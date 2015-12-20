@@ -20,10 +20,11 @@ func TestDetectBOM(t *testing.T) {
 		"":          {{0xde, 0xad, 0xbe, 0xef}},
 	}
 
+	p := NewParser() // DUMMY
 	for expected, inputs := range data {
 		for i, input := range inputs {
 			ctx := &parserCtx{}
-			ctx.init(input)
+			ctx.init(p, input)
 			enc, err := ctx.detectEncoding()
 			if expected == "" {
 				t.Logf("checking [invalid] (%d)", i)
@@ -45,7 +46,7 @@ func TestDetectBOM(t *testing.T) {
 }
 
 func TestEmptyDocument(t *testing.T) {
-	p := &Parser{}
+	p := NewParser()
 	// BOM only
 	_, err := p.Parse([]byte{0x00, 0x00, 0x00, 0x3C})
 	if !assert.Error(t, err, "Parsing BOM only should fail") {
@@ -66,7 +67,7 @@ func TestParseXMLDecl(t *testing.T) {
 	}
 
 	for input, expect := range inputs {
-		p := &Parser{}
+		p := NewParser()
 		doc, err := p.Parse([]byte(input))
 		if !assert.NoError(t, err, "Parse should succeed for '%s'", input) {
 			return
@@ -93,7 +94,7 @@ func TestParseMisc(t *testing.T) {
 	}
 
 	for _, input := range inputs {
-		p := &Parser{}
+		p := NewParser()
 		doc, err := p.Parse([]byte(input))
 		if !assert.NoError(t, err, "Parse should succeed for '%s'", input) {
 			return
@@ -126,7 +127,7 @@ L
 L
 O!]]></child>
 </root>`
-	p := &Parser{}
+	p := NewParser()
 	_, err := p.Parse([]byte(input))
 	if !assert.NoError(t, err, "Parse should succeed for '%s'", input) {
 		return
@@ -142,7 +143,7 @@ func TestParseBad(t *testing.T) {
 		`<?xml version="abc">`,
 		`<?xml varsion="1.0">`,
 	}
-	p := &Parser{}
+	p := NewParser()
 	for _, input := range inputs {
 		_, err := p.Parse([]byte(input))
 		if !assert.Error(t, err, "Parse should fail for '%s'", input) {
@@ -156,7 +157,7 @@ func TestParseNamespace(t *testing.T) {
 <helium:root xmlns:helium="https://github.com/lestrrat/helium">
   <helium:child>foo</helium:child>
 </helium:root>`
-	p := &Parser{}
+	p := NewParser()
 	doc, err := p.Parse([]byte(input))
 	if !assert.NoError(t, err, "Parse should succeed for '%s'", input) {
 		return

@@ -7,7 +7,7 @@ var (
 	ErrInvalidOperation = errors.New("operation cannot be performed")
 )
 
-type nilNode struct {}
+type nilNode struct{}
 
 // common data
 type node struct {
@@ -34,7 +34,7 @@ type Document struct {
 type ProcessingInstruction struct {
 	node
 	target string
-	data string
+	data   string
 }
 
 type DTD struct {
@@ -85,9 +85,44 @@ type Comment struct {
 	content []byte
 }
 
+type ElementType int
+
+const (
+	UndefinedElementType ElementType = iota
+	EmptyElementType
+	AnyElementType
+	MixedElementType
+	ElementElementType
+)
+
 type Element struct {
 	node
 	content    string // XXX probably wrong
 	attributes []Attribute
 	prefix     string
+}
+
+type ElementContent struct {
+}
+
+type EntityType int
+
+const (
+	InternalGeneralEntity EntityType = iota + 1
+	ExternalGeneralParsedEntity
+	ExternalGeneralUnparsedEntity
+	InternalParameterEntity
+	ExternalParameterEntity
+	InternalPredefinedEntity
+)
+
+type Entity struct {
+	node
+	orig       string     // content without substitution
+	content    string     // content or ndata if unparsed
+	entityType EntityType // the entity type
+	externalID string     // external identifier for PUBLIC
+	systemID   string     // URI for a SYSTEM or PUBLIC entity
+	uri        string     // the full URI as computed
+	owner      bool       // does the entity own children
 }

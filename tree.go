@@ -4,7 +4,32 @@ import (
 	"errors"
 
 	"github.com/lestrrat/helium/internal/debug"
+	"github.com/lestrrat/helium/sax"
 )
+
+func (e ParsedElement) Prefix() string {
+	return e.prefix
+}
+
+func (e ParsedElement) LocalName() string {
+	return e.local
+}
+
+func (e ParsedElement) Attributes() []sax.ParsedAttribute {
+	return e.attributes
+}
+
+func (a ParsedAttribute) LocalName() string {
+	return a.local
+}
+
+func (a ParsedAttribute) Prefix() string {
+	return a.prefix
+}
+
+func (a ParsedAttribute) Value() string {
+	return a.value
+}
 
 type TreeBuilder struct {
 	doc  *Document
@@ -47,19 +72,19 @@ func (t *TreeBuilder) ProcessingInstruction(ctxif interface{}, target, data stri
 	return nil
 }
 
-func (t *TreeBuilder) StartElement(ctxif interface{}, elem *ParsedElement) error {
+func (t *TreeBuilder) StartElement(ctxif interface{}, elem sax.ParsedElement) error {
 	//	ctx := ctxif.(*parserCtx)
 	if debug.Enabled {
 		debug.Printf("tree.StartElement: %#v", elem)
 	}
-	e, err := t.doc.CreateElement(elem.Local())
+	e, err := t.doc.CreateElement(elem.LocalName())
 	if err != nil {
 		return err
 	}
 
 	// attrdata = []string{ local, value, prefix }
 	for _, data := range elem.Attributes() {
-		e.SetAttribute(data.prefix+":"+data.local, data.value)
+		e.SetAttribute(data.Prefix()+":"+data.LocalName(), data.Value())
 	}
 
 	if t.node == nil {
@@ -73,7 +98,7 @@ func (t *TreeBuilder) StartElement(ctxif interface{}, elem *ParsedElement) error
 	return nil
 }
 
-func (t *TreeBuilder) EndElement(ctxif interface{}, elem *ParsedElement) error {
+func (t *TreeBuilder) EndElement(ctxif interface{}, elem sax.ParsedElement) error {
 	if debug.Enabled {
 		debug.Printf("tree.EndElement: %#v", elem)
 	}
@@ -82,7 +107,7 @@ func (t *TreeBuilder) EndElement(ctxif interface{}, elem *ParsedElement) error {
 
 func (t *TreeBuilder) Characters(ctxif interface{}, data []byte) error {
 	if debug.Enabled {
-		debug.Printf("tree.Characters: %s", data)
+		debug.Printf("tree.Characters: '%v'", []byte(data))
 	}
 
 	if t.node == nil {
@@ -116,4 +141,12 @@ func (t *TreeBuilder) Comment(ctxif interface{}, data []byte) error {
 	}
 	t.node.AddChild(e)
 	return nil
+}
+
+func (t *TreeBuilder) InternalSubset(ctxif interface{}, name, eid, uri string) error {
+	return nil
+}
+
+func (t *TreeBuilder) GetParameterEntity(ctx interface{}, name string) (string, error) {
+	return "", errors.New("unimplemented")
 }
