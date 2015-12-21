@@ -1,6 +1,6 @@
 package helium
 
-func NewDocument(version, encoding string, standalone bool) *Document {
+func NewDocument(version, encoding string, standalone DocumentStandaloneType) *Document {
 	doc := &Document{
 		encoding:   encoding,
 		standalone: standalone,
@@ -14,7 +14,7 @@ func (d *Document) Encoding() string {
 	return d.encoding
 }
 
-func (d *Document) Standalone() bool {
+func (d *Document) Standalone() DocumentStandaloneType {
 	return d.standalone
 }
 
@@ -29,12 +29,16 @@ func (d *Document) IntSubset() Node {
 func (d *Document) CreatePI(target, data string) (*ProcessingInstruction, error) {
 	return &ProcessingInstruction{
 		target: target,
-		data: data,
+		data:   data,
 	}, nil
 }
 
 func (d *Document) CreateDTD() (*DTD, error) {
-	return &DTD{node{}}, nil
+	return &DTD{
+		node:      node{},
+		entities:  map[string]*Entity{},
+		pentities: map[string]*Entity{},
+	}, nil
 }
 
 func (d *Document) CreateElement(name string) (*Element, error) {
@@ -55,3 +59,34 @@ func (d *Document) CreateComment(value []byte) (*Comment, error) {
 	return e, nil
 }
 
+func (d *Document) CreateElementContent(name string, etype ElementContentType) (*ElementContent, error) {
+	e, err := newElementContent(name, etype)
+	if err != nil {
+		return nil, err
+	}
+	return e, nil
+}
+
+func (d *Document) GetEntity(name string) (*Entity, bool) {
+	if ints := d.intSubset; ints != nil {
+		return ints.LookupEntity(name)
+	}
+
+	if exts := d.extSubset; exts != nil {
+		return exts.LookupEntity(name)
+	}
+
+	return nil, false
+}
+
+func (d *Document) GetParameterEntity(name string) (*Entity, bool) {
+	if ints := d.intSubset; ints != nil {
+		return ints.LookupParameterEntity(name)
+	}
+
+	if exts := d.extSubset; exts != nil {
+		return exts.LookupParameterEntity(name)
+	}
+
+	return nil, false
+}

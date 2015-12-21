@@ -59,11 +59,11 @@ func TestParseXMLDecl(t *testing.T) {
 	inputs := map[string]struct {
 		version    string
 		encoding   string
-		standalone bool
+		standalone int
 	}{
-		`<?xml version="1.0"?>` + content:                                   {"1.0", "utf8", false},
-		`<?xml version="1.0" encoding="euc-jp"?>` + content:                 {"1.0", "euc-jp", false},
-		`<?xml version="1.0" encoding="cp932" standalone='yes'?>` + content: {"1.0", "cp932", true},
+		`<?xml version="1.0"?>` + content:                                   {"1.0", "utf8", int(StandaloneImplicitNo)},
+		`<?xml version="1.0" encoding="euc-jp"?>` + content:                 {"1.0", "euc-jp", int(StandaloneImplicitNo)},
+		`<?xml version="1.0" encoding="cp932" standalone='yes'?>` + content: {"1.0", "cp932", int(StandaloneExplicitYes)},
 	}
 
 	for input, expect := range inputs {
@@ -79,7 +79,7 @@ func TestParseXMLDecl(t *testing.T) {
 		if !assert.Equal(t, expect.encoding, doc.Encoding(), "encoding matches") {
 			return
 		}
-		if !assert.Equal(t, expect.standalone, doc.Standalone(), "standalone matches") {
+		if !assert.Equal(t, expect.standalone, int(doc.Standalone()), "standalone matches") {
 			return
 		}
 	}

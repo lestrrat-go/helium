@@ -7,8 +7,19 @@ import (
 	"github.com/lestrrat/helium/sax"
 )
 
+func (e ParsedElement) Name() string {
+	if e.prefix != "" {
+		return e.prefix + ":" + e.local
+	}
+	return e.local
+}
+
 func (e ParsedElement) Prefix() string {
 	return e.prefix
+}
+
+func (e ParsedElement) URI() string {
+	return e.uri
 }
 
 func (e ParsedElement) LocalName() string {
@@ -34,6 +45,10 @@ func (a ParsedAttribute) Value() string {
 type TreeBuilder struct {
 	doc  *Document
 	node Node
+}
+
+func (t *TreeBuilder) SetDocumentLocator(ctxif interface{}, loc sax.DocumentLocator) error {
+	return nil
 }
 
 func (t *TreeBuilder) StartDocument(ctxif interface{}) error {
@@ -147,6 +162,84 @@ func (t *TreeBuilder) InternalSubset(ctxif interface{}, name, eid, uri string) e
 	return nil
 }
 
-func (t *TreeBuilder) GetParameterEntity(ctx interface{}, name string) (string, error) {
-	return "", errors.New("unimplemented")
+func (t *TreeBuilder) GetEntity(ctxif interface{}, name string) (*Entity, error) {
+	ctx := ctxif.(*parserCtx)
+
+	if ctx.inSubset == 0 {
+		ret := resolvePredefinedEntity(name)
+		if ret != nil {
+			return ret, nil
+		}
+	}
+
+	var ret *Entity
+	var ok bool
+	if ctx.doc == nil || ctx.doc.standalone != 1 {
+		ret, _ = ctx.doc.GetEntity(name)
+	} else {
+		if ctx.inSubset == 2 {
+			ctx.doc.standalone = 0
+			ret, _ = ctx.doc.GetEntity(name)
+			ctx.doc.standalone = 1
+		} else {
+			ret, ok = ctx.doc.GetEntity(name)
+			if !ok {
+				ctx.doc.standalone = 0
+				ret, ok = ctx.doc.GetEntity(name)
+				if !ok {
+					return nil, errors.New("Entity(" + name + ") document marked standalone but requires eternal subset")
+				}
+				ctx.doc.standalone = 1
+			}
+		}
+	}
+/*
+    if ((ret != NULL) &&
+        ((ctxt->validate) || (ctxt->replaceEntities)) &&
+        (ret->children == NULL) &&
+        (ret->etype == XML_EXTERNAL_GENERAL_PARSED_ENTITY)) {
+        int val;
+
+        // for validation purposes we really need to fetch and
+        // parse the external entity
+        xmlNodePtr children;
+        unsigned long oldnbent = ctxt->nbentities;
+
+        val = xmlParseCtxtExternalEntity(ctxt, ret->URI,
+                                         ret->ExternalID, &children);
+        if (val == 0) {
+            xmlAddChildList((xmlNodePtr) ret, children);
+        } else {
+            xmlFatalErrMsg(ctxt, XML_ERR_ENTITY_PROCESSING,
+                           "Failure to process entity %s\n", name, NULL);
+            ctxt->validate = 0;
+            return(NULL);
+        }
+        ret->owner = 1;
+        if (ret->checked == 0) {
+            ret->checked = (ctxt->nbentities - oldnbent + 1) * 2;
+            if ((ret->content != NULL) && (xmlStrchr(ret->content, '<')))
+                ret->checked |= 1;
+        }
+    }
+*/
+	return ret, nil
+}
+
+func (t *TreeBuilder) GetParameterEntity(ctxif interface{}, name string) (sax.Entity, error) {
+	if ctxif == nil {
+		return nil, ErrInvalidParserCtx
+	}
+
+	ctx := ctxif.(*parserCtx)
+	doc := ctx.doc
+	if doc == nil {
+		return nil, ErrInvalidDocument
+	}
+
+	if ret, ok := doc.GetParameterEntity(name); ok {
+		return ret, nil
+	}
+
+	return nil, ErrEntityNotFound
 }

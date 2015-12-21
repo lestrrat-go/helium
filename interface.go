@@ -7,6 +7,14 @@ var (
 	ErrInvalidOperation = errors.New("operation cannot be performed")
 )
 
+type ErrUnimplemented struct {
+	target string
+}
+
+func (e ErrUnimplemented) Error() string {
+	return "unimplemented method: '" + e.target + "'"
+}
+
 type nilNode struct{}
 
 // common data
@@ -22,13 +30,22 @@ type node struct {
 	doc      *Document
 }
 
+type DocumentStandaloneType int
+const (
+	StandaloneInvalidValue = -99
+	StandaloneExplicitYes = 1
+	StandaloneExplicitNo  = 0
+	StandaloneNoXMLDecl   = -1
+	StandaloneImplicitNo  = -2
+)
 type Document struct {
 	node
 	version    string
 	encoding   string
-	standalone bool
+	standalone DocumentStandaloneType
 
 	intSubset *DTD
+	extSubset *DTD
 }
 
 type ProcessingInstruction struct {
@@ -39,6 +56,10 @@ type ProcessingInstruction struct {
 
 type DTD struct {
 	node
+	entities map[string]*Entity
+	pentities map[string]*Entity
+	externalID string
+	systemID string
 }
 
 type Namespace struct {
@@ -102,7 +123,33 @@ type Element struct {
 	prefix     string
 }
 
+type ElementContentType int
+
+const (
+	ElementContentPCDATA ElementContentType = iota + 1
+	ElementContentElement
+	ElementContentSeq
+	ElementContentOr
+)
+
+type ElementContentOccur int
+
+const (
+	ElementContentOnce ElementContentOccur = iota + 1
+	ElementContentOpt
+	ElementContentMult
+	ElementContentPlus
+)
+
 type ElementContent struct {
+	// XXX no doc?
+	ctype  ElementContentType
+	coccur ElementContentOccur
+	name   string
+	prefix string
+	c1     *ElementContent
+	c2     *ElementContent
+	parent *ElementContent
 }
 
 type EntityType int
@@ -126,3 +173,24 @@ type Entity struct {
 	uri        string     // the full URI as computed
 	owner      bool       // does the entity own children
 }
+
+var (
+	EntityLT = Entity{
+		node: node{
+			name: "lt",
+		},
+		orig:"<",
+		content: "<",
+		entityType: InternalPredefinedEntity,
+		owner: false,
+	}
+	EntityApostrophe = Entity{
+		node: node{
+			name: "apos",
+		},
+		orig:"'",
+		content: "'",
+		entityType: InternalPredefinedEntity,
+		owner: false,
+	}
+)

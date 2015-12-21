@@ -6,6 +6,13 @@ func New() *SAX2 {
 	return &SAX2{}
 }
 
+func (s *SAX2) SetDocumentLocator(ctx interface{}, loc DocumentLocator) error {
+	if h := s.SetDocumentLocatorHandler; h != nil {
+		return h(ctx, loc)
+	}
+	return nil
+}
+
 func (s *SAX2) StartDocument(ctx interface{}) error {
 	if h := s.StartDocumentHandler; h != nil {
 		return h(ctx)
@@ -16,6 +23,20 @@ func (s *SAX2) StartDocument(ctx interface{}) error {
 func (s *SAX2) EndDocument(ctx interface{}) error {
 	if h := s.EndDocumentHandler; h != nil {
 		return h(ctx)
+	}
+	return nil
+}
+
+func (s *SAX2) StartElement(ctx interface{}, elem ParsedElement) error {
+	if h := s.StartElementHandler; h != nil {
+		return h(ctx, elem)
+	}
+	return nil
+}
+
+func (s *SAX2) EndElement(ctx interface{}, elem ParsedElement) error {
+	if h := s.EndElementHandler; h != nil {
+		return h(ctx, elem)
 	}
 	return nil
 }
@@ -48,20 +69,6 @@ func (s *SAX2) ProcessingInstruction(ctx interface{}, target, data string) error
 	return nil
 }
 
-func (s *SAX2) StartElement(ctx interface{}, elem ParsedElement) error {
-	if h := s.StartElementHandler; h != nil {
-		return h(ctx, elem)
-	}
-	return nil
-}
-
-func (s *SAX2) EndElement(ctx interface{}, elem ParsedElement) error {
-	if h := s.EndElementHandler; h != nil {
-		return h(ctx, elem)
-	}
-	return nil
-}
-
 func (s *SAX2) InternalSubset(ctx interface{}, name, eid, uri string) error {
 	if h := s.InternalSubsetHandler; h != nil {
 		return h(ctx, name, eid, uri)
@@ -69,9 +76,9 @@ func (s *SAX2) InternalSubset(ctx interface{}, name, eid, uri string) error {
 	return nil
 }
 
-func (s *SAX2) GetParameterEntity(ctx interface{}, name string) (string, error) {
+func (s *SAX2) GetParameterEntity(ctx interface{}, name string) (Entity, error) {
 	if h := s.GetParameterEntityHandler; h != nil {
 		return h(ctx, name)
 	}
-	return "", errors.New("not found")
+	return nil, errors.New("not found")
 }

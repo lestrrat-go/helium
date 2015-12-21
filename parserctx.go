@@ -51,6 +51,7 @@ func (ctx *parserCtx) init(p *Parser, b []byte) error {
 	ctx.lineno = 1
 	ctx.sax = p.sax
 	ctx.userData = ctx // circular dep?!
+	ctx.standalone = StandaloneImplicitNo
 	return nil
 }
 
@@ -194,6 +195,10 @@ func (ctx *parserCtx) curHasChars(n int) bool {
 	return ctx.cursor.HasChars(n)
 }
 
+func (ctx *parserCtx) curDone() bool {
+	return ctx.cursor.Done()
+}
+
 func (ctx *parserCtx) curAdvance(n int) {
 	ctx.cursor.Advance(n)
 }
@@ -235,6 +240,10 @@ func isBlankCh(c rune) bool {
 }
 
 func (ctx *parserCtx) switchEncoding() error {
+	if ctx.encoding == "" {
+		ctx.encoding = "utf-8"
+	}
+
 	enc := encoding.Load(ctx.encoding)
 	if enc == nil {
 		return errors.New("encoding '" + ctx.encoding + "' not supported")
@@ -252,6 +261,12 @@ func (ctx *parserCtx) switchEncoding() error {
 }
 
 func (ctx *parserCtx) parse() error {
+	if s := ctx.sax; s != nil {
+		if err := s.SetDocumentLocator(ctx.userData, nil); err != nil {
+			return ctx.error(err)
+		}
+	}
+
 	// see if we can find the preliminary encoding
 	if ctx.encoding == "" && ctx.curHasChars(4) {
 		if enc, err := ctx.detectEncoding(); err == nil {
@@ -419,12 +434,13 @@ var testCharData = [256]byte{
  */
 func (ctx *parserCtx) parseCharData() error {
 	if debug.Enabled {
-		debug.Printf("START parseCharData (byte offset = %d)", ctx.cursor.OffsetBytes())
+		debug.Printf("START parseCharData (byte offset = %d, remainig = '%s')", ctx.cursor.OffsetBytes(), ctx.cursor.Bytes())
 		defer debug.Printf("END   parseCharData")
 	}
 
 	for i := 1; ctx.curHasChars(i); {
 		// advance until we exhaust whitespaces
+		debug.Printf("i = %d", i)
 		if ctx.curPeek(i) == 0x20 {
 			i++
 			for ; ctx.curPeek(i) == 0x20; i++ {
@@ -438,10 +454,12 @@ func (ctx *parserCtx) parseCharData() error {
 			for ; ctx.curPeek(i) == 0xA; i++ {
 			}
 			debug.Printf(" ----> consumed new lines (i = %d)", i)
-			continue
+			if ctx.curHasChars(i) {
+				continue
+			}
 		}
 
-		if c := ctx.curPeek(i); c == '<' {
+		if c := ctx.curPeek(i); !ctx.curHasChars(i) || c == '<' {
 			l := ctx.curCharLen(i - 1)
 			str := ctx.curConsumeBytes(l)
 			debug.Printf(" ----> %d = '<', consuming %d bytes '%v'", i, l, str)
@@ -480,12 +498,24 @@ func (ctx *parserCtx) parseCharData() error {
 		// so we can index into the correct location
 		i = 1
 
-		if c := ctx.curPeek(i); c == '<' || c == '&' {
+		if c := ctx.curPeek(i); c == '&' {
+			str, err := ctx.parseReference()
+			if err != nil {
+				return ctx.error(err)
+			}
+			if s := ctx.sax; s != nil {
+				if err := s.Characters(ctx, []byte(str)); err != nil {
+					return ctx.error(err)
+				}
+			}
+		}
+
+		if c := ctx.curPeek(i); c == '<' {
 			return nil
 		}
 	}
 
-	return nil
+	return errors.New("Invalid chara data")
 }
 
 func (ctx *parserCtx) parseElement() error {
@@ -633,16 +663,38 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (str
 		debug.Printf("START parseAttributeValueInternal")
 		defer debug.Printf("END   parseAttributeValueInternal")
 	}
-	i := 1
-	for ; ctx.curHasChars(i); i++ {
-		c := ctx.curPeek(i)
-		if c == qch || c < 0x20 || c > 0x7f || c == '&' || c == '<' {
-			i--
-			break
+
+	v := []byte(nil)
+	for {
+		i := 1
+		for ; ctx.curHasChars(i); i++ {
+			c := ctx.curPeek(i)
+			// TODO check for valid "c" value
+			if c == qch || c == '&' || c == '<' {
+				i--
+				break
+			}
 		}
+
+		v = append(v, ctx.curConsume(i)...)
+		i = 1
+		debug.Printf(" ----> %c", ctx.curPeek(i))
+		if ctx.curPeek(i) == '&' {
+			debug.Printf("Encountered entity")
+			r, err := ctx.parseReference()
+			if err != nil {
+				return "", ctx.error(err)
+			}
+			v = append(v, r...)
+			i = 1
+			continue
+		}
+		break
 	}
 
-	return ctx.curConsume(i), nil
+	debug.Printf(" ----> (%s)", string(v))
+
+	return string(v), nil
 }
 
 func (ctx *parserCtx) parseAttribute() (local string, value string, prefix string, err error) {
@@ -707,8 +759,6 @@ func (ctx *parserCtx) skipBlanks() {
 
 // should only be here if current buffer is at '<?xml'
 func (ctx *parserCtx) parseXMLDecl() error {
-	// ctx->input->standalone = -2;
-
 	if !ctx.curConsumePrefix("<?xml") {
 		return ctx.error(ErrInvalidXMLDecl)
 	}
@@ -876,12 +926,16 @@ func (ctx *parserCtx) parseEncodingName(_ rune) (string, error) {
 	return ctx.curConsume(i), nil
 }
 
-func (ctx *parserCtx) parseStandaloneDecl() (bool, error) {
+func (ctx *parserCtx) parseStandaloneDecl() (DocumentStandaloneType, error) {
 	v, err := ctx.parseNamedAttribute("standalone", ctx.parseStandaloneDeclValue)
 	if err != nil {
-		return false, err
+		return StandaloneInvalidValue, err
 	}
-	return v == "yes", nil
+	if v == "yes" {
+		return StandaloneExplicitYes, nil
+	} else {
+		return StandaloneExplicitNo, nil
+	}
 }
 
 const (
@@ -990,6 +1044,10 @@ func (ctx *parserCtx) parsePI() error {
  * Returns the Name parsed.
  */
 func (ctx *parserCtx) parseName() (string, error) {
+	if debug.Enabled {
+		debug.Printf("START parseName")
+		defer debug.Printf("END   parseName")
+	}
 	if ctx.instate == psEOF {
 		return "", ctx.error(ErrPrematureEOF)
 	}
@@ -997,6 +1055,7 @@ func (ctx *parserCtx) parseName() (string, error) {
 	i := 1
 	for ; ctx.curHasChars(i); i++ {
 		c := ctx.curPeek(i)
+		debug.Printf("----> %c", c)
 		if !(c >= 0x61 && c <= 0x7A) && !(c >= 0x41 && c <= 0x5A) && !(c >= 0x30 && c <= 0x39) && c != '_' && c != '-' && c != ':' && c != '.' {
 			i--
 			break
@@ -1372,7 +1431,7 @@ func (ctx *parserCtx) parseMarkupDecl() error {
 			case 'E':
 				c := ctx.curPeek(4)
 				if c == 'L' { // <!EL...
-					if err := ctx.parseElementDecl(); err != nil {
+					if _, err := ctx.parseElementDecl(); err != nil {
 						return ctx.error(err)
 					}
 				} else if c == 'N' { // <!EN....
@@ -1479,7 +1538,7 @@ func (ctx *parserCtx) parsePEReference() error {
 		return nil
 	*/
 	_ = name
-	return ErrUnimplemented
+	return ErrUnimplemented{target: "parsePEReference"}
 }
 
 /*
@@ -1492,24 +1551,24 @@ func (ctx *parserCtx) parsePEReference() error {
  *
  * Returns the type of the element, or -1 in case of error
  */
-func (ctx *parserCtx) parseElementDecl() error {
+func (ctx *parserCtx) parseElementDecl() (ElementType, error) {
 	if debug.Enabled {
 		debug.Printf("START parseElementDecl")
 		defer debug.Printf("END   parseElementDecl")
 	}
 
 	if !ctx.curConsumePrefix("<!ELEMENT") {
-		return ctx.error(ErrInvalidElementDecl)
+		return UndefinedElementType, ctx.error(ErrInvalidElementDecl)
 	}
 
 	if !isBlankCh(ctx.curPeek(1)) {
-		return ctx.error(ErrSpaceRequired)
+		return UndefinedElementType, ctx.error(ErrSpaceRequired)
 	}
 	ctx.skipBlanks()
 
 	name, err := ctx.parseName()
 	if err != nil {
-		return ctx.error(err)
+		return UndefinedElementType, ctx.error(err)
 	}
 
 	/* XXX WHAT?
@@ -1518,17 +1577,21 @@ func (ctx *parserCtx) parseElementDecl() error {
 	*/
 
 	if !isBlankCh(ctx.curPeek(1)) {
-		return ctx.error(ErrSpaceRequired)
+		return UndefinedElementType, ctx.error(ErrSpaceRequired)
 	}
 	ctx.skipBlanks()
 
 	var etype ElementType
+	var content *ElementContent
 	if ctx.curConsumePrefix("EMPTY") {
 		etype = EmptyElementType
 	} else if ctx.curConsumePrefix("ANY") {
 		etype = AnyElementType
 	} else if ctx.curPeek(1) == '(' {
-		panic("parseElementContentDecl unimplemented")
+		content, etype, err = ctx.parseElementContentDecl()
+		if err != nil {
+			return UndefinedElementType, ctx.error(err)
+		}
 	} else {
 		/*
 		   // [ WFC: PEs in Internal Subset ] error handling.
@@ -1543,45 +1606,211 @@ func (ctx *parserCtx) parseElementDecl() error {
 		      return(-1);
 		*/
 	}
+
+	ctx.skipBlanks()
+
+	/*
+	 * Pop-up of finished entities.
+	 */
+	/*
+	   while ((RAW == 0) && (ctxt->inputNr > 1))
+	       xmlPopInput(ctxt);
+	   SKIP_BLANKS;
+	*/
+
+	if ctx.curPeek(1) != '>' {
+		return UndefinedElementType, ctx.error(ErrGtRequired)
+	}
+
+	/*
+	           if (input != ctxt->input) {
+	               xmlFatalErrMsg(ctxt, XML_ERR_ENTITY_BOUNDARY,
+	   "Element declaration doesn't start and stop in the same entity\n");
+	           }
+
+	           NEXT;
+	           if ((ctxt->sax != NULL) && (!ctxt->disableSAX) &&
+	               (ctxt->sax->elementDecl != NULL)) {
+	               if (content != NULL)
+	                   content->parent = NULL;
+	               ctxt->sax->elementDecl(ctxt->userData, name, ret,
+	                                      content);
+	               if ((content != NULL) && (content->parent == NULL)) {
+	                   // this is a trick: if xmlAddElementDecl is called,
+	                   // instead of copying the full tree it is plugged directly
+	                  // if called from the parser. Avoid duplicating the
+	                   // interfaces or change the API/ABI
+	                  //
+	                   xmlFreeDocElementContent(ctxt->myDoc, content);
+	               }
+	           } else if (content != NULL) {
+	               xmlFreeDocElementContent(ctxt->myDoc, content);
+	           }
+	*/
+
 	_ = name
 	_ = etype
-	return ErrUnimplemented
+	_ = content
+	return etype, nil
 }
 
-func (ctx *parserCtx) parseElementContentDecl() (*ElementContent, error) {
+func (ctx *parserCtx) parseElementContentDecl() (*ElementContent, ElementType, error) {
 	if ctx.curPeek(1) != '(' {
-		return nil, ctx.error(ErrOpenParenRequired)
+		return nil, UndefinedElementType, ctx.error(ErrOpenParenRequired)
 	}
 	ctx.curAdvance(1)
 
 	if ctx.instate == psEOF {
-		return nil, ctx.error(ErrEOF)
+		return nil, UndefinedElementType, ctx.error(ErrEOF)
 	}
 
 	ctx.skipBlanks()
 
 	var ec *ElementContent
 	var err error
-	if !ctx.curConsumePrefix("#PCDATA") {
+	var etype ElementType
+	if ctx.curHasPrefix("#PCDATA") {
 		ec, err = ctx.parseElementMixedContentDecl()
 		if err != nil {
-			return nil, ctx.error(err)
+			return nil, UndefinedElementType, ctx.error(err)
 		}
+		etype = MixedElementType
 	} else {
 		ec, err = ctx.parseElementChildrenContentDeclPriv()
 		if err != nil {
-			return nil, ctx.error(err)
+			return nil, UndefinedElementType, ctx.error(err)
 		}
+		etype = ElementElementType
 	}
 
 	ctx.skipBlanks()
-	return ec, nil
+	return ec, etype, nil
 }
 
 func (ctx *parserCtx) parseElementMixedContentDecl() (*ElementContent, error) {
-	return nil, nil
+	if !ctx.curConsumePrefix("#PCDATA") {
+		return nil, ctx.error(ErrPCDATARequired)
+	}
+
+	if ctx.curPeek(1) == ')' {
+		/*
+		               if ((ctxt->validate) && (ctxt->input->id != inputchk)) {
+		                   xmlValidityError(ctxt, XML_ERR_ENTITY_BOUNDARY,
+		   "Element content declaration doesn't start and stop in the same entity\n",
+		                                    NULL, NULL);
+		               }
+		*/
+		ctx.curAdvance(1)
+		ret, err := ctx.doc.CreateElementContent("", ElementContentPCDATA)
+		if err != nil {
+			return nil, ctx.error(err)
+		}
+
+		if ctx.curPeek(1) == '*' {
+			ret.coccur = ElementContentMult
+			ctx.curAdvance(1)
+		}
+
+		return ret, nil
+	}
+
+	var err error
+	var ret *ElementContent
+	var cur *ElementContent
+	if c := ctx.curPeek(1); c == '(' || c == '|' {
+		ret, err = ctx.doc.CreateElementContent("", ElementContentPCDATA)
+		if err != nil {
+			return nil, ctx.error(err)
+		}
+		cur = ret
+	}
+
+	var elem string
+	for ctx.curPeek(1) == '|' {
+		ctx.curAdvance(1)
+		if elem == "" {
+			ret, err = ctx.doc.CreateElementContent("", ElementContentOr)
+			if err != nil {
+				return nil, ctx.error(err)
+			}
+
+			ret.c1 = cur
+			if cur != nil {
+				cur.parent = ret
+			}
+			cur = ret
+		} else {
+			n, err := ctx.doc.CreateElementContent("", ElementContentOr)
+			if err != nil {
+				return nil, ctx.error(err)
+			}
+			n.c1, err = ctx.doc.CreateElementContent("", ElementContentElement)
+			if err != nil {
+				return nil, ctx.error(err)
+			}
+			n.c1.parent = n
+			cur.c2 = n
+			n.parent = cur
+			cur = n
+		}
+		ctx.skipBlanks()
+		elem, err = ctx.parseName()
+		if err != nil {
+			return nil, ctx.error(err)
+		}
+		ctx.skipBlanks()
+	}
+	if ctx.curPeek(1) == ')' && ctx.curPeek(2) == '*' {
+		ctx.curAdvance(2)
+		if elem != "" {
+			cur.c2, err = ctx.doc.CreateElementContent(elem, ElementContentElement)
+			if err != nil {
+				return nil, ctx.error(err)
+			}
+			cur.c2.parent = cur
+		}
+
+		if ret != nil {
+			ret.coccur = ElementContentMult
+		}
+		/*
+		               if ((ctxt->validate) && (ctxt->input->id != inputchk)) {
+		                   xmlValidityError(ctxt, XML_ERR_ENTITY_BOUNDARY,
+		   "Element content declaration doesn't start and stop in the same entity\n",
+		                                    NULL, NULL);
+		   					}
+		*/
+	}
+	return ret, nil
 }
 
+/* *
+ * parse the declaration for a Mixed Element content
+ * The leading '(' and spaces have been skipped in xmlParseElementContentDecl
+ *
+ *
+ * [47] children ::= (choice | seq) ('?' | '*' | '+')?
+ *
+ * [48] cp ::= (Name | choice | seq) ('?' | '*' | '+')?
+ *
+ * [49] choice ::= '(' S? cp ( S? '|' S? cp )* S? ')'
+ *
+ * [50] seq ::= '(' S? cp ( S? ',' S? cp )* S? ')'
+ *
+ * [ VC: Proper Group/PE Nesting ] applies to [49] and [50]
+ * TODO Parameter-entity replacement text must be properly nested
+ *      with parenthesized groups. That is to say, if either of the
+ *      opening or closing parentheses in a choice, seq, or Mixed
+ *      construct is contained in the replacement text for a parameter
+ *      entity, both must be contained in the same replacement text. For
+ *      interoperability, if a parameter-entity reference appears in a
+ *      choice, seq, or Mixed construct, its replacement text should not
+ *      be empty, and neither the first nor last non-blank character of
+ *      the replacement text should be a connector (| or ,).
+ *
+ * Returns the tree of xmlElementContentPtr describing the element
+ *          hierarchy.
+ */
 func (ctx *parserCtx) parseElementChildrenContentDeclPriv() (*ElementContent, error) {
 	return nil, nil
 }
@@ -1608,4 +1837,136 @@ func (ctx *parserCtx) parseExternalID() (string, string, error) {
 
 func (ctx *parserCtx) parseEpilogue() error {
 	return nil
+}
+
+func (ctx *parserCtx) parseReference() (string, error) {
+	if debug.Enabled {
+		debug.Printf("START parseReference")
+		defer debug.Printf("END   parseReference")
+	}
+
+	if ctx.curPeek(1) != '&' {
+		return "", ctx.error(ErrAmpersandRequired)
+	}
+
+	// "&#..." CharRef
+	if ctx.curPeek(2) == '#' {
+		v, err := ctx.parseCharRef()
+		if err != nil {
+			return "", ctx.error(err)
+		}
+		l := utf8.RuneLen(v)
+		b := make([]byte, l)
+		utf8.EncodeRune(b, v)
+		if s := ctx.sax; s != nil {
+			if err := s.Characters(ctx.userData, b); err != nil {
+				return "", ctx.error(err)
+			}
+		}
+
+		return string(b), nil
+	}
+
+	// &...
+	ent, err := ctx.parseEntityRef()
+	if err != nil {
+		return "", ctx.error(err)
+	}
+
+	// if !ctx.wellFormed { return } ??
+
+	if ent.EntityType() == InternalPredefinedEntity {
+		if s := ctx.sax; s != nil {
+			if err := s.Characters(ctx.userData, []byte(ent.Content())); err != nil {
+				return "", ctx.error(err)
+			}
+		}
+		return ent.Content(), nil
+	}
+
+	return "", ErrUnimplemented{target: "parseReference"}
+}
+
+/*
+ * parse Reference declarations
+ *
+ * [66] CharRef ::= '&#' [0-9]+ ';' |
+ *                  '&#x' [0-9a-fA-F]+ ';'
+ *
+ * [ WFC: Legal Character ]
+ * Characters referred to using character references must match the
+ * production for Char.
+ *
+ * Returns the value parsed as a rune
+ */
+func (ctx *parserCtx) parseCharRef() (rune, error) {
+	var val int32
+	if ctx.curConsumePrefix("&#x") {
+		for ctx.curHasChars(1) && ctx.curPeek(1) != ';' {
+			c := ctx.curPeek(1)
+			if c >= '0' && c <= '9' {
+				val = val*16 + (c - '0')
+			} else if c >= 'a' && c <= 'f' {
+				val = val*16 + (c - 'a') + 10
+			} else if c >= 'A' && c <= 'F' {
+				val = val*16 + (c - 'A') + 10
+			} else {
+				return utf8.RuneError, errors.New("invalid hex CharRef")
+			}
+			ctx.curAdvance(1)
+		}
+		if ctx.curPeek(1) == ';' {
+			ctx.curAdvance(1)
+		}
+	} else if ctx.curConsumePrefix("&#") {
+		for ctx.curHasChars(1) && ctx.curPeek(1) != ';' {
+			c := ctx.curPeek(1)
+			if c >= '0' && c <= '9' {
+				val = val*10 + (c - '0')
+			} else {
+				return utf8.RuneError, errors.New("invalid decimal CharRef")
+			}
+			ctx.curAdvance(1)
+		}
+		if ctx.curPeek(1) == ';' {
+			ctx.curAdvance(1)
+		}
+	} else {
+		return utf8.RuneError, errors.New("invalid char ref")
+	}
+	if isChar(val) && val <= unicode.MaxRune {
+		return rune(val), nil
+	}
+
+	return utf8.RuneError, ErrInvalidChar
+}
+
+func (ctx *parserCtx) parseEntityRef() (*Entity, error) {
+	if debug.Enabled {
+		debug.Printf("START parseEntityRef")
+		defer debug.Printf("END   parseEntityRef")
+	}
+
+	if ctx.curPeek(1) != '&' {
+		return nil, ctx.error(ErrAmpersandRequired)
+	}
+	ctx.curAdvance(1)
+
+	name, err := ctx.parseName()
+	if err != nil {
+		return nil, ctx.error(ErrNameRequired)
+	}
+
+	debug.Printf(" ----> name = %s", name)
+	debug.Printf(" ----> %c", ctx.curPeek(1))
+	if ctx.curPeek(1) != ';' {
+		return nil, ctx.error(ErrSemicolonRequired)
+	}
+	ctx.curAdvance(1)
+
+	if ent := resolvePredefinedEntity(name); ent != nil {
+		return ent, nil
+	}
+
+	return nil, ErrUnimplemented{target: "parseEntityRef"}
 }
