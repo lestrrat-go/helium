@@ -20,12 +20,24 @@ func newEventEmitter(out io.Writer) helium.SAX {
 		fmt.Fprintf(out, "SAX.SetDocumentLocator()\n")
 		return nil
 	}
+	s.InternalSubsetHandler = func(_ sax.Context, name, externalID, systemID string) error {
+		fmt.Fprintf(out, "SAX.InternalSubset(%s, %s, %s)\n", name, externalID, systemID)
+		return nil
+	}
+	s.ExternalSubsetHandler = func(_ sax.Context, name, externalID, systemID string) error {
+		fmt.Fprintf(out, "SAX.ExternalSubset(%s, %s, %s)\n", name, externalID, systemID)
+		return nil
+	}
+	s.ElementDeclHandler = func(_ sax.Context, name string, typ int, content sax.ElementContent) error {
+		fmt.Fprintf(out, "SAX.ElementDecl(%s, %d, ...)\n", name, typ)
+		return nil
+	}
 	s.StartDocumentHandler = func(_ sax.Context) error {
 		fmt.Fprintf(out, "SAX.StartDocument()\n")
 		return nil
 	}
 	s.EndDocumentHandler = func(_ sax.Context) error {
-		fmt.Fprintf(out, "SAX.EndDocument()")
+		fmt.Fprintf(out, "SAX.EndDocument()\n")
 		return nil
 	}
 	s.CommentHandler = func(_ sax.Context, data []byte) error {

@@ -1,0 +1,17 @@
+SAX.SetDocumentLocator()
+SAX.StartDocument()
+SAX.Comment(
+long comment long comment long comment long comment long comment long comment
+long comment long comment long comment long comment long comment long comment
+long comment long comment long comment long comment long comment long comment
+long comment long comment long comment long comment long comment long comment
+long comment long comment long comment long comment long comment long comment
+long comment long comment long comment long comment long comment long comment
+long comment long comment long comment long comment long comment long comment
+)
+SAX.InternalSubset(a, , )
+SAX.ElementDecl(a, 1, ...)
+SAX.ExternalSubset(a, , )
+SAX.StartElementNS(a, NULL, NULL, 0, 0, 0)
+SAX.EndElementNS(a, NULL, NULL)
+SAX.EndDocument()

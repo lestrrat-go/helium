@@ -1,0 +1,12 @@
+SAX.SetDocumentLocator()
+SAX.StartDocument()
+SAX.Comment( test of hyphen and line break handling
+     some text - interrupted -
+- - - - - - - - - - - - - - - - - - - - - -
+                      this should stop here^
+
+
+)
+SAX.StartElementNS(doc, NULL, NULL, 0, 0, 0)
+SAX.EndElementNS(doc, NULL, NULL)
+SAX.EndDocument()

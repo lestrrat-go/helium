@@ -170,6 +170,10 @@ func (t *TreeBuilder) InternalSubset(ctxif sax.Context, name, eid, uri string) e
 	return nil
 }
 
+func (t *TreeBuilder) ExternalSubset(ctxif sax.Context, name, eid, uri string) error {
+	return nil
+}
+
 func (t *TreeBuilder) GetEntity(ctxif sax.Context, name string) (*Entity, error) {
 	ctx := ctxif.(*parserCtx)
 

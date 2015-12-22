@@ -92,6 +92,7 @@ type EntityResolver interface {
 // Extensions defines some non-standard SAX extensions. This may be
 // consolidaed later.
 type Extensions interface {
+	ExternalSubset(ctx Context, name string, publicID string, systemID string) error
 	InternalSubset(ctx Context, name string, publicID string, systemID string) error
 }
 

@@ -72,7 +72,7 @@ func Load(name string) enc.Encoding {
 		return charmap.Windows1250
 	case "windows1251":
 		return charmap.Windows1251
-	case "windows1252":
+	case "iso-8859-1", "windows1252":
 		return charmap.Windows1252
 	case "windows1253":
 		return charmap.Windows1253

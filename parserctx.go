@@ -319,16 +319,37 @@ func (ctx *parserCtx) parseDocument() error {
 
 	// Doctype declarations and more misc
 	if ctx.curHasPrefix("<!DOCTYPE") {
+		ctx.inSubset = 1
 		if err := ctx.parseDocTypeDecl(); err != nil {
 			return ctx.error(err)
 		}
 
 		if ctx.curHasPrefix("[") {
+			ctx.instate = psDTD
 			if err := ctx.parseInternalSubset(); err != nil {
 				return ctx.error(err)
 			}
 		}
+
+		ctx.inSubset = 2
+		if s := ctx.sax; s != nil {
+			if err := s.ExternalSubset(ctx.userData,  ctx.intSubName, ctx.extSubSystem, ctx.extSubURI); err != nil {
+				return ctx.error(err)
+			}
+		}
+		if ctx.instate == psEOF {
+			return ctx.error(errors.New("unexpected EOF"))
+		}
+		ctx.inSubset = 0
+
+		// xmlCleanSpecialAttr(ctxt)
+
+		ctx.instate = psPrologue
+		if err := ctx.parseMisc(); err != nil {
+			return ctx.error(err)
+		}
 	}
+	ctx.skipBlanks()
 
 	if ctx.curPeek(1) != '<' {
 		return ctx.error(ErrEmptyDocument)
@@ -492,6 +513,8 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 
 	if i > 1 {
 		str := ctx.curConsume(i - 1)
+		// XXX This is not right, but it's for now the best place to do this
+		str = strings.Replace(str, "\r\n", "\n", -1)
 		if ctx.areBlanks(str) {
 			if s := ctx.sax; s != nil {
 				if err := s.IgnorableWhitespace(ctx.userData, []byte(str)); err != nil {
@@ -1368,6 +1391,7 @@ func (ctx *parserCtx) parseComment() error {
 	// and consume the last 3
 	ctx.curConsume(3)
 	if sh := ctx.sax; sh != nil {
+		str = bytes.Replace(str, []byte{'\r', '\n'}, []byte{'\n'}, -1)
 		sh.Comment(ctx, str)
 	}
 
@@ -1385,15 +1409,19 @@ func (ctx *parserCtx) parseDocTypeDecl() error {
 	if err != nil {
 		return ctx.error(ErrDocTypeNameRequired)
 	}
-	// ctx.intSubName = name
+	ctx.intSubName = name
 
 	ctx.skipBlanks()
 	u, eid, err := ctx.parseExternalID()
 	if err != nil {
-		// ctx.hasExternalSubset = true
-		// ctx.extSubURI = u
-		// ctx.extSubSystem = eid
+		return ctx.error(err)
 	}
+
+	if u != "" || eid != "" {
+		ctx.hasExternalSubset = true
+	}
+	ctx.extSubURI = u
+	ctx.extSubSystem = eid
 
 	ctx.skipBlanks()
 
@@ -1439,9 +1467,11 @@ func (ctx *parserCtx) parseInternalSubset() error {
 		if err := ctx.parseMarkupDecl(); err != nil {
 			return ctx.error(err)
 		}
+/*
 		if err := ctx.parsePEReference(); err != nil {
 			return ctx.error(err)
 		}
+*/
 	}
 	if ctx.curPeek(1) == ']' {
 		ctx.curAdvance(1)
@@ -1677,14 +1707,21 @@ func (ctx *parserCtx) parseElementDecl() (ElementType, error) {
 	if ctx.curPeek(1) != '>' {
 		return UndefinedElementType, ctx.error(ErrGtRequired)
 	}
+	ctx.curAdvance(1)
 
 	/*
 	           if (input != ctxt->input) {
 	               xmlFatalErrMsg(ctxt, XML_ERR_ENTITY_BOUNDARY,
 	   "Element declaration doesn't start and stop in the same entity\n");
 	           }
+	*/
 
-	           NEXT;
+	if s := ctx.sax; s != nil {
+		if err := s.ElementDecl(ctx.userData, name, int(etype), content); err != nil {
+			return UndefinedElementType, ctx.error(err)
+		}
+	}
+/*
 	           if ((ctxt->sax != NULL) && (!ctxt->disableSAX) &&
 	               (ctxt->sax->elementDecl != NULL)) {
 	               if (content != NULL)

@@ -30,6 +30,9 @@ type EndEntityFunc func(ctx Context, name string) error
 // ExternalEntityDeclFunc defines the function type for SAX2.ExternalEntityDeclHandler
 type ExternalEntityDeclFunc func(ctx Context, name string, publicID string, systemID string) error
 
+// ExternalSubsetFunc defines the function type for SAX2.ExternalSubsetHandler
+type ExternalSubsetFunc func(ctx Context, name string, publicID string, systemID string) error
+
 // GetExternalSubsetFunc defines the function type for SAX2.GetExternalSubsetHandler
 type GetExternalSubsetFunc func(ctx Context, name string, baseURI string) error
 
@@ -86,6 +89,7 @@ type SAX2 struct {
 	EndElementHandler EndElementFunc
 	EndEntityHandler EndEntityFunc
 	ExternalEntityDeclHandler ExternalEntityDeclFunc
+	ExternalSubsetHandler ExternalSubsetFunc
 	GetExternalSubsetHandler GetExternalSubsetFunc
 	IgnorableWhitespaceHandler IgnorableWhitespaceFunc
 	InternalEntityDeclHandler InternalEntityDeclFunc
@@ -181,6 +185,14 @@ func (s *SAX2) EndEntity(ctx Context, name string) error {
 // ExternalEntityDecl satisfies the DeclHandler interface
 func (s *SAX2) ExternalEntityDecl(ctx Context, name string, publicID string, systemID string) error {
 	if h := s.ExternalEntityDeclHandler; h != nil {
+		return h(ctx, name, publicID, systemID)
+	}
+	return nil
+}
+
+// ExternalSubset satisfies the Extensions interface
+func (s *SAX2) ExternalSubset(ctx Context, name string, publicID string, systemID string) error {
+	if h := s.ExternalSubsetHandler; h != nil {
 		return h(ctx, name, publicID, systemID)
 	}
 	return nil

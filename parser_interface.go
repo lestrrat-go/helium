@@ -14,6 +14,7 @@ const (
 	psStart
 	psPI
 	psContent
+	psPrologue
 	psEpilogue
 	psCDATA
 	psDTD
@@ -104,19 +105,23 @@ const (
 )
 
 type parserCtx struct {
-	options         int
-	encoding        string
-	cursor          *strcursor.Cursor
-	nbread          int
-	instate         parserState
-	keepBlanks      bool
-	remain          int
-	replaceEntities bool
-	sax             SAX
-	space           int
-	standalone      DocumentStandaloneType
-	inSubset        int
-	version         string
+	options           int
+	encoding          string
+	cursor            *strcursor.Cursor
+	nbread            int
+	instate           parserState
+	keepBlanks        bool
+	remain            int
+	replaceEntities   bool
+	sax               SAX
+	space             int
+	standalone        DocumentStandaloneType
+	hasExternalSubset bool
+	inSubset          int
+	intSubName        string
+	extSubSystem      string
+	extSubURI         string
+	version           string
 
 	doc        *Document
 	userData   interface{}
