@@ -39,10 +39,6 @@ type ErrUnimplemented struct {
 	target string
 }
 
-func (e ErrUnimplemented) Error() string {
-	return "unimplemented method: '" + e.target + "'"
-}
-
 type nilNode struct{}
 
 // common data

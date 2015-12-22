@@ -3,7 +3,6 @@ package helium
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -56,16 +55,6 @@ func (ctx *parserCtx) init(p *Parser, b []byte) error {
 	ctx.userData = ctx // circular dep?!
 	ctx.standalone = StandaloneImplicitNo
 	return nil
-}
-
-func (e ErrParseError) Error() string {
-	return fmt.Sprintf(
-		"%s at line %d, column %d\n -> '%s' <-- around here",
-		e.Err,
-		e.LineNumber,
-		e.Column,
-		e.Line,
-	)
 }
 
 func (ctx *parserCtx) error(err error) error {
@@ -2196,7 +2185,7 @@ func (ctx *parserCtx) parseDefaultDecl() (AttributeDefault, string, error) {
  *
  * Returns a pointer to the normalized value (dst) or NULL if no conversion
  *         is needed.
-*/
+ */
 func (ctx *parserCtx) attrNormalizeSpace(s string) string {
 	if len(s) == 0 {
 		return s
@@ -2260,7 +2249,7 @@ func (ctx *parserCtx) parseAttributeListDecl() error {
 	ctx.skipBlanks()
 
 	for ctx.curPeek(1) != '>' && ctx.instate != psEOF {
-debug.Printf("AttrList loop")
+		debug.Printf("AttrList loop")
 		attrName, err := ctx.parseName()
 		if err != nil {
 			return ctx.error(ErrAttributeNameRequired)
