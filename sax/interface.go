@@ -59,10 +59,12 @@ type Foo interface {
 	GetParameterEntity(ctx Context, nmae string) (Entity, error)
 }
 
+type AttributeDefaultValue interface{}
+type Enumeration interface{}
 type ElementContent interface {}
 // DeclHandler is a SAX2 extension handler for DTD declaration events.
 type DeclHandler interface {
-	AttributeDecl(ctx Context, eName string, aName string, typ string, mode string, value string) error
+	AttributeDecl(ctx Context, elemName string, attrName string, typ int, deftype int, defvalue AttributeDefaultValue, enum Enumeration) error
 
 	// ElementDecl is called when an element definition has been parsed.
 	// Note that the signature differs from SAX2 API in http://sax.sourceforge.net/apidoc/org/xml/sax/ext/DeclHandler.html#elementDecl%28java.lang.String%2C%20java.lang.String%29

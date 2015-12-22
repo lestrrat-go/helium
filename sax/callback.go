@@ -1,7 +1,7 @@
 package sax
 
 // AttributeDeclFunc defines the function type for SAX2.AttributeDeclHandler
-type AttributeDeclFunc func(ctx Context, eName string, aName string, typ string, mode string, value string) error
+type AttributeDeclFunc func(ctx Context, elemName string, attrName string, typ int, deftype int, defvalue AttributeDefaultValue, enum Enumeration) error
 
 // CharactersFunc defines the function type for SAX2.CharactersHandler
 type CharactersFunc func(ctx Context, content []byte) error
@@ -111,9 +111,9 @@ func New() *SAX2 {
 }
 
 // AttributeDecl satisfies the DeclHandler interface
-func (s *SAX2) AttributeDecl(ctx Context, eName string, aName string, typ string, mode string, value string) error {
+func (s *SAX2) AttributeDecl(ctx Context, elemName string, attrName string, typ int, deftype int, defvalue AttributeDefaultValue, enum Enumeration) error {
 	if h := s.AttributeDeclHandler; h != nil {
-		return h(ctx, eName, aName, typ, mode, value)
+		return h(ctx, elemName, attrName, typ, deftype, defvalue, enum)
 	}
 	return nil
 }

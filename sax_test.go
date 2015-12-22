@@ -107,8 +107,9 @@ func newEventEmitter(out io.Writer) helium.SAX {
 
 func TestSAXEvents(t *testing.T) {
 	skipped := map[string]struct{} {
-		"xml2.xml": struct{}{},
-		"att4.xml": struct{}{},
+		"xml2.xml": {},
+		"att4.xml": {},
+		"att5.xml": {},
 	}
 
 	dir := "test"

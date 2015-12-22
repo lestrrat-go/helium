@@ -2,6 +2,34 @@ package helium
 
 import "errors"
 
+type AttributeType int
+
+const (
+	AttrInvalid AttributeType = iota
+	AttrCDATA
+	AttrID
+	AttrIDRef
+	AttrIDRefs
+	AttrEntity
+	AttrEntities
+	AttrNmtoken
+	AttrNmtokens
+	AttrEnumeration
+	AttrNotation
+)
+
+type AttributeDefault int
+
+const (
+	AttrDefaultInvalid AttributeDefault = iota
+	AttrDefaultNone
+	AttrDefaultRequired
+	AttrDefaultImplied
+	AttrDefaultFixed
+)
+
+type Enumeration []string
+
 var (
 	ErrNilNode          = errors.New("nil node")
 	ErrInvalidOperation = errors.New("operation cannot be performed")
@@ -19,8 +47,8 @@ type nilNode struct{}
 
 // common data
 type node struct {
-	typ     NodeType
-	private interface{}
+	typ      NodeType
+	private  interface{}
 	etype    ElementType
 	name     string
 	children []Node
@@ -31,13 +59,15 @@ type node struct {
 }
 
 type DocumentStandaloneType int
+
 const (
 	StandaloneInvalidValue = -99
-	StandaloneExplicitYes = 1
-	StandaloneExplicitNo  = 0
-	StandaloneNoXMLDecl   = -1
-	StandaloneImplicitNo  = -2
+	StandaloneExplicitYes  = 1
+	StandaloneExplicitNo   = 0
+	StandaloneNoXMLDecl    = -1
+	StandaloneImplicitNo   = -2
 )
+
 type Document struct {
 	node
 	version    string
@@ -56,11 +86,11 @@ type ProcessingInstruction struct {
 
 type DTD struct {
 	node
-	elements map[string]Element
-	entities map[string]Entity
-	pentities map[string]Entity
+	elements   map[string]Element
+	entities   map[string]Entity
+	pentities  map[string]Entity
 	externalID string
-	systemID string
+	systemID   string
 }
 
 type Namespace struct {
@@ -180,18 +210,45 @@ var (
 		node: node{
 			name: "lt",
 		},
-		orig:"<",
-		content: "<",
+		orig:       "<",
+		content:    "<",
 		entityType: InternalPredefinedEntity,
-		owner: false,
+		owner:      false,
+	}
+	EntityGT = Entity{
+		node: node{
+			name: "gt",
+		},
+		orig:       ">",
+		content:    ">",
+		entityType: InternalPredefinedEntity,
+		owner:      false,
+	}
+	EntityAmpersand = Entity{
+		node: node{
+			name: "amp",
+		},
+		orig:       "&",
+		content:    "&",
+		entityType: InternalPredefinedEntity,
+		owner:      false,
 	}
 	EntityApostrophe = Entity{
 		node: node{
 			name: "apos",
 		},
-		orig:"'",
-		content: "'",
+		orig:       "'",
+		content:    "'",
 		entityType: InternalPredefinedEntity,
-		owner: false,
+		owner:      false,
+	}
+	EntityQuote = Entity{
+		node: node{
+			name: "quot",
+		},
+		orig:       `"`,
+		content:    `"`,
+		entityType: InternalPredefinedEntity,
+		owner:      false,
 	}
 )

@@ -24,6 +24,9 @@ const MaxNameLength = 50000
 
 var (
 	ErrAmpersandRequired            = errors.New("'&' was required here")
+	ErrAttrListNotFinished          = errors.New("attrlist must finish with a ')'")
+	ErrAttrListNotStarted           = errors.New("attrlist must start with a '('")
+	ErrAttributeNameRequired        = errors.New("attribute namewas required here (ATTLIST)")
 	ErrDocTypeNameRequired          = errors.New("doctype name required")
 	ErrDocTypeNotFinished           = errors.New("doctype not finished")
 	ErrDocumentEnd                  = errors.New("extra content at document end")
@@ -49,6 +52,10 @@ var (
 	ErrMisplacedCDATAEnd            = errors.New("misplaced CDATA end ']]>'")
 	ErrNameTooLong                  = errors.New("name is too long")
 	ErrNameRequired                 = errors.New("name is required")
+	ErrNmtokenRequired              = errors.New("nmtoken is required")
+	ErrNotationNameRequired         = errors.New("notation name expected in NOTATION declaration")
+	ErrNotationNotFinished          = errors.New("notation must finish with a ')'")
+	ErrNotationNotStarted           = errors.New("notation must start with a '('")
 	ErrOpenParenRequired            = errors.New("'(' is required")
 	ErrPCDATARequired               = errors.New("'#PCDATA' required")
 	ErrPercentRequired              = errors.New("'%' is required")
@@ -57,6 +64,10 @@ var (
 	ErrSpaceRequired                = errors.New("space required")
 	ErrStartTagRequired             = errors.New("start tag expected, '<' not found")
 )
+
+type ErrDTDDupToken struct {
+	Name string
+}
 
 type ErrAttrNotFound struct {
 	Token string

@@ -696,7 +696,7 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (str
 		for ; ctx.curHasChars(i); i++ {
 			c := ctx.curPeek(i)
 			// TODO check for valid "c" value
-			if c == qch || c == '&' || c == '<' {
+			if (qch != 0x0 && c == qch) || c == '&' || c == '<' {
 				i--
 				break
 			}
@@ -1532,6 +1532,8 @@ func (ctx *parserCtx) parseMarkupDecl() error {
 		debug.Printf("START parseMarkupDecl")
 		defer debug.Printf("END   parseMarkupDecl")
 	}
+
+	debug.Printf(" ====> %s", ctx.cursor.Bytes())
 	if ctx.curPeek(1) == '<' {
 		if ctx.curPeek(2) == '!' {
 			switch ctx.curPeek(3) {
@@ -1937,7 +1939,400 @@ func (ctx *parserCtx) parseEntityDecl() error {
 	return nil
 }
 
+/*
+ * parse an Notation attribute type.
+ *
+ * Note: the leading 'NOTATION' S part has already being parsed...
+ *
+ * [58] NotationType ::= 'NOTATION' S '(' S? Name (S? '|' S? Name)* S? ')'
+ *
+ * [ VC: Notation Attributes ]
+ * Values of this type must match one of the notation names included
+ * in the declaration; all notation names in the declaration must be declared.
+ *
+ * Returns: the notation attribute tree built while parsing
+ */
+func (ctx *parserCtx) parseNotationType() (Enumeration, error) {
+	if debug.Enabled {
+		debug.Printf("START parseNotationType")
+		defer debug.Printf("END   parseNotationType")
+	}
+
+	if ctx.curPeek(1) != '(' {
+		return nil, ctx.error(ErrNotationNotStarted)
+	}
+	ctx.curAdvance(1)
+	ctx.skipBlanks()
+
+	names := map[string]struct{}{}
+
+	var enum Enumeration
+	for ctx.instate != psEOF {
+		name, err := ctx.parseName()
+		if err != nil {
+			return nil, ctx.error(ErrNotationNameRequired)
+		}
+		if _, ok := names[name]; ok {
+			return nil, ctx.error(ErrDTDDupToken{Name: name})
+		}
+
+		enum = append(enum, name)
+		ctx.skipBlanks()
+
+		if ctx.curPeek(1) != '|' {
+			break
+		}
+		ctx.curAdvance(1)
+		ctx.skipBlanks()
+	}
+
+	if ctx.curPeek(1) != ')' {
+		return nil, ctx.error(ErrNotationNotFinished)
+	}
+	ctx.curAdvance(1)
+	return enum, nil
+}
+
+func (ctx *parserCtx) parseEnumerationType() (Enumeration, error) {
+	if ctx.curPeek(1) != '(' {
+		return nil, ctx.error(ErrAttrListNotStarted)
+	}
+	ctx.curAdvance(1)
+	ctx.skipBlanks()
+
+	names := map[string]struct{}{}
+
+	var enum Enumeration
+	for ctx.instate != psEOF {
+		name, err := ctx.parseNmtoken()
+		if err != nil {
+			return nil, ctx.error(ErrNmtokenRequired)
+		}
+		if _, ok := names[name]; ok {
+			return nil, ctx.error(ErrDTDDupToken{Name: name})
+		}
+
+		enum = append(enum, name)
+		ctx.skipBlanks()
+
+		if ctx.curPeek(1) != '|' {
+			break
+		}
+		ctx.curAdvance(1)
+		ctx.skipBlanks()
+	}
+
+	if ctx.curPeek(1) != ')' {
+		return nil, ctx.error(ErrAttrListNotFinished)
+	}
+	ctx.curAdvance(1)
+	return enum, nil
+}
+
+/*
+ * parse an Enumerated attribute type.
+ *
+ * [57] EnumeratedType ::= NotationType | Enumeration
+ *
+ * [58] NotationType ::= 'NOTATION' S '(' S? Name (S? '|' S? Name)* S? ')'
+ *
+ *
+ * Returns: XML_ATTRIBUTE_ENUMERATION or XML_ATTRIBUTE_NOTATION
+ */
+func (ctx *parserCtx) parseEnumeratedType() (AttributeType, Enumeration, error) {
+	if ctx.curConsumePrefix("NOTATION") {
+		if !isBlankCh(ctx.curPeek(1)) {
+			return AttrInvalid, nil, ctx.error(ErrSpaceRequired)
+		}
+		ctx.skipBlanks()
+		enum, err := ctx.parseNotationType()
+		if err != nil {
+			return AttrInvalid, nil, ctx.error(err)
+		}
+
+		return AttrNotation, enum, nil
+	}
+
+	enum, err := ctx.parseEnumerationType()
+	if err != nil {
+		return AttrInvalid, enum, ctx.error(err)
+	}
+	return AttrEnumeration, enum, nil
+}
+
+/*
+ * parse the Attribute list def for an element
+ *
+ * [54] AttType ::= StringType | TokenizedType | EnumeratedType
+ *
+ * [55] StringType ::= 'CDATA'
+ *
+ * [56] TokenizedType ::= 'ID' | 'IDREF' | 'IDREFS' | 'ENTITY' |
+ *                        'ENTITIES' | 'NMTOKEN' | 'NMTOKENS'
+ *
+ * Validity constraints for attribute values syntax are checked in
+ * xmlValidateAttributeValue()
+ *
+ * [ VC: ID ]
+ * Values of type ID must match the Name production. A name must not
+ * appear more than once in an XML document as a value of this type;
+ * i.e., ID values must uniquely identify the elements which bear them.
+ *
+ * [ VC: One ID per Element Type ]
+ * No element type may have more than one ID attribute specified.
+ *
+ * [ VC: ID Attribute Default ]
+ * An ID attribute must have a declared default of #IMPLIED or #REQUIRED.
+ *
+ * [ VC: IDREF ]
+ * Values of type IDREF must match the Name production, and values
+ * of type IDREFS must match Names; each IDREF Name must match the value
+ * of an ID attribute on some element in the XML document; i.e. IDREF
+ * values must match the value of some ID attribute.
+ *
+ * [ VC: Entity Name ]
+ * Values of type ENTITY must match the Name production, values
+ * of type ENTITIES must match Names; each Entity Name must match the
+ * name of an unparsed entity declared in the DTD.
+ *
+ * [ VC: Name Token ]
+ * Values of type NMTOKEN must match the Nmtoken production; values
+ * of type NMTOKENS must match Nmtokens.
+ *
+ * Returns the attribute type
+ */
+func (ctx *parserCtx) parseAttributeType() (AttributeType, Enumeration, error) {
+	if ctx.curConsumePrefix("CDATA") {
+		return AttrCDATA, nil, nil
+	}
+	if ctx.curConsumePrefix("IDREFS") {
+		return AttrIDRefs, nil, nil
+	}
+	if ctx.curConsumePrefix("IDREF") {
+		return AttrIDRef, nil, nil
+	}
+	if ctx.curConsumePrefix("ID") {
+		return AttrID, nil, nil
+	}
+	if ctx.curConsumePrefix("ENTITY") {
+		return AttrEntity, nil, nil
+	}
+	if ctx.curConsumePrefix("ENTITIES") {
+		return AttrEntities, nil, nil
+	}
+	if ctx.curConsumePrefix("NMTOKENS") {
+		return AttrNmtokens, nil, nil
+	}
+	if ctx.curConsumePrefix("NMTOKEN") {
+		return AttrNmtoken, nil, nil
+	}
+
+	return ctx.parseEnumeratedType()
+}
+
+/*
+ * Parse an attribute default declaration
+ *
+ * [60] DefaultDecl ::= '#REQUIRED' | '#IMPLIED' | (('#FIXED' S)? AttValue)
+ *
+ * [ VC: Required Attribute ]
+ * if the default declaration is the keyword #REQUIRED, then the
+ * attribute must be specified for all elements of the type in the
+ * attribute-list declaration.
+ *
+ * [ VC: Attribute Default Legal ]
+ * The declared default value must meet the lexical constraints of
+ * the declared attribute type c.f. xmlValidateAttributeDecl()
+ *
+ * [ VC: Fixed Attribute Default ]
+ * if an attribute has a default value declared with the #FIXED
+ * keyword, instances of that attribute must match the default value.
+ *
+ * [ WFC: No < in Attribute Values ]
+ * handled in xmlParseAttValue()
+ *
+ * returns: XML_ATTRIBUTE_NONE, XML_ATTRIBUTE_REQUIRED, XML_ATTRIBUTE_IMPLIED
+ *          or XML_ATTRIBUTE_FIXED.
+ */
+func (ctx *parserCtx) parseDefaultDecl() (AttributeDefault, string, error) {
+	if debug.Enabled {
+		debug.Printf("START parseDefaultDecl")
+		defer debug.Printf("END   parseDefaultDecl")
+	}
+
+	if ctx.curConsumePrefix("#REQUIRED") {
+		return AttrDefaultRequired, "", nil
+	}
+	if ctx.curConsumePrefix("#IMPLIED") {
+		return AttrDefaultImplied, "", nil
+	}
+
+	var typ AttributeDefault
+	if ctx.curConsumePrefix("#FIXED") {
+		typ = AttrDefaultFixed
+		if !isBlankCh(ctx.curPeek(1)) {
+			return AttrDefaultInvalid, "", ctx.error(ErrSpaceRequired)
+		}
+		ctx.skipBlanks()
+	}
+
+	def, err := ctx.parseAttributeValueInternal(0x0, false)
+	if err != nil {
+		return AttrDefaultInvalid, "", ctx.error(err)
+	}
+	ctx.instate = psDTD
+	return typ, def, nil
+}
+
+/*
+ * Normalize the space in non CDATA attribute values:
+ * If the attribute type is not CDATA, then the XML processor MUST further
+ * process the normalized attribute value by discarding any leading and
+ * trailing space (#x20) characters, and by replacing sequences of space
+ * (#x20) characters by a single space (#x20) character.
+ * Note that the size of dst need to be at least src, and if one doesn't need
+ * to preserve dst (and it doesn't come from a dictionary or read-only) then
+ * passing src as dst is just fine.
+ *
+ * Returns a pointer to the normalized value (dst) or NULL if no conversion
+ *         is needed.
+*/
+func (ctx *parserCtx) attrNormalizeSpace(s string) string {
+	if len(s) == 0 {
+		return s
+	}
+
+	out := make([]byte, 0, len(s))
+	// skip leading spaces
+	i := 0
+	for ; i < len(s); i++ {
+		if s[i] != 0x20 {
+			break
+		}
+	}
+
+	for ; i < len(s); i++ {
+		if s[i] != 0x20 {
+			out = append(out, s[i])
+		} else {
+			for i++; i < len(s); i++ {
+				if s[i] != 0x20 {
+					i--
+					break
+				}
+			}
+
+			if i < len(s) {
+				out = append(out, s[i])
+
+			}
+		}
+
+	}
+	return string(out)
+}
+
+/*
+ * : parse the Attribute list def for an element
+ *
+ * [52] AttlistDecl ::= '<!ATTLIST' S Name AttDef* S? '>'
+ *
+ * [53] AttDef ::= S Name S AttType S DefaultDecl
+ */
 func (ctx *parserCtx) parseAttributeListDecl() error {
+	if debug.Enabled {
+		debug.Printf("START parseAttributeListDecl")
+		defer debug.Printf("END   parseAttributeListDecl")
+	}
+	if !ctx.curConsumePrefix("<!ATTLIST") {
+		return nil
+	}
+
+	if !isBlankCh(ctx.curPeek(1)) {
+		return ctx.error(ErrSpaceRequired)
+	}
+	ctx.skipBlanks()
+
+	elemName, err := ctx.parseName()
+	if err != nil {
+		return ctx.error(err)
+	}
+	ctx.skipBlanks()
+
+	for ctx.curPeek(1) != '>' && ctx.instate != psEOF {
+debug.Printf("AttrList loop")
+		attrName, err := ctx.parseName()
+		if err != nil {
+			return ctx.error(ErrAttributeNameRequired)
+		}
+		if !isBlankCh(ctx.curPeek(1)) {
+			return ctx.error(ErrSpaceRequired)
+		}
+		ctx.skipBlanks()
+
+		typ, enum, err := ctx.parseAttributeType()
+		if err != nil {
+			return ctx.error(err)
+		}
+
+		if !isBlankCh(ctx.curPeek(1)) {
+			return ctx.error(ErrSpaceRequired)
+		}
+		ctx.skipBlanks()
+
+		def, defvalue, err := ctx.parseDefaultDecl()
+		if err != nil {
+			return ctx.error(err)
+		}
+
+		if typ != AttrCDATA && def != AttrDefaultInvalid {
+			defvalue = ctx.attrNormalizeSpace(defvalue)
+		}
+
+		if c := ctx.curPeek(1); c != '>' {
+			if !isBlankCh(c) {
+				return ctx.error(ErrSpaceRequired)
+			}
+			ctx.skipBlanks()
+		}
+		/*
+		   if (check == CUR_PTR) {
+		       xmlFatalErr(ctxt, XML_ERR_INTERNAL_ERROR,
+		                   "in xmlParseAttributeListDecl\n");
+		       if (defaultValue != NULL)
+		           xmlFree(defaultValue);
+		       if (tree != NULL)
+		           xmlFreeEnumeration(tree);
+		       break;
+		   }
+		*/
+		if s := ctx.sax; s != nil {
+			s.AttributeDecl(ctx.userData, elemName, attrName, int(typ), int(def), defvalue, enum)
+		}
+		/*
+		   if ((ctxt->sax2) && (defaultValue != NULL) &&
+		       (def != XML_ATTRIBUTE_IMPLIED) &&
+		       (def != XML_ATTRIBUTE_REQUIRED)) {
+		       xmlAddDefAttrs(ctxt, elemName, attrName, defaultValue);
+		   }
+		   if (ctxt->sax2) {
+		       xmlAddSpecialAttr(ctxt, elemName, attrName, type);
+		   }
+		   if (defaultValue != NULL)
+		       xmlFree(defaultValue);
+		*/
+		if ctx.curPeek(1) == '>' {
+			/*
+			           if (input != ctxt->input) {
+			               xmlValidityError(ctxt, XML_ERR_ENTITY_BOUNDARY,
+			   "Attribute list declaration doesn't start and stop in the same entity\n",
+			                                NULL, NULL);
+			           }
+			*/
+			ctx.curAdvance(1)
+			break
+		}
+	}
 	return nil
 }
 

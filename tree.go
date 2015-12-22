@@ -256,7 +256,7 @@ func (t *TreeBuilder) GetParameterEntity(ctxif sax.Context, name string) (sax.En
 	return nil, ErrEntityNotFound
 }
 
-func (t *TreeBuilder) AttributeDecl(ctx sax.Context, eName string, aName string, typ string, mode string, value string) error {
+func (t *TreeBuilder) AttributeDecl(ctx sax.Context, eName string, aName string, typ int, deftype int, value sax.AttributeDefaultValue, enum sax.Enumeration) error {
 	return nil
 }
 
