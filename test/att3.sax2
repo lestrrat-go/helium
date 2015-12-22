@@ -1,0 +1,8 @@
+SAX.SetDocumentLocator()
+SAX.StartDocument()
+SAX.StartElementNS(select, NULL, NULL, 0, 1, 0, onclick='aaaa...', 17)
+SAX.Characters(f, 1)
+SAX.Characters( , 2)
+SAX.Characters(oo, 2)
+SAX.EndElementNS(select, NULL, NULL)
+SAX.EndDocument()

@@ -1,0 +1,5 @@
+SAX.SetDocumentLocator()
+SAX.StartDocument()
+SAX.StartElementNS(doc, NULL, NULL, 0, 1, 0, attr='to n...', 28)
+SAX.EndElementNS(doc, NULL, NULL)
+SAX.EndDocument()

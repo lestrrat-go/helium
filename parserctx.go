@@ -333,7 +333,7 @@ func (ctx *parserCtx) parseDocument() error {
 
 		ctx.inSubset = 2
 		if s := ctx.sax; s != nil {
-			if err := s.ExternalSubset(ctx.userData,  ctx.intSubName, ctx.extSubSystem, ctx.extSubURI); err != nil {
+			if err := s.ExternalSubset(ctx.userData, ctx.intSubName, ctx.extSubSystem, ctx.extSubURI); err != nil {
 				return ctx.error(err)
 			}
 		}
@@ -420,6 +420,7 @@ func (ctx *parserCtx) parseContent() error {
 			if err := ctx.parseComment(); err != nil {
 				return ctx.error(err)
 			}
+			continue
 		}
 
 		if ctx.curHasPrefix("<") {
@@ -430,7 +431,10 @@ func (ctx *parserCtx) parseContent() error {
 		}
 
 		if ctx.curHasPrefix("&") {
-			panic("unimplemented (reference)")
+			if _, err := ctx.parseReference(); err != nil {
+				return ctx.error(err)
+			}
+			continue
 		}
 
 		if err := ctx.parseCharData(false); err != nil {
@@ -515,7 +519,7 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 		str := ctx.curConsume(i - 1)
 		// XXX This is not right, but it's for now the best place to do this
 		str = strings.Replace(str, "\r\n", "\n", -1)
-		if ctx.areBlanks(str) {
+		if ctx.areBlanks(str, false) {
 			if s := ctx.sax; s != nil {
 				if err := s.IgnorableWhitespace(ctx.userData, []byte(str)); err != nil {
 					return ctx.error(err)
@@ -1262,7 +1266,7 @@ func (ctx *parserCtx) parsePITarget() (string, error) {
 
 // note: unlike libxml2, we can't differentiate between SAX handlers
 // that uses the same IgnorableWhitespace and Character handlers
-func (ctx *parserCtx) areBlanks(s string) bool {
+func (ctx *parserCtx) areBlanks(s string, blankChars bool) bool {
 	if debug.Enabled {
 		debug.Printf("START areBlanks (%v)", []byte(s))
 		defer debug.Printf("END   areBlanks")
@@ -1274,12 +1278,13 @@ func (ctx *parserCtx) areBlanks(s string) bool {
 	}
 
 	// Check that the string is made of blanks
-	/*
-	   if (blank_chars == 0) {
-	         for (i = 0;i < len;i++)
-	             if (!(IS_BLANK_CH(str[i]))) return(0);
-	     }
-	*/
+	if !blankChars {
+		for _, r := range s {
+			if !isBlankCh(r) {
+				return false
+			}
+		}
+	}
 
 	// Look if the element is mixed content in the DTD if available
 	if ctx.element == nil {
@@ -1467,11 +1472,11 @@ func (ctx *parserCtx) parseInternalSubset() error {
 		if err := ctx.parseMarkupDecl(); err != nil {
 			return ctx.error(err)
 		}
-/*
-		if err := ctx.parsePEReference(); err != nil {
-			return ctx.error(err)
-		}
-*/
+		/*
+			if err := ctx.parsePEReference(); err != nil {
+				return ctx.error(err)
+			}
+		*/
 	}
 	if ctx.curPeek(1) == ']' {
 		ctx.curAdvance(1)
@@ -1721,24 +1726,24 @@ func (ctx *parserCtx) parseElementDecl() (ElementType, error) {
 			return UndefinedElementType, ctx.error(err)
 		}
 	}
-/*
-	           if ((ctxt->sax != NULL) && (!ctxt->disableSAX) &&
-	               (ctxt->sax->elementDecl != NULL)) {
-	               if (content != NULL)
-	                   content->parent = NULL;
-	               ctxt->sax->elementDecl(ctxt->userData, name, ret,
-	                                      content);
-	               if ((content != NULL) && (content->parent == NULL)) {
-	                   // this is a trick: if xmlAddElementDecl is called,
-	                   // instead of copying the full tree it is plugged directly
-	                  // if called from the parser. Avoid duplicating the
-	                   // interfaces or change the API/ABI
-	                  //
-	                   xmlFreeDocElementContent(ctxt->myDoc, content);
-	               }
-	           } else if (content != NULL) {
-	               xmlFreeDocElementContent(ctxt->myDoc, content);
-	           }
+	/*
+	   if ((ctxt->sax != NULL) && (!ctxt->disableSAX) &&
+	       (ctxt->sax->elementDecl != NULL)) {
+	       if (content != NULL)
+	           content->parent = NULL;
+	       ctxt->sax->elementDecl(ctxt->userData, name, ret,
+	                              content);
+	       if ((content != NULL) && (content->parent == NULL)) {
+	           // this is a trick: if xmlAddElementDecl is called,
+	           // instead of copying the full tree it is plugged directly
+	          // if called from the parser. Avoid duplicating the
+	           // interfaces or change the API/ABI
+	          //
+	           xmlFreeDocElementContent(ctxt->myDoc, content);
+	       }
+	   } else if (content != NULL) {
+	       xmlFreeDocElementContent(ctxt->myDoc, content);
+	   }
 	*/
 
 	_ = name
