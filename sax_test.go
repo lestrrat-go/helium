@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -105,6 +106,11 @@ func newEventEmitter(out io.Writer) helium.SAX {
 }
 
 func TestSAXEvents(t *testing.T) {
+	skipped := map[string]struct{} {
+		"xml2.xml": struct{}{},
+		"att4.xml": struct{}{},
+	}
+
 	dir := "test"
 	files, err := ioutil.ReadDir(dir)
 	if !assert.NoError(t, err, "ioutil.ReadDir should succeed") {
@@ -116,8 +122,7 @@ func TestSAXEvents(t *testing.T) {
 			continue
 		}
 
-		switch fi.Name() {
-		case "xml2.xml":
+		if _, ok := skipped[fi.Name()]; ok {
 			t.Logf("Skipping test for '%s' for now...", fi.Name())
 			continue
 		}
@@ -148,6 +153,14 @@ func TestSAXEvents(t *testing.T) {
 		}
 
 		if !assert.Equal(t, string(golden), string(out.Bytes()), "SAX event streams should match (file = %s)", fn) {
+			errout, err := os.OpenFile(fn+".err", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0744)
+			if err != nil {
+				t.Logf("Failed to file to save output: %s", err)
+				return
+			}
+			defer errout.Close()
+
+			errout.Write(out.Bytes())
 			return
 		}
 	}

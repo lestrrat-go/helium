@@ -275,6 +275,11 @@ func (ctx *parserCtx) switchEncoding() error {
 }
 
 func (ctx *parserCtx) parseDocument() error {
+	if debug.Enabled {
+		debug.Printf("START parseDocument")
+		defer debug.Printf("END   parseDocument")
+	}
+
 	if s := ctx.sax; s != nil {
 		if err := s.SetDocumentLocator(ctx.userData, nil); err != nil {
 			return ctx.error(err)
@@ -493,7 +498,7 @@ var testCharData = [256]byte{
  */
 func (ctx *parserCtx) parseCharData(cdata bool) error {
 	if debug.Enabled {
-		debug.Printf("START parseCharData (byte offset = %d, remainig = '%s')", ctx.cursor.OffsetBytes(), ctx.cursor.Bytes())
+		debug.Printf("START parseCharData (byte offset = %d)", ctx.cursor.OffsetBytes())
 		defer debug.Printf("END   parseCharData")
 	}
 
@@ -791,7 +796,6 @@ func (ctx *parserCtx) skipBlanks() {
 	i := 1
 	for ; ctx.curHasChars(i); i++ {
 		if !isBlankCh(ctx.curPeek(i)) {
-			debug.Printf("%d-th character is NOT blank", i)
 			break
 		}
 	}
@@ -1088,29 +1092,34 @@ func (ctx *parserCtx) parsePI() error {
  *
  * Returns the Name parsed.
  */
-func (ctx *parserCtx) parseName() (string, error) {
+func (ctx *parserCtx) parseName() (name string, err error) {
 	if debug.Enabled {
 		debug.Printf("START parseName")
-		defer debug.Printf("END   parseName")
+		defer func() {
+			debug.Printf("END   parseName (%s)", name)
+		}()
 	}
 	if ctx.instate == psEOF {
-		return "", ctx.error(ErrPrematureEOF)
+		err = ctx.error(ErrPrematureEOF)
+		return
 	}
 
 	i := 1
 	for ; ctx.curHasChars(i); i++ {
 		c := ctx.curPeek(i)
-		debug.Printf("----> %c", c)
 		if !(c >= 0x61 && c <= 0x7A) && !(c >= 0x41 && c <= 0x5A) && !(c >= 0x30 && c <= 0x39) && c != '_' && c != '-' && c != ':' && c != '.' {
 			i--
 			break
 		}
 	}
 	if i > MaxNameLength {
-		return "", ctx.error(ErrNameTooLong)
+		err = ctx.error(ErrNameTooLong)
+		return
 	}
 
-	return ctx.curConsume(i), nil
+	name = ctx.curConsume(i)
+	err = nil
+	return
 }
 
 /**
@@ -1266,22 +1275,26 @@ func (ctx *parserCtx) parsePITarget() (string, error) {
 
 // note: unlike libxml2, we can't differentiate between SAX handlers
 // that uses the same IgnorableWhitespace and Character handlers
-func (ctx *parserCtx) areBlanks(s string, blankChars bool) bool {
+func (ctx *parserCtx) areBlanks(s string, blankChars bool) (ret bool) {
 	if debug.Enabled {
 		debug.Printf("START areBlanks (%v)", []byte(s))
-		defer debug.Printf("END   areBlanks")
+		defer func() {
+			debug.Printf("END   areBlanks (%b)", ret)
+		}()
 	}
 
 	// Check for xml:space value.
 	if ctx.space == 1 || ctx.space == -2 {
-		return false
+		ret = false
+		return
 	}
 
 	// Check that the string is made of blanks
 	if !blankChars {
 		for _, r := range s {
 			if !isBlankCh(r) {
-				return false
+				ret = false
+				return
 			}
 		}
 	}
@@ -1289,16 +1302,19 @@ func (ctx *parserCtx) areBlanks(s string, blankChars bool) bool {
 	// Look if the element is mixed content in the DTD if available
 	if ctx.element == nil {
 		debug.Printf("ctx.element == nil")
-		return false
+		ret = false
+		return
 	}
 	if ctx.doc != nil {
 		ok, _ := ctx.doc.IsMixedElement(ctx.element.Name())
 		debug.Printf("IsMixedElement -> %b", ok)
-		return !ok
+		ret = !ok
+		return
 	}
 
 	if c := ctx.curPeek(1); c != '<' && c != 0xD {
-		return false
+		ret = false
+		return
 	}
 
 	/*
@@ -1315,8 +1331,8 @@ func (ctx *parserCtx) areBlanks(s string, blankChars bool) bool {
 	            (xmlNodeIsText(ctxt->node->children)))
 	       return(0);
 	*/
-	debug.Printf("all else failed, it's blank!")
-	return true
+	ret = true
+	return
 }
 
 func isChar(r rune) bool {
