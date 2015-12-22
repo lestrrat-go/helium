@@ -1268,7 +1268,7 @@ func (ctx *parserCtx) areBlanks(s string, blankChars bool) (ret bool) {
 	if debug.Enabled {
 		debug.Printf("START areBlanks (%v)", []byte(s))
 		defer func() {
-			debug.Printf("END   areBlanks (%b)", ret)
+			debug.Printf("END   areBlanks (%t)", ret)
 		}()
 	}
 
@@ -1296,7 +1296,7 @@ func (ctx *parserCtx) areBlanks(s string, blankChars bool) (ret bool) {
 	}
 	if ctx.doc != nil {
 		ok, _ := ctx.doc.IsMixedElement(ctx.element.Name())
-		debug.Printf("IsMixedElement -> %b", ok)
+		debug.Printf("IsMixedElement -> %t", ok)
 		ret = !ok
 		return
 	}
