@@ -1,17 +1,9 @@
 SAX.SetDocumentLocator()
 SAX.StartDocument()
 SAX.StartElementNS(doc, NULL, NULL, 0, 0, 0)
-SAX.characters(
-, 1)
-SAX.comment( document start )
-SAX.characters(
-, 1)
+SAX.Comment( document start )
 SAX.StartElementNS(empty, NULL, NULL, 0, 0, 0)
-SAX.endElementNS(empty, NULL, NULL)
-SAX.characters(
-, 1)
-SAX.comment( document end )
-SAX.characters(
-, 1)
-SAX.endElementNS(doc, NULL, NULL)
-SAX.endDocument()
+SAX.EndElementNS(empty, NULL, NULL)
+SAX.Comment( document end )
+SAX.EndElementNS(doc, NULL, NULL)
+SAX.EndDocument()
