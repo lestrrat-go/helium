@@ -29,7 +29,7 @@ func newEventEmitter(out io.Writer) helium.SAX {
 		return nil
 	}
 	s.CommentHandler = func(_ sax.Context, data []byte) error {
-		fmt.Fprintf(out, "SAX.comment(%s)\n", data)
+		fmt.Fprintf(out, "SAX.Comment(%s)\n", data)
 		return nil
 	}
 	s.CharactersHandler = func(_ sax.Context, data []byte) error {
@@ -105,7 +105,7 @@ func TestSAXEvents(t *testing.T) {
 		}
 
 		switch fi.Name() {
-		case "comment.xml", "xml2.xml":
+		case "xml2.xml":
 			t.Logf("Skipping test for '%s' for now...", fi.Name())
 			continue
 		}

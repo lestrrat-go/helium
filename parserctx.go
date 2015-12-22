@@ -28,12 +28,16 @@ func (ctx *parserCtx) peekNode() *ParsedElement {
 
 func (ctx *parserCtx) popNode() *ParsedElement {
 	e := ctx.peekNode()
+	if e == nil {
+		if debug.Enabled {
+			debug.Printf(" <-- pop node (EMPTY)")
+		}
+	}
+
 	if debug.Enabled {
 		debug.Printf(" <-- pop node " + e.local)
 	}
-	if e != nil {
-		ctx.element = e.next
-	}
+	ctx.element = e.next
 	return e
 }
 
@@ -1238,7 +1242,7 @@ func (ctx *parserCtx) parsePITarget() (string, error) {
 func (ctx *parserCtx) areBlanks(s string) bool {
 	if debug.Enabled {
 		debug.Printf("START areBlanks (%v)", []byte(s))
-		debug.Printf("END   areBlanks")
+		defer debug.Printf("END   areBlanks")
 	}
 
 	// Check for xml:space value.
