@@ -47,24 +47,24 @@ type TreeBuilder struct {
 	node Node
 }
 
-func (t *TreeBuilder) SetDocumentLocator(ctxif interface{}, loc sax.DocumentLocator) error {
+func (t *TreeBuilder) SetDocumentLocator(ctxif sax.Context, loc sax.DocumentLocator) error {
 	return nil
 }
 
-func (t *TreeBuilder) StartDocument(ctxif interface{}) error {
+func (t *TreeBuilder) StartDocument(ctxif sax.Context) error {
 	ctx := ctxif.(*parserCtx)
 	t.doc = NewDocument(ctx.version, ctx.encoding, ctx.standalone)
 	return nil
 }
 
-func (t *TreeBuilder) EndDocument(ctxif interface{}) error {
+func (t *TreeBuilder) EndDocument(ctxif sax.Context) error {
 	ctx := ctxif.(*parserCtx)
 	ctx.doc = t.doc
 	t.doc = nil
 	return nil
 }
 
-func (t *TreeBuilder) ProcessingInstruction(ctxif interface{}, target, data string) error {
+func (t *TreeBuilder) ProcessingInstruction(ctxif sax.Context, target, data string) error {
 	//	ctx := ctxif.(*parserCtx)
 	pi, err := t.doc.CreatePI(target, data)
 	if err != nil {
@@ -87,7 +87,7 @@ func (t *TreeBuilder) ProcessingInstruction(ctxif interface{}, target, data stri
 	return nil
 }
 
-func (t *TreeBuilder) StartElement(ctxif interface{}, elem sax.ParsedElement) error {
+func (t *TreeBuilder) StartElement(ctxif sax.Context, elem sax.ParsedElement) error {
 	//	ctx := ctxif.(*parserCtx)
 	if debug.Enabled {
 		debug.Printf("tree.StartElement: %#v", elem)
@@ -113,14 +113,14 @@ func (t *TreeBuilder) StartElement(ctxif interface{}, elem sax.ParsedElement) er
 	return nil
 }
 
-func (t *TreeBuilder) EndElement(ctxif interface{}, elem sax.ParsedElement) error {
+func (t *TreeBuilder) EndElement(ctxif sax.Context, elem sax.ParsedElement) error {
 	if debug.Enabled {
 		debug.Printf("tree.EndElement: %#v", elem)
 	}
 	return nil
 }
 
-func (t *TreeBuilder) Characters(ctxif interface{}, data []byte) error {
+func (t *TreeBuilder) Characters(ctxif sax.Context, data []byte) error {
 	if debug.Enabled {
 		debug.Printf("tree.Characters: '%v'", []byte(data))
 	}
@@ -137,11 +137,19 @@ func (t *TreeBuilder) Characters(ctxif interface{}, data []byte) error {
 	return nil
 }
 
-func (t *TreeBuilder) CDATABlock(ctxif interface{}, data []byte) error {
+func (t *TreeBuilder) StartCDATA(_ sax.Context) error {
+	return nil
+}
+
+func (t *TreeBuilder) EndCDATA(_ sax.Context) error {
+	return nil
+}
+
+func (t *TreeBuilder) CDATABlock(ctxif sax.Context, data []byte) error {
 	return t.Characters(ctxif, data)
 }
 
-func (t *TreeBuilder) Comment(ctxif interface{}, data []byte) error {
+func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
 	if debug.Enabled {
 		debug.Printf("tree.Comment: %s", data)
 	}
@@ -158,11 +166,11 @@ func (t *TreeBuilder) Comment(ctxif interface{}, data []byte) error {
 	return nil
 }
 
-func (t *TreeBuilder) InternalSubset(ctxif interface{}, name, eid, uri string) error {
+func (t *TreeBuilder) InternalSubset(ctxif sax.Context, name, eid, uri string) error {
 	return nil
 }
 
-func (t *TreeBuilder) GetEntity(ctxif interface{}, name string) (*Entity, error) {
+func (t *TreeBuilder) GetEntity(ctxif sax.Context, name string) (*Entity, error) {
 	ctx := ctxif.(*parserCtx)
 
 	if ctx.inSubset == 0 {
@@ -226,7 +234,7 @@ func (t *TreeBuilder) GetEntity(ctxif interface{}, name string) (*Entity, error)
 	return ret, nil
 }
 
-func (t *TreeBuilder) GetParameterEntity(ctxif interface{}, name string) (sax.Entity, error) {
+func (t *TreeBuilder) GetParameterEntity(ctxif sax.Context, name string) (sax.Entity, error) {
 	if ctxif == nil {
 		return nil, ErrInvalidParserCtx
 	}
@@ -243,3 +251,63 @@ func (t *TreeBuilder) GetParameterEntity(ctxif interface{}, name string) (sax.En
 
 	return nil, ErrEntityNotFound
 }
+
+func (t *TreeBuilder) AttributeDecl(ctx sax.Context, eName string, aName string, typ string, mode string, value string) error {
+	return nil
+}
+
+func (t *TreeBuilder) ElementDecl(ctx sax.Context, name string, typ int, content sax.ElementContent) error {
+	return nil
+}
+
+func (t *TreeBuilder) EndDTD(ctx sax.Context) error {
+	return nil
+}
+
+func (t *TreeBuilder) EndEntity(ctx sax.Context, name string) error {
+	return nil
+}
+func (t *TreeBuilder) ExternalEntityDecl(ctx sax.Context, name string, publicID string, systemID string) error {
+	return nil
+}
+
+func (t *TreeBuilder) GetExternalSubset(ctx sax.Context, name string, baseURI string) error {
+	return nil
+}
+
+func (t *TreeBuilder) IgnorableWhitespace(ctxif sax.Context, content []byte) error {
+	ctx := ctxif.(*parserCtx)
+	if ctx.keepBlanks {
+		return t.Characters(ctx, content)
+	}
+	return nil
+}
+
+func (t *TreeBuilder) InternalEntityDecl(ctx sax.Context, name string, value string) error {
+	return nil
+}
+
+func (t *TreeBuilder) NotationDecl(ctx sax.Context, name string, publicID string, systemID string) error {
+	return nil
+}
+
+func (t *TreeBuilder) ResolveEntity(ctx sax.Context, name string, publicID string, baseURI string, systemID string) error {
+	return nil
+}
+
+func (t *TreeBuilder) SkippedEntity(ctx sax.Context, name string) error {
+	return nil
+}
+
+func (t *TreeBuilder) StartDTD(ctx sax.Context, name string, publicID string, systemID string) error {
+	return nil
+}
+
+func (t *TreeBuilder) StartEntity(ctx sax.Context, name string) error {
+	return nil
+}
+
+func (t *TreeBuilder) UnparsedEntityDecl(ctx sax.Context, name string, publicID string, systemID string, notation string) error {
+	return nil
+}
+

@@ -25,7 +25,9 @@ var (
 	ErrAmpersandRequired            = errors.New("'&' was required here")
 	ErrDocTypeNameRequired          = errors.New("doctype name required")
 	ErrDocTypeNotFinished           = errors.New("doctype not finished")
+	ErrDocumentEnd                  = errors.New("extra content at document end")
 	ErrEOF                          = errors.New("end of file reached")
+	ErrEmptyDocument                = errors.New("start tag expected, '<' not found")
 	ErrEntityNotFound               = errors.New("entity not found")
 	ErrEqualSignRequired            = errors.New("'=' was required here")
 	ErrGtRequired                   = errors.New("'>' was required here")
@@ -43,6 +45,7 @@ var (
 	ErrInvalidXMLDecl               = errors.New("invalid XML declration")
 	ErrInvalidParserCtx             = errors.New("invalid parser context")
 	ErrLtSlashRequired              = errors.New("'</' is required")
+	ErrMisplacedCDATAEnd            = errors.New("misplaced CDATA end ']]>'")
 	ErrNameTooLong                  = errors.New("name is too long")
 	ErrNameRequired                 = errors.New("name is required")
 	ErrOpenParenRequired            = errors.New("'(' is required")
@@ -66,8 +69,17 @@ type ErrParseError struct {
 	LineNumber int
 }
 
+// TODO: rethink about this
+type SAX interface {
+	sax.ContentHandler
+	sax.DTDHandler
+	sax.DeclHandler
+	sax.LexicalHandler
+	sax.EntityResolver
+	sax.Extensions
+}
 type Parser struct {
-	sax sax.Handler
+	sax SAX
 }
 
 type ParsedElement struct {
@@ -92,17 +104,19 @@ const (
 )
 
 type parserCtx struct {
-	options    int
-	encoding   string
-	cursor     *strcursor.Cursor
-	nbread     int
-	instate    parserState
-	lineno     int
-	remain     int
-	sax        sax.Handler
-	standalone DocumentStandaloneType
-	inSubset   int
-	version    string
+	options         int
+	encoding        string
+	cursor          *strcursor.Cursor
+	nbread          int
+	instate         parserState
+	keepBlanks      bool
+	remain          int
+	replaceEntities bool
+	sax             SAX
+	space           int
+	standalone      DocumentStandaloneType
+	inSubset        int
+	version         string
 
 	doc        *Document
 	userData   interface{}

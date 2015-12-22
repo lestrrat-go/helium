@@ -48,7 +48,6 @@ func (ctx *parserCtx) init(p *Parser, b []byte) error {
 	ctx.nbread = 0
 	ctx.cursor = strcursor.New(b)
 	ctx.instate = psStart
-	ctx.lineno = 1
 	ctx.sax = p.sax
 	ctx.userData = ctx // circular dep?!
 	ctx.standalone = StandaloneImplicitNo
@@ -200,6 +199,7 @@ func (ctx *parserCtx) curDone() bool {
 }
 
 func (ctx *parserCtx) curAdvance(n int) {
+	defer ctx.markEOF()
 	ctx.cursor.Advance(n)
 }
 
@@ -211,15 +211,25 @@ func (ctx *parserCtx) curPeek(n int) rune {
 	return ctx.cursor.Peek(n)
 }
 
+func (ctx *parserCtx) markEOF() {
+	if ctx.cursor.Done() {
+		debug.Printf("Marking EOF")
+		ctx.instate = psEOF
+	}
+}
+
 func (ctx *parserCtx) curConsume(n int) string {
+	defer ctx.markEOF()
 	return ctx.cursor.Consume(n)
 }
 
 func (ctx *parserCtx) curConsumePrefix(s string) bool {
+	defer ctx.markEOF()
 	return ctx.cursor.ConsumePrefix(s)
 }
 
 func (ctx *parserCtx) curConsumeBytes(n int) []byte {
+	defer ctx.markEOF()
 	return ctx.cursor.ConsumeBytes(n)
 }
 
@@ -260,7 +270,7 @@ func (ctx *parserCtx) switchEncoding() error {
 	return nil
 }
 
-func (ctx *parserCtx) parse() error {
+func (ctx *parserCtx) parseDocument() error {
 	if s := ctx.sax; s != nil {
 		if err := s.SetDocumentLocator(ctx.userData, nil); err != nil {
 			return ctx.error(err)
@@ -316,14 +326,34 @@ func (ctx *parserCtx) parse() error {
 		}
 	}
 
-	// Start the actual tree
-	if err := ctx.parseContent(); err != nil {
-		return ctx.error(err)
+	if ctx.curPeek(1) != '<' {
+		return ctx.error(ErrEmptyDocument)
+	} else {
+		ctx.instate = psContent
+		if err := ctx.parseElement(); err != nil {
+			return ctx.error(err)
+		}
+		ctx.instate = psEpilogue
+
+		if err := ctx.parseMisc(); err != nil {
+			return ctx.error(err)
+		}
+		if !ctx.curDone() {
+			return ctx.error(ErrDocumentEnd)
+		}
+		ctx.instate = psEOF
 	}
 
-	if err := ctx.parseEpilogue(); err != nil {
-		return ctx.error(err)
-	}
+	/*
+		// Start the actual tree
+		if err := ctx.parseContent(); err != nil {
+			return ctx.error(err)
+		}
+
+		if err := ctx.parseEpilogue(); err != nil {
+			return ctx.error(err)
+		}
+	*/
 
 	// All done
 	if s := ctx.sax; s != nil {
@@ -378,7 +408,7 @@ func (ctx *parserCtx) parseContent() error {
 			panic("unimplemented (reference)")
 		}
 
-		if err := ctx.parseCharData(); err != nil {
+		if err := ctx.parseCharData(false); err != nil {
 			return err
 		}
 	}
@@ -432,90 +462,50 @@ var testCharData = [256]byte{
  *
  * [14] CharData ::= [^<&]* - ([^<&]* ']]>' [^<&]*)
  */
-func (ctx *parserCtx) parseCharData() error {
+func (ctx *parserCtx) parseCharData(cdata bool) error {
 	if debug.Enabled {
 		debug.Printf("START parseCharData (byte offset = %d, remainig = '%s')", ctx.cursor.OffsetBytes(), ctx.cursor.Bytes())
 		defer debug.Printf("END   parseCharData")
 	}
 
-	for i := 1; ctx.curHasChars(i); {
-		// advance until we exhaust whitespaces
-		debug.Printf("i = %d", i)
-		if ctx.curPeek(i) == 0x20 {
-			i++
-			for ; ctx.curPeek(i) == 0x20; i++ {
-			}
-			debug.Printf(" ----> consumed spaces (i = %d)", i)
-		}
-
-		// advance until we exhaust new lines
-		if ctx.curPeek(i) == 0xA {
-			i++
-			for ; ctx.curPeek(i) == 0xA; i++ {
-			}
-			debug.Printf(" ----> consumed new lines (i = %d)", i)
-			if ctx.curHasChars(i) {
-				continue
+	i := 1
+	for ; ctx.curHasChars(i); i++ {
+		c := ctx.curPeek(i)
+		if !cdata {
+			if c == '<' || c == '&' || !isChar(c) {
+				break
 			}
 		}
 
-		if c := ctx.curPeek(i); !ctx.curHasChars(i) || c == '<' {
-			l := ctx.curCharLen(i - 1)
-			str := ctx.curConsumeBytes(l)
-			debug.Printf(" ----> %d = '<', consuming %d bytes '%v'", i, l, str)
-			if s := ctx.sax; s != nil {
-				if err := s.Characters(ctx, str); err != nil {
-					return ctx.error(err)
-				}
+		if c == ']' && ctx.curPeek(i+1) == ']' && ctx.curPeek(i+2) == '>' {
+			if cdata {
+				break
 			}
-			return nil
-		}
 
-	MORE:
-		for ctx.curHasChars(i) {
-			r := ctx.curPeek(i)
-			switch r {
-			case '<', '&':
-				i-- // back up
-				break MORE
-			case ']':
-				if ctx.curPeek(i+1) == ']' && ctx.curPeek(i+2) == '>' {
-					return ctx.error(errors.New("misplaced CDATA end"))
-				}
-			}
-			i++
-		}
-
-		l := ctx.curCharLen(i)
-		str := ctx.curConsumeBytes(l)
-		debug.Printf("ConsumeBytes: '%v' (%d bytes)", []byte(str), l)
-		if s := ctx.sax; s != nil {
-			if err := s.Characters(ctx, str); err != nil {
-				return ctx.error(err)
-			}
-		}
-		// We just consumed the buffer, so need to reset the index
-		// so we can index into the correct location
-		i = 1
-
-		if c := ctx.curPeek(i); c == '&' {
-			str, err := ctx.parseReference()
-			if err != nil {
-				return ctx.error(err)
-			}
-			if s := ctx.sax; s != nil {
-				if err := s.Characters(ctx, []byte(str)); err != nil {
-					return ctx.error(err)
-				}
-			}
-		}
-
-		if c := ctx.curPeek(i); c == '<' {
-			return nil
+			return ctx.error(ErrMisplacedCDATAEnd)
 		}
 	}
 
-	return errors.New("Invalid chara data")
+	if i > 1 {
+		str := ctx.curConsume(i - 1)
+		if ctx.areBlanks(str) {
+			if s := ctx.sax; s != nil {
+				if err := s.IgnorableWhitespace(ctx.userData, []byte(str)); err != nil {
+					return ctx.error(err)
+				}
+			}
+		} else {
+			if s := ctx.sax; s != nil {
+				if err := s.Characters(ctx.userData, []byte(str)); err != nil {
+					return ctx.error(err)
+				}
+			}
+		}
+		i--
+	} else {
+		return errors.New("Invalid char data")
+	}
+	return nil
 }
 
 func (ctx *parserCtx) parseElement() error {
@@ -678,14 +668,34 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (str
 
 		v = append(v, ctx.curConsume(i)...)
 		i = 1
-		debug.Printf(" ----> %c", ctx.curPeek(i))
 		if ctx.curPeek(i) == '&' {
-			debug.Printf("Encountered entity")
-			r, err := ctx.parseReference()
-			if err != nil {
-				return "", ctx.error(err)
+			if ctx.curPeek(i+1) == '#' {
+				r, err := ctx.parseCharRef()
+				if err != nil {
+					return "", ctx.error(err)
+				}
+				l := utf8.RuneLen(r)
+				b := make([]byte, l)
+				utf8.EncodeRune(b, r)
+				v = append(v, b...)
+			} else {
+				ent, err := ctx.parseEntityRef()
+				if err != nil {
+					return "", ctx.error(err)
+				}
+
+				if ent.entityType == InternalPredefinedEntity {
+					if !ctx.replaceEntities {
+						v = append(v, "&#38;"...)
+					} else {
+						v = append(v, ent.content...)
+					}
+				} else {
+					// TODO: decodeentities
+					v = append(v, ent.content...)
+				}
 			}
-			v = append(v, r...)
+
 			i = 1
 			continue
 		}
@@ -750,11 +760,14 @@ func (ctx *parserCtx) skipBlanks() {
 	i := 1
 	for ; ctx.curHasChars(i); i++ {
 		if !isBlankCh(ctx.curPeek(i)) {
-			i--
+			debug.Printf("%d-th character is NOT blank", i)
 			break
 		}
 	}
-	ctx.curAdvance(i)
+	i--
+	if i > 0 {
+		ctx.curAdvance(i)
+	}
 }
 
 // should only be here if current buffer is at '<?xml'
@@ -956,7 +969,7 @@ func (ctx *parserCtx) parseStandaloneDeclValue(_ rune) (string, error) {
 }
 
 func (ctx *parserCtx) parseMisc() error {
-	for ctx.instate != psEOF {
+	for !ctx.curDone() && ctx.instate != psEOF {
 		if ctx.curHasPrefix("<?") {
 			if err := ctx.parsePI(); err != nil {
 				return ctx.error(err)
@@ -966,6 +979,7 @@ func (ctx *parserCtx) parseMisc() error {
 				return ctx.error(err)
 			}
 		} else if isBlankCh(ctx.curPeek(1)) {
+			debug.Printf("ctx.curPeek(1) == '%c'", ctx.curPeek(1))
 			ctx.skipBlanks()
 		} else {
 			break
@@ -1219,6 +1233,60 @@ func (ctx *parserCtx) parsePITarget() (string, error) {
 	return name, nil
 }
 
+// note: unlike libxml2, we can't differentiate between SAX handlers
+// that uses the same IgnorableWhitespace and Character handlers
+func (ctx *parserCtx) areBlanks(s string) bool {
+	if debug.Enabled {
+		debug.Printf("START areBlanks (%v)", []byte(s))
+		debug.Printf("END   areBlanks")
+	}
+
+	// Check for xml:space value.
+	if ctx.space == 1 || ctx.space == -2 {
+		return false
+	}
+
+	// Check that the string is made of blanks
+	/*
+	   if (blank_chars == 0) {
+	         for (i = 0;i < len;i++)
+	             if (!(IS_BLANK_CH(str[i]))) return(0);
+	     }
+	*/
+
+	// Look if the element is mixed content in the DTD if available
+	if ctx.element == nil {
+		debug.Printf("ctx.element == nil")
+		return false
+	}
+	if ctx.doc != nil {
+		ok, _ := ctx.doc.IsMixedElement(ctx.element.Name())
+		debug.Printf("IsMixedElement -> %b", ok)
+		return !ok
+	}
+
+	if c := ctx.curPeek(1); c != '<' && c != 0xD {
+		return false
+	}
+
+	/*
+	   if ((ctxt->node->children == NULL) &&
+	       (RAW == '<') && (NXT(1) == '/')) return(0);
+
+	   lastChild = xmlGetLastChild(ctxt->node);
+	   if (lastChild == NULL) {
+	       if ((ctxt->node->type != XML_ELEMENT_NODE) &&
+	           (ctxt->node->content != NULL)) return(0);
+	   } else if (xmlNodeIsText(lastChild))
+	       return(0);
+	   else if ((ctxt->node->children != NULL) &&
+	            (xmlNodeIsText(ctxt->node->children)))
+	       return(0);
+	*/
+	debug.Printf("all else failed, it's blank!")
+	return true
+}
+
 func isChar(r rune) bool {
 	if r == utf8.RuneError {
 		return false
@@ -1240,39 +1308,23 @@ func (ctx *parserCtx) parseCDSect() error {
 	if !ctx.curConsumePrefix("<![CDATA[") {
 		return ctx.error(ErrInvalidCDSect)
 	}
+	sh := ctx.sax
+	if sh != nil {
+		sh.StartCDATA(ctx)
+	}
+
 	ctx.instate = psCDATA
 	defer func() { ctx.instate = psContent }()
 
-	i := 1
-	// first char
-	r := ctx.curPeek(i)
-	if !isChar(r) {
+	if err := ctx.parseCharData(true); err != nil {
+		return ctx.error(err)
+	}
+
+	if !ctx.curConsumePrefix("]]>") {
 		return ctx.error(ErrCDATANotFinished)
 	}
-	i++
-
-	// second char
-	s := ctx.curPeek(i)
-	if !isChar(s) {
-		return ctx.error(ErrCDATANotFinished)
-	}
-	i++
-
-	// third char
-	cur := ctx.curPeek(i)
-
-	for isChar(cur) && (r != ']' || s != ']' || cur != '>') {
-		i++
-		// trickle down one by one...
-		r = s
-		s = cur
-
-		cur = ctx.curPeek(i)
-	}
-
-	str := ctx.curConsumeBytes(ctx.curCharLen(i))
-	if sh := ctx.sax; sh != nil {
-		sh.CDATABlock(ctx, str)
+	if sh != nil {
+		sh.EndCDATA(ctx)
 	}
 	return nil
 }
@@ -1863,7 +1915,6 @@ func (ctx *parserCtx) parseReference() (string, error) {
 				return "", ctx.error(err)
 			}
 		}
-
 		return string(b), nil
 	}
 
@@ -1876,11 +1927,13 @@ func (ctx *parserCtx) parseReference() (string, error) {
 	// if !ctx.wellFormed { return } ??
 
 	if ent.EntityType() == InternalPredefinedEntity {
-		if s := ctx.sax; s != nil {
-			if err := s.Characters(ctx.userData, []byte(ent.Content())); err != nil {
-				return "", ctx.error(err)
+		/*
+			if s := ctx.sax; s != nil {
+				if err := s.Characters(ctx.userData, []byte(ent.Content())); err != nil {
+					return "", ctx.error(err)
+				}
 			}
-		}
+		*/
 		return ent.Content(), nil
 	}
 

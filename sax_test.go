@@ -14,21 +14,36 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func newEventEmitter(out io.Writer) sax.Handler {
+func newEventEmitter(out io.Writer) helium.SAX {
 	s := sax.New()
-	s.SetDocumentLocatorHandler = func(_ interface{}, loc sax.DocumentLocator) error {
+	s.SetDocumentLocatorHandler = func(_ sax.Context, loc sax.DocumentLocator) error {
 		fmt.Fprintf(out, "SAX.SetDocumentLocator()\n")
 		return nil
 	}
-	s.StartDocumentHandler = func(_ interface{}) error {
+	s.StartDocumentHandler = func(_ sax.Context) error {
 		fmt.Fprintf(out, "SAX.StartDocument()\n")
 		return nil
 	}
-	s.EndDocumentHandler = func(_ interface{}) error {
+	s.EndDocumentHandler = func(_ sax.Context) error {
 		fmt.Fprintf(out, "SAX.EndDocument()")
 		return nil
 	}
-	s.StartElementHandler = func(_ interface{}, elem sax.ParsedElement) error {
+	s.CommentHandler = func(_ sax.Context, data []byte) error {
+		fmt.Fprintf(out, "SAX.comment(%s)\n", data)
+		return nil
+	}
+	s.CharactersHandler = func(_ sax.Context, data []byte) error {
+		var output string
+		if len(data) > 30 {
+			output = string(data[:30])
+		} else {
+			output = string(data)
+		}
+
+		fmt.Fprintf(out, "SAX.Characters(%s, %d)\n", output, len(data))
+		return nil
+	}
+	s.StartElementHandler = func(_ sax.Context, elem sax.ParsedElement) error {
 		prefix := elem.Prefix()
 		if prefix == "" {
 			prefix = "NULL"
@@ -39,7 +54,7 @@ func newEventEmitter(out io.Writer) sax.Handler {
 		}
 		attrs := elem.Attributes()
 
-		fmt.Fprintf(out, "SAX.StartElementNS(%s, %s, %s, %d, %d, %d, ",
+		fmt.Fprintf(out, "SAX.StartElementNS(%s, %s, %s, %d, %d, %d",
 			elem.Name(),
 			prefix,
 			uri,
@@ -47,10 +62,14 @@ func newEventEmitter(out io.Writer) sax.Handler {
 			len(attrs),
 			0, /* TODO - number of defaulted attributes */
 		)
-		for i, attr := range attrs {
-			fmt.Fprintf(out, "%s='%.4s...', %d", attr.LocalName(), attr.Value(), len(attr.Value()))
-			if i < len(attrs) - 1 {
-				fmt.Fprintf(out, ", ")
+
+		if len(attrs) > 0 {
+			fmt.Fprintf(out, ", ")
+			for i, attr := range attrs {
+				fmt.Fprintf(out, "%s='%.4s...', %d", attr.LocalName(), attr.Value(), len(attr.Value()))
+				if i < len(attrs)-1 {
+					fmt.Fprintf(out, ", ")
+				}
 			}
 		}
 
@@ -58,7 +77,7 @@ func newEventEmitter(out io.Writer) sax.Handler {
 
 		return nil
 	}
-	s.EndElementHandler = func(_ interface{}, elem sax.ParsedElement) error {
+	s.EndElementHandler = func(_ sax.Context, elem sax.ParsedElement) error {
 		prefix := elem.Prefix()
 		if prefix == "" {
 			prefix = "NULL"
@@ -85,7 +104,8 @@ func TestSAXEvents(t *testing.T) {
 			continue
 		}
 
-		if fi.Name() == "xml2.xml" {
+		switch fi.Name() {
+		case "comment.xml", "xml2.xml":
 			t.Logf("Skipping test for '%s' for now...", fi.Name())
 			continue
 		}
@@ -115,7 +135,7 @@ func TestSAXEvents(t *testing.T) {
 			return
 		}
 
-		if !assert.Equal(t, string(golden), string(out.Bytes()), "SAX event streams should match") {
+		if !assert.Equal(t, string(golden), string(out.Bytes()), "SAX event streams should match (file = %s)", fn) {
 			return
 		}
 	}

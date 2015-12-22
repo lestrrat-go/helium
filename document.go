@@ -1,5 +1,7 @@
 package helium
 
+import "errors"
+
 func NewDocument(version, encoding string, standalone DocumentStandaloneType) *Document {
 	doc := &Document{
 		encoding:   encoding,
@@ -36,8 +38,9 @@ func (d *Document) CreatePI(target, data string) (*ProcessingInstruction, error)
 func (d *Document) CreateDTD() (*DTD, error) {
 	return &DTD{
 		node:      node{},
-		entities:  map[string]*Entity{},
-		pentities: map[string]*Entity{},
+		elements:  map[string]Element{},
+		entities:  map[string]Entity{},
+		pentities: map[string]Entity{},
 	}, nil
 }
 
@@ -89,4 +92,25 @@ func (d *Document) GetParameterEntity(name string) (*Entity, bool) {
 	}
 
 	return nil, false
+}
+
+func (d *Document) IsMixedElement(name string) (bool, error) {
+	elemDecl, ok := d.intSubset.GetElementDesc(name)
+	if !ok {
+		return false, errors.New("element declaration not found")
+	}
+
+	switch elemDecl.etype {
+	case UndefinedElementType:
+		return false, errors.New("element declaration not found")
+	case ElementElementType:
+		return false, nil
+	case EmptyElementType, AnyElementType, MixedElementType:
+		/*
+		 * return 1 for EMPTY since we want VC error to pop up
+		 * on <empty>     </empty> for example
+		 */
+		return true, nil
+	}
+	return true, nil
 }

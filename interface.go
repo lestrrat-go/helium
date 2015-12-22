@@ -21,7 +21,7 @@ type nilNode struct{}
 type node struct {
 	typ     NodeType
 	private interface{}
-	//etype    ElementType
+	etype    ElementType
 	name     string
 	children []Node
 	parent   Node
@@ -56,8 +56,9 @@ type ProcessingInstruction struct {
 
 type DTD struct {
 	node
-	entities map[string]*Entity
-	pentities map[string]*Entity
+	elements map[string]Element
+	entities map[string]Entity
+	pentities map[string]Entity
 	externalID string
 	systemID string
 }
