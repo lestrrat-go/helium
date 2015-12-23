@@ -133,6 +133,7 @@ type parserCtx struct {
 	extSubSystem      string
 	extSubURI         string
 	version           string
+	attsSpecial       map[string]AttributeType
 
 	doc        *Document
 	userData   interface{}

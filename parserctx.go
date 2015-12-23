@@ -54,6 +54,7 @@ func (ctx *parserCtx) init(p *Parser, b []byte) error {
 	ctx.sax = p.sax
 	ctx.userData = ctx // circular dep?!
 	ctx.standalone = StandaloneImplicitNo
+	ctx.attsSpecial = map[string]AttributeType{}
 	return nil
 }
 
@@ -589,7 +590,7 @@ func (ctx *parserCtx) parseStartTag() error {
 		if ctx.curPeek(1) == '/' && ctx.curPeek(2) == '>' {
 			break
 		}
-		local, prefix, value, err := ctx.parseAttribute()
+		local, prefix, value, err := ctx.parseAttribute(name)
 		if err != nil {
 			return ctx.error(err)
 		}
@@ -664,7 +665,7 @@ func (ctx *parserCtx) parseEndTag() error {
 
 func (ctx *parserCtx) parseAttributeValue(normalize bool) (string, error) {
 	if debug.Enabled {
-		debug.Printf("START parseAttributeValue")
+		debug.Printf("START parseAttributeValue (normalize=%t)", normalize)
 		defer debug.Printf("END   parseAttributeValue")
 	}
 
@@ -676,7 +677,7 @@ func (ctx *parserCtx) parseAttributeValue(normalize bool) (string, error) {
 // This is based on xmlParseAttValueComplex
 func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (string, error) {
 	if debug.Enabled {
-		debug.Printf("START parseAttributeValueInternal (qch = '%c')", qch)
+		debug.Printf("START parseAttributeValueInternal (qch='%c',normalize=%t)", qch, normalize)
 		defer debug.Printf("END   parseAttributeValueInternal")
 	}
 
@@ -684,7 +685,7 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (str
 	b := bytes.Buffer{}
 	for {
 		c := ctx.curPeek(1)
-		// qch == quote character. 
+		// qch == quote character.
 		if (qch != 0x0 && c == qch) || !isChar(c) || c == '<' {
 			break
 		}
@@ -708,7 +709,6 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (str
 				}
 
 				if ent.entityType == InternalPredefinedEntity {
-debug.Printf("%#v", ent)
 					if ent.content == "&" && !ctx.replaceEntities {
 						b.WriteString("&#38;")
 					} else {
@@ -720,10 +720,12 @@ debug.Printf("%#v", ent)
 				}
 			}
 		case 0x20, 0xD, 0xA, 0x9:
-			if !normalize || !inSpace {
-				b.WriteRune(0x20)
+			if b.Len() > 0 || !normalize {
+				if !normalize || !inSpace {
+					b.WriteRune(0x20)
+				}
+				inSpace = true
 			}
-			inSpace = true
 			ctx.curAdvance(1)
 		default:
 			inSpace = false
@@ -749,7 +751,7 @@ debug.Printf("%#v", ent)
 	return s, nil
 }
 
-func (ctx *parserCtx) parseAttribute() (local string, prefix string, value string, err error) {
+func (ctx *parserCtx) parseAttribute(elemName string) (local string, prefix string, value string, err error) {
 	if debug.Enabled {
 		debug.Printf("START parseAttribute")
 		defer debug.Printf("END   parseAttribute")
@@ -760,21 +762,14 @@ func (ctx *parserCtx) parseAttribute() (local string, prefix string, value strin
 		return
 	}
 
-	if debug.Enabled {
-		debug.Printf("Attribute name = '%s'", l)
-	}
 	normalize := false
-	/*
-	    * get the type if needed
-	   if (ctxt->attsSpecial != NULL) {
-	       int type;
-
-	       type = (int) (long) xmlHashQLookup2(ctxt->attsSpecial,
-	                                           pref, elem, *prefix, name);
-	       if (type != 0)
-	           normalize = 1;
-	   }
-	*/
+	_, ok := ctx.lookupSpecialAttribute(elemName, l)
+	if debug.Enabled {
+		debug.Printf("  ---> looking up attribute %s:%s -> %t", elemName, l, ok)
+	}
+	if ok {
+		normalize = true
+	}
 	ctx.skipBlanks()
 
 	if ctx.curPeek(1) != '=' {
@@ -2238,6 +2233,19 @@ func (ctx *parserCtx) attrNormalizeSpace(s string) string {
 	return string(out)
 }
 
+func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ AttributeType) {
+	key := elemName + ":" + attrName
+	if debug.Enabled {
+		debug.Printf("  ---> registering attribute: %s, %d", key, typ)
+	}
+	ctx.attsSpecial[key] = typ
+}
+
+func (ctx *parserCtx) lookupSpecialAttribute(elemName, attrName string) (AttributeType, bool) {
+	v, ok := ctx.attsSpecial[elemName+":"+attrName]
+	return v, ok
+}
+
 /*
  * : parse the Attribute list def for an element
  *
@@ -2321,12 +2329,12 @@ func (ctx *parserCtx) parseAttributeListDecl() error {
 		       (def != XML_ATTRIBUTE_REQUIRED)) {
 		       xmlAddDefAttrs(ctxt, elemName, attrName, defaultValue);
 		   }
-		   if (ctxt->sax2) {
-		       xmlAddSpecialAttr(ctxt, elemName, attrName, type);
-		   }
-		   if (defaultValue != NULL)
-		       xmlFree(defaultValue);
 		*/
+
+		// note: in libxml2, this is only triggered when SAX2 is enabled.
+		// as we only support SAX2, we just register it regardless
+		ctx.addSpecialAttribute(elemName, attrName, typ)
+
 		if ctx.curPeek(1) == '>' {
 			/*
 			           if (input != ctxt->input) {

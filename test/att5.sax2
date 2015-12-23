@@ -77,8 +77,7 @@ SAX.IgnorableWhitespace(
 SAX.Comment( normalization )
 SAX.IgnorableWhitespace(
   , 3)
-SAX.StartElementNS(normId, NULL, NULL, 0, 1, 0, attr=''/>
-...', 0)
+SAX.StartElementNS(normId, NULL, NULL, 0, 1, 0, attr='...', 0)
 SAX.EndElementNS(normId, NULL, NULL)
 SAX.IgnorableWhitespace(
   , 3)
