@@ -589,7 +589,7 @@ func (ctx *parserCtx) parseStartTag() error {
 		if ctx.curPeek(1) == '/' && ctx.curPeek(2) == '>' {
 			break
 		}
-		local, value, prefix, err := ctx.parseAttribute()
+		local, prefix, value, err := ctx.parseAttribute()
 		if err != nil {
 			return ctx.error(err)
 		}
@@ -673,36 +673,34 @@ func (ctx *parserCtx) parseAttributeValue(normalize bool) (string, error) {
 	})
 }
 
+// This is based on xmlParseAttValueComplex
 func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (string, error) {
 	if debug.Enabled {
-		debug.Printf("START parseAttributeValueInternal")
+		debug.Printf("START parseAttributeValueInternal (qch = '%c')", qch)
 		defer debug.Printf("END   parseAttributeValueInternal")
 	}
 
-	v := []byte(nil)
+	inSpace := false
+	b := bytes.Buffer{}
 	for {
-		i := 1
-		for ; ctx.curHasChars(i); i++ {
-			c := ctx.curPeek(i)
-			// TODO check for valid "c" value
-			if (qch != 0x0 && c == qch) || c == '&' || c == '<' {
-				i--
-				break
-			}
+		c := ctx.curPeek(1)
+		// qch == quote character. 
+		if (qch != 0x0 && c == qch) || !isChar(c) || c == '<' {
+			break
 		}
-
-		v = append(v, ctx.curConsume(i)...)
-		i = 1
-		if ctx.curPeek(i) == '&' {
-			if ctx.curPeek(i+1) == '#' {
+		switch c {
+		case '&':
+			inSpace = false
+			if ctx.curPeek(2) == '#' {
 				r, err := ctx.parseCharRef()
 				if err != nil {
 					return "", ctx.error(err)
 				}
-				l := utf8.RuneLen(r)
-				b := make([]byte, l)
-				utf8.EncodeRune(b, r)
-				v = append(v, b...)
+				if r == '&' && !ctx.replaceEntities {
+					b.WriteString("&#38;")
+				} else {
+					b.WriteRune(r)
+				}
 			} else {
 				ent, err := ctx.parseEntityRef()
 				if err != nil {
@@ -710,29 +708,48 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (str
 				}
 
 				if ent.entityType == InternalPredefinedEntity {
-					if !ctx.replaceEntities {
-						v = append(v, "&#38;"...)
+debug.Printf("%#v", ent)
+					if ent.content == "&" && !ctx.replaceEntities {
+						b.WriteString("&#38;")
 					} else {
-						v = append(v, ent.content...)
+						b.WriteString(ent.content)
 					}
 				} else {
 					// TODO: decodeentities
-					v = append(v, ent.content...)
+					b.WriteString(ent.content)
 				}
 			}
-
-			i = 1
-			continue
+		case 0x20, 0xD, 0xA, 0x9:
+			if !normalize || !inSpace {
+				b.WriteRune(0x20)
+			}
+			inSpace = true
+			ctx.curAdvance(1)
+		default:
+			inSpace = false
+			b.WriteRune(c)
+			ctx.curAdvance(1)
 		}
-		break
 	}
 
-	debug.Printf(" ----> (%s)", string(v))
+	s := b.String()
+	if inSpace && normalize {
+		if s[len(s)-1] == 0x20 {
+			for len(s) > 0 {
+				if s[len(s)-1] != 0x20 {
+					break
+				}
+				s = s[:len(s)-1]
+			}
+		}
+	}
 
-	return string(v), nil
+	debug.Printf(" ----> (%s)", s)
+
+	return s, nil
 }
 
-func (ctx *parserCtx) parseAttribute() (local string, value string, prefix string, err error) {
+func (ctx *parserCtx) parseAttribute() (local string, prefix string, value string, err error) {
 	if debug.Enabled {
 		debug.Printf("START parseAttribute")
 		defer debug.Printf("END   parseAttribute")

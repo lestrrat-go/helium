@@ -30,6 +30,13 @@ func (e ParsedElement) Attributes() []sax.ParsedAttribute {
 	return e.attributes
 }
 
+func (a ParsedAttribute) Name() string {
+	if a.prefix != "" {
+		return a.prefix + ":" + a.local
+	}
+	return a.local
+}
+
 func (a ParsedAttribute) LocalName() string {
 	return a.local
 }

@@ -22,7 +22,9 @@ func newEventEmitter(out io.Writer) helium.SAX {
 		return nil
 	}
 	s.AttributeDeclHandler = func(_ sax.Context, elemName string, attrName string, typ int, deftype int, defvalue sax.AttributeDefaultValue, enum sax.Enumeration) error {
-		if defvalue == nil {
+		// eek, defvalue is an interface, and interface == nil is only true
+		// if the interface has no value AND not type, so.. hmmm. 
+		if fmt.Sprintf("%s", defvalue) == "" {
 			defvalue = "NULL"
 		}
 		fmt.Fprintf(out, "SAX.AttributeDecl(%s, %s, %d, %d, %s, ...)\n", elemName, attrName, typ, deftype, defvalue)
@@ -92,7 +94,7 @@ func newEventEmitter(out io.Writer) helium.SAX {
 		if len(attrs) > 0 {
 			fmt.Fprintf(out, ", ")
 			for i, attr := range attrs {
-				fmt.Fprintf(out, "%s='%.4s...', %d", attr.LocalName(), attr.Value(), len(attr.Value()))
+				fmt.Fprintf(out, "%s='%.4s...', %d", attr.Name(), attr.Value(), len(attr.Value()))
 				if i < len(attrs)-1 {
 					fmt.Fprintf(out, ", ")
 				}

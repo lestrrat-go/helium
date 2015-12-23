@@ -102,12 +102,19 @@ type ParsedElement interface {
 	Prefix() string
 	URI() string
 	LocalName() string
+	// Name returns the fully qualified name. That is, if the element has
+	// a namespace prefix associated with it, it will return "prefix:localname"
+	// and "localname" otherwise
 	Name() string
 	Attributes() []ParsedAttribute
 }
 
 type ParsedAttribute interface {
-	Prefix() string
 	LocalName() string
+	// Name returns the fully qualified name. That is, if the attribute has
+	// a namespace prefix associated with it, it will return "prefix:localname"
+	// and "localname" otherwise
+	Name() string
+	Prefix() string
 	Value() string
 }

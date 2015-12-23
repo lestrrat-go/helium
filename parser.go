@@ -11,8 +11,6 @@ func (p *Parser) Parse(b []byte) (*Document, error) {
 	ctx.init(p, b)
 	defer ctx.release()
 
-	// TODO: make this configurable
-	ctx.replaceEntities = true
 	if err := ctx.parseDocument(); err != nil {
 		return nil, err
 	}
