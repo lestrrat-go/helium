@@ -55,7 +55,6 @@ type ContentHandler interface {
 }
 
 type Foo interface {
-	CDATABlock(ctx Context, content []byte)
 	GetParameterEntity(ctx Context, nmae string) (Entity, error)
 }
 

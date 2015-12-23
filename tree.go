@@ -176,10 +176,6 @@ func (t *TreeBuilder) EndCDATA(_ sax.Context) error {
 	return nil
 }
 
-func (t *TreeBuilder) CDATABlock(ctxif sax.Context, data []byte) error {
-	return t.Characters(ctxif, data)
-}
-
 func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
 	if debug.Enabled {
 		debug.Printf("tree.Comment: %s", data)
