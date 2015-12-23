@@ -36,6 +36,9 @@ type ExternalSubsetFunc func(ctx Context, name string, publicID string, systemID
 // GetExternalSubsetFunc defines the function type for SAX2.GetExternalSubsetHandler
 type GetExternalSubsetFunc func(ctx Context, name string, baseURI string) error
 
+// GetParameterEntityFunc defines the function type for SAX2.GetParameterEntityHandler
+type GetParameterEntityFunc func(ctx Context, nmae string) (Entity, error)
+
 // IgnorableWhitespaceFunc defines the function type for SAX2.IgnorableWhitespaceHandler
 type IgnorableWhitespaceFunc func(ctx Context, content []byte) error
 
@@ -91,6 +94,7 @@ type SAX2 struct {
 	ExternalEntityDeclHandler ExternalEntityDeclFunc
 	ExternalSubsetHandler ExternalSubsetFunc
 	GetExternalSubsetHandler GetExternalSubsetFunc
+	GetParameterEntityHandler GetParameterEntityFunc
 	IgnorableWhitespaceHandler IgnorableWhitespaceFunc
 	InternalEntityDeclHandler InternalEntityDeclFunc
 	InternalSubsetHandler InternalSubsetFunc
@@ -204,6 +208,14 @@ func (s *SAX2) GetExternalSubset(ctx Context, name string, baseURI string) error
 		return h(ctx, name, baseURI)
 	}
 	return nil
+}
+
+// GetParameterEntity satisfies the Extensions interface
+func (s *SAX2) GetParameterEntity(ctx Context, nmae string) (Entity, error) {
+	if h := s.GetParameterEntityHandler; h != nil {
+		return h(ctx, nmae)
+	}
+	return nil, nil
 }
 
 // IgnorableWhitespace satisfies the ContentHandler interface

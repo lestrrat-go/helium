@@ -5,7 +5,6 @@ type DocumentLocator interface{}
 
 // TODO fix Context
 type Entity Context
-type GetParameterEntityFunc func(ctx Context, name string) (Entity, error)
 
 // Context is always passed as the first argument to SAX handlers.
 // It is intentionally left as an opaque value so applications can
@@ -54,9 +53,6 @@ type ContentHandler interface {
 	Characters(ctx Context, content []byte) error
 }
 
-type Foo interface {
-	GetParameterEntity(ctx Context, nmae string) (Entity, error)
-}
 
 type AttributeDefaultValue interface{}
 type Enumeration interface{}
@@ -94,6 +90,7 @@ type EntityResolver interface {
 // consolidaed later.
 type Extensions interface {
 	ExternalSubset(ctx Context, name string, publicID string, systemID string) error
+	GetParameterEntity(ctx Context, nmae string) (Entity, error)
 	InternalSubset(ctx Context, name string, publicID string, systemID string) error
 }
 

@@ -20,9 +20,10 @@ sub extract {
         $line =~ s/\s+$//;
 
         next unless $line =~ /\S+/;
-        $line =~ /^([^\s\(]+)\s*\(([^\)]+)\)/;
+        $line =~ /^([^\s\(]+)\s*\(([^\)]+)\)\s*(\([^\)]+\)|[^{]+)/;
         my $name = $1;
         my $args = $2;
+        my $return = $3;
 
         # split the args, strip the typ
         my @args = map { s/\s*\S+$//; $_ } split(/\s*,\s*/,$args);
@@ -33,11 +34,11 @@ func (s *SAX2) $line {
 \tif h := s.${name}Handler; h != nil {
 \t\treturn h(@{[ join ", ", @args ]})
 \t}
-\treturn nil
+\treturn @{[join ", ", map { "nil" } split /,/, $return]}
 }
 
 EOM
-        push @functypes, "// ${name}Func defines the function type for SAX2.${name}Handler\ntype ${name}Func func($args) error";
+        push @functypes, "// ${name}Func defines the function type for SAX2.${name}Handler\ntype ${name}Func func($args) $return";
         push @fields, "${name}Handler ${name}Func";
     }
 }
