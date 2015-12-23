@@ -3,6 +3,7 @@ package helium
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -38,6 +39,18 @@ func (ctx *parserCtx) popNode() *ParsedElement {
 	}
 	ctx.element = e.next
 	return e
+}
+
+func (ctx *parserCtx) lookupNamespace(prefix string) string {
+	for e := ctx.peekNode(); e != nil; e = e.next {
+		for _, ns := range e.namespaces {
+			debug.Printf("---> search %#v", ns)
+			if ns.Prefix() == prefix {
+				return ns.URI()
+			}
+		}
+	}
+	return ""
 }
 
 func (ctx *parserCtx) release() error {
@@ -574,11 +587,15 @@ func (ctx *parserCtx) parseStartTag() error {
 	}
 	ctx.curAdvance(1)
 
-	name, err := ctx.parseName()
+	local, prefix, err := ctx.parseQName()
+	if local == "" {
+		return ctx.error(fmt.Errorf("local name empty! local = %s, prefix = %s, err = %s", local, prefix, err))
+	}
 	if err != nil {
 		return ctx.error(err)
 	}
 
+	namespaces := []sax.ParsedNamespace{}
 	attrs := []sax.ParsedAttribute{}
 	for ctx.instate != psEOF {
 		ctx.skipBlanks()
@@ -590,24 +607,56 @@ func (ctx *parserCtx) parseStartTag() error {
 		if ctx.curPeek(1) == '/' && ctx.curPeek(2) == '>' {
 			break
 		}
-		local, prefix, value, err := ctx.parseAttribute(name)
+		localAttr, prefixAttr, value, err := ctx.parseAttribute(local)
 		if err != nil {
 			return ctx.error(err)
 		}
 
-		attr := ParsedAttribute{
-			local:  local,
-			value:  value,
-			prefix: prefix,
+		if prefixAttr == "xmlns" {
+			ns := ParsedNamespace{
+				prefix: localAttr,
+				uri:    value,
+			}
+			namespaces = append(namespaces, ns)
+		} else if localAttr == "xmlns" && prefixAttr == "" {
+			ns := ParsedNamespace{
+				prefix: "",
+				uri:    value,
+			}
+			namespaces = append(namespaces, ns)
+		} else {
+			attr := ParsedAttribute{
+				local:  localAttr,
+				value:  value,
+				prefix: prefixAttr,
+			}
+			attrs = append(attrs, attr)
 		}
-		attrs = append(attrs, attr)
 	}
 
 	elem := &ParsedElement{
-		local:      name,
+		local:      local,
+		namespaces: namespaces,
 		attributes: attrs,
 	}
+
+	// we push the element first, because this way we get to
+	// query for the namespace declared on this node as well
+	// via lookupNamespace
 	ctx.pushNode(elem)
+
+	nsuri := ctx.lookupNamespace(prefix)
+	if prefix != "" && nsuri == "" {
+		return ctx.error(errors.New("namespace '" + prefix + "' not found"))
+	}
+
+	if nsuri != "" {
+		elem.namespace = &ParsedNamespace{
+			prefix: prefix,
+			uri:    nsuri,
+		}
+	}
+
 	if s := ctx.sax; s != nil {
 		if err := s.StartElement(ctx.userData, elem); err != nil {
 			return ctx.error(err)
@@ -647,9 +696,10 @@ func (ctx *parserCtx) parseEndTag() error {
 		}
 
 		e := ctx.peekNode()
-		if e.local != name {
+		debug.Printf("%#v", e)
+		if e.Name() != name {
 			return ctx.error(
-				errors.New("closing tag does not match ('" + e.local + "' != '" + name + "')"))
+				errors.New("closing tag does not match ('" + e.Name() + "' != '" + name + "')"))
 		}
 	}
 	e := ctx.popNode()
@@ -1105,13 +1155,26 @@ func (ctx *parserCtx) parseName() (name string, err error) {
 		return
 	}
 
-	i := 1
-	for ; ctx.curHasChars(i); i++ {
-		c := ctx.curPeek(i)
-		if !(c >= 0x61 && c <= 0x7A) && !(c >= 0x41 && c <= 0x5A) && !(c >= 0x30 && c <= 0x39) && c != '_' && c != '-' && c != ':' && c != '.' {
+	// first letter
+	c := ctx.curPeek(1)
+	if c == ' ' || c == '>' || c == '/' || /* accelerators */ (!unicode.IsLetter(c) && c != '_' && c != ':') {
+		err = ctx.error(fmt.Errorf("invalid first letter '%c'", c))
+		return
+	}
+
+	i := 2
+	for ctx.curHasChars(i) {
+		c = ctx.curPeek(i)
+		if c == ' ' || c == '>' || c == '/' { /* accelerator */
 			i--
 			break
 		}
+		if !unicode.IsLetter(c) && !unicode.IsDigit(c) && c != '.' && c != '-' && c != '_' && c != ':' /* && !isCombining(c) && !isExtender(c) */ {
+			i--
+			break
+		}
+
+		i++
 	}
 	if i > MaxNameLength {
 		err = ctx.error(ErrNameTooLong)
@@ -1119,6 +1182,10 @@ func (ctx *parserCtx) parseName() (name string, err error) {
 	}
 
 	name = ctx.curConsume(i)
+	if name == "" {
+		err = ctx.error(errors.New("internal error: parseName returned with empty name"))
+		return
+	}
 	err = nil
 	return
 }
@@ -1135,7 +1202,9 @@ func (ctx *parserCtx) parseName() (name string, err error) {
 func (ctx *parserCtx) parseQName() (local string, prefix string, err error) {
 	if debug.Enabled {
 		debug.Printf("START parseQName")
-		defer debug.Printf("END   parseQName")
+		defer func() {
+			debug.Printf("END   parseQName (local=%s/prefix=%s)", local, prefix)
+		}()
 	}
 	var v string
 	v, err = ctx.parseNCName()
@@ -1165,13 +1234,13 @@ func (ctx *parserCtx) parseQName() (local string, prefix string, err error) {
 	prefix = v
 
 	v, err = ctx.parseNCName()
-	if err != nil {
-		v, err = ctx.parseNmtoken()
-		if err != nil {
-			err = ctx.error(err)
-			return
-		}
+	if err == nil {
+		local = v
+		return
+	}
 
+	v, err = ctx.parseNmtoken()
+	if err == nil {
 		local = v
 		return
 	}
@@ -2398,13 +2467,11 @@ func (ctx *parserCtx) parseReference() (string, error) {
 	// if !ctx.wellFormed { return } ??
 
 	if ent.EntityType() == InternalPredefinedEntity {
-		/*
-			if s := ctx.sax; s != nil {
-				if err := s.Characters(ctx.userData, []byte(ent.Content())); err != nil {
-					return "", ctx.error(err)
-				}
+		if s := ctx.sax; s != nil {
+			if err := s.Characters(ctx.userData, []byte(ent.Content())); err != nil {
+				return "", ctx.error(err)
 			}
-		*/
+		}
 		return ent.Content(), nil
 	}
 

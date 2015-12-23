@@ -7,19 +7,43 @@ import (
 	"github.com/lestrrat/helium/sax"
 )
 
+func (ns ParsedNamespace) Prefix() string {
+	return ns.prefix
+}
+
+func (ns ParsedNamespace) URI() string {
+	return ns.uri
+}
+
 func (e ParsedElement) Name() string {
-	if e.prefix != "" {
-		return e.prefix + ":" + e.local
+	if ns := e.namespace; ns != nil {
+		if ns.prefix != "" {
+			return ns.prefix + ":" + e.local
+		}
 	}
 	return e.local
 }
 
 func (e ParsedElement) Prefix() string {
-	return e.prefix
+	if ns := e.namespace; ns != nil {
+		return ns.prefix
+	}
+	return ""
 }
 
 func (e ParsedElement) URI() string {
-	return e.uri
+	if ns := e.namespace; ns != nil {
+		return ns.uri
+	}
+	return ""
+}
+
+func (e ParsedElement) Namespace() sax.ParsedNamespace {
+	return e.namespace
+}
+
+func (e ParsedElement) Namespaces() []sax.ParsedNamespace {
+	return e.namespaces
 }
 
 func (e ParsedElement) LocalName() string {

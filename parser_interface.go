@@ -94,11 +94,16 @@ type Parser struct {
 	sax SAX
 }
 
+type ParsedNamespace struct {
+	prefix string
+	uri string
+}
+
 type ParsedElement struct {
 	local      string
-	prefix     string
-	uri        string
 	value      string
+	namespace  *ParsedNamespace
+	namespaces []sax.ParsedNamespace
 	attributes []sax.ParsedAttribute
 	next       *ParsedElement
 }

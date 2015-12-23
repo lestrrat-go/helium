@@ -98,6 +98,11 @@ type Extensions interface {
 	InternalSubset(ctx Context, name string, publicID string, systemID string) error
 }
 
+type ParsedNamespace interface {
+	Prefix() string
+	URI() string
+}
+
 type ParsedElement interface {
 	Prefix() string
 	URI() string
@@ -107,6 +112,7 @@ type ParsedElement interface {
 	// and "localname" otherwise
 	Name() string
 	Attributes() []ParsedAttribute
+	Namespaces() []ParsedNamespace
 }
 
 type ParsedAttribute interface {

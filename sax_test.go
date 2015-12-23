@@ -72,21 +72,34 @@ func newEventEmitter(out io.Writer) helium.SAX {
 		return charHandler("Characters", ctx, data)
 	}
 	s.StartElementHandler = func(_ sax.Context, elem sax.ParsedElement) error {
-		prefix := elem.Prefix()
-		if prefix == "" {
-			prefix = "NULL"
-		}
-		uri := elem.URI()
-		if uri == "" {
-			uri = "NULL"
-		}
 		attrs := elem.Attributes()
 
-		fmt.Fprintf(out, "SAX.StartElementNS(%s, %s, %s, %d, %d, %d",
-			elem.Name(),
-			prefix,
-			uri,
-			0, /* TODO - number of namespaces */
+		fmt.Fprintf(out, "SAX.StartElementNS(%s, ", elem.LocalName())
+
+		if prefix := elem.Prefix(); prefix != "" {
+			fmt.Fprintf(out, "%s, ", prefix)
+		} else {
+			fmt.Fprintf(out, "NULL, ")
+		}
+
+		if uri := elem.URI(); uri != "" {
+			fmt.Fprintf(out, "'%s', ", uri)
+		} else {
+			fmt.Fprintf(out, "NULL, ")
+		}
+
+		namespaces := elem.Namespaces()
+		lns := len(namespaces)
+		fmt.Fprintf(out, "%d, ", lns)
+		for _, ns := range namespaces  {
+			if prefix := ns.Prefix(); prefix != "" {
+				fmt.Fprintf(out, "xmlns:%s='%s'", ns.Prefix(), ns.URI())
+			} else {
+				fmt.Fprintf(out, "xmlns='%s'", ns.URI())
+			}
+			fmt.Fprintf(out, ", ")
+		}
+		fmt.Fprintf(out, "%d, %d",
 			len(attrs),
 			0, /* TODO - number of defaulted attributes */
 		)
@@ -106,15 +119,20 @@ func newEventEmitter(out io.Writer) helium.SAX {
 		return nil
 	}
 	s.EndElementHandler = func(_ sax.Context, elem sax.ParsedElement) error {
-		prefix := elem.Prefix()
-		if prefix == "" {
-			prefix = "NULL"
+		fmt.Fprintf(out, "SAX.EndElementNS(%s, ", elem.LocalName())
+
+		if prefix := elem.Prefix(); prefix != "" {
+			fmt.Fprintf(out, "%s, ", prefix)
+		} else {
+			fmt.Fprintf(out, "NULL, ")
 		}
-		uri := elem.URI()
-		if uri == "" {
-			uri = "NULL"
+
+		if uri := elem.URI(); uri != "" {
+			fmt.Fprintf(out, "'%s')\n", uri)
+		} else {
+			fmt.Fprintf(out, "NULL)\n")
 		}
-		fmt.Fprintf(out, "SAX.EndElementNS(%s, %s, %s)\n", elem.Name(), prefix, uri)
+
 		return nil
 	}
 	return s
