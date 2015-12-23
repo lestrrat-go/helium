@@ -21,6 +21,13 @@ func newEventEmitter(out io.Writer) helium.SAX {
 		fmt.Fprintf(out, "SAX.SetDocumentLocator()\n")
 		return nil
 	}
+	s.AttributeDeclHandler = func(_ sax.Context, elemName string, attrName string, typ int, deftype int, defvalue sax.AttributeDefaultValue, enum sax.Enumeration) error {
+		if defvalue == nil {
+			defvalue = "NULL"
+		}
+		fmt.Fprintf(out, "SAX.AttributeDecl(%s, %s, %d, %d, %s, ...)\n", elemName, attrName, typ, deftype, defvalue)
+		return nil
+	}
 	s.InternalSubsetHandler = func(_ sax.Context, name, externalID, systemID string) error {
 		fmt.Fprintf(out, "SAX.InternalSubset(%s, %s, %s)\n", name, externalID, systemID)
 		return nil
@@ -45,7 +52,7 @@ func newEventEmitter(out io.Writer) helium.SAX {
 		fmt.Fprintf(out, "SAX.Comment(%s)\n", data)
 		return nil
 	}
-	s.CharactersHandler = func(_ sax.Context, data []byte) error {
+	charHandler := func(name string, _ sax.Context, data []byte) error {
 		var output string
 		if len(data) > 30 {
 			output = string(data[:30])
@@ -53,8 +60,14 @@ func newEventEmitter(out io.Writer) helium.SAX {
 			output = string(data)
 		}
 
-		fmt.Fprintf(out, "SAX.Characters(%s, %d)\n", output, len(data))
+		fmt.Fprintf(out, "SAX.%s(%s, %d)\n", name, output, len(data))
 		return nil
+	}
+	s.IgnorableWhitespaceHandler = func(ctx sax.Context, data []byte) error {
+		return charHandler("IgnorableWhitespace", ctx, data)
+	}
+	s.CharactersHandler = func(ctx sax.Context, data []byte) error {
+		return charHandler("Characters", ctx, data)
 	}
 	s.StartElementHandler = func(_ sax.Context, elem sax.ParsedElement) error {
 		prefix := elem.Prefix()

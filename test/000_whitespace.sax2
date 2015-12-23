@@ -1,0 +1,12 @@
+SAX.SetDocumentLocator()
+SAX.StartDocument()
+SAX.StartElementNS(root, NULL, NULL, 0, 0, 0)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(text, NULL, NULL, 0, 0, 0)
+SAX.Characters(There should be ignorable whit, 79)
+SAX.EndElementNS(text, NULL, NULL)
+SAX.IgnorableWhitespace(
+, 1)
+SAX.EndElementNS(root, NULL, NULL)
+SAX.EndDocument()
