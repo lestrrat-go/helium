@@ -17,7 +17,15 @@ import (
 
 func (ctx *parserCtx) pushNode(e *ParsedElement) {
 	if debug.Enabled {
-		debug.Printf(" --> push node " + e.local)
+		g := debug.IPrintf("START pushNode (%s)", e.Name())
+		defer g.IRelease("END   pushNode")
+		defer func() {
+			i := 1
+			for e := ctx.element; e != nil; e = e.next {
+				debug.Printf("element in stack (%d): %s", i, e.Name())
+				i++
+			}
+		}()
 	}
 	e.next = ctx.element
 	ctx.element = e
@@ -28,15 +36,26 @@ func (ctx *parserCtx) peekNode() *ParsedElement {
 }
 
 func (ctx *parserCtx) popNode() *ParsedElement {
+	if debug.Enabled {
+		g := debug.IPrintf("START popNode")
+		defer g.IRelease("END   popNode")
+		defer func() {
+			i := 1
+			for e := ctx.element; e != nil; e = e.next {
+				debug.Printf("element in stack (%d): %s", i, e.Name())
+				i++
+			}
+		}()
+	}
 	e := ctx.peekNode()
 	if e == nil {
 		if debug.Enabled {
-			debug.Printf(" <-- pop node (EMPTY)")
+			debug.Printf("popped node (EMPTY)")
 		}
 	}
 
 	if debug.Enabled {
-		debug.Printf(" <-- pop node " + e.local)
+		debug.Printf("popped node %s", e.Name())
 	}
 	ctx.element = e.next
 	return e
@@ -114,8 +133,8 @@ var (
 
 func (ctx *parserCtx) detectEncoding() (string, error) {
 	if debug.Enabled {
-		debug.Printf("START detectEncoding")
-		defer debug.Printf("END   detecteEncoding")
+		g := debug.IPrintf("START detectEncoding")
+		defer g.IRelease("END   detecteEncoding")
 	}
 
 	if ctx.curLen() >= 4 {
@@ -220,7 +239,6 @@ func (ctx *parserCtx) curPeek(n int) rune {
 
 func (ctx *parserCtx) markEOF() {
 	if ctx.cursor.Done() {
-		debug.Printf("Marking EOF")
 		ctx.instate = psEOF
 	}
 }
@@ -711,7 +729,10 @@ func (ctx *parserCtx) parseEndTag() error {
 		if err != nil {
 			return ctx.error(err)
 		}
-		debug.Printf("  --> end tag %s", name)
+		if debug.Enabled {
+			debug.Printf("ending tag '%s'", name)
+		}
+
 		if ctx.curPeek(1) == '>' {
 			ctx.curAdvance(1)
 		}
@@ -1405,7 +1426,7 @@ func (ctx *parserCtx) areBlanks(s string, blankChars bool) (ret bool) {
 	if debug.Enabled {
 		g := debug.IPrintf("START areBlanks (%v)", []byte(s))
 		defer g.IRelease("END areBlanks")
-		defer func() { debug.Printf("ret=%t", ret) }()
+		defer func() { debug.Printf("ret = '%t'", ret) }()
 	}
 
 	// Check for xml:space value.
@@ -3445,11 +3466,14 @@ func (ctx *parserCtx) parseReference() (string, error) {
  *
  * Returns the value parsed as a rune
  */
-func (ctx *parserCtx) parseCharRef() (rune, error) {
+func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseCharRef")
 		defer g.IRelease("END   parseCharRef")
+		defer func() { debug.Printf("r = '%c' (%x)", r, r) }()
 	}
+
+	r = utf8.RuneError
 
 	var val int32
 	if ctx.curConsumePrefix("&#x") {
@@ -3462,7 +3486,8 @@ func (ctx *parserCtx) parseCharRef() (rune, error) {
 			} else if c >= 'A' && c <= 'F' {
 				val = val*16 + (c - 'A') + 10
 			} else {
-				return utf8.RuneError, errors.New("invalid hex CharRef")
+				err = errors.New("invalid hex CharRef")
+				return
 			}
 			ctx.curAdvance(1)
 		}
@@ -3475,7 +3500,8 @@ func (ctx *parserCtx) parseCharRef() (rune, error) {
 			if c >= '0' && c <= '9' {
 				val = val*10 + (c - '0')
 			} else {
-				return utf8.RuneError, errors.New("invalid decimal CharRef")
+				err = errors.New("invalid decimal CharRef")
+				return
 			}
 			ctx.curAdvance(1)
 		}
@@ -3483,13 +3509,17 @@ func (ctx *parserCtx) parseCharRef() (rune, error) {
 			ctx.curAdvance(1)
 		}
 	} else {
-		return utf8.RuneError, errors.New("invalid char ref")
-	}
-	if isChar(val) && val <= unicode.MaxRune {
-		return rune(val), nil
+		err = errors.New("invalid char ref")
+		return
 	}
 
-	return utf8.RuneError, ErrInvalidChar
+	if isChar(val) && val <= unicode.MaxRune {
+		r = rune(val)
+		return
+	}
+
+	err = ErrInvalidChar
+	return
 }
 
 /*
