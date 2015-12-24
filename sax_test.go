@@ -165,6 +165,7 @@ func TestSAXEvents(t *testing.T) {
 	skipped := map[string]struct{}{
 		"xml2.xml": {},
 		"att7.xml": {},
+		"att9.xml": {},
 	}
 
 	dir := "test"
