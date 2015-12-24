@@ -322,8 +322,12 @@ func (t *TreeBuilder) NotationDecl(ctx sax.Context, name string, publicID string
 	return nil
 }
 
-func (t *TreeBuilder) ResolveEntity(ctx sax.Context, name string, publicID string, baseURI string, systemID string) error {
+func (t *TreeBuilder) Reference(ctx sax.Context, name string) error {
 	return nil
+}
+
+func (t *TreeBuilder) ResolveEntity(ctx sax.Context, name string, publicID string, baseURI string, systemID string) (sax.Entity, error) {
+	return nil, errors.New("entity not found")
 }
 
 func (t *TreeBuilder) SkippedEntity(ctx sax.Context, name string) error {
@@ -338,7 +342,7 @@ func (t *TreeBuilder) StartEntity(ctx sax.Context, name string) error {
 	return nil
 }
 
-func (t *TreeBuilder) UnparsedEntityDecl(ctx sax.Context, name string, publicID string, systemID string, notation string) error {
+func (t *TreeBuilder) UnparsedEntityDecl(ctx sax.Context, name string, typ int, publicID string, systemID string, notation string) error {
 	return nil
 }
 

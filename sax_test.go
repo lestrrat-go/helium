@@ -2,6 +2,7 @@ package helium_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,6 +17,7 @@ import (
 )
 
 func newEventEmitter(out io.Writer) helium.SAX {
+	entities := map[string]*helium.Entity{}
 	s := sax.New()
 	s.SetDocumentLocatorHandler = func(_ sax.Context, loc sax.DocumentLocator) error {
 		fmt.Fprintf(out, "SAX.SetDocumentLocator()\n")
@@ -23,7 +25,7 @@ func newEventEmitter(out io.Writer) helium.SAX {
 	}
 	s.AttributeDeclHandler = func(_ sax.Context, elemName string, attrName string, typ int, deftype int, defvalue sax.AttributeDefaultValue, enum sax.Enumeration) error {
 		// eek, defvalue is an interface, and interface == nil is only true
-		// if the interface has no value AND not type, so.. hmmm. 
+		// if the interface has no value AND not type, so.. hmmm.
 		if fmt.Sprintf("%s", defvalue) == "" {
 			defvalue = "NULL"
 		}
@@ -32,6 +34,27 @@ func newEventEmitter(out io.Writer) helium.SAX {
 	}
 	s.InternalSubsetHandler = func(_ sax.Context, name, externalID, systemID string) error {
 		fmt.Fprintf(out, "SAX.InternalSubset(%s, %s, %s)\n", name, externalID, systemID)
+		return nil
+	}
+	s.ReferenceHandler = func(_ sax.Context, name string) error {
+		fmt.Fprintf(out, "SAX.Reference(%s)\n", name)
+		return nil
+	}
+	s.ResolveEntityHandler = func(_ sax.Context, name string, publicID string, baseURI string, systemID string) (sax.Entity, error) {
+		fmt.Fprintf(out, "SAX.ResolveEntity(%s)\n", name)
+
+		ent, ok := entities[name]
+		if !ok {
+			return nil, errors.New("entity not found")
+		}
+		return ent, nil
+	}
+
+	s.UnparsedEntityDeclHandler = func(_ sax.Context, name string, typ int, publicID string, systemID string, notation string) error {
+		fmt.Fprintf(out, "SAX.UnparsedEntityDecl(%s, %d, %s, %s, %s)\n",
+			name, typ, publicID, systemID, notation)
+
+		entities[name] = helium.NewEntity(name, helium.EntityType(typ), publicID, systemID, notation)
 		return nil
 	}
 	s.ExternalSubsetHandler = func(_ sax.Context, name, externalID, systemID string) error {
@@ -91,7 +114,7 @@ func newEventEmitter(out io.Writer) helium.SAX {
 		namespaces := elem.Namespaces()
 		lns := len(namespaces)
 		fmt.Fprintf(out, "%d, ", lns)
-		for _, ns := range namespaces  {
+		for _, ns := range namespaces {
 			if prefix := ns.Prefix(); prefix != "" {
 				fmt.Fprintf(out, "xmlns:%s='%s'", ns.Prefix(), ns.URI())
 			} else {
@@ -139,8 +162,9 @@ func newEventEmitter(out io.Writer) helium.SAX {
 }
 
 func TestSAXEvents(t *testing.T) {
-	skipped := map[string]struct{} {
+	skipped := map[string]struct{}{
 		"xml2.xml": {},
+		"att7.xml": {},
 	}
 
 	dir := "test"

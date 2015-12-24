@@ -24,6 +24,8 @@ sub extract {
         my $name = $1;
         my $args = $2;
         my $return = $3;
+        $return =~ s{^\(\s*}{};
+        $return =~ s{\s*\)$}{};
 
         # split the args, strip the typ
         my @args = map { s/\s*\S+$//; $_ } split(/\s*,\s*/,$args);
@@ -34,11 +36,11 @@ func (s *SAX2) $line {
 \tif h := s.${name}Handler; h != nil {
 \t\treturn h(@{[ join ", ", @args ]})
 \t}
-\treturn @{[join ", ", map { "nil" } split /,/, $return]}
+\treturn @{[join ", ", map { $_ eq 'string' ? '""' : $_ eq 'error' ? "ErrHandlerUnspecified" : "nil" } split /\s*,\s*/, $return]}
 }
 
 EOM
-        push @functypes, "// ${name}Func defines the function type for SAX2.${name}Handler\ntype ${name}Func func($args) $return";
+        push @functypes, "// ${name}Func defines the function type for SAX2.${name}Handler\ntype ${name}Func func($args) ($return)";
         push @fields, "${name}Handler ${name}Func";
     }
 }
@@ -55,7 +57,14 @@ if ($content =~ /^type (Extensions) interface {([^}]+)}/msg) {
 
 open my $out, '>', 'callback.go' or die;
 
-print $out "package sax\n\n";
+print $out <<EOM;
+package sax
+
+import "errors"
+
+var ErrHandlerUnspecified = errors.New("handler unspecified")
+
+EOM
 
 foreach my $func (sort { $a cmp $b } @functypes) {
     print $out $func, "\n\n";

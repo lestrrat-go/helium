@@ -4,7 +4,9 @@ package sax
 type DocumentLocator interface{}
 
 // TODO fix Context
-type Entity Context
+type Entity interface {
+	Content() string
+}
 
 // Context is always passed as the first argument to SAX handlers.
 // It is intentionally left as an opaque value so applications can
@@ -21,7 +23,7 @@ type DTDHandler interface {
 
 	//Receive notification of an unparsed entity declaration event.
 	// Parameters are the context object, name, publicID, systemID, and notation name.
-	UnparsedEntityDecl(ctx Context, name string, publicID string, systemID string, notation string) error
+	UnparsedEntityDecl(ctx Context, name string, typ int, publicID string, systemID string, notation string) error
 }
 
 // ContentHandler is the interface defining the SAX2 handler.
@@ -83,7 +85,7 @@ type LexicalHandler interface {
 // references to input sources, or providing a missing external subset.
 type EntityResolver interface {
 	GetExternalSubset(ctx Context, name string, baseURI string) error
-	ResolveEntity(ctx Context, name string, publicID string, baseURI string, systemID string) error
+	ResolveEntity(ctx Context, name string, publicID string, baseURI string, systemID string) (Entity, error)
 }
 
 // Extensions defines some non-standard SAX extensions. This may be
@@ -92,6 +94,7 @@ type Extensions interface {
 	ExternalSubset(ctx Context, name string, publicID string, systemID string) error
 	GetParameterEntity(ctx Context, nmae string) (Entity, error)
 	InternalSubset(ctx Context, name string, publicID string, systemID string) error
+	Reference(ctx Context, name string) error
 }
 
 type ParsedNamespace interface {

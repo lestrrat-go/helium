@@ -18,6 +18,8 @@ const (
 	psEpilogue
 	psCDATA
 	psDTD
+	psEntityDecl
+	psAttributeValue
 )
 
 const MaxNameLength = 50000
@@ -31,6 +33,7 @@ var (
 	ErrDocTypeNotFinished           = errors.New("doctype not finished")
 	ErrDocumentEnd                  = errors.New("extra content at document end")
 	ErrEOF                          = errors.New("end of file reached")
+	ErrElementContentNotFinished    = errors.New("element content not finished")
 	ErrEmptyDocument                = errors.New("start tag expected, '<' not found")
 	ErrEntityNotFound               = errors.New("entity not found")
 	ErrEqualSignRequired            = errors.New("'=' was required here")
@@ -60,9 +63,11 @@ var (
 	ErrPCDATARequired               = errors.New("'#PCDATA' required")
 	ErrPercentRequired              = errors.New("'%' is required")
 	ErrPrematureEOF                 = errors.New("end of document reached")
+	ErrUndeclaredEntity             = errors.New("undeclared entity")
 	ErrSemicolonRequired            = errors.New("';' is required")
 	ErrSpaceRequired                = errors.New("space required")
 	ErrStartTagRequired             = errors.New("start tag expected, '<' not found")
+	ErrValueRequired                = errors.New("value required")
 )
 
 type ErrDTDDupToken struct {
@@ -96,7 +101,7 @@ type Parser struct {
 
 type ParsedNamespace struct {
 	prefix string
-	uri string
+	uri    string
 }
 
 type ParsedElement struct {
@@ -139,6 +144,8 @@ type parserCtx struct {
 	extSubURI         string
 	version           string
 	attsSpecial       map[string]AttributeType
+	valid             bool
+	hasPERefs         bool
 
 	doc        *Document
 	userData   interface{}
@@ -146,3 +153,12 @@ type parserCtx struct {
 	elemidx    int
 	nbentities int
 }
+
+type SubstitutionType int
+
+const (
+	SubstituteNone SubstitutionType = iota
+	SubstituteRef
+	SubstitutePERef
+	SubstituteBoth
+)
