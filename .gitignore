@@ -22,3 +22,6 @@ _testmain.go
 *.exe
 *.test
 *.prof
+
+# files generated when test fails to aid diagnosing problems later
+test/*.err
