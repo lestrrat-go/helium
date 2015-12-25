@@ -125,4 +125,5 @@ type ParsedAttribute interface {
 	Name() string
 	Prefix() string
 	Value() string
+	Defaulted() bool
 }

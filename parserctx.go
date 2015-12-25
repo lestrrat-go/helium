@@ -87,6 +87,7 @@ func (ctx *parserCtx) init(p *Parser, b []byte) error {
 	ctx.userData = ctx // circular dep?!
 	ctx.standalone = StandaloneImplicitNo
 	ctx.attsSpecial = map[string]AttributeType{}
+	ctx.attsDefault = map[string]map[string]ParsedAttribute{}
 	return nil
 }
 
@@ -651,6 +652,30 @@ func (ctx *parserCtx) parseStartTag() error {
 				prefix: prefixAttr,
 			}
 			attrs = append(attrs, attr)
+		}
+	}
+
+	// attributes defaulting
+	// XXX Punting a lot of stuff here. See xmlParseStartTag2
+	if len(ctx.attsDefault) > 0 {
+		var elemName string
+		if prefix != "" {
+			elemName = prefix + ":" + local
+		} else {
+			elemName = local
+		}
+
+		defaults, ok := ctx.lookupAttributeDefault(elemName)
+		if ok {
+			for _, def := range defaults {
+				a2 := ParsedAttribute{
+					local:  def.local,
+					value:  def.value,
+					prefix: def.prefix,
+					defaulted: true,
+				}
+				attrs = append(attrs, a2)
+			}
 		}
 	}
 
@@ -2440,56 +2465,56 @@ func (ctx *parserCtx) decodeEntitiesInternal(s string, what SubstitutionType, de
 
 	out := bytes.Buffer{}
 	for len(s) > 0 {
-	if strings.HasPrefix(s, "&#") {
-		val, width, err := parseStringCharRef(s)
-		if err != nil {
-			return "", err
-		}
-		out.WriteRune(val)
-		s = s[width:] // advance
-	} else if what&SubstituteRef == SubstituteRef {
-		ent, width, err := ctx.parseStringEntityRef(s)
-		if err != nil {
-			return "", err
-		}
-		if err := ctx.entityCheck(ent); err != nil {
-			return "", err
-		}
-
-		if EntityType(ent.EntityType()) == InternalPredefinedEntity {
-			if ent.Content() == "" {
-				return "", errors.New("predefined entity has no content")
+		if strings.HasPrefix(s, "&#") {
+			val, width, err := parseStringCharRef(s)
+			if err != nil {
+				return "", err
 			}
-			out.WriteString(ent.Content())
-		} else if ent.Content() != "" {
+			out.WriteRune(val)
+			s = s[width:] // advance
+		} else if what&SubstituteRef == SubstituteRef {
+			ent, width, err := ctx.parseStringEntityRef(s)
+			if err != nil {
+				return "", err
+			}
+			if err := ctx.entityCheck(ent); err != nil {
+				return "", err
+			}
+
+			if EntityType(ent.EntityType()) == InternalPredefinedEntity {
+				if ent.Content() == "" {
+					return "", errors.New("predefined entity has no content")
+				}
+				out.WriteString(ent.Content())
+			} else if ent.Content() != "" {
+				rep, err := ctx.decodeEntitiesInternal(ent.Content(), what, depth+1)
+				if err != nil {
+					return "", err
+				}
+
+				out.WriteString(rep)
+			} else {
+				out.WriteString(ent.Name())
+			}
+			s = s[width:]
+		} else if s[0] == '%' && what&SubstitutePERef == SubstitutePERef {
+			ent, width, err := ctx.parseStringPEReference(s)
+			if err != nil {
+				return "", err
+			}
+			if err := ctx.entityCheck(ent); err != nil {
+				return "", err
+			}
 			rep, err := ctx.decodeEntitiesInternal(ent.Content(), what, depth+1)
 			if err != nil {
 				return "", err
 			}
-
 			out.WriteString(rep)
+			s = s[width:]
 		} else {
-			out.WriteString(ent.Name())
+			out.WriteByte(s[0])
+			s = s[1:]
 		}
-		s = s[width:]
-	} else if s[0] == '%' && what&SubstitutePERef == SubstitutePERef {
-		ent, width, err := ctx.parseStringPEReference(s)
-		if err != nil {
-			return "", err
-		}
-		if err := ctx.entityCheck(ent); err != nil {
-			return "", err
-		}
-		rep, err := ctx.decodeEntitiesInternal(ent.Content(), what, depth+1)
-		if err != nil {
-			return "", err
-		}
-		out.WriteString(rep)
-		s = s[width:]
-	} else {
-		out.WriteByte(s[0])
-		s = s[1:]
-	}
 	}
 	return out.String(), nil
 }
@@ -3121,6 +3146,49 @@ func (ctx *parserCtx) lookupSpecialAttribute(elemName, attrName string) (Attribu
 	return v, ok
 }
 
+func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue string) {
+	// detect attribute redefinition
+	if _, ok := ctx.lookupSpecialAttribute(elemName, attrName); ok {
+		return
+	}
+
+	// XXX seems like when your language has a map, you can do just
+	// kinda do away with a bunch of stuff..  See xmlAddDefAttrs for
+	// details of what the original code is doing
+	m, ok := ctx.attsDefault[elemName]
+	if !ok {
+		m = map[string]ParsedAttribute{}
+		ctx.attsDefault[elemName] = m
+	}
+
+	var prefix string
+	var local string
+	if i := strings.IndexByte(attrName, ':'); i > -1 {
+		prefix = attrName[:i]
+		local = attrName[i+1:]
+	} else {
+		local = attrName
+	}
+
+	m[attrName] = ParsedAttribute{
+		local:  local,
+		value:  defaultValue,
+		prefix: prefix,
+	}
+	/*
+	   	hmm, let's think about this when the time comes
+	       if (ctxt->external)
+	           defaults->values[5 * defaults->nbAttrs + 4] = BAD_CAST "external";
+	       else
+	           defaults->values[5 * defaults->nbAttrs + 4] = NULL;
+	*/
+}
+
+func (ctx *parserCtx) lookupAttributeDefault(elemName string) (map[string]ParsedAttribute, bool) {
+	v, ok := ctx.attsDefault[elemName]
+	return v, ok
+}
+
 /*
  * : parse the Attribute list def for an element
  *
@@ -3202,13 +3270,10 @@ func (ctx *parserCtx) parseAttributeListDecl() error {
 				return ctx.error(err)
 			}
 		}
-		/*
-		   if ((ctxt->sax2) && (defaultValue != NULL) &&
-		       (def != XML_ATTRIBUTE_IMPLIED) &&
-		       (def != XML_ATTRIBUTE_REQUIRED)) {
-		       xmlAddDefAttrs(ctxt, elemName, attrName, defaultValue);
-		   }
-		*/
+
+		if defvalue != "" && def != AttrDefaultImplied && def != AttrDefaultRequired {
+			ctx.addAttributeDefault(elemName, attrName, defvalue)
+		}
 
 		// note: in libxml2, this is only triggered when SAX2 is enabled.
 		// as we only support SAX2, we just register it regardless

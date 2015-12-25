@@ -73,6 +73,10 @@ func (a ParsedAttribute) Value() string {
 	return a.value
 }
 
+func (a ParsedAttribute) Defaulted() bool {
+	return a.defaulted
+}
+
 type TreeBuilder struct {
 	doc  *Document
 	node Node

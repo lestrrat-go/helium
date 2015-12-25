@@ -122,9 +122,17 @@ func newEventEmitter(out io.Writer) helium.SAX {
 			}
 			fmt.Fprintf(out, ", ")
 		}
+
+		defaulted := 0
+		for _, attr := range attrs {
+			if attr.Defaulted() {
+				defaulted++
+			}
+		}
+
 		fmt.Fprintf(out, "%d, %d",
 			len(attrs),
-			0, /* TODO - number of defaulted attributes */
+			defaulted, /* TODO - number of defaulted attributes */
 		)
 
 		if len(attrs) > 0 {

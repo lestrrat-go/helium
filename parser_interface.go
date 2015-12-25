@@ -117,6 +117,7 @@ type ParsedAttribute struct {
 	local  string
 	prefix string
 	value  string
+	defaulted bool
 }
 
 const (
@@ -144,6 +145,7 @@ type parserCtx struct {
 	extSubURI         string
 	version           string
 	attsSpecial       map[string]AttributeType
+	attsDefault       map[string]map[string]ParsedAttribute
 	valid             bool
 	hasPERefs         bool
 
