@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 )
@@ -16,11 +17,12 @@ var prefix = ""
 var prefixToken = "  "
 var logger = log.New(os.Stdout, "|DEBUG| ", 0)
 
-type guard func()
+type guard func() time.Time
 
 func (g guard) IRelease(f string, args ...interface{}) {
-	g()
-	Printf(f, args...)
+	start := g()
+	dur := time.Since(start)
+	Printf("%s (%s)", fmt.Sprintf(f, args...), dur)
 }
 
 // IPrintf indents and then prints debug messages. Execute the callback
@@ -28,8 +30,10 @@ func (g guard) IRelease(f string, args ...interface{}) {
 func IPrintf(f string, args ...interface{}) guard {
 	Printf(f, args...)
 	prefix = prefix + prefixToken
-	return guard(func() {
+	start := time.Now()
+	return guard(func() time.Time {
 		prefix = prefix[len(prefixToken):]
+		return start
 	})
 }
 

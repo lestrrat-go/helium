@@ -4,7 +4,7 @@ package debug
 
 const Enabled = false
 
-type guard func()
+type guard struct{}
 func (g guard) IRelease(f string, args ...interface{}) {}
 
 // IPrintf is no op unless you comple with the `debug` tag
