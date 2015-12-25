@@ -23,6 +23,10 @@ func Walk(n Node, f WalkFunc) error {
 	return nil
 }
 
+func (n node) Name() string {
+	return n.name
+}
+
 func (n node) Type() NodeType {
 	return n.typ
 }

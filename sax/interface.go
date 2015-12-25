@@ -5,6 +5,9 @@ type DocumentLocator interface{}
 
 // TODO fix Context
 type Entity interface {
+	Name() string
+	SetOrig(string)
+	EntityType() int
 	Content() string
 }
 

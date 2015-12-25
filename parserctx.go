@@ -377,7 +377,7 @@ func (ctx *parserCtx) parseDocument() error {
 		}
 		ctx.inSubset = 0
 
-		// xmlCleanSpecialAttr(ctxt)
+		ctx.cleanSpecialAttributes()
 
 		ctx.instate = psPrologue
 		if err := ctx.parseMisc(); err != nil {
@@ -481,42 +481,6 @@ func (ctx *parserCtx) parseContent() error {
 	}
 
 	return nil
-}
-
-// used for the test in the inner loop of the char data testing
-var testCharData = [256]byte{
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* 0x9, CR/LF separated */
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x00, 0x27, /* & */
-	0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F,
-	0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
-	0x38, 0x39, 0x3A, 0x3B, 0x00, 0x3D, 0x3E, 0x3F, /* < */
-	0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47,
-	0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F,
-	0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57,
-	0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x00, 0x5E, 0x5F, /* ] */
-	0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67,
-	0x68, 0x69, 0x6A, 0x6B, 0x6C, 0x6D, 0x6E, 0x6F,
-	0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77,
-	0x78, 0x79, 0x7A, 0x7B, 0x7C, 0x7D, 0x7E, 0x7F,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* non-ascii */
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 }
 
 /* parse a CharData section.
@@ -644,9 +608,29 @@ func (ctx *parserCtx) parseStartTag() error {
 			break
 		}
 		localAttr, prefixAttr, value, err := ctx.parseAttribute(local)
+		debug.Printf("Parsed attribute -> '%s'", value)
 		if err != nil {
 			return ctx.error(err)
 		}
+
+		/*
+		   if (URL == ctxt->str_xml_ns) {
+		       if (attname != ctxt->str_xml) {
+		           xmlNsErr(ctxt, XML_NS_ERR_XML_NAMESPACE,
+		        "xml namespace URI cannot be the default namespace\n",
+		                    NULL, NULL, NULL);
+		       }
+		       goto skip_default_ns;
+		   }
+		   if ((len == 29) &&
+		       (xmlStrEqual(URL,
+		                BAD_CAST "http://www.w3.org/2000/xmlns/"))) {
+		       xmlNsErr(ctxt, XML_NS_ERR_XML_NAMESPACE,
+		            "reuse of the xmlns namespace name is forbidden\n",
+		                NULL, NULL, NULL);
+		       goto skip_default_ns;
+		   }
+		*/
 
 		if prefixAttr == "xmlns" {
 			ns := ParsedNamespace{
@@ -757,22 +741,27 @@ func (ctx *parserCtx) parseEndTag() error {
 	return nil
 }
 
-func (ctx *parserCtx) parseAttributeValue(normalize bool) (string, error) {
+func (ctx *parserCtx) parseAttributeValue(normalize bool) (value string, entities int, err error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseAttributeValue (normalize=%t)", normalize)
 		defer g.IRelease("END   parseAttributeValue")
 	}
 
-	return ctx.parseQuotedText(func(qch rune) (string, error) {
-		return ctx.parseAttributeValueInternal(qch, normalize)
+	ctx.parseQuotedText(func(qch rune) (string, error) {
+		value, entities, err = ctx.parseAttributeValueInternal(qch, normalize)
+		return "", nil
 	})
+	return
 }
 
 // This is based on xmlParseAttValueComplex
-func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (string, error) {
+func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (value string, entities int, err error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseAttributeValueInternal (qch='%c',normalize=%t)", qch, normalize)
 		defer g.IRelease("END   parseAttributeValueInternal")
+		defer func() {
+			debug.Printf("value = '%s'", value)
+		}()
 	}
 
 	inSpace := false
@@ -785,11 +774,14 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (str
 		}
 		switch c {
 		case '&':
+			entities++
 			inSpace = false
 			if ctx.curPeek(2) == '#' {
-				r, err := ctx.parseCharRef()
+				var r rune
+				r, err = ctx.parseCharRef()
 				if err != nil {
-					return "", ctx.error(err)
+					err = ctx.error(err)
+					return
 				}
 				if r == '&' && !ctx.replaceEntities {
 					b.WriteString("&#38;")
@@ -797,9 +789,11 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (str
 					b.WriteRune(r)
 				}
 			} else {
-				ent, err := ctx.parseEntityRef()
+				var ent *Entity
+				ent, err = ctx.parseEntityRef()
 				if err != nil {
-					return "", ctx.error(err)
+					err = ctx.error(err)
+					return
 				}
 
 				if ent.entityType == InternalPredefinedEntity {
@@ -808,9 +802,23 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (str
 					} else {
 						b.WriteString(ent.content)
 					}
+				} else if ctx.replaceEntities {
+					var rep string
+					rep, err = ctx.decodeEntities(ent.content, SubstituteRef)
+					if err != nil {
+						err = ctx.error(err)
+						return
+					}
+					for i := 0; i < len(rep); i++ {
+						switch rep[i] {
+						case 0xD, 0xA, 0x9:
+							b.WriteByte(0x20)
+						default:
+							b.WriteByte(rep[i])
+						}
+					}
 				} else {
-					// TODO: decodeentities
-					b.WriteString(ent.content)
+					b.WriteString(ent.orig)
 				}
 			}
 		case 0x20, 0xD, 0xA, 0x9:
@@ -828,27 +836,28 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (str
 		}
 	}
 
-	s := b.String()
+	value = b.String()
 	if inSpace && normalize {
-		if s[len(s)-1] == 0x20 {
-			for len(s) > 0 {
-				if s[len(s)-1] != 0x20 {
+		if value[len(value)-1] == 0x20 {
+			for len(value) > 0 {
+				if value[len(value)-1] != 0x20 {
 					break
 				}
-				s = s[:len(s)-1]
+				value = value[:len(value)-1]
 			}
 		}
 	}
 
-	debug.Printf(" ----> (%s)", s)
-
-	return s, nil
+	return
 }
 
 func (ctx *parserCtx) parseAttribute(elemName string) (local string, prefix string, value string, err error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseAttribute")
 		defer g.IRelease("END   parseAttribute")
+		defer func() {
+			debug.Printf("local = '%s', prefix = '%s', value = '%s'", local, prefix, value)
+		}()
 	}
 	l, p, err := ctx.parseQName()
 	if err != nil {
@@ -857,11 +866,11 @@ func (ctx *parserCtx) parseAttribute(elemName string) (local string, prefix stri
 	}
 
 	normalize := false
-	_, ok := ctx.lookupSpecialAttribute(elemName, l)
+	attType, ok := ctx.lookupSpecialAttribute(elemName, l)
 	if debug.Enabled {
-		debug.Printf("  ---> looking up attribute %s:%s -> %t", elemName, l, ok)
+		debug.Printf("looked up attribute %s:%s -> %d (%t)", elemName, l, attType, ok)
 	}
-	if ok {
+	if ok && attType != AttrInvalid {
 		normalize = true
 	}
 	ctx.skipBlanks()
@@ -871,10 +880,28 @@ func (ctx *parserCtx) parseAttribute(elemName string) (local string, prefix stri
 	}
 	ctx.curAdvance(1)
 
-	v, err := ctx.parseAttributeValue(normalize)
+	v, entities, err := ctx.parseAttributeValue(normalize)
 	if err != nil {
 		err = ctx.error(err)
 		return
+	}
+
+	/*
+	 * Sometimes a second normalisation pass for spaces is needed
+	 * but that only happens if charrefs or entities refernces
+	 * have been used in the attribute value, i.e. the attribute
+	 * value have been extracted in an allocated string already.
+	 */
+	if normalize {
+		if debug.Enabled {
+			debug.Printf("normalize is true, checking if entities have been expanded...")
+		}
+		if entities > 0 {
+			if debug.Enabled {
+				debug.Printf("entities seems to have been expanded (%d): doint second normalization", entities)
+			}
+			v = ctx.attrNormalizeSpace(v)
+		}
 	}
 
 	// If this is one of those the well known tags, check for the validity
@@ -982,6 +1009,10 @@ func (ctx *parserCtx) parseNamedAttribute(name string, cb qtextHandler) (string,
 
 // parse the XML version info (version="1.0")
 func (ctx *parserCtx) parseVersionInfo() (string, error) {
+	if debug.Enabled {
+		g := debug.IPrintf("START parseVersionInfo")
+		defer g.IRelease("END   parseVersionInfo")
+	}
 	return ctx.parseNamedAttribute("version", ctx.parseVersionNum)
 }
 
@@ -1018,10 +1049,11 @@ func (ctx *parserCtx) parseVersionNum(_ rune) (string, error) {
 
 type qtextHandler func(qch rune) (string, error)
 
-func (ctx *parserCtx) parseQuotedText(cb qtextHandler) (string, error) {
+func (ctx *parserCtx) parseQuotedText(cb qtextHandler) (value string, err error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseQuotedText")
 		defer g.IRelease("END   parseQuotedText")
+		defer func() { debug.Printf("value = '%s'", value) }()
 	}
 
 	q := ctx.curPeek(1)
@@ -1029,25 +1061,29 @@ func (ctx *parserCtx) parseQuotedText(cb qtextHandler) (string, error) {
 	case '"', '\'':
 		ctx.curAdvance(1)
 	default:
-		return "", errors.New("string not started (got '" + string([]rune{q}) + "')")
+		err = errors.New("string not started (got '" + string([]rune{q}) + "')")
+		return
 	}
-	v, err := cb(q)
+
+	value, err = cb(q)
 	if err != nil {
-		return "", err
-	}
-	if debug.Enabled {
-		debug.Printf("--> v = '%s'", v)
+		return
 	}
 
 	if ctx.curPeek(1) != q {
-		return "", errors.New("string not closed")
+		err = errors.New("string not closed")
+		return
 	}
 	ctx.curAdvance(1)
 
-	return v, nil
+	return
 }
 
 func (ctx *parserCtx) parseEncodingDecl() (string, error) {
+	if debug.Enabled {
+		g := debug.IPrintf("START parseEncodingDecl")
+		defer g.IRelease("END   parseEncodingDecl")
+	}
 	return ctx.parseNamedAttribute("encoding", ctx.parseEncodingName)
 }
 
@@ -1122,6 +1158,9 @@ func (ctx *parserCtx) parseMisc() error {
 		} else if isBlankCh(ctx.curPeek(1)) {
 			ctx.skipBlanks()
 		} else {
+			if debug.Enabled {
+				debug.Printf("Nothing more in misc section...")
+			}
 			break
 		}
 	}
@@ -1321,6 +1360,10 @@ func (ctx *parserCtx) parseQName() (local string, prefix string, err error) {
 	return
 }
 
+func isNameStartChar(r rune) bool {
+	return unicode.IsLetter(r) || r == '_' || r == ':'
+}
+
 func isNameChar(r rune) bool {
 	return r == '.' || r == '-' || r == '_' || r == ':' ||
 		unicode.IsLetter(r) || unicode.IsDigit(r) ||
@@ -1373,9 +1416,15 @@ func (ctx *parserCtx) parseNCName() (ncname string, err error) {
 		return
 	}
 
+	i := 1
+	if c := ctx.curPeek(i); c == ' ' || c == '>' || c == '/' || !isNameStartChar(c) {
+		err = ctx.error(errors.New("invalid name start char"))
+		return
+	}
+	i++
+
 	// at this point we have at least 1 character name.
 	// see how much more we got here
-	i := 1
 	for ; ctx.curHasChars(i); i++ {
 		c := ctx.curPeek(i)
 		if !unicode.IsLetter(c) && !unicode.IsDigit(c) && c != '_' && c != '-' && c != '.' {
@@ -2364,8 +2413,85 @@ func (ctx *parserCtx) parseEntityValueInternal(qch rune) (string, error) {
 	return "", nil
 }
 
-func (ctx *parserCtx) decodeEntities(s string, typ SubstitutionType) (string, error) {
-	return s, nil
+/*
+ * Takes a entity string content and process to do the adequate substitutions.
+ *
+ * [67] Reference ::= EntityRef | CharRef
+ *
+ * [69] PEReference ::= '%' Name ';'
+ *
+ * Returns A newly allocated string with the substitution done.
+ */
+func (ctx *parserCtx) decodeEntities(s string, what SubstitutionType) (ret string, err error) {
+	if debug.Enabled {
+		g := debug.IPrintf("START decodeEntitites (%s)", s)
+		defer func() {
+			g.IRelease("END decodeEntities ('%s' -> '%x')", s, ret)
+		}()
+	}
+	ret, err = ctx.decodeEntitiesInternal(s, what, 0)
+	return
+}
+
+func (ctx *parserCtx) decodeEntitiesInternal(s string, what SubstitutionType, depth int) (string, error) {
+	if depth > 40 {
+		return "", errors.New("entity loop (depth > 40)")
+	}
+
+	out := bytes.Buffer{}
+	for len(s) > 0 {
+	if strings.HasPrefix(s, "&#") {
+		val, width, err := parseStringCharRef(s)
+		if err != nil {
+			return "", err
+		}
+		out.WriteRune(val)
+		s = s[width:] // advance
+	} else if what&SubstituteRef == SubstituteRef {
+		ent, width, err := ctx.parseStringEntityRef(s)
+		if err != nil {
+			return "", err
+		}
+		if err := ctx.entityCheck(ent); err != nil {
+			return "", err
+		}
+
+		if EntityType(ent.EntityType()) == InternalPredefinedEntity {
+			if ent.Content() == "" {
+				return "", errors.New("predefined entity has no content")
+			}
+			out.WriteString(ent.Content())
+		} else if ent.Content() != "" {
+			rep, err := ctx.decodeEntitiesInternal(ent.Content(), what, depth+1)
+			if err != nil {
+				return "", err
+			}
+
+			out.WriteString(rep)
+		} else {
+			out.WriteString(ent.Name())
+		}
+		s = s[width:]
+	} else if s[0] == '%' && what&SubstitutePERef == SubstitutePERef {
+		ent, width, err := ctx.parseStringPEReference(s)
+		if err != nil {
+			return "", err
+		}
+		if err := ctx.entityCheck(ent); err != nil {
+			return "", err
+		}
+		rep, err := ctx.decodeEntitiesInternal(ent.Content(), what, depth+1)
+		if err != nil {
+			return "", err
+		}
+		out.WriteString(rep)
+		s = s[width:]
+	} else {
+		out.WriteByte(s[0])
+		s = s[1:]
+	}
+	}
+	return out.String(), nil
 }
 
 /*
@@ -2448,9 +2574,13 @@ func (ctx *parserCtx) parseEntityDecl() error {
 	}
 
 	ctx.instate = psEntityDecl
+	var literal string
+	var value string
+	var uri string
+
 	if isParameter {
 		if c := ctx.curPeek(1); c == '"' || c == '\'' {
-			_, value, err := ctx.parseEntityValue()
+			literal, value, err = ctx.parseEntityValue()
 			if err == nil {
 				if s := ctx.sax; s != nil {
 					switch err := s.UnparsedEntityDecl(ctx.userData, name, int(InternalParameterEntity), "", "", value); err {
@@ -2462,7 +2592,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 				}
 			}
 		} else {
-			literal, uri, err := ctx.parseExternalID()
+			literal, uri, err = ctx.parseExternalID()
 			if err != nil {
 				return ctx.error(ErrValueRequired)
 			}
@@ -2489,7 +2619,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 		}
 	} else {
 		if c := ctx.curPeek(1); c == '"' || c == '\'' {
-			_, value, err := ctx.parseEntityValue()
+			literal, value, err = ctx.parseEntityValue()
 			if err == nil {
 				if s := ctx.sax; s != nil {
 					switch err := s.UnparsedEntityDecl(ctx.userData, name, int(InternalGeneralEntity), "", "", value); err {
@@ -2501,7 +2631,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 				}
 			}
 		} else {
-			literal, uri, err := ctx.parseExternalID()
+			literal, uri, err = ctx.parseExternalID()
 			if err != nil {
 				return ctx.error(ErrValueRequired)
 			}
@@ -2589,32 +2719,28 @@ func (ctx *parserCtx) parseEntityDecl() error {
 		return ctx.error(errors.New("entity not terminated"))
 	}
 	ctx.curAdvance(1)
-	/*
-	   if (orig != NULL) {
-	        // Ugly mechanism to save the raw entity value.
-	       xmlEntityPtr cur = NULL;
 
-	       if (isParameter) {
-	           if ((ctxt->sax != NULL) &&
-	               (ctxt->sax->getParameterEntity != NULL))
-	               cur = ctxt->sax->getParameterEntity(ctxt->userData, name);
-	       } else {
-	           if ((ctxt->sax != NULL) &&
-	               (ctxt->sax->getEntity != NULL))
-	               cur = ctxt->sax->getEntity(ctxt->userData, name);
-	           if ((cur == NULL) && (ctxt->userData==ctxt)) {
-	               cur = xmlSAX2GetEntity(ctxt, name);
-	           }
-	       }
-	       if (cur != NULL) {
-	           if (cur->orig != NULL)
-	               xmlFree(orig);
-	           else
-	               cur->orig = orig;
-	       } else
-	           xmlFree(orig);
-	   }
-	*/
+	// Ugly mechanism to save the raw entity value.
+	// Note: This happens because the SAX interface doesn't have a way to
+	// pass this non-standard information to the handler
+	var cur sax.Entity
+	if isParameter {
+		if s := ctx.sax; s != nil {
+			cur, _ = s.GetParameterEntity(ctx.userData, name)
+		}
+	} else {
+		if s := ctx.sax; s != nil {
+			cur, _ = s.ResolveEntity(ctx.userData, name, "", "", "")
+			/*
+			   if ((cur == NULL) && (ctxt->userData==ctxt)) {
+			       cur = xmlSAX2GetEntity(ctxt, name);
+			   }
+			*/
+		}
+	}
+	if cur != nil {
+		cur.SetOrig("&" + name + ";")
+	}
 
 	return nil
 }
@@ -2873,7 +2999,8 @@ func (ctx *parserCtx) parseDefaultDecl() (AttributeDefault, string, error) {
 
 	// XXX does AttValue always have a quote around it?
 	def, err := ctx.parseQuotedText(func(qch rune) (string, error) {
-		return ctx.parseAttributeValueInternal(qch, false)
+		s, _, err := ctx.parseAttributeValueInternal(qch, false)
+		return s, err
 	})
 	if err != nil {
 		return AttrDefaultInvalid, "", ctx.error(err)
@@ -2895,12 +3022,25 @@ func (ctx *parserCtx) parseDefaultDecl() (AttributeDefault, string, error) {
  * Returns a pointer to the normalized value (dst) or NULL if no conversion
  *         is needed.
  */
-func (ctx *parserCtx) attrNormalizeSpace(s string) string {
-	if len(s) == 0 {
-		return s
+func (ctx *parserCtx) attrNormalizeSpace(s string) (value string) {
+	if debug.Enabled {
+		g := debug.IPrintf("START attrNormalizeSpace")
+		defer g.IRelease("END   attrNormalizeSpace")
+		defer func() {
+			if s == value {
+				debug.Printf("no change")
+			} else {
+				debug.Printf("normalized '%s' => '%s'", s, value)
+			}
+		}()
 	}
 
-	out := make([]byte, 0, len(s))
+	// don't bother if we have zero length
+	if len(s) == 0 {
+		value = s
+		return
+	}
+
 	// skip leading spaces
 	i := 0
 	for ; i < len(s); i++ {
@@ -2909,25 +3049,48 @@ func (ctx *parserCtx) attrNormalizeSpace(s string) string {
 		}
 	}
 
-	for ; i < len(s); i++ {
+	// make b
+	out := make([]byte, 0, len(s))
+
+	for i < len(s) {
+		// not a space, no problem. just append
 		if s[i] != 0x20 {
 			out = append(out, s[i])
-		} else {
-			for i++; i < len(s); i++ {
-				if s[i] != 0x20 {
-					i--
-					break
-				}
-			}
-
-			if i < len(s) {
-				out = append(out, s[i])
-
-			}
+			i++
+			continue
 		}
 
+		// skip dupes.
+		for i < len(s) && s[i] == 0x20 {
+			i++
+		}
+		out = append(out, 0x20) // append a single space
 	}
-	return string(out)
+
+	if out[len(out)-1] == 0x20 {
+		out = out[:len(out)-1]
+	}
+	value = string(out)
+	return
+}
+
+/* Trim the list of attributes defined to remove all those of type
+ * CDATA as they are not special. This call should be done when finishing
+ * to parse the DTD and before starting to parse the document root.
+ */
+func (ctx *parserCtx) cleanSpecialAttributes() {
+	if debug.Enabled {
+		g := debug.IPrintf("START cleanSpecialAttribute")
+		defer g.IRelease("END cleanSpecialAttribute")
+	}
+	for k, v := range ctx.attsSpecial {
+		if v == AttrCDATA {
+			if debug.Enabled {
+				debug.Printf("removing %s from special attribute set", k)
+			}
+			delete(ctx.attsSpecial, k)
+		}
+	}
 }
 
 func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ AttributeType) {
@@ -2942,7 +3105,7 @@ func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ Attribu
 func (ctx *parserCtx) lookupSpecialAttribute(elemName, attrName string) (AttributeType, bool) {
 	key := elemName + ":" + attrName
 	if debug.Enabled {
-		g := debug.IPrintf("START lookupSpecialAttribute(%s, %d)", key)
+		g := debug.IPrintf("START lookupSpecialAttribute(%s)", key)
 		defer g.IRelease("END lookupSpecialAttribute")
 	}
 	v, ok := ctx.attsSpecial[key]
@@ -3128,7 +3291,7 @@ func (ctx *parserCtx) parseReference() (string, error) {
 
 	// if !ctx.wellFormed { return } ??
 
-	if ent.EntityType() == InternalPredefinedEntity {
+	if EntityType(ent.EntityType()) == InternalPredefinedEntity {
 		if s := ctx.sax; s != nil {
 			switch err := s.Characters(ctx.userData, []byte(ent.Content())); err {
 			case nil, sax.ErrHandlerUnspecified:
@@ -3454,6 +3617,255 @@ func (ctx *parserCtx) parseReference() (string, error) {
 	return "", ErrUnimplemented{target: "parseReference"}
 }
 
+// returns rune, byteCount, error
+func parseStringCharRef(s string) (rune, int, error) {
+	var val int32
+	i := 0
+	if strings.HasPrefix(s, "&#x") {
+		i += 3
+		s = s[3:]
+
+		for c := s[0]; c != ';'; c = s[0] {
+			if c >= '0' && c <= '9' {
+				val = val*16 + (rune(c) - '0')
+			} else if c >= 'a' && c <= 'f' {
+				val = val*16 + (rune(c) - 'a') + 10
+			} else if c >= 'A' && c <= 'F' {
+				val = val*16 + (rune(c) - 'A') + 10
+			} else {
+				return utf8.RuneError, 0, errors.New("invalid hex CharRef")
+			}
+			if rune(val) > unicode.MaxRune {
+				return utf8.RuneError, 0, errors.New("hex CharRef out of range")
+			}
+
+			s = s[1:]
+			i++
+		}
+		if s[0] == ';' {
+			s = s[1:]
+			i++
+		}
+	} else if strings.HasPrefix(s, "&#") {
+		i += 2
+		s = s[2:]
+		for c := s[0]; c != ';'; c = s[0] {
+			if c >= '0' && c <= '9' {
+				val = val*10 + (rune(c) - '0')
+			} else {
+				return utf8.RuneError, 0, errors.New("invalid decimal CharRef")
+			}
+
+			if rune(val) > unicode.MaxRune {
+				return utf8.RuneError, 0, errors.New("decimal CharRef out of range")
+			}
+			s = s[1:]
+			i++
+		}
+		if s[0] == ';' {
+			s = s[1:]
+			i++
+		}
+	}
+
+	r := rune(val)
+	if !isChar(val) {
+		return utf8.RuneError, 0, fmt.Errorf("invalid XML char value %d", val)
+	}
+	return r, i, nil
+}
+
+func parseStringName(s string) (string, int, error) {
+	i := 0
+	r, w := utf8.DecodeRuneInString(s)
+	if r == utf8.RuneError {
+		return "", 0, errors.New("rune decode failed")
+	}
+
+	if !isNameStartChar(r) {
+		return "", 0, errors.New("invalid name start char")
+	}
+
+	out := bytes.Buffer{}
+	out.WriteRune(r)
+	i += w
+	s = s[w:]
+
+	for {
+		r, w = utf8.DecodeRuneInString(s)
+		if r == utf8.RuneError {
+			return "", 0, errors.New("rune decode failed")
+		}
+
+		if !isNameChar(r) {
+			break
+		}
+		out.WriteRune(r)
+		i += w
+		s = s[w:]
+	}
+
+	return out.String(), i, nil
+}
+
+func (ctx *parserCtx) parseStringEntityRef(s string) (sax.Entity, int, error) {
+	if debug.Enabled {
+		g := debug.IPrintf("START parseStringEntityRef ('%s')", s)
+		defer g.IRelease("END parseStringEntityRef")
+	}
+	if len(s) == 0 || s[0] != '&' {
+		return nil, 0, errors.New("invalid entity ref")
+	}
+
+	i := 0
+	name, width, err := parseStringName(s)
+	if err != nil {
+		return nil, 0, errors.New("failed to parse name")
+	}
+	s = s[width:]
+	i += width
+
+	if s[0] != ';' {
+		return nil, 0, ErrSemicolonRequired
+	}
+	s = s[1:]
+	i++
+
+	var loadedEnt sax.Entity
+
+	/*
+	 * Ask first SAX for entity resolution, otherwise try the
+	 * entities which may have stored in the parser context.
+	 */
+	if h := ctx.sax; h != nil {
+		loadedEnt, err = h.ResolveEntity(ctx.userData, name, "", "", "")
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+	/*
+	 * [ WFC: Entity Declared ]
+	 * In a document without any DTD, a document with only an
+	 * internal DTD subset which contains no parameter entity
+	 * references, or a document with "standalone='yes'", the
+	 * Name given in the entity reference must match that in an
+	 * entity declaration, except that well-formed documents
+	 * need not declare any of the following entities: amp, lt,
+	 * gt, apos, quot.
+	 * The declaration of a parameter entity must precede any
+	 * reference to it.
+	 * Similarly, the declaration of a general entity must
+	 * precede any reference to it which appears in a default
+	 * value in an attribute-list declaration. Note that if
+	 * entities are declared in the external subset or in
+	 * external parameter entities, a non-validating processor
+	 * is not obligated to read and process their declarations;
+	 * for such documents, the rule that an entity must be
+	 * declared is a well-formedness constraint only if
+	 * standalone='yes'.
+	 */
+	if loadedEnt == nil {
+		if ctx.standalone == StandaloneExplicitYes || (!ctx.hasExternalSubset && !ctx.hasPERefs) {
+			return nil, 0, fmt.Errorf("entity '%s' not defined", name)
+		}
+		// xmlParserEntityCheck ?!
+	}
+
+	/*
+	 * [ WFC: Parsed Entity ]
+	 * An entity reference must not contain the name of an
+	 * unparsed entity
+	 */
+
+	if EntityType(loadedEnt.EntityType()) == ExternalGeneralUnparsedEntity {
+		return nil, 0, fmt.Errorf("entity reference to unparsed entity '%s'", name)
+	}
+
+	/*
+	 * [ WFC: No External Entity References ]
+	 * Attribute values cannot contain direct or indirect
+	 * entity references to external entities.
+	 */
+	if ctx.instate == psAttributeValue && EntityType(loadedEnt.EntityType()) == ExternalGeneralParsedEntity {
+		return nil, 0, fmt.Errorf("attribute references enternal entity '%s'", name)
+	}
+
+	/*
+	 * [ WFC: No < in Attribute Values ]
+	 * The replacement text of any entity referred to directly or
+	 * indirectly in an attribute value (other than "&lt;") must
+	 * not contain a <.
+	 */
+	if ctx.instate == psAttributeValue && loadedEnt.Content() != "" && EntityType(loadedEnt.EntityType()) == InternalPredefinedEntity && strings.IndexByte(loadedEnt.Content(), '<') > -1 {
+		return nil, 0, fmt.Errorf("'<' in entity '%s' is not allowed in attribute values", name)
+	}
+
+	/*
+	 * Internal check, no parameter entities here ...
+	 */
+
+	switch EntityType(loadedEnt.EntityType()) {
+	case InternalParameterEntity, ExternalParameterEntity:
+		return nil, 0, fmt.Errorf("attempt to reference the parameter entity '%s'", name)
+	}
+
+	return loadedEnt, i, nil
+}
+
+func (ctx *parserCtx) parseStringPEReference(s string) (sax.Entity, int, error) {
+	if len(s) == 0 || s[0] != '%' {
+		return nil, 0, errors.New("invalid PEreference")
+	}
+
+	i := 0
+	name, width, err := parseStringName(s)
+	if err != nil {
+		return nil, 0, err
+	}
+	s = s[width:]
+	i += width
+
+	if s[0] != ';' {
+		return nil, 0, ErrSemicolonRequired
+	}
+	s = s[1:]
+	i++
+
+	var loadedEnt sax.Entity
+	if h := ctx.sax; h != nil {
+		loadedEnt, err = h.GetParameterEntity(ctx.userData, name)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+
+	/*
+	 * [ WFC: Entity Declared ]
+	 * In a document without any DTD, a document with only an
+	 * internal DTD subset which contains no parameter entity
+	 * references, or a document with "standalone='yes'", ...
+	 * ... The declaration of a parameter entity must precede
+	 * any reference to it...
+	 */
+	if loadedEnt == nil {
+		if ctx.standalone == StandaloneExplicitYes || (!ctx.hasExternalSubset && !ctx.hasPERefs) {
+			return nil, 0, fmt.Errorf("not found: PE rerefence '%%%s'", name)
+		} else {
+			ctx.valid = false
+		}
+		// xmlParseEntityCheck(ctxt, 0, NULL, 0)
+	} else {
+		switch EntityType(loadedEnt.EntityType()) {
+		case InternalParameterEntity, ExternalParameterEntity:
+		default:
+			return nil, 0, fmt.Errorf("not a parmeter entity: %%%s", name)
+		}
+	}
+	ctx.hasPERefs = true
+
+	return loadedEnt, i, nil
+}
+
 /*
  * parse Reference declarations
  *
@@ -3665,6 +4077,6 @@ func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
  * boundary feature. It can be disabled with the XML_PARSE_HUGE
  * parser option.
  */
-func (ctx *parserCtx) entityCheck(e *Entity) error {
+func (ctx *parserCtx) entityCheck(e sax.Entity) error {
 	return nil
 }

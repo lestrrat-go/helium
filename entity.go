@@ -17,18 +17,23 @@ func resolvePredefinedEntity(name string) *Entity {
 	}
 }
 
-func NewEntity(orig string, typ EntityType, publicID, systemID, notation string) *Entity {
-	return &Entity{
-		orig:       orig,
+func NewEntity(name string, typ EntityType, publicID, systemID, notation string) *Entity {
+	e := &Entity{
 		content:    notation,
 		entityType: typ,
 		externalID: publicID,
 		systemID:   systemID,
 	}
+	e.name = name
+	return e
 }
 
-func (e *Entity) EntityType() EntityType {
-	return e.entityType
+func (e *Entity) SetOrig(s string) {
+	e.orig = s
+}
+
+func (e *Entity) EntityType() int {
+	return int(e.entityType)
 }
 
 func (e *Entity) Content() string {

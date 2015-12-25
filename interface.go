@@ -210,7 +210,7 @@ var (
 		node: node{
 			name: "lt",
 		},
-		orig:       "<",
+		orig:       "&lt;",
 		content:    "<",
 		entityType: InternalPredefinedEntity,
 		owner:      false,
@@ -219,7 +219,7 @@ var (
 		node: node{
 			name: "gt",
 		},
-		orig:       ">",
+		orig:       "&gt;",
 		content:    ">",
 		entityType: InternalPredefinedEntity,
 		owner:      false,
@@ -228,7 +228,7 @@ var (
 		node: node{
 			name: "amp",
 		},
-		orig:       "&",
+		orig:       "&amp;",
 		content:    "&",
 		entityType: InternalPredefinedEntity,
 		owner:      false,
@@ -237,7 +237,7 @@ var (
 		node: node{
 			name: "apos",
 		},
-		orig:       "'",
+		orig:       "&apos;",
 		content:    "'",
 		entityType: InternalPredefinedEntity,
 		owner:      false,
@@ -246,7 +246,7 @@ var (
 		node: node{
 			name: "quot",
 		},
-		orig:       `"`,
+		orig:       `&quot;`,
 		content:    `"`,
 		entityType: InternalPredefinedEntity,
 		owner:      false,

@@ -1,0 +1,57 @@
+SAX.SetDocumentLocator()
+SAX.StartDocument()
+SAX.InternalSubset(doc, , )
+SAX.ElementDecl(doc, 4, ...)
+SAX.ElementDecl(tst, 3, ...)
+SAX.AttributeDecl(tst, a, 8, 3, NULL, ...)
+SAX.AttributeDecl(tst, b, 1, 3, NULL, ...)
+SAX.UnparsedEntityDecl(d, 1, , , )
+SAX.ResolveEntity(d)
+SAX.UnparsedEntityDecl(a, 1, , , 
+)
+SAX.ResolveEntity(a)
+SAX.UnparsedEntityDecl(da, 1, , , 
+)
+SAX.ResolveEntity(da)
+SAX.ExternalSubset(doc, , )
+SAX.StartElementNS(doc, NULL, NULL, 0, 0, 0)
+SAX.IgnorableWhitespace(
+, 1)
+SAX.StartElementNS(tst, NULL, NULL, 0, 2, 0, a='xyz...', 3, b='  xy...', 5)
+SAX.EndElementNS(tst, NULL, NULL)
+SAX.IgnorableWhitespace(
+, 1)
+SAX.ResolveEntity(d)
+SAX.ResolveEntity(d)
+SAX.ResolveEntity(a)
+SAX.ResolveEntity(a)
+SAX.ResolveEntity(da)
+SAX.ResolveEntity(d)
+SAX.ResolveEntity(d)
+SAX.ResolveEntity(a)
+SAX.ResolveEntity(a)
+SAX.ResolveEntity(da)
+SAX.StartElementNS(tst, NULL, NULL, 0, 2, 0, a='&d;&...', 19, b='&d;&...', 19)
+SAX.EndElementNS(tst, NULL, NULL)
+SAX.IgnorableWhitespace(
+, 1)
+SAX.StartElementNS(tst, NULL, NULL, 0, 2, 0, a='A
+...', 8, b='A
+...', 8)
+SAX.EndElementNS(tst, NULL, NULL)
+SAX.IgnorableWhitespace(
+, 1)
+SAX.StartElementNS(tst, NULL, NULL, 0, 2, 0, a='x y...', 3, b=' x  ...', 6)
+SAX.EndElementNS(tst, NULL, NULL)
+SAX.IgnorableWhitespace(
+, 1)
+SAX.StartElementNS(tst, NULL, NULL, 0, 2, 0, a='a b...', 3, b=' a b...', 5)
+SAX.EndElementNS(tst, NULL, NULL)
+SAX.IgnorableWhitespace(
+, 1)
+SAX.StartElementNS(tst, NULL, NULL, 0, 2, 0, a='a b...', 3, b='  a ...', 8)
+SAX.EndElementNS(tst, NULL, NULL)
+SAX.IgnorableWhitespace(
+, 1)
+SAX.EndElementNS(doc, NULL, NULL)
+SAX.EndDocument()
