@@ -2975,38 +2975,47 @@ func (ctx *parserCtx) parseAttributeType() (AttributeType, Enumeration, error) {
  * returns: XML_ATTRIBUTE_NONE, XML_ATTRIBUTE_REQUIRED, XML_ATTRIBUTE_IMPLIED
  *          or XML_ATTRIBUTE_FIXED.
  */
-func (ctx *parserCtx) parseDefaultDecl() (AttributeDefault, string, error) {
+func (ctx *parserCtx) parseDefaultDecl() (deftype AttributeDefault, defvalue string, err error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseDefaultDecl")
-		defer g.IRelease("END   parseDefaultDecl")
+		defer func() {
+			g.IRelease("END parseDefaultDecl (deftype = %d, defvalue = '%s')", deftype, defvalue)
+		}()
 	}
 
+	deftype = AttrDefaultNone
 	if ctx.curConsumePrefix("#REQUIRED") {
-		return AttrDefaultRequired, "", nil
+		deftype = AttrDefaultRequired
+		return
 	}
 	if ctx.curConsumePrefix("#IMPLIED") {
-		return AttrDefaultImplied, "", nil
+		deftype = AttrDefaultImplied
+		return
 	}
 
-	var typ AttributeDefault
 	if ctx.curConsumePrefix("#FIXED") {
-		typ = AttrDefaultFixed
+		deftype = AttrDefaultFixed
 		if !isBlankCh(ctx.curPeek(1)) {
-			return AttrDefaultInvalid, "", ctx.error(ErrSpaceRequired)
+			deftype = AttrDefaultInvalid
+			err = ctx.error(ErrSpaceRequired)
+			return
 		}
 		ctx.skipBlanks()
 	}
 
 	// XXX does AttValue always have a quote around it?
-	def, err := ctx.parseQuotedText(func(qch rune) (string, error) {
+	defvalue, err = ctx.parseQuotedText(func(qch rune) (string, error) {
 		s, _, err := ctx.parseAttributeValueInternal(qch, false)
 		return s, err
 	})
 	if err != nil {
-		return AttrDefaultInvalid, "", ctx.error(err)
+		deftype = AttrDefaultInvalid
+		err = ctx.error(err)
+		return
 	}
 	ctx.instate = psDTD
-	return typ, def, nil
+	err = nil
+	return
 }
 
 /*
