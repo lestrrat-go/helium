@@ -24,6 +24,11 @@ func (ctx *parserCtx) pushNode(e *Element) {
 	if debug.Enabled {
 		g := debug.IPrintf("START pushNode (%s)", e.Name())
 		defer g.IRelease("END pushNode")
+
+		debug.Printf("  -> before push")
+		for i, elem := range ctx.nodeTab.SimpleStack {
+			debug.Printf("  %003d: %s", i, elem.(*Element).Name())
+		}
 	}
 	ctx.nodeTab.Push(e)
 }
@@ -43,6 +48,13 @@ func (ctx *parserCtx) popNode() (elem *Element) {
 				name = elem.Name()
 			}
 			g.IRelease("END popNode (%s)", name)
+		}()
+
+		defer func() {
+			debug.Printf("  -> after pop")
+			for i, elem := range ctx.nodeTab.SimpleStack {
+				debug.Printf("  %003d: %s", i, elem.(*Element).Name())
+			}
 		}()
 	}
 	return ctx.nodeTab.Pop()
@@ -605,15 +617,15 @@ func (ctx *parserCtx) parseStartTag() error {
 			// <elem xmlns="...">
 			ctx.pushNS("", attvalue)
 			nbNs++
-//    SkipDefaultNS:
-      if ctx.curPeek(1) == '>' || ctx.curHasPrefix("/>") {
-        continue
-      }
+			//    SkipDefaultNS:
+			if ctx.curPeek(1) == '>' || ctx.curHasPrefix("/>") {
+				continue
+			}
 
-      if !isBlankCh(ctx.curPeek(1)) {
-        return ctx.error(ErrSpaceRequired)
-      }
-      ctx.skipBlanks()
+			if !isBlankCh(ctx.curPeek(1)) {
+				return ctx.error(ErrSpaceRequired)
+			}
+			ctx.skipBlanks()
 		} else if aprefix == XMLNsPrefix {
 			var u *url.URL // predeclare, so we can use goto SkipNS
 
@@ -666,7 +678,7 @@ func (ctx *parserCtx) parseStartTag() error {
 
 		var attr *Attribute
 		if aprefix != "" {
-			attr = newAttribute(aprefix + ":" + attname, attvalue, nil)
+			attr = newAttribute(aprefix+":"+attname, attvalue, nil)
 		} else {
 			attr = newAttribute(attname, attvalue, nil)
 		}
@@ -684,12 +696,14 @@ func (ctx *parserCtx) parseStartTag() error {
 			elemName = local
 		}
 
+debug.Printf("-------> %s", elemName)
 		defaults, ok := ctx.lookupAttributeDefault(elemName)
 		if ok {
 			for _, attr := range defaults {
 				attrs = append(attrs, attr)
 			}
 		}
+spew.Dump(attrs)
 	}
 
 	/*
@@ -711,7 +725,6 @@ func (ctx *parserCtx) parseStartTag() error {
 		elem.SetNamespace(prefix, nsuri, true)
 	}
 	ctx.pushNode(elem)
-
 
 	if s := ctx.sax; s != nil {
 		var nslist []sax.Namespace
@@ -3181,7 +3194,13 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 	}
 
 	uri := ctx.lookupNamespace(prefix)
-	m[attrName] = newAttribute(local, defaultValue, newNamespace(prefix, uri))
+	attr := newAttribute(local, defaultValue, newNamespace(prefix, uri))
+	attr.SetDefault(true)
+	m[attrName] = attr
+
+	if debug.Enabled {
+		spew.Dump(ctx.attsDefault)
+	}
 	/*
 	   	hmm, let's think about this when the time comes
 	       if (ctxt->external)
@@ -3193,6 +3212,9 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 
 func (ctx *parserCtx) lookupAttributeDefault(elemName string) (map[string]*Attribute, bool) {
 	v, ok := ctx.attsDefault[elemName]
+	if debug.Enabled {
+		spew.Dump(v)
+	}
 	return v, ok
 }
 
@@ -3328,8 +3350,8 @@ func (ctx *parserCtx) parseEpilogue() error {
 
 func (ctx *parserCtx) parseBalancedChunkInternal(chunk string) (Node, error) {
 	if debug.Enabled {
-		g := debug.IPrintf("START parseBaalancedChunkInternal")
-		defer g.IRelease("END parseBaalancedChunkInternal")
+		g := debug.IPrintf("START parseBalancedChunkInternal")
+		defer g.IRelease("END parseBalancedChunkInternal")
 	}
 	newctx := &parserCtx{}
 	newctx.init(nil, []byte(chunk))
@@ -3347,6 +3369,7 @@ func (ctx *parserCtx) parseBalancedChunkInternal(chunk string) (Node, error) {
 	}()
 	newctx.doc = ctx.doc
 	newctx.sax = ctx.sax
+	newctx.attsDefault = ctx.attsDefault
 
 	// create a dummy node
 	newRoot, err := newctx.doc.CreateElement("pseudoroot")
@@ -3359,9 +3382,13 @@ func (ctx *parserCtx) parseBalancedChunkInternal(chunk string) (Node, error) {
 		return nil, err
 	}
 
-	spew.Dump(newctx.doc)
+	if child := ctx.doc.FirstChild(); child != nil {
+		if grandchild := child.FirstChild(); grandchild != nil {
+			return grandchild, nil
+		}
+	}
 
-	return newctx.doc.children[0].FirstChild(), nil
+	return nil, nil
 }
 
 /*
@@ -3425,6 +3452,10 @@ func (ctx *parserCtx) parseReference() (string, error) {
 	// temprorary fix
 	if ent != nil {
 		ctx.parseBalancedChunkInternal(ent.Content())
+
+		if s := ctx.sax; s != nil {
+			s.Reference(ctx.userData, ent.Name())
+		}
 		return ent.Content(), nil
 	}
 	/*
