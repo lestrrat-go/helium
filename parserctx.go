@@ -1768,6 +1768,7 @@ func (ctx *parserCtx) parseInternalSubset() error {
 			}
 		*/
 	}
+
 	if ctx.curPeek(1) == ']' {
 		ctx.curAdvance(1)
 		ctx.skipBlanks()
@@ -1804,7 +1805,7 @@ FinishDTD:
 func (ctx *parserCtx) parseMarkupDecl() error {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseMarkupDecl")
-		defer g.IRelease("END   parseMarkupDecl")
+		defer g.IRelease("END parseMarkupDecl")
 	}
 
 	if ctx.curPeek(1) == '<' {
@@ -1836,6 +1837,8 @@ func (ctx *parserCtx) parseMarkupDecl() error {
 			default:
 				// no op: error detected later?
 			}
+		} else if ctx.curPeek(2) == '?' {
+			return ctx.parsePI()
 		}
 	}
 
@@ -2474,7 +2477,7 @@ func (ctx *parserCtx) decodeEntities(s string, what SubstitutionType) (ret strin
 	if debug.Enabled {
 		g := debug.IPrintf("START decodeEntitites (%s)", s)
 		defer func() {
-			g.IRelease("END decodeEntities ('%s' -> '%x')", s, ret)
+			g.IRelease("END decodeEntities ('%s' -> '%s')", s, ret)
 		}()
 	}
 	ret, err = ctx.decodeEntitiesInternal(s, what, 0)
@@ -2495,7 +2498,7 @@ func (ctx *parserCtx) decodeEntitiesInternal(s string, what SubstitutionType, de
 			}
 			out.WriteRune(val)
 			s = s[width:] // advance
-		} else if what&SubstituteRef == SubstituteRef {
+		} else if s[0] == '&' && what&SubstituteRef == SubstituteRef {
 			ent, width, err := ctx.parseStringEntityRef(s)
 			if err != nil {
 				return "", err
@@ -3769,11 +3772,17 @@ func (ctx *parserCtx) parseReference() (string, error) {
 }
 
 // returns rune, byteCount, error
-func parseStringCharRef(s string) (rune, int, error) {
+func parseStringCharRef(s string) (r rune, width int, err error) {
+	if debug.Enabled {
+		g := debug.IPrintf("START parseStringCharRef")
+		defer g.IRelease("END parseStringCharRef")
+		defer func() { debug.Printf("r = '%c' (%x)", r, r) }()
+	}
 	var val int32
-	i := 0
+	r = utf8.RuneError
+	width = 0
 	if strings.HasPrefix(s, "&#x") {
-		i += 3
+		width += 3
 		s = s[3:]
 
 		for c := s[0]; c != ';'; c = s[0] {
@@ -3784,46 +3793,54 @@ func parseStringCharRef(s string) (rune, int, error) {
 			} else if c >= 'A' && c <= 'F' {
 				val = val*16 + (rune(c) - 'A') + 10
 			} else {
-				return utf8.RuneError, 0, errors.New("invalid hex CharRef")
+				err = errors.New("invalid hex CharRef")
+				width = 0
+				return
 			}
 			if rune(val) > unicode.MaxRune {
-				return utf8.RuneError, 0, errors.New("hex CharRef out of range")
+				err = errors.New("hex CharRef out of range")
+				width = 0
+				return
 			}
 
 			s = s[1:]
-			i++
+			width++
 		}
 		if s[0] == ';' {
 			s = s[1:]
-			i++
+			width++
 		}
 	} else if strings.HasPrefix(s, "&#") {
-		i += 2
+		width += 2
 		s = s[2:]
 		for c := s[0]; c != ';'; c = s[0] {
 			if c >= '0' && c <= '9' {
 				val = val*10 + (rune(c) - '0')
 			} else {
-				return utf8.RuneError, 0, errors.New("invalid decimal CharRef")
+				err = errors.New("invalid decimal CharRef")
+				width = 0
+				return
 			}
 
 			if rune(val) > unicode.MaxRune {
-				return utf8.RuneError, 0, errors.New("decimal CharRef out of range")
+				err = errors.New("decimal CharRef out of range")
+				width = 0
+				return
 			}
 			s = s[1:]
-			i++
+			width++
 		}
 		if s[0] == ';' {
 			s = s[1:]
-			i++
+			width++
 		}
 	}
 
-	r := rune(val)
+	r = rune(val)
 	if !isChar(val) {
 		return utf8.RuneError, 0, fmt.Errorf("invalid XML char value %d", val)
 	}
-	return r, i, nil
+	return
 }
 
 func parseStringName(s string) (string, int, error) {
@@ -4032,7 +4049,7 @@ func (ctx *parserCtx) parseStringPEReference(s string) (sax.Entity, int, error) 
 func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseCharRef")
-		defer g.IRelease("END   parseCharRef")
+		defer g.IRelease("END parseCharRef")
 		defer func() { debug.Printf("r = '%c' (%x)", r, r) }()
 	}
 
