@@ -2,7 +2,7 @@ package helium
 
 func newComment(b []byte) *Comment {
 	t := Comment{}
-	t.typ = CommentNode
+	t.etype = CommentNode
 	t.content = b
 	return &t
 }

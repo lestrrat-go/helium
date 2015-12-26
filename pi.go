@@ -1,5 +1,5 @@
 package helium
 
-func (p *ProcessingInstruction) Type() NodeType {
+func (p *ProcessingInstruction) Type() ElementType {
 	return ProcessingInstructionNode
 }

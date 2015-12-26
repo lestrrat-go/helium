@@ -99,27 +99,6 @@ type Parser struct {
 	sax SAX
 }
 
-type ParsedNamespace struct {
-	prefix string
-	uri    string
-}
-
-type ParsedElement struct {
-	local      string
-	value      string
-	namespace  *ParsedNamespace
-	namespaces []sax.ParsedNamespace
-	attributes []sax.ParsedAttribute
-	next       *ParsedElement
-}
-
-type ParsedAttribute struct {
-	local  string
-	prefix string
-	value  string
-	defaulted bool
-}
-
 const (
 	inSubsetNo = iota
 	inInternalSubset
@@ -145,14 +124,16 @@ type parserCtx struct {
 	extSubURI         string
 	version           string
 	attsSpecial       map[string]AttributeType
-	attsDefault       map[string]map[string]ParsedAttribute
+	attsDefault       map[string]map[string]*Attribute
 	valid             bool
 	hasPERefs         bool
+	pedantic          bool
 
+	nsTab      nsStack
 	doc        *Document
 	userData   interface{}
-	element    *ParsedElement
-	elemidx    int
+	nodeTab    nodeStack
+	elemidx int
 	nbentities int
 }
 

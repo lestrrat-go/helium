@@ -26,7 +26,7 @@ type EndDTDFunc func(ctx Context) (error)
 type EndDocumentFunc func(ctx Context) (error)
 
 // EndElementFunc defines the function type for SAX2.EndElementHandler
-type EndElementFunc func(ctx Context, elem ParsedElement) (error)
+type EndElementFunc func(ctx Context, localname string, prefix string, uri string) (error)
 
 // EndEntityFunc defines the function type for SAX2.EndEntityHandler
 type EndEntityFunc func(ctx Context, name string) (error)
@@ -80,7 +80,7 @@ type StartDTDFunc func(ctx Context, name string, publicID string, systemID strin
 type StartDocumentFunc func(ctx Context) (error)
 
 // StartElementFunc defines the function type for SAX2.StartElementHandler
-type StartElementFunc func(ctx Context, elem ParsedElement) (error)
+type StartElementFunc func(ctx Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) (error)
 
 // StartEntityFunc defines the function type for SAX2.StartEntityHandler
 type StartEntityFunc func(ctx Context, name string) (error)
@@ -179,9 +179,9 @@ func (s *SAX2) EndDocument(ctx Context) error {
 }
 
 // EndElement satisfies the ContentHandler interface
-func (s *SAX2) EndElement(ctx Context, elem ParsedElement) error {
+func (s *SAX2) EndElement(ctx Context, localname string, prefix string, uri string) error {
 	if h := s.EndElementHandler; h != nil {
-		return h(ctx, elem)
+		return h(ctx, localname, prefix, uri)
 	}
 	return ErrHandlerUnspecified
 }
@@ -323,9 +323,9 @@ func (s *SAX2) StartDocument(ctx Context) error {
 }
 
 // StartElement satisfies the ContentHandler interface
-func (s *SAX2) StartElement(ctx Context, elem ParsedElement) error {
+func (s *SAX2) StartElement(ctx Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error {
 	if h := s.StartElementHandler; h != nil {
-		return h(ctx, elem)
+		return h(ctx, localname, prefix, uri, namespaces, attrs)
 	}
 	return ErrHandlerUnspecified
 }

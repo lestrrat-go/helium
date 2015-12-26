@@ -32,7 +32,7 @@ func TestTextAddChild(t *testing.T) {
 
 func TestTextAddChildInvalidNode(t *testing.T) {
 	n1 := newText([]byte("Hello "))
-	n2 := &Namespace{}
+	n2 := &ProcessingInstruction{}
 
 	if !assert.Equal(t, ErrInvalidOperation, n1.AddChild(n2), "AddChild fails") {
 		return

@@ -2,7 +2,7 @@ package helium
 
 func newText(b []byte) *Text {
 	t := Text{}
-	t.typ = TextNode
+	t.etype = TextNode
 	t.content = b
 	return &t
 }

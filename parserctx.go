@@ -9,67 +9,47 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/lestrrat/go-strcursor"
 	"github.com/lestrrat/helium/encoding"
 	"github.com/lestrrat/helium/internal/debug"
 	"github.com/lestrrat/helium/sax"
 )
 
-func (ctx *parserCtx) pushNode(e *ParsedElement) {
+func (ctx *parserCtx) pushNS(prefix, uri string) {
+	ctx.nsTab.Push(prefix, uri)
+}
+
+func (ctx *parserCtx) pushNode(e *Element) {
 	if debug.Enabled {
 		g := debug.IPrintf("START pushNode (%s)", e.Name())
-		defer g.IRelease("END   pushNode")
-		defer func() {
-			i := 1
-			for e := ctx.element; e != nil; e = e.next {
-				debug.Printf("element in stack (%d): %s", i, e.Name())
-				i++
-			}
-		}()
+		defer g.IRelease("END pushNode")
 	}
-	e.next = ctx.element
-	ctx.element = e
+	ctx.nodeTab.Push(e)
 }
 
-func (ctx *parserCtx) peekNode() *ParsedElement {
-	return ctx.element
+func (ctx *parserCtx) peekNode() *Element {
+	return ctx.nodeTab.PeekOne()
 }
 
-func (ctx *parserCtx) popNode() *ParsedElement {
+func (ctx *parserCtx) popNode() (elem *Element) {
 	if debug.Enabled {
 		g := debug.IPrintf("START popNode")
-		defer g.IRelease("END   popNode")
 		defer func() {
-			i := 1
-			for e := ctx.element; e != nil; e = e.next {
-				debug.Printf("element in stack (%d): %s", i, e.Name())
-				i++
+			var name string
+			if elem == nil {
+				name = "nil"
+			} else {
+				name = elem.Name()
 			}
+			g.IRelease("END popNode (%s)", name)
 		}()
 	}
-	e := ctx.peekNode()
-	if e == nil {
-		if debug.Enabled {
-			debug.Printf("popped node (EMPTY)")
-		}
-	}
-
-	if debug.Enabled {
-		debug.Printf("popped node %s", e.Name())
-	}
-	ctx.element = e.next
-	return e
+	return ctx.nodeTab.Pop()
 }
 
 func (ctx *parserCtx) lookupNamespace(prefix string) string {
-	for e := ctx.peekNode(); e != nil; e = e.next {
-		for _, ns := range e.namespaces {
-			if ns.Prefix() == prefix {
-				return ns.URI()
-			}
-		}
-	}
-	return ""
+	return ctx.nsTab.Lookup(prefix)
 }
 
 func (ctx *parserCtx) release() error {
@@ -83,11 +63,13 @@ func (ctx *parserCtx) init(p *Parser, b []byte) error {
 	ctx.nbread = 0
 	ctx.cursor = strcursor.New(b)
 	ctx.instate = psStart
-	ctx.sax = p.sax
 	ctx.userData = ctx // circular dep?!
 	ctx.standalone = StandaloneImplicitNo
 	ctx.attsSpecial = map[string]AttributeType{}
-	ctx.attsDefault = map[string]map[string]ParsedAttribute{}
+	ctx.attsDefault = map[string]map[string]*Attribute{}
+	if p != nil {
+		ctx.sax = p.sax
+	}
 	return nil
 }
 
@@ -596,8 +578,13 @@ func (ctx *parserCtx) parseStartTag() error {
 		return ctx.error(err)
 	}
 
-	namespaces := []sax.ParsedNamespace{}
-	attrs := []sax.ParsedAttribute{}
+	elem, err := ctx.doc.CreateElement(local)
+	if err != nil {
+		return ctx.error(err)
+	}
+
+	nbNs := 0
+	attrs := []sax.Attribute{}
 	for ctx.instate != psEOF {
 		ctx.skipBlanks()
 		if ctx.curPeek(1) == '>' {
@@ -608,51 +595,83 @@ func (ctx *parserCtx) parseStartTag() error {
 		if ctx.curPeek(1) == '/' && ctx.curPeek(2) == '>' {
 			break
 		}
-		localAttr, prefixAttr, value, err := ctx.parseAttribute(local)
-		debug.Printf("Parsed attribute -> '%s'", value)
+		attname, aprefix, attvalue, err := ctx.parseAttribute(local)
+		debug.Printf("Parsed attribute -> '%s'", attvalue)
 		if err != nil {
 			return ctx.error(err)
 		}
 
-		/*
-		   if (URL == ctxt->str_xml_ns) {
-		       if (attname != ctxt->str_xml) {
-		           xmlNsErr(ctxt, XML_NS_ERR_XML_NAMESPACE,
-		        "xml namespace URI cannot be the default namespace\n",
-		                    NULL, NULL, NULL);
-		       }
-		       goto skip_default_ns;
-		   }
-		   if ((len == 29) &&
-		       (xmlStrEqual(URL,
-		                BAD_CAST "http://www.w3.org/2000/xmlns/"))) {
-		       xmlNsErr(ctxt, XML_NS_ERR_XML_NAMESPACE,
-		            "reuse of the xmlns namespace name is forbidden\n",
-		                NULL, NULL, NULL);
-		       goto skip_default_ns;
-		   }
-		*/
+		if attname == XMLNsPrefix && aprefix == "" {
+			// <elem xmlns="...">
+			ctx.pushNS("", attvalue)
+			nbNs++
+//    SkipDefaultNS:
+      if ctx.curPeek(1) == '>' || ctx.curHasPrefix("/>") {
+        continue
+      }
 
-		if prefixAttr == "xmlns" {
-			ns := ParsedNamespace{
-				prefix: localAttr,
-				uri:    value,
+      if !isBlankCh(ctx.curPeek(1)) {
+        return ctx.error(ErrSpaceRequired)
+      }
+      ctx.skipBlanks()
+		} else if aprefix == XMLNsPrefix {
+			var u *url.URL // predeclare, so we can use goto SkipNS
+
+			// <elem xmlns:foo="...">
+			if attname == XMLPrefix { // xmlns:xml
+				if attvalue != XMLNamespace {
+					return ctx.error(errors.New("xml namespace prefix mapped to wrong URI"))
+				}
+				// skip storing namespace definition
+				goto SkipNS
 			}
-			namespaces = append(namespaces, ns)
-		} else if localAttr == "xmlns" && prefixAttr == "" {
-			ns := ParsedNamespace{
-				prefix: "",
-				uri:    value,
+			if attname == XMLNsPrefix { // xmlns:xmlns="..."
+				return ctx.error(errors.New("redefinition of the xmlns prefix forbidden"))
 			}
-			namespaces = append(namespaces, ns)
-		} else {
-			attr := ParsedAttribute{
-				local:  localAttr,
-				value:  value,
-				prefix: prefixAttr,
+
+			if attvalue == "http://www.w3.org/2000/xmlns/" {
+				return ctx.error(errors.New("reuse of the xmlns namespace name if forbidden"))
 			}
-			attrs = append(attrs, attr)
+
+			if attvalue == "" {
+				return ctx.error(fmt.Errorf("xmlns:%s: Empty XML namespace is not allowed", attname))
+			}
+
+			u, err = url.Parse(attvalue)
+			if err != nil {
+				return ctx.error(fmt.Errorf("xmlns:%s: '%s' is not a validURI", attname, attvalue))
+			}
+			if ctx.pedantic && u.Scheme == "" {
+				return ctx.error(fmt.Errorf("xmlns:%s: URI %s is not absolute", attname, attvalue))
+			}
+
+			if ctx.nsTab.Lookup(attname) != "" {
+				return ctx.error(errors.New("duplicate attribute is not allowed"))
+			}
+			ctx.pushNS(attname, attvalue)
+			nbNs++
+
+		SkipNS:
+			if ctx.curPeek(1) == '>' || ctx.curHasPrefix("/>") {
+				continue
+			}
+
+			if !isBlankCh(ctx.curPeek(1)) {
+				return ctx.error(ErrSpaceRequired)
+			}
+			ctx.skipBlanks()
+			// ctx.input.base != base || inputNr != ctx.inputNr; goto base_changed
+			continue
 		}
+
+		var attr *Attribute
+		if aprefix != "" {
+			attr = newAttribute(aprefix + ":" + attname, attvalue, nil)
+		} else {
+			attr = newAttribute(attname, attvalue, nil)
+		}
+
+		attrs = append(attrs, attr)
 	}
 
 	// attributes defaulting
@@ -667,43 +686,43 @@ func (ctx *parserCtx) parseStartTag() error {
 
 		defaults, ok := ctx.lookupAttributeDefault(elemName)
 		if ok {
-			for _, def := range defaults {
-				a2 := ParsedAttribute{
-					local:  def.local,
-					value:  def.value,
-					prefix: def.prefix,
-					defaulted: true,
-				}
-				attrs = append(attrs, a2)
+			for _, attr := range defaults {
+				attrs = append(attrs, attr)
 			}
 		}
 	}
 
-	elem := &ParsedElement{
-		local:      local,
-		namespaces: namespaces,
-		attributes: attrs,
-	}
+	/*
+		for _, attr := range attrs {
+			local:      local,
+			namespaces: namespaces,
+			attributes: attrs,
+		}
+	*/
 
 	// we push the element first, because this way we get to
 	// query for the namespace declared on this node as well
 	// via lookupNamespace
-	ctx.pushNode(elem)
-
 	nsuri := ctx.lookupNamespace(prefix)
 	if prefix != "" && nsuri == "" {
 		return ctx.error(errors.New("namespace '" + prefix + "' not found"))
 	}
-
 	if nsuri != "" {
-		elem.namespace = &ParsedNamespace{
-			prefix: prefix,
-			uri:    nsuri,
-		}
+		elem.SetNamespace(prefix, nsuri, true)
 	}
+	ctx.pushNode(elem)
+
 
 	if s := ctx.sax; s != nil {
-		switch err := s.StartElement(ctx.userData, elem); err {
+		var nslist []sax.Namespace
+		if nbNs > 0 {
+			nslist = make([]sax.Namespace, nbNs)
+			// workaround []*Namespace != []sax.Namespace
+			for i, ns := range ctx.nsTab.Peek(nbNs) {
+				nslist[i] = ns.(nsStackItem)
+			}
+		}
+		switch err := s.StartElement(ctx.userData, elem.LocalName(), prefix, nsuri, nslist, attrs); err {
 		case nil, sax.ErrHandlerUnspecified:
 			// no op
 		default:
@@ -734,28 +753,19 @@ func (ctx *parserCtx) parseEndTag() error {
 			return ctx.error(ErrLtSlashRequired)
 		}
 
-		name, err := ctx.parseName()
-		if err != nil {
-			return ctx.error(err)
-		}
-		if debug.Enabled {
-			debug.Printf("ending tag '%s'", name)
-		}
-
-		if ctx.curPeek(1) == '>' {
-			ctx.curAdvance(1)
-		}
-
 		e := ctx.peekNode()
-		if e.Name() != name {
-			return ctx.error(
-				errors.New("closing tag does not match ('" + e.Name() + "' != '" + name + "')"))
+		if !ctx.curConsumePrefix(e.Name()) {
+			return ctx.error(errors.New("expected end tag '" + e.Name() + "'"))
 		}
+
+		if ctx.curPeek(1) != '>' {
+			return ctx.error(ErrGtRequired)
+		}
+		ctx.curAdvance(1)
 	}
 	e := ctx.popNode()
-
 	if s := ctx.sax; s != nil {
-		switch err := s.EndElement(ctx, e); err {
+		switch err := s.EndElement(ctx, e.LocalName(), e.Prefix(), e.URI()); err {
 		case nil, sax.ErrHandlerUnspecified:
 			// no op
 		default:
@@ -1520,12 +1530,12 @@ func (ctx *parserCtx) areBlanks(s string, blankChars bool) (ret bool) {
 	}
 
 	// Look if the element is mixed content in the DTD if available
-	if ctx.element == nil {
+	if ctx.peekNode() == nil {
 		ret = false
 		return
 	}
 	if ctx.doc != nil {
-		ok, _ := ctx.doc.IsMixedElement(ctx.element.Name())
+		ok, _ := ctx.doc.IsMixedElement(ctx.peekNode().Name())
 		ret = !ok
 		return
 	}
@@ -1915,7 +1925,7 @@ func (ctx *parserCtx) parsePEReference() error {
  *
  * Returns the type of the element, or -1 in case of error
  */
-func (ctx *parserCtx) parseElementDecl() (ElementType, error) {
+func (ctx *parserCtx) parseElementDecl() (ElementTypeVal, error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseElementDecl")
 		defer g.IRelease("END   parseElementDecl")
@@ -1945,7 +1955,7 @@ func (ctx *parserCtx) parseElementDecl() (ElementType, error) {
 	}
 	ctx.skipBlanks()
 
-	var etype ElementType
+	var etype ElementTypeVal
 	var content *ElementContent
 	if ctx.curConsumePrefix("EMPTY") {
 		etype = EmptyElementType
@@ -2028,7 +2038,7 @@ func (ctx *parserCtx) parseElementDecl() (ElementType, error) {
 	return etype, nil
 }
 
-func (ctx *parserCtx) parseElementContentDecl() (*ElementContent, ElementType, error) {
+func (ctx *parserCtx) parseElementContentDecl() (*ElementContent, ElementTypeVal, error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseElementContentDecl")
 		defer g.IRelease("END   parseElementContentDecl")
@@ -2046,7 +2056,7 @@ func (ctx *parserCtx) parseElementContentDecl() (*ElementContent, ElementType, e
 
 	var ec *ElementContent
 	var err error
-	var etype ElementType
+	var etype ElementTypeVal
 	if ctx.curHasPrefix("#PCDATA") {
 		ec, err = ctx.parseElementMixedContentDecl()
 		if err != nil {
@@ -3157,7 +3167,7 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 	// details of what the original code is doing
 	m, ok := ctx.attsDefault[elemName]
 	if !ok {
-		m = map[string]ParsedAttribute{}
+		m = map[string]*Attribute{}
 		ctx.attsDefault[elemName] = m
 	}
 
@@ -3170,11 +3180,8 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 		local = attrName
 	}
 
-	m[attrName] = ParsedAttribute{
-		local:  local,
-		value:  defaultValue,
-		prefix: prefix,
-	}
+	uri := ctx.lookupNamespace(prefix)
+	m[attrName] = newAttribute(local, defaultValue, newNamespace(prefix, uri))
 	/*
 	   	hmm, let's think about this when the time comes
 	       if (ctxt->external)
@@ -3184,7 +3191,7 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 	*/
 }
 
-func (ctx *parserCtx) lookupAttributeDefault(elemName string) (map[string]ParsedAttribute, bool) {
+func (ctx *parserCtx) lookupAttributeDefault(elemName string) (map[string]*Attribute, bool) {
 	v, ok := ctx.attsDefault[elemName]
 	return v, ok
 }
@@ -3319,6 +3326,44 @@ func (ctx *parserCtx) parseEpilogue() error {
 	return nil
 }
 
+func (ctx *parserCtx) parseBalancedChunkInternal(chunk string) (Node, error) {
+	if debug.Enabled {
+		g := debug.IPrintf("START parseBaalancedChunkInternal")
+		defer g.IRelease("END parseBaalancedChunkInternal")
+	}
+	newctx := &parserCtx{}
+	newctx.init(nil, []byte(chunk))
+	defer newctx.release()
+
+	if ctx.doc == nil {
+		ctx.doc = NewDocument("1.0", "utf8", StandaloneExplicitNo)
+	}
+
+	// save the document's children
+	content := ctx.doc.children
+	ctx.doc.children = []Node{}
+	defer func() {
+		ctx.doc.children = content
+	}()
+	newctx.doc = ctx.doc
+	newctx.sax = ctx.sax
+
+	// create a dummy node
+	newRoot, err := newctx.doc.CreateElement("pseudoroot")
+	if err != nil {
+		return nil, ctx.error(err)
+	}
+	newctx.pushNode(newRoot)
+
+	if err := newctx.parseContent(); err != nil {
+		return nil, err
+	}
+
+	spew.Dump(newctx.doc)
+
+	return newctx.doc.children[0].FirstChild(), nil
+}
+
 /*
  * parse and handle entity references in content, depending on the SAX
  * interface, this may end-up in a call to character() if this is a
@@ -3379,6 +3424,7 @@ func (ctx *parserCtx) parseReference() (string, error) {
 
 	// temprorary fix
 	if ent != nil {
+		ctx.parseBalancedChunkInternal(ent.Content())
 		return ent.Content(), nil
 	}
 	/*

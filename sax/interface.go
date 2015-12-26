@@ -53,8 +53,8 @@ type ContentHandler interface {
 	// Receive notification of a processing instruction.
 	ProcessingInstruction(ctx Context, target string, data string) error
 	// Receive notification of the beginning of an element.
-	StartElement(ctx Context, elem ParsedElement) error
-	EndElement(ctx Context, elem ParsedElement) error
+	StartElement(ctx Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error
+	EndElement(ctx Context, localname string, prefix string, uri string) error
 	Characters(ctx Context, content []byte) error
 }
 
@@ -100,24 +100,12 @@ type Extensions interface {
 	Reference(ctx Context, name string) error
 }
 
-type ParsedNamespace interface {
+type Namespace interface {
 	Prefix() string
 	URI() string
 }
 
-type ParsedElement interface {
-	Prefix() string
-	URI() string
-	LocalName() string
-	// Name returns the fully qualified name. That is, if the element has
-	// a namespace prefix associated with it, it will return "prefix:localname"
-	// and "localname" otherwise
-	Name() string
-	Attributes() []ParsedAttribute
-	Namespaces() []ParsedNamespace
-}
-
-type ParsedAttribute interface {
+type Attribute interface {
 	LocalName() string
 	// Name returns the fully qualified name. That is, if the attribute has
 	// a namespace prefix associated with it, it will return "prefix:localname"
@@ -125,5 +113,5 @@ type ParsedAttribute interface {
 	Name() string
 	Prefix() string
 	Value() string
-	Defaulted() bool
+	IsDefault() bool
 }

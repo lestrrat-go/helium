@@ -7,76 +7,6 @@ import (
 	"github.com/lestrrat/helium/sax"
 )
 
-func (ns ParsedNamespace) Prefix() string {
-	return ns.prefix
-}
-
-func (ns ParsedNamespace) URI() string {
-	return ns.uri
-}
-
-func (e ParsedElement) Name() string {
-	if ns := e.namespace; ns != nil {
-		if ns.prefix != "" {
-			return ns.prefix + ":" + e.local
-		}
-	}
-	return e.local
-}
-
-func (e ParsedElement) Prefix() string {
-	if ns := e.namespace; ns != nil {
-		return ns.prefix
-	}
-	return ""
-}
-
-func (e ParsedElement) URI() string {
-	if ns := e.namespace; ns != nil {
-		return ns.uri
-	}
-	return ""
-}
-
-func (e ParsedElement) Namespace() sax.ParsedNamespace {
-	return e.namespace
-}
-
-func (e ParsedElement) Namespaces() []sax.ParsedNamespace {
-	return e.namespaces
-}
-
-func (e ParsedElement) LocalName() string {
-	return e.local
-}
-
-func (e ParsedElement) Attributes() []sax.ParsedAttribute {
-	return e.attributes
-}
-
-func (a ParsedAttribute) Name() string {
-	if a.prefix != "" {
-		return a.prefix + ":" + a.local
-	}
-	return a.local
-}
-
-func (a ParsedAttribute) LocalName() string {
-	return a.local
-}
-
-func (a ParsedAttribute) Prefix() string {
-	return a.prefix
-}
-
-func (a ParsedAttribute) Value() string {
-	return a.value
-}
-
-func (a ParsedAttribute) Defaulted() bool {
-	return a.defaulted
-}
-
 type TreeBuilder struct {
 	doc  *Document
 	node Node
@@ -122,19 +52,22 @@ func (t *TreeBuilder) ProcessingInstruction(ctxif sax.Context, target, data stri
 	return nil
 }
 
-func (t *TreeBuilder) StartElement(ctxif sax.Context, elem sax.ParsedElement) error {
+func (t *TreeBuilder) StartElement(ctxif sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 	//	ctx := ctxif.(*parserCtx)
 	if debug.Enabled {
-		debug.Printf("tree.StartElement: %#v", elem)
+		if prefix != "" {
+			debug.Printf("tree.StartElement: %s:%s", prefix, localname)
+		} else {
+			debug.Printf("tree.StartElement: %s", localname)
+		}
 	}
-	e, err := t.doc.CreateElement(elem.LocalName())
+	e, err := t.doc.CreateElement(localname)
 	if err != nil {
 		return err
 	}
 
-	// attrdata = []string{ local, value, prefix }
-	for _, data := range elem.Attributes() {
-		e.SetAttribute(data.Prefix()+":"+data.LocalName(), data.Value())
+	for _, attr := range attrs {
+		e.SetAttribute(attr.Name(), attr.Value())
 	}
 
 	if t.node == nil {
@@ -148,9 +81,13 @@ func (t *TreeBuilder) StartElement(ctxif sax.Context, elem sax.ParsedElement) er
 	return nil
 }
 
-func (t *TreeBuilder) EndElement(ctxif sax.Context, elem sax.ParsedElement) error {
+func (t *TreeBuilder) EndElement(ctxif sax.Context, localname, prefix, uri string) error {
 	if debug.Enabled {
-		debug.Printf("tree.EndElement: %#v", elem)
+		if prefix != "" {
+			debug.Printf("tree.EndElement: %s:%s", prefix, localname)
+		} else {
+			debug.Printf("tree.EndElement: %s", localname)
+		}
 	}
 	return nil
 }

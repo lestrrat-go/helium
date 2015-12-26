@@ -1,15 +1,17 @@
 package helium
 
-func NewNamespace() *Namespace {
+func newNamespace(prefix, uri string) *Namespace {
 	n := Namespace{}
-	n.typ = NamespaceNode
+	n.prefix = prefix
+	n.href = uri
+	n.etype = NamespaceNode
 	return &n
 }
 
-func (n *Namespace) AddChild(cur Node) error {
-	return n.node.AddChild(n)
+func (n Namespace) Prefix() string {
+	return n.prefix
 }
 
-func (n *Namespace) AddContent(_ []byte) error {
-	return ErrInvalidOperation
+func (n Namespace) URI() string {
+	return n.href
 }

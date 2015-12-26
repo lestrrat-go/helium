@@ -1,4 +1,4 @@
-package helium_test
+package helium
 
 import (
 	"bytes"
@@ -11,13 +11,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lestrrat/helium"
 	"github.com/lestrrat/helium/sax"
 	"github.com/stretchr/testify/assert"
 )
 
-func newEventEmitter(out io.Writer) helium.SAX {
-	entities := map[string]*helium.Entity{}
+func newEventEmitter(out io.Writer) SAX {
+	entities := map[string]*Entity{}
 	s := sax.New()
 	s.SetDocumentLocatorHandler = func(_ sax.Context, loc sax.DocumentLocator) error {
 		fmt.Fprintf(out, "SAX.SetDocumentLocator()\n")
@@ -50,11 +49,11 @@ func newEventEmitter(out io.Writer) helium.SAX {
 		return ent, nil
 	}
 
-	s.UnparsedEntityDeclHandler = func(_ sax.Context, name string, typ int, publicID string, systemID string, notation string) error {
+	s.UnparsedEntityDeclHandler = func(ctxif sax.Context, name string, typ int, publicID string, systemID string, notation string) error {
 		fmt.Fprintf(out, "SAX.UnparsedEntityDecl(%s, %d, %s, %s, %s)\n",
 			name, typ, publicID, systemID, notation)
 
-		entities[name] = helium.NewEntity(name, helium.EntityType(typ), publicID, systemID, notation)
+		entities[name] = newEntity(name, EntityType(typ), publicID, systemID, notation, "")
 		return nil
 	}
 	s.ExternalSubsetHandler = func(_ sax.Context, name, externalID, systemID string) error {
@@ -94,24 +93,21 @@ func newEventEmitter(out io.Writer) helium.SAX {
 	s.CharactersHandler = func(ctx sax.Context, data []byte) error {
 		return charHandler("Characters", ctx, data)
 	}
-	s.StartElementHandler = func(_ sax.Context, elem sax.ParsedElement) error {
-		attrs := elem.Attributes()
+	s.StartElementHandler = func(_ sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+		fmt.Fprintf(out, "SAX.StartElementNS(%s, ", localname)
 
-		fmt.Fprintf(out, "SAX.StartElementNS(%s, ", elem.LocalName())
-
-		if prefix := elem.Prefix(); prefix != "" {
+		if prefix != "" {
 			fmt.Fprintf(out, "%s, ", prefix)
 		} else {
 			fmt.Fprintf(out, "NULL, ")
 		}
 
-		if uri := elem.URI(); uri != "" {
+		if uri != "" {
 			fmt.Fprintf(out, "'%s', ", uri)
 		} else {
 			fmt.Fprintf(out, "NULL, ")
 		}
 
-		namespaces := elem.Namespaces()
 		lns := len(namespaces)
 		fmt.Fprintf(out, "%d, ", lns)
 		for _, ns := range namespaces {
@@ -125,7 +121,7 @@ func newEventEmitter(out io.Writer) helium.SAX {
 
 		defaulted := 0
 		for _, attr := range attrs {
-			if attr.Defaulted() {
+			if attr.IsDefault() {
 				defaulted++
 			}
 		}
@@ -149,16 +145,16 @@ func newEventEmitter(out io.Writer) helium.SAX {
 
 		return nil
 	}
-	s.EndElementHandler = func(_ sax.Context, elem sax.ParsedElement) error {
-		fmt.Fprintf(out, "SAX.EndElementNS(%s, ", elem.LocalName())
+	s.EndElementHandler = func(_ sax.Context, localname, prefix, uri string) error {
+		fmt.Fprintf(out, "SAX.EndElementNS(%s, ", localname)
 
-		if prefix := elem.Prefix(); prefix != "" {
+		if prefix != "" {
 			fmt.Fprintf(out, "%s, ", prefix)
 		} else {
 			fmt.Fprintf(out, "NULL, ")
 		}
 
-		if uri := elem.URI(); uri != "" {
+		if uri != "" {
 			fmt.Fprintf(out, "'%s')\n", uri)
 		} else {
 			fmt.Fprintf(out, "NULL)\n")
@@ -208,11 +204,11 @@ func TestSAXEvents(t *testing.T) {
 		}
 
 		out := bytes.Buffer{}
-		p := helium.NewParser()
+		p := NewParser()
 		p.SetSAXHandler(newEventEmitter(&out))
 
 		_, err = p.Parse(in)
-		if !assert.NoError(t, err, "Parse should succeed") {
+		if !assert.NoError(t, err, "Parse should succeed (file = %s)", fn) {
 			t.Logf("source XML: %s", in)
 			return
 		}

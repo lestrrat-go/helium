@@ -2,6 +2,12 @@ package helium
 
 import "errors"
 
+const (
+	XMLNamespace = "http://www.w3.org/XML/1998/namespace"
+	XMLNsPrefix  = "xmlns"
+	XMLPrefix    = "xml"
+)
+
 type AttributeType int
 
 const (
@@ -39,19 +45,40 @@ type ErrUnimplemented struct {
 	target string
 }
 
-type nilNode struct{}
+type Node interface {
+	AddChild(Node) error
+	AddContent([]byte) error
+	AddSibling(Node) error
+	Content() []byte
+	FirstChild() Node
+	LastChild() Node
+	Name() string
+	NextSibling() Node
+	PrevSibling() Node
+	SetNextSibling(Node)
+	SetPrevSibling(Node)
+	Type() ElementType
+}
 
-// common data
-type node struct {
-	typ      NodeType
-	private  interface{}
-	etype    ElementType
+// docnode is responsible for handling the basic tree-ish operations
+type docnode struct {
 	name     string
+	etype    ElementType
 	children []Node
 	parent   Node
 	next     Node
 	prev     Node
 	doc      *Document
+}
+
+// node represents a node in a XML tree.
+type node struct {
+	docnode
+	private    interface{}
+	content    []byte
+	properties []*Attribute
+	ns         *Namespace
+	nsDefs     []*Namespace
 }
 
 type DocumentStandaloneType int
@@ -65,7 +92,7 @@ const (
 )
 
 type Document struct {
-	node
+	docnode
 	version    string
 	encoding   string
 	standalone DocumentStandaloneType
@@ -75,14 +102,14 @@ type Document struct {
 }
 
 type ProcessingInstruction struct {
-	node
+	docnode
 	target string
 	data   string
 }
 
 type DTD struct {
-	node
-	elements   map[string]Element
+	docnode
+	elements   map[string]ElementDecl
 	entities   map[string]Entity
 	pentities  map[string]Entity
 	externalID string
@@ -90,65 +117,71 @@ type DTD struct {
 }
 
 type Namespace struct {
-	node
+	etype   ElementType
+	href    string
+	prefix  string
+	context *Document
 }
 
 type Attribute struct {
-	node
-	elem *Node
+	docnode
+	atype       AttributeType
+	defaultAttr bool
+	ns          *Namespace
 }
 
-type NodeType int
+type ElementType int
 
 const (
-	ElementNode NodeType = iota + 1
+	ElementNode ElementType = iota + 1
 	ProcessingInstructionNode
 	NamespaceNode
 	TextNode
 	CommentNode
 )
 
-// helium.Node
-type Node interface {
-	AddChild(Node) error
-	AddContent([]byte) error
-	AddSibling(Node) error
-	Content() []byte
-	FirstChild() Node
-	LastChild() Node
-	NextSibling() Node
-	PrevSibling() Node
-	SetNextSibling(Node)
-	SetPrevSibling(Node)
-	Type() NodeType
+type NamespaceContainer interface {
+	Namespaces() []*Namespace
 }
 
+// Text is just a wrapper around Node so that we can
+// use Go-ish type checks
 type Text struct {
 	node
-	content []byte
 }
 
+// Comment is just a wrapper around Node so that we can
+// use Go-ish type checks
 type Comment struct {
 	node
-	content []byte
 }
 
-type ElementType int
+// Element is just a wrapper around Node so that we can
+// use Go-ish type checks
+type Element struct {
+	node
+}
+
+// ElementDecl is an xml element declaration from DTD
+type ElementDecl struct {
+	docnode
+	decltype ElementTypeVal
+	content  ElementContent
+	prefix   string
+	// xmlRegexpPtr contModel
+}
+
+// ElementTypeVal represents the different possibilities for an element
+// content type.
+type ElementTypeVal int
 
 const (
-	UndefinedElementType ElementType = iota
+	UndefinedElementType ElementTypeVal = iota
 	EmptyElementType
 	AnyElementType
 	MixedElementType
 	ElementElementType
 )
-
-type Element struct {
-	node
-	content    string // XXX probably wrong
-	attributes []Attribute
-	prefix     string
-}
 
 type ElementContentType int
 
@@ -206,49 +239,9 @@ type Entity struct {
 }
 
 var (
-	EntityLT = Entity{
-		node: node{
-			name: "lt",
-		},
-		orig:       "&lt;",
-		content:    "<",
-		entityType: InternalPredefinedEntity,
-		owner:      false,
-	}
-	EntityGT = Entity{
-		node: node{
-			name: "gt",
-		},
-		orig:       "&gt;",
-		content:    ">",
-		entityType: InternalPredefinedEntity,
-		owner:      false,
-	}
-	EntityAmpersand = Entity{
-		node: node{
-			name: "amp",
-		},
-		orig:       "&amp;",
-		content:    "&",
-		entityType: InternalPredefinedEntity,
-		owner:      false,
-	}
-	EntityApostrophe = Entity{
-		node: node{
-			name: "apos",
-		},
-		orig:       "&apos;",
-		content:    "'",
-		entityType: InternalPredefinedEntity,
-		owner:      false,
-	}
-	EntityQuote = Entity{
-		node: node{
-			name: "quot",
-		},
-		orig:       `&quot;`,
-		content:    `"`,
-		entityType: InternalPredefinedEntity,
-		owner:      false,
-	}
+	EntityLT         = newEntity("lt", InternalPredefinedEntity, "", "", "<", "&lt;")
+	EntityGT         = newEntity("gt", InternalPredefinedEntity, "", "", ">", "&gt;")
+	EntityAmpersand  = newEntity("amp", InternalPredefinedEntity, "", "", "&", "&amp;")
+	EntityApostrophe = newEntity("apos", InternalPredefinedEntity, "", "", "'", "&apos;")
+	EntityQuote      = newEntity("quot", InternalPredefinedEntity, "", "", `"`, "&quot;")
 )

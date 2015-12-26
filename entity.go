@@ -3,26 +3,27 @@ package helium
 func resolvePredefinedEntity(name string) *Entity {
 	switch name {
 	case "lt":
-		return &EntityLT
+		return EntityLT
 	case "gt":
-		return &EntityGT
+		return EntityGT
 	case "amp":
-		return &EntityAmpersand
+		return EntityAmpersand
 	case "apos":
-		return &EntityApostrophe
+		return EntityApostrophe
 	case "quot":
-		return &EntityQuote
+		return EntityQuote
 	default:
 		return nil
 	}
 }
 
-func NewEntity(name string, typ EntityType, publicID, systemID, notation string) *Entity {
+func newEntity(name string, typ EntityType, publicID, systemID, notation, orig string) *Entity {
 	e := &Entity{
 		content:    notation,
 		entityType: typ,
 		externalID: publicID,
 		systemID:   systemID,
+		orig:       orig,
 	}
 	e.name = name
 	return e

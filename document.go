@@ -24,8 +24,14 @@ func (d *Document) Version() string {
 	return d.version
 }
 
-func (d *Document) IntSubset() Node {
+func (d *Document) IntSubset() *DTD {
 	return d.intSubset
+}
+
+func (d *Document) CreateNamespace(prefix, uri string) (*Namespace, error) {
+	ns := newNamespace(prefix, uri)
+	ns.context = d
+	return ns, nil
 }
 
 func (d *Document) CreatePI(target, data string) (*ProcessingInstruction, error) {
@@ -36,12 +42,9 @@ func (d *Document) CreatePI(target, data string) (*ProcessingInstruction, error)
 }
 
 func (d *Document) CreateDTD() (*DTD, error) {
-	return &DTD{
-		node:      node{},
-		elements:  map[string]Element{},
-		entities:  map[string]Entity{},
-		pentities: map[string]Entity{},
-	}, nil
+	dtd := newDTD()
+	dtd.doc = d
+	return dtd, nil
 }
 
 func (d *Document) CreateElement(name string) (*Element, error) {
@@ -95,12 +98,12 @@ func (d *Document) GetParameterEntity(name string) (*Entity, bool) {
 }
 
 func (d *Document) IsMixedElement(name string) (bool, error) {
-	elemDecl, ok := d.intSubset.GetElementDesc(name)
+	edecl, ok := d.intSubset.GetElementDesc(name)
 	if !ok {
 		return false, errors.New("element declaration not found")
 	}
 
-	switch elemDecl.etype {
+	switch edecl.decltype {
 	case UndefinedElementType:
 		return false, errors.New("element declaration not found")
 	case ElementElementType:
