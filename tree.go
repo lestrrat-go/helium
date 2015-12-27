@@ -47,7 +47,8 @@ func (t *TreeBuilder) ProcessingInstruction(ctxif sax.Context, target, data stri
 	if t.node.Type() == ElementNode {
 		t.node.AddChild(pi)
 	} else {
-		t.node.AddSibling(pi)
+//		t.node.AddSibling(pi)
+		panic("unimplemented")
 	}
 	return nil
 }

@@ -8,6 +8,18 @@ func newAttribute(name, value string, ns *Namespace) *Attribute {
 	return attr
 }
 
+func (n *Attribute) AddChild(cur Node) error {
+	return addChild(n, cur)
+}
+
+func (n *Attribute) AddContent(b []byte) error {
+	return addContent(n, b)
+}
+
+func (n *Attribute) Replace(cur Node) {
+	replaceNode(n, cur)
+}
+
 func (n *Attribute) SetDefault(b bool) {
 	n.defaultAttr = b
 }

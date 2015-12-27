@@ -6,6 +6,7 @@ const (
 	XMLNamespace = "http://www.w3.org/XML/1998/namespace"
 	XMLNsPrefix  = "xmlns"
 	XMLPrefix    = "xml"
+	XMLTextNoEnc = "textnoenc"
 )
 
 type AttributeType int
@@ -46,16 +47,21 @@ type ErrUnimplemented struct {
 }
 
 type Node interface {
+	setLastChild(Node)
+	setFirstChild(Node)
+
 	AddChild(Node) error
 	AddContent([]byte) error
-	AddSibling(Node) error
 	Content() []byte
 	FirstChild() Node
 	LastChild() Node
 	Name() string
 	NextSibling() Node
+	Parent() Node
 	PrevSibling() Node
+	Replace(Node)
 	SetNextSibling(Node)
+	SetParent(Node)
 	SetPrevSibling(Node)
 	Type() ElementType
 }
@@ -64,7 +70,8 @@ type Node interface {
 type docnode struct {
 	name     string
 	etype    ElementType
-	children []Node
+	firstChild Node
+	lastChild  Node
 	parent   Node
 	next     Node
 	prev     Node
@@ -138,6 +145,8 @@ const (
 	NamespaceNode
 	TextNode
 	CommentNode
+	DTDNode
+	NamespaceDeclNode
 )
 
 type NamespaceContainer interface {
@@ -160,6 +169,13 @@ type Comment struct {
 // use Go-ish type checks
 type Element struct {
 	node
+}
+
+// Nemaspacer is an interface for things that has a namespace
+// prefix and uri
+type Namespacer interface {
+	Prefix() string
+	URI() string
 }
 
 // ElementDecl is an xml element declaration from DTD

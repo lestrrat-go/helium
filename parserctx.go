@@ -9,7 +9,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/lestrrat/go-strcursor"
 	"github.com/lestrrat/helium/encoding"
 	"github.com/lestrrat/helium/internal/debug"
@@ -696,14 +695,18 @@ func (ctx *parserCtx) parseStartTag() error {
 			elemName = local
 		}
 
+if debug.Enabled {
 debug.Printf("-------> %s", elemName)
+}
 		defaults, ok := ctx.lookupAttributeDefault(elemName)
 		if ok {
 			for _, attr := range defaults {
 				attrs = append(attrs, attr)
 			}
 		}
-spew.Dump(attrs)
+if debug.Enabled {
+debug.Dump(attrs)
+}
 	}
 
 	/*
@@ -3203,7 +3206,7 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 	m[attrName] = attr
 
 	if debug.Enabled {
-		spew.Dump(ctx.attsDefault)
+		debug.Dump(ctx.attsDefault)
 	}
 	/*
 	   	hmm, let's think about this when the time comes
@@ -3217,7 +3220,7 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 func (ctx *parserCtx) lookupAttributeDefault(elemName string) (map[string]*Attribute, bool) {
 	v, ok := ctx.attsDefault[elemName]
 	if debug.Enabled {
-		spew.Dump(v)
+		debug.Dump(v)
 	}
 	return v, ok
 }
@@ -3366,10 +3369,13 @@ func (ctx *parserCtx) parseBalancedChunkInternal(chunk string) (Node, error) {
 	}
 
 	// save the document's children
-	content := ctx.doc.children
-	ctx.doc.children = []Node{}
+	fc := ctx.doc.FirstChild()
+	lc := ctx.doc.LastChild()
+	ctx.doc.setFirstChild(nil)
+	ctx.doc.setLastChild(nil)
 	defer func() {
-		ctx.doc.children = content
+		ctx.doc.setFirstChild(fc)
+		ctx.doc.setLastChild(lc)
 	}()
 	newctx.doc = ctx.doc
 	newctx.sax = ctx.sax

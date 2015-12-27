@@ -27,3 +27,7 @@ func (n *Text) AddContent(b []byte) error {
 func (n Text) Content() []byte {
 	return n.content
 }
+
+func (n *Text) Replace(cur Node) {
+	replaceNode(n, cur)
+}

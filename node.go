@@ -5,30 +5,29 @@ import (
 	"errors"
 )
 
+func (n *docnode) setFirstChild(cur Node) {
+	n.firstChild = cur
+}
+
+func (n *docnode) setLastChild(cur Node) {
+	n.lastChild = cur
+}
+
+func (n docnode) Parent() Node {
+	return n.parent
+}
+
 func (n docnode) Content() []byte {
 	b := bytes.Buffer{}
-	for i := 0; i < len(n.children); i++ {
-		chld := n.children[i]
-		b.Write(chld.Content())
+	for e := n.firstChild; e != nil; e = e.NextSibling() {
+		b.Write(e.Content())
 	}
 	return b.Bytes()
 }
 
-func (n *docnode) AddContent(b []byte) error {
+func addContent(n Node, b []byte) error {
 	t := newText(b)
 	return n.AddChild(t)
-}
-
-func (n *node) AddChild(cur Node) error {
-	switch cur.Type() {
-	case TextNode:
-		if lc := n.LastChild(); lc != nil && lc.Type() == TextNode {
-			return lc.AddContent(cur.Content())
-		}
-	}
-
-	n.children = append(n.children, cur)
-	return nil
 }
 
 type WalkFunc func(Node) error
@@ -62,34 +61,24 @@ func (n docnode) Type() ElementType {
 }
 
 func (n docnode) FirstChild() Node {
-	l := len(n.children)
-	if l == 0 {
-		return nil
-	}
-
-	return n.children[0]
+	return n.firstChild
 }
 
 func (n docnode) LastChild() Node {
-	l := len(n.children)
-	if l == 0 {
-		return nil
-	}
-
-	return n.children[l-1]
+	return n.lastChild
 }
 
-func (n *docnode) AddChild(cur Node) error {
-	if l := len(n.children); l > 0 {
-		n.children[l-1].AddSibling(cur)
+func addChild(n Node, cur Node) error {
+	l := n.LastChild()
+	if l == nil { // No children, set firstChild to cur
+		n.setFirstChild(cur)
+		n.setLastChild(cur)
+	} else {
+		l.SetNextSibling(cur)
+		cur.SetPrevSibling(l)
+		n.setLastChild(cur)
 	}
-	n.children = append(n.children, cur)
-	return nil
-}
-
-func (n *docnode) AddSibling(cur Node) error {
-	n.SetNextSibling(cur)
-	cur.SetPrevSibling(n)
+	cur.SetParent(n)
 	return nil
 }
 
@@ -110,6 +99,32 @@ func (n *docnode) SetPrevSibling(cur Node) {
 
 func (n *docnode) SetNextSibling(cur Node) {
 	n.next = cur
+}
+
+func (n *docnode) SetParent(cur Node) {
+	n.parent = cur
+}
+
+func replaceNode(n Node, cur Node) {
+	if next := n.NextSibling(); next != nil {
+		cur.SetNextSibling(next) // cur.next = n.next
+		next.SetPrevSibling(cur) // n.next.prev = cur
+	}
+
+	if prev := n.PrevSibling(); prev != nil {
+		cur.SetPrevSibling(prev) // cur.prev = n.prev
+		prev.SetNextSibling(cur) // n.prev.next = cur
+	}
+
+	if parent := n.Parent(); parent != nil {
+		if parent.FirstChild() == n {
+			parent.setFirstChild(cur)
+		}
+		if parent.LastChild() == n {
+			parent.setLastChild(cur)
+		}
+		cur.SetParent(parent)
+	}
 }
 
 func (n node) Namespaces() []*Namespace {

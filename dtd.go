@@ -22,3 +22,15 @@ func (dtd *DTD) GetElementDesc(name string) (*ElementDecl, bool) {
 	ret, ok := dtd.elements[name]
 	return &ret, ok
 }
+
+func (dtd *DTD) AddChild(cur Node) error {
+	return addChild(dtd, cur)
+}
+
+func (dtd *DTD) AddContent(b []byte) error {
+	return addContent(dtd, b)
+}
+
+func (dtd *DTD) Replace(cur Node) {
+	replaceNode(dtd, cur)
+}

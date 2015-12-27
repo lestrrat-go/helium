@@ -2,6 +2,10 @@ package helium
 
 import "errors"
 
+func CreateDocument() *Document {
+	return NewDocument("1.0", "UTF-8", StandaloneImplicitNo)
+}
+
 func NewDocument(version, encoding string, standalone DocumentStandaloneType) *Document {
 	doc := &Document{
 		encoding:   encoding,
@@ -10,6 +14,14 @@ func NewDocument(version, encoding string, standalone DocumentStandaloneType) *D
 	}
 	doc.intSubset, _ = doc.CreateDTD()
 	return doc
+}
+
+func (d *Document) AddChild(cur Node) error {
+	return addChild(d, cur)
+}
+
+func (d *Document) AddContent(b []byte) error {
+	return addContent(d, b)
 }
 
 func (d *Document) Encoding() string {
@@ -26,6 +38,36 @@ func (d *Document) Version() string {
 
 func (d *Document) IntSubset() *DTD {
 	return d.intSubset
+}
+
+func (d *Document) Replace(n Node) {
+	panic("d.Replace does not make sense")
+}
+
+func (d *Document) SetDocumentElement(root Node) error {
+	if d == nil {
+		// what are you trying to do?
+		return nil
+	}
+
+	if root == nil || root.Type() == NamespaceDeclNode {
+		return nil
+	}
+
+	root.SetParent(d)
+	var old Node
+	for old = d.firstChild; old != nil; old = old.NextSibling() {
+		if old.Type() == ElementNode {
+			break
+		}
+	}
+
+	if old == nil {
+		d.AddChild(root)
+	} else {
+		old.Replace(root)
+	}
+	return nil
 }
 
 func (d *Document) CreateNamespace(prefix, uri string) (*Namespace, error) {
