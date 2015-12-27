@@ -168,6 +168,7 @@ func newEventEmitter(out io.Writer) SAX {
 func TestSAXEvents(t *testing.T) {
 	skipped := map[string]struct{}{
 		"xml2.xml": {},
+		"att11.xml": {},
 	}
 
 	dir := "test"
