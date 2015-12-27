@@ -1,6 +1,10 @@
 package helium
 
-import "errors"
+import (
+	"bytes"
+	"errors"
+	"io"
+)
 
 func CreateDocument() *Document {
 	return NewDocument("1.0", "UTF-8", StandaloneImplicitNo)
@@ -14,6 +18,18 @@ func NewDocument(version, encoding string, standalone DocumentStandaloneType) *D
 	}
 	doc.intSubset, _ = doc.CreateDTD()
 	return doc
+}
+
+func (d Document) XMLString() (string, error) {
+	out := bytes.Buffer{}
+	if err := d.XML(&out); err != nil {
+		return "", err
+	}
+	return out.String(), nil
+}
+
+func (d *Document) XML(out io.Writer) error {
+	return (&Dumper{}).DumpDoc(out, d)
 }
 
 func (d *Document) AddChild(cur Node) error {
