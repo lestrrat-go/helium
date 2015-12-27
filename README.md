@@ -5,7 +5,7 @@
 
 # What on earth?
 
-This is an excercise in rewriting libxml2 in its entirety in Go.
+This is an exercise in rewriting libxml2 in its entirety in Go.
 
 # Get it
 
