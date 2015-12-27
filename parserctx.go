@@ -927,6 +927,7 @@ func (ctx *parserCtx) parseAttribute(elemName string) (local string, prefix stri
 		err = ctx.error(ErrEqualSignRequired)
 	}
 	ctx.curAdvance(1)
+	ctx.skipBlanks()
 
 	v, entities, err := ctx.parseAttributeValue(normalize)
 	if err != nil {
