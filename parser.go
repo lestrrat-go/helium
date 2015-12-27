@@ -2,6 +2,10 @@ package helium
 
 import "github.com/lestrrat/helium/internal/debug"
 
+func Parse(b []byte) (*Document, error) {
+	p := NewParser()
+	return p.Parse(b)
+}
 
 func NewParser() *Parser {
 	return &Parser{
