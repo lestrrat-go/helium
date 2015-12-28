@@ -1,0 +1,23 @@
+SAX.SetDocumentLocator()
+SAX.StartDocument()
+SAX.InternalSubset(test, , )
+SAX.UnparsedEntityDecl(example, 1, , , <p>An ampersand (&#38;) may be escaped
+ numerically (&#38;#38;) or with a general entity
+  (&amp;amp;).</p>)
+SAX.ResolveEntity(example)
+SAX.ExternalSubset(test, , )
+SAX.StartElementNS(test, NULL, NULL, 0, 0, 0)
+SAX.ResolveEntity(example)
+SAX.StartElementNS(p, NULL, NULL, 0, 0, 0)
+SAX.Characters(An ampersand (, 14)
+SAX.Characters(&, 1)
+SAX.Characters() may be escaped
+ numerically , 31)
+SAX.Characters(&, 1)
+SAX.Characters(#38;) or with a general entity, 34)
+SAX.Characters(&, 1)
+SAX.Characters(amp;)., 6)
+SAX.EndElementNS(p, NULL, NULL)
+SAX.Reference(example)
+SAX.EndElementNS(test, NULL, NULL)
+SAX.EndDocument()
