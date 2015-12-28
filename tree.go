@@ -17,12 +17,22 @@ func (t *TreeBuilder) SetDocumentLocator(ctxif sax.Context, loc sax.DocumentLoca
 }
 
 func (t *TreeBuilder) StartDocument(ctxif sax.Context) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.StartDocument")
+		defer g.IRelease("END tree.StartDocument")
+	}
+
 	ctx := ctxif.(*parserCtx)
+
 	t.doc = NewDocument(ctx.version, ctx.encoding, ctx.standalone)
 	return nil
 }
 
 func (t *TreeBuilder) EndDocument(ctxif sax.Context) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.EndDocument")
+		defer g.IRelease("END tree.EndDocument")
+	}
 	ctx := ctxif.(*parserCtx)
 	ctx.doc = t.doc
 	t.doc = nil
@@ -90,24 +100,25 @@ func (t *TreeBuilder) EndElement(ctxif sax.Context, localname, prefix, uri strin
 			debug.Printf("tree.EndElement: %s", localname)
 		}
 	}
+	ctx := ctxif.(*parserCtx)
+	debug.Printf("t.node (%p) -----> t.node = ctx.peekNode (%p)",t.node, ctx.peekNode())
+	if e, ok := t.node.(*Element); ok && e.LocalName() == localname && e.Prefix() == prefix && e.URI() == uri {
+		t.node = t.node.Parent()
+	}
 	return nil
 }
 
 func (t *TreeBuilder) Characters(ctxif sax.Context, data []byte) error {
 	if debug.Enabled {
-		debug.Printf("tree.Characters: '%v'", []byte(data))
+		g := debug.IPrintf("START tree.Characters: '%s' (%v)", data, data)
+		defer g.IRelease("END tree.Characters")
 	}
 
 	if t.node == nil {
 		return errors.New("text content placed in wrong location")
 	}
 
-	e, err := t.doc.CreateText(data)
-	if err != nil {
-		return err
-	}
-	t.node.AddChild(e)
-	return nil
+	return t.node.AddContent(data)
 }
 
 func (t *TreeBuilder) StartCDATA(_ sax.Context) error {
@@ -120,7 +131,8 @@ func (t *TreeBuilder) EndCDATA(_ sax.Context) error {
 
 func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
 	if debug.Enabled {
-		debug.Printf("tree.Comment: %s", data)
+		g := debug.IPrintf("START tree.Comment: %s", data)
+		defer g.IRelease("END tree.Comment")
 	}
 
 	if t.node == nil {
@@ -249,6 +261,11 @@ func (t *TreeBuilder) GetExternalSubset(ctx sax.Context, name string, baseURI st
 }
 
 func (t *TreeBuilder) IgnorableWhitespace(ctxif sax.Context, content []byte) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.IgnorableWhitespace (%v)", content)
+		defer g.IRelease("END tree.IgnorableWhitespace")
+	}
+
 	ctx := ctxif.(*parserCtx)
 	if ctx.keepBlanks {
 		return t.Characters(ctx, content)

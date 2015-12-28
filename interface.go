@@ -38,8 +38,9 @@ const (
 type Enumeration []string
 
 var (
-	ErrNilNode          = errors.New("nil node")
-	ErrInvalidOperation = errors.New("operation cannot be performed")
+	ErrNilNode            = errors.New("nil node")
+	ErrInvalidOperation   = errors.New("operation cannot be performed")
+	ErrDuplicateAttribute = errors.New("duplicate attribute")
 )
 
 type ErrUnimplemented struct {
@@ -68,14 +69,14 @@ type Node interface {
 
 // docnode is responsible for handling the basic tree-ish operations
 type docnode struct {
-	name     string
-	etype    ElementType
+	name       string
+	etype      ElementType
 	firstChild Node
 	lastChild  Node
-	parent   Node
-	next     Node
-	prev     Node
-	doc      *Document
+	parent     Node
+	next       Node
+	prev       Node
+	doc        *Document
 }
 
 // node represents a node in a XML tree.
@@ -83,7 +84,7 @@ type node struct {
 	docnode
 	private    interface{}
 	content    []byte
-	properties []*Attribute
+	properties *Attribute
 	ns         *Namespace
 	nsDefs     []*Namespace
 }
@@ -147,6 +148,7 @@ const (
 	CommentNode
 	DTDNode
 	NamespaceDeclNode
+	DocumentNode = 9
 )
 
 type NamespaceContainer interface {

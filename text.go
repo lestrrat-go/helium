@@ -4,6 +4,7 @@ func newText(b []byte) *Text {
 	t := Text{}
 	t.etype = TextNode
 	t.content = b
+	t.name = "(text)"
 	return &t
 }
 

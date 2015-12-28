@@ -1,6 +1,9 @@
 package helium
 
-import "github.com/lestrrat/helium/internal/stack"
+import (
+	"github.com/lestrrat/helium/internal/debug"
+	"github.com/lestrrat/helium/internal/stack"
+)
 
 type nodeStack struct {
 	stack.SimpleStack
@@ -50,13 +53,15 @@ func newNodeStack() nodeStack {
 }
 
 func (s *nodeStack) Push(e *Element) {
+	debug.Printf("----> Pushing element %s (%p)", e.Name(), e)
 	s.SimpleStack.Push(stack.AnyItem(e))
 }
 
 func (s *nodeStack) Pop() *Element {
 	defer s.SimpleStack.Pop()
-	if item := s.PeekOne(); item != nil {
-		return item
+	if e := s.PeekOne(); e != nil {
+		debug.Printf("----> Pop element %s (%p)", e.Name(), e)
+		return e
 	}
 	return nil
 }

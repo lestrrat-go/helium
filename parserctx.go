@@ -70,8 +70,10 @@ func (ctx *parserCtx) release() error {
 }
 
 func (ctx *parserCtx) init(p *Parser, b []byte) error {
-	ctx.encoding = encNone
+	ctx.detectedEncoding = encUTF8
+	ctx.encoding = ""
 	ctx.nbread = 0
+	ctx.keepBlanks = true
 	ctx.cursor = strcursor.New(b)
 	ctx.instate = psStart
 	ctx.userData = ctx // circular dep?!
@@ -128,7 +130,7 @@ var (
 func (ctx *parserCtx) detectEncoding() (string, error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START detectEncoding")
-		defer g.IRelease("END   detecteEncoding")
+		defer g.IRelease("END detecteEncoding")
 	}
 
 	if ctx.curLen() >= 4 {
@@ -269,13 +271,17 @@ func isBlankCh(c rune) bool {
 }
 
 func (ctx *parserCtx) switchEncoding() error {
-	if ctx.encoding == "" {
-		ctx.encoding = "utf-8"
+	encName := ctx.encoding
+	if encName == "" {
+		encName = ctx.detectedEncoding
+		if encName == "" {
+			encName = "utf8"
+		}
 	}
 
-	enc := encoding.Load(ctx.encoding)
+	enc := encoding.Load(encName)
 	if enc == nil {
-		return errors.New("encoding '" + ctx.encoding + "' not supported")
+		return errors.New("encoding '" + encName + "' not supported")
 	}
 
 	// We're going to have to replace the cursor
@@ -307,7 +313,7 @@ func (ctx *parserCtx) parseDocument() error {
 	// see if we can find the preliminary encoding
 	if ctx.encoding == "" && ctx.curHasChars(4) {
 		if enc, err := ctx.detectEncoding(); err == nil {
-			ctx.encoding = enc
+			ctx.detectedEncoding = enc
 		}
 	}
 
@@ -1014,6 +1020,7 @@ func (ctx *parserCtx) parseXMLDecl() error {
 	// we *may* have encoding decl
 	v, err = ctx.parseEncodingDecl()
 	if err == nil {
+		// ctx.encoding contains the explicit encoding specified
 		ctx.encoding = v
 
 		// if the encoding decl is found, then we *could* have
@@ -3365,7 +3372,7 @@ func (ctx *parserCtx) parseBalancedChunkInternal(chunk string) (Node, error) {
 	defer newctx.release()
 
 	if ctx.doc == nil {
-		ctx.doc = NewDocument("1.0", "utf8", StandaloneExplicitNo)
+		ctx.doc = NewDocument("1.0", "", StandaloneExplicitNo)
 	}
 
 	// save the document's children

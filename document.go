@@ -7,7 +7,7 @@ import (
 )
 
 func CreateDocument() *Document {
-	return NewDocument("1.0", "UTF-8", StandaloneImplicitNo)
+	return NewDocument("1.0", "", StandaloneImplicitNo)
 }
 
 func NewDocument(version, encoding string, standalone DocumentStandaloneType) *Document {
@@ -17,6 +17,8 @@ func NewDocument(version, encoding string, standalone DocumentStandaloneType) *D
 		version:    version,
 	}
 	doc.intSubset, _ = doc.CreateDTD()
+	doc.etype = DocumentNode
+	doc.name = "(document)"
 	return doc
 }
 
@@ -41,7 +43,13 @@ func (d *Document) AddContent(b []byte) error {
 }
 
 func (d *Document) Encoding() string {
-	return d.encoding
+	// In order to differentiate between a document with explicit
+	// encoding in the XML declaration and one without, the XML dump
+	// routine must check for d.encoding == "", and not Encoding()
+	if enc := d.encoding; enc != "" {
+		return d.encoding
+	}
+	return "utf8"
 }
 
 func (d *Document) Standalone() DocumentStandaloneType {

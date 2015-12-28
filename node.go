@@ -3,6 +3,8 @@ package helium
 import (
 	"bytes"
 	"errors"
+
+	"github.com/lestrrat/helium/internal/debug"
 )
 
 func (n *docnode) setFirstChild(cur Node) {
@@ -26,6 +28,7 @@ func (n docnode) Content() []byte {
 }
 
 func addContent(n Node, b []byte) error {
+	debug.Printf("-----> addContent to %s (%p)", n.Name(), n)
 	t := newText(b)
 	return n.AddChild(t)
 }
@@ -69,11 +72,14 @@ func (n docnode) LastChild() Node {
 }
 
 func addChild(n Node, cur Node) error {
+debug.Printf("addChild n = %p", n)
 	l := n.LastChild()
 	if l == nil { // No children, set firstChild to cur
+		debug.Printf("------------> node %s has no children", n.Name())
 		n.setFirstChild(cur)
 		n.setLastChild(cur)
 	} else {
+		debug.Printf("------------> node %s has children", n.Name())
 		l.SetNextSibling(cur)
 		cur.SetPrevSibling(l)
 		n.setLastChild(cur)

@@ -7,14 +7,41 @@ func newElement(name string) *Element {
 	return &e
 }
 
-func (n *Element) SetAttribute(name, value string) {
+func (n *Element) SetAttribute(name, value string) error {
 	attr := newAttribute(name, value, nil)
 
-	n.properties = append(n.properties, attr)
+	if n.properties == nil {
+		n.properties = attr
+	} else {
+		for p := n.properties; p != nil; {
+			if p.Name() == name {
+				return ErrDuplicateAttribute
+			}
+			if next := n.NextSibling(); next != nil {
+				p = next.(*Attribute)
+			} else {
+				p = nil
+			}
+		}
+
+		n.properties.AddChild(attr)
+	}
+
+	return nil
 }
 
 func (n Element) Attributes() []*Attribute {
-	return n.properties
+	attrs := []*Attribute{}
+	for attr := n.properties; attr != nil; {
+		attrs = append(attrs, attr)
+		if a := attr.NextSibling(); a != nil {
+			attr = a.(*Attribute)
+		} else {
+			attr = nil
+		}
+	}
+
+	return attrs
 }
 
 func (n *Element) AddChild(cur Node) error {
