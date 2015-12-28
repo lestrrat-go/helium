@@ -142,13 +142,28 @@ type ElementType int
 
 const (
 	ElementNode ElementType = iota + 1
-	ProcessingInstructionNode
-	NamespaceNode
+	AttributeNode
 	TextNode
+	CDATASectionNode
+	EntityRefNode
+	EntityNode
+	ProcessingInstructionNode
 	CommentNode
+	DocumentNode
+	DocumentTypeNode
+	DocumentFragNode
+	NotationNode
+	HTMLDocumentNode
 	DTDNode
+	ElementDeclNode
+	AttributeDeclNode
+	EntityDeclNode
 	NamespaceDeclNode
-	DocumentNode = 9
+	XIncludeStartNode
+	XIncludeEndNode
+
+	// This doesn't exist in libxml2. Do we need it?
+	NamespaceNode
 )
 
 type NamespaceContainer interface {

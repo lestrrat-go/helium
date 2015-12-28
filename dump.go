@@ -1,10 +1,6 @@
 package helium
 
-import (
-	"io"
-
-	"github.com/lestrrat/helium/internal/debug"
-)
+import "io"
 
 type Dumper struct{}
 
@@ -61,12 +57,16 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		return nil
 		//	case DTDNode:
 		//		err = d.DumpDTD(out, n.(*DTD))
+	case EntityRefNode:
+		io.WriteString(out, "&")
+		io.WriteString(out, n.Name())
+		io.WriteString(out, ";")
+		return nil
 	case TextNode:
 		c := n.Content()
 		if string(c) == XMLTextNoEnc {
 			panic("unimplemented")
 		} else {
-			debug.Printf("Text node! -> '%s'", c)
 			err = d.writeString(out, string(c))
 		}
 		return nil // no recursing down
@@ -102,7 +102,6 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 			return nil
 		}
 	}
-
 
 	io.WriteString(out, ">")
 

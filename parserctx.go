@@ -24,9 +24,13 @@ func (ctx *parserCtx) pushNode(e *Element) {
 		g := debug.IPrintf("START pushNode (%s)", e.Name())
 		defer g.IRelease("END pushNode")
 
-		debug.Printf("  -> before push")
-		for i, elem := range ctx.nodeTab.SimpleStack {
-			debug.Printf("  %003d: %s", i, elem.(*Element).Name())
+		if l := ctx.nodeTab.Len(); l <= 0 {
+			debug.Printf("  (EMPTY node stack)")
+		} else {
+			for i, elem := range ctx.nodeTab.SimpleStack {
+				e := elem.(*Element)
+				debug.Printf("  %003d: %s (%p)", i, e.Name(), e)
+			}
 		}
 	}
 	ctx.nodeTab.Push(e)
@@ -50,9 +54,13 @@ func (ctx *parserCtx) popNode() (elem *Element) {
 		}()
 
 		defer func() {
-			debug.Printf("  -> after pop")
-			for i, elem := range ctx.nodeTab.SimpleStack {
-				debug.Printf("  %003d: %s", i, elem.(*Element).Name())
+			if l := ctx.nodeTab.Len(); l <= 0 {
+				debug.Printf("  (EMPTY node stack)")
+			} else {
+				for i, elem := range ctx.nodeTab.SimpleStack {
+					e := elem.(*Element)
+					debug.Printf("  %003d: %s (%p)", i, e.Name(), e)
+				}
 			}
 		}()
 	}
@@ -701,18 +709,18 @@ func (ctx *parserCtx) parseStartTag() error {
 			elemName = local
 		}
 
-if debug.Enabled {
-debug.Printf("-------> %s", elemName)
-}
+		if debug.Enabled {
+			debug.Printf("-------> %s", elemName)
+		}
 		defaults, ok := ctx.lookupAttributeDefault(elemName)
 		if ok {
 			for _, attr := range defaults {
 				attrs = append(attrs, attr)
 			}
 		}
-if debug.Enabled {
-debug.Dump(attrs)
-}
+		if debug.Enabled {
+			debug.Dump(attrs)
+		}
 	}
 
 	/*

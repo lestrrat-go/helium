@@ -20,6 +20,11 @@ func NewTreeBuilder() *TreeBuilder {
 }
 
 func (t *TreeBuilder) SetDocumentLocator(ctxif sax.Context, loc sax.DocumentLocator) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.SetDocumentLocator")
+		defer g.IRelease("END tree.SetDocumentLocator")
+	}
+
 	return nil
 }
 
@@ -47,6 +52,11 @@ func (t *TreeBuilder) EndDocument(ctxif sax.Context) error {
 }
 
 func (t *TreeBuilder) ProcessingInstruction(ctxif sax.Context, target, data string) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.ProcessingInstruction")
+		defer g.IRelease("END tree.ProcessingInstruction")
+	}
+
 	//	ctx := ctxif.(*parserCtx)
 	pi, err := t.doc.CreatePI(target, data)
 	if err != nil {
@@ -73,11 +83,14 @@ func (t *TreeBuilder) ProcessingInstruction(ctxif sax.Context, target, data stri
 func (t *TreeBuilder) StartElement(ctxif sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 	//	ctx := ctxif.(*parserCtx)
 	if debug.Enabled {
+		var name string
 		if prefix != "" {
-			debug.Printf("tree.StartElement: %s:%s", prefix, localname)
+			name = prefix + ":" + localname
 		} else {
-			debug.Printf("tree.StartElement: %s", localname)
+			name = localname
 		}
+		g := debug.IPrintf("START tree.StartElement: %s", name)
+		defer g.IRelease("END tree.StartElement")
 	}
 	e, err := t.doc.CreateElement(localname)
 	if err != nil {
@@ -107,8 +120,7 @@ func (t *TreeBuilder) EndElement(ctxif sax.Context, localname, prefix, uri strin
 			debug.Printf("tree.EndElement: %s", localname)
 		}
 	}
-	ctx := ctxif.(*parserCtx)
-	debug.Printf("t.node (%p) -----> t.node = ctx.peekNode (%p)",t.node, ctx.peekNode())
+
 	if e, ok := t.node.(*Element); ok && e.LocalName() == localname && e.Prefix() == prefix && e.URI() == uri {
 		t.node = t.node.Parent()
 	}
@@ -129,10 +141,18 @@ func (t *TreeBuilder) Characters(ctxif sax.Context, data []byte) error {
 }
 
 func (t *TreeBuilder) StartCDATA(_ sax.Context) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.StartCDATA")
+		defer g.IRelease("END tree.StartCDATA")
+	}
 	return nil
 }
 
 func (t *TreeBuilder) EndCDATA(_ sax.Context) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.EndCDATA")
+		defer g.IRelease("END tree.EndCDATA")
+	}
 	return nil
 }
 
@@ -163,6 +183,11 @@ func (t *TreeBuilder) ExternalSubset(ctxif sax.Context, name, eid, uri string) e
 }
 
 func (t *TreeBuilder) GetEntity(ctxif sax.Context, name string) (*Entity, error) {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.GetEntity")
+		defer g.IRelease("END tree.GetEntity")
+	}
+
 	ctx := ctxif.(*parserCtx)
 
 	if ctx.inSubset == 0 {
@@ -227,6 +252,11 @@ func (t *TreeBuilder) GetEntity(ctxif sax.Context, name string) (*Entity, error)
 }
 
 func (t *TreeBuilder) GetParameterEntity(ctxif sax.Context, name string) (sax.Entity, error) {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.GetParameterEntity")
+		defer g.IRelease("END tree.GetParameterEntity")
+	}
+
 	if ctxif == nil {
 		return nil, ErrInvalidParserCtx
 	}
@@ -245,25 +275,55 @@ func (t *TreeBuilder) GetParameterEntity(ctxif sax.Context, name string) (sax.En
 }
 
 func (t *TreeBuilder) AttributeDecl(ctx sax.Context, eName string, aName string, typ int, deftype int, value sax.AttributeDefaultValue, enum sax.Enumeration) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.AttributeDecl")
+		defer g.IRelease("END tree.AttributeDecl")
+	}
+
 	return nil
 }
 
 func (t *TreeBuilder) ElementDecl(ctx sax.Context, name string, typ int, content sax.ElementContent) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.ElementDecl")
+		defer g.IRelease("END tree.ElementDecl")
+	}
+
 	return nil
 }
 
 func (t *TreeBuilder) EndDTD(ctx sax.Context) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.EndDTD")
+		defer g.IRelease("END tree.EndDTD")
+	}
+
 	return nil
 }
 
 func (t *TreeBuilder) EndEntity(ctx sax.Context, name string) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.EndEntity")
+		defer g.IRelease("END tree.EndEntity")
+	}
+
 	return nil
 }
 func (t *TreeBuilder) ExternalEntityDecl(ctx sax.Context, name string, publicID string, systemID string) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.ExternalEntityDecl")
+		defer g.IRelease("END tree.ExternalEntityDecl")
+	}
+
 	return nil
 }
 
 func (t *TreeBuilder) GetExternalSubset(ctx sax.Context, name string, baseURI string) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.GetExternalSubset")
+		defer g.IRelease("END tree.GetExternalSubset")
+	}
+
 	return nil
 }
 
@@ -281,18 +341,38 @@ func (t *TreeBuilder) IgnorableWhitespace(ctxif sax.Context, content []byte) err
 }
 
 func (t *TreeBuilder) InternalEntityDecl(ctx sax.Context, name string, value string) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.InternalEntityDecl")
+		defer g.IRelease("END tree.InternalEntityDecl")
+	}
+
 	return nil
 }
 
 func (t *TreeBuilder) NotationDecl(ctx sax.Context, name string, publicID string, systemID string) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.NotationDecl")
+		defer g.IRelease("END tree.NotationDecl")
+	}
+
 	return nil
 }
 
 func (t *TreeBuilder) Reference(ctx sax.Context, name string) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.Reference '%s'", name)
+		defer g.IRelease("END tree.Reference")
+	}
+
 	return nil
 }
 
 func (t *TreeBuilder) ResolveEntity(ctx sax.Context, name string, publicID string, baseURI string, systemID string) (sax.Entity, error) {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.ResolveEntity '%s'", name)
+		defer g.IRelease("END tree.ResolveEntity")
+	}
+
 	ent, ok := t.entities[name]
 	if !ok {
 		return nil, errors.New("entity not found")
@@ -301,14 +381,29 @@ func (t *TreeBuilder) ResolveEntity(ctx sax.Context, name string, publicID strin
 }
 
 func (t *TreeBuilder) SkippedEntity(ctx sax.Context, name string) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.SkippedEntity '%s'", name)
+		defer g.IRelease("END tree.SkippedEntity")
+	}
+
 	return nil
 }
 
 func (t *TreeBuilder) StartDTD(ctx sax.Context, name string, publicID string, systemID string) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.StartDTD")
+		defer g.IRelease("END tree.StartDTD")
+	}
+
 	return nil
 }
 
 func (t *TreeBuilder) StartEntity(ctx sax.Context, name string) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.StartEntity")
+		defer g.IRelease("END tree.StartEntity")
+	}
+
 	return nil
 }
 
