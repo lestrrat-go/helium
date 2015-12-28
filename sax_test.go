@@ -192,12 +192,19 @@ func TestSAXEvents(t *testing.T) {
 			continue
 		}
 
+		goldenfn := strings.Replace(fn, ".xml", ".sax2", -1)
+		if _, err := os.Stat(goldenfn); err != nil {
+			continue
+		}
+
+		t.Logf("Testing %s...", fn)
+
 		in, err := ioutil.ReadFile(fn)
 		if !assert.NoError(t, err, "ioutil.ReadFile should succeed") {
 			return
 		}
 
-		golden, err := ioutil.ReadFile(strings.Replace(fn, ".xml", ".sax2", -1))
+		golden, err := ioutil.ReadFile(goldenfn)
 		if !assert.NoError(t, err, "ioutil.ReadFile should succeed") {
 			return
 		}

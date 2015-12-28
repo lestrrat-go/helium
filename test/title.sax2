@@ -1,0 +1,6 @@
+SAX.SetDocumentLocator()
+SAX.StartDocument()
+SAX.StartElementNS(title, NULL, NULL, 0, 0, 0)
+SAX.Characters(my title, 8)
+SAX.EndElementNS(title, NULL, NULL)
+SAX.EndDocument()
