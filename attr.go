@@ -16,6 +16,10 @@ func (n *Attribute) AddContent(b []byte) error {
 	return addContent(n, b)
 }
 
+func (n *Attribute) AddSibling(cur Node) error {
+	return addSibling(n, cur)
+}
+
 func (n *Attribute) Replace(cur Node) {
 	replaceNode(n, cur)
 }

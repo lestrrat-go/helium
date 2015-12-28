@@ -24,6 +24,11 @@ func (n *Comment) AddContent(b []byte) error {
 	return nil
 }
 
+// AddSibling adds a new sibling to the end of the sibling nodes.
+func (n *Comment) AddSibling(cur Node) error {
+	return addSibling(n, cur)
+}
+
 func (n Comment) Content() []byte {
 	return n.content
 }

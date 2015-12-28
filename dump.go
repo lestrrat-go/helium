@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"unicode/utf8"
+
+	"github.com/lestrrat/helium/internal/debug"
 )
 
 var (
@@ -34,6 +36,7 @@ func isInCharacterRange(r rune) (inrange bool) {
 // of the plain text data s. If escapeNewline is true, newline
 // characters will be escaped.
 func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
+debug.Printf("escapeText = '%s'", s)
 	var esc []byte
 	last := 0
 	for i := 0; i < len(s); {
@@ -50,8 +53,6 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
 			esc = esc_lt
 		case '>':
 			esc = esc_gt
-		case '\t':
-			esc = esc_tab
 		case '\n':
 			if !escapeNewline {
 				continue
@@ -60,7 +61,7 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
 		case '\r':
 			esc = esc_cr
 		default:
-			if !(0x20 <= r && r < 0x80) {
+			if !(r == '\t' || (0x20 <= r && r < 0x80)) {
 				if r < 0xE0 {
 					esc = []byte(fmt.Sprintf("&#x%X;", r))
 					break
@@ -97,6 +98,11 @@ func (d *Dumper) writeString(out io.Writer, content string) error {
 }
 
 func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START Dumper.DumpDoc")
+		defer g.IRelease("END Dumper.DumpDoc")
+	}
+
 	if err := d.DumpNode(out, doc); err != nil {
 		return err
 	}
@@ -111,6 +117,11 @@ func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 }
 
 func (d *Dumper) dumpDocContent(out io.Writer, n Node) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START Dumper.dumpDocContent")
+		defer g.IRelease("END Dumper.dumpDocContent")
+	}
+
 	doc := n.(*Document)
 	io.WriteString(out, `<?xml version="`)
 	version := doc.Version()
@@ -134,6 +145,11 @@ func (d *Dumper) dumpDocContent(out io.Writer, n Node) error {
 }
 
 func (d *Dumper) DumpNode(out io.Writer, n Node) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START Dumper.DumpNode '%s'", n.Name())
+		defer g.IRelease("END Dumper.DumpNode")
+	}
+
 	var err error
 	switch n.Type() {
 	case DocumentNode:
@@ -143,6 +159,11 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		return nil
 		//	case DTDNode:
 		//		err = d.DumpDTD(out, n.(*DTD))
+	case CommentNode:
+		io.WriteString(out, "<!--")
+		out.Write(n.Content())
+		io.WriteString(out, "-->\n") // <-- this newline is not right, but I'm punting the problem for now
+		return nil
 	case EntityRefNode:
 		io.WriteString(out, "&")
 		io.WriteString(out, n.Name())
@@ -178,11 +199,11 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 			io.WriteString(out, " "+attr.Name()+`="`)
 			escapeText(out, []byte(attr.Value()), true)
 			io.WriteString(out, `"`)
-			if a := attr.NextSibling(); a != nil {
-				attr = a.(*Attribute)
-			} else {
-				attr = nil
+			a := attr.NextSibling()
+			if a == nil {
+				break
 			}
+			attr = a.(*Attribute)
 		}
 
 		if child := e.FirstChild(); child == nil {

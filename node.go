@@ -5,6 +5,26 @@ import (
 	"errors"
 )
 
+// because docnode contains links to other nodes, one tends to want to make
+// methods for docnodes that cover the rest of the Node types. However,
+// this cannot be done because the way Go does method reuse -- by delegation.
+// For example, a method that changes the parent's point to the current node would
+// be bad:
+//
+// func (n *docnode) MakeMeYourParent(cur Node) {
+//   cur.SetParent(n)
+// }
+//
+// Wait, you just passed a pointer to the docnode, not the container node
+// such as Element, Text, Comment, etc.
+//
+// So basically the deal is: if you need methods that may mutate the current
+// node AND the operand node, DO NOT implement it for docnode. That includes
+// things like AddSibling, or AddChild.
+//
+// On the other hand, methods like setFirstChild and setLastChild are OK,
+// as they only mutate the current (docnode)'s pointers.
+
 func (n *docnode) setFirstChild(cur Node) {
 	n.firstChild = cur
 }
@@ -74,9 +94,13 @@ func addChild(n Node, cur Node) error {
 		n.setFirstChild(cur)
 		n.setLastChild(cur)
 	} else {
-		l.SetNextSibling(cur)
-		cur.SetPrevSibling(l)
-		n.setLastChild(cur)
+		if err := l.AddSibling(cur); err != nil {
+			return err
+		}
+		// If the last child was a text node, keep the old LastChild
+		if cur.Type() != TextNode || l.Type() != TextNode {
+			n.setLastChild(cur)
+		}
 	}
 	cur.SetParent(n)
 	return nil
@@ -91,6 +115,19 @@ func (n docnode) NextSibling() Node {
 
 func (n docnode) PrevSibling() Node {
 	return n.prev
+}
+
+func addSibling(n, cur Node) error {
+	for n != nil {
+		if n.NextSibling() == nil {
+			n.SetNextSibling(cur)
+			cur.SetPrevSibling(n)
+			return nil
+		}
+		n = n.NextSibling()
+	}
+
+	return errors.New("cannot add sibling to nil node")
 }
 
 func (n *docnode) SetPrevSibling(cur Node) {

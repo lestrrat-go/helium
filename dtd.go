@@ -31,6 +31,10 @@ func (dtd *DTD) AddContent(b []byte) error {
 	return addContent(dtd, b)
 }
 
+func (dtd *DTD) AddSibling(cur Node) error {
+	return addSibling(dtd, cur)
+}
+
 func (dtd *DTD) Replace(cur Node) {
 	replaceNode(dtd, cur)
 }

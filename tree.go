@@ -67,15 +67,10 @@ func (t *TreeBuilder) ProcessingInstruction(ctxif sax.Context, target, data stri
 	t.doc.IntSubset().AddChild(pi)
 	if t.node == nil {
 		t.doc.AddChild(pi)
-		return nil
-	}
-
-	// what's the "current" node?
-	if t.node.Type() == ElementNode {
+	} else if t.node.Type() == ElementNode {
 		t.node.AddChild(pi)
 	} else {
-//		t.node.AddSibling(pi)
-		panic("unimplemented")
+		t.node.AddSibling(pi)
 	}
 	return nil
 }
@@ -122,7 +117,15 @@ func (t *TreeBuilder) EndElement(ctxif sax.Context, localname, prefix, uri strin
 	}
 
 	if e, ok := t.node.(*Element); ok && e.LocalName() == localname && e.Prefix() == prefix && e.URI() == uri {
-		t.node = t.node.Parent()
+		parent := t.node.Parent()
+		if debug.Enabled {
+			pname := "(null)"
+			if parent != nil {
+				pname = parent.Name()
+			}
+			debug.Printf("Setting t.node to '%s' (t.node.Parent())", pname)
+		}
+		t.node = parent
 	}
 	return nil
 }
@@ -135,6 +138,10 @@ func (t *TreeBuilder) Characters(ctxif sax.Context, data []byte) error {
 
 	if t.node == nil {
 		return errors.New("text content placed in wrong location")
+	}
+
+	if debug.Enabled {
+		debug.Printf("Calling AddContent() on '%s' node", t.node.Name())
 	}
 
 	return t.node.AddContent(data)
@@ -162,7 +169,7 @@ func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
 		defer g.IRelease("END tree.Comment")
 	}
 
-	if t.node == nil {
+	if t.doc == nil {
 		return errors.New("comment placed in wrong location")
 	}
 
@@ -170,7 +177,14 @@ func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
 	if err != nil {
 		return err
 	}
-	t.node.AddChild(e)
+
+	if t.node == nil {
+		t.doc.AddChild(e)
+	} else if t.node.Type() == ElementNode {
+		t.node.AddChild(e)
+	} else {
+		t.node.AddSibling(e)
+	}
 	return nil
 }
 

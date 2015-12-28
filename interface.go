@@ -53,6 +53,7 @@ type Node interface {
 
 	AddChild(Node) error
 	AddContent([]byte) error
+	AddSibling(Node) error
 	Content() []byte
 	FirstChild() Node
 	LastChild() Node

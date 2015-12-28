@@ -42,6 +42,10 @@ func (d *Document) AddContent(b []byte) error {
 	return addContent(d, b)
 }
 
+func (d *Document) AddSibling(n Node) error {
+	return errors.New("can't add sibling to a document")
+}
+
 func (d *Document) Encoding() string {
 	// In order to differentiate between a document with explicit
 	// encoding in the XML declaration and one without, the XML dump

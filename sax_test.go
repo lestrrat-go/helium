@@ -220,7 +220,7 @@ func TestSAXEvents(t *testing.T) {
 		}
 
 		if !assert.Equal(t, string(golden), string(out.Bytes()), "SAX event streams should match (file = %s)", fn) {
-			errout, err := os.OpenFile(fn+".err", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0700)
+			errout, err := os.OpenFile(fn+".err", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 			if err != nil {
 				t.Logf("Failed to file to save output: %s", err)
 				return

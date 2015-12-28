@@ -65,7 +65,14 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 		}
 
 		if !assert.Equal(t, string(golden), str, "roundtrip works") {
-			t.Logf("%s", str)
+			errout, err := os.OpenFile(fn+".err", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+			if err != nil {
+				t.Logf("Failed to file to save output: %s", err)
+				return
+			}
+			defer errout.Close()
+
+			errout.WriteString(str)
 			return
 		}
 	}

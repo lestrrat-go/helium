@@ -12,6 +12,10 @@ func (p *ProcessingInstruction) AddContent(b []byte) error {
 	return addContent(p, b)
 }
 
+func (p *ProcessingInstruction) AddSibling(cur Node) error {
+	return addSibling(p, cur)
+}
+
 func (p *ProcessingInstruction) Replace(cur Node) {
 	replaceNode(p, cur)
 }

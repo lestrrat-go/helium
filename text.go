@@ -1,5 +1,7 @@
 package helium
 
+import "github.com/lestrrat/helium/internal/debug"
+
 func newText(b []byte) *Text {
 	t := Text{}
 	t.etype = TextNode
@@ -21,8 +23,21 @@ func (n *Text) AddChild(cur Node) error {
 }
 
 func (n *Text) AddContent(b []byte) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START Text.AddContent '%s' (%p)", b, n)
+		defer func() {
+			g.IRelease("END Text.AddContent '%s'", n.content)
+		}()
+	}
 	n.content = append(n.content, b...)
 	return nil
+}
+
+func (n *Text) AddSibling(cur Node) error {
+	if cur.Type() == TextNode {
+		return n.AddContent(cur.Content())
+	}
+	return addSibling(n, cur)
 }
 
 func (n Text) Content() []byte {

@@ -1,5 +1,12 @@
 package helium
 
+import (
+	"bytes"
+	"io"
+
+	"github.com/lestrrat/helium/internal/debug"
+)
+
 func newElement(name string) *Element {
 	e := Element{}
 	e.name = name
@@ -7,24 +14,65 @@ func newElement(name string) *Element {
 	return &e
 }
 
+func (n Element) XMLString() (string, error) {
+	out := bytes.Buffer{}
+	if err := n.XML(&out); err != nil {
+		return "", err
+	}
+	return out.String(), nil
+}
+
+func (n *Element) XML(out io.Writer) error {
+	return (&Dumper{}).DumpNode(out, n)
+}
+
+// AddChild adds a new child node to the end of the children nodes.
+func (n *Element) AddChild(cur Node) error {
+	return addChild(n, cur)
+}
+
+func (n *Element) AddContent(b []byte) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START Element.AddContent '%s'", b)
+		defer g.IRelease("END Element.AddContent")
+	}
+	return addContent(n, b)
+}
+
+// AddSibling adds a new sibling to the end of the sibling nodes.
+func (n *Element) AddSibling(cur Node) error {
+	return addSibling(n, cur)
+}
+
+func (n *Element) Replace(cur Node) {
+	replaceNode(n, cur)
+}
 func (n *Element) SetAttribute(name, value string) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START Element.SetAttribute '%s' (%s)", name, value)
+		defer g.IRelease("END Element.SetAttribute")
+	}
 	attr := newAttribute(name, value, nil)
 
-	if n.properties == nil {
+	p := n.properties
+	if p == nil {
 		n.properties = attr
 	} else {
-		for p := n.properties; p != nil; {
+		last := p
+		for p != nil {
 			if p.Name() == name {
 				return ErrDuplicateAttribute
 			}
 			if next := n.NextSibling(); next != nil {
 				p = next.(*Attribute)
+				last = p
 			} else {
 				p = nil
 			}
 		}
 
-		n.properties.AddChild(attr)
+		last.SetNextSibling(attr)
+		attr.SetPrevSibling(last)
 	}
 
 	return nil
@@ -42,16 +90,4 @@ func (n Element) Attributes() []*Attribute {
 	}
 
 	return attrs
-}
-
-func (n *Element) AddChild(cur Node) error {
-	return addChild(n, cur)
-}
-
-func (n *Element) AddContent(b []byte) error {
-	return addContent(n, b)
-}
-
-func (n *Element) Replace(cur Node) {
-	replaceNode(n, cur)
 }
