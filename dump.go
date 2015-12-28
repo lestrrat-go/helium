@@ -1,6 +1,92 @@
 package helium
 
-import "io"
+import (
+	"fmt"
+	"io"
+	"unicode/utf8"
+)
+
+var (
+	esc_quot = []byte("&#34;") // shorter than "&quot;"
+	esc_apos = []byte("&#39;") // shorter than "&apos;"
+	esc_amp  = []byte("&amp;")
+	esc_lt   = []byte("&lt;")
+	esc_gt   = []byte("&gt;")
+	esc_tab  = []byte("&#09;")
+	esc_nl   = []byte("&#10;")
+	esc_cr   = []byte("&#xD;")
+	esc_fffd = []byte("\uFFFD") // Unicode replacement character
+)
+
+// Decide whether the given rune is in the XML Character Range, per
+// the Char production of http://www.xml.com/axml/testaxml.htm,
+// Section 2.2 Characters.
+func isInCharacterRange(r rune) (inrange bool) {
+	return r == 0x09 ||
+		r == 0x0A ||
+		r == 0x0D ||
+		r >= 0x20 && r <= 0xDF77 ||
+		r >= 0xE000 && r <= 0xFFFD ||
+		r >= 0x10000 && r <= 0x10FFFF
+}
+
+// escapeText writes to w the properly escaped XML equivalent
+// of the plain text data s. If escapeNewline is true, newline
+// characters will be escaped.
+func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
+	var esc []byte
+	last := 0
+	for i := 0; i < len(s); {
+		r, width := utf8.DecodeRune(s[i:])
+		i += width
+		switch r {
+		case '"':
+			esc = esc_quot
+		case '\'':
+			esc = esc_apos
+		case '&':
+			esc = esc_amp
+		case '<':
+			esc = esc_lt
+		case '>':
+			esc = esc_gt
+		case '\t':
+			esc = esc_tab
+		case '\n':
+			if !escapeNewline {
+				continue
+			}
+			esc = esc_nl
+		case '\r':
+			esc = esc_cr
+		default:
+			if !(0x20 <= r && r < 0x80) {
+				if r < 0xE0 {
+					esc = []byte(fmt.Sprintf("&#x%X;", r))
+					break
+				}
+			}
+			if !isInCharacterRange(r) || (r == 0xFFFD && width == 1) {
+				esc = esc_fffd
+				break
+			}
+			continue
+		}
+
+		if _, err := w.Write(s[last : i-width]); err != nil {
+			return err
+		}
+		if _, err := w.Write(esc); err != nil {
+			return err
+		}
+		last = i
+	}
+
+	if _, err := w.Write(s[last:]); err != nil {
+		return err
+	}
+	return nil
+}
 
 type Dumper struct{}
 
@@ -67,7 +153,7 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		if string(c) == XMLTextNoEnc {
 			panic("unimplemented")
 		} else {
-			err = d.writeString(out, string(c))
+			escapeText(out, c, false)
 		}
 		return nil // no recursing down
 	}
@@ -89,7 +175,9 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 
 	if e, ok := n.(*Element); ok {
 		for attr := e.properties; attr != nil; {
-			io.WriteString(out, " "+attr.Name()+`="`+attr.Value()+`"`)
+			io.WriteString(out, " "+attr.Name()+`="`)
+			escapeText(out, []byte(attr.Value()), true)
+			io.WriteString(out, `"`)
 			if a := attr.NextSibling(); a != nil {
 				attr = a.(*Attribute)
 			} else {
