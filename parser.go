@@ -9,7 +9,7 @@ func Parse(b []byte) (*Document, error) {
 
 func NewParser() *Parser {
 	return &Parser{
-		sax: &TreeBuilder{},
+		sax: NewTreeBuilder(),
 	}
 }
 

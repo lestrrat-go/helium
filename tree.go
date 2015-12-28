@@ -10,6 +10,13 @@ import (
 type TreeBuilder struct {
 	doc  *Document
 	node Node
+	entities map[string]Entity
+}
+
+func NewTreeBuilder() *TreeBuilder {
+	return &TreeBuilder{
+		entities: make(map[string]Entity),
+	}
 }
 
 func (t *TreeBuilder) SetDocumentLocator(ctxif sax.Context, loc sax.DocumentLocator) error {
@@ -286,7 +293,11 @@ func (t *TreeBuilder) Reference(ctx sax.Context, name string) error {
 }
 
 func (t *TreeBuilder) ResolveEntity(ctx sax.Context, name string, publicID string, baseURI string, systemID string) (sax.Entity, error) {
-	return nil, errors.New("entity not found")
+	ent, ok := t.entities[name]
+	if !ok {
+		return nil, errors.New("entity not found")
+	}
+	return &ent, nil
 }
 
 func (t *TreeBuilder) SkippedEntity(ctx sax.Context, name string) error {
@@ -302,6 +313,13 @@ func (t *TreeBuilder) StartEntity(ctx sax.Context, name string) error {
 }
 
 func (t *TreeBuilder) UnparsedEntityDecl(ctx sax.Context, name string, typ int, publicID string, systemID string, notation string) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START tree.UnparsedEntityDecl '%s'", name)
+		defer g.IRelease("END tree.UnparsedEntityDecl")
+	}
+
+	ent := newEntity(name, EntityType(typ), publicID, systemID, notation, "")
+	t.entities[name] = *ent
 	return nil
 }
 

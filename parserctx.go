@@ -4174,7 +4174,7 @@ func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
 			return loadedEnt.(*Entity), nil
 		}
 
-		if ctx == ctx.userData {
+		if loadedEnt == nil && ctx == ctx.userData {
 			panic("unimplemented")
 			//			ent = ctx.resolveEntity(name)
 		}
