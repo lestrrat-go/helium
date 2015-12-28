@@ -7,6 +7,22 @@
 
 This is an exercise in rewriting libxml2 in its entirety in Go.
 
+# SYNOPSIS
+
+```go
+import "github.com/lestrrat/helium"
+
+func main() {
+    doc, err := helium.Parse(`.... xml string ....`)
+    if err != nil {
+        panic("failed to parse XML: " + err.Error())
+    }
+
+    // Dump this XML
+    doc.XML(os.Stdout)
+}
+```
+
 # Get it
 
 ```
@@ -33,3 +49,7 @@ go test -tags debug
 # Important Notice:
 
 I'm only going to work on this full-throttle until Jan 4, 2016. After that, I need to get back to life for a while again. Help in forms for PRs is better, but if you insiste, Amazon gift cards to lestrrat at gmail is appreciated ;)
+
+# What's with the naming?
+
+I thought it sounded cool. Not set in stone, so we may change it later.
