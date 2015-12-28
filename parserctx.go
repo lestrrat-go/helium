@@ -135,10 +135,12 @@ var (
 	patMaybeXMLDecl = []byte{0x3C, 0x3F, 0x78, 0x6D}
 )
 
-func (ctx *parserCtx) detectEncoding() (string, error) {
+func (ctx *parserCtx) detectEncoding() (encoding string, err error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START detectEncoding")
-		defer g.IRelease("END detecteEncoding")
+		defer func() {
+			g.IRelease("END detecteEncoding '%s'", encoding)
+		}()
 	}
 
 	if ctx.curLen() >= 4 {
@@ -147,33 +149,39 @@ func (ctx *parserCtx) detectEncoding() (string, error) {
 		}
 		b := ctx.curPeekBytes(4)
 		if bytes.Equal(b, patUCS4BE) {
-			ctx.curAdvance(4) // BOM, consume
-			return encUCS4BE, nil
+			ctx.curAdvanceBytes(4) // BOM, consume
+			encoding = encUCS4BE
+			return
 		}
 
 		if bytes.Equal(b, patUCS4LE) {
-			ctx.curAdvance(4) // BOM, consume
-			return encUCS4LE, nil
+			ctx.curAdvanceBytes(4) // BOM, consume
+			encoding = encUCS4LE
+			return
 		}
 
 		if bytes.Equal(b, patUCS42143) {
-			ctx.curAdvance(4) // BOM, consume
-			return encUCS42143, nil
+			ctx.curAdvanceBytes(4) // BOM, consume
+			encoding = encUCS42143
+			return
 		}
 
 		if bytes.Equal(b, patUCS43412) {
-			ctx.curAdvance(4) // BOM, consume
-			return encUCS43412, nil
+			ctx.curAdvanceBytes(4) // BOM, consume
+			encoding = encUCS43412
+			return
 		}
 
 		if bytes.Equal(b, patEBCDIC) {
 			// no BOM
-			return encEBCDIC, nil
+			encoding = encEBCDIC
+			return
 		}
 
 		if bytes.Equal(b, patMaybeXMLDecl) {
 			// no BOM, "<?xm"
-			return encUTF8, nil
+			encoding = encUTF8
+			return
 		}
 
 		/*
@@ -182,13 +190,15 @@ func (ctx *parserCtx) detectEncoding() (string, error) {
 		 * UTF-16BE encodings.
 		 */
 		if bytes.Equal(b, patUTF16LE4B) {
-			ctx.curAdvance(4)
-			return encUTF16LE, nil
+			ctx.curAdvanceBytes(4)
+			encoding = encUTF16LE
+			return
 		}
 
 		if bytes.Equal(b, patUTF16BE4B) {
-			ctx.curAdvance(4)
-			return encUTF16BE, nil
+			ctx.curAdvanceBytes(4)
+			encoding = encUTF16BE
+			return
 		}
 	}
 
@@ -198,8 +208,9 @@ func (ctx *parserCtx) detectEncoding() (string, error) {
 		}
 		b := ctx.curPeekBytes(3)
 		if bytes.Equal(b, patUTF8) {
-			ctx.curAdvance(3)
-			return encUTF8, nil
+			ctx.curAdvanceBytes(3)
+			encoding = encUTF8
+			return
 		}
 	}
 
@@ -209,15 +220,19 @@ func (ctx *parserCtx) detectEncoding() (string, error) {
 		}
 		b := ctx.curPeekBytes(2)
 		if bytes.Equal(b, patUTF16BE2B) {
-			ctx.curAdvance(2)
-			return encUTF16BE, nil
+			ctx.curAdvanceBytes(2)
+			encoding = encUTF16BE
+			return
 		}
 		if bytes.Equal(b, patUTF16LE2B) {
-			ctx.curAdvance(2)
-			return encUTF16LE, nil
+			ctx.curAdvanceBytes(2)
+			encoding = encUTF16LE
+			return
 		}
 	}
-	return encNone, errors.New("failed to detect encoding")
+	encoding = encNone
+	err = errors.New("failed to detect encoding")
+	return
 }
 
 func (ctx *parserCtx) curHasChars(n int) bool {
@@ -231,6 +246,11 @@ func (ctx *parserCtx) curDone() bool {
 func (ctx *parserCtx) curAdvance(n int) {
 	defer ctx.markEOF()
 	ctx.cursor.Advance(n)
+}
+
+func (ctx *parserCtx) curAdvanceBytes(n int) {
+	defer ctx.markEOF()
+	ctx.cursor.AdvanceBytes(n)
 }
 
 func (ctx *parserCtx) curPeekBytes(n int) []byte {

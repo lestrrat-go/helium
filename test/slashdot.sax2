@@ -1,0 +1,517 @@
+SAX.SetDocumentLocator()
+SAX.StartDocument()
+SAX.StartElementNS(ultramode, NULL, NULL, 0, 0, 0)
+SAX.IgnorableWhitespace(
+ , 2)
+SAX.StartElementNS(story, NULL, NULL, 0, 0, 0)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(title, NULL, NULL, 0, 0, 0)
+SAX.Characters(100 Mbit/s on Fibre to the hom, 31)
+SAX.EndElementNS(title, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(url, NULL, NULL, 0, 0, 0)
+SAX.Characters(http://slashdot.org/articles/9, 51)
+SAX.EndElementNS(url, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(time, NULL, NULL, 0, 0, 0)
+SAX.Characters(1999-06-06 14:39:59, 19)
+SAX.EndElementNS(time, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(author, NULL, NULL, 0, 0, 0)
+SAX.Characters(CmdrTaco, 8)
+SAX.EndElementNS(author, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(department, NULL, NULL, 0, 0, 0)
+SAX.Characters(wouldn't-it-be-nice, 19)
+SAX.EndElementNS(department, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(topic, NULL, NULL, 0, 0, 0)
+SAX.Characters(internet, 8)
+SAX.EndElementNS(topic, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(comments, NULL, NULL, 0, 0, 0)
+SAX.Characters(20, 2)
+SAX.EndElementNS(comments, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(section, NULL, NULL, 0, 0, 0)
+SAX.Characters(articles, 8)
+SAX.EndElementNS(section, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(image, NULL, NULL, 0, 0, 0)
+SAX.Characters(topicinternet.jpg, 17)
+SAX.EndElementNS(image, NULL, NULL)
+SAX.IgnorableWhitespace(
+  , 3)
+SAX.EndElementNS(story, NULL, NULL)
+SAX.IgnorableWhitespace(
+ , 2)
+SAX.StartElementNS(story, NULL, NULL, 0, 0, 0)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(title, NULL, NULL, 0, 0, 0)
+SAX.Characters(Gimp 1.2 Preview, 16)
+SAX.EndElementNS(title, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(url, NULL, NULL, 0, 0, 0)
+SAX.Characters(http://slashdot.org/articles/9, 51)
+SAX.EndElementNS(url, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(time, NULL, NULL, 0, 0, 0)
+SAX.Characters(1999-06-06 14:38:40, 19)
+SAX.EndElementNS(time, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(author, NULL, NULL, 0, 0, 0)
+SAX.Characters(CmdrTaco, 8)
+SAX.EndElementNS(author, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(department, NULL, NULL, 0, 0, 0)
+SAX.Characters(stuff-to-read, 13)
+SAX.EndElementNS(department, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(topic, NULL, NULL, 0, 0, 0)
+SAX.Characters(gimp, 4)
+SAX.EndElementNS(topic, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(comments, NULL, NULL, 0, 0, 0)
+SAX.Characters(12, 2)
+SAX.EndElementNS(comments, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(section, NULL, NULL, 0, 0, 0)
+SAX.Characters(articles, 8)
+SAX.EndElementNS(section, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(image, NULL, NULL, 0, 0, 0)
+SAX.Characters(topicgimp.gif, 13)
+SAX.EndElementNS(image, NULL, NULL)
+SAX.IgnorableWhitespace(
+  , 3)
+SAX.EndElementNS(story, NULL, NULL)
+SAX.IgnorableWhitespace(
+ , 2)
+SAX.StartElementNS(story, NULL, NULL, 0, 0, 0)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(title, NULL, NULL, 0, 0, 0)
+SAX.Characters(Sony's AIBO robot Sold Out, 26)
+SAX.EndElementNS(title, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(url, NULL, NULL, 0, 0, 0)
+SAX.Characters(http://slashdot.org/articles/9, 51)
+SAX.EndElementNS(url, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(time, NULL, NULL, 0, 0, 0)
+SAX.Characters(1999-06-06 14:32:51, 19)
+SAX.EndElementNS(time, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(author, NULL, NULL, 0, 0, 0)
+SAX.Characters(CmdrTaco, 8)
+SAX.EndElementNS(author, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(department, NULL, NULL, 0, 0, 0)
+SAX.Characters(stuff-to-see, 12)
+SAX.EndElementNS(department, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(topic, NULL, NULL, 0, 0, 0)
+SAX.Characters(tech, 4)
+SAX.EndElementNS(topic, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(comments, NULL, NULL, 0, 0, 0)
+SAX.Characters(10, 2)
+SAX.EndElementNS(comments, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(section, NULL, NULL, 0, 0, 0)
+SAX.Characters(articles, 8)
+SAX.EndElementNS(section, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(image, NULL, NULL, 0, 0, 0)
+SAX.Characters(topictech2.jpg, 14)
+SAX.EndElementNS(image, NULL, NULL)
+SAX.IgnorableWhitespace(
+  , 3)
+SAX.EndElementNS(story, NULL, NULL)
+SAX.IgnorableWhitespace(
+ , 2)
+SAX.StartElementNS(story, NULL, NULL, 0, 0, 0)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(title, NULL, NULL, 0, 0, 0)
+SAX.Characters(Ask Slashdot: Another Word for, 40)
+SAX.EndElementNS(title, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(url, NULL, NULL, 0, 0, 0)
+SAX.Characters(http://slashdot.org/askslashdo, 54)
+SAX.EndElementNS(url, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(time, NULL, NULL, 0, 0, 0)
+SAX.Characters(1999-06-05 20:00:00, 19)
+SAX.EndElementNS(time, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(author, NULL, NULL, 0, 0, 0)
+SAX.Characters(Cliff, 5)
+SAX.EndElementNS(author, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(department, NULL, NULL, 0, 0, 0)
+SAX.Characters(hacker-vs-cracker, 17)
+SAX.EndElementNS(department, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(topic, NULL, NULL, 0, 0, 0)
+SAX.Characters(news, 4)
+SAX.EndElementNS(topic, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(comments, NULL, NULL, 0, 0, 0)
+SAX.Characters(385, 3)
+SAX.EndElementNS(comments, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(section, NULL, NULL, 0, 0, 0)
+SAX.Characters(askslashdot, 11)
+SAX.EndElementNS(section, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(image, NULL, NULL, 0, 0, 0)
+SAX.Characters(topicnews.gif, 13)
+SAX.EndElementNS(image, NULL, NULL)
+SAX.IgnorableWhitespace(
+  , 3)
+SAX.EndElementNS(story, NULL, NULL)
+SAX.IgnorableWhitespace(
+ , 2)
+SAX.StartElementNS(story, NULL, NULL, 0, 0, 0)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(title, NULL, NULL, 0, 0, 0)
+SAX.Characters(Corel Linux FAQ, 15)
+SAX.EndElementNS(title, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(url, NULL, NULL, 0, 0, 0)
+SAX.Characters(http://slashdot.org/articles/9, 51)
+SAX.EndElementNS(url, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(time, NULL, NULL, 0, 0, 0)
+SAX.Characters(1999-06-05 18:42:06, 19)
+SAX.EndElementNS(time, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(author, NULL, NULL, 0, 0, 0)
+SAX.Characters(CmdrTaco, 8)
+SAX.EndElementNS(author, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(department, NULL, NULL, 0, 0, 0)
+SAX.Characters(stuff-to-read, 13)
+SAX.EndElementNS(department, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(topic, NULL, NULL, 0, 0, 0)
+SAX.Characters(corel, 5)
+SAX.EndElementNS(topic, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(comments, NULL, NULL, 0, 0, 0)
+SAX.Characters(164, 3)
+SAX.EndElementNS(comments, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(section, NULL, NULL, 0, 0, 0)
+SAX.Characters(articles, 8)
+SAX.EndElementNS(section, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(image, NULL, NULL, 0, 0, 0)
+SAX.Characters(topiccorel.gif, 14)
+SAX.EndElementNS(image, NULL, NULL)
+SAX.IgnorableWhitespace(
+  , 3)
+SAX.EndElementNS(story, NULL, NULL)
+SAX.IgnorableWhitespace(
+ , 2)
+SAX.StartElementNS(story, NULL, NULL, 0, 0, 0)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(title, NULL, NULL, 0, 0, 0)
+SAX.Characters(Upside downsides MP3.COM., 25)
+SAX.EndElementNS(title, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(url, NULL, NULL, 0, 0, 0)
+SAX.Characters(http://slashdot.org/articles/9, 51)
+SAX.EndElementNS(url, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(time, NULL, NULL, 0, 0, 0)
+SAX.Characters(1999-06-05 15:56:45, 19)
+SAX.EndElementNS(time, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(author, NULL, NULL, 0, 0, 0)
+SAX.Characters(CmdrTaco, 8)
+SAX.EndElementNS(author, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(department, NULL, NULL, 0, 0, 0)
+SAX.Characters(stuff-to-think-about, 20)
+SAX.EndElementNS(department, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(topic, NULL, NULL, 0, 0, 0)
+SAX.Characters(music, 5)
+SAX.EndElementNS(topic, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(comments, NULL, NULL, 0, 0, 0)
+SAX.Characters(48, 2)
+SAX.EndElementNS(comments, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(section, NULL, NULL, 0, 0, 0)
+SAX.Characters(articles, 8)
+SAX.EndElementNS(section, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(image, NULL, NULL, 0, 0, 0)
+SAX.Characters(topicmusic.gif, 14)
+SAX.EndElementNS(image, NULL, NULL)
+SAX.IgnorableWhitespace(
+  , 3)
+SAX.EndElementNS(story, NULL, NULL)
+SAX.IgnorableWhitespace(
+ , 2)
+SAX.StartElementNS(story, NULL, NULL, 0, 0, 0)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(title, NULL, NULL, 0, 0, 0)
+SAX.Characters(2 Terabits of Bandwidth, 23)
+SAX.EndElementNS(title, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(url, NULL, NULL, 0, 0, 0)
+SAX.Characters(http://slashdot.org/articles/9, 51)
+SAX.EndElementNS(url, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(time, NULL, NULL, 0, 0, 0)
+SAX.Characters(1999-06-05 15:53:43, 19)
+SAX.EndElementNS(time, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(author, NULL, NULL, 0, 0, 0)
+SAX.Characters(CmdrTaco, 8)
+SAX.EndElementNS(author, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(department, NULL, NULL, 0, 0, 0)
+SAX.Characters(faster-porn, 11)
+SAX.EndElementNS(department, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(topic, NULL, NULL, 0, 0, 0)
+SAX.Characters(internet, 8)
+SAX.EndElementNS(topic, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(comments, NULL, NULL, 0, 0, 0)
+SAX.Characters(66, 2)
+SAX.EndElementNS(comments, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(section, NULL, NULL, 0, 0, 0)
+SAX.Characters(articles, 8)
+SAX.EndElementNS(section, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(image, NULL, NULL, 0, 0, 0)
+SAX.Characters(topicinternet.jpg, 17)
+SAX.EndElementNS(image, NULL, NULL)
+SAX.IgnorableWhitespace(
+  , 3)
+SAX.EndElementNS(story, NULL, NULL)
+SAX.IgnorableWhitespace(
+ , 2)
+SAX.StartElementNS(story, NULL, NULL, 0, 0, 0)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(title, NULL, NULL, 0, 0, 0)
+SAX.Characters(Suppression of cold fusion res, 36)
+SAX.EndElementNS(title, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(url, NULL, NULL, 0, 0, 0)
+SAX.Characters(http://slashdot.org/articles/9, 51)
+SAX.EndElementNS(url, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(time, NULL, NULL, 0, 0, 0)
+SAX.Characters(1999-06-04 23:12:29, 19)
+SAX.EndElementNS(time, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(author, NULL, NULL, 0, 0, 0)
+SAX.Characters(Hemos, 5)
+SAX.EndElementNS(author, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(department, NULL, NULL, 0, 0, 0)
+SAX.Characters(possibly-probably, 17)
+SAX.EndElementNS(department, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(topic, NULL, NULL, 0, 0, 0)
+SAX.Characters(science, 7)
+SAX.EndElementNS(topic, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(comments, NULL, NULL, 0, 0, 0)
+SAX.Characters(217, 3)
+SAX.EndElementNS(comments, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(section, NULL, NULL, 0, 0, 0)
+SAX.Characters(articles, 8)
+SAX.EndElementNS(section, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(image, NULL, NULL, 0, 0, 0)
+SAX.Characters(topicscience.gif, 16)
+SAX.EndElementNS(image, NULL, NULL)
+SAX.IgnorableWhitespace(
+  , 3)
+SAX.EndElementNS(story, NULL, NULL)
+SAX.IgnorableWhitespace(
+ , 2)
+SAX.StartElementNS(story, NULL, NULL, 0, 0, 0)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(title, NULL, NULL, 0, 0, 0)
+SAX.Characters(California Gov. Halts Wage Inf, 36)
+SAX.EndElementNS(title, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(url, NULL, NULL, 0, 0, 0)
+SAX.Characters(http://slashdot.org/articles/9, 50)
+SAX.EndElementNS(url, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(time, NULL, NULL, 0, 0, 0)
+SAX.Characters(1999-06-04 23:05:34, 19)
+SAX.EndElementNS(time, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(author, NULL, NULL, 0, 0, 0)
+SAX.Characters(Hemos, 5)
+SAX.EndElementNS(author, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(department, NULL, NULL, 0, 0, 0)
+SAX.Characters(woo-hoo!, 8)
+SAX.EndElementNS(department, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(topic, NULL, NULL, 0, 0, 0)
+SAX.Characters(usa, 3)
+SAX.EndElementNS(topic, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(comments, NULL, NULL, 0, 0, 0)
+SAX.Characters(16, 2)
+SAX.EndElementNS(comments, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(section, NULL, NULL, 0, 0, 0)
+SAX.Characters(articles, 8)
+SAX.EndElementNS(section, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(image, NULL, NULL, 0, 0, 0)
+SAX.Characters(topicus.gif, 11)
+SAX.EndElementNS(image, NULL, NULL)
+SAX.IgnorableWhitespace(
+  , 3)
+SAX.EndElementNS(story, NULL, NULL)
+SAX.IgnorableWhitespace(
+ , 2)
+SAX.StartElementNS(story, NULL, NULL, 0, 0, 0)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(title, NULL, NULL, 0, 0, 0)
+SAX.Characters(Red Hat Announces IPO, 21)
+SAX.EndElementNS(title, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(url, NULL, NULL, 0, 0, 0)
+SAX.Characters(http://slashdot.org/articles/9, 51)
+SAX.EndElementNS(url, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(time, NULL, NULL, 0, 0, 0)
+SAX.Characters(1999-06-04 19:30:18, 19)
+SAX.EndElementNS(time, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(author, NULL, NULL, 0, 0, 0)
+SAX.Characters(Justin, 6)
+SAX.EndElementNS(author, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(department, NULL, NULL, 0, 0, 0)
+SAX.Characters(details-sketchy, 15)
+SAX.EndElementNS(department, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(topic, NULL, NULL, 0, 0, 0)
+SAX.Characters(redhat, 6)
+SAX.EndElementNS(topic, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(comments, NULL, NULL, 0, 0, 0)
+SAX.Characters(155, 3)
+SAX.EndElementNS(comments, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(section, NULL, NULL, 0, 0, 0)
+SAX.Characters(articles, 8)
+SAX.EndElementNS(section, NULL, NULL)
+SAX.IgnorableWhitespace(
+    , 5)
+SAX.StartElementNS(image, NULL, NULL, 0, 0, 0)
+SAX.Characters(topicredhat.gif, 15)
+SAX.EndElementNS(image, NULL, NULL)
+SAX.IgnorableWhitespace(
+  , 3)
+SAX.EndElementNS(story, NULL, NULL)
+SAX.IgnorableWhitespace(
+, 1)
+SAX.EndElementNS(ultramode, NULL, NULL)
+SAX.EndDocument()
