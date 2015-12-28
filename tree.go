@@ -10,13 +10,10 @@ import (
 type TreeBuilder struct {
 	doc  *Document
 	node Node
-	entities map[string]Entity
 }
 
 func NewTreeBuilder() *TreeBuilder {
-	return &TreeBuilder{
-		entities: make(map[string]Entity),
-	}
+	return &TreeBuilder{}
 }
 
 func (t *TreeBuilder) SetDocumentLocator(ctxif sax.Context, loc sax.DocumentLocator) error {
@@ -205,8 +202,7 @@ func (t *TreeBuilder) GetEntity(ctxif sax.Context, name string) (*Entity, error)
 	ctx := ctxif.(*parserCtx)
 
 	if ctx.inSubset == 0 {
-		ret := resolvePredefinedEntity(name)
-		if ret != nil {
+		if ret, err := resolvePredefinedEntity(name); err != nil {
 			return ret, nil
 		}
 	}
@@ -387,11 +383,10 @@ func (t *TreeBuilder) ResolveEntity(ctx sax.Context, name string, publicID strin
 		defer g.IRelease("END tree.ResolveEntity")
 	}
 
-	ent, ok := t.entities[name]
-	if !ok {
-		return nil, errors.New("entity not found")
+	if ent, ok := t.doc.GetEntity(name); ok {
+		return ent, nil
 	}
-	return &ent, nil
+	return nil, errors.New("entity not found")
 }
 
 func (t *TreeBuilder) SkippedEntity(ctx sax.Context, name string) error {
@@ -427,8 +422,9 @@ func (t *TreeBuilder) UnparsedEntityDecl(ctx sax.Context, name string, typ int, 
 		defer g.IRelease("END tree.UnparsedEntityDecl")
 	}
 
-	ent := newEntity(name, EntityType(typ), publicID, systemID, notation, "")
-	t.entities[name] = *ent
+	// Because the parser needs to know about entities even in cases where
+	// there isn't a SAX handler registered, call to Document.RegisterEntry
+	// is done in the main parser -- and not here.
 	return nil
 }
 

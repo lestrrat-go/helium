@@ -143,6 +143,14 @@ func (d *Document) CreateElementContent(name string, etype ElementContentType) (
 	return e, nil
 }
 
+func (d *Document) RegisterEntity(name string, typ EntityType, publicID, systemID, content string) (*Entity, error) {
+	if d.intSubset == nil {
+		return nil, errors.New("document without internal subset")
+	}
+
+	return d.intSubset.RegisterEntity(name, typ, publicID, systemID, content)
+}
+
 func (d *Document) GetEntity(name string) (*Entity, bool) {
 	if ints := d.intSubset; ints != nil {
 		return ints.LookupEntity(name)

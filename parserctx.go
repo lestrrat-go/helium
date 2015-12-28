@@ -889,7 +889,7 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (val
 					}
 				} else if ctx.replaceEntities {
 					var rep string
-					rep, err = ctx.decodeEntities(ent.content, SubstituteRef)
+					rep, err = ctx.decodeEntities(ent.Content(), SubstituteRef)
 					if err != nil {
 						err = ctx.error(err)
 						return
@@ -2512,7 +2512,7 @@ func (ctx *parserCtx) parseEntityValueInternal(qch rune) (string, error) {
  *
  * Returns A newly allocated string with the substitution done.
  */
-func (ctx *parserCtx) decodeEntities(s string, what SubstitutionType) (ret string, err error) {
+func (ctx *parserCtx) decodeEntities(s []byte, what SubstitutionType) (ret string, err error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START decodeEntitites (%s)", s)
 		defer func() {
@@ -2523,14 +2523,14 @@ func (ctx *parserCtx) decodeEntities(s string, what SubstitutionType) (ret strin
 	return
 }
 
-func (ctx *parserCtx) decodeEntitiesInternal(s string, what SubstitutionType, depth int) (string, error) {
+func (ctx *parserCtx) decodeEntitiesInternal(s []byte, what SubstitutionType, depth int) (string, error) {
 	if depth > 40 {
 		return "", errors.New("entity loop (depth > 40)")
 	}
 
 	out := bytes.Buffer{}
 	for len(s) > 0 {
-		if strings.HasPrefix(s, "&#") {
+		if bytes.HasPrefix(s, []byte{'&', '#'}) {
 			val, width, err := parseStringCharRef(s)
 			if err != nil {
 				return "", err
@@ -2547,11 +2547,11 @@ func (ctx *parserCtx) decodeEntitiesInternal(s string, what SubstitutionType, de
 			}
 
 			if EntityType(ent.EntityType()) == InternalPredefinedEntity {
-				if ent.Content() == "" {
+				if len(ent.Content()) == 0 {
 					return "", errors.New("predefined entity has no content")
 				}
-				out.WriteString(ent.Content())
-			} else if ent.Content() != "" {
+				out.Write(ent.Content())
+			} else if len(ent.Content()) != 0 {
 				rep, err := ctx.decodeEntitiesInternal(ent.Content(), what, depth+1)
 				if err != nil {
 					return "", err
@@ -2602,7 +2602,7 @@ func (ctx *parserCtx) parseEntityValue() (string, string, error) {
 		return ctx.parseEntityValueInternal(qch)
 	})
 
-	val, err := ctx.decodeEntities(literal, SubstitutePERef)
+	val, err := ctx.decodeEntities([]byte(literal), SubstitutePERef)
 	if err != nil {
 		return "", "", ctx.error(err)
 	}
@@ -2669,6 +2669,9 @@ func (ctx *parserCtx) parseEntityDecl() error {
 	var uri string
 
 	if isParameter {
+		if debug.Enabled {
+			debug.Printf("Found parameter entity")
+		}
 		if c := ctx.curPeek(1); c == '"' || c == '\'' {
 			literal, value, err = ctx.parseEntityValue()
 			if err == nil {
@@ -2708,6 +2711,9 @@ func (ctx *parserCtx) parseEntityDecl() error {
 			}
 		}
 	} else {
+		if debug.Enabled {
+			debug.Printf("Found entity")
+		}
 		if c := ctx.curPeek(1); c == '"' || c == '\'' {
 			literal, value, err = ctx.parseEntityValue()
 			if err == nil {
@@ -2736,7 +2742,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 					return ctx.error(errors.New("err uri fragment"))
 				} else {
 					if s := ctx.sax; s != nil {
-						switch err := s.UnparsedEntityDecl(ctx.userData, name, int(ExternalParameterEntity), literal, uri, ""); err {
+						switch err := s.UnparsedEntityDecl(ctx.userData, name, int(ExternalGeneralParsedEntity), literal, uri, ""); err {
 						case nil, sax.ErrHandlerUnspecified:
 							// no op
 						default:
@@ -3390,13 +3396,13 @@ func (ctx *parserCtx) parseEpilogue() error {
 	return nil
 }
 
-func (ctx *parserCtx) parseBalancedChunkInternal(chunk string) (Node, error) {
+func (ctx *parserCtx) parseBalancedChunkInternal(chunk []byte) (Node, error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseBalancedChunkInternal")
 		defer g.IRelease("END parseBalancedChunkInternal")
 	}
 	newctx := &parserCtx{}
-	newctx.init(nil, []byte(chunk))
+	newctx.init(nil, chunk)
 	defer newctx.release()
 
 	if ctx.doc == nil {
@@ -3491,18 +3497,16 @@ func (ctx *parserCtx) parseReference() (string, error) {
 				return "", ctx.error(err)
 			}
 		}
-		return ent.Content(), nil
+		return string(ent.Content()), nil
 	}
 
 	// temprorary fix
-	if ent != nil {
 		ctx.parseBalancedChunkInternal(ent.Content())
 
 		if s := ctx.sax; s != nil {
 			s.Reference(ctx.userData, ent.Name())
 		}
-		return ent.Content(), nil
-	}
+		return string(ent.Content()), nil
 	/*
 	   	if s := ctx.sax; s != nil {
 	   debug.Printf("ResolveEntry %#v", ent)
@@ -3814,7 +3818,7 @@ func (ctx *parserCtx) parseReference() (string, error) {
 }
 
 // returns rune, byteCount, error
-func parseStringCharRef(s string) (r rune, width int, err error) {
+func parseStringCharRef(s []byte) (r rune, width int, err error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseStringCharRef")
 		defer g.IRelease("END parseStringCharRef")
@@ -3823,7 +3827,7 @@ func parseStringCharRef(s string) (r rune, width int, err error) {
 	var val int32
 	r = utf8.RuneError
 	width = 0
-	if strings.HasPrefix(s, "&#x") {
+	if bytes.HasPrefix(s, []byte{'&', '#', 'x'}) {
 		width += 3
 		s = s[3:]
 
@@ -3852,7 +3856,7 @@ func parseStringCharRef(s string) (r rune, width int, err error) {
 			s = s[1:]
 			width++
 		}
-	} else if strings.HasPrefix(s, "&#") {
+	} else if bytes.HasPrefix(s, []byte{'&', '#'}) {
 		width += 2
 		s = s[2:]
 		for c := s[0]; c != ';'; c = s[0] {
@@ -3885,9 +3889,9 @@ func parseStringCharRef(s string) (r rune, width int, err error) {
 	return
 }
 
-func parseStringName(s string) (string, int, error) {
+func parseStringName(s []byte) (string, int, error) {
 	i := 0
-	r, w := utf8.DecodeRuneInString(s)
+	r, w := utf8.DecodeRune(s)
 	if r == utf8.RuneError {
 		return "", 0, errors.New("rune decode failed")
 	}
@@ -3902,7 +3906,7 @@ func parseStringName(s string) (string, int, error) {
 	s = s[w:]
 
 	for {
-		r, w = utf8.DecodeRuneInString(s)
+		r, w = utf8.DecodeRune(s)
 		if r == utf8.RuneError {
 			return "", 0, errors.New("rune decode failed")
 		}
@@ -3918,7 +3922,7 @@ func parseStringName(s string) (string, int, error) {
 	return out.String(), i, nil
 }
 
-func (ctx *parserCtx) parseStringEntityRef(s string) (sax.Entity, int, error) {
+func (ctx *parserCtx) parseStringEntityRef(s []byte) (sax.Entity, int, error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseStringEntityRef ('%s')", s)
 		defer g.IRelease("END parseStringEntityRef")
@@ -4006,7 +4010,7 @@ func (ctx *parserCtx) parseStringEntityRef(s string) (sax.Entity, int, error) {
 	 * indirectly in an attribute value (other than "&lt;") must
 	 * not contain a <.
 	 */
-	if ctx.instate == psAttributeValue && loadedEnt.Content() != "" && EntityType(loadedEnt.EntityType()) == InternalPredefinedEntity && strings.IndexByte(loadedEnt.Content(), '<') > -1 {
+	if ctx.instate == psAttributeValue && len(loadedEnt.Content()) > 0 && EntityType(loadedEnt.EntityType()) == InternalPredefinedEntity && bytes.IndexByte(loadedEnt.Content(), '<') > -1 {
 		return nil, 0, fmt.Errorf("'<' in entity '%s' is not allowed in attribute values", name)
 	}
 
@@ -4022,7 +4026,7 @@ func (ctx *parserCtx) parseStringEntityRef(s string) (sax.Entity, int, error) {
 	return loadedEnt, i, nil
 }
 
-func (ctx *parserCtx) parseStringPEReference(s string) (sax.Entity, int, error) {
+func (ctx *parserCtx) parseStringPEReference(s []byte) (sax.Entity, int, error) {
 	if len(s) == 0 || s[0] != '%' {
 		return nil, 0, errors.New("invalid PEreference")
 	}
@@ -4172,26 +4176,31 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseEntityRef")
-		defer g.IRelease("END   parseEntityRef")
+		defer func() {
+			g.IRelease("END parseEntityRef ent = %#v", ent)
+		}()
 	}
 
 	if ctx.curPeek(1) != '&' {
-		return nil, ctx.error(ErrAmpersandRequired)
+		err = ctx.error(ErrAmpersandRequired)
+		return
 	}
 	ctx.curAdvance(1)
 
 	name, err := ctx.parseName()
 	if err != nil {
-		return nil, ctx.error(ErrNameRequired)
+		err = ctx.error(ErrNameRequired)
+		return
 	}
 
 	if ctx.curPeek(1) != ';' {
-		return nil, ctx.error(ErrSemicolonRequired)
+		err = ctx.error(ErrSemicolonRequired)
+		return
 	}
 	ctx.curAdvance(1)
 
-	if ent = resolvePredefinedEntity(name); ent != nil {
-		return ent, nil
+	if ent, err = resolvePredefinedEntity(name); err == nil {
+		return
 	}
 
 	if s := ctx.sax; s != nil {
@@ -4199,7 +4208,8 @@ func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
 		var loadedEnt sax.Entity
 		loadedEnt, err = s.ResolveEntity(ctx.userData, name, "", "", "")
 		if err == nil {
-			return loadedEnt.(*Entity), nil
+			ent = loadedEnt.(*Entity)
+			return
 		}
 
 		if loadedEnt == nil && ctx == ctx.userData {
@@ -4273,6 +4283,10 @@ func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
 		case ExternalParameterEntity:
 			return nil, ctx.error(errors.New("attempt to reference the parameter entity"))
 		}
+	}
+
+	if ent == nil {
+		panic("at the end of parseEntityRef, ent == nil")
 	}
 	// [ WFC: No Recursion ]
 	// A parsed entity must not contain a recursive reference

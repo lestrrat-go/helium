@@ -1,19 +1,21 @@
 package helium
 
-func resolvePredefinedEntity(name string) *Entity {
+import "errors"
+
+func resolvePredefinedEntity(name string) (*Entity, error) {
 	switch name {
 	case "lt":
-		return EntityLT
+		return EntityLT, nil
 	case "gt":
-		return EntityGT
+		return EntityGT, nil
 	case "amp":
-		return EntityAmpersand
+		return EntityAmpersand, nil
 	case "apos":
-		return EntityApostrophe
+		return EntityApostrophe, nil
 	case "quot":
-		return EntityQuote
+		return EntityQuote, nil
 	default:
-		return nil
+		return nil, errors.New("entity not found")
 	}
 }
 
@@ -37,6 +39,22 @@ func (e *Entity) EntityType() int {
 	return int(e.entityType)
 }
 
-func (e *Entity) Content() string {
-	return e.content
+func (e *Entity) Content() []byte {
+	return []byte(e.content)
+}
+
+func (e *Entity) AddChild(cur Node) error {
+	return addChild(e, cur)
+}
+
+func (e *Entity) AddContent(b []byte) error {
+	return addContent(e, b)
+}
+
+func (e *Entity) AddSibling(cur Node) error {
+	return addSibling(e, cur)
+}
+
+func (e *Entity) Replace(cur Node) {
+	replaceNode(e, cur)
 }

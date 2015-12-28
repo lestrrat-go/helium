@@ -119,8 +119,8 @@ type ProcessingInstruction struct {
 type DTD struct {
 	docnode
 	elements   map[string]ElementDecl
-	entities   map[string]Entity
-	pentities  map[string]Entity
+	entities   map[string]*Entity
+	pentities  map[string]*Entity
 	externalID string
 	systemID   string
 }

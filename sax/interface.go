@@ -8,7 +8,7 @@ type Entity interface {
 	Name() string
 	SetOrig(string)
 	EntityType() int
-	Content() string
+	Content() []byte
 }
 
 // Context is always passed as the first argument to SAX handlers.
