@@ -15,6 +15,23 @@ import (
 	"github.com/lestrrat/helium/sax"
 )
 
+type attrData struct {
+	localname string
+	prefix string
+	value string
+	isDefault bool
+}
+func (a attrData) LocalName() string { return a.localname }
+func (a attrData) Prefix() string { return a.prefix }
+func (a attrData) Value() string { return a.value }
+func (a attrData) IsDefault() bool { return a.isDefault }
+func (a attrData) Name() string {
+	if a.prefix != "" {
+		return a.prefix + ":" + a.localname
+	}
+	return a.localname
+}
+
 func (ctx *parserCtx) pushNS(prefix, uri string) {
 	ctx.nsTab.Push(prefix, uri)
 }
@@ -719,11 +736,12 @@ func (ctx *parserCtx) parseStartTag() error {
 			continue
 		}
 
-		var attr *Attribute
-		if aprefix != "" {
-			attr = newAttribute(aprefix+":"+attname, attvalue, nil)
-		} else {
-			attr = newAttribute(attname, attvalue, nil)
+		// Due to various reasons, we cannot create a real Attribute object
+		// here. So we create a simple holder for attribute data
+		attr := &attrData{
+			localname: attname,
+			prefix: aprefix,
+			value: attvalue,
 		}
 
 		attrs = append(attrs, attr)
@@ -3236,7 +3254,12 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 	}
 
 	uri := ctx.lookupNamespace(prefix)
-	attr := newAttribute(local, defaultValue, newNamespace(prefix, uri))
+	attr, err := ctx.doc.CreateAttribute(local, defaultValue, newNamespace(prefix, uri))
+	if err != nil {
+		// XXX Unhandled?!
+		return
+	}
+
 	attr.SetDefault(true)
 	m[attrName] = attr
 

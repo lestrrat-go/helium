@@ -52,7 +52,10 @@ func (n *Element) SetAttribute(name, value string) error {
 		g := debug.IPrintf("START Element.SetAttribute '%s' (%s)", name, value)
 		defer g.IRelease("END Element.SetAttribute")
 	}
-	attr := newAttribute(name, value, nil)
+	attr, err := n.doc.CreateAttribute(name, value, nil)
+	if err != nil {
+		return err
+	}
 
 	p := n.properties
 	if p == nil {

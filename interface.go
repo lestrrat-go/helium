@@ -171,6 +171,10 @@ type NamespaceContainer interface {
 	Namespaces() []*Namespace
 }
 
+type EntityReference struct {
+	node
+}
+
 // Text is just a wrapper around Node so that we can
 // use Go-ish type checks
 type Text struct {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"strings"
 )
 
 func CreateDocument() *Document {
@@ -98,8 +99,56 @@ func (d *Document) SetDocumentElement(root Node) error {
 	return nil
 }
 
-func (d *Document) CreateAttribute(name, value string) (*Attribute, error) {
-	return nil, nil
+func (d *Document) CreateReference(name string) (*EntityReference, error) {
+	if name == "" {
+		return nil, errors.New("empty name")
+	}
+
+	n := &EntityReference{}
+	n.etype = EntityRefNode
+	n.doc = d
+	if name[0] == '&' {
+		// the name should be everything but '&' and ';'
+		if name[len(name)-1] == ';' {
+			n.name = name[1:len(name)-1]
+		} else {
+			n.name = name[1:]
+		}
+	} else {
+		n.name = name
+	}
+
+	ent, ok := d.GetEntity(n.name)
+	if ok {
+		n.content = []byte(ent.content)
+        // Original code says:
+        // The parent pointer in entity is a DTD pointer and thus is NOT
+        // updated.  Not sure if this is 100% correct.
+		n.setFirstChild(ent)
+		n.setLastChild(ent)
+	}
+
+	return n, nil
+}
+
+func (d *Document) CreateAttribute(name, value string, ns *Namespace) (*Attribute, error) {
+	attr := newAttribute(name, ns)
+	if value != "" {
+		n, err := d.stringToNodeList(value)
+		if err != nil {
+			return nil, err
+		}
+		attr.setFirstChild(n)
+		for n != nil {
+			n.SetParent(attr)
+			x := n.NextSibling()
+			if x == nil {
+				n.setLastChild(x)
+			}
+			n = x
+		}
+	}
+	return attr, nil
 }
 
 func (d *Document) CreateNamespace(prefix, uri string) (*Namespace, error) {
@@ -198,4 +247,161 @@ func (d *Document) IsMixedElement(name string) (bool, error) {
 		return true, nil
 	}
 	return true, nil
+}
+
+/*
+ * @doc:  the document
+ * @value:  the value of the attribute
+ *
+ * Parse the value string and build the node list associated. Should
+ * produce a flat tree with only TEXTs and ENTITY_REFs.
+ * Returns a pointer to the first child
+ */
+func (d *Document) stringToNodeList(value string) (Node, error) {
+	rdr := strings.NewReader(value)
+	buf := bytes.Buffer{}
+	var ret Node
+	var last Node
+	var charval int32
+	for rdr.Len() > 0 {
+		r, _, err := rdr.ReadRune()
+		if err != nil {
+			return nil, err
+		}
+
+		// if this is not any sort of an entity , just go go go
+		if r != '&' {
+			buf.WriteRune(r)
+			continue
+		}
+
+		// well, at least the first rune sure looks like an entity, see what
+		// else we have.
+		r, _, err = rdr.ReadRune()
+		if err != nil {
+			return nil, err
+		}
+
+		if r == '#' {
+			r2, _, err := rdr.ReadRune()
+			if err != nil {
+				return nil, err
+			}
+
+			var accumulator func(int32, rune) (int32, error)
+			if r2 == 'x' {
+				accumulator = accumulateHexCharRef
+			} else {
+				rdr.UnreadRune()
+				accumulator = accumulateDecimalCharRef
+			}
+			for {
+				r, _, err = rdr.ReadRune()
+				if err != nil {
+					return nil, err
+				}
+				if r == ';' {
+					break
+				}
+				charval, err = accumulator(charval, r)
+				if err != nil {
+					return nil, err
+				}
+			}
+		} else {
+			rdr.UnreadRune()
+			entbuf := bytes.Buffer{}
+			for rdr.Len() > 0 {
+				r, _, err = rdr.ReadRune()
+				if err != nil {
+					return nil, err
+				}
+				if r == ';' {
+					break
+				}
+				entbuf.WriteRune(r)
+			}
+
+			if rdr.Len() == 0 {
+				return nil, errors.New("entity was unterminated (could not find terminating semicolon)")
+			}
+
+			val := entbuf.String()
+			ent, ok := d.GetEntity(val)
+
+			// XXX I *believe* libxml2 SKIPS entities that it can't resolve
+			// at this point?
+			if ok && ent.EntityType() == int(InternalPredefinedEntity) {
+				buf.Write(ent.Content())
+			} else {
+				// flush the buffer so far
+				if buf.Len() > 0 {
+					node, err := d.CreateText(buf.Bytes())
+					if err != nil {
+						return nil, err
+					}
+
+					if last == nil {
+						last = node
+						ret = node
+					} else {
+						last.AddSibling(node)
+						last = node
+					}
+				}
+
+				// create a new REFERENCE_REF node
+				node, err := d.CreateReference(val)
+				if err != nil {
+					return nil, err
+				}
+
+				// no children
+				if ok && ent.FirstChild() == nil {
+					// XXX WTF am I doing here...?
+					refchildren, err := d.stringToNodeList(string(node.Content()))
+					if err != nil {
+						return nil, err
+					}
+					ent.setFirstChild(refchildren)
+					for n := refchildren; n != nil; {
+						n.SetParent(ent)
+						x := n.NextSibling()
+						if x == nil {
+							ent.setLastChild(n)
+						}
+						n = x
+					}
+				}
+
+				if last == nil {
+					last = node
+					ret = node
+				} else {
+					last.AddSibling(node)
+					last = node
+				}
+			}
+		}
+
+		if charval != 0 {
+			buf.WriteRune(rune(charval))
+			charval = 0
+		}
+	}
+
+	if buf.Len() > 0 {
+		n, err := d.CreateText(buf.Bytes())
+		if err != nil {
+			return nil, err
+		}
+
+		if last == nil {
+			ret = n
+		} else {
+			last.AddSibling(n)
+		}
+	}
+
+	return ret, nil
 }

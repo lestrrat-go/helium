@@ -1,9 +1,8 @@
 package helium
 
-func newAttribute(name, value string, ns *Namespace) *Attribute {
+func newAttribute(name string, ns *Namespace) *Attribute {
 	attr := &Attribute{}
 	attr.name = name
-	attr.AddContent([]byte(value))
 	attr.ns = ns
 	return attr
 }
