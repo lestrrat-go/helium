@@ -98,6 +98,10 @@ func (d *Document) SetDocumentElement(root Node) error {
 	return nil
 }
 
+func (d *Document) CreateAttribute(name, value string) (*Attribute, error) {
+	return nil, nil
+}
+
 func (d *Document) CreateNamespace(prefix, uri string) (*Namespace, error) {
 	ns := newNamespace(prefix, uri)
 	ns.context = d

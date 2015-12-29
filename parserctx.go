@@ -88,6 +88,7 @@ func (ctx *parserCtx) init(p *Parser, b []byte) error {
 	ctx.standalone = StandaloneImplicitNo
 	ctx.attsSpecial = map[string]AttributeType{}
 	ctx.attsDefault = map[string]map[string]*Attribute{}
+	ctx.wellFormed = true
 	if p != nil {
 		ctx.sax = p.sax
 	}
@@ -877,6 +878,7 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (val
 					err = ctx.error(err)
 					return
 				}
+
 				if r == '&' && !ctx.replaceEntities {
 					b.WriteString("&#38;")
 				} else {
@@ -3493,12 +3495,12 @@ func (ctx *parserCtx) parseReference() (string, error) {
 	}
 
 	// temprorary fix
-		ctx.parseBalancedChunkInternal(ent.Content())
+	ctx.parseBalancedChunkInternal(ent.Content())
 
-		if s := ctx.sax; s != nil {
-			s.Reference(ctx.userData, ent.Name())
-		}
-		return string(ent.Content()), nil
+	if s := ctx.sax; s != nil {
+		s.Reference(ctx.userData, ent.Name())
+	}
+	return string(ent.Content()), nil
 	/*
 	   	if s := ctx.sax; s != nil {
 	   debug.Printf("ResolveEntry %#v", ent)
@@ -3809,69 +3811,75 @@ func (ctx *parserCtx) parseReference() (string, error) {
 	return "", ErrUnimplemented{target: "parseReference"}
 }
 
+func accumulateDecimalCharRef(val int32, c rune) (int32, error) {
+	if c >= '0' && c <= '9' {
+		val = val*10 + (rune(c) - '0')
+	} else {
+		return 0, errors.New("invalid decimal CharRef")
+	}
+	return val, nil
+}
+
+func accumulateHexCharRef(val int32, c rune) (int32, error) {
+	if c >= '0' && c <= '9' {
+		val = val*16 + (rune(c) - '0')
+	} else if c >= 'a' && c <= 'f' {
+		val = val*16 + (rune(c) - 'a') + 10
+	} else if c >= 'A' && c <= 'F' {
+		val = val*16 + (rune(c) - 'A') + 10
+	} else {
+		return 0, errors.New("invalid hex CharRef")
+	}
+	return val, nil
+}
+
 // returns rune, byteCount, error
 func parseStringCharRef(s []byte) (r rune, width int, err error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseStringCharRef")
-		defer g.IRelease("END parseStringCharRef")
-		defer func() { debug.Printf("r = '%c' (%x)", r, r) }()
+		defer func () {
+			g.IRelease("END parseStringCharRef r = '%c' (%x), consumed %d bytes", r, r, width)
+		}()
 	}
 	var val int32
 	r = utf8.RuneError
 	width = 0
-	if bytes.HasPrefix(s, []byte{'&', '#', 'x'}) {
-		width += 3
-		s = s[3:]
+	if !bytes.HasPrefix(s, []byte{'&', '#'}) {
+		err = errors.New("ampersand (&) was required")
+		return
+	}
 
-		for c := s[0]; c != ';'; c = s[0] {
-			if c >= '0' && c <= '9' {
-				val = val*16 + (rune(c) - '0')
-			} else if c >= 'a' && c <= 'f' {
-				val = val*16 + (rune(c) - 'a') + 10
-			} else if c >= 'A' && c <= 'F' {
-				val = val*16 + (rune(c) - 'A') + 10
-			} else {
-				err = errors.New("invalid hex CharRef")
-				width = 0
-				return
-			}
-			if rune(val) > unicode.MaxRune {
-				err = errors.New("hex CharRef out of range")
-				width = 0
-				return
-			}
+	width += 2
+	s = s[2:]
 
-			s = s[1:]
-			width++
-		}
-		if s[0] == ';' {
-			s = s[1:]
-			width++
-		}
-	} else if bytes.HasPrefix(s, []byte{'&', '#'}) {
-		width += 2
-		s = s[2:]
-		for c := s[0]; c != ';'; c = s[0] {
-			if c >= '0' && c <= '9' {
-				val = val*10 + (rune(c) - '0')
-			} else {
-				err = errors.New("invalid decimal CharRef")
-				width = 0
-				return
-			}
+	var accumulator func(int32, rune) (int32, error)
+	if s[0] == 'x' {
+		s = s[1:]
+		width++
+		accumulator = accumulateHexCharRef
+	} else {
+		accumulator = accumulateDecimalCharRef
+	}
 
-			if rune(val) > unicode.MaxRune {
-				err = errors.New("decimal CharRef out of range")
-				width = 0
-				return
-			}
-			s = s[1:]
-			width++
+	for c := s[0]; c != ';'; c = s[0] {
+		val, err = accumulator(val, rune(c))
+		if err != nil {
+			width = 0
+			return
 		}
-		if s[0] == ';' {
-			s = s[1:]
-			width++
+		if rune(val) > unicode.MaxRune {
+			err = errors.New("hex CharRef out of range")
+			width = 0
+			return
 		}
+
+		s = s[1:]
+		width++
+	}
+
+	if s[0] == ';' {
+		s = s[1:]
+		width++
 	}
 
 	r = rune(val)
@@ -3914,6 +3922,71 @@ func parseStringName(s []byte) (string, int, error) {
 	return out.String(), i, nil
 }
 
+// This will be called as a fallback. The SAX handler
+// may totally decide to ignore entity related processing
+// but we still need to resolve the entity in order for
+// the rest of the processing to work.
+func (ctx *parserCtx) getEntity(name string) (*Entity, error) {
+	if ctx.inSubset == 0 {
+		if ret, err := resolvePredefinedEntity(name); err != nil {
+			return ret, nil
+		}
+	}
+
+	var ret *Entity
+	var ok bool
+	if ctx.doc == nil || ctx.doc.standalone != 1 {
+		ret, _ = ctx.doc.GetEntity(name)
+	} else {
+		if ctx.inSubset == 2 {
+			ctx.doc.standalone = 0
+			ret, _ = ctx.doc.GetEntity(name)
+			ctx.doc.standalone = 1
+		} else {
+			ret, ok = ctx.doc.GetEntity(name)
+			if !ok {
+				ctx.doc.standalone = 0
+				ret, ok = ctx.doc.GetEntity(name)
+				if !ok {
+					return nil, errors.New("Entity(" + name + ") document marked standalone but requires eternal subset")
+				}
+				ctx.doc.standalone = 1
+			}
+		}
+	}
+	/*
+	   if ((ret != NULL) &&
+	       ((ctxt->validate) || (ctxt->replaceEntities)) &&
+	       (ret->children == NULL) &&
+	       (ret->etype == XML_EXTERNAL_GENERAL_PARSED_ENTITY)) {
+	       int val;
+
+	       // for validation purposes we really need to fetch and
+	       // parse the external entity
+	       xmlNodePtr children;
+	       unsigned long oldnbent = ctxt->nbentities;
+
+	       val = xmlParseCtxtExternalEntity(ctxt, ret->URI,
+	                                        ret->ExternalID, &children);
+	       if (val == 0) {
+	           xmlAddChildList((xmlNodePtr) ret, children);
+	       } else {
+	           xmlFatalErrMsg(ctxt, XML_ERR_ENTITY_PROCESSING,
+	                          "Failure to process entity %s\n", name, NULL);
+	           ctxt->validate = 0;
+	           return(NULL);
+	       }
+	       ret->owner = 1;
+	       if (ret->checked == 0) {
+	           ret->checked = (ctxt->nbentities - oldnbent + 1) * 2;
+	           if ((ret->content != NULL) && (xmlStrchr(ret->content, '<')))
+	               ret->checked |= 1;
+	       }
+	   }
+	*/
+	return ret, nil
+}
+
 func (ctx *parserCtx) parseStringEntityRef(s []byte) (sax.Entity, int, error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseStringEntityRef ('%s')", s)
@@ -3946,7 +4019,15 @@ func (ctx *parserCtx) parseStringEntityRef(s []byte) (sax.Entity, int, error) {
 	if h := ctx.sax; h != nil {
 		loadedEnt, err = h.GetEntity(ctx.userData, name)
 		if err != nil {
-			return nil, 0, err
+			// Note: libxml2 would try to ask for xmlGetPredefinedEntity
+			// next, but that's only when XML_PARSE_OLDSAX is enabled.
+			// we won't do that.
+			if ctx.wellFormed && ctx.userData == ctx {
+				loadedEnt, err = ctx.getEntity(name)
+				if err != nil {
+					return nil, 0, err
+				}
+			}
 		}
 	}
 	/*

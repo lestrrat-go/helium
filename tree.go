@@ -197,72 +197,16 @@ func (t *TreeBuilder) IsStandalone(ctxif sax.Context) (bool, error) {
 	return false, sax.ErrHandlerUnspecified
 }
 
-func (t *TreeBuilder) GetEntity(ctxif sax.Context, name string) (sax.Entity, error) {
+func (t *TreeBuilder) GetEntity(ctxif sax.Context, name string) (ent sax.Entity, err error) {
 	if debug.Enabled {
-		g := debug.IPrintf("START tree.GetEntity")
-		defer g.IRelease("END tree.GetEntity")
+		g := debug.IPrintf("START tree.GetEntity '%s'", name)
+		defer func() {
+			g.IRelease("END tree.GetEntity = '%v'", ent)
+		}()
 	}
 
-	ctx := ctxif.(*parserCtx)
-
-	if ctx.inSubset == 0 {
-		if ret, err := resolvePredefinedEntity(name); err != nil {
-			return ret, nil
-		}
-	}
-
-	var ret *Entity
-	var ok bool
-	if ctx.doc == nil || ctx.doc.standalone != 1 {
-		ret, _ = ctx.doc.GetEntity(name)
-	} else {
-		if ctx.inSubset == 2 {
-			ctx.doc.standalone = 0
-			ret, _ = ctx.doc.GetEntity(name)
-			ctx.doc.standalone = 1
-		} else {
-			ret, ok = ctx.doc.GetEntity(name)
-			if !ok {
-				ctx.doc.standalone = 0
-				ret, ok = ctx.doc.GetEntity(name)
-				if !ok {
-					return nil, errors.New("Entity(" + name + ") document marked standalone but requires eternal subset")
-				}
-				ctx.doc.standalone = 1
-			}
-		}
-	}
-/*
-    if ((ret != NULL) &&
-        ((ctxt->validate) || (ctxt->replaceEntities)) &&
-        (ret->children == NULL) &&
-        (ret->etype == XML_EXTERNAL_GENERAL_PARSED_ENTITY)) {
-        int val;
-
-        // for validation purposes we really need to fetch and
-        // parse the external entity
-        xmlNodePtr children;
-        unsigned long oldnbent = ctxt->nbentities;
-
-        val = xmlParseCtxtExternalEntity(ctxt, ret->URI,
-                                         ret->ExternalID, &children);
-        if (val == 0) {
-            xmlAddChildList((xmlNodePtr) ret, children);
-        } else {
-            xmlFatalErrMsg(ctxt, XML_ERR_ENTITY_PROCESSING,
-                           "Failure to process entity %s\n", name, NULL);
-            ctxt->validate = 0;
-            return(NULL);
-        }
-        ret->owner = 1;
-        if (ret->checked == 0) {
-            ret->checked = (ctxt->nbentities - oldnbent + 1) * 2;
-            if ((ret->content != NULL) && (xmlStrchr(ret->content, '<')))
-                ret->checked |= 1;
-        }
-    }
-*/
-	return ret, nil
+	err = sax.ErrHandlerUnspecified
+	return
 }
 
 func (t *TreeBuilder) GetParameterEntity(ctxif sax.Context, name string) (sax.Entity, error) {
@@ -351,6 +295,7 @@ func (t *TreeBuilder) IgnorableWhitespace(ctxif sax.Context, content []byte) err
 	if ctx.keepBlanks {
 		return t.Characters(ctx, content)
 	}
+
 	return nil
 }
 
