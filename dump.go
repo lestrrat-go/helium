@@ -14,9 +14,9 @@ var (
 	esc_amp  = []byte("&amp;")
 	esc_lt   = []byte("&lt;")
 	esc_gt   = []byte("&gt;")
-	esc_tab  = []byte("&#09;")
+	esc_tab  = []byte("&#9;")
 	esc_nl   = []byte("&#10;")
-	esc_cr   = []byte("&#xD;")
+	esc_cr   = []byte("&#13;")
 	esc_fffd = []byte("\uFFFD") // Unicode replacement character
 )
 
@@ -30,6 +30,58 @@ func isInCharacterRange(r rune) (inrange bool) {
 		r >= 0x20 && r <= 0xDF77 ||
 		r >= 0xE000 && r <= 0xFFFD ||
 		r >= 0x10000 && r <= 0x10FFFF
+}
+
+func escapeAttrValue(w io.Writer, s[]byte) error {
+	var esc []byte
+	last := 0
+	for i := 0; i < len(s); {
+		r, width := utf8.DecodeRune(s[i:])
+		i += width
+		switch r {
+		case '"':
+			esc = esc_quot
+		case '\'':
+			esc = esc_apos
+		case '&':
+			esc = esc_amp
+		case '<':
+			esc = esc_lt
+		case '>':
+			esc = esc_gt
+		case '\n':
+			esc = esc_nl
+		case '\r':
+			esc = esc_cr
+		case '\t':
+			esc = esc_tab
+		default:
+			if !(0x20 <= r && r < 0x80) {
+				if r < 0xE0 {
+					esc = []byte(fmt.Sprintf("&#x%X;", r))
+					break
+				}
+			}
+			if !isInCharacterRange(r) || (r == 0xFFFD && width == 1) {
+				esc = esc_fffd
+				break
+			}
+			continue
+		}
+
+		if _, err := w.Write(s[last : i-width]); err != nil {
+			return err
+		}
+		if _, err := w.Write(esc); err != nil {
+			return err
+		}
+		last = i
+	}
+
+	if _, err := w.Write(s[last:]); err != nil {
+		return err
+	}
+	return nil
 }
 
 // escapeText writes to w the properly escaped XML equivalent
@@ -197,7 +249,7 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 	if e, ok := n.(*Element); ok {
 		for attr := e.properties; attr != nil; {
 			io.WriteString(out, " "+attr.Name()+`="`)
-			escapeText(out, []byte(attr.Value()), true)
+			escapeAttrValue(out, []byte(attr.Value()))
 			io.WriteString(out, `"`)
 			a := attr.NextSibling()
 			if a == nil {
