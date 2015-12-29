@@ -110,7 +110,7 @@ func (d *Document) CreateReference(name string) (*EntityReference, error) {
 	if name[0] == '&' {
 		// the name should be everything but '&' and ';'
 		if name[len(name)-1] == ';' {
-			n.name = name[1:len(name)-1]
+			n.name = name[1 : len(name)-1]
 		} else {
 			n.name = name[1:]
 		}
@@ -121,9 +121,9 @@ func (d *Document) CreateReference(name string) (*EntityReference, error) {
 	ent, ok := d.GetEntity(n.name)
 	if ok {
 		n.content = []byte(ent.content)
-        // Original code says:
-        // The parent pointer in entity is a DTD pointer and thus is NOT
-        // updated.  Not sure if this is 100% correct.
+		// Original code says:
+		// The parent pointer in entity is a DTD pointer and thus is NOT
+		// updated.  Not sure if this is 100% correct.
 		n.setFirstChild(ent)
 		n.setLastChild(ent)
 	}

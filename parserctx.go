@@ -17,14 +17,15 @@ import (
 
 type attrData struct {
 	localname string
-	prefix string
-	value string
+	prefix    string
+	value     string
 	isDefault bool
 }
+
 func (a attrData) LocalName() string { return a.localname }
-func (a attrData) Prefix() string { return a.prefix }
-func (a attrData) Value() string { return a.value }
-func (a attrData) IsDefault() bool { return a.isDefault }
+func (a attrData) Prefix() string    { return a.prefix }
+func (a attrData) Value() string     { return a.value }
+func (a attrData) IsDefault() bool   { return a.isDefault }
 func (a attrData) Name() string {
 	if a.prefix != "" {
 		return a.prefix + ":" + a.localname
@@ -740,8 +741,8 @@ func (ctx *parserCtx) parseStartTag() error {
 		// here. So we create a simple holder for attribute data
 		attr := &attrData{
 			localname: attname,
-			prefix: aprefix,
-			value: attvalue,
+			prefix:    aprefix,
+			value:     attvalue,
 		}
 
 		attrs = append(attrs, attr)
@@ -3860,7 +3861,7 @@ func accumulateHexCharRef(val int32, c rune) (int32, error) {
 func parseStringCharRef(s []byte) (r rune, width int, err error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseStringCharRef")
-		defer func () {
+		defer func() {
 			g.IRelease("END parseStringCharRef r = '%c' (%x), consumed %d bytes", r, r, width)
 		}()
 	}
