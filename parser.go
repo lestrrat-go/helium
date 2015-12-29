@@ -1,6 +1,9 @@
 package helium
 
-import "github.com/lestrrat/helium/internal/debug"
+import (
+	"github.com/lestrrat/helium/internal/debug"
+	"github.com/lestrrat/helium/sax"
+)
 
 func Parse(b []byte) (*Document, error) {
 	p := NewParser()
@@ -30,6 +33,6 @@ func (p *Parser) Parse(b []byte) (*Document, error) {
 	return ctx.doc, nil
 }
 
-func (p *Parser) SetSAXHandler(s SAX) {
+func (p *Parser) SetSAXHandler(s sax.SAX2Handler) {
 	p.sax = s
 }

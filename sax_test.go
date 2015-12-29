@@ -15,17 +15,17 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func newEventEmitter(out io.Writer) SAX {
+func newEventEmitter(out io.Writer) sax.SAX2Handler {
 	entities := map[string]*Entity{}
 	s := sax.New()
 	s.SetDocumentLocatorHandler = func(_ sax.Context, loc sax.DocumentLocator) error {
 		fmt.Fprintf(out, "SAX.SetDocumentLocator()\n")
 		return nil
 	}
-	s.AttributeDeclHandler = func(_ sax.Context, elemName string, attrName string, typ int, deftype int, defvalue sax.AttributeDefaultValue, enum sax.Enumeration) error {
+	s.AttributeDeclHandler = func(_ sax.Context, elemName string, attrName string, typ int, deftype int, defvalue string, enum sax.Enumeration) error {
 		// eek, defvalue is an interface, and interface == nil is only true
 		// if the interface has no value AND not type, so.. hmmm.
-		if fmt.Sprintf("%s", defvalue) == "" {
+		if defvalue == "" {
 			defvalue = "NULL"
 		}
 		fmt.Fprintf(out, "SAX.AttributeDecl(%s, %s, %d, %d, %s, ...)\n", elemName, attrName, typ, deftype, defvalue)
@@ -39,7 +39,7 @@ func newEventEmitter(out io.Writer) SAX {
 		fmt.Fprintf(out, "SAX.Reference(%s)\n", name)
 		return nil
 	}
-	s.ResolveEntityHandler = func(_ sax.Context, name string, publicID string, baseURI string, systemID string) (sax.Entity, error) {
+	s.GetEntityHandler = func(_ sax.Context, name string) (sax.Entity, error) {
 		fmt.Fprintf(out, "SAX.ResolveEntity(%s)\n", name)
 
 		ent, ok := entities[name]
@@ -49,7 +49,7 @@ func newEventEmitter(out io.Writer) SAX {
 		return ent, nil
 	}
 
-	s.UnparsedEntityDeclHandler = func(ctxif sax.Context, name string, typ int, publicID string, systemID string, notation string) error {
+	s.EntityDeclHandler = func(ctxif sax.Context, name string, typ int, publicID string, systemID string, notation string) error {
 		fmt.Fprintf(out, "SAX.UnparsedEntityDecl(%s, %d, %s, %s, %s)\n",
 			name, typ, publicID, systemID, notation)
 
@@ -93,7 +93,7 @@ func newEventEmitter(out io.Writer) SAX {
 	s.CharactersHandler = func(ctx sax.Context, data []byte) error {
 		return charHandler("Characters", ctx, data)
 	}
-	s.StartElementHandler = func(_ sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	s.StartElementNSHandler = func(_ sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		fmt.Fprintf(out, "SAX.StartElementNS(%s, ", localname)
 
 		if prefix != "" {
@@ -145,7 +145,7 @@ func newEventEmitter(out io.Writer) SAX {
 
 		return nil
 	}
-	s.EndElementHandler = func(_ sax.Context, localname, prefix, uri string) error {
+	s.EndElementNSHandler = func(_ sax.Context, localname, prefix, uri string) error {
 		fmt.Fprintf(out, "SAX.EndElementNS(%s, ", localname)
 
 		if prefix != "" {

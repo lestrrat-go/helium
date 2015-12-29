@@ -549,7 +549,16 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 		str := ctx.curConsume(i - 1)
 		// XXX This is not right, but it's for now the best place to do this
 		str = strings.Replace(str, "\r\n", "\n", -1)
-		if ctx.areBlanks(str, false) {
+		if ctx.instate == psCDATA {
+			if s := ctx.sax; s != nil {
+				switch err := s.CDataBlock(ctx.userData, []byte(str)); err {
+				case nil, sax.ErrHandlerUnspecified:
+					// no op
+				default:
+					return ctx.error(err)
+				}
+			}
+		} else if ctx.areBlanks(str, false) {
 			if s := ctx.sax; s != nil {
 				switch err := s.IgnorableWhitespace(ctx.userData, []byte(str)); err {
 				case nil, sax.ErrHandlerUnspecified:
@@ -772,7 +781,7 @@ func (ctx *parserCtx) parseStartTag() error {
 				nslist[i] = ns.(nsStackItem)
 			}
 		}
-		switch err := s.StartElement(ctx.userData, elem.LocalName(), prefix, nsuri, nslist, attrs); err {
+		switch err := s.StartElementNS(ctx.userData, elem.LocalName(), prefix, nsuri, nslist, attrs); err {
 		case nil, sax.ErrHandlerUnspecified:
 			// no op
 		default:
@@ -815,7 +824,7 @@ func (ctx *parserCtx) parseEndTag() error {
 	}
 	e := ctx.popNode()
 	if s := ctx.sax; s != nil {
-		switch err := s.EndElement(ctx, e.LocalName(), e.Prefix(), e.URI()); err {
+		switch err := s.EndElementNS(ctx, e.LocalName(), e.Prefix(), e.URI()); err {
 		case nil, sax.ErrHandlerUnspecified:
 			// no op
 		default:
@@ -1641,15 +1650,6 @@ func (ctx *parserCtx) parseCDSect() error {
 	if !ctx.curConsumePrefix("<![CDATA[") {
 		return ctx.error(ErrInvalidCDSect)
 	}
-	sh := ctx.sax
-	if sh != nil {
-		switch err := sh.StartCDATA(ctx); err {
-		case nil, sax.ErrHandlerUnspecified:
-			// no op
-		default:
-			return ctx.error(err)
-		}
-	}
 
 	ctx.instate = psCDATA
 	defer func() { ctx.instate = psContent }()
@@ -1660,14 +1660,6 @@ func (ctx *parserCtx) parseCDSect() error {
 
 	if !ctx.curConsumePrefix("]]>") {
 		return ctx.error(ErrCDATANotFinished)
-	}
-	if sh != nil {
-		switch err := sh.EndCDATA(ctx); err {
-		case nil, sax.ErrHandlerUnspecified:
-			// no op
-		default:
-			return ctx.error(err)
-		}
 	}
 	return nil
 }
@@ -2676,7 +2668,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 			literal, value, err = ctx.parseEntityValue()
 			if err == nil {
 				if s := ctx.sax; s != nil {
-					switch err := s.UnparsedEntityDecl(ctx.userData, name, int(InternalParameterEntity), "", "", value); err {
+					switch err := s.EntityDecl(ctx.userData, name, int(InternalParameterEntity), "", "", value); err {
 					case nil, sax.ErrHandlerUnspecified:
 						// no op
 					default:
@@ -2700,7 +2692,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 					return ctx.error(errors.New("err uri fragment"))
 				} else {
 					if s := ctx.sax; s != nil {
-						switch err := s.UnparsedEntityDecl(ctx.userData, name, int(ExternalParameterEntity), literal, uri, ""); err {
+						switch err := s.EntityDecl(ctx.userData, name, int(ExternalParameterEntity), literal, uri, ""); err {
 						case nil, sax.ErrHandlerUnspecified:
 							// no op
 						default:
@@ -2718,7 +2710,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 			literal, value, err = ctx.parseEntityValue()
 			if err == nil {
 				if s := ctx.sax; s != nil {
-					switch err := s.UnparsedEntityDecl(ctx.userData, name, int(InternalGeneralEntity), "", "", value); err {
+					switch err := s.EntityDecl(ctx.userData, name, int(InternalGeneralEntity), "", "", value); err {
 					case nil, sax.ErrHandlerUnspecified:
 						// no op
 					default:
@@ -2742,7 +2734,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 					return ctx.error(errors.New("err uri fragment"))
 				} else {
 					if s := ctx.sax; s != nil {
-						switch err := s.UnparsedEntityDecl(ctx.userData, name, int(ExternalGeneralParsedEntity), literal, uri, ""); err {
+						switch err := s.EntityDecl(ctx.userData, name, int(ExternalGeneralParsedEntity), literal, uri, ""); err {
 						case nil, sax.ErrHandlerUnspecified:
 							// no op
 						default:
@@ -2767,7 +2759,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 					return ctx.error(err)
 				}
 				if s := ctx.sax; s != nil {
-					switch err := s.UnparsedEntityDecl(ctx.userData, name, int(ExternalParameterEntity), literal, uri, ndata); err {
+					switch err := s.EntityDecl(ctx.userData, name, int(ExternalParameterEntity), literal, uri, ndata); err {
 					case nil, sax.ErrHandlerUnspecified:
 						// no op
 					default:
@@ -2776,7 +2768,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 				}
 			} else {
 				if s := ctx.sax; s != nil {
-					switch err := s.UnparsedEntityDecl(ctx.userData, name, int(ExternalParameterEntity), literal, uri, ""); err {
+					switch err := s.EntityDecl(ctx.userData, name, int(ExternalParameterEntity), literal, uri, ""); err {
 					case nil, sax.ErrHandlerUnspecified:
 						// no op
 					default:
@@ -2826,7 +2818,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 		}
 	} else {
 		if s := ctx.sax; s != nil {
-			cur, _ = s.ResolveEntity(ctx.userData, name, "", "", "")
+			cur, _ = s.GetEntity(ctx.userData, name)
 			/*
 			   if ((cur == NULL) && (ctxt->userData==ctxt)) {
 			       cur = xmlSAX2GetEntity(ctxt, name);
@@ -3510,7 +3502,7 @@ func (ctx *parserCtx) parseReference() (string, error) {
 	/*
 	   	if s := ctx.sax; s != nil {
 	   debug.Printf("ResolveEntry %#v", ent)
-	   		loadedEnt, err := s.ResolveEntity(ctx.userData, ent.orig, "", "", "")
+	   		loadedEnt, err := s.GetEntity(ctx.userData, ent.orig, "", "", "")
 	   		switch err {
 	   		case nil, sax.ErrHandlerUnspecified:
 	   			// no op
@@ -3952,7 +3944,7 @@ func (ctx *parserCtx) parseStringEntityRef(s []byte) (sax.Entity, int, error) {
 	 * entities which may have stored in the parser context.
 	 */
 	if h := ctx.sax; h != nil {
-		loadedEnt, err = h.ResolveEntity(ctx.userData, name, "", "", "")
+		loadedEnt, err = h.GetEntity(ctx.userData, name)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -4206,7 +4198,7 @@ func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
 	if s := ctx.sax; s != nil {
 		// ask the SAX2 handler nicely
 		var loadedEnt sax.Entity
-		loadedEnt, err = s.ResolveEntity(ctx.userData, name, "", "", "")
+		loadedEnt, err = s.GetEntity(ctx.userData, name)
 		if err == nil {
 			ent = loadedEnt.(*Entity)
 			return

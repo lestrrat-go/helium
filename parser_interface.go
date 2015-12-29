@@ -86,17 +86,8 @@ type ErrParseError struct {
 	LineNumber int
 }
 
-// TODO: rethink about this
-type SAX interface {
-	sax.ContentHandler
-	sax.DTDHandler
-	sax.DeclHandler
-	sax.LexicalHandler
-	sax.EntityResolver
-	sax.Extensions
-}
 type Parser struct {
-	sax SAX
+	sax sax.SAX2Handler
 }
 
 const (
@@ -120,7 +111,7 @@ type parserCtx struct {
 	keepBlanks        bool
 	remain            int
 	replaceEntities   bool
-	sax               SAX
+	sax               sax.SAX2Handler
 	space             int
 	standalone        DocumentStandaloneType
 	hasExternalSubset bool

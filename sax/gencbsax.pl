@@ -1,88 +1,91 @@
 #!perl
+use strict;
 
 # This script generates the default SAX2 handler, which is
 # just a collection of callbacks
 
 open my $fh, '<', "interface.go" or die;
-my $content = do { local $/; <$fh> };
+# my $content = do { local $/; <$fh> };
 
-my @methods; # SAX2 methods
-my @functypes; # BlahFunc definitions
-my @fields; # fields in SAX2 struct
-
-sub extract {
-    my ($iface, $methods) = @_;
-    $iface =~ s/^\s+//;
-    $iface =~ s/\s+$//;
-    for my $line (split /\n/, $methods) {
-        $line =~ s{//.*}{};
-        $line =~ s/^\s+//;
-        $line =~ s/\s+$//;
-
-        next unless $line =~ /\S+/;
-        $line =~ /^([^\s\(]+)\s*\(([^\)]+)\)\s*(\([^\)]+\)|[^{]+)/;
-        my $name = $1;
-        my $args = $2;
-        my $return = $3;
-        $return =~ s{^\(\s*}{};
-        $return =~ s{\s*\)$}{};
-
-        # split the args, strip the typ
-        my @args = map { s/\s*\S+$//; $_ } split(/\s*,\s*/,$args);
-
-        push @methods, <<EOM;
-// ${name} satisfies the ${iface} interface
-func (s *SAX2) $line {
-\tif h := s.${name}Handler; h != nil {
-\t\treturn h(@{[ join ", ", @args ]})
-\t}
-\treturn @{[join ", ", map { $_ eq 'string' ? '""' : $_ eq 'error' ? "ErrHandlerUnspecified" : "nil" } split /\s*,\s*/, $return]}
-}
-
-EOM
-        push @functypes, "// ${name}Func defines the function type for SAX2.${name}Handler\ntype ${name}Func func($args) ($return)";
-        push @fields, "${name}Handler ${name}Func";
+while (my $ln = <$fh>) {
+    if ($ln =~ /^\/\/ SAX functions/) {
+        last;
     }
 }
 
-while ($content =~ /^type (\w+Handler) interface {([^}]+)}/msg) {
-    extract($1, $2)
-}
-if ($content =~ /^type (EntityResolver) interface {([^}]+)}/msg) {
-    extract($1, $2)
-}
-if ($content =~ /^type (Extensions) interface {([^}]+)}/msg) {
-    extract($1, $2)
+my %handler_returns;
+my %handler_args;
+my @handler_funcs;
+while (my $ln = <$fh>) {
+    if ($ln =~ /^type (.+)Func func\(([^)]+)\) (\([^\)]+\)|.+)$/) {
+        push @handler_funcs, $1;
+        $handler_args{$1} = $2;
+        $handler_returns{$1} = $3;
+    }
 }
 
-open my $out, '>', 'callback.go' or die;
+open my $out, '>', 'sax2.go' or die;
 
+my $klass = "SAX2";
 print $out <<EOM;
 package sax
 
 import "errors"
 
+// ErrHandlerUnspecified is returned when there is no Handler
+// registered for that particular event callback. This is not
+// a fatal error per se, and can be ignored if the implementation
+// chooses to do so.
 var ErrHandlerUnspecified = errors.New("handler unspecified")
 
+// SAX2Handler is an interface for anything that can satisfy
+// helium's expected SAX2 API
+type SAX2Handler interface {
 EOM
 
-foreach my $func (sort { $a cmp $b } @functypes) {
-    print $out $func, "\n\n";
+foreach my $func (@handler_funcs) {
+    my $args = $handler_args{$func};
+    my $ret  = $handler_returns{$func};
+    print $out "\t$func($args) $ret\n";
 }
-
-print $out "type SAX2 struct {\n";
-foreach my $field (sort { $a cmp $b } @fields) {
-    print $out "\t$field\n"
-}
-print $out "}\n";
 
 print $out <<EOM;
-func New() *SAX2 {
-\treturn &SAX2{}
+}
+
+// $klass is the callback based SAX2 handler.
+type $klass struct {
+EOM
+
+foreach my $func (@handler_funcs) {
+    print $out "\t${func}Handler ${func}Func\n";
+}
+
+print $out <<EOM;
+}
+
+// New creates a new instance of $klass. All callbacks are
+// uninitialized.
+func New() *${klass} {
+\treturn &${klass}{}
 }
 
 EOM
 
-foreach my $method (sort { $a cmp $b } @methods) {
-    print $out "$method";
+foreach my $func (@handler_funcs) {
+    my $args = $handler_args{$func};
+    my $ret  = $handler_returns{$func};
+    my $no_handler_ret  = 
+        join ", ",
+            map { $_ eq "error" ? "ErrHandlerUnspecified" : $_ eq "bool" ? "false" : "nil" }
+            split /\s*,\s*/, $ret =~ s{\(([^\)]+)\)}{$1}r;
+    my $bare_args = join ", ", map { (split /\s+/, $_)[0] } split /\s*,\s*/, $args;
+    print $out <<EOM
+func (s $klass) $func($args) $ret {
+\tif h := s.${func}Handler; h != nil {
+\t\treturn h($bare_args)
+\t}
+\treturn $no_handler_ret;
+}
+
+EOM
 }
