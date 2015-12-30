@@ -95,6 +95,14 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 		return err
 	}
 
+	if uri != "" {
+		e.SetNamespace(prefix, uri, true)
+	}
+
+	for _, ns := range namespaces {
+		e.SetNamespace(ns.Prefix(), ns.URI(), false)
+	}
+
 	for _, attr := range attrs {
 		e.SetAttribute(attr.Name(), attr.Value())
 	}

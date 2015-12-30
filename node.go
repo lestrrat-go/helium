@@ -164,6 +164,10 @@ func replaceNode(n Node, cur Node) {
 	}
 }
 
+func (n node) Namespace() *Namespace {
+	return n.ns
+}
+
 func (n node) Namespaces() []*Namespace {
 	return n.nsDefs
 }
@@ -180,6 +184,8 @@ func (n *node) SetNamespace(prefix, uri string, activate ...bool) error {
 	}
 	if a {
 		n.ns = ns
+	} else {
+		n.nsDefs = append(n.nsDefs, ns)
 	}
 
 	return nil

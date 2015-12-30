@@ -197,8 +197,11 @@ type Element struct {
 // Nemaspacer is an interface for things that has a namespace
 // prefix and uri
 type Namespacer interface {
+	Namespace() *Namespace
+	Namespaces() []*Namespace
 	Prefix() string
 	URI() string
+	LocalName() string
 }
 
 // AttributeDecl is an xml attribute delcaration from DTD

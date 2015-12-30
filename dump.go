@@ -4,10 +4,51 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/lestrrat/helium/internal/debug"
 )
+
+var (
+	qch_dquote = []byte{'"'}
+	qch_quote  = []byte{'\''}
+)
+
+func dumpQuotedString(out io.Writer, s string) error {
+	dqi := strings.IndexByte(s, qch_dquote[0])
+	if dqi < 0 {
+		// double quote is allowed, cool!
+		out.Write(qch_dquote)
+		io.WriteString(out, s)
+		out.Write(qch_dquote)
+		return nil
+	}
+
+	if qi := strings.IndexByte(s, qch_quote[0]); qi < 0 {
+		// single quotes, then
+		out.Write(qch_quote)
+		io.WriteString(out, s)
+		out.Write(qch_quote)
+		return nil
+	}
+
+	// Grr, can't use " or '. Well, let's escape all the double
+	// quotes to &quot;, and quote the string
+
+	out.Write(qch_dquote)
+	for len(s) > 0 && dqi > -1 {
+		io.WriteString(out, s[:dqi])
+		s = s[dqi+1:]
+		dqi = strings.IndexByte(s, qch_dquote[0])
+	}
+
+	if len(s) > 0 {
+		io.WriteString(out, s)
+	}
+	out.Write(qch_dquote)
+	return nil
+}
 
 var (
 	esc_quot = []byte("&#34;") // shorter than "&quot;"
@@ -302,6 +343,34 @@ func (d *Dumper) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
 	return nil
 }
 
+func (d *Dumper) dumpNsList(out io.Writer, nslist []*Namespace) error {
+	for _, ns := range nslist {
+		if err := d.dumpNs(out, ns); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *Dumper) dumpNs(out io.Writer, ns *Namespace) error {
+	if ns.href == "" {
+		// no op
+		return nil
+	}
+
+	io.WriteString(out, " ")
+
+	if ns.prefix == "" {
+		io.WriteString(out, "xmlns")
+	} else {
+		io.WriteString(out, "xmlns:")
+		io.WriteString(out, ns.prefix)
+	}
+	io.WriteString(out, "=")
+	dumpQuotedString(out, ns.href)
+	return nil
+}
+
 func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 	if debug.Enabled {
 		g := debug.IPrintf("START Dumper.DumpNode '%s'", n.Name())
@@ -340,7 +409,7 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		return nil // no recursing down
 	case AttributeDeclNode:
 		if err = d.dumpAttributeDecl(out, n.(*AttributeDecl)); err != nil {
-		return err
+			return err
 		}
 		return nil
 	default:
@@ -352,15 +421,27 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 	}
 
 	// if it got here it's some sort of an element
-
-	name := n.Name()
+	var name string
+	var nslist []*Namespace
 	if nser, ok := n.(Namespacer); ok {
 		if prefix := nser.Prefix(); prefix != "" {
-			name = prefix + ":" + name
+			name = prefix + ":" + nser.LocalName()
+		} else {
+			name = nser.LocalName()
 		}
+		nslist = nser.Namespaces()
+	} else {
+		name = n.Name()
 	}
+
 	io.WriteString(out, "<")
 	io.WriteString(out, name)
+
+	if len(nslist) > 0 {
+		if err := d.dumpNsList(out, nslist); err != nil {
+			return err
+		}
+	}
 
 	if e, ok := n.(*Element); ok {
 		for attr := e.properties; attr != nil; {

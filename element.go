@@ -51,7 +51,13 @@ func (n *Element) SetAttribute(name, value string) error {
 	if debug.Enabled {
 		g := debug.IPrintf("START Element.SetAttribute '%s' (%s)", name, value)
 		defer g.IRelease("END Element.SetAttribute")
+
+i := 1
+for a := n.properties; a != nil; a = a.NextAttribute() {
+	debug.Printf("attribute %d: %s", i, a.Name())
+}
 	}
+
 	attr, err := n.doc.CreateAttribute(name, value, nil)
 	if err != nil {
 		return err
@@ -60,23 +66,20 @@ func (n *Element) SetAttribute(name, value string) error {
 	p := n.properties
 	if p == nil {
 		n.properties = attr
-	} else {
-		last := p
-		for p != nil {
-			if p.Name() == name {
-				return ErrDuplicateAttribute
-			}
-			if next := n.NextSibling(); next != nil {
-				p = next.(*Attribute)
-				last = p
-			} else {
-				p = nil
-			}
+		return nil
+	}
+
+	var last *Attribute
+	for ; p != nil; p = p.NextAttribute() {
+		if p.Name() == name {
+			return ErrDuplicateAttribute
 		}
 
-		last.SetNextSibling(attr)
-		attr.SetPrevSibling(last)
+		last = p
 	}
+
+	last.SetNextSibling(attr)
+	attr.SetPrevSibling(last)
 
 	return nil
 }

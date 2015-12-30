@@ -29,6 +29,16 @@ func newAttribute(name string, ns *Namespace) *Attribute {
 	return attr
 }
 
+// NextAttribute is a thin wrapper around NextSibling() so that the
+// caller does not have to constantly type assert
+func (n *Attribute) NextAttribute() *Attribute {
+	next := n.NextSibling()
+	if next == nil {
+		return nil
+	}
+	return next.(*Attribute)
+}
+
 func (n *Attribute) AddChild(cur Node) error {
 	return addChild(n, cur)
 }
