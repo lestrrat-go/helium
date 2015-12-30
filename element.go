@@ -51,11 +51,6 @@ func (n *Element) SetAttribute(name, value string) error {
 	if debug.Enabled {
 		g := debug.IPrintf("START Element.SetAttribute '%s' (%s)", name, value)
 		defer g.IRelease("END Element.SetAttribute")
-
-i := 1
-for a := n.properties; a != nil; a = a.NextAttribute() {
-	debug.Printf("attribute %d: %s", i, a.Name())
-}
 	}
 
 	attr, err := n.doc.CreateAttribute(name, value, nil)
