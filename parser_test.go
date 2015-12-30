@@ -104,13 +104,28 @@ func TestParseMisc(t *testing.T) {
 			debug.Dump(doc)
 		}
 
-		pi := doc.FirstChild()
-		if !assert.IsType(t, &ProcessingInstruction{}, pi, "First child should be a processing instruction") {
-			return
-		}
+		// XXX Not sure if this is right, but I'm going to assume it's ok
+		// to have a DTD in the child list
+		n := doc.FirstChild()
+		for {
+			if n == nil {
+				t.Errorf("Could not find ProcessingInstruction node")
+				return
+			}
 
-		if !assert.IsType(t, &Element{}, pi.NextSibling(), "NextSibling of PI should be Element node") {
-			return
+			switch n.(type) {
+			case *DTD:
+				// no op
+			case *ProcessingInstruction:
+				if !assert.IsType(t, &ProcessingInstruction{}, n, "First child should be a processing instruction") {
+					return
+				}
+
+				if !assert.IsType(t, &Element{}, n.NextSibling(), "NextSibling of PI should be Element node") {
+					return
+				}
+			}
+			n = n.NextSibling()
 		}
 	}
 }

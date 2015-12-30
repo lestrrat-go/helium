@@ -1,6 +1,7 @@
 package helium
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"unicode/utf8"
@@ -32,7 +33,7 @@ func isInCharacterRange(r rune) (inrange bool) {
 		r >= 0x10000 && r <= 0x10FFFF
 }
 
-func escapeAttrValue(w io.Writer, s[]byte) error {
+func escapeAttrValue(w io.Writer, s []byte) error {
 	var esc []byte
 	last := 0
 	for i := 0; i < len(s); {
@@ -88,7 +89,7 @@ func escapeAttrValue(w io.Writer, s[]byte) error {
 // of the plain text data s. If escapeNewline is true, newline
 // characters will be escaped.
 func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
-debug.Printf("escapeText = '%s'", s)
+	debug.Printf("escapeText = '%s'", s)
 	var esc []byte
 	last := 0
 	for i := 0; i < len(s); {
@@ -196,6 +197,111 @@ func (d *Dumper) dumpDocContent(out io.Writer, n Node) error {
 	return nil
 }
 
+func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
+	dtd := n.(*DTD)
+	io.WriteString(out, "<!DOCTYPE ")
+	io.WriteString(out, dtd.Name())
+	io.WriteString(out, " ")
+
+	if dtd.externalID != "" {
+		io.WriteString(out, " PUBLIC ")
+		io.WriteString(out, dtd.externalID)
+		io.WriteString(out, " ")
+	} else if dtd.systemID != "" {
+		io.WriteString(out, " SYSTEM ")
+		io.WriteString(out, dtd.systemID)
+		io.WriteString(out, " ")
+	}
+
+	if len(dtd.entities) == 0 && len(dtd.elements) == 0 && len(dtd.pentities) == 0 && len(dtd.attributes) == 0 {
+		/* (dtd.notations == NULL) && */
+		io.WriteString(out, ">")
+		return nil
+	}
+
+	io.WriteString(out, "[\n")
+
+	for e := dtd.FirstChild(); e != nil; e = e.NextSibling() {
+		if err := d.DumpNode(out, e); err != nil {
+			return err
+		}
+	}
+
+	io.WriteString(out, "]>\n")
+	return nil
+}
+
+func (d *Dumper) dumpEnumeration(out io.Writer, n Enumeration) error {
+	l := len(n)
+	for i, v := range n {
+		io.WriteString(out, v)
+		if i != l-1 {
+			io.WriteString(out, " | ")
+		}
+	}
+	io.WriteString(out, ")")
+	return nil
+}
+
+func (d *Dumper) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
+	io.WriteString(out, "<!ATTLIST ")
+	io.WriteString(out, n.elem)
+	io.WriteString(out, " ")
+	if n.prefix != "" {
+		io.WriteString(out, n.prefix)
+		io.WriteString(out, ":")
+	}
+	io.WriteString(out, n.name)
+	switch n.atype {
+	case AttrCDATA:
+		io.WriteString(out, " CDATA")
+	case AttrID:
+		io.WriteString(out, " ID")
+	case AttrIDRef:
+		io.WriteString(out, " IDREF")
+	case AttrIDRefs:
+		io.WriteString(out, " IDREFS")
+	case AttrEntity:
+		io.WriteString(out, " ENTITY")
+	case AttrNmtoken:
+		io.WriteString(out, " NMTOKEN")
+	case AttrNmtokens:
+		io.WriteString(out, " NMTOKENS")
+	case AttrEnumeration:
+		io.WriteString(out, " (")
+		if err := d.dumpEnumeration(out, n.tree); err != nil {
+			return err
+		}
+	case AttrNotation:
+		io.WriteString(out, " NOTATION (")
+		if err := d.dumpEnumeration(out, n.tree); err != nil {
+			return err
+		}
+	default:
+		return errors.New("invalid AttributeDecl type")
+	}
+
+	switch n.def {
+	case AttrDefaultNone:
+		// no op
+	case AttrDefaultRequired:
+		io.WriteString(out, " #REQUIRED")
+	case AttrDefaultImplied:
+		io.WriteString(out, " #IMPLIED")
+	case AttrDefaultFixed:
+		io.WriteString(out, " #FIXED")
+	default:
+		return errors.New("invalid AttributeDecl default value type")
+	}
+
+	if n.defvalue != "" {
+		io.WriteString(out, " ")
+		io.WriteString(out, n.defvalue)
+	}
+	io.WriteString(out, ">\n")
+	return nil
+}
+
 func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 	if debug.Enabled {
 		g := debug.IPrintf("START Dumper.DumpNode '%s'", n.Name())
@@ -209,8 +315,11 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 			return err
 		}
 		return nil
-		//	case DTDNode:
-		//		err = d.DumpDTD(out, n.(*DTD))
+	case DTDNode:
+		if err = d.dumpDTD(out, n); err != nil {
+			return err
+		}
+		return nil
 	case CommentNode:
 		io.WriteString(out, "<!--")
 		out.Write(n.Content())
@@ -229,6 +338,13 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 			escapeText(out, c, false)
 		}
 		return nil // no recursing down
+	case AttributeDeclNode:
+		if err = d.dumpAttributeDecl(out, n.(*AttributeDecl)); err != nil {
+		return err
+		}
+		return nil
+	default:
+		debug.Printf("Fallthrough: %#v", n)
 	}
 
 	if err != nil {

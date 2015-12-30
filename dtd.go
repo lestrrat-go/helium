@@ -3,11 +3,14 @@ package helium
 import "errors"
 
 func newDTD() *DTD {
-	return &DTD{
+	dtd := &DTD{
+		attributes: map[string]*AttributeDecl{},
 		elements:  map[string]ElementDecl{},
 		entities:  map[string]*Entity{},
 		pentities: map[string]*Entity{},
 	}
+	dtd.etype = DTDNode
+	return dtd
 }
 
 func (dtd *DTD) RegisterEntity(name string, typ EntityType, publicID, systemID, content string) (*Entity, error) {
@@ -25,6 +28,26 @@ func (dtd *DTD) RegisterEntity(name string, typ EntityType, publicID, systemID, 
 	ent.doc = dtd.doc
 	table[name] = ent
 	return ent, nil
+}
+
+func (dtd *DTD) LookupAttribute(name, prefix, elem string) (*AttributeDecl, bool) {
+	key := name + ":" + prefix + ":" + elem
+	decl, ok := dtd.attributes[key]
+	if !ok {
+		return nil, false
+	}
+	return decl, ok
+}
+
+func (dtd *DTD) RegisterAttribute(attr *AttributeDecl) error {
+	// TODO maybe this shouldn't be normalized, check later
+	key := attr.name + ":" + attr.prefix + ":" + attr.elem
+	_, ok := dtd.attributes[key]
+	if ok {
+		return errors.New("duplicate attribute declared")
+	}
+	dtd.attributes[key] = attr
+	return nil
 }
 
 func (dtd *DTD) LookupEntity(name string) (*Entity, bool) {

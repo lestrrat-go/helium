@@ -2,6 +2,7 @@ package helium
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/lestrrat/helium/internal/debug"
 	"github.com/lestrrat/helium/sax"
@@ -54,14 +55,19 @@ func (t *TreeBuilder) ProcessingInstruction(ctxif sax.Context, target, data stri
 		defer g.IRelease("END tree.ProcessingInstruction")
 	}
 
-	//	ctx := ctxif.(*parserCtx)
 	pi, err := t.doc.CreatePI(target, data)
 	if err != nil {
 		return err
 	}
 
-	// register to the document
-	t.doc.IntSubset().AddChild(pi)
+	ctx := ctxif.(*parserCtx)
+	switch ctx.inSubset {
+	case 1:
+		t.doc.IntSubset().AddChild(pi)
+	case 2:
+		t.doc.ExtSubset().AddChild(pi)
+	}
+
 	if t.node == nil {
 		t.doc.AddChild(pi)
 	} else if t.node.Type() == ElementNode {
@@ -178,6 +184,15 @@ func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
 }
 
 func (t *TreeBuilder) InternalSubset(ctxif sax.Context, name, eid, uri string) error {
+	dtd, err := t.doc.CreateDTD()
+	if err != nil {
+		return err
+	}
+	t.doc.intSubset = dtd
+	t.doc.AddChild(t.doc.intSubset)
+	dtd.externalID = eid
+	dtd.name = name
+	dtd.systemID = uri
 	return nil
 }
 
@@ -232,12 +247,59 @@ func (t *TreeBuilder) GetParameterEntity(ctxif sax.Context, name string) (sax.En
 	return nil, ErrEntityNotFound
 }
 
-func (t *TreeBuilder) AttributeDecl(ctx sax.Context, eName string, aName string, typ int, deftype int, value string, enum sax.Enumeration) error {
+func (t *TreeBuilder) AttributeDecl(ctxif sax.Context, eName string, aName string, typ int, deftype int, value string, enumif sax.Enumeration) error {
 	if debug.Enabled {
-		g := debug.IPrintf("START tree.AttributeDecl")
+		g := debug.IPrintf("START tree.AttributeDecl name = '%s', elem = '%s'", aName, eName)
 		defer g.IRelease("END tree.AttributeDecl")
 	}
 
+	ctx := ctxif.(*parserCtx)
+
+	if aName == "xml:id" && typ != int(AttrID) {
+		// libxml2 says "raise the error but keep the validity flag"
+		// but I don't know if we can do that..
+		return errors.New("xml:id: attribute type should be AttrID")
+	}
+	var prefix string
+	var local string
+	if i := strings.IndexByte(aName, ':'); i > -1 {
+		prefix = aName[:i]
+		local = aName[i+1:]
+	} else {
+		local = aName
+	}
+
+	enum := enumif.(Enumeration)
+
+	switch ctx.inSubset {
+	case 1:
+		if debug.Enabled {
+			debug.Printf("Processing intSubset...")
+		}
+		if _, err := ctx.addAttributeDecl(t.doc.intSubset, eName, local, prefix, AttributeType(typ), AttributeDefault(deftype), value, enum); err != nil {
+			return err
+		}
+	case 2:
+		if debug.Enabled {
+			debug.Printf("Processing extSubset...")
+		}
+		if _, err := ctx.addAttributeDecl(t.doc.extSubset, eName, local, prefix, AttributeType(typ), AttributeDefault(deftype), value, enum); err != nil {
+			return err
+		}
+	default:
+		if debug.Enabled {
+			debug.Printf("uh-oh we have a problem inSubset = %d", ctx.inSubset)
+		}
+		return errors.New("TreeBuilder.AttributeDecl called while not in subset")
+	}
+	/*
+	   if (ctxt->vctxt.valid == 0)
+	       ctxt->valid = 0;
+	   if ((attr != NULL) && (ctxt->validate) && (ctxt->wellFormed) &&
+	       (ctxt->myDoc->intSubset != NULL))
+	       ctxt->valid &= xmlValidateAttributeDecl(&ctxt->vctxt, ctxt->myDoc,
+	                                               attr);
+	*/
 	return nil
 }
 
@@ -381,7 +443,6 @@ func (t *TreeBuilder) UnparsedEntityDecl(ctx sax.Context, name string, publicID 
 	// is done in the main parser -- and not here.
 	return nil
 }
-
 
 func (t *TreeBuilder) Error(ctx sax.Context, message string, args ...interface{}) error {
 	return nil

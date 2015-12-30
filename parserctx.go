@@ -3230,6 +3230,116 @@ func (ctx *parserCtx) lookupSpecialAttribute(elemName, attrName string) (Attribu
 	return v, ok
 }
 
+func validateAttributeValueInternal(doc *Document, typ AttributeType, defvalue string) error {
+	return nil
+}
+
+func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefix string, atype AttributeType, def AttributeDefault, defvalue string, tree Enumeration) (attr *AttributeDecl, err error) {
+	if dtd == nil {
+		err = errors.New("dtd required")
+		return
+	}
+	if name == "" {
+		err = errors.New("name required")
+	}
+	if elem == "" {
+		err = errors.New("element required")
+	}
+
+	switch atype {
+	case AttrCDATA, AttrID, AttrIDRef, AttrIDRefs, AttrEntity, AttrEntities, AttrNmtoken, AttrNmtokens, AttrEnumeration, AttrNotation:
+		// ok. no op
+	default:
+		err = errors.New("invalid attribute type")
+		return
+	}
+
+	if defvalue != "" {
+		if err = validateAttributeValueInternal(dtd.doc, atype, defvalue); err != nil {
+			err = fmt.Errorf("attribute %s of %s: invalid default value: %s", elem, name, err)
+			ctx.valid = false
+			return
+		}
+	}
+
+  // Check first that an attribute defined in the external subset wasn't
+  // already defined in the internal subset
+	if doc := dtd.doc; doc != nil && doc.extSubset == dtd && doc.intSubset != nil && len(doc.intSubset.attributes) == 0 {
+		if _, ok := dtd.LookupAttribute(name, prefix, elem); !ok {
+			err = fmt.Errorf("attribute %s of %s: already defined in internal subset", elem, name)
+			return
+		}
+	}
+
+	attr = newAttributeDecl()
+	attr.atype = atype
+	attr.doc = dtd.doc
+	attr.name = name
+	attr.prefix = prefix
+	attr.elem = elem
+	attr.def = def
+	attr.tree = tree
+	attr.defvalue = defvalue
+
+  // Validity Check: Search the DTD for previous declarations of the ATTLIST
+	// (RegisterAttribute should return error if this attr already exists)
+	if err = dtd.RegisterAttribute(attr); err != nil {
+		attr = nil
+		return
+	}
+
+/*
+    // Validity Check:
+    // Multiple ID per element
+    //
+    elemDef = xmlGetDtdElementDesc2(dtd, elem, 1);
+    if (elemDef != NULL) {
+
+// #ifdef LIBXML_VALID_ENABLED
+        if ((type == XML_ATTRIBUTE_ID) &&
+            (xmlScanIDAttributeDecl(NULL, elemDef, 1) != 0)) {
+            xmlErrValidNode(ctxt, (xmlNodePtr) dtd, XML_DTD_MULTIPLE_ID,
+           "Element %s has too may ID attributes defined : %s\n",
+                   elem, name, NULL);
+            if (ctxt != NULL)
+                ctxt->valid = 0;
+        }
+// #endif LIBXML_VALID_ENABLED 
+
+        // Insert namespace default def first they need to be
+        // processed first.
+        //
+        if ((xmlStrEqual(ret->name, BAD_CAST "xmlns")) ||
+            ((ret->prefix != NULL &&
+             (xmlStrEqual(ret->prefix, BAD_CAST "xmlns"))))) {
+            ret->nexth = elemDef->attributes;
+            elemDef->attributes = ret;
+        } else {
+            xmlAttributePtr tmp = elemDef->attributes;
+
+            while ((tmp != NULL) &&
+                   ((xmlStrEqual(tmp->name, BAD_CAST "xmlns")) ||
+                    ((ret->prefix != NULL &&
+                     (xmlStrEqual(ret->prefix, BAD_CAST "xmlns")))))) {
+                if (tmp->nexth == NULL)
+                    break;
+                tmp = tmp->nexth;
+            }
+            if (tmp != NULL) {
+                ret->nexth = tmp->nexth;
+                tmp->nexth = ret;
+            } else {
+                ret->nexth = elemDef->attributes;
+                elemDef->attributes = ret;
+            }
+        }
+    }
+*/
+
+	dtd.AddChild(attr)
+	return attr, nil
+}
+
 func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue string) {
 	// detect attribute redefinition
 	if _, ok := ctx.lookupSpecialAttribute(elemName, attrName); ok {

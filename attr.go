@@ -1,5 +1,27 @@
 package helium
 
+func newAttributeDecl() *AttributeDecl {
+	attr := &AttributeDecl{}
+	attr.etype = AttributeDeclNode
+	return attr
+}
+
+func (n *AttributeDecl) AddChild(cur Node) error {
+	return addChild(n, cur)
+}
+
+func (n *AttributeDecl) AddContent(b []byte) error {
+	return addContent(n, b)
+}
+
+func (n *AttributeDecl) AddSibling(cur Node) error {
+	return addSibling(n, cur)
+}
+
+func (n *AttributeDecl) Replace(cur Node) {
+	replaceNode(n, cur)
+}
+
 func newAttribute(name string, ns *Namespace) *Attribute {
 	attr := &Attribute{}
 	attr.name = name

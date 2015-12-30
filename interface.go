@@ -118,6 +118,7 @@ type ProcessingInstruction struct {
 
 type DTD struct {
 	docnode
+	attributes map[string]*AttributeDecl
 	elements   map[string]ElementDecl
 	entities   map[string]*Entity
 	pentities  map[string]*Entity
@@ -198,6 +199,17 @@ type Element struct {
 type Namespacer interface {
 	Prefix() string
 	URI() string
+}
+
+// AttributeDecl is an xml attribute delcaration from DTD
+type AttributeDecl struct {
+	docnode
+	atype    AttributeType    // attribute type
+	def      AttributeDefault // default
+	defvalue string           // ... or the default value
+	tree     Enumeration      // ... or the numeration tree, if any
+	prefix   string           // the namespace prefix, if any
+	elem     string           // name of the element holding the attribute
 }
 
 // ElementDecl is an xml element declaration from DTD

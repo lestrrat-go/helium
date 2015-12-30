@@ -17,7 +17,7 @@ func NewDocument(version, encoding string, standalone DocumentStandaloneType) *D
 		standalone: standalone,
 		version:    version,
 	}
-	doc.intSubset, _ = doc.CreateDTD()
+
 	doc.etype = DocumentNode
 	doc.name = "(document)"
 	return doc
@@ -67,6 +67,10 @@ func (d *Document) Version() string {
 
 func (d *Document) IntSubset() *DTD {
 	return d.intSubset
+}
+
+func (d *Document) ExtSubset() *DTD {
+	return d.extSubset
 }
 
 func (d *Document) Replace(n Node) {
@@ -229,6 +233,10 @@ func (d *Document) GetParameterEntity(name string) (*Entity, bool) {
 }
 
 func (d *Document) IsMixedElement(name string) (bool, error) {
+	if d.intSubset == nil {
+		return false, errors.New("element declaration not found")
+	}
+
 	edecl, ok := d.intSubset.GetElementDesc(name)
 	if !ok {
 		return false, errors.New("element declaration not found")
