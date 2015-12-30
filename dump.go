@@ -164,8 +164,8 @@ func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 		if err := d.DumpNode(out, e); err != nil {
 			return err
 		}
+		io.WriteString(out, "\n")
 	}
-	io.WriteString(out, "\n")
 	return nil
 }
 
@@ -227,7 +227,7 @@ func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
 		}
 	}
 
-	io.WriteString(out, "]>\n")
+	io.WriteString(out, "]>")
 	return nil
 }
 
@@ -323,7 +323,7 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 	case CommentNode:
 		io.WriteString(out, "<!--")
 		out.Write(n.Content())
-		io.WriteString(out, "-->\n") // <-- this newline is not right, but I'm punting the problem for now
+		io.WriteString(out, "-->")
 		return nil
 	case EntityRefNode:
 		io.WriteString(out, "&")
