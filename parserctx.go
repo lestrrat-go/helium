@@ -925,7 +925,9 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (val
 						}
 					}
 				} else {
-					b.WriteString(ent.orig)
+					b.WriteString("&")
+					b.WriteString(ent.name)
+					b.WriteString(";")
 				}
 			}
 		case 0x20, 0xD, 0xA, 0x9:
