@@ -7,6 +7,28 @@ import (
 	"github.com/lestrrat/helium/internal/debug"
 )
 
+func newElementDecl() *ElementDecl {
+	e := ElementDecl{}
+	e.etype = ElementDeclNode
+	return &e
+}
+
+func (n *ElementDecl) AddChild(cur Node) error {
+	return addChild(n, cur)
+}
+
+func (n *ElementDecl) AddContent(b []byte) error {
+	return addContent(n, b)
+}
+
+func (n *ElementDecl) AddSibling(cur Node) error {
+	return addSibling(n, cur)
+}
+
+func (n *ElementDecl) Replace(cur Node) {
+	replaceNode(n, cur)
+}
+
 func newElement(name string) *Element {
 	e := Element{}
 	e.name = name

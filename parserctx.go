@@ -772,14 +772,6 @@ func (ctx *parserCtx) parseStartTag() error {
 		}
 	}
 
-	/*
-		for _, attr := range attrs {
-			local:      local,
-			namespaces: namespaces,
-			attributes: attrs,
-		}
-	*/
-
 	// we push the element first, because this way we get to
 	// query for the namespace declared on this node as well
 	// via lookupNamespace
@@ -2275,7 +2267,7 @@ func (ctx *parserCtx) parseElementMixedContentDecl() (*ElementContent, error) {
 func (ctx *parserCtx) parseElementChildrenContentDeclPriv(depth int) (*ElementContent, error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseElementChildrenContentDeclPriv(%d)", depth)
-		defer g.IRelease("END   parseElementChildrenContentDeclPriv(%d)", depth)
+		defer g.IRelease("END parseElementChildrenContentDeclPriv(%d)", depth)
 	}
 
 	if depth > 128 { // XML_PARSE_HUGE -> 2048
@@ -4420,8 +4412,7 @@ func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
 		}
 
 		if loadedEnt == nil && ctx == ctx.userData {
-			panic("unimplemented")
-			//			ent = ctx.resolveEntity(name)
+			ent, _ = ctx.getEntity(name)
 		}
 	}
 

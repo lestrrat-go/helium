@@ -119,7 +119,7 @@ type ProcessingInstruction struct {
 type DTD struct {
 	docnode
 	attributes map[string]*AttributeDecl
-	elements   map[string]ElementDecl
+	elements   map[string]*ElementDecl
 	entities   map[string]*Entity
 	pentities  map[string]*Entity
 	externalID string
@@ -219,7 +219,8 @@ type AttributeDecl struct {
 type ElementDecl struct {
 	docnode
 	decltype ElementTypeVal
-	content  ElementContent
+	content  *ElementContent
+	attributes *AttributeDecl
 	prefix   string
 	// xmlRegexpPtr contModel
 }

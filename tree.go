@@ -228,7 +228,12 @@ func (t *TreeBuilder) GetEntity(ctxif sax.Context, name string) (ent sax.Entity,
 		}()
 	}
 
-	err = sax.ErrHandlerUnspecified
+	x, ok := t.doc.GetEntity(name)
+	if !ok {
+		err = errors.New("entity not found")
+	} else {
+		ent = x
+	}
 	return
 }
 
@@ -311,10 +316,27 @@ func (t *TreeBuilder) AttributeDecl(ctxif sax.Context, eName string, aName strin
 	return nil
 }
 
-func (t *TreeBuilder) ElementDecl(ctx sax.Context, name string, typ int, content sax.ElementContent) error {
+func (t *TreeBuilder) ElementDecl(ctxif sax.Context, name string, typ int, content sax.ElementContent) error {
 	if debug.Enabled {
 		g := debug.IPrintf("START tree.ElementDecl")
 		defer g.IRelease("END tree.ElementDecl")
+	}
+
+	ctx := ctxif.(*parserCtx)
+
+	var dtd *DTD
+	switch ctx.inSubset {
+	case 1:
+		dtd = t.doc.intSubset
+	case 2:
+		dtd = t.doc.extSubset
+	default:
+		return errors.New("sax.ElementDecl called while not in subset")
+	}
+
+	_, err := dtd.AddElementDecl(name, ElementTypeVal(typ), content.(*ElementContent))
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -432,11 +454,43 @@ func (t *TreeBuilder) StartEntity(ctx sax.Context, name string) error {
 	return nil
 }
 
-func (t *TreeBuilder) EntityDecl(ctx sax.Context, name string, typ int, publicID string, systemID string, notation string) error {
+func (t *TreeBuilder) EntityDecl(ctxif sax.Context, name string, typ int, publicID string, systemID string, notation string) error {
 	if debug.Enabled {
 		g := debug.IPrintf("START tree.EntityDecl '%s'", name)
 		defer g.IRelease("END tree.EntityDecl")
 	}
+
+	ctx := ctxif.(*parserCtx)
+	var dtd *DTD
+	switch ctx.inSubset {
+	case 1:
+		dtd = t.doc.intSubset
+	case 2:
+		dtd = t.doc.extSubset
+	default:
+		return errors.New("sax.EntityDecl called while note in subset")
+	}
+
+	ent, err := dtd.RegisterEntity(name, EntityType(typ), publicID, systemID, notation)
+	if err != nil {
+		return err
+	}
+
+	if ent.uri == "" && systemID != "" {
+			/*
+            xmlChar *URI;
+            const char *base = NULL;
+
+            if (ctxt->input != NULL)
+                base = ctxt->input->filename;
+            if (base == NULL)
+                base = ctxt->directory;
+
+            URI = xmlBuildURI(systemId, (const xmlChar *) base);
+            ent->URI = URI;
+			*/
+	}
+
 	return nil
 }
 

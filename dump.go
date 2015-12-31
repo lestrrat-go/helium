@@ -284,6 +284,125 @@ func (d *Dumper) dumpEnumeration(out io.Writer, n Enumeration) error {
 	return nil
 }
 
+func dumpElementDeclPrologue(out io.Writer, n *ElementDecl) {
+		io.WriteString(out, "<!ELEMENT ")
+		if n.prefix != "" {
+			io.WriteString(out, n.prefix)
+			io.WriteString(out, ":")
+		}
+		io.WriteString(out, n.name)
+}
+
+func dumpElementContent(out io.Writer, n *ElementContent, glob bool) error {
+	if debug.Enabled {
+		g := debug.IPrintf("START Dumper.dumpElementContent n = '%s'", n.name)
+		defer g.IRelease("END Dumper.dumpElementContent")
+	debug.Dump(n)
+	}
+	if n == nil {
+		return nil
+	}
+
+	if glob {
+		io.WriteString(out, "(")
+	}
+
+	switch n.ctype {
+	case ElementContentPCDATA:
+		io.WriteString(out, "#PCDATA")
+	case ElementContentElement:
+		if n.prefix != "" {
+			io.WriteString(out, n.prefix)
+			io.WriteString(out, ":")
+		}
+		io.WriteString(out, n.name)
+	case ElementContentSeq:
+		switch n.c1.ctype {
+		case ElementContentOr, ElementContentSeq:
+			if err := dumpElementContent(out, n.c1, true); err != nil {
+				return err
+			}
+		default:
+			if err := dumpElementContent(out, n.c1, false); err != nil {
+				return err
+			}
+		}
+		io.WriteString(out, " , ")
+
+		if ctype := n.c2.ctype; ctype == ElementContentOr || (ctype == ElementContentSeq && n.c2.coccur != ElementContentOnce) {
+			if err := dumpElementContent(out, n.c2, true); err != nil {
+				return err
+			}
+		} else {
+			if err := dumpElementContent(out, n.c2, false); err != nil {
+				return err
+			}
+		}
+	case ElementContentOr:
+		switch n.c1.ctype {
+		case ElementContentOr, ElementContentSeq:
+			if err := dumpElementContent(out, n.c1, true); err != nil {
+				return err
+			}
+		default:
+			if err := dumpElementContent(out, n.c1, false); err != nil {
+				return err
+			}
+		}
+		io.WriteString(out, " | ")
+
+		if ctype := n.c2.ctype; ctype == ElementContentSeq || (ctype == ElementContentOr && n.c2.coccur != ElementContentOnce) {
+			if err := dumpElementContent(out, n.c2, true); err != nil {
+				return err
+			}
+		} else {
+			if err := dumpElementContent(out, n.c2, false); err != nil {
+				return err
+			}
+		}
+	default:
+		return errors.New("invalid ElementContent")
+	}
+
+	if glob {
+		io.WriteString(out, ")")
+	}
+
+	switch n.coccur {
+	case ElementContentOnce:
+		// no op
+	case ElementContentOpt:
+		io.WriteString(out, "?")
+	case ElementContentMult:
+		io.WriteString(out, "*")
+	case ElementContentPlus:
+		io.WriteString(out, "+")
+	}
+
+	return nil
+}
+
+func (d *Dumper) dumpElementDecl(out io.Writer, n *ElementDecl) error {
+	switch n.decltype {
+	case EmptyElementType:
+		dumpElementDeclPrologue(out, n)
+		io.WriteString(out, " EMPTY>\n")
+	case AnyElementType:
+		dumpElementDeclPrologue(out, n)
+		io.WriteString(out, " ANY>\n")
+	case MixedElementType, ElementElementType:
+		dumpElementDeclPrologue(out, n)
+		io.WriteString(out, " ")
+		if err := dumpElementContent(out, n.content, true); err != nil {
+			return err
+		}
+		io.WriteString(out, ">\n")
+	default:
+		return errors.New("invalid element decl")
+	}
+	return nil
+}
+
 func (d *Dumper) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
 	io.WriteString(out, "<!ATTLIST ")
 	io.WriteString(out, n.elem)
@@ -337,7 +456,7 @@ func (d *Dumper) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
 
 	if n.defvalue != "" {
 		io.WriteString(out, " ")
-		io.WriteString(out, n.defvalue)
+		dumpQuotedString(out, n.defvalue)
 	}
 	io.WriteString(out, ">\n")
 	return nil
@@ -407,6 +526,11 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 			escapeText(out, c, false)
 		}
 		return nil // no recursing down
+	case ElementDeclNode:
+		if err = d.dumpElementDecl(out, n.(*ElementDecl)); err != nil {
+			return err
+		}
+		return nil
 	case AttributeDeclNode:
 		if err = d.dumpAttributeDecl(out, n.(*AttributeDecl)); err != nil {
 			return err
