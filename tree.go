@@ -415,7 +415,20 @@ func (t *TreeBuilder) Reference(ctx sax.Context, name string) error {
 		defer g.IRelease("END tree.Reference")
 	}
 
-	return nil
+	doc := t.doc
+	var n Node
+	var err error
+	if name[0] == '#' {
+		if n, err = doc.CreateCharRef(name); err != nil {
+			return err
+		}
+	} else {
+		if n, err = doc.CreateReference(name); err != nil {
+			return err
+		}
+	}
+
+	return t.node.AddChild(n)
 }
 
 func (t *TreeBuilder) ResolveEntity(ctx sax.Context, publicID string, systemID string) (sax.ParseInput, error) {

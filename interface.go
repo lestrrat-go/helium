@@ -172,7 +172,7 @@ type NamespaceContainer interface {
 	Namespaces() []*Namespace
 }
 
-type EntityReference struct {
+type EntityRef struct {
 	node
 }
 

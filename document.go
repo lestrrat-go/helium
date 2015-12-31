@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"strings"
+
+	"github.com/lestrrat/helium/internal/debug"
 )
 
 func CreateDocument() *Document {
@@ -103,23 +105,14 @@ func (d *Document) SetDocumentElement(root Node) error {
 	return nil
 }
 
-func (d *Document) CreateReference(name string) (*EntityReference, error) {
-	if name == "" {
-		return nil, errors.New("empty name")
+func (d *Document) CreateReference(name string) (*EntityRef, error) {
+	if debug.Enabled {
+		g := debug.IPrintf("START document.CreateReference '%s'", name)
+		defer g.IRelease("END document.CreateReference")
 	}
-
-	n := &EntityReference{}
-	n.etype = EntityRefNode
-	n.doc = d
-	if name[0] == '&' {
-		// the name should be everything but '&' and ';'
-		if name[len(name)-1] == ';' {
-			n.name = name[1 : len(name)-1]
-		} else {
-			n.name = name[1:]
-		}
-	} else {
-		n.name = name
+	n, err := d.CreateCharRef(name)
+	if err != nil {
+		return nil, err
 	}
 
 	ent, ok := d.GetEntity(n.name)
@@ -404,5 +397,30 @@ func (d *Document) stringToNodeList(value string) (Node, error) {
 	}
 
 	return ret, nil
+}
+
+func (d *Document) CreateCharRef(name string) (*EntityRef, error) {
+	if debug.Enabled {
+		g := debug.IPrintf("START document.CreateCharRef '%s'", name)
+		defer g.IRelease("END document.CreateCharRef")
+	}
+
+	if name == "" {
+		return nil, errors.New("empty name")
+	}
+
+	n := newEntityRef()
+	n.doc = d
+	if name[0] != '&' {
+		n.name = name
+	} else {
+		// the name should be everything but '&' and ';'
+		if name[len(name)-1] == ';' {
+			n.name = name[1 : len(name)-1]
+		} else {
+			n.name = name[1:]
+		}
+	}
+	return n, nil
 }
 

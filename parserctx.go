@@ -3626,7 +3626,9 @@ func (ctx *parserCtx) parseReference() (string, error) {
 	ctx.parseBalancedChunkInternal(ent.Content())
 
 	if s := ctx.sax; s != nil {
-		s.Reference(ctx.userData, ent.Name())
+		if err := s.Reference(ctx.userData, ent.Name()); err != nil {
+			return "", err
+		}
 	}
 	return string(ent.Content()), nil
 	/*
