@@ -27,6 +27,7 @@ func newEntity(name string, typ EntityType, publicID, systemID, notation, orig s
 		systemID:   systemID,
 		orig:       orig,
 	}
+	e.etype = EntityNode
 	e.name = name
 	return e
 }

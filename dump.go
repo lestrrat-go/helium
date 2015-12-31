@@ -1,6 +1,7 @@
 package helium
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -285,19 +286,19 @@ func (d *Dumper) dumpEnumeration(out io.Writer, n Enumeration) error {
 }
 
 func dumpElementDeclPrologue(out io.Writer, n *ElementDecl) {
-		io.WriteString(out, "<!ELEMENT ")
-		if n.prefix != "" {
-			io.WriteString(out, n.prefix)
-			io.WriteString(out, ":")
-		}
-		io.WriteString(out, n.name)
+	io.WriteString(out, "<!ELEMENT ")
+	if n.prefix != "" {
+		io.WriteString(out, n.prefix)
+		io.WriteString(out, ":")
+	}
+	io.WriteString(out, n.name)
 }
 
 func dumpElementContent(out io.Writer, n *ElementContent, glob bool) error {
 	if debug.Enabled {
 		g := debug.IPrintf("START Dumper.dumpElementContent n = '%s'", n.name)
 		defer g.IRelease("END Dumper.dumpElementContent")
-	debug.Dump(n)
+		debug.Dump(n)
 	}
 	if n == nil {
 		return nil
@@ -379,6 +380,113 @@ func dumpElementContent(out io.Writer, n *ElementContent, glob bool) error {
 		io.WriteString(out, "+")
 	}
 
+	return nil
+}
+
+func dumpEntityContent(out io.Writer, content string) error {
+	if strings.IndexByte(content, '%') == -1 {
+		dumpQuotedString(out, content)
+		return nil
+	}
+
+	io.WriteString(out, `"`)
+	rdr := strings.NewReader(content)
+	buf := bytes.Buffer{}
+	for rdr.Len() > 0 {
+		c, err := rdr.ReadByte()
+		if err != nil {
+			return err
+		}
+		switch c {
+		case '"':
+			if buf.Len() > 0 {
+				buf.WriteTo(out)
+				buf.Reset()
+			}
+			io.WriteString(out, "&quot;")
+		case '%':
+			if buf.Len() > 0 {
+				buf.WriteTo(out)
+				buf.Reset()
+			}
+			io.WriteString(out, "&#x25;")
+		default:
+			buf.WriteByte(c)
+		}
+	}
+	if buf.Len() > 0 {
+		buf.WriteTo(out)
+	}
+	io.WriteString(out, `"`)
+
+	return nil
+}
+
+func (d *Dumper) dumpEntityDecl(out io.Writer, ent *Entity) error {
+	if ent == nil {
+		return nil
+	}
+
+	switch etype := ent.entityType; etype {
+	case InternalGeneralEntity:
+		io.WriteString(out, "<!ENTITY ")
+		io.WriteString(out, ent.name)
+		io.WriteString(out, " ")
+		if ent.orig != "" {
+			dumpQuotedString(out, ent.orig)
+		} else {
+			dumpEntityContent(out, ent.content)
+		}
+		io.WriteString(out, ">\n")
+	case ExternalGeneralParsedEntity, ExternalGeneralUnparsedEntity:
+		io.WriteString(out, "<!ENTITY ")
+		io.WriteString(out, ent.name)
+		if ent.externalID == "" {
+			io.WriteString(out, " PUBLIC ")
+			dumpQuotedString(out, ent.externalID)
+			io.WriteString(out, " ")
+			dumpQuotedString(out, ent.systemID)
+		} else {
+			io.WriteString(out, " SYSTEM ")
+			dumpQuotedString(out, ent.systemID)
+		}
+
+		if etype == ExternalGeneralUnparsedEntity {
+			if ent.content != "" {
+				io.WriteString(out, " NDATA ")
+				if ent.orig != "" {
+					io.WriteString(out, ent.orig)
+				} else {
+					io.WriteString(out, ent.content)
+				}
+			}
+		}
+		io.WriteString(out, ">\n")
+	case InternalParameterEntity:
+		io.WriteString(out, "<!ENTITY % ")
+		io.WriteString(out, ent.name)
+		io.WriteString(out, " ")
+		if ent.orig != "" {
+			dumpQuotedString(out, ent.orig)
+		} else {
+			dumpEntityContent(out, ent.content)
+		}
+		io.WriteString(out, ">\n")
+	case ExternalParameterEntity:
+		io.WriteString(out, "<!ENTITY % ")
+		io.WriteString(out, ent.name)
+		if ent.externalID != "" {
+			io.WriteString(out, " PUBLIC ")
+			dumpQuotedString(out, ent.externalID)
+			io.WriteString(out, " ")
+			dumpQuotedString(out, ent.systemID)
+		} else {
+			io.WriteString(out, " SYSTEM ")
+			dumpQuotedString(out, ent.systemID)
+		}
+	default:
+		return errors.New("invalid entity type")
+	}
 	return nil
 }
 
@@ -533,6 +641,11 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		return nil
 	case AttributeDeclNode:
 		if err = d.dumpAttributeDecl(out, n.(*AttributeDecl)); err != nil {
+			return err
+		}
+		return nil
+	case EntityNode:
+		if err = d.dumpEntityDecl(out, n.(*Entity)); err != nil {
 			return err
 		}
 		return nil

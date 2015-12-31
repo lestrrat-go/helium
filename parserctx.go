@@ -2840,7 +2840,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 		}
 	}
 	if cur != nil {
-		cur.SetOrig("&" + name + ";")
+		cur.SetOrig(literal)
 	}
 
 	return nil

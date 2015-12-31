@@ -32,6 +32,8 @@ func (dtd *DTD) RegisterEntity(name string, typ EntityType, publicID, systemID, 
 	ent := newEntity(name, typ, publicID, systemID, content, "")
 	ent.doc = dtd.doc
 	table[name] = ent
+
+	dtd.AddChild(ent)
 	return ent, nil
 }
 
