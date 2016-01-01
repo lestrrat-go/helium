@@ -88,7 +88,6 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 	}
 	ctx := ctxif.(*parserCtx)
 	doc := ctx.doc
-	elem := t.elem
 
 	e, err := doc.CreateElement(localname)
 	if err != nil {
@@ -110,16 +109,16 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 		e.SetAttribute(attr.Name(), attr.Value())
 	}
 
-	if elem == nil {
-		if debug.Enabled {
-			debug.Printf("parent is nil, adding a child directly to document")
-		}
+	var parent Node
+	if e := t.elem; e != nil {
+		parent = e
+	}
+	if parent == nil {
 		doc.AddChild(e)
+	} else if parent.Type() == ElementNode {
+		parent.AddChild(e)
 	} else {
-		if debug.Enabled {
-			debug.Printf("parent is NOT nil, adding a child to '%s'", elem.Name())
-		}
-		elem.AddChild(e)
+		parent.AddSibling(e)
 	}
 
 	t.elem = e
