@@ -9,7 +9,6 @@ import (
 )
 
 type TreeBuilder struct {
-	elem *Element
 }
 
 func NewTreeBuilder() *TreeBuilder {
@@ -63,7 +62,7 @@ func (t *TreeBuilder) ProcessingInstruction(ctxif sax.Context, target, data stri
 		doc.ExtSubset().AddChild(pi)
 	}
 
-	parent := t.elem
+	parent := ctx.elem
 	if parent == nil {
 		doc.AddChild(pi)
 	} else if parent.Type() == ElementNode {
@@ -86,6 +85,7 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 		g := debug.IPrintf("START tree.StartElement: %s", name)
 		defer g.IRelease("END tree.StartElement")
 	}
+
 	ctx := ctxif.(*parserCtx)
 	doc := ctx.doc
 
@@ -110,7 +110,7 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 	}
 
 	var parent Node
-	if e := t.elem; e != nil {
+	if e := ctx.elem; e != nil {
 		parent = e
 	}
 	if parent == nil {
@@ -121,7 +121,7 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 		parent.AddSibling(e)
 	}
 
-	t.elem = e
+	ctx.elem = e
 
 	return nil
 }
@@ -135,16 +135,17 @@ func (t *TreeBuilder) EndElementNS(ctxif sax.Context, localname, prefix, uri str
 		}
 	}
 
-	cur := t.elem
+	ctx := ctxif.(*parserCtx)
+	cur := ctx.elem
 	if cur == nil {
 		return errors.New("no context node to end")
 	}
 
 	p := cur.Parent()
 	if e, ok := p.(*Element); ok {
-		t.elem = e
+		ctx.elem = e
 	} else {
-		t.elem = nil
+		ctx.elem = nil
 	}
 	return nil
 }
@@ -155,7 +156,8 @@ func (t *TreeBuilder) Characters(ctxif sax.Context, data []byte) error {
 		defer g.IRelease("END tree.Characters")
 	}
 
-	n := t.elem
+	ctx := ctxif.(*parserCtx)
+	n := ctx.elem
 	if n == nil {
 		return errors.New("text content placed in wrong location")
 	}
@@ -192,7 +194,7 @@ func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
 		return err
 	}
 
-	n := t.elem
+	n := ctx.elem
 	if n == nil {
 		doc.AddChild(e)
 	} else if n.Type() == ElementNode {
@@ -452,7 +454,7 @@ func (t *TreeBuilder) Reference(ctxif sax.Context, name string) error {
 		}
 	}
 
-	parent := t.elem
+	parent := ctx.elem
 	return parent.AddChild(n)
 }
 

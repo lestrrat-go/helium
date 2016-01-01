@@ -128,6 +128,7 @@ type parserCtx struct {
 	wellFormed        bool
 	depth             int
 	loadsubset        LoadSubsetOption
+	elem              *Element // current context element
 
 	nsTab      nsStack
 	doc        *Document
