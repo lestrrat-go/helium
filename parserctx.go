@@ -782,7 +782,6 @@ func (ctx *parserCtx) parseStartTag() error {
 	if nsuri != "" {
 		elem.SetNamespace(prefix, nsuri, true)
 	}
-	ctx.pushNode(elem)
 
 	if s := ctx.sax; s != nil {
 		var nslist []sax.Namespace
@@ -800,6 +799,7 @@ func (ctx *parserCtx) parseStartTag() error {
 			return ctx.error(err)
 		}
 	}
+	ctx.pushNode(elem)
 
 	return nil
 }
@@ -834,7 +834,8 @@ func (ctx *parserCtx) parseEndTag() error {
 		}
 		ctx.curAdvance(1)
 	}
-	e := ctx.popNode()
+
+	e := ctx.peekNode()
 	if s := ctx.sax; s != nil {
 		switch err := s.EndElementNS(ctx, e.LocalName(), e.Prefix(), e.URI()); err {
 		case nil, sax.ErrHandlerUnspecified:
@@ -843,6 +844,7 @@ func (ctx *parserCtx) parseEndTag() error {
 			return ctx.error(err)
 		}
 	}
+	ctx.popNode()
 
 	return nil
 }
@@ -3522,6 +3524,7 @@ func (ctx *parserCtx) parseExternalEntityPrivate(uri, externalID string) (Node, 
 	return nil, errors.New("unimplemented")
 }
 
+var ErrParseSucceeded = errors.New("parse succeeded")
 func (ctx *parserCtx) parseBalancedChunkInternal(chunk []byte) (Node, error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseBalancedChunkInternal")
@@ -3563,12 +3566,13 @@ func (ctx *parserCtx) parseBalancedChunkInternal(chunk []byte) (Node, error) {
 		return nil, ctx.error(err)
 	}
 	newctx.pushNode(newRoot)
+	newctx.doc.AddChild(newRoot)
 
 	if err := newctx.parseContent(); err != nil {
 		return nil, err
 	}
 
-	if child := ctx.doc.FirstChild(); child != nil {
+	if child := newctx.doc.FirstChild(); child != nil {
 		if grandchild := child.FirstChild(); grandchild != nil {
 			for e := grandchild; e != nil; e = e.NextSibling() {
 				e.SetTreeDoc(ctx.doc)
@@ -3578,7 +3582,9 @@ func (ctx *parserCtx) parseBalancedChunkInternal(chunk []byte) (Node, error) {
 		}
 	}
 
-	return nil, errors.New("failed to parse chunk")
+	// this means that the parsing was successful, but there weren't
+	// any nodes generated as a result of parsing
+	return nil, ErrParseSucceeded
 }
 
 /*
@@ -3656,12 +3662,18 @@ func (ctx *parserCtx) parseReference() error {
 	if (wasChecked == 0 || (ent.firstChild == nil && ctx.options.IsSet(ParseNoEnt))) && (EntityType(ent.EntityType()) != ExternalGeneralParsedEntity || ctx.options.IsSet(ParseNoEnt|ParseDTDValid)) {
 		if EntityType(ent.EntityType()) == InternalGeneralEntity {
 			parsedEnt, err = ctx.parseBalancedChunkInternal([]byte(ent.Content()))
-			if err != nil {
+			switch err {
+			case nil, ErrParseSucceeded:
+				// may not have generated nodes, but parse was successful
+			default:
 				return err
 			}
 		} else if EntityType(ent.EntityType()) == ExternalGeneralParsedEntity {
 			parsedEnt, err = ctx.parseExternalEntityPrivate(ent.uri, ent.externalID)
-			if err != nil {
+			switch err {
+			case nil, ErrParseSucceeded:
+				// may not have generated nodes, but parse was successful
+			default:
 				return err
 			}
 		} else {
@@ -3754,14 +3766,20 @@ func (ctx *parserCtx) parseReference() error {
 			if wasChecked != 0 {
 				if EntityType(ent.EntityType()) == InternalGeneralEntity {
 					parsedEnt, err = ctx.parseBalancedChunkInternal([]byte(ent.Content()))
-					if err != nil {
-						return err
-					}
+			switch err {
+			case nil, ErrParseSucceeded:
+				// may not have generated nodes, but parse was successful
+			default:
+				return err
+			}
 				} else if EntityType(ent.EntityType()) == ExternalGeneralParsedEntity {
 					parsedEnt, err = ctx.parseExternalEntityPrivate(ent.URI(), ent.externalID)
-					if err != nil {
-						return err
-					}
+			switch err {
+			case nil, ErrParseSucceeded:
+				// may not have generated nodes, but parse was successful
+			default:
+				return err
+			}
 				} else {
 					return errors.New("invalid entity type")
 				}
