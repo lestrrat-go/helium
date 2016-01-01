@@ -3,6 +3,8 @@ package helium
 import (
 	"bytes"
 	"errors"
+
+	"github.com/lestrrat/helium/internal/debug"
 )
 
 // because docnode contains links to other nodes, one tends to want to make
@@ -99,18 +101,23 @@ func (n docnode) LastChild() Node {
 func addChild(n Node, cur Node) error {
 	l := n.LastChild()
 	if l == nil { // No children, set firstChild to cur
+debug.Printf("LastChild is nil, setting firstChild and lastChild")
 		n.setFirstChild(cur)
 		n.setLastChild(cur)
-	} else {
-		if err := l.AddSibling(cur); err != nil {
-			return err
-		}
-		// If the last child was a text node, keep the old LastChild
-		if cur.Type() != TextNode || l.Type() != TextNode {
-			n.setLastChild(cur)
-		}
+		cur.SetParent(n)
+		return nil
 	}
-	cur.SetParent(n)
+
+	// AddSibling handles setting the parent, and the
+	// lastChild pointer
+	if err := l.AddSibling(cur); err != nil {
+		return err
+	}
+
+	// If the last child was a text node, keep the old LastChild
+	if cur.Type() == TextNode && l.Type() == TextNode {
+		n.setLastChild(l)
+	}
 	return nil
 }
 
@@ -130,6 +137,11 @@ func addSibling(n, cur Node) error {
 		if n.NextSibling() == nil {
 			n.SetNextSibling(cur)
 			cur.SetPrevSibling(n)
+			parent := n.Parent()
+			cur.SetParent(parent)
+			if parent != nil {
+				parent.setLastChild(cur)
+			}
 			return nil
 		}
 		n = n.NextSibling()

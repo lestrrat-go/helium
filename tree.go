@@ -8,7 +8,9 @@ import (
 	"github.com/lestrrat/helium/sax"
 )
 
-type TreeBuilder struct {}
+type TreeBuilder struct {
+	elem *Element
+}
 
 func NewTreeBuilder() *TreeBuilder {
 	return &TreeBuilder{}
@@ -61,7 +63,7 @@ func (t *TreeBuilder) ProcessingInstruction(ctxif sax.Context, target, data stri
 		doc.ExtSubset().AddChild(pi)
 	}
 
-	parent := ctx.peekNode()
+	parent := t.elem
 	if parent == nil {
 		doc.AddChild(pi)
 	} else if parent.Type() == ElementNode {
@@ -85,8 +87,8 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 		defer g.IRelease("END tree.StartElement")
 	}
 	ctx := ctxif.(*parserCtx)
-	parent := ctx.peekNode()
 	doc := ctx.doc
+	elem := t.elem
 
 	e, err := doc.CreateElement(localname)
 	if err != nil {
@@ -105,17 +107,19 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 		e.SetAttribute(attr.Name(), attr.Value())
 	}
 
-	if parent == nil {
+	if elem == nil {
 		if debug.Enabled {
 			debug.Printf("parent is nil, adding a child directly to document")
 		}
 		doc.AddChild(e)
 	} else {
 		if debug.Enabled {
-			debug.Printf("parent is NOT nil, adding a child to '%s'", parent.Name())
+			debug.Printf("parent is NOT nil, adding a child to '%s'", elem.Name())
 		}
-		parent.AddChild(e)
+		elem.AddChild(e)
 	}
+
+	t.elem = e
 
 	return nil
 }
@@ -129,21 +133,16 @@ func (t *TreeBuilder) EndElementNS(ctxif sax.Context, localname, prefix, uri str
 		}
 	}
 
-	ctx := ctxif.(*parserCtx)
-	cur := ctx.peekNode()
+	cur := t.elem
 	if cur == nil {
 		return errors.New("no context node to end")
 	}
 
-	if cur.LocalName() == localname && cur.Prefix() == prefix && cur.URI() == uri {
-		parent := cur.Parent()
-		if debug.Enabled {
-			pname := "(null)"
-			if parent != nil {
-				pname = parent.Name()
-			}
-			debug.Printf("Setting node parent to '%s' (node.Parent())", pname)
-		}
+	p := cur.Parent()
+	if e, ok := p.(*Element); ok {
+		t.elem = e
+	} else {
+		t.elem = nil
 	}
 	return nil
 }
@@ -154,8 +153,7 @@ func (t *TreeBuilder) Characters(ctxif sax.Context, data []byte) error {
 		defer g.IRelease("END tree.Characters")
 	}
 
-	ctx := ctxif.(*parserCtx)
-	n := ctx.peekNode()
+	n := t.elem
 	if n == nil {
 		return errors.New("text content placed in wrong location")
 	}
@@ -192,7 +190,7 @@ func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
 		return err
 	}
 
-	n := ctx.peekNode()
+	n := t.elem
 	if n == nil {
 		doc.AddChild(e)
 	} else if n.Type() == ElementNode {
@@ -452,7 +450,7 @@ func (t *TreeBuilder) Reference(ctxif sax.Context, name string) error {
 		}
 	}
 
-	parent := ctx.peekNode()
+	parent := t.elem
 	return parent.AddChild(n)
 }
 
