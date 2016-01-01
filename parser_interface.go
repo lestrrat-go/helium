@@ -97,7 +97,7 @@ const (
 )
 
 type parserCtx struct {
-	options int
+	options ParseOption
 	// ctx.encoding contains the explicit encoding. ctx.detectedEncoding
 	// contains the encoding as detected by inspecting BOM, etc.
 	// It is important to differentiate between the two, otherwise
@@ -126,6 +126,7 @@ type parserCtx struct {
 	hasPERefs         bool
 	pedantic          bool
 	wellFormed        bool
+	depth int
 
 	nsTab      nsStack
 	doc        *Document

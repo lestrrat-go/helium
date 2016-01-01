@@ -22,3 +22,7 @@ func (e *EntityRef) Replace(cur Node) {
 	replaceNode(e, cur)
 }
 
+func (n *EntityRef) SetTreeDoc(doc *Document) {
+	setTreeDoc(n, doc)
+}
+

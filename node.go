@@ -33,6 +33,14 @@ func (n *docnode) setLastChild(cur Node) {
 	n.lastChild = cur
 }
 
+func (n *docnode) SetOwnerDocument(doc *Document) {
+	n.doc = doc
+}
+
+func (n docnode) OwnerDocument() *Document {
+	return n.doc
+}
+
 func (n docnode) Parent() Node {
 	return n.parent
 }
@@ -210,4 +218,41 @@ func (n node) Name() string {
 		return ns.Prefix() + ":" + n.name
 	}
 	return n.name
+}
+
+func setListDoc(n Node, doc *Document) {
+	if n == nil || n.Type() == NamespaceDeclNode {
+		return
+	}
+
+	for ; n != nil; n = n.NextSibling() {
+		if n.OwnerDocument() != doc {
+			n.SetTreeDoc(doc)
+		}
+	}
+}
+
+func setTreeDoc(n Node, doc *Document) {
+	if n == nil || n.Type() == NamespaceDeclNode {
+		return
+	}
+
+	if n.OwnerDocument() == doc {
+		return
+	}
+
+	if n.Type() == ElementNode {
+		e := n.(*Element)
+		for prop := e.properties; prop != nil; prop = prop.NextAttribute() {
+			// if prop.atype == XML_ATTRIBUTE_ID; xmlRemoveID(tree->doc, prop)
+			prop.doc = doc
+			if child := prop.firstChild; child != nil {
+				setListDoc(child, doc)
+			}
+		}
+	}
+	if child := n.FirstChild(); child != nil {
+		setListDoc(child, doc)
+	}
+	n.SetOwnerDocument(doc)
 }
