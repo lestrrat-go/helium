@@ -3,6 +3,8 @@ package helium
 import (
 	"bytes"
 	"errors"
+
+	"github.com/lestrrat/helium/internal/debug"
 )
 
 // because docnode contains links to other nodes, one tends to want to make
@@ -31,6 +33,14 @@ func (n *docnode) setFirstChild(cur Node) {
 
 func (n *docnode) setLastChild(cur Node) {
 	n.lastChild = cur
+}
+
+func (n *docnode) SetOwnerDocument(doc *Document) {
+	n.doc = doc
+}
+
+func (n docnode) OwnerDocument() *Document {
+	return n.doc
 }
 
 func (n docnode) Parent() Node {
@@ -91,18 +101,23 @@ func (n docnode) LastChild() Node {
 func addChild(n Node, cur Node) error {
 	l := n.LastChild()
 	if l == nil { // No children, set firstChild to cur
+debug.Printf("LastChild is nil, setting firstChild and lastChild")
 		n.setFirstChild(cur)
 		n.setLastChild(cur)
-	} else {
-		if err := l.AddSibling(cur); err != nil {
-			return err
-		}
-		// If the last child was a text node, keep the old LastChild
-		if cur.Type() != TextNode || l.Type() != TextNode {
-			n.setLastChild(cur)
-		}
+		cur.SetParent(n)
+		return nil
 	}
-	cur.SetParent(n)
+
+	// AddSibling handles setting the parent, and the
+	// lastChild pointer
+	if err := l.AddSibling(cur); err != nil {
+		return err
+	}
+
+	// If the last child was a text node, keep the old LastChild
+	if cur.Type() == TextNode && l.Type() == TextNode {
+		n.setLastChild(l)
+	}
 	return nil
 }
 
@@ -122,6 +137,11 @@ func addSibling(n, cur Node) error {
 		if n.NextSibling() == nil {
 			n.SetNextSibling(cur)
 			cur.SetPrevSibling(n)
+			parent := n.Parent()
+			cur.SetParent(parent)
+			if parent != nil {
+				parent.setLastChild(cur)
+			}
 			return nil
 		}
 		n = n.NextSibling()
@@ -210,4 +230,41 @@ func (n node) Name() string {
 		return ns.Prefix() + ":" + n.name
 	}
 	return n.name
+}
+
+func setListDoc(n Node, doc *Document) {
+	if n == nil || n.Type() == NamespaceDeclNode {
+		return
+	}
+
+	for ; n != nil; n = n.NextSibling() {
+		if n.OwnerDocument() != doc {
+			n.SetTreeDoc(doc)
+		}
+	}
+}
+
+func setTreeDoc(n Node, doc *Document) {
+	if n == nil || n.Type() == NamespaceDeclNode {
+		return
+	}
+
+	if n.OwnerDocument() == doc {
+		return
+	}
+
+	if n.Type() == ElementNode {
+		e := n.(*Element)
+		for prop := e.properties; prop != nil; prop = prop.NextAttribute() {
+			// if prop.atype == XML_ATTRIBUTE_ID; xmlRemoveID(tree->doc, prop)
+			prop.doc = doc
+			if child := prop.firstChild; child != nil {
+				setListDoc(child, doc)
+			}
+		}
+	}
+	if child := n.FirstChild(); child != nil {
+		setListDoc(child, doc)
+	}
+	n.SetOwnerDocument(doc)
 }

@@ -47,3 +47,8 @@ func (n Text) Content() []byte {
 func (n *Text) Replace(cur Node) {
 	replaceNode(n, cur)
 }
+
+func (n *Text) SetTreeDoc(doc *Document) {
+	setTreeDoc(n, doc)
+}
+

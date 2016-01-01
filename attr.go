@@ -22,6 +22,10 @@ func (n *AttributeDecl) Replace(cur Node) {
 	replaceNode(n, cur)
 }
 
+func (n *AttributeDecl) SetTreeDoc(doc *Document) {
+	setTreeDoc(n, doc)
+}
+
 func newAttribute(name string, ns *Namespace) *Attribute {
 	attr := &Attribute{}
 	attr.name = name
@@ -53,6 +57,10 @@ func (n *Attribute) AddSibling(cur Node) error {
 
 func (n *Attribute) Replace(cur Node) {
 	replaceNode(n, cur)
+}
+
+func (n *Attribute) SetTreeDoc(doc *Document) {
+	setTreeDoc(n, doc)
 }
 
 func (n *Attribute) SetDefault(b bool) {

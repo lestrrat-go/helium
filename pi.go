@@ -19,3 +19,7 @@ func (p *ProcessingInstruction) AddSibling(cur Node) error {
 func (p *ProcessingInstruction) Replace(cur Node) {
 	replaceNode(p, cur)
 }
+
+func (p *ProcessingInstruction) SetTreeDoc(doc *Document) {
+	setTreeDoc(p, doc)
+}

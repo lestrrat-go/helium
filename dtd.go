@@ -183,3 +183,7 @@ func (dtd *DTD) AddSibling(cur Node) error {
 func (dtd *DTD) Replace(cur Node) {
 	replaceNode(dtd, cur)
 }
+
+func (dtd *DTD) SetTreeDoc(doc *Document) {
+	setTreeDoc(dtd, doc)
+}

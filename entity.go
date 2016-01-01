@@ -59,3 +59,7 @@ func (e *Entity) AddSibling(cur Node) error {
 func (e *Entity) Replace(cur Node) {
 	replaceNode(e, cur)
 }
+
+func (n *Entity) SetTreeDoc(doc *Document) {
+	setTreeDoc(n, doc)
+}

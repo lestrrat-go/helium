@@ -29,6 +29,10 @@ func (n *ElementDecl) Replace(cur Node) {
 	replaceNode(n, cur)
 }
 
+func (n *ElementDecl) SetTreeDoc(doc *Document) {
+	setTreeDoc(n, doc)
+}
+
 func newElement(name string) *Element {
 	e := Element{}
 	e.name = name
@@ -69,6 +73,11 @@ func (n *Element) AddSibling(cur Node) error {
 func (n *Element) Replace(cur Node) {
 	replaceNode(n, cur)
 }
+
+func (n *Element) SetTreeDoc(doc *Document) {
+	setTreeDoc(n, doc)
+}
+
 func (n *Element) SetAttribute(name, value string) error {
 	if debug.Enabled {
 		g := debug.IPrintf("START Element.SetAttribute '%s' (%s)", name, value)
