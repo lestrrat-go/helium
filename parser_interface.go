@@ -126,7 +126,8 @@ type parserCtx struct {
 	hasPERefs         bool
 	pedantic          bool
 	wellFormed        bool
-	depth int
+	depth             int
+	loadsubset        LoadSubsetOption
 
 	nsTab      nsStack
 	doc        *Document

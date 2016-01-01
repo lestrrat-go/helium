@@ -767,9 +767,6 @@ func (ctx *parserCtx) parseStartTag() error {
 				attrs = append(attrs, attr)
 			}
 		}
-		if debug.Enabled {
-			debug.Dump(attrs)
-		}
 	}
 
 	// we push the element first, because this way we get to
@@ -3370,9 +3367,6 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 	attr.SetDefault(true)
 	m[attrName] = attr
 
-	if debug.Enabled {
-		debug.Dump(ctx.attsDefault)
-	}
 	/*
 	   	hmm, let's think about this when the time comes
 	       if (ctxt->external)
@@ -3384,9 +3378,6 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 
 func (ctx *parserCtx) lookupAttributeDefault(elemName string) (map[string]*Attribute, bool) {
 	v, ok := ctx.attsDefault[elemName]
-	if debug.Enabled {
-		debug.Dump(v)
-	}
 	return v, ok
 }
 
@@ -3525,7 +3516,8 @@ func (ctx *parserCtx) parseExternalEntityPrivate(uri, externalID string) (Node, 
 }
 
 var ErrParseSucceeded = errors.New("parse succeeded")
-func (ctx *parserCtx) parseBalancedChunkInternal(chunk []byte) (Node, error) {
+
+func (ctx *parserCtx) parseBalancedChunkInternal(chunk []byte, userData interface{}) (Node, error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START parseBalancedChunkInternal")
 		defer g.IRelease("END parseBalancedChunkInternal")
@@ -3541,6 +3533,12 @@ func (ctx *parserCtx) parseBalancedChunkInternal(chunk []byte) (Node, error) {
 	newctx := &parserCtx{}
 	newctx.init(nil, chunk)
 	defer newctx.release()
+
+	if userData != nil {
+		newctx.userData = userData
+	} else {
+		newctx.userData = newctx
+	}
 
 	if ctx.doc == nil {
 		ctx.doc = NewDocument("1.0", "", StandaloneExplicitNo)
@@ -3660,8 +3658,13 @@ func (ctx *parserCtx) parseReference() error {
 	// the document entity by default.
 	var parsedEnt Node
 	if (wasChecked == 0 || (ent.firstChild == nil && ctx.options.IsSet(ParseNoEnt))) && (EntityType(ent.EntityType()) != ExternalGeneralParsedEntity || ctx.options.IsSet(ParseNoEnt|ParseDTDValid)) {
+		var userData interface{}
+		if ctx.userData != ctx {
+			userData = ctx.userData
+		}
+
 		if EntityType(ent.EntityType()) == InternalGeneralEntity {
-			parsedEnt, err = ctx.parseBalancedChunkInternal([]byte(ent.Content()))
+			parsedEnt, err = ctx.parseBalancedChunkInternal([]byte(ent.Content()), userData)
 			switch err {
 			case nil, ErrParseSucceeded:
 				// may not have generated nodes, but parse was successful
@@ -3764,22 +3767,26 @@ func (ctx *parserCtx) parseReference() error {
 			// though parsing for first checking go though the entity
 			// content to generate callbacks associated to the entity
 			if wasChecked != 0 {
+				var userData interface{}
+				if ctx.userData != ctx {
+					userData = ctx.userData
+				}
 				if EntityType(ent.EntityType()) == InternalGeneralEntity {
-					parsedEnt, err = ctx.parseBalancedChunkInternal([]byte(ent.Content()))
-			switch err {
-			case nil, ErrParseSucceeded:
-				// may not have generated nodes, but parse was successful
-			default:
-				return err
-			}
+					parsedEnt, err = ctx.parseBalancedChunkInternal([]byte(ent.Content()), userData)
+					switch err {
+					case nil, ErrParseSucceeded:
+						// may not have generated nodes, but parse was successful
+					default:
+						return err
+					}
 				} else if EntityType(ent.EntityType()) == ExternalGeneralParsedEntity {
 					parsedEnt, err = ctx.parseExternalEntityPrivate(ent.URI(), ent.externalID)
-			switch err {
-			case nil, ErrParseSucceeded:
-				// may not have generated nodes, but parse was successful
-			default:
-				return err
-			}
+					switch err {
+					case nil, ErrParseSucceeded:
+						// may not have generated nodes, but parse was successful
+					default:
+						return err
+					}
 				} else {
 					return errors.New("invalid entity type")
 				}
@@ -3796,6 +3803,7 @@ func (ctx *parserCtx) parseReference() error {
 			}
 			return nil
 		}
+
 		// If we didn't get any children for the entity being built
 		if s := ctx.sax; s != nil && !ctx.replaceEntities {
 			// Create a node.
@@ -3808,6 +3816,7 @@ func (ctx *parserCtx) parseReference() error {
 			return nil
 		}
 		_ = parsedEnt
+
 		/*
 			if ctx.replaceEntities || ent.firstChild == nil {
 			           // There is a problem on the handling of _private for entities

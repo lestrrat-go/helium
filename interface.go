@@ -9,6 +9,14 @@ const (
 	XMLTextNoEnc = "textnoenc"
 )
 
+type LoadSubsetOption int
+
+const (
+	DetectIDs LoadSubsetOption = 1<<iota+1
+	CompleteAttrs
+	SkipIDs
+)
+
 type ParseOption int
 
 // Note: Many of these are totally unimplemented at this point

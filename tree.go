@@ -104,6 +104,9 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 	}
 
 	for _, attr := range attrs {
+		if attr.IsDefault() && !ctx.loadsubset.IsSet(CompleteAttrs) {
+			continue
+		}
 		e.SetAttribute(attr.Name(), attr.Value())
 	}
 

@@ -5,14 +5,6 @@ import (
 	"github.com/lestrrat/helium/sax"
 )
 
-func (p *ParseOption) Set(n ParseOption) {
-	*p = *p | n
-}
-
-func (p ParseOption) IsSet(n ParseOption) bool {
-	return int(p) & int(n) != 0
-}
-
 func Parse(b []byte) (*Document, error) {
 	p := NewParser()
 	return p.Parse(b)
