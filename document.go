@@ -255,6 +255,10 @@ func (d *Document) IsMixedElement(name string) (bool, error) {
  * Returns a pointer to the first child
  */
 func (d *Document) stringToNodeList(value string) (Node, error) {
+	if debug.Enabled {
+		g := debug.IPrintf("START document.stringToNodeList '%s'", value)
+		defer g.IRelease("END document.stringToNodeList")
+	}
 	rdr := strings.NewReader(value)
 	buf := bytes.Buffer{}
 	var ret Node
@@ -319,7 +323,7 @@ func (d *Document) stringToNodeList(value string) (Node, error) {
 				entbuf.WriteRune(r)
 			}
 
-			if rdr.Len() == 0 {
+			if r != ';' {
 				return nil, errors.New("entity was unterminated (could not find terminating semicolon)")
 			}
 
@@ -362,12 +366,12 @@ func (d *Document) stringToNodeList(value string) (Node, error) {
 					}
 					ent.setFirstChild(refchildren)
 					for n := refchildren; n != nil; {
-						n.SetParent(ent)
-						x := n.NextSibling()
-						if x == nil {
-							ent.setLastChild(n)
+						ent.AddChild(n)
+						if x := n.NextSibling(); x != nil {
+							n = x
+						} else {
+							n = nil
 						}
-						n = x
 					}
 				}
 
@@ -400,6 +404,12 @@ func (d *Document) stringToNodeList(value string) (Node, error) {
 		}
 	}
 
+	if debug.Enabled {
+		for n := last; n != nil; n = n.PrevSibling() {
+			debug.Printf("---> %s (%#v)", n.Name(), n)
+		}
+	}
+
 	return ret, nil
 }
 
@@ -427,4 +437,3 @@ func (d *Document) CreateCharRef(name string) (*EntityRef, error) {
 	}
 	return n, nil
 }
-
