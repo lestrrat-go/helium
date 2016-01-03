@@ -132,13 +132,22 @@ func (d *Document) CreateReference(name string) (*EntityRef, error) {
 	return n, nil
 }
 
-func (d *Document) CreateAttribute(name, value string, ns *Namespace) (*Attribute, error) {
-	attr := newAttribute(name, ns)
+func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Attribute, err error) {
+	if debug.Enabled {
+		g := debug.IPrintf("START document.CreateAttribute '%s' (%s)", name, value)
+		defer func() {
+			g.IRelease("END document.CreateAttribute (attr.Value = '%s')", attr.Value())
+		}()
+	}
+	var n Node
+	attr = newAttribute(name, ns)
 	if value != "" {
-		n, err := d.stringToNodeList(value)
+		n, err = d.stringToNodeList(value)
 		if err != nil {
-			return nil, err
+			attr = nil
+			return
 		}
+
 		attr.setFirstChild(n)
 		for n != nil {
 			n.SetParent(attr)
@@ -341,6 +350,7 @@ func (d *Document) stringToNodeList(value string) (Node, error) {
 					if err != nil {
 						return nil, err
 					}
+					buf.Reset()
 
 					if last == nil {
 						last = node
@@ -406,7 +416,7 @@ func (d *Document) stringToNodeList(value string) (Node, error) {
 
 	if debug.Enabled {
 		for n := last; n != nil; n = n.PrevSibling() {
-			debug.Printf("---> %s (%#v)", n.Name(), n)
+			debug.Printf("---> %s (%s)", n.Name(), n.Content())
 		}
 	}
 
