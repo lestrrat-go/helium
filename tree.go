@@ -102,11 +102,17 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 		e.SetNamespace(ns.Prefix(), ns.URI(), false)
 	}
 
+debug.Printf("We got %d attributes", len(attrs))
 	for _, attr := range attrs {
 		if attr.IsDefault() && !ctx.loadsubset.IsSet(CompleteAttrs) {
+			if debug.Enabled {
+				debug.Printf("Skipping default attribute %s", attr.Name())
+			}
 			continue
 		}
-		e.SetAttribute(attr.Name(), attr.Value())
+		if err := e.SetAttribute(attr.Name(), attr.Value()); err != nil {
+			return err
+		}
 	}
 
 	var parent Node
