@@ -140,8 +140,6 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
 		switch r {
 		case '"':
 			esc = esc_quot
-		case '\'':
-			esc = esc_apos
 		case '&':
 			esc = esc_amp
 		case '<':
