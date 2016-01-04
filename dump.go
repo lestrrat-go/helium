@@ -151,8 +151,6 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
 		r, width := utf8.DecodeRune(s[i:])
 		i += width
 		switch r {
-		case '"':
-			esc = esc_quot
 		case '&':
 			esc = esc_amp
 		case '<':
