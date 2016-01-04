@@ -206,16 +206,30 @@ func (d *Document) CreateElementContent(name string, etype ElementContentType) (
 	return e, nil
 }
 
-func (d *Document) GetEntity(name string) (*Entity, bool) {
+func (d *Document) GetEntity(name string) (ent *Entity, found bool) {
+	if debug.Enabled {
+		g := debug.IPrintf("START document.GetEntity '%s'", name)
+		defer func() {
+			g.IRelease("END document.GetEntity found = %t '%#x', (%p)", found, ent.Content(), ent)
+		}()
+	}
 	if ints := d.intSubset; ints != nil {
-		return ints.LookupEntity(name)
+		if debug.Enabled {
+			debug.Printf("Looking into internal subset...")
+		}
+		ent, found = ints.LookupEntity(name)
+		return
 	}
 
 	if exts := d.extSubset; exts != nil {
-		return exts.LookupEntity(name)
+		if debug.Enabled {
+			debug.Printf("Looking into external subset...")
+		}
+		ent, found = exts.LookupEntity(name)
+		return
 	}
 
-	return nil, false
+	return
 }
 
 func (d *Document) GetParameterEntity(name string) (*Entity, bool) {
@@ -263,20 +277,29 @@ func (d *Document) IsMixedElement(name string) (bool, error) {
  * produce a flat tree with only TEXTs and ENTITY_REFs.
  * Returns a pointer to the first child
  */
-func (d *Document) stringToNodeList(value string) (Node, error) {
+func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 	if debug.Enabled {
 		g := debug.IPrintf("START document.stringToNodeList '%s'", value)
-		defer g.IRelease("END document.stringToNodeList")
+		defer func() {
+			var content []byte
+			if ret == nil {
+				content = []byte("(nil)")
+			} else {
+				content = ret.Content()
+			}
+			g.IRelease("END document.stringToNodeList '%s'", content)
+		}()
 	}
 	rdr := strings.NewReader(value)
 	buf := bytes.Buffer{}
-	var ret Node
 	var last Node
 	var charval int32
+	var r rune
+	var r2 rune
 	for rdr.Len() > 0 {
-		r, _, err := rdr.ReadRune()
+		r, _, err = rdr.ReadRune()
 		if err != nil {
-			return nil, err
+			return
 		}
 
 		// if this is not any sort of an entity , just go go go
@@ -289,13 +312,13 @@ func (d *Document) stringToNodeList(value string) (Node, error) {
 		// else we have.
 		r, _, err = rdr.ReadRune()
 		if err != nil {
-			return nil, err
+			return
 		}
 
 		if r == '#' {
-			r2, _, err := rdr.ReadRune()
+			r2, _, err = rdr.ReadRune()
 			if err != nil {
-				return nil, err
+				return
 			}
 
 			var accumulator func(int32, rune) (int32, error)
@@ -308,14 +331,14 @@ func (d *Document) stringToNodeList(value string) (Node, error) {
 			for {
 				r, _, err = rdr.ReadRune()
 				if err != nil {
-					return nil, err
+					return
 				}
 				if r == ';' {
 					break
 				}
 				charval, err = accumulator(charval, r)
 				if err != nil {
-					return nil, err
+					return
 				}
 			}
 		} else {
@@ -324,7 +347,7 @@ func (d *Document) stringToNodeList(value string) (Node, error) {
 			for rdr.Len() > 0 {
 				r, _, err = rdr.ReadRune()
 				if err != nil {
-					return nil, err
+					return
 				}
 				if r == ';' {
 					break
@@ -333,7 +356,8 @@ func (d *Document) stringToNodeList(value string) (Node, error) {
 			}
 
 			if r != ';' {
-				return nil, errors.New("entity was unterminated (could not find terminating semicolon)")
+				err = errors.New("entity was unterminated (could not find terminating semicolon)")
+				return
 			}
 
 			val := entbuf.String()
@@ -346,9 +370,13 @@ func (d *Document) stringToNodeList(value string) (Node, error) {
 			} else {
 				// flush the buffer so far
 				if buf.Len() > 0 {
-					node, err := d.CreateText(buf.Bytes())
+					if debug.Enabled {
+						debug.Printf("Flushing content so far... '%s'", buf.Bytes())
+					}
+					var node Node
+					node, err = d.CreateText(buf.Bytes())
 					if err != nil {
-						return nil, err
+						return
 					}
 					buf.Reset()
 
@@ -362,17 +390,19 @@ func (d *Document) stringToNodeList(value string) (Node, error) {
 				}
 
 				// create a new REFERENCE_REF node
-				node, err := d.CreateReference(val)
+				var node Node
+				node, err = d.CreateReference(val)
 				if err != nil {
-					return nil, err
+					return
 				}
 
 				// no children
 				if ok && ent.FirstChild() == nil {
 					// XXX WTF am I doing here...?
-					refchildren, err := d.stringToNodeList(string(node.Content()))
+					var refchildren Node
+					refchildren, err = d.stringToNodeList(string(node.Content()))
 					if err != nil {
-						return nil, err
+						return
 					}
 					ent.setFirstChild(refchildren)
 					for n := refchildren; n != nil; {
@@ -402,9 +432,10 @@ func (d *Document) stringToNodeList(value string) (Node, error) {
 	}
 
 	if buf.Len() > 0 {
-		n, err := d.CreateText(buf.Bytes())
+		var n Node
+		n, err = d.CreateText(buf.Bytes())
 		if err != nil {
-			return nil, err
+			return
 		}
 
 		if last == nil {
@@ -414,13 +445,7 @@ func (d *Document) stringToNodeList(value string) (Node, error) {
 		}
 	}
 
-	if debug.Enabled {
-		for n := last; n != nil; n = n.PrevSibling() {
-			debug.Printf("---> %s (%s)", n.Name(), n.Content())
-		}
-	}
-
-	return ret, nil
+	return
 }
 
 func (d *Document) CreateCharRef(name string) (*EntityRef, error) {

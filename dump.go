@@ -76,6 +76,14 @@ func isInCharacterRange(r rune) (inrange bool) {
 }
 
 func escapeAttrValue(w io.Writer, s []byte) error {
+	if debug.Enabled {
+		debugbuf := bytes.Buffer{}
+		w = io.MultiWriter(w, &debugbuf)
+		g := debug.IPrintf("START escapeAttrValue '%s'", s)
+		defer func() {
+			g.IRelease("END escapeAttrValue '%s'", debugbuf.Bytes())
+		}()
+	}
 	var esc []byte
 	last := 0
 	for i := 0; i < len(s); {
@@ -131,7 +139,14 @@ func escapeAttrValue(w io.Writer, s []byte) error {
 // of the plain text data s. If escapeNewline is true, newline
 // characters will be escaped.
 func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
-	debug.Printf("escapeText = '%s'", s)
+	if debug.Enabled {
+		debugbuf := bytes.Buffer{}
+		w = io.MultiWriter(w, &debugbuf)
+		g := debug.IPrintf("START escapeText = '%s'", s)
+		defer func() {
+			g.IRelease("END escapeText = '%s'", debugbuf.Bytes())
+		}()
+	}
 	var esc []byte
 	last := 0
 	for i := 0; i < len(s); {
@@ -296,7 +311,6 @@ func dumpElementContent(out io.Writer, n *ElementContent, glob bool) error {
 	if debug.Enabled {
 		g := debug.IPrintf("START Dumper.dumpElementContent n = '%s'", n.name)
 		defer g.IRelease("END Dumper.dumpElementContent")
-		debug.Dump(n)
 	}
 	if n == nil {
 		return nil
@@ -647,12 +661,15 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 			return err
 		}
 		return nil
-	default:
-		debug.Printf("Fallthrough: %#v", n)
 	}
 
 	if err != nil {
 		return err
+	}
+
+	if debug.Enabled {
+		g := debug.IPrintf("START DumpNode(fallthrough)")
+		defer g.IRelease("END DUmpNode(fallthrough)")
 	}
 
 	// if it got here it's some sort of an element
@@ -680,8 +697,11 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 
 	if e, ok := n.(*Element); ok {
 		for attr := e.properties; attr != nil; {
+				g := debug.IPrintf("START DumpNode(fallthrough->attribute(%s))", attr.Name())
 			io.WriteString(out, " "+attr.Name()+`="`)
+		count := 0
 			for achld := attr.FirstChild(); achld != nil; achld = achld.NextSibling() {
+			count++
 				if achld.Type() == TextNode {
 					escapeAttrValue(out, achld.Content())
 				} else {
@@ -689,6 +709,7 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 				}
 			}
 			io.WriteString(out, `"`)
+			g.IRelease("END DUmpNode(fallthrough->attribute(%s))", attr.Name())
 			a := attr.NextSibling()
 			if a == nil {
 				break

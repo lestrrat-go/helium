@@ -13,7 +13,7 @@ import (
 
 func TestXMLToDOMToXMLString(t *testing.T) {
 	skipped := map[string]struct{}{
-		"att10.xml": {},
+//		"att10.xml": {},
 	}
 
 	dir := "test"

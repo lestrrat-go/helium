@@ -2,11 +2,23 @@ package helium
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 
 	"github.com/lestrrat/helium/internal/debug"
 )
 
+const _ElementType_name = "ElementNodeAttributeNodeTextNodeCDATASectionNodeEntityRefNodeEntityNodeProcessingInstructionNodeCommentNodeDocumentNodeDocumentTypeNodeDocumentFragNodeNotationNodeHTMLDocumentNodeDTDNodeElementDeclNodeAttributeDeclNodeEntityDeclNodeNamespaceDeclNodeXIncludeStartNodeXIncludeEndNodeNamespaceNode"
+
+var _ElementType_index = [...]uint16{0, 11, 24, 32, 48, 61, 71, 96, 107, 119, 135, 151, 163, 179, 186, 201, 218, 232, 249, 266, 281, 294}
+
+func (i ElementType) String() string {
+	i -= 1
+	if i < 0 || i >= ElementType(len(_ElementType_index)-1) {
+		return fmt.Sprintf("ElementType(%d)", i+1)
+	}
+	return _ElementType_name[_ElementType_index[i]:_ElementType_index[i+1]]
+}
 func newElementDecl() *ElementDecl {
 	e := ElementDecl{}
 	e.etype = ElementDeclNode

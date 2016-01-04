@@ -113,9 +113,6 @@ func (dtd *DTD) AddElementDecl(name string, typ ElementTypeVal, content *Element
 		return nil, err
 	}
 
-	if debug.Enabled {
-		debug.Dump(decl)
-	}
 	return decl, nil
 }
 
