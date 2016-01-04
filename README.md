@@ -59,6 +59,17 @@ The goal for the moment is to "port" libxml2. That means that where possible, we
 
 Help in forms for PRs is better, but if you insiste, Amazon gift cards to lestrrat at gmail is appreciated ;)
 
+To get started, see notes on test structure below. Grab some files from libxml2, and see
+if things work. If it doesn't work, fix it! :)
+
+# Test structure
+
+As of this writing, `dump_test.go` and `sax_test.go` both look for the presence of XML
+files under test directory, and parse+dumps appropriate output after seeing that there's
+a corresponding `*.dump` or `*.sax2` files.
+
+For SAX tests, do note that letter casing and such are different from that of libxml2.
+
 # What's with the naming?
 
 I thought it sounded cool. Not set in stone, so we may change it later.
