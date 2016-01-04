@@ -5,7 +5,11 @@
 
 # What on earth?
 
-This is an exercise in rewriting libxml2 in its entirety in Go.
+This is an exercise in rewriting libxml2 in its entirety in Go. Why? I've run into
+performance blockers while using cgo and libxml2, and I couldn't squeeze out that last
+drop of performance out of it. Also, there was also [this](https://github.com/golang/go/issues/13400), which I thought was a shame to not be able to handle XML using pure Go.
+
+So I started -- and I still have a long way to go.
 
 # SYNOPSIS
 
@@ -43,12 +47,17 @@ go test -tags debug
 
 # Current status
 
-* Still very broken, but basic XML parsing (no DTDs yet) is functional, so you can probably write a SAX2 parser that generates the correct DOM structure
+* Good news: parse/dump basic XML with some DTDs are now working.
+* Bad news: I have run out of tuits. I intend to work on this from time to time, but I *REALLY* need people's help. See "Contributing" below.
 * While XML declaration is parsed, encoding is ignored, and assumed to be UTF-8
 
-# Important Notice:
+# Contributing
 
-I'm only going to work on this full-throttle until Jan 4, 2016. After that, I need to get back to life for a while again. Help in forms for PRs is better, but if you insiste, Amazon gift cards to lestrrat at gmail is appreciated ;)
+I won't have much time to discuss: let the code talk: Give me PRs that are self-explanatory! :)
+
+The goal for the moment is to "port" libxml2. That means that where possible, we should just steal their code, even if things aren't too go-ish. We'll polish after we have a compatible implementation. So don't debate for optimal go-ness unless it's a really low hanging fruit.
+
+Help in forms for PRs is better, but if you insiste, Amazon gift cards to lestrrat at gmail is appreciated ;)
 
 # What's with the naming?
 
