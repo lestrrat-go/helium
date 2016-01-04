@@ -681,7 +681,13 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 	if e, ok := n.(*Element); ok {
 		for attr := e.properties; attr != nil; {
 			io.WriteString(out, " "+attr.Name()+`="`)
-			escapeAttrValue(out, []byte(attr.Value()))
+			for achld := attr.FirstChild(); achld != nil; achld = achld.NextSibling() {
+				if achld.Type() == TextNode {
+					escapeAttrValue(out, achld.Content())
+				} else {
+					d.DumpNode(out, achld)
+				}
+			}
 			io.WriteString(out, `"`)
 			a := attr.NextSibling()
 			if a == nil {

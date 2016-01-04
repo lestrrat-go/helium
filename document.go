@@ -376,7 +376,7 @@ func (d *Document) stringToNodeList(value string) (Node, error) {
 					}
 					ent.setFirstChild(refchildren)
 					for n := refchildren; n != nil; {
-						ent.SetParent(n)
+						n.SetParent(ent)
 						if x := n.NextSibling(); x != nil {
 							n = x
 						} else {
