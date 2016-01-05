@@ -13,6 +13,8 @@ So I started -- and I still have a long way to go.
 
 # SYNOPSIS
 
+Parsing XML into a DOM model, then dumping it:
+
 ```go
 import "github.com/lestrrat/helium"
 
@@ -25,6 +27,16 @@ func main() {
     // Dump this XML
     doc.XML(os.Stdout)
 }
+```
+
+Using command line `helium-lint` (very under developed right now):
+
+```
+helium-lint xmlfile ...
+```
+
+```
+cat xmlfile | helium-lin
 ```
 
 # Get it
