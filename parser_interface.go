@@ -2,6 +2,7 @@ package helium
 
 import (
 	"errors"
+	"io"
 
 	"github.com/lestrrat/go-strcursor"
 	"github.com/lestrrat/helium/sax"
@@ -29,6 +30,7 @@ var (
 	ErrAttrListNotFinished          = errors.New("attrlist must finish with a ')'")
 	ErrAttrListNotStarted           = errors.New("attrlist must start with a '('")
 	ErrAttributeNameRequired        = errors.New("attribute namewas required here (ATTLIST)")
+	ErrByteCursorRequired           = errors.New("inconsistent state: required ByteCursor")
 	ErrDocTypeNameRequired          = errors.New("doctype name required")
 	ErrDocTypeNotFinished           = errors.New("doctype not finished")
 	ErrDocumentEnd                  = errors.New("extra content at document end")
@@ -105,7 +107,9 @@ type parserCtx struct {
 	// <?xml version="1.0"?> vs <?xml version="1.0" encoding="utf-8"?>
 	encoding          string
 	detectedEncoding  string
-	cursor            *strcursor.Cursor
+	in                io.Reader
+	bytecursor        *strcursor.ByteCursor // Used for parsing up to XML declaration
+	cursor            *strcursor.RuneCursor // Used for XML content
 	nbread            int
 	instate           parserState
 	keepBlanks        bool

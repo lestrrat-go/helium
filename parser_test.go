@@ -1,6 +1,7 @@
 package helium
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/lestrrat/helium/internal/debug"
@@ -24,7 +25,7 @@ func TestDetectBOM(t *testing.T) {
 	for expected, inputs := range data {
 		for i, input := range inputs {
 			ctx := &parserCtx{}
-			ctx.init(p, input)
+			ctx.init(p, bytes.NewReader(input))
 			enc, err := ctx.detectEncoding()
 			if expected == "" {
 				t.Logf("checking [invalid] (%d)", i)
@@ -98,10 +99,6 @@ func TestParseMisc(t *testing.T) {
 		doc, err := p.Parse([]byte(input))
 		if !assert.NoError(t, err, "Parse should succeed for '%s'", input) {
 			return
-		}
-
-		if debug.Enabled {
-			debug.Dump(doc)
 		}
 
 		// XXX Not sure if this is right, but I'm going to assume it's ok

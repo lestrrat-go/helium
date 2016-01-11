@@ -1,6 +1,8 @@
 package helium
 
 import (
+	"bytes"
+
 	"github.com/lestrrat/helium/internal/debug"
 	"github.com/lestrrat/helium/sax"
 )
@@ -19,11 +21,11 @@ func NewParser() *Parser {
 func (p *Parser) Parse(b []byte) (*Document, error) {
 	if debug.Enabled {
 		g := debug.IPrintf("=== START Parser.Parse ===")
-		defer g.IRelease("=== END   Parser.Parse ===")
+		defer g.IRelease("=== END Parser.Parse ===")
 	}
 
 	ctx := &parserCtx{}
-	ctx.init(p, b)
+	ctx.init(p, bytes.NewReader(b))
 	defer ctx.release()
 
 	if err := ctx.parseDocument(); err != nil {
