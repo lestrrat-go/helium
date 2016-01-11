@@ -32,6 +32,14 @@ func newEntity(name string, typ EntityType, publicID, systemID, notation, orig s
 	return e
 }
 
+func (e *Entity) Checked() bool {
+	return e.checked & 1 == 1
+}
+
+func (e *Entity) MarkChecked() {
+	e.checked |= 1
+}
+
 func (e *Entity) SetOrig(s string) {
 	e.orig = s
 }

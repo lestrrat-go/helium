@@ -326,7 +326,7 @@ type Entity struct {
 	systemID   string     // URI for a SYSTEM or PUBLIC entity
 	uri        string     // the full URI as computed
 	owner      bool       // does the entity own children
-	checked    int        /* was the entity content checked */
+	checked    int        // was the entity content checked
 	/* this is also used to count entities
 	 * references done from that entity
 	 * and if it contains '<' */

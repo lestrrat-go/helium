@@ -514,7 +514,6 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 
 	i := 0
 	for c := cur.PeekN(i + 1); c != 0x0; c = cur.PeekN(i + 1) {
-		debug.Printf("%d: %c", i+1, c)
 		if !cdata {
 			if c == '<' || c == '&' || !isChar(c) {
 				break
@@ -643,7 +642,6 @@ func (ctx *parserCtx) parseStartTag() error {
 			break
 		}
 		attname, aprefix, attvalue, err := ctx.parseAttribute(local)
-		debug.Printf("Parsed attribute -> '%s'", attvalue)
 		if err != nil {
 			return ctx.error(err)
 		}
@@ -1021,7 +1019,6 @@ func (ctx *parserCtx) skipBlanks() bool {
 func skipBlankBytes(cur *strcursor.ByteCursor) bool {
 	i := 0
 	for c := cur.PeekN(i + 1); c != 0x0 && isBlankCh(rune(c)); c = cur.PeekN(i + 1) {
-		debug.Printf("c = %c", c)
 		i++
 	}
 	if i > 0 {
@@ -1419,7 +1416,6 @@ func (ctx *parserCtx) parsePI() error {
 	cur.Advance(i)
 	data := buf.String()
 
-	debug.Printf("data -> '%s'", data)
 	if !cur.Consume("?>") {
 		return ctx.error(ErrInvalidProcessingInstruction)
 	}
@@ -1822,7 +1818,6 @@ func (ctx *parserCtx) parseComment() error {
 		if q == '-' && r == '-' {
 			return ctx.error(ErrHyphenInComment)
 		}
-debug.Printf("PeekN(%d): '%c'", i+1, c)
 		buf.WriteRune(c)
 		q = r
 		r = c
@@ -1834,8 +1829,6 @@ debug.Printf("PeekN(%d): '%c'", i+1, c)
 	str := buf.Bytes()
 	// i+1 because '>' was not consumed in the loop
 	cur.Advance(i + 1)
-
-debug.Printf("Comment: '%s'", str)
 
 	if sh := ctx.sax; sh != nil {
 		str = bytes.Replace(str, []byte{'\r', '\n'}, []byte{'\n'}, -1)
@@ -2012,19 +2005,21 @@ func (ctx *parserCtx) parseMarkupDecl() error {
 		return nil
 	}
 
+	// This is only for internal subset. On external entities,
+	// the replacement is done before parsing stage
+	if ctx.external {
+		if err := ctx.parsePEReference(); err != nil {
+			return ctx.error(err)
+		}
+	}
 	/*
-	   // This is only for internal subset. On external entities,
-	     // the replacement is done before parsing stage
-	     if ((ctxt->external == 0) && (ctxt->inputNr == 1))
-	         xmlParsePEReference(ctxt);
-
-	      // Conditional sections are allowed from entities included
-	      // by PE References in the internal subset.
-	     if ((ctxt->external == 0) && (ctxt->inputNr > 1)) {
-	         if ((RAW == '<') && (NXT(1) == '!') && (NXT(2) == '[')) {
-	             xmlParseConditionalSections(ctxt);
-	         }
-	     }
+	    // Conditional sections are allowed from entities included
+	    // by PE References in the internal subset.
+	   if ((ctxt->external == 0) && (ctxt->inputNr > 1)) {
+	       if ((RAW == '<') && (NXT(1) == '!') && (NXT(2) == '[')) {
+	           xmlParseConditionalSections(ctxt);
+	       }
+	   }
 	*/
 	ctx.instate = psDTD
 
@@ -2066,6 +2061,9 @@ func (ctx *parserCtx) parsePEReference() error {
 	cur := ctx.cursor
 	if cur.Peek() != '%' {
 		// This is not an error. just be done
+		if debug.Enabled {
+			debug.Printf("no parameter entities here, returning...")
+		}
 		return nil
 	}
 	cur.Advance(1)
@@ -2082,21 +2080,87 @@ func (ctx *parserCtx) parsePEReference() error {
 
 	/*
 		ctx.nbentities++ // number of entities parsed
-		if s := ctx.sax; s != nil {
-			entity, err := s.GetParameterEntity(ctx, name)
-			if err != nil {
-			}
-		}
-
-		// XXX Why check here?
-		if ctx.instate == psEOF {
-			return nil
-		}
-
-		return nil
 	*/
-	_ = name
-	return ErrUnimplemented{target: "parsePEReference"}
+	var entity sax.Entity
+	if s := ctx.sax; s != nil {
+		entity, _ = s.GetParameterEntity(ctx, name)
+	}
+
+	// XXX Why check here?
+	if ctx.instate == psEOF {
+		return nil
+	}
+
+	if entity == nil {
+		/*
+		 * [ WFC: Entity Declared ]
+		 * In a document without any DTD, a document with only an
+		 * internal DTD subset which contains no parameter entity
+		 * references, or a document with "standalone='yes'", ...
+		 * ... The declaration of a parameter entity must precede
+		 * any reference to it...
+		 */
+		if ctx.standalone == StandaloneExplicitYes || (!ctx.hasExternalSubset && !ctx.hasPERefs) {
+			return fmt.Errorf("parse error: PEReference: %%%s; not found", name)
+		}
+		/*
+		 * [ VC: Entity Declared ]
+		 * In a document with an external subset or external
+		 * parameter entities with "standalone='no'", ...
+		 * ... The declaration of a parameter entity must
+		 * precede any reference to it...
+		 */
+		/*
+		   xmlWarningMsg(ctxt, XML_WAR_UNDECLARED_ENTITY,
+		                 "PEReference: %%%s; not found\n",
+		                 name, NULL);
+		*/
+		ctx.valid = false
+		if err := ctx.entityCheck(entity, 0, 0); err != nil {
+			return ctx.error(err)
+		}
+	} else {
+		/*
+		 * Internal checking in case the entity quest barfed
+		 */
+		if etype := EntityType(entity.EntityType()); etype != InternalParameterEntity && etype != ExternalParameterEntity {
+			/*
+			   xmlWarningMsg(ctxt, XML_WAR_UNDECLARED_ENTITY,
+			         "Internal: %%%s; is not a parameter entity\n",
+			                 name, NULL);
+			*/
+			/*
+			   } else if (ctxt->input->free != deallocblankswrapper) {
+			           input = xmlNewBlanksWrapperInputStream(ctxt, entity);
+			           if (xmlPushInput(ctxt, input) < 0)
+			               return;
+			*/
+		} else {
+			// TODO !!!
+			// handle the extra spaces added before and after
+			// c.f. http://www.w3.org/TR/REC-xml#as-PE
+			/*
+			   input = xmlNewEntityInputStream(ctxt, entity);
+			   if (xmlPushInput(ctxt, input) < 0)
+			       return;
+			   if ((entity->etype == XML_EXTERNAL_PARAMETER_ENTITY) &&
+			       (CMP5(CUR_PTR, '<', '?', 'x', 'm', 'l')) &&
+			       (IS_BLANK_CH(NXT(5)))) {
+			       xmlParseTextDecl(ctxt);
+			       if (ctxt->errNo ==
+			           XML_ERR_UNSUPPORTED_ENCODING) {
+			           // The XML REC instructs us to stop parsing
+			           // right here
+			           //
+			           xmlHaltParser(ctxt);
+			           return;
+			       }
+			   }
+			*/
+		}
+	}
+	ctx.hasPERefs = true
+	return nil
 }
 
 /*
@@ -2679,7 +2743,7 @@ func (ctx *parserCtx) decodeEntitiesInternal(s []byte, what SubstitutionType, de
 			if err != nil {
 				return "", err
 			}
-			if err := ctx.entityCheck(ent); err != nil {
+			if err := ctx.entityCheck(ent, 0, 0); err != nil {
 				return "", err
 			}
 
@@ -2704,7 +2768,7 @@ func (ctx *parserCtx) decodeEntitiesInternal(s []byte, what SubstitutionType, de
 			if err != nil {
 				return "", err
 			}
-			if err := ctx.entityCheck(ent); err != nil {
+			if err := ctx.entityCheck(ent, width, 0); err != nil {
 				return "", err
 			}
 			rep, err := ctx.decodeEntitiesInternal(ent.Content(), what, depth+1)
@@ -4580,7 +4644,6 @@ func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
 	// for such documents, the rule that an entity must be
 	// declared is a well-formedness constraint only if
 	// standalone='yes'.
-	debug.Printf("%#v", ent)
 	if ent == nil {
 		if ctx.standalone == StandaloneExplicitYes || (!ctx.hasExternalSubset && ctx.hasPERefs) {
 			return nil, ctx.error(ErrUndeclaredEntity)
@@ -4596,7 +4659,7 @@ func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
 				}
 			}
 			// ent is nil, no? why check?
-			if err := ctx.entityCheck(ent); err != nil {
+			if err := ctx.entityCheck(ent, 0, 0); err != nil {
 				return nil, ctx.error(err)
 			}
 			ctx.valid = false
@@ -4644,6 +4707,27 @@ func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
  * boundary feature. It can be disabled with the XML_PARSE_HUGE
  * parser option.
  */
-func (ctx *parserCtx) entityCheck(e sax.Entity) error {
+func (ctx *parserCtx) entityCheck(ent sax.Entity, size, replacement int) error {
 	return nil
+	/*
+	   size_t consumed = 0;
+
+	   if ((ctxt == NULL) || (ctxt->options & XML_PARSE_HUGE))
+	       return (0);
+	   if (ctxt->lastError.code == XML_ERR_ENTITY_LOOP)
+	       return (1);
+	*/
+
+	// This may look absurd but is needed to detect
+	// entities problems
+/*
+	if ent != nil && EntityType(ent.EntityType()) != InternalPredefinedEntity && ent.Content() != nil && !ent.Checked() {
+		rep, err := decodeEntities(ent.Content(), SubstituteRef)
+		if err != nil {
+			return ctx.error(err)
+		}
+	}
+
+	return nil
+*/
 }

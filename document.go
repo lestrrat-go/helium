@@ -210,7 +210,11 @@ func (d *Document) GetEntity(name string) (ent *Entity, found bool) {
 	if debug.Enabled {
 		g := debug.IPrintf("START document.GetEntity '%s'", name)
 		defer func() {
-			g.IRelease("END document.GetEntity found = %t '%#x', (%p)", found, ent.Content(), ent)
+			if found {
+				g.IRelease("END document.GetEntity found = %t '%#x', (%p)", found, ent.Content(), ent)
+			} else {
+				g.IRelease("END document.GetEntity found = false")
+			}
 		}()
 	}
 	if ints := d.intSubset; ints != nil {

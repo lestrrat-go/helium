@@ -121,6 +121,7 @@ type parserCtx struct {
 	hasExternalSubset bool
 	inSubset          int
 	intSubName        string
+	external          bool // true if parsing external DTDs
 	extSubSystem      string
 	extSubURI         string
 	version           string

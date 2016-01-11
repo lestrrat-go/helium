@@ -17,6 +17,8 @@ type Entity interface {
 	SetOrig(string)
 	EntityType() int
 	Content() []byte
+	Checked() bool
+	MarkChecked()
 }
 
 
