@@ -4,7 +4,6 @@ import (
 	"errors"
 	"io"
 
-	"github.com/lestrrat/go-strcursor"
 	"github.com/lestrrat/helium/sax"
 )
 
@@ -21,6 +20,14 @@ const (
 	psDTD
 	psEntityDecl
 	psAttributeValue
+	psComment
+	psStartTag
+	psEndTag
+	psSystemLiteral
+	psPublicLiteral
+	psEntityValue
+	psIgnore
+	psMisc
 )
 
 const MaxNameLength = 50000
@@ -108,8 +115,6 @@ type parserCtx struct {
 	encoding          string
 	detectedEncoding  string
 	in                io.Reader
-	bytecursor        *strcursor.ByteCursor // Used for parsing up to XML declaration
-	cursor            *strcursor.RuneCursor // Used for XML content
 	nbread            int
 	instate           parserState
 	keepBlanks        bool
@@ -141,6 +146,7 @@ type parserCtx struct {
 	nodeTab    nodeStack
 	elemidx    int
 	nbentities int
+	inputTab   inputStack
 }
 
 type SubstitutionType int
