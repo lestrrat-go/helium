@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/lestrrat/helium/internal/debug"
+	"github.com/lestrrat/go-pdebug"
 )
 
 var (
@@ -76,10 +76,10 @@ func isInCharacterRange(r rune) (inrange bool) {
 }
 
 func escapeAttrValue(w io.Writer, s []byte) error {
-	if debug.Enabled {
+	if pdebug.Enabled {
 		debugbuf := bytes.Buffer{}
 		w = io.MultiWriter(w, &debugbuf)
-		g := debug.IPrintf("START escapeAttrValue '%s'", s)
+		g := pdebug.IPrintf("START escapeAttrValue '%s'", s)
 		defer func() {
 			g.IRelease("END escapeAttrValue '%s'", debugbuf.Bytes())
 		}()
@@ -137,10 +137,10 @@ func escapeAttrValue(w io.Writer, s []byte) error {
 // of the plain text data s. If escapeNewline is true, newline
 // characters will be escaped.
 func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
-	if debug.Enabled {
+	if pdebug.Enabled {
 		debugbuf := bytes.Buffer{}
 		w = io.MultiWriter(w, &debugbuf)
-		g := debug.IPrintf("START escapeText = '%s'", s)
+		g := pdebug.IPrintf("START escapeText = '%s'", s)
 		defer func() {
 			g.IRelease("END escapeText = '%s'", debugbuf.Bytes())
 		}()
@@ -202,8 +202,8 @@ func (d *Dumper) writeString(out io.Writer, content string) error {
 }
 
 func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
-	if debug.Enabled {
-		g := debug.IPrintf("START Dumper.DumpDoc")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START Dumper.DumpDoc")
 		defer g.IRelease("END Dumper.DumpDoc")
 	}
 
@@ -221,8 +221,8 @@ func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 }
 
 func (d *Dumper) dumpDocContent(out io.Writer, n Node) error {
-	if debug.Enabled {
-		g := debug.IPrintf("START Dumper.dumpDocContent")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START Dumper.dumpDocContent")
 		defer g.IRelease("END Dumper.dumpDocContent")
 	}
 
@@ -304,8 +304,8 @@ func dumpElementDeclPrologue(out io.Writer, n *ElementDecl) {
 }
 
 func dumpElementContent(out io.Writer, n *ElementContent, glob bool) error {
-	if debug.Enabled {
-		g := debug.IPrintf("START Dumper.dumpElementContent n = '%s'", n.name)
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START Dumper.dumpElementContent n = '%s'", n.name)
 		defer g.IRelease("END Dumper.dumpElementContent")
 	}
 	if n == nil {
@@ -607,8 +607,8 @@ func (d *Dumper) dumpNs(out io.Writer, ns *Namespace) error {
 }
 
 func (d *Dumper) DumpNode(out io.Writer, n Node) error {
-	if debug.Enabled {
-		g := debug.IPrintf("START Dumper.DumpNode '%s'", n.Name())
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START Dumper.DumpNode '%s'", n.Name())
 		defer g.IRelease("END Dumper.DumpNode")
 	}
 
@@ -663,8 +663,8 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		return err
 	}
 
-	if debug.Enabled {
-		g := debug.IPrintf("START DumpNode(fallthrough)")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START DumpNode(fallthrough)")
 		defer g.IRelease("END DUmpNode(fallthrough)")
 	}
 
@@ -693,11 +693,11 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 
 	if e, ok := n.(*Element); ok {
 		for attr := e.properties; attr != nil; {
-				g := debug.IPrintf("START DumpNode(fallthrough->attribute(%s))", attr.Name())
+			g := pdebug.IPrintf("START DumpNode(fallthrough->attribute(%s))", attr.Name())
 			io.WriteString(out, " "+attr.Name()+`="`)
-		count := 0
+			count := 0
 			for achld := attr.FirstChild(); achld != nil; achld = achld.NextSibling() {
-			count++
+				count++
 				if achld.Type() == TextNode {
 					escapeAttrValue(out, achld.Content())
 				} else {

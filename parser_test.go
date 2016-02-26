@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/lestrrat/helium/internal/debug"
+	"github.com/lestrrat/go-pdebug"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -176,7 +176,7 @@ func TestParseNamespace(t *testing.T) {
 		return
 	}
 
-	if debug.Enabled {
-		debug.Dump(doc)
+	if pdebug.Enabled {
+		pdebug.Dump(doc)
 	}
 }

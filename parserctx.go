@@ -11,9 +11,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/lestrrat/go-pdebug"
 	"github.com/lestrrat/go-strcursor"
 	"github.com/lestrrat/helium/encoding"
-	"github.com/lestrrat/helium/internal/debug"
 	"github.com/lestrrat/helium/sax"
 )
 
@@ -52,16 +52,16 @@ func (ctx *parserCtx) pushNS(prefix, uri string) {
 }
 
 func (ctx *parserCtx) pushNode(e *Element) {
-	if debug.Enabled {
-		g := debug.IPrintf("START pushNode (%s)", e.Name())
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START pushNode (%s)", e.Name())
 		defer g.IRelease("END pushNode")
 
 		if l := ctx.nodeTab.Len(); l <= 0 {
-			debug.Printf("  (EMPTY node stack)")
+			pdebug.Printf("  (EMPTY node stack)")
 		} else {
 			for i, elem := range ctx.nodeTab.SimpleStack {
 				e := elem.(*Element)
-				debug.Printf("  %003d: %s (%p)", i, e.Name(), e)
+				pdebug.Printf("  %003d: %s (%p)", i, e.Name(), e)
 			}
 		}
 	}
@@ -73,8 +73,8 @@ func (ctx *parserCtx) peekNode() *Element {
 }
 
 func (ctx *parserCtx) popNode() (elem *Element) {
-	if debug.Enabled {
-		g := debug.IPrintf("START popNode")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START popNode")
 		defer func() {
 			var name string
 			if elem == nil {
@@ -87,11 +87,11 @@ func (ctx *parserCtx) popNode() (elem *Element) {
 
 		defer func() {
 			if l := ctx.nodeTab.Len(); l <= 0 {
-				debug.Printf("  (EMPTY node stack)")
+				pdebug.Printf("  (EMPTY node stack)")
 			} else {
 				for i, elem := range ctx.nodeTab.SimpleStack {
 					e := elem.(*Element)
-					debug.Printf("  %003d: %s (%p)", i, e.Name(), e)
+					pdebug.Printf("  %003d: %s (%p)", i, e.Name(), e)
 				}
 			}
 		}()
@@ -114,8 +114,8 @@ var bufferPool = sync.Pool{
 }
 
 func allocByteBuffer() interface{} {
-	if debug.Enabled {
-		debug.Printf("Allocating new bytes.Buffer...")
+	if pdebug.Enabled {
+		pdebug.Printf("Allocating new bytes.Buffer...")
 	}
 	return &bytes.Buffer{}
 }
@@ -126,6 +126,9 @@ func releaseBuffer(b *bytes.Buffer) {
 }
 
 func (ctx *parserCtx) pushInput(in interface{}) {
+	if pdebug.Enabled {
+		pdebug.Printf("pushInput (n = %d -> %d)", ctx.inputTab.Len(), ctx.inputTab.Len()+1)
+	}
 	ctx.inputTab.Push(in)
 }
 
@@ -210,8 +213,8 @@ var (
 )
 
 func (ctx *parserCtx) detectEncoding() (encoding string, err error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START detectEncoding")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START detectEncoding")
 		defer func() {
 			g.IRelease("END detecteEncoding '%s'", encoding)
 		}()
@@ -294,8 +297,8 @@ func isBlankCh(c rune) bool {
 }
 
 func (ctx *parserCtx) switchEncoding() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START switchEncoding()")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START switchEncoding()")
 		defer g.IRelease("END switchEncoding")
 	}
 
@@ -307,8 +310,8 @@ func (ctx *parserCtx) switchEncoding() error {
 		}
 	}
 
-	if debug.Enabled {
-		debug.Printf("Loading encoding '%s'", encName)
+	if pdebug.Enabled {
+		pdebug.Printf("Loading encoding '%s'", encName)
 	}
 	enc := encoding.Load(encName)
 	if enc == nil {
@@ -330,8 +333,8 @@ func (ctx *parserCtx) switchEncoding() error {
 var xmlDeclHint = []byte{'<', '?', 'x', 'm', 'l'}
 
 func (ctx *parserCtx) parseDocument() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseDocument")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseDocument")
 		defer g.IRelease("END parseDocument")
 	}
 
@@ -474,8 +477,8 @@ func (ctx *parserCtx) parseDocument() error {
 }
 
 func (ctx *parserCtx) parseContent() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseContent")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseContent")
 		defer g.IRelease("END parseContent")
 	}
 	ctx.instate = psContent
@@ -544,8 +547,8 @@ func (ctx *parserCtx) parseContent() error {
  * [14] CharData ::= [^<&]* - ([^<&]* ']]>' [^<&]*)
  */
 func (ctx *parserCtx) parseCharData(cdata bool) error {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseCharData")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseCharData")
 		defer g.IRelease("END parseCharData")
 	}
 
@@ -578,7 +581,7 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 	}
 
 	if i <= 0 {
-		debug.Dump(cur)
+		pdebug.Dump(cur)
 		return errors.New("Invalid char data")
 	}
 
@@ -620,10 +623,10 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 }
 
 func (ctx *parserCtx) parseElement() error {
-	if debug.Enabled {
+	if pdebug.Enabled {
 		ctx.elemidx++
 		i := ctx.elemidx
-		g := debug.IPrintf("START parseElement (%d)", i)
+		g := pdebug.IPrintf("START parseElement (%d)", i)
 		defer g.IRelease("END parseElement (%d)", i)
 	}
 
@@ -653,8 +656,8 @@ func (ctx *parserCtx) parseElement() error {
 }
 
 func (ctx *parserCtx) parseStartTag() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseStartTag")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseStartTag")
 		defer g.IRelease("END parseStartTag")
 	}
 
@@ -781,8 +784,8 @@ func (ctx *parserCtx) parseStartTag() error {
 			elemName = local
 		}
 
-		if debug.Enabled {
-			debug.Printf("-------> %s", elemName)
+		if pdebug.Enabled {
+			pdebug.Printf("-------> %s", elemName)
 		}
 		defaults, ok := ctx.lookupAttributeDefault(elemName)
 		if ok {
@@ -834,8 +837,8 @@ func (ctx *parserCtx) parseStartTag() error {
  * [NS 9] ETag ::= '</' QName S? '>'
  */
 func (ctx *parserCtx) parseEndTag() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseEndTag")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseEndTag")
 		defer g.IRelease("END parseEndTag")
 	}
 
@@ -874,8 +877,8 @@ func (ctx *parserCtx) parseEndTag() error {
 }
 
 func (ctx *parserCtx) parseAttributeValue(normalize bool) (value string, entities int, err error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseAttributeValue (normalize=%t)", normalize)
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseAttributeValue (normalize=%t)", normalize)
 		defer g.IRelease("END parseAttributeValue")
 	}
 
@@ -888,11 +891,11 @@ func (ctx *parserCtx) parseAttributeValue(normalize bool) (value string, entitie
 
 // This is based on xmlParseAttValueComplex
 func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (value string, entities int, err error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseAttributeValueInternal (qch='%c',normalize=%t)", qch, normalize)
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseAttributeValueInternal (qch='%c',normalize=%t)", qch, normalize)
 		defer g.IRelease("END parseAttributeValueInternal")
 		defer func() {
-			debug.Printf("value = '%s'", value)
+			pdebug.Printf("value = '%s'", value)
 		}()
 	}
 
@@ -993,11 +996,11 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (val
 }
 
 func (ctx *parserCtx) parseAttribute(elemName string) (local string, prefix string, value string, err error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseAttribute")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseAttribute")
 		defer g.IRelease("END parseAttribute")
 		defer func() {
-			debug.Printf("local = '%s', prefix = '%s', value = '%s'", local, prefix, value)
+			pdebug.Printf("local = '%s', prefix = '%s', value = '%s'", local, prefix, value)
 		}()
 	}
 	l, p, err := ctx.parseQName()
@@ -1008,8 +1011,8 @@ func (ctx *parserCtx) parseAttribute(elemName string) (local string, prefix stri
 
 	normalize := false
 	attType, ok := ctx.lookupSpecialAttribute(elemName, l)
-	if debug.Enabled {
-		debug.Printf("looked up attribute %s:%s -> %d (%t)", elemName, l, attType, ok)
+	if pdebug.Enabled {
+		pdebug.Printf("looked up attribute %s:%s -> %d (%t)", elemName, l, attType, ok)
 	}
 	if ok && attType != AttrInvalid {
 		normalize = true
@@ -1039,12 +1042,12 @@ func (ctx *parserCtx) parseAttribute(elemName string) (local string, prefix stri
 	 * value have been extracted in an allocated string already.
 	 */
 	if normalize {
-		if debug.Enabled {
-			debug.Printf("normalize is true, checking if entities have been expanded...")
+		if pdebug.Enabled {
+			pdebug.Printf("normalize is true, checking if entities have been expanded...")
 		}
 		if entities > 0 {
-			if debug.Enabled {
-				debug.Printf("entities seems to have been expanded (%d): doint second normalization", entities)
+			if pdebug.Enabled {
+				pdebug.Printf("entities seems to have been expanded (%d): doint second normalization", entities)
 			}
 			v = ctx.attrNormalizeSpace(v)
 		}
@@ -1061,21 +1064,25 @@ func (ctx *parserCtx) parseAttribute(elemName string) (local string, prefix stri
 }
 
 func (ctx *parserCtx) skipBlanks() bool {
+	i := 0
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START skipBlanks")
+		defer func() {
+			g.IRelease("END skipBlanks (skipped %d)", i)
+		}()
+	}
 	cur := ctx.getCursor()
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	i := 1
-	for ; !cur.Done(); i++ {
-		if !isBlankCh(cur.PeekN(i)) {
-			break
-		}
+	for c := cur.PeekN(i + 1); isBlankCh(c) && !cur.Done(); c = cur.PeekN(i + 1) {
+		i++
 	}
-	i--
 	if i > 0 {
 		cur.Advance(i)
 
 		if cur.Peek() == '%' {
+			pdebug.Printf("Found possible parameter entity reference")
 			ctx.handlePEReference()
 		}
 		return true
@@ -1083,13 +1090,24 @@ func (ctx *parserCtx) skipBlanks() bool {
 	return false
 }
 
-func skipBlankBytes(cur *strcursor.ByteCursor) bool {
+func (ctx *parserCtx) skipBlankBytes(cur *strcursor.ByteCursor) bool {
 	i := 0
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START skipBlankBytes")
+		defer func() {
+			g.IRelease("END skipBlankBytes (skipped %d)", i)
+		}()
+	}
 	for c := cur.PeekN(i + 1); c != 0x0 && isBlankCh(rune(c)); c = cur.PeekN(i + 1) {
 		i++
 	}
 	if i > 0 {
 		cur.Advance(i)
+
+		if cur.Peek() == '%' {
+			pdebug.Printf("Found possible parameter entity reference")
+			ctx.handlePEReference()
+		}
 		return true
 	}
 	return false
@@ -1106,7 +1124,7 @@ func (ctx *parserCtx) parseXMLDecl() error {
 		return ctx.error(ErrInvalidXMLDecl)
 	}
 
-	if !skipBlankBytes(cur) {
+	if !ctx.skipBlankBytes(cur) {
 		return errors.New("blank needed after '<?xml'")
 	}
 
@@ -1186,8 +1204,8 @@ func (ctx *parserCtx) parseNamedAttribute(name string, cb qtextHandler) (string,
 var versionBytes = []byte{'v', 'e', 'r', 's', 'i', 'o', 'n'}
 
 func (ctx *parserCtx) parseVersionInfo() (string, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseVersionInfo")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseVersionInfo")
 		defer g.IRelease("END parseVersionInfo")
 	}
 
@@ -1200,18 +1218,18 @@ func (ctx *parserCtx) parseNamedAttributeBytes(name []byte, valueParser qbyteHan
 		return "", ErrByteCursorRequired
 	}
 
-	skipBlankBytes(cur)
+	ctx.skipBlankBytes(cur)
 	if !cur.Consume(name) {
 		return "", ctx.error(ErrAttrNotFound{Token: string(name)})
 	}
 
-	skipBlankBytes(cur)
+	ctx.skipBlankBytes(cur)
 	if cur.Peek() != '=' {
 		return "", ErrEqualSignRequired
 	}
 	cur.Advance(1)
 
-	skipBlankBytes(cur)
+	ctx.skipBlankBytes(cur)
 
 	return ctx.parseQuotedTextBytes(valueParser)
 }
@@ -1262,10 +1280,10 @@ type qtextHandler func(qch rune) (string, error)
 type qbyteHandler func(qch byte) (string, error)
 
 func (ctx *parserCtx) parseQuotedTextBytes(cb qbyteHandler) (value string, err error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseQuotedTextBytes")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseQuotedTextBytes")
 		defer g.IRelease("END parseQuotedTextBytes")
-		defer func() { debug.Printf("value = '%s'", value) }()
+		defer func() { pdebug.Printf("value = '%s'", value) }()
 	}
 
 	cur := ctx.getByteCursor()
@@ -1296,10 +1314,10 @@ func (ctx *parserCtx) parseQuotedTextBytes(cb qbyteHandler) (value string, err e
 }
 
 func (ctx *parserCtx) parseQuotedText(cb qtextHandler) (value string, err error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseQuotedText")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseQuotedText")
 		defer g.IRelease("END parseQuotedText")
-		defer func() { debug.Printf("value = '%s'", value) }()
+		defer func() { pdebug.Printf("value = '%s'", value) }()
 	}
 
 	cur := ctx.getCursor()
@@ -1332,16 +1350,16 @@ func (ctx *parserCtx) parseQuotedText(cb qtextHandler) (value string, err error)
 var encodingBytes = []byte{'e', 'n', 'c', 'o', 'd', 'i', 'n', 'g'}
 
 func (ctx *parserCtx) parseEncodingDecl() (string, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseEncodingDecl")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseEncodingDecl")
 		defer g.IRelease("END parseEncodingDecl")
 	}
 	return ctx.parseNamedAttributeBytes(encodingBytes, ctx.parseEncodingName)
 }
 
 func (ctx *parserCtx) parseEncodingName(_ byte) (string, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseEncodingName")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseEncodingName")
 		defer g.IRelease("END parseEncodingName")
 	}
 	cur := ctx.getByteCursor()
@@ -1377,8 +1395,8 @@ func (ctx *parserCtx) parseEncodingName(_ byte) (string, error) {
 var standaloneBytes = []byte{'s', 't', 'a', 'n', 'd', 'a', 'l', 'o', 'n', 'e'}
 
 func (ctx *parserCtx) parseStandaloneDecl() (DocumentStandaloneType, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseStandaloneDecl")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseStandaloneDecl")
 		defer g.IRelease("END parseStandaloneDecl")
 	}
 
@@ -1415,8 +1433,8 @@ func (ctx *parserCtx) parseStandaloneDeclValue(_ byte) (string, error) {
 }
 
 func (ctx *parserCtx) parseMisc() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseMisc")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseMisc")
 		defer g.IRelease("END parseMisc")
 	}
 	cur := ctx.getCursor()
@@ -1432,8 +1450,8 @@ func (ctx *parserCtx) parseMisc() error {
 		} else if isBlankCh(cur.Peek()) {
 			ctx.skipBlanks()
 		} else {
-			if debug.Enabled {
-				debug.Printf("Nothing more in misc section...")
+			if pdebug.Enabled {
+				pdebug.Printf("Nothing more in misc section...")
 			}
 			break
 		}
@@ -1448,8 +1466,8 @@ var knownPIs = []string{
 }
 
 func (ctx *parserCtx) parsePI() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START parsePI")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parsePI")
 		defer g.IRelease("END parsePI")
 	}
 
@@ -1534,10 +1552,10 @@ func (ctx *parserCtx) parsePI() error {
  * Returns the Name parsed.
  */
 func (ctx *parserCtx) parseName() (name string, err error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseName")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseName")
 		defer g.IRelease("END parseName")
-		defer func() { debug.Printf("name = '%s'", name) }()
+		defer func() { pdebug.Printf("name = '%s'", name) }()
 	}
 	if ctx.instate == psEOF {
 		err = ctx.error(ErrPrematureEOF)
@@ -1599,10 +1617,10 @@ func (ctx *parserCtx) parseName() (name string, err error) {
  * Returns the Name parsed
  */
 func (ctx *parserCtx) parseQName() (local string, prefix string, err error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseQName")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseQName")
 		defer g.IRelease("END parseQName")
-		defer func() { debug.Printf("local='%s' prefix='%s'", local, prefix) }()
+		defer func() { pdebug.Printf("local='%s' prefix='%s'", local, prefix) }()
 	}
 
 	cur := ctx.getCursor()
@@ -1677,8 +1695,8 @@ func isNameChar(r rune) bool {
  * Returns the Nmtoken parsed
  */
 func (ctx *parserCtx) parseNmtoken() (string, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseNmtoken")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseNmtoken")
 		defer g.IRelease("END parseNmtoken")
 	}
 
@@ -1711,11 +1729,11 @@ func (ctx *parserCtx) parseNmtoken() (string, error) {
  * Returns the Name parsed
  */
 func (ctx *parserCtx) parseNCName() (ncname string, err error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseNCName")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseNCName")
 		defer g.IRelease("END parseNCName")
 		defer func() {
-			debug.Printf("ncname = '%s'", ncname)
+			pdebug.Printf("ncname = '%s'", ncname)
 		}()
 	}
 	if ctx.instate == psEOF {
@@ -1758,8 +1776,8 @@ func (ctx *parserCtx) parseNCName() (ncname string, err error) {
 }
 
 func (ctx *parserCtx) parsePITarget() (string, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parsePITarget")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parsePITarget")
 		defer g.IRelease("END parsePITarget")
 	}
 
@@ -1788,10 +1806,10 @@ func (ctx *parserCtx) parsePITarget() (string, error) {
 // note: unlike libxml2, we can't differentiate between SAX handlers
 // that uses the same IgnorableWhitespace and Character handlers
 func (ctx *parserCtx) areBlanks(s string, blankChars bool) (ret bool) {
-	if debug.Enabled {
-		g := debug.IPrintf("START areBlanks (%v)", []byte(s))
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START areBlanks (%v)", []byte(s))
 		defer g.IRelease("END areBlanks")
-		defer func() { debug.Printf("ret = '%t'", ret) }()
+		defer func() { pdebug.Printf("ret = '%t'", ret) }()
 	}
 
 	// Check for xml:space value.
@@ -1866,8 +1884,8 @@ var (
 )
 
 func (ctx *parserCtx) parseCDSect() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseCDSect")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseCDSect")
 		defer g.IRelease("END parseCDSect")
 	}
 
@@ -1893,8 +1911,8 @@ func (ctx *parserCtx) parseCDSect() error {
 }
 
 func (ctx *parserCtx) parseComment() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseComment")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseComment")
 		defer g.IRelease("END parseComment")
 	}
 
@@ -1954,8 +1972,8 @@ func (ctx *parserCtx) parseComment() error {
 }
 
 func (ctx *parserCtx) parseDocTypeDecl() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseDocTypeDecl")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseDocTypeDecl")
 		defer g.IRelease("END parseDocTypeDecl")
 	}
 
@@ -2017,8 +2035,8 @@ func (ctx *parserCtx) parseDocTypeDecl() error {
 }
 
 func (ctx *parserCtx) parseInternalSubset() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseInternalSubset")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseInternalSubset")
 		defer g.IRelease("END parseInternalSubset")
 	}
 
@@ -2077,8 +2095,8 @@ FinishDTD:
  * entities or to the external subset.)
  */
 func (ctx *parserCtx) parseMarkupDecl() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseMarkupDecl")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseMarkupDecl")
 		defer g.IRelease("END parseMarkupDecl")
 	}
 
@@ -2126,7 +2144,7 @@ func (ctx *parserCtx) parseMarkupDecl() error {
 
 	// This is only for internal subset. On external entities,
 	// the replacement is done before parsing stage
-	if ctx.external {
+	if !ctx.external && ctx.inputTab.Len() == 1 {
 		if err := ctx.parsePEReference(); err != nil {
 			return ctx.error(err)
 		}
@@ -2172,8 +2190,8 @@ func (ctx *parserCtx) parseMarkupDecl() error {
  * NOTE: misleading but this is handled.
  */
 func (ctx *parserCtx) parsePEReference() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START parsePEReference")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parsePEReference")
 		defer g.IRelease("END parsePEReference")
 	}
 
@@ -2183,8 +2201,8 @@ func (ctx *parserCtx) parsePEReference() error {
 	}
 	if cur.Peek() != '%' {
 		// This is not an error. just be done
-		if debug.Enabled {
-			debug.Printf("no parameter entities here, returning...")
+		if pdebug.Enabled {
+			pdebug.Printf("no parameter entities here, returning...")
 		}
 		return nil
 	}
@@ -2296,8 +2314,8 @@ func (ctx *parserCtx) parsePEReference() error {
  * Returns the type of the element, or -1 in case of error
  */
 func (ctx *parserCtx) parseElementDecl() (ElementTypeVal, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseElementDecl")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseElementDecl")
 		defer g.IRelease("END parseElementDecl")
 	}
 
@@ -2413,8 +2431,8 @@ func (ctx *parserCtx) parseElementDecl() (ElementTypeVal, error) {
 }
 
 func (ctx *parserCtx) parseElementContentDecl() (*ElementContent, ElementTypeVal, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseElementContentDecl")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseElementContentDecl")
 		defer g.IRelease("END parseElementContentDecl")
 	}
 
@@ -2455,8 +2473,8 @@ func (ctx *parserCtx) parseElementContentDecl() (*ElementContent, ElementTypeVal
 }
 
 func (ctx *parserCtx) parseElementMixedContentDecl() (*ElementContent, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseElementMixedContentDecl")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseElementMixedContentDecl")
 		defer g.IRelease("END parseElementMixedContentDecl")
 	}
 
@@ -2588,8 +2606,8 @@ func (ctx *parserCtx) parseElementMixedContentDecl() (*ElementContent, error) {
  *          hierarchy.
  */
 func (ctx *parserCtx) parseElementChildrenContentDeclPriv(depth int) (*ElementContent, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseElementChildrenContentDeclPriv(%d)", depth)
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseElementChildrenContentDeclPriv(%d)", depth)
 		defer g.IRelease("END parseElementChildrenContentDeclPriv(%d)", depth)
 	}
 
@@ -2849,8 +2867,8 @@ func (ctx *parserCtx) parseEntityValueInternal(qch rune) (string, error) {
  * Returns A newly allocated string with the substitution done.
  */
 func (ctx *parserCtx) decodeEntities(s []byte, what SubstitutionType) (ret string, err error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START decodeEntitites (%s)", s)
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START decodeEntitites (%s)", s)
 		defer func() {
 			g.IRelease("END decodeEntities ('%s' -> '%s')", s, ret)
 		}()
@@ -2868,6 +2886,7 @@ func (ctx *parserCtx) decodeEntitiesInternal(s []byte, what SubstitutionType, de
 	defer releaseBuffer(out)
 
 	for len(s) > 0 {
+		pdebug.Printf("s[0] -> %c", s[0])
 		if bytes.HasPrefix(s, []byte{'&', '#'}) {
 			val, width, err := parseStringCharRef(s)
 			if err != nil {
@@ -2931,12 +2950,12 @@ func (ctx *parserCtx) decodeEntitiesInternal(s []byte, what SubstitutionType, de
  * Returns the EntityValue parsed with reference substituted or NULL
  */
 func (ctx *parserCtx) parseEntityValue() (string, string, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseEntityValue")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseEntityValue")
 		defer g.IRelease("END parseEntityValue")
 	}
 
-  ctx.instate = psEntityValue;
+	ctx.instate = psEntityValue
 
 	literal, err := ctx.parseQuotedText(func(qch rune) (string, error) {
 		return ctx.parseEntityValueInternal(qch)
@@ -2969,8 +2988,8 @@ func (ctx *parserCtx) parseEntityValue() (string, string, error) {
  * The Name must match the declared name of a notation.
  */
 func (ctx *parserCtx) parseEntityDecl() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseEntityDecl")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseEntityDecl")
 		defer g.IRelease("END parseEntityDecl")
 	}
 
@@ -3013,8 +3032,8 @@ func (ctx *parserCtx) parseEntityDecl() error {
 	var uri string
 
 	if isParameter {
-		if debug.Enabled {
-			debug.Printf("Found parameter entity")
+		if pdebug.Enabled {
+			pdebug.Printf("Found parameter entity")
 		}
 		if c := cur.Peek(); c == '"' || c == '\'' {
 			literal, value, err = ctx.parseEntityValue()
@@ -3055,8 +3074,8 @@ func (ctx *parserCtx) parseEntityDecl() error {
 			}
 		}
 	} else {
-		if debug.Enabled {
-			debug.Printf("Found entity")
+		if pdebug.Enabled {
+			pdebug.Printf("Found entity")
 		}
 		if c := cur.Peek(); c == '"' || c == '\'' {
 			literal, value, err = ctx.parseEntityValue()
@@ -3199,8 +3218,8 @@ func (ctx *parserCtx) parseEntityDecl() error {
  * Returns: the notation attribute tree built while parsing
  */
 func (ctx *parserCtx) parseNotationType() (Enumeration, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseNotationType")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseNotationType")
 		defer g.IRelease("END parseNotationType")
 	}
 
@@ -3244,8 +3263,8 @@ func (ctx *parserCtx) parseNotationType() (Enumeration, error) {
 }
 
 func (ctx *parserCtx) parseEnumerationType() (Enumeration, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseEnumerationType")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseEnumerationType")
 		defer g.IRelease("END parseEnumerationType")
 	}
 
@@ -3299,8 +3318,8 @@ func (ctx *parserCtx) parseEnumerationType() (Enumeration, error) {
  * Returns: XML_ATTRIBUTE_ENUMERATION or XML_ATTRIBUTE_NOTATION
  */
 func (ctx *parserCtx) parseEnumeratedType() (AttributeType, Enumeration, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseEnumeratedType")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseEnumeratedType")
 		defer g.IRelease("END parseEnumeratedType")
 	}
 
@@ -3370,8 +3389,8 @@ func (ctx *parserCtx) parseEnumeratedType() (AttributeType, Enumeration, error) 
  * Returns the attribute type
  */
 func (ctx *parserCtx) parseAttributeType() (AttributeType, Enumeration, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseAttributeType")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseAttributeType")
 		defer g.IRelease("END parseAttributeType")
 	}
 
@@ -3432,8 +3451,8 @@ func (ctx *parserCtx) parseAttributeType() (AttributeType, Enumeration, error) {
  *          or XML_ATTRIBUTE_FIXED.
  */
 func (ctx *parserCtx) parseDefaultDecl() (deftype AttributeDefault, defvalue string, err error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseDefaultDecl")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseDefaultDecl")
 		defer func() {
 			g.IRelease("END parseDefaultDecl (deftype = %d, defvalue = '%s')", deftype, defvalue)
 		}()
@@ -3492,14 +3511,14 @@ func (ctx *parserCtx) parseDefaultDecl() (deftype AttributeDefault, defvalue str
  *         is needed.
  */
 func (ctx *parserCtx) attrNormalizeSpace(s string) (value string) {
-	if debug.Enabled {
-		g := debug.IPrintf("START attrNormalizeSpace")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START attrNormalizeSpace")
 		defer g.IRelease("END attrNormalizeSpace")
 		defer func() {
 			if s == value {
-				debug.Printf("no change")
+				pdebug.Printf("no change")
 			} else {
-				debug.Printf("normalized '%s' => '%s'", s, value)
+				pdebug.Printf("normalized '%s' => '%s'", s, value)
 			}
 		}()
 	}
@@ -3548,14 +3567,14 @@ func (ctx *parserCtx) attrNormalizeSpace(s string) (value string) {
  * to parse the DTD and before starting to parse the document root.
  */
 func (ctx *parserCtx) cleanSpecialAttributes() {
-	if debug.Enabled {
-		g := debug.IPrintf("START cleanSpecialAttribute")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START cleanSpecialAttribute")
 		defer g.IRelease("END cleanSpecialAttribute")
 	}
 	for k, v := range ctx.attsSpecial {
 		if v == AttrCDATA {
-			if debug.Enabled {
-				debug.Printf("removing %s from special attribute set", k)
+			if pdebug.Enabled {
+				pdebug.Printf("removing %s from special attribute set", k)
 			}
 			delete(ctx.attsSpecial, k)
 		}
@@ -3564,8 +3583,8 @@ func (ctx *parserCtx) cleanSpecialAttributes() {
 
 func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ AttributeType) {
 	key := elemName + ":" + attrName
-	if debug.Enabled {
-		g := debug.IPrintf("START addSpecialAttribute(%s, %d)", key, typ)
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START addSpecialAttribute(%s, %d)", key, typ)
 		defer g.IRelease("END addSpecialAttribute")
 	}
 	ctx.attsSpecial[key] = typ
@@ -3573,8 +3592,8 @@ func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ Attribu
 
 func (ctx *parserCtx) lookupSpecialAttribute(elemName, attrName string) (AttributeType, bool) {
 	key := elemName + ":" + attrName
-	if debug.Enabled {
-		g := debug.IPrintf("START lookupSpecialAttribute(%s)", key)
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START lookupSpecialAttribute(%s)", key)
 		defer g.IRelease("END lookupSpecialAttribute")
 	}
 	v, ok := ctx.attsSpecial[key]
@@ -3747,8 +3766,8 @@ func (ctx *parserCtx) lookupAttributeDefault(elemName string) (map[string]*Attri
  * [53] AttDef ::= S Name S AttType S DefaultDecl
  */
 func (ctx *parserCtx) parseAttributeListDecl() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseAttributeListDecl")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseAttributeListDecl")
 		defer g.IRelease("END parseAttributeListDecl")
 	}
 
@@ -3850,24 +3869,24 @@ func (ctx *parserCtx) parseAttributeListDecl() error {
 }
 
 func (ctx *parserCtx) parseNotationDecl() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseNotationDecl")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseNotationDecl")
 		defer g.IRelease("END parseNotationDecl")
 	}
 	return nil
 }
 
 func (ctx *parserCtx) parseExternalID() (string, string, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseExternalID")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseExternalID")
 		defer g.IRelease("END parseExternalID")
 	}
 	return "", "", nil
 }
 
 func (ctx *parserCtx) parseEpilogue() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseEpilogue")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseEpilogue")
 		defer g.IRelease("END parseEpilogue")
 	}
 
@@ -3881,8 +3900,8 @@ func (ctx *parserCtx) parseExternalEntityPrivate(uri, externalID string) (Node, 
 var ErrParseSucceeded = errors.New("parse succeeded")
 
 func (ctx *parserCtx) parseBalancedChunkInternal(chunk []byte, userData interface{}) (Node, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseBalancedChunkInternal")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseBalancedChunkInternal")
 		defer g.IRelease("END parseBalancedChunkInternal")
 	}
 
@@ -3957,8 +3976,8 @@ func (ctx *parserCtx) parseBalancedChunkInternal(chunk []byte, userData interfac
  * [67] Reference ::= EntityRef | CharRef
  */
 func (ctx *parserCtx) parseReference() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseReference")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseReference")
 		defer g.IRelease("END parseReference")
 	}
 
@@ -4330,8 +4349,8 @@ func accumulateHexCharRef(val int32, c rune) (int32, error) {
 
 // returns rune, byteCount, error
 func parseStringCharRef(s []byte) (r rune, width int, err error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseStringCharRef")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseStringCharRef")
 		defer func() {
 			g.IRelease("END parseStringCharRef r = '%c' (%x), consumed %d bytes", r, r, width)
 		}()
@@ -4485,8 +4504,8 @@ func (ctx *parserCtx) getEntity(name string) (*Entity, error) {
 }
 
 func (ctx *parserCtx) parseStringEntityRef(s []byte) (sax.Entity, int, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseStringEntityRef ('%s')", s)
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseStringEntityRef ('%s')", s)
 		defer g.IRelease("END parseStringEntityRef")
 	}
 	if len(s) == 0 || s[0] != '&' {
@@ -4663,10 +4682,10 @@ func (ctx *parserCtx) parseStringPEReference(s []byte) (sax.Entity, int, error) 
  * Returns the value parsed as a rune
  */
 func (ctx *parserCtx) parseCharRef() (r rune, err error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseCharRef")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseCharRef")
 		defer g.IRelease("END parseCharRef")
-		defer func() { debug.Printf("r = '%c' (%x)", r, r) }()
+		defer func() { pdebug.Printf("r = '%c' (%x)", r, r) }()
 	}
 
 	r = utf8.RuneError
@@ -4747,8 +4766,8 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
  * Returns the xmlEntityPtr if found, or NULL otherwise.
  */
 func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START parseEntityRef")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseEntityRef")
 		defer func() {
 			g.IRelease("END parseEntityRef ent = %#v", ent)
 		}()
@@ -4902,8 +4921,8 @@ func (ctx *parserCtx) entityCheck(ent sax.Entity, size, replacement int) error {
 }
 
 func (ctx *parserCtx) handlePEReference() error {
-	if debug.Enabled {
-		g := debug.IPrintf("START handlePEReference")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START handlePEReference")
 		defer g.IRelease("END handlePEReference")
 	}
 
@@ -4923,37 +4942,40 @@ func (ctx *parserCtx) handlePEReference() error {
 		//       entity value to be able to save the internal
 		//       subset of the document.
 		//       This will be handled by xmlStringDecodeEntities
-		if debug.Enabled {
-			debug.Printf("instate == %s, ignoring", st)
+		if pdebug.Enabled {
+			pdebug.Printf("instate == %s, ignoring", st)
 		}
 		return nil
 	case psEOF:
-		if debug.Enabled {
-			debug.Printf("parameter entity at EOF")
+		if pdebug.Enabled {
+			pdebug.Printf("parameter entity at EOF")
 		}
 		return errors.New("handlePEReference: parameter entity at EOF")
 	case psPrologue, psStart, psMisc:
-		if debug.Enabled {
-			debug.Printf("parameter entity in prologue")
+		if pdebug.Enabled {
+			pdebug.Printf("parameter entity in prologue")
 		}
 		return errors.New("handlePEReference: parameter entity in prologue")
 	case psEpilogue:
-		if debug.Enabled {
-			debug.Printf("parameter entity in epilogue")
+		if pdebug.Enabled {
+			pdebug.Printf("parameter entity in epilogue")
 		}
 		return errors.New("handlePEReference: parameter entity in epilogue")
 	case psDTD:
-		if debug.Enabled {
-			debug.Printf("parameter entity in DTD")
+		if pdebug.Enabled {
+			pdebug.Printf("parameter entity in DTD")
 		}
 		// [WFC: Well-Formedness Constraint: PEs in Internal Subset]
 		// In the internal DTD subset, parameter-entity references
 		// can occur only where markup declarations can occur, not
 		// within markup declarations.
 		// In that case this is handled in xmlParseMarkupDecl
-		if !ctx.external { // ctxt->inputNr == 1
-			if debug.Enabled {
-				debug.Printf("we're NOT in external DTD, bail out")
+		if pdebug.Enabled {
+			pdebug.Printf("DTD external = %t, inputNr = %d", ctx.external, ctx.inputTab.Len())
+		}
+		if !ctx.external || ctx.inputTab.Len() == 1 {
+			if pdebug.Enabled {
+				pdebug.Printf("we're NOT in external DTD, bail out")
 			}
 			return nil
 		}
@@ -4969,8 +4991,8 @@ func (ctx *parserCtx) handlePEReference() error {
 	if err != nil {
 		return err
 	}
-	if debug.Enabled {
-		debug.Printf("entity name: '%s'", name)
+	if pdebug.Enabled {
+		pdebug.Printf("entity name: '%s'", name)
 	}
 
 	if cur.Peek() != ';' {
@@ -5015,6 +5037,7 @@ func (ctx *parserCtx) handlePEReference() error {
 		*/
 		ctx.valid = false
 		ctx.entityCheck(nil, 0, 0)
+		pdebug.Printf("Should be calling pushInput here")
 		/* have no clue what this is for
 		   } else if (ctxt->input->free != deallocblankswrapper) {
 		           input = xmlNewBlanksWrapperInputStream(ctxt, entity);
@@ -5037,15 +5060,52 @@ func (ctx *parserCtx) handlePEReference() error {
 		// only process data coming from the document entity by
 		// default.
 		/*
-		   if ((entity->etype == XML_EXTERNAL_PARAMETER_ENTITY) &&
-		       ((ctxt->options & XML_PARSE_NOENT) == 0) &&
-		       ((ctxt->options & XML_PARSE_DTDVALID) == 0) &&
-		       ((ctxt->options & XML_PARSE_DTDLOAD) == 0) &&
-		       ((ctxt->options & XML_PARSE_DTDATTR) == 0) &&
-		       (ctxt->replaceEntities == 0) &&
-		       (ctxt->validate == 0))
-		       return;
+			  if EntityType(entity.EntityType()) == ExternalParameterEntity) &&
+				       ((ctxt->options & XML_PARSE_NOENT) == 0) &&
+				       ((ctxt->options & XML_PARSE_DTDVALID) == 0) &&
+				       ((ctxt->options & XML_PARSE_DTDLOAD) == 0) &&
+				       ((ctxt->options & XML_PARSE_DTDATTR) == 0) &&
+				       (ctxt->replaceEntities == 0) &&
+				       (ctxt->validate == 0))
+				       return;
 		*/
+		ctx.pushInput(strcursor.NewByteCursor(bytes.NewReader(entity.Content())))
+
+		/*
+		           // Get the 4 first bytes and decode the charset
+		           // if enc != XML_CHAR_ENCODING_NONE
+		           // plug some encoding conversion routines.
+		           // Note that, since we may have some non-UTF8
+		           // encoding (like UTF16, bug 135229), the 'length'
+		           // is not known, but we can calculate based upon
+		           // the amount of data in the buffer.
+		           GROW
+		           if (ctxt->instate == XML_PARSER_EOF)
+		               return;
+		           if ((ctxt->input->end - ctxt->input->cur)>=4) {
+		               start[0] = RAW;
+		               start[1] = NXT(1);
+		               start[2] = NXT(2);
+		               start[3] = NXT(3);
+		               enc = xmlDetectCharEncoding(start, 4);
+		               if (enc != XML_CHAR_ENCODING_NONE) {
+		                   xmlSwitchEncoding(ctxt, enc);
+		               }
+		           }
+
+		           if ((entity->etype == XML_EXTERNAL_PARAMETER_ENTITY) &&
+		               (CMP5(CUR_PTR, '<', '?', 'x', 'm', 'l' )) &&
+		               (IS_BLANK_CH(NXT(5)))) {
+		               xmlParseTextDecl(ctxt);
+		           }
+		       } else {
+		           xmlFatalErrMsgStr(ctxt, XML_ERR_ENTITY_IS_PARAMETER,
+		                    "PEReference: %s is not a parameter entity\n",
+		                             name);
+		       }
+		   }
+		*/
+
 	}
 	return errors.New("unimplemented")
 }

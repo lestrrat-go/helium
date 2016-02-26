@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/lestrrat/helium/internal/debug"
+	"github.com/lestrrat/go-pdebug"
 )
 
 func CreateDocument() *Document {
@@ -110,8 +110,8 @@ func (d *Document) SetDocumentElement(root Node) error {
 }
 
 func (d *Document) CreateReference(name string) (*EntityRef, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START document.CreateReference '%s'", name)
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START document.CreateReference '%s'", name)
 		defer g.IRelease("END document.CreateReference")
 	}
 	n, err := d.CreateCharRef(name)
@@ -133,8 +133,8 @@ func (d *Document) CreateReference(name string) (*EntityRef, error) {
 }
 
 func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Attribute, err error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START document.CreateAttribute '%s' (%s)", name, value)
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START document.CreateAttribute '%s' (%s)", name, value)
 		defer func() {
 			g.IRelease("END document.CreateAttribute (attr.Value = '%s')", attr.Value())
 		}()
@@ -207,8 +207,8 @@ func (d *Document) CreateElementContent(name string, etype ElementContentType) (
 }
 
 func (d *Document) GetEntity(name string) (ent *Entity, found bool) {
-	if debug.Enabled {
-		g := debug.IPrintf("START document.GetEntity '%s'", name)
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START document.GetEntity '%s'", name)
 		defer func() {
 			if found {
 				g.IRelease("END document.GetEntity found = %t '%#x', (%p)", found, ent.Content(), ent)
@@ -218,16 +218,16 @@ func (d *Document) GetEntity(name string) (ent *Entity, found bool) {
 		}()
 	}
 	if ints := d.intSubset; ints != nil {
-		if debug.Enabled {
-			debug.Printf("Looking into internal subset...")
+		if pdebug.Enabled {
+			pdebug.Printf("Looking into internal subset...")
 		}
 		ent, found = ints.LookupEntity(name)
 		return
 	}
 
 	if exts := d.extSubset; exts != nil {
-		if debug.Enabled {
-			debug.Printf("Looking into external subset...")
+		if pdebug.Enabled {
+			pdebug.Printf("Looking into external subset...")
 		}
 		ent, found = exts.LookupEntity(name)
 		return
@@ -282,8 +282,8 @@ func (d *Document) IsMixedElement(name string) (bool, error) {
  * Returns a pointer to the first child
  */
 func (d *Document) stringToNodeList(value string) (ret Node, err error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START document.stringToNodeList '%s'", value)
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START document.stringToNodeList '%s'", value)
 		defer func() {
 			var content []byte
 			if ret == nil {
@@ -374,8 +374,8 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 			} else {
 				// flush the buffer so far
 				if buf.Len() > 0 {
-					if debug.Enabled {
-						debug.Printf("Flushing content so far... '%s'", buf.Bytes())
+					if pdebug.Enabled {
+						pdebug.Printf("Flushing content so far... '%s'", buf.Bytes())
 					}
 					var node Node
 					node, err = d.CreateText(buf.Bytes())
@@ -453,8 +453,8 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 }
 
 func (d *Document) CreateCharRef(name string) (*EntityRef, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START document.CreateCharRef '%s'", name)
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START document.CreateCharRef '%s'", name)
 		defer g.IRelease("END document.CreateCharRef")
 	}
 

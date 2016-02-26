@@ -4,12 +4,12 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/lestrrat/helium/internal/debug"
+	"github.com/lestrrat/go-pdebug"
 )
 
 func newElementContent(name string, ctype ElementContentType) (*ElementContent, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START newElementContent '%s' (type = %d)", name, ctype)
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START newElementContent '%s' (type = %d)", name, ctype)
 		defer g.IRelease("END newElementContent")
 	}
 	var prefix string
@@ -32,8 +32,6 @@ func newElementContent(name string, ctype ElementContentType) (*ElementContent, 
 	default:
 		return nil, errors.New("invalid element content type")
 	}
-
-debug.Printf("--------------> ElementContent name = %s <------------", local)
 
 	ret := ElementContent{
 		ctype:  ctype,
@@ -84,4 +82,3 @@ func (elem *ElementContent) copyElementContent() *ElementContent {
 	}
 	return ret
 }
-

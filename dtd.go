@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/lestrrat/helium/internal/debug"
+	"github.com/lestrrat/go-pdebug"
 )
 
 func newDTD() *DTD {
@@ -38,8 +38,8 @@ func (dtd *DTD) RegisterEntity(name string, typ EntityType, publicID, systemID, 
 }
 
 func (dtd *DTD) AddElementDecl(name string, typ ElementTypeVal, content *ElementContent) (*ElementDecl, error) {
-	if debug.Enabled {
-		g := debug.IPrintf("START dtd.AddElementDecl '%s'", name)
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START dtd.AddElementDecl '%s'", name)
 		defer g.IRelease("END dtd.AddElementDecl")
 	}
 
