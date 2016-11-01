@@ -1,0 +1,18 @@
+package: github.com/lestrrat/helium
+import:
+- package: github.com/jessevdk/go-flags
+- package: github.com/lestrrat/go-pdebug
+- package: github.com/lestrrat/go-strcursor
+- package: golang.org/x/text
+  subpackages:
+  - encoding
+  - encoding/charmap
+  - encoding/japanese
+  - encoding/korean
+  - encoding/simplifiedchinese
+  - encoding/traditionalchinese
+  - encoding/unicode
+testImport:
+- package: github.com/stretchr/testify
+  subpackages:
+  - assert

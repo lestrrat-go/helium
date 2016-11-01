@@ -6,6 +6,10 @@ type nodeStack struct {
 	stack.SimpleStack
 }
 
+type inputStack struct {
+	stack.SimpleStack
+}
+
 type nsStack struct {
 	stack.UniqueStack
 }
@@ -67,4 +71,31 @@ func (s *nodeStack) PeekOne() *Element {
 		return nil
 	}
 	return l[0].(*Element)
+}
+
+func newInputStack() inputStack {
+	return inputStack{}
+}
+
+// the reason we're using interface{} here is that we may have to
+// push a ByteCursor or a RuneCursor, and they don't share
+// a common API
+func (s *inputStack) Push(c interface{}) {
+	s.SimpleStack.Push(stack.AnyItem(c))
+}
+
+func (s *inputStack) Pop() interface{} {
+  defer s.SimpleStack.Pop()
+  if e := s.PeekOne(); e != nil {
+    return e
+  }
+  return nil
+}
+
+func (s *inputStack) PeekOne() interface{} {
+	l := s.SimpleStack.Peek(1)
+	if len(l) != 1 {
+		return nil
+	}
+	return l[0].(interface{})
 }

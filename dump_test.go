@@ -15,6 +15,14 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 	skipped := map[string]struct{}{
 		"comment4.xml": {},
 	}
+	only := map[string]struct{}{}
+	if v := os.Getenv("HELIUM_DUMP_TEST_FILES"); v != "" {
+		files := strings.Split(v, ",")
+		for _, f := range files {
+			n := strings.TrimSpace(f)
+			only[n] = struct{}{}
+		}
+	}
 
 	dir := "test"
 	files, err := ioutil.ReadDir(dir)
@@ -27,9 +35,15 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 			continue
 		}
 
-		if _, ok := skipped[fi.Name()]; ok {
-			t.Logf("Skipping test for '%s' for now...", fi.Name())
-			continue
+		if len(only) > 0 {
+			if _, ok := only[fi.Name()]; !ok {
+				continue
+			}
+		} else {
+			if _, ok := skipped[fi.Name()]; ok {
+				t.Logf("Skipping test for '%s' for now...", fi.Name())
+				continue
+			}
 		}
 
 		fn := filepath.Join(dir, fi.Name())
