@@ -180,6 +180,44 @@ func (d *Document) CreateDTD() (*DTD, error) {
 	return dtd, nil
 }
 
+func (d *Document) InternalSubset() (*DTD, error) {
+	// equiv: xmlGetIntSubset (tree.c)
+	if d.intSubset == nil {
+		return nil, errors.New("no internal subset is associated with this document")
+	}
+	return d.intSubset, nil
+}
+
+func (d *Document) CreateInternalSubset(name, externalID, systemID string) (*DTD, error) {
+	// equiv: xmlCreateIntSubset (tree.c)
+	if _, err := d.InternalSubset(); err == nil {
+		return nil, errors.New("document " + d.name + " already has an internal subset")
+	}
+
+	cur, err := d.CreateDTD()
+	if err != nil {
+		return nil, err
+	}
+
+	cur.name = name
+	cur.externalID = externalID
+	cur.systemID = systemID
+
+	if d == nil {
+		return cur, nil
+	}
+
+	d.intSubset = cur
+	cur.parent = d
+	cur.doc = d
+
+	// there's an elaborate code in libxml2 to insert the node in
+	// the correct location...
+	d.AddChild(cur)
+
+	return cur, nil
+}
+
 func (d *Document) CreateElement(name string) (*Element, error) {
 	e := newElement(name)
 	e.doc = d

@@ -140,8 +140,8 @@ func (ctx *parserCtx) getByteCursor() *strcursor.ByteCursor {
 	return cur
 }
 
-func (ctx *parserCtx) getCursor() *strcursor.RuneCursor {
-	cur, ok := ctx.inputTab.PeekOne().(*strcursor.RuneCursor)
+func (ctx *parserCtx) getCursor() strcursor.Cursor {
+	cur, ok := ctx.inputTab.PeekOne().(strcursor.Cursor)
 	if !ok {
 		return nil
 	}
@@ -398,20 +398,20 @@ func (ctx *parserCtx) parseDocument() error {
 		panic("did not get rune cursor")
 	}
 	// Doctype declarations and more misc
-	if cur.HasPrefix("<!DOCTYPE") {
-		ctx.inSubset = 1
+	if cur.HasPrefixString("<!DOCTYPE") {
+		ctx.inSubset = inInternalSubset
 		if err := ctx.parseDocTypeDecl(); err != nil {
 			return ctx.error(err)
 		}
 
-		if cur.HasPrefix("[") {
+		if cur.HasPrefixString("[") {
 			ctx.instate = psDTD
 			if err := ctx.parseInternalSubset(); err != nil {
 				return ctx.error(err)
 			}
 		}
 
-		ctx.inSubset = 2
+		ctx.inSubset = inExternalSubset
 		if s := ctx.sax; s != nil {
 			switch err := s.ExternalSubset(ctx.userData, ctx.intSubName, ctx.extSubSystem, ctx.extSubURI); err {
 			case nil, sax.ErrHandlerUnspecified:
@@ -423,7 +423,7 @@ func (ctx *parserCtx) parseDocument() error {
 		if ctx.instate == psEOF {
 			return ctx.error(errors.New("unexpected EOF"))
 		}
-		ctx.inSubset = 0
+		ctx.inSubset = notInSubset
 
 		ctx.cleanSpecialAttributes()
 
@@ -489,39 +489,39 @@ func (ctx *parserCtx) parseContent() error {
 	}
 
 	for !cur.Done() {
-		if cur.HasPrefix("</") {
+		if cur.HasPrefixString("</") {
 			break
 		}
 
-		if cur.HasPrefix("<?") {
+		if cur.HasPrefixString("<?") {
 			if err := ctx.parsePI(); err != nil {
 				return ctx.error(err)
 			}
 			continue
 		}
 
-		if cur.HasPrefix("<![CDATA[") {
+		if cur.HasPrefixString("<![CDATA[") {
 			if err := ctx.parseCDSect(); err != nil {
 				return ctx.error(err)
 			}
 			continue
 		}
 
-		if cur.HasPrefix("<!--") {
+		if cur.HasPrefixString("<!--") {
 			if err := ctx.parseComment(); err != nil {
 				return ctx.error(err)
 			}
 			continue
 		}
 
-		if cur.HasPrefix("<") {
+		if cur.HasPrefixString("<") {
 			if err := ctx.parseElement(); err != nil {
 				return ctx.error(err)
 			}
 			continue
 		}
 
-		if cur.HasPrefix("&") {
+		if cur.HasPrefixString("&") {
 			if err := ctx.parseReference(); err != nil {
 				return ctx.error(err)
 			}
@@ -642,7 +642,7 @@ func (ctx *parserCtx) parseElement() error {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if !cur.HasPrefix("/>") {
+	if !cur.HasPrefixString("/>") {
 		if err := ctx.parseContent(); err != nil {
 			return ctx.error(err)
 		}
@@ -705,7 +705,7 @@ func (ctx *parserCtx) parseStartTag() error {
 			ctx.pushNS("", attvalue)
 			nbNs++
 			//    SkipDefaultNS:
-			if cur.Peek() == '>' || cur.HasPrefix("/>") {
+			if cur.Peek() == '>' || cur.HasPrefixString("/>") {
 				continue
 			}
 
@@ -751,7 +751,7 @@ func (ctx *parserCtx) parseStartTag() error {
 			nbNs++
 
 		SkipNS:
-			if cur.Peek() == '>' || cur.HasPrefix("/>") {
+			if cur.Peek() == '>' || cur.HasPrefixString("/>") {
 				continue
 			}
 
@@ -846,13 +846,13 @@ func (ctx *parserCtx) parseEndTag() error {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if !cur.Consume("/>") {
-		if !cur.Consume("</") {
+	if !cur.ConsumeString("/>") {
+		if !cur.ConsumeString("</") {
 			return ctx.error(ErrLtSlashRequired)
 		}
 
 		e := ctx.peekNode()
-		if !cur.Consume(e.Name()) {
+		if !cur.ConsumeString(e.Name()) {
 			return ctx.error(errors.New("expected end tag '" + e.Name() + "'"))
 		}
 
@@ -1186,7 +1186,7 @@ func (ctx *parserCtx) parseNamedAttribute(name string, cb qtextHandler) (string,
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if !cur.Consume(name) {
+	if !cur.ConsumeString(name) {
 		return "", ctx.error(ErrAttrNotFound{Token: name})
 	}
 
@@ -1212,7 +1212,7 @@ func (ctx *parserCtx) parseVersionInfo() (string, error) {
 	return ctx.parseNamedAttributeBytes(versionBytes, ctx.parseVersionNum)
 }
 
-func (ctx *parserCtx) parseNamedAttributeBytes(name []byte, valueParser qbyteHandler) (string, error) {
+func (ctx *parserCtx) parseNamedAttributeBytes(name []byte, valueParser qtextHandler) (string, error) {
 	cur := ctx.getByteCursor()
 	if cur == nil {
 		return "", ErrByteCursorRequired
@@ -1243,7 +1243,7 @@ func (ctx *parserCtx) parseNamedAttributeBytes(name []byte, valueParser qbyteHan
  *
  * Returns the string giving the XML version number
  */
-func (ctx *parserCtx) parseVersionNum(_ byte) (string, error) {
+func (ctx *parserCtx) parseVersionNum(_ rune) (string, error) {
 	cur := ctx.getByteCursor()
 	if cur == nil {
 		return "", ErrByteCursorRequired
@@ -1267,7 +1267,7 @@ func (ctx *parserCtx) parseVersionNum(_ byte) (string, error) {
 			defer releaseBuffer(b)
 
 			for x := 1; x < i; x++ {
-				b.WriteByte(cur.PeekN(x))
+				b.WriteRune(cur.PeekN(x))
 			}
 			cur.Advance(i - 1)
 			return b.String(), nil
@@ -1277,9 +1277,8 @@ func (ctx *parserCtx) parseVersionNum(_ byte) (string, error) {
 }
 
 type qtextHandler func(qch rune) (string, error)
-type qbyteHandler func(qch byte) (string, error)
 
-func (ctx *parserCtx) parseQuotedTextBytes(cb qbyteHandler) (value string, err error) {
+func (ctx *parserCtx) parseQuotedTextBytes(cb qtextHandler) (value string, err error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START parseQuotedTextBytes")
 		defer g.IRelease("END parseQuotedTextBytes")
@@ -1295,7 +1294,7 @@ func (ctx *parserCtx) parseQuotedTextBytes(cb qbyteHandler) (value string, err e
 	case '"', '\'':
 		cur.Advance(1)
 	default:
-		err = errors.New("string not started (got '" + string([]byte{q}) + "')")
+		err = errors.New("string not started (got '" + string([]rune{q}) + "')")
 		return
 	}
 
@@ -1357,7 +1356,7 @@ func (ctx *parserCtx) parseEncodingDecl() (string, error) {
 	return ctx.parseNamedAttributeBytes(encodingBytes, ctx.parseEncodingName)
 }
 
-func (ctx *parserCtx) parseEncodingName(_ byte) (string, error) {
+func (ctx *parserCtx) parseEncodingName(_ rune) (string, error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START parseEncodingName")
 		defer g.IRelease("END parseEncodingName")
@@ -1375,7 +1374,7 @@ func (ctx *parserCtx) parseEncodingName(_ byte) (string, error) {
 	if !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') {
 		return "", ctx.error(ErrInvalidEncodingName)
 	}
-	buf.WriteByte(c)
+	buf.WriteRune(c)
 
 	i := 2
 	for c = cur.PeekN(i); c != 0x0; c = cur.PeekN(i) {
@@ -1383,7 +1382,7 @@ func (ctx *parserCtx) parseEncodingName(_ byte) (string, error) {
 			i--
 			break
 		}
-		buf.WriteByte(c)
+		buf.WriteRune(c)
 		i++
 	}
 
@@ -1411,21 +1410,20 @@ func (ctx *parserCtx) parseStandaloneDecl() (DocumentStandaloneType, error) {
 	}
 }
 
-var (
-	yes = []byte{'y', 'e', 's'}
-	no  = []byte{'n', 'o'}
-)
-
-func (ctx *parserCtx) parseStandaloneDeclValue(_ byte) (string, error) {
+func (ctx *parserCtx) parseStandaloneDeclValue(_ rune) (string, error) {
+	const (
+		yes = "yes"
+		no = "no"
+	)
 	cur := ctx.getByteCursor()
 	if cur == nil {
 		return "", ErrByteCursorRequired
 	}
-	if cur.Consume(yes) {
+	if cur.ConsumeString(yes) {
 		return string(yes), nil
 	}
 
-	if cur.Consume(no) {
+	if cur.ConsumeString(no) {
 		return string(no), nil
 	}
 
@@ -1437,13 +1435,14 @@ func (ctx *parserCtx) parseMisc() error {
 		g := pdebug.IPrintf("START parseMisc")
 		defer g.IRelease("END parseMisc")
 	}
+
 	cur := ctx.getCursor()
 	for !cur.Done() && ctx.instate != psEOF {
-		if cur.HasPrefix("<?") {
+		if cur.HasPrefixString("<?") {
 			if err := ctx.parsePI(); err != nil {
 				return ctx.error(err)
 			}
-		} else if cur.HasPrefix("<!--") {
+		} else if cur.HasPrefixString("<!--") {
 			if err := ctx.parseComment(); err != nil {
 				return ctx.error(err)
 			}
@@ -1475,7 +1474,7 @@ func (ctx *parserCtx) parsePI() error {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if !cur.Consume("<?") {
+	if !cur.ConsumeString("<?") {
 		return ctx.error(ErrInvalidProcessingInstruction)
 	}
 	oldstate := ctx.instate
@@ -1487,7 +1486,7 @@ func (ctx *parserCtx) parsePI() error {
 		return ctx.error(err)
 	}
 
-	if cur.Consume("?>") {
+	if cur.ConsumeString("?>") {
 		if s := ctx.sax; s != nil {
 			switch err := s.ProcessingInstruction(ctx.userData, target, ""); err {
 			case nil, sax.ErrHandlerUnspecified:
@@ -1523,7 +1522,7 @@ func (ctx *parserCtx) parsePI() error {
 	cur.Advance(i)
 	data := buf.String()
 
-	if !cur.Consume("?>") {
+	if !cur.ConsumeString("?>") {
 		return ctx.error(ErrInvalidProcessingInstruction)
 	}
 
@@ -1893,7 +1892,7 @@ func (ctx *parserCtx) parseCDSect() error {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if !cur.Consume("<![CDATA[") {
+	if !cur.ConsumeString("<![CDATA[") {
 		return ctx.error(ErrInvalidCDSect)
 	}
 
@@ -1904,7 +1903,7 @@ func (ctx *parserCtx) parseCDSect() error {
 		return ctx.error(err)
 	}
 
-	if !cur.Consume("]]>") {
+	if !cur.ConsumeString("]]>") {
 		return ctx.error(ErrCDATANotFinished)
 	}
 	return nil
@@ -1920,7 +1919,7 @@ func (ctx *parserCtx) parseComment() error {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if !cur.Consume("<!--") {
+	if !cur.ConsumeString("<!--") {
 		return ctx.error(ErrInvalidComment)
 	}
 
@@ -1981,7 +1980,7 @@ func (ctx *parserCtx) parseDocTypeDecl() error {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if !cur.Consume("<!DOCTYPE") {
+	if !cur.ConsumeString("<!DOCTYPE") {
 		return ctx.error(ErrInvalidDTD)
 	}
 
@@ -2035,6 +2034,7 @@ func (ctx *parserCtx) parseDocTypeDecl() error {
 }
 
 func (ctx *parserCtx) parseInternalSubset() error {
+	// equiv: xmlParseInternalSubset (parser.c)
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START parseInternalSubset")
 		defer g.IRelease("END parseInternalSubset")
@@ -2047,9 +2047,8 @@ func (ctx *parserCtx) parseInternalSubset() error {
 	if cur.Peek() != '[' {
 		goto FinishDTD
 	}
-	cur.Advance(1)
-
 	ctx.instate = psDTD
+	cur.Advance(1)
 
 	for !cur.Done() && cur.Peek() != ']' {
 		ctx.skipBlanks()
@@ -2059,6 +2058,8 @@ func (ctx *parserCtx) parseInternalSubset() error {
 		if err := ctx.parsePEReference(); err != nil {
 			return ctx.error(err)
 		}
+
+
 	}
 
 	if cur.Peek() == ']' {
@@ -2323,7 +2324,7 @@ func (ctx *parserCtx) parseElementDecl() (ElementTypeVal, error) {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if !cur.Consume("<!ELEMENT") {
+	if !cur.ConsumeString("<!ELEMENT") {
 		return UndefinedElementType, ctx.error(ErrInvalidElementDecl)
 	}
 
@@ -2349,9 +2350,9 @@ func (ctx *parserCtx) parseElementDecl() (ElementTypeVal, error) {
 
 	var etype ElementTypeVal
 	var content *ElementContent
-	if cur.Consume("EMPTY") {
+	if cur.ConsumeString("EMPTY") {
 		etype = EmptyElementType
-	} else if cur.Consume("ANY") {
+	} else if cur.ConsumeString("ANY") {
 		etype = AnyElementType
 	} else if cur.Peek() == '(' {
 		content, etype, err = ctx.parseElementContentDecl()
@@ -2454,7 +2455,7 @@ func (ctx *parserCtx) parseElementContentDecl() (*ElementContent, ElementTypeVal
 	var ec *ElementContent
 	var err error
 	var etype ElementTypeVal
-	if cur.HasPrefix("#PCDATA") {
+	if cur.HasPrefixString("#PCDATA") {
 		ec, err = ctx.parseElementMixedContentDecl()
 		if err != nil {
 			return nil, UndefinedElementType, ctx.error(err)
@@ -2482,7 +2483,7 @@ func (ctx *parserCtx) parseElementMixedContentDecl() (*ElementContent, error) {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if !cur.Consume("#PCDATA") {
+	if !cur.ConsumeString("#PCDATA") {
 		return nil, ctx.error(ErrPCDATARequired)
 	}
 
@@ -2997,7 +2998,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if !cur.Consume("<!ENTITY") {
+	if !cur.ConsumeString("<!ENTITY") {
 		return ctx.error(errors.New("<!ENTITY not started"))
 	}
 
@@ -3036,6 +3037,9 @@ func (ctx *parserCtx) parseEntityDecl() error {
 			pdebug.Printf("Found parameter entity")
 		}
 		if c := cur.Peek(); c == '"' || c == '\'' {
+		if pdebug.Enabled {
+			pdebug.Printf("parseEntityDecl, isParameter = true, calling parseEntityValue")
+		}
 			literal, value, err = ctx.parseEntityValue()
 			if err == nil {
 				if s := ctx.sax; s != nil {
@@ -3120,7 +3124,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 			}
 
 			ctx.skipBlanks()
-			if cur.Consume("NDATA") {
+			if cur.ConsumeString("NDATA") {
 				if !ctx.skipBlanks() {
 					return ctx.error(ErrSpaceRequired)
 				}
@@ -3327,7 +3331,7 @@ func (ctx *parserCtx) parseEnumeratedType() (AttributeType, Enumeration, error) 
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if cur.Consume("NOTATION") {
+	if cur.ConsumeString("NOTATION") {
 		if !isBlankCh(cur.Peek()) {
 			return AttrInvalid, nil, ctx.error(ErrSpaceRequired)
 		}
@@ -3398,28 +3402,28 @@ func (ctx *parserCtx) parseAttributeType() (AttributeType, Enumeration, error) {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if cur.Consume("CDATA") {
+	if cur.ConsumeString("CDATA") {
 		return AttrCDATA, nil, nil
 	}
-	if cur.Consume("IDREFS") {
+	if cur.ConsumeString("IDREFS") {
 		return AttrIDRefs, nil, nil
 	}
-	if cur.Consume("IDREF") {
+	if cur.ConsumeString("IDREF") {
 		return AttrIDRef, nil, nil
 	}
-	if cur.Consume("ID") {
+	if cur.ConsumeString("ID") {
 		return AttrID, nil, nil
 	}
-	if cur.Consume("ENTITY") {
+	if cur.ConsumeString("ENTITY") {
 		return AttrEntity, nil, nil
 	}
-	if cur.Consume("ENTITIES") {
+	if cur.ConsumeString("ENTITIES") {
 		return AttrEntities, nil, nil
 	}
-	if cur.Consume("NMTOKENS") {
+	if cur.ConsumeString("NMTOKENS") {
 		return AttrNmtokens, nil, nil
 	}
-	if cur.Consume("NMTOKEN") {
+	if cur.ConsumeString("NMTOKEN") {
 		return AttrNmtoken, nil, nil
 	}
 
@@ -3463,16 +3467,16 @@ func (ctx *parserCtx) parseDefaultDecl() (deftype AttributeDefault, defvalue str
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if cur.Consume("#REQUIRED") {
+	if cur.ConsumeString("#REQUIRED") {
 		deftype = AttrDefaultRequired
 		return
 	}
-	if cur.Consume("#IMPLIED") {
+	if cur.ConsumeString("#IMPLIED") {
 		deftype = AttrDefaultImplied
 		return
 	}
 
-	if cur.Consume("#FIXED") {
+	if cur.ConsumeString("#FIXED") {
 		deftype = AttrDefaultFixed
 		if !isBlankCh(cur.Peek()) {
 			deftype = AttrDefaultInvalid
@@ -3775,7 +3779,7 @@ func (ctx *parserCtx) parseAttributeListDecl() error {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if !cur.Consume("<!ATTLIST") {
+	if !cur.ConsumeString("<!ATTLIST") {
 		return nil
 	}
 
@@ -4695,7 +4699,7 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if cur.Consume("&#x") {
+	if cur.ConsumeString("&#x") {
 		for c := cur.Peek(); !cur.Done() && c != ';'; c = cur.Peek() {
 			if c >= '0' && c <= '9' {
 				val = val*16 + (c - '0')
@@ -4712,7 +4716,7 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 		if cur.Peek() == ';' {
 			cur.Advance(1)
 		}
-	} else if cur.Consume("&#") {
+	} else if cur.ConsumeString("&#") {
 		for !cur.Done() && cur.Peek() != ';' {
 			c := cur.Peek()
 			if c >= '0' && c <= '9' {

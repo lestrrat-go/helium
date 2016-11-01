@@ -100,7 +100,7 @@ type Parser struct {
 }
 
 const (
-	inSubsetNo = iota
+	notInSubset = iota
 	inInternalSubset
 	inExternalSubset
 )

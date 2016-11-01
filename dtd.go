@@ -184,3 +184,5 @@ func (dtd *DTD) Replace(cur Node) {
 func (dtd *DTD) SetTreeDoc(doc *Document) {
 	setTreeDoc(dtd, doc)
 }
+
+func (dtd *DTD) Free() {}

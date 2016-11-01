@@ -219,16 +219,22 @@ func (t *TreeBuilder) InternalSubset(ctxif sax.Context, name, eid, uri string) e
 
 	ctx := ctxif.(*parserCtx)
 	doc := ctx.doc
-	dtd, err := doc.CreateDTD()
+
+	dtd, err := doc.InternalSubset()
+	if err == nil {
+		/* TODO
+		if ctx.html {
+			return nil
+		} */
+		dtd.Free()
+		doc.intSubset = nil // hmm, do we need this?
+	}
+
+	dtd, err = doc.CreateInternalSubset(name, eid, uri)
 	if err != nil {
 		return err
 	}
 
-	doc.intSubset = dtd
-	doc.AddChild(doc.intSubset)
-	dtd.externalID = eid
-	dtd.name = name
-	dtd.systemID = uri
 	return nil
 }
 
