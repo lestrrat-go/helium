@@ -18,12 +18,7 @@ func TestNsStack(t *testing.T) {
 	}
 
 	item := s.Lookup("ds")
-	if !assert.NotEqual(t, stack.NilItem, item, `Lookup("ds") is not a NilItem`) {
-		return
-	}
-
-	nsItem := item.(nsstack.Item)
-	if !assert.Equal(t, "http://www.w3.org/2000/09/xmldsig#", nsItem.Href, `Lookup("ds") succeeds`) {
+	if !assert.Equal(t, "http://www.w3.org/2000/09/xmldsig#", item, `Lookup("ds") succeeds`) {
 		return
 	}
 
@@ -32,8 +27,7 @@ func TestNsStack(t *testing.T) {
 		return
 	}
 
-	nsItem = item.(nsstack.Item)
-	if !assert.Equal(t, "http://www.w3.org/XML/1998/namespace", nsItem.Href, `Lookup("xml") succeeds`) {
+	if !assert.Equal(t, "http://www.w3.org/XML/1998/namespace", item, `Lookup("xml") succeeds`) {
 		return
 	}
 
@@ -42,7 +36,7 @@ func TestNsStack(t *testing.T) {
 		return
 	}
 
-	if !assert.Equal(t, stack.NilItem, s.Lookup("ds"), `Lookup("ds") fails`) {
+	if !assert.Equal(t, "", s.Lookup("ds"), `Lookup("ds") fails`) {
 		return
 	}
 

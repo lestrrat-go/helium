@@ -38,5 +38,5 @@ func (s *Stack) Lookup(prefix string) string {
 	if item == stack.NilItem {
 		return ""
 	}
-	return item.(Item).prefix
+	return item.(Item).href
 }
