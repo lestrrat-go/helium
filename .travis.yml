@@ -4,4 +4,4 @@ go:
   - tip
 sudo: false
 install:
-  - glide install
+  - make installdeps
