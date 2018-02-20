@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/lestrrat/go-pdebug"
+	"github.com/lestrrat-go/pdebug"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -167,7 +167,7 @@ func TestParseBad(t *testing.T) {
 
 func TestParseNamespace(t *testing.T) {
 	const input = `<?xml version="1.0"?>
-<helium:root xmlns:helium="https://github.com/lestrrat/helium">
+<helium:root xmlns:helium="https://github.com/lestrrat-go/helium">
   <helium:child>foo</helium:child>
 </helium:root>`
 	p := NewParser()

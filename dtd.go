@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/lestrrat/go-pdebug"
+	"github.com/lestrrat-go/pdebug"
 )
 
 func newDTD() *DTD {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/lestrrat/go-pdebug"
+	"github.com/lestrrat-go/pdebug"
 )
 
 var (

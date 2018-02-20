@@ -1,6 +1,6 @@
 package helium
 
-import "github.com/lestrrat/go-pdebug"
+import "github.com/lestrrat-go/pdebug"
 
 func newText(b []byte) *Text {
 	t := Text{}

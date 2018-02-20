@@ -7,9 +7,9 @@ imports:
   - spew
 - name: github.com/jessevdk/go-flags
   version: a44368c298f0906bc8509ee776b9d3eedb9b5741
-- name: github.com/lestrrat/go-pdebug
+- name: github.com/lestrrat-go/pdebug
   version: 2e6eaaa5717f81bda41d27070d3c966f40a1e75f
-- name: github.com/lestrrat/go-strcursor
+- name: github.com/lestrrat-go/strcursor
   version: cbe932022364859ae125f9122e4bc4d56958c401
 - name: golang.org/x/text
   version: a8b38433e35b65ba247bb267317037dee1b70cea

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"errors"
 
-	"github.com/lestrrat/go-pdebug"
+	"github.com/lestrrat-go/pdebug"
 )
 
 // because docnode contains links to other nodes, one tends to want to make

@@ -3,8 +3,8 @@ package helium
 import (
 	"bytes"
 
-	"github.com/lestrrat/go-pdebug"
-	"github.com/lestrrat/helium/sax"
+	"github.com/lestrrat-go/pdebug"
+	"github.com/lestrrat-go/helium/sax"
 )
 
 func Parse(b []byte) (*Document, error) {

@@ -4,8 +4,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/lestrrat/go-pdebug"
-	"github.com/lestrrat/helium/sax"
+	"github.com/lestrrat-go/pdebug"
+	"github.com/lestrrat-go/helium/sax"
 )
 
 type TreeBuilder struct {

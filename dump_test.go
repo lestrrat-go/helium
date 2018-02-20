@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lestrrat/helium"
+	"github.com/lestrrat-go/helium"
 	"github.com/stretchr/testify/assert"
 )
 

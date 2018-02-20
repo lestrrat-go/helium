@@ -11,10 +11,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/lestrrat/go-pdebug"
-	"github.com/lestrrat/go-strcursor"
-	"github.com/lestrrat/helium/encoding"
-	"github.com/lestrrat/helium/sax"
+	"github.com/lestrrat-go/pdebug"
+	"github.com/lestrrat-go/strcursor"
+	"github.com/lestrrat-go/helium/encoding"
+	"github.com/lestrrat-go/helium/sax"
 )
 
 type attrData struct {

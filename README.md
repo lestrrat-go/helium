@@ -1,7 +1,7 @@
 # helium
 
-[![Build Status](https://travis-ci.org/lestrrat/helium.svg?branch=master)](https://travis-ci.org/lestrrat/helium)
-[![GoDoc](https://godoc.org/github.com/lestrrat/helium?status.svg)](https://godoc.org/github.com/lestrrat/helium)
+[![Build Status](https://travis-ci.org/lestrrat-go/helium.svg?branch=master)](https://travis-ci.org/lestrrat-go/helium)
+[![GoDoc](https://godoc.org/github.com/lestrrat-go/helium?status.svg)](https://godoc.org/github.com/lestrrat-go/helium)
 
 # What on earth?
 
@@ -16,7 +16,7 @@ So I started -- and I still have a long way to go.
 Parsing XML into a DOM model, then dumping it:
 
 ```go
-import "github.com/lestrrat/helium"
+import "github.com/lestrrat-go/helium"
 
 func main() {
     doc, err := helium.Parse(`.... xml string ....`)
@@ -42,7 +42,7 @@ cat xmlfile | helium-lin
 # Get it
 
 ```
-go get github.com/lestrrat/helium
+go get github.com/lestrrat-go/helium
 ```
 
 # Test it

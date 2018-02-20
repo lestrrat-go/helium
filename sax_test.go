@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lestrrat/helium/sax"
+	"github.com/lestrrat-go/helium/sax"
 	"github.com/stretchr/testify/assert"
 )
 

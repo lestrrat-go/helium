@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/lestrrat/go-pdebug"
+	"github.com/lestrrat-go/pdebug"
 )
 
 func CreateDocument() *Document {
