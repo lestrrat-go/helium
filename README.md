@@ -36,7 +36,7 @@ helium-lint xmlfile ...
 ```
 
 ```
-cat xmlfile | helium-lin
+cat xmlfile | helium-lint
 ```
 
 # Get it
