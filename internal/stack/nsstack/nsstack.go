@@ -1,6 +1,6 @@
 package nsstack
 
-import "github.com/lestrrat/helium/internal/stack"
+import "github.com/lestrrat-go/helium/internal/stack"
 
 type Item struct {
 	prefix string

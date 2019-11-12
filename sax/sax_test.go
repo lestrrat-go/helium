@@ -3,7 +3,7 @@ package sax_test
 import (
 	"testing"
 
-	"github.com/lestrrat/helium/sax"
+	"github.com/lestrrat-go/helium/sax"
 )
 
 func TestInterface(t *testing.T) {

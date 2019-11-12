@@ -3,8 +3,8 @@ package nsstack_test
 import (
 	"testing"
 
-	"github.com/lestrrat/helium/internal/stack"
-	"github.com/lestrrat/helium/internal/stack/nsstack"
+	"github.com/lestrrat-go/helium/internal/stack"
+	"github.com/lestrrat-go/helium/internal/stack/nsstack"
 	"github.com/stretchr/testify/assert"
 )
 

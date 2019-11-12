@@ -7,8 +7,8 @@ import (
 	"os"
 
 	"github.com/jessevdk/go-flags"
-	"github.com/lestrrat/helium"
-	"github.com/lestrrat/helium/internal/cliutil"
+	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/cliutil"
 )
 
 type cmdopts struct {
