@@ -12,8 +12,9 @@ import (
 )
 
 type cmdopts struct {
-	Format  bool `long:"format"`
-	Version bool `long:"version"`
+	Format   bool `long:"format"`
+	NoBlanks bool `long:"noblanks"`
+	Version  bool `long:"version"`
 }
 
 func main() {
@@ -53,7 +54,7 @@ func _main() int {
 			for _, f := range args {
 				fh, err := os.Open(f)
 				if err != nil {
-					errCh <-err
+					errCh <- err
 					return
 				}
 				inputCh <- fh

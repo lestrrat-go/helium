@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium/sax"
+	"github.com/lestrrat-go/pdebug"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -49,11 +50,28 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		return ent, nil
 	}
 
+	s.GetParameterEntityHandler = func(_ sax.Context, name string) (sax.Entity, error) {
+		fmt.Fprintf(out, "SAX.ResolveEntity(%s)\n", name)
+
+		ent, ok := entities[name]
+		if !ok {
+			return nil, errors.New("entity not found")
+		}
+		return ent, nil
+	}
+
 	s.EntityDeclHandler = func(ctxif sax.Context, name string, typ int, publicID string, systemID string, notation string) error {
+		if pdebug.Enabled {
+			g := pdebug.Marker("EntityDecl handler for sax_test.go")
+			defer g.End()
+		}
 		fmt.Fprintf(out, "SAX.UnparsedEntityDecl(%s, %d, %s, %s, %s)\n",
 			name, typ, publicID, systemID, notation)
 
 		entities[name] = newEntity(name, EntityType(typ), publicID, systemID, notation, "")
+		if pdebug.Enabled {
+			pdebug.Printf("registered entity '%s' (entity type = '%s', publicID = '%s', systemID = '%s', notation = '%s')", name, EntityType(typ), publicID, systemID, notation)
+		}
 		return nil
 	}
 	s.ExternalSubsetHandler = func(_ sax.Context, name, externalID, systemID string) error {
@@ -167,7 +185,6 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 
 func TestSAXEvents(t *testing.T) {
 	skipped := map[string]struct{}{
-		"xml2.xml": {},
 		"att11.xml": {},
 	}
 
@@ -179,6 +196,10 @@ func TestSAXEvents(t *testing.T) {
 
 	for _, fi := range files {
 		if fi.IsDir() {
+			continue
+		}
+
+		if fi.Name() != "xml2.xml" {
 			continue
 		}
 

@@ -11,10 +11,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/lestrrat-go/pdebug"
-	"github.com/lestrrat-go/strcursor"
 	"github.com/lestrrat-go/helium/encoding"
 	"github.com/lestrrat-go/helium/sax"
+	"github.com/lestrrat-go/pdebug"
+	"github.com/lestrrat-go/strcursor"
 )
 
 type attrData struct {
@@ -49,6 +49,46 @@ func (i parserState) String() string {
 
 func (ctx *parserCtx) pushNS(prefix, uri string) {
 	ctx.nsTab.Push(prefix, uri)
+}
+
+const (
+	cbEntityDecl = iota
+	cbGetParameterEntity
+)
+
+func (ctx *parserCtx) fireSAXCallback(typ int, args ...interface{}) error {
+	// This is ugly, but I *REALLY* wanted to catch all occurences of
+	// SAX callbacks being fired in one shot. optimize it later
+
+	s := ctx.sax
+	if s == nil {
+		return nil
+	}
+
+	switch typ {
+	case cbEntityDecl:
+		if pdebug.Enabled {
+			g := pdebug.Marker("EntityDecl callback")
+			defer g.End()
+		}
+		return s.EntityDecl(ctx.userData, args[0].(string), int(InternalParameterEntity), "", "", args[1].(string))
+	case cbGetParameterEntity:
+		if pdebug.Enabled {
+			g := pdebug.Marker("GetParameterEntity callback")
+			defer g.End()
+		}
+
+		entity, err := s.GetParameterEntity(ctx, args[1].(string))
+		if err == nil {
+			ret := args[0].(*sax.Entity)
+			*ret = entity
+			if pdebug.Enabled {
+				pdebug.Printf("got entity %s", entity)
+			}
+		}
+		return err
+	}
+	return nil
 }
 
 func (ctx *parserCtx) pushNode(e *Element) {
@@ -1413,7 +1453,7 @@ func (ctx *parserCtx) parseStandaloneDecl() (DocumentStandaloneType, error) {
 func (ctx *parserCtx) parseStandaloneDeclValue(_ rune) (string, error) {
 	const (
 		yes = "yes"
-		no = "no"
+		no  = "no"
 	)
 	cur := ctx.getByteCursor()
 	if cur == nil {
@@ -2059,7 +2099,6 @@ func (ctx *parserCtx) parseInternalSubset() error {
 			return ctx.error(err)
 		}
 
-
 	}
 
 	if cur.Peek() == ']' {
@@ -2192,8 +2231,8 @@ func (ctx *parserCtx) parseMarkupDecl() error {
  */
 func (ctx *parserCtx) parsePEReference() error {
 	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parsePEReference")
-		defer g.IRelease("END parsePEReference")
+		g := pdebug.Marker("parsePEReference")
+		defer g.End()
 	}
 
 	cur := ctx.getCursor()
@@ -2224,7 +2263,7 @@ func (ctx *parserCtx) parsePEReference() error {
 	*/
 	var entity sax.Entity
 	if s := ctx.sax; s != nil {
-		entity, _ = s.GetParameterEntity(ctx, name)
+		_ = ctx.fireSAXCallback(cbGetParameterEntity, &entity, name)
 	}
 
 	// XXX Why check here?
@@ -2952,8 +2991,8 @@ func (ctx *parserCtx) decodeEntitiesInternal(s []byte, what SubstitutionType, de
  */
 func (ctx *parserCtx) parseEntityValue() (string, string, error) {
 	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseEntityValue")
-		defer g.IRelease("END parseEntityValue")
+		g := pdebug.Marker("parseEntityValue")
+		defer g.End()
 	}
 
 	ctx.instate = psEntityValue
@@ -2965,6 +3004,10 @@ func (ctx *parserCtx) parseEntityValue() (string, string, error) {
 	val, err := ctx.decodeEntities([]byte(literal), SubstitutePERef)
 	if err != nil {
 		return "", "", ctx.error(err)
+	}
+
+	if pdebug.Enabled {
+		pdebug.Printf("parsed entity value '%s'", val)
 	}
 
 	return literal, val, nil
@@ -2990,8 +3033,8 @@ func (ctx *parserCtx) parseEntityValue() (string, string, error) {
  */
 func (ctx *parserCtx) parseEntityDecl() error {
 	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseEntityDecl")
-		defer g.IRelease("END parseEntityDecl")
+		g := pdebug.Marker("parseEntityDecl")
+		defer g.End()
 	}
 
 	cur := ctx.getCursor()
@@ -3036,22 +3079,28 @@ func (ctx *parserCtx) parseEntityDecl() error {
 		if pdebug.Enabled {
 			pdebug.Printf("Found parameter entity")
 		}
+
 		if c := cur.Peek(); c == '"' || c == '\'' {
-		if pdebug.Enabled {
-			pdebug.Printf("parseEntityDecl, isParameter = true, calling parseEntityValue")
-		}
+			if pdebug.Enabled {
+				pdebug.Printf("parseEntityDecl, isParameter = true, calling parseEntityValue")
+			}
 			literal, value, err = ctx.parseEntityValue()
+			if pdebug.Enabled {
+				pdebug.Printf("entity declaration '%s' -> '%s'", name, value)
+			}
+
 			if err == nil {
-				if s := ctx.sax; s != nil {
-					switch err := s.EntityDecl(ctx.userData, name, int(InternalParameterEntity), "", "", value); err {
-					case nil, sax.ErrHandlerUnspecified:
-						// no op
-					default:
-						return ctx.error(err)
-					}
+				switch err := ctx.fireSAXCallback(cbEntityDecl, name, value); err {
+				case nil, sax.ErrHandlerUnspecified:
+					// no op
+				default:
+					return ctx.error(err)
 				}
 			}
 		} else {
+			if pdebug.Enabled {
+				pdebug.Printf("Attempting to parse external ID")
+			}
 			literal, uri, err = ctx.parseExternalID()
 			if err != nil {
 				return ctx.error(ErrValueRequired)
@@ -3143,6 +3192,9 @@ func (ctx *parserCtx) parseEntityDecl() error {
 				}
 			} else {
 				if s := ctx.sax; s != nil {
+					if pdebug.Enabled {
+						pdebug.Printf("Calling s.EntityDecl with %s -> %s", name, literal)
+					}
 					switch err := s.EntityDecl(ctx.userData, name, int(ExternalParameterEntity), literal, uri, ""); err {
 					case nil, sax.ErrHandlerUnspecified:
 						// no op
@@ -3176,6 +3228,8 @@ func (ctx *parserCtx) parseEntityDecl() error {
 			}
 		}
 	}
+
+	pdebug.Printf("============================")
 
 	ctx.skipBlanks()
 	if cur.Peek() != '>' {
@@ -4354,9 +4408,10 @@ func accumulateHexCharRef(val int32, c rune) (int32, error) {
 // returns rune, byteCount, error
 func parseStringCharRef(s []byte) (r rune, width int, err error) {
 	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseStringCharRef")
+		g := pdebug.Marker("parseStringCharRef")
 		defer func() {
-			g.IRelease("END parseStringCharRef r = '%c' (%x), consumed %d bytes", r, r, width)
+			pdebug.Printf("r = '%c' (%x), consumed %d bytes", &r, &r, &width)
+			g.End()
 		}()
 	}
 	var val int32
@@ -4926,8 +4981,8 @@ func (ctx *parserCtx) entityCheck(ent sax.Entity, size, replacement int) error {
 
 func (ctx *parserCtx) handlePEReference() error {
 	if pdebug.Enabled {
-		g := pdebug.IPrintf("START handlePEReference")
-		defer g.IRelease("END handlePEReference")
+		g := pdebug.Marker("handlePEReference")
+		defer g.End()
 	}
 
 	cur := ctx.getCursor()

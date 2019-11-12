@@ -79,9 +79,10 @@ func escapeAttrValue(w io.Writer, s []byte) error {
 	if pdebug.Enabled {
 		debugbuf := bytes.Buffer{}
 		w = io.MultiWriter(w, &debugbuf)
-		g := pdebug.IPrintf("START escapeAttrValue '%s'", s)
+		g := pdebug.Marker("escapeAttrValue '%s'", s)
 		defer func() {
-			g.IRelease("END escapeAttrValue '%s'", debugbuf.Bytes())
+			pdebug.Printf("escaped value '%s'", debugbuf.Bytes())
+			g.End()
 		}()
 	}
 	var esc []byte

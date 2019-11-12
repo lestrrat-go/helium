@@ -1,10 +1,10 @@
 package helium
 
 import (
-	"errors"
 	"strings"
 
 	"github.com/lestrrat-go/pdebug"
+	"github.com/pkg/errors"
 )
 
 func newDTD() *DTD {
@@ -18,8 +18,9 @@ func newDTD() *DTD {
 	return dtd
 }
 
-func (dtd *DTD) RegisterEntity(name string, typ EntityType, publicID, systemID, content string) (*Entity, error) {
+func (dtd *DTD) AddEntity(name string, typ EntityType, publicID, systemID, content string) (*Entity, error) {
 	var table map[string]*Entity
+
 	switch typ {
 	case InternalGeneralEntity, ExternalGeneralParsedEntity, ExternalGeneralUnparsedEntity:
 		table = dtd.entities
@@ -27,6 +28,10 @@ func (dtd *DTD) RegisterEntity(name string, typ EntityType, publicID, systemID, 
 		table = dtd.pentities
 	case InternalPredefinedEntity:
 		return nil, errors.New("cannot register a predefined entity")
+	}
+
+	if table == nil {
+		return nil, errors.Errorf("invalid entity type: %d", typ)
 	}
 
 	ent := newEntity(name, typ, publicID, systemID, content, "")

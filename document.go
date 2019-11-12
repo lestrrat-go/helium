@@ -514,3 +514,11 @@ func (d *Document) CreateCharRef(name string) (*EntityRef, error) {
 	}
 	return n, nil
 }
+
+func (d *Document) AddEntity(name string, typ EntityType, externalID, systemID, content string) (*Entity, error) {
+	if d.intSubset == nil {
+		return nil, errors.New("document without internal subset")
+	}
+
+	return d.intSubset.AddEntity(name, typ, externalID, systemID, content)
+}

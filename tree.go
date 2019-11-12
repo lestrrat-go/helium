@@ -524,7 +524,7 @@ func (t *TreeBuilder) EntityDecl(ctxif sax.Context, name string, typ int, public
 		return errors.New("sax.EntityDecl called while note in subset")
 	}
 
-	ent, err := dtd.RegisterEntity(name, EntityType(typ), publicID, systemID, notation)
+	ent, err := dtd.AddEntity(name, EntityType(typ), publicID, systemID, notation)
 	if err != nil {
 		return err
 	}

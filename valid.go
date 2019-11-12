@@ -63,12 +63,12 @@ func (elem *ElementContent) copyElementContent() *ElementContent {
 	if elem.c2 != nil {
 		prev := ret
 		for cur := elem.c2; cur != nil; {
-			tmp := &ElementContent{}
+			var tmp ElementContent
 			tmp.name = cur.name
 			tmp.ctype = cur.ctype
 			tmp.coccur = cur.coccur
 			tmp.prefix = cur.prefix
-			prev.c2 = tmp
+			prev.c2 = &tmp
 			if cur.c1 != nil {
 				tmp.c1 = cur.c1.copyElementContent()
 			}
@@ -76,7 +76,7 @@ func (elem *ElementContent) copyElementContent() *ElementContent {
 				tmp.c1.parent = ret
 			}
 
-			prev = tmp
+			prev = &tmp
 			cur = cur.c2
 		}
 	}
