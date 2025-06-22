@@ -2160,11 +2160,12 @@ func (ctx *parserCtx) parseMarkupDecl() error {
 			switch cur.PeekN(3) {
 			case 'E':
 				c := cur.PeekN(4)
-				if c == 'L' { // <!EL...
+				switch c {
+				case 'L': // <!EL...
 					if _, err := ctx.parseElementDecl(); err != nil {
 						return ctx.error(err)
 					}
-				} else if c == 'N' { // <!EN....
+				case 'N': // <!EN....
 					if err := ctx.parseEntityDecl(); err != nil {
 						return ctx.error(err)
 					}
