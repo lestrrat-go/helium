@@ -4017,6 +4017,7 @@ func (ctx *parserCtx) parseBalancedChunkInternal(chunk []byte, userData interfac
 		return nil, ctx.error(err)
 	}
 	newctx.pushNode(newRoot)
+	newctx.elem = newRoot  // Set the current element context
 	newctx.doc.AddChild(newRoot)
 	newctx.switchEncoding()
 	if err := newctx.parseContent(); err != nil {
@@ -4121,28 +4122,12 @@ func (ctx *parserCtx) parseReference() error {
 		}
 
 		if EntityType(ent.EntityType()) == InternalGeneralEntity {
-			content := ent.Content()
-			// Check if content contains markup (starts with '<')
-			// If it's just character data, handle it directly
-			if len(content) > 0 && content[0] != '<' && !bytes.Contains([]byte(content), []byte{'<'}) {
-				// Pure character content - add directly to current element
-				if s := ctx.sax; s != nil {
-					switch err := s.Characters(ctx.userData, []byte(content)); err {
-					case nil, sax.ErrHandlerUnspecified:
-						// no op
-					default:
-						return err
-					}
-				}
-			} else {
-				// Content contains markup - use full parsing
-				parsedEnt, err = ctx.parseBalancedChunkInternal([]byte(content), userData)
-				switch err {
-				case nil, ErrParseSucceeded:
-					// may not have generated nodes, but parse was successful
-				default:
-					return err
-				}
+			parsedEnt, err = ctx.parseBalancedChunkInternal([]byte(ent.Content()), userData)
+			switch err {
+			case nil, ErrParseSucceeded:
+				// may not have generated nodes, but parse was successful
+			default:
+				return err
 			}
 		} else if EntityType(ent.EntityType()) == ExternalGeneralParsedEntity {
 			parsedEnt, err = ctx.parseExternalEntityPrivate(ent.uri, ent.externalID)
