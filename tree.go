@@ -4,8 +4,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/lestrrat-go/pdebug"
 	"github.com/lestrrat-go/helium/sax"
+	"github.com/lestrrat-go/pdebug"
 )
 
 type TreeBuilder struct {
@@ -230,7 +230,7 @@ func (t *TreeBuilder) InternalSubset(ctxif sax.Context, name, eid, uri string) e
 		doc.intSubset = nil // hmm, do we need this?
 	}
 
-	dtd, err = doc.CreateInternalSubset(name, eid, uri)
+	_, err = doc.CreateInternalSubset(name, eid, uri)
 	if err != nil {
 		return err
 	}
