@@ -181,11 +181,24 @@ func (ctx *parserCtx) getByteCursor() *strcursor.ByteCursor {
 }
 
 func (ctx *parserCtx) getCursor() strcursor.Cursor {
-	cur, ok := ctx.inputTab.PeekOne().(strcursor.Cursor)
-	if !ok {
-		return nil
+	// Pop exhausted input streams and return the next available cursor
+	for ctx.inputTab.Len() > 0 {
+		cur, ok := ctx.inputTab.PeekOne().(strcursor.Cursor)
+		if !ok {
+			ctx.popInput()
+			continue
+		}
+		if cur.Done() && ctx.inputTab.Len() > 1 {
+			// Current input is exhausted, pop it and try the next
+			if pdebug.Enabled {
+				pdebug.Printf("Popping exhausted input stream, stack depth: %d -> %d", ctx.inputTab.Len(), ctx.inputTab.Len()-1)
+			}
+			ctx.popInput()
+			continue
+		}
+		return cur
 	}
-	return cur
+	return nil
 }
 
 func (ctx *parserCtx) popInput() interface{} {
@@ -2090,7 +2103,13 @@ func (ctx *parserCtx) parseInternalSubset() error {
 	ctx.instate = psDTD
 	cur.Advance(1)
 
-	for !cur.Done() && cur.Peek() != ']' {
+	for {
+		// Get current cursor in case parameter entity expansion changed the input
+		cur = ctx.getCursor()
+		if cur == nil || cur.Done() || cur.Peek() == ']' {
+			break
+		}
+		
 		ctx.skipBlanks()
 		if err := ctx.parseMarkupDecl(); err != nil {
 			return ctx.error(err)
@@ -2098,19 +2117,24 @@ func (ctx *parserCtx) parseInternalSubset() error {
 		if err := ctx.parsePEReference(); err != nil {
 			return ctx.error(err)
 		}
-
 	}
 
-	if cur.Peek() == ']' {
+	// Get final cursor state  
+	cur = ctx.getCursor()
+	if cur != nil && cur.Peek() == ']' {
 		cur.Advance(1)
 		ctx.skipBlanks()
 	}
 
 FinishDTD:
-	if cur.Peek() != '>' {
+	// Ensure we have the current cursor
+	cur = ctx.getCursor()
+	if cur != nil && cur.Peek() != '>' {
 		return ctx.error(ErrDocTypeNotFinished)
 	}
-	cur.Advance(1)
+	if cur != nil {
+		cur.Advance(1)
+	}
 
 	return nil
 }
@@ -2316,27 +2340,27 @@ func (ctx *parserCtx) parsePEReference() error {
 			               return;
 			*/
 		} else {
-			// TODO !!!
-			// handle the extra spaces added before and after
+			// Handle the parameter entity expansion
 			// c.f. http://www.w3.org/TR/REC-xml#as-PE
-			/*
-			   input = xmlNewEntityInputStream(ctxt, entity);
-			   if (xmlPushInput(ctxt, input) < 0)
-			       return;
-			   if ((entity->etype == XML_EXTERNAL_PARAMETER_ENTITY) &&
-			       (CMP5(CUR_PTR, '<', '?', 'x', 'm', 'l')) &&
-			       (IS_BLANK_CH(NXT(5)))) {
-			       xmlParseTextDecl(ctxt);
-			       if (ctxt->errNo ==
-			           XML_ERR_UNSUPPORTED_ENCODING) {
-			           // The XML REC instructs us to stop parsing
-			           // right here
-			           //
-			           xmlHaltParser(ctxt);
-			           return;
-			       }
-			   }
-			*/
+			if pdebug.Enabled {
+				pdebug.Printf("Expanding parameter entity '%s' with content: %s", name, string(entity.Content()))
+			}
+			
+			// Decode character references and other entities in the parameter entity content
+			decodedContent, err := ctx.decodeEntities(entity.Content(), SubstituteBoth)
+			if err != nil {
+				return fmt.Errorf("failed to decode parameter entity content: %v", err)
+			}
+			
+			if pdebug.Enabled {
+				pdebug.Printf("Decoded parameter entity content: %s", decodedContent)
+			}
+			
+			// Push the decoded content as new input stream
+			ctx.pushInput(strcursor.NewByteCursor(bytes.NewReader([]byte(decodedContent))))
+			
+			// Note: External parameter entities may need text declaration parsing
+			// but for now we only handle internal parameter entities
 		}
 	}
 	ctx.hasPERefs = true
@@ -4571,12 +4595,12 @@ func (ctx *parserCtx) parseStringEntityRef(s []byte) (sax.Entity, int, error) {
 		return nil, 0, errors.New("invalid entity ref")
 	}
 
-	i := 0
-	name, width, err := parseStringName(s)
+	i := 1 // skip the '&'
+	name, width, err := parseStringName(s[1:]) // skip the '&' for name parsing
 	if err != nil {
 		return nil, 0, errors.New("failed to parse name")
 	}
-	s = s[width:]
+	s = s[width+1:] // skip '&' + name
 	i += width
 
 	if s[0] != ';' {
@@ -4679,12 +4703,12 @@ func (ctx *parserCtx) parseStringPEReference(s []byte) (sax.Entity, int, error) 
 		return nil, 0, errors.New("invalid PEreference")
 	}
 
-	i := 0
-	name, width, err := parseStringName(s)
+	i := 1 // skip the '%'
+	name, width, err := parseStringName(s[1:]) // skip the '%' for name parsing
 	if err != nil {
 		return nil, 0, err
 	}
-	s = s[width:]
+	s = s[width+1:] // skip '%' + name
 	i += width
 
 	if s[0] != ';' {
@@ -5104,7 +5128,6 @@ func (ctx *parserCtx) handlePEReference() error {
 		               return;
 		*/
 	} else {
-		panic("Oh, it got here?!")
 		switch EntityType(entity.EntityType()) {
 		case InternalParameterEntity, ExternalParameterEntity:
 			// OK
@@ -5128,7 +5151,11 @@ func (ctx *parserCtx) handlePEReference() error {
 				       (ctxt->validate == 0))
 				       return;
 		*/
-		ctx.pushInput(strcursor.NewByteCursor(bytes.NewReader(entity.Content())))
+		if pdebug.Enabled {
+			pdebug.Printf("handlePEReference: found entity '%s' with content: %s", name, string(entity.Content()))
+		}
+		// Note: Parameter entity expansion is handled in parsePEReference, not here
+		// This function is called from a different context (skip blanks)
 
 		/*
 		           // Get the 4 first bytes and decode the charset
@@ -5166,5 +5193,5 @@ func (ctx *parserCtx) handlePEReference() error {
 		*/
 
 	}
-	return errors.New("unimplemented")
+	return nil
 }
