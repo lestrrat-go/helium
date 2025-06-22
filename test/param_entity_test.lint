@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<!DOCTYPE test [
+<!ELEMENT test (#PCDATA)>
+<!ENTITY % simple "hello">
+<!ENTITY % complex '&#60;!ENTITY greeting "Hello World" >'>
+<!ENTITY greeting "Hello World">
+]>
+<test>Message: &greeting;</test>
