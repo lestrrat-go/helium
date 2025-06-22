@@ -1,7 +1,6 @@
 package helium_test
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,8 +24,8 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 	}
 
 	dir := "test"
-	files, err := ioutil.ReadDir(dir)
-	require.NoError(t, err, "ioutil.ReadDir should succeed")
+	files, err := os.ReadDir(dir)
+	require.NoError(t, err, "os.ReadDir should succeed")
 
 	for _, fi := range files {
 		if fi.IsDir() {
@@ -54,12 +53,12 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 			t.Logf("%s does not exist, skipping...", goldenfn)
 			continue
 		}
-		golden, err := ioutil.ReadFile(goldenfn)
-		require.NoError(t, err, "ioutil.ReadFile should succeed")
+		golden, err := os.ReadFile(goldenfn)
+		require.NoError(t, err, "os.ReadFile should succeed")
 
 		t.Logf("Parsing %s...", fn)
-		in, err := ioutil.ReadFile(fn)
-		require.NoError(t, err, "ioutil.ReadFile should succeed")
+		in, err := os.ReadFile(fn)
+		require.NoError(t, err, "os.ReadFile should succeed")
 
 		doc, err := helium.Parse([]byte(in))
 		require.NoError(t, err, `Parse(...) succeeds`)
