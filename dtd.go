@@ -1,10 +1,11 @@
 package helium
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/lestrrat-go/pdebug"
-	"github.com/pkg/errors"
 )
 
 func newDTD() *DTD {
@@ -31,7 +32,7 @@ func (dtd *DTD) AddEntity(name string, typ EntityType, publicID, systemID, conte
 	}
 
 	if table == nil {
-		return nil, errors.Errorf("invalid entity type: %d", typ)
+		return nil, fmt.Errorf("invalid entity type: %d", typ)
 	}
 
 	ent := newEntity(name, typ, publicID, systemID, content, "")
