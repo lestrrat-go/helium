@@ -7,6 +7,8 @@ import (
 	"github.com/lestrrat-go/helium/sax"
 )
 
+//go:generate stringer -type=parserState
+
 type parserState int
 
 const (

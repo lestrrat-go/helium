@@ -35,17 +35,6 @@ func (a attrData) Name() string {
 	return a.localname
 }
 
-const _parserState_name = "psEOFpsStartpsPIpsContentpsProloguepsEpiloguepsCDATApsDTDpsEntityDeclpsAttributeValuepsCommentpsStartTagpsEndTagpsSystemLiteralpsPublicLiteralpsEntityValuepsIgnorepsMisc"
-
-var _parserState_index = [...]uint8{0, 5, 12, 16, 25, 35, 45, 52, 57, 69, 85, 94, 104, 112, 127, 142, 155, 163, 169}
-
-func (i parserState) String() string {
-	i -= -1
-	if i < 0 || i >= parserState(len(_parserState_index)-1) {
-		return fmt.Sprintf("parserState(%d)", i+-1)
-	}
-	return _parserState_name[_parserState_index[i]:_parserState_index[i+1]]
-}
 
 func (ctx *parserCtx) pushNS(prefix, uri string) {
 	ctx.nsTab.Push(prefix, uri)
@@ -642,7 +631,7 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 	str := buf.String()
 
 	// XXX This is not right, but it's for now the best place to do this
-	str = strings.Replace(str, "\r\n", "\n", -1)
+	str = strings.ReplaceAll(str, "\r\n", "\n")
 	if ctx.instate == psCDATA {
 		if s := ctx.sax; s != nil {
 			switch err := s.CDataBlock(ctx.userData, []byte(str)); err {
@@ -2011,7 +2000,7 @@ func (ctx *parserCtx) parseComment() error {
 	cur.Advance(i + 1)
 
 	if sh := ctx.sax; sh != nil {
-		str = bytes.Replace(str, []byte{'\r', '\n'}, []byte{'\n'}, -1)
+		str = bytes.ReplaceAll(str, []byte{'\r', '\n'}, []byte{'\n'})
 		switch err := sh.Comment(ctx, str); err {
 		case nil, sax.ErrHandlerUnspecified:
 			// no op
