@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestXMLToDOMToXMLString(t *testing.T) {
@@ -26,9 +26,7 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 
 	dir := "test"
 	files, err := ioutil.ReadDir(dir)
-	if !assert.NoError(t, err, "ioutil.ReadDir should succeed") {
-		return
-	}
+	require.NoError(t, err, "ioutil.ReadDir should succeed")
 
 	for _, fi := range files {
 		if fi.IsDir() {
@@ -57,27 +55,19 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 			continue
 		}
 		golden, err := ioutil.ReadFile(goldenfn)
-		if !assert.NoError(t, err, "ioutil.ReadFile should succeed") {
-			return
-		}
+		require.NoError(t, err, "ioutil.ReadFile should succeed")
 
 		t.Logf("Parsing %s...", fn)
 		in, err := ioutil.ReadFile(fn)
-		if !assert.NoError(t, err, "ioutil.ReadFile should succeed") {
-			return
-		}
+		require.NoError(t, err, "ioutil.ReadFile should succeed")
 
 		doc, err := helium.Parse([]byte(in))
-		if !assert.NoError(t, err, `Parse(...) succeeds`) {
-			return
-		}
+		require.NoError(t, err, `Parse(...) succeeds`)
 
 		str, err := doc.XMLString()
-		if !assert.NoError(t, err, "XMLString(doc) succeeds") {
-			return
-		}
+		require.NoError(t, err, "XMLString(doc) succeeds")
 
-		if !assert.Equal(t, string(golden), str, "roundtrip works") {
+		if string(golden) != str {
 			errout, err := os.OpenFile(fn+".err", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 			if err != nil {
 				t.Logf("Failed to file to save output: %s", err)
@@ -86,8 +76,8 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 			defer errout.Close()
 
 			errout.WriteString(str)
-			return
 		}
+		require.Equal(t, string(golden), str, "roundtrip works")
 	}
 }
 
@@ -96,17 +86,13 @@ func TestDOMToXMLString(t *testing.T) {
 	//	defer doc.Free()
 
 	root, err := doc.CreateElement("root")
-	if !assert.NoError(t, err, `CreateElement("root") succeeds`) {
-		return
-	}
+	require.NoError(t, err, `CreateElement("root") succeeds`)
 
 	doc.SetDocumentElement(root)
 	root.AddContent([]byte(`Hello, World!`))
 
 	str, err := doc.XMLString()
-	if !assert.NoError(t, err, "XMLString(doc) succeeds") {
-		return
-	}
+	require.NoError(t, err, "XMLString(doc) succeeds")
 
 	t.Logf("%s", str)
 }

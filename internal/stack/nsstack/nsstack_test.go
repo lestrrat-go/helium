@@ -5,7 +5,7 @@ import (
 
 	"github.com/lestrrat-go/helium/internal/stack"
 	"github.com/lestrrat-go/helium/internal/stack/nsstack"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNsStack(t *testing.T) {
@@ -13,32 +13,20 @@ func TestNsStack(t *testing.T) {
 	s.Push("xml", "http://www.w3.org/XML/1998/namespace")
 	s.Push("ds", "http://www.w3.org/2000/09/xmldsig#")
 
-	if !assert.Equal(t, 2, s.Len(), "Len == 2") {
-		return
-	}
+	require.Equal(t, 2, s.Len(), "Len == 2")
 
 	item := s.Lookup("ds")
-	if !assert.Equal(t, "http://www.w3.org/2000/09/xmldsig#", item, `Lookup("ds") succeeds`) {
-		return
-	}
+	require.Equal(t, "http://www.w3.org/2000/09/xmldsig#", item, `Lookup("ds") succeeds`)
 
 	item = s.Lookup("xml")
-	if !assert.NotEqual(t, stack.NilItem, item, `Lookup("xm") is not a NilItem`) {
-		return
-	}
+	require.NotEqual(t, stack.NilItem, item, `Lookup("xm") is not a NilItem`)
 
-	if !assert.Equal(t, "http://www.w3.org/XML/1998/namespace", item, `Lookup("xml") succeeds`) {
-		return
-	}
+	require.Equal(t, "http://www.w3.org/XML/1998/namespace", item, `Lookup("xml") succeeds`)
 
 	s.Pop()
-	if !assert.Equal(t, 1, s.Len(), "Len == 1") {
-		return
-	}
+	require.Equal(t, 1, s.Len(), "Len == 1")
 
-	if !assert.Equal(t, "", s.Lookup("ds"), `Lookup("ds") fails`) {
-		return
-	}
+	require.Equal(t, "", s.Lookup("ds"), `Lookup("ds") fails`)
 
 	s.Pop(2)
 }

@@ -13,7 +13,7 @@ import (
 
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newEventEmitter(out io.Writer) sax.SAX2Handler {
@@ -190,9 +190,7 @@ func TestSAXEvents(t *testing.T) {
 
 	dir := "test"
 	files, err := ioutil.ReadDir(dir)
-	if !assert.NoError(t, err, "ioutil.ReadDir should succeed") {
-		return
-	}
+	require.NoError(t, err, "ioutil.ReadDir should succeed")
 
 	for _, fi := range files {
 		if fi.IsDir() {
@@ -221,26 +219,22 @@ func TestSAXEvents(t *testing.T) {
 		t.Logf("Testing %s...", fn)
 
 		in, err := ioutil.ReadFile(fn)
-		if !assert.NoError(t, err, "ioutil.ReadFile should succeed") {
-			return
-		}
+		require.NoError(t, err, "ioutil.ReadFile should succeed")
 
 		golden, err := ioutil.ReadFile(goldenfn)
-		if !assert.NoError(t, err, "ioutil.ReadFile should succeed") {
-			return
-		}
+		require.NoError(t, err, "ioutil.ReadFile should succeed")
 
 		out := bytes.Buffer{}
 		p := NewParser()
 		p.SetSAXHandler(newEventEmitter(&out))
 
 		_, err = p.Parse(in)
-		if !assert.NoError(t, err, "Parse should succeed (file = %s)", fn) {
+		if err != nil {
 			t.Logf("source XML: %s", in)
-			return
 		}
+		require.NoError(t, err, "Parse should succeed (file = %s)", fn)
 
-		if !assert.Equal(t, string(golden), string(out.Bytes()), "SAX event streams should match (file = %s)", fn) {
+		if string(golden) != string(out.Bytes()) {
 			errout, err := os.OpenFile(fn+".err", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 			if err != nil {
 				t.Logf("Failed to file to save output: %s", err)
@@ -249,7 +243,7 @@ func TestSAXEvents(t *testing.T) {
 			defer errout.Close()
 
 			errout.Write(out.Bytes())
-			return
 		}
+		require.Equal(t, string(golden), string(out.Bytes()), "SAX event streams should match (file = %s)", fn)
 	}
 }
