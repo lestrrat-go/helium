@@ -210,7 +210,7 @@ func TestSAXEvents(t *testing.T) {
 			continue
 		}
 
-		goldenfn := strings.Replace(fn, ".xml", ".sax2", -1)
+		goldenfn := strings.ReplaceAll(fn, ".xml", ".sax2")
 		if _, err := os.Stat(goldenfn); err != nil {
 			continue
 		}
