@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -189,8 +188,8 @@ func TestSAXEvents(t *testing.T) {
 	}
 
 	dir := "test"
-	files, err := ioutil.ReadDir(dir)
-	require.NoError(t, err, "ioutil.ReadDir should succeed")
+	files, err := os.ReadDir(dir)
+	require.NoError(t, err, "os.ReadDir should succeed")
 
 	for _, fi := range files {
 		if fi.IsDir() {
@@ -218,11 +217,11 @@ func TestSAXEvents(t *testing.T) {
 
 		t.Logf("Testing %s...", fn)
 
-		in, err := ioutil.ReadFile(fn)
-		require.NoError(t, err, "ioutil.ReadFile should succeed")
+		in, err := os.ReadFile(fn)
+		require.NoError(t, err, "os.ReadFile should succeed")
 
-		golden, err := ioutil.ReadFile(goldenfn)
-		require.NoError(t, err, "ioutil.ReadFile should succeed")
+		golden, err := os.ReadFile(goldenfn)
+		require.NoError(t, err, "os.ReadFile should succeed")
 
 		out := bytes.Buffer{}
 		p := NewParser()
