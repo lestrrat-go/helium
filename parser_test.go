@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/pdebug"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDetectBOM(t *testing.T) {
@@ -29,18 +29,12 @@ func TestDetectBOM(t *testing.T) {
 			enc, err := ctx.detectEncoding()
 			if expected == "" {
 				t.Logf("checking [invalid] (%d)", i)
-				if !assert.Error(t, err, "detectEncoding should fail for sequence %#v", input) {
-					return
-				}
+				require.Error(t, err, "detectEncoding should fail for sequence %#v", input)
 			} else {
 				t.Logf("checking %s (%d)", expected, i)
-				if !assert.NoError(t, err, "detectEncoding should succeed for sequence %#v", input) {
-					return
-				}
+				require.NoError(t, err, "detectEncoding should succeed for sequence %#v", input)
 
-				if !assert.Equal(t, expected, enc, "detectEncoding returns as expected") {
-					return
-				}
+				require.Equal(t, expected, enc, "detectEncoding returns as expected")
 			}
 		}
 	}
@@ -50,9 +44,7 @@ func TestEmptyDocument(t *testing.T) {
 	p := NewParser()
 	// BOM only
 	_, err := p.Parse([]byte{0x00, 0x00, 0x00, 0x3C})
-	if !assert.Error(t, err, "Parsing BOM only should fail") {
-		return
-	}
+	require.Error(t, err, "Parsing BOM only should fail")
 }
 
 func TestParseXMLDecl(t *testing.T) {
@@ -70,19 +62,11 @@ func TestParseXMLDecl(t *testing.T) {
 	for input, expect := range inputs {
 		p := NewParser()
 		doc, err := p.Parse([]byte(input))
-		if !assert.NoError(t, err, "Parse should succeed for '%s'", input) {
-			return
-		}
+		require.NoError(t, err, "Parse should succeed for '%s'", input)
 
-		if !assert.Equal(t, expect.version, doc.Version(), "version matches") {
-			return
-		}
-		if !assert.Equal(t, expect.encoding, doc.Encoding(), "encoding matches") {
-			return
-		}
-		if !assert.Equal(t, expect.standalone, int(doc.Standalone()), "standalone matches") {
-			return
-		}
+		require.Equal(t, expect.version, doc.Version(), "version matches")
+		require.Equal(t, expect.encoding, doc.Encoding(), "encoding matches")
+		require.Equal(t, expect.standalone, int(doc.Standalone()), "standalone matches")
 	}
 }
 
@@ -97,9 +81,7 @@ func TestParseMisc(t *testing.T) {
 	for _, input := range inputs {
 		p := NewParser()
 		doc, err := p.Parse([]byte(input))
-		if !assert.NoError(t, err, "Parse should succeed for '%s'", input) {
-			return
-		}
+		require.NoError(t, err, "Parse should succeed for '%s'", input)
 
 		// XXX Not sure if this is right, but I'm going to assume it's ok
 		// to have a DTD in the child list
@@ -114,13 +96,9 @@ func TestParseMisc(t *testing.T) {
 
 			switch n.Type() {
 			case ProcessingInstructionNode:
-				if !assert.IsType(t, &ProcessingInstruction{}, n, "First child should be a processing instruction") {
-					return
-				}
+				require.IsType(t, &ProcessingInstruction{}, n, "First child should be a processing instruction")
 
-				if !assert.IsType(t, &Element{}, n.NextSibling(), "NextSibling of PI should be Element node") {
-					return
-				}
+				require.IsType(t, &Element{}, n.NextSibling(), "NextSibling of PI should be Element node")
 				break LOOP
 			}
 			n = n.NextSibling()
@@ -142,9 +120,7 @@ O!]]></child>
 </root>`
 	p := NewParser()
 	_, err := p.Parse([]byte(input))
-	if !assert.NoError(t, err, "Parse should succeed for '%s'", input) {
-		return
-	}
+	require.NoError(t, err, "Parse should succeed for '%s'", input)
 }
 
 func TestParseBad(t *testing.T) {
@@ -159,9 +135,7 @@ func TestParseBad(t *testing.T) {
 	p := NewParser()
 	for _, input := range inputs {
 		_, err := p.Parse([]byte(input))
-		if !assert.Error(t, err, "Parse should fail for '%s'", input) {
-			return
-		}
+		require.Error(t, err, "Parse should fail for '%s'", input)
 	}
 }
 
@@ -172,9 +146,7 @@ func TestParseNamespace(t *testing.T) {
 </helium:root>`
 	p := NewParser()
 	doc, err := p.Parse([]byte(input))
-	if !assert.NoError(t, err, "Parse should succeed for '%s'", input) {
-		return
-	}
+	require.NoError(t, err, "Parse should succeed for '%s'", input)
 
 	if pdebug.Enabled {
 		pdebug.Dump(doc)

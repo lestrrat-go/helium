@@ -3,7 +3,7 @@ package helium
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestElementTree(t *testing.T) {
@@ -15,94 +15,50 @@ func TestElementTree(t *testing.T) {
 	e3.SetAttribute("id", "e3")
 	e4.SetAttribute("id", "e4")
 
-	if !assert.NoError(t, e1.AddChild(e2), "e1.AddChild(e2) succeeds") {
-		return
-	}
-	if !assert.NoError(t, e1.AddChild(e3), "e1.AddChild(e3) succeeds") {
-		return
-	}
-	if !assert.NoError(t, e1.AddChild(e4), "e1.AddChild(e4) succeeds") {
-		return
-	}
+	require.NoError(t, e1.AddChild(e2), "e1.AddChild(e2) succeeds")
+	require.NoError(t, e1.AddChild(e3), "e1.AddChild(e3) succeeds")
+	require.NoError(t, e1.AddChild(e4), "e1.AddChild(e4) succeeds")
 
-	if !assert.Equal(t, e2, e1.FirstChild(), "e1.FirstChild is e2") {
-		return
-	}
-	if !assert.Equal(t, e4, e1.LastChild(), "e1.LastChild is e4") {
-		return
-	}
+	require.Equal(t, e2, e1.FirstChild(), "e1.FirstChild is e2")
+	require.Equal(t, e4, e1.LastChild(), "e1.LastChild is e4")
 
-	if !assert.Equal(t, e3, e2.NextSibling(), "e2.NextSibling is e3") {
-		return
-	}
-	if !assert.Equal(t, e4, e3.NextSibling(), "e3.NextSibling is e4") {
-		return
-	}
-	if !assert.Equal(t, nil, e4.NextSibling(), "e4.NextSibling is nil") {
-		return
-	}
+	require.Equal(t, e3, e2.NextSibling(), "e2.NextSibling is e3")
+	require.Equal(t, e4, e3.NextSibling(), "e3.NextSibling is e4")
+	require.Equal(t, nil, e4.NextSibling(), "e4.NextSibling is nil")
 
-	if !assert.Equal(t, e3, e4.PrevSibling(), "e4.PrevSibling is e3") {
-		return
-	}
-	if !assert.Equal(t, e2, e3.PrevSibling(), "e3.PrevSibling is e2") {
-		return
-	}
-	if !assert.Equal(t, nil, e2.PrevSibling(), "e2.PrevSibling is nil") {
-		return
-	}
+	require.Equal(t, e3, e4.PrevSibling(), "e4.PrevSibling is e3")
+	require.Equal(t, e2, e3.PrevSibling(), "e3.PrevSibling is e2")
+	require.Equal(t, nil, e2.PrevSibling(), "e2.PrevSibling is nil")
 
-	if !assert.NoError(t, e2.AddContent([]byte("e2")), "e2.AddContent succeeds") {
-		return
-	}
-	if !assert.Equal(t, []byte("e2"), e2.Content(), "e2.Content matches") {
-		return
-	}
+	require.NoError(t, e2.AddContent([]byte("e2")), "e2.AddContent succeeds")
+	require.Equal(t, []byte("e2"), e2.Content(), "e2.Content matches")
 
 	for _, e := range []Node{e2, e3, e4} {
-		if !assert.Equal(t, e1, e.Parent(), "%s.Parent is e1", e.Name()) {
-			return
-		}
+		require.Equal(t, e1, e.Parent(), "%s.Parent is e1", e.Name())
 	}
 
 	str, err := e1.XMLString()
-	if !assert.NoError(t, err, "e1.XMLString succeeds") {
-		return
-	}
-	if !assert.Equal(t, `<root><e2 id="e2">e2</e2><e3 id="e3"/><e4 id="e4"/></root>`, str, "e1.XMLString produces expected result") {
-		return
-	}
+	require.NoError(t, err, "e1.XMLString succeeds")
+	require.Equal(t, `<root><e2 id="e2">e2</e2><e3 id="e3"/><e4 id="e4"/></root>`, str, "e1.XMLString produces expected result")
 }
 
 func TestElementContent(t *testing.T) {
 	e := newElement("root")
 	for _, chunk := range [][]byte{[]byte("Hello "), []byte("World!")} {
-		if !assert.NoError(t, e.AddContent(chunk), "AddContent succeeds") {
-			return
-		}
+		require.NoError(t, e.AddContent(chunk), "AddContent succeeds")
 	}
 
-	if !assert.IsType(t, newText(nil), e.LastChild(), "LastChild is a Text node") {
-		return
-	}
+	require.IsType(t, newText(nil), e.LastChild(), "LastChild is a Text node")
 
-	if !assert.Equal(t, []byte("Hello World!"), e.Content()) {
-		return
-	}
+	require.Equal(t, []byte("Hello World!"), e.Content())
 
 	e = newElement("root")
 	for _, chunk := range [][]byte{[]byte("Hello "), []byte("World!")} {
-		if !assert.NoError(t, e.AddChild(newText(chunk)), "AddChild succeeds") {
-			return
-		}
+		require.NoError(t, e.AddChild(newText(chunk)), "AddChild succeeds")
 	}
 
-	if !assert.IsType(t, newText(nil), e.LastChild(), "LastChild is a Text node") {
-		return
-	}
+	require.IsType(t, newText(nil), e.LastChild(), "LastChild is a Text node")
 
-	if !assert.Equal(t, []byte("Hello World!"), e.Content()) {
-		return
-	}
+	require.Equal(t, []byte("Hello World!"), e.Content())
 
 }

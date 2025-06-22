@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestHeliumLintGolden tests helium-lint command output against golden files.
@@ -41,9 +41,7 @@ func TestHeliumLintGolden(t *testing.T) {
 
 	dir := "test"
 	files, err := os.ReadDir(dir)
-	if !assert.NoError(t, err, "os.ReadDir should succeed") {
-		return
-	}
+	require.NoError(t, err, "os.ReadDir should succeed")
 
 	for _, fi := range files {
 		if fi.IsDir() {
@@ -74,24 +72,18 @@ func TestHeliumLintGolden(t *testing.T) {
 		}
 
 		golden, err := os.ReadFile(goldenfn)
-		if !assert.NoError(t, err, "os.ReadFile should succeed for golden file") {
-			return
-		}
+		require.NoError(t, err, "os.ReadFile should succeed for golden file")
 
 		t.Logf("Testing helium-lint logic for %s...", fn)
 
 		// Read the XML file
 		input, err := os.ReadFile(fn)
-		if !assert.NoError(t, err, "os.ReadFile should succeed for input file") {
-			return
-		}
+		require.NoError(t, err, "os.ReadFile should succeed for input file")
 
 		// Mimic what helium-lint does internally
 		p := helium.NewParser()
 		doc, err := p.Parse(input)
-		if !assert.NoError(t, err, "helium.Parse should succeed for %s", fn) {
-			return
-		}
+		require.NoError(t, err, "helium.Parse should succeed for %s", fn)
 
 		// Generate output using helium.Dumper like helium-lint does
 		var output bytes.Buffer
@@ -101,7 +93,7 @@ func TestHeliumLintGolden(t *testing.T) {
 		actual := output.String()
 		expected := string(golden)
 
-		if !assert.Equal(t, expected, actual, "helium-lint output should match golden file for %s", fn) {
+		if expected != actual {
 			// Save the actual output to .err file for debugging
 			errout, err := os.OpenFile(fn+".lint.err", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 			if err != nil {
@@ -112,7 +104,7 @@ func TestHeliumLintGolden(t *testing.T) {
 
 			errout.WriteString(actual)
 			t.Logf("Actual output saved to %s", fn+".lint.err")
-			return
 		}
+		require.Equal(t, expected, actual, "helium-lint output should match golden file for %s", fn)
 	}
 }
