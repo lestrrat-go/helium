@@ -35,7 +35,6 @@ func (a attrData) Name() string {
 	return a.localname
 }
 
-
 func (ctx *parserCtx) pushNS(prefix, uri string) {
 	ctx.nsTab.Push(prefix, uri)
 }
@@ -1315,7 +1314,6 @@ func (ctx *parserCtx) parseVersionNum(_ rune) (string, error) {
 			return b.String(), nil
 		}
 	}
-	return "", ErrInvalidVersionNum
 }
 
 type qtextHandler func(qch rune) (string, error)
@@ -2098,7 +2096,7 @@ func (ctx *parserCtx) parseInternalSubset() error {
 		if cur == nil || cur.Done() || cur.Peek() == ']' {
 			break
 		}
-		
+
 		ctx.skipBlanks()
 		if err := ctx.parseMarkupDecl(); err != nil {
 			return ctx.error(err)
@@ -2108,7 +2106,7 @@ func (ctx *parserCtx) parseInternalSubset() error {
 		}
 	}
 
-	// Get final cursor state  
+	// Get final cursor state
 	cur = ctx.getCursor()
 	if cur != nil && cur.Peek() == ']' {
 		cur.Advance(1)
@@ -2334,20 +2332,20 @@ func (ctx *parserCtx) parsePEReference() error {
 			if pdebug.Enabled {
 				pdebug.Printf("Expanding parameter entity '%s' with content: %s", name, string(entity.Content()))
 			}
-			
+
 			// Decode character references and other entities in the parameter entity content
 			decodedContent, err := ctx.decodeEntities(entity.Content(), SubstituteBoth)
 			if err != nil {
 				return fmt.Errorf("failed to decode parameter entity content: %v", err)
 			}
-			
+
 			if pdebug.Enabled {
 				pdebug.Printf("Decoded parameter entity content: %s", decodedContent)
 			}
-			
+
 			// Push the decoded content as new input stream
 			ctx.pushInput(strcursor.NewByteCursor(bytes.NewReader([]byte(decodedContent))))
-			
+
 			// Note: External parameter entities may need text declaration parsing
 			// but for now we only handle internal parameter entities
 		}
@@ -4017,7 +4015,7 @@ func (ctx *parserCtx) parseBalancedChunkInternal(chunk []byte, userData interfac
 		return nil, ctx.error(err)
 	}
 	newctx.pushNode(newRoot)
-	newctx.elem = newRoot  // Set the current element context
+	newctx.elem = newRoot // Set the current element context
 	newctx.doc.AddChild(newRoot)
 	newctx.switchEncoding()
 	if err := newctx.parseContent(); err != nil {
@@ -4585,7 +4583,7 @@ func (ctx *parserCtx) parseStringEntityRef(s []byte) (sax.Entity, int, error) {
 		return nil, 0, errors.New("invalid entity ref")
 	}
 
-	i := 1 // skip the '&'
+	i := 1                                     // skip the '&'
 	name, width, err := parseStringName(s[1:]) // skip the '&' for name parsing
 	if err != nil {
 		return nil, 0, errors.New("failed to parse name")
@@ -4693,7 +4691,7 @@ func (ctx *parserCtx) parseStringPEReference(s []byte) (sax.Entity, int, error) 
 		return nil, 0, errors.New("invalid PEreference")
 	}
 
-	i := 1 // skip the '%'
+	i := 1                                     // skip the '%'
 	name, width, err := parseStringName(s[1:]) // skip the '%' for name parsing
 	if err != nil {
 		return nil, 0, err
