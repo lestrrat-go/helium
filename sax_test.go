@@ -36,11 +36,11 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		return nil
 	}
 	s.ReferenceHandler = func(_ sax.Context, name string) error {
-		fmt.Fprintf(out, "SAX.Reference(%s)\n", name)
+		_, _ = fmt.Fprintf(out, "SAX.Reference(%s)\n", name)
 		return nil
 	}
 	s.GetEntityHandler = func(_ sax.Context, name string) (sax.Entity, error) {
-		fmt.Fprintf(out, "SAX.ResolveEntity(%s)\n", name)
+		_, _ = fmt.Fprintf(out, "SAX.ResolveEntity(%s)\n", name)
 
 		ent, ok := entities[name]
 		if !ok {
@@ -50,7 +50,7 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 	}
 
 	s.GetParameterEntityHandler = func(_ sax.Context, name string) (sax.Entity, error) {
-		fmt.Fprintf(out, "SAX.ResolveEntity(%s)\n", name)
+		_, _ = fmt.Fprintf(out, "SAX.ResolveEntity(%s)\n", name)
 
 		ent, ok := entities[name]
 		if !ok {
@@ -158,7 +158,7 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 			}
 		}
 
-		fmt.Fprintln(out, ")")
+		_, _ = fmt.Fprintln(out, ")")
 
 		return nil
 	}

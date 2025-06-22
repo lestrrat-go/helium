@@ -57,18 +57,28 @@ func (t *TreeBuilder) ProcessingInstruction(ctxif sax.Context, target, data stri
 
 	switch ctx.inSubset {
 	case 1:
-		doc.IntSubset().AddChild(pi)
+		if err := doc.IntSubset().AddChild(pi); err != nil {
+			return err
+		}
 	case 2:
-		doc.ExtSubset().AddChild(pi)
+		if err := doc.ExtSubset().AddChild(pi); err != nil {
+			return err
+		}
 	}
 
 	parent := ctx.elem
 	if parent == nil {
-		doc.AddChild(pi)
+		if err := doc.AddChild(pi); err != nil {
+			return err
+		}
 	} else if parent.Type() == ElementNode {
-		parent.AddChild(pi)
+		if err := parent.AddChild(pi); err != nil {
+			return err
+		}
 	} else {
-		parent.AddSibling(pi)
+		if err := parent.AddSibling(pi); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -95,11 +105,15 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 	}
 
 	if uri != "" {
-		e.SetNamespace(prefix, uri, true)
+		if err := e.SetNamespace(prefix, uri, true); err != nil {
+			return err
+		}
 	}
 
 	for _, ns := range namespaces {
-		e.SetNamespace(ns.Prefix(), ns.URI(), false)
+		if err := e.SetNamespace(ns.Prefix(), ns.URI(), false); err != nil {
+			return err
+		}
 	}
 
 	pdebug.Printf("We got %d attributes", len(attrs))

@@ -38,7 +38,7 @@ func newNsStack() nsStack {
 }
 
 func (s *nsStack) Push(prefix, uri string) {
-	s.UniqueStack.Push(nsStackItem{prefix: prefix, href: uri})
+	_ = s.UniqueStack.Push(nsStackItem{prefix: prefix, href: uri})
 }
 
 func (s *nsStack) Lookup(prefix string) string {

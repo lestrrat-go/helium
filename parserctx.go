@@ -1207,7 +1207,9 @@ func (ctx *parserCtx) parseXMLDecl() error {
 		// if the next character isn't blank, we expect the
 		// end of XML decl, so return success
 		if cur.Peek() == '?' && cur.PeekN(2) == '>' {
-			cur.Advance(2)
+			if err := cur.Advance(2); err != nil {
+				return err
+			}
 			return nil
 		}
 
@@ -1224,7 +1226,9 @@ func (ctx *parserCtx) parseXMLDecl() error {
 		// if the encoding decl is found, then we *could* have
 		// the end of the XML declaration
 		if cur.Peek() == '?' && cur.PeekN(2) == '>' {
-			cur.Advance(2)
+			if err := cur.Advance(2); err != nil {
+				return err
+			}
 			return nil
 		}
 	} else if _, ok := err.(ErrAttrNotFound); ok {
@@ -1238,7 +1242,9 @@ func (ctx *parserCtx) parseXMLDecl() error {
 	ctx.standalone = vb
 
 	if cur.Peek() == '?' && cur.PeekN(2) == '>' {
-		cur.Advance(2)
+		if err := cur.Advance(2); err != nil {
+			return err
+		}
 		return nil
 	}
 	return ctx.error(errors.New("XML declaration not closed"))

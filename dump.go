@@ -256,16 +256,16 @@ func (d *Dumper) dumpDocContent(out io.Writer, n Node) error {
 	_, _ = io.WriteString(out, version+`"`)
 
 	if encoding := doc.encoding; encoding != "" {
-		io.WriteString(out, ` encoding="`+encoding+`"`)
+		_, _ = io.WriteString(out, ` encoding="`+encoding+`"`)
 	}
 
 	switch doc.Standalone() {
 	case StandaloneExplicitNo:
-		io.WriteString(out, ` standalone="no"`)
+		_, _ = io.WriteString(out, ` standalone="no"`)
 	case StandaloneExplicitYes:
-		io.WriteString(out, ` standalone="yes"`)
+		_, _ = io.WriteString(out, ` standalone="yes"`)
 	}
-	io.WriteString(out, "?>\n")
+	_, _ = io.WriteString(out, "?>\n")
 	return nil
 }
 
@@ -521,13 +521,13 @@ func (d *Dumper) dumpEntityDecl(out io.Writer, ent *Entity) error {
 		io.WriteString(out, "<!ENTITY % ")
 		io.WriteString(out, ent.name)
 		if ent.externalID != "" {
-			io.WriteString(out, " PUBLIC ")
-			dumpQuotedString(out, ent.externalID)
-			io.WriteString(out, " ")
-			dumpQuotedString(out, ent.systemID)
+			_, _ = io.WriteString(out, " PUBLIC ")
+			_ = dumpQuotedString(out, ent.externalID)
+			_, _ = io.WriteString(out, " ")
+			_ = dumpQuotedString(out, ent.systemID)
 		} else {
-			io.WriteString(out, " SYSTEM ")
-			dumpQuotedString(out, ent.systemID)
+			_, _ = io.WriteString(out, " SYSTEM ")
+			_ = dumpQuotedString(out, ent.systemID)
 		}
 	default:
 		return errors.New("invalid entity type")
