@@ -234,7 +234,7 @@ func TestSAXEvents(t *testing.T) {
 		}
 		require.NoError(t, err, "Parse should succeed (file = %s)", fn)
 
-		if string(golden) != string(out.Bytes()) {
+		if string(golden) != out.String() {
 			errout, err := os.OpenFile(fn+".err", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 			if err != nil {
 				t.Logf("Failed to file to save output: %s", err)
@@ -244,6 +244,6 @@ func TestSAXEvents(t *testing.T) {
 
 			errout.Write(out.Bytes())
 		}
-		require.Equal(t, string(golden), string(out.Bytes()), "SAX event streams should match (file = %s)", fn)
+		require.Equal(t, string(golden), out.String(), "SAX event streams should match (file = %s)", fn)
 	}
 }
