@@ -4017,6 +4017,7 @@ func (ctx *parserCtx) parseBalancedChunkInternal(chunk []byte, userData interfac
 		return nil, ctx.error(err)
 	}
 	newctx.pushNode(newRoot)
+	newctx.elem = newRoot  // Set the current element context
 	newctx.doc.AddChild(newRoot)
 	newctx.switchEncoding()
 	if err := newctx.parseContent(); err != nil {
