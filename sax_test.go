@@ -19,7 +19,7 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 	entities := map[string]*Entity{}
 	s := sax.New()
 	s.SetDocumentLocatorHandler = func(_ sax.Context, loc sax.DocumentLocator) error {
-		fmt.Fprintf(out, "SAX.SetDocumentLocator()\n")
+		_, _ = fmt.Fprintf(out, "SAX.SetDocumentLocator()\n")
 		return nil
 	}
 	s.AttributeDeclHandler = func(_ sax.Context, elemName string, attrName string, typ int, deftype int, defvalue string, enum sax.Enumeration) error {
@@ -28,11 +28,11 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		if defvalue == "" {
 			defvalue = "NULL"
 		}
-		fmt.Fprintf(out, "SAX.AttributeDecl(%s, %s, %d, %d, %s, ...)\n", elemName, attrName, typ, deftype, defvalue)
+		_, _ = fmt.Fprintf(out, "SAX.AttributeDecl(%s, %s, %d, %d, %s, ...)\n", elemName, attrName, typ, deftype, defvalue)
 		return nil
 	}
 	s.InternalSubsetHandler = func(_ sax.Context, name, externalID, systemID string) error {
-		fmt.Fprintf(out, "SAX.InternalSubset(%s, %s, %s)\n", name, externalID, systemID)
+		_, _ = fmt.Fprintf(out, "SAX.InternalSubset(%s, %s, %s)\n", name, externalID, systemID)
 		return nil
 	}
 	s.ReferenceHandler = func(_ sax.Context, name string) error {

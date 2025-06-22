@@ -908,7 +908,9 @@ func (ctx *parserCtx) parseEndTag() error {
 		if cur.Peek() != '>' {
 			return ctx.error(ErrGtRequired)
 		}
-		cur.Advance(1)
+		if err := cur.Advance(1); err != nil {
+			return err
+		}
 	}
 
 	e := ctx.peekNode()
@@ -931,10 +933,13 @@ func (ctx *parserCtx) parseAttributeValue(normalize bool) (value string, entitie
 		defer g.IRelease("END parseAttributeValue")
 	}
 
-	ctx.parseQuotedText(func(qch rune) (string, error) {
+	_, err2 := ctx.parseQuotedText(func(qch rune) (string, error) {
 		value, entities, err = ctx.parseAttributeValueInternal(qch, normalize)
 		return "", nil
 	})
+	if err2 != nil {
+		return "", 0, err2
+	}
 	return
 }
 
@@ -1021,11 +1026,15 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (val
 				}
 				inSpace = true
 			}
-			cur.Advance(1)
+			if err := cur.Advance(1); err != nil {
+				return "", 0, err
+			}
 		default:
 			inSpace = false
 			b.WriteRune(c)
-			cur.Advance(1)
+			if err := cur.Advance(1); err != nil {
+				return "", 0, err
+			}
 		}
 	}
 
@@ -1075,7 +1084,10 @@ func (ctx *parserCtx) parseAttribute(elemName string) (local string, prefix stri
 	if cur.Peek() != '=' {
 		err = ctx.error(ErrEqualSignRequired)
 	}
-	cur.Advance(1)
+	if err2 := cur.Advance(1); err2 != nil {
+		err = err2
+		return
+	}
 	ctx.skipBlanks()
 
 	v, entities, err := ctx.parseAttributeValue(normalize)
@@ -1128,11 +1140,15 @@ func (ctx *parserCtx) skipBlanks() bool {
 		i++
 	}
 	if i > 0 {
-		cur.Advance(i)
+		if err := cur.Advance(i); err != nil {
+			return false
+		}
 
 		if cur.Peek() == '%' {
 			pdebug.Printf("Found possible parameter entity reference")
-			ctx.handlePEReference()
+			if err := ctx.handlePEReference(); err != nil {
+				return false
+			}
 		}
 		return true
 	}
@@ -1151,11 +1167,15 @@ func (ctx *parserCtx) skipBlankBytes(cur *strcursor.ByteCursor) bool {
 		i++
 	}
 	if i > 0 {
-		cur.Advance(i)
+		if err := cur.Advance(i); err != nil {
+			return false
+		}
 
 		if cur.Peek() == '%' {
 			pdebug.Printf("Found possible parameter entity reference")
-			ctx.handlePEReference()
+			if err := ctx.handlePEReference(); err != nil {
+				return false
+			}
 		}
 		return true
 	}
@@ -3789,7 +3809,9 @@ func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefi
 	       }
 	*/
 
-	dtd.AddChild(attr)
+	if err := dtd.AddChild(attr); err != nil {
+		return nil, err
+	}
 	return attr, nil
 }
 
@@ -3996,8 +4018,16 @@ func (ctx *parserCtx) parseBalancedChunkInternal(chunk []byte, userData interfac
 	}
 
 	newctx := &parserCtx{}
-	newctx.init(nil, bytes.NewReader(chunk))
-	defer newctx.release()
+	if err := newctx.init(nil, bytes.NewReader(chunk)); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := newctx.release(); err != nil {
+			if pdebug.Enabled {
+				pdebug.Printf("newctx.release() failed: %s", err)
+			}
+		}
+	}()
 
 	if userData != nil {
 		newctx.userData = userData
@@ -4030,8 +4060,12 @@ func (ctx *parserCtx) parseBalancedChunkInternal(chunk []byte, userData interfac
 	}
 	newctx.pushNode(newRoot)
 	newctx.elem = newRoot // Set the current element context
-	newctx.doc.AddChild(newRoot)
-	newctx.switchEncoding()
+	if err := newctx.doc.AddChild(newRoot); err != nil {
+		return nil, err
+	}
+	if err := newctx.switchEncoding(); err != nil {
+		return nil, err
+	}
 	if err := newctx.parseContent(); err != nil {
 		return nil, err
 	}
@@ -5121,7 +5155,9 @@ func (ctx *parserCtx) handlePEReference() error {
 		                     name, NULL);
 		*/
 		ctx.valid = false
-		ctx.entityCheck(nil, 0, 0)
+		if err := ctx.entityCheck(nil, 0, 0); err != nil {
+			return ctx.error(err)
+		}
 		pdebug.Printf("Should be calling pushInput here")
 		/* have no clue what this is for
 		   } else if (ctxt->input->free != deallocblankswrapper) {

@@ -236,7 +236,7 @@ func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 		if err := d.DumpNode(out, e); err != nil {
 			return err
 		}
-		io.WriteString(out, "\n")
+		_, _ = io.WriteString(out, "\n")
 	}
 	return nil
 }
@@ -248,12 +248,12 @@ func (d *Dumper) dumpDocContent(out io.Writer, n Node) error {
 	}
 
 	doc := n.(*Document)
-	io.WriteString(out, `<?xml version="`)
+	_, _ = io.WriteString(out, `<?xml version="`)
 	version := doc.Version()
 	if version == "" {
 		version = "1.0"
 	}
-	io.WriteString(out, version+`"`)
+	_, _ = io.WriteString(out, version+`"`)
 
 	if encoding := doc.encoding; encoding != "" {
 		io.WriteString(out, ` encoding="`+encoding+`"`)
@@ -483,13 +483,13 @@ func (d *Dumper) dumpEntityDecl(out io.Writer, ent *Entity) error {
 		io.WriteString(out, "<!ENTITY ")
 		io.WriteString(out, ent.name)
 		if ent.externalID == "" {
-			io.WriteString(out, " PUBLIC ")
-			dumpQuotedString(out, ent.externalID)
-			io.WriteString(out, " ")
-			dumpQuotedString(out, ent.systemID)
+			_, _ = io.WriteString(out, " PUBLIC ")
+			_ = dumpQuotedString(out, ent.externalID)
+			_, _ = io.WriteString(out, " ")
+			_ = dumpQuotedString(out, ent.systemID)
 		} else {
-			io.WriteString(out, " SYSTEM ")
-			dumpQuotedString(out, ent.systemID)
+			_, _ = io.WriteString(out, " SYSTEM ")
+			_ = dumpQuotedString(out, ent.systemID)
 		}
 
 		if etype == ExternalGeneralUnparsedEntity {
@@ -662,9 +662,9 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		}
 		return nil
 	case CommentNode:
-		io.WriteString(out, "<!--")
-		out.Write(n.Content())
-		io.WriteString(out, "-->")
+		_, _ = io.WriteString(out, "<!--")
+		_, _ = out.Write(n.Content())
+		_, _ = io.WriteString(out, "-->")
 		return nil
 	case EntityRefNode:
 		io.WriteString(out, "&")
