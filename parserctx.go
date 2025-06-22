@@ -3012,6 +3012,9 @@ func (ctx *parserCtx) parseEntityValue() (string, string, error) {
 	literal, err := ctx.parseQuotedText(func(qch rune) (string, error) {
 		return ctx.parseEntityValueInternal(qch)
 	})
+	if err != nil {
+		return "", "", ctx.error(err)
+	}
 
 	val, err := ctx.decodeEntities([]byte(literal), SubstitutePERef)
 	if err != nil {
@@ -3681,9 +3684,11 @@ func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefi
 	}
 	if name == "" {
 		err = errors.New("name required")
+		return
 	}
 	if elem == "" {
 		err = errors.New("element required")
+		return
 	}
 
 	switch atype {
