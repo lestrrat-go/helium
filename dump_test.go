@@ -48,7 +48,7 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 			continue
 		}
 
-		goldenfn := strings.Replace(fn, ".xml", ".dump", -1)
+		goldenfn := strings.ReplaceAll(fn, ".xml", ".dump")
 		if _, err := os.Stat(goldenfn); err != nil {
 			t.Logf("%s does not exist, skipping...", goldenfn)
 			continue
