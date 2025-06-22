@@ -39,7 +39,9 @@ func (dtd *DTD) AddEntity(name string, typ EntityType, publicID, systemID, conte
 	ent.doc = dtd.doc
 	table[name] = ent
 
-	dtd.AddChild(ent)
+	if err := dtd.AddChild(ent); err != nil {
+		return nil, err
+	}
 	return ent, nil
 }
 

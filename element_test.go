@@ -11,9 +11,9 @@ func TestElementTree(t *testing.T) {
 	e2 := newElement("e2")
 	e3 := newElement("e3")
 	e4 := newElement("e4")
-	e2.SetAttribute("id", "e2")
-	e3.SetAttribute("id", "e3")
-	e4.SetAttribute("id", "e4")
+	require.NoError(t, e2.SetAttribute("id", "e2"))
+	require.NoError(t, e3.SetAttribute("id", "e3"))
+	require.NoError(t, e4.SetAttribute("id", "e4"))
 
 	require.NoError(t, e1.AddChild(e2), "e1.AddChild(e2) succeeds")
 	require.NoError(t, e1.AddChild(e3), "e1.AddChild(e3) succeeds")

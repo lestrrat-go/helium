@@ -72,9 +72,9 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 				t.Logf("Failed to file to save output: %s", err)
 				return
 			}
-			defer errout.Close()
+			defer func() { _ = errout.Close() }()
 
-			errout.WriteString(str)
+			_, _ = errout.WriteString(str)
 		}
 		require.Equal(t, string(golden), str, "roundtrip works")
 	}
@@ -87,8 +87,8 @@ func TestDOMToXMLString(t *testing.T) {
 	root, err := doc.CreateElement("root")
 	require.NoError(t, err, `CreateElement("root") succeeds`)
 
-	doc.SetDocumentElement(root)
-	root.AddContent([]byte(`Hello, World!`))
+	require.NoError(t, doc.SetDocumentElement(root))
+	require.NoError(t, root.AddContent([]byte(`Hello, World!`)))
 
 	str, err := doc.XMLString()
 	require.NoError(t, err, "XMLString(doc) succeeds")

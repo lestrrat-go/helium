@@ -20,34 +20,54 @@ func dumpQuotedString(out io.Writer, s string) error {
 	dqi := strings.IndexByte(s, qch_dquote[0])
 	if dqi < 0 {
 		// double quote is allowed, cool!
-		out.Write(qch_dquote)
-		io.WriteString(out, s)
-		out.Write(qch_dquote)
+		if _, err := out.Write(qch_dquote); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(out, s); err != nil {
+			return err
+		}
+		if _, err := out.Write(qch_dquote); err != nil {
+			return err
+		}
 		return nil
 	}
 
 	if qi := strings.IndexByte(s, qch_quote[0]); qi < 0 {
 		// single quotes, then
-		out.Write(qch_quote)
-		io.WriteString(out, s)
-		out.Write(qch_quote)
+		if _, err := out.Write(qch_quote); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(out, s); err != nil {
+			return err
+		}
+		if _, err := out.Write(qch_quote); err != nil {
+			return err
+		}
 		return nil
 	}
 
 	// Grr, can't use " or '. Well, let's escape all the double
 	// quotes to &quot;, and quote the string
 
-	out.Write(qch_dquote)
+	if _, err := out.Write(qch_dquote); err != nil {
+		return err
+	}
 	for len(s) > 0 && dqi > -1 {
-		io.WriteString(out, s[:dqi])
+		if _, err := io.WriteString(out, s[:dqi]); err != nil {
+			return err
+		}
 		s = s[dqi+1:]
 		dqi = strings.IndexByte(s, qch_dquote[0])
 	}
 
 	if len(s) > 0 {
-		io.WriteString(out, s)
+		if _, err := io.WriteString(out, s); err != nil {
+			return err
+		}
 	}
-	out.Write(qch_dquote)
+	if _, err := out.Write(qch_dquote); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -394,7 +414,9 @@ func dumpElementContent(out io.Writer, n *ElementContent, glob bool) error {
 
 func dumpEntityContent(out io.Writer, content string) error {
 	if strings.IndexByte(content, '%') == -1 {
-		dumpQuotedString(out, content)
+		if err := dumpQuotedString(out, content); err != nil {
+			return err
+		}
 		return nil
 	}
 
@@ -409,13 +431,17 @@ func dumpEntityContent(out io.Writer, content string) error {
 		switch c {
 		case '"':
 			if buf.Len() > 0 {
-				buf.WriteTo(out)
+				if _, err := buf.WriteTo(out); err != nil {
+					return err
+				}
 				buf.Reset()
 			}
 			io.WriteString(out, "&quot;")
 		case '%':
 			if buf.Len() > 0 {
-				buf.WriteTo(out)
+				if _, err := buf.WriteTo(out); err != nil {
+					return err
+				}
 				buf.Reset()
 			}
 			io.WriteString(out, "&#x25;")
@@ -424,7 +450,9 @@ func dumpEntityContent(out io.Writer, content string) error {
 		}
 	}
 	if buf.Len() > 0 {
-		buf.WriteTo(out)
+		if _, err := buf.WriteTo(out); err != nil {
+			return err
+		}
 	}
 	io.WriteString(out, `"`)
 
@@ -442,9 +470,13 @@ func (d *Dumper) dumpEntityDecl(out io.Writer, ent *Entity) error {
 		io.WriteString(out, ent.name)
 		io.WriteString(out, " ")
 		if ent.orig != "" {
-			dumpQuotedString(out, ent.orig)
+			if err := dumpQuotedString(out, ent.orig); err != nil {
+				return err
+			}
 		} else {
-			dumpEntityContent(out, ent.content)
+			if err := dumpEntityContent(out, ent.content); err != nil {
+				return err
+			}
 		}
 		io.WriteString(out, ">\n")
 	case ExternalGeneralParsedEntity, ExternalGeneralUnparsedEntity:
@@ -476,9 +508,13 @@ func (d *Dumper) dumpEntityDecl(out io.Writer, ent *Entity) error {
 		io.WriteString(out, ent.name)
 		io.WriteString(out, " ")
 		if ent.orig != "" {
-			dumpQuotedString(out, ent.orig)
+			if err := dumpQuotedString(out, ent.orig); err != nil {
+				return err
+			}
 		} else {
-			dumpEntityContent(out, ent.content)
+			if err := dumpEntityContent(out, ent.content); err != nil {
+				return err
+			}
 		}
 		io.WriteString(out, ">\n")
 	case ExternalParameterEntity:
@@ -702,7 +738,9 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 				if achld.Type() == TextNode {
 					escapeAttrValue(out, achld.Content())
 				} else {
-					d.DumpNode(out, achld)
+					if err := d.DumpNode(out, achld); err != nil {
+						return err
+					}
 				}
 			}
 			io.WriteString(out, `"`)

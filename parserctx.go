@@ -626,7 +626,9 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 		return errors.New("Invalid char data")
 	}
 
-	cur.Advance(i)
+	if err := cur.Advance(i); err != nil {
+		return err
+	}
 	str := buf.String()
 
 	// XXX This is not right, but it's for now the best place to do this
@@ -709,7 +711,9 @@ func (ctx *parserCtx) parseStartTag() error {
 	if cur.Peek() != '<' {
 		return ctx.error(ErrStartTagRequired)
 	}
-	cur.Advance(1)
+	if err := cur.Advance(1); err != nil {
+		return err
+	}
 
 	local, prefix, err := ctx.parseQName()
 	if local == "" {
@@ -729,7 +733,9 @@ func (ctx *parserCtx) parseStartTag() error {
 	for ctx.instate != psEOF {
 		ctx.skipBlanks()
 		if cur.Peek() == '>' {
-			cur.Advance(1)
+			if err := cur.Advance(1); err != nil {
+				return err
+			}
 			break
 		}
 
@@ -844,7 +850,9 @@ func (ctx *parserCtx) parseStartTag() error {
 		return ctx.error(errors.New("namespace '" + prefix + "' not found"))
 	}
 	if nsuri != "" {
-		elem.SetNamespace(prefix, nsuri, true)
+		if err := elem.SetNamespace(prefix, nsuri, true); err != nil {
+			return err
+		}
 	}
 
 	if s := ctx.sax; s != nil {

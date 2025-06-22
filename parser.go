@@ -25,8 +25,17 @@ func (p *Parser) Parse(b []byte) (*Document, error) {
 	}
 
 	ctx := &parserCtx{}
-	ctx.init(p, bytes.NewReader(b))
-	defer ctx.release()
+	if err := ctx.init(p, bytes.NewReader(b)); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := ctx.release(); err != nil {
+			// Log error but don't override the main return error
+			if pdebug.Enabled {
+				pdebug.Printf("ctx.release() failed: %s", err)
+			}
+		}
+	}()
 
 	if err := ctx.parseDocument(); err != nil {
 		return nil, err

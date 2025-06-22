@@ -239,9 +239,9 @@ func TestSAXEvents(t *testing.T) {
 				t.Logf("Failed to file to save output: %s", err)
 				return
 			}
-			defer errout.Close()
+			defer func() { _ = errout.Close() }()
 
-			errout.Write(out.Bytes())
+			_, _ = errout.Write(out.Bytes())
 		}
 		require.Equal(t, string(golden), out.String(), "SAX event streams should match (file = %s)", fn)
 	}

@@ -88,7 +88,7 @@ func TestHeliumLintGolden(t *testing.T) {
 		// Generate output using helium.Dumper like helium-lint does
 		var output bytes.Buffer
 		d := helium.Dumper{}
-		d.DumpDoc(&output, doc)
+		require.NoError(t, d.DumpDoc(&output, doc))
 
 		actual := output.String()
 		expected := string(golden)
@@ -100,9 +100,9 @@ func TestHeliumLintGolden(t *testing.T) {
 				t.Logf("Failed to create file to save output: %s", err)
 				return
 			}
-			defer errout.Close()
+			defer func() { _ = errout.Close() }()
 
-			errout.WriteString(actual)
+			_, _ = errout.WriteString(actual)
 			t.Logf("Actual output saved to %s", fn+".lint.err")
 		}
 		require.Equal(t, expected, actual, "helium-lint output should match golden file for %s", fn)

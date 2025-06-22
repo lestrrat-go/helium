@@ -83,7 +83,10 @@ func _main() int {
 		}
 
 		d := helium.Dumper{}
-		d.DumpDoc(os.Stdout, doc)
+		if err := d.DumpDoc(os.Stdout, doc); err != nil {
+			fmt.Fprintf(os.Stderr, "%s\n", err)
+			return 1
+		}
 	}
 
 	select {
