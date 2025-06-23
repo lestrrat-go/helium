@@ -20,40 +20,60 @@ func dumpQuotedString(out io.Writer, s string) error {
 	dqi := strings.IndexByte(s, qch_dquote[0])
 	if dqi < 0 {
 		// double quote is allowed, cool!
-		out.Write(qch_dquote)
-		io.WriteString(out, s)
-		out.Write(qch_dquote)
+		if _, err := out.Write(qch_dquote); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(out, s); err != nil {
+			return err
+		}
+		if _, err := out.Write(qch_dquote); err != nil {
+			return err
+		}
 		return nil
 	}
 
 	if qi := strings.IndexByte(s, qch_quote[0]); qi < 0 {
 		// single quotes, then
-		out.Write(qch_quote)
-		io.WriteString(out, s)
-		out.Write(qch_quote)
+		if _, err := out.Write(qch_quote); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(out, s); err != nil {
+			return err
+		}
+		if _, err := out.Write(qch_quote); err != nil {
+			return err
+		}
 		return nil
 	}
 
 	// Grr, can't use " or '. Well, let's escape all the double
 	// quotes to &quot;, and quote the string
 
-	out.Write(qch_dquote)
+	if _, err := out.Write(qch_dquote); err != nil {
+		return err
+	}
 	for len(s) > 0 && dqi > -1 {
-		io.WriteString(out, s[:dqi])
+		if _, err := io.WriteString(out, s[:dqi]); err != nil {
+			return err
+		}
 		s = s[dqi+1:]
 		dqi = strings.IndexByte(s, qch_dquote[0])
 	}
 
 	if len(s) > 0 {
-		io.WriteString(out, s)
+		if _, err := io.WriteString(out, s); err != nil {
+			return err
+		}
 	}
-	out.Write(qch_dquote)
+	if _, err := out.Write(qch_dquote); err != nil {
+		return err
+	}
 	return nil
 }
 
 var (
 	esc_quot = []byte("&#34;") // shorter than "&quot;"
-	esc_apos = []byte("&#39;") // shorter than "&apos;"
+	// esc_apos = []byte("&#39;") // shorter than "&apos;"
 	esc_amp  = []byte("&amp;")
 	esc_lt   = []byte("&lt;")
 	esc_gt   = []byte("&gt;")
@@ -106,7 +126,7 @@ func escapeAttrValue(w io.Writer, s []byte) error {
 		case '\t':
 			esc = esc_tab
 		default:
-			if !(0x20 <= r && r < 0x80) {
+			if !(0x20 <= r && r < 0x80) { // nolint:staticcheck
 				if r < 0xE0 {
 					esc = []byte(fmt.Sprintf("&#x%X;", r))
 					break
@@ -166,7 +186,7 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
 		case '\r':
 			esc = esc_cr
 		default:
-			if !(r == '\t' || (0x20 <= r && r < 0x80)) {
+			if !(r == '\t' || (0x20 <= r && r < 0x80)) { // nolint:staticcheck
 				if r < 0xE0 {
 					esc = []byte(fmt.Sprintf("&#x%X;", r))
 					break
@@ -196,12 +216,6 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
 
 type Dumper struct{}
 
-func (d *Dumper) writeString(out io.Writer, content string) error {
-	// punt all the magic for now
-	_, err := io.WriteString(out, content)
-	return err
-}
-
 func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START Dumper.DumpDoc")
@@ -216,7 +230,7 @@ func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 		if err := d.DumpNode(out, e); err != nil {
 			return err
 		}
-		io.WriteString(out, "\n")
+		_, _ = io.WriteString(out, "\n")
 	}
 	return nil
 }
@@ -228,50 +242,50 @@ func (d *Dumper) dumpDocContent(out io.Writer, n Node) error {
 	}
 
 	doc := n.(*Document)
-	io.WriteString(out, `<?xml version="`)
+	_, _ = io.WriteString(out, `<?xml version="`)
 	version := doc.Version()
 	if version == "" {
 		version = "1.0"
 	}
-	io.WriteString(out, version+`"`)
+	_, _ = io.WriteString(out, version+`"`)
 
 	if encoding := doc.encoding; encoding != "" {
-		io.WriteString(out, ` encoding="`+encoding+`"`)
+		_, _ = io.WriteString(out, ` encoding="`+encoding+`"`)
 	}
 
 	switch doc.Standalone() {
 	case StandaloneExplicitNo:
-		io.WriteString(out, ` standalone="no"`)
+		_, _ = io.WriteString(out, ` standalone="no"`)
 	case StandaloneExplicitYes:
-		io.WriteString(out, ` standalone="yes"`)
+		_, _ = io.WriteString(out, ` standalone="yes"`)
 	}
-	io.WriteString(out, "?>\n")
+	_, _ = io.WriteString(out, "?>\n")
 	return nil
 }
 
 func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
 	dtd := n.(*DTD)
-	io.WriteString(out, "<!DOCTYPE ")
-	io.WriteString(out, dtd.Name())
-	io.WriteString(out, " ")
+	_, _ = io.WriteString(out, "<!DOCTYPE ")
+	_, _ = io.WriteString(out, dtd.Name())
+	_, _ = io.WriteString(out, " ")
 
 	if dtd.externalID != "" {
-		io.WriteString(out, " PUBLIC ")
-		io.WriteString(out, dtd.externalID)
-		io.WriteString(out, " ")
+		_, _ = io.WriteString(out, " PUBLIC ")
+		_, _ = io.WriteString(out, dtd.externalID)
+		_, _ = io.WriteString(out, " ")
 	} else if dtd.systemID != "" {
-		io.WriteString(out, " SYSTEM ")
-		io.WriteString(out, dtd.systemID)
-		io.WriteString(out, " ")
+		_, _ = io.WriteString(out, " SYSTEM ")
+		_, _ = io.WriteString(out, dtd.systemID)
+		_, _ = io.WriteString(out, " ")
 	}
 
 	if len(dtd.entities) == 0 && len(dtd.elements) == 0 && len(dtd.pentities) == 0 && len(dtd.attributes) == 0 {
 		/* (dtd.notations == NULL) && */
-		io.WriteString(out, ">")
+		_, _ = io.WriteString(out, ">")
 		return nil
 	}
 
-	io.WriteString(out, "[\n")
+	_, _ = io.WriteString(out, "[\n")
 
 	for e := dtd.FirstChild(); e != nil; e = e.NextSibling() {
 		if err := d.DumpNode(out, e); err != nil {
@@ -279,29 +293,29 @@ func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
 		}
 	}
 
-	io.WriteString(out, "]>")
+	_, _ = io.WriteString(out, "]>")
 	return nil
 }
 
 func (d *Dumper) dumpEnumeration(out io.Writer, n Enumeration) error {
 	l := len(n)
 	for i, v := range n {
-		io.WriteString(out, v)
+		_, _ = io.WriteString(out, v)
 		if i != l-1 {
-			io.WriteString(out, " | ")
+			_, _ = io.WriteString(out, " | ")
 		}
 	}
-	io.WriteString(out, ")")
+	_, _ = io.WriteString(out, ")")
 	return nil
 }
 
 func dumpElementDeclPrologue(out io.Writer, n *ElementDecl) {
-	io.WriteString(out, "<!ELEMENT ")
+	_, _ = io.WriteString(out, "<!ELEMENT ")
 	if n.prefix != "" {
-		io.WriteString(out, n.prefix)
-		io.WriteString(out, ":")
+		_, _ = io.WriteString(out, n.prefix)
+		_, _ = io.WriteString(out, ":")
 	}
-	io.WriteString(out, n.name)
+	_, _ = io.WriteString(out, n.name)
 }
 
 func dumpElementContent(out io.Writer, n *ElementContent, glob bool) error {
@@ -314,18 +328,18 @@ func dumpElementContent(out io.Writer, n *ElementContent, glob bool) error {
 	}
 
 	if glob {
-		io.WriteString(out, "(")
+		_, _ = io.WriteString(out, "(")
 	}
 
 	switch n.ctype {
 	case ElementContentPCDATA:
-		io.WriteString(out, "#PCDATA")
+		_, _ = io.WriteString(out, "#PCDATA")
 	case ElementContentElement:
 		if n.prefix != "" {
-			io.WriteString(out, n.prefix)
-			io.WriteString(out, ":")
+			_, _ = io.WriteString(out, n.prefix)
+			_, _ = io.WriteString(out, ":")
 		}
-		io.WriteString(out, n.name)
+		_, _ = io.WriteString(out, n.name)
 	case ElementContentSeq:
 		switch n.c1.ctype {
 		case ElementContentOr, ElementContentSeq:
@@ -337,7 +351,7 @@ func dumpElementContent(out io.Writer, n *ElementContent, glob bool) error {
 				return err
 			}
 		}
-		io.WriteString(out, " , ")
+		_, _ = io.WriteString(out, " , ")
 
 		if ctype := n.c2.ctype; ctype == ElementContentOr || (ctype == ElementContentSeq && n.c2.coccur != ElementContentOnce) {
 			if err := dumpElementContent(out, n.c2, true); err != nil {
@@ -359,7 +373,7 @@ func dumpElementContent(out io.Writer, n *ElementContent, glob bool) error {
 				return err
 			}
 		}
-		io.WriteString(out, " | ")
+		_, _ = io.WriteString(out, " | ")
 
 		if ctype := n.c2.ctype; ctype == ElementContentSeq || (ctype == ElementContentOr && n.c2.coccur != ElementContentOnce) {
 			if err := dumpElementContent(out, n.c2, true); err != nil {
@@ -375,18 +389,18 @@ func dumpElementContent(out io.Writer, n *ElementContent, glob bool) error {
 	}
 
 	if glob {
-		io.WriteString(out, ")")
+		_, _ = io.WriteString(out, ")")
 	}
 
 	switch n.coccur {
 	case ElementContentOnce:
 		// no op
 	case ElementContentOpt:
-		io.WriteString(out, "?")
+		_, _ = io.WriteString(out, "?")
 	case ElementContentMult:
-		io.WriteString(out, "*")
+		_, _ = io.WriteString(out, "*")
 	case ElementContentPlus:
-		io.WriteString(out, "+")
+		_, _ = io.WriteString(out, "+")
 	}
 
 	return nil
@@ -394,11 +408,13 @@ func dumpElementContent(out io.Writer, n *ElementContent, glob bool) error {
 
 func dumpEntityContent(out io.Writer, content string) error {
 	if strings.IndexByte(content, '%') == -1 {
-		dumpQuotedString(out, content)
+		if err := dumpQuotedString(out, content); err != nil {
+			return err
+		}
 		return nil
 	}
 
-	io.WriteString(out, `"`)
+	_, _ = io.WriteString(out, `"`)
 	rdr := strings.NewReader(content)
 	buf := bytes.Buffer{}
 	for rdr.Len() > 0 {
@@ -409,24 +425,30 @@ func dumpEntityContent(out io.Writer, content string) error {
 		switch c {
 		case '"':
 			if buf.Len() > 0 {
-				buf.WriteTo(out)
+				if _, err := buf.WriteTo(out); err != nil {
+					return err
+				}
 				buf.Reset()
 			}
-			io.WriteString(out, "&quot;")
+			_, _ = io.WriteString(out, "&quot;")
 		case '%':
 			if buf.Len() > 0 {
-				buf.WriteTo(out)
+				if _, err := buf.WriteTo(out); err != nil {
+					return err
+				}
 				buf.Reset()
 			}
-			io.WriteString(out, "&#x25;")
+			_, _ = io.WriteString(out, "&#x25;")
 		default:
-			buf.WriteByte(c)
+			_ = buf.WriteByte(c)
 		}
 	}
 	if buf.Len() > 0 {
-		buf.WriteTo(out)
+		if _, err := buf.WriteTo(out); err != nil {
+			return err
+		}
 	}
-	io.WriteString(out, `"`)
+	_, _ = io.WriteString(out, `"`)
 
 	return nil
 }
@@ -438,60 +460,68 @@ func (d *Dumper) dumpEntityDecl(out io.Writer, ent *Entity) error {
 
 	switch etype := ent.entityType; etype {
 	case InternalGeneralEntity:
-		io.WriteString(out, "<!ENTITY ")
-		io.WriteString(out, ent.name)
-		io.WriteString(out, " ")
+		_, _ = io.WriteString(out, "<!ENTITY ")
+		_, _ = io.WriteString(out, ent.name)
+		_, _ = io.WriteString(out, " ")
 		if ent.orig != "" {
-			dumpQuotedString(out, ent.orig)
+			if err := dumpQuotedString(out, ent.orig); err != nil {
+				return err
+			}
 		} else {
-			dumpEntityContent(out, ent.content)
+			if err := dumpEntityContent(out, ent.content); err != nil {
+				return err
+			}
 		}
-		io.WriteString(out, ">\n")
+		_, _ = io.WriteString(out, ">\n")
 	case ExternalGeneralParsedEntity, ExternalGeneralUnparsedEntity:
-		io.WriteString(out, "<!ENTITY ")
-		io.WriteString(out, ent.name)
+		_, _ = io.WriteString(out, "<!ENTITY ")
+		_, _ = io.WriteString(out, ent.name)
 		if ent.externalID == "" {
-			io.WriteString(out, " PUBLIC ")
-			dumpQuotedString(out, ent.externalID)
-			io.WriteString(out, " ")
-			dumpQuotedString(out, ent.systemID)
+			_, _ = io.WriteString(out, " PUBLIC ")
+			_ = dumpQuotedString(out, ent.externalID)
+			_, _ = io.WriteString(out, " ")
+			_ = dumpQuotedString(out, ent.systemID)
 		} else {
-			io.WriteString(out, " SYSTEM ")
-			dumpQuotedString(out, ent.systemID)
+			_, _ = io.WriteString(out, " SYSTEM ")
+			_ = dumpQuotedString(out, ent.systemID)
 		}
 
 		if etype == ExternalGeneralUnparsedEntity {
 			if ent.content != "" {
-				io.WriteString(out, " NDATA ")
+				_, _ = io.WriteString(out, " NDATA ")
 				if ent.orig != "" {
-					io.WriteString(out, ent.orig)
+					_, _ = io.WriteString(out, ent.orig)
 				} else {
-					io.WriteString(out, ent.content)
+					_, _ = io.WriteString(out, ent.content)
 				}
 			}
 		}
-		io.WriteString(out, ">\n")
+		_, _ = io.WriteString(out, ">\n")
 	case InternalParameterEntity:
-		io.WriteString(out, "<!ENTITY % ")
-		io.WriteString(out, ent.name)
-		io.WriteString(out, " ")
+		_, _ = io.WriteString(out, "<!ENTITY % ")
+		_, _ = io.WriteString(out, ent.name)
+		_, _ = io.WriteString(out, " ")
 		if ent.orig != "" {
-			dumpQuotedString(out, ent.orig)
+			if err := dumpQuotedString(out, ent.orig); err != nil {
+				return err
+			}
 		} else {
-			dumpEntityContent(out, ent.content)
+			if err := dumpEntityContent(out, ent.content); err != nil {
+				return err
+			}
 		}
-		io.WriteString(out, ">\n")
+		_, _ = io.WriteString(out, ">\n")
 	case ExternalParameterEntity:
-		io.WriteString(out, "<!ENTITY % ")
-		io.WriteString(out, ent.name)
+		_, _ = io.WriteString(out, "<!ENTITY % ")
+		_, _ = io.WriteString(out, ent.name)
 		if ent.externalID != "" {
-			io.WriteString(out, " PUBLIC ")
-			dumpQuotedString(out, ent.externalID)
-			io.WriteString(out, " ")
-			dumpQuotedString(out, ent.systemID)
+			_, _ = io.WriteString(out, " PUBLIC ")
+			_ = dumpQuotedString(out, ent.externalID)
+			_, _ = io.WriteString(out, " ")
+			_ = dumpQuotedString(out, ent.systemID)
 		} else {
-			io.WriteString(out, " SYSTEM ")
-			dumpQuotedString(out, ent.systemID)
+			_, _ = io.WriteString(out, " SYSTEM ")
+			_ = dumpQuotedString(out, ent.systemID)
 		}
 	default:
 		return errors.New("invalid entity type")
@@ -503,17 +533,17 @@ func (d *Dumper) dumpElementDecl(out io.Writer, n *ElementDecl) error {
 	switch n.decltype {
 	case EmptyElementType:
 		dumpElementDeclPrologue(out, n)
-		io.WriteString(out, " EMPTY>\n")
+		_, _ = io.WriteString(out, " EMPTY>\n")
 	case AnyElementType:
 		dumpElementDeclPrologue(out, n)
-		io.WriteString(out, " ANY>\n")
+		_, _ = io.WriteString(out, " ANY>\n")
 	case MixedElementType, ElementElementType:
 		dumpElementDeclPrologue(out, n)
-		io.WriteString(out, " ")
+		_, _ = io.WriteString(out, " ")
 		if err := dumpElementContent(out, n.content, true); err != nil {
 			return err
 		}
-		io.WriteString(out, ">\n")
+		_, _ = io.WriteString(out, ">\n")
 	default:
 		return errors.New("invalid element decl")
 	}
@@ -521,36 +551,36 @@ func (d *Dumper) dumpElementDecl(out io.Writer, n *ElementDecl) error {
 }
 
 func (d *Dumper) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
-	io.WriteString(out, "<!ATTLIST ")
-	io.WriteString(out, n.elem)
-	io.WriteString(out, " ")
+	_, _ = io.WriteString(out, "<!ATTLIST ")
+	_, _ = io.WriteString(out, n.elem)
+	_, _ = io.WriteString(out, " ")
 	if n.prefix != "" {
-		io.WriteString(out, n.prefix)
-		io.WriteString(out, ":")
+		_, _ = io.WriteString(out, n.prefix)
+		_, _ = io.WriteString(out, ":")
 	}
-	io.WriteString(out, n.name)
+	_, _ = io.WriteString(out, n.name)
 	switch n.atype {
 	case AttrCDATA:
-		io.WriteString(out, " CDATA")
+		_, _ = io.WriteString(out, " CDATA")
 	case AttrID:
-		io.WriteString(out, " ID")
+		_, _ = io.WriteString(out, " ID")
 	case AttrIDRef:
-		io.WriteString(out, " IDREF")
+		_, _ = io.WriteString(out, " IDREF")
 	case AttrIDRefs:
-		io.WriteString(out, " IDREFS")
+		_, _ = io.WriteString(out, " IDREFS")
 	case AttrEntity:
-		io.WriteString(out, " ENTITY")
+		_, _ = io.WriteString(out, " ENTITY")
 	case AttrNmtoken:
-		io.WriteString(out, " NMTOKEN")
+		_, _ = io.WriteString(out, " NMTOKEN")
 	case AttrNmtokens:
-		io.WriteString(out, " NMTOKENS")
+		_, _ = io.WriteString(out, " NMTOKENS")
 	case AttrEnumeration:
-		io.WriteString(out, " (")
+		_, _ = io.WriteString(out, " (")
 		if err := d.dumpEnumeration(out, n.tree); err != nil {
 			return err
 		}
 	case AttrNotation:
-		io.WriteString(out, " NOTATION (")
+		_, _ = io.WriteString(out, " NOTATION (")
 		if err := d.dumpEnumeration(out, n.tree); err != nil {
 			return err
 		}
@@ -562,20 +592,20 @@ func (d *Dumper) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
 	case AttrDefaultNone:
 		// no op
 	case AttrDefaultRequired:
-		io.WriteString(out, " #REQUIRED")
+		_, _ = io.WriteString(out, " #REQUIRED")
 	case AttrDefaultImplied:
-		io.WriteString(out, " #IMPLIED")
+		_, _ = io.WriteString(out, " #IMPLIED")
 	case AttrDefaultFixed:
-		io.WriteString(out, " #FIXED")
+		_, _ = io.WriteString(out, " #FIXED")
 	default:
 		return errors.New("invalid AttributeDecl default value type")
 	}
 
 	if n.defvalue != "" {
-		io.WriteString(out, " ")
-		dumpQuotedString(out, n.defvalue)
+		_, _ = io.WriteString(out, " ")
+		_ = dumpQuotedString(out, n.defvalue)
 	}
-	io.WriteString(out, ">\n")
+	_, _ = io.WriteString(out, ">\n")
 	return nil
 }
 
@@ -594,16 +624,16 @@ func (d *Dumper) dumpNs(out io.Writer, ns *Namespace) error {
 		return nil
 	}
 
-	io.WriteString(out, " ")
+	_, _ = io.WriteString(out, " ")
 
 	if ns.prefix == "" {
-		io.WriteString(out, "xmlns")
+		_, _ = io.WriteString(out, "xmlns")
 	} else {
-		io.WriteString(out, "xmlns:")
-		io.WriteString(out, ns.prefix)
+		_, _ = io.WriteString(out, "xmlns:")
+		_, _ = io.WriteString(out, ns.prefix)
 	}
-	io.WriteString(out, "=")
-	dumpQuotedString(out, ns.href)
+	_, _ = io.WriteString(out, "=")
+	_ = dumpQuotedString(out, ns.href)
 	return nil
 }
 
@@ -626,21 +656,23 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		}
 		return nil
 	case CommentNode:
-		io.WriteString(out, "<!--")
-		out.Write(n.Content())
-		io.WriteString(out, "-->")
+		_, _ = io.WriteString(out, "<!--")
+		_, _ = out.Write(n.Content())
+		_, _ = io.WriteString(out, "-->")
 		return nil
 	case EntityRefNode:
-		io.WriteString(out, "&")
-		io.WriteString(out, n.Name())
-		io.WriteString(out, ";")
+		_, _ = io.WriteString(out, "&")
+		_, _ = io.WriteString(out, n.Name())
+		_, _ = io.WriteString(out, ";")
 		return nil
 	case TextNode:
 		c := n.Content()
 		if string(c) == XMLTextNoEnc {
 			panic("unimplemented")
 		} else {
-			escapeText(out, c, false)
+			if err := escapeText(out, c, false); err != nil {
+				return err
+			}
 		}
 		return nil // no recursing down
 	case ElementDeclNode:
@@ -683,8 +715,8 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		name = n.Name()
 	}
 
-	io.WriteString(out, "<")
-	io.WriteString(out, name)
+	_, _ = io.WriteString(out, "<")
+	_, _ = io.WriteString(out, name)
 
 	if len(nslist) > 0 {
 		if err := d.dumpNsList(out, nslist); err != nil {
@@ -695,17 +727,21 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 	if e, ok := n.(*Element); ok {
 		for attr := e.properties; attr != nil; {
 			g := pdebug.IPrintf("START DumpNode(fallthrough->attribute(%s))", attr.Name())
-			io.WriteString(out, " "+attr.Name()+`="`)
+			_, _ = io.WriteString(out, " "+attr.Name()+`="`)
 			count := 0
 			for achld := attr.FirstChild(); achld != nil; achld = achld.NextSibling() {
 				count++
 				if achld.Type() == TextNode {
-					escapeAttrValue(out, achld.Content())
+					if err := escapeAttrValue(out, achld.Content()); err != nil {
+						return err
+					}
 				} else {
-					d.DumpNode(out, achld)
+					if err := d.DumpNode(out, achld); err != nil {
+						return err
+					}
 				}
 			}
-			io.WriteString(out, `"`)
+			_, _ = io.WriteString(out, `"`)
 			g.IRelease("END DUmpNode(fallthrough->attribute(%s))", attr.Name())
 			a := attr.NextSibling()
 			if a == nil {
@@ -715,12 +751,12 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		}
 
 		if child := e.FirstChild(); child == nil {
-			io.WriteString(out, "/>")
+			_, _ = io.WriteString(out, "/>")
 			return nil
 		}
 	}
 
-	io.WriteString(out, ">")
+	_, _ = io.WriteString(out, ">")
 
 	if child := n.FirstChild(); child != nil {
 		for ; child != nil; child = child.NextSibling() {
@@ -730,9 +766,9 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		}
 	}
 
-	io.WriteString(out, "</")
-	io.WriteString(out, name)
-	io.WriteString(out, ">")
+	_, _ = io.WriteString(out, "</")
+	_, _ = io.WriteString(out, name)
+	_, _ = io.WriteString(out, ">")
 
 	return nil
 }

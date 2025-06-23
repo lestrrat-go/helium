@@ -12,15 +12,10 @@ func newText(b []byte) *Text {
 }
 
 func (n *Text) AddChild(cur Node) error {
-	var t Text
-	switch cur.(type) {
-	case *Text:
-		t = *(cur.(*Text))
-	default:
-		return ErrInvalidOperation
+	if t, ok := cur.(*Text); ok {
+		return n.AddContent(t.content)
 	}
-
-	return n.AddContent(t.content)
+	return ErrInvalidOperation
 }
 
 func (n *Text) AddContent(b []byte) error {

@@ -114,13 +114,13 @@ type parserCtx struct {
 	// It is important to differentiate between the two, otherwise
 	// we will not be able to reconstruct
 	// <?xml version="1.0"?> vs <?xml version="1.0" encoding="utf-8"?>
-	encoding          string
-	detectedEncoding  string
-	in                io.Reader
-	nbread            int
-	instate           parserState
-	keepBlanks        bool
-	remain            int
+	encoding         string
+	detectedEncoding string
+	in               io.Reader
+	nbread           int
+	instate          parserState
+	keepBlanks       bool
+	// remain            int
 	replaceEntities   bool
 	sax               sax.SAX2Handler
 	space             int
@@ -142,13 +142,13 @@ type parserCtx struct {
 	loadsubset        LoadSubsetOption
 	elem              *Element // current context element
 
-	nsTab      nsStack
-	doc        *Document
-	userData   interface{}
-	nodeTab    nodeStack
-	elemidx    int
-	nbentities int
-	inputTab   inputStack
+	nsTab    nsStack
+	doc      *Document
+	userData interface{}
+	nodeTab  nodeStack
+	elemidx  int
+	// nbentities int
+	inputTab inputStack
 }
 
 type SubstitutionType int

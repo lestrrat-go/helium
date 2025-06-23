@@ -8,15 +8,10 @@ func newComment(b []byte) *Comment {
 }
 
 func (n *Comment) AddChild(cur Node) error {
-	var t Comment
-	switch cur.(type) {
-	case *Comment:
-		t = *(cur.(*Comment))
-	default:
-		return ErrInvalidOperation
+	if t, ok := cur.(*Comment); ok {
+		return n.AddContent(t.content)
 	}
-
-	return n.AddContent(t.content)
+	return ErrInvalidOperation
 }
 
 func (n *Comment) AddContent(b []byte) error {

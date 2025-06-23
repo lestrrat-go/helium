@@ -102,7 +102,9 @@ func (d *Document) SetDocumentElement(root Node) error {
 	}
 
 	if old == nil {
-		d.AddChild(root)
+		if err := d.AddChild(root); err != nil {
+			return err
+		}
 	} else {
 		old.Replace(root)
 	}
@@ -213,7 +215,9 @@ func (d *Document) CreateInternalSubset(name, externalID, systemID string) (*DTD
 
 	// there's an elaborate code in libxml2 to insert the node in
 	// the correct location...
-	d.AddChild(cur)
+	if err := d.AddChild(cur); err != nil {
+		return nil, err
+	}
 
 	return cur, nil
 }
@@ -346,7 +350,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 
 		// if this is not any sort of an entity , just go go go
 		if r != '&' {
-			buf.WriteRune(r)
+			_, _ = buf.WriteRune(r)
 			continue
 		}
 
@@ -367,7 +371,10 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 			if r2 == 'x' {
 				accumulator = accumulateHexCharRef
 			} else {
-				rdr.UnreadRune()
+				if err2 := rdr.UnreadRune(); err2 != nil {
+					err = err2
+					return
+				}
 				accumulator = accumulateDecimalCharRef
 			}
 			for {
@@ -384,7 +391,10 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 				}
 			}
 		} else {
-			rdr.UnreadRune()
+			if err2 := rdr.UnreadRune(); err2 != nil {
+				err = err2
+				return
+			}
 			entbuf := bytes.Buffer{}
 			for rdr.Len() > 0 {
 				r, _, err = rdr.ReadRune()
@@ -394,7 +404,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 				if r == ';' {
 					break
 				}
-				entbuf.WriteRune(r)
+				_, _ = entbuf.WriteRune(r)
 			}
 
 			if r != ';' {
@@ -408,7 +418,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 			// XXX I *believe* libxml2 SKIPS entities that it can't resolve
 			// at this point?
 			if ok && ent.EntityType() == int(InternalPredefinedEntity) {
-				buf.Write(ent.Content())
+				_, _ = buf.Write(ent.Content())
 			} else {
 				// flush the buffer so far
 				if buf.Len() > 0 {
@@ -426,7 +436,10 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 						last = node
 						ret = node
 					} else {
-						last.AddSibling(node)
+						if err2 := last.AddSibling(node); err2 != nil {
+							err = err2
+							return
+						}
 						last = node
 					}
 				}
@@ -461,14 +474,17 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 					last = node
 					ret = node
 				} else {
-					last.AddSibling(node)
+					if err2 := last.AddSibling(node); err2 != nil {
+						err = err2
+						return
+					}
 					last = node
 				}
 			}
 		}
 
 		if charval != 0 {
-			buf.WriteRune(rune(charval))
+			_, _ = buf.WriteRune(rune(charval))
 			charval = 0
 		}
 	}
@@ -483,7 +499,9 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 		if last == nil {
 			ret = n
 		} else {
-			last.AddSibling(n)
+			if err := last.AddSibling(n); err != nil {
+				return nil, err
+			}
 		}
 	}
 

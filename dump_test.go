@@ -1,7 +1,6 @@
 package helium_test
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,8 +24,8 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 	}
 
 	dir := "test"
-	files, err := ioutil.ReadDir(dir)
-	require.NoError(t, err, "ioutil.ReadDir should succeed")
+	files, err := os.ReadDir(dir)
+	require.NoError(t, err, "os.ReadDir should succeed")
 
 	for _, fi := range files {
 		if fi.IsDir() {
@@ -49,17 +48,17 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 			continue
 		}
 
-		goldenfn := strings.Replace(fn, ".xml", ".dump", -1)
+		goldenfn := strings.ReplaceAll(fn, ".xml", ".dump")
 		if _, err := os.Stat(goldenfn); err != nil {
 			t.Logf("%s does not exist, skipping...", goldenfn)
 			continue
 		}
-		golden, err := ioutil.ReadFile(goldenfn)
-		require.NoError(t, err, "ioutil.ReadFile should succeed")
+		golden, err := os.ReadFile(goldenfn)
+		require.NoError(t, err, "os.ReadFile should succeed")
 
 		t.Logf("Parsing %s...", fn)
-		in, err := ioutil.ReadFile(fn)
-		require.NoError(t, err, "ioutil.ReadFile should succeed")
+		in, err := os.ReadFile(fn)
+		require.NoError(t, err, "os.ReadFile should succeed")
 
 		doc, err := helium.Parse([]byte(in))
 		require.NoError(t, err, `Parse(...) succeeds`)
@@ -73,9 +72,9 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 				t.Logf("Failed to file to save output: %s", err)
 				return
 			}
-			defer errout.Close()
+			defer func() { _ = errout.Close() }()
 
-			errout.WriteString(str)
+			_, _ = errout.WriteString(str)
 		}
 		require.Equal(t, string(golden), str, "roundtrip works")
 	}
@@ -88,8 +87,8 @@ func TestDOMToXMLString(t *testing.T) {
 	root, err := doc.CreateElement("root")
 	require.NoError(t, err, `CreateElement("root") succeeds`)
 
-	doc.SetDocumentElement(root)
-	root.AddContent([]byte(`Hello, World!`))
+	require.NoError(t, doc.SetDocumentElement(root))
+	require.NoError(t, root.AddContent([]byte(`Hello, World!`)))
 
 	str, err := doc.XMLString()
 	require.NoError(t, err, "XMLString(doc) succeeds")

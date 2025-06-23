@@ -4,8 +4,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/lestrrat-go/pdebug"
 	"github.com/lestrrat-go/helium/sax"
+	"github.com/lestrrat-go/pdebug"
 )
 
 type TreeBuilder struct {
@@ -57,18 +57,28 @@ func (t *TreeBuilder) ProcessingInstruction(ctxif sax.Context, target, data stri
 
 	switch ctx.inSubset {
 	case 1:
-		doc.IntSubset().AddChild(pi)
+		if err := doc.IntSubset().AddChild(pi); err != nil {
+			return err
+		}
 	case 2:
-		doc.ExtSubset().AddChild(pi)
+		if err := doc.ExtSubset().AddChild(pi); err != nil {
+			return err
+		}
 	}
 
 	parent := ctx.elem
 	if parent == nil {
-		doc.AddChild(pi)
+		if err := doc.AddChild(pi); err != nil {
+			return err
+		}
 	} else if parent.Type() == ElementNode {
-		parent.AddChild(pi)
+		if err := parent.AddChild(pi); err != nil {
+			return err
+		}
 	} else {
-		parent.AddSibling(pi)
+		if err := parent.AddSibling(pi); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -95,11 +105,15 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 	}
 
 	if uri != "" {
-		e.SetNamespace(prefix, uri, true)
+		if err := e.SetNamespace(prefix, uri, true); err != nil {
+			return err
+		}
 	}
 
 	for _, ns := range namespaces {
-		e.SetNamespace(ns.Prefix(), ns.URI(), false)
+		if err := e.SetNamespace(ns.Prefix(), ns.URI(), false); err != nil {
+			return err
+		}
 	}
 
 	pdebug.Printf("We got %d attributes", len(attrs))
@@ -120,11 +134,17 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 		parent = e
 	}
 	if parent == nil {
-		doc.AddChild(e)
+		if err := doc.AddChild(e); err != nil {
+			return err
+		}
 	} else if parent.Type() == ElementNode {
-		parent.AddChild(e)
+		if err := parent.AddChild(e); err != nil {
+			return err
+		}
 	} else {
-		parent.AddSibling(e)
+		if err := parent.AddSibling(e); err != nil {
+			return err
+		}
 	}
 
 	ctx.elem = e
@@ -202,11 +222,17 @@ func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
 
 	n := ctx.elem
 	if n == nil {
-		doc.AddChild(e)
+		if err := doc.AddChild(e); err != nil {
+			return err
+		}
 	} else if n.Type() == ElementNode {
-		n.AddChild(e)
+		if err := n.AddChild(e); err != nil {
+			return err
+		}
 	} else {
-		n.AddSibling(e)
+		if err := n.AddSibling(e); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -230,7 +256,7 @@ func (t *TreeBuilder) InternalSubset(ctxif sax.Context, name, eid, uri string) e
 		doc.intSubset = nil // hmm, do we need this?
 	}
 
-	dtd, err = doc.CreateInternalSubset(name, eid, uri)
+	_, err = doc.CreateInternalSubset(name, eid, uri)
 	if err != nil {
 		return err
 	}
@@ -524,25 +550,25 @@ func (t *TreeBuilder) EntityDecl(ctxif sax.Context, name string, typ int, public
 		return errors.New("sax.EntityDecl called while note in subset")
 	}
 
-	ent, err := dtd.AddEntity(name, EntityType(typ), publicID, systemID, notation)
+	_, err := dtd.AddEntity(name, EntityType(typ), publicID, systemID, notation)
 	if err != nil {
 		return err
 	}
 
-	if ent.uri == "" && systemID != "" {
-		/*
-		   xmlChar *URI;
-		   const char *base = NULL;
+	/*
+		if ent.uri == "" && systemID != "" {
+			   xmlChar *URI;
+			   const char *base = NULL;
 
-		   if (ctxt->input != NULL)
-		       base = ctxt->input->filename;
-		   if (base == NULL)
-		       base = ctxt->directory;
+			   if (ctxt->input != NULL)
+			       base = ctxt->input->filename;
+			   if (base == NULL)
+			       base = ctxt->directory;
 
-		   URI = xmlBuildURI(systemId, (const xmlChar *) base);
-		   ent->URI = URI;
-		*/
-	}
+			   URI = xmlBuildURI(systemId, (const xmlChar *) base);
+			   ent->URI = URI;
+		}
+	*/
 
 	return nil
 }

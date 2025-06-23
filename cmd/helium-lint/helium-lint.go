@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 
 	"github.com/jessevdk/go-flags"
@@ -72,7 +71,7 @@ func _main() int {
 
 	p := helium.NewParser()
 	for in := range inputCh {
-		buf, err := ioutil.ReadAll(in)
+		buf, err := io.ReadAll(in)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s\n", err)
 			return 1
@@ -84,7 +83,10 @@ func _main() int {
 		}
 
 		d := helium.Dumper{}
-		d.DumpDoc(os.Stdout, doc)
+		if err := d.DumpDoc(os.Stdout, doc); err != nil {
+			fmt.Fprintf(os.Stderr, "%s\n", err)
+			return 1
+		}
 	}
 
 	select {

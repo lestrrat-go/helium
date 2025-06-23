@@ -30,7 +30,7 @@ func New() Stack {
 }
 
 func (s *Stack) Push(prefix, uri string) {
-	s.UniqueStack.Push(Item{prefix: prefix, href: uri})
+	_ = s.UniqueStack.Push(Item{prefix: prefix, href: uri})
 }
 
 func (s *Stack) Lookup(prefix string) string {

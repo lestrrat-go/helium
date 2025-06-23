@@ -33,12 +33,8 @@ func (i nsStackItem) Key() string {
 	return i.prefix
 }
 
-func newNsStack() nsStack {
-	return nsStack{}
-}
-
 func (s *nsStack) Push(prefix, uri string) {
-	s.UniqueStack.Push(nsStackItem{prefix: prefix, href: uri})
+	_ = s.UniqueStack.Push(nsStackItem{prefix: prefix, href: uri})
 }
 
 func (s *nsStack) Lookup(prefix string) string {
@@ -47,10 +43,6 @@ func (s *nsStack) Lookup(prefix string) string {
 		return ""
 	}
 	return item.(nsStackItem).href
-}
-
-func newNodeStack() nodeStack {
-	return nodeStack{}
 }
 
 func (s *nodeStack) Push(e *Element) {
@@ -66,15 +58,11 @@ func (s *nodeStack) Pop() *Element {
 }
 
 func (s *nodeStack) PeekOne() *Element {
-	l := s.SimpleStack.Peek(1)
+	l := s.SimpleStack.Peek(1) // nolint:staticcheck
 	if len(l) != 1 {
 		return nil
 	}
 	return l[0].(*Element)
-}
-
-func newInputStack() inputStack {
-	return inputStack{}
 }
 
 // the reason we're using interface{} here is that we may have to
@@ -85,15 +73,15 @@ func (s *inputStack) Push(c interface{}) {
 }
 
 func (s *inputStack) Pop() interface{} {
-  defer s.SimpleStack.Pop()
-  if e := s.PeekOne(); e != nil {
-    return e
-  }
-  return nil
+	defer s.SimpleStack.Pop() // nolint:staticcheck
+	if e := s.PeekOne(); e != nil {
+		return e
+	}
+	return nil
 }
 
 func (s *inputStack) PeekOne() interface{} {
-	l := s.SimpleStack.Peek(1)
+	l := s.SimpleStack.Peek(1) // nolint:staticcheck
 	if len(l) != 1 {
 		return nil
 	}
