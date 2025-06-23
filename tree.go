@@ -134,11 +134,17 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 		parent = e
 	}
 	if parent == nil {
-		doc.AddChild(e)
+		if err := doc.AddChild(e); err != nil {
+			return err
+		}
 	} else if parent.Type() == ElementNode {
-		parent.AddChild(e)
+		if err := parent.AddChild(e); err != nil {
+			return err
+		}
 	} else {
-		parent.AddSibling(e)
+		if err := parent.AddSibling(e); err != nil {
+			return err
+		}
 	}
 
 	ctx.elem = e
@@ -216,11 +222,17 @@ func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
 
 	n := ctx.elem
 	if n == nil {
-		doc.AddChild(e)
+		if err := doc.AddChild(e); err != nil {
+			return err
+		}
 	} else if n.Type() == ElementNode {
-		n.AddChild(e)
+		if err := n.AddChild(e); err != nil {
+			return err
+		}
 	} else {
-		n.AddSibling(e)
+		if err := n.AddSibling(e); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -271,9 +271,9 @@ func (d *Dumper) dumpDocContent(out io.Writer, n Node) error {
 
 func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
 	dtd := n.(*DTD)
-	io.WriteString(out, "<!DOCTYPE ")
-	io.WriteString(out, dtd.Name())
-	io.WriteString(out, " ")
+	_, _ = io.WriteString(out, "<!DOCTYPE ")
+	_, _ = io.WriteString(out, dtd.Name())
+	_, _ = io.WriteString(out, " ")
 
 	if dtd.externalID != "" {
 		io.WriteString(out, " PUBLIC ")
@@ -608,8 +608,8 @@ func (d *Dumper) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
 	}
 
 	if n.defvalue != "" {
-		io.WriteString(out, " ")
-		dumpQuotedString(out, n.defvalue)
+		_, _ = io.WriteString(out, " ")
+		_ = dumpQuotedString(out, n.defvalue)
 	}
 	io.WriteString(out, ">\n")
 	return nil
@@ -638,8 +638,8 @@ func (d *Dumper) dumpNs(out io.Writer, ns *Namespace) error {
 		io.WriteString(out, "xmlns:")
 		io.WriteString(out, ns.prefix)
 	}
-	io.WriteString(out, "=")
-	dumpQuotedString(out, ns.href)
+	_, _ = io.WriteString(out, "=")
+	_ = dumpQuotedString(out, ns.href)
 	return nil
 }
 
@@ -676,7 +676,9 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		if string(c) == XMLTextNoEnc {
 			panic("unimplemented")
 		} else {
-			escapeText(out, c, false)
+			if err := escapeText(out, c, false); err != nil {
+				return err
+			}
 		}
 		return nil // no recursing down
 	case ElementDeclNode:

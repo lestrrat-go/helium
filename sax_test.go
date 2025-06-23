@@ -64,7 +64,7 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 			g := pdebug.Marker("EntityDecl handler for sax_test.go")
 			defer g.End()
 		}
-		fmt.Fprintf(out, "SAX.UnparsedEntityDecl(%s, %d, %s, %s, %s)\n",
+		_, _ = fmt.Fprintf(out, "SAX.UnparsedEntityDecl(%s, %d, %s, %s, %s)\n",
 			name, typ, publicID, systemID, notation)
 
 		entities[name] = newEntity(name, EntityType(typ), publicID, systemID, notation, "")
@@ -74,23 +74,23 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		return nil
 	}
 	s.ExternalSubsetHandler = func(_ sax.Context, name, externalID, systemID string) error {
-		fmt.Fprintf(out, "SAX.ExternalSubset(%s, %s, %s)\n", name, externalID, systemID)
+		_, _ = fmt.Fprintf(out, "SAX.ExternalSubset(%s, %s, %s)\n", name, externalID, systemID)
 		return nil
 	}
 	s.ElementDeclHandler = func(_ sax.Context, name string, typ int, content sax.ElementContent) error {
-		fmt.Fprintf(out, "SAX.ElementDecl(%s, %d, ...)\n", name, typ)
+		_, _ = fmt.Fprintf(out, "SAX.ElementDecl(%s, %d, ...)\n", name, typ)
 		return nil
 	}
 	s.StartDocumentHandler = func(_ sax.Context) error {
-		fmt.Fprintf(out, "SAX.StartDocument()\n")
+		_, _ = fmt.Fprintf(out, "SAX.StartDocument()\n")
 		return nil
 	}
 	s.EndDocumentHandler = func(_ sax.Context) error {
-		fmt.Fprintf(out, "SAX.EndDocument()\n")
+		_, _ = fmt.Fprintf(out, "SAX.EndDocument()\n")
 		return nil
 	}
 	s.CommentHandler = func(_ sax.Context, data []byte) error {
-		fmt.Fprintf(out, "SAX.Comment(%s)\n", data)
+		_, _ = fmt.Fprintf(out, "SAX.Comment(%s)\n", data)
 		return nil
 	}
 	charHandler := func(name string, _ sax.Context, data []byte) error {
@@ -101,7 +101,7 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 			output = string(data)
 		}
 
-		fmt.Fprintf(out, "SAX.%s(%s, %d)\n", name, output, len(data))
+		_, _ = fmt.Fprintf(out, "SAX.%s(%s, %d)\n", name, output, len(data))
 		return nil
 	}
 	s.IgnorableWhitespaceHandler = func(ctx sax.Context, data []byte) error {
@@ -111,29 +111,29 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		return charHandler("Characters", ctx, data)
 	}
 	s.StartElementNSHandler = func(_ sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
-		fmt.Fprintf(out, "SAX.StartElementNS(%s, ", localname)
+		_, _ = fmt.Fprintf(out, "SAX.StartElementNS(%s, ", localname)
 
 		if prefix != "" {
-			fmt.Fprintf(out, "%s, ", prefix)
+			_, _ = fmt.Fprintf(out, "%s, ", prefix)
 		} else {
-			fmt.Fprintf(out, "NULL, ")
+			_, _ = fmt.Fprintf(out, "NULL, ")
 		}
 
 		if uri != "" {
-			fmt.Fprintf(out, "'%s', ", uri)
+			_, _ = fmt.Fprintf(out, "'%s', ", uri)
 		} else {
-			fmt.Fprintf(out, "NULL, ")
+			_, _ = fmt.Fprintf(out, "NULL, ")
 		}
 
 		lns := len(namespaces)
-		fmt.Fprintf(out, "%d, ", lns)
+		_, _ = fmt.Fprintf(out, "%d, ", lns)
 		for _, ns := range namespaces {
 			if prefix := ns.Prefix(); prefix != "" {
-				fmt.Fprintf(out, "xmlns:%s='%s'", ns.Prefix(), ns.URI())
+				_, _ = fmt.Fprintf(out, "xmlns:%s='%s'", ns.Prefix(), ns.URI())
 			} else {
-				fmt.Fprintf(out, "xmlns='%s'", ns.URI())
+				_, _ = fmt.Fprintf(out, "xmlns='%s'", ns.URI())
 			}
-			fmt.Fprintf(out, ", ")
+			_, _ = fmt.Fprintf(out, ", ")
 		}
 
 		defaulted := 0
@@ -143,17 +143,17 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 			}
 		}
 
-		fmt.Fprintf(out, "%d, %d",
+		_, _ = fmt.Fprintf(out, "%d, %d",
 			len(attrs),
 			defaulted, /* TODO - number of defaulted attributes */
 		)
 
 		if len(attrs) > 0 {
-			fmt.Fprintf(out, ", ")
+			_, _ = fmt.Fprintf(out, ", ")
 			for i, attr := range attrs {
-				fmt.Fprintf(out, "%s='%.4s...', %d", attr.Name(), attr.Value(), len(attr.Value()))
+				_, _ = fmt.Fprintf(out, "%s='%.4s...', %d", attr.Name(), attr.Value(), len(attr.Value()))
 				if i < len(attrs)-1 {
-					fmt.Fprintf(out, ", ")
+					_, _ = fmt.Fprintf(out, ", ")
 				}
 			}
 		}
@@ -163,18 +163,18 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		return nil
 	}
 	s.EndElementNSHandler = func(_ sax.Context, localname, prefix, uri string) error {
-		fmt.Fprintf(out, "SAX.EndElementNS(%s, ", localname)
+		_, _ = fmt.Fprintf(out, "SAX.EndElementNS(%s, ", localname)
 
 		if prefix != "" {
-			fmt.Fprintf(out, "%s, ", prefix)
+			_, _ = fmt.Fprintf(out, "%s, ", prefix)
 		} else {
-			fmt.Fprintf(out, "NULL, ")
+			_, _ = fmt.Fprintf(out, "NULL, ")
 		}
 
 		if uri != "" {
-			fmt.Fprintf(out, "'%s')\n", uri)
+			_, _ = fmt.Fprintf(out, "'%s')\n", uri)
 		} else {
-			fmt.Fprintf(out, "NULL)\n")
+			_, _ = fmt.Fprintf(out, "NULL)\n")
 		}
 
 		return nil
