@@ -42,10 +42,6 @@ jobs:
           go mod tidy
           git diff --exit-code go.mod go.sum
 
-      - name: Run tests
-        run: |
-          go test -v -race -coverprofile=coverage.out ./...
-
       - name: Run tests with debug tags
         run: |
           go test -v -race -tags debug ./...
@@ -53,6 +49,7 @@ jobs:
       - name: Build helium-lint command
         run: |
           go build -v ./cmd/helium-lint
+          rm helium-lint
 
       - name: Check for uncommitted changes
         run: |
