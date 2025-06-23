@@ -350,7 +350,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 
 		// if this is not any sort of an entity , just go go go
 		if r != '&' {
-			buf.WriteRune(r)
+			_, _ = buf.WriteRune(r)
 			continue
 		}
 
@@ -404,7 +404,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 				if r == ';' {
 					break
 				}
-				entbuf.WriteRune(r)
+				_, _ = entbuf.WriteRune(r)
 			}
 
 			if r != ';' {
@@ -418,7 +418,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 			// XXX I *believe* libxml2 SKIPS entities that it can't resolve
 			// at this point?
 			if ok && ent.EntityType() == int(InternalPredefinedEntity) {
-				buf.Write(ent.Content())
+				_, _ = buf.Write(ent.Content())
 			} else {
 				// flush the buffer so far
 				if buf.Len() > 0 {
@@ -484,7 +484,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 		}
 
 		if charval != 0 {
-			buf.WriteRune(rune(charval))
+			_, _ = buf.WriteRune(rune(charval))
 			charval = 0
 		}
 	}

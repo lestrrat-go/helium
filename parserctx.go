@@ -617,7 +617,7 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 			return ctx.error(ErrMisplacedCDATAEnd)
 		}
 
-		buf.WriteRune(c)
+		_, _ = buf.WriteRune(c)
 		i++
 	}
 
@@ -980,9 +980,9 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (val
 				}
 
 				if r == '&' && !ctx.replaceEntities {
-					b.WriteString("&#38;")
+					_, _ = b.WriteString("&#38;")
 				} else {
-					b.WriteRune(r)
+					_, _ = b.WriteRune(r)
 				}
 			} else {
 				var ent *Entity
@@ -994,9 +994,9 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (val
 
 				if ent.entityType == InternalPredefinedEntity {
 					if ent.content == "&" && !ctx.replaceEntities {
-						b.WriteString("&#38;")
+						_, _ = b.WriteString("&#38;")
 					} else {
-						b.WriteString(ent.content)
+						_, _ = b.WriteString(ent.content)
 					}
 				} else if ctx.replaceEntities {
 					var rep string
@@ -1008,15 +1008,15 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (val
 					for i := 0; i < len(rep); i++ {
 						switch rep[i] {
 						case 0xD, 0xA, 0x9:
-							b.WriteByte(0x20)
+							_ = b.WriteByte(0x20)
 						default:
-							b.WriteByte(rep[i])
+							_ = b.WriteByte(rep[i])
 						}
 					}
 				} else {
-					b.WriteString("&")
-					b.WriteString(ent.name)
-					b.WriteString(";")
+					_, _ = b.WriteString("&")
+					_, _ = b.WriteString(ent.name)
+					_, _ = b.WriteString(";")
 				}
 			}
 		case 0x20, 0xD, 0xA, 0x9:
@@ -1270,7 +1270,9 @@ func (ctx *parserCtx) parseNamedAttribute(name string, cb qtextHandler) (string,
 		return "", ErrEqualSignRequired
 	}
 
-	cur.Advance(1)
+	if err := cur.Advance(1); err != nil {
+		return "", err
+	}
 	ctx.skipBlanks()
 	return ctx.parseQuotedText(cb)
 }
@@ -1302,7 +1304,9 @@ func (ctx *parserCtx) parseNamedAttributeBytes(name []byte, valueParser qtextHan
 	if cur.Peek() != '=' {
 		return "", ErrEqualSignRequired
 	}
-	cur.Advance(1)
+	if err := cur.Advance(1); err != nil {
+		return "", err
+	}
 
 	ctx.skipBlankBytes(cur)
 
@@ -1344,7 +1348,9 @@ func (ctx *parserCtx) parseVersionNum(_ rune) (string, error) {
 			for x := 1; x < i; x++ {
 				b.WriteRune(cur.PeekN(x))
 			}
-			cur.Advance(i - 1)
+			if err := cur.Advance(i - 1); err != nil {
+				return "", err
+			}
 			return b.String(), nil
 		}
 	}
@@ -1366,7 +1372,9 @@ func (ctx *parserCtx) parseQuotedTextBytes(cb qtextHandler) (value string, err e
 	q := cur.Peek()
 	switch q {
 	case '"', '\'':
-		cur.Advance(1)
+		if err := cur.Advance(1); err != nil {
+			return "", err
+		}
 	default:
 		err = errors.New("string not started (got '" + string([]rune{q}) + "')")
 		return
@@ -1381,7 +1389,9 @@ func (ctx *parserCtx) parseQuotedTextBytes(cb qtextHandler) (value string, err e
 		err = errors.New("string not closed")
 		return
 	}
-	cur.Advance(1)
+	if err := cur.Advance(1); err != nil {
+		return "", err
+	}
 
 	return
 }
@@ -1400,7 +1410,9 @@ func (ctx *parserCtx) parseQuotedText(cb qtextHandler) (value string, err error)
 	q := cur.Peek()
 	switch q {
 	case '"', '\'':
-		cur.Advance(1)
+		if err := cur.Advance(1); err != nil {
+			return "", err
+		}
 	default:
 		err = errors.New("string not started (got '" + string([]rune{q}) + "')")
 		return
@@ -1415,7 +1427,9 @@ func (ctx *parserCtx) parseQuotedText(cb qtextHandler) (value string, err error)
 		err = errors.New("string not closed")
 		return
 	}
-	cur.Advance(1)
+	if err := cur.Advance(1); err != nil {
+		return "", err
+	}
 
 	return
 }
@@ -1448,7 +1462,7 @@ func (ctx *parserCtx) parseEncodingName(_ rune) (string, error) {
 	if !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') {
 		return "", ctx.error(ErrInvalidEncodingName)
 	}
-	buf.WriteRune(c)
+	_, _ = buf.WriteRune(c)
 
 	i := 2
 	for c = cur.PeekN(i); c != 0x0; c = cur.PeekN(i) {
@@ -1456,11 +1470,13 @@ func (ctx *parserCtx) parseEncodingName(_ rune) (string, error) {
 			i--
 			break
 		}
-		buf.WriteRune(c)
+		_, _ = buf.WriteRune(c)
 		i++
 	}
 
-	cur.Advance(i)
+	if err := cur.Advance(i); err != nil {
+		return "", err
+	}
 
 	return buf.String(), nil
 }
@@ -1589,11 +1605,13 @@ func (ctx *parserCtx) parsePI() error {
 		if !isChar(c) {
 			break
 		}
-		buf.WriteRune(c)
+		_, _ = buf.WriteRune(c)
 		i++
 	}
 
-	cur.Advance(i)
+	if err := cur.Advance(i); err != nil {
+		return err
+	}
 	data := buf.String()
 
 	if !cur.ConsumeString("?>") {
@@ -1649,7 +1667,7 @@ func (ctx *parserCtx) parseName() (name string, err error) {
 		err = ctx.error(fmt.Errorf("invalid first letter '%c'", c))
 		return
 	}
-	buf.WriteRune(c)
+	_, _ = buf.WriteRune(c)
 
 	i := 2
 	for c = cur.PeekN(i); c != 0x0; c = cur.PeekN(i) {
@@ -1661,7 +1679,7 @@ func (ctx *parserCtx) parseName() (name string, err error) {
 			i--
 			break
 		}
-		buf.WriteRune(c)
+		_, _ = buf.WriteRune(c)
 
 		i++
 	}
@@ -1670,7 +1688,9 @@ func (ctx *parserCtx) parseName() (name string, err error) {
 		return
 	}
 
-	cur.Advance(i)
+	if err := cur.Advance(i); err != nil {
+		return "", err
+	}
 	name = buf.String()
 	if name == "" {
 		err = ctx.error(errors.New("internal error: parseName returned with empty name"))
@@ -1724,7 +1744,9 @@ func (ctx *parserCtx) parseQName() (local string, prefix string, err error) {
 		return
 	}
 
-	cur.Advance(1)
+	if err := cur.Advance(1); err != nil {
+		return "", "", err
+	}
 	prefix = v
 
 	v, err = ctx.parseNCName()
@@ -1785,7 +1807,7 @@ func (ctx *parserCtx) parseNmtoken() (string, error) {
 		if !isNameChar(c) {
 			break
 		}
-		buf.WriteRune(c)
+		_, _ = buf.WriteRune(c)
 	}
 
 	return buf.String(), nil
@@ -1826,7 +1848,7 @@ func (ctx *parserCtx) parseNCName() (ncname string, err error) {
 		err = ctx.error(errors.New("invalid name start char"))
 		return
 	}
-	buf.WriteRune(c)
+	_, _ = buf.WriteRune(c)
 
 	// at this point we have at least 1 character name.
 	// see how much more we got here
@@ -1836,14 +1858,16 @@ func (ctx *parserCtx) parseNCName() (ncname string, err error) {
 			i--
 			break
 		}
-		buf.WriteRune(c)
+		_, _ = buf.WriteRune(c)
 		i++
 	}
 	if i > MaxNameLength {
 		err = ctx.error(ErrNameTooLong)
 		return
 	}
-	cur.Advance(i)
+	if err := cur.Advance(i); err != nil {
+		return "", err
+	}
 	ncname = buf.String()
 	return
 }
@@ -2019,7 +2043,7 @@ func (ctx *parserCtx) parseComment() error {
 		if q == '-' && r == '-' {
 			return ctx.error(ErrHyphenInComment)
 		}
-		buf.WriteRune(c)
+		_, _ = buf.WriteRune(c)
 		q = r
 		r = c
 		i++
@@ -2029,7 +2053,9 @@ func (ctx *parserCtx) parseComment() error {
 	buf.Truncate(buf.Len() - 2)
 	str := buf.Bytes()
 	// i+1 because '>' was not consumed in the loop
-	cur.Advance(i + 1)
+	if err := cur.Advance(i + 1); err != nil {
+		return err
+	}
 
 	if sh := ctx.sax; sh != nil {
 		str = bytes.ReplaceAll(str, []byte{'\r', '\n'}, []byte{'\n'})
@@ -2102,7 +2128,9 @@ func (ctx *parserCtx) parseDocTypeDecl() error {
 	if c != '>' {
 		return ctx.error(ErrDocTypeNotFinished)
 	}
-	cur.Advance(1)
+	if err := cur.Advance(1); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -2122,7 +2150,9 @@ func (ctx *parserCtx) parseInternalSubset() error {
 		goto FinishDTD
 	}
 	ctx.instate = psDTD
-	cur.Advance(1)
+	if err := cur.Advance(1); err != nil {
+		return err
+	}
 
 	for {
 		// Get current cursor in case parameter entity expansion changed the input
@@ -2143,7 +2173,9 @@ func (ctx *parserCtx) parseInternalSubset() error {
 	// Get final cursor state
 	cur = ctx.getCursor()
 	if cur != nil && cur.Peek() == ']' {
-		cur.Advance(1)
+		if err := cur.Advance(1); err != nil {
+			return err
+		}
 		ctx.skipBlanks()
 	}
 
@@ -2154,7 +2186,9 @@ FinishDTD:
 		return ctx.error(ErrDocTypeNotFinished)
 	}
 	if cur != nil {
-		cur.Advance(1)
+		if err := cur.Advance(1); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -2292,7 +2326,9 @@ func (ctx *parserCtx) parsePEReference() error {
 		}
 		return nil
 	}
-	cur.Advance(1)
+	if err := cur.Advance(1); err != nil {
+		return err
+	}
 
 	name, err := ctx.parseName()
 	if err != nil {
@@ -2302,7 +2338,9 @@ func (ctx *parserCtx) parsePEReference() error {
 	if cur.Peek() != ';' {
 		return ctx.error(ErrSemicolonRequired)
 	}
-	cur.Advance(1)
+	if err := cur.Advance(1); err != nil {
+		return err
+	}
 
 	/*
 		ctx.nbentities++ // number of entities parsed
@@ -2473,7 +2511,9 @@ func (ctx *parserCtx) parseElementDecl() (ElementTypeVal, error) {
 	if cur.Peek() != '>' {
 		return UndefinedElementType, ctx.error(ErrGtRequired)
 	}
-	cur.Advance(1)
+	if err := cur.Advance(1); err != nil {
+		return UndefinedElementType, err
+	}
 
 	/*
 	           if (input != ctxt->input) {
@@ -2529,7 +2569,9 @@ func (ctx *parserCtx) parseElementContentDecl() (*ElementContent, ElementTypeVal
 	if cur.Peek() != '(' {
 		return nil, UndefinedElementType, ctx.error(ErrOpenParenRequired)
 	}
-	cur.Advance(1)
+	if err := cur.Advance(1); err != nil {
+		return nil, UndefinedElementType, err
+	}
 
 	if ctx.instate == psEOF {
 		return nil, UndefinedElementType, ctx.error(ErrEOF)
@@ -2580,7 +2622,9 @@ func (ctx *parserCtx) parseElementMixedContentDecl() (*ElementContent, error) {
 		                                    NULL, NULL);
 		               }
 		*/
-		cur.Advance(1)
+		if err := cur.Advance(1); err != nil {
+			return nil, ctx.error(err)
+		}
 		ret, err := ctx.doc.CreateElementContent("", ElementContentPCDATA)
 		if err != nil {
 			return nil, ctx.error(err)
@@ -2588,7 +2632,9 @@ func (ctx *parserCtx) parseElementMixedContentDecl() (*ElementContent, error) {
 
 		if cur.Peek() == '*' {
 			ret.coccur = ElementContentMult
-			cur.Advance(1)
+			if err := cur.Advance(1); err != nil {
+				return nil, err
+			}
 		}
 
 		return ret, nil
@@ -2607,7 +2653,9 @@ func (ctx *parserCtx) parseElementMixedContentDecl() (*ElementContent, error) {
 
 	var elem string
 	for cur.Peek() == '|' {
-		cur.Advance(1)
+		if err := cur.Advance(1); err != nil {
+			return nil, err
+		}
 		if elem == "" {
 			retelem, err = ctx.doc.CreateElementContent("", ElementContentOr)
 			if err != nil {
@@ -2641,7 +2689,9 @@ func (ctx *parserCtx) parseElementMixedContentDecl() (*ElementContent, error) {
 		ctx.skipBlanks()
 	}
 	if cur.Peek() == ')' && cur.PeekN(2) == '*' {
-		cur.Advance(2)
+		if err := cur.Advance(2); err != nil {
+			return nil, err
+		}
 		if elem != "" {
 			curelem.c2, err = ctx.doc.CreateElementContent(elem, ElementContentElement)
 			if err != nil {
@@ -2709,7 +2759,9 @@ func (ctx *parserCtx) parseElementChildrenContentDeclPriv(depth int) (*ElementCo
 		panic("did not get rune cursor")
 	}
 	if cur.Peek() == '(' {
-		cur.Advance(1)
+		if err := cur.Advance(1); err != nil {
+			return nil, err
+		}
 		ctx.skipBlanks()
 		retelem, err := ctx.parseElementChildrenContentDeclPriv(depth + 1)
 		if err != nil {
@@ -2732,13 +2784,19 @@ func (ctx *parserCtx) parseElementChildrenContentDeclPriv(depth int) (*ElementCo
 		switch cur.Peek() {
 		case '?':
 			curelem.coccur = ElementContentOpt
-			cur.Advance(1)
+			if err := cur.Advance(1); err != nil {
+				return nil, err
+			}
 		case '*':
 			curelem.coccur = ElementContentMult
-			cur.Advance(1)
+			if err := cur.Advance(1); err != nil {
+				return nil, err
+			}
 		case '+':
 			curelem.coccur = ElementContentPlus
-			cur.Advance(1)
+			if err := cur.Advance(1); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -2755,7 +2813,9 @@ func (ctx *parserCtx) parseElementChildrenContentDeclPriv(depth int) (*ElementCo
 		} else if sep != c {
 			return ctx.error(fmt.Errorf("'%c' expected", sep))
 		}
-		cur.Advance(1)
+		if err := cur.Advance(1); err != nil {
+			return err
+		}
 
 		op, err := ctx.doc.CreateElementContent("", typ)
 		if err != nil {
@@ -2803,7 +2863,9 @@ LOOP:
 		ctx.skipBlanks()
 
 		if cur.Peek() == '(' {
-			cur.Advance(1)
+			if err := cur.Advance(1); err != nil {
+				return nil, err
+			}
 			ctx.skipBlanks()
 			// recurse
 			var err error
@@ -2826,13 +2888,19 @@ LOOP:
 			switch cur.Peek() {
 			case '?':
 				last.coccur = ElementContentOpt
-				cur.Advance(1)
+				if err := cur.Advance(1); err != nil {
+					return nil, err
+				}
 			case '*':
 				last.coccur = ElementContentMult
-				cur.Advance(1)
+				if err := cur.Advance(1); err != nil {
+					return nil, err
+				}
 			case '+':
 				last.coccur = ElementContentPlus
-				cur.Advance(1)
+				if err := cur.Advance(1); err != nil {
+					return nil, err
+				}
 			}
 		}
 		ctx.skipBlanks()
@@ -2933,7 +3001,7 @@ func (ctx *parserCtx) parseEntityValueInternal(qch rune) (string, error) {
 
 	i := 0
 	for c := cur.PeekN(i + 1); isChar(c) && c != qch; c = cur.PeekN(i + 1) {
-		buf.WriteRune(c)
+		_, _ = buf.WriteRune(c)
 		i++
 	}
 	if i > 0 {
@@ -2993,16 +3061,16 @@ func (ctx *parserCtx) decodeEntitiesInternal(s []byte, what SubstitutionType, de
 				if len(ent.Content()) == 0 {
 					return "", errors.New("predefined entity has no content")
 				}
-				out.Write(ent.Content())
+				_, _ = out.Write(ent.Content())
 			} else if len(ent.Content()) != 0 {
 				rep, err := ctx.decodeEntitiesInternal(ent.Content(), what, depth+1)
 				if err != nil {
 					return "", err
 				}
 
-				out.WriteString(rep)
+				_, _ = out.WriteString(rep)
 			} else {
-				out.WriteString(ent.Name())
+				_, _ = out.WriteString(ent.Name())
 			}
 			s = s[width:]
 		} else if s[0] == '%' && what&SubstitutePERef == SubstitutePERef {
@@ -3017,10 +3085,10 @@ func (ctx *parserCtx) decodeEntitiesInternal(s []byte, what SubstitutionType, de
 			if err != nil {
 				return "", err
 			}
-			out.WriteString(rep)
+			_, _ = out.WriteString(rep)
 			s = s[width:]
 		} else {
-			out.WriteByte(s[0])
+			_ = out.WriteByte(s[0])
 			s = s[1:]
 		}
 	}
@@ -3100,7 +3168,9 @@ func (ctx *parserCtx) parseEntityDecl() error {
 
 	isParameter := false
 	if cur.Peek() == '%' {
-		cur.Advance(1)
+		if err := cur.Advance(1); err != nil {
+			return err
+		}
 		if !ctx.skipBlanks() {
 			return ctx.error(ErrSpaceRequired)
 		}
@@ -3284,7 +3354,9 @@ func (ctx *parserCtx) parseEntityDecl() error {
 	if cur.Peek() != '>' {
 		return ctx.error(errors.New("entity not terminated"))
 	}
-	cur.Advance(1)
+	if err := cur.Advance(1); err != nil {
+		return err
+	}
 
 	// Ugly mechanism to save the raw entity value.
 	// Note: This happens because the SAX interface doesn't have a way to

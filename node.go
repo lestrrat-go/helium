@@ -50,7 +50,7 @@ func (n docnode) Parent() Node {
 func (n docnode) Content() []byte {
 	b := bytes.Buffer{}
 	for e := n.firstChild; e != nil; e = e.NextSibling() {
-		b.Write(e.Content())
+		_, _ = b.Write(e.Content())
 	}
 	return b.Bytes()
 }
