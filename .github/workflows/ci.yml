@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        go_version: ["1.23", "1.24"]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Cache dependencies
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install Go
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
+        with:
+          go-version: ${{ matrix.go_version }}
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Tidy dependencies
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Run tests
+        run: |
+          go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Run tests with debug tags
+        run: |
+          go test -v -race -tags debug ./...
+
+      - name: Build helium-lint command
+        run: |
+          go build -v ./cmd/helium-lint
+
+      - name: Check for uncommitted changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Uncommitted changes detected:"
+            git status --porcelain
+            exit 1
+          fi
