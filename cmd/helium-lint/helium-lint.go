@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/jessevdk/go-flags"
+	flags "github.com/jessevdk/go-flags"
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/cliutil"
 )
