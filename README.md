@@ -1,6 +1,6 @@
 # helium
 
-[![Build Status](https://travis-ci.org/lestrrat-go/helium.svg?branch=master)](https://travis-ci.org/lestrrat-go/helium)
+[![Build Status](https://travis-ci.org/lestrrat-go/helium.svg?branch=main)](https://travis-ci.org/lestrrat-go/helium)
 [![GoDoc](https://godoc.org/github.com/lestrrat-go/helium?status.svg)](https://godoc.org/github.com/lestrrat-go/helium)
 
 # What on earth?
