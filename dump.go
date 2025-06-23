@@ -73,7 +73,7 @@ func dumpQuotedString(out io.Writer, s string) error {
 
 var (
 	esc_quot = []byte("&#34;") // shorter than "&quot;"
-	esc_apos = []byte("&#39;") // shorter than "&apos;"
+	// esc_apos = []byte("&#39;") // shorter than "&apos;"
 	esc_amp  = []byte("&amp;")
 	esc_lt   = []byte("&lt;")
 	esc_gt   = []byte("&gt;")
@@ -126,7 +126,7 @@ func escapeAttrValue(w io.Writer, s []byte) error {
 		case '\t':
 			esc = esc_tab
 		default:
-			if !(0x20 <= r && r < 0x80) {
+			if !(0x20 <= r && r < 0x80) { // nolint:staticcheck
 				if r < 0xE0 {
 					esc = []byte(fmt.Sprintf("&#x%X;", r))
 					break
@@ -186,7 +186,7 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
 		case '\r':
 			esc = esc_cr
 		default:
-			if !(r == '\t' || (0x20 <= r && r < 0x80)) {
+			if !(r == '\t' || (0x20 <= r && r < 0x80)) { // nolint:staticcheck
 				if r < 0xE0 {
 					esc = []byte(fmt.Sprintf("&#x%X;", r))
 					break
@@ -215,12 +215,6 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
 }
 
 type Dumper struct{}
-
-func (d *Dumper) writeString(out io.Writer, content string) error {
-	// punt all the magic for now
-	_, err := io.WriteString(out, content)
-	return err
-}
 
 func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 	if pdebug.Enabled {

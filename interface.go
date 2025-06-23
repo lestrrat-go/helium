@@ -12,7 +12,7 @@ const (
 type LoadSubsetOption int
 
 const (
-	DetectIDs LoadSubsetOption = 1<<iota+1
+	DetectIDs LoadSubsetOption = 1<<iota + 1
 	CompleteAttrs
 	SkipIDs
 )
@@ -123,7 +123,7 @@ type docnode struct {
 // node represents a node in a XML tree.
 type node struct {
 	docnode
-	private    interface{}
+	// private    interface{}
 	content    []byte
 	properties *Attribute
 	ns         *Namespace
@@ -175,7 +175,7 @@ type Namespace struct {
 
 type Attribute struct {
 	docnode
-	atype       AttributeType
+	// atype       AttributeType
 	defaultAttr bool
 	ns          *Namespace
 }
@@ -325,8 +325,8 @@ type Entity struct {
 	externalID string     // external identifier for PUBLIC
 	systemID   string     // URI for a SYSTEM or PUBLIC entity
 	uri        string     // the full URI as computed
-	owner      bool       // does the entity own children
-	checked    int        // was the entity content checked
+	// owner      bool       // does the entity own children
+	checked int // was the entity content checked
 	/* this is also used to count entities
 	 * references done from that entity
 	 * and if it contains '<' */

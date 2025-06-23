@@ -550,25 +550,25 @@ func (t *TreeBuilder) EntityDecl(ctxif sax.Context, name string, typ int, public
 		return errors.New("sax.EntityDecl called while note in subset")
 	}
 
-	ent, err := dtd.AddEntity(name, EntityType(typ), publicID, systemID, notation)
+	_, err := dtd.AddEntity(name, EntityType(typ), publicID, systemID, notation)
 	if err != nil {
 		return err
 	}
 
-	if ent.uri == "" && systemID != "" {
-		/*
-		   xmlChar *URI;
-		   const char *base = NULL;
+	/*
+		if ent.uri == "" && systemID != "" {
+			   xmlChar *URI;
+			   const char *base = NULL;
 
-		   if (ctxt->input != NULL)
-		       base = ctxt->input->filename;
-		   if (base == NULL)
-		       base = ctxt->directory;
+			   if (ctxt->input != NULL)
+			       base = ctxt->input->filename;
+			   if (base == NULL)
+			       base = ctxt->directory;
 
-		   URI = xmlBuildURI(systemId, (const xmlChar *) base);
-		   ent->URI = URI;
-		*/
-	}
+			   URI = xmlBuildURI(systemId, (const xmlChar *) base);
+			   ent->URI = URI;
+		}
+	*/
 
 	return nil
 }
