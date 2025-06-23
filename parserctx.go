@@ -7,11 +7,11 @@ import (
 	"io"
 	"net/url"
 	"strings"
-	"sync"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/encoding"
+	"github.com/lestrrat-go/helium/internal/pool"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 	"github.com/lestrrat-go/strcursor"
@@ -137,21 +137,6 @@ func (ctx *parserCtx) release() error {
 	return nil
 }
 
-var bufferPool = sync.Pool{
-	New: allocByteBuffer,
-}
-
-func allocByteBuffer() interface{} {
-	if pdebug.Enabled {
-		pdebug.Printf("Allocating new bytes.Buffer...")
-	}
-	return &bytes.Buffer{}
-}
-
-func releaseBuffer(b *bytes.Buffer) {
-	b.Reset()
-	bufferPool.Put(b)
-}
 
 func (ctx *parserCtx) pushInput(in interface{}) {
 	if pdebug.Enabled {
@@ -593,8 +578,8 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 		defer g.IRelease("END parseCharData")
 	}
 
-	buf := bufferPool.Get().(*bytes.Buffer)
-	defer releaseBuffer(buf)
+	buf := pool.BytesBuffer().Get()
+	defer pool.BytesBuffer().Put(buf)
 
 	cur := ctx.getCursor()
 	if cur == nil {
@@ -958,8 +943,8 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (val
 		panic("did not get rune cursor")
 	}
 	inSpace := false
-	b := bufferPool.Get().(*bytes.Buffer)
-	defer releaseBuffer(b)
+	b := pool.BytesBuffer().Get()
+	defer pool.BytesBuffer().Put(b)
 
 	for {
 		c := cur.Peek()
@@ -1344,8 +1329,8 @@ func (ctx *parserCtx) parseVersionNum(_ rune) (string, error) {
 
 	for i := 4; ; i++ {
 		if v := cur.PeekN(i); v > '9' || v < '0' {
-			b := bufferPool.Get().(*bytes.Buffer)
-			defer releaseBuffer(b)
+			b := pool.BytesBuffer().Get()
+			defer pool.BytesBuffer().Put(b)
 
 			for x := 1; x < i; x++ {
 				b.WriteRune(cur.PeekN(x))
@@ -1457,8 +1442,8 @@ func (ctx *parserCtx) parseEncodingName(_ rune) (string, error) {
 	}
 	c := cur.Peek()
 
-	buf := bufferPool.Get().(*bytes.Buffer)
-	defer releaseBuffer(buf)
+	buf := pool.BytesBuffer().Get()
+	defer pool.BytesBuffer().Put(buf)
 
 	// first char needs to be alphabets
 	if !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') { // nolint:staticcheck
@@ -1595,8 +1580,8 @@ func (ctx *parserCtx) parsePI() error {
 	}
 
 	ctx.skipBlanks()
-	buf := bufferPool.Get().(*bytes.Buffer)
-	defer releaseBuffer(buf)
+	buf := pool.BytesBuffer().Get()
+	defer pool.BytesBuffer().Put(buf)
 
 	i := 0
 	for c := cur.PeekN(i + 1); c != 0x0; c = cur.PeekN(i + 1) {
@@ -1660,8 +1645,8 @@ func (ctx *parserCtx) parseName() (name string, err error) {
 		panic("did not get rune cursor")
 	}
 
-	buf := bufferPool.Get().(*bytes.Buffer)
-	defer releaseBuffer(buf)
+	buf := pool.BytesBuffer().Get()
+	defer pool.BytesBuffer().Put(buf)
 
 	// first letter
 	c := cur.Peek()
@@ -1802,8 +1787,8 @@ func (ctx *parserCtx) parseNmtoken() (string, error) {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	buf := bufferPool.Get().(*bytes.Buffer)
-	defer releaseBuffer(buf)
+	buf := pool.BytesBuffer().Get()
+	defer pool.BytesBuffer().Put(buf)
 
 	for c := cur.PeekN(i); c != 0x0; i++ {
 		if !isNameChar(c) {
@@ -1842,8 +1827,8 @@ func (ctx *parserCtx) parseNCName() (ncname string, err error) {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	buf := bufferPool.Get().(*bytes.Buffer)
-	defer releaseBuffer(buf)
+	buf := pool.BytesBuffer().Get()
+	defer pool.BytesBuffer().Put(buf)
 
 	var c rune
 	if c = cur.Peek(); c == ' ' || c == '>' || c == '/' || !isNameStartChar(c) {
@@ -2023,8 +2008,8 @@ func (ctx *parserCtx) parseComment() error {
 		return ctx.error(ErrInvalidComment)
 	}
 
-	buf := bufferPool.Get().(*bytes.Buffer)
-	defer releaseBuffer(buf)
+	buf := pool.BytesBuffer().Get()
+	defer pool.BytesBuffer().Put(buf)
 
 	i := 0
 	q := cur.PeekN(i + 1)
@@ -3002,8 +2987,8 @@ func (ctx *parserCtx) parseEntityValueInternal(qch rune) (string, error) {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	buf := bufferPool.Get().(*bytes.Buffer)
-	defer releaseBuffer(buf)
+	buf := pool.BytesBuffer().Get()
+	defer pool.BytesBuffer().Put(buf)
 
 	i := 0
 	for c := cur.PeekN(i + 1); isChar(c) && c != qch; c = cur.PeekN(i + 1) {
@@ -3044,8 +3029,8 @@ func (ctx *parserCtx) decodeEntitiesInternal(s []byte, what SubstitutionType, de
 		return "", errors.New("entity loop (depth > 40)")
 	}
 
-	out := bufferPool.Get().(*bytes.Buffer)
-	defer releaseBuffer(out)
+	out := pool.BytesBuffer().Get()
+	defer pool.BytesBuffer().Put(out)
 
 	for len(s) > 0 {
 		pdebug.Printf("s[0] -> %c", s[0])
@@ -4627,8 +4612,8 @@ func parseStringName(s []byte) (string, int, error) {
 		return "", 0, errors.New("invalid name start char")
 	}
 
-	out := bufferPool.Get().(*bytes.Buffer)
-	defer releaseBuffer(out)
+	out := pool.BytesBuffer().Get()
+	defer pool.BytesBuffer().Put(out)
 
 	out.WriteRune(r)
 	i += w
