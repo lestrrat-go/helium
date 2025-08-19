@@ -1,6 +1,8 @@
 package helium_test
 
 import (
+	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +13,11 @@ import (
 )
 
 func TestXMLToDOMToXMLString(t *testing.T) {
+	ctx := context.Background()
+	if testing.Verbose() {
+		ctx = helium.WithTraceLogger(ctx, slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	}
+
 	skipped := map[string]struct{}{
 		"comment4.xml": {},
 	}
@@ -60,7 +67,7 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 		in, err := os.ReadFile(fn)
 		require.NoError(t, err, "os.ReadFile should succeed")
 
-		doc, err := helium.Parse([]byte(in))
+		doc, err := helium.Parse(ctx, []byte(in))
 		require.NoError(t, err, `Parse(...) succeeds`)
 
 		str, err := doc.XMLString()

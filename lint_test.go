@@ -2,6 +2,7 @@ package helium_test
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,20 +17,19 @@ import (
 // This test looks for .xml files in the test/ directory and compares the output
 // of helium-lint with corresponding .lint golden files. To create a golden file:
 //
-//   xmllint test/example.xml > test/example.lint
+//	xmllint test/example.xml > test/example.lint
 //
 // The test will automatically pick up any .xml file that has a corresponding .lint file.
 //
 // Environment variable HELIUM_LINT_TEST_FILES can be set to test only specific files:
 //
-//   HELIUM_LINT_TEST_FILES=xml2.xml,comment.xml go test -run TestHeliumLintGolden
-//
+//	HELIUM_LINT_TEST_FILES=xml2.xml,comment.xml go test -run TestHeliumLintGolden
 func TestHeliumLintGolden(t *testing.T) {
 	// Skip files that are known to have issues or different behavior
 	skipped := map[string]struct{}{
 		// Add any files that need to be skipped here
 	}
-	
+
 	// Allow testing only specific files via environment variable
 	only := map[string]struct{}{}
 	if v := os.Getenv("HELIUM_LINT_TEST_FILES"); v != "" {
@@ -82,7 +82,7 @@ func TestHeliumLintGolden(t *testing.T) {
 
 		// Mimic what helium-lint does internally
 		p := helium.NewParser()
-		doc, err := p.Parse(input)
+		doc, err := p.Parse(context.Background(), input)
 		require.NoError(t, err, "helium.Parse should succeed for %s", fn)
 
 		// Generate output using helium.Dumper like helium-lint does

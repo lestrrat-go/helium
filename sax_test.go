@@ -2,6 +2,7 @@ package helium
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -11,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium/sax"
-	"github.com/lestrrat-go/pdebug"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,17 +60,10 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 	}
 
 	s.EntityDeclHandler = func(ctxif sax.Context, name string, typ int, publicID string, systemID string, notation string) error {
-		if pdebug.Enabled {
-			g := pdebug.Marker("EntityDecl handler for sax_test.go")
-			defer g.End()
-		}
 		_, _ = fmt.Fprintf(out, "SAX.UnparsedEntityDecl(%s, %d, %s, %s, %s)\n",
 			name, typ, publicID, systemID, notation)
 
 		entities[name] = newEntity(name, EntityType(typ), publicID, systemID, notation, "")
-		if pdebug.Enabled {
-			pdebug.Printf("registered entity '%s' (entity type = '%s', publicID = '%s', systemID = '%s', notation = '%s')", name, EntityType(typ), publicID, systemID, notation)
-		}
 		return nil
 	}
 	s.ExternalSubsetHandler = func(_ sax.Context, name, externalID, systemID string) error {
@@ -227,7 +220,7 @@ func TestSAXEvents(t *testing.T) {
 		p := NewParser()
 		p.SetSAXHandler(newEventEmitter(&out))
 
-		_, err = p.Parse(in)
+		_, err = p.Parse(context.Background(), in)
 		if err != nil {
 			t.Logf("source XML: %s", in)
 		}

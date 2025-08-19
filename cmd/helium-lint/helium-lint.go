@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -76,7 +77,7 @@ func _main() int {
 			fmt.Fprintf(os.Stderr, "%s\n", err)
 			return 1
 		}
-		doc, err := p.Parse(buf)
+		doc, err := p.Parse(context.Background(), buf)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s\n", err)
 			return 1

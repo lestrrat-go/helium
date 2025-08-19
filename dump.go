@@ -7,8 +7,6 @@ import (
 	"io"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/lestrrat-go/pdebug"
 )
 
 var (
@@ -96,15 +94,6 @@ func isInCharacterRange(r rune) (inrange bool) {
 }
 
 func escapeAttrValue(w io.Writer, s []byte) error {
-	if pdebug.Enabled {
-		debugbuf := bytes.Buffer{}
-		w = io.MultiWriter(w, &debugbuf)
-		g := pdebug.Marker("escapeAttrValue '%s'", s)
-		defer func() {
-			pdebug.Printf("escaped value '%s'", debugbuf.Bytes())
-			g.End()
-		}()
-	}
 	var esc []byte
 	last := 0
 	for i := 0; i < len(s); {
@@ -158,14 +147,6 @@ func escapeAttrValue(w io.Writer, s []byte) error {
 // of the plain text data s. If escapeNewline is true, newline
 // characters will be escaped.
 func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
-	if pdebug.Enabled {
-		debugbuf := bytes.Buffer{}
-		w = io.MultiWriter(w, &debugbuf)
-		g := pdebug.IPrintf("START escapeText = '%s'", s)
-		defer func() {
-			g.IRelease("END escapeText = '%s'", debugbuf.Bytes())
-		}()
-	}
 	var esc []byte
 	last := 0
 	for i := 0; i < len(s); {
@@ -217,11 +198,6 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
 type Dumper struct{}
 
 func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Dumper.DumpDoc")
-		defer g.IRelease("END Dumper.DumpDoc")
-	}
-
 	if err := d.DumpNode(out, doc); err != nil {
 		return err
 	}
@@ -236,11 +212,6 @@ func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 }
 
 func (d *Dumper) dumpDocContent(out io.Writer, n Node) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Dumper.dumpDocContent")
-		defer g.IRelease("END Dumper.dumpDocContent")
-	}
-
 	doc := n.(*Document)
 	_, _ = io.WriteString(out, `<?xml version="`)
 	version := doc.Version()
@@ -319,10 +290,6 @@ func dumpElementDeclPrologue(out io.Writer, n *ElementDecl) {
 }
 
 func dumpElementContent(out io.Writer, n *ElementContent, glob bool) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Dumper.dumpElementContent n = '%s'", n.name)
-		defer g.IRelease("END Dumper.dumpElementContent")
-	}
 	if n == nil {
 		return nil
 	}
@@ -638,11 +605,6 @@ func (d *Dumper) dumpNs(out io.Writer, ns *Namespace) error {
 }
 
 func (d *Dumper) DumpNode(out io.Writer, n Node) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Dumper.DumpNode '%s'", n.Name())
-		defer g.IRelease("END Dumper.DumpNode")
-	}
-
 	var err error
 	switch n.Type() {
 	case DocumentNode:
@@ -696,11 +658,6 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		return err
 	}
 
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START DumpNode(fallthrough)")
-		defer g.IRelease("END DUmpNode(fallthrough)")
-	}
-
 	// if it got here it's some sort of an element
 	var name string
 	var nslist []*Namespace
@@ -726,7 +683,6 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 
 	if e, ok := n.(*Element); ok {
 		for attr := e.properties; attr != nil; {
-			g := pdebug.IPrintf("START DumpNode(fallthrough->attribute(%s))", attr.Name())
 			_, _ = io.WriteString(out, " "+attr.Name()+`="`)
 			count := 0
 			for achld := attr.FirstChild(); achld != nil; achld = achld.NextSibling() {
@@ -742,7 +698,6 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 				}
 			}
 			_, _ = io.WriteString(out, `"`)
-			g.IRelease("END DUmpNode(fallthrough->attribute(%s))", attr.Name())
 			a := attr.NextSibling()
 			if a == nil {
 				break

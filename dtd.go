@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-
-	"github.com/lestrrat-go/pdebug"
 )
 
 func newDTD() *DTD {
@@ -46,11 +44,6 @@ func (dtd *DTD) AddEntity(name string, typ EntityType, publicID, systemID, conte
 }
 
 func (dtd *DTD) AddElementDecl(name string, typ ElementTypeVal, content *ElementContent) (*ElementDecl, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START dtd.AddElementDecl '%s'", name)
-		defer g.IRelease("END dtd.AddElementDecl")
-	}
-
 	switch typ {
 	case EmptyElementType, AnyElementType:
 		if content != nil {

@@ -3,8 +3,6 @@ package helium
 import (
 	"bytes"
 	"errors"
-
-	"github.com/lestrrat-go/pdebug"
 )
 
 // because docnode contains links to other nodes, one tends to want to make
@@ -101,9 +99,6 @@ func (n docnode) LastChild() Node {
 func addChild(n Node, cur Node) error {
 	l := n.LastChild()
 	if l == nil { // No children, set firstChild to cur
-		if pdebug.Enabled {
-			pdebug.Printf("LastChild is nil, setting firstChild and lastChild")
-		}
 		n.setFirstChild(cur)
 		n.setLastChild(cur)
 		cur.SetParent(n)

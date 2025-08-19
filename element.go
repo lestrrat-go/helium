@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-
-	"github.com/lestrrat-go/pdebug"
 )
 
 const _ElementType_name = "ElementNodeAttributeNodeTextNodeCDATASectionNodeEntityRefNodeEntityNodeProcessingInstructionNodeCommentNodeDocumentNodeDocumentTypeNodeDocumentFragNodeNotationNodeHTMLDocumentNodeDTDNodeElementDeclNodeAttributeDeclNodeEntityDeclNodeNamespaceDeclNodeXIncludeStartNodeXIncludeEndNodeNamespaceNode"
@@ -70,10 +68,6 @@ func (n *Element) AddChild(cur Node) error {
 }
 
 func (n *Element) AddContent(b []byte) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Element.AddContent '%s'", b)
-		defer g.IRelease("END Element.AddContent")
-	}
 	return addContent(n, b)
 }
 
@@ -91,11 +85,6 @@ func (n *Element) SetTreeDoc(doc *Document) {
 }
 
 func (n *Element) SetAttribute(name, value string) error {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Element.SetAttribute '%s' (%s)", name, value)
-		defer g.IRelease("END Element.SetAttribute")
-	}
-
 	attr, err := n.doc.CreateAttribute(name, value, nil)
 	if err != nil {
 		return err
