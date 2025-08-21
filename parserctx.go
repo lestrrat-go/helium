@@ -1050,7 +1050,7 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 		panic("did not get rune cursor")
 	}
 	if cur.Peek() != '=' {
-		err = pctx.error(ctx, ErrEqualSignRequired)
+		_ = pctx.error(ctx, ErrEqualSignRequired) // error logged but not returned here
 	}
 	if err2 := cur.Advance(1); err2 != nil {
 		err = err2
@@ -3825,7 +3825,7 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 		return nil, err
 	}
 	defer func() {
-		if err := newctx.release(); err != nil {
+		if err := newctx.release(); err != nil { //nolint:staticcheck // intentionally empty error handling
 			// Error ignored
 		}
 	}()

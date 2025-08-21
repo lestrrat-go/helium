@@ -78,6 +78,7 @@ func TestStartSpan(t *testing.T) {
 
 	// Test StartSpan helper
 	ctx, span := StartSpan(ctx, "test_function")
+	_ = ctx // context used for span tracking
 
 	// Simulate some work
 	time.Sleep(time.Millisecond)

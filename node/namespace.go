@@ -3,9 +3,7 @@ package node
 // Namespace represents an XML namespace declaration
 type Namespace struct {
 	*prefix
-	etype   NodeType
-	href    string
-	context *Document
+	href string
 }
 
 func NewNamespace(prefixStr, uri string) *Namespace {

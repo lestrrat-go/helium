@@ -11,11 +11,9 @@ type Entity struct {
 	etype      EntityType
 	orig       string
 	content    string
-	length     int
 	externalID string
 	systemID   string
 	URI        string
-	owner      int
 	//checked    int
 	checked bool
 }
@@ -53,10 +51,6 @@ type Enumeration []string
 // ElementDecl represents an element declaration
 type ElementDecl struct {
 	treeNode
-	etype      ElementTypeVal
-	content    *ElementContent
-	attributes map[string]*AttributeDecl
-	prefix     string
 }
 
 // ElementTypeVal represents the type of element content
@@ -135,7 +129,7 @@ func newEntity(name string, typ EntityType, publicID, systemID, content, orig st
 		externalID: publicID,
 		systemID:   systemID,
 	}
-	e.treeNode.name = name
+	e.name = name
 	return e
 }
 
@@ -156,7 +150,7 @@ func (e *Entity) Type() NodeType {
 }
 
 func (e *Entity) LocalName() string {
-	return e.treeNode.name
+	return e.name
 }
 
 func (e *Entity) AddChild(cur Node) error {
@@ -176,7 +170,7 @@ func (e *Entity) Replace(cur Node) error {
 }
 
 func (e *Entity) SetOwnerDocument(doc *Document) error {
-	e.treeNode.doc = doc
+	e.doc = doc
 	return nil
 }
 

@@ -50,4 +50,5 @@ func TestDocument(t *testing.T) {
 		require.Equal(t, root, doc.FirstChild())
 		require.Equal(t, doc, root.Parent())
 	})
+
 }

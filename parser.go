@@ -24,7 +24,7 @@ func (p *Parser) Parse(ctx context.Context, b []byte) (*Document, error) {
 		return nil, err
 	}
 	defer func() {
-		if err := pctx.release(); err != nil {
+		if err := pctx.release(); err != nil { //nolint:staticcheck // intentionally empty error handling
 			// Log error but don't override the main return error
 		}
 	}()

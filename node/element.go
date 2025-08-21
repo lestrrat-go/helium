@@ -10,10 +10,9 @@ var ErrDuplicateAttribute = errors.New("duplicate attribute")
 
 type Element struct {
 	treeNode
-	name   string
-	attrs  *orderedmap.Map[string, *Attribute]
-	ns     *Namespace
-	nsDefs []*Namespace
+	name  string
+	attrs *orderedmap.Map[string, *Attribute]
+	ns    *Namespace
 }
 
 var _ Node = (*Element)(nil)

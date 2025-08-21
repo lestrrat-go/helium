@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/node"
 )
 
@@ -70,7 +71,7 @@ func (d *Dumper) dumpDTD(out io.Writer, n node.Node) error {
 	return nil
 }
 
-func (d *Dumper) dumpEnumeration(out io.Writer, n node.Enumeration) error {
+func (d *Dumper) DumpEnumeration(out io.Writer, n helium.Enumeration) error {
 	l := len(n)
 	for i, v := range n {
 		_, _ = io.WriteString(out, v)
@@ -87,7 +88,7 @@ func dumpElementDeclPrologue(out io.Writer, n node.Node) {
 	_, _ = io.WriteString(out, n.LocalName())
 }
 
-func dumpElementContent(out io.Writer, n *node.ElementContent, glob bool) error {
+func DumpElementContent(out io.Writer, n *helium.ElementContent, glob bool) error {
 	// Note: s11n dumping functions lack context for tracing
 	if n == nil {
 		return nil
@@ -108,7 +109,7 @@ func dumpElementContent(out io.Writer, n *node.ElementContent, glob bool) error 
 	return nil
 }
 
-func dumpEntityContent(out io.Writer, content string) error {
+func DumpEntityContent(out io.Writer, content string) error {
 	if strings.IndexByte(content, '%') == -1 {
 		if err := DumpQuotedString(out, content); err != nil {
 			return err

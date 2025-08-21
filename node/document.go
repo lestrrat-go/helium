@@ -36,36 +36,36 @@ func NewDocumentWithOptions(version, encoding string, standalone DocumentStandal
 
 func (d *Document) CreateElement(name string) *Element {
 	e := NewElement(name)
-	e.SetOwnerDocument(d)
+	_ = e.SetOwnerDocument(d)
 	return e
 }
 
 func (d *Document) CreateComment(content []byte) *Comment {
 	c := NewComment(content)
-	c.SetOwnerDocument(d)
+	_ = c.SetOwnerDocument(d)
 	return c
 }
 
 func (d *Document) CreateText(content []byte) *Text {
 	t := NewText(content)
-	t.SetOwnerDocument(d)
+	_ = t.SetOwnerDocument(d)
 	return t
 }
 
 func (d *Document) CreateAttribute(name, value string) *Attribute {
 	attr := newAttribute(name, nil)
-	attr.SetOwnerDocument(d)
+	_ = attr.SetOwnerDocument(d)
 	if value != "" {
 		text := NewText([]byte(value))
-		text.SetOwnerDocument(d)
-		attr.AddChild(text)
+		_ = text.SetOwnerDocument(d)
+		_ = attr.AddChild(text)
 	}
 	return attr
 }
 
 func (d *Document) CreateEntity(name string, typ EntityType, publicID, systemID, content, orig string) *Entity {
 	e := newEntity(name, typ, publicID, systemID, content, orig)
-	e.SetOwnerDocument(d)
+	_ = e.SetOwnerDocument(d)
 	return e
 }
 
@@ -96,13 +96,6 @@ func (d *Document) SetLastChild(child Node) {
 	d.lastChild = child
 }
 
-func (d *Document) setFirstChild(child Node) {
-	d.SetFirstChild(child)
-}
-
-func (d *Document) setLastChild(child Node) {
-	d.SetLastChild(child)
-}
 
 func (d *Document) Version() string {
 	return d.version
@@ -157,7 +150,7 @@ func (d *Document) SetDocumentElement(root Node) error {
 		return nil
 	}
 
-	root.SetParent(d)
+	_ = root.SetParent(d)
 	var old Node
 	for old = d.firstChild; old != nil; old = old.NextSibling() {
 		if old.Type() == ElementNodeType {
@@ -170,7 +163,7 @@ func (d *Document) SetDocumentElement(root Node) error {
 			return err
 		}
 	} else {
-		old.Replace(root)
+		_ = old.Replace(root)
 	}
 	return nil
 }
@@ -200,7 +193,7 @@ func (d *Document) CreatePI(target, data string) (*ProcessingInstructionNode, er
 		target: target,
 		data:   data,
 	}
-	pi.SetOwnerDocument(d)
+	_ = pi.SetOwnerDocument(d)
 	return pi, nil
 }
 
@@ -208,7 +201,7 @@ func (d *Document) CreatePI(target, data string) (*ProcessingInstructionNode, er
 func (d *Document) InternalSubset() (*DTD, error) {
 	if d.intSubset == nil {
 		d.intSubset = &DTD{}
-		d.intSubset.SetOwnerDocument(d)
+		_ = d.intSubset.SetOwnerDocument(d)
 	}
 	return d.intSubset, nil
 }
@@ -221,7 +214,7 @@ func (d *Document) CreateInternalSubset(name, eid, uri string) (*DTD, error) {
 			systemID:   uri,
 		}
 		d.intSubset.name = name
-		d.intSubset.SetOwnerDocument(d)
+		_ = d.intSubset.SetOwnerDocument(d)
 	}
 	return d.intSubset, nil
 }

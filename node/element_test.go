@@ -70,7 +70,7 @@ func TestElement(t *testing.T) {
 
 			err := parent.AddChild(old)
 			require.NoError(t, err)
-			old.Replace(replacement)
+			_ = old.Replace(replacement)
 
 			require.Equal(t, replacement, parent.FirstChild())
 			require.Equal(t, replacement, parent.LastChild())
@@ -92,7 +92,7 @@ func TestElement(t *testing.T) {
 			err = parent.AddChild(last)
 			require.NoError(t, err)
 
-			middle.Replace(replacement)
+			_ = middle.Replace(replacement)
 
 			require.Equal(t, first, parent.FirstChild())
 			require.Equal(t, last, parent.LastChild())
