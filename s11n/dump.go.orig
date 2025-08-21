@@ -1,0 +1,764 @@
+package helium
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/lestrrat-go/helium/internal/tokens"
+	"github.com/lestrrat-go/pdebug"
+)
+
+var (
+	qch_dquote = []byte{'"'}
+	qch_quote  = []byte{'\''}
+)
+
+func dumpQuotedString(out io.Writer, s string) error {
+	dqi := strings.IndexByte(s, qch_dquote[0])
+	if dqi < 0 {
+		// double quote is allowed, cool!
+		if _, err := out.Write(qch_dquote); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(out, s); err != nil {
+			return err
+		}
+		if _, err := out.Write(qch_dquote); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if qi := strings.IndexByte(s, qch_quote[0]); qi < 0 {
+		// single quotes, then
+		if _, err := out.Write(qch_quote); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(out, s); err != nil {
+			return err
+		}
+		if _, err := out.Write(qch_quote); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Grr, can't use " or '. Well, let's escape all the double
+	// quotes to &quot;, and quote the string
+
+	if _, err := out.Write(qch_dquote); err != nil {
+		return err
+	}
+	for len(s) > 0 && dqi > -1 {
+		if _, err := io.WriteString(out, s[:dqi]); err != nil {
+			return err
+		}
+		s = s[dqi+1:]
+		dqi = strings.IndexByte(s, qch_dquote[0])
+	}
+
+	if len(s) > 0 {
+		if _, err := io.WriteString(out, s); err != nil {
+			return err
+		}
+	}
+	if _, err := out.Write(qch_dquote); err != nil {
+		return err
+	}
+	return nil
+}
+
+var (
+	esc_quot = []byte("&#34;") // shorter than "&quot;"
+	// esc_apos = []byte("&#39;") // shorter than "&apos;"
+	esc_amp  = []byte("&amp;")
+	esc_lt   = []byte("&lt;")
+	esc_gt   = []byte("&gt;")
+	esc_tab  = []byte("&#9;")
+	esc_nl   = []byte("&#10;")
+	esc_cr   = []byte("&#13;")
+	esc_fffd = []byte("\uFFFD") // Unicode replacement character
+)
+
+
+func escapeAttrValue(w io.Writer, s []byte) error {
+	if pdebug.Enabled {
+		debugbuf := bytes.Buffer{}
+		w = io.MultiWriter(w, &debugbuf)
+		g := pdebug.Marker("escapeAttrValue '%s'", s)
+		defer func() {
+			pdebug.Printf("escaped value '%s'", debugbuf.Bytes())
+			g.End()
+		}()
+	}
+	var esc []byte
+	last := 0
+	for i := 0; i < len(s); {
+		r, width := utf8.DecodeRune(s[i:])
+		i += width
+		switch r {
+		case '"':
+			esc = esc_quot
+		case '&':
+			esc = esc_amp
+		case '<':
+			esc = esc_lt
+		case '>':
+			esc = esc_gt
+		case '\n':
+			esc = esc_nl
+		case '\r':
+			esc = esc_cr
+		case '\t':
+			esc = esc_tab
+		default:
+			if !(0x20 <= r && r < 0x80) { // nolint:staticcheck
+				if r < 0xE0 {
+					esc = []byte(fmt.Sprintf("&#x%X;", r))
+					break
+				}
+			}
+			if !tokens.IsInCharacterRange(r) || (r == 0xFFFD && width == 1) {
+				esc = esc_fffd
+				break
+			}
+			continue
+		}
+
+		if _, err := w.Write(s[last : i-width]); err != nil {
+			return err
+		}
+		if _, err := w.Write(esc); err != nil {
+			return err
+		}
+		last = i
+	}
+
+	if _, err := w.Write(s[last:]); err != nil {
+		return err
+	}
+	return nil
+}
+
+// escapeText writes to w the properly escaped XML equivalent
+// of the plain text data s. If escapeNewline is true, newline
+// characters will be escaped.
+func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
+	if pdebug.Enabled {
+		debugbuf := bytes.Buffer{}
+		w = io.MultiWriter(w, &debugbuf)
+		g := pdebug.IPrintf("START escapeText = '%s'", s)
+		defer func() {
+			g.IRelease("END escapeText = '%s'", debugbuf.Bytes())
+		}()
+	}
+	var esc []byte
+	last := 0
+	for i := 0; i < len(s); {
+		r, width := utf8.DecodeRune(s[i:])
+		i += width
+		switch r {
+		case '&':
+			esc = esc_amp
+		case '<':
+			esc = esc_lt
+		case '>':
+			esc = esc_gt
+		case '\n':
+			if !escapeNewline {
+				continue
+			}
+			esc = esc_nl
+		case '\r':
+			esc = esc_cr
+		default:
+			if !(r == '\t' || (0x20 <= r && r < 0x80)) { // nolint:staticcheck
+				if r < 0xE0 {
+					esc = []byte(fmt.Sprintf("&#x%X;", r))
+					break
+				}
+			}
+			if !tokens.IsInCharacterRange(r) || (r == 0xFFFD && width == 1) {
+				esc = esc_fffd
+				break
+			}
+			continue
+		}
+
+		if _, err := w.Write(s[last : i-width]); err != nil {
+			return err
+		}
+		if _, err := w.Write(esc); err != nil {
+			return err
+		}
+		last = i
+	}
+
+	if _, err := w.Write(s[last:]); err != nil {
+		return err
+	}
+	return nil
+}
+
+type Dumper struct{}
+
+func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START Dumper.DumpDoc")
+		defer g.IRelease("END Dumper.DumpDoc")
+	}
+
+	if err := d.DumpNode(out, doc); err != nil {
+		return err
+	}
+
+	for e := doc.FirstChild(); e != nil; e = e.NextSibling() {
+		if err := d.DumpNode(out, e); err != nil {
+			return err
+		}
+		_, _ = io.WriteString(out, "\n")
+	}
+	return nil
+}
+
+func (d *Dumper) dumpDocContent(out io.Writer, n Node) error {
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START Dumper.dumpDocContent")
+		defer g.IRelease("END Dumper.dumpDocContent")
+	}
+
+	doc := n.(*Document)
+	_, _ = io.WriteString(out, `<?xml version="`)
+	version := doc.Version()
+	if version == "" {
+		version = "1.0"
+	}
+	_, _ = io.WriteString(out, version+`"`)
+
+	if encoding := doc.encoding; encoding != "" {
+		_, _ = io.WriteString(out, ` encoding="`+encoding+`"`)
+	}
+
+	switch doc.Standalone() {
+	case StandaloneExplicitNo:
+		_, _ = io.WriteString(out, ` standalone="no"`)
+	case StandaloneExplicitYes:
+		_, _ = io.WriteString(out, ` standalone="yes"`)
+	}
+	_, _ = io.WriteString(out, "?>\n")
+	return nil
+}
+
+func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
+	dtd := n.(*DTD)
+	_, _ = io.WriteString(out, "<!DOCTYPE ")
+	_, _ = io.WriteString(out, dtd.Name())
+	_, _ = io.WriteString(out, " ")
+
+	if dtd.externalID != "" {
+		_, _ = io.WriteString(out, " PUBLIC ")
+		_, _ = io.WriteString(out, dtd.externalID)
+		_, _ = io.WriteString(out, " ")
+	} else if dtd.systemID != "" {
+		_, _ = io.WriteString(out, " SYSTEM ")
+		_, _ = io.WriteString(out, dtd.systemID)
+		_, _ = io.WriteString(out, " ")
+	}
+
+	if len(dtd.entities) == 0 && len(dtd.elements) == 0 && len(dtd.pentities) == 0 && len(dtd.attributes) == 0 {
+		/* (dtd.notations == NULL) && */
+		_, _ = io.WriteString(out, ">")
+		return nil
+	}
+
+	_, _ = io.WriteString(out, "[\n")
+
+	for e := dtd.FirstChild(); e != nil; e = e.NextSibling() {
+		if err := d.DumpNode(out, e); err != nil {
+			return err
+		}
+	}
+
+	_, _ = io.WriteString(out, "]>")
+	return nil
+}
+
+func (d *Dumper) dumpEnumeration(out io.Writer, n Enumeration) error {
+	l := len(n)
+	for i, v := range n {
+		_, _ = io.WriteString(out, v)
+		if i != l-1 {
+			_, _ = io.WriteString(out, " | ")
+		}
+	}
+	_, _ = io.WriteString(out, ")")
+	return nil
+}
+
+func dumpElementDeclPrologue(out io.Writer, n *ElementDecl) {
+	_, _ = io.WriteString(out, "<!ELEMENT ")
+	if n.prefix != "" {
+		_, _ = io.WriteString(out, n.prefix)
+		_, _ = io.WriteString(out, ":")
+	}
+	_, _ = io.WriteString(out, n.name)
+}
+
+func dumpElementContent(out io.Writer, n *ElementContent, glob bool) error {
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START Dumper.dumpElementContent n = '%s'", n.name)
+		defer g.IRelease("END Dumper.dumpElementContent")
+	}
+	if n == nil {
+		return nil
+	}
+
+	if glob {
+		_, _ = io.WriteString(out, "(")
+	}
+
+	switch n.ctype {
+	case ElementContentPCDATA:
+		_, _ = io.WriteString(out, "#PCDATA")
+	case ElementContentElement:
+		if n.prefix != "" {
+			_, _ = io.WriteString(out, n.prefix)
+			_, _ = io.WriteString(out, ":")
+		}
+		_, _ = io.WriteString(out, n.name)
+	case ElementContentSeq:
+		switch n.c1.ctype {
+		case ElementContentOr, ElementContentSeq:
+			if err := dumpElementContent(out, n.c1, true); err != nil {
+				return err
+			}
+		default:
+			if err := dumpElementContent(out, n.c1, false); err != nil {
+				return err
+			}
+		}
+		_, _ = io.WriteString(out, " , ")
+
+		if ctype := n.c2.ctype; ctype == ElementContentOr || (ctype == ElementContentSeq && n.c2.coccur != ElementContentOnce) {
+			if err := dumpElementContent(out, n.c2, true); err != nil {
+				return err
+			}
+		} else {
+			if err := dumpElementContent(out, n.c2, false); err != nil {
+				return err
+			}
+		}
+	case ElementContentOr:
+		switch n.c1.ctype {
+		case ElementContentOr, ElementContentSeq:
+			if err := dumpElementContent(out, n.c1, true); err != nil {
+				return err
+			}
+		default:
+			if err := dumpElementContent(out, n.c1, false); err != nil {
+				return err
+			}
+		}
+		_, _ = io.WriteString(out, " | ")
+
+		if ctype := n.c2.ctype; ctype == ElementContentSeq || (ctype == ElementContentOr && n.c2.coccur != ElementContentOnce) {
+			if err := dumpElementContent(out, n.c2, true); err != nil {
+				return err
+			}
+		} else {
+			if err := dumpElementContent(out, n.c2, false); err != nil {
+				return err
+			}
+		}
+	default:
+		return errors.New("invalid ElementContent")
+	}
+
+	if glob {
+		_, _ = io.WriteString(out, ")")
+	}
+
+	switch n.coccur {
+	case ElementContentOnce:
+		// no op
+	case ElementContentOpt:
+		_, _ = io.WriteString(out, "?")
+	case ElementContentMult:
+		_, _ = io.WriteString(out, "*")
+	case ElementContentPlus:
+		_, _ = io.WriteString(out, "+")
+	}
+
+	return nil
+}
+
+func dumpEntityContent(out io.Writer, content string) error {
+	if strings.IndexByte(content, '%') == -1 {
+		if err := dumpQuotedString(out, content); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	_, _ = io.WriteString(out, `"`)
+	rdr := strings.NewReader(content)
+	buf := bytes.Buffer{}
+	for rdr.Len() > 0 {
+		c, err := rdr.ReadByte()
+		if err != nil {
+			return err
+		}
+		switch c {
+		case '"':
+			if buf.Len() > 0 {
+				if _, err := buf.WriteTo(out); err != nil {
+					return err
+				}
+				buf.Reset()
+			}
+			_, _ = io.WriteString(out, "&quot;")
+		case '%':
+			if buf.Len() > 0 {
+				if _, err := buf.WriteTo(out); err != nil {
+					return err
+				}
+				buf.Reset()
+			}
+			_, _ = io.WriteString(out, "&#x25;")
+		default:
+			_ = buf.WriteByte(c)
+		}
+	}
+	if buf.Len() > 0 {
+		if _, err := buf.WriteTo(out); err != nil {
+			return err
+		}
+	}
+	_, _ = io.WriteString(out, `"`)
+
+	return nil
+}
+
+func (d *Dumper) dumpEntityDecl(out io.Writer, ent *Entity) error {
+	if ent == nil {
+		return nil
+	}
+
+	switch etype := ent.entityType; etype {
+	case InternalGeneralEntity:
+		_, _ = io.WriteString(out, "<!ENTITY ")
+		_, _ = io.WriteString(out, ent.name)
+		_, _ = io.WriteString(out, " ")
+		if ent.orig != "" {
+			if err := dumpQuotedString(out, ent.orig); err != nil {
+				return err
+			}
+		} else {
+			if err := dumpEntityContent(out, ent.content); err != nil {
+				return err
+			}
+		}
+		_, _ = io.WriteString(out, ">\n")
+	case ExternalGeneralParsedEntity, ExternalGeneralUnparsedEntity:
+		_, _ = io.WriteString(out, "<!ENTITY ")
+		_, _ = io.WriteString(out, ent.name)
+		if ent.externalID == "" {
+			_, _ = io.WriteString(out, " PUBLIC ")
+			_ = dumpQuotedString(out, ent.externalID)
+			_, _ = io.WriteString(out, " ")
+			_ = dumpQuotedString(out, ent.systemID)
+		} else {
+			_, _ = io.WriteString(out, " SYSTEM ")
+			_ = dumpQuotedString(out, ent.systemID)
+		}
+
+		if etype == ExternalGeneralUnparsedEntity {
+			if ent.content != "" {
+				_, _ = io.WriteString(out, " NDATA ")
+				if ent.orig != "" {
+					_, _ = io.WriteString(out, ent.orig)
+				} else {
+					_, _ = io.WriteString(out, ent.content)
+				}
+			}
+		}
+		_, _ = io.WriteString(out, ">\n")
+	case InternalParameterEntity:
+		_, _ = io.WriteString(out, "<!ENTITY % ")
+		_, _ = io.WriteString(out, ent.name)
+		_, _ = io.WriteString(out, " ")
+		if ent.orig != "" {
+			if err := dumpQuotedString(out, ent.orig); err != nil {
+				return err
+			}
+		} else {
+			if err := dumpEntityContent(out, ent.content); err != nil {
+				return err
+			}
+		}
+		_, _ = io.WriteString(out, ">\n")
+	case ExternalParameterEntity:
+		_, _ = io.WriteString(out, "<!ENTITY % ")
+		_, _ = io.WriteString(out, ent.name)
+		if ent.externalID != "" {
+			_, _ = io.WriteString(out, " PUBLIC ")
+			_ = dumpQuotedString(out, ent.externalID)
+			_, _ = io.WriteString(out, " ")
+			_ = dumpQuotedString(out, ent.systemID)
+		} else {
+			_, _ = io.WriteString(out, " SYSTEM ")
+			_ = dumpQuotedString(out, ent.systemID)
+		}
+	default:
+		return errors.New("invalid entity type")
+	}
+	return nil
+}
+
+func (d *Dumper) dumpElementDecl(out io.Writer, n *ElementDecl) error {
+	switch n.decltype {
+	case EmptyElementType:
+		dumpElementDeclPrologue(out, n)
+		_, _ = io.WriteString(out, " EMPTY>\n")
+	case AnyElementType:
+		dumpElementDeclPrologue(out, n)
+		_, _ = io.WriteString(out, " ANY>\n")
+	case MixedElementType, ElementElementType:
+		dumpElementDeclPrologue(out, n)
+		_, _ = io.WriteString(out, " ")
+		if err := dumpElementContent(out, n.content, true); err != nil {
+			return err
+		}
+		_, _ = io.WriteString(out, ">\n")
+	default:
+		return errors.New("invalid element decl")
+	}
+	return nil
+}
+
+func (d *Dumper) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
+	_, _ = io.WriteString(out, "<!ATTLIST ")
+	_, _ = io.WriteString(out, n.elem)
+	_, _ = io.WriteString(out, " ")
+	if n.prefix != "" {
+		_, _ = io.WriteString(out, n.prefix)
+		_, _ = io.WriteString(out, ":")
+	}
+	_, _ = io.WriteString(out, n.name)
+	switch n.atype {
+	case AttrCDATA:
+		_, _ = io.WriteString(out, " CDATA")
+	case AttrID:
+		_, _ = io.WriteString(out, " ID")
+	case AttrIDRef:
+		_, _ = io.WriteString(out, " IDREF")
+	case AttrIDRefs:
+		_, _ = io.WriteString(out, " IDREFS")
+	case AttrEntity:
+		_, _ = io.WriteString(out, " ENTITY")
+	case AttrNmtoken:
+		_, _ = io.WriteString(out, " NMTOKEN")
+	case AttrNmtokens:
+		_, _ = io.WriteString(out, " NMTOKENS")
+	case AttrEnumeration:
+		_, _ = io.WriteString(out, " (")
+		if err := d.dumpEnumeration(out, n.tree); err != nil {
+			return err
+		}
+	case AttrNotation:
+		_, _ = io.WriteString(out, " NOTATION (")
+		if err := d.dumpEnumeration(out, n.tree); err != nil {
+			return err
+		}
+	default:
+		return errors.New("invalid AttributeDecl type")
+	}
+
+	switch n.def {
+	case AttrDefaultNone:
+		// no op
+	case AttrDefaultRequired:
+		_, _ = io.WriteString(out, " #REQUIRED")
+	case AttrDefaultImplied:
+		_, _ = io.WriteString(out, " #IMPLIED")
+	case AttrDefaultFixed:
+		_, _ = io.WriteString(out, " #FIXED")
+	default:
+		return errors.New("invalid AttributeDecl default value type")
+	}
+
+	if n.defvalue != "" {
+		_, _ = io.WriteString(out, " ")
+		_ = dumpQuotedString(out, n.defvalue)
+	}
+	_, _ = io.WriteString(out, ">\n")
+	return nil
+}
+
+func (d *Dumper) dumpNsList(out io.Writer, nslist []*Namespace) error {
+	for _, ns := range nslist {
+		if err := d.dumpNs(out, ns); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *Dumper) dumpNs(out io.Writer, ns *Namespace) error {
+	if ns.href == "" {
+		// no op
+		return nil
+	}
+
+	_, _ = io.WriteString(out, " ")
+
+	if ns.prefix == "" {
+		_, _ = io.WriteString(out, "xmlns")
+	} else {
+		_, _ = io.WriteString(out, "xmlns:")
+		_, _ = io.WriteString(out, ns.prefix)
+	}
+	_, _ = io.WriteString(out, "=")
+	_ = dumpQuotedString(out, ns.href)
+	return nil
+}
+
+func (d *Dumper) DumpNode(out io.Writer, n Node) error {
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START Dumper.DumpNode '%s'", n.Name())
+		defer g.IRelease("END Dumper.DumpNode")
+	}
+
+	var err error
+	switch n.Type() {
+	case DocumentNode:
+		if err = d.dumpDocContent(out, n); err != nil {
+			return err
+		}
+		return nil
+	case DTDNode:
+		if err = d.dumpDTD(out, n); err != nil {
+			return err
+		}
+		return nil
+	case CommentNode:
+		_, _ = io.WriteString(out, "<!--")
+		_, _ = out.Write(n.Content())
+		_, _ = io.WriteString(out, "-->")
+		return nil
+	case EntityRefNode:
+		_, _ = io.WriteString(out, "&")
+		_, _ = io.WriteString(out, n.Name())
+		_, _ = io.WriteString(out, ";")
+		return nil
+	case TextNode:
+		c := n.Content()
+		if string(c) == tokens.XMLTextNoEnc {
+			panic("unimplemented")
+		} else {
+			if err := escapeText(out, c, false); err != nil {
+				return err
+			}
+		}
+		return nil // no recursing down
+	case ElementDeclNode:
+		if err = d.dumpElementDecl(out, n.(*ElementDecl)); err != nil {
+			return err
+		}
+		return nil
+	case AttributeDeclNode:
+		if err = d.dumpAttributeDecl(out, n.(*AttributeDecl)); err != nil {
+			return err
+		}
+		return nil
+	case EntityNode:
+		if err = d.dumpEntityDecl(out, n.(*Entity)); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if err != nil {
+		return err
+	}
+
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START DumpNode(fallthrough)")
+		defer g.IRelease("END DUmpNode(fallthrough)")
+	}
+
+	// if it got here it's some sort of an element
+	var name string
+	var nslist []*Namespace
+	if nser, ok := n.(Namespacer); ok {
+		if prefix := nser.Prefix(); prefix != "" {
+			name = prefix + ":" + nser.LocalName()
+		} else {
+			name = nser.LocalName()
+		}
+		nslist = nser.Namespaces()
+	} else {
+		name = n.Name()
+	}
+
+	_, _ = io.WriteString(out, "<")
+	_, _ = io.WriteString(out, name)
+
+	if len(nslist) > 0 {
+		if err := d.dumpNsList(out, nslist); err != nil {
+			return err
+		}
+	}
+
+	if e, ok := n.(*Element); ok {
+		for attr := e.properties; attr != nil; {
+			g := pdebug.IPrintf("START DumpNode(fallthrough->attribute(%s))", attr.Name())
+			_, _ = io.WriteString(out, " "+attr.Name()+`="`)
+			count := 0
+			for achld := attr.FirstChild(); achld != nil; achld = achld.NextSibling() {
+				count++
+				if achld.Type() == TextNode {
+					if err := escapeAttrValue(out, achld.Content()); err != nil {
+						return err
+					}
+				} else {
+					if err := d.DumpNode(out, achld); err != nil {
+						return err
+					}
+				}
+			}
+			_, _ = io.WriteString(out, `"`)
+			g.IRelease("END DUmpNode(fallthrough->attribute(%s))", attr.Name())
+			a := attr.NextSibling()
+			if a == nil {
+				break
+			}
+			attr = a.(*Attribute)
+		}
+
+		if child := e.FirstChild(); child == nil {
+			_, _ = io.WriteString(out, "/>")
+			return nil
+		}
+	}
+
+	_, _ = io.WriteString(out, ">")
+
+	if child := n.FirstChild(); child != nil {
+		for ; child != nil; child = child.NextSibling() {
+			if err := d.DumpNode(out, child); err != nil {
+				return err
+			}
+		}
+	}
+
+	_, _ = io.WriteString(out, "</")
+	_, _ = io.WriteString(out, name)
+	_, _ = io.WriteString(out, ">")
+
+	return nil
+}
