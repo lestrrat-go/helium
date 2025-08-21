@@ -120,8 +120,8 @@ type docnode struct {
 	doc        *Document
 }
 
-// node represents a node in a XML tree.
-type node struct {
+// xmlnode represents a node in a XML tree.
+type xmlnode struct {
 	docnode
 	// private    interface{}
 	content    []byte
@@ -213,25 +213,25 @@ type NamespaceContainer interface {
 }
 
 type EntityRef struct {
-	node
+	xmlnode
 }
 
 // Text is just a wrapper around Node so that we can
 // use Go-ish type checks
 type Text struct {
-	node
+	xmlnode
 }
 
 // Comment is just a wrapper around Node so that we can
 // use Go-ish type checks
 type Comment struct {
-	node
+	xmlnode
 }
 
 // Element is just a wrapper around Node so that we can
 // use Go-ish type checks
 type Element struct {
-	node
+	xmlnode
 }
 
 // Nemaspacer is an interface for things that has a namespace
@@ -318,7 +318,7 @@ const (
 )
 
 type Entity struct {
-	node
+	xmlnode
 	orig       string     // content without substitution
 	content    string     // content or ndata if unparsed
 	entityType EntityType // the entity type

@@ -20,7 +20,7 @@ func NewParser() *Parser {
 
 func (p *Parser) Parse(ctx context.Context, b []byte) (*Document, error) {
 	pctx := &parserCtx{}
-	if err := pctx.init(p, bytes.NewReader(b)); err != nil {
+	if err := pctx.init(ctx, p, bytes.NewReader(b)); err != nil {
 		return nil, err
 	}
 	defer func() {

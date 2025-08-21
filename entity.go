@@ -33,7 +33,7 @@ func newEntity(name string, typ EntityType, publicID, systemID, notation, orig s
 }
 
 func (e *Entity) Checked() bool {
-	return e.checked & 1 == 1
+	return e.checked&1 == 1
 }
 
 func (e *Entity) MarkChecked() {

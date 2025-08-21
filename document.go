@@ -2,13 +2,16 @@ package helium
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"strings"
+
+	"github.com/lestrrat-go/helium/node"
 )
 
-func CreateDocument() *Document {
-	return NewDocument("1.0", "", StandaloneImplicitNo)
+func CreateDocument() *node.Document {
+	return node.NewDocument()
 }
 
 func NewDocument(version, encoding string, standalone DocumentStandaloneType) *Document {
@@ -25,14 +28,14 @@ func NewDocument(version, encoding string, standalone DocumentStandaloneType) *D
 
 func (d Document) XMLString() (string, error) {
 	out := bytes.Buffer{}
-	if err := d.XML(&out); err != nil {
+	if err := d.XML(context.Background(), &out); err != nil {
 		return "", err
 	}
 	return out.String(), nil
 }
 
-func (d *Document) XML(out io.Writer) error {
-	return (&Dumper{}).DumpDoc(out, d)
+func (d *Document) XML(ctx context.Context, out io.Writer) error {
+	return (&Dumper{}).DumpDoc(ctx, out, d)
 }
 
 func (d *Document) AddChild(cur Node) error {

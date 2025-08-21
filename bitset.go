@@ -5,7 +5,7 @@ func (p *ParseOption) Set(n ParseOption) {
 }
 
 func (p ParseOption) IsSet(n ParseOption) bool {
-	return p & n != 0
+	return p&n != 0
 }
 
 func (p *LoadSubsetOption) Set(n LoadSubsetOption) {
@@ -13,6 +13,5 @@ func (p *LoadSubsetOption) Set(n LoadSubsetOption) {
 }
 
 func (p LoadSubsetOption) IsSet(n LoadSubsetOption) bool {
-	return p & n != 0
+	return p&n != 0
 }
-

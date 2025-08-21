@@ -1,7 +1,9 @@
 package helium
 
 import (
+	"context"
 	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/lestrrat-go/helium/sax"
@@ -14,60 +16,99 @@ func NewTreeBuilder() *TreeBuilder {
 	return &TreeBuilder{}
 }
 
-func (t *TreeBuilder) SetDocumentLocator(ctxif sax.Context, loc sax.DocumentLocator) error {
+func (t *TreeBuilder) SetDocumentLocator(ctx context.Context, ctxif sax.Context, loc sax.DocumentLocator) error {
 	return nil
 }
 
-func (t *TreeBuilder) StartDocument(ctxif sax.Context) error {
-	ctx := ctxif.(*parserCtx)
-	ctx.doc = NewDocument(ctx.version, ctx.encoding, ctx.standalone)
+func (t *TreeBuilder) StartDocument(ctx context.Context, ctxif sax.Context) error {
+	pctx := ctxif.(*parserCtx)
+
+	ctx, span := StartSpan(ctx, "TreeBuilder.StartDocument")
+	defer span.End()
+
+	TraceEvent(ctx, "parsing started",
+		slog.String("version", pctx.version),
+		slog.String("encoding", pctx.encoding),
+		slog.Int("standalone", int(pctx.standalone)))
+
+	pctx.doc = NewDocument(pctx.version, pctx.encoding, pctx.standalone)
+
+	TraceEvent(ctx, "document created successfully")
 	return nil
 }
 
-func (t *TreeBuilder) EndDocument(ctxif sax.Context) error {
+func (t *TreeBuilder) EndDocument(ctx context.Context, ctxif sax.Context) error {
+	ctx, span := StartSpan(ctx, "TreeBuilder.EndDocument")
+	defer span.End()
+
+	TraceEvent(ctx, "parsing completed")
 	return nil
 }
 
-func (t *TreeBuilder) ProcessingInstruction(ctxif sax.Context, target, data string) error {
-	ctx := ctxif.(*parserCtx)
-	doc := ctx.doc
+func (t *TreeBuilder) ProcessingInstruction(ctx context.Context, ctxif sax.Context, target, data string) error {
+	pctx := ctxif.(*parserCtx)
+
+	ctx, span := StartSpan(ctx, "TreeBuilder.ProcessingInstruction")
+	defer span.End()
+
+	TraceEvent(ctx, "processing instruction",
+		slog.String("target", target),
+		slog.String("data", data))
+
+	doc := pctx.doc
 	pi, err := doc.CreatePI(target, data)
 	if err != nil {
 		return err
 	}
 
-	switch ctx.inSubset {
+	switch pctx.inSubset {
 	case 1:
 		if err := doc.IntSubset().AddChild(pi); err != nil {
 			return err
 		}
+		TraceEvent(ctx, "PI added to internal subset")
 	case 2:
 		if err := doc.ExtSubset().AddChild(pi); err != nil {
 			return err
 		}
+		TraceEvent(ctx, "PI added to external subset")
 	}
 
-	parent := ctx.elem
+	parent := pctx.elem
 	if parent == nil {
 		if err := doc.AddChild(pi); err != nil {
 			return err
 		}
+		TraceEvent(ctx, "PI added to document")
 	} else if parent.Type() == ElementNode {
 		if err := parent.AddChild(pi); err != nil {
 			return err
 		}
+		TraceEvent(ctx, "PI added as child element")
 	} else {
 		if err := parent.AddSibling(pi); err != nil {
 			return err
 		}
+		TraceEvent(ctx, "PI added as sibling")
 	}
+	TraceEvent(ctx, "processing instruction completed successfully")
 	return nil
 }
 
-func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
-	ctx := ctxif.(*parserCtx)
-	doc := ctx.doc
+func (t *TreeBuilder) StartElementNS(ctx context.Context, ctxif sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	pctx := ctxif.(*parserCtx)
 
+	ctx, span := StartSpan(ctx, "TreeBuilder.StartElementNS")
+	defer span.End()
+
+	TraceEvent(ctx, "element start",
+		slog.String("element_name", localname),
+		slog.String("prefix", prefix),
+		slog.String("uri", uri),
+		slog.Int("namespace_count", len(namespaces)),
+		slog.Int("attribute_count", len(attrs)))
+
+	doc := pctx.doc
 	e, err := doc.CreateElement(localname)
 	if err != nil {
 		return err
@@ -86,7 +127,7 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 	}
 
 	for _, attr := range attrs {
-		if attr.IsDefault() && !ctx.loadsubset.IsSet(CompleteAttrs) {
+		if attr.IsDefault() && !pctx.loadsubset.IsSet(CompleteAttrs) {
 			continue
 		}
 		if err := e.SetAttribute(attr.Name(), attr.Value()); err != nil {
@@ -95,61 +136,94 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 	}
 
 	var parent Node
-	if e := ctx.elem; e != nil {
+	if e := pctx.elem; e != nil {
 		parent = e
 	}
 	if parent == nil {
 		if err := doc.AddChild(e); err != nil {
 			return err
 		}
+		TraceEvent(ctx, "element added to document as root")
 	} else if parent.Type() == ElementNode {
 		if err := parent.AddChild(e); err != nil {
 			return err
 		}
+		TraceEvent(ctx, "element added as child")
 	} else {
 		if err := parent.AddSibling(e); err != nil {
 			return err
 		}
+		TraceEvent(ctx, "element added as sibling")
 	}
 
-	ctx.elem = e
-
+	pctx.elem = e
+	TraceEvent(ctx, "element processing completed successfully")
 	return nil
 }
 
-func (t *TreeBuilder) EndElementNS(ctxif sax.Context, localname, prefix, uri string) error {
-	ctx := ctxif.(*parserCtx)
-	cur := ctx.elem
+func (t *TreeBuilder) EndElementNS(ctx context.Context, ctxif sax.Context, localname, prefix, uri string) error {
+	pctx := ctxif.(*parserCtx)
+
+	ctx, span := StartSpan(ctx, "TreeBuilder.EndElementNS")
+	defer span.End()
+
+	TraceEvent(ctx, "element end",
+		slog.String("element_name", localname),
+		slog.String("prefix", prefix),
+		slog.String("uri", uri))
+
+	cur := pctx.elem
 	if cur == nil {
 		return errors.New("no context node to end")
 	}
 
 	p := cur.Parent()
 	if e, ok := p.(*Element); ok {
-		ctx.elem = e
+		pctx.elem = e
+		TraceEvent(ctx, "moved up to parent element", slog.String("parent_name", e.LocalName()))
 	} else {
-		ctx.elem = nil
+		pctx.elem = nil
+		TraceEvent(ctx, "moved up to document root")
 	}
+	TraceEvent(ctx, "element end processing completed successfully")
 	return nil
 }
 
-func (t *TreeBuilder) Characters(ctxif sax.Context, data []byte) error {
-	ctx := ctxif.(*parserCtx)
-	n := ctx.elem
+func (t *TreeBuilder) Characters(ctx context.Context, ctxif sax.Context, data []byte) error {
+	pctx := ctxif.(*parserCtx)
+
+	TraceEvent(ctx, "character data",
+		slog.Int("data_length", len(data)))
+
+	n := pctx.elem
 	if n == nil {
 		return errors.New("text content placed in wrong location")
 	}
 
-	return n.AddContent(data)
-}
+	if err := n.AddContent(data); err != nil {
+		return err
+	}
 
-func (t *TreeBuilder) CDataBlock(_ sax.Context, data []byte) error {
+	TraceEvent(ctx, "character data added successfully")
 	return nil
 }
 
-func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
-	ctx := ctxif.(*parserCtx)
-	doc := ctx.doc
+func (t *TreeBuilder) CDataBlock(ctx context.Context, ctxif sax.Context, data []byte) error {
+	TraceEvent(ctx, "CDATA block",
+		slog.Int("data_length", len(data)))
+	return nil
+}
+
+func (t *TreeBuilder) Comment(ctx context.Context, ctxif sax.Context, data []byte) error {
+	pctx := ctxif.(*parserCtx)
+
+	ctx, span := StartSpan(ctx, "TreeBuilder.Comment")
+	defer span.End()
+
+	TraceEvent(ctx, "comment",
+		slog.Int("comment_length", len(data)))
+
+	doc := pctx.doc
 	if doc == nil {
 		return errors.New("comment placed in wrong location")
 	}
@@ -159,26 +233,30 @@ func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
 		return err
 	}
 
-	n := ctx.elem
+	n := pctx.elem
 	if n == nil {
 		if err := doc.AddChild(e); err != nil {
 			return err
 		}
+		TraceEvent(ctx, "comment added to document")
 	} else if n.Type() == ElementNode {
 		if err := n.AddChild(e); err != nil {
 			return err
 		}
+		TraceEvent(ctx, "comment added as child")
 	} else {
 		if err := n.AddSibling(e); err != nil {
 			return err
 		}
+		TraceEvent(ctx, "comment added as sibling")
 	}
+	TraceEvent(ctx, "comment processing completed successfully")
 	return nil
 }
 
-func (t *TreeBuilder) InternalSubset(ctxif sax.Context, name, eid, uri string) error {
-	ctx := ctxif.(*parserCtx)
-	doc := ctx.doc
+func (t *TreeBuilder) InternalSubset(ctx context.Context, ctxif sax.Context, name, eid, uri string) error {
+	pctx := ctxif.(*parserCtx)
+	doc := pctx.doc
 
 	dtd, err := doc.InternalSubset()
 	if err == nil {
@@ -198,25 +276,25 @@ func (t *TreeBuilder) InternalSubset(ctxif sax.Context, name, eid, uri string) e
 	return nil
 }
 
-func (t *TreeBuilder) ExternalSubset(ctxif sax.Context, name, eid, uri string) error {
+func (t *TreeBuilder) ExternalSubset(ctx context.Context, ctxif sax.Context, name, eid, uri string) error {
 	return nil
 }
 
-func (t *TreeBuilder) HasInternalSubset(ctxif sax.Context) (bool, error) {
+func (t *TreeBuilder) HasInternalSubset(ctx context.Context, ctxif sax.Context) (bool, error) {
 	return false, sax.ErrHandlerUnspecified
 }
 
-func (t *TreeBuilder) HasExternalSubset(ctxif sax.Context) (bool, error) {
+func (t *TreeBuilder) HasExternalSubset(ctx context.Context, ctxif sax.Context) (bool, error) {
 	return false, sax.ErrHandlerUnspecified
 }
 
-func (t *TreeBuilder) IsStandalone(ctxif sax.Context) (bool, error) {
+func (t *TreeBuilder) IsStandalone(ctx context.Context, ctxif sax.Context) (bool, error) {
 	return false, sax.ErrHandlerUnspecified
 }
 
-func (t *TreeBuilder) GetEntity(ctxif sax.Context, name string) (ent sax.Entity, err error) {
-	ctx := ctxif.(*parserCtx)
-	doc := ctx.doc
+func (t *TreeBuilder) GetEntity(ctx context.Context, ctxif sax.Context, name string) (ent sax.Entity, err error) {
+	pctx := ctxif.(*parserCtx)
+	doc := pctx.doc
 	x, ok := doc.GetEntity(name)
 	if !ok {
 		err = errors.New("entity not found")
@@ -226,13 +304,13 @@ func (t *TreeBuilder) GetEntity(ctxif sax.Context, name string) (ent sax.Entity,
 	return
 }
 
-func (t *TreeBuilder) GetParameterEntity(ctxif sax.Context, name string) (sax.Entity, error) {
+func (t *TreeBuilder) GetParameterEntity(ctx context.Context, ctxif sax.Context, name string) (sax.Entity, error) {
 	if ctxif == nil {
 		return nil, ErrInvalidParserCtx
 	}
 
-	ctx := ctxif.(*parserCtx)
-	doc := ctx.doc
+	pctx := ctxif.(*parserCtx)
+	doc := pctx.doc
 	if doc == nil {
 		return nil, ErrInvalidDocument
 	}
@@ -244,8 +322,8 @@ func (t *TreeBuilder) GetParameterEntity(ctxif sax.Context, name string) (sax.En
 	return nil, ErrEntityNotFound
 }
 
-func (t *TreeBuilder) AttributeDecl(ctxif sax.Context, eName string, aName string, typ int, deftype int, value string, enumif sax.Enumeration) error {
-	ctx := ctxif.(*parserCtx)
+func (t *TreeBuilder) AttributeDecl(ctx context.Context, ctxif sax.Context, eName string, aName string, typ int, deftype int, value string, enumif sax.Enumeration) error {
+	pctx := ctxif.(*parserCtx)
 
 	if aName == "xml:id" && typ != int(AttrID) {
 		// libxml2 says "raise the error but keep the validity flag"
@@ -263,14 +341,14 @@ func (t *TreeBuilder) AttributeDecl(ctxif sax.Context, eName string, aName strin
 
 	enum := enumif.(Enumeration)
 
-	doc := ctx.doc
-	switch ctx.inSubset {
+	doc := pctx.doc
+	switch pctx.inSubset {
 	case 1:
-		if _, err := ctx.addAttributeDecl(doc.intSubset, eName, local, prefix, AttributeType(typ), AttributeDefault(deftype), value, enum); err != nil {
+		if _, err := pctx.addAttributeDecl(doc.intSubset, eName, local, prefix, AttributeType(typ), AttributeDefault(deftype), value, enum); err != nil {
 			return err
 		}
 	case 2:
-		if _, err := ctx.addAttributeDecl(doc.extSubset, eName, local, prefix, AttributeType(typ), AttributeDefault(deftype), value, enum); err != nil {
+		if _, err := pctx.addAttributeDecl(doc.extSubset, eName, local, prefix, AttributeType(typ), AttributeDefault(deftype), value, enum); err != nil {
 			return err
 		}
 	default:
@@ -287,11 +365,11 @@ func (t *TreeBuilder) AttributeDecl(ctxif sax.Context, eName string, aName strin
 	return nil
 }
 
-func (t *TreeBuilder) ElementDecl(ctxif sax.Context, name string, typ int, content sax.ElementContent) error {
-	ctx := ctxif.(*parserCtx)
-	doc := ctx.doc
+func (t *TreeBuilder) ElementDecl(ctx context.Context, ctxif sax.Context, name string, typ int, content sax.ElementContent) error {
+	pctx := ctxif.(*parserCtx)
+	doc := pctx.doc
 	var dtd *DTD
-	switch ctx.inSubset {
+	switch pctx.inSubset {
 	case 1:
 		dtd = doc.intSubset
 	case 2:
@@ -308,41 +386,41 @@ func (t *TreeBuilder) ElementDecl(ctxif sax.Context, name string, typ int, conte
 	return nil
 }
 
-func (t *TreeBuilder) EndDTD(ctxif sax.Context) error {
+func (t *TreeBuilder) EndDTD(ctx context.Context, ctxif sax.Context) error {
 	return nil
 }
 
-func (t *TreeBuilder) EndEntity(ctxif sax.Context, name string) error {
+func (t *TreeBuilder) EndEntity(ctx context.Context, ctxif sax.Context, name string) error {
 	return nil
 }
-func (t *TreeBuilder) ExternalEntityDecl(ctxif sax.Context, name string, publicID string, systemID string) error {
-	return nil
-}
-
-func (t *TreeBuilder) GetExternalSubset(ctxif sax.Context, name string, baseURI string) error {
+func (t *TreeBuilder) ExternalEntityDecl(ctx context.Context, ctxif sax.Context, name string, publicID string, systemID string) error {
 	return nil
 }
 
-func (t *TreeBuilder) IgnorableWhitespace(ctxif sax.Context, content []byte) error {
-	ctx := ctxif.(*parserCtx)
-	if ctx.keepBlanks {
-		return t.Characters(ctx, content)
+func (t *TreeBuilder) GetExternalSubset(ctx context.Context, ctxif sax.Context, name string, baseURI string) error {
+	return nil
+}
+
+func (t *TreeBuilder) IgnorableWhitespace(ctx context.Context, ctxif sax.Context, content []byte) error {
+	pctx := ctxif.(*parserCtx)
+	if pctx.keepBlanks {
+		return t.Characters(ctx, ctxif, content)
 	}
 
 	return nil
 }
 
-func (t *TreeBuilder) InternalEntityDecl(ctxif sax.Context, name string, value string) error {
+func (t *TreeBuilder) InternalEntityDecl(ctx context.Context, ctxif sax.Context, name string, value string) error {
 	return nil
 }
 
-func (t *TreeBuilder) NotationDecl(ctxif sax.Context, name string, publicID string, systemID string) error {
+func (t *TreeBuilder) NotationDecl(ctx context.Context, ctxif sax.Context, name string, publicID string, systemID string) error {
 	return nil
 }
 
-func (t *TreeBuilder) Reference(ctxif sax.Context, name string) error {
-	ctx := ctxif.(*parserCtx)
-	doc := ctx.doc
+func (t *TreeBuilder) Reference(ctx context.Context, ctxif sax.Context, name string) error {
+	pctx := ctxif.(*parserCtx)
+	doc := pctx.doc
 	var n Node
 	var err error
 	if name[0] == '#' {
@@ -355,31 +433,31 @@ func (t *TreeBuilder) Reference(ctxif sax.Context, name string) error {
 		}
 	}
 
-	parent := ctx.elem
+	parent := pctx.elem
 	return parent.AddChild(n)
 }
 
-func (t *TreeBuilder) ResolveEntity(ctxif sax.Context, publicID string, systemID string) (sax.ParseInput, error) {
+func (t *TreeBuilder) ResolveEntity(ctx context.Context, ctxif sax.Context, publicID string, systemID string) (sax.ParseInput, error) {
 	return nil, sax.ErrHandlerUnspecified
 }
 
-func (t *TreeBuilder) SkippedEntity(ctxif sax.Context, name string) error {
+func (t *TreeBuilder) SkippedEntity(ctx context.Context, ctxif sax.Context, name string) error {
 	return nil
 }
 
-func (t *TreeBuilder) StartDTD(ctxif sax.Context, name string, publicID string, systemID string) error {
+func (t *TreeBuilder) StartDTD(ctx context.Context, ctxif sax.Context, name string, publicID string, systemID string) error {
 	return nil
 }
 
-func (t *TreeBuilder) StartEntity(ctxif sax.Context, name string) error {
+func (t *TreeBuilder) StartEntity(ctx context.Context, ctxif sax.Context, name string) error {
 	return nil
 }
 
-func (t *TreeBuilder) EntityDecl(ctxif sax.Context, name string, typ int, publicID string, systemID string, notation string) error {
-	ctx := ctxif.(*parserCtx)
-	doc := ctx.doc
+func (t *TreeBuilder) EntityDecl(ctx context.Context, ctxif sax.Context, name string, typ int, publicID string, systemID string, notation string) error {
+	pctx := ctxif.(*parserCtx)
+	doc := pctx.doc
 	var dtd *DTD
-	switch ctx.inSubset {
+	switch pctx.inSubset {
 	case 1:
 		dtd = doc.intSubset
 	case 2:
@@ -411,13 +489,13 @@ func (t *TreeBuilder) EntityDecl(ctxif sax.Context, name string, typ int, public
 	return nil
 }
 
-func (t *TreeBuilder) UnparsedEntityDecl(ctxif sax.Context, name string, publicID string, systemID string, notation string) error {
+func (t *TreeBuilder) UnparsedEntityDecl(ctx context.Context, ctxif sax.Context, name string, publicID string, systemID string, notation string) error {
 	// Because the parser needs to know about entities even in cases where
 	// there isn't a SAX handler registered, call to Document.RegisterEntry
 	// is done in the main parser -- and not here.
 	return nil
 }
 
-func (t *TreeBuilder) Error(ctxif sax.Context, message string, args ...interface{}) error {
+func (t *TreeBuilder) Error(ctx context.Context, ctxif sax.Context, message string, args ...interface{}) error {
 	return nil
 }

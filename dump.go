@@ -2,9 +2,11 @@ package helium
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"unicode/utf8"
 )
@@ -197,21 +199,30 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
 
 type Dumper struct{}
 
-func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
-	if err := d.DumpNode(out, doc); err != nil {
+func (d *Dumper) DumpDoc(ctx context.Context, out io.Writer, doc *Document) error {
+	ctx, span := StartSpan(ctx, "DumpDoc")
+	defer span.End()
+
+	TraceEvent(ctx, "starting document serialization",
+		slog.String("document_version", doc.Version()),
+		slog.String("document_encoding", doc.Encoding()))
+
+	if err := d.DumpNode(ctx, out, doc); err != nil {
 		return err
 	}
 
 	for e := doc.FirstChild(); e != nil; e = e.NextSibling() {
-		if err := d.DumpNode(out, e); err != nil {
+		if err := d.DumpNode(ctx, out, e); err != nil {
 			return err
 		}
 		_, _ = io.WriteString(out, "\n")
 	}
+
+	TraceEvent(ctx, "completed document serialization")
 	return nil
 }
 
-func (d *Dumper) dumpDocContent(out io.Writer, n Node) error {
+func (d *Dumper) dumpDocContent(ctx context.Context, out io.Writer, n Node) error {
 	doc := n.(*Document)
 	_, _ = io.WriteString(out, `<?xml version="`)
 	version := doc.Version()
@@ -234,7 +245,7 @@ func (d *Dumper) dumpDocContent(out io.Writer, n Node) error {
 	return nil
 }
 
-func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
+func (d *Dumper) dumpDTD(ctx context.Context, out io.Writer, n Node) error {
 	dtd := n.(*DTD)
 	_, _ = io.WriteString(out, "<!DOCTYPE ")
 	_, _ = io.WriteString(out, dtd.Name())
@@ -259,7 +270,7 @@ func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
 	_, _ = io.WriteString(out, "[\n")
 
 	for e := dtd.FirstChild(); e != nil; e = e.NextSibling() {
-		if err := d.DumpNode(out, e); err != nil {
+		if err := d.DumpNode(ctx, out, e); err != nil {
 			return err
 		}
 	}
@@ -420,7 +431,7 @@ func dumpEntityContent(out io.Writer, content string) error {
 	return nil
 }
 
-func (d *Dumper) dumpEntityDecl(out io.Writer, ent *Entity) error {
+func (d *Dumper) dumpEntityDecl(ctx context.Context, out io.Writer, ent *Entity) error {
 	if ent == nil {
 		return nil
 	}
@@ -496,7 +507,7 @@ func (d *Dumper) dumpEntityDecl(out io.Writer, ent *Entity) error {
 	return nil
 }
 
-func (d *Dumper) dumpElementDecl(out io.Writer, n *ElementDecl) error {
+func (d *Dumper) dumpElementDecl(ctx context.Context, out io.Writer, n *ElementDecl) error {
 	switch n.decltype {
 	case EmptyElementType:
 		dumpElementDeclPrologue(out, n)
@@ -517,7 +528,7 @@ func (d *Dumper) dumpElementDecl(out io.Writer, n *ElementDecl) error {
 	return nil
 }
 
-func (d *Dumper) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
+func (d *Dumper) dumpAttributeDecl(ctx context.Context, out io.Writer, n *AttributeDecl) error {
 	_, _ = io.WriteString(out, "<!ATTLIST ")
 	_, _ = io.WriteString(out, n.elem)
 	_, _ = io.WriteString(out, " ")
@@ -576,16 +587,16 @@ func (d *Dumper) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
 	return nil
 }
 
-func (d *Dumper) dumpNsList(out io.Writer, nslist []*Namespace) error {
+func (d *Dumper) dumpNsList(ctx context.Context, out io.Writer, nslist []*Namespace) error {
 	for _, ns := range nslist {
-		if err := d.dumpNs(out, ns); err != nil {
+		if err := d.dumpNs(ctx, out, ns); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (d *Dumper) dumpNs(out io.Writer, ns *Namespace) error {
+func (d *Dumper) dumpNs(ctx context.Context, out io.Writer, ns *Namespace) error {
 	if ns.href == "" {
 		// no op
 		return nil
@@ -604,16 +615,22 @@ func (d *Dumper) dumpNs(out io.Writer, ns *Namespace) error {
 	return nil
 }
 
-func (d *Dumper) DumpNode(out io.Writer, n Node) error {
+func (d *Dumper) DumpNode(ctx context.Context, out io.Writer, n Node) error {
+	ctx, span := StartSpan(ctx, "DumpNode")
+	defer span.End()
+
+	TraceEvent(ctx, "serializing node",
+		slog.String("node_type", n.Type().String()),
+		slog.String("node_name", n.Name()))
 	var err error
 	switch n.Type() {
 	case DocumentNode:
-		if err = d.dumpDocContent(out, n); err != nil {
+		if err = d.dumpDocContent(ctx, out, n); err != nil {
 			return err
 		}
 		return nil
 	case DTDNode:
-		if err = d.dumpDTD(out, n); err != nil {
+		if err = d.dumpDTD(ctx, out, n); err != nil {
 			return err
 		}
 		return nil
@@ -638,17 +655,17 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		}
 		return nil // no recursing down
 	case ElementDeclNode:
-		if err = d.dumpElementDecl(out, n.(*ElementDecl)); err != nil {
+		if err = d.dumpElementDecl(ctx, out, n.(*ElementDecl)); err != nil {
 			return err
 		}
 		return nil
 	case AttributeDeclNode:
-		if err = d.dumpAttributeDecl(out, n.(*AttributeDecl)); err != nil {
+		if err = d.dumpAttributeDecl(ctx, out, n.(*AttributeDecl)); err != nil {
 			return err
 		}
 		return nil
 	case EntityNode:
-		if err = d.dumpEntityDecl(out, n.(*Entity)); err != nil {
+		if err = d.dumpEntityDecl(ctx, out, n.(*Entity)); err != nil {
 			return err
 		}
 		return nil
@@ -676,7 +693,7 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 	_, _ = io.WriteString(out, name)
 
 	if len(nslist) > 0 {
-		if err := d.dumpNsList(out, nslist); err != nil {
+		if err := d.dumpNsList(ctx, out, nslist); err != nil {
 			return err
 		}
 	}
@@ -692,7 +709,7 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 						return err
 					}
 				} else {
-					if err := d.DumpNode(out, achld); err != nil {
+					if err := d.DumpNode(ctx, out, achld); err != nil {
 						return err
 					}
 				}
@@ -715,7 +732,7 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 
 	if child := n.FirstChild(); child != nil {
 		for ; child != nil; child = child.NextSibling() {
-			if err := d.DumpNode(out, child); err != nil {
+			if err := d.DumpNode(ctx, out, child); err != nil {
 				return err
 			}
 		}

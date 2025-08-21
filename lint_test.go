@@ -88,7 +88,7 @@ func TestHeliumLintGolden(t *testing.T) {
 		// Generate output using helium.Dumper like helium-lint does
 		var output bytes.Buffer
 		d := helium.Dumper{}
-		require.NoError(t, d.DumpDoc(&output, doc))
+		require.NoError(t, d.DumpDoc(context.Background(), &output, doc))
 
 		actual := output.String()
 		expected := string(golden)

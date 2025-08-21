@@ -181,15 +181,15 @@ func replaceNode(n Node, cur Node) {
 	}
 }
 
-func (n node) Namespace() *Namespace {
+func (n xmlnode) Namespace() *Namespace {
 	return n.ns
 }
 
-func (n node) Namespaces() []*Namespace {
+func (n xmlnode) Namespaces() []*Namespace {
 	return n.nsDefs
 }
 
-func (n *node) SetNamespace(prefix, uri string, activate ...bool) error {
+func (n *xmlnode) SetNamespace(prefix, uri string, activate ...bool) error {
 	ns, err := n.doc.CreateNamespace(prefix, uri)
 	if err != nil {
 		return err
@@ -208,21 +208,21 @@ func (n *node) SetNamespace(prefix, uri string, activate ...bool) error {
 	return nil
 }
 
-func (n node) Prefix() string {
+func (n xmlnode) Prefix() string {
 	if ns := n.ns; ns != nil {
 		return ns.Prefix()
 	}
 	return ""
 }
 
-func (n node) URI() string {
+func (n xmlnode) URI() string {
 	if ns := n.ns; ns != nil {
 		return ns.URI()
 	}
 	return ""
 }
 
-func (n node) Name() string {
+func (n xmlnode) Name() string {
 	if ns := n.ns; ns != nil && ns.Prefix() != "" {
 		return ns.Prefix() + ":" + n.name
 	}

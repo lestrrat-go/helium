@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/s11n"
 	"github.com/stretchr/testify/require"
 )
 
@@ -88,17 +89,23 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 }
 
 func TestDOMToXMLString(t *testing.T) {
+	// Enable logging for this test
+	ctx := context.Background()
+	if testing.Verbose() {
+		ctx = helium.WithTraceLogger(ctx, slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	}
 	doc := helium.CreateDocument()
 	//	defer doc.Free()
 
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err, `CreateElement("root") succeeds`)
+	root := doc.CreateElement("root")
+	require.NotNil(t, root, `CreateElement("root") succeeds`)
 
 	require.NoError(t, doc.SetDocumentElement(root))
 	require.NoError(t, root.AddContent([]byte(`Hello, World!`)))
 
-	str, err := doc.XMLString()
-	require.NoError(t, err, "XMLString(doc) succeeds")
+	var output strings.Builder
+	d := s11n.Dumper{}
+	require.NoError(t, d.DumpDoc(&output, doc), "DumpDoc(doc) succeeds")
 
-	t.Logf("%s", str)
+	t.Logf("%s", output.String())
 }

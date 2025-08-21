@@ -25,7 +25,7 @@ func TestDetectBOM(t *testing.T) {
 	for expected, inputs := range data {
 		for i, input := range inputs {
 			ctx := &parserCtx{}
-			require.NoError(t, ctx.init(p, bytes.NewReader(input)))
+			require.NoError(t, ctx.init(context.Background(), p, bytes.NewReader(input)))
 			enc, err := ctx.detectEncoding()
 			if expected == "" {
 				t.Logf("checking [invalid] (%d)", i)

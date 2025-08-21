@@ -2,13 +2,14 @@ package helium
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 )
 
-const _ElementType_name = "ElementNodeAttributeNodeTextNodeCDATASectionNodeEntityRefNodeEntityNodeProcessingInstructionNodeCommentNodeDocumentNodeDocumentTypeNodeDocumentFragNodeNotationNodeHTMLDocumentNodeDTDNodeElementDeclNodeAttributeDeclNodeEntityDeclNodeNamespaceDeclNodeXIncludeStartNodeXIncludeEndNodeNamespaceNode"
+const _ElementType_name = "ElementNodeAttributeTextNodeCDATASectionNodeEntityRefNodeEntityNodeProcessingInstructionNodeCommentNodeDocumentNodeDocumentTypeNodeDocumentFragNodeNotationNodeHTMLDocumentNodeDTDNodeElementDeclNodeAttributeDeclNodeEntityDeclNodeNamespaceDeclNodeXIncludeStartNodeXIncludeEndNodeNamespaceNode"
 
-var _ElementType_index = [...]uint16{0, 11, 24, 32, 48, 61, 71, 96, 107, 119, 135, 151, 163, 179, 186, 201, 218, 232, 249, 266, 281, 294}
+var _ElementType_index = [...]uint16{0, 11, 20, 28, 44, 57, 67, 92, 103, 115, 131, 147, 159, 175, 182, 197, 214, 228, 245, 262, 277, 290}
 
 func (i ElementType) String() string {
 	i -= 1
@@ -21,6 +22,14 @@ func newElementDecl() *ElementDecl {
 	e := ElementDecl{}
 	e.etype = ElementDeclNode
 	return &e
+}
+
+// newElement creates a new Element with the given name
+func newElement(name string) *Element {
+	e := &Element{}
+	e.name = name
+	e.etype = ElementNode
+	return e
 }
 
 func (n *ElementDecl) AddChild(cur Node) error {
@@ -43,23 +52,16 @@ func (n *ElementDecl) SetTreeDoc(doc *Document) {
 	setTreeDoc(n, doc)
 }
 
-func newElement(name string) *Element {
-	e := Element{}
-	e.name = name
-	e.etype = ElementNode
-	return &e
-}
-
 func (n Element) XMLString() (string, error) {
 	out := bytes.Buffer{}
-	if err := n.XML(&out); err != nil {
+	if err := n.XML(context.Background(), &out); err != nil {
 		return "", err
 	}
 	return out.String(), nil
 }
 
-func (n *Element) XML(out io.Writer) error {
-	return (&Dumper{}).DumpNode(out, n)
+func (n *Element) XML(ctx context.Context, out io.Writer) error {
+	return (&Dumper{}).DumpNode(ctx, out, n)
 }
 
 // AddChild adds a new child node to the end of the children nodes.

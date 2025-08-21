@@ -84,7 +84,7 @@ func _main() int {
 		}
 
 		d := helium.Dumper{}
-		if err := d.DumpDoc(os.Stdout, doc); err != nil {
+		if err := d.DumpDoc(context.Background(), os.Stdout, doc); err != nil {
 			fmt.Fprintf(os.Stderr, "%s\n", err)
 			return 1
 		}
