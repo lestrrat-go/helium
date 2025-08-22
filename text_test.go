@@ -30,5 +30,3 @@ func TestTextAddChildInvalidNode(t *testing.T) {
 
 	require.Equal(t, []byte("Hello "), n1.Content(), "Content matches")
 }
-
-

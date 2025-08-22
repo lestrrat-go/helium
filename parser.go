@@ -2,14 +2,14 @@ package helium
 
 import (
 	"bytes"
+	"context"
 
-	"github.com/lestrrat-go/pdebug"
 	"github.com/lestrrat-go/helium/sax"
 )
 
-func Parse(b []byte) (*Document, error) {
+func Parse(ctx context.Context, b []byte) (*Document, error) {
 	p := NewParser()
-	return p.Parse(b)
+	return p.Parse(ctx, b)
 }
 
 func NewParser() *Parser {
@@ -18,30 +18,22 @@ func NewParser() *Parser {
 	}
 }
 
-func (p *Parser) Parse(b []byte) (*Document, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("=== START Parser.Parse ===")
-		defer g.IRelease("=== END Parser.Parse ===")
-	}
-
-	ctx := &parserCtx{}
-	if err := ctx.init(p, bytes.NewReader(b)); err != nil {
+func (p *Parser) Parse(ctx context.Context, b []byte) (*Document, error) {
+	pctx := &parserCtx{}
+	if err := pctx.init(ctx, p, bytes.NewReader(b)); err != nil {
 		return nil, err
 	}
 	defer func() {
-		if err := ctx.release(); err != nil {
+		if err := pctx.release(); err != nil { //nolint:staticcheck // intentionally empty error handling
 			// Log error but don't override the main return error
-			if pdebug.Enabled {
-				pdebug.Printf("ctx.release() failed: %s", err)
-			}
 		}
 	}()
 
-	if err := ctx.parseDocument(); err != nil {
+	if err := pctx.parseDocument(ctx); err != nil {
 		return nil, err
 	}
 
-	return ctx.doc, nil
+	return pctx.doc, nil
 }
 
 func (p *Parser) SetSAXHandler(s sax.SAX2Handler) {

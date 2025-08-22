@@ -2,9 +2,9 @@ package helium
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
-	"github.com/lestrrat-go/pdebug"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,7 +25,7 @@ func TestDetectBOM(t *testing.T) {
 	for expected, inputs := range data {
 		for i, input := range inputs {
 			ctx := &parserCtx{}
-			require.NoError(t, ctx.init(p, bytes.NewReader(input)))
+			require.NoError(t, ctx.init(context.Background(), p, bytes.NewReader(input)))
 			enc, err := ctx.detectEncoding()
 			if expected == "" {
 				t.Logf("checking [invalid] (%d)", i)
@@ -43,7 +43,7 @@ func TestDetectBOM(t *testing.T) {
 func TestEmptyDocument(t *testing.T) {
 	p := NewParser()
 	// BOM only
-	_, err := p.Parse([]byte{0x00, 0x00, 0x00, 0x3C})
+	_, err := p.Parse(context.Background(), []byte{0x00, 0x00, 0x00, 0x3C})
 	require.Error(t, err, "Parsing BOM only should fail")
 }
 
@@ -61,7 +61,7 @@ func TestParseXMLDecl(t *testing.T) {
 
 	for input, expect := range inputs {
 		p := NewParser()
-		doc, err := p.Parse([]byte(input))
+		doc, err := p.Parse(context.Background(), []byte(input))
 		require.NoError(t, err, "Parse should succeed for '%s'", input)
 
 		require.Equal(t, expect.version, doc.Version(), "version matches")
@@ -80,7 +80,7 @@ func TestParseMisc(t *testing.T) {
 
 	for _, input := range inputs {
 		p := NewParser()
-		doc, err := p.Parse([]byte(input))
+		doc, err := p.Parse(context.Background(), []byte(input))
 		require.NoError(t, err, "Parse should succeed for '%s'", input)
 
 		// XXX Not sure if this is right, but I'm going to assume it's ok
@@ -119,7 +119,7 @@ L
 O!]]></child>
 </root>`
 	p := NewParser()
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(context.Background(), []byte(input))
 	require.NoError(t, err, "Parse should succeed for '%s'", input)
 }
 
@@ -134,7 +134,7 @@ func TestParseBad(t *testing.T) {
 	}
 	p := NewParser()
 	for _, input := range inputs {
-		_, err := p.Parse([]byte(input))
+		_, err := p.Parse(context.Background(), []byte(input))
 		require.Error(t, err, "Parse should fail for '%s'", input)
 	}
 }
@@ -145,10 +145,6 @@ func TestParseNamespace(t *testing.T) {
   <helium:child>foo</helium:child>
 </helium:root>`
 	p := NewParser()
-	doc, err := p.Parse([]byte(input))
+	_, err := p.Parse(context.Background(), []byte(input))
 	require.NoError(t, err, "Parse should succeed for '%s'", input)
-
-	if pdebug.Enabled {
-		pdebug.Dump(doc)
-	}
 }

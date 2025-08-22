@@ -3,15 +3,9 @@ package helium
 import (
 	"errors"
 	"strings"
-
-	"github.com/lestrrat-go/pdebug"
 )
 
 func newElementContent(name string, ctype ElementContentType) (*ElementContent, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START newElementContent '%s' (type = %d)", name, ctype)
-		defer g.IRelease("END newElementContent")
-	}
 	var prefix string
 	var local string
 	switch ctype {

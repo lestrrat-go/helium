@@ -2,13 +2,14 @@ package helium
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/lestrrat-go/helium/internal/tokens"
+	"github.com/lestrrat-go/pdebug"
 )
 
 var (
@@ -83,19 +84,17 @@ var (
 	esc_fffd = []byte("\uFFFD") // Unicode replacement character
 )
 
-// Decide whether the given rune is in the XML Character Range, per
-// the Char production of http://www.xml.com/axml/testaxml.htm,
-// Section 2.2 Characters.
-func isInCharacterRange(r rune) (inrange bool) {
-	return r == 0x09 ||
-		r == 0x0A ||
-		r == 0x0D ||
-		r >= 0x20 && r <= 0xDF77 ||
-		r >= 0xE000 && r <= 0xFFFD ||
-		r >= 0x10000 && r <= 0x10FFFF
-}
 
 func escapeAttrValue(w io.Writer, s []byte) error {
+	if pdebug.Enabled {
+		debugbuf := bytes.Buffer{}
+		w = io.MultiWriter(w, &debugbuf)
+		g := pdebug.Marker("escapeAttrValue '%s'", s)
+		defer func() {
+			pdebug.Printf("escaped value '%s'", debugbuf.Bytes())
+			g.End()
+		}()
+	}
 	var esc []byte
 	last := 0
 	for i := 0; i < len(s); {
@@ -123,7 +122,7 @@ func escapeAttrValue(w io.Writer, s []byte) error {
 					break
 				}
 			}
-			if !isInCharacterRange(r) || (r == 0xFFFD && width == 1) {
+			if !tokens.IsInCharacterRange(r) || (r == 0xFFFD && width == 1) {
 				esc = esc_fffd
 				break
 			}
@@ -149,6 +148,14 @@ func escapeAttrValue(w io.Writer, s []byte) error {
 // of the plain text data s. If escapeNewline is true, newline
 // characters will be escaped.
 func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
+	if pdebug.Enabled {
+		debugbuf := bytes.Buffer{}
+		w = io.MultiWriter(w, &debugbuf)
+		g := pdebug.IPrintf("START escapeText = '%s'", s)
+		defer func() {
+			g.IRelease("END escapeText = '%s'", debugbuf.Bytes())
+		}()
+	}
 	var esc []byte
 	last := 0
 	for i := 0; i < len(s); {
@@ -175,7 +182,7 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
 					break
 				}
 			}
-			if !isInCharacterRange(r) || (r == 0xFFFD && width == 1) {
+			if !tokens.IsInCharacterRange(r) || (r == 0xFFFD && width == 1) {
 				esc = esc_fffd
 				break
 			}
@@ -199,30 +206,31 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
 
 type Dumper struct{}
 
-func (d *Dumper) DumpDoc(ctx context.Context, out io.Writer, doc *Document) error {
-	ctx, span := StartSpan(ctx, "DumpDoc")
-	defer span.End()
+func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START Dumper.DumpDoc")
+		defer g.IRelease("END Dumper.DumpDoc")
+	}
 
-	TraceEvent(ctx, "starting document serialization",
-		slog.String("document_version", doc.Version()),
-		slog.String("document_encoding", doc.Encoding()))
-
-	if err := d.DumpNode(ctx, out, doc); err != nil {
+	if err := d.DumpNode(out, doc); err != nil {
 		return err
 	}
 
 	for e := doc.FirstChild(); e != nil; e = e.NextSibling() {
-		if err := d.DumpNode(ctx, out, e); err != nil {
+		if err := d.DumpNode(out, e); err != nil {
 			return err
 		}
 		_, _ = io.WriteString(out, "\n")
 	}
-
-	TraceEvent(ctx, "completed document serialization")
 	return nil
 }
 
-func (d *Dumper) dumpDocContent(ctx context.Context, out io.Writer, n Node) error {
+func (d *Dumper) dumpDocContent(out io.Writer, n Node) error {
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START Dumper.dumpDocContent")
+		defer g.IRelease("END Dumper.dumpDocContent")
+	}
+
 	doc := n.(*Document)
 	_, _ = io.WriteString(out, `<?xml version="`)
 	version := doc.Version()
@@ -245,7 +253,7 @@ func (d *Dumper) dumpDocContent(ctx context.Context, out io.Writer, n Node) erro
 	return nil
 }
 
-func (d *Dumper) dumpDTD(ctx context.Context, out io.Writer, n Node) error {
+func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
 	dtd := n.(*DTD)
 	_, _ = io.WriteString(out, "<!DOCTYPE ")
 	_, _ = io.WriteString(out, dtd.Name())
@@ -270,7 +278,7 @@ func (d *Dumper) dumpDTD(ctx context.Context, out io.Writer, n Node) error {
 	_, _ = io.WriteString(out, "[\n")
 
 	for e := dtd.FirstChild(); e != nil; e = e.NextSibling() {
-		if err := d.DumpNode(ctx, out, e); err != nil {
+		if err := d.DumpNode(out, e); err != nil {
 			return err
 		}
 	}
@@ -301,6 +309,10 @@ func dumpElementDeclPrologue(out io.Writer, n *ElementDecl) {
 }
 
 func dumpElementContent(out io.Writer, n *ElementContent, glob bool) error {
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START Dumper.dumpElementContent n = '%s'", n.name)
+		defer g.IRelease("END Dumper.dumpElementContent")
+	}
 	if n == nil {
 		return nil
 	}
@@ -431,7 +443,7 @@ func dumpEntityContent(out io.Writer, content string) error {
 	return nil
 }
 
-func (d *Dumper) dumpEntityDecl(ctx context.Context, out io.Writer, ent *Entity) error {
+func (d *Dumper) dumpEntityDecl(out io.Writer, ent *Entity) error {
 	if ent == nil {
 		return nil
 	}
@@ -507,7 +519,7 @@ func (d *Dumper) dumpEntityDecl(ctx context.Context, out io.Writer, ent *Entity)
 	return nil
 }
 
-func (d *Dumper) dumpElementDecl(ctx context.Context, out io.Writer, n *ElementDecl) error {
+func (d *Dumper) dumpElementDecl(out io.Writer, n *ElementDecl) error {
 	switch n.decltype {
 	case EmptyElementType:
 		dumpElementDeclPrologue(out, n)
@@ -528,7 +540,7 @@ func (d *Dumper) dumpElementDecl(ctx context.Context, out io.Writer, n *ElementD
 	return nil
 }
 
-func (d *Dumper) dumpAttributeDecl(ctx context.Context, out io.Writer, n *AttributeDecl) error {
+func (d *Dumper) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
 	_, _ = io.WriteString(out, "<!ATTLIST ")
 	_, _ = io.WriteString(out, n.elem)
 	_, _ = io.WriteString(out, " ")
@@ -587,16 +599,16 @@ func (d *Dumper) dumpAttributeDecl(ctx context.Context, out io.Writer, n *Attrib
 	return nil
 }
 
-func (d *Dumper) dumpNsList(ctx context.Context, out io.Writer, nslist []*Namespace) error {
+func (d *Dumper) dumpNsList(out io.Writer, nslist []*Namespace) error {
 	for _, ns := range nslist {
-		if err := d.dumpNs(ctx, out, ns); err != nil {
+		if err := d.dumpNs(out, ns); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (d *Dumper) dumpNs(ctx context.Context, out io.Writer, ns *Namespace) error {
+func (d *Dumper) dumpNs(out io.Writer, ns *Namespace) error {
 	if ns.href == "" {
 		// no op
 		return nil
@@ -615,22 +627,21 @@ func (d *Dumper) dumpNs(ctx context.Context, out io.Writer, ns *Namespace) error
 	return nil
 }
 
-func (d *Dumper) DumpNode(ctx context.Context, out io.Writer, n Node) error {
-	ctx, span := StartSpan(ctx, "DumpNode")
-	defer span.End()
+func (d *Dumper) DumpNode(out io.Writer, n Node) error {
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START Dumper.DumpNode '%s'", n.Name())
+		defer g.IRelease("END Dumper.DumpNode")
+	}
 
-	TraceEvent(ctx, "serializing node",
-		slog.String("node_type", n.Type().String()),
-		slog.String("node_name", n.Name()))
 	var err error
 	switch n.Type() {
 	case DocumentNode:
-		if err = d.dumpDocContent(ctx, out, n); err != nil {
+		if err = d.dumpDocContent(out, n); err != nil {
 			return err
 		}
 		return nil
 	case DTDNode:
-		if err = d.dumpDTD(ctx, out, n); err != nil {
+		if err = d.dumpDTD(out, n); err != nil {
 			return err
 		}
 		return nil
@@ -646,7 +657,7 @@ func (d *Dumper) DumpNode(ctx context.Context, out io.Writer, n Node) error {
 		return nil
 	case TextNode:
 		c := n.Content()
-		if string(c) == XMLTextNoEnc {
+		if string(c) == tokens.XMLTextNoEnc {
 			panic("unimplemented")
 		} else {
 			if err := escapeText(out, c, false); err != nil {
@@ -655,17 +666,17 @@ func (d *Dumper) DumpNode(ctx context.Context, out io.Writer, n Node) error {
 		}
 		return nil // no recursing down
 	case ElementDeclNode:
-		if err = d.dumpElementDecl(ctx, out, n.(*ElementDecl)); err != nil {
+		if err = d.dumpElementDecl(out, n.(*ElementDecl)); err != nil {
 			return err
 		}
 		return nil
 	case AttributeDeclNode:
-		if err = d.dumpAttributeDecl(ctx, out, n.(*AttributeDecl)); err != nil {
+		if err = d.dumpAttributeDecl(out, n.(*AttributeDecl)); err != nil {
 			return err
 		}
 		return nil
 	case EntityNode:
-		if err = d.dumpEntityDecl(ctx, out, n.(*Entity)); err != nil {
+		if err = d.dumpEntityDecl(out, n.(*Entity)); err != nil {
 			return err
 		}
 		return nil
@@ -673,6 +684,11 @@ func (d *Dumper) DumpNode(ctx context.Context, out io.Writer, n Node) error {
 
 	if err != nil {
 		return err
+	}
+
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START DumpNode(fallthrough)")
+		defer g.IRelease("END DUmpNode(fallthrough)")
 	}
 
 	// if it got here it's some sort of an element
@@ -693,13 +709,14 @@ func (d *Dumper) DumpNode(ctx context.Context, out io.Writer, n Node) error {
 	_, _ = io.WriteString(out, name)
 
 	if len(nslist) > 0 {
-		if err := d.dumpNsList(ctx, out, nslist); err != nil {
+		if err := d.dumpNsList(out, nslist); err != nil {
 			return err
 		}
 	}
 
 	if e, ok := n.(*Element); ok {
 		for attr := e.properties; attr != nil; {
+			g := pdebug.IPrintf("START DumpNode(fallthrough->attribute(%s))", attr.Name())
 			_, _ = io.WriteString(out, " "+attr.Name()+`="`)
 			count := 0
 			for achld := attr.FirstChild(); achld != nil; achld = achld.NextSibling() {
@@ -709,12 +726,13 @@ func (d *Dumper) DumpNode(ctx context.Context, out io.Writer, n Node) error {
 						return err
 					}
 				} else {
-					if err := d.DumpNode(ctx, out, achld); err != nil {
+					if err := d.DumpNode(out, achld); err != nil {
 						return err
 					}
 				}
 			}
 			_, _ = io.WriteString(out, `"`)
+			g.IRelease("END DUmpNode(fallthrough->attribute(%s))", attr.Name())
 			a := attr.NextSibling()
 			if a == nil {
 				break
@@ -732,7 +750,7 @@ func (d *Dumper) DumpNode(ctx context.Context, out io.Writer, n Node) error {
 
 	if child := n.FirstChild(); child != nil {
 		for ; child != nil; child = child.NextSibling() {
-			if err := d.DumpNode(ctx, out, child); err != nil {
+			if err := d.DumpNode(out, child); err != nil {
 				return err
 			}
 		}

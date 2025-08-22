@@ -146,7 +146,6 @@ type parserCtx struct {
 	doc      *Document
 	userData interface{}
 	nodeTab  nodeStack
-	elemidx  int
 	// nbentities int
 	inputTab inputStack
 }

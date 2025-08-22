@@ -4,7 +4,6 @@ go 1.24.4
 
 require (
 	github.com/jessevdk/go-flags v1.6.1
-	github.com/lestrrat-go/pdebug v0.0.0-20210111095411-35b07dbf089b
 	github.com/lestrrat-go/strcursor v0.0.0-20230223230220-c1a91b69c459
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/text v0.26.0

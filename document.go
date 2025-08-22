@@ -2,15 +2,16 @@ package helium
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"strings"
 
-	"github.com/lestrrat-go/pdebug"
+	"github.com/lestrrat-go/helium/node"
 )
 
-func CreateDocument() *Document {
-	return NewDocument("1.0", "", StandaloneImplicitNo)
+func CreateDocument() *node.Document {
+	return node.NewDocument()
 }
 
 func NewDocument(version, encoding string, standalone DocumentStandaloneType) *Document {
@@ -27,14 +28,14 @@ func NewDocument(version, encoding string, standalone DocumentStandaloneType) *D
 
 func (d Document) XMLString() (string, error) {
 	out := bytes.Buffer{}
-	if err := d.XML(&out); err != nil {
+	if err := d.XML(context.Background(), &out); err != nil {
 		return "", err
 	}
 	return out.String(), nil
 }
 
-func (d *Document) XML(out io.Writer) error {
-	return (&Dumper{}).DumpDoc(out, d)
+func (d *Document) XML(ctx context.Context, out io.Writer) error {
+	return (&Dumper{}).DumpDoc(ctx, out, d)
 }
 
 func (d *Document) AddChild(cur Node) error {
@@ -112,10 +113,6 @@ func (d *Document) SetDocumentElement(root Node) error {
 }
 
 func (d *Document) CreateReference(name string) (*EntityRef, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START document.CreateReference '%s'", name)
-		defer g.IRelease("END document.CreateReference")
-	}
 	n, err := d.CreateCharRef(name)
 	if err != nil {
 		return nil, err
@@ -135,12 +132,6 @@ func (d *Document) CreateReference(name string) (*EntityRef, error) {
 }
 
 func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Attribute, err error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START document.CreateAttribute '%s' (%s)", name, value)
-		defer func() {
-			g.IRelease("END document.CreateAttribute (attr.Value = '%s')", attr.Value())
-		}()
-	}
 	var n Node
 	attr = newAttribute(name, ns)
 	if value != "" {
@@ -249,28 +240,12 @@ func (d *Document) CreateElementContent(name string, etype ElementContentType) (
 }
 
 func (d *Document) GetEntity(name string) (ent *Entity, found bool) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START document.GetEntity '%s'", name)
-		defer func() {
-			if found {
-				g.IRelease("END document.GetEntity found = %t '%#x', (%p)", found, ent.Content(), ent)
-			} else {
-				g.IRelease("END document.GetEntity found = false")
-			}
-		}()
-	}
 	if ints := d.intSubset; ints != nil {
-		if pdebug.Enabled {
-			pdebug.Printf("Looking into internal subset...")
-		}
 		ent, found = ints.LookupEntity(name)
 		return
 	}
 
 	if exts := d.extSubset; exts != nil {
-		if pdebug.Enabled {
-			pdebug.Printf("Looking into external subset...")
-		}
 		ent, found = exts.LookupEntity(name)
 		return
 	}
@@ -324,18 +299,6 @@ func (d *Document) IsMixedElement(name string) (bool, error) {
  * Returns a pointer to the first child
  */
 func (d *Document) stringToNodeList(value string) (ret Node, err error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START document.stringToNodeList '%s'", value)
-		defer func() {
-			var content []byte
-			if ret == nil {
-				content = []byte("(nil)")
-			} else {
-				content = ret.Content()
-			}
-			g.IRelease("END document.stringToNodeList '%s'", content)
-		}()
-	}
 	rdr := strings.NewReader(value)
 	buf := bytes.Buffer{}
 	var last Node
@@ -422,9 +385,6 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 			} else {
 				// flush the buffer so far
 				if buf.Len() > 0 {
-					if pdebug.Enabled {
-						pdebug.Printf("Flushing content so far... '%s'", buf.Bytes())
-					}
 					var node Node
 					node, err = d.CreateText(buf.Bytes())
 					if err != nil {
@@ -509,11 +469,6 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 }
 
 func (d *Document) CreateCharRef(name string) (*EntityRef, error) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START document.CreateCharRef '%s'", name)
-		defer g.IRelease("END document.CreateCharRef")
-	}
-
 	if name == "" {
 		return nil, errors.New("empty name")
 	}

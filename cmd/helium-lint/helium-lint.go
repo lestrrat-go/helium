@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -76,14 +77,14 @@ func _main() int {
 			fmt.Fprintf(os.Stderr, "%s\n", err)
 			return 1
 		}
-		doc, err := p.Parse(buf)
+		doc, err := p.Parse(context.Background(), buf)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s\n", err)
 			return 1
 		}
 
 		d := helium.Dumper{}
-		if err := d.DumpDoc(os.Stdout, doc); err != nil {
+		if err := d.DumpDoc(context.Background(), os.Stdout, doc); err != nil {
 			fmt.Fprintf(os.Stderr, "%s\n", err)
 			return 1
 		}
