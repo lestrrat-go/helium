@@ -18,13 +18,22 @@ type Span interface {
 	End()
 }
 
+type nullSpan struct{}
+
+func (nullSpan) End() {}
+
 // internalSpan implements the Span interface
 type internalSpan struct {
-	finishFunc func()
+	start time.Time
+	tlog  *slog.Logger
 }
 
 func (s *internalSpan) End() {
-	s.finishFunc()
+	duration := time.Since(s.start)
+	s.tlog.Debug("END",
+		slog.String("operation", "function_exit"),
+		slog.Duration("duration", duration),
+	)
 }
 
 // SpanInfo holds information about a tracing span
@@ -114,24 +123,16 @@ func getTraceLogFromContext(ctx context.Context) *slog.Logger {
 // Modern pattern: ctx, span := StartSpan(ctx, name); defer span.End()
 func StartSpan(ctx context.Context, spanName string) (context.Context, Span) {
 	if !TracingEnabled {
-		return ctx, &internalSpan{finishFunc: func() {}}
+		return ctx, nullSpan{}
 	}
 	ctx, span := WithSpan(ctx, spanName)
 	tlog := getTraceLogFromContext(ctx)
 	tlog.Debug("START", slog.String("operation", "function_entry"))
 
-	finishFunc := func() {
-		if !TracingEnabled {
-			return
-		}
-		duration := time.Since(span.Start)
-		tlog.Debug("END",
-			slog.String("operation", "function_exit"),
-			slog.Duration("duration", duration),
-		)
+	return ctx, &internalSpan{
+		start: span.Start,
+		tlog:  tlog,
 	}
-
-	return ctx, &internalSpan{finishFunc: finishFunc}
 }
 
 // TraceEvent logs a structured event with span context
