@@ -660,6 +660,17 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		_, _ = out.Write(n.Content())
 		_, _ = io.WriteString(out, "-->")
 		return nil
+	case ProcessingInstructionNode:
+		// Mirrors xmlsave.c XML_PI_NODE handling.
+		pi := n.(*ProcessingInstruction)
+		_, _ = io.WriteString(out, "<?")
+		_, _ = io.WriteString(out, pi.target)
+		if pi.data != "" {
+			_, _ = io.WriteString(out, " ")
+			_, _ = io.WriteString(out, pi.data)
+		}
+		_, _ = io.WriteString(out, "?>")
+		return nil
 	case EntityRefNode:
 		_, _ = io.WriteString(out, "&")
 		_, _ = io.WriteString(out, n.Name())
