@@ -219,6 +219,9 @@ func (t *TreeBuilder) CDataBlock(ctxif sax.Context, data []byte) error {
 	return parent.AddChild(cdata)
 }
 
+// Comment mirrors xmlSAX2Comment in libxml2's SAX2.c, which delegates
+// parent selection to xmlSAX2AppendChild. When inside a DTD subset the
+// comment is added to the DTD, not the document.
 func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.Comment: %s", data)
@@ -234,6 +237,14 @@ func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
 	e, err := doc.CreateComment(data)
 	if err != nil {
 		return err
+	}
+
+	// Mirror xmlSAX2AppendChild parent selection (SAX2.c:899-907).
+	switch ctx.inSubset {
+	case inInternalSubset:
+		return doc.IntSubset().AddChild(e)
+	case inExternalSubset:
+		return doc.ExtSubset().AddChild(e)
 	}
 
 	n := ctx.elem
