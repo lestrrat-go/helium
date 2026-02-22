@@ -837,7 +837,19 @@ func (ctx *parserCtx) parseStartTag() error {
 		defaults, ok := ctx.lookupAttributeDefault(elemName)
 		if ok {
 			for _, attr := range defaults {
-				attrs = append(attrs, attr)
+				attname := attr.LocalName()
+				aprefix := attr.Prefix()
+				if attname == XMLNsPrefix && aprefix == "" {
+					// Default xmlns="..." declaration from DTD
+					ctx.pushNS("", attr.Value())
+					nbNs++
+				} else if aprefix == XMLNsPrefix {
+					// Default xmlns:prefix="..." declaration from DTD
+					ctx.pushNS(attname, attr.Value())
+					nbNs++
+				} else {
+					attrs = append(attrs, attr)
+				}
 			}
 		}
 	}
