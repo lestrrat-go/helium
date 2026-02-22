@@ -73,7 +73,7 @@ func dumpQuotedString(out io.Writer, s string) error {
 }
 
 var (
-	esc_quot = []byte("&#34;") // shorter than "&quot;"
+	esc_quot = []byte("&quot;")
 	// esc_apos = []byte("&#39;") // shorter than "&apos;"
 	esc_amp  = []byte("&amp;")
 	esc_lt   = []byte("&lt;")
@@ -628,8 +628,11 @@ func (d *Dumper) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
 	}
 
 	if n.defvalue != "" {
-		_, _ = io.WriteString(out, " ")
-		_ = dumpQuotedString(out, n.defvalue)
+		// Mirrors libxml2's xmlSaveWriteAttributeDecl: always use double
+		// quotes and escape <, >, ", & via escapeAttrValue.
+		_, _ = io.WriteString(out, ` "`)
+		_ = escapeAttrValue(out, []byte(n.defvalue), d.escapeNonASCII)
+		_, _ = io.WriteString(out, `"`)
 	}
 	_, _ = io.WriteString(out, ">\n")
 	return nil
