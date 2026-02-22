@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	henc "github.com/lestrrat-go/helium/encoding"
 	"github.com/lestrrat-go/pdebug"
 )
 
@@ -220,6 +221,21 @@ func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START Dumper.DumpDoc")
 		defer g.IRelease("END Dumper.DumpDoc")
+	}
+
+	// Re-encode output when the document declares a non-UTF-8 encoding.
+	// Mirrors libxml2's xmlSaveDoc encoding handler setup.
+	if enc := doc.encoding; enc != "" {
+		lower := strings.ToLower(enc)
+		if lower != "utf-8" && lower != "utf8" {
+			if e := henc.Load(enc); e != nil {
+				w := e.NewEncoder().Writer(out)
+				if closer, ok := w.(io.Closer); ok {
+					defer func() { _ = closer.Close() }()
+				}
+				out = w
+			}
+		}
 	}
 
 	if err := d.DumpNode(out, doc); err != nil {
