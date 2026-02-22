@@ -293,19 +293,15 @@ func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
 	dtd := n.(*DTD)
 	_, _ = io.WriteString(out, "<!DOCTYPE ")
 	_, _ = io.WriteString(out, dtd.Name())
-	_, _ = io.WriteString(out, " ")
 
 	if dtd.externalID != "" {
-		_, _ = io.WriteString(out, "PUBLIC \"")
+		_, _ = io.WriteString(out, " PUBLIC \"")
 		_, _ = io.WriteString(out, dtd.externalID)
+		_, _ = io.WriteString(out, "\" \"")
+		_, _ = io.WriteString(out, dtd.systemID)
 		_, _ = io.WriteString(out, "\"")
-		if dtd.systemID != "" {
-			_, _ = io.WriteString(out, " \"")
-			_, _ = io.WriteString(out, dtd.systemID)
-			_, _ = io.WriteString(out, "\"")
-		}
 	} else if dtd.systemID != "" {
-		_, _ = io.WriteString(out, "SYSTEM \"")
+		_, _ = io.WriteString(out, " SYSTEM \"")
 		_, _ = io.WriteString(out, dtd.systemID)
 		_, _ = io.WriteString(out, "\"")
 	}
@@ -316,7 +312,7 @@ func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
 		return nil
 	}
 
-	_, _ = io.WriteString(out, "[\n")
+	_, _ = io.WriteString(out, " [\n")
 
 	for e := dtd.FirstChild(); e != nil; e = e.NextSibling() {
 		if err := d.DumpNode(out, e); err != nil {
