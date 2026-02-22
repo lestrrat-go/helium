@@ -1232,27 +1232,24 @@ func (ctx *parserCtx) parseXMLDecl() error {
 	// we *may* have encoding decl
 	v, err = ctx.parseEncodingDecl()
 	if err == nil {
-		// ctx.encoding contains the explicit encoding specified
 		ctx.encoding = v
+	}
 
-		// if the encoding decl is found, then we *could* have
-		// the end of the XML declaration
-		if cur.Peek() == '?' && cur.PeekN(2) == '>' {
-			if err := cur.Advance(2); err != nil {
-				return err
-			}
-			return nil
+	// we *may* have standalone decl
+	ctx.skipBlankBytes(cur)
+	if cur.Peek() == '?' && cur.PeekN(2) == '>' {
+		if err := cur.Advance(2); err != nil {
+			return err
 		}
-	} else if _, ok := err.(ErrAttrNotFound); ok {
-		return ctx.error(err)
+		return nil
 	}
 
 	vb, err := ctx.parseStandaloneDecl()
-	if err != nil {
-		return err
+	if err == nil {
+		ctx.standalone = vb
 	}
-	ctx.standalone = vb
 
+	ctx.skipBlankBytes(cur)
 	if cur.Peek() == '?' && cur.PeekN(2) == '>' {
 		if err := cur.Advance(2); err != nil {
 			return err
