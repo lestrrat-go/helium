@@ -675,6 +675,30 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 			}
 		}
 		return nil // no recursing down
+	case CDATASectionNode:
+		// Mirrors xmlsave.c XML_CDATA_SECTION_NODE handling.
+		// Splits content on "]]>" sequences so the output is well-formed.
+		c := n.Content()
+		if len(c) == 0 {
+			_, _ = io.WriteString(out, "<![CDATA[]]>")
+		} else {
+			start := 0
+			for i := 0; i+2 < len(c); i++ {
+				if c[i] == ']' && c[i+1] == ']' && c[i+2] == '>' {
+					end := i + 2
+					_, _ = io.WriteString(out, "<![CDATA[")
+					_, _ = out.Write(c[start:end])
+					_, _ = io.WriteString(out, "]]>")
+					start = end
+				}
+			}
+			if start < len(c) {
+				_, _ = io.WriteString(out, "<![CDATA[")
+				_, _ = out.Write(c[start:])
+				_, _ = io.WriteString(out, "]]>")
+			}
+		}
+		return nil
 	case ElementDeclNode:
 		if err = d.dumpElementDecl(out, n.(*ElementDecl)); err != nil {
 			return err

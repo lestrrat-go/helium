@@ -240,6 +240,13 @@ func (d *Document) CreateComment(value []byte) (*Comment, error) {
 	return e, nil
 }
 
+// CreateCDATASection mirrors xmlNewCDataBlock in libxml2's tree.c.
+func (d *Document) CreateCDATASection(value []byte) (*CDATASection, error) {
+	e := newCDATASection(value)
+	e.doc = d
+	return e, nil
+}
+
 func (d *Document) CreateElementContent(name string, etype ElementContentType) (*ElementContent, error) {
 	e, err := newElementContent(name, etype)
 	if err != nil {

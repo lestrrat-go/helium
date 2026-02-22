@@ -195,12 +195,28 @@ func (t *TreeBuilder) Characters(ctxif sax.Context, data []byte) error {
 	return n.AddContent(data)
 }
 
-func (t *TreeBuilder) CDataBlock(_ sax.Context, data []byte) error {
+// CDataBlock mirrors xmlSAX2Text(ctxt, value, len, XML_CDATA_SECTION_NODE)
+// in libxml2's SAX2.c. Unlike text nodes, adjacent CDATA sections are NOT
+// merged — each callback creates a new CDATASection node.
+func (t *TreeBuilder) CDataBlock(ctxif sax.Context, data []byte) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.CDATABlock")
 		defer g.IRelease("END tree.CDATABlock")
 	}
-	return nil
+
+	ctx := ctxif.(*parserCtx)
+	parent := ctx.elem
+	if parent == nil {
+		return nil
+	}
+
+	doc := ctx.doc
+	cdata, err := doc.CreateCDATASection(data)
+	if err != nil {
+		return err
+	}
+
+	return parent.AddChild(cdata)
 }
 
 func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
