@@ -128,6 +128,9 @@ func (ctx *parserCtx) popNode() (elem *Element) {
 }
 
 func (ctx *parserCtx) lookupNamespace(prefix string) string {
+	if prefix == XMLPrefix {
+		return XMLNamespace
+	}
 	return ctx.nsTab.Lookup(prefix)
 }
 
@@ -760,6 +763,7 @@ func (ctx *parserCtx) parseStartTag() error {
 				return ctx.error(ErrSpaceRequired)
 			}
 			ctx.skipBlanks()
+			continue
 		} else if aprefix == XMLNsPrefix {
 			var u *url.URL // predeclare, so we can use goto SkipNS
 
