@@ -2628,6 +2628,8 @@ func (ctx *parserCtx) parseElementMixedContentDecl() (*ElementContent, error) {
 		return nil, ctx.error(ErrPCDATARequired)
 	}
 
+	ctx.skipBlanks()
+
 	if cur.Peek() == ')' {
 		/*
 		               if ((ctxt->validate) && (ctxt->input->id != inputchk)) {
@@ -2686,7 +2688,7 @@ func (ctx *parserCtx) parseElementMixedContentDecl() (*ElementContent, error) {
 			if err != nil {
 				return nil, ctx.error(err)
 			}
-			n.c1, err = ctx.doc.CreateElementContent("", ElementContentElement)
+			n.c1, err = ctx.doc.CreateElementContent(elem, ElementContentElement)
 			if err != nil {
 				return nil, ctx.error(err)
 			}
@@ -2777,7 +2779,8 @@ func (ctx *parserCtx) parseElementChildrenContentDeclPriv(depth int) (*ElementCo
 			return nil, err
 		}
 		ctx.skipBlanks()
-		retelem, err := ctx.parseElementChildrenContentDeclPriv(depth + 1)
+		var err error
+		retelem, err = ctx.parseElementChildrenContentDeclPriv(depth + 1)
 		if err != nil {
 			return nil, ctx.error(err)
 		}
@@ -2967,6 +2970,9 @@ LOOP:
 				curelem = curelem.c2
 			}
 		}
+		if err := cur.Advance(1); err != nil {
+			return nil, err
+		}
 	case '+':
 		if retelem.coccur == ElementContentOpt {
 			retelem.coccur = ElementContentMult
@@ -2994,6 +3000,9 @@ LOOP:
 		}
 		if found {
 			retelem.coccur = ElementContentMult
+		}
+		if err := cur.Advance(1); err != nil {
+			return nil, err
 		}
 	}
 
