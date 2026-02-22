@@ -96,7 +96,7 @@ func isInCharacterRange(r rune) (inrange bool) {
 		r >= 0x10000 && r <= 0x10FFFF
 }
 
-func escapeAttrValue(w io.Writer, s []byte) error {
+func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII bool) error {
 	if pdebug.Enabled {
 		debugbuf := bytes.Buffer{}
 		w = io.MultiWriter(w, &debugbuf)
@@ -127,7 +127,7 @@ func escapeAttrValue(w io.Writer, s []byte) error {
 		case '\t':
 			esc = esc_tab
 		default:
-			if !(0x20 <= r && r < 0x80) { // nolint:staticcheck
+			if escapeNonASCII && !(0x20 <= r && r < 0x80) { // nolint:staticcheck
 				if r < 0xE0 {
 					esc = []byte(fmt.Sprintf("&#x%X;", r))
 					break
@@ -158,7 +158,7 @@ func escapeAttrValue(w io.Writer, s []byte) error {
 // escapeText writes to w the properly escaped XML equivalent
 // of the plain text data s. If escapeNewline is true, newline
 // characters will be escaped.
-func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
+func escapeText(w io.Writer, s []byte, escapeNewline bool, escapeNonASCII bool) error {
 	if pdebug.Enabled {
 		debugbuf := bytes.Buffer{}
 		w = io.MultiWriter(w, &debugbuf)
@@ -187,7 +187,7 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
 		case '\r':
 			esc = esc_cr
 		default:
-			if !(r == '\t' || (0x20 <= r && r < 0x80)) { // nolint:staticcheck
+			if escapeNonASCII && !(r == '\t' || (0x20 <= r && r < 0x80)) { // nolint:staticcheck
 				if r < 0xE0 {
 					esc = []byte(fmt.Sprintf("&#x%X;", r))
 					break
@@ -215,7 +215,14 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
 	return nil
 }
 
-type Dumper struct{}
+// Dumper serializes an XML document tree.
+// escapeNonASCII controls whether characters U+0080–U+00DF are emitted as
+// numeric character references (&#xNN;).  libxml2 only does this when the
+// output encoding is UTF-8; when an encoding handler is present the
+// characters pass through and the encoder converts them.
+type Dumper struct {
+	escapeNonASCII bool
+}
 
 func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 	if pdebug.Enabled {
@@ -223,12 +230,15 @@ func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 		defer g.IRelease("END Dumper.DumpDoc")
 	}
 
-	// Re-encode output when the document declares a non-UTF-8 encoding.
-	// Mirrors libxml2's xmlSaveDoc encoding handler setup.
+	// Mirrors libxml2's xmlSaveWriteText: when output encoding is UTF-8
+	// (no encoder), escape non-ASCII chars 0x80-0xDF as numeric refs.
+	// When an encoder is present, pass them through for re-encoding.
+	d.escapeNonASCII = true
 	if enc := doc.encoding; enc != "" {
 		lower := strings.ToLower(enc)
 		if lower != "utf-8" && lower != "utf8" {
 			if e := henc.Load(enc); e != nil {
+				d.escapeNonASCII = false
 				w := e.NewEncoder().Writer(out)
 				if closer, ok := w.(io.Closer); ok {
 					defer func() { _ = closer.Close() }()
@@ -697,7 +707,7 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		if string(c) == XMLTextNoEnc {
 			panic("unimplemented")
 		} else {
-			if err := escapeText(out, c, false); err != nil {
+			if err := escapeText(out, c, false, d.escapeNonASCII); err != nil {
 				return err
 			}
 		}
@@ -783,7 +793,7 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 			for achld := attr.FirstChild(); achld != nil; achld = achld.NextSibling() {
 				count++
 				if achld.Type() == TextNode {
-					if err := escapeAttrValue(out, achld.Content()); err != nil {
+					if err := escapeAttrValue(out, achld.Content(), d.escapeNonASCII); err != nil {
 						return err
 					}
 				} else {
