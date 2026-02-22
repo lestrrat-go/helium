@@ -4093,10 +4093,100 @@ func (ctx *parserCtx) parseNotationDecl() error {
 	return nil
 }
 
+func (ctx *parserCtx) parseSystemLiteral(qch rune) (string, error) {
+	cur := ctx.getCursor()
+	if cur == nil {
+		panic("did not get rune cursor")
+	}
+	buf := bufferPool.Get().(*bytes.Buffer)
+	defer releaseBuffer(buf)
+
+	i := 0
+	for c := cur.PeekN(i + 1); isChar(c) && c != qch; c = cur.PeekN(i + 1) {
+		buf.WriteRune(c)
+		i++
+	}
+	if i > 0 {
+		if err := cur.Advance(i); err != nil {
+			return "", ctx.error(err)
+		}
+	}
+	return buf.String(), nil
+}
+
+func (ctx *parserCtx) parsePubidLiteral(qch rune) (string, error) {
+	cur := ctx.getCursor()
+	if cur == nil {
+		panic("did not get rune cursor")
+	}
+	buf := bufferPool.Get().(*bytes.Buffer)
+	defer releaseBuffer(buf)
+
+	i := 0
+	for c := cur.PeekN(i + 1); isChar(c) && c != qch; c = cur.PeekN(i + 1) {
+		buf.WriteRune(c)
+		i++
+	}
+	if i > 0 {
+		if err := cur.Advance(i); err != nil {
+			return "", ctx.error(err)
+		}
+	}
+	return buf.String(), nil
+}
+
+// parseExternalID parses an external ID (SYSTEM or PUBLIC identifier).
+// Returns (systemURI, publicID, error).
 func (ctx *parserCtx) parseExternalID() (string, string, error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START parseExternalID")
 		defer g.IRelease("END parseExternalID")
+	}
+
+	cur := ctx.getCursor()
+	if cur == nil {
+		panic("did not get rune cursor")
+	}
+
+	if cur.HasPrefixString("SYSTEM") {
+		if err := cur.Advance(6); err != nil {
+			return "", "", err
+		}
+		if !isBlankCh(cur.Peek()) {
+			return "", "", ctx.error(ErrSpaceRequired)
+		}
+		ctx.skipBlanks()
+		uri, err := ctx.parseQuotedText(ctx.parseSystemLiteral)
+		if err != nil {
+			return "", "", ctx.error(errors.New("system URI required"))
+		}
+		return uri, "", nil
+	} else if cur.HasPrefixString("PUBLIC") {
+		if err := cur.Advance(6); err != nil {
+			return "", "", err
+		}
+		if !isBlankCh(cur.Peek()) {
+			return "", "", ctx.error(ErrSpaceRequired)
+		}
+		ctx.skipBlanks()
+		publicID, err := ctx.parseQuotedText(ctx.parsePubidLiteral)
+		if err != nil {
+			return "", "", ctx.error(errors.New("public ID required"))
+		}
+		if !isBlankCh(cur.Peek()) {
+			// No system literal follows
+			return "", publicID, nil
+		}
+		ctx.skipBlanks()
+		if c := cur.Peek(); c != '\'' && c != '"' {
+			// No system literal follows
+			return "", publicID, nil
+		}
+		uri, err := ctx.parseQuotedText(ctx.parseSystemLiteral)
+		if err != nil {
+			return "", "", ctx.error(errors.New("system URI required"))
+		}
+		return uri, publicID, nil
 	}
 	return "", "", nil
 }

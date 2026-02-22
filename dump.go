@@ -296,13 +296,18 @@ func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
 	_, _ = io.WriteString(out, " ")
 
 	if dtd.externalID != "" {
-		_, _ = io.WriteString(out, " PUBLIC ")
+		_, _ = io.WriteString(out, "PUBLIC \"")
 		_, _ = io.WriteString(out, dtd.externalID)
-		_, _ = io.WriteString(out, " ")
+		_, _ = io.WriteString(out, "\"")
+		if dtd.systemID != "" {
+			_, _ = io.WriteString(out, " \"")
+			_, _ = io.WriteString(out, dtd.systemID)
+			_, _ = io.WriteString(out, "\"")
+		}
 	} else if dtd.systemID != "" {
-		_, _ = io.WriteString(out, " SYSTEM ")
+		_, _ = io.WriteString(out, "SYSTEM \"")
 		_, _ = io.WriteString(out, dtd.systemID)
-		_, _ = io.WriteString(out, " ")
+		_, _ = io.WriteString(out, "\"")
 	}
 
 	if len(dtd.entities) == 0 && len(dtd.elements) == 0 && len(dtd.pentities) == 0 && len(dtd.attributes) == 0 {
