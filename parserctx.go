@@ -621,7 +621,7 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 		i++
 	}
 
-	if i <= 0 {
+	if i <= 0 && !cdata {
 		pdebug.Dump(cur)
 		return errors.New("invalid char data")
 	}
