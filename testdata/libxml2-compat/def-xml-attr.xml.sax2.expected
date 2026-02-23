@@ -7,7 +7,7 @@ SAX.externalSubset(root, , )
 SAX.startElementNs(root, NULL, NULL, 0, 0, 0)
 SAX.characters(
   , 3)
-SAX.startElementNs(foo, NULL, NULL, 0, 2, 1, xml:lang='ger"...', 3, bar='<>"...', 3)
+SAX.startElementNs(foo, NULL, NULL, 0, 2, 1, xml:lang='ger...', 3, bar='<>"...', 3)
 SAX.characters(Ja, 2)
 SAX.endElementNs(foo, NULL, NULL)
 SAX.characters(
