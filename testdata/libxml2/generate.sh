@@ -73,12 +73,12 @@ echo "Copied $sax2count SAX2 golden files into $DEST"
 fixed=0
 for f in "$DEST"/*.sax2.expected; do
     [ -f "$f" ] || continue
-    if perl -i -pe '
+    if perl -0777 -i -pe '
         s{=\047(.{1,4})\.\.\.\047(, )(\d+)}{
             my($d,$s,$n)=($1,$2,$3);
             $d = substr($d,0,$n) if length($d) > $n;
             "=\047${d}...\047$s$n"
-        }ge
+        }gse
     ' "$f"; then
         fixed=$((fixed + 1))
     fi

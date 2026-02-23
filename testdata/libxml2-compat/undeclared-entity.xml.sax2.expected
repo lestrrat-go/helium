@@ -8,8 +8,7 @@ SAX.characters(
     , 5)
 SAX.getEntity(undeclared)
 SAX.warning: Entity 'undeclared' not defined
-SAX.startElementNs(elem, NULL, NULL, 0, 1, 0, attr='"/>
-...', 0)
+SAX.startElementNs(elem, NULL, NULL, 0, 1, 0, attr='...', 0)
 SAX.endElementNs(elem, NULL, NULL)
 SAX.characters(
     , 5)

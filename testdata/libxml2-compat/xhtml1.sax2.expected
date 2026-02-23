@@ -82,8 +82,7 @@ SAX.characters(
 SAX.comment( 4.5 )
 SAX.characters(
   , 3)
-SAX.startElementNs(dl, NULL, NULL, 0, 1, 0, compact='">
- ...', 0)
+SAX.startElementNs(dl, NULL, NULL, 0, 1, 0, compact='...', 0)
 SAX.characters(
   , 3)
 SAX.startElementNs(dt, NULL, NULL, 0, 0, 0)
