@@ -240,7 +240,6 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 		"svg2":            "attribute value truncation (C buffer artifact)",
 		"wap.xml":         "attribute value truncation (C buffer artifact)",
 		"xhtml1":          "attribute value truncation (C buffer artifact)",
-		"defattr2.xml":     "attribute value truncation + default attr order (map iteration)",
 
 		// Character event splitting: libxml2 emits multiple smaller characters()
 		// events at buffer boundaries; helium may merge or split differently.
