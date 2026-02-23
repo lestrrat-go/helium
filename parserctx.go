@@ -2077,11 +2077,16 @@ func (ctx *parserCtx) parseNmtoken() (string, error) {
 	buf := bufferPool.Get().(*bytes.Buffer)
 	defer releaseBuffer(buf)
 
-	for c := cur.PeekN(i); c != 0x0; i++ {
+	for c := cur.PeekN(i); c != 0x0; c = cur.PeekN(i) {
 		if !isNameChar(c) {
+			i--
 			break
 		}
 		_, _ = buf.WriteRune(c)
+		i++
+	}
+	if err := cur.Advance(i); err != nil {
+		return "", err
 	}
 
 	return buf.String(), nil
