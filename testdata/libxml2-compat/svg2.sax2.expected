@@ -38,7 +38,7 @@ SAX.characters(
 SAX.startElementNs(g, NULL, NULL, 0, 1, 0, style='stro...', 15)
 SAX.characters( 
    , 5)
-SAX.startElementNs(rect, NULL, NULL, 0, 4, 0, x='30" ...', 2, y='101"...', 3, width='51" ...', 2, height='33"/...', 2)
+SAX.startElementNs(rect, NULL, NULL, 0, 4, 0, x='30...', 2, y='101...', 3, width='51...', 2, height='33...', 2)
 SAX.endElementNs(rect, NULL, NULL)
 SAX.characters(
 , 1)
@@ -48,7 +48,7 @@ SAX.characters(
 SAX.startElementNs(g, NULL, NULL, 0, 1, 0, style='fill...', 13)
 SAX.characters( 
    , 5)
-SAX.startElementNs(ellipse, NULL, NULL, 0, 5, 0, cx='182"...', 3, cy='127"...', 3, major='37" ...', 2, minor='31" ...', 2, angle='90"/...', 2)
+SAX.startElementNs(ellipse, NULL, NULL, 0, 5, 0, cx='182...', 3, cy='127...', 3, major='37...', 2, minor='31...', 2, angle='90...', 2)
 SAX.endElementNs(ellipse, NULL, NULL)
 SAX.characters(
 , 1)
@@ -90,7 +90,7 @@ SAX.characters(
 SAX.startElementNs(g, NULL, NULL, 0, 1, 0, style='stro...', 15)
 SAX.characters( 
    , 5)
-SAX.startElementNs(text, NULL, NULL, 0, 2, 0, x='188"...', 3, y='36" ...', 2)
+SAX.startElementNs(text, NULL, NULL, 0, 2, 0, x='188...', 3, y='36...', 2)
 SAX.characters(this is text, 12)
 SAX.endElementNs(text, NULL, NULL)
 SAX.characters(
@@ -129,7 +129,7 @@ SAX.characters(
 SAX.startElementNs(g, NULL, NULL, 0, 1, 0, style='stro...', 15)
 SAX.characters( 
    , 5)
-SAX.startElementNs(text, NULL, NULL, 0, 2, 0, x='176"...', 3, y='85" ...', 2)
+SAX.startElementNs(text, NULL, NULL, 0, 2, 0, x='176...', 3, y='85...', 2)
 SAX.characters(sadfsadfsad, 11)
 SAX.endElementNs(text, NULL, NULL)
 SAX.characters(
@@ -146,7 +146,7 @@ SAX.characters(
 SAX.startElementNs(g, NULL, NULL, 0, 1, 0, style='fill...', 13)
 SAX.characters( 
    , 5)
-SAX.startElementNs(ellipse, NULL, NULL, 0, 5, 0, cx='208"...', 3, cy='180"...', 3, major='45" ...', 2, minor='31" ...', 2, angle='0"/>...', 1)
+SAX.startElementNs(ellipse, NULL, NULL, 0, 5, 0, cx='208...', 3, cy='180...', 3, major='45...', 2, minor='31...', 2, angle='0...', 1)
 SAX.endElementNs(ellipse, NULL, NULL)
 SAX.characters(
 , 1)

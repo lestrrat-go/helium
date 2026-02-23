@@ -17,7 +17,7 @@ SAX.externalSubset(doc, , )
 SAX.startElementNs(doc, NULL, NULL, 0, 0, 0)
 SAX.characters(
 , 1)
-SAX.startElementNs(tst, NULL, NULL, 0, 2, 0, a='xyz"...', 3, b='  xy...', 5)
+SAX.startElementNs(tst, NULL, NULL, 0, 2, 0, a='xyz...', 3, b='  xy...', 5)
 SAX.endElementNs(tst, NULL, NULL)
 SAX.characters(
 , 1)
@@ -45,7 +45,7 @@ SAX.startElementNs(tst, NULL, NULL, 0, 2, 0, a='x y...', 3, b=' x  ...', 6)
 SAX.endElementNs(tst, NULL, NULL)
 SAX.characters(
 , 1)
-SAX.startElementNs(tst, NULL, NULL, 0, 2, 0, a='a b ...', 3, b=' a b...', 5)
+SAX.startElementNs(tst, NULL, NULL, 0, 2, 0, a='a b...', 3, b=' a b...', 5)
 SAX.endElementNs(tst, NULL, NULL)
 SAX.characters(
 , 1)
