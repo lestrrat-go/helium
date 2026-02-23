@@ -44,3 +44,24 @@ for input in "$SOURCE"/test/*; do
 done
 
 echo "Copied $count test cases into $DEST"
+
+# Copy SAX2 golden files
+sax2count=0
+for input in "$DEST"/*; do
+    [ -f "$input" ] || continue
+    base="$(basename "$input")"
+
+    # Skip .expected and .err files
+    case "$base" in
+        *.expected|*.err) continue ;;
+    esac
+
+    # The SAX2 result file is result/<base>.sax2
+    sax2result="$SOURCE/result/$base.sax2"
+    [ -f "$sax2result" ] || continue
+
+    cp "$sax2result" "$DEST/$base.sax2.expected"
+    sax2count=$((sax2count + 1))
+done
+
+echo "Copied $sax2count SAX2 golden files into $DEST"

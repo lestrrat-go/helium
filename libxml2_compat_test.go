@@ -53,8 +53,9 @@ func TestLibxml2Compat(t *testing.T) {
 
 		name := fi.Name()
 
-		// Skip .expected and .err files
-		if strings.HasSuffix(name, ".expected") || strings.HasSuffix(name, ".err") {
+		// Skip .expected, .err, .sax2.expected, .sax2.err files
+		if strings.HasSuffix(name, ".expected") || strings.HasSuffix(name, ".err") ||
+			strings.HasSuffix(name, ".sax2.expected") || strings.HasSuffix(name, ".sax2.err") {
 			continue
 		}
 
