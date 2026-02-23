@@ -9,7 +9,7 @@ SAX.characters(
 SAX.comment( no normalization )
 SAX.characters(
   , 3)
-SAX.startElementNs(norm, NULL, NULL, 0, 1, 0, attr='   '...', 3)
+SAX.startElementNs(norm, NULL, NULL, 0, 1, 0, attr='   ...', 3)
 SAX.endElementNs(norm, NULL, NULL)
 SAX.characters(
   , 3)

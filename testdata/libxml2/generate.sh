@@ -65,3 +65,22 @@ for input in "$DEST"/*; do
 done
 
 echo "Copied $sax2count SAX2 golden files into $DEST"
+
+# Fix C buffer artifacts in SAX2 golden files.
+# xmllint's C code uses %.4s to print attribute values, which reads 4 bytes
+# from a raw pointer regardless of string length, leaking adjacent buffer
+# contents. Normalize by trimming displayed value to the reported length.
+fixed=0
+for f in "$DEST"/*.sax2.expected; do
+    [ -f "$f" ] || continue
+    if perl -i -pe '
+        s{=\047(.{1,4})\.\.\.\047(, )(\d+)}{
+            my($d,$s,$n)=($1,$2,$3);
+            $d = substr($d,0,$n) if length($d) > $n;
+            "=\047${d}...\047$s$n"
+        }ge
+    ' "$f"; then
+        fixed=$((fixed + 1))
+    fi
+done
+echo "Normalized $fixed SAX2 golden files (C buffer truncation fix)"

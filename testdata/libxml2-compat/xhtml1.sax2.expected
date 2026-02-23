@@ -3,7 +3,7 @@ SAX.startDocument()
 SAX.internalSubset(html, -//W3C//DTD XHTML 1.0 Strict//EN, http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd)
 SAX.externalSubset(html, -//W3C//DTD XHTML 1.0 Strict//EN, http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd)
 SAX.comment( 3.1.1 3/ )
-SAX.startElementNs(html, NULL, NULL, 0, 2, 0, xml:lang='en" ...', 2, lang='en">...', 2)
+SAX.startElementNs(html, NULL, NULL, 0, 2, 0, xml:lang='en...', 2, lang='en...', 2)
 SAX.characters(
   , 3)
 SAX.startElementNs(head, NULL, NULL, 0, 0, 0)
@@ -47,7 +47,7 @@ SAX.characters(
 SAX.comment( C2 )
 SAX.characters(
   , 3)
-SAX.startElementNs(img, NULL, NULL, 0, 2, 0, src='foo....', 7, alt='foo"...', 3)
+SAX.startElementNs(img, NULL, NULL, 0, 2, 0, src='foo....', 7, alt='foo...', 3)
 SAX.endElementNs(img, NULL, NULL)
 SAX.characters(
   , 3)
@@ -61,12 +61,12 @@ SAX.characters(
 SAX.comment( C7 )
 SAX.characters(
   , 3)
-SAX.startElementNs(p, NULL, NULL, 0, 1, 0, lang='fr">...', 2)
+SAX.startElementNs(p, NULL, NULL, 0, 1, 0, lang='fr...', 2)
 SAX.characters(coucou, 6)
 SAX.endElementNs(p, NULL, NULL)
 SAX.characters(
   , 3)
-SAX.startElementNs(p, NULL, NULL, 0, 1, 0, xml:lang='fr">...', 2)
+SAX.startElementNs(p, NULL, NULL, 0, 1, 0, xml:lang='fr...', 2)
 SAX.characters(salut, 5)
 SAX.endElementNs(p, NULL, NULL)
 SAX.characters(
