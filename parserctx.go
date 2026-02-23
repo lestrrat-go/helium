@@ -648,8 +648,9 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 	}
 	str := buf.String()
 
-	// XXX This is not right, but it's for now the best place to do this
+	// XML §2.11 End-of-Line Handling: normalize \r\n to \n, then lone \r to \n.
 	str = strings.ReplaceAll(str, "\r\n", "\n")
+	str = strings.ReplaceAll(str, "\r", "\n")
 	if ctx.instate == psCDATA {
 		if s := ctx.sax; s != nil {
 			switch err := s.CDataBlock(ctx.userData, []byte(str)); err {
@@ -2372,7 +2373,9 @@ func (ctx *parserCtx) parseComment() error {
 	}
 
 	if sh := ctx.sax; sh != nil {
+		// XML §2.11 End-of-Line Handling: normalize \r\n to \n, then lone \r to \n.
 		str = bytes.ReplaceAll(str, []byte{'\r', '\n'}, []byte{'\n'})
+		str = bytes.ReplaceAll(str, []byte{'\r'}, []byte{'\n'})
 		switch err := sh.Comment(ctx, str); err {
 		case nil, sax.ErrHandlerUnspecified:
 			// no op
