@@ -224,7 +224,6 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 
 		// Character event splitting: libxml2 emits multiple smaller characters()
 		// events at buffer boundaries; helium may merge or split differently.
-		"ent11":                            "character event splitting differs",
 		"isolat1":                          "character event splitting differs",
 		"isolat2":                          "character event splitting differs",
 		"icu_parse_test.xml":               "character event splitting differs",
