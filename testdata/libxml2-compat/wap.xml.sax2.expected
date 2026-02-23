@@ -54,8 +54,7 @@ SAX.characters(
         , 9)
 SAX.startElementNs(postfield, NULL, NULL, 0, 2, 0, name='SUBM...', 6, value='No...', 2)
 SAX.endElementNs(postfield, NULL, NULL)
-SAX.startElementNs(postfield, NULL, NULL, 0, 2, 0, name='v"
-v...', 1, value='dark...', 4)
+SAX.startElementNs(postfield, NULL, NULL, 0, 2, 0, name='v...', 1, value='dark...', 4)
 SAX.endElementNs(postfield, NULL, NULL)
 SAX.characters(
         , 9)

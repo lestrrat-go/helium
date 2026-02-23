@@ -9,8 +9,7 @@ SAX.characters(
 SAX.startElementNs(USES, NULL, NULL, 0, 0, 0)
 SAX.characters(
   , 3)
-SAX.startElementNs(STATEMENT, NULL, NULL, 0, 4, 0, purp='2,3...', 3, recpnt='0...', 1, id='0"
- ...', 1, consq='a si...', 37)
+SAX.startElementNs(STATEMENT, NULL, NULL, 0, 4, 0, purp='2,3...', 3, recpnt='0...', 1, id='0...', 1, consq='a si...', 37)
 SAX.characters(
     , 5)
 SAX.startElementNs(WITH, NULL, NULL, 0, 0, 0)
@@ -42,8 +41,7 @@ SAX.characters(
 SAX.startElementNs(USES, NULL, NULL, 0, 0, 0)
 SAX.characters(
   , 3)
-SAX.startElementNs(STATEMENT, NULL, NULL, 0, 4, 0, action='read...', 14, purp='0...', 1, recpnt='0...', 1, id='1">
-...', 1)
+SAX.startElementNs(STATEMENT, NULL, NULL, 0, 4, 0, action='read...', 14, purp='0...', 1, recpnt='0...', 1, id='1...', 1)
 SAX.characters(
     , 5)
 SAX.startElementNs(REF, NULL, NULL, 0, 1, 0, name='User...', 14)

@@ -77,8 +77,7 @@ SAX.characters(
 SAX.comment( normalization )
 SAX.characters(
   , 3)
-SAX.startElementNs(normId, NULL, NULL, 0, 1, 0, attr=''/>
-...', 0)
+SAX.startElementNs(normId, NULL, NULL, 0, 1, 0, attr='...', 0)
 SAX.endElementNs(normId, NULL, NULL)
 SAX.characters(
   , 3)

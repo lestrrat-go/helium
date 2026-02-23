@@ -222,25 +222,6 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 	skipped := map[string]string{
 		"ebcdic_566012.xml": "EBCDIC encoding not supported",
 
-		// Attribute value truncation: libxml2's %.4s reads past the Go string
-		// boundary into the raw XML buffer's closing delimiter. Helium returns
-		// clean Go strings so short attribute values format differently.
-		"att4":            "attribute value truncation (C buffer artifact)",
-		"att5":            "attribute value truncation (C buffer artifact)",
-		"att8":            "attribute value truncation (C buffer artifact)",
-		"att10":           "attribute value truncation (C buffer artifact)",
-		"attrib.xml":      "attribute value truncation (C buffer artifact)",
-		"boundaries1.xml": "attribute value truncation (C buffer artifact)",
-		"dia1":            "attribute value truncation (C buffer artifact)",
-		"dia2":            "attribute value truncation (C buffer artifact)",
-		"dtd11":           "attribute value truncation (C buffer artifact)",
-		"ns4":             "attribute value truncation (C buffer artifact)",
-		"ns5":             "attribute value truncation (C buffer artifact)",
-		"p3p":             "attribute value truncation (C buffer artifact)",
-		"svg2":            "attribute value truncation (C buffer artifact)",
-		"wap.xml":         "attribute value truncation (C buffer artifact)",
-		"xhtml1":          "attribute value truncation (C buffer artifact)",
-
 		// Character event splitting: libxml2 emits multiple smaller characters()
 		// events at buffer boundaries; helium may merge or split differently.
 		"ent11":                            "character event splitting differs",
