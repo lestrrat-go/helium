@@ -766,12 +766,9 @@ func (ctx *parserCtx) parseStartTag() error {
 
 		if attname == XMLNsPrefix && aprefix == "" {
 			// <elem xmlns="...">
-			// Namespace URIs must have all entity/character references expanded.
-			if !ctx.replaceEntities && strings.ContainsRune(attvalue, '&') {
-				if expanded, err2 := ctx.decodeEntities([]byte(attvalue), SubstituteRef); err2 == nil {
-					attvalue = expanded
-				}
-			}
+			// Namespace URI entity/character references are expanded inline
+			// during attribute value parsing (replaceEntities forced true in
+			// parseAttribute for namespace attrs), so no post-processing needed.
 			ctx.pushNS("", attvalue)
 			nbNs++
 			//    SkipDefaultNS:
@@ -788,12 +785,9 @@ func (ctx *parserCtx) parseStartTag() error {
 			var u *url.URL // predeclare, so we can use goto SkipNS
 
 			// <elem xmlns:foo="...">
-			// Namespace URIs must have all entity/character references expanded.
-			if !ctx.replaceEntities && strings.ContainsRune(attvalue, '&') {
-				if expanded, err2 := ctx.decodeEntities([]byte(attvalue), SubstituteRef); err2 == nil {
-					attvalue = expanded
-				}
-			}
+			// Namespace URI entity/character references are expanded inline
+			// during attribute value parsing (replaceEntities forced true in
+			// parseAttribute for namespace attrs), so no post-processing needed.
 			if attname == XMLPrefix { // xmlns:xml
 				if attvalue != XMLNamespace {
 					return ctx.error(errors.New("xml namespace prefix mapped to wrong URI"))
@@ -1175,7 +1169,20 @@ func (ctx *parserCtx) parseAttribute(elemName string) (local string, prefix stri
 	}
 	ctx.skipBlanks()
 
+	// Namespace URIs must always have entities expanded inline during
+	// parsing, matching libxml2's isNamespace flag in xmlParseAttValueInternal.
+	// This avoids a second decodeEntities pass that would trigger extra
+	// SAX getEntity callbacks.
+	isNamespace := (l == XMLNsPrefix && p == "") || p == XMLNsPrefix
+	savedReplaceEntities := ctx.replaceEntities
+	if isNamespace {
+		ctx.replaceEntities = true
+	}
+
 	v, entities, err := ctx.parseAttributeValue(normalize)
+
+	ctx.replaceEntities = savedReplaceEntities
+
 	if err != nil {
 		err = ctx.error(err)
 		return

@@ -258,7 +258,6 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 
 		// Parser behavior differences: entity handling, namespace propagation,
 		// default attributes, or other structural differences.
-		"entity-in-ns-uri.xml": "extra getEntity calls during namespace URI entity expansion",
 		"undeclared-entity.xml": "requires SAX Warning callback (not in interface)",
 	}
 
