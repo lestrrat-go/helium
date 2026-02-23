@@ -458,11 +458,15 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 					return
 				}
 
-				// no children
-				if ok && ent.FirstChild() == nil {
-					// XXX WTF am I doing here...?
+				// Parse entity content to build children, mirroring
+				// xmlNodeParseAttValue in libxml2 tree.c.
+				// Use the expanding flag to prevent infinite recursion
+				// when entities reference each other.
+				if ok && ent.FirstChild() == nil && !ent.expanding {
+					ent.expanding = true
 					var refchildren Node
-					refchildren, err = d.stringToNodeList(string(node.Content()))
+					refchildren, err = d.stringToNodeList(string(ent.Content()))
+					ent.expanding = false
 					if err != nil {
 						return
 					}
