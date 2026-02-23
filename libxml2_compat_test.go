@@ -34,7 +34,6 @@ func TestLibxml2Compat(t *testing.T) {
 	// Files known to fail — add entries here with a reason as you triage.
 	skipped := map[string]string{
 		"defattr2.xml":      "parser hangs: infinite loop in parseNmtoken on numeric enumeration values (0|1)",
-		"dtd9":              "panic: nil pointer dereference in dumpElementContent",
 		"ebcdic_566012.xml": "EBCDIC encoding not supported",
 		"ent_738805.xml":    "stack overflow: recursive entity expansion in stringToNodeList",
 	}
