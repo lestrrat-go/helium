@@ -22,6 +22,7 @@ func nullOrString(s string) string {
 
 func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 	entities := map[string]*Entity{}
+	peEntities := map[string]*Entity{}
 	s := sax.New()
 
 	s.SetDocumentLocatorHandler = func(_ sax.Context, _ sax.DocumentLocator) error {
@@ -53,7 +54,13 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 		}
 		_, _ = fmt.Fprintf(out, "SAX.entityDecl(%s, %d, %s, %s, %s)\n",
 			name, typ, nullOrString(publicID), nullOrString(systemID), contentStr)
-		entities[name] = newEntity(name, EntityType(typ), publicID, systemID, content, "")
+		ent := newEntity(name, EntityType(typ), publicID, systemID, content, "")
+		et = EntityType(typ)
+		if et == InternalParameterEntity || et == ExternalParameterEntity {
+			peEntities[name] = ent
+		} else {
+			entities[name] = ent
+		}
 		return nil
 	}
 	s.UnparsedEntityDeclHandler = func(_ sax.Context, name string, publicID string, systemID string, notationName string) error {
@@ -86,7 +93,7 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 	}
 	s.GetParameterEntityHandler = func(_ sax.Context, name string) (sax.Entity, error) {
 		_, _ = fmt.Fprintf(out, "SAX.getParameterEntity(%s)\n", name)
-		ent, ok := entities[name]
+		ent, ok := peEntities[name]
 		if !ok {
 			return nil, nil
 		}
@@ -233,6 +240,8 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 		"svg2":            "attribute value truncation (C buffer artifact)",
 		"wap.xml":         "attribute value truncation (C buffer artifact)",
 		"xhtml1":          "attribute value truncation (C buffer artifact)",
+		"def-xml-attr.xml": "attribute value truncation (C buffer artifact)",
+		"defattr2.xml":     "attribute value truncation + default attr order (map iteration)",
 
 		// Character event splitting: libxml2 emits multiple smaller characters()
 		// events at buffer boundaries; helium may merge or split differently.
@@ -249,15 +258,8 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 
 		// Parser behavior differences: entity handling, namespace propagation,
 		// default attributes, or other structural differences.
-		"att11":                "extra getEntity call from parser",
-		"ent2":                 "unparsed entity routing and extra getEntity calls",
-		"ent7":                 "missing elementDecl emission",
-		"ent_738805.xml":       "extra getEntity call from parser",
-		"entity-in-ns-uri.xml": "namespace URI with entity references handled differently",
-		"ns6":                  "namespace URI propagation differs",
-		"def-xml-attr.xml":     "default attribute handling differs",
-		"defattr2.xml":         "default attribute handling differs",
-		"undeclared-entity.xml": "panic on nil entity from getEntity",
+		"entity-in-ns-uri.xml": "extra getEntity calls during namespace URI entity expansion",
+		"undeclared-entity.xml": "requires SAX Warning callback (not in interface)",
 	}
 
 	only := map[string]struct{}{}

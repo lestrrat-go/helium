@@ -883,7 +883,17 @@ func (ctx *parserCtx) parseStartTag() error {
 					ctx.pushNS(attname, attr.Value())
 					nbNs++
 				} else {
-					attrs = append(attrs, attr)
+					// Skip if an explicit attribute with the same name exists
+					dup := false
+					for _, ea := range attrs {
+						if ea.LocalName() == attname && ea.Prefix() == aprefix {
+							dup = true
+							break
+						}
+					}
+					if !dup {
+						attrs = append(attrs, attr)
+					}
 				}
 			}
 		}
@@ -919,6 +929,7 @@ func (ctx *parserCtx) parseStartTag() error {
 		}
 	}
 	ctx.pushNode(elem)
+	ctx.nsNrTab = append(ctx.nsNrTab, nbNs)
 
 	return nil
 }
@@ -970,6 +981,16 @@ func (ctx *parserCtx) parseEndTag() error {
 		}
 	}
 	ctx.popNode()
+
+	// Pop namespace bindings that were pushed by this element's start tag.
+	// This mirrors libxml2's nsPop(ctxt, nbNs) in xmlParseEndTag2.
+	if n := len(ctx.nsNrTab); n > 0 {
+		nbNs := ctx.nsNrTab[n-1]
+		ctx.nsNrTab = ctx.nsNrTab[:n-1]
+		if nbNs > 0 {
+			ctx.nsTab.Pop(nbNs)
+		}
+	}
 
 	return nil
 }
@@ -1071,6 +1092,13 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (val
 						}
 					}
 				} else {
+					// Even when not replacing entities, libxml2 validates
+					// entity content by resolving nested references. This
+					// triggers getEntity callbacks for transitive refs.
+					if ent.checked == 0 && strings.ContainsRune(ent.content, '&') {
+						_, _ = ctx.decodeEntities(ent.Content(), SubstituteRef)
+						ent.checked = 2
+					}
 					_, _ = b.WriteString("&")
 					_, _ = b.WriteString(ent.name)
 					_, _ = b.WriteString(";")
@@ -3347,6 +3375,13 @@ func (ctx *parserCtx) decodeEntitiesInternal(s []byte, what SubstitutionType, de
 			if err != nil {
 				return "", err
 			}
+			if ent == nil {
+				// Entity not found (undeclared in non-standalone doc with
+				// external subset). Write entity name as-is.
+				_, _ = out.Write(s[:width])
+				s = s[width:]
+				continue
+			}
 			if err := ctx.entityCheck(ent, 0, 0); err != nil {
 				return "", err
 			}
@@ -3487,6 +3522,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 	var literal string
 	var value string
 	var uri string
+	var hasOrig bool // true when parseEntityValue was called (libxml2: orig != NULL)
 
 	if isParameter {
 		if pdebug.Enabled {
@@ -3498,6 +3534,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 				pdebug.Printf("parseEntityDecl, isParameter = true, calling parseEntityValue")
 			}
 			literal, value, err = ctx.parseEntityValue()
+			hasOrig = true
 			if pdebug.Enabled {
 				pdebug.Printf("entity declaration '%s' -> '%s'", name, value)
 			}
@@ -3545,6 +3582,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 		}
 		if c := cur.Peek(); c == '"' || c == '\'' {
 			literal, value, err = ctx.parseEntityValue()
+			hasOrig = true
 			if err == nil {
 				if s := ctx.sax; s != nil {
 					switch err := s.EntityDecl(ctx.userData, name, int(InternalGeneralEntity), "", "", value); err {
@@ -3589,8 +3627,9 @@ func (ctx *parserCtx) parseEntityDecl() error {
 					return ctx.error(err)
 				}
 				if s := ctx.sax; s != nil {
-					// NDATA entity: publicID=uri, systemID=literal, notation=ndata
-					switch err := s.EntityDecl(ctx.userData, name, int(ExternalGeneralUnparsedEntity), uri, literal, ndata); err {
+					// NDATA entity: call UnparsedEntityDecl, not EntityDecl.
+					// libxml2: ctxt->sax->unparsedEntityDecl(ctxt->userData, name, literal, URI, ndata)
+					switch err := s.UnparsedEntityDecl(ctx.userData, name, uri, literal, ndata); err {
 					case nil, sax.ErrHandlerUnspecified:
 						// no op
 					default:
@@ -3625,26 +3664,27 @@ func (ctx *parserCtx) parseEntityDecl() error {
 	}
 
 	// Ugly mechanism to save the raw entity value.
-	// Note: This happens because the SAX interface doesn't have a way to
-	// pass this non-standard information to the handler
-	var curent sax.Entity
-	if isParameter {
-		if s := ctx.sax; s != nil {
-			curent, _ = s.GetParameterEntity(ctx.userData, name)
+	// In libxml2, this block only runs when orig != NULL, i.e. when
+	// parseEntityValue was called (internal entities only).
+	if hasOrig {
+		var curent sax.Entity
+		if isParameter {
+			if s := ctx.sax; s != nil {
+				curent, _ = s.GetParameterEntity(ctx.userData, name)
+			}
+		} else {
+			if s := ctx.sax; s != nil {
+				curent, _ = s.GetEntity(ctx.userData, name)
+				if curent == nil && ctx == ctx.userData {
+					e, _ := ctx.getEntity(name)
+					curent = e
+				}
+			}
 		}
-	} else {
-		if s := ctx.sax; s != nil {
-			curent, _ = s.GetEntity(ctx.userData, name)
-			/*
-			   if ((cur == NULL) && (ctxt->userData==ctxt)) {
-			       cur = xmlSAX2GetEntity(ctxt, name);
-			   }
-			*/
-		}
-	}
-	if curent != nil {
-		if ent, ok := curent.(*Entity); ok && ent.entityType != ExternalGeneralUnparsedEntity {
-			curent.SetOrig(literal)
+		if curent != nil {
+			if ent, ok := curent.(*Entity); ok && ent.orig == "" {
+				ent.SetOrig(literal)
+			}
 		}
 	}
 
@@ -4631,263 +4671,54 @@ func (ctx *parserCtx) parseReference() error {
 			return errors.New("invalid entity type")
 		}
 
-		/*
-		           // Store the number of entities needing parsing for this entity
-		           // content and do checkings
-		           ent->checked = (ctxt->nbentities - oldnbent + 1) * 2;
-		           if ((ent->content != NULL) && (xmlStrchr(ent->content, '<')))
-		               ent->checked |= 1;
-		           if (ret == XML_ERR_ENTITY_LOOP) {
-		               xmlFatalErr(ctxt, XML_ERR_ENTITY_LOOP, NULL);
-		               xmlFreeNodeList(list);
-		               return;
-		           }
-		           if (xmlParserEntityCheck(ctxt, 0, ent, 0)) {
-		               xmlFreeNodeList(list);
-		               return;
-		           }
+		// Mark entity as checked after first parse (libxml2: ent->checked = 2)
+		if ent.checked == 0 {
+			ent.checked = 2
+		}
+	}
 
-		           if ((ret == XML_ERR_OK) && (list != NULL)) {
-		               if (((ent->etype == XML_INTERNAL_GENERAL_ENTITY) ||
-		                (ent->etype == XML_EXTERNAL_GENERAL_PARSED_ENTITY))&&
-		                   (ent->children == NULL)) {
-		                   ent->children = list;
-		                   if (ctxt->replaceEntities) {
-		                       // Prune it directly in the generated document
-		                       // except for single text nodes.
-		                       if (((list->type == XML_TEXT_NODE) &&
-		                            (list->next == NULL)) ||
-		                           (ctxt->parseMode == XML_PARSE_READER)) {
-		                           list->parent = (xmlNodePtr) ent;
-		                           list = NULL;
-		                           ent->owner = 1;
-		                       } else {
-		                           ent->owner = 0;
-		                           while (list != NULL) {
-		                               list->parent = (xmlNodePtr) ctxt->node;
-		                               list->doc = ctxt->myDoc;
-		                               if (list->next == NULL)
-		                                   ent->last = list;
-		                               list = list->next;
-		                           }
-		                           list = ent->children;
-		   #ifdef LIBXML_LEGACY_ENABLED
-		                           if (ent->etype == XML_EXTERNAL_GENERAL_PARSED_ENTITY)
-		                             xmlAddEntityReference(ent, list, NULL);
-		   #endif
-		                       }
-		                   } else {
-		                       ent->owner = 1;
-		                       while (list != NULL) {
-		                           list->parent = (xmlNodePtr) ent;
-		                           xmlSetTreeDoc(list, ent->doc);
-		                           if (list->next == NULL)
-		                               ent->last = list;
-		                           list = list->next;
-		                       }
-		                   }
-		               } else {
-		                   xmlFreeNodeList(list);
-		                   list = NULL;
-		               }
-		           } else if ((ret != XML_ERR_OK) &&
-		                      (ret != XML_WAR_UNDECLARED_ENTITY)) {
-		               xmlFatalErrMsgStr(ctxt, XML_ERR_UNDECLARED_ENTITY,
-		                        "Entity '%s' failed to parse\n", ent->name);
-		               xmlParserEntityCheck(ctxt, 0, ent, 0);
-		           } else if (list != NULL) {
-		               xmlFreeNodeList(list);
-		               list = NULL;
-		           }
-		           if (ent->checked == 0)
-		               ent->checked = 2;
-		       } else if (ent->checked != 1) {
-		           ctxt->nbentities += ent->checked / 2;
-		       }
-		*/
-
-		// Now that the entity content has been gathered
-		// provide it to the application, this can take different forms based
-		// on the parsing modes.
-		if ent.firstChild == nil {
-			// Probably running in SAX mode and the callbacks don't
-			// build the entity content. So unless we already went
-			// though parsing for first checking go though the entity
-			// content to generate callbacks associated to the entity
-			if wasChecked != 0 {
-				var userData interface{}
-				if ctx.userData != ctx {
-					userData = ctx.userData
-				}
-				if EntityType(ent.EntityType()) == InternalGeneralEntity {
-					parsedEnt, err = ctx.parseBalancedChunkInternal([]byte(ent.Content()), userData)
-					_ = parsedEnt
-					switch err {
-					case nil, ErrParseSucceeded:
-						// may not have generated nodes, but parse was successful
-					default:
-						return err
-					}
-				} else if EntityType(ent.EntityType()) == ExternalGeneralParsedEntity {
-					parsedEnt, err = ctx.parseExternalEntityPrivate(ent.URI(), ent.externalID)
-					_ = parsedEnt
-					switch err {
-					case nil, ErrParseSucceeded:
-						// may not have generated nodes, but parse was successful
-					default:
-						return err
-					}
-				} else {
-					return errors.New("invalid entity type")
-				}
+	// Now that the entity content has been gathered
+	// provide it to the application, this can take different forms based
+	// on the parsing modes.
+	//
+	// This block is OUTSIDE the wasChecked==0 condition, matching libxml2's
+	// structure: even when wasChecked!=0 (entity already parsed once), SAX
+	// mode still needs to re-parse content to generate callbacks.
+	if ent.firstChild == nil {
+		// Probably running in SAX mode and the callbacks don't
+		// build the entity content. So unless we already went
+		// though parsing for first checking go though the entity
+		// content to generate callbacks associated to the entity
+		if wasChecked != 0 {
+			var userData interface{}
+			if ctx.userData != ctx {
+				userData = ctx.userData
 			}
-			if s := ctx.sax; s != nil && !ctx.replaceEntities {
-				// Entity reference callback comes second, it's somewhat
-				// superfluous but a compatibility to historical behaviour
-				switch err := s.Reference(ctx.userData, ent.name); err {
-				case nil, sax.ErrHandlerUnspecified:
-					// no op
+			if EntityType(ent.EntityType()) == InternalGeneralEntity {
+				parsedEnt, err = ctx.parseBalancedChunkInternal([]byte(ent.Content()), userData)
+				_ = parsedEnt
+				switch err {
+				case nil, ErrParseSucceeded:
+					// may not have generated nodes, but parse was successful
 				default:
 					return err
 				}
+			} else if EntityType(ent.EntityType()) == ExternalGeneralParsedEntity {
+				parsedEnt, err = ctx.parseExternalEntityPrivate(ent.URI(), ent.externalID)
+				_ = parsedEnt
+				switch err {
+				case nil, ErrParseSucceeded:
+					// may not have generated nodes, but parse was successful
+				default:
+					return err
+				}
+			} else {
+				return errors.New("invalid entity type")
 			}
-			return nil
 		}
-
-		// If we didn't get any children for the entity being built
 		if s := ctx.sax; s != nil && !ctx.replaceEntities {
-			// Create a node.
-			switch err := s.Reference(ctx.userData, ent.name); err {
-			case nil, sax.ErrHandlerUnspecified:
-				// no op
-			default:
-				return err
-			}
-			return nil
-		}
-		_ = parsedEnt
-
-		/*
-			if ctx.replaceEntities || ent.firstChild == nil {
-			           // There is a problem on the handling of _private for entities
-			           // (bug 155816): Should we copy the content of the field from
-			           // the entity (possibly overwriting some value set by the user
-			           // when a copy is created), should we leave it alone, or should
-			           // we try to take care of different situations?  The problem
-			           // is exacerbated by the usage of this field by the xmlReader.
-			           // To fix this bug, we look at _private on the created node
-			           // and, if it's NULL, we copy in whatever was in the entity.
-			           // If it's not NULL we leave it alone.  This is somewhat of a
-			           // hack - maybe we should have further tests to determine
-			           // what to do.
-				if ctx.peekNode() == nil && ent.firstChild == nil {
-			               // Seems we are generating the DOM content, do
-			               // a simple tree copy for all references except the first
-			               // In the first occurrence list contains the replacement.
-					if (parsedEnt == nil && ent.owner == nil) || ctx.parseMode == ParseReaderMode {
-
-
-
-			               if (((list == NULL) && (ent->owner == 0)) ||
-			                   (ctxt->parseMode == XML_PARSE_READER)) {
-			                   xmlNodePtr nw = NULL, cur, firstChild = NULL;
-			                   // We are copying here, make sure there is no abuse
-			                   ctxt->sizeentcopy += ent->length + 5;
-			                   if (xmlParserEntityCheck(ctxt, 0, ent, ctxt->sizeentcopy))
-			                       return;
-
-			                   // when operating on a reader, the entities definitions
-			                   // are always owning the entities subtree.
-			                   // if (ctxt->parseMode == XML_PARSE_READER)
-			                   //    ent->owner = 1;
-			                   cur = ent->children;
-			                   while (cur != NULL) {
-			                       nw = xmlDocCopyNode(cur, ctxt->myDoc, 1);
-			                       if (nw != NULL) {
-			                           if (nw->_private == NULL)
-			                               nw->_private = cur->_private;
-			                           if (firstChild == NULL){
-			                               firstChild = nw;
-			                           }
-			                           nw = xmlAddChild(ctxt->node, nw);
-			                       }
-			                       if (cur == ent->last) {
-			                           // needed to detect some strange empty
-			                           // node cases in the reader tests
-			                           if ((ctxt->parseMode == XML_PARSE_READER) &&
-			                               (nw != NULL) &&
-			                               (nw->type == XML_ELEMENT_NODE) &&
-			                               (nw->children == NULL))
-			                               nw->extra = 1;
-
-			                           break;
-			                       }
-			                       cur = cur->next;
-			                   }
-			               } else if ((list == NULL) || (ctxt->inputNr > 0)) {
-			                   xmlNodePtr nw = NULL, cur, next, last,
-			                              firstChild = NULL;
-
-			                   // We are copying here, make sure there is no abuse
-			                   ctxt->sizeentcopy += ent->length + 5;
-			                   if (xmlParserEntityCheck(ctxt, 0, ent, ctxt->sizeentcopy))
-			                       return;
-
-			                   // Copy the entity child list and make it the new
-			                   // entity child list. The goal is to make sure any
-			                   // ID or REF referenced will be the one from the
-			                   // document content and not the entity copy.
-			                   cur = ent->children;
-			                   ent->children = NULL;
-			                   last = ent->last;
-			                   ent->last = NULL;
-			                   while (cur != NULL) {
-			                       next = cur->next;
-			                       cur->next = NULL;
-			                       cur->parent = NULL;
-			                       nw = xmlDocCopyNode(cur, ctxt->myDoc, 1);
-			                       if (nw != NULL) {
-			                           if (nw->_private == NULL)
-			                               nw->_private = cur->_private;
-			                           if (firstChild == NULL){
-			                               firstChild = cur;
-			                           }
-			                           xmlAddChild((xmlNodePtr) ent, nw);
-			                           xmlAddChild(ctxt->node, cur);
-			                       }
-			                       if (cur == last)
-			                           break;
-			                       cur = next;
-			                   }
-			                   if (ent->owner == 0)
-			                       ent->owner = 1;
-			               } else {
-			                   const xmlChar *nbktext;
-			                   // the name change is to avoid coalescing of the
-			                   // node with a possible previous text one which
-			                   // would make ent->children a dangling pointer
-			                   nbktext = xmlDictLookup(ctxt->dict, BAD_CAST "nbktext",
-			                                           -1);
-			                   if (ent->children->type == XML_TEXT_NODE)
-			                       ent->children->name = nbktext;
-			                   if ((ent->last != ent->children) &&
-			                       (ent->last->type == XML_TEXT_NODE))
-			                       ent->last->name = nbktext;
-			                   xmlAddChildList(ctxt->node, ent->children);
-			               }
-
-			               // This is to avoid a nasty side effect, see
-			               // characters() in SAX.c
-			               ctxt->nodemem = 0;
-			               ctxt->nodelen = 0;
-			               return;
-			           }
-			       }
-		*/
-	} else {
-		// External parsed entity that we are not loading (no ParseNoEnt
-		// or ParseDTDValid). Create an EntityRef node as a placeholder.
-		if s := ctx.sax; s != nil && !ctx.replaceEntities {
+			// Entity reference callback comes second, it's somewhat
+			// superfluous but a compatibility to historical behaviour
 			switch err := s.Reference(ctx.userData, ent.name); err {
 			case nil, sax.ErrHandlerUnspecified:
 				// no op
@@ -4897,6 +4728,19 @@ func (ctx *parserCtx) parseReference() error {
 		}
 		return nil
 	}
+
+	// If we didn't get any children for the entity being built
+	if s := ctx.sax; s != nil && !ctx.replaceEntities {
+		// Create a node.
+		switch err := s.Reference(ctx.userData, ent.name); err {
+		case nil, sax.ErrHandlerUnspecified:
+			// no op
+		default:
+			return err
+		}
+		return nil
+	}
+	_ = parsedEnt
 
 	return nil
 }
@@ -5022,7 +4866,7 @@ func parseStringName(s []byte) (string, int, error) {
 // the rest of the processing to work.
 func (ctx *parserCtx) getEntity(name string) (*Entity, error) {
 	if ctx.inSubset == 0 {
-		if ret, err := resolvePredefinedEntity(name); err != nil {
+		if ret, err := resolvePredefinedEntity(name); err == nil {
 			return ret, nil
 		}
 	}
@@ -5107,6 +4951,13 @@ func (ctx *parserCtx) parseStringEntityRef(s []byte) (sax.Entity, int, error) {
 
 	var loadedEnt sax.Entity
 
+	// Check predefined entities first (amp, lt, gt, apos, quot).
+	// libxml2 does this via xmlGetPredefinedEntity before calling the SAX handler,
+	// which avoids triggering user-visible getEntity callbacks for predefined entities.
+	if predef, perr := resolvePredefinedEntity(name); perr == nil {
+		return predef, i, nil
+	}
+
 	/*
 	 * Ask first SAX for entity resolution, otherwise try the
 	 * entities which may have stored in the parser context.
@@ -5114,9 +4965,6 @@ func (ctx *parserCtx) parseStringEntityRef(s []byte) (sax.Entity, int, error) {
 	if h := ctx.sax; h != nil {
 		loadedEnt, err = h.GetEntity(ctx.userData, name)
 		if err != nil {
-			// Note: libxml2 would try to ask for xmlGetPredefinedEntity
-			// next, but that's only when XML_PARSE_OLDSAX is enabled.
-			// we won't do that.
 			if ctx.wellFormed && ctx.userData == ctx {
 				loadedEnt, err = ctx.getEntity(name)
 				if err != nil {
@@ -5150,7 +4998,9 @@ func (ctx *parserCtx) parseStringEntityRef(s []byte) (sax.Entity, int, error) {
 		if ctx.standalone == StandaloneExplicitYes || (!ctx.hasExternalSubset && !ctx.hasPERefs) {
 			return nil, 0, fmt.Errorf("entity '%s' not defined", name)
 		}
-		// xmlParserEntityCheck ?!
+		// Entity not found but cannot flag as error (external subset/PE refs).
+		// Return nil to let the caller handle gracefully.
+		return nil, i, nil
 	}
 
 	/*
@@ -5391,16 +5241,19 @@ func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
 		return
 	}
 
+	// Clear error from resolvePredefinedEntity before proceeding
+	err = nil
+
 	if s := ctx.sax; s != nil {
 		// ask the SAX2 handler nicely
 		var loadedEnt sax.Entity
-		loadedEnt, err = s.GetEntity(ctx.userData, name)
-		if err == nil {
+		loadedEnt, _ = s.GetEntity(ctx.userData, name)
+		if loadedEnt != nil {
 			ent = loadedEnt.(*Entity)
 			return
 		}
 
-		if loadedEnt == nil && ctx == ctx.userData {
+		if ctx == ctx.userData {
 			ent, _ = ctx.getEntity(name)
 		}
 	}

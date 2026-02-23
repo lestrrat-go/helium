@@ -606,9 +606,20 @@ func (t *TreeBuilder) UnparsedEntityDecl(ctxif sax.Context, name string, publicI
 		defer g.IRelease("END tree.UnparsedEntityDecl")
 	}
 
-	// Because the parser needs to know about entities even in cases where
-	// there isn't a SAX handler registered, call to Document.RegisterEntry
-	// is done in the main parser -- and not here.
+	// Mirror xmlSAX2UnparsedEntityDecl: register the NDATA entity in the DTD.
+	ctx := ctxif.(*parserCtx)
+	doc := ctx.doc
+	var dtd *DTD
+	switch ctx.inSubset {
+	case 1:
+		dtd = doc.intSubset
+	case 2:
+		dtd = doc.extSubset
+	default:
+		return errors.New("sax.UnparsedEntityDecl called while not in subset")
+	}
+
+	_, _ = dtd.AddEntity(name, ExternalGeneralUnparsedEntity, publicID, systemID, notation)
 	return nil
 }
 

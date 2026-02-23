@@ -143,6 +143,7 @@ type parserCtx struct {
 	elem              *Element // current context element
 
 	nsTab    nsStack
+	nsNrTab  []int // number of ns bindings pushed per element (parallel to nodeTab)
 	doc      *Document
 	userData interface{}
 	nodeTab  nodeStack

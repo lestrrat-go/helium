@@ -75,6 +75,15 @@ func (n Attribute) Value() string {
 	return string(n.Content())
 }
 
+func (n Attribute) Name() string {
+	if n.ns != nil {
+		if p := n.ns.Prefix(); p != "" {
+			return p + ":" + n.docnode.Name()
+		}
+	}
+	return n.docnode.Name()
+}
+
 func (n Attribute) Prefix() string {
 	return n.ns.Prefix()
 }
