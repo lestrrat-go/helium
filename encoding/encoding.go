@@ -20,6 +20,14 @@ func Load(name string) enc.Encoding {
 	switch strings.ToLower(name) {
 	case "utf8", "utf-8":
 		return unicode.UTF8
+	case "us-ascii", "ascii":
+		return unicode.UTF8
+	case "utf-16le", "utf16le":
+		return unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM)
+	case "utf-16be", "utf16be":
+		return unicode.UTF16(unicode.BigEndian, unicode.IgnoreBOM)
+	case "utf-16", "utf16":
+		return unicode.UTF16(unicode.LittleEndian, unicode.UseBOM)
 	case "euc-jp":
 		return japanese.EUCJP
 	case "shift_jis", "shift-jis", "shiftjis", "cp932":
@@ -37,29 +45,29 @@ func Load(name string) enc.Encoding {
 	case "cp866":
 		return charmap.CodePage866
 	case "iso-8859-10":
-		return charmap.ISO8859_10
+		return withC1Fallback(charmap.ISO8859_10)
 	case "iso-8859-13":
-		return charmap.ISO8859_13
+		return withC1Fallback(charmap.ISO8859_13)
 	case "iso-8859-14":
-		return charmap.ISO8859_14
+		return withC1Fallback(charmap.ISO8859_14)
 	case "iso-8859-15":
-		return charmap.ISO8859_15
+		return withC1Fallback(charmap.ISO8859_15)
 	case "iso-8859-16":
-		return charmap.ISO8859_16
+		return withC1Fallback(charmap.ISO8859_16)
 	case "iso-8859-2":
-		return charmap.ISO8859_2
+		return withC1Fallback(charmap.ISO8859_2)
 	case "iso-8859-3":
-		return charmap.ISO8859_3
+		return withC1Fallback(charmap.ISO8859_3)
 	case "iso-8859-4":
-		return charmap.ISO8859_4
+		return withC1Fallback(charmap.ISO8859_4)
 	case "iso-8859-5":
-		return charmap.ISO8859_5
+		return withC1Fallback(charmap.ISO8859_5)
 	case "iso-8859-6":
-		return charmap.ISO8859_6
+		return withC1Fallback(charmap.ISO8859_6)
 	case "iso-8859-7":
-		return charmap.ISO8859_7
+		return withC1Fallback(charmap.ISO8859_7)
 	case "iso-8859-8":
-		return charmap.ISO8859_8
+		return withC1Fallback(charmap.ISO8859_8)
 	case "koi8r":
 		return charmap.KOI8R
 	case "koir8u":
@@ -69,25 +77,25 @@ func Load(name string) enc.Encoding {
 	case "macintoshcyrillic":
 		return charmap.MacintoshCyrillic
 	case "windows1250":
-		return charmap.Windows1250
+		return withC1Fallback(charmap.Windows1250)
 	case "windows1251":
-		return charmap.Windows1251
+		return withC1Fallback(charmap.Windows1251)
 	case "iso-8859-1", "windows1252":
-		return charmap.Windows1252
+		return withC1Fallback(charmap.Windows1252)
 	case "windows1253":
-		return charmap.Windows1253
+		return withC1Fallback(charmap.Windows1253)
 	case "windows1254":
-		return charmap.Windows1254
+		return withC1Fallback(charmap.Windows1254)
 	case "windows1255":
-		return charmap.Windows1255
+		return withC1Fallback(charmap.Windows1255)
 	case "windows1256":
-		return charmap.Windows1256
+		return withC1Fallback(charmap.Windows1256)
 	case "windows1257":
-		return charmap.Windows1257
+		return withC1Fallback(charmap.Windows1257)
 	case "windows1258":
-		return charmap.Windows1258
+		return withC1Fallback(charmap.Windows1258)
 	case "windows874":
-		return charmap.Windows874
+		return withC1Fallback(charmap.Windows874)
 	case "xuserdefined":
 		return charmap.XUserDefined
 	}

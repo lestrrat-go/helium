@@ -128,7 +128,7 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII bool) error {
 			esc = esc_tab
 		default:
 			if escapeNonASCII && !(0x20 <= r && r < 0x80) { // nolint:staticcheck
-				if r < 0xE0 {
+				if r < 0x100 {
 					esc = []byte(fmt.Sprintf("&#x%X;", r))
 					break
 				}
@@ -188,7 +188,7 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool, escapeNonASCII bool) 
 			esc = esc_cr
 		default:
 			if escapeNonASCII && !(r == '\t' || (0x20 <= r && r < 0x80)) { // nolint:staticcheck
-				if r < 0xE0 {
+				if r < 0x100 {
 					esc = []byte(fmt.Sprintf("&#x%X;", r))
 					break
 				}
@@ -216,7 +216,7 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool, escapeNonASCII bool) 
 }
 
 // Dumper serializes an XML document tree.
-// escapeNonASCII controls whether characters U+0080–U+00DF are emitted as
+// escapeNonASCII controls whether characters U+0080–U+00FF are emitted as
 // numeric character references (&#xNN;).  libxml2 only does this when the
 // output encoding is UTF-8; when an encoding handler is present the
 // characters pass through and the encoder converts them.
@@ -236,7 +236,7 @@ func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 	d.escapeNonASCII = true
 	if enc := doc.encoding; enc != "" {
 		lower := strings.ToLower(enc)
-		if lower != "utf-8" && lower != "utf8" {
+		if lower != "utf-8" && lower != "utf8" && lower != "us-ascii" && lower != "ascii" {
 			if e := henc.Load(enc); e != nil {
 				d.escapeNonASCII = false
 				w := e.NewEncoder().Writer(out)
@@ -503,7 +503,7 @@ func (d *Dumper) dumpEntityDecl(out io.Writer, ent *Entity) error {
 	case ExternalGeneralParsedEntity, ExternalGeneralUnparsedEntity:
 		_, _ = io.WriteString(out, "<!ENTITY ")
 		_, _ = io.WriteString(out, ent.name)
-		if ent.externalID == "" {
+		if ent.externalID != "" {
 			_, _ = io.WriteString(out, " PUBLIC ")
 			_ = dumpQuotedString(out, ent.externalID)
 			_, _ = io.WriteString(out, " ")
@@ -662,8 +662,9 @@ func (d *Dumper) dumpNs(out io.Writer, ns *Namespace) error {
 		_, _ = io.WriteString(out, "xmlns:")
 		_, _ = io.WriteString(out, ns.prefix)
 	}
-	_, _ = io.WriteString(out, "=")
-	_ = dumpQuotedString(out, ns.href)
+	_, _ = io.WriteString(out, `="`)
+	_ = escapeAttrValue(out, []byte(ns.href), d.escapeNonASCII)
+	_, _ = io.WriteString(out, `"`)
 	return nil
 }
 
