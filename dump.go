@@ -222,6 +222,52 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool, escapeNonASCII bool) 
 // characters pass through and the encoder converts them.
 type Dumper struct {
 	escapeNonASCII bool
+	isXHTML        bool
+	encoding       string // document encoding, used for XHTML meta injection
+}
+
+// isXHTMLDTD returns true if the DTD identifies an XHTML document.
+// Mirrors libxml2's xmlIsXHTML (tree.c).
+func isXHTMLDTD(dtd *DTD) bool {
+	switch dtd.externalID {
+	case "-//W3C//DTD XHTML 1.0 Strict//EN",
+		"-//W3C//DTD XHTML 1.0 Transitional//EN",
+		"-//W3C//DTD XHTML 1.0 Frameset//EN":
+		return true
+	}
+	switch dtd.systemID {
+	case "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd",
+		"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd",
+		"http://www.w3.org/TR/xhtml1/DTD/xhtml1-frameset.dtd":
+		return true
+	}
+	return false
+}
+
+// xhtmlVoidElements is the set of XHTML empty elements that use " />"
+// self-closing syntax. Mirrors xhtmlIsEmpty in xmlsave.c.
+var xhtmlVoidElements = map[string]bool{
+	"area": true, "base": true, "basefont": true, "br": true,
+	"col": true, "frame": true, "hr": true, "img": true,
+	"input": true, "isindex": true, "link": true, "meta": true,
+	"param": true,
+}
+
+// xhtmlNameIDElements is the set of elements where name→id mirroring
+// applies (C.8). Mirrors xhtmlAttrListDumpOutput in xmlsave.c.
+var xhtmlNameIDElements = map[string]bool{
+	"a": true, "p": true, "div": true, "img": true,
+	"map": true, "applet": true, "form": true, "frame": true,
+	"iframe": true,
+}
+
+// htmlBooleanAttrs is the set of HTML boolean attributes.
+// Mirrors htmlIsBooleanAttr in HTMLtree.c.
+var htmlBooleanAttrs = map[string]bool{
+	"checked": true, "compact": true, "declare": true, "defer": true,
+	"disabled": true, "ismap": true, "multiple": true, "nohref": true,
+	"noresize": true, "noshade": true, "nowrap": true, "readonly": true,
+	"selected": true,
 }
 
 func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
@@ -248,13 +294,26 @@ func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 		}
 	}
 
+	// Detect XHTML. Mirrors xmlSaveDocInternal in xmlsave.c.
+	d.isXHTML = false
+	d.encoding = doc.encoding
+	if dtd := doc.intSubset; dtd != nil {
+		d.isXHTML = isXHTMLDTD(dtd)
+	}
+
 	if err := d.DumpNode(out, doc); err != nil {
 		return err
 	}
 
 	for e := doc.FirstChild(); e != nil; e = e.NextSibling() {
-		if err := d.DumpNode(out, e); err != nil {
-			return err
+		if d.isXHTML && e.Type() == ElementNode {
+			if err := d.dumpXHTMLNode(out, e); err != nil {
+				return err
+			}
+		} else {
+			if err := d.DumpNode(out, e); err != nil {
+				return err
+			}
 		}
 		_, _ = io.WriteString(out, "\n")
 	}
@@ -837,4 +896,216 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 	_, _ = io.WriteString(out, ">")
 
 	return nil
+}
+
+// dumpXHTMLNode serializes a node using XHTML rules.
+// Mirrors xhtmlNodeDumpOutput in xmlsave.c.
+func (d *Dumper) dumpXHTMLNode(out io.Writer, n Node) error {
+	switch n.Type() {
+	case ElementNode:
+		// handled below
+	default:
+		return d.DumpNode(out, n)
+	}
+
+	e := n.(*Element)
+	localName := e.LocalName()
+
+	var name string
+	if nser, ok := n.(Namespacer); ok {
+		if prefix := nser.Prefix(); prefix != "" {
+			name = prefix + ":" + localName
+		} else {
+			name = localName
+		}
+	} else {
+		name = n.Name()
+	}
+
+	_, _ = io.WriteString(out, "<")
+	_, _ = io.WriteString(out, name)
+
+	// Dump namespace declarations
+	nslist := e.Namespaces()
+	if len(nslist) > 0 {
+		if err := d.dumpNsList(out, nslist); err != nil {
+			return err
+		}
+	}
+
+	// C.1: Inject xmlns="http://www.w3.org/1999/xhtml" on <html> if missing.
+	hasDefaultNs := false
+	for _, ns := range nslist {
+		if ns.prefix == "" {
+			hasDefaultNs = true
+			break
+		}
+	}
+	if localName == "html" && e.ns == nil && !hasDefaultNs {
+		_, _ = io.WriteString(out, ` xmlns="http://www.w3.org/1999/xhtml"`)
+	}
+
+	// Dump attributes with XHTML mirroring rules.
+	d.dumpXHTMLAttrList(out, e)
+
+	// Determine if we need to inject <meta> Content-Type in <head>.
+	addMeta := false
+	if localName == "head" {
+		if parent := e.parent; parent != nil {
+			if pe, ok := parent.(*Element); ok {
+				if pe.LocalName() == "html" && pe.parent != nil && pe.parent.Type() == DocumentNode {
+					addMeta = !d.headHasContentTypeMeta(e)
+				}
+			}
+		}
+	}
+
+	if e.FirstChild() == nil {
+		if e.ns == nil && xhtmlVoidElements[localName] && !addMeta {
+			// C.2: Empty void elements: " />"
+			_, _ = io.WriteString(out, " />")
+		} else {
+			if addMeta {
+				_, _ = io.WriteString(out, ">")
+				d.writeMetaContentType(out)
+			} else {
+				_, _ = io.WriteString(out, ">")
+			}
+			// C.3: Non-void elements must use open+close tags
+			_, _ = io.WriteString(out, "</")
+			_, _ = io.WriteString(out, name)
+			_, _ = io.WriteString(out, ">")
+		}
+		return nil
+	}
+
+	_, _ = io.WriteString(out, ">")
+	if addMeta {
+		d.writeMetaContentType(out)
+	}
+
+	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Type() == ElementNode {
+			if err := d.dumpXHTMLNode(out, child); err != nil {
+				return err
+			}
+		} else {
+			if err := d.DumpNode(out, child); err != nil {
+				return err
+			}
+		}
+	}
+
+	_, _ = io.WriteString(out, "</")
+	_, _ = io.WriteString(out, name)
+	_, _ = io.WriteString(out, ">")
+	return nil
+}
+
+// dumpXHTMLAttrList dumps attributes with XHTML rules:
+// - Boolean attribute normalization (C.5)
+// - lang/xml:lang mirroring (C.7)
+// - name/id mirroring (C.8)
+func (d *Dumper) dumpXHTMLAttrList(out io.Writer, e *Element) {
+	var langAttr, xmlLangAttr, nameAttr, idAttr *Attribute
+	localName := e.LocalName()
+
+	for attr := e.properties; attr != nil; {
+		attrName := attr.Name()
+
+		// Track special attributes for mirroring.
+		// xml:lang is stored with full qualified name "xml:lang".
+		switch attrName {
+		case "id":
+			idAttr = attr
+		case "name":
+			nameAttr = attr
+		case "lang":
+			langAttr = attr
+		case "xml:lang":
+			xmlLangAttr = attr
+		}
+
+		// Write the attribute (Name() already includes any namespace prefix)
+		_, _ = io.WriteString(out, " ")
+		_, _ = io.WriteString(out, attrName)
+		_, _ = io.WriteString(out, `="`)
+
+		// C.5: Boolean attribute normalization
+		attrValue := attr.Value()
+		if attrValue == "" && htmlBooleanAttrs[attrName] {
+			_, _ = io.WriteString(out, attrName)
+		} else {
+			for achld := attr.FirstChild(); achld != nil; achld = achld.NextSibling() {
+				if achld.Type() == TextNode {
+					_ = escapeAttrValue(out, achld.Content(), d.escapeNonASCII)
+				} else {
+					_ = d.DumpNode(out, achld)
+				}
+			}
+		}
+		_, _ = io.WriteString(out, `"`)
+
+		a := attr.NextSibling()
+		if a == nil {
+			break
+		}
+		attr = a.(*Attribute)
+	}
+
+	// C.8: name→id mirroring (only for specific elements)
+	if nameAttr != nil && idAttr == nil && xhtmlNameIDElements[localName] {
+		_, _ = io.WriteString(out, ` id="`)
+		_ = escapeAttrValue(out, nameAttr.Content(), d.escapeNonASCII)
+		_, _ = io.WriteString(out, `"`)
+	}
+
+	// C.7: lang/xml:lang mirroring
+	if langAttr != nil && xmlLangAttr == nil {
+		_, _ = io.WriteString(out, ` xml:lang="`)
+		_ = escapeAttrValue(out, langAttr.Content(), d.escapeNonASCII)
+		_, _ = io.WriteString(out, `"`)
+	} else if xmlLangAttr != nil && langAttr == nil {
+		_, _ = io.WriteString(out, ` lang="`)
+		_ = escapeAttrValue(out, xmlLangAttr.Content(), d.escapeNonASCII)
+		_, _ = io.WriteString(out, `"`)
+	}
+}
+
+// headHasContentTypeMeta checks if a <head> element already has a
+// <meta http-equiv="Content-Type"> child.
+func (d *Dumper) headHasContentTypeMeta(head *Element) bool {
+	for child := head.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Type() != ElementNode {
+			continue
+		}
+		ce, ok := child.(*Element)
+		if !ok || ce.LocalName() != "meta" {
+			continue
+		}
+		for attr := ce.properties; attr != nil; {
+			if attr.ns == nil && strings.EqualFold(attr.Name(), "http-equiv") {
+				if strings.EqualFold(attr.Value(), "Content-Type") {
+					return true
+				}
+			}
+			a := attr.NextSibling()
+			if a == nil {
+				break
+			}
+			attr = a.(*Attribute)
+		}
+	}
+	return false
+}
+
+// writeMetaContentType writes the XHTML meta Content-Type tag.
+func (d *Dumper) writeMetaContentType(out io.Writer) {
+	enc := d.encoding
+	if enc == "" {
+		enc = "UTF-8"
+	}
+	_, _ = io.WriteString(out, `<meta http-equiv="Content-Type" content="text/html; charset=`)
+	_, _ = io.WriteString(out, enc)
+	_, _ = io.WriteString(out, `" />`)
 }
