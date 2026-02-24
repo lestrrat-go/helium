@@ -176,7 +176,15 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 		if len(attrs) > 0 {
 			_, _ = fmt.Fprintf(out, ", ")
 			for i, attr := range attrs {
-				_, _ = fmt.Fprintf(out, "%s='%.4s...', %d", attr.Name(), attr.Value(), len(attr.Value()))
+				// Truncate attribute value preview at 4 bytes (matching
+				// libxml2's C-level %.4s which is byte-based, unlike Go's
+				// %.4s which is rune-based).
+				val := attr.Value()
+				preview := val
+				if len(preview) > 4 {
+					preview = preview[:4]
+				}
+				_, _ = fmt.Fprintf(out, "%s='%s...', %d", attr.Name(), preview, len(val))
 				if i < len(attrs)-1 {
 					_, _ = fmt.Fprintf(out, ", ")
 				}
@@ -220,8 +228,6 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 	}
 
 	skipped := map[string]string{
-		"ebcdic_566012.xml": "EBCDIC encoding not supported",
-
 		// Character event splitting: libxml2 emits multiple smaller characters()
 		// events at buffer boundaries; helium may merge or split differently.
 		"isolat1":                          "character event splitting differs",

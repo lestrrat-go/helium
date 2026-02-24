@@ -422,6 +422,34 @@ func (ctx *parserCtx) parseDocument() error {
 				return ctx.error(err)
 			}
 		}
+	} else if ctx.detectedEncoding == encEBCDIC {
+		// EBCDIC bytes are not ASCII-compatible, so we cannot parse the
+		// XML declaration at byte level. Instead, scan the raw bytes
+		// using the EBCDIC invariant character set (shared across all
+		// EBCDIC Latin code pages) to extract the encoding name.
+		if ctx.rawInput != nil {
+			if encName := encoding.ExtractEBCDICEncoding(ctx.rawInput); encName != "" {
+				ctx.encoding = encName
+			}
+		}
+		// Fall back to IBM-037 (US EBCDIC) if no encoding was declared.
+		if ctx.encoding == "" {
+			ctx.encoding = "ibm037"
+		}
+		// Reset the byte cursor from the raw input so the decoder
+		// reads from the beginning of the document.
+		ctx.popInput()
+		ctx.pushInput(strcursor.NewByteCursor(bytes.NewReader(ctx.rawInput)))
+		if err := ctx.switchEncoding(); err != nil {
+			return ctx.error(err)
+		}
+		// Parse the XML declaration from the decoded rune cursor.
+		cur := ctx.getCursor()
+		if cur != nil && cur.HasPrefixString("<?xml") {
+			if err := ctx.parseXMLDeclFromCursor(); err != nil {
+				return ctx.error(err)
+			}
+		}
 	} else {
 		// XML prolog (byte-level for ASCII-compatible encodings)
 		if bcur.HasPrefix(xmlDeclHint) {
