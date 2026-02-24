@@ -183,9 +183,7 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 }
 
 func TestSAXEvents(t *testing.T) {
-	skipped := map[string]struct{}{
-		"att11.xml": {},
-	}
+	skipped := map[string]struct{}{}
 
 	dir := "test"
 	files, err := os.ReadDir(dir)
@@ -193,10 +191,6 @@ func TestSAXEvents(t *testing.T) {
 
 	for _, fi := range files {
 		if fi.IsDir() {
-			continue
-		}
-
-		if fi.Name() != "xml2.xml" {
 			continue
 		}
 

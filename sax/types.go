@@ -77,3 +77,4 @@ type SetDocumentLocatorFunc func(ctx Context, locator DocumentLocator) error
 type StartDocumentFunc func(ctx Context) error
 type StartElementNSFunc func(ctx Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error
 type UnparsedEntityDeclFunc func(ctx Context, name string, publicID string, systemID string, notationName string) error
+type WarningFunc func(ctx Context, msg string, args ...interface{}) error

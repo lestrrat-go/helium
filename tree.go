@@ -626,3 +626,7 @@ func (t *TreeBuilder) UnparsedEntityDecl(ctxif sax.Context, name string, publicI
 func (t *TreeBuilder) Error(ctxif sax.Context, message string, args ...interface{}) error {
 	return nil
 }
+
+func (t *TreeBuilder) Warning(ctxif sax.Context, msg string, args ...interface{}) error {
+	return nil
+}

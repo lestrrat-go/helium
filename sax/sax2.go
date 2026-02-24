@@ -37,6 +37,7 @@ type SAX2Handler interface {
 	StartDocument(ctx Context) error
 	StartElementNS(ctx Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error
 	UnparsedEntityDecl(ctx Context, name string, publicID string, systemID string, notationName string) error
+	Warning(ctx Context, msg string, args ...interface{}) error
 }
 
 // SAX2 is the callback based SAX2 handler.
@@ -66,6 +67,7 @@ type SAX2 struct {
 	StartDocumentHandler StartDocumentFunc
 	StartElementNSHandler StartElementNSFunc
 	UnparsedEntityDeclHandler UnparsedEntityDeclFunc
+	WarningHandler WarningFunc
 }
 
 // New creates a new instance of SAX2. All callbacks are
@@ -245,6 +247,13 @@ func (s SAX2) StartElementNS(ctx Context, localname string, prefix string, uri s
 func (s SAX2) UnparsedEntityDecl(ctx Context, name string, publicID string, systemID string, notationName string) error {
 	if h := s.UnparsedEntityDeclHandler; h != nil {
 		return h(ctx, name, publicID, systemID, notationName)
+	}
+	return ErrHandlerUnspecified;
+}
+
+func (s SAX2) Warning(ctx Context, msg string, args ...interface{}) error {
+	if h := s.WarningHandler; h != nil {
+		return h(ctx, msg, args...)
 	}
 	return ErrHandlerUnspecified;
 }
