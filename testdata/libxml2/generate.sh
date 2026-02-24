@@ -128,3 +128,84 @@ for f in "$DEST"/*.sax2.expected; do
     merged=$((merged + 1))
 done
 echo "Merged consecutive SAX.characters() events in $merged SAX2 golden files"
+
+# Copy XPath test files
+mkdir -p "$DEST/xpath/expr" "$DEST/xpath/tests" "$DEST/xpath/docs"
+
+# Expression tests (no document context)
+xpath_expr_count=0
+for input in "$SOURCE"/test/XPath/expr/*; do
+    [ -f "$input" ] || continue
+    base="$(basename "$input")"
+    result="$SOURCE/result/XPath/expr/$base"
+    [ -f "$result" ] || continue
+    cp "$input" "$DEST/xpath/expr/$base"
+    cp "$result" "$DEST/xpath/expr/$base.expected"
+    xpath_expr_count=$((xpath_expr_count + 1))
+done
+echo "Copied $xpath_expr_count XPath expression tests into $DEST/xpath/expr"
+
+# Document-based tests
+xpath_tests_count=0
+for input in "$SOURCE"/test/XPath/tests/*; do
+    [ -f "$input" ] || continue
+    base="$(basename "$input")"
+    result="$SOURCE/result/XPath/tests/$base"
+    [ -f "$result" ] || continue
+    cp "$input" "$DEST/xpath/tests/$base"
+    cp "$result" "$DEST/xpath/tests/$base.expected"
+    xpath_tests_count=$((xpath_tests_count + 1))
+done
+echo "Copied $xpath_tests_count XPath document-based tests into $DEST/xpath/tests"
+
+# XML documents used by document-based tests
+xpath_docs_count=0
+for input in "$SOURCE"/test/XPath/docs/*; do
+    [ -f "$input" ] || continue
+    base="$(basename "$input")"
+    cp "$input" "$DEST/xpath/docs/$base"
+    xpath_docs_count=$((xpath_docs_count + 1))
+done
+echo "Copied $xpath_docs_count XPath test documents into $DEST/xpath/docs"
+
+# Copy XInclude test files
+# XInclude tests need directory structure preserved because included files use
+# relative paths like "../ents/something.xml".
+XINC_DEST="$DEST/xinclude"
+mkdir -p "$XINC_DEST/docs" "$XINC_DEST/ents" "$XINC_DEST/result" "$XINC_DEST/without-reader"
+
+# docs/ — test inputs
+xinc_docs=0
+for input in "$SOURCE"/test/XInclude/docs/*; do
+    [ -f "$input" ] || continue
+    cp "$input" "$XINC_DEST/docs/"
+    xinc_docs=$((xinc_docs + 1))
+done
+echo "Copied $xinc_docs XInclude doc inputs into $XINC_DEST/docs"
+
+# ents/ — included entities/fragments
+xinc_ents=0
+for input in "$SOURCE"/test/XInclude/ents/*; do
+    [ -f "$input" ] || continue
+    cp "$input" "$XINC_DEST/ents/"
+    xinc_ents=$((xinc_ents + 1))
+done
+echo "Copied $xinc_ents XInclude entity files into $XINC_DEST/ents"
+
+# without-reader/ — additional test inputs
+xinc_wr=0
+for input in "$SOURCE"/test/XInclude/without-reader/*; do
+    [ -f "$input" ] || continue
+    cp "$input" "$XINC_DEST/without-reader/"
+    xinc_wr=$((xinc_wr + 1))
+done
+echo "Copied $xinc_wr XInclude without-reader inputs into $XINC_DEST/without-reader"
+
+# result/ — expected outputs (flat directory covers both docs/ and without-reader/)
+xinc_results=0
+for result in "$SOURCE"/result/XInclude/*; do
+    [ -f "$result" ] || continue
+    cp "$result" "$XINC_DEST/result/"
+    xinc_results=$((xinc_results + 1))
+done
+echo "Copied $xinc_results XInclude result files into $XINC_DEST/result"
