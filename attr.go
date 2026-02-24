@@ -61,6 +61,16 @@ func (n *AttributeDecl) SetTreeDoc(doc *Document) {
 	setTreeDoc(n, doc)
 }
 
+// AType returns the attribute type (e.g. AttrID, AttrCDATA).
+func (n *AttributeDecl) AType() AttributeType {
+	return n.atype
+}
+
+// Elem returns the element name this attribute declaration belongs to.
+func (n *AttributeDecl) Elem() string {
+	return n.elem
+}
+
 func newAttribute(name string, ns *Namespace) *Attribute {
 	attr := &Attribute{}
 	attr.name = name

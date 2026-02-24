@@ -15,6 +15,11 @@ func newNamespace(prefix, uri string) *Namespace {
 	return &n
 }
 
+// NewNamespace creates a new Namespace with the given prefix and URI.
+func NewNamespace(prefix, uri string) *Namespace {
+	return newNamespace(prefix, uri)
+}
+
 func (n Namespace) Prefix() string {
 	return n.prefix
 }

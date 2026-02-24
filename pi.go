@@ -6,6 +6,14 @@ type ProcessingInstruction struct {
 	data   string
 }
 
+func (p *ProcessingInstruction) Name() string {
+	return p.target
+}
+
+func (p *ProcessingInstruction) Content() []byte {
+	return []byte(p.data)
+}
+
 func (p *ProcessingInstruction) Type() ElementType {
 	return ProcessingInstructionNode
 }
