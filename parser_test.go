@@ -284,3 +284,246 @@ func newStringParseInput(content, uri string) *stringParseInput {
 }
 
 func (s *stringParseInput) URI() string { return s.uri }
+
+func TestParseDTDValidRequiredAttribute(t *testing.T) {
+	// #REQUIRED attribute missing → validation error
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc EMPTY>
+  <!ATTLIST doc id ID #REQUIRED>
+]>
+<doc/>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	doc, err := p.Parse([]byte(input))
+	require.Error(t, err, "missing #REQUIRED attribute should fail validation")
+	require.NotNil(t, doc, "document should still be returned with validation error")
+
+	ve, ok := err.(*ValidationError)
+	require.True(t, ok, "error should be *ValidationError")
+	require.True(t, len(ve.Errors) > 0)
+	require.Contains(t, ve.Errors[0], "required")
+}
+
+func TestParseDTDValidRequiredPresent(t *testing.T) {
+	// #REQUIRED attribute present → no error
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc EMPTY>
+  <!ATTLIST doc id ID #REQUIRED>
+]>
+<doc id="x1"/>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	_, err := p.Parse([]byte(input))
+	require.NoError(t, err)
+}
+
+func TestParseDTDValidFixedMismatch(t *testing.T) {
+	// #FIXED attribute with wrong value → validation error
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc EMPTY>
+  <!ATTLIST doc version CDATA #FIXED "1.0">
+]>
+<doc version="2.0"/>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	_, err := p.Parse([]byte(input))
+	require.Error(t, err, "#FIXED attribute value mismatch should fail")
+
+	ve, ok := err.(*ValidationError)
+	require.True(t, ok)
+	require.Contains(t, ve.Error(), "must be")
+}
+
+func TestParseDTDValidFixedCorrect(t *testing.T) {
+	// #FIXED attribute with correct value → no error
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc EMPTY>
+  <!ATTLIST doc version CDATA #FIXED "1.0">
+]>
+<doc version="1.0"/>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	_, err := p.Parse([]byte(input))
+	require.NoError(t, err)
+}
+
+func TestParseDTDValidEmptyElement(t *testing.T) {
+	// EMPTY element with content → validation error
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (child)>
+  <!ELEMENT child EMPTY>
+]>
+<doc><child>text</child></doc>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	_, err := p.Parse([]byte(input))
+	require.Error(t, err, "EMPTY element with content should fail")
+
+	ve, ok := err.(*ValidationError)
+	require.True(t, ok)
+	require.Contains(t, ve.Error(), "EMPTY")
+}
+
+func TestParseDTDValidElementContent(t *testing.T) {
+	// Element content model (a, b) with correct content → no error
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (a, b)>
+  <!ELEMENT a (#PCDATA)>
+  <!ELEMENT b (#PCDATA)>
+]>
+<doc><a>hello</a><b>world</b></doc>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	_, err := p.Parse([]byte(input))
+	require.NoError(t, err)
+}
+
+func TestParseDTDValidElementContentMismatch(t *testing.T) {
+	// Element content model (a, b) with (b, a) → validation error
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (a, b)>
+  <!ELEMENT a (#PCDATA)>
+  <!ELEMENT b (#PCDATA)>
+]>
+<doc><b>world</b><a>hello</a></doc>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	_, err := p.Parse([]byte(input))
+	require.Error(t, err, "wrong element order should fail content model")
+}
+
+func TestParseDTDValidMixedContent(t *testing.T) {
+	// Mixed content (#PCDATA | a)* — text and <a> are allowed
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (#PCDATA | a)*>
+  <!ELEMENT a (#PCDATA)>
+]>
+<doc>hello <a>world</a> end</doc>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	_, err := p.Parse([]byte(input))
+	require.NoError(t, err)
+}
+
+func TestParseDTDValidMixedContentBadChild(t *testing.T) {
+	// Mixed content (#PCDATA | a)* — <b> is NOT allowed
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (#PCDATA | a)*>
+  <!ELEMENT a (#PCDATA)>
+  <!ELEMENT b (#PCDATA)>
+]>
+<doc>hello <b>world</b></doc>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	_, err := p.Parse([]byte(input))
+	require.Error(t, err, "<b> not allowed in mixed content (a)")
+}
+
+func TestParseDTDValidNoFlag(t *testing.T) {
+	// Same invalid document but WITHOUT ParseDTDValid → should pass
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc EMPTY>
+  <!ATTLIST doc id ID #REQUIRED>
+]>
+<doc/>`
+
+	p := NewParser()
+	// Don't set ParseDTDValid
+	_, err := p.Parse([]byte(input))
+	require.NoError(t, err, "without ParseDTDValid, validation should not run")
+}
+
+func TestParseDTDValidChoiceContent(t *testing.T) {
+	// Choice content model (a | b) with <a> → valid
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (a | b)>
+  <!ELEMENT a (#PCDATA)>
+  <!ELEMENT b (#PCDATA)>
+]>
+<doc><a>hello</a></doc>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	_, err := p.Parse([]byte(input))
+	require.NoError(t, err)
+}
+
+func TestParseDTDValidRepeatContent(t *testing.T) {
+	// Repetition content model (a)+ with multiple <a> → valid
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (a)+>
+  <!ELEMENT a (#PCDATA)>
+]>
+<doc><a>1</a><a>2</a><a>3</a></doc>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	_, err := p.Parse([]byte(input))
+	require.NoError(t, err)
+}
+
+func TestParseDTDValidRepeatContentEmpty(t *testing.T) {
+	// Repetition content model (a)+ with zero <a> → invalid
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (a)+>
+  <!ELEMENT a (#PCDATA)>
+]>
+<doc></doc>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	_, err := p.Parse([]byte(input))
+	require.Error(t, err, "(a)+ requires at least one <a>")
+}
+
+func TestValidateAttributeValueInternal(t *testing.T) {
+	t.Run("ID valid", func(t *testing.T) {
+		require.NoError(t, validateAttributeValueInternal(nil, AttrID, "myid"))
+	})
+	t.Run("ID invalid", func(t *testing.T) {
+		require.Error(t, validateAttributeValueInternal(nil, AttrID, "123"))
+	})
+	t.Run("NMTOKEN valid", func(t *testing.T) {
+		require.NoError(t, validateAttributeValueInternal(nil, AttrNmtoken, "hello-world"))
+	})
+	t.Run("NMTOKEN valid digits", func(t *testing.T) {
+		require.NoError(t, validateAttributeValueInternal(nil, AttrNmtoken, "123"))
+	})
+	t.Run("NMTOKEN invalid", func(t *testing.T) {
+		require.Error(t, validateAttributeValueInternal(nil, AttrNmtoken, "hello world"))
+	})
+	t.Run("NMTOKENS valid", func(t *testing.T) {
+		require.NoError(t, validateAttributeValueInternal(nil, AttrNmtokens, "hello world"))
+	})
+	t.Run("IDREFS valid", func(t *testing.T) {
+		require.NoError(t, validateAttributeValueInternal(nil, AttrIDRefs, "id1 id2"))
+	})
+	t.Run("IDREFS invalid", func(t *testing.T) {
+		require.Error(t, validateAttributeValueInternal(nil, AttrIDRefs, "id1 123"))
+	})
+	t.Run("CDATA anything", func(t *testing.T) {
+		require.NoError(t, validateAttributeValueInternal(nil, AttrCDATA, "anything goes here!"))
+	})
+}

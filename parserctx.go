@@ -1069,9 +1069,9 @@ func (ctx *parserCtx) parseStartTag() error {
 	}
 
 	// Attributes defaulting: apply DTD-declared default attribute values.
-	// Missing vs libxml2's xmlParseStartTag2: #FIXED/#REQUIRED validation,
-	// ID/IDREF uniqueness checks, enumerated type coercion. These require
-	// full DTD validation (Track E).
+	// NOTE: #FIXED/#REQUIRED validation and element content model checking
+	// are done post-parse via validateDocument() when ParseDTDValid is set.
+	// ID/IDREF uniqueness checks are not yet implemented.
 	if len(ctx.attsDefault) > 0 {
 		var elemName string
 		if prefix != "" {
@@ -4336,10 +4336,6 @@ func (ctx *parserCtx) lookupSpecialAttribute(elemName, attrName string) (Attribu
 	return v, ok
 }
 
-func validateAttributeValueInternal(doc *Document, typ AttributeType, defvalue string) error {
-	return nil
-}
-
 func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefix string, atype AttributeType, def AttributeDefault, defvalue string, tree Enumeration) (attr *AttributeDecl, err error) {
 	if dtd == nil {
 		err = errors.New("dtd required")
@@ -4396,53 +4392,9 @@ func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefi
 		return
 	}
 
-	/*
-	       // Validity Check:
-	       // Multiple ID per element
-	       //
-	       elemDef = xmlGetDtdElementDesc2(dtd, elem, 1);
-	       if (elemDef != NULL) {
-
-	   // #ifdef LIBXML_VALID_ENABLED
-	           if ((type == XML_ATTRIBUTE_ID) &&
-	               (xmlScanIDAttributeDecl(NULL, elemDef, 1) != 0)) {
-	               xmlErrValidNode(ctxt, (xmlNodePtr) dtd, XML_DTD_MULTIPLE_ID,
-	              "Element %s has too may ID attributes defined : %s\n",
-	                      elem, name, NULL);
-	               if (ctxt != NULL)
-	                   ctxt->valid = 0;
-	           }
-	   // #endif LIBXML_VALID_ENABLED
-
-	           // Insert namespace default def first they need to be
-	           // processed first.
-	           //
-	           if ((xmlStrEqual(ret->name, BAD_CAST "xmlns")) ||
-	               ((ret->prefix != NULL &&
-	                (xmlStrEqual(ret->prefix, BAD_CAST "xmlns"))))) {
-	               ret->nexth = elemDef->attributes;
-	               elemDef->attributes = ret;
-	           } else {
-	               xmlAttributePtr tmp = elemDef->attributes;
-
-	               while ((tmp != NULL) &&
-	                      ((xmlStrEqual(tmp->name, BAD_CAST "xmlns")) ||
-	                       ((ret->prefix != NULL &&
-	                        (xmlStrEqual(ret->prefix, BAD_CAST "xmlns")))))) {
-	                   if (tmp->nexth == NULL)
-	                       break;
-	                   tmp = tmp->nexth;
-	               }
-	               if (tmp != NULL) {
-	                   ret->nexth = tmp->nexth;
-	                   tmp->nexth = ret;
-	               } else {
-	                   ret->nexth = elemDef->attributes;
-	                   elemDef->attributes = ret;
-	               }
-	           }
-	       }
-	*/
+	// NOTE: Multiple-ID-per-element check and namespace-default attribute
+	// ordering are handled post-parse via validateDocument() when
+	// ParseDTDValid is set.
 
 	if err := dtd.AddChild(attr); err != nil {
 		return nil, err

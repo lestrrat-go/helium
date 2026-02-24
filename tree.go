@@ -392,14 +392,9 @@ func (t *TreeBuilder) AttributeDecl(ctxif sax.Context, eName string, aName strin
 		}
 		return errors.New("TreeBuilder.AttributeDecl called while not in subset")
 	}
-	/*
-	   if (ctxt->vctxt.valid == 0)
-	       ctxt->valid = 0;
-	   if ((attr != NULL) && (ctxt->validate) && (ctxt->wellFormed) &&
-	       (ctxt->myDoc->intSubset != NULL))
-	       ctxt->valid &= xmlValidateAttributeDecl(&ctxt->vctxt, ctxt->myDoc,
-	                                               attr);
-	*/
+	// NOTE: Attribute declaration validation (xmlValidateAttributeDecl in
+	// libxml2) is now handled post-parse via validateDocument() when
+	// ParseDTDValid is set.
 	return nil
 }
 

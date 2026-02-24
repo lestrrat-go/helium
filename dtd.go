@@ -244,6 +244,17 @@ func (dtd *DTD) GetElementDesc(name string) (*ElementDecl, bool) {
 	return ret, ok
 }
 
+// AttributesForElement returns all attribute declarations for the named element.
+func (dtd *DTD) AttributesForElement(elem string) []*AttributeDecl {
+	var result []*AttributeDecl
+	for _, adecl := range dtd.attributes {
+		if adecl.elem == elem {
+			result = append(result, adecl)
+		}
+	}
+	return result
+}
+
 func (dtd *DTD) AddChild(cur Node) error {
 	return addChild(dtd, cur)
 }

@@ -51,6 +51,13 @@ func (p *Parser) Parse(b []byte) (*Document, error) {
 		return nil, err
 	}
 
+	// DTD validation: run post-parse document validation when requested.
+	if p != nil && p.options.IsSet(ParseDTDValid) && ctx.doc != nil {
+		if ve := validateDocument(ctx.doc); ve != nil {
+			return ctx.doc, ve
+		}
+	}
+
 	return ctx.doc, nil
 }
 
