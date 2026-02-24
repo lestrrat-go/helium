@@ -77,7 +77,7 @@ type parserCtx struct {
 	extSubURI         string
 	version           string
 	attsSpecial       map[string]AttributeType
-	attsDefault       map[string]map[string]*Attribute
+	attsDefault       map[string][]*Attribute
 	valid             bool
 	hasPERefs         bool
 	pedantic          bool
@@ -296,7 +296,7 @@ func (ctx *parserCtx) init(p *Parser, in io.Reader) error {
 	ctx.userData = ctx // circular dep?!
 	ctx.standalone = StandaloneImplicitNo
 	ctx.attsSpecial = map[string]AttributeType{}
-	ctx.attsDefault = map[string]map[string]*Attribute{}
+	ctx.attsDefault = map[string][]*Attribute{}
 	ctx.wellFormed = true
 	if p != nil {
 		ctx.sax = p.sax
@@ -2852,11 +2852,13 @@ func (ctx *parserCtx) parsePEReference() error {
 		 * ... The declaration of a parameter entity must
 		 * precede any reference to it...
 		 */
-		/*
-		   xmlWarningMsg(ctxt, XML_WAR_UNDECLARED_ENTITY,
-		                 "PEReference: %%%s; not found\n",
-		                 name, NULL);
-		*/
+		if s := ctx.sax; s != nil {
+			switch err := s.Warning(ctx.userData, "PEReference: %%%s; not found\n", name); err {
+			case nil, sax.ErrHandlerUnspecified:
+			default:
+				return ctx.error(err)
+			}
+		}
 		ctx.valid = false
 		if err := ctx.entityCheck(entity, 0, 0); err != nil {
 			return ctx.error(err)
@@ -2866,11 +2868,13 @@ func (ctx *parserCtx) parsePEReference() error {
 		 * Internal checking in case the entity quest barfed
 		 */
 		if etype := EntityType(entity.EntityType()); etype != InternalParameterEntity && etype != ExternalParameterEntity {
-			/*
-			   xmlWarningMsg(ctxt, XML_WAR_UNDECLARED_ENTITY,
-			         "Internal: %%%s; is not a parameter entity\n",
-			                 name, NULL);
-			*/
+			if s := ctx.sax; s != nil {
+				switch err := s.Warning(ctx.userData, "Internal: %%%s; is not a parameter entity\n", name); err {
+				case nil, sax.ErrHandlerUnspecified:
+				default:
+					return ctx.error(err)
+				}
+			}
 			/*
 			   } else if (ctxt->input->free != deallocblankswrapper) {
 			           input = xmlNewBlanksWrapperInputStream(ctxt, entity);
@@ -4390,13 +4394,13 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 		return
 	}
 
-	// XXX seems like when your language has a map, you can do just
-	// kinda do away with a bunch of stuff..  See xmlAddDefAttrs for
-	// details of what the original code is doing
-	m, ok := ctx.attsDefault[elemName]
-	if !ok {
-		m = map[string]*Attribute{}
-		ctx.attsDefault[elemName] = m
+	// See xmlAddDefAttrs for details of what the original code is doing.
+	// Use a slice to preserve declaration order (Go maps randomize iteration).
+	existing := ctx.attsDefault[elemName]
+	for _, a := range existing {
+		if a.Name() == attrName {
+			return // already registered
+		}
 	}
 
 	var prefix string
@@ -4411,12 +4415,11 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 	uri := ctx.lookupNamespace(prefix)
 	attr, err := ctx.doc.CreateAttribute(local, defaultValue, newNamespace(prefix, uri))
 	if err != nil {
-		// XXX Unhandled?!
 		return
 	}
 
 	attr.SetDefault(true)
-	m[attrName] = attr
+	ctx.attsDefault[elemName] = append(existing, attr)
 
 	/*
 	   	hmm, let's think about this when the time comes
@@ -4427,7 +4430,7 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 	*/
 }
 
-func (ctx *parserCtx) lookupAttributeDefault(elemName string) (map[string]*Attribute, bool) {
+func (ctx *parserCtx) lookupAttributeDefault(elemName string) ([]*Attribute, bool) {
 	v, ok := ctx.attsDefault[elemName]
 	return v, ok
 }
@@ -4544,11 +4547,65 @@ func (ctx *parserCtx) parseAttributeListDecl() error {
 	return nil
 }
 
+// parseNotationDecl parses a notation declaration per XML spec production [82]:
+//
+//	NotationDecl ::= '<!NOTATION' S Name S (ExternalID | PublicID) S? '>'
+//	PublicID      ::= 'PUBLIC' S PubidLiteral
 func (ctx *parserCtx) parseNotationDecl() error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START parseNotationDecl")
 		defer g.IRelease("END parseNotationDecl")
 	}
+
+	cur := ctx.getCursor()
+	if cur == nil {
+		panic("did not get rune cursor")
+	}
+	if !cur.ConsumeString("<!NOTATION") {
+		return ctx.error(errors.New("<!NOTATION not started"))
+	}
+
+	if !ctx.skipBlanks() {
+		return ctx.error(ErrSpaceRequired)
+	}
+
+	name, err := ctx.parseName()
+	if err != nil {
+		return ctx.error(err)
+	}
+
+	if !ctx.skipBlanks() {
+		return ctx.error(ErrSpaceRequired)
+	}
+
+	// Parse ExternalID or PublicID.
+	// ExternalID = 'SYSTEM' S SystemLiteral | 'PUBLIC' S PubidLiteral S SystemLiteral
+	// PublicID   = 'PUBLIC' S PubidLiteral
+	// parseExternalID handles both SYSTEM and PUBLIC. For PUBLIC without
+	// a system literal, it returns ("", publicID, nil).
+	systemID, publicID, err := ctx.parseExternalID()
+	if err != nil {
+		return ctx.error(err)
+	}
+
+	ctx.skipBlanks()
+
+	if cur.Peek() != '>' {
+		return ctx.error(errors.New("'>' required to close <!NOTATION"))
+	}
+	if err := cur.Advance(1); err != nil {
+		return err
+	}
+
+	// Wire SAX2 NotationDecl callback.
+	if s := ctx.sax; s != nil {
+		switch err := s.NotationDecl(ctx.userData, name, publicID, systemID); err {
+		case nil, sax.ErrHandlerUnspecified:
+		default:
+			return ctx.error(err)
+		}
+	}
+
 	return nil
 }
 
@@ -5038,7 +5095,9 @@ func (ctx *parserCtx) getEntity(name string) (*Entity, error) {
 
 	var ret *Entity
 	var ok bool
-	if ctx.doc == nil || ctx.doc.standalone != 1 {
+	if ctx.doc == nil {
+		return nil, ErrEntityNotFound
+	} else if ctx.doc.standalone != 1 {
 		ret, _ = ctx.doc.GetEntity(name)
 	} else {
 		if ctx.inSubset == 2 {
@@ -5164,7 +5223,14 @@ func (ctx *parserCtx) parseStringEntityRef(s []byte) (sax.Entity, int, error) {
 			return nil, 0, fmt.Errorf("entity '%s' not defined", name)
 		}
 		// Entity not found but cannot flag as error (external subset/PE refs).
-		// Return nil to let the caller handle gracefully.
+		// Emit a warning matching libxml2's xmlWarningMsg behavior.
+		if s := ctx.sax; s != nil {
+			switch err := s.Warning(ctx.userData, "Entity '%s' not defined", name); err {
+			case nil, sax.ErrHandlerUnspecified:
+			default:
+				return nil, 0, err
+			}
+		}
 		return nil, i, nil
 	}
 
@@ -5446,6 +5512,13 @@ func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
 		if ctx.standalone == StandaloneExplicitYes || (!ctx.hasExternalSubset && ctx.hasPERefs) {
 			return nil, ctx.error(ErrUndeclaredEntity)
 		} else {
+			if s := ctx.sax; s != nil {
+				switch err := s.Warning(ctx.userData, "Entity '%s' not defined", name); err {
+				case nil, sax.ErrHandlerUnspecified:
+				default:
+					return nil, ctx.error(err)
+				}
+			}
 			if ctx.inSubset == 0 && ctx.instate != psAttributeValue {
 				if s := ctx.sax; s != nil {
 					switch err := s.Reference(ctx.userData, name); err {
@@ -5456,7 +5529,6 @@ func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
 					}
 				}
 			}
-			// ent is nil, no? why check?
 			if err := ctx.entityCheck(ent, 0, 0); err != nil {
 				return nil, ctx.error(err)
 			}
@@ -5640,16 +5712,13 @@ func (ctx *parserCtx) handlePEReference() error {
 		// parameter entities with "standalone='no'", ...
 		// ... The declaration of a parameter entity must precede
 		// any reference to it...
-		/*
-		   if ((ctxt->validate) && (ctxt->vctxt.error != NULL)) {
-		       xmlValidityError(ctxt, XML_WAR_UNDECLARED_ENTITY,
-		                        "PEReference: %%%s; not found\n",
-		                        name, NULL);
-		   } else
-		       xmlWarningMsg(ctxt, XML_WAR_UNDECLARED_ENTITY,
-		                     "PEReference: %%%s; not found\n",
-		                     name, NULL);
-		*/
+		if s := ctx.sax; s != nil {
+			switch err := s.Warning(ctx.userData, "PEReference: %%%s; not found\n", name); err {
+			case nil, sax.ErrHandlerUnspecified:
+			default:
+				return ctx.error(err)
+			}
+		}
 		ctx.valid = false
 		if err := ctx.entityCheck(nil, 0, 0); err != nil {
 			return ctx.error(err)

@@ -212,6 +212,10 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 		}
 		return nil
 	}
+	s.WarningHandler = func(_ sax.Context, msg string, args ...interface{}) error {
+		_, _ = fmt.Fprintf(out, "SAX.warning: %s\n", fmt.Sprintf(msg, args...))
+		return nil
+	}
 	return s
 }
 
@@ -323,11 +327,7 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 		t.Skipf("testdata/libxml2-compat not found; run testdata/libxml2/generate.sh first")
 	}
 
-	skipped := map[string]string{
-		// Parser behavior differences: entity handling, namespace propagation,
-		// default attributes, or other structural differences.
-		"undeclared-entity.xml": "requires SAX Warning callback (not in interface)",
-	}
+	skipped := map[string]string{}
 
 	only := map[string]struct{}{}
 	if v := os.Getenv("HELIUM_LIBXML2_SAX2_TEST_FILES"); v != "" {
