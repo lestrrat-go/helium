@@ -2,12 +2,8 @@ SAX.setDocumentLocator()
 SAX.startDocument()
 SAX.startElementNs(EXAMPLE, NULL, NULL, 0, 0, 0)
 SAX.characters(
-    This is an inverted excla, 42)
-SAX.characters(¡, 2)
-SAX.characters(
-    This is a space , 21)
-SAX.characters( , 1)
-SAX.characters( 
-, 2)
+    This is an inverted excla¡
+    This is a space   
+, 68)
 SAX.endElementNs(EXAMPLE, NULL, NULL)
 SAX.endDocument()

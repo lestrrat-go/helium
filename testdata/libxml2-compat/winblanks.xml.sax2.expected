@@ -8,9 +8,8 @@ SAX.characters(
         , 9)
 SAX.startElementNs(C, NULL, NULL, 0, 0, 0)
 SAX.endElementNs(C, NULL, NULL)
-SAX.characters(   , 3)
-SAX.characters(
-, 1)
+SAX.characters(   
+, 4)
 SAX.endElementNs(B, NULL, NULL)
 SAX.characters(
 , 1)

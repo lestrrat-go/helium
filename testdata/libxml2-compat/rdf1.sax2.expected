@@ -42,10 +42,7 @@ SAX.endElementNs(Vendor, RPM, 'http://www.rpm.org/')
 SAX.characters(
     , 5)
 SAX.startElementNs(Packager, RPM, 'http://www.rpm.org/', 0, 0, 0)
-SAX.characters(Red Hat Software , 17)
-SAX.characters(<, 1)
-SAX.characters(bugs@redhat.com, 15)
-SAX.characters(>, 1)
+SAX.characters(Red Hat Software <bugs@redhat.com>, 34)
 SAX.endElementNs(Packager, RPM, 'http://www.rpm.org/')
 SAX.characters(
     , 5)
@@ -70,12 +67,8 @@ SAX.endElementNs(Copyright, RPM, 'http://www.rpm.org/')
 SAX.characters(
     , 5)
 SAX.startElementNs(Changelog, RPM, 'http://www.rpm.org/', 0, 0, 0)
-SAX.characters(* Sun May 10 1998 Prospector S, 36)
-SAX.characters(<, 1)
-SAX.characters(bugs@redhat.com, 15)
-SAX.characters(>, 1)
-SAX.characters(
-  - translations modified for, 42)
+SAX.characters(* Sun May 10 1998 Prospector S<bugs@redhat.com>
+  - translations modified for, 95)
 SAX.endElementNs(Changelog, RPM, 'http://www.rpm.org/')
 SAX.characters(
     , 5)

@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -205,6 +207,100 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 	return s
 }
 
+// mergeCharactersEvents normalizes a SAX2 event trace by collapsing runs of
+// consecutive SAX.characters() events into a single event whose byte-length
+// is the sum of the individual lengths.
+//
+// Why this is needed:
+//
+// The XML specification (§2.10) allows a SAX parser to split character data
+// into arbitrarily many characters() callbacks. libxml2 and helium both
+// exercise this freedom, but they split at different boundaries:
+//
+//   - libxml2 splits at internal I/O buffer boundaries. For native UTF-8
+//     input the buffer is ~4000 bytes; for transcoded input (UTF-16,
+//     ISO-8859-*, EUC-JP, …) it is ~300 bytes. The split points depend on
+//     the byte offset within the file, not on the logical structure of the
+//     character data.
+//
+//   - helium splits at entity-reference boundaries. When character data
+//     contains entity references (e.g. &lt; &gt; &amp; &apos;), helium
+//     emits separate characters() events for the text before, the
+//     replacement text, and the text after each reference. It may also
+//     split at multi-byte character boundaries in transcoded input.
+//
+// Because the split points differ, the raw SAX2 traces from the two parsers
+// can never match line-for-line even though the delivered character content
+// is semantically identical. Merging consecutive characters() events on
+// both sides before comparison eliminates these irrelevant differences.
+//
+// Re-truncation to 30 bytes:
+//
+// The SAX2 event emitter (charHandler, above) mirrors libxml2's testSAX.c
+// behaviour: it truncates the displayed character content to 30 bytes while
+// still reporting the true byte-length. When libxml2 splits a large text
+// node into N buffer-sized chunks, each chunk's display is independently
+// truncated. Concatenating those truncated displays produces a string much
+// longer than 30 bytes but consisting of disjoint 30-byte windows into the
+// original data — essentially meaningless for comparison.
+//
+// To make the merged events comparable, we re-truncate the concatenated
+// display to 30 bytes after merging. This way both the golden file (merged
+// from libxml2's buffer-split events) and helium's output (merged from
+// entity-ref-split events) end up showing just the first 30 bytes of the
+// text node's content, which will agree as long as the underlying data is
+// the same.
+var reCharEvent = regexp.MustCompile(`(?s)^SAX\.characters\((.*), (\d+)\)\n$`)
+
+func mergeCharactersEvents(s string) string {
+	// Phase 1: split the trace into individual SAX events.
+	// Each event starts with "SAX." at column 0 and may span multiple
+	// lines (character content can contain embedded newlines).
+	var events []string
+	cur := ""
+	for _, line := range strings.SplitAfter(s, "\n") {
+		if strings.HasPrefix(line, "SAX.") && cur != "" {
+			events = append(events, cur)
+			cur = line
+		} else {
+			cur += line
+		}
+	}
+	if cur != "" {
+		events = append(events, cur)
+	}
+
+	// Phase 2: walk the events and merge consecutive characters() runs.
+	var out []string
+	mergedData := ""
+	mergedLen := 0
+
+	flushMerged := func() {
+		if mergedLen > 0 {
+			// Re-truncate to 30 bytes (see doc comment above).
+			if len(mergedData) > 30 {
+				mergedData = mergedData[:30]
+			}
+			out = append(out, fmt.Sprintf("SAX.characters(%s, %d)\n", mergedData, mergedLen))
+			mergedData = ""
+			mergedLen = 0
+		}
+	}
+
+	for _, ev := range events {
+		if m := reCharEvent.FindStringSubmatch(ev); m != nil {
+			mergedData += m[1]
+			n, _ := strconv.Atoi(m[2])
+			mergedLen += n
+		} else {
+			flushMerged()
+			out = append(out, ev)
+		}
+	}
+	flushMerged()
+	return strings.Join(out, "")
+}
+
 // TestLibxml2CompatSAX2 runs helium's SAX2 event stream against libxml2's
 // SAX2 golden files (.sax2.expected) in testdata/libxml2-compat/.
 //
@@ -222,23 +318,10 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 	skipped := map[string]string{
 		"ebcdic_566012.xml": "EBCDIC encoding not supported",
 
-		// Character event splitting: libxml2 splits character data at internal
-		// parser buffer boundaries (aligned to the file byte offset). Helium
-		// collects all character data first, then splits uniformly. The chunk
-		// boundaries therefore differ.
-		"isolat1":                          "character event splitting differs (buffer alignment)",
-		"isolat2":                          "character event splitting differs (buffer alignment)",
-		"icu_parse_test.xml":               "character event splitting differs (buffer alignment)",
-		"rdf2":                             "character event splitting differs (buffer alignment)",
-		"winblanks.xml":                    "character event splitting differs (CR/LF boundary)",
-		"text-4-byte-UTF-16-BE.xml":        "character event splitting differs (buffer alignment)",
-		"text-4-byte-UTF-16-BE-offset.xml": "character event splitting differs (buffer alignment)",
-		"text-4-byte-UTF-16-LE.xml":        "character event splitting differs (buffer alignment)",
-		"text-4-byte-UTF-16-LE-offset.xml": "character event splitting differs (buffer alignment)",
-
 		// Parser behavior differences: entity handling, namespace propagation,
 		// default attributes, or other structural differences.
 		"undeclared-entity.xml": "requires SAX Warning callback (not in interface)",
+
 	}
 
 	only := map[string]struct{}{}
@@ -297,7 +380,6 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 			var buf bytes.Buffer
 			p := NewParser()
 			p.SetSAXHandler(newLibxml2EventEmitter(&buf))
-			p.SetCharBufferSize(4000)
 
 			_, err = p.Parse(input)
 			if err != nil {
@@ -306,12 +388,20 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 			require.NoError(t, err, "Parse should succeed (file = %s)", name)
 
 			actual := buf.String()
-			if string(expected) != actual {
+			// Merge consecutive SAX.characters() events on both the golden
+			// file and helium's output before comparing. Without this,
+			// differences in split boundaries (libxml2: I/O buffer edges;
+			// helium: entity-ref / multi-byte boundaries) cause spurious
+			// mismatches even though the underlying character data is the
+			// same. See mergeCharactersEvents for details.
+			normalizedExpected := mergeCharactersEvents(string(expected))
+			normalizedActual := mergeCharactersEvents(actual)
+			if normalizedExpected != normalizedActual {
 				errPath := filepath.Join(dir, name+".sax2.err")
 				_ = os.WriteFile(errPath, []byte(actual), 0600)
 				t.Logf("Actual output saved to %s", errPath)
 			}
-			require.Equal(t, string(expected), actual, "SAX2 event streams should match (file = %s)", name)
+			require.Equal(t, normalizedExpected, normalizedActual, "SAX2 event streams should match (file = %s)", name)
 		})
 	}
 }

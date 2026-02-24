@@ -84,3 +84,47 @@ for f in "$DEST"/*.sax2.expected; do
     fi
 done
 echo "Normalized $fixed SAX2 golden files (C buffer truncation fix)"
+
+# Merge consecutive SAX.characters() events in SAX2 golden files.
+# libxml2 splits character data at internal buffer boundaries (4000 bytes for
+# native UTF-8, ~300 bytes for transcoded input). The SAX spec allows arbitrary
+# splitting, so we normalize by merging adjacent characters() events into one.
+merged=0
+for f in "$DEST"/*.sax2.expected; do
+    [ -f "$f" ] || continue
+    perl -0777 -i -e '
+        my $content = <>;
+        my @events;
+        my $cur = "";
+        for my $line (split /(?<=\n)/, $content) {
+            if ($line =~ /^SAX\./ && $cur ne "") {
+                push @events, $cur;
+                $cur = $line;
+            } else {
+                $cur .= $line;
+            }
+        }
+        push @events, $cur if $cur ne "";
+
+        my @out;
+        my ($merged_data, $merged_len) = ("", 0);
+        for my $ev (@events) {
+            if ($ev =~ /^SAX\.characters\((.*), (\d+)\)\n$/s) {
+                $merged_data .= $1;
+                $merged_len += $2;
+            } else {
+                if ($merged_len > 0) {
+                    push @out, "SAX.characters($merged_data, $merged_len)\n";
+                    ($merged_data, $merged_len) = ("", 0);
+                }
+                push @out, $ev;
+            }
+        }
+        if ($merged_len > 0) {
+            push @out, "SAX.characters($merged_data, $merged_len)\n";
+        }
+        print @out;
+    ' "$f"
+    merged=$((merged + 1))
+done
+echo "Merged consecutive SAX.characters() events in $merged SAX2 golden files"

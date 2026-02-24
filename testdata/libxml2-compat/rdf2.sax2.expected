@@ -42,14 +42,7 @@ SAX.endElementNs(Vendor, RPM, 'http://www.rpm.org/')
 SAX.characters(
     , 5)
 SAX.startElementNs(Packager, RPM, 'http://www.rpm.org/', 0, 0, 0)
-SAX.characters(Till Bubeck , 12)
-SAX.characters(<, 1)
-SAX.characters(bubeck@delix.de, 15)
-SAX.characters(>, 1)
-SAX.characters(, Ngo Than , 11)
-SAX.characters(<, 1)
-SAX.characters(than@delix.de, 13)
-SAX.characters(>, 1)
+SAX.characters(Till Bubeck <bubeck@delix.de>, Ngo Than <than@delix.de>, 55)
 SAX.endElementNs(Packager, RPM, 'http://www.rpm.org/')
 SAX.characters(
     , 5)
@@ -64,19 +57,9 @@ SAX.endElementNs(Summary, RPM, 'http://www.rpm.org/')
 SAX.characters(
     , 5)
 SAX.startElementNs(Description, RPM, 'http://www.rpm.org/', 0, 0, 0)
-SAX.characters(Diese Library stellt dem Progr, 57)
-SAX.characters(ä, 2)
-SAX.characters(ngige
-Routinen zur Ansteuerung, 57)
-SAX.characters(ü, 2)
-SAX.characters(gung, die
-speziell optimiert s, 57)
-SAX.characters(', 1)
-SAX.characters(new curses, 10)
-SAX.characters(', 1)
-SAX.characters( (ncurses) Variante und ist de, 51)
-SAX.characters(ü, 2)
-SAX.characters(r die klassische Curses-Librar, 70)
+SAX.characters(Diese Library stellt dem Progrängige
+Routinen zur Ansteuerungügung, die
+speziell optimiert s'new curses' (ncurses) Variante und ist deür die klassische Curses-Librar, 310)
 SAX.endElementNs(Description, RPM, 'http://www.rpm.org/')
 SAX.characters(
     , 5)
@@ -154,33 +137,15 @@ SAX.characters(
     , 5)
 SAX.startElementNs(Files, RPM, 'http://www.rpm.org/', 0, 0, 0)
 SAX.characters(/lib/libncurses.so.4
-/lib/libn, 2008)
-SAX.characters(/share/ncurses4/terminfo/P/P14, 4000)
-SAX.characters(es4/terminfo/a/alt7pc
-/usr/sha, 4000)
-SAX.characters(/a/att4415-w
-/usr/share/ncurse, 4000)
-SAX.characters(ses4/terminfo/b/bee
-/usr/share, 4000)
-SAX.characters(r/share/ncurses4/terminfo/c/co, 4000)
-SAX.characters(/usr/share/ncurses4/terminfo/d, 4000)
-SAX.characters(sr/share/ncurses4/terminfo/g/g, 4000)
-SAX.characters(/terminfo/h/hp2626-12x40
-/usr/, 4000)
-SAX.characters(e/ncurses4/terminfo/i/intertub, 4000)
-SAX.characters(rses4/terminfo/m/mskermit22714, 4000)
-SAX.characters(are/ncurses4/terminfo/p/p12-m
-, 4000)
-SAX.characters(pt100w
-/usr/share/ncurses4/ter, 4000)
-SAX.characters(sr/share/ncurses4/terminfo/s/s, 4000)
-SAX.characters(usr/share/ncurses4/terminfo/t/, 4000)
-SAX.characters(share/ncurses4/terminfo/v/vi55, 4000)
-SAX.characters(are/ncurses4/terminfo/w/wy160-, 4000)
-SAX.characters(/wy99gt-vb
-/usr/share/ncurses4, 4000)
-SAX.characters(/w/wyse99gt
-/usr/share/ncurses, 2907)
+/lib/libn/share/ncurses4/terminfo/P/P14es4/terminfo/a/alt7pc
+/usr/sha/a/att4415-w
+/usr/share/ncurseses4/terminfo/b/bee
+/usr/sharer/share/ncurses4/terminfo/c/co/usr/share/ncurses4/terminfo/dsr/share/ncurses4/terminfo/g/g/terminfo/h/hp2626-12x40
+/usr/e/ncurses4/terminfo/i/intertubrses4/terminfo/m/mskermit22714are/ncurses4/terminfo/p/p12-m
+pt100w
+/usr/share/ncurses4/tersr/share/ncurses4/terminfo/s/susr/share/ncurses4/terminfo/t/share/ncurses4/terminfo/v/vi55are/ncurses4/terminfo/w/wy160-/wy99gt-vb
+/usr/share/ncurses4/w/wyse99gt
+/usr/share/ncurses, 72915)
 SAX.endElementNs(Files, RPM, 'http://www.rpm.org/')
 SAX.characters(
   , 3)
