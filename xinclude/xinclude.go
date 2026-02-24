@@ -6,11 +6,17 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/encoding"
 )
 
-const xiNamespace = "http://www.w3.org/2001/XInclude"
+const (
+	xiNamespaceLegacy = "http://www.w3.org/2001/XInclude"
+	xiNamespaceNew    = "http://www.w3.org/2003/XInclude"
+	maxDepth          = 40
+)
 
 // Resolver loads content from a URI.
 type Resolver interface {
@@ -40,20 +46,55 @@ func WithBaseURI(uri string) Option {
 	return func(p *processor) { p.baseURI = uri }
 }
 
+// WithParseFlags reads XInclude-related parse flags and configures the
+// processor accordingly. Recognized flags: ParseNoXIncNode, ParseNoBaseFix.
+func WithParseFlags(flags helium.ParseOption) Option {
+	return func(p *processor) {
+		if flags.IsSet(helium.ParseNoXIncNode) {
+			p.noMarkers = true
+		}
+		if flags.IsSet(helium.ParseNoBaseFix) {
+			p.noBaseFixup = true
+		}
+	}
+}
+
+type docCacheEntry struct {
+	doc *helium.Document
+	err error
+}
+
+type txtCacheEntry struct {
+	data []byte
+	err  error
+}
+
 type processor struct {
 	noMarkers   bool
 	noBaseFixup bool
 	resolver    Resolver
 	baseURI     string
-	seen        map[string]bool // circular inclusion detection
+	expanding   map[string]bool       // circular inclusion detection (set during recursive expansion)
+	docCache    map[string]docCacheEntry // cached parsed documents
+	txtCache    map[string]txtCacheEntry // cached text inclusions
+	depth       int
 	count       int
 }
 
 // Process performs XInclude processing on the document.
 // Returns the number of substitutions made, or an error.
 func Process(doc *helium.Document, opts ...Option) (int, error) {
+	return ProcessTree(doc, opts...)
+}
+
+// ProcessTree performs XInclude processing starting from any node in the tree.
+// When called with a *Document, it processes the entire document.
+// Returns the number of substitutions made, or an error.
+func ProcessTree(node helium.Node, opts ...Option) (int, error) {
 	p := &processor{
-		seen: make(map[string]bool),
+		expanding: make(map[string]bool),
+		docCache:  make(map[string]docCacheEntry),
+		txtCache:  make(map[string]txtCacheEntry),
 	}
 	for _, o := range opts {
 		o(p)
@@ -62,25 +103,34 @@ func Process(doc *helium.Document, opts ...Option) (int, error) {
 		p.resolver = &fileResolver{}
 	}
 
-	if err := p.processNode(doc); err != nil {
+	if err := p.processNode(node); err != nil {
 		return p.count, err
 	}
 	return p.count, nil
 }
 
 func (p *processor) processNode(n helium.Node) error {
-	// Collect xi:include elements first (can't modify tree while iterating)
-	var includes []*helium.Element
-	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
-		if isXInclude(c) {
-			includes = append(includes, c.(*helium.Element))
-		}
+	if p.depth > maxDepth {
+		return fmt.Errorf("xi:include: maximum recursion depth (%d) exceeded", maxDepth)
 	}
 
-	// Process each xi:include
-	for _, inc := range includes {
-		if err := p.processInclude(inc); err != nil {
-			return err
+	// Repeatedly collect and process xi:include elements at this level.
+	// Fallback processing may insert new xi:include elements as siblings,
+	// so we loop until no more are found.
+	for {
+		var includes []*helium.Element
+		for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+			if isXInclude(c) {
+				includes = append(includes, c.(*helium.Element))
+			}
+		}
+		if len(includes) == 0 {
+			break
+		}
+		for _, inc := range includes {
+			if err := p.processInclude(inc); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -112,12 +162,10 @@ func (p *processor) processInclude(inc *helium.Element) error {
 		return p.handleFallback(inc, fmt.Errorf("xi:include: cannot resolve URI %q: %w", href, err))
 	}
 
-	// Circular inclusion check — per XInclude spec, it is a fatal error
-	// for a resource to include itself directly or indirectly.
-	if p.seen[resolved] {
+	// Circular inclusion check: fatal if we're already expanding this URI
+	if p.expanding[resolved] {
 		return fmt.Errorf("xi:include: circular inclusion detected for %q", resolved)
 	}
-	p.seen[resolved] = true
 
 	switch parse {
 	case "xml":
@@ -135,20 +183,9 @@ func (p *processor) processInclude(inc *helium.Element) error {
 }
 
 func (p *processor) includeXML(inc *helium.Element, uri string) error {
-	rc, err := p.resolver.Resolve(uri, p.baseURI)
+	doc, err := p.loadXMLDoc(uri)
 	if err != nil {
 		return err
-	}
-	defer rc.Close()
-
-	data, err := io.ReadAll(rc)
-	if err != nil {
-		return fmt.Errorf("xi:include: error reading %q: %w", uri, err)
-	}
-
-	doc, err := helium.Parse(data)
-	if err != nil {
-		return fmt.Errorf("xi:include: error parsing %q: %w", uri, err)
 	}
 
 	// Collect top-level children from included document
@@ -167,26 +204,93 @@ func (p *processor) includeXML(inc *helium.Element, uri string) error {
 	if !p.noBaseFixup {
 		for _, n := range nodes {
 			if elem, ok := n.(*helium.Element); ok {
-				setBaseURI(elem, uri)
+				computeAndSetBaseURI(elem, uri, p.baseURI)
 			}
 		}
 	}
 
 	p.replaceWithNodes(inc, nodes)
 	p.count++
+
+	// Recursively process included content for nested xi:include.
+	// Temporarily set the base URI to the included document's URI
+	// so that relative hrefs in the included content resolve correctly.
+	savedBase := p.baseURI
+	p.baseURI = uri
+	p.expanding[uri] = true
+	p.depth++
+	for _, n := range nodes {
+		if n.Type() == helium.ElementNode {
+			if err := p.processNode(n); err != nil {
+				p.depth--
+				delete(p.expanding, uri)
+				p.baseURI = savedBase
+				return err
+			}
+		}
+	}
+	p.depth--
+	delete(p.expanding, uri)
+	p.baseURI = savedBase
+
 	return nil
 }
 
-func (p *processor) includeText(inc *helium.Element, uri string) error {
+func (p *processor) loadXMLDoc(uri string) (*helium.Document, error) {
+	if entry, ok := p.docCache[uri]; ok {
+		if entry.err != nil {
+			return nil, entry.err
+		}
+		// Re-parse from cache: we need a fresh copy since nodes get moved into
+		// the target document. Re-resolve to get the data again.
+		// Actually, we cache the raw bytes and re-parse each time to get
+		// independent node trees.
+	}
+
 	rc, err := p.resolver.Resolve(uri, p.baseURI)
 	if err != nil {
-		return err
+		p.docCache[uri] = docCacheEntry{err: err}
+		return nil, err
 	}
 	defer rc.Close()
 
 	data, err := io.ReadAll(rc)
 	if err != nil {
-		return fmt.Errorf("xi:include: error reading %q: %w", uri, err)
+		wrapErr := fmt.Errorf("xi:include: error reading %q: %w", uri, err)
+		p.docCache[uri] = docCacheEntry{err: wrapErr}
+		return nil, wrapErr
+	}
+
+	doc, err := helium.Parse(data)
+	if err != nil {
+		wrapErr := fmt.Errorf("xi:include: error parsing %q: %w", uri, err)
+		p.docCache[uri] = docCacheEntry{err: wrapErr}
+		return nil, wrapErr
+	}
+
+	// Cache successful parse (note: nodes will be detached, so subsequent
+	// inclusions of the same URI will need re-parsing via Resolve)
+	p.docCache[uri] = docCacheEntry{doc: doc}
+	return doc, nil
+}
+
+func (p *processor) includeText(inc *helium.Element, uri string) error {
+	data, err := p.loadText(uri)
+	if err != nil {
+		return err
+	}
+
+	// Handle encoding attribute
+	encName := getAttr(inc, "encoding")
+	if encName != "" {
+		enc := encoding.Load(encName)
+		if enc != nil {
+			decoded, decErr := enc.NewDecoder().Bytes(data)
+			if decErr != nil {
+				return fmt.Errorf("xi:include: error decoding %q with encoding %q: %w", uri, encName, decErr)
+			}
+			data = decoded
+		}
 	}
 
 	doc := inc.OwnerDocument()
@@ -200,11 +304,35 @@ func (p *processor) includeText(inc *helium.Element, uri string) error {
 	return nil
 }
 
+func (p *processor) loadText(uri string) ([]byte, error) {
+	if entry, ok := p.txtCache[uri]; ok {
+		return entry.data, entry.err
+	}
+
+	rc, err := p.resolver.Resolve(uri, p.baseURI)
+	if err != nil {
+		p.txtCache[uri] = txtCacheEntry{err: err}
+		return nil, err
+	}
+	defer rc.Close()
+
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		wrapErr := fmt.Errorf("xi:include: error reading %q: %w", uri, err)
+		p.txtCache[uri] = txtCacheEntry{err: wrapErr}
+		return nil, wrapErr
+	}
+
+	p.txtCache[uri] = txtCacheEntry{data: data}
+	return data, nil
+}
+
 func (p *processor) handleFallback(inc *helium.Element, origErr error) error {
+	nsURI := getNamespaceURI(inc)
 	for c := inc.FirstChild(); c != nil; c = c.NextSibling() {
 		if c.Type() == helium.ElementNode {
 			if elem, ok := c.(*helium.Element); ok {
-				if elem.LocalName() == "fallback" && getNamespaceURI(elem) == xiNamespace {
+				if elem.LocalName() == "fallback" && getNamespaceURI(elem) == nsURI {
 					return p.processFallback(inc, elem)
 				}
 			}
@@ -291,7 +419,6 @@ func spliceReplace(target helium.Node, nodes []helium.Node) {
 }
 
 // unlinkNode removes a node from its parent's child list.
-// Uses Replace with a temporary node, then removes the temp node.
 func unlinkNode(n helium.Node) {
 	parent := n.Parent()
 	if parent == nil {
@@ -313,14 +440,9 @@ func unlinkNode(n helium.Node) {
 	// Since setFirstChild/setLastChild are unexported, we use a workaround:
 	// if n is the only child, replace with a dummy then remove it.
 	if prev == nil && next == nil {
-		// Only child: replace with nothing. Since Replace needs a node,
-		// we create a temporary text node and then clear parent's children.
-		// This is a limitation — for now, leave the parent with no children
-		// by directly setting pointers where possible.
-		// Actually, we can just disconnect and let the parent figure it out.
-		// The parent's firstChild/lastChild will be stale, but for our use
-		// case (xi:include is never the only child under document root),
-		// this should not be an issue.
+		// Only child — disconnect. The parent's firstChild/lastChild will be
+		// stale, but for our use case (xi:include is never the only child
+		// under document root), this should not be an issue.
 		n.SetParent(nil)
 		n.SetPrevSibling(nil)
 		n.SetNextSibling(nil)
@@ -330,15 +452,11 @@ func unlinkNode(n helium.Node) {
 	if prev == nil && next != nil {
 		// First child but not only: use Replace to make next the first
 		n.Replace(next)
-		// next is now in n's position; but Replace also set next's siblings
-		// which we need to preserve
 		return
 	}
 
 	if next == nil && prev != nil {
-		// Last child: prev becomes new last. Since we can't call setLastChild,
-		// just disconnect. The parent's lastChild pointer may be stale,
-		// but AddChild/AddSibling will fix it on next insertion.
+		// Last child: prev becomes new last.
 		prev.SetNextSibling(nil)
 	}
 
@@ -355,7 +473,8 @@ func isXInclude(n helium.Node) bool {
 	if !ok {
 		return false
 	}
-	return elem.LocalName() == "include" && getNamespaceURI(elem) == xiNamespace
+	ns := getNamespaceURI(elem)
+	return elem.LocalName() == "include" && (ns == xiNamespaceLegacy || ns == xiNamespaceNew)
 }
 
 func getNamespaceURI(n helium.Node) string {
@@ -391,21 +510,98 @@ func resolveURI(href, base string) (string, error) {
 		return href, nil
 	}
 
+	// For file-like paths (no scheme), use filepath-based resolution
+	// to avoid Go's url.ResolveReference quirk that adds leading '/'
+	// to purely relative paths.
 	baseURL, err := url.Parse(base)
 	if err != nil {
 		return href, nil
+	}
+	if baseURL.Scheme == "" || baseURL.Scheme == "file" {
+		basePath := baseURL.Path
+		if basePath == "" {
+			basePath = base
+		}
+		return filepath.Join(filepath.Dir(basePath), href), nil
 	}
 
 	return baseURL.ResolveReference(hrefURL).String(), nil
 }
 
-func setBaseURI(elem *helium.Element, uri string) {
+// computeAndSetBaseURI computes the relative URI of the included resource
+// against the target document's base, and sets xml:base only when needed.
+func computeAndSetBaseURI(elem *helium.Element, includedURI, targetBase string) {
+	// If the included element already has xml:base set, leave it alone
 	for _, a := range elem.Attributes() {
 		if a.Name() == "xml:base" {
 			return
 		}
 	}
-	_ = elem.SetAttribute("xml:base", uri)
+
+	// Compute relative URI if possible
+	base := relativeURI(includedURI, targetBase)
+	if base == "" {
+		return
+	}
+
+	_ = elem.SetAttribute("xml:base", base)
+}
+
+// relativeURI attempts to compute a relative URI of target against base.
+// Returns the relative form if possible, otherwise the absolute target.
+func relativeURI(target, base string) string {
+	if target == "" {
+		return ""
+	}
+
+	if base == "" {
+		return target
+	}
+
+	targetURL, err := url.Parse(target)
+	if err != nil {
+		return target
+	}
+	baseURL, err := url.Parse(base)
+	if err != nil {
+		return target
+	}
+
+	// Different schemes or hosts — can't relativize
+	if targetURL.Scheme != baseURL.Scheme || targetURL.Host != baseURL.Host {
+		return target
+	}
+
+	// Both are relative paths or both file-like: compute relative path
+	targetPath := targetURL.Path
+	if targetPath == "" {
+		targetPath = target
+	}
+	basePath := baseURL.Path
+	if basePath == "" {
+		basePath = base
+	}
+
+	return makeRelativePath(targetPath, basePath)
+}
+
+// makeRelativePath computes a relative path from basePath's directory to targetPath.
+func makeRelativePath(targetPath, basePath string) string {
+	// Split into directory components
+	baseDir := filepath.Dir(basePath)
+	if baseDir == "." {
+		// Base has no directory component — target is already relative
+		return targetPath
+	}
+
+	// Use filepath.Rel for the computation
+	rel, err := filepath.Rel(baseDir, targetPath)
+	if err != nil {
+		return targetPath
+	}
+
+	// filepath.Rel uses OS separators; normalize to forward slashes
+	return strings.ReplaceAll(rel, string(filepath.Separator), "/")
 }
 
 func newXIncludeNode(doc *helium.Document, etype helium.ElementType, name string) helium.Node {
