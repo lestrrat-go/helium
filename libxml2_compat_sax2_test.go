@@ -222,17 +222,19 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 	skipped := map[string]string{
 		"ebcdic_566012.xml": "EBCDIC encoding not supported",
 
-		// Character event splitting: libxml2 emits multiple smaller characters()
-		// events at buffer boundaries; helium may merge or split differently.
-		"isolat1":                          "character event splitting differs",
-		"isolat2":                          "character event splitting differs",
-		"icu_parse_test.xml":               "character event splitting differs",
-		"rdf2":                             "character event splitting differs",
-		"winblanks.xml":                    "character event splitting differs",
-		"text-4-byte-UTF-16-BE.xml":        "character event splitting differs",
-		"text-4-byte-UTF-16-BE-offset.xml": "character event splitting differs",
-		"text-4-byte-UTF-16-LE.xml":        "character event splitting differs",
-		"text-4-byte-UTF-16-LE-offset.xml": "character event splitting differs",
+		// Character event splitting: libxml2 splits character data at internal
+		// parser buffer boundaries (aligned to the file byte offset). Helium
+		// collects all character data first, then splits uniformly. The chunk
+		// boundaries therefore differ.
+		"isolat1":                          "character event splitting differs (buffer alignment)",
+		"isolat2":                          "character event splitting differs (buffer alignment)",
+		"icu_parse_test.xml":               "character event splitting differs (buffer alignment)",
+		"rdf2":                             "character event splitting differs (buffer alignment)",
+		"winblanks.xml":                    "character event splitting differs (CR/LF boundary)",
+		"text-4-byte-UTF-16-BE.xml":        "character event splitting differs (buffer alignment)",
+		"text-4-byte-UTF-16-BE-offset.xml": "character event splitting differs (buffer alignment)",
+		"text-4-byte-UTF-16-LE.xml":        "character event splitting differs (buffer alignment)",
+		"text-4-byte-UTF-16-LE-offset.xml": "character event splitting differs (buffer alignment)",
 
 		// Parser behavior differences: entity handling, namespace propagation,
 		// default attributes, or other structural differences.
@@ -295,6 +297,7 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 			var buf bytes.Buffer
 			p := NewParser()
 			p.SetSAXHandler(newLibxml2EventEmitter(&buf))
+			p.SetCharBufferSize(4000)
 
 			_, err = p.Parse(input)
 			if err != nil {

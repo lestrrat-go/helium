@@ -47,3 +47,12 @@ func (p *Parser) Parse(b []byte) (*Document, error) {
 func (p *Parser) SetSAXHandler(s sax.SAX2Handler) {
 	p.sax = s
 }
+
+// SetCharBufferSize sets the maximum number of bytes delivered in a single
+// Characters or IgnorableWhitespace SAX callback. When size <= 0 (the
+// default), all character data is delivered in one call. When size > 0,
+// data longer than size bytes is split into chunks of at most size bytes,
+// always respecting UTF-8 character boundaries.
+func (p *Parser) SetCharBufferSize(size int) {
+	p.charBufferSize = size
+}

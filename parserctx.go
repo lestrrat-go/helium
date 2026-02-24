@@ -211,6 +211,53 @@ func (ctx *parserCtx) init(p *Parser, in io.Reader) error {
 	ctx.wellFormed = true
 	if p != nil {
 		ctx.sax = p.sax
+		ctx.charBufferSize = p.charBufferSize
+	}
+	return nil
+}
+
+// deliverCharacters calls the given SAX character handler, splitting data
+// into chunks of at most ctx.charBufferSize bytes when the buffer size is
+// configured (> 0). Splits never occur in the middle of a multi-byte UTF-8
+// character.
+func (ctx *parserCtx) deliverCharacters(handler func(sax.Context, []byte) error, data []byte) error {
+	bufSize := ctx.charBufferSize
+	if bufSize <= 0 || len(data) <= bufSize {
+		switch err := handler(ctx.userData, data); err {
+		case nil, sax.ErrHandlerUnspecified:
+			return nil
+		default:
+			return ctx.error(err)
+		}
+	}
+
+	for len(data) > 0 {
+		end := bufSize
+		if end >= len(data) {
+			// Remaining data fits in one chunk.
+			end = len(data)
+		} else {
+			// Walk backward from the proposed split point to find a valid
+			// UTF-8 character boundary.
+			for end > 0 && !utf8.RuneStart(data[end]) {
+				end--
+			}
+			if end == 0 {
+				// Should not happen with valid UTF-8, but avoid infinite loop.
+				end = bufSize
+				if end > len(data) {
+					end = len(data)
+				}
+			}
+		}
+
+		switch err := handler(ctx.userData, data[:end]); err {
+		case nil, sax.ErrHandlerUnspecified:
+			// no op
+		default:
+			return ctx.error(err)
+		}
+		data = data[end:]
 	}
 	return nil
 }
@@ -662,20 +709,14 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 		}
 	} else if ctx.areBlanks(str, false) {
 		if s := ctx.sax; s != nil {
-			switch err := s.IgnorableWhitespace(ctx.userData, []byte(str)); err {
-			case nil, sax.ErrHandlerUnspecified:
-				// no op
-			default:
-				return ctx.error(err)
+			if err := ctx.deliverCharacters(s.IgnorableWhitespace, []byte(str)); err != nil {
+				return err
 			}
 		}
 	} else {
 		if s := ctx.sax; s != nil {
-			switch err := s.Characters(ctx.userData, []byte(str)); err {
-			case nil, sax.ErrHandlerUnspecified:
-				// no op
-			default:
-				return ctx.error(err)
+			if err := ctx.deliverCharacters(s.Characters, []byte(str)); err != nil {
+				return err
 			}
 		}
 	}
@@ -4608,11 +4649,8 @@ func (ctx *parserCtx) parseReference() error {
 		b := make([]byte, l)
 		utf8.EncodeRune(b, v)
 		if s := ctx.sax; s != nil {
-			switch err := s.Characters(ctx.userData, b); err {
-			case nil, sax.ErrHandlerUnspecified:
-				// no op
-			default:
-				return ctx.error(err)
+			if err := ctx.deliverCharacters(s.Characters, b); err != nil {
+				return err
 			}
 		}
 		return nil
@@ -4636,11 +4674,8 @@ func (ctx *parserCtx) parseReference() error {
 			return nil
 		}
 		if s := ctx.sax; s != nil {
-			switch err := s.Characters(ctx.userData, []byte(ent.content)); err {
-			case nil, sax.ErrHandlerUnspecified:
-				// no op
-			default:
-				return ctx.error(err)
+			if err := ctx.deliverCharacters(s.Characters, []byte(ent.content)); err != nil {
+				return err
 			}
 		}
 		return nil

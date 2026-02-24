@@ -98,7 +98,8 @@ type ErrParseError struct {
 }
 
 type Parser struct {
-	sax sax.SAX2Handler
+	sax            sax.SAX2Handler
+	charBufferSize int
 }
 
 const (
@@ -140,6 +141,7 @@ type parserCtx struct {
 	wellFormed        bool
 	depth             int
 	loadsubset        LoadSubsetOption
+	charBufferSize    int
 	elem              *Element // current context element
 
 	nsTab    nsStack
