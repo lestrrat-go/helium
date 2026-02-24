@@ -548,7 +548,10 @@ func (ctx *parserCtx) parseDocument() error {
 
 	// For UTF-16 detected encodings, we must switch encoding FIRST
 	// because the XML declaration is encoded in UTF-16, not ASCII.
-	if ctx.detectedEncoding == encUTF16LE || ctx.detectedEncoding == encUTF16BE {
+	switch ctx.detectedEncoding {
+	case encUTF16LE, encUTF16BE:
+		// For UTF-16 detected encodings, we must switch encoding FIRST
+		// because the XML declaration is encoded in UTF-16, not ASCII.
 		if err := ctx.switchEncoding(); err != nil {
 			return ctx.error(err)
 		}
@@ -558,7 +561,7 @@ func (ctx *parserCtx) parseDocument() error {
 				return ctx.error(err)
 			}
 		}
-	} else if ctx.detectedEncoding == encEBCDIC {
+	case encEBCDIC:
 		// EBCDIC bytes are not ASCII-compatible, so we cannot parse the
 		// XML declaration at byte level. Instead, scan the raw bytes
 		// using the EBCDIC invariant character set (shared across all
@@ -586,7 +589,7 @@ func (ctx *parserCtx) parseDocument() error {
 				return ctx.error(err)
 			}
 		}
-	} else {
+	default:
 		// XML prolog (byte-level for ASCII-compatible encodings)
 		if bcur.HasPrefix(xmlDeclHint) {
 			if err := ctx.parseXMLDecl(); err != nil {
