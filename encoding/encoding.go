@@ -98,6 +98,14 @@ func Load(name string) enc.Encoding {
 		return withC1Fallback(charmap.Windows874)
 	case "xuserdefined":
 		return charmap.XUserDefined
+	case "ebcdic", "ibm037", "ibm-037", "cp037", "ebcdic-us", "ebcdic-cp-us", "csibm037":
+		return charmap.CodePage037
+	case "ibm1047", "ibm-1047", "cp1047":
+		return charmap.CodePage1047
+	case "ibm1140", "ibm-1140", "ibm01140", "cp1140", "ccsid01140":
+		return charmap.CodePage1140
+	case "ibm1141", "ibm-1141", "ibm01141", "cp1141", "ccsid01141":
+		return codePage1141
 	}
 	return nil
 }

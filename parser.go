@@ -24,7 +24,7 @@ func (p *Parser) Parse(b []byte) (*Document, error) {
 		defer g.IRelease("=== END Parser.Parse ===")
 	}
 
-	ctx := &parserCtx{}
+	ctx := &parserCtx{rawInput: b}
 	if err := ctx.init(p, bytes.NewReader(b)); err != nil {
 		return nil, err
 	}

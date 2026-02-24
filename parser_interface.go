@@ -118,6 +118,7 @@ type parserCtx struct {
 	encoding         string
 	detectedEncoding string
 	in               io.Reader
+	rawInput         []byte // original bytes, used for EBCDIC encoding detection
 	nbread           int
 	instate          parserState
 	keepBlanks       bool

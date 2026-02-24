@@ -32,9 +32,7 @@ func TestLibxml2Compat(t *testing.T) {
 	}
 
 	// Files known to fail — add entries here with a reason as you triage.
-	skipped := map[string]string{
-		"ebcdic_566012.xml": "EBCDIC encoding not supported",
-	}
+	skipped := map[string]string{}
 
 	only := map[string]struct{}{}
 	if v := os.Getenv("HELIUM_LIBXML2_TEST_FILES"); v != "" {
