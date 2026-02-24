@@ -70,7 +70,6 @@ const (
 )
 
 type ElementContent struct {
-	// XXX no doc?
 	ctype  ElementContentType
 	coccur ElementContentOccur
 	name   string

@@ -442,8 +442,9 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 			val := entbuf.String()
 			ent, ok := d.GetEntity(val)
 
-			// XXX I *believe* libxml2 SKIPS entities that it can't resolve
-			// at this point?
+			// Predefined entities are inlined; all others (resolved or not)
+			// become entity reference nodes. This matches libxml2's
+			// xmlNodeParseAttValue behavior in tree.c.
 			if ok && ent.EntityType() == int(InternalPredefinedEntity) {
 				_, _ = buf.Write(ent.Content())
 			} else {

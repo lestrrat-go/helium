@@ -275,10 +275,7 @@ func (t *TreeBuilder) InternalSubset(ctxif sax.Context, name, eid, uri string) e
 
 	dtd, err := doc.InternalSubset()
 	if err == nil {
-		/* TODO
-		if ctx.html {
-			return nil
-		} */
+		// HTML mode would skip freeing the DTD here.
 		dtd.Free()
 		doc.intSubset = nil // hmm, do we need this?
 	}
