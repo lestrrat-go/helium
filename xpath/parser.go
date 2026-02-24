@@ -1,6 +1,7 @@
 package xpath
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 )
@@ -281,7 +282,11 @@ func (p *Parser) parsePrimaryExpr() (Expr, error) {
 		p.lexer.Next()
 		v, err := strconv.ParseFloat(tok.Value, 64)
 		if err != nil {
-			return nil, fmt.Errorf("invalid number %q: %w", tok.Value, err)
+			// Accept range errors (overflow → ±Inf, underflow → 0)
+			var numErr *strconv.NumError
+			if !errors.As(err, &numErr) || numErr.Err != strconv.ErrRange {
+				return nil, fmt.Errorf("invalid number %q: %w", tok.Value, err)
+			}
 		}
 		return NumberExpr{Value: v}, nil
 

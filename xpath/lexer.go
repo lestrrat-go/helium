@@ -233,6 +233,16 @@ func (l *Lexer) scanNumber() {
 			l.pos++
 		}
 	}
+	// Scientific notation extension (libxml2 compat): e.g. 1e2, 1.5E-3
+	if l.pos < len(l.input) && (l.input[l.pos] == 'e' || l.input[l.pos] == 'E') {
+		l.pos++
+		if l.pos < len(l.input) && (l.input[l.pos] == '+' || l.input[l.pos] == '-') {
+			l.pos++
+		}
+		for l.pos < len(l.input) && l.input[l.pos] >= '0' && l.input[l.pos] <= '9' {
+			l.pos++
+		}
+	}
 	l.emit(TokenNumber, l.input[start:l.pos])
 }
 

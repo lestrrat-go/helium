@@ -92,8 +92,68 @@ func fnID(ctx *evalContext, args []Expr) (*Result, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("id() takes exactly 1 argument")
 	}
-	// Simplified: return empty node-set (full ID support requires DTD)
-	return &Result{Type: NodeSetResult}, nil
+	r, err := eval(ctx, args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	// Collect target ID values
+	var idValues []string
+	if r.Type == NodeSetResult {
+		for _, n := range r.NodeSet {
+			idValues = append(idValues, strings.Fields(stringValue(n))...)
+		}
+	} else {
+		idValues = strings.Fields(resultToString(r))
+	}
+	if len(idValues) == 0 {
+		return &Result{Type: NodeSetResult}, nil
+	}
+
+	// Get document and DTD
+	root := documentRoot(ctx.node)
+	doc, ok := root.(*helium.Document)
+	if !ok {
+		return &Result{Type: NodeSetResult}, nil
+	}
+	dtd := doc.IntSubset()
+	if dtd == nil {
+		return &Result{Type: NodeSetResult}, nil
+	}
+
+	// Build set of target IDs for fast lookup
+	targets := make(map[string]bool, len(idValues))
+	for _, v := range idValues {
+		targets[v] = true
+	}
+
+	// Walk the document tree looking for elements with ID attributes
+	var result []helium.Node
+	var walkForID func(helium.Node)
+	walkForID = func(n helium.Node) {
+		if elem, ok := n.(*helium.Element); ok {
+			// Check DTD for ID-typed attributes on this element
+			for _, adecl := range dtd.AttributesForElement(elem.LocalName()) {
+				if adecl.AType() == helium.AttrID {
+					// Check if this element has this attribute with a target value
+					for _, attr := range elem.Attributes() {
+						if attr.LocalName() == adecl.Name() {
+							if targets[attr.Value()] {
+								result = append(result, elem)
+							}
+							break
+						}
+					}
+				}
+			}
+		}
+		for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+			walkForID(c)
+		}
+	}
+	walkForID(root)
+
+	return &Result{Type: NodeSetResult, NodeSet: result}, nil
 }
 
 func fnLocalName(ctx *evalContext, args []Expr) (*Result, error) {
@@ -264,39 +324,40 @@ func fnSubstring(ctx *evalContext, args []Expr) (*Result, error) {
 		return nil, err
 	}
 
-	// XPath substring uses 1-based indexing with round()
+	// XPath spec: character at position p is included iff
+	//   p >= round(startPos) AND p < round(startPos) + round(length)
+	// where positions are 1-based. round() independently on each arg.
 	runes := []rune(s)
-	start := int(math.Round(startPos)) - 1 // convert to 0-based
+	rStart := math.Floor(startPos + 0.5) // XPath round
 
 	if len(args) == 3 {
 		length, err := evalToNumber(ctx, args[2])
 		if err != nil {
 			return nil, err
 		}
-		end := int(math.Round(startPos+length)) - 1
-
-		if start < 0 {
-			start = 0
+		rLength := math.Floor(length + 0.5)
+		var b strings.Builder
+		for i, r := range runes {
+			p := float64(i + 1) // 1-based position
+			if p >= rStart && p < rStart+rLength {
+				b.WriteRune(r)
+			}
 		}
-		if end > len(runes) {
-			end = len(runes)
-		}
-		if start >= end || math.IsNaN(startPos) || math.IsNaN(length) {
-			return &Result{Type: StringResult}, nil
-		}
-		return &Result{Type: StringResult, String: string(runes[start:end])}, nil
+		return &Result{Type: StringResult, String: b.String()}, nil
 	}
 
-	if math.IsNaN(startPos) {
+	// 2-arg form: include iff p >= round(startPos)
+	if math.IsNaN(rStart) || math.IsInf(rStart, 1) {
 		return &Result{Type: StringResult}, nil
 	}
-	if start < 0 {
-		start = 0
+	var b strings.Builder
+	for i, r := range runes {
+		p := float64(i + 1)
+		if p >= rStart {
+			b.WriteRune(r)
+		}
 	}
-	if start >= len(runes) {
-		return &Result{Type: StringResult}, nil
-	}
-	return &Result{Type: StringResult, String: string(runes[start:])}, nil
+	return &Result{Type: StringResult, String: b.String()}, nil
 }
 
 func fnStringLength(ctx *evalContext, args []Expr) (*Result, error) {
@@ -517,11 +578,16 @@ func fnRound(ctx *evalContext, args []Expr) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	// XPath round: round half towards positive infinity
-	if math.IsNaN(n) || math.IsInf(n, 0) {
+	// XPath round: round half towards positive infinity, preserve -0
+	if math.IsNaN(n) || math.IsInf(n, 0) || n == 0 {
 		return &Result{Type: NumberResult, Number: n}, nil
 	}
-	return &Result{Type: NumberResult, Number: math.Floor(n + 0.5)}, nil
+	r := math.Floor(n + 0.5)
+	// Preserve negative zero: values in (-0.5, 0) round to -0
+	if r == 0 && n < 0 {
+		r = math.Copysign(0, -1)
+	}
+	return &Result{Type: NumberResult, Number: r}, nil
 }
 
 // --- Helpers ---

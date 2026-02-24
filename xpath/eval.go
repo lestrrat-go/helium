@@ -76,28 +76,62 @@ func evalLocationPath(ctx *evalContext, lp *LocationPath) (*Result, error) {
 	}
 
 	for _, step := range lp.Steps {
-		var next []helium.Node
-		for _, n := range nodes {
-			candidates := traverseAxis(step.Axis, n)
-			for _, c := range candidates {
-				if matchNodeTest(step.NodeTest, c, step.Axis, ctx) {
-					next = append(next, c)
+		if len(step.Predicates) > 0 {
+			// Per-parent predicate evaluation: position() is relative
+			// to each parent's candidate set, not the global set.
+			var allFiltered []helium.Node
+			for _, n := range nodes {
+				candidates := traverseAxis(step.Axis, n)
+				var matched []helium.Node
+				for _, c := range candidates {
+					if matchNodeTest(step.NodeTest, c, step.Axis, ctx) {
+						matched = append(matched, c)
+					}
+				}
+				for _, pred := range step.Predicates {
+					var err error
+					matched, err = applyPredicate(ctx, matched, pred)
+					if err != nil {
+						return nil, err
+					}
+				}
+				allFiltered = append(allFiltered, matched...)
+			}
+			nodes = deduplicateNodes(allFiltered)
+		} else {
+			var next []helium.Node
+			for _, n := range nodes {
+				candidates := traverseAxis(step.Axis, n)
+				for _, c := range candidates {
+					if matchNodeTest(step.NodeTest, c, step.Axis, ctx) {
+						next = append(next, c)
+					}
 				}
 			}
-		}
-		nodes = next
-
-		// Apply predicates
-		for _, pred := range step.Predicates {
-			filtered, err := applyPredicate(ctx, nodes, pred)
-			if err != nil {
-				return nil, err
-			}
-			nodes = filtered
+			nodes = deduplicateNodes(next)
 		}
 	}
 
 	return &Result{Type: NodeSetResult, NodeSet: nodes}, nil
+}
+
+// deduplicateNodes removes duplicate nodes and sorts in document order.
+func deduplicateNodes(nodes []helium.Node) []helium.Node {
+	if len(nodes) <= 1 {
+		return nodes
+	}
+	seen := make(map[helium.Node]bool, len(nodes))
+	result := make([]helium.Node, 0, len(nodes))
+	for _, n := range nodes {
+		if !seen[n] {
+			seen[n] = true
+			result = append(result, n)
+		}
+	}
+	sort.SliceStable(result, func(i, j int) bool {
+		return documentPosition(result[i]) < documentPosition(result[j])
+	})
+	return result
 }
 
 func documentRoot(n helium.Node) helium.Node {
@@ -140,7 +174,14 @@ func matchNameTest(test NameTest, n helium.Node, axis AxisType, ctx *evalContext
 			return false
 		}
 	case AxisNamespace:
-		return false // namespace axis not supported
+		// Principal node type for namespace axis is namespace
+		if n.Type() != helium.NamespaceNode {
+			return false
+		}
+		if test.Local == "*" {
+			return true
+		}
+		return n.Name() == test.Local
 	default:
 		// For principal node type of other axes: element
 		if n.Type() != helium.ElementNode {
@@ -497,23 +538,9 @@ func evalArithmetic(ctx *evalContext, e BinaryExpr) (*Result, error) {
 	case TokenStar:
 		result = ln * rn
 	case TokenDiv:
-		if rn == 0 {
-			if ln == 0 {
-				result = math.NaN()
-			} else if ln > 0 {
-				result = math.Inf(1)
-			} else {
-				result = math.Inf(-1)
-			}
-		} else {
-			result = ln / rn
-		}
+		result = ln / rn
 	case TokenMod:
-		if rn == 0 {
-			result = math.NaN()
-		} else {
-			result = math.Mod(ln, rn)
-		}
+		result = math.Mod(ln, rn)
 	}
 	return &Result{Type: NumberResult, Number: result}, nil
 }
@@ -616,15 +643,33 @@ func stringValue(n helium.Node) string {
 	}
 	switch n.Type() {
 	case helium.DocumentNode, helium.ElementNode:
-		return string(n.Content())
+		// XPath spec 5.2: string-value of element/document is the
+		// concatenation of string-values of all text node descendants.
+		var b strings.Builder
+		collectTextDescendants(n, &b)
+		return b.String()
 	case helium.TextNode, helium.CDATASectionNode:
 		return string(n.Content())
 	case helium.CommentNode:
 		return string(n.Content())
 	case helium.ProcessingInstructionNode:
 		return string(n.Content())
+	case helium.NamespaceNode:
+		return string(n.Content())
 	}
 	return ""
+}
+
+// collectTextDescendants recursively collects text from Text and CDATA descendants.
+func collectTextDescendants(n helium.Node, b *strings.Builder) {
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		switch c.Type() {
+		case helium.TextNode, helium.CDATASectionNode:
+			b.Write(c.Content())
+		default:
+			collectTextDescendants(c, b)
+		}
+	}
 }
 
 // resultToString converts any Result to a string per XPath spec.
@@ -706,8 +751,8 @@ func numberToString(f float64) string {
 	if f == 0 {
 		return "0"
 	}
-	// Use the shortest representation
-	s := strconv.FormatFloat(f, 'f', -1, 64)
+	// Match libxml2's xmlXPathCastNumberToString which uses trio_snprintf %0.15g
+	s := strconv.FormatFloat(f, 'g', 15, 64)
 	return s
 }
 
@@ -734,29 +779,40 @@ func mergeNodeSets(a, b []helium.Node) []helium.Node {
 	return result
 }
 
-// documentPosition returns an integer representing document order.
-// This is a simple implementation that counts traversal steps from root.
+// documentPosition returns an integer representing document order by
+// performing a pre-order walk from the root. This is O(n) per call
+// but correct for all tree shapes.
 func documentPosition(n helium.Node) int {
+	root := documentRoot(n)
 	pos := 0
-	// Count ancestors
-	var ancestors []helium.Node
-	for p := n.Parent(); p != nil; p = p.Parent() {
-		ancestors = append(ancestors, p)
+	found := -1
+	walkDocOrder(root, n, &pos, &found)
+	return found
+}
+
+func walkDocOrder(cur, target helium.Node, pos *int, found *int) {
+	if *found >= 0 {
+		return
 	}
-	// From root down, count sibling position at each level
-	for i := len(ancestors) - 1; i >= 0; i-- {
-		parent := ancestors[i]
-		idx := 0
-		for c := parent.FirstChild(); c != nil; c = c.NextSibling() {
-			idx++
-			if i > 0 && c == ancestors[i-1] {
-				break
+	if cur == target {
+		*found = *pos
+		return
+	}
+	*pos++
+	// Walk attributes (they precede children in document order)
+	if elem, ok := cur.(*helium.Element); ok {
+		for _, attr := range elem.Attributes() {
+			if helium.Node(attr) == target {
+				*found = *pos
+				return
 			}
-			if i == 0 && c == n {
-				break
-			}
+			*pos++
 		}
-		pos = pos*1000 + idx
 	}
-	return pos
+	for c := cur.FirstChild(); c != nil; c = c.NextSibling() {
+		walkDocOrder(c, target, pos, found)
+		if *found >= 0 {
+			return
+		}
+	}
 }

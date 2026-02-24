@@ -98,6 +98,7 @@ func (n *Element) SetAttribute(name, value string) error {
 	p := n.properties
 	if p == nil {
 		n.properties = attr
+		attr.SetParent(n)
 		return nil
 	}
 
@@ -112,6 +113,7 @@ func (n *Element) SetAttribute(name, value string) error {
 
 	last.SetNextSibling(attr)
 	attr.SetPrevSibling(last)
+	attr.SetParent(n)
 
 	return nil
 }

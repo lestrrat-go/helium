@@ -39,6 +39,10 @@ func traverseAxis(axis AxisType, node helium.Node) []helium.Node {
 }
 
 func axisChild(node helium.Node) []helium.Node {
+	// In XPath, attributes have no children
+	if _, ok := node.(*helium.Attribute); ok {
+		return nil
+	}
 	var result []helium.Node
 	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
 		result = append(result, c)
@@ -53,6 +57,10 @@ func axisDescendant(node helium.Node) []helium.Node {
 }
 
 func collectDescendants(node helium.Node, result *[]helium.Node) {
+	// In XPath, attributes have no children
+	if _, ok := node.(*helium.Attribute); ok {
+		return
+	}
 	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
 		*result = append(*result, c)
 		collectDescendants(c, result)
@@ -159,8 +167,61 @@ func axisAttribute(node helium.Node) []helium.Node {
 	return result
 }
 
-func axisNamespace(_ helium.Node) []helium.Node {
-	// Namespace nodes in helium don't implement Node, so the
-	// namespace axis is not supported. Return nil.
-	return nil
+func axisNamespace(node helium.Node) []helium.Node {
+	elem, ok := node.(*helium.Element)
+	if !ok {
+		return nil
+	}
+
+	// Collect ancestor chain (outermost first)
+	var ancestors []helium.Node
+	for cur := helium.Node(elem); cur != nil; cur = cur.Parent() {
+		ancestors = append(ancestors, cur)
+	}
+
+	// Walk from outermost to innermost to collect in-scope namespaces.
+	// Inner declarations override outer ones.
+	seen := map[string]bool{}
+	// First pass: determine which prefixes are in scope (inner wins)
+	for i := 0; i < len(ancestors); i++ {
+		nser, ok := ancestors[i].(interface{ Namespaces() []*helium.Namespace })
+		if !ok {
+			continue
+		}
+		for _, ns := range nser.Namespaces() {
+			seen[ns.Prefix()] = ns.URI() != ""
+		}
+	}
+
+	// Second pass: collect from outermost to innermost, matching libxml2 order
+	seen2 := map[string]bool{}
+	var result []helium.Node
+
+	// xml namespace always first
+	xmlNS := helium.NewNamespace("xml", "http://www.w3.org/XML/1998/namespace")
+	result = append(result, helium.NewNamespaceNodeWrapper(xmlNS, elem))
+	seen2["xml"] = true
+
+	for i := len(ancestors) - 1; i >= 0; i-- {
+		nser, ok := ancestors[i].(interface{ Namespaces() []*helium.Namespace })
+		if !ok {
+			continue
+		}
+		for _, ns := range nser.Namespaces() {
+			prefix := ns.Prefix()
+			if seen2[prefix] {
+				continue
+			}
+			if !seen[prefix] {
+				continue // undeclared by inner scope
+			}
+			seen2[prefix] = true
+			if ns.URI() == "" {
+				continue
+			}
+			result = append(result, helium.NewNamespaceNodeWrapper(ns, elem))
+		}
+	}
+
+	return result
 }
