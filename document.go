@@ -9,6 +9,26 @@ import (
 	"github.com/lestrrat-go/pdebug"
 )
 
+type DocumentStandaloneType int
+
+const (
+	StandaloneInvalidValue = -99
+	StandaloneExplicitYes  = 1
+	StandaloneExplicitNo   = 0
+	StandaloneNoXMLDecl    = -1
+	StandaloneImplicitNo   = -2
+)
+
+type Document struct {
+	docnode
+	version    string
+	encoding   string
+	standalone DocumentStandaloneType
+
+	intSubset *DTD
+	extSubset *DTD
+}
+
 func CreateDocument() *Document {
 	return NewDocument("1.0", "", StandaloneImplicitNo)
 }

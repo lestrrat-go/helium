@@ -17,6 +17,95 @@ import (
 	"github.com/lestrrat-go/strcursor"
 )
 
+//go:generate stringer -type=parserState
+
+type parserState int
+
+const (
+	psEOF parserState = iota - 1
+	psStart
+	psPI
+	psContent
+	psPrologue
+	psEpilogue
+	psCDATA
+	psDTD
+	psEntityDecl
+	psAttributeValue
+	psComment
+	psStartTag
+	psEndTag
+	psSystemLiteral
+	psPublicLiteral
+	psEntityValue
+	psIgnore
+	psMisc
+)
+
+const MaxNameLength = 50000
+
+const (
+	notInSubset = iota
+	inInternalSubset
+	inExternalSubset
+)
+
+type parserCtx struct {
+	options ParseOption
+	// ctx.encoding contains the explicit encoding. ctx.detectedEncoding
+	// contains the encoding as detected by inspecting BOM, etc.
+	// It is important to differentiate between the two, otherwise
+	// we will not be able to reconstruct
+	// <?xml version="1.0"?> vs <?xml version="1.0" encoding="utf-8"?>
+	encoding         string
+	detectedEncoding string
+	in               io.Reader
+	rawInput         []byte // original bytes, used for EBCDIC encoding detection
+	nbread           int
+	instate          parserState
+	keepBlanks       bool
+	// remain            int
+	replaceEntities   bool
+	sax               sax.SAX2Handler
+	space             int
+	standalone        DocumentStandaloneType
+	hasExternalSubset bool
+	inSubset          int
+	intSubName        string
+	external          bool // true if parsing external DTDs
+	extSubSystem      string
+	extSubURI         string
+	version           string
+	attsSpecial       map[string]AttributeType
+	attsDefault       map[string]map[string]*Attribute
+	valid             bool
+	hasPERefs         bool
+	pedantic          bool
+	wellFormed        bool
+	depth             int
+	loadsubset        LoadSubsetOption
+	charBufferSize    int
+	elem              *Element // current context element
+
+	nsTab    nsStack
+	nsNrTab  []int // number of ns bindings pushed per element (parallel to nodeTab)
+	doc      *Document
+	userData interface{}
+	nodeTab  nodeStack
+	elemidx  int
+	// nbentities int
+	inputTab inputStack
+}
+
+type SubstitutionType int
+
+const (
+	SubstituteNone SubstitutionType = iota
+	SubstituteRef
+	SubstitutePERef
+	SubstituteBoth
+)
+
 type attrData struct {
 	localname string
 	prefix    string

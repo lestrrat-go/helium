@@ -3,9 +3,14 @@ package helium
 import (
 	"bytes"
 
-	"github.com/lestrrat-go/pdebug"
 	"github.com/lestrrat-go/helium/sax"
+	"github.com/lestrrat-go/pdebug"
 )
+
+type Parser struct {
+	sax            sax.SAX2Handler
+	charBufferSize int
+}
 
 func Parse(b []byte) (*Document, error) {
 	p := NewParser()

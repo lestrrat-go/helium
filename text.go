@@ -2,6 +2,12 @@ package helium
 
 import "github.com/lestrrat-go/pdebug"
 
+// Text is just a wrapper around Node so that we can
+// use Go-ish type checks
+type Text struct {
+	node
+}
+
 func newText(b []byte) *Text {
 	t := Text{}
 	t.etype = TextNode

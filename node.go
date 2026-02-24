@@ -3,9 +3,110 @@ package helium
 import (
 	"bytes"
 	"errors"
+	"fmt"
 
 	"github.com/lestrrat-go/pdebug"
 )
+
+type Node interface {
+	setLastChild(Node)
+	setFirstChild(Node)
+
+	AddChild(Node) error
+	AddContent([]byte) error
+	AddSibling(Node) error
+	Content() []byte
+	FirstChild() Node
+	LastChild() Node
+	Name() string
+	NextSibling() Node
+	OwnerDocument() *Document
+	Parent() Node
+	PrevSibling() Node
+	Replace(Node)
+	SetNextSibling(Node)
+	SetOwnerDocument(doc *Document)
+	SetParent(Node)
+	SetPrevSibling(Node)
+	SetTreeDoc(doc *Document)
+	Type() ElementType
+}
+
+// docnode is responsible for handling the basic tree-ish operations
+type docnode struct {
+	name       string
+	etype      ElementType
+	firstChild Node
+	lastChild  Node
+	parent     Node
+	next       Node
+	prev       Node
+	doc        *Document
+}
+
+// node represents a node in a XML tree.
+type node struct {
+	docnode
+	// private    interface{}
+	content    []byte
+	properties *Attribute
+	ns         *Namespace
+	nsDefs     []*Namespace
+}
+
+type ElementType int
+
+const (
+	ElementNode ElementType = iota + 1
+	AttributeNode
+	TextNode
+	CDATASectionNode
+	EntityRefNode
+	EntityNode
+	ProcessingInstructionNode
+	CommentNode
+	DocumentNode
+	DocumentTypeNode
+	DocumentFragNode
+	NotationNode
+	HTMLDocumentNode
+	DTDNode
+	ElementDeclNode
+	AttributeDeclNode
+	EntityDeclNode
+	NamespaceDeclNode
+	XIncludeStartNode
+	XIncludeEndNode
+
+	// This doesn't exist in libxml2. Do we need it?
+	NamespaceNode
+)
+
+const _ElementType_name = "ElementNodeAttributeNodeTextNodeCDATASectionNodeEntityRefNodeEntityNodeProcessingInstructionNodeCommentNodeDocumentNodeDocumentTypeNodeDocumentFragNodeNotationNodeHTMLDocumentNodeDTDNodeElementDeclNodeAttributeDeclNodeEntityDeclNodeNamespaceDeclNodeXIncludeStartNodeXIncludeEndNodeNamespaceNode"
+
+var _ElementType_index = [...]uint16{0, 11, 24, 32, 48, 61, 71, 96, 107, 119, 135, 151, 163, 179, 186, 201, 218, 232, 249, 266, 281, 294}
+
+func (i ElementType) String() string {
+	i -= 1
+	if i < 0 || i >= ElementType(len(_ElementType_index)-1) {
+		return fmt.Sprintf("ElementType(%d)", i+1)
+	}
+	return _ElementType_name[_ElementType_index[i]:_ElementType_index[i+1]]
+}
+
+type NamespaceContainer interface {
+	Namespaces() []*Namespace
+}
+
+// Nemaspacer is an interface for things that has a namespace
+// prefix and uri
+type Namespacer interface {
+	Namespace() *Namespace
+	Namespaces() []*Namespace
+	Prefix() string
+	URI() string
+	LocalName() string
+}
 
 // because docnode contains links to other nodes, one tends to want to make
 // methods for docnodes that cover the rest of the Node types. However,

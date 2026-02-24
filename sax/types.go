@@ -21,8 +21,6 @@ type Entity interface {
 	MarkChecked()
 }
 
-
-type AttributeDefaultValue interface{}
 type Enumeration interface{}
 type ElementContent interface{}
 
@@ -79,4 +77,3 @@ type SetDocumentLocatorFunc func(ctx Context, locator DocumentLocator) error
 type StartDocumentFunc func(ctx Context) error
 type StartElementNSFunc func(ctx Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error
 type UnparsedEntityDeclFunc func(ctx Context, name string, publicID string, systemID string, notationName string) error
-

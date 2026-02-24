@@ -1,5 +1,12 @@
 package helium
 
+type Namespace struct {
+	etype   ElementType
+	href    string
+	prefix  string
+	context *Document
+}
+
 func newNamespace(prefix, uri string) *Namespace {
 	n := Namespace{}
 	n.prefix = prefix
