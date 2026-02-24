@@ -252,7 +252,7 @@ func (p *processor) loadXMLDoc(uri string) (*helium.Document, error) {
 		p.docCache[uri] = docCacheEntry{err: err}
 		return nil, err
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	data, err := io.ReadAll(rc)
 	if err != nil {
@@ -314,7 +314,7 @@ func (p *processor) loadText(uri string) ([]byte, error) {
 		p.txtCache[uri] = txtCacheEntry{err: err}
 		return nil, err
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	data, err := io.ReadAll(rc)
 	if err != nil {

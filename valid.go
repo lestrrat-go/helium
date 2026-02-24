@@ -194,10 +194,6 @@ func (e *ValidationError) Error() string {
 	return strings.Join(e.Errors, "; ")
 }
 
-func (e *ValidationError) add(msg string) {
-	e.Errors = append(e.Errors, msg)
-}
-
 func (e *ValidationError) addf(format string, args ...interface{}) {
 	e.Errors = append(e.Errors, fmt.Sprintf(format, args...))
 }
