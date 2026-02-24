@@ -229,6 +229,22 @@ func (ctx *parserCtx) release() error {
 	return nil
 }
 
+// LineNumber implements sax.DocumentLocator.
+func (ctx *parserCtx) LineNumber() int {
+	if cur := ctx.getCursor(); cur != nil {
+		return cur.LineNumber()
+	}
+	return 0
+}
+
+// ColumnNumber implements sax.DocumentLocator.
+func (ctx *parserCtx) ColumnNumber() int {
+	if cur := ctx.getCursor(); cur != nil {
+		return cur.Column()
+	}
+	return 0
+}
+
 var bufferPool = sync.Pool{
 	New: allocByteBuffer,
 }
@@ -535,7 +551,7 @@ func (ctx *parserCtx) parseDocument() error {
 	}
 
 	if s := ctx.sax; s != nil {
-		switch err := s.SetDocumentLocator(ctx.userData, nil); err {
+		switch err := s.SetDocumentLocator(ctx.userData, ctx); err {
 		case nil, sax.ErrHandlerUnspecified:
 			// no op
 		default:
@@ -1052,8 +1068,10 @@ func (ctx *parserCtx) parseStartTag() error {
 		attrs = append(attrs, attr)
 	}
 
-	// attributes defaulting
-	// XXX Punting a lot of stuff here. See xmlParseStartTag2
+	// Attributes defaulting: apply DTD-declared default attribute values.
+	// Missing vs libxml2's xmlParseStartTag2: #FIXED/#REQUIRED validation,
+	// ID/IDREF uniqueness checks, enumerated type coercion. These require
+	// full DTD validation (Track E).
 	if len(ctx.attsDefault) > 0 {
 		var elemName string
 		if prefix != "" {
@@ -2873,7 +2891,7 @@ func (ctx *parserCtx) parsePEReference() error {
 		_ = ctx.fireSAXCallback(cbGetParameterEntity, &entity, name)
 	}
 
-	// XXX Why check here?
+	// GetParameterEntity callback may trigger input switching; bail if EOF.
 	if ctx.instate == psEOF {
 		return nil
 	}
@@ -3257,7 +3275,7 @@ func (ctx *parserCtx) parseElementMixedContentDecl() (*ElementContent, error) {
  * [50] seq ::= '(' S? cp ( S? ',' S? cp )* S? ')'
  *
  * [ VC: Proper Group/PE Nesting ] applies to [49] and [50]
- * TODO Parameter-entity replacement text must be properly nested
+ * NOTE(validation): Parameter-entity replacement text must be properly nested
  *      with parenthesized groups. That is to say, if either of the
  *      opening or closing parentheses in a choice, seq, or Mixed
  *      construct is contained in the replacement text for a parameter
@@ -3332,8 +3350,7 @@ func (ctx *parserCtx) parseElementChildrenContentDeclPriv(depth int) (*ElementCo
 
 	ctx.skipBlanks()
 
-	// XXX closures aren't the most efficient thing golang has to offer,
-	// but I really don't want to write the same code twice...
+	// Closure used to avoid duplicating choice/seq content creation logic.
 	var sep rune
 	var last *ElementContent
 	createElementContent := func(c rune, typ ElementContentType) error {
@@ -3453,7 +3470,7 @@ LOOP:
 	c := cur.Peek()
 	switch c {
 	case '?':
-		// XXX why would ret be null?
+		// Guard against nil (empty content model edge case).
 		if retelem != nil {
 			if retelem.coccur == ElementContentPlus {
 				retelem.coccur = ElementContentMult
@@ -4201,7 +4218,7 @@ func (ctx *parserCtx) parseDefaultDecl() (deftype AttributeDefault, defvalue str
 		ctx.skipBlanks()
 	}
 
-	// XXX does AttValue always have a quote around it?
+	// XML spec [10] AttValue ::= '"' ... '"' | "'" ... "'" — always quoted.
 	defvalue, err = ctx.parseQuotedText(func(qch rune) (string, error) {
 		s, _, err := ctx.parseAttributeValueInternal(qch, false)
 		return s, err

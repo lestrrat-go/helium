@@ -5,8 +5,13 @@ package sax
 // use type assertions to pass whatever object they need to pass.
 type Context interface{}
 
-// TODO fix Context
-type DocumentLocator interface{}
+// DocumentLocator provides document position information to SAX handlers.
+// The parser passes an implementation to SetDocumentLocator at the start
+// of parsing; handlers can query it during callbacks for source location.
+type DocumentLocator interface {
+	LineNumber() int
+	ColumnNumber() int
+}
 
 // ParseInput represents an input source for the parser, typically used
 // for external entity resolution. Implementations must provide an
@@ -17,7 +22,7 @@ type ParseInput interface {
 	URI() string
 }
 
-// TODO fix Context
+// Entity represents a parsed or unparsed entity declaration.
 type Entity interface {
 	Name() string
 	SetOrig(string)
