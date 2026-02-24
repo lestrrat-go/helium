@@ -8,8 +8,14 @@ type Context interface{}
 // TODO fix Context
 type DocumentLocator interface{}
 
-// TODO
-type ParseInput interface{}
+// ParseInput represents an input source for the parser, typically used
+// for external entity resolution. Implementations must provide an
+// io.Reader for the content. The URI method returns the resolved URI
+// of the input source (used for relative URI resolution).
+type ParseInput interface {
+	Read(p []byte) (n int, err error)
+	URI() string
+}
 
 // TODO fix Context
 type Entity interface {

@@ -652,6 +652,17 @@ func (ctx *parserCtx) parseDocument() error {
 			}
 		}
 
+		// Query SAX callbacks for subset/standalone status.
+		// These mirror libxml2's calls after internal subset parsing.
+		if s := ctx.sax; s != nil {
+			if has, err := s.HasInternalSubset(ctx.userData); err == nil {
+				_ = has // informational; handler may use for validation decisions
+			}
+			if has, err := s.HasExternalSubset(ctx.userData); err == nil {
+				_ = has
+			}
+		}
+
 		ctx.inSubset = inExternalSubset
 		if s := ctx.sax; s != nil {
 			switch err := s.ExternalSubset(ctx.userData, ctx.intSubName, ctx.extSubSystem, ctx.extSubURI); err {
@@ -4742,7 +4753,121 @@ func (ctx *parserCtx) parseExternalID() (string, string, error) {
 }
 
 func (ctx *parserCtx) parseExternalEntityPrivate(uri, externalID string) (Node, error) {
-	return nil, errors.New("unimplemented")
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseExternalEntityPrivate(uri=%s, externalID=%s)", uri, externalID)
+		defer g.IRelease("END parseExternalEntityPrivate")
+	}
+
+	ctx.depth++
+	defer func() { ctx.depth-- }()
+
+	if ctx.depth > 40 {
+		return nil, errors.New("entity loop")
+	}
+
+	// Resolve the external entity via the SAX ResolveEntity callback.
+	// The application must provide an implementation that returns the
+	// entity content as a ParseInput (io.Reader + URI).
+	var input sax.ParseInput
+	if s := ctx.sax; s != nil {
+		resolved, err := s.ResolveEntity(ctx.userData, externalID, uri)
+		switch err {
+		case nil:
+			input = resolved
+		case sax.ErrHandlerUnspecified:
+			// no handler registered — cannot resolve
+		default:
+			return nil, ctx.error(err)
+		}
+	}
+
+	if input == nil {
+		return nil, fmt.Errorf("cannot resolve external entity (URI=%s, publicID=%s)", uri, externalID)
+	}
+
+	// Read all content from the resolved input
+	content, err := io.ReadAll(input)
+	if err != nil {
+		return nil, ctx.error(fmt.Errorf("reading external entity: %w", err))
+	}
+
+	newctx := &parserCtx{}
+	if err := newctx.init(nil, bytes.NewReader(content)); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := newctx.release(); err != nil {
+			if pdebug.Enabled {
+				pdebug.Printf("newctx.release() failed: %s", err)
+			}
+		}
+	}()
+
+	newctx.userData = ctx.userData
+	if ctx.doc == nil {
+		ctx.doc = NewDocument("1.0", "", StandaloneExplicitNo)
+	}
+
+	// Save and restore the document's children
+	fc := ctx.doc.FirstChild()
+	lc := ctx.doc.LastChild()
+	ctx.doc.setFirstChild(nil)
+	ctx.doc.setLastChild(nil)
+	defer func() {
+		ctx.doc.setFirstChild(fc)
+		ctx.doc.setLastChild(lc)
+	}()
+	newctx.doc = ctx.doc
+	newctx.sax = ctx.sax
+	newctx.attsDefault = ctx.attsDefault
+	newctx.options = ctx.options
+	newctx.depth = ctx.depth + 1
+	newctx.external = true
+
+	// External parsed entities may have a text declaration (XML decl without
+	// standalone). Try to detect and parse encoding.
+	if newctx.encoding == "" {
+		if enc, err := newctx.detectEncoding(); err == nil {
+			newctx.detectedEncoding = enc
+		}
+	}
+
+	bcur := newctx.getByteCursor()
+	if bcur != nil && bcur.HasPrefix(xmlDeclHint) {
+		if err := newctx.parseXMLDecl(); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := newctx.switchEncoding(); err != nil {
+		return nil, err
+	}
+
+	// Create a dummy root node and parse the content
+	newRoot, err := newctx.doc.CreateElement("pseudoroot")
+	if err != nil {
+		return nil, ctx.error(err)
+	}
+	newctx.pushNode(newRoot)
+	newctx.elem = newRoot
+	if err := newctx.doc.AddChild(newRoot); err != nil {
+		return nil, err
+	}
+	if err := newctx.parseContent(); err != nil {
+		return nil, err
+	}
+
+	if child := newctx.doc.FirstChild(); child != nil {
+		if grandchild := child.FirstChild(); grandchild != nil {
+			for e := grandchild; e != nil; e = e.NextSibling() {
+				e.SetTreeDoc(ctx.doc)
+				e.SetParent(nil)
+			}
+			return grandchild, nil
+		}
+	}
+
+	return nil, ErrParseSucceeded
 }
 
 var ErrParseSucceeded = errors.New("parse succeeded")
@@ -4960,7 +5085,7 @@ func (ctx *parserCtx) parseReference() error {
 					return err
 				}
 			} else if EntityType(ent.EntityType()) == ExternalGeneralParsedEntity {
-				parsedEnt, err = ctx.parseExternalEntityPrivate(ent.URI(), ent.externalID)
+				parsedEnt, err = ctx.parseExternalEntityPrivate(ent.uri, ent.externalID)
 				_ = parsedEnt
 				switch err {
 				case nil, ErrParseSucceeded:

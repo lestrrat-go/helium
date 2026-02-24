@@ -2,8 +2,10 @@ package helium
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
+	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 	"github.com/stretchr/testify/require"
 )
@@ -247,3 +249,38 @@ func TestParseRecover(t *testing.T) {
 	require.Error(t, err, "malformed XML should still return error")
 	require.NotNil(t, doc2, "with recover, partial document should be returned")
 }
+
+func TestParseExternalEntity(t *testing.T) {
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY ext SYSTEM "ext.xml">
+]>
+<doc>&ext;</doc>`
+
+	// Provide a ResolveEntity handler that returns inline content
+	s := sax.New()
+	s.ResolveEntityHandler = func(_ sax.Context, publicID, systemID string) (sax.ParseInput, error) {
+		if systemID == "ext.xml" {
+			return newStringParseInput("<inner>hello</inner>", systemID), nil
+		}
+		return nil, sax.ErrHandlerUnspecified
+	}
+
+	p := NewParser()
+	p.SetSAXHandler(s)
+	p.SetOption(ParseNoEnt)
+	_, err := p.Parse([]byte(input))
+	require.NoError(t, err, "Parse with external entity should succeed")
+}
+
+// stringParseInput implements sax.ParseInput for testing.
+type stringParseInput struct {
+	*strings.Reader
+	uri string
+}
+
+func newStringParseInput(content, uri string) *stringParseInput {
+	return &stringParseInput{Reader: strings.NewReader(content), uri: uri}
+}
+
+func (s *stringParseInput) URI() string { return s.uri }
