@@ -11,9 +11,7 @@ import (
 )
 
 func TestXMLToDOMToXMLString(t *testing.T) {
-	skipped := map[string]struct{}{
-		"comment4.xml": {},
-	}
+	skipped := map[string]struct{}{}
 	only := map[string]struct{}{}
 	if v := os.Getenv("HELIUM_DUMP_TEST_FILES"); v != "" {
 		files := strings.Split(v, ",")
