@@ -301,6 +301,22 @@ func (ctx *parserCtx) init(p *Parser, in io.Reader) error {
 	if p != nil {
 		ctx.sax = p.sax
 		ctx.charBufferSize = p.charBufferSize
+		ctx.options = p.options
+		if ctx.options.IsSet(ParseNoBlanks) {
+			ctx.keepBlanks = false
+		}
+		if ctx.options.IsSet(ParsePedantic) {
+			ctx.pedantic = true
+		}
+		if ctx.options.IsSet(ParseDTDLoad) {
+			ctx.loadsubset.Set(DetectIDs)
+		}
+		if ctx.options.IsSet(ParseDTDAttr) {
+			ctx.loadsubset.Set(CompleteAttrs)
+		}
+		if ctx.options.IsSet(ParseNoEnt) {
+			ctx.replaceEntities = true
+		}
 	}
 	return nil
 }
@@ -820,11 +836,18 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 	str = strings.ReplaceAll(str, "\r", "\n")
 	if ctx.instate == psCDATA {
 		if s := ctx.sax; s != nil {
-			switch err := s.CDataBlock(ctx.userData, []byte(str)); err {
-			case nil, sax.ErrHandlerUnspecified:
-				// no op
-			default:
-				return ctx.error(err)
+			if ctx.options.IsSet(ParseNoCDATA) {
+				// ParseNoCDATA: deliver CDATA content as Characters instead of CDataBlock
+				if err := ctx.deliverCharacters(s.Characters, []byte(str)); err != nil {
+					return err
+				}
+			} else {
+				switch err := s.CDataBlock(ctx.userData, []byte(str)); err {
+				case nil, sax.ErrHandlerUnspecified:
+					// no op
+				default:
+					return ctx.error(err)
+				}
 			}
 		}
 	} else if ctx.areBlanks(str, false) {
@@ -931,9 +954,14 @@ func (ctx *parserCtx) parseStartTag() error {
 			// Namespace URI entity/character references are expanded inline
 			// during attribute value parsing (replaceEntities forced true in
 			// parseAttribute for namespace attrs), so no post-processing needed.
+
+			// ParseNsClean: skip redundant namespace declarations
+			if ctx.options.IsSet(ParseNsClean) && ctx.nsTab.Lookup("") == attvalue {
+				goto SkipDefaultNS
+			}
 			ctx.pushNS("", attvalue)
 			nbNs++
-			//    SkipDefaultNS:
+		SkipDefaultNS:
 			if cur.Peek() == '>' || cur.HasPrefixString("/>") {
 				continue
 			}
@@ -944,7 +972,8 @@ func (ctx *parserCtx) parseStartTag() error {
 			ctx.skipBlanks()
 			continue
 		} else if aprefix == XMLNsPrefix {
-			var u *url.URL // predeclare, so we can use goto SkipNS
+			var u *url.URL      // predeclare, so we can use goto SkipNS
+			var existingURI string // predeclare, so we can use goto SkipNS
 
 			// <elem xmlns:foo="...">
 			// Namespace URI entity/character references are expanded inline
@@ -977,7 +1006,12 @@ func (ctx *parserCtx) parseStartTag() error {
 				return ctx.error(fmt.Errorf("xmlns:%s: URI %s is not absolute", attname, attvalue))
 			}
 
-			if ctx.nsTab.Lookup(attname) != "" {
+			existingURI = ctx.nsTab.Lookup(attname)
+			if existingURI != "" {
+				// ParseNsClean: skip redundant namespace declarations
+				if ctx.options.IsSet(ParseNsClean) && existingURI == attvalue {
+					goto SkipNS
+				}
 				return ctx.error(errors.New("duplicate attribute is not allowed"))
 			}
 			ctx.pushNS(attname, attvalue)
@@ -1473,7 +1507,7 @@ func (ctx *parserCtx) parseXMLDecl() error {
 
 	// we *may* have encoding decl
 	v, err = ctx.parseEncodingDecl()
-	if err == nil {
+	if err == nil && !ctx.options.IsSet(ParseIgnoreEnc) {
 		ctx.encoding = v
 	}
 
@@ -1543,7 +1577,7 @@ func (ctx *parserCtx) parseXMLDeclFromCursor() error {
 
 	// encoding (optional)
 	ev, err := ctx.parseEncodingDeclFromCursor()
-	if err == nil {
+	if err == nil && !ctx.options.IsSet(ParseIgnoreEnc) {
 		ctx.encoding = ev
 	}
 
@@ -2154,7 +2188,7 @@ func (ctx *parserCtx) parseName() (name string, err error) {
 
 		i++
 	}
-	if i > MaxNameLength {
+	if i > MaxNameLength && !ctx.options.IsSet(ParseHuge) {
 		err = ctx.error(ErrNameTooLong)
 		return
 	}
@@ -2337,7 +2371,7 @@ func (ctx *parserCtx) parseNCName() (ncname string, err error) {
 		_, _ = buf.WriteRune(c)
 		i++
 	}
-	if i > MaxNameLength {
+	if i > MaxNameLength && !ctx.options.IsSet(ParseHuge) {
 		err = ctx.error(ErrNameTooLong)
 		return
 	}
@@ -2852,7 +2886,7 @@ func (ctx *parserCtx) parsePEReference() error {
 		 * ... The declaration of a parameter entity must
 		 * precede any reference to it...
 		 */
-		if s := ctx.sax; s != nil {
+		if s := ctx.sax; s != nil && !ctx.options.IsSet(ParseNoWarning) {
 			switch err := s.Warning(ctx.userData, "PEReference: %%%s; not found\n", name); err {
 			case nil, sax.ErrHandlerUnspecified:
 			default:
@@ -2868,7 +2902,7 @@ func (ctx *parserCtx) parsePEReference() error {
 		 * Internal checking in case the entity quest barfed
 		 */
 		if etype := EntityType(entity.EntityType()); etype != InternalParameterEntity && etype != ExternalParameterEntity {
-			if s := ctx.sax; s != nil {
+			if s := ctx.sax; s != nil && !ctx.options.IsSet(ParseNoWarning) {
 				switch err := s.Warning(ctx.userData, "Internal: %%%s; is not a parameter entity\n", name); err {
 				case nil, sax.ErrHandlerUnspecified:
 				default:
@@ -5224,7 +5258,7 @@ func (ctx *parserCtx) parseStringEntityRef(s []byte) (sax.Entity, int, error) {
 		}
 		// Entity not found but cannot flag as error (external subset/PE refs).
 		// Emit a warning matching libxml2's xmlWarningMsg behavior.
-		if s := ctx.sax; s != nil {
+		if s := ctx.sax; s != nil && !ctx.options.IsSet(ParseNoWarning) {
 			switch err := s.Warning(ctx.userData, "Entity '%s' not defined", name); err {
 			case nil, sax.ErrHandlerUnspecified:
 			default:
@@ -5512,7 +5546,7 @@ func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
 		if ctx.standalone == StandaloneExplicitYes || (!ctx.hasExternalSubset && ctx.hasPERefs) {
 			return nil, ctx.error(ErrUndeclaredEntity)
 		} else {
-			if s := ctx.sax; s != nil {
+			if s := ctx.sax; s != nil && !ctx.options.IsSet(ParseNoWarning) {
 				switch err := s.Warning(ctx.userData, "Entity '%s' not defined", name); err {
 				case nil, sax.ErrHandlerUnspecified:
 				default:
@@ -5712,7 +5746,7 @@ func (ctx *parserCtx) handlePEReference() error {
 		// parameter entities with "standalone='no'", ...
 		// ... The declaration of a parameter entity must precede
 		// any reference to it...
-		if s := ctx.sax; s != nil {
+		if s := ctx.sax; s != nil && !ctx.options.IsSet(ParseNoWarning) {
 			switch err := s.Warning(ctx.userData, "PEReference: %%%s; not found\n", name); err {
 			case nil, sax.ErrHandlerUnspecified:
 			default:

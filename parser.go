@@ -10,6 +10,7 @@ import (
 type Parser struct {
 	sax            sax.SAX2Handler
 	charBufferSize int
+	options        ParseOption
 }
 
 func Parse(b []byte) (*Document, error) {
@@ -43,6 +44,10 @@ func (p *Parser) Parse(b []byte) (*Document, error) {
 	}()
 
 	if err := ctx.parseDocument(); err != nil {
+		if p != nil && p.options.IsSet(ParseRecover) {
+			// ParseRecover: return the partial document along with the error
+			return ctx.doc, err
+		}
 		return nil, err
 	}
 
@@ -51,6 +56,10 @@ func (p *Parser) Parse(b []byte) (*Document, error) {
 
 func (p *Parser) SetSAXHandler(s sax.SAX2Handler) {
 	p.sax = s
+}
+
+func (p *Parser) SetOption(opt ParseOption) {
+	p.options.Set(opt)
 }
 
 // SetCharBufferSize sets the maximum number of bytes delivered in a single

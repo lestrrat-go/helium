@@ -152,3 +152,98 @@ func TestParseNamespace(t *testing.T) {
 		pdebug.Dump(doc)
 	}
 }
+
+func findDocumentElement(doc *Document) Node {
+	for n := doc.FirstChild(); n != nil; n = n.NextSibling() {
+		if n.Type() == ElementNode {
+			return n
+		}
+	}
+	return nil
+}
+
+func TestParseNoBlanks(t *testing.T) {
+	const input = `<?xml version="1.0"?>
+<root>
+  <child>text</child>
+</root>`
+	p := NewParser()
+	p.SetOption(ParseNoBlanks)
+	doc, err := p.Parse([]byte(input))
+	require.NoError(t, err, "Parse should succeed")
+
+	// With ParseNoBlanks, blank-only text nodes between elements should be stripped.
+	// The root element's first child should be <child>, not a whitespace text node.
+	root := findDocumentElement(doc)
+	require.NotNil(t, root, "document element must exist")
+	first := root.FirstChild()
+	require.NotNil(t, first, "root must have children")
+	require.Equal(t, ElementNode, first.Type(), "first child should be element, not blank text")
+}
+
+func TestParseNoCDATA(t *testing.T) {
+	const input = `<?xml version="1.0"?>
+<root><![CDATA[hello]]></root>`
+
+	// Without ParseNoCDATA: tree should have a CDATA node
+	p1 := NewParser()
+	doc1, err := p1.Parse([]byte(input))
+	require.NoError(t, err, "Parse should succeed")
+	root1 := findDocumentElement(doc1)
+	require.NotNil(t, root1)
+	child1 := root1.FirstChild()
+	require.NotNil(t, child1)
+	require.Equal(t, CDATASectionNode, child1.Type(), "without ParseNoCDATA, should be CDATA node")
+
+	// With ParseNoCDATA: CDATA should be delivered as text
+	p2 := NewParser()
+	p2.SetOption(ParseNoCDATA)
+	doc2, err := p2.Parse([]byte(input))
+	require.NoError(t, err, "Parse should succeed")
+	root2 := findDocumentElement(doc2)
+	require.NotNil(t, root2)
+	child2 := root2.FirstChild()
+	require.NotNil(t, child2)
+	require.Equal(t, TextNode, child2.Type(), "with ParseNoCDATA, CDATA should be a text node")
+	require.Equal(t, "hello", string(child2.Content()))
+}
+
+func TestParsePedantic(t *testing.T) {
+	// Pedantic mode requires absolute URIs in namespace declarations
+	const input = `<?xml version="1.0"?>
+<root xmlns:foo="relative/uri">
+  <foo:child>text</foo:child>
+</root>`
+
+	// Without pedantic: should succeed
+	p1 := NewParser()
+	_, err := p1.Parse([]byte(input))
+	require.NoError(t, err, "without pedantic, relative URI should be accepted")
+
+	// With pedantic: should fail (relative URI)
+	p2 := NewParser()
+	p2.SetOption(ParsePedantic)
+	_, err = p2.Parse([]byte(input))
+	require.Error(t, err, "with pedantic, relative URI should be rejected")
+}
+
+func TestParseRecover(t *testing.T) {
+	// Malformed XML: mismatched close tag
+	const input = `<?xml version="1.0"?>
+<root>
+  <child>text</chld>
+</root>`
+
+	// Without ParseRecover: error, no document
+	p1 := NewParser()
+	doc1, err := p1.Parse([]byte(input))
+	require.Error(t, err, "malformed XML should fail")
+	require.Nil(t, doc1, "without recover, no document returned")
+
+	// With ParseRecover: error, but partial document returned
+	p2 := NewParser()
+	p2.SetOption(ParseRecover)
+	doc2, err := p2.Parse([]byte(input))
+	require.Error(t, err, "malformed XML should still return error")
+	require.NotNil(t, doc2, "with recover, partial document should be returned")
+}
