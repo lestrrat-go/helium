@@ -2,6 +2,41 @@ package helium
 
 import "errors"
 
+type EntityType int
+
+const (
+	InternalGeneralEntity EntityType = iota + 1
+	ExternalGeneralParsedEntity
+	ExternalGeneralUnparsedEntity
+	InternalParameterEntity
+	ExternalParameterEntity
+	InternalPredefinedEntity
+)
+
+type Entity struct {
+	node
+	orig       string     // content without substitution
+	content    string     // content or ndata if unparsed
+	entityType EntityType // the entity type
+	externalID string     // external identifier for PUBLIC
+	systemID   string     // URI for a SYSTEM or PUBLIC entity
+	uri        string     // the full URI as computed
+	// owner      bool       // does the entity own children
+	checked   int  // was the entity content checked
+	expanding bool // guard against recursive expansion (mirrors XML_ENT_EXPANDING)
+	/* this is also used to count entities
+	 * references done from that entity
+	 * and if it contains '<' */
+}
+
+var (
+	EntityLT         = newEntity("lt", InternalPredefinedEntity, "", "", "<", "&lt;")
+	EntityGT         = newEntity("gt", InternalPredefinedEntity, "", "", ">", "&gt;")
+	EntityAmpersand  = newEntity("amp", InternalPredefinedEntity, "", "", "&", "&amp;")
+	EntityApostrophe = newEntity("apos", InternalPredefinedEntity, "", "", "'", "&apos;")
+	EntityQuote      = newEntity("quot", InternalPredefinedEntity, "", "", `"`, "&quot;")
+)
+
 func resolvePredefinedEntity(name string) (*Entity, error) {
 	switch name {
 	case "lt":

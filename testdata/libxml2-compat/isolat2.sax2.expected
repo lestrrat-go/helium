@@ -1,0 +1,15 @@
+SAX.setDocumentLocator()
+SAX.startDocument()
+SAX.startElementNs(tst, NULL, NULL, 0, 0, 0)
+SAX.characters(
+
+       The following table d¡     INVERTED EXCLAMATION MA      250   168   A8     ¨   SOFT HYPHEN
+       256   174    264   180   B4     ´     ACSCULINE ORDINAL INDICATOR
+    1   BF     ¿     INVERTED QUE A WITH TILDE
+       304   196  C8     È     LATIN CAPITAL APITAL LETTER I WITH GRAVE
+     321   209   D1     Ñ     LA LATIN CAPITAL LETTER O WITH T 332   218   DA     Ú     LAT    LATIN CAPITAL LETTER THORN3   227   E3     ã     LATIN R C WITH CEDILLA
+       350   36   EC     ì     LATIN SMALLLETTER ETH
+       361   241     õ     LATIN SMALL LETTER O  250   FA     ú     LATIN SMAL LETTER THORN
+       377   25, 6130)
+SAX.endElementNs(tst, NULL, NULL)
+SAX.endDocument()

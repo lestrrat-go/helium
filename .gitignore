@@ -25,3 +25,8 @@ _testmain.go
 
 # files generated when test fails to aid diagnosing problems later
 test/*.err
+testdata/libxml2-compat/*.err
+testdata/libxml2-compat/*.sax2.err
+
+# libxml2 source clone (dev-time only, not committed)
+testdata/libxml2/source/

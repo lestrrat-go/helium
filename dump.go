@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	henc "github.com/lestrrat-go/helium/encoding"
 	"github.com/lestrrat-go/pdebug"
 )
 
@@ -72,7 +73,7 @@ func dumpQuotedString(out io.Writer, s string) error {
 }
 
 var (
-	esc_quot = []byte("&#34;") // shorter than "&quot;"
+	esc_quot = []byte("&quot;")
 	// esc_apos = []byte("&#39;") // shorter than "&apos;"
 	esc_amp  = []byte("&amp;")
 	esc_lt   = []byte("&lt;")
@@ -95,7 +96,7 @@ func isInCharacterRange(r rune) (inrange bool) {
 		r >= 0x10000 && r <= 0x10FFFF
 }
 
-func escapeAttrValue(w io.Writer, s []byte) error {
+func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII bool) error {
 	if pdebug.Enabled {
 		debugbuf := bytes.Buffer{}
 		w = io.MultiWriter(w, &debugbuf)
@@ -126,8 +127,8 @@ func escapeAttrValue(w io.Writer, s []byte) error {
 		case '\t':
 			esc = esc_tab
 		default:
-			if !(0x20 <= r && r < 0x80) { // nolint:staticcheck
-				if r < 0xE0 {
+			if escapeNonASCII && !(0x20 <= r && r < 0x80) { // nolint:staticcheck
+				if r < 0x100 {
 					esc = []byte(fmt.Sprintf("&#x%X;", r))
 					break
 				}
@@ -157,7 +158,7 @@ func escapeAttrValue(w io.Writer, s []byte) error {
 // escapeText writes to w the properly escaped XML equivalent
 // of the plain text data s. If escapeNewline is true, newline
 // characters will be escaped.
-func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
+func escapeText(w io.Writer, s []byte, escapeNewline bool, escapeNonASCII bool) error {
 	if pdebug.Enabled {
 		debugbuf := bytes.Buffer{}
 		w = io.MultiWriter(w, &debugbuf)
@@ -186,8 +187,8 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
 		case '\r':
 			esc = esc_cr
 		default:
-			if !(r == '\t' || (0x20 <= r && r < 0x80)) { // nolint:staticcheck
-				if r < 0xE0 {
+			if escapeNonASCII && !(r == '\t' || (0x20 <= r && r < 0x80)) { // nolint:staticcheck
+				if r < 0x100 {
 					esc = []byte(fmt.Sprintf("&#x%X;", r))
 					break
 				}
@@ -214,7 +215,60 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool) error {
 	return nil
 }
 
-type Dumper struct{}
+// Dumper serializes an XML document tree.
+// escapeNonASCII controls whether characters U+0080–U+00FF are emitted as
+// numeric character references (&#xNN;).  libxml2 only does this when the
+// output encoding is UTF-8; when an encoding handler is present the
+// characters pass through and the encoder converts them.
+type Dumper struct {
+	escapeNonASCII bool
+	isXHTML        bool
+	encoding       string // document encoding, used for XHTML meta injection
+}
+
+// isXHTMLDTD returns true if the DTD identifies an XHTML document.
+// Mirrors libxml2's xmlIsXHTML (tree.c).
+func isXHTMLDTD(dtd *DTD) bool {
+	switch dtd.externalID {
+	case "-//W3C//DTD XHTML 1.0 Strict//EN",
+		"-//W3C//DTD XHTML 1.0 Transitional//EN",
+		"-//W3C//DTD XHTML 1.0 Frameset//EN":
+		return true
+	}
+	switch dtd.systemID {
+	case "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd",
+		"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd",
+		"http://www.w3.org/TR/xhtml1/DTD/xhtml1-frameset.dtd":
+		return true
+	}
+	return false
+}
+
+// xhtmlVoidElements is the set of XHTML empty elements that use " />"
+// self-closing syntax. Mirrors xhtmlIsEmpty in xmlsave.c.
+var xhtmlVoidElements = map[string]bool{
+	"area": true, "base": true, "basefont": true, "br": true,
+	"col": true, "frame": true, "hr": true, "img": true,
+	"input": true, "isindex": true, "link": true, "meta": true,
+	"param": true,
+}
+
+// xhtmlNameIDElements is the set of elements where name→id mirroring
+// applies (C.8). Mirrors xhtmlAttrListDumpOutput in xmlsave.c.
+var xhtmlNameIDElements = map[string]bool{
+	"a": true, "p": true, "div": true, "img": true,
+	"map": true, "applet": true, "form": true, "frame": true,
+	"iframe": true,
+}
+
+// htmlBooleanAttrs is the set of HTML boolean attributes.
+// Mirrors htmlIsBooleanAttr in HTMLtree.c.
+var htmlBooleanAttrs = map[string]bool{
+	"checked": true, "compact": true, "declare": true, "defer": true,
+	"disabled": true, "ismap": true, "multiple": true, "nohref": true,
+	"noresize": true, "noshade": true, "nowrap": true, "readonly": true,
+	"selected": true,
+}
 
 func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 	if pdebug.Enabled {
@@ -222,13 +276,44 @@ func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 		defer g.IRelease("END Dumper.DumpDoc")
 	}
 
+	// Mirrors libxml2's xmlSaveWriteText: when output encoding is UTF-8
+	// (no encoder), escape non-ASCII chars 0x80-0xDF as numeric refs.
+	// When an encoder is present, pass them through for re-encoding.
+	d.escapeNonASCII = true
+	if enc := doc.encoding; enc != "" {
+		lower := strings.ToLower(enc)
+		if lower != "utf-8" && lower != "utf8" && lower != "us-ascii" && lower != "ascii" {
+			if e := henc.Load(enc); e != nil {
+				d.escapeNonASCII = false
+				w := e.NewEncoder().Writer(out)
+				if closer, ok := w.(io.Closer); ok {
+					defer func() { _ = closer.Close() }()
+				}
+				out = w
+			}
+		}
+	}
+
+	// Detect XHTML. Mirrors xmlSaveDocInternal in xmlsave.c.
+	d.isXHTML = false
+	d.encoding = doc.encoding
+	if dtd := doc.intSubset; dtd != nil {
+		d.isXHTML = isXHTMLDTD(dtd)
+	}
+
 	if err := d.DumpNode(out, doc); err != nil {
 		return err
 	}
 
 	for e := doc.FirstChild(); e != nil; e = e.NextSibling() {
-		if err := d.DumpNode(out, e); err != nil {
-			return err
+		if d.isXHTML && e.Type() == ElementNode {
+			if err := d.dumpXHTMLNode(out, e); err != nil {
+				return err
+			}
+		} else {
+			if err := d.DumpNode(out, e); err != nil {
+				return err
+			}
 		}
 		_, _ = io.WriteString(out, "\n")
 	}
@@ -267,16 +352,17 @@ func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
 	dtd := n.(*DTD)
 	_, _ = io.WriteString(out, "<!DOCTYPE ")
 	_, _ = io.WriteString(out, dtd.Name())
-	_, _ = io.WriteString(out, " ")
 
 	if dtd.externalID != "" {
-		_, _ = io.WriteString(out, " PUBLIC ")
+		_, _ = io.WriteString(out, " PUBLIC \"")
 		_, _ = io.WriteString(out, dtd.externalID)
-		_, _ = io.WriteString(out, " ")
-	} else if dtd.systemID != "" {
-		_, _ = io.WriteString(out, " SYSTEM ")
+		_, _ = io.WriteString(out, "\" \"")
 		_, _ = io.WriteString(out, dtd.systemID)
-		_, _ = io.WriteString(out, " ")
+		_, _ = io.WriteString(out, "\"")
+	} else if dtd.systemID != "" {
+		_, _ = io.WriteString(out, " SYSTEM \"")
+		_, _ = io.WriteString(out, dtd.systemID)
+		_, _ = io.WriteString(out, "\"")
 	}
 
 	if len(dtd.entities) == 0 && len(dtd.elements) == 0 && len(dtd.pentities) == 0 && len(dtd.attributes) == 0 {
@@ -285,7 +371,7 @@ func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
 		return nil
 	}
 
-	_, _ = io.WriteString(out, "[\n")
+	_, _ = io.WriteString(out, " [\n")
 
 	for e := dtd.FirstChild(); e != nil; e = e.NextSibling() {
 		if err := d.DumpNode(out, e); err != nil {
@@ -476,7 +562,7 @@ func (d *Dumper) dumpEntityDecl(out io.Writer, ent *Entity) error {
 	case ExternalGeneralParsedEntity, ExternalGeneralUnparsedEntity:
 		_, _ = io.WriteString(out, "<!ENTITY ")
 		_, _ = io.WriteString(out, ent.name)
-		if ent.externalID == "" {
+		if ent.externalID != "" {
 			_, _ = io.WriteString(out, " PUBLIC ")
 			_ = dumpQuotedString(out, ent.externalID)
 			_, _ = io.WriteString(out, " ")
@@ -602,8 +688,11 @@ func (d *Dumper) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
 	}
 
 	if n.defvalue != "" {
-		_, _ = io.WriteString(out, " ")
-		_ = dumpQuotedString(out, n.defvalue)
+		// Mirrors libxml2's xmlSaveWriteAttributeDecl: always use double
+		// quotes and escape <, >, ", & via escapeAttrValue.
+		_, _ = io.WriteString(out, ` "`)
+		_ = escapeAttrValue(out, []byte(n.defvalue), d.escapeNonASCII)
+		_, _ = io.WriteString(out, `"`)
 	}
 	_, _ = io.WriteString(out, ">\n")
 	return nil
@@ -632,8 +721,9 @@ func (d *Dumper) dumpNs(out io.Writer, ns *Namespace) error {
 		_, _ = io.WriteString(out, "xmlns:")
 		_, _ = io.WriteString(out, ns.prefix)
 	}
-	_, _ = io.WriteString(out, "=")
-	_ = dumpQuotedString(out, ns.href)
+	_, _ = io.WriteString(out, `="`)
+	_ = escapeAttrValue(out, []byte(ns.href), d.escapeNonASCII)
+	_, _ = io.WriteString(out, `"`)
 	return nil
 }
 
@@ -660,6 +750,17 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		_, _ = out.Write(n.Content())
 		_, _ = io.WriteString(out, "-->")
 		return nil
+	case ProcessingInstructionNode:
+		// Mirrors xmlsave.c XML_PI_NODE handling.
+		pi := n.(*ProcessingInstruction)
+		_, _ = io.WriteString(out, "<?")
+		_, _ = io.WriteString(out, pi.target)
+		if pi.data != "" {
+			_, _ = io.WriteString(out, " ")
+			_, _ = io.WriteString(out, pi.data)
+		}
+		_, _ = io.WriteString(out, "?>")
+		return nil
 	case EntityRefNode:
 		_, _ = io.WriteString(out, "&")
 		_, _ = io.WriteString(out, n.Name())
@@ -670,11 +771,35 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		if string(c) == XMLTextNoEnc {
 			panic("unimplemented")
 		} else {
-			if err := escapeText(out, c, false); err != nil {
+			if err := escapeText(out, c, false, d.escapeNonASCII); err != nil {
 				return err
 			}
 		}
 		return nil // no recursing down
+	case CDATASectionNode:
+		// Mirrors xmlsave.c XML_CDATA_SECTION_NODE handling.
+		// Splits content on "]]>" sequences so the output is well-formed.
+		c := n.Content()
+		if len(c) == 0 {
+			_, _ = io.WriteString(out, "<![CDATA[]]>")
+		} else {
+			start := 0
+			for i := 0; i+2 < len(c); i++ {
+				if c[i] == ']' && c[i+1] == ']' && c[i+2] == '>' {
+					end := i + 2
+					_, _ = io.WriteString(out, "<![CDATA[")
+					_, _ = out.Write(c[start:end])
+					_, _ = io.WriteString(out, "]]>")
+					start = end
+				}
+			}
+			if start < len(c) {
+				_, _ = io.WriteString(out, "<![CDATA[")
+				_, _ = out.Write(c[start:])
+				_, _ = io.WriteString(out, "]]>")
+			}
+		}
+		return nil
 	case ElementDeclNode:
 		if err = d.dumpElementDecl(out, n.(*ElementDecl)); err != nil {
 			return err
@@ -732,7 +857,7 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 			for achld := attr.FirstChild(); achld != nil; achld = achld.NextSibling() {
 				count++
 				if achld.Type() == TextNode {
-					if err := escapeAttrValue(out, achld.Content()); err != nil {
+					if err := escapeAttrValue(out, achld.Content(), d.escapeNonASCII); err != nil {
 						return err
 					}
 				} else {
@@ -771,4 +896,216 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 	_, _ = io.WriteString(out, ">")
 
 	return nil
+}
+
+// dumpXHTMLNode serializes a node using XHTML rules.
+// Mirrors xhtmlNodeDumpOutput in xmlsave.c.
+func (d *Dumper) dumpXHTMLNode(out io.Writer, n Node) error {
+	switch n.Type() {
+	case ElementNode:
+		// handled below
+	default:
+		return d.DumpNode(out, n)
+	}
+
+	e := n.(*Element)
+	localName := e.LocalName()
+
+	var name string
+	if nser, ok := n.(Namespacer); ok {
+		if prefix := nser.Prefix(); prefix != "" {
+			name = prefix + ":" + localName
+		} else {
+			name = localName
+		}
+	} else {
+		name = n.Name()
+	}
+
+	_, _ = io.WriteString(out, "<")
+	_, _ = io.WriteString(out, name)
+
+	// Dump namespace declarations
+	nslist := e.Namespaces()
+	if len(nslist) > 0 {
+		if err := d.dumpNsList(out, nslist); err != nil {
+			return err
+		}
+	}
+
+	// C.1: Inject xmlns="http://www.w3.org/1999/xhtml" on <html> if missing.
+	hasDefaultNs := false
+	for _, ns := range nslist {
+		if ns.prefix == "" {
+			hasDefaultNs = true
+			break
+		}
+	}
+	if localName == "html" && e.ns == nil && !hasDefaultNs {
+		_, _ = io.WriteString(out, ` xmlns="http://www.w3.org/1999/xhtml"`)
+	}
+
+	// Dump attributes with XHTML mirroring rules.
+	d.dumpXHTMLAttrList(out, e)
+
+	// Determine if we need to inject <meta> Content-Type in <head>.
+	addMeta := false
+	if localName == "head" {
+		if parent := e.parent; parent != nil {
+			if pe, ok := parent.(*Element); ok {
+				if pe.LocalName() == "html" && pe.parent != nil && pe.parent.Type() == DocumentNode {
+					addMeta = !d.headHasContentTypeMeta(e)
+				}
+			}
+		}
+	}
+
+	if e.FirstChild() == nil {
+		if e.ns == nil && xhtmlVoidElements[localName] && !addMeta {
+			// C.2: Empty void elements: " />"
+			_, _ = io.WriteString(out, " />")
+		} else {
+			if addMeta {
+				_, _ = io.WriteString(out, ">")
+				d.writeMetaContentType(out)
+			} else {
+				_, _ = io.WriteString(out, ">")
+			}
+			// C.3: Non-void elements must use open+close tags
+			_, _ = io.WriteString(out, "</")
+			_, _ = io.WriteString(out, name)
+			_, _ = io.WriteString(out, ">")
+		}
+		return nil
+	}
+
+	_, _ = io.WriteString(out, ">")
+	if addMeta {
+		d.writeMetaContentType(out)
+	}
+
+	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Type() == ElementNode {
+			if err := d.dumpXHTMLNode(out, child); err != nil {
+				return err
+			}
+		} else {
+			if err := d.DumpNode(out, child); err != nil {
+				return err
+			}
+		}
+	}
+
+	_, _ = io.WriteString(out, "</")
+	_, _ = io.WriteString(out, name)
+	_, _ = io.WriteString(out, ">")
+	return nil
+}
+
+// dumpXHTMLAttrList dumps attributes with XHTML rules:
+// - Boolean attribute normalization (C.5)
+// - lang/xml:lang mirroring (C.7)
+// - name/id mirroring (C.8)
+func (d *Dumper) dumpXHTMLAttrList(out io.Writer, e *Element) {
+	var langAttr, xmlLangAttr, nameAttr, idAttr *Attribute
+	localName := e.LocalName()
+
+	for attr := e.properties; attr != nil; {
+		attrName := attr.Name()
+
+		// Track special attributes for mirroring.
+		// xml:lang is stored with full qualified name "xml:lang".
+		switch attrName {
+		case "id":
+			idAttr = attr
+		case "name":
+			nameAttr = attr
+		case "lang":
+			langAttr = attr
+		case "xml:lang":
+			xmlLangAttr = attr
+		}
+
+		// Write the attribute (Name() already includes any namespace prefix)
+		_, _ = io.WriteString(out, " ")
+		_, _ = io.WriteString(out, attrName)
+		_, _ = io.WriteString(out, `="`)
+
+		// C.5: Boolean attribute normalization
+		attrValue := attr.Value()
+		if attrValue == "" && htmlBooleanAttrs[attrName] {
+			_, _ = io.WriteString(out, attrName)
+		} else {
+			for achld := attr.FirstChild(); achld != nil; achld = achld.NextSibling() {
+				if achld.Type() == TextNode {
+					_ = escapeAttrValue(out, achld.Content(), d.escapeNonASCII)
+				} else {
+					_ = d.DumpNode(out, achld)
+				}
+			}
+		}
+		_, _ = io.WriteString(out, `"`)
+
+		a := attr.NextSibling()
+		if a == nil {
+			break
+		}
+		attr = a.(*Attribute)
+	}
+
+	// C.8: name→id mirroring (only for specific elements)
+	if nameAttr != nil && idAttr == nil && xhtmlNameIDElements[localName] {
+		_, _ = io.WriteString(out, ` id="`)
+		_ = escapeAttrValue(out, nameAttr.Content(), d.escapeNonASCII)
+		_, _ = io.WriteString(out, `"`)
+	}
+
+	// C.7: lang/xml:lang mirroring
+	if langAttr != nil && xmlLangAttr == nil {
+		_, _ = io.WriteString(out, ` xml:lang="`)
+		_ = escapeAttrValue(out, langAttr.Content(), d.escapeNonASCII)
+		_, _ = io.WriteString(out, `"`)
+	} else if xmlLangAttr != nil && langAttr == nil {
+		_, _ = io.WriteString(out, ` lang="`)
+		_ = escapeAttrValue(out, xmlLangAttr.Content(), d.escapeNonASCII)
+		_, _ = io.WriteString(out, `"`)
+	}
+}
+
+// headHasContentTypeMeta checks if a <head> element already has a
+// <meta http-equiv="Content-Type"> child.
+func (d *Dumper) headHasContentTypeMeta(head *Element) bool {
+	for child := head.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Type() != ElementNode {
+			continue
+		}
+		ce, ok := child.(*Element)
+		if !ok || ce.LocalName() != "meta" {
+			continue
+		}
+		for attr := ce.properties; attr != nil; {
+			if attr.ns == nil && strings.EqualFold(attr.Name(), "http-equiv") {
+				if strings.EqualFold(attr.Value(), "Content-Type") {
+					return true
+				}
+			}
+			a := attr.NextSibling()
+			if a == nil {
+				break
+			}
+			attr = a.(*Attribute)
+		}
+	}
+	return false
+}
+
+// writeMetaContentType writes the XHTML meta Content-Type tag.
+func (d *Dumper) writeMetaContentType(out io.Writer) {
+	enc := d.encoding
+	if enc == "" {
+		enc = "UTF-8"
+	}
+	_, _ = io.WriteString(out, `<meta http-equiv="Content-Type" content="text/html; charset=`)
+	_, _ = io.WriteString(out, enc)
+	_, _ = io.WriteString(out, `" />`)
 }

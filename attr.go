@@ -1,5 +1,40 @@
 package helium
 
+type AttributeType int
+
+const (
+	AttrInvalid AttributeType = iota
+	AttrCDATA
+	AttrID
+	AttrIDRef
+	AttrIDRefs
+	AttrEntity
+	AttrEntities
+	AttrNmtoken
+	AttrNmtokens
+	AttrEnumeration
+	AttrNotation
+)
+
+type AttributeDefault int
+
+const (
+	AttrDefaultInvalid AttributeDefault = iota
+	AttrDefaultNone
+	AttrDefaultRequired
+	AttrDefaultImplied
+	AttrDefaultFixed
+)
+
+type Enumeration []string
+
+type Attribute struct {
+	docnode
+	// atype       AttributeType
+	defaultAttr bool
+	ns          *Namespace
+}
+
 func newAttributeDecl() *AttributeDecl {
 	attr := &AttributeDecl{}
 	attr.etype = AttributeDeclNode
@@ -73,6 +108,15 @@ func (n *Attribute) IsDefault() bool {
 
 func (n Attribute) Value() string {
 	return string(n.Content())
+}
+
+func (n Attribute) Name() string {
+	if n.ns != nil {
+		if p := n.ns.Prefix(); p != "" {
+			return p + ":" + n.docnode.Name()
+		}
+	}
+	return n.docnode.Name()
 }
 
 func (n Attribute) Prefix() string {

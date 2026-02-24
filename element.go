@@ -2,23 +2,17 @@ package helium
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 
 	"github.com/lestrrat-go/pdebug"
 )
 
-const _ElementType_name = "ElementNodeAttributeNodeTextNodeCDATASectionNodeEntityRefNodeEntityNodeProcessingInstructionNodeCommentNodeDocumentNodeDocumentTypeNodeDocumentFragNodeNotationNodeHTMLDocumentNodeDTDNodeElementDeclNodeAttributeDeclNodeEntityDeclNodeNamespaceDeclNodeXIncludeStartNodeXIncludeEndNodeNamespaceNode"
-
-var _ElementType_index = [...]uint16{0, 11, 24, 32, 48, 61, 71, 96, 107, 119, 135, 151, 163, 179, 186, 201, 218, 232, 249, 266, 281, 294}
-
-func (i ElementType) String() string {
-	i -= 1
-	if i < 0 || i >= ElementType(len(_ElementType_index)-1) {
-		return fmt.Sprintf("ElementType(%d)", i+1)
-	}
-	return _ElementType_name[_ElementType_index[i]:_ElementType_index[i+1]]
+// Element is just a wrapper around Node so that we can
+// use Go-ish type checks
+type Element struct {
+	node
 }
+
 func newElementDecl() *ElementDecl {
 	e := ElementDecl{}
 	e.etype = ElementDeclNode

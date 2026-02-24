@@ -195,14 +195,33 @@ func (t *TreeBuilder) Characters(ctxif sax.Context, data []byte) error {
 	return n.AddContent(data)
 }
 
-func (t *TreeBuilder) CDataBlock(_ sax.Context, data []byte) error {
+// CDataBlock mirrors xmlSAX2Text(ctxt, value, len, XML_CDATA_SECTION_NODE)
+// in libxml2's SAX2.c. Unlike text nodes, adjacent CDATA sections are NOT
+// merged — each callback creates a new CDATASection node.
+func (t *TreeBuilder) CDataBlock(ctxif sax.Context, data []byte) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.CDATABlock")
 		defer g.IRelease("END tree.CDATABlock")
 	}
-	return nil
+
+	ctx := ctxif.(*parserCtx)
+	parent := ctx.elem
+	if parent == nil {
+		return nil
+	}
+
+	doc := ctx.doc
+	cdata, err := doc.CreateCDATASection(data)
+	if err != nil {
+		return err
+	}
+
+	return parent.AddChild(cdata)
 }
 
+// Comment mirrors xmlSAX2Comment in libxml2's SAX2.c, which delegates
+// parent selection to xmlSAX2AppendChild. When inside a DTD subset the
+// comment is added to the DTD, not the document.
 func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.Comment: %s", data)
@@ -218,6 +237,14 @@ func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
 	e, err := doc.CreateComment(data)
 	if err != nil {
 		return err
+	}
+
+	// Mirror xmlSAX2AppendChild parent selection (SAX2.c:899-907).
+	switch ctx.inSubset {
+	case inInternalSubset:
+		return doc.IntSubset().AddChild(e)
+	case inExternalSubset:
+		return doc.ExtSubset().AddChild(e)
 	}
 
 	n := ctx.elem
@@ -579,9 +606,20 @@ func (t *TreeBuilder) UnparsedEntityDecl(ctxif sax.Context, name string, publicI
 		defer g.IRelease("END tree.UnparsedEntityDecl")
 	}
 
-	// Because the parser needs to know about entities even in cases where
-	// there isn't a SAX handler registered, call to Document.RegisterEntry
-	// is done in the main parser -- and not here.
+	// Mirror xmlSAX2UnparsedEntityDecl: register the NDATA entity in the DTD.
+	ctx := ctxif.(*parserCtx)
+	doc := ctx.doc
+	var dtd *DTD
+	switch ctx.inSubset {
+	case 1:
+		dtd = doc.intSubset
+	case 2:
+		dtd = doc.extSubset
+	default:
+		return errors.New("sax.UnparsedEntityDecl called while not in subset")
+	}
+
+	_, _ = dtd.AddEntity(name, ExternalGeneralUnparsedEntity, publicID, systemID, notation)
 	return nil
 }
 

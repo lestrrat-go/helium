@@ -34,7 +34,10 @@ func (i nsStackItem) Key() string {
 }
 
 func (s *nsStack) Push(prefix, uri string) {
-	_ = s.UniqueStack.Push(nsStackItem{prefix: prefix, href: uri})
+	// Force-append: namespace prefixes may be redeclared on child elements
+	// (shadowing the parent's binding), so we must allow duplicate keys.
+	// UniqueStack.Lookup searches from the end, giving correct shadowing.
+	s.UniqueStack = append(s.UniqueStack, nsStackItem{prefix: prefix, href: uri})
 }
 
 func (s *nsStack) Lookup(prefix string) string {

@@ -8,6 +8,78 @@ import (
 	"github.com/lestrrat-go/pdebug"
 )
 
+type DTD struct {
+	docnode
+	attributes map[string]*AttributeDecl
+	elements   map[string]*ElementDecl
+	entities   map[string]*Entity
+	pentities  map[string]*Entity
+	externalID string
+	systemID   string
+}
+
+// AttributeDecl is an xml attribute delcaration from DTD
+type AttributeDecl struct {
+	docnode
+	atype    AttributeType    // attribute type
+	def      AttributeDefault // default
+	defvalue string           // ... or the default value
+	tree     Enumeration      // ... or the numeration tree, if any
+	prefix   string           // the namespace prefix, if any
+	elem     string           // name of the element holding the attribute
+}
+
+// ElementDecl is an xml element declaration from DTD
+type ElementDecl struct {
+	docnode
+	decltype   ElementTypeVal
+	content    *ElementContent
+	attributes *AttributeDecl
+	prefix     string
+	// xmlRegexpPtr contModel
+}
+
+// ElementTypeVal represents the different possibilities for an element
+// content type.
+type ElementTypeVal int
+
+const (
+	UndefinedElementType ElementTypeVal = iota
+	EmptyElementType
+	AnyElementType
+	MixedElementType
+	ElementElementType
+)
+
+type ElementContentType int
+
+const (
+	ElementContentPCDATA ElementContentType = iota + 1
+	ElementContentElement
+	ElementContentSeq
+	ElementContentOr
+)
+
+type ElementContentOccur int
+
+const (
+	ElementContentOnce ElementContentOccur = iota + 1
+	ElementContentOpt
+	ElementContentMult
+	ElementContentPlus
+)
+
+type ElementContent struct {
+	// XXX no doc?
+	ctype  ElementContentType
+	coccur ElementContentOccur
+	name   string
+	prefix string
+	c1     *ElementContent
+	c2     *ElementContent
+	parent *ElementContent
+}
+
 func newDTD() *DTD {
 	dtd := &DTD{
 		attributes: map[string]*AttributeDecl{},

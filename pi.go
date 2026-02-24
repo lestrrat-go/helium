@@ -1,5 +1,11 @@
 package helium
 
+type ProcessingInstruction struct {
+	docnode
+	target string
+	data   string
+}
+
 func (p *ProcessingInstruction) Type() ElementType {
 	return ProcessingInstructionNode
 }

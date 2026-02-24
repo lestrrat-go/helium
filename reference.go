@@ -1,5 +1,9 @@
 package helium
 
+type EntityRef struct {
+	node
+}
+
 func newEntityRef() *EntityRef {
 	n := &EntityRef{}
 	n.etype = EntityRefNode

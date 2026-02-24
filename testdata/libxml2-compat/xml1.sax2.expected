@@ -1,0 +1,17 @@
+SAX.setDocumentLocator()
+SAX.startDocument()
+SAX.internalSubset(test, , )
+SAX.entityDecl(example, 1, (null), (null), <p>An ampersand (&#38;) may be escaped
+ numerically (&#38;#38;) or with a general entity
+  (&amp;amp;).</p>)
+SAX.getEntity(example)
+SAX.externalSubset(test, , )
+SAX.startElementNs(test, NULL, NULL, 0, 0, 0)
+SAX.getEntity(example)
+SAX.startElementNs(p, NULL, NULL, 0, 0, 0)
+SAX.characters(An ampersand (&) may be escaped
+ numerically &#38;) or with a general entity&amp;)., 88)
+SAX.endElementNs(p, NULL, NULL)
+SAX.reference(example)
+SAX.endElementNs(test, NULL, NULL)
+SAX.endDocument()

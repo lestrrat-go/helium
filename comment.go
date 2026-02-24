@@ -1,5 +1,11 @@
 package helium
 
+// Comment is just a wrapper around Node so that we can
+// use Go-ish type checks
+type Comment struct {
+	node
+}
+
 func newComment(b []byte) *Comment {
 	t := Comment{}
 	t.etype = CommentNode

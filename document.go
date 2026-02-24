@@ -9,6 +9,26 @@ import (
 	"github.com/lestrrat-go/pdebug"
 )
 
+type DocumentStandaloneType int
+
+const (
+	StandaloneInvalidValue = -99
+	StandaloneExplicitYes  = 1
+	StandaloneExplicitNo   = 0
+	StandaloneNoXMLDecl    = -1
+	StandaloneImplicitNo   = -2
+)
+
+type Document struct {
+	docnode
+	version    string
+	encoding   string
+	standalone DocumentStandaloneType
+
+	intSubset *DTD
+	extSubset *DTD
+}
+
 func CreateDocument() *Document {
 	return NewDocument("1.0", "", StandaloneImplicitNo)
 }
@@ -240,6 +260,13 @@ func (d *Document) CreateComment(value []byte) (*Comment, error) {
 	return e, nil
 }
 
+// CreateCDATASection mirrors xmlNewCDataBlock in libxml2's tree.c.
+func (d *Document) CreateCDATASection(value []byte) (*CDATASection, error) {
+	e := newCDATASection(value)
+	e.doc = d
+	return e, nil
+}
+
 func (d *Document) CreateElementContent(name string, etype ElementContentType) (*ElementContent, error) {
 	e, err := newElementContent(name, etype)
 	if err != nil {
@@ -451,11 +478,15 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 					return
 				}
 
-				// no children
-				if ok && ent.FirstChild() == nil {
-					// XXX WTF am I doing here...?
+				// Parse entity content to build children, mirroring
+				// xmlNodeParseAttValue in libxml2 tree.c.
+				// Use the expanding flag to prevent infinite recursion
+				// when entities reference each other.
+				if ok && ent.FirstChild() == nil && !ent.expanding {
+					ent.expanding = true
 					var refchildren Node
-					refchildren, err = d.stringToNodeList(string(node.Content()))
+					refchildren, err = d.stringToNodeList(string(ent.Content()))
+					ent.expanding = false
 					if err != nil {
 						return
 					}
