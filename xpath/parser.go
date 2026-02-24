@@ -379,16 +379,18 @@ func (p *Parser) parseRelativeLocationPath() ([]Step, error) {
 	}
 	steps := []Step{step}
 
+loop:
 	for {
 		tok := p.lexer.Peek()
-		if tok.Type == TokenSlash {
+		switch tok.Type {
+		case TokenSlash:
 			p.lexer.Next()
 			s, err := p.parseStep()
 			if err != nil {
 				return nil, err
 			}
 			steps = append(steps, s)
-		} else if tok.Type == TokenSlashSlash {
+		case TokenSlashSlash:
 			p.lexer.Next()
 			// Insert descendant-or-self::node() step
 			steps = append(steps, Step{
@@ -400,8 +402,8 @@ func (p *Parser) parseRelativeLocationPath() ([]Step, error) {
 				return nil, err
 			}
 			steps = append(steps, s)
-		} else {
-			break
+		default:
+			break loop
 		}
 	}
 	return steps, nil
@@ -431,10 +433,11 @@ func (p *Parser) parseStep() (Step, error) {
 
 	// @ is short for attribute::
 	axis := AxisChild
-	if tok.Type == TokenAt {
+	switch tok.Type {
+	case TokenAt:
 		axis = AxisAttribute
 		p.lexer.Next()
-	} else if tok.Type == TokenName {
+	case TokenName:
 		// Check if this is an axis specifier (Name '::')
 		p.lexer.Next()
 		if p.lexer.Peek().Type == TokenColonColon {

@@ -133,14 +133,15 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ctx *evalContext) 
 }
 
 func matchNameTest(test NameTest, n helium.Node, axis AxisType, ctx *evalContext) bool {
-	if axis == AxisAttribute {
+	switch axis {
+	case AxisAttribute:
 		// Use type assertion because Attribute.Type() may not be set correctly
 		if _, ok := n.(*helium.Attribute); !ok {
 			return false
 		}
-	} else if axis == AxisNamespace {
+	case AxisNamespace:
 		return false // namespace axis not supported
-	} else {
+	default:
 		// For principal node type of other axes: element
 		if n.Type() != helium.ElementNode {
 			return false
