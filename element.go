@@ -95,16 +95,38 @@ func (n *Element) SetAttribute(name, value string) error {
 		return err
 	}
 
+	n.addProperty(attr)
+	return nil
+}
+
+// SetLiteralAttribute creates or replaces an attribute with a literal text
+// value. Unlike SetAttribute, the value is not parsed for entity references.
+// This is useful for HTML where the parser has already resolved entities.
+func (n *Element) SetLiteralAttribute(name, value string) {
+	attr := newAttribute(name, nil)
+	attr.doc = n.doc
+	if value != "" {
+		t := newText([]byte(value))
+		t.doc = n.doc
+		attr.setFirstChild(t)
+		attr.setLastChild(t)
+		t.SetParent(attr)
+	}
+	n.addProperty(attr)
+}
+
+// addProperty inserts or replaces an attribute in the element's property list.
+func (n *Element) addProperty(attr *Attribute) {
 	p := n.properties
 	if p == nil {
 		n.properties = attr
 		attr.SetParent(n)
-		return nil
+		return
 	}
 
 	var last *Attribute
 	for ; p != nil; p = p.NextAttribute() {
-		if p.Name() == name {
+		if p.Name() == attr.Name() {
 			// Replace existing attribute in-place: splice new attr
 			// into the same position in the linked list.
 			attr.SetPrevSibling(p.PrevSibling())
@@ -123,7 +145,7 @@ func (n *Element) SetAttribute(name, value string) error {
 			p.SetParent(nil)
 			p.SetPrevSibling(nil)
 			p.SetNextSibling(nil)
-			return nil
+			return
 		}
 
 		last = p
@@ -132,8 +154,6 @@ func (n *Element) SetAttribute(name, value string) error {
 	last.SetNextSibling(attr)
 	attr.SetPrevSibling(last)
 	attr.SetParent(n)
-
-	return nil
 }
 
 // SetAttributeNS creates an attribute with the given local name, value, and namespace.

@@ -1,5 +1,7 @@
 package html
 
+import "unicode/utf8"
+
 // htmlEntityTable maps HTML4 entity names to their Unicode codepoints.
 // 252 named character references from the HTML 4.01 specification.
 var htmlEntityTable = map[string]string{
@@ -258,8 +260,39 @@ var htmlEntityTable = map[string]string{
 	"zwnj":     "\u200C",
 }
 
+// htmlEntityByRune maps Unicode codepoints to their preferred HTML4 entity name.
+// Built from htmlEntityTable at init time, excluding entities for ASCII
+// characters (amp, lt, gt, quot, apos) which are handled separately.
+var htmlEntityByRune map[rune]string
+
+func init() {
+	htmlEntityByRune = make(map[rune]string, len(htmlEntityTable))
+	for name, val := range htmlEntityTable {
+		r, _ := utf8.DecodeRuneInString(val)
+		if r < 0x80 {
+			continue // skip ASCII entities (amp, lt, gt, quot, apos)
+		}
+		// For codepoints with multiple entity names (e.g., Scaron/scaron),
+		// prefer the lowercase variant as that matches libxml2 output.
+		if existing, ok := htmlEntityByRune[r]; ok {
+			if name < existing {
+				// keep alphabetically first (lowercase letters sort before uppercase in entity names)
+			} else {
+				continue
+			}
+		}
+		htmlEntityByRune[r] = name
+	}
+}
+
 // lookupEntity resolves an HTML named entity (without the leading & and trailing ;).
 func lookupEntity(name string) (string, bool) {
 	v, ok := htmlEntityTable[name]
 	return v, ok
+}
+
+// lookupEntityByRune returns the HTML4 entity name for a Unicode codepoint,
+// or empty string if none exists.
+func lookupEntityByRune(r rune) string {
+	return htmlEntityByRune[r]
 }

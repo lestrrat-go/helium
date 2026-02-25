@@ -396,3 +396,84 @@ func TestLibxml2CompatHTMLSAX(t *testing.T) {
 		})
 	}
 }
+
+// TestHTMLSerialization parses HTML files to DOM, serializes with DumpDoc,
+// and compares output against .expected golden files.
+//
+// Environment variable HELIUM_HTML_TEST_FILES can be set to test only
+// specific files:
+//
+//	HELIUM_HTML_TEST_FILES=autoclose,entities go test -run TestHTMLSerialization
+func TestHTMLSerialization(t *testing.T) {
+	dir := "../testdata/libxml2-compat/html"
+
+	if _, err := os.Stat(dir); err != nil {
+		t.Skipf("testdata/libxml2-compat/html not found")
+	}
+
+	only := map[string]struct{}{}
+	if v := os.Getenv("HELIUM_HTML_TEST_FILES"); v != "" {
+		for _, f := range strings.Split(v, ",") {
+			only[strings.TrimSpace(f)] = struct{}{}
+		}
+	}
+
+	files, err := os.ReadDir(dir)
+	require.NoError(t, err, "os.ReadDir should succeed")
+
+	for _, fi := range files {
+		if fi.IsDir() {
+			continue
+		}
+
+		name := fi.Name()
+
+		// Only process .html and .htm files
+		if !strings.HasSuffix(name, ".html") && !strings.HasSuffix(name, ".htm") {
+			continue
+		}
+
+		// Check if an .expected golden file exists
+		expectedPath := filepath.Join(dir, name+".expected")
+		if _, err := os.Stat(expectedPath); err != nil {
+			continue
+		}
+
+		// Strip extension for filtering
+		baseName := strings.TrimSuffix(name, filepath.Ext(name))
+		if len(only) > 0 {
+			if _, ok := only[baseName]; !ok {
+				if _, ok := only[name]; !ok {
+					continue
+				}
+			}
+		}
+
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("panic: %v", r)
+				}
+			}()
+
+			doc, err := html.ParseFile(filepath.Join(dir, name))
+			require.NoError(t, err, "ParseFile should succeed (file = %s)", name)
+
+			var buf bytes.Buffer
+			err = html.DumpDoc(&buf, doc)
+			require.NoError(t, err, "DumpDoc should succeed (file = %s)", name)
+
+			expected, err := os.ReadFile(expectedPath)
+			require.NoError(t, err, "reading expected file")
+
+			actual := buf.String()
+			if actual != string(expected) {
+				errPath := filepath.Join(dir, name+".dump.actual")
+				_ = os.WriteFile(errPath, []byte(actual), 0600)
+				t.Logf("Actual output saved to %s", errPath)
+			}
+			require.Equal(t, string(expected), actual,
+				"HTML serialization should match (file = %s)", name)
+		})
+	}
+}

@@ -276,3 +276,13 @@ func (dtd *DTD) SetTreeDoc(doc *Document) {
 }
 
 func (dtd *DTD) Free() {}
+
+// ExternalID returns the DTD external ID (PUBLIC identifier).
+func (dtd *DTD) ExternalID() string {
+	return dtd.externalID
+}
+
+// SystemID returns the DTD system ID (SYSTEM identifier).
+func (dtd *DTD) SystemID() string {
+	return dtd.systemID
+}

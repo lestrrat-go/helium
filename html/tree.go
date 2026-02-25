@@ -36,10 +36,11 @@ func (t *treeBuilder) StartElement(name string, attrs []Attribute) error {
 		return err
 	}
 
+	// Use SetLiteralAttribute because the HTML parser has already resolved
+	// entities in attribute values. SetAttribute would re-parse them as XML
+	// entity references and fail on bare '&' characters.
 	for _, a := range attrs {
-		if err := elem.SetAttribute(a.Name, a.Value); err != nil {
-			return err
-		}
+		elem.SetLiteralAttribute(a.Name, a.Value)
 	}
 
 	if err := t.cur.AddChild(elem); err != nil {
@@ -63,14 +64,14 @@ func (t *treeBuilder) EndElement(name string) error {
 }
 
 func (t *treeBuilder) Characters(ch []byte) error {
-	if t.cur == nil {
+	if t.cur == nil || t.cur == t.doc {
 		return nil
 	}
 	return t.cur.AddContent(ch)
 }
 
 func (t *treeBuilder) CDataBlock(value []byte) error {
-	if t.cur == nil {
+	if t.cur == nil || t.cur == t.doc {
 		return nil
 	}
 	return t.cur.AddContent(value)
