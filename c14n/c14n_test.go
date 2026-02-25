@@ -17,18 +17,15 @@ const testdataBase = "../testdata/libxml2-compat/c14n"
 // knownParseFailures lists test cases that fail during parsing due to
 // helium parser limitations (not C14N bugs).
 var knownParseFailures = map[string]string{
-	"without-comments/example-3":     "duplicate namespace declaration handling",
-	"without-comments/example-4":     "entity reference in single-quoted attribute",
-	"without-comments/example-5":     "external entity resolution (world.txt)",
-	"without-comments/test-3":        "duplicate namespace declaration handling",
-	"with-comments/example-3":        "duplicate namespace declaration handling",
-	"with-comments/example-4":        "entity reference in single-quoted attribute",
-	"with-comments/example-5":        "external entity resolution (world.txt)",
+	"without-comments/example-3":            "duplicate namespace declaration handling",
+	"without-comments/example-4":            "entity reference in single-quoted attribute",
+	"without-comments/test-3":               "duplicate namespace declaration handling",
+	"with-comments/example-3":               "duplicate namespace declaration handling",
+	"with-comments/example-4":               "entity reference in single-quoted attribute",
 	"exc-without-comments/test-0":           "duplicate namespace declaration handling",
 	"exc-without-comments/test-1":           "duplicate namespace declaration handling",
 	"1-1-without-comments/example-3":        "duplicate namespace declaration handling",
 	"1-1-without-comments/example-4":        "entity reference in single-quoted attribute",
-	"1-1-without-comments/example-5":        "external entity resolution (world.txt)",
 }
 
 func parseTestDoc(t *testing.T, path string) *helium.Document {

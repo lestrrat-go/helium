@@ -5029,6 +5029,24 @@ func (ctx *parserCtx) parseReference() error {
 		if ent.checked == 0 {
 			ent.checked = 2
 		}
+
+		// Store parsed nodes as entity children (mirrors libxml2).
+		// This populates ent.firstChild so subsequent references can
+		// reuse the parsed tree without re-parsing.
+		if parsedEnt != nil && ent.firstChild == nil {
+			for n := parsedEnt; n != nil; {
+				next := n.NextSibling()
+				// Detach from the old sibling chain before adding
+				// to the entity, otherwise addChild/addSibling will
+				// follow stale NextSibling links and loop.
+				n.SetNextSibling(nil)
+				n.SetPrevSibling(nil)
+				n.SetParent(nil)
+				n.SetTreeDoc(ctx.doc)
+				_ = ent.AddChild(n)
+				n = next
+			}
+		}
 	}
 
 	// Now that the entity content has been gathered
@@ -5083,9 +5101,11 @@ func (ctx *parserCtx) parseReference() error {
 		return nil
 	}
 
-	// If we didn't get any children for the entity being built
+	// Entity has children (from prior parse). When replaceEntities is true,
+	// copy the entity's children into the current element (mirrors libxml2's
+	// entity substitution). When replaceEntities is false, emit a Reference
+	// SAX event instead.
 	if s := ctx.sax; s != nil && !ctx.replaceEntities {
-		// Create a node.
 		switch err := s.Reference(ctx.userData, ent.name); err {
 		case nil, sax.ErrHandlerUnspecified:
 			// no op
@@ -5094,7 +5114,18 @@ func (ctx *parserCtx) parseReference() error {
 		}
 		return nil
 	}
-	_ = parsedEnt
+
+	if ctx.replaceEntities {
+		for n := ent.firstChild; n != nil; n = n.NextSibling() {
+			if s := ctx.sax; s != nil {
+				if n.Type() == TextNode {
+					if err := ctx.deliverCharacters(s.Characters, n.Content()); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
 
 	return nil
 }

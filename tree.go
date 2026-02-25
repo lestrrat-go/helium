@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,33 @@ import (
 	"github.com/lestrrat-go/pdebug"
 	"github.com/lestrrat-go/strcursor"
 )
+
+// buildURI resolves a relative system ID against a base URI.
+// For local file paths (no scheme or file: scheme), it uses filepath.Join.
+// For other schemes, it uses url.ResolveReference.
+func buildURI(systemID, base string) string {
+	u, err := url.Parse(systemID)
+	if err != nil {
+		return ""
+	}
+	if u.IsAbs() {
+		return systemID
+	}
+
+	baseURL, err := url.Parse(base)
+	if err != nil {
+		return ""
+	}
+	if baseURL.Scheme == "" || baseURL.Scheme == "file" {
+		basePath := baseURL.Path
+		if basePath == "" {
+			basePath = base
+		}
+		return filepath.Join(filepath.Dir(basePath), systemID)
+	}
+
+	return baseURL.ResolveReference(u).String()
+}
 
 // fileParseInput wraps an os.File as a sax.ParseInput.
 type fileParseInput struct {
@@ -626,6 +654,16 @@ func (t *TreeBuilder) ResolveEntity(ctxif sax.Context, publicID string, systemID
 		}
 	}
 
+	// Fall back to direct file-based resolution. The systemID at this point
+	// is the entity's resolved URI (built from system ID + base URI in
+	// EntityDecl). Try opening it as a file path.
+	if systemID != "" {
+		f, err := os.Open(systemID)
+		if err == nil {
+			return &fileParseInput{ReadCloser: f, uri: systemID}, nil
+		}
+	}
+
 	return nil, sax.ErrHandlerUnspecified
 }
 
@@ -674,25 +712,25 @@ func (t *TreeBuilder) EntityDecl(ctxif sax.Context, name string, typ int, public
 		return errors.New("sax.EntityDecl called while note in subset")
 	}
 
-	_, err := dtd.AddEntity(name, EntityType(typ), publicID, systemID, notation)
+	ent, err := dtd.AddEntity(name, EntityType(typ), publicID, systemID, notation)
 	if err != nil {
 		return err
 	}
 
-	/*
-		if ent.uri == "" && systemID != "" {
-			   xmlChar *URI;
-			   const char *base = NULL;
-
-			   if (ctxt->input != NULL)
-			       base = ctxt->input->filename;
-			   if (base == NULL)
-			       base = ctxt->directory;
-
-			   URI = xmlBuildURI(systemId, (const xmlChar *) base);
-			   ent->URI = URI;
+	// Build the full URI for external entities by resolving the system ID
+	// against the document's base URI (mirrors libxml2's xmlSAX2EntityDecl).
+	if ent.uri == "" && systemID != "" {
+		base := ctx.baseURI
+		if base != "" {
+			resolved := buildURI(systemID, base)
+			if resolved != "" {
+				ent.uri = resolved
+			}
 		}
-	*/
+		if ent.uri == "" {
+			ent.uri = systemID
+		}
+	}
 
 	return nil
 }
