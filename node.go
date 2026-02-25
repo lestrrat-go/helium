@@ -18,12 +18,14 @@ type Node interface {
 	Content() []byte
 	FirstChild() Node
 	LastChild() Node
+	Line() int
 	Name() string
 	NextSibling() Node
 	OwnerDocument() *Document
 	Parent() Node
 	PrevSibling() Node
 	Replace(Node)
+	SetLine(int)
 	SetNextSibling(Node)
 	SetOwnerDocument(doc *Document)
 	SetParent(Node)
@@ -42,6 +44,7 @@ type docnode struct {
 	next       Node
 	prev       Node
 	doc        *Document
+	line       int
 }
 
 // node represents a node in a XML tree.
@@ -189,6 +192,14 @@ func (n docnode) Name() string {
 
 func (n docnode) Type() ElementType {
 	return n.etype
+}
+
+func (n docnode) Line() int {
+	return n.line
+}
+
+func (n *docnode) SetLine(line int) {
+	n.line = line
 }
 
 func (n docnode) FirstChild() Node {
