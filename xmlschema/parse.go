@@ -198,11 +198,8 @@ func (c *compiler) parseComplexType(elem *helium.Element) (*TypeDef, error) {
 		}
 	}
 
-	// If no content model and not mixed, check for empty.
-	if td.ContentModel == nil && td.ContentType == ContentTypeEmpty {
-		// Check if there are attribute declarations — if so, it's still empty content.
-		// ContentTypeEmpty is the default (no children).
-	}
+	// If no content model and not mixed, ContentTypeEmpty is the default (no children).
+	// Attribute declarations do not change the content type.
 
 	return td, nil
 }

@@ -10,14 +10,6 @@ type SchemaError struct {
 	errors []string
 }
 
-func (e *SchemaError) addf(format string, args ...interface{}) {
-	e.errors = append(e.errors, fmt.Sprintf(format, args...))
-}
-
-func (e *SchemaError) hasErrors() bool {
-	return len(e.errors) > 0
-}
-
 // Error returns all collected errors joined by newlines.
 func (e *SchemaError) Error() string {
 	return strings.Join(e.errors, "")

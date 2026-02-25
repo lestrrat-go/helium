@@ -32,10 +32,7 @@ func matchSequence(parent *helium.Element, mg *ModelGroup, children []childElem,
 	maxReps := mg.MaxOccurs
 
 	reps := 0
-	for {
-		if maxReps != Unbounded && reps >= maxReps {
-			break
-		}
+	for maxReps == Unbounded || reps < maxReps {
 		// First try without side effects.
 		tryCons, tryErr := tryOnce(pos)
 		if tryErr != nil {
@@ -103,10 +100,7 @@ func matchChoice(parent *helium.Element, mg *ModelGroup, children []childElem, p
 	}
 
 	reps := 0
-	for {
-		if maxReps != Unbounded && reps >= maxReps {
-			break
-		}
+	for maxReps == Unbounded || reps < maxReps {
 		consumed, ok := matchOnce(pos)
 		if !ok {
 			break
