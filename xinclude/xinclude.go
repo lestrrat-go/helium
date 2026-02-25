@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/encoding"
@@ -176,11 +177,15 @@ func (p *processor) processInclude(inc *helium.Element) error {
 		return p.handleFallback(inc, fmt.Errorf("xi:include missing href attribute"))
 	}
 
+	// Compute effective base URI at the include point, accounting for
+	// xml:base attributes on ancestor elements.
+	incBase := effectiveBaseURI(inc, p.baseURI)
+
 	// Resolve the document URI
 	var resolved string
 	if href != "" {
 		var err error
-		resolved, err = resolveURI(href, p.baseURI)
+		resolved, err = resolveURI(href, incBase)
 		if err != nil {
 			return p.handleFallback(inc, fmt.Errorf("xi:include: cannot resolve URI %q: %w", href, err))
 		}
@@ -207,9 +212,9 @@ func (p *processor) processInclude(inc *helium.Element) error {
 	switch parse {
 	case "xml":
 		if xptrExpr != "" {
-			err = p.includeXMLWithXPointer(inc, resolved, xptrExpr)
+			err = p.includeXMLWithXPointer(inc, resolved, xptrExpr, incBase)
 		} else {
-			err = p.includeXML(inc, resolved)
+			err = p.includeXML(inc, resolved, incBase)
 		}
 	case "text":
 		if resolved == "" {
@@ -227,7 +232,7 @@ func (p *processor) processInclude(inc *helium.Element) error {
 	return nil
 }
 
-func (p *processor) includeXML(inc *helium.Element, uri string) error {
+func (p *processor) includeXML(inc *helium.Element, uri string, incBase string) error {
 	doc, err := p.loadXMLDoc(uri)
 	if err != nil {
 		return err
@@ -250,9 +255,10 @@ func (p *processor) includeXML(inc *helium.Element, uri string) error {
 
 	// Set xml:base on included content (if not suppressed)
 	if !p.noBaseFixup {
+		fixupSource, fixupTarget := p.computeFixupBases(inc, uri)
 		for _, n := range nodes {
 			if elem, ok := n.(*helium.Element); ok {
-				computeAndSetBaseURI(elem, uri, p.baseURI)
+				computeAndSetBaseURI(elem, fixupSource, fixupTarget)
 			}
 		}
 	}
@@ -284,7 +290,7 @@ func (p *processor) includeXML(inc *helium.Element, uri string) error {
 	return nil
 }
 
-func (p *processor) includeXMLWithXPointer(inc *helium.Element, uri string, xptrExpr string) error {
+func (p *processor) includeXMLWithXPointer(inc *helium.Element, uri string, xptrExpr string, incBase string) error {
 	var doc *helium.Document
 	var err error
 
@@ -319,6 +325,18 @@ func (p *processor) includeXMLWithXPointer(inc *helium.Element, uri string, xptr
 		return nil
 	}
 
+	// Compute effective base for each source node BEFORE copying
+	// (copies lose their ancestor chain).
+	var srcBases []string
+	var fixupTargetBase string
+	if !p.noBaseFixup && uri != "" {
+		fixupSource, fixupTarget := p.computeFixupBases(inc, uri)
+		fixupTargetBase = fixupTarget
+		for _, n := range nodes {
+			srcBases = append(srcBases, effectiveBaseURI(n, fixupSource))
+		}
+	}
+
 	// Deep-copy result nodes into the target document
 	targetDoc := inc.OwnerDocument()
 	var copies []helium.Node
@@ -332,9 +350,9 @@ func (p *processor) includeXMLWithXPointer(inc *helium.Element, uri string, xptr
 
 	// Apply xml:base fixup (only for cross-document includes)
 	if !p.noBaseFixup && uri != "" {
-		for _, n := range copies {
+		for i, n := range copies {
 			if elem, ok := n.(*helium.Element); ok {
-				computeAndSetBaseURI(elem, uri, p.baseURI)
+				computeBaseForIncludedNode(elem, srcBases[i], fixupTargetBase)
 			}
 		}
 	}
@@ -427,6 +445,11 @@ func (p *processor) includeText(inc *helium.Element, uri string) error {
 			}
 			data = decoded
 		}
+	}
+
+	// Validate that text contains only valid XML characters
+	if err := validateXMLChars(data); err != nil {
+		return fmt.Errorf("xi:include: %s contains invalid char", uri)
 	}
 
 	doc := inc.OwnerDocument()
@@ -639,6 +662,7 @@ func getAttr(elem *helium.Element, name string) string {
 	return ""
 }
 
+
 func resolveURI(href, base string) (string, error) {
 	hrefURL, err := url.Parse(href)
 	if err != nil {
@@ -673,6 +697,7 @@ func resolveURI(href, base string) (string, error) {
 
 // computeAndSetBaseURI computes the relative URI of the included resource
 // against the target document's base, and sets xml:base only when needed.
+// Used for whole-document XML inclusion (includeXML).
 func computeAndSetBaseURI(elem *helium.Element, includedURI, targetBase string) {
 	// If the included element already has xml:base set, leave it alone
 	for _, a := range elem.Attributes() {
@@ -688,6 +713,43 @@ func computeAndSetBaseURI(elem *helium.Element, includedURI, targetBase string) 
 	}
 
 	_ = elem.SetAttribute("xml:base", base)
+}
+
+// computeBaseForIncludedNode sets xml:base on a node that was included via
+// XPointer. srcEffectiveBase is the absolute effective base of the source
+// node (computed from its ancestor xml:base chain). targetEffectiveBase is
+// the effective base at the xi:include point in the target document.
+func computeBaseForIncludedNode(elem *helium.Element, srcEffectiveBase, targetEffectiveBase string) {
+	// Check if this element has an existing xml:base attribute
+	var existingBase string
+	for _, a := range elem.Attributes() {
+		if a.Name() == "xml:base" {
+			existingBase = a.Value()
+			break
+		}
+	}
+
+	if existingBase != "" {
+		// Element has xml:base in the source. If absolute, keep it.
+		if u, err := url.Parse(existingBase); err == nil && u.IsAbs() {
+			return
+		}
+		// The element's xml:base was relative to the source context.
+		// srcEffectiveBase already incorporates this element's xml:base,
+		// so relativize it against the target's effective base.
+		newBase := relativeURI(srcEffectiveBase, targetEffectiveBase)
+		if newBase == "" {
+			return
+		}
+		_ = elem.SetAttribute("xml:base", newBase)
+	} else {
+		// No xml:base — set one relative to the target's effective base.
+		newBase := relativeURI(srcEffectiveBase, targetEffectiveBase)
+		if newBase == "" {
+			return
+		}
+		_ = elem.SetAttribute("xml:base", newBase)
+	}
 }
 
 // relativeURI attempts to compute a relative URI of target against base.
@@ -787,6 +849,147 @@ func fixupNamespaceDecls(n helium.Node) {
 	for c := elem.FirstChild(); c != nil; c = c.NextSibling() {
 		fixupNamespaceDecls(c)
 	}
+}
+
+// validateXMLChars checks that data contains only valid XML characters.
+// Valid XML chars: #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
+func validateXMLChars(data []byte) error {
+	for i := 0; i < len(data); {
+		r, size := utf8.DecodeRune(data[i:])
+		if r == utf8.RuneError && size <= 1 {
+			return fmt.Errorf("invalid byte at offset %d", i)
+		}
+		if !isValidXMLChar(r) {
+			return fmt.Errorf("invalid XML character U+%04X at offset %d", r, i)
+		}
+		i += size
+	}
+	return nil
+}
+
+func isValidXMLChar(r rune) bool {
+	return r == 0x9 || r == 0xA || r == 0xD ||
+		(r >= 0x20 && r <= 0xD7FF) ||
+		(r >= 0xE000 && r <= 0xFFFD) ||
+		(r >= 0x10000 && r <= 0x10FFFF)
+}
+
+// effectiveBaseURI computes the effective base URI of a node by walking
+// ancestor xml:base attributes. Per RFC 3986 / XML Base, each xml:base
+// is resolved against the parent's effective base, starting from the document URI.
+func effectiveBaseURI(node helium.Node, docURI string) string {
+	// Collect xml:base values from ancestors (leaf-to-root order)
+	var bases []string
+	for n := node; n != nil; n = n.Parent() {
+		if elem, ok := n.(*helium.Element); ok {
+			for _, a := range elem.Attributes() {
+				if a.Name() == "xml:base" {
+					bases = append(bases, a.Value())
+					break
+				}
+			}
+		}
+	}
+	if len(bases) == 0 {
+		return docURI
+	}
+
+	// Apply xml:base values from root to leaf
+	result := docURI
+	for i := len(bases) - 1; i >= 0; i-- {
+		result = resolveBase(result, bases[i])
+	}
+	return result
+}
+
+// resolveBase resolves an xml:base value against a current base URI using
+// RFC 3986 URI resolution semantics. Unlike filepath.Join, ".." segments
+// cannot traverse above the URI root.
+func resolveBase(currentBase, xmlBase string) string {
+	xmlBaseURL, err := url.Parse(xmlBase)
+	if err != nil {
+		return xmlBase
+	}
+	// Absolute URI replaces entirely
+	if xmlBaseURL.IsAbs() {
+		return xmlBase
+	}
+
+	if currentBase == "" {
+		return xmlBase
+	}
+
+	baseURL, err := url.Parse(currentBase)
+	if err != nil {
+		return xmlBase
+	}
+
+	// If the base already has a real scheme (not file), use standard resolution.
+	if baseURL.Scheme != "" && baseURL.Scheme != "file" {
+		return baseURL.ResolveReference(xmlBaseURL).String()
+	}
+
+	// For file-like paths (no scheme), use URL resolution with a synthetic
+	// absolute prefix so that ".." segments are properly bounded by the
+	// URI root, matching RFC 3986 semantics.
+	const syntheticPrefix = "synthetic://h/"
+	syntheticBase := syntheticPrefix + currentBase
+	absBase, err := url.Parse(syntheticBase)
+	if err != nil {
+		return filepath.Join(filepath.Dir(currentBase), xmlBase)
+	}
+	resolved := absBase.ResolveReference(xmlBaseURL)
+	result := strings.TrimPrefix(resolved.String(), syntheticPrefix)
+	return result
+}
+
+// commonAncestorDir returns the longest common directory prefix of two paths.
+func commonAncestorDir(a, b string) string {
+	aDir := filepath.Dir(filepath.Clean(a))
+	bDir := filepath.Dir(filepath.Clean(b))
+	aParts := strings.Split(aDir, string(filepath.Separator))
+	bParts := strings.Split(bDir, string(filepath.Separator))
+
+	n := len(aParts)
+	if len(bParts) < n {
+		n = len(bParts)
+	}
+
+	common := 0
+	for i := 0; i < n; i++ {
+		if aParts[i] != bParts[i] {
+			break
+		}
+		common = i + 1
+	}
+
+	if common == 0 {
+		return "."
+	}
+
+	return strings.Join(aParts[:common], string(filepath.Separator))
+}
+
+// computeFixupBases computes relative URI bases for xml:base fixup.
+// When both the source and target document URIs are absolute paths,
+// they are converted to relative paths against their common ancestor
+// directory. This ensures that ".." traversal in xml:base attributes
+// is bounded at the logical root, matching RFC 3986 URI resolution.
+func (p *processor) computeFixupBases(inc *helium.Element, sourceURI string) (string, string) {
+	relSource := sourceURI
+	relTarget := p.baseURI
+
+	if filepath.IsAbs(sourceURI) && filepath.IsAbs(p.baseURI) {
+		root := commonAncestorDir(sourceURI, p.baseURI)
+		if rel, err := filepath.Rel(root, sourceURI); err == nil {
+			relSource = rel
+		}
+		if rel, err := filepath.Rel(root, p.baseURI); err == nil {
+			relTarget = rel
+		}
+	}
+
+	return relSource, effectiveBaseURI(inc, relTarget)
 }
 
 // fileResolver resolves URIs by reading from the filesystem.

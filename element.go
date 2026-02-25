@@ -105,7 +105,25 @@ func (n *Element) SetAttribute(name, value string) error {
 	var last *Attribute
 	for ; p != nil; p = p.NextAttribute() {
 		if p.Name() == name {
-			return ErrDuplicateAttribute
+			// Replace existing attribute in-place: splice new attr
+			// into the same position in the linked list.
+			attr.SetPrevSibling(p.PrevSibling())
+			attr.SetNextSibling(p.NextSibling())
+			attr.SetParent(n)
+			if prev := p.PrevSibling(); prev != nil {
+				prev.SetNextSibling(attr)
+			}
+			if next := p.NextSibling(); next != nil {
+				next.SetPrevSibling(attr)
+			}
+			if n.properties == p {
+				n.properties = attr
+			}
+			// Detach old attribute
+			p.SetParent(nil)
+			p.SetPrevSibling(nil)
+			p.SetNextSibling(nil)
+			return nil
 		}
 
 		last = p
