@@ -584,10 +584,7 @@ func TestLibxml2XIncludeGolden(t *testing.T) {
 
 	// Skip files that have issues beyond XPointer support
 	skip := map[string]string{
-		"base.xml":         "requires xml:base ancestor resolution for href",
-		"nodes3.xml":       "2003 namespace with fragment in href - expected error",
-		"issue733.xml":     "requires external DTD loading in included documents",
-		"invalid_char.xml": "requires invalid char handling",
+		"issue733.xml": "requires external DTD loading in included documents",
 	}
 
 	entries, err := os.ReadDir(docsDir)
@@ -606,9 +603,18 @@ func TestLibxml2XIncludeGolden(t *testing.T) {
 			continue
 		}
 
-		// Check that a corresponding result file exists
+		// Check for result file (success case) or .err file (error case)
 		resultFile := filepath.Join(resultDir, name)
-		if _, statErr := os.Stat(resultFile); os.IsNotExist(statErr) {
+		errFile := filepath.Join(resultDir, name+".err")
+		hasResult := false
+		hasErr := false
+		if _, statErr := os.Stat(resultFile); statErr == nil {
+			hasResult = true
+		}
+		if _, statErr := os.Stat(errFile); statErr == nil {
+			hasErr = true
+		}
+		if !hasResult && !hasErr {
 			continue
 		}
 
@@ -620,19 +626,26 @@ func TestLibxml2XIncludeGolden(t *testing.T) {
 			doc, err := helium.Parse(data)
 			require.NoError(t, err, "parsing %s", name)
 
-			_, err = xinclude.Process(doc,
+			_, procErr := xinclude.Process(doc,
 				xinclude.WithNoXIncludeNodes(),
 				xinclude.WithBaseURI(docPath),
 			)
-			require.NoError(t, err, "processing %s", name)
 
-			got, err := doc.XMLString()
-			require.NoError(t, err)
+			if hasResult {
+				// Success case: compare output against expected result
+				require.NoError(t, procErr, "processing %s", name)
 
-			expected, err := os.ReadFile(resultFile)
-			require.NoError(t, err)
+				got, err := doc.XMLString()
+				require.NoError(t, err)
 
-			require.Equal(t, string(expected), got, "output mismatch for %s", name)
+				expected, err := os.ReadFile(resultFile)
+				require.NoError(t, err)
+
+				require.Equal(t, string(expected), got, "output mismatch for %s", name)
+			} else {
+				// Error case: XInclude processing should have returned an error
+				require.Error(t, procErr, "expected error processing %s", name)
+			}
 		})
 	}
 }
