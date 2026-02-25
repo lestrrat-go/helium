@@ -362,15 +362,16 @@ func fnSubstring(ctx *evalContext, args []Expr) (*Result, error) {
 
 func fnStringLength(ctx *evalContext, args []Expr) (*Result, error) {
 	var s string
-	if len(args) == 0 {
+	switch len(args) {
+	case 0:
 		s = stringValue(ctx.node)
-	} else if len(args) == 1 {
+	case 1:
 		var err error
 		s, err = evalToString(ctx, args[0])
 		if err != nil {
 			return nil, err
 		}
-	} else {
+	default:
 		return nil, fmt.Errorf("string-length() takes 0 or 1 arguments")
 	}
 	return &Result{Type: NumberResult, Number: float64(len([]rune(s)))}, nil
@@ -378,15 +379,16 @@ func fnStringLength(ctx *evalContext, args []Expr) (*Result, error) {
 
 func fnNormalizeSpace(ctx *evalContext, args []Expr) (*Result, error) {
 	var s string
-	if len(args) == 0 {
+	switch len(args) {
+	case 0:
 		s = stringValue(ctx.node)
-	} else if len(args) == 1 {
+	case 1:
 		var err error
 		s, err = evalToString(ctx, args[0])
 		if err != nil {
 			return nil, err
 		}
-	} else {
+	default:
 		return nil, fmt.Errorf("normalize-space() takes 0 or 1 arguments")
 	}
 

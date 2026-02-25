@@ -125,14 +125,15 @@ func (l *Lexer) tokenize() error {
 			}
 		case r == '.':
 			l.advance(1)
-			if l.pos < len(l.input) && l.input[l.pos] == '.' {
+			switch {
+			case l.pos < len(l.input) && l.input[l.pos] == '.':
 				l.emit(TokenDotDot, "..")
 				l.advance(1)
-			} else if l.pos < len(l.input) && l.input[l.pos] >= '0' && l.input[l.pos] <= '9' {
+			case l.pos < len(l.input) && l.input[l.pos] >= '0' && l.input[l.pos] <= '9':
 				// .5 style number
 				l.pos-- // back to the dot
 				l.scanNumber()
-			} else {
+			default:
 				l.emit(TokenDot, ".")
 			}
 		case r == '-':

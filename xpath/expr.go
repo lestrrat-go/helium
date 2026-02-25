@@ -8,6 +8,7 @@ type Expr interface {
 // AxisType identifies one of the 13 XPath axes.
 type AxisType int
 
+// AxisChild and the other AxisType constants identify the thirteen XPath axes.
 const (
 	AxisChild AxisType = iota
 	AxisDescendant
@@ -66,6 +67,7 @@ type NodeTest interface {
 // NodeTestType identifies built-in node test functions.
 type NodeTestType int
 
+// NodeTestNode and the other NodeTestType constants identify built-in XPath node test functions.
 const (
 	NodeTestNode NodeTestType = iota // node()
 	NodeTestText                     // text()
