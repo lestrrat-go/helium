@@ -3,6 +3,7 @@ package helium
 import (
 	"bytes"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,14 @@ import (
 	"github.com/lestrrat-go/pdebug"
 	"github.com/lestrrat-go/strcursor"
 )
+
+// fileParseInput wraps an os.File as a sax.ParseInput.
+type fileParseInput struct {
+	io.ReadCloser
+	uri string
+}
+
+func (f *fileParseInput) URI() string { return f.uri }
 
 type TreeBuilder struct {
 }
@@ -302,8 +311,18 @@ func (t *TreeBuilder) ExternalSubset(ctxif sax.Context, name, eid, uri string) e
 
 	ctx := ctxif.(*parserCtx)
 
-	// Only load external subset if DTD loading is requested and URI is present
-	if !ctx.loadsubset.IsSet(DetectIDs) || uri == "" {
+	if !ctx.loadsubset.IsSet(DetectIDs) {
+		return nil
+	}
+
+	// Try catalog resolution first.
+	if ctx.catalog != nil {
+		if catalogURI := ctx.catalog.Resolve(eid, uri); catalogURI != "" {
+			uri = catalogURI
+		}
+	}
+
+	if uri == "" {
 		return nil
 	}
 
@@ -593,8 +612,18 @@ func (t *TreeBuilder) Reference(ctxif sax.Context, name string) error {
 
 func (t *TreeBuilder) ResolveEntity(ctxif sax.Context, publicID string, systemID string) (sax.ParseInput, error) {
 	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.ResolveEntity '%s'", publicID, systemID)
+		g := pdebug.IPrintf("START tree.ResolveEntity '%s' '%s'", publicID, systemID)
 		defer g.IRelease("END tree.ResolveEntity")
+	}
+
+	ctx := ctxif.(*parserCtx)
+	if ctx.catalog != nil {
+		if resolved := ctx.catalog.Resolve(publicID, systemID); resolved != "" {
+			f, err := os.Open(resolved)
+			if err == nil {
+				return &fileParseInput{ReadCloser: f, uri: resolved}, nil
+			}
+		}
 	}
 
 	return nil, sax.ErrHandlerUnspecified

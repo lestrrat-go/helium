@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/encoding"
+	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 	"github.com/lestrrat-go/strcursor"
@@ -85,8 +86,9 @@ type parserCtx struct {
 	depth             int
 	loadsubset        LoadSubsetOption
 	charBufferSize    int
-	baseURI           string   // document base URI for resolving external references
-	elem              *Element // current context element
+	baseURI           string             // document base URI for resolving external references
+	catalog           icatalog.Resolver // XML catalog for entity resolution
+	elem              *Element         // current context element
 
 	nsTab    nsStack
 	nsNrTab  []int // number of ns bindings pushed per element (parallel to nodeTab)
@@ -319,6 +321,7 @@ func (ctx *parserCtx) init(p *Parser, in io.Reader) error {
 		ctx.sax = p.sax
 		ctx.charBufferSize = p.charBufferSize
 		ctx.options = p.options
+		ctx.catalog = p.catalog
 		if ctx.options.IsSet(ParseNoBlanks) {
 			ctx.keepBlanks = false
 		}
