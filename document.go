@@ -233,10 +233,29 @@ func (d *Document) CreateInternalSubset(name, externalID, systemID string) (*DTD
 	cur.parent = d
 	cur.doc = d
 
-	// there's an elaborate code in libxml2 to insert the node in
-	// the correct location...
-	if err := d.AddChild(cur); err != nil {
-		return nil, err
+	// Insert before the root element (matching libxml2's xmlCreateIntSubset).
+	// If no children exist yet, just append.
+	var root Node
+	for c := d.firstChild; c != nil; c = c.NextSibling() {
+		if c.Type() == ElementNode {
+			root = c
+			break
+		}
+	}
+	if root == nil {
+		if err := d.AddChild(cur); err != nil {
+			return nil, err
+		}
+	} else {
+		// Insert cur before root.
+		cur.SetNextSibling(root)
+		if prev := root.PrevSibling(); prev != nil {
+			prev.SetNextSibling(cur)
+			cur.SetPrevSibling(prev)
+		} else {
+			d.setFirstChild(cur)
+		}
+		root.SetPrevSibling(cur)
 	}
 
 	return cur, nil

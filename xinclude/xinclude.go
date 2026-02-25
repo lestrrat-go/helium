@@ -238,6 +238,8 @@ func (p *processor) includeXML(inc *helium.Element, uri string, incBase string) 
 		return err
 	}
 
+	propagateDTD(doc, inc.OwnerDocument())
+
 	// Collect top-level children from included document, skipping DTD nodes
 	var nodes []helium.Node
 	for c := doc.FirstChild(); c != nil; c = c.NextSibling() {
@@ -312,6 +314,8 @@ func (p *processor) includeXMLWithXPointer(inc *helium.Element, uri string, xptr
 			return err
 		}
 	}
+
+	propagateDTD(doc, inc.OwnerDocument())
 
 	// Evaluate XPointer expression against the document
 	nodes, err := xpointer.Evaluate(doc, xptrExpr)
@@ -388,6 +392,21 @@ func (p *processor) includeXMLWithXPointer(inc *helium.Element, uri string, xptr
 	p.baseURI = savedBase
 
 	return nil
+}
+
+// propagateDTD creates a minimal internal subset on the target document
+// when the included document has one and the target does not. This matches
+// libxml2's behavior of preserving DOCTYPE across XInclude boundaries.
+func propagateDTD(src, dst *helium.Document) {
+	if src.IntSubset() == nil || dst.IntSubset() != nil {
+		return
+	}
+	for c := dst.FirstChild(); c != nil; c = c.NextSibling() {
+		if c.Type() == helium.ElementNode {
+			dst.CreateInternalSubset(c.(*helium.Element).LocalName(), "", "")
+			return
+		}
+	}
 }
 
 func (p *processor) loadXMLDoc(uri string) (*helium.Document, error) {

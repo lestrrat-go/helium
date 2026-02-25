@@ -231,3 +231,27 @@ for result in "$SOURCE"/result/schemas/*; do
     schema_result=$((schema_result + 1))
 done
 echo "Copied $schema_result XML Schema result files into $SCHEMA_DEST/result"
+
+# Copy XML Catalog test files
+# Catalogs reference each other via relative paths (nextCatalog, delegate*)
+# so all XML/script/SGML files must stay in a flat directory together.
+CAT_DEST="$DEST/catalogs"
+mkdir -p "$CAT_DEST" "$CAT_DEST/result"
+
+# test/ — catalog XML, script, and SGML files
+cat_test=0
+for input in "$SOURCE"/test/catalogs/*; do
+    [ -f "$input" ] || continue
+    cp "$input" "$CAT_DEST/"
+    cat_test=$((cat_test + 1))
+done
+echo "Copied $cat_test catalog test files into $CAT_DEST"
+
+# result/ — expected resolution output (golden files)
+cat_result=0
+for result in "$SOURCE"/result/catalogs/*; do
+    [ -f "$result" ] || continue
+    cp "$result" "$CAT_DEST/result/"
+    cat_result=$((cat_result + 1))
+done
+echo "Copied $cat_result catalog result files into $CAT_DEST/result"

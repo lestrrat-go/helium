@@ -3,6 +3,7 @@ package helium
 import (
 	"bytes"
 
+	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 )
@@ -12,6 +13,7 @@ type Parser struct {
 	charBufferSize int
 	options        ParseOption
 	baseURI        string
+	catalog        icatalog.Resolver
 }
 
 func Parse(b []byte) (*Document, error) {
@@ -83,4 +85,11 @@ func (p *Parser) SetCharBufferSize(size int) {
 // references such as external DTD system identifiers.
 func (p *Parser) SetBaseURI(uri string) {
 	p.baseURI = uri
+}
+
+// SetCatalog sets an XML Catalog for resolving external entity identifiers
+// (public/system IDs) during parsing. When set, the parser consults the
+// catalog before attempting to load external DTDs and entities.
+func (p *Parser) SetCatalog(c icatalog.Resolver) {
+	p.catalog = c
 }
