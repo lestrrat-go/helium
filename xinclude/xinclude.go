@@ -403,7 +403,9 @@ func propagateDTD(src, dst *helium.Document) {
 	}
 	for c := dst.FirstChild(); c != nil; c = c.NextSibling() {
 		if c.Type() == helium.ElementNode {
-			dst.CreateInternalSubset(c.(*helium.Element).LocalName(), "", "")
+			if _, err := dst.CreateInternalSubset(c.(*helium.Element).LocalName(), "", ""); err != nil {
+				return
+			}
 			return
 		}
 	}
