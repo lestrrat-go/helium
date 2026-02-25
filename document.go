@@ -565,6 +565,42 @@ func (d *Document) CreateCharRef(name string) (*EntityRef, error) {
 	return n, nil
 }
 
+// GetElementByID returns the first element in the document whose ID matches
+// the given value. It checks xml:id attributes first, then falls back to
+// DTD-declared ID attributes.
+func (d *Document) GetElementByID(id string) *Element {
+	var found *Element
+	_ = Walk(d, func(n Node) error {
+		if n.Type() != ElementNode {
+			return nil
+		}
+		elem := n.(*Element)
+		for _, a := range elem.Attributes() {
+			// Check xml:id
+			if a.Name() == "xml:id" && a.Value() == id {
+				found = elem
+				return errors.New("found")
+			}
+		}
+		// Check DTD-declared ID attributes
+		if dtd := d.intSubset; dtd != nil {
+			for _, adecl := range dtd.AttributesForElement(elem.LocalName()) {
+				if adecl.AType() != AttrID {
+					continue
+				}
+				for _, a := range elem.Attributes() {
+					if a.LocalName() == adecl.LocalName() && a.Value() == id {
+						found = elem
+						return errors.New("found")
+					}
+				}
+			}
+		}
+		return nil
+	})
+	return found
+}
+
 func (d *Document) AddEntity(name string, typ EntityType, externalID, systemID, content string) (*Entity, error) {
 	if d.intSubset == nil {
 		return nil, errors.New("document without internal subset")
