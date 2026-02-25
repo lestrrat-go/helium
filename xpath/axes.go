@@ -1,3 +1,5 @@
+// Package xpath implements XPath 1.0 expression parsing and evaluation
+// against helium XML document trees.
 package xpath
 
 import (
@@ -68,7 +70,7 @@ func collectDescendants(node helium.Node, result *[]helium.Node) {
 }
 
 func axisDescendantOrSelf(node helium.Node) []helium.Node {
-	var result []helium.Node
+	result := make([]helium.Node, 0, 1)
 	result = append(result, node)
 	collectDescendants(node, &result)
 	return result
@@ -179,11 +181,10 @@ func axisNamespace(node helium.Node) []helium.Node {
 		ancestors = append(ancestors, cur)
 	}
 
-	// Walk from outermost to innermost to collect in-scope namespaces.
-	// Inner declarations override outer ones.
+	// First pass: determine which prefixes are in scope.
+	// Walk from outermost to innermost so inner declarations override outer ones.
 	seen := map[string]bool{}
-	// First pass: determine which prefixes are in scope (inner wins)
-	for i := 0; i < len(ancestors); i++ {
+	for i := len(ancestors) - 1; i >= 0; i-- {
 		nser, ok := ancestors[i].(interface{ Namespaces() []*helium.Namespace })
 		if !ok {
 			continue

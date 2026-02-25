@@ -283,8 +283,7 @@ func (p *Parser) parsePrimaryExpr() (Expr, error) {
 		v, err := strconv.ParseFloat(tok.Value, 64)
 		if err != nil {
 			// Accept range errors (overflow → ±Inf, underflow → 0)
-			var numErr *strconv.NumError
-			if !errors.As(err, &numErr) || numErr.Err != strconv.ErrRange {
+			if !errors.Is(err, strconv.ErrRange) {
 				return nil, fmt.Errorf("invalid number %q: %w", tok.Value, err)
 			}
 		}
@@ -479,7 +478,7 @@ func (p *Parser) parseStep() (Step, error) {
 }
 
 // parseNodeTest → NameTest | NodeType '(' ')' | 'processing-instruction' '(' Literal ')'
-func (p *Parser) parseNodeTest(axis AxisType) (NodeTest, error) {
+func (p *Parser) parseNodeTest(_ AxisType) (NodeTest, error) {
 	tok := p.lexer.Peek()
 
 	// * wildcard

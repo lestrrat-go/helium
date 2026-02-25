@@ -121,12 +121,21 @@ func deduplicateNodes(nodes []helium.Node) []helium.Node {
 		return nodes
 	}
 	seen := make(map[helium.Node]bool, len(nodes))
+	nsKeys := make(map[nsNodeKey]bool)
 	result := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
-		if !seen[n] {
-			seen[n] = true
-			result = append(result, n)
+		if seen[n] {
+			continue
 		}
+		if n.Type() == helium.NamespaceNode {
+			key := nsNodeKey{parent: n.Parent(), prefix: n.Name()}
+			if nsKeys[key] {
+				continue
+			}
+			nsKeys[key] = true
+		}
+		seen[n] = true
+		result = append(result, n)
 	}
 	sort.SliceStable(result, func(i, j int) bool {
 		return documentPosition(result[i]) < documentPosition(result[j])
@@ -756,22 +765,42 @@ func numberToString(f float64) string {
 	return s
 }
 
+// nsNodeKey identifies a namespace node by its parent element and prefix.
+// NamespaceNodeWrapper objects are created fresh each time the namespace axis
+// is traversed, so pointer-based identity fails for deduplication. We use
+// value-based identity (parent pointer + prefix string) instead.
+type nsNodeKey struct {
+	parent helium.Node
+	prefix string
+}
+
 // mergeNodeSets merges two node sets, deduplicating by identity,
 // and sorting in document order.
 func mergeNodeSets(a, b []helium.Node) []helium.Node {
 	seen := make(map[helium.Node]bool, len(a)+len(b))
+	nsKeys := make(map[nsNodeKey]bool)
 	var result []helium.Node
-	for _, n := range a {
-		if !seen[n] {
-			seen[n] = true
-			result = append(result, n)
+
+	addNode := func(n helium.Node) {
+		if seen[n] {
+			return
 		}
+		if n.Type() == helium.NamespaceNode {
+			key := nsNodeKey{parent: n.Parent(), prefix: n.Name()}
+			if nsKeys[key] {
+				return
+			}
+			nsKeys[key] = true
+		}
+		seen[n] = true
+		result = append(result, n)
+	}
+
+	for _, n := range a {
+		addNode(n)
 	}
 	for _, n := range b {
-		if !seen[n] {
-			seen[n] = true
-			result = append(result, n)
-		}
+		addNode(n)
 	}
 	sort.SliceStable(result, func(i, j int) bool {
 		return documentPosition(result[i]) < documentPosition(result[j])
@@ -783,6 +812,16 @@ func mergeNodeSets(a, b []helium.Node) []helium.Node {
 // performing a pre-order walk from the root. This is O(n) per call
 // but correct for all tree shapes.
 func documentPosition(n helium.Node) int {
+	// Namespace nodes are not in the document tree. Position them
+	// right after their parent element so they sort correctly relative
+	// to other node types.
+	if n.Type() == helium.NamespaceNode {
+		parent := n.Parent()
+		if parent == nil {
+			return 0
+		}
+		return documentPosition(parent)
+	}
 	root := documentRoot(n)
 	pos := 0
 	found := -1

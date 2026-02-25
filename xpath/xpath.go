@@ -12,6 +12,8 @@ var ErrNotNodeSet = errors.New("xpath: result is not a node-set")
 // ResultType identifies the type of an XPath evaluation result.
 type ResultType int
 
+// NodeSetResult, BooleanResult, NumberResult, and StringResult identify the
+// four possible XPath result types.
 const (
 	NodeSetResult ResultType = iota
 	BooleanResult
