@@ -1,11 +1,15 @@
 package helium
 
 import (
+	"bytes"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
+	"github.com/lestrrat-go/strcursor"
 )
 
 type TreeBuilder struct {
@@ -291,6 +295,76 @@ func (t *TreeBuilder) InternalSubset(ctxif sax.Context, name, eid, uri string) e
 }
 
 func (t *TreeBuilder) ExternalSubset(ctxif sax.Context, name, eid, uri string) error {
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START tree.ExternalSubset %s,%s,%s", name, eid, uri)
+		defer g.IRelease("END tree.ExternalSubset")
+	}
+
+	ctx := ctxif.(*parserCtx)
+
+	// Only load external subset if DTD loading is requested and URI is present
+	if !ctx.loadsubset.IsSet(DetectIDs) || uri == "" {
+		return nil
+	}
+
+	// Resolve system URI against document's base URI
+	resolved := uri
+	if !filepath.IsAbs(uri) && ctx.baseURI != "" {
+		resolved = filepath.Join(filepath.Dir(ctx.baseURI), uri)
+	}
+
+	data, err := os.ReadFile(resolved)
+	if err != nil {
+		// Silently ignore missing external DTDs
+		return nil
+	}
+
+	doc := ctx.doc
+
+	// Create the external subset DTD
+	dtd := newDTD()
+	dtd.name = name
+	dtd.externalID = eid
+	dtd.systemID = uri
+	dtd.doc = doc
+	doc.extSubset = dtd
+
+	// Parse markup declarations from the DTD content.
+	// Push content onto the input stack and loop until exhausted.
+	savedExternal := ctx.external
+	ctx.external = true
+
+	baseLen := ctx.inputTab.Len()
+	ctx.pushInput(strcursor.NewByteCursor(bytes.NewReader(data)))
+
+	for ctx.inputTab.Len() > baseLen {
+		top, ok := ctx.inputTab.PeekOne().(strcursor.Cursor)
+		if !ok || top.Done() {
+			break
+		}
+
+		ctx.skipBlanks()
+
+		if ctx.inputTab.Len() <= baseLen {
+			break
+		}
+		top, ok = ctx.inputTab.PeekOne().(strcursor.Cursor)
+		if !ok || top.Done() {
+			break
+		}
+
+		if err := ctx.parseMarkupDecl(); err != nil {
+			break
+		}
+	}
+
+	// Clean up: ensure our pushed input is removed
+	for ctx.inputTab.Len() > baseLen {
+		ctx.popInput()
+	}
+
+	ctx.external = savedExternal
+
 	return nil
 }
 

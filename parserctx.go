@@ -85,6 +85,7 @@ type parserCtx struct {
 	depth             int
 	loadsubset        LoadSubsetOption
 	charBufferSize    int
+	baseURI           string   // document base URI for resolving external references
 	elem              *Element // current context element
 
 	nsTab    nsStack
@@ -4367,10 +4368,10 @@ func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefi
 	}
 
 	// Check first that an attribute defined in the external subset wasn't
-	// already defined in the internal subset
-	if doc := dtd.doc; doc != nil && doc.extSubset == dtd && doc.intSubset != nil && len(doc.intSubset.attributes) == 0 {
-		if _, ok := dtd.LookupAttribute(name, prefix, elem); !ok {
-			err = fmt.Errorf("attribute %s of %s: already defined in internal subset", elem, name)
+	// already defined in the internal subset. If so, silently skip it
+	// (the internal subset declaration takes precedence per XML spec).
+	if doc := dtd.doc; doc != nil && doc.extSubset == dtd && doc.intSubset != nil && len(doc.intSubset.attributes) > 0 {
+		if _, ok := doc.intSubset.LookupAttribute(name, prefix, elem); ok {
 			return
 		}
 	}

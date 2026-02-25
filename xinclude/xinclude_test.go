@@ -583,9 +583,7 @@ func TestLibxml2XIncludeGolden(t *testing.T) {
 	}
 
 	// Skip files that have issues beyond XPointer support
-	skip := map[string]string{
-		"issue733.xml": "requires external DTD loading in included documents",
-	}
+	skip := map[string]string{}
 
 	entries, err := os.ReadDir(docsDir)
 	require.NoError(t, err)
