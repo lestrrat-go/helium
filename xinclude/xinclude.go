@@ -415,7 +415,10 @@ func (p *processor) loadXMLDoc(uri string) (*helium.Document, error) {
 		return nil, wrapErr
 	}
 
-	doc, err := helium.Parse(data)
+	parser := helium.NewParser()
+	parser.SetOption(helium.ParseDTDLoad)
+	parser.SetBaseURI(uri)
+	doc, err := parser.Parse(data)
 	if err != nil {
 		wrapErr := fmt.Errorf("xi:include: error parsing %q: %w", uri, err)
 		p.docCache[uri] = docCacheEntry{err: wrapErr}

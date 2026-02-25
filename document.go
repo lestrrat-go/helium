@@ -582,8 +582,11 @@ func (d *Document) GetElementByID(id string) *Element {
 				return errors.New("found")
 			}
 		}
-		// Check DTD-declared ID attributes
-		if dtd := d.intSubset; dtd != nil {
+		// Check DTD-declared ID attributes (internal and external subsets)
+		for _, dtd := range []*DTD{d.intSubset, d.extSubset} {
+			if dtd == nil {
+				continue
+			}
 			for _, adecl := range dtd.AttributesForElement(elem.LocalName()) {
 				if adecl.AType() != AttrID {
 					continue
