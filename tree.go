@@ -104,6 +104,8 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 		return err
 	}
 
+	e.SetLine(ctx.LineNumber())
+
 	if uri != "" {
 		if err := e.SetNamespace(prefix, uri, true); err != nil {
 			return err
