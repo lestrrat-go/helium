@@ -209,3 +209,25 @@ for result in "$SOURCE"/result/XInclude/*; do
     xinc_results=$((xinc_results + 1))
 done
 echo "Copied $xinc_results XInclude result files into $XINC_DEST/result"
+
+# Copy XML Schema test files
+SCHEMA_DEST="$DEST/schemas"
+mkdir -p "$SCHEMA_DEST/test" "$SCHEMA_DEST/result"
+
+# test/ — schema (.xsd) and instance (.xml) files
+schema_test=0
+for input in "$SOURCE"/test/schemas/*; do
+    [ -f "$input" ] || continue
+    cp "$input" "$SCHEMA_DEST/test/"
+    schema_test=$((schema_test + 1))
+done
+echo "Copied $schema_test XML Schema test files into $SCHEMA_DEST/test"
+
+# result/ — expected validation output (.err files)
+schema_result=0
+for result in "$SOURCE"/result/schemas/*; do
+    [ -f "$result" ] || continue
+    cp "$result" "$SCHEMA_DEST/result/"
+    schema_result=$((schema_result + 1))
+done
+echo "Copied $schema_result XML Schema result files into $SCHEMA_DEST/result"

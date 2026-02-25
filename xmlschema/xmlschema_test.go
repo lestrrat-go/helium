@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const testdataBase = "../testdata/libxml2/source"
+const testdataBase = "../testdata/libxml2-compat/schemas"
 
 // testCase represents a single golden-file test: one (schema, instance) pair.
 type testCase struct {
@@ -33,8 +33,8 @@ type testCase struct {
 func discoverTests(t *testing.T) []testCase {
 	t.Helper()
 
-	resultDir := filepath.Join(testdataBase, "result", "schemas")
-	schemaDir := filepath.Join(testdataBase, "test", "schemas")
+	resultDir := filepath.Join(testdataBase, "result")
+	schemaDir := filepath.Join(testdataBase, "test")
 
 	entries, err := os.ReadDir(resultDir)
 	require.NoError(t, err)
