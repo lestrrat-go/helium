@@ -10,6 +10,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/encoding"
+	"github.com/lestrrat-go/helium/xpointer"
 )
 
 const (
@@ -147,31 +148,75 @@ func (p *processor) processNode(n helium.Node) error {
 
 func (p *processor) processInclude(inc *helium.Element) error {
 	href := getAttr(inc, "href")
+	xptrExpr := getAttr(inc, "xpointer")
 	parse := getAttr(inc, "parse")
 	if parse == "" {
 		parse = "xml"
 	}
 
-	if href == "" {
+	// Extract fragment identifier from href
+	var fragment string
+	if idx := strings.IndexByte(href, '#'); idx >= 0 {
+		fragment = href[idx+1:]
+		href = href[:idx]
+	}
+
+	// 2003 namespace with fragment in href is an error per spec
+	if getNamespaceURI(inc) == xiNamespaceNew && fragment != "" {
+		return p.handleFallback(inc, fmt.Errorf("xi:include: invalid fragment identifier in URI, use the xpointer attribute"))
+	}
+
+	// Use fragment as xpointer expression if xpointer attribute is not set
+	if xptrExpr == "" && fragment != "" {
+		xptrExpr = fragment
+	}
+
+	// Neither href nor xpointer → error
+	if href == "" && xptrExpr == "" {
 		return p.handleFallback(inc, fmt.Errorf("xi:include missing href attribute"))
 	}
 
-	// Resolve URI
-	resolved, err := resolveURI(href, p.baseURI)
-	if err != nil {
-		return p.handleFallback(inc, fmt.Errorf("xi:include: cannot resolve URI %q: %w", href, err))
+	// Resolve the document URI
+	var resolved string
+	if href != "" {
+		var err error
+		resolved, err = resolveURI(href, p.baseURI)
+		if err != nil {
+			return p.handleFallback(inc, fmt.Errorf("xi:include: cannot resolve URI %q: %w", href, err))
+		}
+	} else if fragment != "" && p.baseURI != "" {
+		// href="#fragment" with base URI set → load document from base URI
+		resolved = p.baseURI
+	}
+	// else: href absent, xpointer only → same-document (resolved stays "")
+
+	// Circular inclusion check key includes xpointer expression
+	circularKey := resolved
+	if xptrExpr != "" {
+		if resolved != "" {
+			circularKey = resolved + "#" + xptrExpr
+		} else {
+			circularKey = "#" + xptrExpr
+		}
+	}
+	if p.expanding[circularKey] {
+		return fmt.Errorf("xi:include: circular inclusion detected for %q", circularKey)
 	}
 
-	// Circular inclusion check: fatal if we're already expanding this URI
-	if p.expanding[resolved] {
-		return fmt.Errorf("xi:include: circular inclusion detected for %q", resolved)
-	}
-
+	var err error
 	switch parse {
 	case "xml":
-		err = p.includeXML(inc, resolved)
+		if xptrExpr != "" {
+			err = p.includeXMLWithXPointer(inc, resolved, xptrExpr)
+		} else {
+			err = p.includeXML(inc, resolved)
+		}
 	case "text":
-		err = p.includeText(inc, resolved)
+		if resolved == "" {
+			err = fmt.Errorf("xi:include: text inclusion requires href")
+		} else {
+			err = p.includeText(inc, resolved)
+		}
 	default:
 		err = fmt.Errorf("xi:include: unsupported parse value %q", parse)
 	}
@@ -188,9 +233,12 @@ func (p *processor) includeXML(inc *helium.Element, uri string) error {
 		return err
 	}
 
-	// Collect top-level children from included document
+	// Collect top-level children from included document, skipping DTD nodes
 	var nodes []helium.Node
 	for c := doc.FirstChild(); c != nil; c = c.NextSibling() {
+		if c.Type() == helium.DTDNode {
+			continue
+		}
 		nodes = append(nodes, c)
 	}
 
@@ -231,6 +279,94 @@ func (p *processor) includeXML(inc *helium.Element, uri string) error {
 	}
 	p.depth--
 	delete(p.expanding, uri)
+	p.baseURI = savedBase
+
+	return nil
+}
+
+func (p *processor) includeXMLWithXPointer(inc *helium.Element, uri string, xptrExpr string) error {
+	var doc *helium.Document
+	var err error
+
+	if uri == "" {
+		// Same-document reference: evaluate against a fresh parse of the
+		// current document (via base URI) to avoid seeing nodes that were
+		// inserted by previous XInclude processing in this pass.
+		if p.baseURI != "" {
+			doc, err = p.loadXMLDoc(p.baseURI)
+			if err != nil {
+				return err
+			}
+		} else {
+			doc = inc.OwnerDocument()
+		}
+	} else {
+		doc, err = p.loadXMLDoc(uri)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Evaluate XPointer expression against the document
+	nodes, err := xpointer.Evaluate(doc, xptrExpr)
+	if err != nil {
+		return fmt.Errorf("xi:include: XPointer evaluation failed: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		unlinkNode(inc)
+		p.count++
+		return nil
+	}
+
+	// Deep-copy result nodes into the target document
+	targetDoc := inc.OwnerDocument()
+	var copies []helium.Node
+	for _, n := range nodes {
+		c, copyErr := xpointer.CopyNode(n, targetDoc)
+		if copyErr != nil {
+			return fmt.Errorf("xi:include: copy failed: %w", copyErr)
+		}
+		copies = append(copies, c)
+	}
+
+	// Apply xml:base fixup (only for cross-document includes)
+	if !p.noBaseFixup && uri != "" {
+		for _, n := range copies {
+			if elem, ok := n.(*helium.Element); ok {
+				computeAndSetBaseURI(elem, uri, p.baseURI)
+			}
+		}
+	}
+
+	p.replaceWithNodes(inc, copies)
+	p.count++
+
+	// Circular detection key
+	circularKey := "#" + xptrExpr
+	if uri != "" {
+		circularKey = uri + "#" + xptrExpr
+	}
+
+	// Recursively process included content for nested xi:include
+	savedBase := p.baseURI
+	if uri != "" {
+		p.baseURI = uri
+	}
+	p.expanding[circularKey] = true
+	p.depth++
+	for _, n := range copies {
+		if n.Type() == helium.ElementNode {
+			if err := p.processNode(n); err != nil {
+				p.depth--
+				delete(p.expanding, circularKey)
+				p.baseURI = savedBase
+				return err
+			}
+		}
+	}
+	p.depth--
+	delete(p.expanding, circularKey)
 	p.baseURI = savedBase
 
 	return nil
@@ -351,6 +487,13 @@ func (p *processor) processFallback(inc *helium.Element, fb *helium.Element) err
 		unlinkNode(inc)
 		p.count++
 		return nil
+	}
+
+	// Fix namespace declarations for nodes being moved out of their
+	// declaring context (the fallback element may have xmlns:* declarations
+	// that children rely on).
+	for _, n := range nodes {
+		fixupNamespaceDecls(n)
 	}
 
 	p.replaceWithNodes(inc, nodes)
@@ -558,6 +701,11 @@ func relativeURI(target, base string) string {
 		return target
 	}
 
+	// Same URI — no xml:base needed
+	if target == base {
+		return ""
+	}
+
 	targetURL, err := url.Parse(target)
 	if err != nil {
 		return target
@@ -606,6 +754,39 @@ func makeRelativePath(targetPath, basePath string) string {
 
 func newXIncludeNode(doc *helium.Document, etype helium.ElementType, name string) helium.Node {
 	return helium.NewXIncludeNode(doc, etype, name)
+}
+
+// fixupNamespaceDecls ensures that elements being moved out of their declaring
+// context carry their own namespace declarations. For each element in the subtree,
+// if it has an active namespace whose prefix is not declared in the element's own
+// nsDefs, a declaration is added.
+func fixupNamespaceDecls(n helium.Node) {
+	if n.Type() != helium.ElementNode {
+		return
+	}
+	elem := n.(*helium.Element)
+
+	// Build set of locally declared prefixes
+	declared := make(map[string]bool)
+	if nc, ok := helium.Node(elem).(helium.NamespaceContainer); ok {
+		for _, ns := range nc.Namespaces() {
+			declared[ns.Prefix()] = true
+		}
+	}
+
+	// If the element has an active namespace prefix not locally declared, add it
+	if nsr, ok := helium.Node(elem).(helium.Namespacer); ok {
+		if ns := nsr.Namespace(); ns != nil {
+			if ns.Prefix() != "" && !declared[ns.Prefix()] {
+				_ = elem.SetNamespace(ns.Prefix(), ns.URI())
+			}
+		}
+	}
+
+	// Recurse into children
+	for c := elem.FirstChild(); c != nil; c = c.NextSibling() {
+		fixupNamespaceDecls(c)
+	}
 }
 
 // fileResolver resolves URIs by reading from the filesystem.

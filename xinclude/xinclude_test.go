@@ -582,16 +582,11 @@ func TestLibxml2XIncludeGolden(t *testing.T) {
 		t.Skip("libxml2 test data not available; run testdata/libxml2/generate.sh first")
 	}
 
-	// Skip files that require XPointer or have other issues
+	// Skip files that have issues beyond XPointer support
 	skip := map[string]string{
-		"base.xml":         "requires XPointer",
-		"coalesce.xml":     "requires XPointer",
-		"docids.xml":       "requires XPointer",
-		"nodes.xml":        "requires XPointer",
-		"nodes2.xml":       "requires XPointer",
-		"nodes3.xml":       "requires XPointer",
-		"red.xml":          "requires XPointer",
-		"issue733.xml":     "requires XPointer and DTD",
+		"base.xml":         "requires xml:base ancestor resolution for href",
+		"nodes3.xml":       "2003 namespace with fragment in href - expected error",
+		"issue733.xml":     "requires external DTD loading in included documents",
 		"invalid_char.xml": "requires invalid char handling",
 	}
 
@@ -638,6 +633,79 @@ func TestLibxml2XIncludeGolden(t *testing.T) {
 			require.NoError(t, err)
 
 			require.Equal(t, string(expected), got, "output mismatch for %s", name)
+		})
+	}
+}
+
+func TestLibxml2XIncludeWithoutReader(t *testing.T) {
+	wrDir, err := filepath.Abs(filepath.Join("..", "testdata", "libxml2-compat", "xinclude", "without-reader"))
+	require.NoError(t, err)
+	resultDir, err := filepath.Abs(filepath.Join("..", "testdata", "libxml2-compat", "xinclude", "result"))
+	require.NoError(t, err)
+
+	if _, statErr := os.Stat(wrDir); os.IsNotExist(statErr) {
+		t.Skip("libxml2 without-reader test data not available")
+	}
+
+	// Tests that expect success: compare output against result file
+	successTests := []string{
+		"issue424-1.xml",
+		"issue424-2.xml",
+		"fallback7.xml",
+		"ns1.xml",
+	}
+
+	for _, name := range successTests {
+		t.Run(name, func(t *testing.T) {
+			docPath := filepath.Join(wrDir, name)
+			data, err := os.ReadFile(docPath)
+			require.NoError(t, err)
+
+			doc, err := helium.Parse(data)
+			require.NoError(t, err, "parsing %s", name)
+
+			_, err = xinclude.Process(doc,
+				xinclude.WithNoXIncludeNodes(),
+				xinclude.WithBaseURI(docPath),
+			)
+			require.NoError(t, err, "processing %s", name)
+
+			got, err := doc.XMLString()
+			require.NoError(t, err)
+
+			resultFile := filepath.Join(resultDir, name)
+			expected, err := os.ReadFile(resultFile)
+			require.NoError(t, err)
+
+			require.Equal(t, string(expected), got, "output mismatch for %s", name)
+		})
+	}
+
+	// Tests that expect errors
+	errorTests := []struct {
+		name    string
+		contain string
+	}{
+		{"loop.xml", "circular"},
+		{"max-recurse.xml", "depth"},
+	}
+
+	for _, tc := range errorTests {
+		t.Run(tc.name, func(t *testing.T) {
+			docPath := filepath.Join(wrDir, tc.name)
+			data, err := os.ReadFile(docPath)
+			require.NoError(t, err)
+
+			doc, err := helium.Parse(data)
+			require.NoError(t, err, "parsing %s", tc.name)
+
+			_, err = xinclude.Process(doc,
+				xinclude.WithNoXIncludeNodes(),
+				xinclude.WithBaseURI(docPath),
+			)
+			require.Error(t, err, "expected error for %s", tc.name)
+			require.Contains(t, err.Error(), tc.contain,
+				"error for %s should contain %q", tc.name, tc.contain)
 		})
 	}
 }
