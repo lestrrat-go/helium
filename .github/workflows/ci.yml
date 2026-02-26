@@ -42,10 +42,10 @@ jobs:
         run: |
           go test -v -race -tags debug ./...
 
-      - name: Build helium-lint command
+      - name: Build heliumlint command
         run: |
-          go build -v ./cmd/helium-lint
-          rm helium-lint
+          go build -v ./cmd/heliumlint
+          rm heliumlint
 
       - name: Check for uncommitted changes
         run: |

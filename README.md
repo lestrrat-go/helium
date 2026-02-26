@@ -29,14 +29,14 @@ func main() {
 }
 ```
 
-Using command line `helium-lint` (very under developed right now):
+Using command line `heliumlint` (very under developed right now):
 
 ```
-helium-lint xmlfile ...
+heliumlint xmlfile ...
 ```
 
 ```
-cat xmlfile | helium-lint
+cat xmlfile | heliumlint
 ```
 
 # Get it

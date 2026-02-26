@@ -21,11 +21,11 @@ func main() {
 }
 
 func showVersion() {
-	fmt.Printf("helium-lint: using helium version %s\n", helium.Version)
+	fmt.Printf("heliumlint: using helium version %s\n", helium.Version)
 }
 
 func showUsage() {
-	fmt.Printf(`Usage : helium-lint [options] XMLfiles ...
+	fmt.Printf(`Usage : heliumlint [options] XMLfiles ...
 	Parse the XML files and output the result of the parsing
 	--version : display the version of the XML library used
 `)
