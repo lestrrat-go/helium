@@ -8,9 +8,28 @@ type QName struct {
 
 // Schema represents a compiled XML Schema.
 type Schema struct {
-	targetNamespace string
-	elements        map[QName]*ElementDecl
-	types           map[QName]*TypeDef
+	targetNamespace   string
+	elemFormQualified bool // elementFormDefault="qualified"
+	attrFormQualified bool // attributeFormDefault="qualified"
+	elements          map[QName]*ElementDecl
+	types             map[QName]*TypeDef
+	groups            map[QName]*ModelGroup
+	attrGroups        map[QName][]*AttrUse
+	globalAttrs       map[QName]*AttrUse
+	substGroups       map[QName][]*ElementDecl // head QName → member element declarations
+	compileErrors     string                   // accumulated compilation error messages
+	compileWarnings   string                   // accumulated compilation warnings
+}
+
+// CompileErrors returns any schema compilation error messages
+// in libxml2-compatible format. Empty string means no errors.
+func (s *Schema) CompileErrors() string {
+	return s.compileErrors
+}
+
+// CompileWarnings returns any schema compilation warning messages.
+func (s *Schema) CompileWarnings() string {
+	return s.compileWarnings
 }
 
 // LookupElement returns the global element declaration for the given name.
@@ -54,11 +73,31 @@ const Unbounded = -1
 
 // ElementDecl is a schema element declaration.
 type ElementDecl struct {
-	Name      QName
-	Type      *TypeDef
-	MinOccurs int
-	MaxOccurs int // -1 = unbounded
+	Name              QName
+	Type              *TypeDef
+	MinOccurs         int
+	MaxOccurs         int // -1 = unbounded
+	Abstract          bool
+	SubstitutionGroup QName // QName of the substitution group head (zero value if none)
 }
+
+// DerivationKind describes how a type is derived from its base.
+type DerivationKind int
+
+const (
+	DerivationNone        DerivationKind = iota
+	DerivationExtension
+	DerivationRestriction
+)
+
+// TypeVariety describes the variety of a simple type definition.
+type TypeVariety int
+
+const (
+	TypeVarietyAtomic TypeVariety = iota
+	TypeVarietyList
+	TypeVarietyUnion
+)
 
 // TypeDef is a schema type definition.
 type TypeDef struct {
@@ -67,13 +106,32 @@ type TypeDef struct {
 	ContentModel *ModelGroup
 	BaseType     *TypeDef
 	Attributes   []*AttrUse
+	AnyAttribute *Wildcard
+	Derivation   DerivationKind
+	Facets       *FacetSet
+	Variety      TypeVariety
+	ItemType     *TypeDef   // for list types: the item type definition
+	MemberTypes  []*TypeDef // for union types: the member type definitions
+}
+
+// FacetSet holds facet constraints for a simple type restriction.
+type FacetSet struct {
+	Enumeration  []string
+	MinInclusive *string
+	MaxInclusive *string
+	TotalDigits  *int
+	Length       *int
+	MinLength    *int
+	MaxLength    *int
+	Pattern      *string
 }
 
 // AttrUse is a stub for attribute use declarations (future phases).
 type AttrUse struct {
-	Name     QName
-	TypeName QName
-	Required bool
+	Name       QName
+	TypeName   QName
+	Required   bool
+	Prohibited bool
 }
 
 // ModelGroup is a content model compositor (sequence, choice, all).
@@ -100,7 +158,20 @@ type Particle struct {
 	Term      ParticleTerm
 }
 
-// Wildcard is a stub for xs:any (future phases).
+// ProcessContentsKind describes how matching elements are validated.
+type ProcessContentsKind int
+
+const (
+	ProcessStrict ProcessContentsKind = iota
+	ProcessLax
+	ProcessSkip
+)
+
+// Wildcard represents an xs:any or xs:anyAttribute wildcard.
 type Wildcard struct {
-	Namespace string
+	// Namespace constraint: "##any", "##other", "##local",
+	// "##targetNamespace", or a space-separated list of URIs.
+	Namespace       string
+	ProcessContents ProcessContentsKind
+	TargetNS        string // schema's target namespace, for resolving ##other/##targetNamespace
 }

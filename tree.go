@@ -83,6 +83,27 @@ func (t *TreeBuilder) ProcessingInstruction(ctxif sax.Context, target, data stri
 	return nil
 }
 
+// lookupNSByPrefix walks the element and its ancestors to find a namespace
+// declaration matching the given prefix. The "xml" prefix is always
+// implicitly bound to the XML namespace.
+func lookupNSByPrefix(e *Element, prefix string) *Namespace {
+	var node Node = e
+	for node != nil {
+		if el, ok := node.(*Element); ok {
+			for _, ns := range el.Namespaces() {
+				if ns.Prefix() == prefix {
+					return ns
+				}
+			}
+		}
+		node = node.Parent()
+	}
+	if prefix == "xml" {
+		return NewNamespace("xml", XMLNamespace)
+	}
+	return nil
+}
+
 func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 	//	ctx := ctxif.(*parserCtx)
 	if pdebug.Enabled {
@@ -126,8 +147,21 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 			}
 			continue
 		}
-		if err := e.SetAttribute(attr.Name(), attr.Value()); err != nil {
-			return err
+		if p := attr.Prefix(); p != "" {
+			// Prefixed attribute — look up the namespace from the
+			// element itself or from the parent context (the element
+			// hasn't been linked to the tree yet).
+			ns := lookupNSByPrefix(e, p)
+			if ns == nil && ctx.elem != nil {
+				ns = lookupNSByPrefix(ctx.elem, p)
+			}
+			if err := e.SetAttributeNS(attr.LocalName(), attr.Value(), ns); err != nil {
+				return err
+			}
+		} else {
+			if err := e.SetAttribute(attr.Name(), attr.Value()); err != nil {
+				return err
+			}
 		}
 	}
 

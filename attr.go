@@ -130,9 +130,15 @@ func (n Attribute) Name() string {
 }
 
 func (n Attribute) Prefix() string {
+	if n.ns == nil {
+		return ""
+	}
 	return n.ns.Prefix()
 }
 
 func (n Attribute) URI() string {
+	if n.ns == nil {
+		return ""
+	}
 	return n.ns.URI()
 }

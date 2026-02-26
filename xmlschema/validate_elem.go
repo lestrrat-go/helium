@@ -16,21 +16,30 @@ func matchSequence(parent *helium.Element, mg *ModelGroup, children []childElem,
 		return tryMatchSequenceOnce(mg, children, p, schema)
 	}
 
+	hasWildcard := sequenceHasWildcard(mg)
+
 	matchOnce := func(p int) (int, error) {
 		cur := p
+		var contentErr error
 		for _, particle := range mg.Particles {
-			consumed, e := matchParticle(parent, particle, children, cur, schema, filename, out)
-			if e != nil {
-				return cur - p, e
-			}
+			consumed, e := matchParticle(parent, particle, children, cur, schema, filename, out, hasWildcard)
 			cur += consumed
+			if e != nil {
+				if consumed == 0 {
+					// Structural error — stop processing subsequent particles.
+					return cur - p, e
+				}
+				// Content error — continue but track error.
+				contentErr = e
+			}
 		}
-		return cur - p, nil
+		return cur - p, contentErr
 	}
 
 	minReps := mg.MinOccurs
 	maxReps := mg.MaxOccurs
 
+	var contentErr error
 	reps := 0
 	for maxReps == Unbounded || reps < maxReps {
 		// First try without side effects.
@@ -38,8 +47,8 @@ func matchSequence(parent *helium.Element, mg *ModelGroup, children []childElem,
 		if tryErr != nil {
 			if reps < minReps {
 				// Must succeed — run with error reporting.
-				_, e := matchOnce(pos)
-				return pos - startPos, e
+				consumed, e := matchOnce(pos)
+				return pos - startPos + consumed, e
 			}
 			break
 		}
@@ -53,13 +62,13 @@ func matchSequence(parent *helium.Element, mg *ModelGroup, children []childElem,
 		// Actually run with error reporting (for nested validation).
 		consumed, e := matchOnce(pos)
 		if e != nil {
-			return pos - startPos + consumed, e
+			contentErr = e
 		}
 		pos += consumed
 		reps++
 	}
 
-	return pos - startPos, nil
+	return pos - startPos, contentErr
 }
 
 func tryMatchSequenceOnce(mg *ModelGroup, children []childElem, pos int, schema *Schema) (int, error) {
@@ -82,11 +91,19 @@ func matchChoice(parent *helium.Element, mg *ModelGroup, children []childElem, p
 	minReps := mg.MinOccurs
 	maxReps := mg.MaxOccurs
 
+	var contentErr error
+
 	matchOnce := func(p int) (int, bool) {
+		// First find a structurally matching particle.
 		for _, particle := range mg.Particles {
 			consumed, err := tryMatchParticle(particle, children, p, schema)
 			if err == nil && consumed > 0 {
-				return consumed, true
+				// Now validate matched content with error reporting.
+				actualConsumed, actualErr := matchParticle(parent, particle, children, p, schema, filename, out, false)
+				if actualErr != nil {
+					contentErr = actualErr
+				}
+				return actualConsumed, true
 			}
 		}
 		// Try zero-length matches.
@@ -108,67 +125,67 @@ func matchChoice(parent *helium.Element, mg *ModelGroup, children []childElem, p
 		reps++
 		pos += consumed
 		if consumed == 0 {
+			// Zero-length match (e.g., optional element). If we still need more
+			// reps to meet minReps, count them all at once since they'll all be
+			// zero-length too.
+			if reps < minReps {
+				reps = minReps
+			}
 			break
 		}
 	}
 
 	if reps < minReps {
-		names := particleNames(mg.Particles)
+		names := particleNames(mg.Particles, schema)
 		msg := formatExpected("Missing child element(s).", names)
-		out.WriteString(validityError(filename, parent.Line(), parent.LocalName(), msg))
+		out.WriteString(validityError(filename, parent.Line(), elemDisplayName(parent), msg))
 		return pos - startPos, fmt.Errorf("missing")
 	}
 
-	return pos - startPos, nil
+	return pos - startPos, contentErr
 }
 
 // matchAll matches children[pos:] against an all model group.
 // Returns (consumed, error). Does NOT check for leftover children.
 func matchAll(parent *helium.Element, mg *ModelGroup, children []childElem, pos int, schema *Schema, filename string, out *strings.Builder) (int, error) {
 	seen := make([]bool, len(mg.Particles))
-	nameToIdx := make(map[string]int, len(mg.Particles))
+	nameToIdx := make(map[QName]int, len(mg.Particles))
 	for i, p := range mg.Particles {
 		if ed, ok := p.Term.(*ElementDecl); ok {
-			nameToIdx[ed.Name.Local] = i
+			nameToIdx[ed.Name] = i
+			// Also register substitution group members.
+			for _, member := range schema.substGroups[ed.Name] {
+				nameToIdx[member.Name] = i
+			}
 		}
 	}
 
 	consumed := 0
 	for pos+consumed < len(children) {
 		child := children[pos+consumed]
-		idx, ok := nameToIdx[child.name]
+		idx, ok := nameToIdx[QName{Local: child.name, NS: child.ns}]
+		if !ok {
+			// Try without namespace for unqualified declarations.
+			idx, ok = nameToIdx[QName{Local: child.name}]
+		}
 		if !ok {
 			// Unknown child in <all>.
-			var expected []string
-			for i, p := range mg.Particles {
-				if !seen[i] {
-					if ed, ok2 := p.Term.(*ElementDecl); ok2 {
-						expected = append(expected, ed.Name.Local)
-					}
-				}
-			}
+			expected := unseenParticleNames(mg.Particles, seen, schema)
 			msg := "This element is not expected."
 			if len(expected) > 0 {
 				msg = formatExpected("This element is not expected.", expected)
 			}
-			out.WriteString(validityError(filename, child.elem.Line(), child.name, msg))
+			out.WriteString(validityError(filename, child.elem.Line(), child.displayName, msg))
 			return consumed, fmt.Errorf("unexpected element")
 		}
 		if seen[idx] {
 			// Duplicate — stop matching and report error.
-			var expected []string
-			for i, p := range mg.Particles {
-				if !seen[i] {
-					if ed, ok2 := p.Term.(*ElementDecl); ok2 {
-						expected = append(expected, ed.Name.Local)
-					}
-				}
-			}
+			expected := unseenParticleNames(mg.Particles, seen, schema)
 			msg := "This element is not expected."
 			if len(expected) > 0 {
 				msg = formatExpected("This element is not expected.", expected)
 			}
-			out.WriteString(validityError(filename, child.elem.Line(), child.name, msg))
+			out.WriteString(validityError(filename, child.elem.Line(), child.displayName, msg))
 			return consumed, fmt.Errorf("duplicate")
 		}
 		seen[idx] = true
@@ -189,16 +206,9 @@ func matchAll(parent *helium.Element, mg *ModelGroup, children []childElem, pos 
 		}
 	}
 	if hasRequired {
-		var unseen []string
-		for i, p := range mg.Particles {
-			if !seen[i] {
-				if ed, ok := p.Term.(*ElementDecl); ok {
-					unseen = append(unseen, ed.Name.Local)
-				}
-			}
-		}
+		unseen := unseenParticleNames(mg.Particles, seen, schema)
 		msg := formatExpected("Missing child element(s).", unseen)
-		out.WriteString(validityError(filename, parent.Line(), parent.LocalName(), msg))
+		out.WriteString(validityError(filename, parent.Line(), elemDisplayName(parent), msg))
 		return consumed, fmt.Errorf("missing")
 	}
 
@@ -227,7 +237,7 @@ func validateContentModelTop(parent *helium.Element, mg *ModelGroup, children []
 	// Check for unconsumed children.
 	if consumed < len(children) {
 		ce := children[consumed]
-		out.WriteString(validityError(filename, ce.elem.Line(), ce.name, "This element is not expected."))
+		out.WriteString(validityError(filename, ce.elem.Line(), ce.displayName, "This element is not expected."))
 		return fmt.Errorf("unexpected element")
 	}
 
@@ -236,10 +246,10 @@ func validateContentModelTop(parent *helium.Element, mg *ModelGroup, children []
 
 // matchParticle matches a particle against children[pos:], returning how many
 // children were consumed. On failure, writes an error and returns an error.
-func matchParticle(parent *helium.Element, p *Particle, children []childElem, pos int, schema *Schema, filename string, out *strings.Builder) (int, error) {
+func matchParticle(parent *helium.Element, p *Particle, children []childElem, pos int, schema *Schema, filename string, out *strings.Builder, seqHasWildcard bool) (int, error) {
 	switch term := p.Term.(type) {
 	case *ElementDecl:
-		return matchElementParticle(parent, p, term, children, pos, schema, filename, out)
+		return matchElementParticle(parent, p, term, children, pos, schema, filename, out, seqHasWildcard)
 	case *ModelGroup:
 		switch term.Compositor {
 		case CompositorSequence:
@@ -249,14 +259,16 @@ func matchParticle(parent *helium.Element, p *Particle, children []childElem, po
 		case CompositorAll:
 			return matchAll(parent, term, children, pos, schema, filename, out)
 		}
+	case *Wildcard:
+		return matchWildcardParticle(parent, p, term, children, pos, schema, filename, out)
 	}
 	return 0, nil
 }
 
 // matchElementParticle matches an element particle.
-func matchElementParticle(parent *helium.Element, p *Particle, edecl *ElementDecl, children []childElem, pos int, schema *Schema, filename string, out *strings.Builder) (int, error) {
+func matchElementParticle(parent *helium.Element, p *Particle, edecl *ElementDecl, children []childElem, pos int, schema *Schema, filename string, out *strings.Builder, seqHasWildcard bool) (int, error) {
 	count := 0
-	for pos+count < len(children) && children[pos+count].name == edecl.Name.Local {
+	for pos+count < len(children) && elemMatchesDeclOrSubst(children[pos+count], edecl, schema) {
 		count++
 		if p.MaxOccurs != Unbounded && count >= p.MaxOccurs {
 			break
@@ -264,38 +276,62 @@ func matchElementParticle(parent *helium.Element, p *Particle, edecl *ElementDec
 	}
 
 	if count < p.MinOccurs {
-		msg := formatExpected("Missing child element(s).", []string{edecl.Name.Local})
-		out.WriteString(validityError(filename, parent.Line(), parent.LocalName(), msg))
+		expectedNames := elementExpectedNamesWithSubst(edecl, schema)
+		if pos+count < len(children) {
+			// There IS a child but it doesn't match — "This element is not expected."
+			child := children[pos+count]
+			msg := formatExpected("This element is not expected.", expectedNames)
+			out.WriteString(validityError(filename, child.elem.Line(), child.displayName, msg))
+		} else {
+			// No more children at all — "Missing child element(s)."
+			// When the sequence contains wildcards, suppress "Expected is" since the
+			// expected set is ambiguous (wildcards could have consumed the elements).
+			var msg string
+			if seqHasWildcard {
+				msg = "Missing child element(s)."
+			} else {
+				msg = formatExpected("Missing child element(s).", expectedNames)
+			}
+			out.WriteString(validityError(filename, parent.Line(), elemDisplayName(parent), msg))
+		}
 		return count, fmt.Errorf("missing")
 	}
 
 	// Validate each matched child element's own content model.
+	// Continue after value/content errors so all errors are reported.
+	// For substitution group members, use the member's type instead of the head's type.
+	// xsi:type overrides the declared type for polymorphism.
+	var contentErr error
 	for i := 0; i < count; i++ {
 		child := children[pos+i]
-		if edecl.Type != nil {
-			if err := validateElementContent(child.elem, edecl.Type, schema, filename, out); err != nil {
-				return i, err
+		td := resolveSubstType(child, edecl, schema)
+		td = resolveXsiType(child.elem, td, schema)
+		if td != nil {
+			if err := validateElementContent(child.elem, td, schema, filename, out); err != nil {
+				contentErr = err
 			}
 		}
 	}
 
-	return count, nil
+	return count, contentErr
 }
 
 // tryMatchParticle is like matchParticle but does not write errors.
 func tryMatchParticle(p *Particle, children []childElem, pos int, schema *Schema) (int, error) {
 	switch term := p.Term.(type) {
 	case *ElementDecl:
-		return tryMatchElementParticle(p, term, children, pos)
+		return tryMatchElementParticle(p, term, children, pos, schema)
 	case *ModelGroup:
 		return tryMatchModelGroup(term, children, pos, schema)
+	case *Wildcard:
+		return tryMatchWildcardParticle(p, term, children, pos, schema)
 	}
 	return 0, nil
 }
 
-func tryMatchElementParticle(p *Particle, edecl *ElementDecl, children []childElem, pos int) (int, error) {
+func tryMatchElementParticle(p *Particle, edecl *ElementDecl, children []childElem, pos int, schema *Schema) (int, error) {
 	count := 0
-	for pos+count < len(children) && children[pos+count].name == edecl.Name.Local {
+	for pos+count < len(children) && elemMatchesDeclOrSubst(children[pos+count], edecl, schema) {
 		count++
 		if p.MaxOccurs != Unbounded && count >= p.MaxOccurs {
 			break
@@ -305,6 +341,22 @@ func tryMatchElementParticle(p *Particle, edecl *ElementDecl, children []childEl
 		return 0, fmt.Errorf("insufficient")
 	}
 	return count, nil
+}
+
+// resolveSubstType returns the type to use for validating a child element
+// against a particle. If the child is a substitution group member, use its type.
+func resolveSubstType(child childElem, edecl *ElementDecl, schema *Schema) *TypeDef {
+	if matchesDeclDirect(child, edecl) {
+		return edecl.Type
+	}
+	if schema != nil {
+		for _, member := range schema.substGroups[edecl.Name] {
+			if matchesDeclDirect(child, member) {
+				return member.Type
+			}
+		}
+	}
+	return edecl.Type
 }
 
 func tryMatchModelGroup(mg *ModelGroup, children []childElem, pos int, schema *Schema) (int, error) {
@@ -343,16 +395,22 @@ func tryMatchChoice(mg *ModelGroup, children []childElem, pos int, schema *Schem
 
 func tryMatchAll(mg *ModelGroup, children []childElem, pos int, schema *Schema) (int, error) {
 	seen := make([]bool, len(mg.Particles))
-	nameToIdx := make(map[string]int, len(mg.Particles))
+	nameToIdx := make(map[QName]int, len(mg.Particles))
 	for i, p := range mg.Particles {
 		if ed, ok := p.Term.(*ElementDecl); ok {
-			nameToIdx[ed.Name.Local] = i
+			nameToIdx[ed.Name] = i
+			for _, member := range schema.substGroups[ed.Name] {
+				nameToIdx[member.Name] = i
+			}
 		}
 	}
 	consumed := 0
 	for pos+consumed < len(children) {
 		child := children[pos+consumed]
-		idx, ok := nameToIdx[child.name]
+		idx, ok := nameToIdx[QName{Local: child.name, NS: child.ns}]
+		if !ok {
+			idx, ok = nameToIdx[QName{Local: child.name}]
+		}
 		if !ok {
 			break
 		}
@@ -370,6 +428,164 @@ func tryMatchAll(mg *ModelGroup, children []childElem, pos int, schema *Schema) 
 	return consumed, nil
 }
 
+// matchWildcardParticle matches a wildcard particle against children.
+func matchWildcardParticle(parent *helium.Element, p *Particle, wc *Wildcard, children []childElem, pos int, schema *Schema, filename string, out *strings.Builder) (int, error) {
+	count := 0
+	for pos+count < len(children) {
+		child := children[pos+count]
+		if !wildcardMatches(wc, child.elem.URI()) {
+			break
+		}
+		count++
+		if p.MaxOccurs != Unbounded && count >= p.MaxOccurs {
+			break
+		}
+	}
+
+	if count < p.MinOccurs {
+		msg := fmt.Sprintf("This element is not expected. Expected is ( %s ).", wildcardExpected(wc))
+		if pos < len(children) {
+			out.WriteString(validityError(filename, children[pos].elem.Line(), children[pos].displayName, msg))
+		} else {
+			out.WriteString(validityError(filename, parent.Line(), elemDisplayName(parent), msg))
+		}
+		return count, fmt.Errorf("wildcard not matched")
+	}
+
+	return count, nil
+}
+
+// tryMatchWildcardParticle is the try version (no error reporting).
+func tryMatchWildcardParticle(p *Particle, wc *Wildcard, children []childElem, pos int, schema *Schema) (int, error) {
+	count := 0
+	for pos+count < len(children) {
+		child := children[pos+count]
+		if !wildcardMatches(wc, child.elem.URI()) {
+			break
+		}
+		count++
+		if p.MaxOccurs != Unbounded && count >= p.MaxOccurs {
+			break
+		}
+	}
+
+	if count < p.MinOccurs {
+		return 0, fmt.Errorf("wildcard not matched")
+	}
+
+	return count, nil
+}
+
+// wildcardMatches checks if an element namespace matches a wildcard constraint.
+func wildcardMatches(wc *Wildcard, elemNS string) bool {
+	ns := wc.Namespace
+	switch ns {
+	case "##any":
+		return true
+	case "##other":
+		// Matches any namespace other than the target namespace.
+		// Also does not match absent namespace (no namespace).
+		return elemNS != "" && elemNS != wc.TargetNS
+	case "##not-absent":
+		// Matches any namespace except absent (empty namespace).
+		return elemNS != ""
+	default:
+		// Space-separated list that may include ##local, ##targetNamespace, and URIs.
+		for _, part := range strings.Split(ns, " ") {
+			switch part {
+			case "##local":
+				if elemNS == "" {
+					return true
+				}
+			case "##targetNamespace":
+				if elemNS == wc.TargetNS {
+					return true
+				}
+			default:
+				if elemNS == part {
+					return true
+				}
+			}
+		}
+		return false
+	}
+}
+
+// wildcardExpected formats the expected string for wildcard error messages.
+func wildcardExpected(wc *Wildcard) string {
+	switch wc.Namespace {
+	case "##any":
+		return "##any"
+	case "##other":
+		if wc.TargetNS != "" {
+			return "##other{" + wc.TargetNS + "}*"
+		}
+		return "##other*"
+	default:
+		return wc.Namespace
+	}
+}
+
+// elemMatchesDeclOrSubst checks if a child element matches a declaration
+// directly or via substitution group. schema may be nil for basic matching.
+func elemMatchesDeclOrSubst(child childElem, edecl *ElementDecl, schema *Schema) bool {
+	if matchesDeclDirect(child, edecl) && !edecl.Abstract {
+		return true
+	}
+	// Check substitution group members.
+	if schema != nil {
+		for _, member := range schema.substGroups[edecl.Name] {
+			if matchesDeclDirect(child, member) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func matchesDeclDirect(child childElem, edecl *ElementDecl) bool {
+	if child.name != edecl.Name.Local {
+		return false
+	}
+	if edecl.Name.NS != "" {
+		return child.ns == edecl.Name.NS
+	}
+	return true
+}
+
+// elementDisplayForExpected formats an element declaration name for error messages.
+func elementDisplayForExpected(edecl *ElementDecl) string {
+	if edecl.Name.NS != "" {
+		return "{" + edecl.Name.NS + "}" + edecl.Name.Local
+	}
+	return edecl.Name.Local
+}
+
+// elementExpectedNamesWithSubst returns the list of expected element names
+// for a declaration, including substitution group members.
+// The head element is always listed first (even if abstract), followed by members.
+func elementExpectedNamesWithSubst(edecl *ElementDecl, schema *Schema) []string {
+	members := schema.substGroups[edecl.Name]
+	if len(members) == 0 {
+		return []string{elementDisplayForExpected(edecl)}
+	}
+	names := []string{elementDisplayForExpected(edecl)}
+	for _, m := range members {
+		names = append(names, elementDisplayForExpected(m))
+	}
+	return names
+}
+
+// sequenceHasWildcard returns true if any particle in the model group is a wildcard.
+func sequenceHasWildcard(mg *ModelGroup) bool {
+	for _, p := range mg.Particles {
+		if _, ok := p.Term.(*Wildcard); ok {
+			return true
+		}
+	}
+	return false
+}
+
 func formatExpected(prefix string, names []string) string {
 	if len(names) == 1 {
 		return fmt.Sprintf("%s Expected is ( %s ).", prefix, names[0])
@@ -377,11 +593,30 @@ func formatExpected(prefix string, names []string) string {
 	return fmt.Sprintf("%s Expected is one of ( %s ).", prefix, strings.Join(names, ", "))
 }
 
-func particleNames(particles []*Particle) []string {
+func unseenParticleNames(particles []*Particle, seen []bool, schema *Schema) []string {
+	var names []string
+	for i, p := range particles {
+		if seen[i] {
+			continue
+		}
+		switch term := p.Term.(type) {
+		case *ElementDecl:
+			names = append(names, elementExpectedNamesWithSubst(term, schema)...)
+		case *Wildcard:
+			names = append(names, wildcardExpected(term))
+		}
+	}
+	return names
+}
+
+func particleNames(particles []*Particle, schema *Schema) []string {
 	var names []string
 	for _, p := range particles {
-		if ed, ok := p.Term.(*ElementDecl); ok {
-			names = append(names, ed.Name.Local)
+		switch term := p.Term.(type) {
+		case *ElementDecl:
+			names = append(names, elementExpectedNamesWithSubst(term, schema)...)
+		case *Wildcard:
+			names = append(names, wildcardExpected(term))
 		}
 	}
 	return names
