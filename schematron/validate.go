@@ -1,0 +1,287 @@
+package schematron
+
+import (
+	"fmt"
+	"math"
+	"strings"
+
+	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath"
+)
+
+func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig) string {
+	filename := cfg.filename
+	var out strings.Builder
+	valid := true
+
+	xctx := &xpath.Context{
+		Namespaces: schema.namespaces,
+	}
+
+	for _, pat := range schema.patterns {
+		for _, r := range pat.rules {
+			result, err := r.contextExpr.EvaluateWithContext(doc, xctx)
+			if err != nil {
+				continue
+			}
+			if result.Type != xpath.NodeSetResult {
+				continue
+			}
+
+			for _, node := range result.NodeSet {
+				if node.Type() != helium.ElementNode {
+					continue
+				}
+
+				// Set up let variables for this rule.
+				ruleCtx := xctx
+				if len(r.lets) > 0 {
+					vars := make(map[string]interface{})
+					for k, v := range xctx.Variables {
+						vars[k] = v
+					}
+					for _, lb := range r.lets {
+						letResult, err := lb.expr.EvaluateWithContext(node, xctx)
+						if err == nil {
+							vars[lb.name] = xpathResultToValue(letResult)
+						}
+					}
+					ruleCtx = &xpath.Context{
+						Namespaces: xctx.Namespaces,
+						Variables:  vars,
+					}
+				}
+
+				for _, t := range r.tests {
+					testResult, err := t.compiled.EvaluateWithContext(node, ruleCtx)
+					if err != nil {
+						continue
+					}
+
+					boolVal := xpathResultToBool(testResult)
+
+					// Assert: fire error when false.
+					// Report: fire error when true.
+					fire := false
+					if t.typ == testAssert && !boolVal {
+						fire = true
+					} else if t.typ == testReport && boolVal {
+						fire = true
+					}
+
+					if fire {
+						valid = false
+						msg := formatMessage(t.message, node, ruleCtx, &out)
+						nodePath := getNodePath(node)
+						out.WriteString(schematronError(filename, node.Line(), node.Name(), nodePath, msg))
+					}
+				}
+			}
+		}
+	}
+
+	if valid {
+		out.WriteString(filename + " validates\n")
+	} else {
+		out.WriteString(filename + " fails to validate\n")
+	}
+	return out.String()
+}
+
+// formatMessage interpolates message parts against a context node.
+// If a value-of evaluation fails, it emits an XPath error to out and
+// stops processing further parts (matching libxml2 behavior).
+func formatMessage(parts []messagePart, node helium.Node, xctx *xpath.Context, out *strings.Builder) string {
+	var raw strings.Builder
+	for _, part := range parts {
+		switch p := part.(type) {
+		case textPart:
+			raw.WriteString(p.text)
+		case namePart:
+			if p.expr != nil {
+				result, err := p.expr.EvaluateWithContext(node, xctx)
+				if err == nil {
+					raw.WriteString(xpathResultToName(result))
+				}
+			}
+		case valueOfPart:
+			if p.expr == nil {
+				// Compile-time error — should not happen (caught during compilation).
+				return collapseWhitespace(raw.String())
+			}
+			result, err := p.expr.EvaluateWithContext(node, xctx)
+			if err != nil {
+				// Runtime XPath error — emit error line and stop processing.
+				fmt.Fprintf(out, "XPath error : %s\n", formatXPathError(err))
+				return collapseWhitespace(raw.String())
+			}
+			raw.WriteString(xpathResultToString(result))
+		}
+	}
+	return collapseWhitespace(raw.String())
+}
+
+// formatXPathError converts XPath error messages to libxml2-compatible format.
+func formatXPathError(err error) string {
+	msg := err.Error()
+	// Map helium xpath error messages to libxml2 format.
+	if strings.HasPrefix(msg, "unknown function: ") {
+		return "Unregistered function: " + strings.TrimPrefix(msg, "unknown function: ")
+	}
+	return msg
+}
+
+// collapseWhitespace replaces runs of whitespace (space, tab, newline, CR) with a single space.
+func collapseWhitespace(s string) string {
+	var sb strings.Builder
+	sb.Grow(len(s))
+	inWS := false
+	for _, r := range s {
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			if !inWS {
+				sb.WriteByte(' ')
+				inWS = true
+			}
+		} else {
+			sb.WriteRune(r)
+			inWS = false
+		}
+	}
+	return sb.String()
+}
+
+// xpathResultToBool converts an XPath result to a boolean.
+func xpathResultToBool(r *xpath.Result) bool {
+	switch r.Type {
+	case xpath.BooleanResult:
+		return r.Boolean
+	case xpath.NumberResult:
+		return r.Number != 0 && !math.IsNaN(r.Number)
+	case xpath.StringResult:
+		return r.String != ""
+	case xpath.NodeSetResult:
+		return len(r.NodeSet) > 0
+	}
+	return false
+}
+
+// xpathResultToString converts an XPath result to a string.
+func xpathResultToString(r *xpath.Result) string {
+	switch r.Type {
+	case xpath.StringResult:
+		return r.String
+	case xpath.NumberResult:
+		if r.Number == math.Trunc(r.Number) && !math.IsInf(r.Number, 0) && !math.IsNaN(r.Number) {
+			return fmt.Sprintf("%g", r.Number)
+		}
+		return fmt.Sprintf("%g", r.Number)
+	case xpath.BooleanResult:
+		if r.Boolean {
+			return "true"
+		}
+		return "false"
+	case xpath.NodeSetResult:
+		if len(r.NodeSet) > 0 {
+			return string(r.NodeSet[0].Content())
+		}
+		return ""
+	}
+	return ""
+}
+
+// xpathResultToName extracts a node name from an XPath result.
+// Only returns a name for element and attribute nodes (matching libxml2 behavior).
+func xpathResultToName(r *xpath.Result) string {
+	if r.Type == xpath.NodeSetResult && len(r.NodeSet) > 0 {
+		n := r.NodeSet[0]
+		if n.Type() == helium.ElementNode {
+			return n.Name()
+		}
+		// Use type assertion for attributes since Attribute.Type() may not be set correctly.
+		if attr, ok := n.(*helium.Attribute); ok {
+			return attr.LocalName()
+		}
+	}
+	return ""
+}
+
+// xpathResultToValue converts an XPath result to a value suitable for variable binding.
+func xpathResultToValue(r *xpath.Result) interface{} {
+	switch r.Type {
+	case xpath.NodeSetResult:
+		return r.NodeSet
+	case xpath.StringResult:
+		return r.String
+	case xpath.NumberResult:
+		return r.Number
+	case xpath.BooleanResult:
+		return r.Boolean
+	}
+	return nil
+}
+
+// getNodePath returns the XPath path to a node (equivalent to libxml2's xmlGetNodePath).
+// For elements: /root/parent/child[N] where [N] is added only when siblings share the name.
+func getNodePath(n helium.Node) string {
+	if n == nil {
+		return ""
+	}
+
+	var parts []string
+	for cur := n; cur != nil; cur = cur.Parent() {
+		if cur.Type() == helium.DocumentNode {
+			break
+		}
+		if cur.Type() != helium.ElementNode {
+			continue
+		}
+		name := cur.Name()
+		pos := siblingPosition(cur)
+		if pos > 0 {
+			parts = append(parts, fmt.Sprintf("%s[%d]", name, pos))
+		} else {
+			parts = append(parts, name)
+		}
+	}
+
+	// Reverse.
+	for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
+		parts[i], parts[j] = parts[j], parts[i]
+	}
+
+	return "/" + strings.Join(parts, "/")
+}
+
+// siblingPosition returns the 1-based position among same-named siblings,
+// or 0 if the element is the only one with that name among its siblings.
+func siblingPosition(n helium.Node) int {
+	name := n.Name()
+	parent := n.Parent()
+	if parent == nil {
+		return 0
+	}
+
+	count := 0
+	for sib := parent.FirstChild(); sib != nil; sib = sib.NextSibling() {
+		if sib.Type() == helium.ElementNode && sib.Name() == name {
+			count++
+		}
+	}
+
+	if count <= 1 {
+		return 0 // unique name, no position needed
+	}
+
+	// Count position.
+	pos := 0
+	for sib := parent.FirstChild(); sib != nil; sib = sib.NextSibling() {
+		if sib.Type() == helium.ElementNode && sib.Name() == name {
+			pos++
+			if sib == n {
+				return pos
+			}
+		}
+	}
+	return 0
+}
+
