@@ -217,8 +217,7 @@ func (c *compiler) processIncludes(root *helium.Element) error {
 				// Import failure — report warning if we have a filename.
 				if c.filename != "" {
 					displayLoc := filepath.Join(filepath.Dir(c.filename), loc)
-					c.schemaWarnings.WriteString(
-						fmt.Sprintf("I/O warning : failed to load \"%s\": %s\n", displayLoc, "No such file or directory"))
+					fmt.Fprintf(&c.schemaWarnings, "I/O warning : failed to load \"%s\": %s\n", displayLoc, "No such file or directory")
 					c.schemaWarnings.WriteString(schemaParserWarning(c.filename, elem.Line(),
 						elem.LocalName(), "import",
 						"Failed to locate a schema at location '"+displayLoc+"'. Skipping the import."))
