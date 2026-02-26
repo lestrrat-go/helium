@@ -11,7 +11,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/lestrrat-go/helium/encoding"
+	"github.com/lestrrat-go/helium/internal/encoding"
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"

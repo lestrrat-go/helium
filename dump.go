@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	henc "github.com/lestrrat-go/helium/encoding"
+	henc "github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/pdebug"
 )
 
