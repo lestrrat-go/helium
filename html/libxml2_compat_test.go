@@ -401,16 +401,17 @@ func TestLibxml2CompatHTMLSAX(t *testing.T) {
 			normalizedExpected := mergeHTMLCharEvents(string(expected))
 			normalizedActual := mergeHTMLCharEvents(actual)
 
-			if normalizedExpected != normalizedActual {
-				errPath := filepath.Join(dir, name+".sax.actual")
-				_ = os.WriteFile(errPath, []byte(actual), 0600)
-				t.Logf("Actual output saved to %s", errPath)
-			}
 			// When events are merged from different split boundaries,
 			// the display strings may differ while byte counts match.
 			// Normalize character/cdata displays for comparison.
 			cmpExpected := normalizeCharDisplays(normalizedExpected)
 			cmpActual := normalizeCharDisplays(normalizedActual)
+
+			if cmpExpected != cmpActual {
+				errPath := filepath.Join(dir, name+".sax.actual")
+				_ = os.WriteFile(errPath, []byte(actual), 0600)
+				t.Logf("Actual output saved to %s", errPath)
+			}
 			require.Equal(t, cmpExpected, cmpActual,
 				"HTML SAX event streams should match (file = %s)", name)
 		})
@@ -622,7 +623,6 @@ func TestHTMLErrors(t *testing.T) {
 	}
 
 	skipped := map[string]string{
-		"doc3.htm":             "auto-close ordering differences",
 		"encoding-error.html": "special Bytes: 0xNN context format needs parser-level byte tracking",
 	}
 
