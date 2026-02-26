@@ -274,7 +274,49 @@ func (c *compiler) parseInclude(elem *helium.Element) {
 	c.parseGrammarContent(root)
 	c.baseDir = oldBaseDir
 
+	// Collect override names from <include> children, then delete them from
+	// the current grammar scope so the overrides replace (not combine with)
+	// the included definitions.
+	overrideNames := c.collectOverrideNames(elem)
+	g := c.currentGrammar()
+	if g != nil {
+		for _, name := range overrideNames {
+			delete(g.defines, name)
+		}
+	}
+
 	// Process overrides from the <include> element's children
+	c.parseIncludeOverrides(elem)
+}
+
+// collectOverrideNames returns the define/start names overridden by an include element.
+func (c *compiler) collectOverrideNames(elem *helium.Element) []string {
+	var names []string
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		childElem, ok := child.(*helium.Element)
+		if !ok {
+			continue
+		}
+		if !isRNGElement(childElem) {
+			continue
+		}
+		switch childElem.LocalName() {
+		case "start":
+			names = append(names, "##start")
+		case "define":
+			name := getAttr(childElem, "name")
+			if name != "" {
+				names = append(names, name)
+			}
+		case "div":
+			names = append(names, c.collectOverrideNames(childElem)...)
+		}
+	}
+	return names
+}
+
+// parseIncludeOverrides processes override children of an <include> element.
+func (c *compiler) parseIncludeOverrides(elem *helium.Element) {
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
@@ -288,6 +330,8 @@ func (c *compiler) parseInclude(elem *helium.Element) {
 			c.parseStart(childElem)
 		case "define":
 			c.parseDefine(childElem)
+		case "div":
+			c.parseIncludeOverrides(childElem)
 		}
 	}
 }
@@ -633,8 +677,8 @@ func (c *compiler) parseNameClass(node *helium.Element) *nameClass {
 	switch node.LocalName() {
 	case "name":
 		name := textContent(node)
-		ns := getAttr(node, "ns")
-		if ns == "" {
+		ns, hasNS := getAttrOpt(node, "ns")
+		if !hasNS {
 			ns = getAncestorNS(node)
 		}
 		return &nameClass{kind: ncName, name: name, ns: ns}
@@ -651,8 +695,8 @@ func (c *compiler) parseNameClass(node *helium.Element) *nameClass {
 		}
 		return nc
 	case "nsName":
-		ns := getAttr(node, "ns")
-		if ns == "" {
+		ns, hasNS := getAttrOpt(node, "ns")
+		if !hasNS {
 			ns = getAncestorNS(node)
 		}
 		nc := &nameClass{kind: ncNsName, ns: ns}
@@ -798,6 +842,16 @@ func getAttr(elem *helium.Element, name string) string {
 		}
 	}
 	return ""
+}
+
+// getAttrOpt returns the value and presence of an attribute.
+func getAttrOpt(elem *helium.Element, name string) (string, bool) {
+	for _, attr := range elem.Attributes() {
+		if attr.LocalName() == name {
+			return attr.Value(), true
+		}
+	}
+	return "", false
 }
 
 // getAncestorNS walks up the RNG element tree to find the ns attribute.

@@ -279,11 +279,32 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		return 0
 
 	case patternGroup:
+		groupFailed := false
 		for _, child := range pat.children {
+			// Track first non-ignored node before validation to detect consumption
+			trimmedBefore := skipIgnored(state.seq)
+			var firstNodeBefore helium.Node
+			if len(trimmedBefore) > 0 {
+				firstNodeBefore = trimmedBefore[0]
+			}
+
 			errLenBefore := v.errors.Len()
 			savedErrors := v.errors.String()
 			savedValid := v.valid
 			if ret := v.validateContentPat(child, elem, attrs, attrUsed, state); ret != 0 {
+				// Check if an element was consumed (sequence advanced past the first node)
+				trimmedAfter := skipIgnored(state.seq)
+				var firstNodeAfter helium.Node
+				if len(trimmedAfter) > 0 {
+					firstNodeAfter = trimmedAfter[0]
+				}
+				if firstNodeBefore != nil && firstNodeAfter != firstNodeBefore {
+					// Element was consumed but content failed — continue to collect
+					// errors from remaining group children (like libxml2 does)
+					groupFailed = true
+					continue
+				}
+
 				remaining := skipIgnored(state.seq)
 				if len(remaining) > 0 {
 					if e, ok := remaining[0].(*helium.Element); ok {
@@ -305,6 +326,9 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 				}
 				return -1
 			}
+		}
+		if groupFailed {
+			return -1
 		}
 		return 0
 
@@ -414,7 +438,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 				v.valid = savedValid
 				break
 			}
-			if seqEqual(state.seq, savedState.seq) {
+			if seqEqual(state.seq, savedState.seq) && boolSliceEqual(attrUsed, savedAttrUsed) {
 				break
 			}
 		}
@@ -448,7 +472,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 				v.valid = savedValid
 				break
 			}
-			if seqEqual(state.seq, savedState.seq) {
+			if seqEqual(state.seq, savedState.seq) && boolSliceEqual(attrUsed, savedAttrUsed) {
 				break
 			}
 		}
@@ -553,12 +577,21 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		}
 		return 0
 
-	case patternRef:
+	case patternRef, patternParentRef:
 		def, ok := v.grammar.defines[pat.name]
 		if !ok {
 			return -1
 		}
 		return v.validateContentPat(def, elem, attrs, attrUsed, state)
+
+	case patternList:
+		text := v.collectText(state)
+		if ret := v.matchListContent(pat, text, elem); ret != 0 {
+			v.addError(elem, "Error validating list")
+			v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+			return -1
+		}
+		return 0
 
 	default:
 		// For element/text/data/value/etc., delegate to normal validation
@@ -846,7 +879,15 @@ func (v *validator) matchAttrContent(pat *pattern, text string, elem *helium.Ele
 	case patternText:
 		return 0
 	case patternValue:
-		return v.matchValue(pat, text)
+		if ret := v.matchValue(pat, text); ret != 0 {
+			if elem != nil && pat.dataType != nil && pat.dataType.library == xsdDatatypeLibrary {
+				if validateXSDType(pat.dataType.name, strings.TrimSpace(text), nil) != 0 {
+					v.addError(elem, fmt.Sprintf("failed to compare type %s", pat.dataType.name))
+				}
+			}
+			return -1
+		}
+		return 0
 	case patternData:
 		return v.matchData(pat, text)
 	case patternChoice:
@@ -857,7 +898,10 @@ func (v *validator) matchAttrContent(pat *pattern, text string, elem *helium.Ele
 		}
 		return -1
 	case patternList:
-		return v.matchListContent(pat, text, elem)
+		if ret := v.matchListContent(pat, text, elem); ret != 0 {
+			return -1
+		}
+		return 0
 	case patternGroup:
 		// Sequential match on tokens
 		tokens := strings.Fields(text)
@@ -909,6 +953,11 @@ func (v *validator) matchListContent(pat *pattern, text string, elem *helium.Ele
 	for _, child := range pat.children {
 		n, ok := v.matchAttrTokens(child, tokens[offset:])
 		if !ok {
+			if elem != nil {
+				if typeName := listDataTypeName(child); typeName != "" {
+					v.addError(elem, fmt.Sprintf("failed to validate type %s", typeName))
+				}
+			}
 			return -1
 		}
 		offset += n
@@ -920,6 +969,26 @@ func (v *validator) matchListContent(pat *pattern, text string, elem *helium.Ele
 		return -1
 	}
 	return 0
+}
+
+// listDataTypeName extracts the data type name from a pattern for list error reporting.
+func listDataTypeName(pat *pattern) string {
+	if pat == nil {
+		return ""
+	}
+	switch pat.kind {
+	case patternData:
+		if pat.dataType != nil {
+			return pat.dataType.name
+		}
+	case patternOneOrMore, patternZeroOrMore, patternGroup:
+		for _, child := range pat.children {
+			if name := listDataTypeName(child); name != "" {
+				return name
+			}
+		}
+	}
+	return ""
 }
 
 // matchAttrTokens matches tokens against a pattern, returning how many tokens were consumed.
@@ -1311,9 +1380,17 @@ done:
 func (v *validator) matchValue(pat *pattern, text string) int {
 	expected := pat.value
 
-	if pat.dataType != nil && pat.dataType.name == "token" && pat.dataType.library == "" {
-		text = normalizeToken(text)
-		expected = normalizeToken(expected)
+	if pat.dataType != nil {
+		if pat.dataType.library == "" {
+			if pat.dataType.name == "token" {
+				text = normalizeToken(text)
+				expected = normalizeToken(expected)
+			}
+		} else if pat.dataType.library == xsdDatatypeLibrary {
+			// XSD type-aware comparison: normalize both values
+			text = strings.TrimSpace(text)
+			expected = strings.TrimSpace(expected)
+		}
 	}
 
 	if text == expected {

@@ -83,37 +83,8 @@ func discoverTests(t *testing.T) []testCase {
 // skip lists test groups that need unimplemented features.
 // Keys are base names (matched by prefix).
 var skip = map[string]string{
-	// Include tests require include file resolution
-	"demo":     "include chain (demo → demo2 → demo3)",
-	"include0": "include with override",
-	"include1": "include with override",
-	// ExternalRef
-	"595792":  "externalRef",
-	"tutor9_1": "externalRef (inline.rng)",
-	// Include in grammar
-	"tutor9_7":  "include",
-	"tutor9_10": "include",
-	"tutor9_11": "include",
-	"tutor13_1": "include + parentRef",
-	// Large/complex schemas
-	"docbook":         "large schema (docbook.rng)",
-	"ISO19005":        "large schema (ISO XMP)",
-	"OpenDocumentSub": "large schema (OpenDocument)",
-	"libvirt":         "large schema (libvirt.rng — missing from test dir)",
-	"spec":            "large schema (spec.rng — missing from test dir)",
 	// Broken XML
 	"broken-xml": "broken XML schema parsing",
-	// Ambiguous name class
-	"ambig_name-class": "ambiguous name class validation",
-	// Interleave
-	"interleave0_0": "interleave validation",
-	"interleave1_0": "interleave validation",
-	// Tutor tests with advanced datatypes
-	"tutor7":  "list datatype validation",
-	"tutor11": "name class validation",
-	"tutor12": "name class validation",
-	// Compare (datatype comparison)
-	"compare0": "datatype comparison",
 }
 
 // skipExact lists specific test cases (by full test name) that need skipping
@@ -127,9 +98,14 @@ var skipExact = map[string]string{
 	"choice0_6": "error formatting: remaining content reported on child vs parent",
 	"choice0_7": "error formatting: remaining content reported on child vs parent",
 	"choice0_8": "error formatting: remaining content reported on child vs parent",
-	// Requires group continuation past element failure to collect errors from
-	// both entryWithoutRef and entryWithRef
-	"simplifyChoiceNotAllowed_0": "error collection: group aborts on first element failure",
+	// Large XML file — anyName zeroOrMore inner element validation failure
+	"tutor11_1_3": "anyName: inner element validation failure in large document",
+	// Requires compile-time check: attribute name class overlap detection
+	"tutor11_3_1": "compile-time: Attributes conflicts in group check",
+	// Large/complex schemas with validation issues
+	"docbook_0":  "large schema: docbook validation false negative",
+	"libvirt_0":  "large schema: libvirt interleave-related validation issue",
+	"spec_0":     "XML parse error in test data (unescaped entities)",
 }
 
 func shouldSkip(name string) string {
