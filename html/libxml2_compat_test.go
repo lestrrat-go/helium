@@ -622,7 +622,6 @@ func TestHTMLErrors(t *testing.T) {
 	}
 
 	skipped := map[string]string{
-		"doc3.htm":             "auto-close ordering differences",
 		"encoding-error.html": "special Bytes: 0xNN context format needs parser-level byte tracking",
 	}
 
