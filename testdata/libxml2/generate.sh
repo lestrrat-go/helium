@@ -293,3 +293,36 @@ for category in without-comments with-comments exc-without-comments 1-1-without-
     c14n_total=$((c14n_total + c14n_cat + c14n_results))
 done
 echo "Copied $c14n_total total C14N files into $C14N_DEST"
+
+# Copy HTML test files
+HTML_DEST="$DEST/html"
+mkdir -p "$HTML_DEST"
+
+# test/ — HTML input files and result/ — SAX golden outputs and serialized HTML
+html_count=0
+for input in "$SOURCE"/test/HTML/*; do
+    [ -f "$input" ] || continue
+    base="$(basename "$input")"
+    cp "$input" "$HTML_DEST/$base"
+
+    # Copy SAX golden file if it exists
+    sax_result="$SOURCE/result/HTML/$base.sax"
+    if [ -f "$sax_result" ]; then
+        cp "$sax_result" "$HTML_DEST/$base.sax"
+    fi
+
+    # Copy serialized HTML golden file if it exists
+    html_result="$SOURCE/result/HTML/$base"
+    if [ -f "$html_result" ]; then
+        cp "$html_result" "$HTML_DEST/$base.expected"
+    fi
+
+    # Copy error golden file if it exists
+    err_result="$SOURCE/result/HTML/$base.err"
+    if [ -f "$err_result" ]; then
+        cp "$err_result" "$HTML_DEST/$base.err"
+    fi
+
+    html_count=$((html_count + 1))
+done
+echo "Copied $html_count HTML test files into $HTML_DEST"

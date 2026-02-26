@@ -33,6 +33,16 @@ func CreateDocument() *Document {
 	return NewDocument("1.0", "", StandaloneImplicitNo)
 }
 
+// NewHTMLDocument creates a new HTML document (HTMLDocumentNode type).
+func NewHTMLDocument() *Document {
+	doc := &Document{
+		standalone: StandaloneNoXMLDecl,
+	}
+	doc.etype = HTMLDocumentNode
+	doc.name = "(document)"
+	return doc
+}
+
 func NewDocument(version, encoding string, standalone DocumentStandaloneType) *Document {
 	doc := &Document{
 		encoding:   encoding,
@@ -81,6 +91,10 @@ func (d *Document) Encoding() string {
 		return d.encoding
 	}
 	return "utf8"
+}
+
+func (d *Document) SetEncoding(enc string) {
+	d.encoding = enc
 }
 
 func (d *Document) Standalone() DocumentStandaloneType {
