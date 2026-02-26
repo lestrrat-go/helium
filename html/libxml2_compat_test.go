@@ -497,3 +497,190 @@ func TestHTMLSerialization(t *testing.T) {
 		})
 	}
 }
+
+// htmlError captures an error emitted by the HTML SAX parser.
+type htmlError struct {
+	line int
+	col  int
+	msg  string
+}
+
+// newHTMLErrorCollector returns a SAX handler that only collects errors,
+// plus a pointer to the accumulated error slice.
+func newHTMLErrorCollector() (html.SAXHandler, *[]htmlError) {
+	var errors []htmlError
+	var loc html.DocumentLocator
+
+	s := &html.SAXCallbacks{}
+	s.SetDocumentLocatorHandler = func(l html.DocumentLocator) error {
+		loc = l
+		return nil
+	}
+	s.ErrorHandler = func(msg string, args ...any) error {
+		errors = append(errors, htmlError{
+			line: loc.LineNumber(),
+			col:  loc.ColumnNumber(),
+			msg:  fmt.Sprintf(msg, args...),
+		})
+		return nil
+	}
+	return s, &errors
+}
+
+// formatHTMLErrors formats collected errors in libxml2's .err output format.
+//
+// Each error block is 3 lines:
+//
+//	./test/HTML/<filename>:<line>: HTML parser error : <message>
+//	<source context up to 80 chars>
+//	<spaces/tabs + ^ at error column>
+//
+// The context extraction matches libxml2's xmlParserInputGetWindow algorithm.
+func formatHTMLErrors(filename string, input []byte, errors []htmlError) string {
+	// Normalize line endings to match parser's normalization
+	normalized := bytes.ReplaceAll(input, []byte("\r\n"), []byte("\n"))
+	normalized = bytes.ReplaceAll(normalized, []byte("\r"), []byte("\n"))
+	lines := bytes.Split(normalized, []byte("\n"))
+
+	const maxCtx = 80 // sizeof(content) - 1 in libxml2
+
+	var buf strings.Builder
+	for _, e := range errors {
+		// Header line
+		fmt.Fprintf(&buf, "./test/HTML/%s:%d: HTML parser error : %s\n",
+			filename, e.line, e.msg)
+
+		lineIdx := e.line - 1
+		if lineIdx < 0 || lineIdx >= len(lines) {
+			buf.WriteString("\n^\n")
+			continue
+		}
+		srcLine := lines[lineIdx]
+		lineLen := len(srcLine)
+
+		// errPos: 0-indexed position past last consumed byte (may equal lineLen)
+		errPos := e.col - 1
+
+		// Step 1: skip back over virtual newline (mirrors libxml2's skip-eol)
+		adjustedPos := errPos
+		if adjustedPos >= lineLen {
+			if lineLen > 0 {
+				adjustedPos = lineLen - 1
+			} else {
+				adjustedPos = 0
+			}
+		}
+
+		// Step 2: walk back up to maxCtx bytes from adjustedPos
+		start := max(0, adjustedPos-maxCtx)
+
+		// Step 3: forward walk from start to end of line, limited to maxCtx bytes
+		end := min(start+maxCtx, lineLen)
+		content := srcLine[start:end]
+		contentLen := len(content)
+
+		// Step 4: caret column (using original errPos, not adjusted)
+		col := errPos - start
+		// Step 5: cap column if it exceeds content
+		if col >= contentLen {
+			if contentLen < maxCtx {
+				col = contentLen
+			} else {
+				col = maxCtx - 1
+			}
+		}
+
+		// Write context line
+		buf.Write(content)
+		buf.WriteByte('\n')
+
+		// Write caret line (preserving tabs from source)
+		for i := 0; i < col; i++ {
+			if i < contentLen && content[i] == '\t' {
+				buf.WriteByte('\t')
+			} else {
+				buf.WriteByte(' ')
+			}
+		}
+		buf.WriteString("^\n")
+	}
+	return buf.String()
+}
+
+// TestHTMLErrors parses HTML files with SAX error collection, formats
+// errors in libxml2 style, and compares against .err golden files.
+//
+// Environment variable HELIUM_HTML_TEST_FILES can be set to test only
+// specific files:
+//
+//	HELIUM_HTML_TEST_FILES=reg4,test3 go test -run TestHTMLErrors
+func TestHTMLErrors(t *testing.T) {
+	dir := "../testdata/libxml2-compat/html"
+
+	if _, err := os.Stat(dir); err != nil {
+		t.Skipf("testdata/libxml2-compat/html not found; run testdata/libxml2/generate.sh first")
+	}
+
+	skipped := map[string]string{
+		"doc3.htm":             "auto-close ordering differences",
+		"encoding-error.html": "special Bytes: 0xNN context format needs parser-level byte tracking",
+	}
+
+	only := map[string]struct{}{}
+	if v := os.Getenv("HELIUM_HTML_TEST_FILES"); v != "" {
+		for _, f := range strings.Split(v, ",") {
+			only[strings.TrimSpace(f)] = struct{}{}
+		}
+	}
+
+	errFiles, err := filepath.Glob(filepath.Join(dir, "*.err"))
+	require.NoError(t, err, "filepath.Glob should succeed")
+
+	for _, errFile := range errFiles {
+		// Derive input filename by stripping .err suffix
+		name := strings.TrimSuffix(filepath.Base(errFile), ".err")
+
+		// Strip extension for filtering
+		baseName := strings.TrimSuffix(name, filepath.Ext(name))
+		if len(only) > 0 {
+			if _, ok := only[baseName]; !ok {
+				if _, ok := only[name]; !ok {
+					continue
+				}
+			}
+		}
+
+		if reason, ok := skipped[name]; ok {
+			t.Logf("Skipping %s: %s", name, reason)
+			continue
+		}
+
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("panic: %v", r)
+				}
+			}()
+
+			input, err := os.ReadFile(filepath.Join(dir, name))
+			require.NoError(t, err, "reading input file")
+
+			expected, err := os.ReadFile(errFile)
+			require.NoError(t, err, "reading expected .err file")
+
+			handler, errors := newHTMLErrorCollector()
+			err = html.ParseWithSAX(input, handler)
+			require.NoError(t, err, "ParseWithSAX should succeed (file = %s)", name)
+
+			actual := formatHTMLErrors(name, input, *errors)
+
+			if actual != string(expected) {
+				actualPath := filepath.Join(dir, name+".err.actual")
+				_ = os.WriteFile(actualPath, []byte(actual), 0600)
+				t.Logf("Actual output saved to %s", actualPath)
+			}
+			require.Equal(t, string(expected), actual,
+				"HTML error output should match (file = %s)", name)
+		})
+	}
+}
