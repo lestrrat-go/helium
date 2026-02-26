@@ -3,7 +3,16 @@ package xmlschema
 // CompileOption configures schema compilation.
 type CompileOption func(*compileConfig)
 
-type compileConfig struct{}
+type compileConfig struct {
+	filename string // XSD filename for error messages
+}
+
+// WithSchemaFilename sets the XSD filename used in schema compilation error messages.
+func WithSchemaFilename(name string) CompileOption {
+	return func(c *compileConfig) {
+		c.filename = name
+	}
+}
 
 // ValidateOption configures schema validation.
 type ValidateOption func(*validateConfig)

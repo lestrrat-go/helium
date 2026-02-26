@@ -6,17 +6,26 @@ package xmlschema
 
 import (
 	"os"
+	"path/filepath"
 
 	helium "github.com/lestrrat-go/helium"
 )
 
 // Compile compiles an XSD document into a Schema.
 func Compile(doc *helium.Document, opts ...CompileOption) (*Schema, error) {
-	return compileSchema(doc)
+	cfg := &compileConfig{}
+	for _, o := range opts {
+		o(cfg)
+	}
+	return compileSchema(doc, "", cfg)
 }
 
 // CompileFile reads and compiles an XSD file into a Schema.
 func CompileFile(path string, opts ...CompileOption) (*Schema, error) {
+	cfg := &compileConfig{}
+	for _, o := range opts {
+		o(cfg)
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -25,7 +34,8 @@ func CompileFile(path string, opts ...CompileOption) (*Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-	return compileSchema(doc)
+	baseDir := filepath.Dir(path)
+	return compileSchema(doc, baseDir, cfg)
 }
 
 // Validate validates a document against a compiled schema.

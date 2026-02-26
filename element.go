@@ -136,6 +136,35 @@ func (n *Element) SetAttribute(name, value string) error {
 	return nil
 }
 
+// SetAttributeNS creates an attribute with the given local name, value, and namespace.
+func (n *Element) SetAttributeNS(localname, value string, ns *Namespace) error {
+	attr, err := n.doc.CreateAttribute(localname, value, ns)
+	if err != nil {
+		return err
+	}
+
+	p := n.properties
+	if p == nil {
+		n.properties = attr
+		attr.SetParent(n)
+		return nil
+	}
+
+	var last *Attribute
+	for ; p != nil; p = p.NextAttribute() {
+		if p.LocalName() == localname && p.ns == ns {
+			return ErrDuplicateAttribute
+		}
+		last = p
+	}
+
+	last.SetNextSibling(attr)
+	attr.SetPrevSibling(last)
+	attr.SetParent(n)
+
+	return nil
+}
+
 func (n Element) Attributes() []*Attribute {
 	attrs := []*Attribute{}
 	for attr := n.properties; attr != nil; {
