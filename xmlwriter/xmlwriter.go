@@ -108,14 +108,6 @@ func (w *Writer) writeByte(b byte) {
 	_, w.err = w.out.Write([]byte{b})
 }
 
-// writeBytes writes a byte slice.
-func (w *Writer) writeBytes(b []byte) {
-	if w.err != nil {
-		return
-	}
-	_, w.err = w.out.Write(b)
-}
-
 // writeIndent writes a newline followed by indent*depth.
 func (w *Writer) writeIndent() {
 	if w.indent == "" {
