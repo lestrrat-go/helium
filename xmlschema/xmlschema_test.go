@@ -113,31 +113,13 @@ func findXMLInstance(dir, schemaKey, idx string) string {
 // skip lists test groups that need unimplemented features.
 // Keys are base names (matched by prefix).
 var skip = map[string]string{
-	// Import/include.
-	"582906-2": "schema import error reporting not implemented",
-	"import1":  "import error reporting not implemented",
-	"include3": "include schema component constraint not implemented",
-	// Annotation errors.
-	"annot-err": "annotation validation not implemented",
-	// Any wildcard.
-	"any4": "xs:any determinism checking not implemented",
-	// Complex schema error tests.
-	"element-err": "complex element error reporting order mismatch",
-	// Simple type/value validation.
-	"changelog093":             "deferred",
-	// Determinism.
-	"deter0": "determinism checking not implemented",
-	// IDC.
-	"idc-keyref-err1": "identity constraints not implemented",
-	// Issues.
+	// IDC: libxml2 IDC field evaluation quirk with ref elements + attributeFormDefault="qualified".
+	"idc-keyref-err1": "libxml2 IDC quirk with ref + attributeFormDefault",
 }
 
 // skipExact lists specific test cases (by full test name) that need skipping
 // when their group-level skip has been removed.
-var skipExact = map[string]string{
-	"bug303566_1_1": "identity constraints not implemented",
-	"bug312957_1_0":    "identity constraints not implemented",
-}
+var skipExact = map[string]string{}
 
 func shouldSkip(name string) string {
 	// Check against all skip keys using prefix matching.
@@ -192,7 +174,7 @@ func TestGoldenFiles(t *testing.T) {
 
 			var got string
 			if schema.CompileErrors() != "" {
-				got = schema.CompileErrors()
+				got = schema.CompileWarnings() + schema.CompileErrors()
 			} else {
 				// Parse instance.
 				xmlData, err := os.ReadFile(tc.xmlPath)

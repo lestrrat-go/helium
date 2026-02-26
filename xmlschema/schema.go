@@ -79,6 +79,27 @@ type ElementDecl struct {
 	MaxOccurs         int // -1 = unbounded
 	Abstract          bool
 	SubstitutionGroup QName // QName of the substitution group head (zero value if none)
+	IsRef             bool  // true if this was created from a ref="..." attribute
+	IDCs              []*IDConstraint
+}
+
+// IDCKind describes the kind of identity constraint.
+type IDCKind int
+
+const (
+	IDCUnique IDCKind = iota
+	IDCKey
+	IDCKeyRef
+)
+
+// IDConstraint represents an xs:unique, xs:key, or xs:keyref identity constraint.
+type IDConstraint struct {
+	Name       string
+	Kind       IDCKind
+	Selector   string            // XPath selector expression
+	Fields     []string          // XPath field expressions
+	Refer      string            // for keyref: the name of the referenced key/unique
+	Namespaces map[string]string // prefix → URI from the schema document (for XPath evaluation)
 }
 
 // DerivationKind describes how a type is derived from its base.

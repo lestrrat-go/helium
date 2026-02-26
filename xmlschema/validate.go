@@ -17,7 +17,7 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 		return filename + " fails to validate\n"
 	}
 
-	// Walk the document tree.
+	// Walk the document tree for content model validation.
 	_ = helium.Walk(doc, func(n helium.Node) error {
 		if n.Type() != helium.ElementNode {
 			return nil
@@ -25,6 +25,21 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 		elem := n.(*helium.Element)
 		if err := validateElement(elem, schema, filename, &out); err != nil {
 			valid = false
+		}
+		return nil
+	})
+
+	// Second walk: evaluate identity constraints (xs:key, xs:keyref, xs:unique).
+	_ = helium.Walk(doc, func(n helium.Node) error {
+		if n.Type() != helium.ElementNode {
+			return nil
+		}
+		elem := n.(*helium.Element)
+		edecl := lookupElemDecl(elem, schema)
+		if edecl != nil && len(edecl.IDCs) > 0 {
+			if err := validateIDConstraints(elem, edecl, schema, filename, &out); err != nil {
+				valid = false
+			}
 		}
 		return nil
 	})
@@ -298,6 +313,19 @@ func wildcardMatchesAttr(wc *Wildcard, attrNS string) bool {
 
 // elemTextContent returns the concatenated text content of an element,
 // including both text nodes and CDATA sections.
+// lookupElemDecl finds the global element declaration for an instance element.
+func lookupElemDecl(elem *helium.Element, schema *Schema) *ElementDecl {
+	edecl, ok := schema.LookupElement(elem.LocalName(), elem.URI())
+	if ok {
+		return edecl
+	}
+	edecl, ok = schema.LookupElement(elem.LocalName(), "")
+	if ok {
+		return edecl
+	}
+	return nil
+}
+
 func elemTextContent(elem *helium.Element) string {
 	var buf []byte
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {

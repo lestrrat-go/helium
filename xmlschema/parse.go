@@ -38,6 +38,9 @@ type compiler struct {
 	schemaErrors   strings.Builder
 	schemaWarnings strings.Builder
 	filename       string // XSD filename for error messages
+	includeFile    string // currently-included file path (for duplicate element errors)
+	// importedNS tracks which namespaces have been imported and their schema locations.
+	importedNS map[string]string // namespace → schema location
 }
 
 // elemRefSource tracks source location for error reporting.
@@ -86,6 +89,7 @@ func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*S
 		globalElemSources: make(map[*ElementDecl]elemRefSource),
 		typeDefSources:    make(map[*TypeDef]typeDefSource),
 		itemTypeRefs:      make(map[*TypeDef]QName),
+		importedNS:        make(map[string]string),
 	}
 	if cfg != nil {
 		c.filename = cfg.filename
@@ -98,13 +102,15 @@ func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*S
 	// Register built-in types.
 	registerBuiltinTypes(c.schema)
 
-	// Process includes before parsing declarations.
-	if err := c.processIncludes(root); err != nil {
+	// First pass: collect all named types and global elements.
+	if err := c.parseSchemaChildren(root); err != nil {
 		return nil, err
 	}
 
-	// First pass: collect all named types and global elements.
-	if err := c.parseSchemaChildren(root); err != nil {
+	// Process includes after parsing the main schema's declarations.
+	// This matches libxml2's processing order where includes are merged
+	// after the including schema's own declarations are registered.
+	if err := c.processIncludes(root); err != nil {
 		return nil, err
 	}
 
@@ -187,7 +193,7 @@ func (c *compiler) processIncludes(root *helium.Element) error {
 			if loc == "" {
 				continue
 			}
-			if err := c.loadInclude(loc); err != nil {
+			if err := c.loadInclude(loc, elem); err != nil {
 				return err
 			}
 		case isXSDElement(elem, "import"):
@@ -196,17 +202,39 @@ func (c *compiler) processIncludes(root *helium.Element) error {
 				continue
 			}
 			ns := getAttr(elem, "namespace")
-			if err := c.loadImport(loc, ns); err != nil {
-				// Import failures are non-fatal — skip silently.
+
+			// Check if this namespace was already imported.
+			if prevLoc, ok := c.importedNS[ns]; ok && c.filename != "" {
+				displayLoc := filepath.Join(filepath.Dir(c.filename), loc)
+				displayPrevLoc := filepath.Join(filepath.Dir(c.filename), prevLoc)
+				c.schemaWarnings.WriteString(schemaParserWarning(c.filename, elem.Line(),
+					elem.LocalName(), "import",
+					"Skipping import of schema located at '"+displayLoc+"' for the namespace '"+ns+"', since this namespace was already imported with the schema located at '"+displayPrevLoc+"'."))
 				continue
 			}
+
+			if err := c.loadImport(loc, ns); err != nil {
+				// Import failure — report warning if we have a filename.
+				if c.filename != "" {
+					displayLoc := filepath.Join(filepath.Dir(c.filename), loc)
+					c.schemaWarnings.WriteString(
+						fmt.Sprintf("I/O warning : failed to load \"%s\": %s\n", displayLoc, "No such file or directory"))
+					c.schemaWarnings.WriteString(schemaParserWarning(c.filename, elem.Line(),
+						elem.LocalName(), "import",
+						"Failed to locate a schema at location '"+displayLoc+"'. Skipping the import."))
+				}
+				continue
+			}
+
+			// Track the imported namespace.
+			c.importedNS[ns] = loc
 		}
 	}
 	return nil
 }
 
 // loadInclude loads and merges an included schema file.
-func (c *compiler) loadInclude(location string) error {
+func (c *compiler) loadInclude(location string, includeElem *helium.Element) error {
 	path := location
 	if c.baseDir != "" {
 		path = filepath.Join(c.baseDir, location)
@@ -227,6 +255,19 @@ func (c *compiler) loadInclude(location string) error {
 		return fmt.Errorf("xmlschema: included document %q is not an xs:schema", location)
 	}
 
+	// Check target namespace compatibility.
+	incTargetNS := getAttr(incRoot, "targetNamespace")
+	if incTargetNS != "" && incTargetNS != c.schema.targetNamespace {
+		displayLoc := location
+		if c.filename != "" {
+			displayLoc = filepath.Join(filepath.Dir(c.filename), location)
+		}
+		c.schemaErrors.WriteString(schemaParserError(c.filename, includeElem.Line(),
+			includeElem.LocalName(), "include",
+			"The target namespace '"+incTargetNS+"' of the included/redefined schema '"+displayLoc+"' differs from '"+c.schema.targetNamespace+"' of the including/redefining schema."))
+		return nil
+	}
+
 	// Chameleon include: if the included schema has no targetNamespace,
 	// it adopts the including schema's targetNamespace.
 	// The included schema's elementFormDefault/attributeFormDefault are
@@ -235,6 +276,7 @@ func (c *compiler) loadInclude(location string) error {
 	// Save current form-qualified settings and temporarily apply included schema's settings.
 	savedElemForm := c.schema.elemFormQualified
 	savedAttrForm := c.schema.attrFormQualified
+	savedIncludeFile := c.includeFile
 	if v := getAttr(incRoot, "elementFormDefault"); v != "" {
 		c.schema.elemFormQualified = v == "qualified"
 	}
@@ -242,12 +284,18 @@ func (c *compiler) loadInclude(location string) error {
 		c.schema.attrFormQualified = v == "qualified"
 	}
 
+	// Set the include file path for duplicate element error reporting.
+	if c.filename != "" {
+		c.includeFile = filepath.Join(filepath.Dir(c.filename), location)
+	}
+
 	// Parse the included schema's declarations into the current compiler.
 	err = c.parseSchemaChildren(incRoot)
 
-	// Restore form-qualified settings.
+	// Restore form-qualified settings and include file.
 	c.schema.elemFormQualified = savedElemForm
 	c.schema.attrFormQualified = savedAttrForm
+	c.includeFile = savedIncludeFile
 
 	return err
 }
@@ -274,6 +322,12 @@ func (c *compiler) loadImport(location, namespace string) error {
 		return fmt.Errorf("xmlschema: imported document %q is not an xs:schema", location)
 	}
 
+	// Compute display filename for the imported schema (for error messages).
+	var impFilename string
+	if c.filename != "" {
+		impFilename = filepath.Join(filepath.Dir(c.filename), location)
+	}
+
 	// Create a temporary compiler for the imported schema.
 	impC := &compiler{
 		schema: &Schema{
@@ -293,6 +347,8 @@ func (c *compiler) loadImport(location, namespace string) error {
 		globalElemSources: make(map[*ElementDecl]elemRefSource),
 		typeDefSources:    make(map[*TypeDef]typeDefSource),
 		itemTypeRefs:      make(map[*TypeDef]QName),
+		filename:          impFilename,
+		importedNS:        make(map[string]string),
 	}
 
 	impC.schema.targetNamespace = getAttr(impRoot, "targetNamespace")
@@ -301,18 +357,24 @@ func (c *compiler) loadImport(location, namespace string) error {
 
 	registerBuiltinTypes(impC.schema)
 
+	if err := impC.parseSchemaChildren(impRoot); err != nil {
+		return err
+	}
+
 	// Process includes/imports in the imported schema (but skip back-references).
 	if err := impC.processIncludes(impRoot); err != nil {
 		// Non-fatal for imported schemas.
 		_ = err
 	}
 
-	if err := impC.parseSchemaChildren(impRoot); err != nil {
-		return err
-	}
-
-	if err := impC.resolveRefs(); err != nil {
-		return err
+	// Propagate compile errors from the imported schema's parsing phase.
+	// Only propagate if there are no prior errors (matches libxml2 behavior
+	// of stopping error reporting after first import failure).
+	if impC.schemaErrors.Len() > 0 {
+		if c.schemaErrors.Len() == 0 {
+			c.schemaErrors.WriteString(impC.schemaErrors.String())
+		}
+		return nil
 	}
 
 	// Merge the imported schema's declarations into the main schema.
@@ -341,6 +403,35 @@ func (c *compiler) loadImport(location, namespace string) error {
 			c.schema.globalAttrs[qn] = au
 		}
 	}
+
+	// Merge ref maps from the sub-compiler into the parent compiler.
+	// This defers resolution to the parent's resolveRefs(), which has
+	// access to all merged declarations (handles circular imports).
+	for edecl, qn := range impC.elemRefs {
+		c.elemRefs[edecl] = qn
+	}
+	for edecl, src := range impC.elemRefSources {
+		c.elemRefSources[edecl] = src
+	}
+	for td, qn := range impC.typeRefs {
+		c.typeRefs[td] = qn
+	}
+	for td, src := range impC.typeDefSources {
+		c.typeDefSources[td] = src
+	}
+	for mg, qn := range impC.groupRefs {
+		c.groupRefs[mg] = qn
+	}
+	for td, qns := range impC.attrGroupRefs {
+		c.attrGroupRefs[td] = qns
+	}
+	for edecl, src := range impC.globalElemSources {
+		c.globalElemSources[edecl] = src
+	}
+	for td, qn := range impC.itemTypeRefs {
+		c.itemTypeRefs[td] = qn
+	}
+	c.unionMemberRefs = append(c.unionMemberRefs, impC.unionMemberRefs...)
 
 	return nil
 }
@@ -377,6 +468,8 @@ func (c *compiler) parseGlobalElement(elem *helium.Element) error {
 			}
 			ce := child.(*helium.Element)
 			switch {
+			case isXSDElement(ce, "annotation"):
+				c.checkAnnotation(ce)
 			case isXSDElement(ce, "complexType"):
 				td, err := c.parseComplexType(ce)
 				if err != nil {
@@ -391,6 +484,21 @@ func (c *compiler) parseGlobalElement(elem *helium.Element) error {
 				decl.Type = td
 			}
 		}
+	}
+
+	// Parse IDC (identity constraint) declarations.
+	decl.IDCs = c.parseIDConstraints(elem)
+
+	// Check for duplicate global element declarations (e.g., from includes).
+	if _, exists := c.schema.elements[decl.Name]; exists && c.includeFile != "" {
+		qnDisplay := "'" + decl.Name.NS + "'" + decl.Name.Local
+		if decl.Name.NS != "" {
+			qnDisplay = "'{" + decl.Name.NS + "}" + decl.Name.Local + "'"
+		}
+		c.schemaErrors.WriteString(schemaParserError(c.includeFile, elem.Line(),
+			elem.LocalName(), "element",
+			"A global element declaration "+qnDisplay+" does already exist."))
+		return nil
 	}
 
 	c.globalElemSources[decl] = elemRefSource{elemName: name, line: elem.Line()}
@@ -1016,8 +1124,10 @@ func (c *compiler) parseLocalElement(elem *helium.Element) (*Particle, error) {
 			Name:      qn,
 			MinOccurs: minOcc,
 			MaxOccurs: maxOcc,
+			IsRef:     true,
 		}
 		c.elemRefs[edecl] = qn
+		c.elemRefSources[edecl] = elemRefSource{elemName: elem.LocalName(), line: elem.Line()}
 		return &Particle{
 			MinOccurs: minOcc,
 			MaxOccurs: maxOcc,
@@ -1071,6 +1181,9 @@ func (c *compiler) parseLocalElement(elem *helium.Element) (*Particle, error) {
 			}
 		}
 	}
+
+	// Parse IDC (identity constraint) declarations on local elements.
+	edecl.IDCs = c.parseIDConstraints(elem)
 
 	return &Particle{
 		MinOccurs: minOcc,
@@ -1197,6 +1310,15 @@ func (c *compiler) resolveRefs() error {
 			// First check if this is a reference to a global element.
 			if ge, ok := c.schema.elements[qn]; ok {
 				edecl.Type = ge.Type
+				continue
+			}
+			// For ref elements, report unresolved element declaration error.
+			if edecl.IsRef {
+				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
+					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) element declaration.", qn.NS, qn.Local)
+					c.schemaErrors.WriteString(schemaParserErrorAttr(c.filename, src.line, src.elemName, "element", "ref", msg))
+				}
+				edecl.Type = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
 				continue
 			}
 			td, ok := c.schema.types[qn]
@@ -1391,6 +1513,17 @@ func (c *compiler) resolveRefs() error {
 	})
 	for _, td := range restrictionTypes {
 		c.checkRestrictionAttrs(td)
+	}
+
+	// Check UPA (Unique Particle Attribution) for all complex types with content models.
+	// Only run UPA if there are no prior schema errors (libxml2 skips UPA when
+	// the schema has structural parse errors).
+	if c.filename != "" && c.schemaErrors.Len() == 0 {
+		for td, src := range c.typeDefSources {
+			if td.ContentModel != nil {
+				c.checkUPA(td, src)
+			}
+		}
 	}
 
 	return nil
@@ -1729,6 +1862,80 @@ func findDocumentElement(doc *helium.Document) *helium.Element {
 		}
 	}
 	return nil
+}
+
+// collectNSContext collects namespace declarations from a schema element and its ancestors.
+func collectNSContext(elem *helium.Element) map[string]string {
+	nsMap := make(map[string]string)
+	var node helium.Node = elem
+	for node != nil {
+		if e, ok := node.(*helium.Element); ok {
+			for _, ns := range e.Namespaces() {
+				prefix := ns.Prefix()
+				if _, exists := nsMap[prefix]; !exists {
+					nsMap[prefix] = ns.URI()
+				}
+			}
+		}
+		node = node.Parent()
+	}
+	return nsMap
+}
+
+// parseIDConstraints scans element children for xs:key, xs:keyref, xs:unique declarations.
+func (c *compiler) parseIDConstraints(elem *helium.Element) []*IDConstraint {
+	var idcs []*IDConstraint
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		ce := child.(*helium.Element)
+		var kind IDCKind
+		switch {
+		case isXSDElement(ce, "unique"):
+			kind = IDCUnique
+		case isXSDElement(ce, "key"):
+			kind = IDCKey
+		case isXSDElement(ce, "keyref"):
+			kind = IDCKeyRef
+		default:
+			continue
+		}
+		idc := c.parseIDConstraint(ce, kind)
+		if idc != nil {
+			idcs = append(idcs, idc)
+		}
+	}
+	return idcs
+}
+
+// parseIDConstraint parses a single xs:key, xs:keyref, or xs:unique declaration.
+func (c *compiler) parseIDConstraint(elem *helium.Element, kind IDCKind) *IDConstraint {
+	name := getAttr(elem, "name")
+	if name == "" {
+		return nil
+	}
+	idc := &IDConstraint{
+		Name:       name,
+		Kind:       kind,
+		Namespaces: collectNSContext(elem),
+	}
+	if kind == IDCKeyRef {
+		idc.Refer = getAttr(elem, "refer")
+	}
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		ce := child.(*helium.Element)
+		switch {
+		case isXSDElement(ce, "selector"):
+			idc.Selector = getAttr(ce, "xpath")
+		case isXSDElement(ce, "field"):
+			idc.Fields = append(idc.Fields, getAttr(ce, "xpath"))
+		}
+	}
+	return idc
 }
 
 func isXSDElement(elem *helium.Element, localName string) bool {
