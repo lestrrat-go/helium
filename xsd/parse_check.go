@@ -1,4 +1,4 @@
-package xmlschema
+package xsd
 
 import (
 	"strings"

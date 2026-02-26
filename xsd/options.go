@@ -1,4 +1,4 @@
-package xmlschema
+package xsd
 
 // CompileOption configures schema compilation.
 type CompileOption func(*compileConfig)
