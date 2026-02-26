@@ -28,15 +28,6 @@ var htmlURIAttrs = map[string]bool{
 	"src":    true,
 }
 
-// htmlBooleanAttrs is the set of HTML boolean attributes.
-// Mirrors htmlIsBooleanAttr in HTMLtree.c.
-var htmlBooleanAttrs = map[string]bool{
-	"checked": true, "compact": true, "declare": true, "defer": true,
-	"disabled": true, "ismap": true, "multiple": true, "nohref": true,
-	"noresize": true, "noshade": true, "nowrap": true, "readonly": true,
-	"selected": true,
-}
-
 // defaultHTMLDTD is the default DOCTYPE for HTML documents without one.
 // Mirrors libxml2's htmlDocContentDumpOutput behavior.
 const defaultHTMLDTD = `<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN" "http://www.w3.org/TR/REC-html40/loose.dtd">` + "\n"

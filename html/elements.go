@@ -148,22 +148,6 @@ func lookupElement(name string) *htmlElemDesc {
 	return elemMap[strings.ToLower(name)]
 }
 
-// isVoidElement returns true if the element is a void element (no closing tag allowed).
-func isVoidElement(name string) bool {
-	if desc := lookupElement(name); desc != nil {
-		return desc.Empty
-	}
-	return false
-}
-
-// isInlineElement returns true if the element is an inline element.
-func isInlineElement(name string) bool {
-	if desc := lookupElement(name); desc != nil {
-		return desc.Inline == 1
-	}
-	return false
-}
-
 // isHeadElement returns true if the tag belongs in <head>.
 func isHeadElement(name string) bool {
 	switch strings.ToLower(name) {
@@ -171,11 +155,6 @@ func isHeadElement(name string) bool {
 		return true
 	}
 	return false
-}
-
-// isBodyElement returns true if the tag belongs in <body> (not <head>).
-func isBodyElement(name string) bool {
-	return !isHeadElement(name) && strings.ToLower(name) != "html" && strings.ToLower(name) != "head"
 }
 
 // htmlStartClose is the auto-close rules table from libxml2.
