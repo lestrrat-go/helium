@@ -1,8 +1,7 @@
-// Package xmlschema implements XML Schema (XSD) validation.
+// Package xsd implements XML Schema (XSD) validation.
 //
-// Phase 1 covers structural validation: content model matching for
-// sequence, choice, and all compositors with element particles.
-package xmlschema
+// It supports a subset of the W3C XML Schema Definition Language 1.0.
+package xsd
 
 import (
 	"os"

@@ -1,4 +1,4 @@
-package xmlschema_test
+package xsd_test
 
 import (
 	"os"
@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xmlschema"
+	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
 
@@ -169,7 +169,7 @@ func TestGoldenFiles(t *testing.T) {
 
 			// Compile schema.
 			xsdFilename := "./test/schemas/" + tc.xsdBase
-			schema, err := xmlschema.CompileFile(tc.xsdPath, xmlschema.WithSchemaFilename(xsdFilename))
+			schema, err := xsd.CompileFile(tc.xsdPath, xsd.WithSchemaFilename(xsdFilename))
 			require.NoError(t, err, "schema compilation failed for %s", tc.xsdPath)
 
 			var got string
@@ -184,7 +184,7 @@ func TestGoldenFiles(t *testing.T) {
 
 				// Validate. Prepend any compile warnings to the output.
 				filename := "./test/schemas/" + tc.xmlBase
-				got = schema.CompileWarnings() + xmlschema.Validate(doc, schema, xmlschema.WithFilename(filename))
+				got = schema.CompileWarnings() + xsd.Validate(doc, schema, xsd.WithFilename(filename))
 			}
 
 			if got == string(expected) {

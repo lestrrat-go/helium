@@ -1,4 +1,4 @@
-package xmlschema
+package xsd
 
 import (
 	"fmt"
@@ -64,11 +64,11 @@ type typeDefSource struct {
 func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*Schema, error) {
 	root := findDocumentElement(doc)
 	if root == nil {
-		return nil, fmt.Errorf("xmlschema: empty document")
+		return nil, fmt.Errorf("xsd: empty document")
 	}
 
 	if !isXSDElement(root, "schema") {
-		return nil, fmt.Errorf("xmlschema: root element is not xs:schema")
+		return nil, fmt.Errorf("xsd: root element is not xs:schema")
 	}
 
 	c := &compiler{
@@ -241,17 +241,17 @@ func (c *compiler) loadInclude(location string, includeElem *helium.Element) err
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("xmlschema: failed to load include %q: %w", location, err)
+		return fmt.Errorf("xsd: failed to load include %q: %w", location, err)
 	}
 
 	doc, err := helium.Parse(data)
 	if err != nil {
-		return fmt.Errorf("xmlschema: failed to parse include %q: %w", location, err)
+		return fmt.Errorf("xsd: failed to parse include %q: %w", location, err)
 	}
 
 	incRoot := findDocumentElement(doc)
 	if incRoot == nil || !isXSDElement(incRoot, "schema") {
-		return fmt.Errorf("xmlschema: included document %q is not an xs:schema", location)
+		return fmt.Errorf("xsd: included document %q is not an xs:schema", location)
 	}
 
 	// Check target namespace compatibility.
@@ -318,7 +318,7 @@ func (c *compiler) loadImport(location, namespace string) error {
 
 	impRoot := findDocumentElement(doc)
 	if impRoot == nil || !isXSDElement(impRoot, "schema") {
-		return fmt.Errorf("xmlschema: imported document %q is not an xs:schema", location)
+		return fmt.Errorf("xsd: imported document %q is not an xs:schema", location)
 	}
 
 	// Compute display filename for the imported schema (for error messages).
@@ -508,7 +508,7 @@ func (c *compiler) parseGlobalElement(elem *helium.Element) error {
 func (c *compiler) parseNamedComplexType(elem *helium.Element) error {
 	name := getAttr(elem, "name")
 	if name == "" {
-		return fmt.Errorf("xmlschema: named complexType missing name")
+		return fmt.Errorf("xsd: named complexType missing name")
 	}
 
 	td, err := c.parseComplexType(elem)
@@ -524,7 +524,7 @@ func (c *compiler) parseNamedComplexType(elem *helium.Element) error {
 func (c *compiler) parseNamedSimpleType(elem *helium.Element) error {
 	name := getAttr(elem, "name")
 	if name == "" {
-		return fmt.Errorf("xmlschema: named simpleType missing name")
+		return fmt.Errorf("xsd: named simpleType missing name")
 	}
 
 	td, err := c.parseSimpleType(elem)
@@ -965,7 +965,7 @@ func (c *compiler) parseFacets(restriction *helium.Element) *FacetSet {
 func (c *compiler) parseNamedGroup(elem *helium.Element) error {
 	name := getAttr(elem, "name")
 	if name == "" {
-		return fmt.Errorf("xmlschema: named group missing name")
+		return fmt.Errorf("xsd: named group missing name")
 	}
 
 	// A named group has exactly one child compositor (sequence, choice, or all).
@@ -999,7 +999,7 @@ func (c *compiler) parseNamedGroup(elem *helium.Element) error {
 func (c *compiler) parseNamedAttributeGroup(elem *helium.Element) error {
 	name := getAttr(elem, "name")
 	if name == "" {
-		return fmt.Errorf("xmlschema: named attributeGroup missing name")
+		return fmt.Errorf("xsd: named attributeGroup missing name")
 	}
 
 	qn := QName{Local: name, NS: c.schema.targetNamespace}
@@ -1136,7 +1136,7 @@ func (c *compiler) parseLocalElement(elem *helium.Element) (*Particle, error) {
 
 	name := getAttr(elem, "name")
 	if name == "" {
-		return nil, fmt.Errorf("xmlschema: local element missing name")
+		return nil, fmt.Errorf("xsd: local element missing name")
 	}
 
 	// Determine element namespace based on form and elementFormDefault.

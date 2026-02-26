@@ -1,4 +1,4 @@
-package xmlschema
+package xsd
 
 // QName represents a namespace-qualified name.
 type QName struct {
