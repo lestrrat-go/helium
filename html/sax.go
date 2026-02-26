@@ -13,128 +13,243 @@ type Attribute struct {
 	Boolean bool // true for boolean attributes (no value specified in source)
 }
 
-// SAXHandler is the HTML SAX1 handler interface. Unlike the XML SAX2Handler,
-// this uses simple element names (no namespaces) matching libxml2's HTML SAX.
-type SAXHandler interface {
+// Per-method handler interfaces. Each follows the http.Handler pattern:
+// an interface with a single method, paired with a func type adapter.
+
+type SetDocumentLocatorHandler interface {
 	SetDocumentLocator(loc DocumentLocator) error
+}
+
+type StartDocumentHandler interface {
 	StartDocument() error
+}
+
+type EndDocumentHandler interface {
 	EndDocument() error
+}
+
+type StartElementHandler interface {
 	StartElement(name string, attrs []Attribute) error
+}
+
+type EndElementHandler interface {
 	EndElement(name string) error
+}
+
+type CharactersHandler interface {
 	Characters(ch []byte) error
+}
+
+type CDataBlockHandler interface {
 	CDataBlock(value []byte) error
+}
+
+type CommentHandler interface {
 	Comment(value []byte) error
+}
+
+type InternalSubsetHandler interface {
 	InternalSubset(name, externalID, systemID string) error
+}
+
+type ProcessingInstructionHandler interface {
 	ProcessingInstruction(target, data string) error
+}
+
+type IgnorableWhitespaceHandler interface {
 	IgnorableWhitespace(ch []byte) error
+}
+
+type ErrorHandler interface {
 	Error(msg string, args ...interface{}) error
+}
+
+type WarningHandler interface {
 	Warning(msg string, args ...interface{}) error
 }
 
+// Func type adapters. Each implements its corresponding handler interface.
+
+type SetDocumentLocatorFunc func(loc DocumentLocator) error
+
+func (f SetDocumentLocatorFunc) SetDocumentLocator(loc DocumentLocator) error { return f(loc) }
+
+type StartDocumentFunc func() error
+
+func (f StartDocumentFunc) StartDocument() error { return f() }
+
+type EndDocumentFunc func() error
+
+func (f EndDocumentFunc) EndDocument() error { return f() }
+
+type StartElementFunc func(name string, attrs []Attribute) error
+
+func (f StartElementFunc) StartElement(name string, attrs []Attribute) error { return f(name, attrs) }
+
+type EndElementFunc func(name string) error
+
+func (f EndElementFunc) EndElement(name string) error { return f(name) }
+
+type CharactersFunc func(ch []byte) error
+
+func (f CharactersFunc) Characters(ch []byte) error { return f(ch) }
+
+type CDataBlockFunc func(value []byte) error
+
+func (f CDataBlockFunc) CDataBlock(value []byte) error { return f(value) }
+
+type CommentFunc func(value []byte) error
+
+func (f CommentFunc) Comment(value []byte) error { return f(value) }
+
+type InternalSubsetFunc func(name, externalID, systemID string) error
+
+func (f InternalSubsetFunc) InternalSubset(name, externalID, systemID string) error {
+	return f(name, externalID, systemID)
+}
+
+type ProcessingInstructionFunc func(target, data string) error
+
+func (f ProcessingInstructionFunc) ProcessingInstruction(target, data string) error {
+	return f(target, data)
+}
+
+type IgnorableWhitespaceFunc func(ch []byte) error
+
+func (f IgnorableWhitespaceFunc) IgnorableWhitespace(ch []byte) error { return f(ch) }
+
+type ErrorFunc func(msg string, args ...interface{}) error
+
+func (f ErrorFunc) Error(msg string, args ...interface{}) error { return f(msg, args...) }
+
+type WarningFunc func(msg string, args ...interface{}) error
+
+func (f WarningFunc) Warning(msg string, args ...interface{}) error { return f(msg, args...) }
+
+// SAXHandler is the HTML SAX1 handler interface. Unlike the XML SAX2Handler,
+// this uses simple element names (no namespaces) matching libxml2's HTML SAX.
+type SAXHandler interface {
+	SetDocumentLocatorHandler
+	StartDocumentHandler
+	EndDocumentHandler
+	StartElementHandler
+	EndElementHandler
+	CharactersHandler
+	CDataBlockHandler
+	CommentHandler
+	InternalSubsetHandler
+	ProcessingInstructionHandler
+	IgnorableWhitespaceHandler
+	ErrorHandler
+	WarningHandler
+}
+
 // SAXCallbacks is a callback-based SAXHandler implementation.
+// Each field accepts either a Func adapter or any type implementing
+// the corresponding single-method Handler interface.
 type SAXCallbacks struct {
-	SetDocumentLocatorHandler func(loc DocumentLocator) error
-	StartDocumentHandler      func() error
-	EndDocumentHandler        func() error
-	StartElementHandler       func(name string, attrs []Attribute) error
-	EndElementHandler         func(name string) error
-	CharactersHandler         func(ch []byte) error
-	CDataBlockHandler         func(value []byte) error
-	CommentHandler            func(value []byte) error
-	InternalSubsetHandler     func(name, externalID, systemID string) error
-	ProcessingInstructionHandler func(target, data string) error
-	IgnorableWhitespaceHandler func(ch []byte) error
-	ErrorHandler              func(msg string, args ...interface{}) error
-	WarningHandler            func(msg string, args ...interface{}) error
+	SetDocumentLocatorHandler    SetDocumentLocatorHandler
+	StartDocumentHandler         StartDocumentHandler
+	EndDocumentHandler           EndDocumentHandler
+	StartElementHandler          StartElementHandler
+	EndElementHandler            EndElementHandler
+	CharactersHandler            CharactersHandler
+	CDataBlockHandler            CDataBlockHandler
+	CommentHandler               CommentHandler
+	InternalSubsetHandler        InternalSubsetHandler
+	ProcessingInstructionHandler ProcessingInstructionHandler
+	IgnorableWhitespaceHandler   IgnorableWhitespaceHandler
+	ErrorHandler                 ErrorHandler
+	WarningHandler               WarningHandler
 }
 
 func (s *SAXCallbacks) SetDocumentLocator(loc DocumentLocator) error {
 	if h := s.SetDocumentLocatorHandler; h != nil {
-		return h(loc)
+		return h.SetDocumentLocator(loc)
 	}
 	return nil
 }
 
 func (s *SAXCallbacks) StartDocument() error {
 	if h := s.StartDocumentHandler; h != nil {
-		return h()
+		return h.StartDocument()
 	}
 	return nil
 }
 
 func (s *SAXCallbacks) EndDocument() error {
 	if h := s.EndDocumentHandler; h != nil {
-		return h()
+		return h.EndDocument()
 	}
 	return nil
 }
 
 func (s *SAXCallbacks) StartElement(name string, attrs []Attribute) error {
 	if h := s.StartElementHandler; h != nil {
-		return h(name, attrs)
+		return h.StartElement(name, attrs)
 	}
 	return nil
 }
 
 func (s *SAXCallbacks) EndElement(name string) error {
 	if h := s.EndElementHandler; h != nil {
-		return h(name)
+		return h.EndElement(name)
 	}
 	return nil
 }
 
 func (s *SAXCallbacks) Characters(ch []byte) error {
 	if h := s.CharactersHandler; h != nil {
-		return h(ch)
+		return h.Characters(ch)
 	}
 	return nil
 }
 
 func (s *SAXCallbacks) CDataBlock(value []byte) error {
 	if h := s.CDataBlockHandler; h != nil {
-		return h(value)
+		return h.CDataBlock(value)
 	}
 	return nil
 }
 
 func (s *SAXCallbacks) Comment(value []byte) error {
 	if h := s.CommentHandler; h != nil {
-		return h(value)
+		return h.Comment(value)
 	}
 	return nil
 }
 
 func (s *SAXCallbacks) InternalSubset(name, externalID, systemID string) error {
 	if h := s.InternalSubsetHandler; h != nil {
-		return h(name, externalID, systemID)
+		return h.InternalSubset(name, externalID, systemID)
 	}
 	return nil
 }
 
 func (s *SAXCallbacks) ProcessingInstruction(target, data string) error {
 	if h := s.ProcessingInstructionHandler; h != nil {
-		return h(target, data)
+		return h.ProcessingInstruction(target, data)
 	}
 	return nil
 }
 
 func (s *SAXCallbacks) IgnorableWhitespace(ch []byte) error {
 	if h := s.IgnorableWhitespaceHandler; h != nil {
-		return h(ch)
+		return h.IgnorableWhitespace(ch)
 	}
 	return nil
 }
 
 func (s *SAXCallbacks) Error(msg string, args ...interface{}) error {
 	if h := s.ErrorHandler; h != nil {
-		return h(msg, args...)
+		return h.Error(msg, args...)
 	}
 	return nil
 }
 
 func (s *SAXCallbacks) Warning(msg string, args ...interface{}) error {
 	if h := s.WarningHandler; h != nil {
-		return h(msg, args...)
+		return h.Warning(msg, args...)
 	}
 	return nil
 }
