@@ -326,3 +326,25 @@ for input in "$SOURCE"/test/HTML/*; do
     html_count=$((html_count + 1))
 done
 echo "Copied $html_count HTML test files into $HTML_DEST"
+
+# Copy Schematron test files
+SCH_DEST="$DEST/schematron"
+mkdir -p "$SCH_DEST/test" "$SCH_DEST/result"
+
+# test/ — schema (.sct) and instance (.xml) files
+sch_test=0
+for input in "$SOURCE"/test/schematron/*; do
+    [ -f "$input" ] || continue
+    cp "$input" "$SCH_DEST/test/"
+    sch_test=$((sch_test + 1))
+done
+echo "Copied $sch_test Schematron test files into $SCH_DEST/test"
+
+# result/ — expected validation output (.err files)
+sch_result=0
+for result in "$SOURCE"/result/schematron/*; do
+    [ -f "$result" ] || continue
+    cp "$result" "$SCH_DEST/result/"
+    sch_result=$((sch_result + 1))
+done
+echo "Copied $sch_result Schematron result files into $SCH_DEST/result"
