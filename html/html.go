@@ -19,6 +19,9 @@ func Parse(data []byte) (*helium.Document, error) {
 	if err := p.parse(); err != nil {
 		return nil, err
 	}
+	if enc := p.detectedEncoding; enc != "" {
+		tb.doc.SetEncoding(enc)
+	}
 	return tb.doc, nil
 }
 

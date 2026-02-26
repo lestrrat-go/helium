@@ -1,6 +1,7 @@
 package html
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"strings"
@@ -43,6 +44,17 @@ const defaultHTMLDTD = `<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional
 // DumpDoc serializes an HTML document to the writer.
 // Mirrors libxml2's htmlDocContentDumpOutput.
 func DumpDoc(out io.Writer, doc *helium.Document) error {
+	// If the document was parsed from Latin-1/Windows-1252, convert
+	// UTF-8 output back to single-byte encoding to match libxml2.
+	// strict=true for explicit ISO-8859-1 charset (numeric char refs for
+	// runes > 0xFF); strict=false for auto-detected Win-1252 (raw bytes).
+	enc := doc.Encoding()
+	if enc == "ISO-8859-1" {
+		out = &latin1EncodingWriter{w: out, strict: true}
+	} else if enc == "Windows-1252" {
+		out = &latin1EncodingWriter{w: out, strict: false}
+	}
+
 	// Output DTD if present, or default DTD for HTML documents
 	if dtd := doc.IntSubset(); dtd != nil {
 		if err := dumpDTD(out, dtd); err != nil {
@@ -299,7 +311,10 @@ func dumpAttributes(out io.Writer, e *helium.Element) error {
 		_, _ = io.WriteString(out, attrName)
 
 		// Boolean attributes: just the name, no ="..."
-		if htmlBooleanAttrs[attrName] && attr.Value() == "" {
+		// Matches libxml2: if the attribute has no children (boolean attr
+		// in the source), output just the name. Attributes with empty string
+		// values (e.g., alt="") have an empty text child and get ="".
+		if attr.FirstChild() == nil {
 			continue
 		}
 
@@ -341,6 +356,82 @@ func uriEscapeStr(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// unicodeToWin1252 is the reverse mapping of win1252ToUnicode (parser.go).
+// Maps Unicode codepoints back to Windows-1252 bytes 0x80-0x9F.
+var unicodeToWin1252 = map[rune]byte{
+	0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84,
+	0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88,
+	0x2030: 0x89, 0x0160: 0x8A, 0x2039: 0x8B, 0x0152: 0x8C,
+	0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92, 0x201C: 0x93,
+	0x201D: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97,
+	0x02DC: 0x98, 0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B,
+	0x0153: 0x9C, 0x017E: 0x9E, 0x0178: 0x9F,
+}
+
+// latin1EncodingWriter wraps an io.Writer and converts multi-byte UTF-8
+// runes in the Latin-1/Windows-1252 range back to single bytes.
+// When strict is true (explicit ISO-8859-1 charset), runes > 0xFF that
+// have no Latin-1 representation are emitted as numeric character references.
+// When strict is false (auto-detected Win-1252), Win-1252 reverse mapping
+// is used and unmapped runes pass through as UTF-8.
+type latin1EncodingWriter struct {
+	w      io.Writer
+	strict bool
+}
+
+func (lw *latin1EncodingWriter) Write(p []byte) (int, error) {
+	out := utf8ToLatin1(p, lw.strict)
+	_, err := lw.w.Write(out)
+	// Report the original input length as consumed
+	if err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+// utf8ToLatin1 converts UTF-8 encoded data back to Latin-1/Windows-1252.
+// Runes U+0080-U+00FF are written as single bytes.
+// When strict is true (explicit ISO-8859-1), runes > U+00FF are emitted
+// as numeric character references (&#N;).
+// When strict is false (auto-detected Win-1252), Windows-1252 runes are
+// reverse-mapped to single bytes and other runes pass through as UTF-8.
+func utf8ToLatin1(data []byte, strict bool) []byte {
+	// Fast path: if all bytes are ASCII, no conversion needed
+	allASCII := true
+	for _, b := range data {
+		if b >= 0x80 {
+			allASCII = false
+			break
+		}
+	}
+	if allASCII {
+		return data
+	}
+
+	var buf bytes.Buffer
+	buf.Grow(len(data))
+	for i := 0; i < len(data); {
+		b := data[i]
+		if b < 0x80 {
+			buf.WriteByte(b)
+			i++
+			continue
+		}
+		r, size := utf8.DecodeRune(data[i:])
+		if r >= 0x80 && r <= 0xFF {
+			buf.WriteByte(byte(r))
+		} else if strict {
+			fmt.Fprintf(&buf, "&#%d;", r)
+		} else if wb, ok := unicodeToWin1252[r]; ok {
+			buf.WriteByte(wb)
+		} else {
+			buf.Write(data[i : i+size])
+		}
+		i += size
+	}
+	return buf.Bytes()
 }
 
 // isURISafe returns true if the byte should NOT be percent-encoded.

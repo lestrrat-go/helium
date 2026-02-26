@@ -92,6 +92,7 @@ var html40ElementTable = []htmlElemDesc{
 	{"meta", 0, 2, 2, true, false, 0, 0, dataNormal},
 	{"noembed", 0, 0, 0, false, false, 0, 0, dataRawText},
 	{"noframes", 0, 0, 0, false, false, 2, 0, dataRawText},
+	{"nobr", 0, 3, 0, false, false, 0, 1, dataNormal},
 	{"noscript", 0, 0, 0, false, false, 0, 0, dataNormal},
 	{"object", 0, 0, 0, false, false, 0, 2, dataNormal},
 	{"ol", 0, 0, 0, false, false, 0, 0, dataNormal},

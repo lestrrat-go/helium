@@ -93,6 +93,10 @@ func (d *Document) Encoding() string {
 	return "utf8"
 }
 
+func (d *Document) SetEncoding(enc string) {
+	d.encoding = enc
+}
+
 func (d *Document) Standalone() DocumentStandaloneType {
 	return d.standalone
 }

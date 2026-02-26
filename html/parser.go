@@ -31,6 +31,16 @@ type parser struct {
 
 	// locator for SetDocumentLocator
 	locator *parserLocator
+
+	// encodingError is set when invalid bytes were found in a UTF-8 declared
+	// document and replaced with U+FFFD. The SAX error is emitted once when
+	// the first characters event containing U+FFFD is encountered.
+	encodingError bool
+
+	// detectedEncoding records the original encoding detected for the input.
+	// Empty means UTF-8 (no conversion was needed). "ISO-8859-1" means the
+	// input was Latin-1/Windows-1252 and was converted to UTF-8 for parsing.
+	detectedEncoding string
 }
 
 // parserLocator implements DocumentLocator.
@@ -44,18 +54,36 @@ func (l *parserLocator) ColumnNumber() int { return l.p.col }
 func newParser(input []byte, sax SAXHandler) *parser {
 	// Normalize \r\n → \n and standalone \r → \n (HTML spec line normalization)
 	normalized := normalizeNewlines(input)
-	// If input is not valid UTF-8, assume Latin-1 (ISO-8859-1) encoding
-	// and convert to UTF-8, matching libxml2's default behavior.
+
+	var encodingErr bool
+	var detectedEnc string
 	if !utf8.Valid(normalized) {
-		normalized = latin1ToUTF8(normalized)
+		if declaredCharsetIsUTF8(normalized) {
+			normalized, encodingErr = replaceInvalidUTF8(normalized)
+		} else {
+			// Assume Latin-1/Windows-1252 encoding and convert to UTF-8,
+			// matching libxml2's default behavior for non-UTF-8 documents.
+			// Distinguish explicit charset=iso-8859-1 from auto-detected:
+			// - "ISO-8859-1": strict output with &#N; for runes > 0xFF
+			// - "Windows-1252": Win-1252 reverse mapping for output
+			if declaredCharsetIsLatin1(normalized) {
+				detectedEnc = "ISO-8859-1"
+			} else {
+				detectedEnc = "Windows-1252"
+			}
+			normalized = latin1ToUTF8(normalized)
+		}
 	}
+
 	p := &parser{
-		input: normalized,
-		pos:   0,
-		line:  1,
-		col:   1,
-		sax:   sax,
-		mode:  insertInitial,
+		input:            normalized,
+		pos:              0,
+		line:             1,
+		col:              1,
+		sax:              sax,
+		mode:             insertInitial,
+		encodingError:    encodingErr,
+		detectedEncoding: detectedEnc,
 	}
 	p.locator = &parserLocator{p: p}
 	return p
@@ -107,6 +135,51 @@ func latin1ToUTF8(data []byte) []byte {
 		}
 	}
 	return buf.Bytes()
+}
+
+// replaceInvalidUTF8 replaces invalid byte sequences with U+FFFD.
+// Returns the cleaned data and whether any replacements were made.
+func replaceInvalidUTF8(data []byte) ([]byte, bool) {
+	var buf bytes.Buffer
+	buf.Grow(len(data))
+	hasErrors := false
+	for i := 0; i < len(data); {
+		r, size := utf8.DecodeRune(data[i:])
+		if r == utf8.RuneError && size <= 1 {
+			buf.WriteRune('\uFFFD')
+			i++
+			hasErrors = true
+		} else {
+			buf.Write(data[i : i+size])
+			i += size
+		}
+	}
+	return buf.Bytes(), hasErrors
+}
+
+// declaredCharsetIsUTF8 scans the raw (possibly invalid) input bytes for a
+// <meta charset="utf-8"> declaration, returning true if found.
+func declaredCharsetIsUTF8(data []byte) bool {
+	// Case-insensitive search for charset="utf-8" or charset=utf-8
+	lower := bytes.ToLower(data)
+	// Limit scan to the first 1024 bytes (charset should appear early)
+	if len(lower) > 1024 {
+		lower = lower[:1024]
+	}
+	return bytes.Contains(lower, []byte("charset=\"utf-8\"")) ||
+		bytes.Contains(lower, []byte("charset=utf-8"))
+}
+
+// declaredCharsetIsLatin1 scans the raw input bytes for an explicit
+// charset=iso-8859-1 declaration. This distinguishes documents that
+// declare ISO-8859-1 from those that are just auto-detected as non-UTF-8.
+func declaredCharsetIsLatin1(data []byte) bool {
+	lower := bytes.ToLower(data)
+	if len(lower) > 1024 {
+		lower = lower[:1024]
+	}
+	return bytes.Contains(lower, []byte("charset=iso-8859-1")) ||
+		bytes.Contains(lower, []byte("charset=\"iso-8859-1\""))
 }
 
 // peek returns the byte at the current position, or 0 if at end.
@@ -395,6 +468,18 @@ func (p *parser) parseEndTag() {
 	name := p.parseName()
 	name = strings.ToLower(name)
 
+	// Detect malformed end tag: characters like '<' after the tag name
+	// but before '>' indicate a malformed tag (e.g., </font<).
+	malformed := false
+	var junkChar byte
+	if !p.atEnd() && p.peek() != '>' {
+		ch := p.peek()
+		if ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r' {
+			malformed = true
+			junkChar = ch
+		}
+	}
+
 	// Skip to closing '>'
 	for !p.atEnd() && p.peek() != '>' {
 		p.advance(1)
@@ -404,6 +489,11 @@ func (p *parser) parseEndTag() {
 	}
 
 	if name == "" {
+		return
+	}
+
+	if malformed {
+		_ = p.sax.Error("Unexpected end tag : %s", name+string(junkChar))
 		return
 	}
 
@@ -661,10 +751,27 @@ func (p *parser) parseCharRef() {
 				_ = p.emitCharacters([]byte(val))
 				return
 			}
-			// Without semicolon — resolve the entity (HTML legacy behavior)
-			// but only if the entity name is recognized
-			_ = p.emitCharacters([]byte(val))
-			return
+			// Without semicolon — only resolve legacy (HTML4) entities.
+			// HTML5-only entities require a trailing semicolon.
+			if isLegacyEntity(name) {
+				_ = p.emitCharacters([]byte(val))
+				return
+			}
+		}
+		// No semicolon and full name is not a legacy entity.
+		// Try prefix matching: find the longest legacy entity prefix.
+		if !hasSemicolon {
+			for i := len(name) - 1; i > 0; i-- {
+				prefix := name[:i]
+				if isLegacyEntity(prefix) {
+					if val, ok := lookupEntity(prefix); ok {
+						_ = p.emitCharacters([]byte(val))
+						remainder := name[i:]
+						_ = p.emitCharacters([]byte(remainder))
+						return
+					}
+				}
+			}
 		}
 	}
 
@@ -675,6 +782,10 @@ func (p *parser) parseCharRef() {
 
 // emitCharacters fires the appropriate SAX Characters event.
 func (p *parser) emitCharacters(data []byte) error {
+	if p.encodingError && bytes.ContainsRune(data, '\uFFFD') {
+		_ = p.sax.Error("Invalid bytes in character encoding")
+		p.encodingError = false
+	}
 	return p.sax.Characters(data)
 }
 
@@ -884,15 +995,16 @@ func (p *parser) parseAttributes() []Attribute {
 }
 
 // parseAttrName parses an attribute name.
+// Uses negative-logic terminators: any character that is not a terminator
+// is accepted, matching HTML's liberal attribute name rules.
 func (p *parser) parseAttrName() string {
 	start := p.pos
 	for !p.atEnd() {
 		b := p.peek()
-		if isNameChar(b) {
-			p.advance(1)
-		} else {
+		if isWhitespaceByte(b) || b == '>' || b == '/' || b == '=' || b == '"' || b == '\'' || b == '<' || b == 0 {
 			break
 		}
+		p.advance(1)
 	}
 	return string(p.input[start:p.pos])
 }
@@ -992,6 +1104,10 @@ func (p *parser) resolveEntityInAttr() string {
 			// the next character is NOT '=' or alphanumeric.
 			if hasSemicolon {
 				return val
+			}
+			// Without semicolon: only resolve legacy (HTML4) entities
+			if !isLegacyEntity(name) {
+				return "&" + name
 			}
 			// Without semicolon, check what follows
 			next := p.peek()
