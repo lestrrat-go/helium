@@ -5,16 +5,18 @@ import "fmt"
 // TokenType identifies the kind of lexical token.
 type TokenType int
 
+// TokenEOF marks the end of input. TokenNumber, TokenString, TokenName,
+// TokenStar, and TokenVariableRef represent literals and names.
+// TokenSlash through TokenDiv represent operators.
+// TokenLParen through TokenColon represent punctuation symbols.
 const (
-	// Literals and names
-	TokenEOF TokenType = iota
-	TokenNumber         // 42, 3.14
-	TokenString         // "hello", 'hello'
-	TokenName           // NCName (foo, bar)
-	TokenStar           // * (wildcard name test or multiply)
-	TokenVariableRef    // $name
+	TokenEOF        TokenType = iota // end of input
+	TokenNumber                      // 42, 3.14
+	TokenString                      // "hello", 'hello'
+	TokenName                        // NCName (foo, bar)
+	TokenStar                        // * (wildcard name test or multiply)
+	TokenVariableRef                 // $name
 
-	// Operators
 	TokenSlash       // /
 	TokenSlashSlash  // //
 	TokenPipe        // |
@@ -31,7 +33,6 @@ const (
 	TokenMod         // mod
 	TokenDiv         // div
 
-	// Symbols
 	TokenLParen     // (
 	TokenRParen     // )
 	TokenLBracket   // [

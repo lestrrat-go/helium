@@ -1,12 +1,53 @@
 package helium
 
 import (
+	"bytes"
 	"errors"
+	"io"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
+	"github.com/lestrrat-go/strcursor"
 )
+
+// buildURI resolves a relative system ID against a base URI.
+// For local file paths (no scheme or file: scheme), it uses filepath.Join.
+// For other schemes, it uses url.ResolveReference.
+func buildURI(systemID, base string) string {
+	u, err := url.Parse(systemID)
+	if err != nil {
+		return ""
+	}
+	if u.IsAbs() {
+		return systemID
+	}
+
+	baseURL, err := url.Parse(base)
+	if err != nil {
+		return ""
+	}
+	if baseURL.Scheme == "" || baseURL.Scheme == "file" {
+		basePath := baseURL.Path
+		if basePath == "" {
+			basePath = base
+		}
+		return filepath.Join(filepath.Dir(basePath), systemID)
+	}
+
+	return baseURL.ResolveReference(u).String()
+}
+
+// fileParseInput wraps an os.File as a sax.ParseInput.
+type fileParseInput struct {
+	io.ReadCloser
+	uri string
+}
+
+func (f *fileParseInput) URI() string { return f.uri }
 
 type TreeBuilder struct {
 }
@@ -325,6 +366,86 @@ func (t *TreeBuilder) InternalSubset(ctxif sax.Context, name, eid, uri string) e
 }
 
 func (t *TreeBuilder) ExternalSubset(ctxif sax.Context, name, eid, uri string) error {
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START tree.ExternalSubset %s,%s,%s", name, eid, uri)
+		defer g.IRelease("END tree.ExternalSubset")
+	}
+
+	ctx := ctxif.(*parserCtx)
+
+	if !ctx.loadsubset.IsSet(DetectIDs) {
+		return nil
+	}
+
+	// Try catalog resolution first.
+	if ctx.catalog != nil {
+		if catalogURI := ctx.catalog.Resolve(eid, uri); catalogURI != "" {
+			uri = catalogURI
+		}
+	}
+
+	if uri == "" {
+		return nil
+	}
+
+	// Resolve system URI against document's base URI
+	resolved := uri
+	if !filepath.IsAbs(uri) && ctx.baseURI != "" {
+		resolved = filepath.Join(filepath.Dir(ctx.baseURI), uri)
+	}
+
+	data, err := os.ReadFile(resolved)
+	if err != nil {
+		// Silently ignore missing external DTDs
+		return nil
+	}
+
+	doc := ctx.doc
+
+	// Create the external subset DTD
+	dtd := newDTD()
+	dtd.name = name
+	dtd.externalID = eid
+	dtd.systemID = uri
+	dtd.doc = doc
+	doc.extSubset = dtd
+
+	// Parse markup declarations from the DTD content.
+	// Push content onto the input stack and loop until exhausted.
+	savedExternal := ctx.external
+	ctx.external = true
+
+	baseLen := ctx.inputTab.Len()
+	ctx.pushInput(strcursor.NewByteCursor(bytes.NewReader(data)))
+
+	for ctx.inputTab.Len() > baseLen {
+		top, ok := ctx.inputTab.PeekOne().(strcursor.Cursor)
+		if !ok || top.Done() {
+			break
+		}
+
+		ctx.skipBlanks()
+
+		if ctx.inputTab.Len() <= baseLen {
+			break
+		}
+		top, ok = ctx.inputTab.PeekOne().(strcursor.Cursor)
+		if !ok || top.Done() {
+			break
+		}
+
+		if err := ctx.parseMarkupDecl(); err != nil {
+			break
+		}
+	}
+
+	// Clean up: ensure our pushed input is removed
+	for ctx.inputTab.Len() > baseLen {
+		ctx.popInput()
+	}
+
+	ctx.external = savedExternal
+
 	return nil
 }
 
@@ -553,8 +674,28 @@ func (t *TreeBuilder) Reference(ctxif sax.Context, name string) error {
 
 func (t *TreeBuilder) ResolveEntity(ctxif sax.Context, publicID string, systemID string) (sax.ParseInput, error) {
 	if pdebug.Enabled {
-		g := pdebug.IPrintf("START tree.ResolveEntity '%s'", publicID, systemID)
+		g := pdebug.IPrintf("START tree.ResolveEntity '%s' '%s'", publicID, systemID)
 		defer g.IRelease("END tree.ResolveEntity")
+	}
+
+	ctx := ctxif.(*parserCtx)
+	if ctx.catalog != nil {
+		if resolved := ctx.catalog.Resolve(publicID, systemID); resolved != "" {
+			f, err := os.Open(resolved)
+			if err == nil {
+				return &fileParseInput{ReadCloser: f, uri: resolved}, nil
+			}
+		}
+	}
+
+	// Fall back to direct file-based resolution. The systemID at this point
+	// is the entity's resolved URI (built from system ID + base URI in
+	// EntityDecl). Try opening it as a file path.
+	if systemID != "" {
+		f, err := os.Open(systemID)
+		if err == nil {
+			return &fileParseInput{ReadCloser: f, uri: systemID}, nil
+		}
 	}
 
 	return nil, sax.ErrHandlerUnspecified
@@ -605,25 +746,25 @@ func (t *TreeBuilder) EntityDecl(ctxif sax.Context, name string, typ int, public
 		return errors.New("sax.EntityDecl called while note in subset")
 	}
 
-	_, err := dtd.AddEntity(name, EntityType(typ), publicID, systemID, notation)
+	ent, err := dtd.AddEntity(name, EntityType(typ), publicID, systemID, notation)
 	if err != nil {
 		return err
 	}
 
-	/*
-		if ent.uri == "" && systemID != "" {
-			   xmlChar *URI;
-			   const char *base = NULL;
-
-			   if (ctxt->input != NULL)
-			       base = ctxt->input->filename;
-			   if (base == NULL)
-			       base = ctxt->directory;
-
-			   URI = xmlBuildURI(systemId, (const xmlChar *) base);
-			   ent->URI = URI;
+	// Build the full URI for external entities by resolving the system ID
+	// against the document's base URI (mirrors libxml2's xmlSAX2EntityDecl).
+	if ent.uri == "" && systemID != "" {
+		base := ctx.baseURI
+		if base != "" {
+			resolved := buildURI(systemID, base)
+			if resolved != "" {
+				ent.uri = resolved
+			}
 		}
-	*/
+		if ent.uri == "" {
+			ent.uri = systemID
+		}
+	}
 
 	return nil
 }

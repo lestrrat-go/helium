@@ -3,6 +3,7 @@ package helium
 import (
 	"bytes"
 
+	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 )
@@ -11,6 +12,8 @@ type Parser struct {
 	sax            sax.SAX2Handler
 	charBufferSize int
 	options        ParseOption
+	baseURI        string
+	catalog        icatalog.Resolver
 }
 
 func Parse(b []byte) (*Document, error) {
@@ -30,7 +33,7 @@ func (p *Parser) Parse(b []byte) (*Document, error) {
 		defer g.IRelease("=== END Parser.Parse ===")
 	}
 
-	ctx := &parserCtx{rawInput: b}
+	ctx := &parserCtx{rawInput: b, baseURI: p.baseURI}
 	if err := ctx.init(p, bytes.NewReader(b)); err != nil {
 		return nil, err
 	}
@@ -76,4 +79,17 @@ func (p *Parser) SetOption(opt ParseOption) {
 // always respecting UTF-8 character boundaries.
 func (p *Parser) SetCharBufferSize(size int) {
 	p.charBufferSize = size
+}
+
+// SetBaseURI sets the document's base URI, used for resolving relative
+// references such as external DTD system identifiers.
+func (p *Parser) SetBaseURI(uri string) {
+	p.baseURI = uri
+}
+
+// SetCatalog sets an XML Catalog for resolving external entity identifiers
+// (public/system IDs) during parsing. When set, the parser consults the
+// catalog before attempting to load external DTDs and entities.
+func (p *Parser) SetCatalog(c icatalog.Resolver) {
+	p.catalog = c
 }

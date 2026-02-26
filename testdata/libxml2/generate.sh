@@ -209,3 +209,87 @@ for result in "$SOURCE"/result/XInclude/*; do
     xinc_results=$((xinc_results + 1))
 done
 echo "Copied $xinc_results XInclude result files into $XINC_DEST/result"
+
+# Copy XML Schema test files
+SCHEMA_DEST="$DEST/schemas"
+mkdir -p "$SCHEMA_DEST/test" "$SCHEMA_DEST/result"
+
+# test/ — schema (.xsd) and instance (.xml) files
+schema_test=0
+for input in "$SOURCE"/test/schemas/*; do
+    [ -f "$input" ] || continue
+    cp "$input" "$SCHEMA_DEST/test/"
+    schema_test=$((schema_test + 1))
+done
+echo "Copied $schema_test XML Schema test files into $SCHEMA_DEST/test"
+
+# result/ — expected validation output (.err files)
+schema_result=0
+for result in "$SOURCE"/result/schemas/*; do
+    [ -f "$result" ] || continue
+    cp "$result" "$SCHEMA_DEST/result/"
+    schema_result=$((schema_result + 1))
+done
+echo "Copied $schema_result XML Schema result files into $SCHEMA_DEST/result"
+
+# Copy XML Catalog test files
+# Catalogs reference each other via relative paths (nextCatalog, delegate*)
+# so all XML/script/SGML files must stay in a flat directory together.
+CAT_DEST="$DEST/catalogs"
+mkdir -p "$CAT_DEST" "$CAT_DEST/result"
+
+# test/ — catalog XML, script, and SGML files
+cat_test=0
+for input in "$SOURCE"/test/catalogs/*; do
+    [ -f "$input" ] || continue
+    cp "$input" "$CAT_DEST/"
+    cat_test=$((cat_test + 1))
+done
+echo "Copied $cat_test catalog test files into $CAT_DEST"
+
+# result/ — expected resolution output (golden files)
+cat_result=0
+for result in "$SOURCE"/result/catalogs/*; do
+    [ -f "$result" ] || continue
+    cp "$result" "$CAT_DEST/result/"
+    cat_result=$((cat_result + 1))
+done
+echo "Copied $cat_result catalog result files into $CAT_DEST/result"
+
+# Copy C14N test files
+# C14N tests are organized by category (without-comments, with-comments,
+# exc-without-comments, 1-1-without-comments). Each category has .xml inputs
+# with optional .xpath and .ns sidecar files. Results have no extension.
+# Some tests reference doc.dtd via relative paths, so it must be preserved.
+C14N_DEST="$DEST/c14n"
+c14n_total=0
+
+for category in without-comments with-comments exc-without-comments 1-1-without-comments; do
+    test_dir="$SOURCE/test/c14n/$category"
+    result_dir="$SOURCE/result/c14n/$category"
+    [ -d "$test_dir" ] || continue
+
+    mkdir -p "$C14N_DEST/$category/test" "$C14N_DEST/$category/result"
+
+    # Copy all test files (.xml, .xpath, .ns, .dtd)
+    c14n_cat=0
+    for input in "$test_dir"/*; do
+        [ -f "$input" ] || continue
+        cp "$input" "$C14N_DEST/$category/test/"
+        c14n_cat=$((c14n_cat + 1))
+    done
+
+    # Copy result files (no extension)
+    c14n_results=0
+    if [ -d "$result_dir" ]; then
+        for result in "$result_dir"/*; do
+            [ -f "$result" ] || continue
+            cp "$result" "$C14N_DEST/$category/result/"
+            c14n_results=$((c14n_results + 1))
+        done
+    fi
+
+    echo "Copied $c14n_cat test + $c14n_results result files for c14n/$category"
+    c14n_total=$((c14n_total + c14n_cat + c14n_results))
+done
+echo "Copied $c14n_total total C14N files into $C14N_DEST"

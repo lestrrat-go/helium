@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/encoding"
+	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 	"github.com/lestrrat-go/strcursor"
@@ -85,7 +86,9 @@ type parserCtx struct {
 	depth             int
 	loadsubset        LoadSubsetOption
 	charBufferSize    int
-	elem              *Element // current context element
+	baseURI           string             // document base URI for resolving external references
+	catalog           icatalog.Resolver // XML catalog for entity resolution
+	elem              *Element         // current context element
 
 	nsTab    nsStack
 	nsNrTab  []int // number of ns bindings pushed per element (parallel to nodeTab)
@@ -318,6 +321,7 @@ func (ctx *parserCtx) init(p *Parser, in io.Reader) error {
 		ctx.sax = p.sax
 		ctx.charBufferSize = p.charBufferSize
 		ctx.options = p.options
+		ctx.catalog = p.catalog
 		if ctx.options.IsSet(ParseNoBlanks) {
 			ctx.keepBlanks = false
 		}
@@ -4367,10 +4371,10 @@ func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefi
 	}
 
 	// Check first that an attribute defined in the external subset wasn't
-	// already defined in the internal subset
-	if doc := dtd.doc; doc != nil && doc.extSubset == dtd && doc.intSubset != nil && len(doc.intSubset.attributes) == 0 {
-		if _, ok := dtd.LookupAttribute(name, prefix, elem); !ok {
-			err = fmt.Errorf("attribute %s of %s: already defined in internal subset", elem, name)
+	// already defined in the internal subset. If so, silently skip it
+	// (the internal subset declaration takes precedence per XML spec).
+	if doc := dtd.doc; doc != nil && doc.extSubset == dtd && doc.intSubset != nil && len(doc.intSubset.attributes) > 0 {
+		if _, ok := doc.intSubset.LookupAttribute(name, prefix, elem); ok {
 			return
 		}
 	}
@@ -5025,6 +5029,24 @@ func (ctx *parserCtx) parseReference() error {
 		if ent.checked == 0 {
 			ent.checked = 2
 		}
+
+		// Store parsed nodes as entity children (mirrors libxml2).
+		// This populates ent.firstChild so subsequent references can
+		// reuse the parsed tree without re-parsing.
+		if parsedEnt != nil && ent.firstChild == nil {
+			for n := parsedEnt; n != nil; {
+				next := n.NextSibling()
+				// Detach from the old sibling chain before adding
+				// to the entity, otherwise addChild/addSibling will
+				// follow stale NextSibling links and loop.
+				n.SetNextSibling(nil)
+				n.SetPrevSibling(nil)
+				n.SetParent(nil)
+				n.SetTreeDoc(ctx.doc)
+				_ = ent.AddChild(n)
+				n = next
+			}
+		}
 	}
 
 	// Now that the entity content has been gathered
@@ -5079,9 +5101,11 @@ func (ctx *parserCtx) parseReference() error {
 		return nil
 	}
 
-	// If we didn't get any children for the entity being built
+	// Entity has children (from prior parse). When replaceEntities is true,
+	// copy the entity's children into the current element (mirrors libxml2's
+	// entity substitution). When replaceEntities is false, emit a Reference
+	// SAX event instead.
 	if s := ctx.sax; s != nil && !ctx.replaceEntities {
-		// Create a node.
 		switch err := s.Reference(ctx.userData, ent.name); err {
 		case nil, sax.ErrHandlerUnspecified:
 			// no op
@@ -5090,7 +5114,18 @@ func (ctx *parserCtx) parseReference() error {
 		}
 		return nil
 	}
-	_ = parsedEnt
+
+	if ctx.replaceEntities {
+		for n := ent.firstChild; n != nil; n = n.NextSibling() {
+			if s := ctx.sax; s != nil {
+				if n.Type() == TextNode {
+					if err := ctx.deliverCharacters(s.Characters, n.Content()); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
 
 	return nil
 }
