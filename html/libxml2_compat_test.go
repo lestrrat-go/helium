@@ -591,6 +591,33 @@ func formatHTMLErrors(filename string, input []byte, errors []htmlError) string 
 			}
 		}
 
+		// For encoding errors, insert "Bytes:" line and truncate context
+		// at the error position (matching libxml2's error.c behavior).
+		if e.msg == "Invalid bytes in character encoding" {
+			// Compute byte offset in normalized input
+			byteOffset := 0
+			for i := 0; i < lineIdx; i++ {
+				byteOffset += len(lines[i]) + 1 // +1 for \n separator
+			}
+			byteOffset += errPos
+
+			endOfs := byteOffset + 4
+			if endOfs > len(normalized) {
+				endOfs = len(normalized)
+			}
+			rawBytes := normalized[byteOffset:endOfs]
+			var parts []string
+			for _, b := range rawBytes {
+				parts = append(parts, fmt.Sprintf("0x%02X", b))
+			}
+			fmt.Fprintf(&buf, "Bytes: %s\n", strings.Join(parts, " "))
+
+			// Show only content before the invalid byte
+			if col < len(content) {
+				content = content[:col]
+			}
+		}
+
 		// Write context line
 		buf.Write(content)
 		buf.WriteByte('\n')
@@ -622,9 +649,7 @@ func TestHTMLErrors(t *testing.T) {
 		t.Skipf("testdata/libxml2-compat/html not found; run testdata/libxml2/generate.sh first")
 	}
 
-	skipped := map[string]string{
-		"encoding-error.html": "special Bytes: 0xNN context format needs parser-level byte tracking",
-	}
+	skipped := map[string]string{}
 
 	only := map[string]struct{}{}
 	if v := os.Getenv("HELIUM_HTML_TEST_FILES"); v != "" {

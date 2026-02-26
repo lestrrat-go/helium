@@ -34,7 +34,9 @@ type parser struct {
 	// encodingError is set when invalid bytes were found in a UTF-8 declared
 	// document and replaced with U+FFFD. The SAX error is emitted once when
 	// the first characters event containing U+FFFD is encountered.
-	encodingError bool
+	encodingError     bool
+	encodingErrorLine int // line of first invalid byte (1-indexed)
+	encodingErrorCol  int // column of first invalid byte (1-indexed)
 
 	// detectedEncoding records the original encoding detected for the input.
 	// Empty means UTF-8 (no conversion was needed). "ISO-8859-1" means the
@@ -55,10 +57,16 @@ func newParser(input []byte, sax SAXHandler) *parser {
 	normalized := normalizeNewlines(input)
 
 	var encodingErr bool
+	var encErrLine, encErrCol int
 	var detectedEnc string
 	if !utf8.Valid(normalized) {
 		if declaredCharsetIsUTF8(normalized) {
-			normalized, encodingErr = replaceInvalidUTF8(normalized)
+			raw := normalized
+			var invBytes invalidByteInfo
+			normalized, encodingErr = replaceInvalidUTF8(raw, &invBytes)
+			if encodingErr {
+				encErrLine, encErrCol = lineColFromOffset(raw, invBytes.offset)
+			}
 		} else {
 			// Assume Latin-1/Windows-1252 encoding and convert to UTF-8,
 			// matching libxml2's default behavior for non-UTF-8 documents.
@@ -75,14 +83,16 @@ func newParser(input []byte, sax SAXHandler) *parser {
 	}
 
 	p := &parser{
-		input:            normalized,
-		pos:              0,
-		line:             1,
-		col:              1,
-		sax:              sax,
-		mode:             insertInitial,
-		encodingError:    encodingErr,
-		detectedEncoding: detectedEnc,
+		input:             normalized,
+		pos:               0,
+		line:              1,
+		col:               1,
+		sax:               sax,
+		mode:              insertInitial,
+		encodingError:     encodingErr,
+		encodingErrorLine: encErrLine,
+		encodingErrorCol:  encErrCol,
+		detectedEncoding:  detectedEnc,
 	}
 	p.locator = &parserLocator{p: p}
 	return p
@@ -106,6 +116,22 @@ func normalizeNewlines(data []byte) []byte {
 		}
 	}
 	return out
+}
+
+// lineColFromOffset computes the 1-indexed line and column for a byte offset
+// within newline-normalized data. The offset is the position of the target byte.
+func lineColFromOffset(data []byte, offset int) (int, int) {
+	line := 1
+	col := 1
+	for i := 0; i < offset && i < len(data); i++ {
+		if data[i] == '\n' {
+			line++
+			col = 1
+		} else {
+			col++
+		}
+	}
+	return line, col
 }
 
 // win1252ToUnicode maps Windows-1252 bytes 0x80-0x9F to Unicode codepoints.
@@ -136,24 +162,41 @@ func latin1ToUTF8(data []byte) []byte {
 	return buf.Bytes()
 }
 
+// invalidByteInfo records the position and raw bytes of the first invalid
+// byte sequence found during UTF-8 validation.
+type invalidByteInfo struct {
+	offset   int    // byte offset of first invalid byte in newline-normalized input
+	rawBytes [4]byte
+	nBytes   int // number of valid bytes in rawBytes (0..4)
+}
+
 // replaceInvalidUTF8 replaces invalid byte sequences with U+FFFD.
+// If info is non-nil, populates it with details of the first invalid byte.
 // Returns the cleaned data and whether any replacements were made.
-func replaceInvalidUTF8(data []byte) ([]byte, bool) {
+func replaceInvalidUTF8(data []byte, info *invalidByteInfo) ([]byte, bool) {
 	var buf bytes.Buffer
 	buf.Grow(len(data))
-	hasErrors := false
+	found := false
 	for i := 0; i < len(data); {
 		r, size := utf8.DecodeRune(data[i:])
 		if r == utf8.RuneError && size <= 1 {
 			buf.WriteRune('\uFFFD')
+			if !found && info != nil {
+				info.offset = i
+				end := i + 4
+				if end > len(data) {
+					end = len(data)
+				}
+				info.nBytes = copy(info.rawBytes[:], data[i:end])
+			}
+			found = true
 			i++
-			hasErrors = true
 		} else {
 			buf.Write(data[i : i+size])
 			i += size
 		}
 	}
-	return buf.Bytes(), hasErrors
+	return buf.Bytes(), found
 }
 
 // declaredCharsetIsUTF8 scans the raw (possibly invalid) input bytes for a
@@ -782,7 +825,12 @@ func (p *parser) parseCharRef() {
 // emitCharacters fires the appropriate SAX Characters event.
 func (p *parser) emitCharacters(data []byte) error {
 	if p.encodingError && bytes.ContainsRune(data, '\uFFFD') {
+		// Temporarily override line/col so the DocumentLocator reports
+		// the position of the first invalid byte in the original input.
+		savedLine, savedCol := p.line, p.col
+		p.line, p.col = p.encodingErrorLine, p.encodingErrorCol
 		_ = p.sax.Error("Invalid bytes in character encoding")
+		p.line, p.col = savedLine, savedCol
 		p.encodingError = false
 	}
 	return p.sax.Characters(data)
