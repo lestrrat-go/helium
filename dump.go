@@ -221,9 +221,45 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool, escapeNonASCII bool) 
 // output encoding is UTF-8; when an encoding handler is present the
 // characters pass through and the encoder converts them.
 type Dumper struct {
+	// Format enables indented output when set to true.
+	Format bool
+	// IndentString is the string used for each indent level (default "  ").
+	IndentString string
+
 	escapeNonASCII bool
 	isXHTML        bool
 	encoding       string // document encoding, used for XHTML meta injection
+	indent         int    // current indent depth (used when Format is true)
+}
+
+func (d *Dumper) indentStr() string {
+	if d.IndentString == "" {
+		return "  "
+	}
+	return d.IndentString
+}
+
+func (d *Dumper) writeIndent(out io.Writer) {
+	if !d.Format || d.indent <= 0 {
+		return
+	}
+	s := d.indentStr()
+	for i := 0; i < d.indent; i++ {
+		_, _ = io.WriteString(out, s)
+	}
+}
+
+// hasOnlyTextChildren returns true when every child is a text or entity-ref node.
+func hasOnlyTextChildren(n Node) bool {
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		switch c.Type() {
+		case TextNode, EntityRefNode, CDATASectionNode:
+			// ok
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // isXHTMLDTD returns true if the DTD identifies an XHTML document.
@@ -890,10 +926,25 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 	_, _ = io.WriteString(out, ">")
 
 	if child := n.FirstChild(); child != nil {
+		textOnly := d.Format && hasOnlyTextChildren(n)
+		if d.Format && !textOnly {
+			_, _ = io.WriteString(out, "\n")
+			d.indent++
+		}
 		for ; child != nil; child = child.NextSibling() {
+			if d.Format && !textOnly {
+				d.writeIndent(out)
+			}
 			if err := d.DumpNode(out, child); err != nil {
 				return err
 			}
+			if d.Format && !textOnly {
+				_, _ = io.WriteString(out, "\n")
+			}
+		}
+		if d.Format && !textOnly {
+			d.indent--
+			d.writeIndent(out)
 		}
 	}
 
