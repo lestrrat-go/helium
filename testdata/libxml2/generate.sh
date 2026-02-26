@@ -326,3 +326,29 @@ for input in "$SOURCE"/test/HTML/*; do
     html_count=$((html_count + 1))
 done
 echo "Copied $html_count HTML test files into $HTML_DEST"
+
+# Copy RELAX NG test files
+# RelaxNG tests have schema (.rng) and instance (.xml) files in test/relaxng/,
+# with some schemas referencing other .rng files via include/externalRef.
+# An OASIS/ subdirectory contains a spectest.xml file.
+# Results are .err files in result/relaxng/.
+RELAXNG_DEST="$DEST/relaxng"
+mkdir -p "$RELAXNG_DEST/test" "$RELAXNG_DEST/result"
+
+# test/ — schema (.rng) and instance (.xml) files
+relaxng_test=0
+for input in "$SOURCE"/test/relaxng/*; do
+    [ -f "$input" ] || continue
+    cp "$input" "$RELAXNG_DEST/test/"
+    relaxng_test=$((relaxng_test + 1))
+done
+echo "Copied $relaxng_test RELAX NG test files into $RELAXNG_DEST/test"
+
+# result/ — expected validation output (.err files)
+relaxng_result=0
+for result in "$SOURCE"/result/relaxng/*; do
+    [ -f "$result" ] || continue
+    cp "$result" "$RELAXNG_DEST/result/"
+    relaxng_result=$((relaxng_result + 1))
+done
+echo "Copied $relaxng_result RELAX NG result files into $RELAXNG_DEST/result"
