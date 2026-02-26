@@ -10,7 +10,7 @@ import (
 	"unicode/utf8"
 
 	helium "github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/encoding"
+	"github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/xpointer"
 )
 
