@@ -40,9 +40,10 @@ func DumpDoc(out io.Writer, doc *helium.Document) error {
 	// strict=true for explicit ISO-8859-1 charset (numeric char refs for
 	// runes > 0xFF); strict=false for auto-detected Win-1252 (raw bytes).
 	enc := doc.Encoding()
-	if enc == "ISO-8859-1" {
+	switch enc {
+	case "ISO-8859-1":
 		out = &latin1EncodingWriter{w: out, strict: true}
-	} else if enc == "Windows-1252" {
+	case "Windows-1252":
 		out = &latin1EncodingWriter{w: out, strict: false}
 	}
 

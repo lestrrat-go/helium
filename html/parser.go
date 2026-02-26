@@ -2,7 +2,6 @@ package html
 
 import (
 	"bytes"
-	"fmt"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -922,8 +921,8 @@ func (p *parser) parseRCDATAContent(tagName string) {
 			if !p.atEnd() && p.peek() == '<' {
 				// Check if this is the end tag — if not, emit '<' as text
 				remaining := p.remaining()
-				if !(p.peekAt(1) == '/' && len(remaining) >= len(endTag) &&
-					strings.EqualFold(string(remaining[:len(endTag)]), endTag)) {
+				if p.peekAt(1) != '/' || len(remaining) < len(endTag) ||
+					!strings.EqualFold(string(remaining[:len(endTag)]), endTag) {
 					_ = p.emitCharacters([]byte("<"))
 					p.advance(1)
 				}
@@ -1203,15 +1202,3 @@ func matchCaseInsensitive(data []byte, prefix string) bool {
 	return strings.EqualFold(string(data[:len(prefix)]), prefix)
 }
 
-// formatSAXStartElement formats a start element event string for SAX output.
-// This is used by the SAX event emitter for golden file comparison.
-func formatSAXStartElement(name string, attrs []Attribute) string {
-	if len(attrs) == 0 {
-		return fmt.Sprintf("SAX.startElement(%s)", name)
-	}
-	parts := make([]string, 0, len(attrs))
-	for _, a := range attrs {
-		parts = append(parts, fmt.Sprintf("%s='%s'", a.Name, a.Value))
-	}
-	return fmt.Sprintf("SAX.startElement(%s, %s)", name, strings.Join(parts, ", "))
-}
