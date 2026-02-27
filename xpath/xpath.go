@@ -9,6 +9,18 @@ import (
 // ErrNotNodeSet is returned when an expression result is not a node-set.
 var ErrNotNodeSet = errors.New("xpath: result is not a node-set")
 
+// ErrRecursionLimit is returned when expression evaluation exceeds the
+// maximum recursion depth (5000), matching libxml2's XPATH_MAX_RECURSION_DEPTH.
+var ErrRecursionLimit = errors.New("xpath: recursion limit exceeded")
+
+// ErrOpLimit is returned when the operation counter exceeds the limit
+// configured via Context.OpLimit, matching libxml2's opLimit mechanism.
+var ErrOpLimit = errors.New("xpath: operation limit exceeded")
+
+// ErrNodeSetLimit is returned when a node-set exceeds the maximum length
+// (10,000,000), matching libxml2's XPATH_MAX_NODESET_LENGTH.
+var ErrNodeSetLimit = errors.New("xpath: node-set length limit exceeded")
+
 // ResultType identifies the type of an XPath evaluation result.
 type ResultType int
 
@@ -35,6 +47,7 @@ type Result struct {
 type Context struct {
 	Namespaces map[string]string      // prefix → URI
 	Variables  map[string]interface{} // name → value ([]helium.Node, string, float64, bool)
+	OpLimit    int                    // 0 = unlimited (default); matches libxml2's opLimit
 }
 
 // Expression is a compiled XPath expression, reusable across evaluations.
@@ -73,6 +86,7 @@ func (e *Expression) EvaluateWithContext(node helium.Node, xctx *Context) (*Resu
 	if xctx != nil {
 		ctx.namespaces = xctx.Namespaces
 		ctx.variables = xctx.Variables
+		ctx.opLimit = xctx.OpLimit
 	}
 	return eval(ctx, e.ast)
 }

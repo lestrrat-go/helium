@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"strings"
 	"sync"
@@ -44,6 +45,12 @@ const (
 )
 
 const MaxNameLength = 50000
+
+const (
+	entityAllowedExpansion int64 = 1_000_000 // 1 MB baseline before ratio check
+	entityFixedCost        int64 = 20        // fixed byte cost per entity reference
+	entityMaxAmplDefault         = 5         // default max amplification factor
+)
 
 const (
 	notInSubset = iota
@@ -95,7 +102,10 @@ type parserCtx struct {
 	doc      *Document
 	userData interface{}
 	nodeTab  nodeStack
-	elemidx  int
+	elemidx     int
+	sizeentcopy int64 // cumulative entity expansion bytes (non-entity-specific)
+	inputSize   int64 // total input document size
+	maxAmpl     int   // max amplification factor (default 5, 0 = disabled via ParseHuge)
 	// nbentities int
 	inputTab inputStack
 }
@@ -317,6 +327,8 @@ func (ctx *parserCtx) init(p *Parser, in io.Reader) error {
 	ctx.attsSpecial = map[string]AttributeType{}
 	ctx.attsDefault = map[string][]*Attribute{}
 	ctx.wellFormed = true
+	ctx.inputSize = int64(len(ctx.rawInput))
+	ctx.maxAmpl = entityMaxAmplDefault
 	if p != nil {
 		ctx.sax = p.sax
 		ctx.charBufferSize = p.charBufferSize
@@ -336,6 +348,9 @@ func (ctx *parserCtx) init(p *Parser, in io.Reader) error {
 		}
 		if ctx.options.IsSet(ParseNoEnt) {
 			ctx.replaceEntities = true
+		}
+		if ctx.options.IsSet(ParseHuge) {
+			ctx.maxAmpl = 0
 		}
 	}
 	return nil
@@ -3640,6 +3655,9 @@ func (ctx *parserCtx) decodeEntitiesInternal(s []byte, what SubstitutionType, de
 				if err != nil {
 					return "", err
 				}
+				if err := ctx.entityCheck(ent, len(rep), 0); err != nil {
+					return "", err
+				}
 
 				_, _ = out.WriteString(rep)
 			} else {
@@ -3656,6 +3674,9 @@ func (ctx *parserCtx) decodeEntitiesInternal(s []byte, what SubstitutionType, de
 			}
 			rep, err := ctx.decodeEntitiesInternal(ent.Content(), what, depth+1)
 			if err != nil {
+				return "", err
+			}
+			if err := ctx.entityCheck(ent, len(rep), 0); err != nil {
 				return "", err
 			}
 			_, _ = out.WriteString(rep)
@@ -4896,6 +4917,12 @@ func (ctx *parserCtx) parseBalancedChunkInternal(chunk []byte, userData interfac
 	newctx.sax = ctx.sax
 	newctx.attsDefault = ctx.attsDefault
 	newctx.depth = ctx.depth + 1
+	// Propagate entity amplification tracking from parent context,
+	// and collect the accumulated counter back when done.
+	newctx.sizeentcopy = ctx.sizeentcopy
+	newctx.inputSize = ctx.inputSize
+	newctx.maxAmpl = ctx.maxAmpl
+	defer func() { ctx.sizeentcopy = newctx.sizeentcopy }()
 
 	// create a dummy node
 	newRoot, err := newctx.doc.CreateElement("pseudoroot")
@@ -4993,6 +5020,11 @@ func (ctx *parserCtx) parseReference() error {
 		return nil
 	}
 
+	// Entity amplification guard: account for entity content being expanded.
+	if err := ctx.entityCheck(ent, len(ent.content), 0); err != nil {
+		return ctx.error(err)
+	}
+
 	// The first reference to the entity trigger a parsing phase
 	// where the ent->children is filled with the result from
 	// the parsing.
@@ -5007,6 +5039,8 @@ func (ctx *parserCtx) parseReference() error {
 		if ctx.userData != ctx {
 			userData = ctx.userData
 		}
+
+		sizeBefore := ctx.sizeentcopy
 
 		if EntityType(ent.EntityType()) == InternalGeneralEntity {
 			parsedEnt, err = ctx.parseBalancedChunkInternal([]byte(ent.Content()), userData)
@@ -5028,10 +5062,14 @@ func (ctx *parserCtx) parseReference() error {
 			return errors.New("invalid entity type")
 		}
 
-		// Mark entity as checked after first parse (libxml2: ent->checked = 2)
+		// Mark entity as checked after first parse (libxml2: ent->checked = 2).
+		// Also record the cumulative expansion cost so subsequent references
+		// to this entity account for the full recursive expansion.
 		if ent.checked == 0 {
 			ent.checked = 2
 		}
+		ent.expandedSize = ctx.sizeentcopy - sizeBefore + int64(len(ent.content))
+		ent.MarkChecked()
 
 		// Store parsed nodes as entity children (mirrors libxml2).
 		// This populates ent.firstChild so subsequent references can
@@ -5744,29 +5782,39 @@ func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
  * boundary feature. It can be disabled with the XML_PARSE_HUGE
  * parser option.
  */
+func saturatedAdd(a, b int64) int64 {
+	if a > math.MaxInt64-b {
+		return math.MaxInt64
+	}
+	return a + b
+}
+
 func (ctx *parserCtx) entityCheck(ent sax.Entity, size, replacement int) error {
-	return nil
-	/*
-	   size_t consumed = 0;
-
-	   if ((ctxt == NULL) || (ctxt->options & XML_PARSE_HUGE))
-	       return (0);
-	   if (ctxt->lastError.code == XML_ERR_ENTITY_LOOP)
-	       return (1);
-	*/
-
-	// This may look absurd but is needed to detect
-	// entities problems
-	/*
-		if ent != nil && EntityType(ent.EntityType()) != InternalPredefinedEntity && ent.Content() != nil && !ent.Checked() {
-			rep, err := decodeEntities(ent.Content(), SubstituteRef)
-			if err != nil {
-				return ctx.error(err)
-			}
-		}
-
+	if ctx.maxAmpl == 0 {
 		return nil
-	*/
+	}
+
+	// For already-checked entities, use the cached expandedSize which
+	// includes the full recursive expansion cost.
+	if e, ok := ent.(*Entity); ok && e != nil && e.Checked() {
+		ctx.sizeentcopy = saturatedAdd(ctx.sizeentcopy, e.expandedSize)
+		ctx.sizeentcopy = saturatedAdd(ctx.sizeentcopy, entityFixedCost)
+	} else {
+		ctx.sizeentcopy = saturatedAdd(ctx.sizeentcopy, int64(size))
+		ctx.sizeentcopy = saturatedAdd(ctx.sizeentcopy, entityFixedCost)
+	}
+
+	if ctx.sizeentcopy > entityAllowedExpansion {
+		consumed := ctx.inputSize
+		if consumed == 0 {
+			consumed = 1
+		}
+		if ctx.sizeentcopy/int64(ctx.maxAmpl) > consumed {
+			return errors.New("maximum entity amplification factor exceeded")
+		}
+	}
+
+	return nil
 }
 
 func (ctx *parserCtx) handlePEReference() error {

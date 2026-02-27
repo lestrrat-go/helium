@@ -1,11 +1,10 @@
 #!perl
 use strict;
 
-# This script generates the default SAX2 handler, which is
-# just a collection of callbacks
+# This script generates the SAX2 handler interfaces, func adapters,
+# and the callback-based SAX2 struct.
 
-open my $fh, '<', "interface.go" or die;
-# my $content = do { local $/; <$fh> };
+open my $fh, '<', "types.go" or die;
 
 while (my $ln = <$fh>) {
     if ($ln =~ /^\/\/ SAX functions/) {
@@ -22,6 +21,18 @@ while (my $ln = <$fh>) {
         $handler_args{$1} = $2;
         $handler_returns{$1} = $3;
     }
+}
+
+sub bare_args {
+    my ($args) = @_;
+    return join ", ", map {
+        my @parts = split /\s+/, $_;
+        if ($parts[1] =~ /^\.\.\./) {
+            "$parts[0]..."
+        } else {
+            $parts[0]
+        }
+    } split /\s*,\s*/, $args;
 }
 
 open my $out, '>', 'sax2.go' or die;
@@ -53,12 +64,35 @@ foreach my $func (@handler_funcs) {
 print $out <<EOM;
 }
 
+EOM
+
+# Generate individual handler interfaces and Handle methods on XXXFunc
+foreach my $func (@handler_funcs) {
+    my $args = $handler_args{$func};
+    my $ret  = $handler_returns{$func};
+    my $ba = bare_args($args);
+
+    print $out <<EOM;
+// $func is the interface for the $func handler.
+type $func interface {
+\tHandle($args) $ret
+}
+
+func (f ${func}Func) Handle($args) $ret {
+\treturn f($ba)
+}
+
+EOM
+}
+
+# Generate SAX2 struct
+print $out <<EOM;
 // $klass is the callback based SAX2 handler.
 type $klass struct {
 EOM
 
 foreach my $func (@handler_funcs) {
-    print $out "\t${func}Handler ${func}Func\n";
+    print $out "\t${func}Handler ${func}\n";
 }
 
 print $out <<EOM;
@@ -72,18 +106,19 @@ func New() *${klass} {
 
 EOM
 
+# Generate delegation methods
 foreach my $func (@handler_funcs) {
     my $args = $handler_args{$func};
     my $ret  = $handler_returns{$func};
-    my $no_handler_ret  = 
+    my $no_handler_ret  =
         join ", ",
             map { $_ eq "error" ? "ErrHandlerUnspecified" : $_ eq "bool" ? "false" : "nil" }
             split /\s*,\s*/, $ret =~ s{\(([^\)]+)\)}{$1}r;
-    my $bare_args = join ", ", map { (split /\s+/, $_)[0] } split /\s*,\s*/, $args;
+    my $ba = bare_args($args);
     print $out <<EOM
 func (s $klass) $func($args) $ret {
 \tif h := s.${func}Handler; h != nil {
-\t\treturn h($bare_args)
+\t\treturn h.Handle($ba)
 \t}
 \treturn $no_handler_ret;
 }

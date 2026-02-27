@@ -164,23 +164,23 @@ func htmlEncodeEntitiesAttr(data string) string {
 func newHTMLSAXEventEmitter(out *bytes.Buffer) html.SAXHandler {
 	s := &html.SAXCallbacks{}
 
-	s.SetDocumentLocatorHandler = func(_ html.DocumentLocator) error {
+	s.SetDocumentLocatorHandler = html.SetDocumentLocatorFunc(func(_ html.DocumentLocator) error {
 		fmt.Fprintf(out, "SAX.setDocumentLocator()\n")
 		return nil
-	}
-	s.StartDocumentHandler = func() error {
+	})
+	s.StartDocumentHandler = html.StartDocumentFunc(func() error {
 		fmt.Fprintf(out, "SAX.startDocument()\n")
 		return nil
-	}
-	s.EndDocumentHandler = func() error {
+	})
+	s.EndDocumentHandler = html.EndDocumentFunc(func() error {
 		fmt.Fprintf(out, "SAX.endDocument()\n")
 		return nil
-	}
-	s.InternalSubsetHandler = func(name, externalID, systemID string) error {
+	})
+	s.InternalSubsetHandler = html.InternalSubsetFunc(func(name, externalID, systemID string) error {
 		fmt.Fprintf(out, "SAX.internalSubset(%s, %s, %s)\n", name, externalID, systemID)
 		return nil
-	}
-	s.StartElementHandler = func(name string, attrs []html.Attribute) error {
+	})
+	s.StartElementHandler = html.StartElementFunc(func(name string, attrs []html.Attribute) error {
 		if len(attrs) == 0 {
 			fmt.Fprintf(out, "SAX.startElement(%s)\n", name)
 		} else {
@@ -196,42 +196,42 @@ func newHTMLSAXEventEmitter(out *bytes.Buffer) html.SAXHandler {
 			fmt.Fprintf(out, "SAX.startElement(%s, %s)\n", name, strings.Join(parts, ", "))
 		}
 		return nil
-	}
-	s.EndElementHandler = func(name string) error {
+	})
+	s.EndElementHandler = html.EndElementFunc(func(name string) error {
 		fmt.Fprintf(out, "SAX.endElement(%s)\n", name)
 		return nil
-	}
-	s.CharactersHandler = func(ch []byte) error {
+	})
+	s.CharactersHandler = html.CharactersFunc(func(ch []byte) error {
 		display := htmlEncodeEntities(ch, 30, 0)
 		fmt.Fprintf(out, "SAX.characters(%s, %d)\n", display, len(ch))
 		return nil
-	}
-	s.CDataBlockHandler = func(value []byte) error {
+	})
+	s.CDataBlockHandler = html.CDataBlockFunc(func(value []byte) error {
 		display := htmlEncodeEntities(value, 30, 0)
 		fmt.Fprintf(out, "SAX.cdata(%s, %d)\n", display, len(value))
 		return nil
-	}
-	s.CommentHandler = func(value []byte) error {
+	})
+	s.CommentHandler = html.CommentFunc(func(value []byte) error {
 		fmt.Fprintf(out, "SAX.comment(%s)\n", string(value))
 		return nil
-	}
-	s.ProcessingInstructionHandler = func(target, data string) error {
+	})
+	s.ProcessingInstructionHandler = html.ProcessingInstructionFunc(func(target, data string) error {
 		fmt.Fprintf(out, "SAX.processingInstruction(%s, %s)\n", target, data)
 		return nil
-	}
-	s.IgnorableWhitespaceHandler = func(ch []byte) error {
+	})
+	s.IgnorableWhitespaceHandler = html.IgnorableWhitespaceFunc(func(ch []byte) error {
 		display := htmlEncodeEntities(ch, 30, 0)
 		fmt.Fprintf(out, "SAX.characters(%s, %d)\n", display, len(ch))
 		return nil
-	}
-	s.WarningHandler = func(msg string, args ...interface{}) error {
+	})
+	s.WarningHandler = html.WarningFunc(func(msg string, args ...interface{}) error {
 		fmt.Fprintf(out, "SAX.warning: %s\n", fmt.Sprintf(msg, args...))
 		return nil
-	}
-	s.ErrorHandler = func(msg string, args ...interface{}) error {
+	})
+	s.ErrorHandler = html.ErrorFunc(func(msg string, args ...interface{}) error {
 		fmt.Fprintf(out, "SAX.error: %s\n", fmt.Sprintf(msg, args...))
 		return nil
-	}
+	})
 	return s
 }
 
@@ -513,18 +513,18 @@ func newHTMLErrorCollector() (html.SAXHandler, *[]htmlError) {
 	var loc html.DocumentLocator
 
 	s := &html.SAXCallbacks{}
-	s.SetDocumentLocatorHandler = func(l html.DocumentLocator) error {
+	s.SetDocumentLocatorHandler = html.SetDocumentLocatorFunc(func(l html.DocumentLocator) error {
 		loc = l
 		return nil
-	}
-	s.ErrorHandler = func(msg string, args ...any) error {
+	})
+	s.ErrorHandler = html.ErrorFunc(func(msg string, args ...any) error {
 		errors = append(errors, htmlError{
 			line: loc.LineNumber(),
 			col:  loc.ColumnNumber(),
 			msg:  fmt.Sprintf(msg, args...),
 		})
 		return nil
-	}
+	})
 	return s, &errors
 }
 

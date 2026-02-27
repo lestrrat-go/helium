@@ -18,11 +18,11 @@ import (
 func newEventEmitter(out io.Writer) sax.SAX2Handler {
 	entities := map[string]*Entity{}
 	s := sax.New()
-	s.SetDocumentLocatorHandler = func(_ sax.Context, loc sax.DocumentLocator) error {
+	s.SetDocumentLocatorHandler = sax.SetDocumentLocatorFunc(func(_ sax.Context, loc sax.DocumentLocator) error {
 		_, _ = fmt.Fprintf(out, "SAX.SetDocumentLocator()\n")
 		return nil
-	}
-	s.AttributeDeclHandler = func(_ sax.Context, elemName string, attrName string, typ int, deftype int, defvalue string, enum sax.Enumeration) error {
+	})
+	s.AttributeDeclHandler = sax.AttributeDeclFunc(func(_ sax.Context, elemName string, attrName string, typ int, deftype int, defvalue string, enum sax.Enumeration) error {
 		// eek, defvalue is an interface, and interface == nil is only true
 		// if the interface has no value AND not type, so.. hmmm.
 		if defvalue == "" {
@@ -30,16 +30,16 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		}
 		_, _ = fmt.Fprintf(out, "SAX.AttributeDecl(%s, %s, %d, %d, %s, ...)\n", elemName, attrName, typ, deftype, defvalue)
 		return nil
-	}
-	s.InternalSubsetHandler = func(_ sax.Context, name, externalID, systemID string) error {
+	})
+	s.InternalSubsetHandler = sax.InternalSubsetFunc(func(_ sax.Context, name, externalID, systemID string) error {
 		_, _ = fmt.Fprintf(out, "SAX.InternalSubset(%s, %s, %s)\n", name, externalID, systemID)
 		return nil
-	}
-	s.ReferenceHandler = func(_ sax.Context, name string) error {
+	})
+	s.ReferenceHandler = sax.ReferenceFunc(func(_ sax.Context, name string) error {
 		_, _ = fmt.Fprintf(out, "SAX.Reference(%s)\n", name)
 		return nil
-	}
-	s.GetEntityHandler = func(_ sax.Context, name string) (sax.Entity, error) {
+	})
+	s.GetEntityHandler = sax.GetEntityFunc(func(_ sax.Context, name string) (sax.Entity, error) {
 		_, _ = fmt.Fprintf(out, "SAX.ResolveEntity(%s)\n", name)
 
 		ent, ok := entities[name]
@@ -47,9 +47,9 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 			return nil, errors.New("entity not found")
 		}
 		return ent, nil
-	}
+	})
 
-	s.GetParameterEntityHandler = func(_ sax.Context, name string) (sax.Entity, error) {
+	s.GetParameterEntityHandler = sax.GetParameterEntityFunc(func(_ sax.Context, name string) (sax.Entity, error) {
 		_, _ = fmt.Fprintf(out, "SAX.ResolveEntity(%s)\n", name)
 
 		ent, ok := entities[name]
@@ -57,9 +57,9 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 			return nil, errors.New("entity not found")
 		}
 		return ent, nil
-	}
+	})
 
-	s.EntityDeclHandler = func(ctxif sax.Context, name string, typ int, publicID string, systemID string, notation string) error {
+	s.EntityDeclHandler = sax.EntityDeclFunc(func(ctxif sax.Context, name string, typ int, publicID string, systemID string, notation string) error {
 		if pdebug.Enabled {
 			g := pdebug.Marker("EntityDecl handler for sax_test.go")
 			defer g.End()
@@ -72,27 +72,27 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 			pdebug.Printf("registered entity '%s' (entity type = '%s', publicID = '%s', systemID = '%s', notation = '%s')", name, EntityType(typ), publicID, systemID, notation)
 		}
 		return nil
-	}
-	s.ExternalSubsetHandler = func(_ sax.Context, name, externalID, systemID string) error {
+	})
+	s.ExternalSubsetHandler = sax.ExternalSubsetFunc(func(_ sax.Context, name, externalID, systemID string) error {
 		_, _ = fmt.Fprintf(out, "SAX.ExternalSubset(%s, %s, %s)\n", name, externalID, systemID)
 		return nil
-	}
-	s.ElementDeclHandler = func(_ sax.Context, name string, typ int, content sax.ElementContent) error {
+	})
+	s.ElementDeclHandler = sax.ElementDeclFunc(func(_ sax.Context, name string, typ int, content sax.ElementContent) error {
 		_, _ = fmt.Fprintf(out, "SAX.ElementDecl(%s, %d, ...)\n", name, typ)
 		return nil
-	}
-	s.StartDocumentHandler = func(_ sax.Context) error {
+	})
+	s.StartDocumentHandler = sax.StartDocumentFunc(func(_ sax.Context) error {
 		_, _ = fmt.Fprintf(out, "SAX.StartDocument()\n")
 		return nil
-	}
-	s.EndDocumentHandler = func(_ sax.Context) error {
+	})
+	s.EndDocumentHandler = sax.EndDocumentFunc(func(_ sax.Context) error {
 		_, _ = fmt.Fprintf(out, "SAX.EndDocument()\n")
 		return nil
-	}
-	s.CommentHandler = func(_ sax.Context, data []byte) error {
+	})
+	s.CommentHandler = sax.CommentFunc(func(_ sax.Context, data []byte) error {
 		_, _ = fmt.Fprintf(out, "SAX.Comment(%s)\n", data)
 		return nil
-	}
+	})
 	charHandler := func(name string, _ sax.Context, data []byte) error {
 		var output string
 		if len(data) > 30 {
@@ -104,13 +104,13 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.%s(%s, %d)\n", name, output, len(data))
 		return nil
 	}
-	s.IgnorableWhitespaceHandler = func(ctx sax.Context, data []byte) error {
+	s.IgnorableWhitespaceHandler = sax.IgnorableWhitespaceFunc(func(ctx sax.Context, data []byte) error {
 		return charHandler("IgnorableWhitespace", ctx, data)
-	}
-	s.CharactersHandler = func(ctx sax.Context, data []byte) error {
+	})
+	s.CharactersHandler = sax.CharactersFunc(func(ctx sax.Context, data []byte) error {
 		return charHandler("Characters", ctx, data)
-	}
-	s.StartElementNSHandler = func(_ sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	})
+	s.StartElementNSHandler = sax.StartElementNSFunc(func(_ sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		_, _ = fmt.Fprintf(out, "SAX.StartElementNS(%s, ", localname)
 
 		if prefix != "" {
@@ -161,8 +161,8 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintln(out, ")")
 
 		return nil
-	}
-	s.EndElementNSHandler = func(_ sax.Context, localname, prefix, uri string) error {
+	})
+	s.EndElementNSHandler = sax.EndElementNSFunc(func(_ sax.Context, localname, prefix, uri string) error {
 		_, _ = fmt.Fprintf(out, "SAX.EndElementNS(%s, ", localname)
 
 		if prefix != "" {
@@ -178,7 +178,7 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		}
 
 		return nil
-	}
+	})
 	return s
 }
 

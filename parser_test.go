@@ -259,12 +259,12 @@ func TestParseExternalEntity(t *testing.T) {
 
 	// Provide a ResolveEntity handler that returns inline content
 	s := sax.New()
-	s.ResolveEntityHandler = func(_ sax.Context, publicID, systemID string) (sax.ParseInput, error) {
+	s.ResolveEntityHandler = sax.ResolveEntityFunc(func(_ sax.Context, publicID, systemID string) (sax.ParseInput, error) {
 		if systemID == "ext.xml" {
 			return newStringParseInput("<inner>hello</inner>", systemID), nil
 		}
 		return nil, sax.ErrHandlerUnspecified
-	}
+	})
 
 	p := NewParser()
 	p.SetSAXHandler(s)

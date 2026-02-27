@@ -51,6 +51,9 @@ func init() {
 }
 
 func evalFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, error) {
+	if err := ctx.countOps(1); err != nil {
+		return nil, err
+	}
 	fn, ok := builtinFunctions[fc.Name]
 	if !ok {
 		return nil, fmt.Errorf("unknown function: %s", fc.Name)
@@ -97,15 +100,7 @@ func fnID(ctx *evalContext, args []Expr) (*Result, error) {
 		return nil, err
 	}
 
-	// Collect target ID values
-	var idValues []string
-	if r.Type == NodeSetResult {
-		for _, n := range r.NodeSet {
-			idValues = append(idValues, strings.Fields(stringValue(n))...)
-		}
-	} else {
-		idValues = strings.Fields(resultToString(r))
-	}
+	idValues := collectIDValues(r)
 	if len(idValues) == 0 {
 		return &Result{Type: NodeSetResult}, nil
 	}
@@ -129,61 +124,80 @@ func fnID(ctx *evalContext, args []Expr) (*Result, error) {
 
 	// Walk the document tree looking for elements with ID attributes
 	var result []helium.Node
-	var walkForID func(helium.Node)
-	walkForID = func(n helium.Node) {
-		if elem, ok := n.(*helium.Element); ok {
-			// Check DTD for ID-typed attributes on this element
-			for _, adecl := range dtd.AttributesForElement(elem.LocalName()) {
-				if adecl.AType() == helium.AttrID {
-					// Check if this element has this attribute with a target value
-					for _, attr := range elem.Attributes() {
-						if attr.LocalName() == adecl.Name() {
-							if targets[attr.Value()] {
-								result = append(result, elem)
-							}
-							break
-						}
-					}
-				}
-			}
-		}
-		for c := n.FirstChild(); c != nil; c = c.NextSibling() {
-			walkForID(c)
-		}
-	}
-	walkForID(root)
+	collectIDNodes(root, dtd, targets, &result)
 
 	return &Result{Type: NodeSetResult, NodeSet: result}, nil
 }
 
+// collectIDValues extracts the whitespace-separated ID values from an XPath result.
+func collectIDValues(r *Result) []string {
+	if r.Type == NodeSetResult {
+		vals := make([]string, 0, len(r.NodeSet))
+		for _, n := range r.NodeSet {
+			vals = append(vals, strings.Fields(stringValue(n))...)
+		}
+		return vals
+	}
+	return strings.Fields(resultToString(r))
+}
+
+// collectIDNodes recursively searches the subtree rooted at n for elements whose
+// DTD-declared ID attribute matches one of the target values.
+func collectIDNodes(n helium.Node, dtd *helium.DTD, targets map[string]bool, result *[]helium.Node) {
+	if elem, ok := n.(*helium.Element); ok {
+		checkElementIDMatch(elem, dtd, targets, result)
+	}
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		collectIDNodes(c, dtd, targets, result)
+	}
+}
+
+// checkElementIDMatch checks whether elem has a DTD-declared ID attribute
+// whose value is one of the target IDs.
+func checkElementIDMatch(elem *helium.Element, dtd *helium.DTD, targets map[string]bool, result *[]helium.Node) {
+	for _, adecl := range dtd.AttributesForElement(elem.LocalName()) {
+		if adecl.AType() != helium.AttrID {
+			continue
+		}
+		for _, attr := range elem.Attributes() {
+			if attr.LocalName() == adecl.Name() {
+				if targets[attr.Value()] {
+					*result = append(*result, elem)
+				}
+				break
+			}
+		}
+	}
+}
+
 func fnLocalName(ctx *evalContext, args []Expr) (*Result, error) {
-	n, err := nodeArgOrContext(ctx, args)
+	n, ok, err := nodeArgOrContext(ctx, args)
 	if err != nil {
 		return nil, err
 	}
-	if n == nil {
+	if !ok {
 		return &Result{Type: StringResult}, nil
 	}
 	return &Result{Type: StringResult, String: localNameOf(n)}, nil
 }
 
 func fnNamespaceURI(ctx *evalContext, args []Expr) (*Result, error) {
-	n, err := nodeArgOrContext(ctx, args)
+	n, ok, err := nodeArgOrContext(ctx, args)
 	if err != nil {
 		return nil, err
 	}
-	if n == nil {
+	if !ok {
 		return &Result{Type: StringResult}, nil
 	}
 	return &Result{Type: StringResult, String: nodeNamespaceURI(n)}, nil
 }
 
 func fnName(ctx *evalContext, args []Expr) (*Result, error) {
-	n, err := nodeArgOrContext(ctx, args)
+	n, ok, err := nodeArgOrContext(ctx, args)
 	if err != nil {
 		return nil, err
 	}
-	if n == nil {
+	if !ok {
 		return &Result{Type: StringResult}, nil
 	}
 	return &Result{Type: StringResult, String: n.Name()}, nil
@@ -191,24 +205,25 @@ func fnName(ctx *evalContext, args []Expr) (*Result, error) {
 
 // nodeArgOrContext returns the first node from an optional node-set argument,
 // or the context node if no argument is provided.
-func nodeArgOrContext(ctx *evalContext, args []Expr) (helium.Node, error) {
+// The second return value reports whether a node was found.
+func nodeArgOrContext(ctx *evalContext, args []Expr) (helium.Node, bool, error) {
 	if len(args) == 0 {
-		return ctx.node, nil
+		return ctx.node, true, nil
 	}
 	if len(args) != 1 {
-		return nil, fmt.Errorf("expected 0 or 1 arguments")
+		return nil, false, fmt.Errorf("expected 0 or 1 arguments")
 	}
 	r, err := eval(ctx, args[0])
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if r.Type != NodeSetResult {
-		return nil, fmt.Errorf("argument must be a node-set")
+		return nil, false, fmt.Errorf("argument must be a node-set")
 	}
 	if len(r.NodeSet) == 0 {
-		return nil, nil
+		return nil, false, nil
 	}
-	return r.NodeSet[0], nil
+	return r.NodeSet[0], true, nil
 }
 
 // --- String functions ---
@@ -327,37 +342,43 @@ func fnSubstring(ctx *evalContext, args []Expr) (*Result, error) {
 	// XPath spec: character at position p is included iff
 	//   p >= round(startPos) AND p < round(startPos) + round(length)
 	// where positions are 1-based. round() independently on each arg.
-	runes := []rune(s)
 	rStart := math.Floor(startPos + 0.5) // XPath round
 
 	if len(args) == 3 {
-		length, err := evalToNumber(ctx, args[2])
-		if err != nil {
-			return nil, err
-		}
-		rLength := math.Floor(length + 0.5)
-		var b strings.Builder
-		for i, r := range runes {
-			p := float64(i + 1) // 1-based position
-			if p >= rStart && p < rStart+rLength {
-				b.WriteRune(r)
-			}
-		}
-		return &Result{Type: StringResult, String: b.String()}, nil
+		return fnSubstring3(ctx, args[2], s, rStart)
 	}
+	return fnSubstring2(s, rStart), nil
+}
 
-	// 2-arg form: include iff p >= round(startPos)
-	if math.IsNaN(rStart) || math.IsInf(rStart, 1) {
-		return &Result{Type: StringResult}, nil
+// fnSubstring3 handles the 3-argument form of substring().
+func fnSubstring3(ctx *evalContext, lengthArg Expr, s string, rStart float64) (*Result, error) {
+	length, err := evalToNumber(ctx, lengthArg)
+	if err != nil {
+		return nil, err
 	}
+	rLength := math.Floor(length + 0.5)
 	var b strings.Builder
-	for i, r := range runes {
-		p := float64(i + 1)
-		if p >= rStart {
+	for i, r := range []rune(s) {
+		p := float64(i + 1) // 1-based position
+		if p >= rStart && p < rStart+rLength {
 			b.WriteRune(r)
 		}
 	}
 	return &Result{Type: StringResult, String: b.String()}, nil
+}
+
+// fnSubstring2 handles the 2-argument form of substring().
+func fnSubstring2(s string, rStart float64) *Result {
+	if math.IsNaN(rStart) || math.IsInf(rStart, 1) {
+		return &Result{Type: StringResult}
+	}
+	var b strings.Builder
+	for i, r := range []rune(s) {
+		if float64(i+1) >= rStart {
+			b.WriteRune(r)
+		}
+	}
+	return &Result{Type: StringResult, String: b.String()}
 }
 
 func fnStringLength(ctx *evalContext, args []Expr) (*Result, error) {
@@ -414,25 +435,7 @@ func fnTranslate(ctx *evalContext, args []Expr) (*Result, error) {
 		return nil, err
 	}
 
-	fromRunes := []rune(from)
-	toRunes := []rune(to)
-
-	// Build translation map
-	mapping := make(map[rune]rune, len(fromRunes))
-	remove := make(map[rune]bool)
-	for i, r := range fromRunes {
-		if _, exists := mapping[r]; exists {
-			continue // first occurrence wins
-		}
-		if _, exists := remove[r]; exists {
-			continue
-		}
-		if i < len(toRunes) {
-			mapping[r] = toRunes[i]
-		} else {
-			remove[r] = true
-		}
-	}
+	mapping, remove := buildTranslateMap([]rune(from), []rune(to))
 
 	var b strings.Builder
 	for _, r := range s {
@@ -446,6 +449,27 @@ func fnTranslate(ctx *evalContext, args []Expr) (*Result, error) {
 		}
 	}
 	return &Result{Type: StringResult, String: b.String()}, nil
+}
+
+// buildTranslateMap constructs the character mapping and removal set for translate().
+// The first occurrence of each rune in fromRunes wins per XPath spec.
+func buildTranslateMap(fromRunes, toRunes []rune) (mapping map[rune]rune, remove map[rune]bool) {
+	mapping = make(map[rune]rune, len(fromRunes))
+	remove = make(map[rune]bool)
+	for i, r := range fromRunes {
+		if _, exists := mapping[r]; exists {
+			continue // first occurrence wins
+		}
+		if remove[r] {
+			continue
+		}
+		if i < len(toRunes) {
+			mapping[r] = toRunes[i]
+		} else {
+			remove[r] = true
+		}
+	}
+	return mapping, remove
 }
 
 // --- Boolean functions ---

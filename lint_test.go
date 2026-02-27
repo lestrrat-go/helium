@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestHeliumLintGolden tests helium-lint command output against golden files.
+// TestHeliumLintGolden tests heliumlint command output against golden files.
 //
 // This test looks for .xml files in the test/ directory and compares the output
-// of helium-lint with corresponding .lint golden files. To create a golden file:
+// of heliumlint with corresponding .lint golden files. To create a golden file:
 //
 //   xmllint test/example.xml > test/example.lint
 //
@@ -74,18 +74,18 @@ func TestHeliumLintGolden(t *testing.T) {
 		golden, err := os.ReadFile(goldenfn)
 		require.NoError(t, err, "os.ReadFile should succeed for golden file")
 
-		t.Logf("Testing helium-lint logic for %s...", fn)
+		t.Logf("Testing heliumlint logic for %s...", fn)
 
 		// Read the XML file
 		input, err := os.ReadFile(fn)
 		require.NoError(t, err, "os.ReadFile should succeed for input file")
 
-		// Mimic what helium-lint does internally
+		// Mimic what heliumlint does internally
 		p := helium.NewParser()
 		doc, err := p.Parse(input)
 		require.NoError(t, err, "helium.Parse should succeed for %s", fn)
 
-		// Generate output using helium.Dumper like helium-lint does
+		// Generate output using helium.Dumper like heliumlint does
 		var output bytes.Buffer
 		d := helium.Dumper{}
 		require.NoError(t, d.DumpDoc(&output, doc))
@@ -105,6 +105,6 @@ func TestHeliumLintGolden(t *testing.T) {
 			_, _ = errout.WriteString(actual)
 			t.Logf("Actual output saved to %s", fn+".lint.err")
 		}
-		require.Equal(t, expected, actual, "helium-lint output should match golden file for %s", fn)
+		require.Equal(t, expected, actual, "heliumlint output should match golden file for %s", fn)
 	}
 }
