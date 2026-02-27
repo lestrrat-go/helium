@@ -969,8 +969,8 @@ func getDatatypeLibrary(node *helium.Element) string {
 // addSchemaError records a schema compilation error.
 func (c *compiler) addSchemaError(node *helium.Element, msg string) {
 	line := node.Line()
-	c.errors.WriteString(fmt.Sprintf("%s:%d: element %s: Relax-NG parser error : %s\n",
-		c.filename, line, node.LocalName(), msg))
+	fmt.Fprintf(&c.errors, "%s:%d: element %s: Relax-NG parser error : %s\n",
+		c.filename, line, node.LocalName(), msg)
 }
 
 // hasDataContent checks if any pattern in the slice is a data/value/list pattern.
