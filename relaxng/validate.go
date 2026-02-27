@@ -1027,7 +1027,7 @@ func (v *validator) validateAttributes(pat *pattern, elem *helium.Element) int {
 	}
 
 	// Collect all attribute patterns from this element and its content.
-	attrPats := collectAttrPatterns(pat)
+	attrPats := collectAttrPatterns(pat, v.grammar.defines)
 
 	// Validate attribute patterns
 	attrUsed := make([]bool, len(instanceAttrs))
@@ -1053,10 +1053,11 @@ func (v *validator) validateAttributes(pat *pattern, elem *helium.Element) int {
 }
 
 // collectAttrPatterns collects all attribute patterns from an element pattern,
-// including those nested in group/optional/choice/etc.
-func collectAttrPatterns(pat *pattern) []*attrPatInfo {
+// including those nested in group/optional/choice/etc and behind refs.
+func collectAttrPatterns(pat *pattern, defines map[string]*pattern) []*attrPatInfo {
 	var result []*attrPatInfo
-	collectAttrsFromPat(pat, false, &result)
+	visited := make(map[string]bool)
+	collectAttrsFromPat(pat, false, defines, visited, &result)
 	return result
 }
 
@@ -1065,7 +1066,7 @@ type attrPatInfo struct {
 	optional bool
 }
 
-func collectAttrsFromPat(pat *pattern, optional bool, result *[]*attrPatInfo) {
+func collectAttrsFromPat(pat *pattern, optional bool, defines map[string]*pattern, visited map[string]bool, result *[]*attrPatInfo) {
 	if pat == nil {
 		return
 	}
@@ -1080,21 +1081,26 @@ func collectAttrsFromPat(pat *pattern, optional bool, result *[]*attrPatInfo) {
 			*result = append(*result, &attrPatInfo{pat: child, optional: optional})
 		case patternOptional, patternZeroOrMore:
 			for _, gc := range child.children {
-				collectAttrsFromPat(gc, true, result)
+				collectAttrsFromPat(gc, true, defines, visited, result)
 			}
 		case patternGroup, patternInterleave:
-			collectAttrsFromPat(child, optional, result)
+			collectAttrsFromPat(child, optional, defines, visited, result)
 		case patternChoice:
 			// In choice, all branches' attributes are optional
 			for _, gc := range child.children {
-				collectAttrsFromPat(gc, true, result)
+				collectAttrsFromPat(gc, true, defines, visited, result)
 			}
 		case patternOneOrMore:
 			for _, gc := range child.children {
-				collectAttrsFromPat(gc, optional, result)
+				collectAttrsFromPat(gc, optional, defines, visited, result)
 			}
 		case patternRef:
-			// TODO: resolve ref for attribute collection
+			if !visited[child.name] {
+				visited[child.name] = true
+				if def, ok := defines[child.name]; ok {
+					collectAttrsFromPat(def, optional, defines, visited, result)
+				}
+			}
 		}
 	}
 }
