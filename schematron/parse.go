@@ -313,12 +313,6 @@ func elemTextContent(elem *helium.Element) string {
 	return sb.String()
 }
 
-// findDocumentElement returns the root element of a document.
 func findDocumentElement(doc *helium.Document) *helium.Element {
-	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
-		if child.Type() == helium.ElementNode {
-			return child.(*helium.Element)
-		}
-	}
-	return nil
+	return doc.DocumentElement()
 }

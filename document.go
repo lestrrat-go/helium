@@ -117,6 +117,16 @@ func (d *Document) Replace(n Node) {
 	panic("d.Replace does not make sense")
 }
 
+// DocumentElement returns the root element of the document, or nil if none exists.
+func (d *Document) DocumentElement() *Element {
+	for n := d.firstChild; n != nil; n = n.NextSibling() {
+		if n.Type() == ElementNode {
+			return n.(*Element)
+		}
+	}
+	return nil
+}
+
 func (d *Document) SetDocumentElement(root Node) error {
 	if d == nil {
 		// what are you trying to do?

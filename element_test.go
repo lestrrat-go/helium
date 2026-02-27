@@ -60,5 +60,99 @@ func TestElementContent(t *testing.T) {
 	require.IsType(t, newText(nil), e.LastChild(), "LastChild is a Text node")
 
 	require.Equal(t, []byte("Hello World!"), e.Content())
+}
 
+func TestGetAttribute(t *testing.T) {
+	doc := CreateDocument()
+	e, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	require.NoError(t, e.SetAttribute("id", "123"))
+	require.NoError(t, e.SetAttribute("class", "main"))
+
+	val, ok := e.GetAttribute("id")
+	require.True(t, ok)
+	require.Equal(t, "123", val)
+
+	val, ok = e.GetAttribute("class")
+	require.True(t, ok)
+	require.Equal(t, "main", val)
+
+	_, ok = e.GetAttribute("missing")
+	require.False(t, ok)
+}
+
+func TestHasAttribute(t *testing.T) {
+	doc := CreateDocument()
+	e, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	require.NoError(t, e.SetAttribute("id", "123"))
+
+	require.True(t, e.HasAttribute("id"))
+	require.False(t, e.HasAttribute("missing"))
+}
+
+func TestGetAttributeNS(t *testing.T) {
+	doc := CreateDocument()
+	e, err := doc.CreateElement("root")
+	require.NoError(t, err)
+
+	ns := NewNamespace("x", "http://example.com")
+	require.NoError(t, e.SetAttributeNS("attr", "val", ns))
+
+	val, ok := e.GetAttributeNS("attr", "http://example.com")
+	require.True(t, ok)
+	require.Equal(t, "val", val)
+
+	_, ok = e.GetAttributeNS("attr", "http://other.com")
+	require.False(t, ok)
+
+	_, ok = e.GetAttributeNS("missing", "http://example.com")
+	require.False(t, ok)
+}
+
+func TestRemoveAttribute(t *testing.T) {
+	doc := CreateDocument()
+	e, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	require.NoError(t, e.SetAttribute("a", "1"))
+	require.NoError(t, e.SetAttribute("b", "2"))
+	require.NoError(t, e.SetAttribute("c", "3"))
+
+	// Remove middle
+	ok := e.RemoveAttribute("b")
+	require.True(t, ok)
+	require.False(t, e.HasAttribute("b"))
+	require.True(t, e.HasAttribute("a"))
+	require.True(t, e.HasAttribute("c"))
+
+	// Remove first
+	ok = e.RemoveAttribute("a")
+	require.True(t, ok)
+	require.False(t, e.HasAttribute("a"))
+	require.True(t, e.HasAttribute("c"))
+
+	// Remove last (only remaining)
+	ok = e.RemoveAttribute("c")
+	require.True(t, ok)
+	require.Equal(t, 0, len(e.Attributes()))
+
+	// Remove non-existent
+	ok = e.RemoveAttribute("missing")
+	require.False(t, ok)
+}
+
+func TestRemoveAttributeNS(t *testing.T) {
+	doc := CreateDocument()
+	e, err := doc.CreateElement("root")
+	require.NoError(t, err)
+
+	ns := NewNamespace("x", "http://example.com")
+	require.NoError(t, e.SetAttributeNS("attr", "val", ns))
+
+	ok := e.RemoveAttributeNS("attr", "http://example.com")
+	require.True(t, ok)
+	require.Equal(t, 0, len(e.Attributes()))
+
+	ok = e.RemoveAttributeNS("attr", "http://example.com")
+	require.False(t, ok)
 }
