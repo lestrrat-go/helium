@@ -2,6 +2,7 @@
 package relaxng
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -29,6 +30,16 @@ func CompileFile(path string, opts ...CompileOption) (*Grammar, error) {
 	}
 	doc, err := helium.Parse(data)
 	if err != nil {
+		var pe helium.ErrParseError
+		if errors.As(err, &pe) {
+			filename := cfg.filename
+			if filename == "" {
+				filename = path
+			}
+			errs := formatXMLParseError(filename, pe)
+			errs += rngParserError("xmlRelaxNGParse: could not load " + filename)
+			return &Grammar{compileErrors: errs}, nil
+		}
 		return nil, err
 	}
 	baseDir := filepath.Dir(path)

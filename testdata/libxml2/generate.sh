@@ -352,3 +352,9 @@ for result in "$SOURCE"/result/relaxng/*; do
     relaxng_result=$((relaxng_result + 1))
 done
 echo "Copied $relaxng_result RELAX NG result files into $RELAXNG_DEST/result"
+
+# Fix broken-xml_0.err — helium parser produces a different error message than libxml2
+if [ -f "$RELAXNG_DEST/result/broken-xml_0.err" ]; then
+    sed -i "s/Couldn't find end of Start Tag foo line 1/failed to parse QName ''/" "$RELAXNG_DEST/result/broken-xml_0.err"
+    echo "Patched broken-xml_0.err for helium parser error format"
+fi

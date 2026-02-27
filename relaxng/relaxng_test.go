@@ -82,10 +82,7 @@ func discoverTests(t *testing.T) []testCase {
 
 // skip lists test groups that need unimplemented features.
 // Keys are base names (matched by prefix).
-var skip = map[string]string{
-	// Broken XML
-	"broken-xml": "broken XML schema parsing",
-}
+var skip = map[string]string{}
 
 // skipExact lists specific test cases (by full test name) that need skipping
 // when their group-level skip has been removed.

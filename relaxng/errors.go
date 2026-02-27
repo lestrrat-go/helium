@@ -1,6 +1,11 @@
 package relaxng
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+
+	helium "github.com/lestrrat-go/helium"
+)
 
 // validityError formats a validation error in libxml2 format:
 //
@@ -21,6 +26,21 @@ func bareValidityError(msg string) string {
 //	Relax-NG parser error : {msg}\n
 func rngParserError(msg string) string {
 	return fmt.Sprintf("Relax-NG parser error : %s\n", msg)
+}
+
+// formatXMLParseError formats a helium XML parse error in libxml2-compatible style:
+//
+//	{file}:{line}: parser error : {msg}
+//	{source_line}
+//	{caret}
+func formatXMLParseError(filename string, pe helium.ErrParseError) string {
+	line := strings.TrimRight(pe.Line, "\n")
+	caretPos := pe.Column - 1
+	if caretPos < 0 {
+		caretPos = 0
+	}
+	return fmt.Sprintf("%s:%d: parser error : %s\n%s\n%s^\n",
+		filename, pe.LineNumber, pe.Err.Error(), line, strings.Repeat(" ", caretPos))
 }
 
 // rngParserErrorAt formats a schema compilation error with file/line context:
