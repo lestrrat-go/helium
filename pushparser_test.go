@@ -125,7 +125,7 @@ func TestPushParserPushAfterError(t *testing.T) {
 	require.NoError(t, pp.Push(malformed))
 
 	// Close the stream to trigger EOF in the parser, which should fail
-	pp.stream.Close()
+	require.NoError(t, pp.stream.Close())
 	<-pp.done // wait for parser to finish
 
 	// Now pushing should return an error

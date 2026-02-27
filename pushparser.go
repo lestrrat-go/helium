@@ -144,7 +144,10 @@ func (pp *PushParser) Write(p []byte) (int, error) {
 // same result.
 func (pp *PushParser) Close() (*Document, error) {
 	pp.closeOnce.Do(func() {
-		pp.stream.Close()
+		if err := pp.stream.Close(); err != nil {
+			pp.result = pushResult{err: err}
+			return
+		}
 		pp.result = <-pp.done
 	})
 	return pp.result.doc, pp.result.err
