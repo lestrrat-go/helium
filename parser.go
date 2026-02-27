@@ -2,6 +2,7 @@ package helium
 
 import (
 	"bytes"
+	"io"
 
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/sax"
@@ -55,6 +56,50 @@ func (p *Parser) Parse(b []byte) (*Document, error) {
 	}
 
 	// DTD validation: run post-parse document validation when requested.
+	if p != nil && p.options.IsSet(ParseDTDValid) && ctx.doc != nil {
+		if ve := validateDocument(ctx.doc); ve != nil {
+			return ctx.doc, ve
+		}
+	}
+
+	return ctx.doc, nil
+}
+
+// ParseReader parses XML from an io.Reader and returns the resulting Document.
+// This is identical to Parse but reads from a stream instead of a byte slice.
+// EBCDIC encoding detection is not supported when parsing from a reader.
+func ParseReader(r io.Reader) (*Document, error) {
+	return NewParser().ParseReader(r)
+}
+
+// ParseReader parses XML from an io.Reader and returns the resulting Document.
+// This is identical to Parse but reads from a stream instead of a byte slice.
+// EBCDIC encoding detection is not supported when parsing from a reader.
+func (p *Parser) ParseReader(r io.Reader) (*Document, error) {
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("=== START Parser.ParseReader ===")
+		defer g.IRelease("=== END Parser.ParseReader ===")
+	}
+
+	ctx := &parserCtx{baseURI: p.baseURI}
+	if err := ctx.init(p, r); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := ctx.release(); err != nil {
+			if pdebug.Enabled {
+				pdebug.Printf("ctx.release() failed: %s", err)
+			}
+		}
+	}()
+
+	if err := ctx.parseDocument(); err != nil {
+		if p != nil && p.options.IsSet(ParseRecover) {
+			return ctx.doc, err
+		}
+		return nil, err
+	}
+
 	if p != nil && p.options.IsSet(ParseDTDValid) && ctx.doc != nil {
 		if ve := validateDocument(ctx.doc); ve != nil {
 			return ctx.doc, ve
