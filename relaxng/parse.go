@@ -65,6 +65,7 @@ func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*G
 	}
 
 	c.resolveRefs()
+	c.checkRefCycles()
 	c.popGrammar()
 
 	c.grammar.start = startPat
@@ -115,6 +116,58 @@ func (c *compiler) resolveRefs() {
 		if name != "##start" {
 			c.grammar.defines[name] = entry.pattern
 		}
+	}
+}
+
+// checkRefCycles detects cycles in inline references (refs that lead back to
+// the same define without passing through an element pattern).
+func (c *compiler) checkRefCycles() {
+	for name := range c.grammar.defines {
+		visiting := map[string]bool{name: true}
+		if ref := c.findCycleInPattern(c.grammar.defines[name], visiting); ref != nil {
+			c.errors.WriteString(rngParserErrorAt(c.filename, ref.line, "ref",
+				fmt.Sprintf("Detected a cycle in %s references", ref.name)))
+			return
+		}
+	}
+}
+
+// findCycleInPattern walks a pattern tree looking for ref cycles.
+// Element patterns break the chain (refs inside elements don't create content cycles).
+// Returns the offending ref pattern if a cycle is found.
+func (c *compiler) findCycleInPattern(pat *pattern, visiting map[string]bool) *pattern {
+	if pat == nil {
+		return nil
+	}
+	switch pat.kind {
+	case patternElement:
+		// Elements break the cycle chain — don't recurse into content
+		return nil
+	case patternRef, patternParentRef:
+		if visiting[pat.name] {
+			return pat
+		}
+		def, ok := c.grammar.defines[pat.name]
+		if !ok {
+			return nil
+		}
+		visiting[pat.name] = true
+		result := c.findCycleInPattern(def, visiting)
+		delete(visiting, pat.name)
+		return result
+	default:
+		for _, child := range pat.children {
+			if ref := c.findCycleInPattern(child, visiting); ref != nil {
+				return ref
+			}
+		}
+		// Also check attrs
+		for _, attr := range pat.attrs {
+			if ref := c.findCycleInPattern(attr, visiting); ref != nil {
+				return ref
+			}
+		}
+		return nil
 	}
 }
 

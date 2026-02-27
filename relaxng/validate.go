@@ -166,10 +166,15 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 	state.seq = state.seq[1:]
 
 	// Validate attributes and content together.
-	// Build child node list
+	// Build child node list, skipping non-content nodes (DTD artifacts, PIs, comments).
 	var children []helium.Node
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		children = append(children, child)
+		switch child.Type() {
+		case helium.EntityRefNode, helium.EntityNode, helium.ProcessingInstructionNode, helium.CommentNode:
+			continue
+		default:
+			children = append(children, child)
+		}
 	}
 
 	// Collect instance attributes (skip xmlns declarations)
@@ -194,6 +199,23 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 
 	errLenBefore := v.errors.Len()
 	if ret := v.validateElementBody(pat, elem, instanceAttrs, attrUsed, contentState); ret != 0 {
+		// For top-level choice content, check for unknown child elements
+		// and insert their errors before the body validation errors.
+		topChoice := len(pat.children) == 1 && pat.children[0].kind == patternChoice
+		if topChoice {
+			savedBefore := v.errors.String()[:errLenBefore]
+			bodyErrors := v.errors.String()[errLenBefore:]
+			v.errors.Reset()
+			v.errors.WriteString(savedBefore)
+			for _, n := range skipIgnored(contentState.seq) {
+				if e, ok := n.(*helium.Element); ok {
+					if !v.isKnownChildElement(pat, e.LocalName(), elemNS(e)) {
+						v.addError(elem, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
+					}
+				}
+			}
+			v.errors.WriteString(bodyErrors)
+		}
 		if v.errors.Len() == errLenBefore {
 			v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
 		}
@@ -213,15 +235,29 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 	// Check all content consumed
 	remaining := skipIgnored(contentState.seq)
 	if len(remaining) > 0 {
-		hasChildError := false
-		for _, n := range remaining {
-			if e, ok := n.(*helium.Element); ok {
-				v.addErrorOnNode(e, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
-				hasChildError = true
+		// When the element's content is a top-level choice, remaining content
+		// errors are reported on the parent element (libxml2 behavior).
+		topChoice := len(pat.children) == 1 && pat.children[0].kind == patternChoice
+		if topChoice {
+			for _, n := range remaining {
+				if e, ok := n.(*helium.Element); ok {
+					if !v.isKnownChildElement(pat, e.LocalName(), elemNS(e)) {
+						v.addError(elem, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
+					}
+				}
 			}
-		}
-		if !hasChildError {
 			v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+		} else {
+			hasChildError := false
+			for _, n := range remaining {
+				if e, ok := n.(*helium.Element); ok {
+					v.addErrorOnNode(e, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
+					hasChildError = true
+				}
+			}
+			if !hasChildError {
+				v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+			}
 		}
 		v.suppressDepth = savedSuppress
 		return -1
@@ -488,6 +524,21 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		for i, child := range pat.children {
 			isRepeatable[i] = child.kind == patternZeroOrMore || child.kind == patternOneOrMore || child.kind == patternText
 		}
+
+		// For children that resolve to groups, track per-member progress.
+		// This allows group members to be matched one-by-one with other
+		// interleave children consuming elements between them.
+		type groupState struct {
+			members []*pattern
+			pos     int
+		}
+		groupStates := make([]*groupState, len(pat.children))
+		for i, child := range pat.children {
+			if grp := v.resolveToGroup(child); grp != nil {
+				groupStates[i] = &groupState{members: grp.children, pos: 0}
+			}
+		}
+
 		// Track which children ever consumed something.
 		consumed := make([]bool, len(pat.children))
 		// Track which single-use children are "done" (already matched once).
@@ -525,6 +576,56 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 					}
 					continue
 				}
+
+				// Group children: match member-by-member so other interleave
+				// children can consume elements between group members.
+				if gs := groupStates[i]; gs != nil {
+					for gs.pos < len(gs.members) {
+						member := gs.members[gs.pos]
+						savedState := state.clone()
+						savedAttrUsed := make([]bool, len(attrUsed))
+						copy(savedAttrUsed, attrUsed)
+						savedErrors := v.errors.String()
+						savedValid := v.valid
+						v.suppressDepth++
+						ret := v.validateContentPat(member, elem, attrs, attrUsed, state)
+						v.suppressDepth--
+						if ret == 0 && (!seqEqual(state.seq, savedState.seq) || !boolSliceEqual(attrUsed, savedAttrUsed)) {
+							// Member consumed something — advance.
+							consumed[i] = true
+							progress = true
+							gs.pos++
+							v.errors.Reset()
+							v.errors.WriteString(savedErrors)
+							v.valid = savedValid
+							// Continue trying next members in same round
+							// (they might also match immediately).
+						} else {
+							// Member didn't consume. If nullable, skip it
+							// and try the next member.
+							*state = *savedState
+							copy(attrUsed, savedAttrUsed)
+							v.errors.Reset()
+							v.errors.WriteString(savedErrors)
+							v.valid = savedValid
+							if v.isNullable(member) {
+								gs.pos++
+								continue
+							}
+							// Not nullable — stop trying this group for now.
+							// Other interleave children may consume first.
+							break
+						}
+					}
+					if gs.pos >= len(gs.members) {
+						if !isRepeatable[i] {
+							done[i] = true
+						}
+					}
+					continue
+				}
+
+				// Non-group children: try atomic matching.
 				savedState := state.clone()
 				savedAttrUsed := make([]bool, len(attrUsed))
 				copy(savedAttrUsed, attrUsed)
@@ -559,6 +660,19 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		// Check for required children that were never consumed.
 		for i, child := range pat.children {
 			if !consumed[i] && !v.isNullable(child) {
+				// For group children with partial progress, check if remaining members are all nullable.
+				if gs := groupStates[i]; gs != nil && gs.pos > 0 {
+					allNullable := true
+					for j := gs.pos; j < len(gs.members); j++ {
+						if !v.isNullable(gs.members[j]) {
+							allNullable = false
+							break
+						}
+					}
+					if allNullable {
+						continue
+					}
+				}
 				isAttr := child.kind == patternAttribute
 				if !isAttr {
 					eName := v.patternElementName(child)
@@ -615,6 +729,61 @@ func (v *validator) elementMatches(pat *pattern, elem *helium.Element) bool {
 		return false
 	}
 	return true
+}
+
+// isKnownChildElement checks if an element name/ns appears as a child element
+// defined anywhere in the content patterns of the given element pattern.
+func (v *validator) isKnownChildElement(elemPat *pattern, name, ns string) bool {
+	visited := make(map[string]bool)
+	for _, child := range elemPat.children {
+		if v.isKnownElementInPatternImpl(child, name, ns, visited) {
+			return true
+		}
+	}
+	return false
+}
+
+// isKnownElementInPattern checks if an element name/ns appears as a child element
+// pattern anywhere in the given pattern tree (used for error reporting).
+func (v *validator) isKnownElementInPattern(pat *pattern, name, ns string) bool {
+	visited := make(map[string]bool)
+	return v.isKnownElementInPatternImpl(pat, name, ns, visited)
+}
+
+func (v *validator) isKnownElementInPatternImpl(pat *pattern, name, ns string, visited map[string]bool) bool {
+	if pat == nil {
+		return false
+	}
+	switch pat.kind {
+	case patternElement:
+		// Check if this element pattern matches the name
+		if pat.nameClass != nil {
+			if nameClassMatches(pat.nameClass, name, ns) {
+				return true
+			}
+		} else if (pat.name == "" || pat.name == name) && (pat.ns == "" || pat.ns == ns) {
+			return true
+		}
+		// Don't recurse into element children (those define nested content)
+		return false
+	case patternRef, patternParentRef:
+		if visited[pat.name] {
+			return false
+		}
+		visited[pat.name] = true
+		def, ok := v.grammar.defines[pat.name]
+		if !ok {
+			return false
+		}
+		return v.isKnownElementInPatternImpl(def, name, ns, visited)
+	default:
+		for _, child := range pat.children {
+			if v.isKnownElementInPatternImpl(child, name, ns, visited) {
+				return true
+			}
+		}
+		return false
+	}
 }
 
 // elementMatchesWithErrors checks element matching and generates error messages.
@@ -1884,6 +2053,29 @@ func isValueChoice(pat *pattern) bool {
 		}
 	}
 	return len(pat.children) > 0
+}
+
+// resolveToGroup follows refs to find a group pattern. Returns nil if the
+// pattern is not a group (or ref chain to a group).
+func (v *validator) resolveToGroup(pat *pattern) *pattern {
+	for pat != nil {
+		switch pat.kind {
+		case patternRef, patternParentRef:
+			def, ok := v.grammar.defines[pat.name]
+			if !ok {
+				return nil
+			}
+			pat = def
+		case patternGroup:
+			if len(pat.children) > 1 {
+				return pat
+			}
+			return nil
+		default:
+			return nil
+		}
+	}
+	return nil
 }
 
 func findDocElement(doc *helium.Document) *helium.Element {

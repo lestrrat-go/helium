@@ -22,3 +22,10 @@ func bareValidityError(msg string) string {
 func rngParserError(msg string) string {
 	return fmt.Sprintf("Relax-NG parser error : %s\n", msg)
 }
+
+// rngParserErrorAt formats a schema compilation error with file/line context:
+//
+//	{file}:{line}: element {elemName}: Relax-NG parser error : {msg}\n
+func rngParserErrorAt(file string, line int, elemName, msg string) string {
+	return fmt.Sprintf("%s:%d: element %s: Relax-NG parser error : %s\n", file, line, elemName, msg)
+}

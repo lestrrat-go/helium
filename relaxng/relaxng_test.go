@@ -90,22 +90,10 @@ var skip = map[string]string{
 // skipExact lists specific test cases (by full test name) that need skipping
 // when their group-level skip has been removed.
 var skipExact = map[string]string{
-	// Cycle detection in grammar refs (compile-time check)
-	"tutor4_4_1": "cycle detection in inline references",
-	// Error message formatting differences: libxml2 reports remaining content
-	// on parent element, we report on the child element
-	"choice0_5": "error formatting: remaining content reported on child vs parent",
-	"choice0_6": "error formatting: remaining content reported on child vs parent",
-	"choice0_7": "error formatting: remaining content reported on child vs parent",
-	"choice0_8": "error formatting: remaining content reported on child vs parent",
-	// Large XML file — anyName zeroOrMore inner element validation failure
-	"tutor11_1_3": "anyName: inner element validation failure in large document",
 	// Requires compile-time check: attribute name class overlap detection
 	"tutor11_3_1": "compile-time: Attributes conflicts in group check",
-	// Large/complex schemas with validation issues
-	"docbook_0":  "large schema: docbook validation false negative",
-	"libvirt_0":  "large schema: libvirt interleave-related validation issue",
-	"spec_0":     "XML parse error in test data (unescaped entities)",
+	// Parser can't handle closing tag split across lines
+	"spec_0": "XML parser: closing tag split across lines",
 }
 
 func shouldSkip(name string) string {
