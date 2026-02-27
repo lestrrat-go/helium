@@ -225,6 +225,8 @@ type Dumper struct {
 	Format bool
 	// IndentString is the string used for each indent level (default "  ").
 	IndentString string
+	// SkipDTD omits DTD nodes from output when set to true.
+	SkipDTD bool
 
 	escapeNonASCII bool
 	isXHTML        bool
@@ -342,6 +344,9 @@ func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 	}
 
 	for e := doc.FirstChild(); e != nil; e = e.NextSibling() {
+		if d.SkipDTD && e.Type() == DTDNode {
+			continue
+		}
 		if d.isXHTML && e.Type() == ElementNode {
 			if err := d.dumpXHTMLNode(out, e); err != nil {
 				return err

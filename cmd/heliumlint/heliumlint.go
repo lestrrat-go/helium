@@ -286,21 +286,10 @@ func run() int {
 	// Load catalogs if requested
 	var cat *catalog.Catalog
 	if cfg.catalogs && !cfg.noCatalogs {
-		envFiles := os.Getenv("XML_CATALOG_FILES")
-		if envFiles != "" {
-			for _, f := range strings.Split(envFiles, " ") {
-				f = strings.TrimSpace(f)
-				if f == "" {
-					continue
-				}
-				c, err := catalog.Load(f)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "heliumlint: failed to load catalog %s: %s\n", f, err)
-					continue
-				}
-				cat = c
-				break // use first successfully loaded catalog
-			}
+		var err error
+		cat, err = loadCatalogFromEnv()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "heliumlint: %s\n", err)
 		}
 	}
 
@@ -312,7 +301,7 @@ func run() int {
 			t0 = time.Now()
 		}
 		var err error
-		schema, err = xsd.CompileFile(cfg.schemaFile)
+		schema, err = compileSchema(cfg)
 		if cfg.timing {
 			fmt.Fprintf(os.Stderr, "Compiling schema took %s\n", time.Since(t0))
 		}
@@ -342,6 +331,30 @@ func run() int {
 		}
 	}
 	return exitCode
+}
+
+func loadCatalogFromEnv() (*catalog.Catalog, error) {
+	envFiles := os.Getenv("XML_CATALOG_FILES")
+	if envFiles == "" {
+		return nil, nil
+	}
+	for _, f := range strings.Split(envFiles, " ") {
+		f = strings.TrimSpace(f)
+		if f == "" {
+			continue
+		}
+		c, err := catalog.Load(f)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "heliumlint: failed to load catalog %s: %s\n", f, err)
+			continue
+		}
+		return c, nil
+	}
+	return nil, nil
+}
+
+func compileSchema(cfg *config) (*xsd.Schema, error) {
+	return xsd.CompileFile(cfg.schemaFile)
 }
 
 type namedInput struct {
@@ -427,12 +440,12 @@ func processInput(cfg *config, input namedInput, cat *catalog.Catalog, schema *x
 		if cfg.timing {
 			fmt.Fprintf(os.Stderr, "Validating took %s\n", time.Since(t0))
 		}
-		if result != "" {
+		if strings.Contains(result, "fails to validate") {
 			fmt.Fprint(os.Stderr, result)
 			return exitValidation
 		}
 		if !cfg.quiet {
-			fmt.Fprintf(os.Stderr, "%s validates\n", input.name)
+			fmt.Fprint(os.Stderr, result)
 		}
 	}
 
@@ -444,11 +457,6 @@ func processInput(cfg *config, input namedInput, cat *catalog.Catalog, schema *x
 	// XPath query
 	if cfg.xpathExpr != "" {
 		return evalXPath(cfg, doc, out)
-	}
-
-	// Drop DTD
-	if cfg.dropdtd {
-		dropDTDNodes(doc)
 	}
 
 	// Output
@@ -487,6 +495,7 @@ func processInput(cfg *config, input namedInput, cat *catalog.Catalog, schema *x
 	d := helium.Dumper{
 		Format:       cfg.format,
 		IndentString: "  ",
+		SkipDTD:      cfg.dropdtd,
 	}
 	if dErr := d.DumpDoc(out, doc); dErr != nil {
 		if cfg.timing {
@@ -554,24 +563,3 @@ func evalXPath(cfg *config, doc *helium.Document, out io.Writer) int {
 	return exitOK
 }
 
-func dropDTDNodes(doc *helium.Document) {
-	var dtds []helium.Node
-	for c := doc.FirstChild(); c != nil; c = c.NextSibling() {
-		if c.Type() == helium.DTDNode {
-			dtds = append(dtds, c)
-		}
-	}
-	for _, dtd := range dtds {
-		prev := dtd.PrevSibling()
-		next := dtd.NextSibling()
-		if prev != nil {
-			prev.SetNextSibling(next)
-		}
-		if next != nil {
-			next.SetPrevSibling(prev)
-		}
-		if prev == nil && next != nil {
-			dtd.Replace(next)
-		}
-	}
-}
