@@ -55,7 +55,6 @@ type pattern struct {
 	attrs     []*pattern // attribute patterns (for element)
 	nameClass *nameClass // for element/attribute name matching
 	params    []*param   // for data patterns
-	combine   string     // "choice" or "interleave" for define/start combine attribute
 	line      int        // source line number
 }
 

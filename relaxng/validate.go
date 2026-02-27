@@ -871,24 +871,6 @@ func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 	return false
 }
 
-func (v *validator) elementMatches(pat *pattern, elem *helium.Element) bool {
-	ns := elemNS(elem)
-	if pat.nameClass != nil {
-		return nameClassMatches(pat.nameClass, elem.LocalName(), ns)
-	}
-	// Match by name/ns directly
-	if pat.name != "" && pat.name != elem.LocalName() {
-		return false
-	}
-	if pat.ns != "" && pat.ns != ns {
-		return false
-	}
-	if pat.ns == "" && pat.name != "" && ns != "" {
-		return false
-	}
-	return true
-}
-
 // isKnownChildElement checks if an element name/ns appears as a child element
 // defined anywhere in the content patterns of the given element pattern.
 func (v *validator) isKnownChildElement(elemPat *pattern, name, ns string) bool {
@@ -899,13 +881,6 @@ func (v *validator) isKnownChildElement(elemPat *pattern, name, ns string) bool 
 		}
 	}
 	return false
-}
-
-// isKnownElementInPattern checks if an element name/ns appears as a child element
-// pattern anywhere in the given pattern tree (used for error reporting).
-func (v *validator) isKnownElementInPattern(pat *pattern, name, ns string) bool {
-	visited := make(map[string]bool)
-	return v.isKnownElementInPatternImpl(pat, name, ns, visited)
 }
 
 func (v *validator) isKnownElementInPatternImpl(pat *pattern, name, ns string, visited map[string]bool) bool {
@@ -1013,125 +988,6 @@ func describeExceptNS(nc *nameClass) string {
 		}
 	}
 	return ""
-}
-
-func (v *validator) validateAttributes(pat *pattern, elem *helium.Element) int {
-	// Collect instance attributes (skip xmlns declarations)
-	allAttrs := elem.Attributes()
-	var instanceAttrs []*helium.Attribute
-	for _, attr := range allAttrs {
-		if attr.Prefix() == "xmlns" || (attr.Prefix() == "" && attr.LocalName() == "xmlns") {
-			continue
-		}
-		instanceAttrs = append(instanceAttrs, attr)
-	}
-
-	// Collect all attribute patterns from this element and its content.
-	attrPats := collectAttrPatterns(pat, v.grammar.defines)
-
-	// Validate attribute patterns
-	attrUsed := make([]bool, len(instanceAttrs))
-
-	for _, attrPat := range attrPats {
-		found := v.matchAttrPat(attrPat, instanceAttrs, attrUsed, elem)
-		if !found && !isOptionalAttrPat(attrPat) {
-			return -1
-		}
-	}
-
-	// Check for unexpected attributes
-	for i, attr := range instanceAttrs {
-		if !attrUsed[i] {
-			if !hasWildcardAttrPat(attrPats) {
-				v.addError(elem, fmt.Sprintf("Invalid attribute %s for element %s", attr.LocalName(), elem.LocalName()))
-				return -1
-			}
-		}
-	}
-
-	return 0
-}
-
-// collectAttrPatterns collects all attribute patterns from an element pattern,
-// including those nested in group/optional/choice/etc and behind refs.
-func collectAttrPatterns(pat *pattern, defines map[string]*pattern) []*attrPatInfo {
-	var result []*attrPatInfo
-	visited := make(map[string]bool)
-	collectAttrsFromPat(pat, false, defines, visited, &result)
-	return result
-}
-
-type attrPatInfo struct {
-	pat      *pattern
-	optional bool
-}
-
-func collectAttrsFromPat(pat *pattern, optional bool, defines map[string]*pattern, visited map[string]bool, result *[]*attrPatInfo) {
-	if pat == nil {
-		return
-	}
-	// Direct attribute patterns on the element
-	for _, a := range pat.attrs {
-		*result = append(*result, &attrPatInfo{pat: a, optional: optional})
-	}
-	// Check children
-	for _, child := range pat.children {
-		switch child.kind {
-		case patternAttribute:
-			*result = append(*result, &attrPatInfo{pat: child, optional: optional})
-		case patternOptional, patternZeroOrMore:
-			for _, gc := range child.children {
-				collectAttrsFromPat(gc, true, defines, visited, result)
-			}
-		case patternGroup, patternInterleave:
-			collectAttrsFromPat(child, optional, defines, visited, result)
-		case patternChoice:
-			// In choice, all branches' attributes are optional
-			for _, gc := range child.children {
-				collectAttrsFromPat(gc, true, defines, visited, result)
-			}
-		case patternOneOrMore:
-			for _, gc := range child.children {
-				collectAttrsFromPat(gc, optional, defines, visited, result)
-			}
-		case patternRef:
-			if !visited[child.name] {
-				visited[child.name] = true
-				if def, ok := defines[child.name]; ok {
-					collectAttrsFromPat(def, optional, defines, visited, result)
-				}
-			}
-		}
-	}
-}
-
-func (v *validator) matchAttrPat(info *attrPatInfo, attrs []*helium.Attribute, used []bool, elem *helium.Element) bool {
-	pat := info.pat
-	for i, attr := range attrs {
-		if used[i] {
-			continue
-		}
-		if v.attributeMatches(pat, attr) {
-			if v.validateAttributeValue(pat, attr, elem) == 0 {
-				used[i] = true
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func isOptionalAttrPat(info *attrPatInfo) bool {
-	return info.optional
-}
-
-func hasWildcardAttrPat(infos []*attrPatInfo) bool {
-	for _, info := range infos {
-		if info.pat.nameClass != nil && info.pat.nameClass.kind == ncAnyName {
-			return true
-		}
-	}
-	return false
 }
 
 // matchOneAttr tries to match an attribute pattern against instance attributes.
@@ -1421,49 +1277,6 @@ func (v *validator) matchAttrTokens(pat *pattern, tokens []string) (int, bool) {
 	return 0, false
 }
 
-func (v *validator) validateElementContent(pat *pattern, elem *helium.Element) int {
-	// Build child node list
-	var children []helium.Node
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		children = append(children, child)
-	}
-
-	// If no content patterns, expect empty
-	if len(pat.children) == 0 {
-		remaining := skipIgnored(children)
-		if len(remaining) > 0 {
-			return -1
-		}
-		return 0
-	}
-
-	contentState := &validState{seq: children}
-
-	// Validate content patterns (skip attribute children, they're already handled)
-	for _, contentPat := range pat.children {
-		if contentPat.kind == patternAttribute {
-			continue
-		}
-		if ret := v.validatePattern(contentPat, contentState); ret != 0 {
-			return -1
-		}
-	}
-
-	// Check all content consumed
-	remaining := skipIgnored(contentState.seq)
-	if len(remaining) > 0 {
-		for _, n := range remaining {
-			if e, ok := n.(*helium.Element); ok {
-				v.addError(elem, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
-				return -1
-			}
-		}
-		return -1
-	}
-
-	return 0
-}
-
 func (v *validator) validateGroup(pat *pattern, state *validState) int {
 	for _, child := range pat.children {
 		if ret := v.validatePattern(child, state); ret != 0 {
@@ -1714,12 +1527,13 @@ func (v *validator) matchValue(pat *pattern, text string) int {
 	expected := pat.value
 
 	if pat.dataType != nil {
-		if pat.dataType.library == "" {
+		switch pat.dataType.library {
+		case "":
 			if pat.dataType.name == "token" {
 				text = normalizeToken(text)
 				expected = normalizeToken(expected)
 			}
-		} else if pat.dataType.library == xsdDatatypeLibrary {
+		case xsdDatatypeLibrary:
 			// XSD type-aware comparison: normalize both values
 			text = strings.TrimSpace(text)
 			expected = strings.TrimSpace(expected)
@@ -2022,7 +1836,7 @@ func validateXSDHexBinary(value string) int {
 		return -1
 	}
 	for _, r := range value {
-		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') && (r < 'A' || r > 'F') {
 			return -1
 		}
 	}

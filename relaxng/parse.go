@@ -539,7 +539,7 @@ attrConflictDone:
 
 	// Check: element with no content (no children, no attrs)
 	if len(contentChildren) == 0 && len(p.attrs) == 0 {
-		c.addSchemaError(node, fmt.Sprintf("xmlRelaxNGParseElement: element has no content"))
+		c.addSchemaError(node, "xmlRelaxNGParseElement: element has no content")
 	}
 
 	// Check: content type error (mixing data/value with element/group patterns)
