@@ -10,6 +10,11 @@ import (
 	helium "github.com/lestrrat-go/helium"
 )
 
+const (
+	maxRecursionDepth = 5000
+	maxNodeSetLength  = 10_000_000
+)
+
 // evalContext holds the evaluation state for an XPath expression.
 type evalContext struct {
 	node       helium.Node
@@ -17,13 +22,18 @@ type evalContext struct {
 	size       int
 	namespaces map[string]string
 	variables  map[string]interface{}
+	depth      int
+	opCount    *int // shared across the entire evaluation tree
+	opLimit    int  // 0 = unlimited
 }
 
 func newEvalContext(node helium.Node) *evalContext {
+	opCount := 0
 	return &evalContext{
 		node:     node,
 		position: 1,
 		size:     1,
+		opCount:  &opCount,
 	}
 }
 
@@ -34,11 +44,35 @@ func (ctx *evalContext) withNode(n helium.Node, pos, size int) *evalContext {
 		size:       size,
 		namespaces: ctx.namespaces,
 		variables:  ctx.variables,
+		depth:      ctx.depth,
+		opCount:    ctx.opCount,
+		opLimit:    ctx.opLimit,
 	}
+}
+
+func (ctx *evalContext) countOps(n int) error {
+	if ctx.opLimit <= 0 {
+		return nil
+	}
+	*ctx.opCount += n
+	if *ctx.opCount > ctx.opLimit {
+		return ErrOpLimit
+	}
+	return nil
 }
 
 // eval dispatches to the appropriate evaluator for each AST node type.
 func eval(ctx *evalContext, expr Expr) (*Result, error) {
+	ctx.depth++
+	if ctx.depth > maxRecursionDepth {
+		return nil, ErrRecursionLimit
+	}
+	defer func() { ctx.depth-- }()
+	return dispatchExpr(ctx, expr)
+}
+
+// dispatchExpr routes an expression to its evaluator without the depth check.
+func dispatchExpr(ctx *evalContext, expr Expr) (*Result, error) {
 	switch e := expr.(type) {
 	case *LocationPath:
 		return evalLocationPath(ctx, e)
@@ -54,6 +88,14 @@ func eval(ctx *evalContext, expr Expr) (*Result, error) {
 		return evalVariableExpr(ctx, e)
 	case FunctionCall:
 		return evalFunctionCall(ctx, e)
+	default:
+		return dispatchCompoundExpr(ctx, expr)
+	}
+}
+
+// dispatchCompoundExpr handles compound expression types that combine sub-expressions.
+func dispatchCompoundExpr(ctx *evalContext, expr Expr) (*Result, error) {
+	switch e := expr.(type) {
 	case FilterExpr:
 		return evalFilterExpr(ctx, e)
 	case UnionExpr:
@@ -75,50 +117,76 @@ func evalLocationPath(ctx *evalContext, lp *LocationPath) (*Result, error) {
 		nodes = []helium.Node{ctx.node}
 	}
 
+	var err error
 	for _, step := range lp.Steps {
 		if len(step.Predicates) > 0 {
-			// Per-parent predicate evaluation: position() is relative
-			// to each parent's candidate set, not the global set.
-			var allFiltered []helium.Node
-			for _, n := range nodes {
-				candidates := traverseAxis(step.Axis, n)
-				var matched []helium.Node
-				for _, c := range candidates {
-					if matchNodeTest(step.NodeTest, c, step.Axis, ctx) {
-						matched = append(matched, c)
-					}
-				}
-				for _, pred := range step.Predicates {
-					var err error
-					matched, err = applyPredicate(ctx, matched, pred)
-					if err != nil {
-						return nil, err
-					}
-				}
-				allFiltered = append(allFiltered, matched...)
-			}
-			nodes = deduplicateNodes(allFiltered)
+			nodes, err = evalStepWithPredicates(ctx, nodes, step)
 		} else {
-			var next []helium.Node
-			for _, n := range nodes {
-				candidates := traverseAxis(step.Axis, n)
-				for _, c := range candidates {
-					if matchNodeTest(step.NodeTest, c, step.Axis, ctx) {
-						next = append(next, c)
-					}
-				}
-			}
-			nodes = deduplicateNodes(next)
+			nodes, err = evalStepNoPredicates(ctx, nodes, step)
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 
 	return &Result{Type: NodeSetResult, NodeSet: nodes}, nil
 }
 
+// evalStepWithPredicates evaluates one location step that has predicates.
+// Position() is relative to each parent's candidate set, not the global set.
+func evalStepWithPredicates(ctx *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
+	var allFiltered []helium.Node
+	for _, n := range nodes {
+		candidates, err := traverseAxis(step.Axis, n)
+		if err != nil {
+			return nil, err
+		}
+		if err := ctx.countOps(len(candidates)); err != nil {
+			return nil, err
+		}
+		matched := filterByNodeTest(candidates, step.NodeTest, step.Axis, ctx)
+		for _, pred := range step.Predicates {
+			matched, err = applyPredicate(ctx, matched, pred)
+			if err != nil {
+				return nil, err
+			}
+		}
+		allFiltered = append(allFiltered, matched...)
+	}
+	return deduplicateNodes(allFiltered)
+}
+
+// evalStepNoPredicates evaluates one location step that has no predicates.
+func evalStepNoPredicates(ctx *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
+	var next []helium.Node
+	for _, n := range nodes {
+		candidates, err := traverseAxis(step.Axis, n)
+		if err != nil {
+			return nil, err
+		}
+		if err := ctx.countOps(len(candidates)); err != nil {
+			return nil, err
+		}
+		next = append(next, filterByNodeTest(candidates, step.NodeTest, step.Axis, ctx)...)
+	}
+	return deduplicateNodes(next)
+}
+
+// filterByNodeTest returns only those nodes that match the given node test.
+func filterByNodeTest(candidates []helium.Node, nt NodeTest, axis AxisType, ctx *evalContext) []helium.Node {
+	var matched []helium.Node
+	for _, c := range candidates {
+		if matchNodeTest(nt, c, axis, ctx) {
+			matched = append(matched, c)
+		}
+	}
+	return matched
+}
+
 // deduplicateNodes removes duplicate nodes and sorts in document order.
-func deduplicateNodes(nodes []helium.Node) []helium.Node {
+func deduplicateNodes(nodes []helium.Node) ([]helium.Node, error) {
 	if len(nodes) <= 1 {
-		return nodes
+		return nodes, nil
 	}
 	seen := make(map[helium.Node]bool, len(nodes))
 	nsKeys := make(map[nsNodeKey]bool)
@@ -137,10 +205,13 @@ func deduplicateNodes(nodes []helium.Node) []helium.Node {
 		seen[n] = true
 		result = append(result, n)
 	}
+	if len(result) > maxNodeSetLength {
+		return nil, ErrNodeSetLimit
+	}
 	sort.SliceStable(result, func(i, j int) bool {
 		return documentPosition(result[i]) < documentPosition(result[j])
 	})
-	return result
+	return result, nil
 }
 
 func documentRoot(n helium.Node) helium.Node {
@@ -183,14 +254,7 @@ func matchNameTest(test NameTest, n helium.Node, axis AxisType, ctx *evalContext
 			return false
 		}
 	case AxisNamespace:
-		// Principal node type for namespace axis is namespace
-		if n.Type() != helium.NamespaceNode {
-			return false
-		}
-		if test.Local == "*" {
-			return true
-		}
-		return n.Name() == test.Local
+		return matchNameTestNamespaceAxis(test, n)
 	default:
 		// For principal node type of other axes: element
 		if n.Type() != helium.ElementNode {
@@ -198,6 +262,23 @@ func matchNameTest(test NameTest, n helium.Node, axis AxisType, ctx *evalContext
 		}
 	}
 
+	return matchNameTestByLocalAndPrefix(test, n, ctx)
+}
+
+// matchNameTestNamespaceAxis matches a name test against a namespace-axis node.
+func matchNameTestNamespaceAxis(test NameTest, n helium.Node) bool {
+	if n.Type() != helium.NamespaceNode {
+		return false
+	}
+	if test.Local == "*" {
+		return true
+	}
+	return n.Name() == test.Local
+}
+
+// matchNameTestByLocalAndPrefix matches a name test's local name and optional prefix
+// against a node (used after the principal node type check has passed).
+func matchNameTestByLocalAndPrefix(test NameTest, n helium.Node, ctx *evalContext) bool {
 	if test.Local == "*" {
 		if test.Prefix == "" {
 			return true
@@ -207,8 +288,7 @@ func matchNameTest(test NameTest, n helium.Node, axis AxisType, ctx *evalContext
 	}
 
 	// Match local name
-	localName := localNameOf(n)
-	if localName != test.Local {
+	if localNameOf(n) != test.Local {
 		return false
 	}
 
@@ -278,6 +358,9 @@ func matchTypeTest(test TypeTest, n helium.Node) bool {
 }
 
 func applyPredicate(ctx *evalContext, nodes []helium.Node, pred Expr) ([]helium.Node, error) {
+	if err := ctx.countOps(len(nodes)); err != nil {
+		return nil, err
+	}
 	size := len(nodes)
 	var result []helium.Node
 	for i, n := range nodes {
@@ -294,8 +377,8 @@ func applyPredicate(ctx *evalContext, nodes []helium.Node, pred Expr) ([]helium.
 }
 
 // predicateTrue evaluates a predicate result. Per XPath spec:
-// - If result is a number, it's true when equal to position
-// - Otherwise, convert to boolean
+// - If result is a number, it's true when equal to position.
+// - Otherwise, convert to boolean.
 func predicateTrue(r *Result, position int) bool {
 	if r.Type == NumberResult {
 		return r.Number == float64(position)
@@ -309,27 +392,9 @@ func evalBinaryExpr(ctx *evalContext, e BinaryExpr) (*Result, error) {
 		return evalOr(ctx, e)
 	case TokenAnd:
 		return evalAnd(ctx, e)
-	case TokenEquals:
+	case TokenEquals, TokenNotEquals, TokenLess, TokenLessEq, TokenGreater, TokenGreaterEq:
 		return evalComparison(ctx, e)
-	case TokenNotEquals:
-		return evalComparison(ctx, e)
-	case TokenLess:
-		return evalComparison(ctx, e)
-	case TokenLessEq:
-		return evalComparison(ctx, e)
-	case TokenGreater:
-		return evalComparison(ctx, e)
-	case TokenGreaterEq:
-		return evalComparison(ctx, e)
-	case TokenPlus:
-		return evalArithmetic(ctx, e)
-	case TokenMinus:
-		return evalArithmetic(ctx, e)
-	case TokenStar:
-		return evalArithmetic(ctx, e)
-	case TokenDiv:
-		return evalArithmetic(ctx, e)
-	case TokenMod:
+	case TokenPlus, TokenMinus, TokenStar, TokenDiv, TokenMod:
 		return evalArithmetic(ctx, e)
 	}
 	return nil, fmt.Errorf("unsupported binary operator: %s", e.Op)
@@ -380,75 +445,86 @@ func evalComparison(ctx *evalContext, e BinaryExpr) (*Result, error) {
 
 // compareResults implements XPath comparison semantics including node-set comparisons.
 func compareResults(op TokenType, left, right *Result) bool {
+	if left.Type == NodeSetResult {
+		return compareNodeSet(op, left.NodeSet, right)
+	}
+	if right.Type == NodeSetResult {
+		return compareNodeSetRight(op, left, right.NodeSet)
+	}
+	return compareScalars(op, left, right)
+}
+
+// compareNodeSet handles comparisons where the left operand is a node-set.
+func compareNodeSet(op TokenType, leftNodes []helium.Node, right *Result) bool {
 	// Node-set vs node-set
-	if left.Type == NodeSetResult && right.Type == NodeSetResult {
-		for _, ln := range left.NodeSet {
+	if right.Type == NodeSetResult {
+		for _, ln := range leftNodes {
 			lv := stringValue(ln)
 			for _, rn := range right.NodeSet {
-				rv := stringValue(rn)
-				if compareStrings(op, lv, rv) {
+				if compareStrings(op, lv, stringValue(rn)) {
 					return true
 				}
 			}
 		}
 		return false
 	}
-
-	// Node-set vs other
-	if left.Type == NodeSetResult {
-		for _, ln := range left.NodeSet {
-			sv := stringValue(ln)
-			if compareWithScalar(op, sv, right) {
-				return true
-			}
+	// Node-set vs scalar
+	for _, ln := range leftNodes {
+		if compareWithScalar(op, stringValue(ln), right) {
+			return true
 		}
-		return false
 	}
+	return false
+}
 
-	// Other vs node-set
-	if right.Type == NodeSetResult {
-		for _, rn := range right.NodeSet {
-			sv := stringValue(rn)
-			if compareWithScalar(reverseOp(op), sv, left) {
-				return true
-			}
+// compareNodeSetRight handles comparisons where only the right operand is a node-set.
+func compareNodeSetRight(op TokenType, left *Result, rightNodes []helium.Node) bool {
+	rev := reverseOp(op)
+	for _, rn := range rightNodes {
+		if compareWithScalar(rev, stringValue(rn), left) {
+			return true
 		}
-		return false
 	}
+	return false
+}
 
-	// Both scalars
+// compareScalars compares two non-node-set results using XPath type coercion rules.
+func compareScalars(op TokenType, left, right *Result) bool {
 	if op == TokenEquals || op == TokenNotEquals {
-		// If either is boolean, compare as booleans
-		if left.Type == BooleanResult || right.Type == BooleanResult {
-			lb := resultToBoolean(left)
-			rb := resultToBoolean(right)
-			if op == TokenEquals {
-				return lb == rb
-			}
-			return lb != rb
-		}
-		// If either is number, compare as numbers
-		if left.Type == NumberResult || right.Type == NumberResult {
-			ln := resultToNumber(left)
-			rn := resultToNumber(right)
-			if op == TokenEquals {
-				return ln == rn
-			}
-			return ln != rn
-		}
-		// Compare as strings
-		ls := resultToString(left)
-		rs := resultToString(right)
-		if op == TokenEquals {
-			return ls == rs
-		}
-		return ls != rs
+		return compareScalarsEqNe(op, left, right)
 	}
-
 	// Relational: always compare as numbers
-	ln := resultToNumber(left)
-	rn := resultToNumber(right)
-	return compareNumbers(op, ln, rn)
+	return compareNumbers(op, resultToNumber(left), resultToNumber(right))
+}
+
+// compareScalarsEqNe compares two scalar results for equality or inequality
+// according to XPath 1.0 type coercion rules.
+func compareScalarsEqNe(op TokenType, left, right *Result) bool {
+	// If either is boolean, compare as booleans
+	if left.Type == BooleanResult || right.Type == BooleanResult {
+		lb := resultToBoolean(left)
+		rb := resultToBoolean(right)
+		if op == TokenEquals {
+			return lb == rb
+		}
+		return lb != rb
+	}
+	// If either is number, compare as numbers
+	if left.Type == NumberResult || right.Type == NumberResult {
+		ln := resultToNumber(left)
+		rn := resultToNumber(right)
+		if op == TokenEquals {
+			return ln == rn
+		}
+		return ln != rn
+	}
+	// Compare as strings
+	ls := resultToString(left)
+	rs := resultToString(right)
+	if op == TokenEquals {
+		return ls == rs
+	}
+	return ls != rs
 }
 
 func compareWithScalar(op TokenType, nodeStr string, scalar *Result) bool {
@@ -616,7 +692,10 @@ func evalUnionExpr(ctx *evalContext, e UnionExpr) (*Result, error) {
 		return nil, fmt.Errorf("union operator requires node-sets")
 	}
 	// Merge and deduplicate, preserving document order
-	merged := mergeNodeSets(left.NodeSet, right.NodeSet)
+	merged, err := mergeNodeSets(left.NodeSet, right.NodeSet)
+	if err != nil {
+		return nil, err
+	}
 	return &Result{Type: NodeSetResult, NodeSet: merged}, nil
 }
 
@@ -639,7 +718,10 @@ func evalPathExpr(ctx *evalContext, e PathExpr) (*Result, error) {
 		if err != nil {
 			return nil, err
 		}
-		result = mergeNodeSets(result, subResult.NodeSet)
+		result, err = mergeNodeSets(result, subResult.NodeSet)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &Result{Type: NodeSetResult, NodeSet: result}, nil
 }
@@ -776,7 +858,7 @@ type nsNodeKey struct {
 
 // mergeNodeSets merges two node sets, deduplicating by identity,
 // and sorting in document order.
-func mergeNodeSets(a, b []helium.Node) []helium.Node {
+func mergeNodeSets(a, b []helium.Node) ([]helium.Node, error) {
 	seen := make(map[helium.Node]bool, len(a)+len(b))
 	nsKeys := make(map[nsNodeKey]bool)
 	var result []helium.Node
@@ -802,10 +884,13 @@ func mergeNodeSets(a, b []helium.Node) []helium.Node {
 	for _, n := range b {
 		addNode(n)
 	}
+	if len(result) > maxNodeSetLength {
+		return nil, ErrNodeSetLimit
+	}
 	sort.SliceStable(result, func(i, j int) bool {
 		return documentPosition(result[i]) < documentPosition(result[j])
 	})
-	return result
+	return result, nil
 }
 
 // documentPosition returns an integer representing document order by

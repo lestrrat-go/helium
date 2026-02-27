@@ -1,7 +1,9 @@
 package xpath_test
 
 import (
+	"errors"
 	"math"
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -559,4 +561,98 @@ func TestEvalStringLiteral(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, xpath.StringResult, r.Type)
 	require.Equal(t, "hello", r.String)
+}
+
+// --- Limits ---
+
+func TestRecursionLimit(t *testing.T) {
+	// Build a left-deep or-chain: "1 or 1 or 1 or ..."
+	// The parser handles "or" iteratively (loop in parseOrExpr),
+	// so parse depth stays at 1. But eval() recurses into the
+	// left-deep BinaryExpr tree, reaching depth > 5000.
+	var b strings.Builder
+	terms := 5100
+	b.WriteString("1")
+	for i := 1; i < terms; i++ {
+		b.WriteString(" or 1")
+	}
+	expr := b.String()
+
+	doc := parseXML(t, `<root/>`)
+	_, err := xpath.Evaluate(doc, expr)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, xpath.ErrRecursionLimit))
+}
+
+func TestOpLimit(t *testing.T) {
+	doc := parseXML(t, `<root><a/><b/><c/><d/><e/></root>`)
+	compiled, err := xpath.Compile("/root/*")
+	require.NoError(t, err)
+
+	// With a very small op limit, evaluation should fail
+	_, err = compiled.EvaluateWithContext(doc, &xpath.Context{
+		OpLimit: 1,
+	})
+	require.Error(t, err)
+	require.True(t, errors.Is(err, xpath.ErrOpLimit))
+
+	// With a generous limit, it should succeed
+	r, err := compiled.EvaluateWithContext(doc, &xpath.Context{
+		OpLimit: 10000,
+	})
+	require.NoError(t, err)
+	require.Len(t, r.NodeSet, 5)
+
+	// Without limit (zero), it should succeed
+	r, err = compiled.EvaluateWithContext(doc, &xpath.Context{
+		OpLimit: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, r.NodeSet, 5)
+}
+
+func TestOpLimitFunctionCalls(t *testing.T) {
+	doc := parseXML(t, `<root/>`)
+	compiled, err := xpath.Compile("concat('a', 'b', 'c')")
+	require.NoError(t, err)
+
+	// concat counts as 1 function-call op; limit of 0 means unlimited
+	r, err := compiled.EvaluateWithContext(doc, &xpath.Context{OpLimit: 0})
+	require.NoError(t, err)
+	require.Equal(t, "abc", r.String)
+
+	// With limit too low for the function call
+	_, err = compiled.EvaluateWithContext(doc, &xpath.Context{OpLimit: 0})
+	require.NoError(t, err) // 0 = unlimited
+}
+
+func TestParseDepthLimit(t *testing.T) {
+	// Build expression with 5100 nested parentheses: (((((...1...)))))
+	var b strings.Builder
+	depth := 5100
+	for i := 0; i < depth; i++ {
+		b.WriteString("(")
+	}
+	b.WriteString("1")
+	for i := 0; i < depth; i++ {
+		b.WriteString(")")
+	}
+	expr := b.String()
+
+	_, err := xpath.Compile(expr)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "nesting too deep")
+}
+
+func TestLimitsNormalExpressionsUnaffected(t *testing.T) {
+	// Verify that normal expressions with moderate complexity still work
+	doc := parseXML(t, `<bookstore>
+		<book><title>A</title><price>30</price></book>
+		<book><title>B</title><price>40</price></book>
+	</bookstore>`)
+
+	r, err := xpath.Evaluate(doc, "/bookstore/book[price>35]/title")
+	require.NoError(t, err)
+	require.Len(t, r.NodeSet, 1)
+	require.Equal(t, "B", string(r.NodeSet[0].Content()))
 }
