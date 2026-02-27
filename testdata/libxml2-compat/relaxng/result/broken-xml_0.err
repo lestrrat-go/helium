@@ -1,0 +1,5 @@
+./test/relaxng/broken-xml.rng:2: parser error : failed to parse QName ''
+
+^
+Relax-NG parser error : xmlRelaxNGParse: could not load ./test/relaxng/broken-xml.rng
+Relax-NG schema ./test/relaxng/broken-xml.rng failed to compile
