@@ -315,58 +315,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		return 0
 
 	case patternGroup:
-		groupFailed := false
-		for _, child := range pat.children {
-			// Track first non-ignored node before validation to detect consumption
-			trimmedBefore := skipIgnored(state.seq)
-			var firstNodeBefore helium.Node
-			if len(trimmedBefore) > 0 {
-				firstNodeBefore = trimmedBefore[0]
-			}
-
-			errLenBefore := v.errors.Len()
-			savedErrors := v.errors.String()
-			savedValid := v.valid
-			if ret := v.validateContentPat(child, elem, attrs, attrUsed, state); ret != 0 {
-				// Check if an element was consumed (sequence advanced past the first node)
-				trimmedAfter := skipIgnored(state.seq)
-				var firstNodeAfter helium.Node
-				if len(trimmedAfter) > 0 {
-					firstNodeAfter = trimmedAfter[0]
-				}
-				if firstNodeBefore != nil && firstNodeAfter != firstNodeBefore {
-					// Element was consumed but content failed — continue to collect
-					// errors from remaining group children (like libxml2 does)
-					groupFailed = true
-					continue
-				}
-
-				remaining := skipIgnored(state.seq)
-				if len(remaining) > 0 {
-					if e, ok := remaining[0].(*helium.Element); ok {
-						expectedName := v.patternElementName(child)
-						if expectedName != "" && expectedName != e.LocalName() && child.kind == patternChoice {
-							// Choice expected element X but got Y.
-							v.errors.Reset()
-							v.errors.WriteString(savedErrors)
-							v.valid = savedValid
-							v.addErrorOnNode(e, fmt.Sprintf("Expecting element %s, got %s", expectedName, e.LocalName()))
-							v.addErrorOnNode(e, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
-						} else if v.errors.Len() == errLenBefore {
-							v.addErrorOnNode(e, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
-						}
-					}
-				} else if v.errors.Len() == errLenBefore && v.patternElementName(child) != "" {
-					// Content is empty but an element was expected.
-					v.addError(elem, "Expecting an element , got nothing")
-				}
-				return -1
-			}
-		}
-		if groupFailed {
-			return -1
-		}
-		return 0
+		return v.validateGroupContent(pat, elem, attrs, attrUsed, state)
 
 	case patternChoice:
 		savedErrors := v.errors.String()
@@ -711,6 +660,215 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		// For element/text/data/value/etc., delegate to normal validation
 		return v.validatePattern(pat, state)
 	}
+}
+
+// groupBound records state at a group child boundary for backtracking.
+type groupBound struct {
+	state    *validState
+	attrUsed []bool
+	errors   string
+	valid    bool
+}
+
+func saveGroupBound(state *validState, attrUsed []bool, errors string, valid bool) groupBound {
+	return groupBound{
+		state:    state.clone(),
+		attrUsed: append([]bool(nil), attrUsed...),
+		errors:   errors,
+		valid:    valid,
+	}
+}
+
+func (b *groupBound) restore(state *validState, attrUsed []bool, v *validator) {
+	*state = *b.state
+	copy(attrUsed, b.attrUsed)
+	v.errors.Reset()
+	v.errors.WriteString(b.errors)
+	v.valid = b.valid
+}
+
+// validateGroupContent validates a group pattern's children sequentially with
+// backtracking support. When a mandatory child fails because a previous
+// flexible child (zeroOrMore, oneOrMore, optional) over-consumed elements,
+// we try reducing the flexible child's consumption.
+func (v *validator) validateGroupContent(pat *pattern, elem *helium.Element,
+	attrs []*helium.Attribute, attrUsed []bool, state *validState) int {
+
+	children := pat.children
+	if len(children) == 0 {
+		return 0
+	}
+
+	// Save state before each child for backtracking.
+	bounds := make([]groupBound, 1, len(children)+1)
+	bounds[0] = saveGroupBound(state, attrUsed, v.errors.String(), v.valid)
+
+	groupFailed := false
+	for gi, child := range children {
+		// Track first non-ignored node to detect consumption
+		trimmedBefore := skipIgnored(state.seq)
+		var firstNodeBefore helium.Node
+		if len(trimmedBefore) > 0 {
+			firstNodeBefore = trimmedBefore[0]
+		}
+
+		errLenBefore := v.errors.Len()
+		savedErrors := v.errors.String()
+		savedValid := v.valid
+		if ret := v.validateContentPat(child, elem, attrs, attrUsed, state); ret != 0 {
+			// Check if an element was consumed (sequence advanced)
+			trimmedAfter := skipIgnored(state.seq)
+			var firstNodeAfter helium.Node
+			if len(trimmedAfter) > 0 {
+				firstNodeAfter = trimmedAfter[0]
+			}
+			if firstNodeBefore != nil && firstNodeAfter != firstNodeBefore {
+				// Element consumed but content failed — continue to collect
+				// errors from remaining group children (like libxml2 does)
+				groupFailed = true
+				bounds = append(bounds, saveGroupBound(state, attrUsed, v.errors.String(), v.valid))
+				continue
+			}
+
+			// No element consumed — try backtracking.
+			if gi > 0 && v.backtrackGroupFlexible(children, gi, elem, attrs, attrUsed, state, bounds) {
+				bounds = append(bounds, saveGroupBound(state, attrUsed, v.errors.String(), v.valid))
+				continue
+			}
+
+			// No backtracking possible — report errors
+			remaining := skipIgnored(state.seq)
+			if len(remaining) > 0 {
+				if e, ok := remaining[0].(*helium.Element); ok {
+					expectedName := v.patternElementName(child)
+					if expectedName != "" && expectedName != e.LocalName() && child.kind == patternChoice {
+						v.errors.Reset()
+						v.errors.WriteString(savedErrors)
+						v.valid = savedValid
+						v.addErrorOnNode(e, fmt.Sprintf("Expecting element %s, got %s", expectedName, e.LocalName()))
+						v.addErrorOnNode(e, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+					} else if v.errors.Len() == errLenBefore {
+						v.addErrorOnNode(e, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
+					}
+				}
+			} else if v.errors.Len() == errLenBefore && v.patternElementName(child) != "" {
+				v.addError(elem, "Expecting an element , got nothing")
+			}
+			return -1
+		}
+
+		bounds = append(bounds, saveGroupBound(state, attrUsed, v.errors.String(), v.valid))
+	}
+	if groupFailed {
+		return -1
+	}
+	return 0
+}
+
+// backtrackGroupFlexible tries to fix a group failure at failIdx by reducing
+// consumption of a previous flexible child (zeroOrMore, oneOrMore, optional).
+// It tries each flexible child from nearest to furthest, and for each tries
+// progressively increasing iteration counts from the minimum up to one less
+// than the greedy count, preferring the highest successful count to maximize
+// content consumption.
+func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
+	elem *helium.Element, attrs []*helium.Attribute, attrUsed []bool,
+	state *validState, bounds []groupBound) bool {
+
+	for j := failIdx - 1; j >= 0; j-- {
+		child := children[j]
+		isZeroFlex := child.kind == patternZeroOrMore || child.kind == patternOptional
+		isOneMore := child.kind == patternOneOrMore
+		if !isZeroFlex && !isOneMore {
+			continue
+		}
+		// Check if child[j] consumed anything.
+		seqEq := seqEqual(bounds[j].state.seq, bounds[j+1].state.seq)
+		attrEq := boolSliceEqual(bounds[j].attrUsed, bounds[j+1].attrUsed)
+		if seqEq && attrEq {
+			continue
+		}
+
+		minIter := 0
+		if isOneMore {
+			minIter = 1
+		}
+
+		content := wrapChildren(child.children)
+
+		// Try progressively increasing iteration counts from minIter upward.
+		// Track the best (highest iter) success to maximize content consumption.
+		type btSuccess struct {
+			state    *validState
+			attrUsed []bool
+			errors   string
+			valid    bool
+		}
+		var best *btSuccess
+
+		for iter := minIter; ; iter++ {
+			bounds[j].restore(state, attrUsed, v)
+
+			// Run 'iter' iterations of the flexible child.
+			iterOK := true
+			for k := 0; k < iter; k++ {
+				savedSt := state.clone()
+				v.suppressDepth++
+				ret := v.validateContentPat(content, elem, attrs, attrUsed, state)
+				v.suppressDepth--
+				if ret != 0 || seqEqual(state.seq, savedSt.seq) {
+					iterOK = false
+					break
+				}
+			}
+			if !iterOK {
+				break // Can't match 'iter' times
+			}
+
+			// Check if we've reached the same state as the greedy pass.
+			if seqEqual(state.seq, bounds[j+1].state.seq) &&
+				boolSliceEqual(attrUsed, bounds[j+1].attrUsed) {
+				break // Same as original greedy — stop
+			}
+
+			// Try remaining children [j+1..failIdx].
+			// Save error state so failed retries don't leave stale errors.
+			retryErrors := v.errors.String()
+			retryValid := v.valid
+			allOK := true
+			for k := j + 1; k <= failIdx; k++ {
+				if v.validateContentPat(children[k], elem, attrs, attrUsed, state) != 0 {
+					allOK = false
+					break
+				}
+			}
+			if allOK {
+				best = &btSuccess{
+					state:    state.clone(),
+					attrUsed: append([]bool(nil), attrUsed...),
+					errors:   v.errors.String(),
+					valid:    v.valid,
+				}
+			}
+			// Restore errors from before retry so failed attempts don't leak errors.
+			v.errors.Reset()
+			v.errors.WriteString(retryErrors)
+			v.valid = retryValid
+		}
+
+		if best != nil {
+			*state = *best.state
+			copy(attrUsed, best.attrUsed)
+			v.errors.Reset()
+			v.errors.WriteString(best.errors)
+			v.valid = best.valid
+			return true
+		}
+
+		// Restore before trying the next candidate.
+		bounds[j].restore(state, attrUsed, v)
+	}
+	return false
 }
 
 func (v *validator) elementMatches(pat *pattern, elem *helium.Element) bool {

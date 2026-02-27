@@ -1186,6 +1186,9 @@ func (ctx *parserCtx) parseEndTag() error {
 			return ctx.error(errors.New("expected end tag '" + e.Name() + "'"))
 		}
 
+		// [NS 9] ETag ::= '</' QName S? '>'
+		ctx.skipBlanks()
+
 		if cur.Peek() != '>' {
 			return ctx.error(ErrGtRequired)
 		}

@@ -92,8 +92,6 @@ var skip = map[string]string{
 var skipExact = map[string]string{
 	// Requires compile-time check: attribute name class overlap detection
 	"tutor11_3_1": "compile-time: Attributes conflicts in group check",
-	// Parser can't handle closing tag split across lines
-	"spec_0": "XML parser: closing tag split across lines",
 }
 
 func shouldSkip(name string) string {
