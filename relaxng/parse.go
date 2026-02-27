@@ -525,6 +525,18 @@ func (c *compiler) parseElement(node *helium.Element) *pattern {
 		}
 	}
 
+	// Check: attribute name class conflicts
+	allAttrs := collectAttrPatternsFlat(append(p.attrs, contentChildren...))
+	for i := 0; i < len(allAttrs); i++ {
+		for j := i + 1; j < len(allAttrs); j++ {
+			if nameClassesOverlap(allAttrs[i].nameClass, allAttrs[j].nameClass) {
+				c.addSchemaError(node, "Attributes conflicts in group")
+				goto attrConflictDone
+			}
+		}
+	}
+attrConflictDone:
+
 	// Check: element with no content (no children, no attrs)
 	if len(contentChildren) == 0 && len(p.attrs) == 0 {
 		c.addSchemaError(node, fmt.Sprintf("xmlRelaxNGParseElement: element has no content"))
@@ -729,9 +741,16 @@ func (c *compiler) parseExternalRef(node *helium.Element) *pattern {
 func (c *compiler) parseNameClass(node *helium.Element) *nameClass {
 	switch node.LocalName() {
 	case "name":
-		name := textContent(node)
+		qname := textContent(node)
 		ns, hasNS := getAttrOpt(node, "ns")
-		if !hasNS {
+		name := qname
+		if strings.Contains(qname, ":") {
+			localName, resolvedNS := resolveQName(node, qname)
+			name = localName
+			if !hasNS {
+				ns = resolvedNS
+			}
+		} else if !hasNS {
 			ns = getAncestorNS(node)
 		}
 		return &nameClass{kind: ncName, name: name, ns: ns}

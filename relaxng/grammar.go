@@ -91,6 +91,95 @@ type nameClass struct {
 	except *nameClass // for ncAnyName, ncNsName
 }
 
+// collectAttrPatternsFlat recursively extracts all patternAttribute nodes from
+// a pattern slice, walking into wrapper patterns (zeroOrMore, oneOrMore,
+// optional, group, interleave). Does NOT walk into choice because attributes
+// in different choice branches are alternatives and cannot conflict.
+func collectAttrPatternsFlat(pats []*pattern) []*pattern {
+	var result []*pattern
+	for _, p := range pats {
+		if p == nil {
+			continue
+		}
+		switch p.kind {
+		case patternAttribute:
+			result = append(result, p)
+		case patternZeroOrMore, patternOneOrMore, patternOptional,
+			patternGroup, patternInterleave:
+			result = append(result, collectAttrPatternsFlat(p.children)...)
+			result = append(result, collectAttrPatternsFlat(p.attrs)...)
+		}
+	}
+	return result
+}
+
+// nameClassesOverlap returns true if two name classes can potentially match
+// the same attribute name. Uses conservative analysis (anyName overlaps with
+// everything regardless of except clauses).
+func nameClassesOverlap(a, b *nameClass) bool {
+	if a == nil || b == nil {
+		return false
+	}
+
+	// anyName: check if except clause excludes the other name class
+	if a.kind == ncAnyName {
+		if a.except != nil && b.kind == ncName {
+			if nameClassMatches(a.except, b.name, b.ns) {
+				return false
+			}
+		}
+		return true
+	}
+	if b.kind == ncAnyName {
+		if b.except != nil && a.kind == ncName {
+			if nameClassMatches(b.except, a.name, a.ns) {
+				return false
+			}
+		}
+		return true
+	}
+
+	// ncChoice: overlap if either branch overlaps
+	if a.kind == ncChoice {
+		return nameClassesOverlap(a.left, b) || nameClassesOverlap(a.right, b)
+	}
+	if b.kind == ncChoice {
+		return nameClassesOverlap(a, b.left) || nameClassesOverlap(a, b.right)
+	}
+
+	// nsName vs nsName
+	if a.kind == ncNsName && b.kind == ncNsName {
+		return a.ns == b.ns
+	}
+
+	// nsName vs ncName (with except support)
+	if a.kind == ncNsName && b.kind == ncName {
+		if a.ns != b.ns {
+			return false
+		}
+		if a.except != nil && nameClassMatches(a.except, b.name, b.ns) {
+			return false
+		}
+		return true
+	}
+	if a.kind == ncName && b.kind == ncNsName {
+		if a.ns != b.ns {
+			return false
+		}
+		if b.except != nil && nameClassMatches(b.except, a.name, a.ns) {
+			return false
+		}
+		return true
+	}
+
+	// ncName vs ncName
+	if a.kind == ncName && b.kind == ncName {
+		return a.name == b.name && a.ns == b.ns
+	}
+
+	return false
+}
+
 // nameClassMatches returns true if the name class matches the given local name and namespace.
 func nameClassMatches(nc *nameClass, local, ns string) bool {
 	if nc == nil {

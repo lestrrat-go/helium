@@ -86,10 +86,7 @@ var skip = map[string]string{}
 
 // skipExact lists specific test cases (by full test name) that need skipping
 // when their group-level skip has been removed.
-var skipExact = map[string]string{
-	// Requires compile-time check: attribute name class overlap detection
-	"tutor11_3_1": "compile-time: Attributes conflicts in group check",
-}
+var skipExact = map[string]string{}
 
 func shouldSkip(name string) string {
 	// Check exact match first.
