@@ -22,8 +22,9 @@ type Entity struct {
 	systemID   string     // URI for a SYSTEM or PUBLIC entity
 	uri        string     // the full URI as computed
 	// owner      bool       // does the entity own children
-	checked   int  // was the entity content checked
-	expanding bool // guard against recursive expansion (mirrors XML_ENT_EXPANDING)
+	checked      int   // was the entity content checked
+	expanding    bool  // guard against recursive expansion (mirrors XML_ENT_EXPANDING)
+	expandedSize int64 // total expanded byte count after recursive resolution
 	/* this is also used to count entities
 	 * references done from that entity
 	 * and if it contains '<' */
