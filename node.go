@@ -276,6 +276,34 @@ func (n *docnode) SetParent(cur Node) {
 	n.parent = cur
 }
 
+// UnlinkNode detaches a node from its parent and sibling chain.
+// After unlinking, the node has no parent, prev, or next pointers.
+func UnlinkNode(n Node) {
+	if n == nil {
+		return
+	}
+
+	if parent := n.Parent(); parent != nil {
+		if parent.FirstChild() == n {
+			parent.setFirstChild(n.NextSibling())
+		}
+		if parent.LastChild() == n {
+			parent.setLastChild(n.PrevSibling())
+		}
+	}
+
+	if prev := n.PrevSibling(); prev != nil {
+		prev.SetNextSibling(n.NextSibling())
+	}
+	if next := n.NextSibling(); next != nil {
+		next.SetPrevSibling(n.PrevSibling())
+	}
+
+	n.SetParent(nil)
+	n.SetPrevSibling(nil)
+	n.SetNextSibling(nil)
+}
+
 func replaceNode(n Node, cur Node) {
 	if next := n.NextSibling(); next != nil {
 		cur.SetNextSibling(next) // cur.next = n.next

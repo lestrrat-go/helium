@@ -194,6 +194,74 @@ func (n *Element) SetAttributeNS(localname, value string, ns *Namespace) error {
 	return nil
 }
 
+// GetAttribute returns the value of the attribute with the given name,
+// or empty string and false if not found.
+func (n *Element) GetAttribute(name string) (string, bool) {
+	for p := n.properties; p != nil; p = p.NextAttribute() {
+		if p.Name() == name {
+			return p.Value(), true
+		}
+	}
+	return "", false
+}
+
+// HasAttribute reports whether the element has an attribute with the given name.
+func (n *Element) HasAttribute(name string) bool {
+	_, ok := n.GetAttribute(name)
+	return ok
+}
+
+// GetAttributeNS returns the value of the attribute with the given
+// local name and namespace URI, or empty string and false if not found.
+func (n *Element) GetAttributeNS(localName, nsURI string) (string, bool) {
+	for p := n.properties; p != nil; p = p.NextAttribute() {
+		if p.LocalName() == localName && p.URI() == nsURI {
+			return p.Value(), true
+		}
+	}
+	return "", false
+}
+
+// RemoveAttribute removes the attribute with the given name from the element.
+// Returns true if an attribute was removed.
+func (n *Element) RemoveAttribute(name string) bool {
+	for p := n.properties; p != nil; p = p.NextAttribute() {
+		if p.Name() == name {
+			n.spliceOutAttribute(p)
+			return true
+		}
+	}
+	return false
+}
+
+// RemoveAttributeNS removes the attribute with the given local name and
+// namespace URI. Returns true if an attribute was removed.
+func (n *Element) RemoveAttributeNS(localName, nsURI string) bool {
+	for p := n.properties; p != nil; p = p.NextAttribute() {
+		if p.LocalName() == localName && p.URI() == nsURI {
+			n.spliceOutAttribute(p)
+			return true
+		}
+	}
+	return false
+}
+
+// spliceOutAttribute removes an attribute from the element's property linked list.
+func (n *Element) spliceOutAttribute(p *Attribute) {
+	if prev := p.PrevSibling(); prev != nil {
+		prev.SetNextSibling(p.NextSibling())
+	}
+	if next := p.NextSibling(); next != nil {
+		next.SetPrevSibling(p.PrevSibling())
+	}
+	if n.properties == p {
+		n.properties = p.NextAttribute()
+	}
+	p.SetParent(nil)
+	p.SetPrevSibling(nil)
+	p.SetNextSibling(nil)
+}
+
 func (n Element) Attributes() []*Attribute {
 	attrs := []*Attribute{}
 	for attr := n.properties; attr != nil; {

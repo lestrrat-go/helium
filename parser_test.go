@@ -156,12 +156,7 @@ func TestParseNamespace(t *testing.T) {
 }
 
 func findDocumentElement(doc *Document) Node {
-	for n := doc.FirstChild(); n != nil; n = n.NextSibling() {
-		if n.Type() == ElementNode {
-			return n
-		}
-	}
-	return nil
+	return doc.DocumentElement()
 }
 
 func TestParseNoBlanks(t *testing.T) {

@@ -1855,12 +1855,7 @@ func (c *compiler) resolveQName(elem *helium.Element, ref string) QName {
 // helpers
 
 func findDocumentElement(doc *helium.Document) *helium.Element {
-	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
-		if child.Type() == helium.ElementNode {
-			return child.(*helium.Element)
-		}
-	}
-	return nil
+	return doc.DocumentElement()
 }
 
 // collectNSContext collects namespace declarations from a schema element and its ancestors.
