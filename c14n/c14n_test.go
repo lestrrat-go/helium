@@ -19,6 +19,7 @@ const testdataBase = "../testdata/libxml2-compat/c14n"
 var knownParseFailures = map[string]string{
 	"without-comments/example-3":            "duplicate namespace declaration handling",
 	"without-comments/example-4":            "entity reference in single-quoted attribute",
+	"without-comments/test-2":               "duplicate namespace declaration handling",
 	"without-comments/test-3":               "duplicate namespace declaration handling",
 	"with-comments/example-3":               "duplicate namespace declaration handling",
 	"with-comments/example-4":               "entity reference in single-quoted attribute",

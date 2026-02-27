@@ -10,31 +10,28 @@ const (
 
 type ParseOption int
 
-// Note: Many of these are totally unimplemented at this point
+// Bit positions match libxml2's XML_PARSE_* constants.
 const (
-	ParseRecover   ParseOption = 1 << iota /* recover on errors */
-	ParseNoEnt                             /* substitute entities */
-	ParseDTDLoad                           /* load the external subset */
-	ParseDTDAttr                           /* default DTD attributes */
-	ParseDTDValid                          /* validate with the DTD */
-	ParseNoError                           /* suppress error reports */
-	ParseNoWarning                         /* suppress warning reports */
-	ParsePedantic                          /* pedantic error reporting */
-	ParseNoBlanks                          /* remove blank nodes */
-	// gap here: ParseSAX1 is not implemented
-	ParseXInclude   ParseOption = 1<<iota + 10 /* Implement XInclude substitition  */
-	ParseNoNet                                 /* Forbid network access */
-	ParseNoDict                                /* Do not reuse the context dictionnary */
-	ParseNsClean                               /* remove redundant namespaces declarations */
-	ParseNoCDATA                               /* merge CDATA as text nodes */
-	ParseNoXIncNode                            /* do not generate XINCLUDE START/END nodes */
-	ParseCompact                               /* compact small text nodes; no modification of the tree allowed afterwards (will possibly crash if you try to modify the tree) */
-	// ParseOld10 is not implemented
-	ParseNoBaseFix /* do not fixup XINCLUDE xml:base uris */
-	ParseHuge      /* relax any hardcoded limit from the parser */
-	// ParseOldSAX is not implemented
-	ParseIgnoreEnc ParseOption = 1<<iota + 21 /* ignore internal document encoding hint */
-	ParseBigLines  ParseOption = 1 << 22      /* Store big lines numbers in text PSVI field */
+	ParseRecover    ParseOption = 1 << iota       /* recover on errors */
+	ParseNoEnt      ParseOption = 1 << iota       /* substitute entities */
+	ParseDTDLoad    ParseOption = 1 << iota       /* load the external subset */
+	ParseDTDAttr    ParseOption = 1 << iota       /* default DTD attributes */
+	ParseDTDValid   ParseOption = 1 << iota       /* validate with the DTD */
+	ParseNoError    ParseOption = 1 << iota       /* suppress error reports */
+	ParseNoWarning  ParseOption = 1 << iota       /* suppress warning reports */
+	ParsePedantic   ParseOption = 1 << iota       /* pedantic error reporting */
+	ParseNoBlanks   ParseOption = 1 << iota       /* remove blank nodes */
+	ParseXInclude   ParseOption = 1 << (iota + 1) /* Implement XInclude substitution */
+	ParseNoNet      ParseOption = 1 << (iota + 1) /* Forbid network access */
+	ParseNoDict     ParseOption = 1 << (iota + 1) /* Do not reuse the context dictionary */
+	ParseNsClean    ParseOption = 1 << (iota + 1) /* remove redundant namespaces declarations */
+	ParseNoCDATA    ParseOption = 1 << (iota + 1) /* merge CDATA as text nodes */
+	ParseNoXIncNode ParseOption = 1 << (iota + 1) /* do not generate XINCLUDE START/END nodes */
+	ParseCompact    ParseOption = 1 << (iota + 1) /* compact small text nodes */
+	ParseNoBaseFix  ParseOption = 1 << (iota + 2) /* do not fixup XINCLUDE xml:base uris */
+	ParseHuge       ParseOption = 1 << (iota + 2) /* relax any hardcoded limit from the parser */
+	ParseIgnoreEnc  ParseOption = 1 << (iota + 3) /* ignore internal document encoding hint */
+	ParseBigLines   ParseOption = 1 << (iota + 3) /* Store big lines numbers in text PSVI field */
 )
 
 func (p *ParseOption) Set(n ParseOption) {
