@@ -1,12 +1,22 @@
 package helium
 
+import "github.com/lestrrat-go/helium/internal/bitset"
+
 type LoadSubsetOption int
 
 const (
-	DetectIDs LoadSubsetOption = 1<<iota + 1
-	CompleteAttrs
-	SkipIDs
+	DetectIDs     LoadSubsetOption = 1 << (iota + 1)
+	CompleteAttrs                                     // 4
+	SkipIDs                                           // 8
 )
+
+func (p *LoadSubsetOption) Set(n LoadSubsetOption) {
+	bitset.Set(p, n)
+}
+
+func (p LoadSubsetOption) IsSet(n LoadSubsetOption) bool {
+	return bitset.IsSet(p, n)
+}
 
 type ParseOption int
 
@@ -35,18 +45,9 @@ const (
 )
 
 func (p *ParseOption) Set(n ParseOption) {
-	*p = *p | n
+	bitset.Set(p, n)
 }
 
 func (p ParseOption) IsSet(n ParseOption) bool {
-	return p & n != 0
+	return bitset.IsSet(p, n)
 }
-
-func (p *LoadSubsetOption) Set(n LoadSubsetOption) {
-	*p = *p | n
-}
-
-func (p LoadSubsetOption) IsSet(n LoadSubsetOption) bool {
-	return p & n != 0
-}
-
