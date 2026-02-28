@@ -421,7 +421,11 @@ func TestDefaultFixedValidation(t *testing.T) {
 func TestRedefine(t *testing.T) {
 	tmpDir := filepath.Join("..", ".tmp", "redefine-test")
 	require.NoError(t, os.MkdirAll(tmpDir, 0o755))
-	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	t.Cleanup(func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			t.Logf("failed to remove temp dir %s: %v", tmpDir, err)
+		}
+	})
 
 	writeFile := func(t *testing.T, name, content string) string {
 		t.Helper()
