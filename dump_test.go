@@ -94,6 +94,23 @@ func TestDOMToXMLString(t *testing.T) {
 	t.Logf("%s", str)
 }
 
+func TestDumpNsSkipsXmlPrefix(t *testing.T) {
+	doc := helium.CreateDocument()
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	require.NoError(t, doc.SetDocumentElement(root))
+
+	// Add explicit xml: namespace declaration to the element
+	require.NoError(t, root.SetNamespace("xml", helium.XMLNamespace))
+
+	str, err := doc.XMLString()
+	require.NoError(t, err)
+
+	// The xml: namespace declaration must NOT appear in the output.
+	// libxml2's xmlNsDumpOutput skips prefix "xml" unconditionally.
+	require.NotContains(t, str, "xmlns:xml")
+}
+
 func TestFormatOutput(t *testing.T) {
 	t.Run("nested elements", func(t *testing.T) {
 		doc, err := helium.Parse([]byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
