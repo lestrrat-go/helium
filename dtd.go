@@ -117,6 +117,13 @@ func (dtd *DTD) AddEntity(name string, typ EntityType, publicID, systemID, conte
 		}
 	}
 
+	// First definition wins (XML spec §4.2): if the entity already
+	// exists, return the existing one and silently ignore the
+	// redefinition, matching libxml2's behavior.
+	if existing, ok := table[name]; ok {
+		return existing, nil
+	}
+
 	ent := newEntity(name, typ, publicID, systemID, content, "")
 	ent.doc = dtd.doc
 	table[name] = ent
