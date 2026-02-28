@@ -1,0 +1,97 @@
+package helium
+
+import (
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestErrParseErrorUnwrap(t *testing.T) {
+	pe := ErrParseError{
+		Err:        ErrSpaceRequired,
+		Level:      ErrorLevelError,
+		Line:       "<foo>",
+		LineNumber: 1,
+		Column:     5,
+	}
+	require.True(t, errors.Is(pe, ErrSpaceRequired))
+	require.False(t, errors.Is(pe, ErrEOF))
+}
+
+func TestErrParseErrorAs(t *testing.T) {
+	pe := ErrParseError{
+		Err:        ErrSpaceRequired,
+		File:       "test.xml",
+		Level:      ErrorLevelError,
+		Line:       "<foo>",
+		LineNumber: 3,
+		Column:     10,
+	}
+	var wrapped error = pe
+
+	var extracted ErrParseError
+	require.True(t, errors.As(wrapped, &extracted))
+	require.Equal(t, "test.xml", extracted.File)
+	require.Equal(t, ErrorLevelError, extracted.Level)
+	require.Equal(t, 3, extracted.LineNumber)
+	require.Equal(t, 10, extracted.Column)
+	require.Equal(t, "<foo>", extracted.Line)
+}
+
+func TestErrParseErrorErrorString(t *testing.T) {
+	t.Run("without file", func(t *testing.T) {
+		pe := ErrParseError{
+			Err:        ErrSpaceRequired,
+			Level:      ErrorLevelError,
+			Line:       "<foo>",
+			LineNumber: 1,
+			Column:     5,
+		}
+		msg := pe.Error()
+		require.Contains(t, msg, "space required")
+		require.Contains(t, msg, "line 1")
+		require.Contains(t, msg, "column 5")
+		require.False(t, strings.HasPrefix(msg, ":"))
+	})
+
+	t.Run("with file", func(t *testing.T) {
+		pe := ErrParseError{
+			Err:        ErrSpaceRequired,
+			File:       "test.xml",
+			Level:      ErrorLevelError,
+			Line:       "<foo>",
+			LineNumber: 1,
+			Column:     5,
+		}
+		msg := pe.Error()
+		require.True(t, strings.HasPrefix(msg, "test.xml: "))
+	})
+}
+
+func TestErrParseErrorLevel(t *testing.T) {
+	_, err := Parse([]byte("<broken"))
+	require.Error(t, err)
+
+	var pe ErrParseError
+	require.True(t, errors.As(err, &pe))
+	require.Equal(t, ErrorLevelError, pe.Level)
+}
+
+func TestErrDTDDupTokenFixed(t *testing.T) {
+	e := ErrDTDDupToken{Name: "foo"}
+	require.Contains(t, e.Error(), "standalone")
+	require.NotContains(t, e.Error(), "standlone")
+}
+
+func TestErrorLevelConstants(t *testing.T) {
+	require.Equal(t, ErrorLevel(0), ErrorLevelNone)
+	require.Equal(t, ErrorLevel(1), ErrorLevelWarning)
+	require.Equal(t, ErrorLevel(2), ErrorLevelError)
+	require.Equal(t, ErrorLevel(3), ErrorLevelFatal)
+
+	require.True(t, ErrorLevelNone < ErrorLevelWarning)
+	require.True(t, ErrorLevelWarning < ErrorLevelError)
+	require.True(t, ErrorLevelError < ErrorLevelFatal)
+}

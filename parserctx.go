@@ -408,7 +408,7 @@ func (ctx *parserCtx) error(err error) error {
 		return err
 	}
 
-	e := ErrParseError{Err: err}
+	e := ErrParseError{Err: err, Level: ErrorLevelError, File: ctx.baseURI}
 	if cur := ctx.getCursor(); cur != nil {
 		e.Column = cur.Column()
 		e.LineNumber = cur.LineNumber()
