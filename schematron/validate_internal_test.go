@@ -1,12 +1,95 @@
 package schematron
 
 import (
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath"
 	"github.com/stretchr/testify/require"
 )
+
+func compileTestSchema(t *testing.T, xml string) *Schema {
+	t.Helper()
+	doc, err := helium.Parse([]byte(xml))
+	require.NoError(t, err)
+	schema, err := Compile(doc)
+	require.NoError(t, err)
+	return schema
+}
+
+func TestCompileEmptyContext(t *testing.T) {
+	schema := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern><rule context=""><assert test="true()">ok</assert></rule></pattern>
+	</schema>`)
+	require.Contains(t, schema.CompileErrors(), "rule has an empty context attribute")
+}
+
+func TestCompileRuleNoAssert(t *testing.T) {
+	schema := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern><rule context="*"></rule></pattern>
+	</schema>`)
+	require.Contains(t, schema.CompileErrors(), "rule has no assert nor report element")
+}
+
+func TestCompilePatternNoRules(t *testing.T) {
+	schema := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern></pattern>
+	</schema>`)
+	require.Contains(t, schema.CompileErrors(), "Pattern has no rule element")
+}
+
+func TestCompileSchemaNoPatterns(t *testing.T) {
+	schema := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+	</schema>`)
+	require.Contains(t, schema.CompileErrors(), "schema has no pattern element")
+}
+
+func TestCompileNonRuleInPattern(t *testing.T) {
+	schema := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern>
+			<bogus/>
+			<rule context="*"><assert test="true()">ok</assert></rule>
+		</pattern>
+	</schema>`)
+	require.Contains(t, schema.CompileErrors(), "Expecting a rule element instead of bogus")
+}
+
+func TestCompileValidSchema(t *testing.T) {
+	schema := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern>
+			<rule context="*"><assert test="true()">ok</assert></rule>
+		</pattern>
+	</schema>`)
+	require.Equal(t, "", schema.CompileErrors())
+}
+
+// Verify errors don't contain false positives for schemas with let-only rules.
+func TestCompileRuleWithLetOnly(t *testing.T) {
+	schema := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern>
+			<rule context="*">
+				<let name="x" value="1"/>
+			</rule>
+		</pattern>
+	</schema>`)
+	// A rule with only let bindings and no assert/report should still emit the error.
+	require.Contains(t, schema.CompileErrors(), "rule has no assert nor report element")
+}
+
+// Verify multiple errors accumulate.
+func TestCompileMultipleErrors(t *testing.T) {
+	schema := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern>
+			<rule context="">
+			</rule>
+		</pattern>
+	</schema>`)
+	errs := schema.CompileErrors()
+	// Should have: empty context, pattern has no rule (since rule returned nil)
+	require.True(t, strings.Contains(errs, "rule has an empty context attribute"))
+	require.True(t, strings.Contains(errs, "Pattern has no rule element"))
+}
 
 func TestXpathResultToStringBoolean(t *testing.T) {
 	t.Run("true", func(t *testing.T) {

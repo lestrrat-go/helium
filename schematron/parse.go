@@ -56,6 +56,10 @@ func compileSchema(doc *helium.Document, _ *compileConfig) (*Schema, error) {
 		}
 	}
 
+	if len(schema.patterns) == 0 {
+		fmt.Fprintf(&errors, "schema has no pattern element\n")
+	}
+
 	schema.compileErrors = errors.String()
 	schema.compileWarnings = warnings.String()
 	return schema, nil
@@ -75,6 +79,7 @@ func compilePattern(elem *helium.Element, schNS string, errors *strings.Builder)
 			continue
 		}
 		if stripPrefix(ruleElem.Name()) != "rule" {
+			fmt.Fprintf(errors, "Expecting a rule element instead of %s\n", ruleElem.Name())
 			continue
 		}
 
@@ -83,12 +88,17 @@ func compilePattern(elem *helium.Element, schNS string, errors *strings.Builder)
 		}
 	}
 
+	if len(p.rules) == 0 {
+		fmt.Fprintf(errors, "Pattern has no rule element\n")
+	}
+
 	return p
 }
 
 func compileRule(elem *helium.Element, schNS string, errors *strings.Builder) *rule {
 	context := getAttr(elem, "context")
 	if context == "" {
+		fmt.Fprintf(errors, "rule has an empty context attribute\n")
 		return nil
 	}
 
@@ -112,6 +122,10 @@ func compileRule(elem *helium.Element, schNS string, errors *strings.Builder) *r
 			continue
 		}
 		compileRuleChild(r, childElem, schNS, errors)
+	}
+
+	if len(r.tests) == 0 {
+		fmt.Fprintf(errors, "rule has no assert nor report element\n")
 	}
 
 	return r
