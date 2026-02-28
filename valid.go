@@ -247,6 +247,20 @@ func validateDocument(doc *Document) *ValidationError {
 		return nil
 	}
 
+	// Check that the root element name matches the DTD name
+	if root := doc.DocumentElement(); root != nil {
+		var dtdName string
+		if doc.intSubset != nil {
+			dtdName = doc.intSubset.name
+		}
+		if dtdName == "" && doc.extSubset != nil {
+			dtdName = doc.extSubset.name
+		}
+		if dtdName != "" && root.LocalName() != dtdName {
+			vctx.ve.addf("root element name %q does not match DTD name %q", root.LocalName(), dtdName)
+		}
+	}
+
 	// Walk the document tree and validate each element
 	_ = Walk(doc, func(n Node) error {
 		if n.Type() != ElementNode {
