@@ -2889,18 +2889,153 @@ func (ctx *parserCtx) parseMarkupDecl() error {
 			return ctx.error(err)
 		}
 	}
-	/*
-	    // Conditional sections are allowed from entities included
-	    // by PE References in the internal subset.
-	   if ((ctxt->external == 0) && (ctxt->inputNr > 1)) {
-	       if ((RAW == '<') && (NXT(1) == '!') && (NXT(2) == '[')) {
-	           xmlParseConditionalSections(ctxt);
-	       }
-	   }
-	*/
+	// Conditional sections are allowed from entities included
+	// by PE References in the internal subset.
+	if !ctx.external && ctx.inputTab.Len() > 1 {
+		cur = ctx.getCursor()
+		if cur != nil && cur.Peek() == '<' && cur.PeekN(2) == '!' && cur.PeekN(3) == '[' {
+			if err := ctx.parseConditionalSections(); err != nil {
+				return ctx.error(err)
+			}
+			return nil
+		}
+	}
 	ctx.instate = psDTD
 
 	return nil
+}
+
+// parseConditionalSections parses conditional sections in a DTD.
+//
+//	[61] conditionalSect ::= includeSect | ignoreSect
+//	[62] includeSect ::= '<![' S? 'INCLUDE' S? '[' extSubsetDecl ']]>'
+//	[63] ignoreSect  ::= '<![' S? 'IGNORE'  S? '[' ignoreSectContents* ']]>'
+func (ctx *parserCtx) parseConditionalSections() error {
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseConditionalSections")
+		defer g.IRelease("END parseConditionalSections")
+	}
+
+	cur := ctx.getCursor()
+	if cur == nil {
+		return ErrPrematureEOF
+	}
+
+	// Consume '<![' (3 chars)
+	if err := cur.Advance(3); err != nil {
+		return err
+	}
+
+	ctx.skipBlanks()
+
+	// Check for PE reference that expands to keyword
+	cur = ctx.getCursor()
+	if cur != nil && cur.Peek() == '%' {
+		if err := ctx.parsePEReference(); err != nil {
+			return err
+		}
+		ctx.skipBlanks()
+	}
+
+	cur = ctx.getCursor()
+	if cur == nil {
+		return ErrPrematureEOF
+	}
+
+	if cur.HasPrefixString("INCLUDE") {
+		// Consume 'INCLUDE'
+		if err := cur.Advance(7); err != nil {
+			return err
+		}
+		ctx.skipBlanks()
+		cur = ctx.getCursor()
+		if cur == nil || cur.Peek() != '[' {
+			return ErrConditionalSectionKeyword
+		}
+		if err := cur.Advance(1); err != nil {
+			return err
+		}
+
+		// Parse included content until ']]>'
+		for {
+			ctx.skipBlanks()
+			cur = ctx.getCursor()
+			if cur == nil || cur.Done() {
+				return ErrConditionalSectionNotFinished
+			}
+
+			if cur.Peek() == ']' && cur.PeekN(2) == ']' && cur.PeekN(3) == '>' {
+				if err := cur.Advance(3); err != nil {
+					return err
+				}
+				return nil
+			}
+
+			if cur.Peek() == '<' && cur.PeekN(2) == '!' && cur.PeekN(3) == '[' {
+				if err := ctx.parseConditionalSections(); err != nil {
+					return err
+				}
+				continue
+			}
+
+			if err := ctx.parseMarkupDecl(); err != nil {
+				return err
+			}
+
+			cur = ctx.getCursor()
+			if cur != nil && cur.Peek() == '%' {
+				if err := ctx.parsePEReference(); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	if cur.HasPrefixString("IGNORE") {
+		// Consume 'IGNORE'
+		if err := cur.Advance(6); err != nil {
+			return err
+		}
+		ctx.skipBlanks()
+		cur = ctx.getCursor()
+		if cur == nil || cur.Peek() != '[' {
+			return ErrConditionalSectionKeyword
+		}
+		if err := cur.Advance(1); err != nil {
+			return err
+		}
+
+		// Scan char-by-char tracking nesting depth
+		depth := 1
+		for depth > 0 {
+			cur = ctx.getCursor()
+			if cur == nil || cur.Done() {
+				return ErrConditionalSectionNotFinished
+			}
+
+			c := cur.Peek()
+			if c == '<' && cur.PeekN(2) == '!' && cur.PeekN(3) == '[' {
+				depth++
+				if err := cur.Advance(3); err != nil {
+					return err
+				}
+				continue
+			}
+			if c == ']' && cur.PeekN(2) == ']' && cur.PeekN(3) == '>' {
+				depth--
+				if err := cur.Advance(3); err != nil {
+					return err
+				}
+				continue
+			}
+			if err := cur.Advance(1); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	return ErrConditionalSectionKeyword
 }
 
 /*
