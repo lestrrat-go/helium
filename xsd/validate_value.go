@@ -239,10 +239,16 @@ func validateBuiltinValue(value, builtinLocal string) error {
 		return validateQName(value)
 	case "base64Binary":
 		return validateBase64Binary(value)
+	case "normalizedString":
+		return validateNormalizedString(value)
+	case "token":
+		return validateToken(value)
 	case "IDREFS", "ENTITIES":
 		return validateSpaceSeparatedList(value, validateNCName)
 	case "NMTOKENS":
 		return validateSpaceSeparatedList(value, validateNMTOKEN)
+	case "anyURI":
+		return nil
 	default:
 		return nil
 	}
@@ -436,6 +442,26 @@ var nmtokenRegex = regexp.MustCompile(`^[\w.:-]+$`)
 func validateNMTOKEN(value string) error {
 	if !nmtokenRegex.MatchString(value) {
 		return fmt.Errorf("invalid NMTOKEN")
+	}
+	return nil
+}
+
+func validateNormalizedString(value string) error {
+	if strings.ContainsAny(value, "\t\n\r") {
+		return fmt.Errorf("invalid normalizedString")
+	}
+	return nil
+}
+
+func validateToken(value string) error {
+	if strings.ContainsAny(value, "\t\n\r") {
+		return fmt.Errorf("invalid token")
+	}
+	if value != strings.TrimSpace(value) {
+		return fmt.Errorf("invalid token")
+	}
+	if strings.Contains(value, "  ") {
+		return fmt.Errorf("invalid token")
 	}
 	return nil
 }
