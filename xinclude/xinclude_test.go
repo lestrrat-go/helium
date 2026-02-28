@@ -720,3 +720,115 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 		})
 	}
 }
+
+// --- Validation strictness tests ---
+
+func TestXIncludeIncludeInInclude(t *testing.T) {
+	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<xi:include href="a.xml">
+			<xi:include href="b.xml"/>
+		</xi:include>
+	</root>`)
+
+	resolver := &stringResolver{
+		files: map[string]string{
+			"a.xml": `<a/>`,
+			"b.xml": `<b/>`,
+		},
+	}
+
+	_, err := xinclude.Process(doc,
+		xinclude.WithResolver(resolver),
+		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoBaseFixup(),
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "xi:include has an 'include' child")
+}
+
+func TestXIncludeMultipleFallback(t *testing.T) {
+	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<xi:include href="missing.xml">
+			<xi:fallback><a/></xi:fallback>
+			<xi:fallback><b/></xi:fallback>
+		</xi:include>
+	</root>`)
+
+	resolver := &stringResolver{files: map[string]string{}}
+
+	_, err := xinclude.Process(doc,
+		xinclude.WithResolver(resolver),
+		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoBaseFixup(),
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "xi:include has multiple fallback children")
+}
+
+func TestXIncludeFallbackOutsideInclude(t *testing.T) {
+	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<xi:fallback><a/></xi:fallback>
+	</root>`)
+
+	_, err := xinclude.Process(doc,
+		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoBaseFixup(),
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "xi:fallback is not the child of an 'include'")
+}
+
+func TestXIncludeURITooLong(t *testing.T) {
+	longHref := strings.Repeat("a", 2001) + ".xml"
+	doc := parseXML(t, fmt.Sprintf(`<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<xi:include href="%s"/>
+	</root>`, longHref))
+
+	resolver := &stringResolver{files: map[string]string{}}
+
+	_, err := xinclude.Process(doc,
+		xinclude.WithResolver(resolver),
+		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoBaseFixup(),
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "URI too long")
+}
+
+func TestXIncludeParseNoEntWithXPointer(t *testing.T) {
+	// Document with entity reference that should be resolved before XPointer
+	resolver := &stringResolver{
+		files: map[string]string{
+			"entities.xml": `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ENTITY greeting "Hello World">
+]>
+<root><item>&greeting;</item></root>`,
+		},
+	}
+
+	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<xi:include href="entities.xml" xpointer="xpointer(/root/item)"/>
+	</root>`)
+
+	count, err := xinclude.Process(doc,
+		xinclude.WithResolver(resolver),
+		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoBaseFixup(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+
+	root := docElement(doc)
+	var found bool
+	for c := root.FirstChild(); c != nil; c = c.NextSibling() {
+		if c.Type() == helium.ElementNode {
+			elem := c.(*helium.Element)
+			if elem.LocalName() == "item" {
+				found = true
+				require.Equal(t, "Hello World", string(c.Content()))
+			}
+		}
+	}
+	require.True(t, found, "included <item> element not found")
+}
