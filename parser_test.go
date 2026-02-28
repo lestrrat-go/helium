@@ -2,6 +2,7 @@ package helium
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
@@ -853,4 +854,94 @@ func TestParseSkipIDs(t *testing.T) {
 	ctx.addSpecialAttribute("doc", "name", AttrNmtoken)
 	_, found = ctx.attsSpecial["doc:name"]
 	require.True(t, found, "non-ID attributes should still be interned")
+}
+
+func TestConditionalSectionInclude(t *testing.T) {
+	// INCLUDE section via PE expansion: element declarations should be applied.
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY % inc "INCLUDE">
+  <!ENTITY % sect "<![%inc;[<!ELEMENT doc (child)><!ELEMENT child (#PCDATA)>]]>">
+  %sect;
+]>
+<doc>
+    <child>text</child>
+</doc>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	doc, err := p.Parse([]byte(input))
+	require.NoError(t, err, "INCLUDE conditional section should parse successfully")
+	require.NotNil(t, doc)
+
+	root := doc.DocumentElement()
+	require.NotNil(t, root)
+	require.Equal(t, "doc", root.Name())
+}
+
+func TestConditionalSectionIgnore(t *testing.T) {
+	// Conditional sections in internal subset must come via PE expansion.
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY % ign "IGNORE">
+  <!ENTITY % sect "<![%ign;[<!ELEMENT doc (nonexistent)>]]>">
+  %sect;
+  <!ELEMENT doc (#PCDATA)>
+]>
+<doc>hello</doc>`
+
+	p := NewParser()
+	_, err := p.Parse([]byte(input))
+	require.NoError(t, err, "IGNORE section content should be skipped")
+}
+
+func TestConditionalSectionInternalSubsetPE(t *testing.T) {
+	// Internal subset with PE that expands to conditional section content.
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY % inc "INCLUDE">
+  <!ENTITY % content "<![%inc;[<!ELEMENT doc (#PCDATA)>]]>">
+  %content;
+]>
+<doc>hello</doc>`
+
+	p := NewParser()
+	_, err := p.Parse([]byte(input))
+	require.NoError(t, err, "PE-expanded conditional section in internal subset should work")
+}
+
+func TestConditionalSectionErrors(t *testing.T) {
+	t.Run("invalid keyword", func(t *testing.T) {
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY % kw "BOGUS">
+  <!ENTITY % sect "<![%kw;[<!ELEMENT doc (#PCDATA)>]]>">
+  %sect;
+]>
+<doc/>`
+		p := NewParser()
+		_, err := p.Parse([]byte(input))
+		require.Error(t, err, "invalid keyword should fail")
+	})
+}
+
+func TestConditionalSectionExternalDTD(t *testing.T) {
+	path := "testdata/libxml2-compat/valid/cond_sect1.xml"
+	input, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	p := NewParser()
+	p.SetOption(ParseDTDLoad)
+	p.SetBaseURI(path)
+	doc, err := p.Parse(input)
+	require.NoError(t, err, "external DTD with conditional sections should parse")
+	require.NotNil(t, doc)
+
+	expected, err := os.ReadFile("testdata/libxml2-compat/valid/cond_sect1.xml.expected")
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	d := &Dumper{}
+	require.NoError(t, d.DumpDoc(&buf, doc))
+	require.Equal(t, string(expected), buf.String())
 }

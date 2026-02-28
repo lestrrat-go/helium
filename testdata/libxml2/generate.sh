@@ -380,3 +380,32 @@ for result in "$SOURCE"/result/schematron/*; do
     sch_result=$((sch_result + 1))
 done
 echo "Copied $sch_result Schematron result files into $SCH_DEST/result"
+
+# Copy valid DTD test files
+# Valid tests live in test/valid/ with DTDs in test/valid/dtds/.
+# Results are in result/valid/. The XML files reference DTDs via relative
+# paths like "dtds/cond_sect1.dtd", so the directory structure must be preserved.
+VALID_DEST="$DEST/valid"
+mkdir -p "$VALID_DEST/dtds"
+
+valid_count=0
+for input in "$SOURCE"/test/valid/*.xml; do
+    [ -f "$input" ] || continue
+    base="$(basename "$input")"
+    result="$SOURCE/result/valid/$base"
+    [ -f "$result" ] || continue
+
+    cp "$input" "$VALID_DEST/$base"
+    cp "$result" "$VALID_DEST/$base.expected"
+    valid_count=$((valid_count + 1))
+done
+echo "Copied $valid_count valid DTD test files into $VALID_DEST"
+
+# Copy referenced DTD files
+valid_dtd_count=0
+for dtd in "$SOURCE"/test/valid/dtds/*; do
+    [ -f "$dtd" ] || continue
+    cp "$dtd" "$VALID_DEST/dtds/"
+    valid_dtd_count=$((valid_dtd_count + 1))
+done
+echo "Copied $valid_dtd_count valid DTD files into $VALID_DEST/dtds"

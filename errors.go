@@ -85,6 +85,8 @@ var (
 	ErrPrematureEOF                 = errors.New("end of document reached")
 	ErrUndeclaredEntity             = errors.New("undeclared entity")
 	ErrSemicolonRequired            = errors.New("';' is required")
+	ErrConditionalSectionNotFinished = errors.New("conditional section ']]>' expected")
+	ErrConditionalSectionKeyword    = errors.New("INCLUDE or IGNORE keyword expected in conditional section")
 	ErrSpaceRequired                = errors.New("space required")
 	ErrStartTagRequired             = errors.New("start tag expected, '<' not found")
 	ErrValueRequired                = errors.New("value required")

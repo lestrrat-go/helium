@@ -495,6 +495,14 @@ func (t *TreeBuilder) ExternalSubset(ctxif sax.Context, name, eid, uri string) e
 			break
 		}
 
+		cur := ctx.getCursor()
+		if cur != nil && cur.Peek() == '<' && cur.PeekN(2) == '!' && cur.PeekN(3) == '[' {
+			if err := ctx.parseConditionalSections(); err != nil {
+				break
+			}
+			continue
+		}
+
 		if err := ctx.parseMarkupDecl(); err != nil {
 			break
 		}
