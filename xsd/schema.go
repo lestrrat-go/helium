@@ -141,6 +141,7 @@ type TypeDef struct {
 	Variety      TypeVariety
 	ItemType     *TypeDef   // for list types: the item type definition
 	MemberTypes  []*TypeDef // for union types: the member type definitions
+	Abstract     bool
 }
 
 // FacetSet holds facet constraints for a simple type restriction.

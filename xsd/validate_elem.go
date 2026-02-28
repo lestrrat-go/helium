@@ -307,6 +307,12 @@ func matchElementParticle(parent *helium.Element, p *Particle, edecl *ElementDec
 		actualDecl := resolveSubstDecl(child, edecl, schema)
 		td := actualDecl.Type
 		td = resolveXsiType(child.elem, td, schema)
+		if td != nil && td.Abstract {
+			msg := "The type definition is abstract."
+			out.WriteString(validityError(filename, child.elem.Line(), elemDisplayName(child.elem), msg))
+			contentErr = fmt.Errorf("abstract type")
+			continue
+		}
 		if td != nil {
 			if hasXsiNil(child.elem) {
 				if err := validateNilledElement(child.elem, actualDecl, td, schema, filename, out); err != nil {

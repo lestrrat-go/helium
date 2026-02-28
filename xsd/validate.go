@@ -81,6 +81,11 @@ func validateRootElement(elem *helium.Element, schema *Schema, filename string, 
 	}
 
 	td := resolveXsiType(elem, edecl.Type, schema)
+	if td != nil && td.Abstract {
+		msg := "The type definition is abstract."
+		out.WriteString(validityError(filename, elem.Line(), elemDisplayName(elem), msg))
+		return fmt.Errorf("abstract type")
+	}
 	if hasXsiNil(elem) {
 		return validateNilledElement(elem, edecl, td, schema, filename, out)
 	}

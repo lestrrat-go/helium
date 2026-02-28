@@ -534,6 +534,7 @@ func (c *compiler) parseNamedComplexType(elem *helium.Element) error {
 		return err
 	}
 	td.Name = QName{Local: name, NS: c.schema.targetNamespace}
+	td.Abstract = getAttr(elem, "abstract") == attrValTrue
 	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: false}
 	c.schema.types[td.Name] = td
 	return nil
