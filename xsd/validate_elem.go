@@ -9,6 +9,9 @@ import (
 
 // matchSequence matches children[pos:] against a sequence model group.
 // Returns (consumed, error). Does NOT check for leftover children.
+//
+// The greedy matching approach assumes UPA-compliant (deterministic) content
+// models, which is enforced at compile time by checkUPA in parse_check.go.
 func matchSequence(parent *helium.Element, mg *ModelGroup, children []childElem, pos int, schema *Schema, filename string, out *strings.Builder) (int, error) {
 	startPos := pos
 

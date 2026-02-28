@@ -490,6 +490,13 @@ func isBlankContent(b []byte) bool {
 
 // matchContentModel validates a sequence of child element names against
 // an ElementContent tree. Returns true if the children match.
+//
+// This uses a greedy recursive descent approach, which is correct for
+// deterministic content models as required by the XML spec (Section 3.2.1,
+// Appendix E). At each position only one particle can match the next
+// element, so greedy consumption and first-match-wins in choices always
+// produce the correct result. Non-deterministic content models (which
+// violate the XML spec) may be matched incorrectly.
 func matchContentModel(content *ElementContent, children []string) bool {
 	_, ok := matchContent(content, children, 0)
 	return ok
