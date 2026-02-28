@@ -15,6 +15,55 @@ const (
 	maxNodeSetLength  = 10_000_000
 )
 
+// docOrderCache caches document-order positions for all nodes in a document.
+// Built lazily on first use and shared across the entire evaluation tree.
+type docOrderCache struct {
+	positions map[helium.Node]int
+}
+
+func (c *docOrderCache) position(n helium.Node) int {
+	if c.positions == nil {
+		return -1
+	}
+	// Namespace nodes are not in the document tree. Position them
+	// right after their parent element so they sort correctly.
+	if n.Type() == helium.NamespaceNode {
+		parent := n.Parent()
+		if parent == nil {
+			return 0
+		}
+		return c.position(parent)
+	}
+	pos, ok := c.positions[n]
+	if !ok {
+		return -1
+	}
+	return pos
+}
+
+func (c *docOrderCache) buildFrom(root helium.Node) {
+	if c.positions != nil {
+		return
+	}
+	c.positions = make(map[helium.Node]int)
+	pos := 0
+	c.indexWalk(root, &pos)
+}
+
+func (c *docOrderCache) indexWalk(cur helium.Node, pos *int) {
+	c.positions[cur] = *pos
+	*pos++
+	if elem, ok := cur.(*helium.Element); ok {
+		for _, attr := range elem.Attributes() {
+			c.positions[helium.Node(attr)] = *pos
+			*pos++
+		}
+	}
+	for child := cur.FirstChild(); child != nil; child = child.NextSibling() {
+		c.indexWalk(child, pos)
+	}
+}
+
 // evalContext holds the evaluation state for an XPath expression.
 type evalContext struct {
 	node        helium.Node
@@ -27,6 +76,7 @@ type evalContext struct {
 	depth       int
 	opCount     *int // shared across the entire evaluation tree
 	opLimit     int  // 0 = unlimited
+	docOrder    *docOrderCache
 }
 
 func newEvalContext(node helium.Node) *evalContext {
@@ -36,6 +86,7 @@ func newEvalContext(node helium.Node) *evalContext {
 		position: 1,
 		size:     1,
 		opCount:  &opCount,
+		docOrder: &docOrderCache{},
 	}
 }
 
@@ -51,6 +102,7 @@ func (ctx *evalContext) withNode(n helium.Node, pos, size int) *evalContext {
 		depth:       ctx.depth,
 		opCount:     ctx.opCount,
 		opLimit:     ctx.opLimit,
+		docOrder:    ctx.docOrder,
 	}
 }
 
@@ -194,7 +246,7 @@ func evalStepWithPredicates(ctx *evalContext, nodes []helium.Node, step Step) ([
 		}
 		allFiltered = append(allFiltered, matched...)
 	}
-	return deduplicateNodes(allFiltered)
+	return deduplicateNodes(allFiltered, ctx.docOrder)
 }
 
 // evalStepNoPredicates evaluates one location step that has no predicates.
@@ -210,7 +262,7 @@ func evalStepNoPredicates(ctx *evalContext, nodes []helium.Node, step Step) ([]h
 		}
 		next = append(next, filterByNodeTest(candidates, step.NodeTest, step.Axis, ctx)...)
 	}
-	return deduplicateNodes(next)
+	return deduplicateNodes(next, ctx.docOrder)
 }
 
 // filterByNodeTest returns only those nodes that match the given node test.
@@ -225,7 +277,7 @@ func filterByNodeTest(candidates []helium.Node, nt NodeTest, axis AxisType, ctx 
 }
 
 // deduplicateNodes removes duplicate nodes and sorts in document order.
-func deduplicateNodes(nodes []helium.Node) ([]helium.Node, error) {
+func deduplicateNodes(nodes []helium.Node, cache *docOrderCache) ([]helium.Node, error) {
 	if len(nodes) <= 1 {
 		return nodes, nil
 	}
@@ -249,8 +301,9 @@ func deduplicateNodes(nodes []helium.Node) ([]helium.Node, error) {
 	if len(result) > maxNodeSetLength {
 		return nil, ErrNodeSetLimit
 	}
+	cache.buildFrom(documentRoot(result[0]))
 	sort.SliceStable(result, func(i, j int) bool {
-		return documentPosition(result[i]) < documentPosition(result[j])
+		return cache.position(result[i]) < cache.position(result[j])
 	})
 	return result, nil
 }
@@ -733,7 +786,7 @@ func evalUnionExpr(ctx *evalContext, e UnionExpr) (*Result, error) {
 		return nil, ErrUnionNotNodeSet
 	}
 	// Merge and deduplicate, preserving document order
-	merged, err := mergeNodeSets(left.NodeSet, right.NodeSet)
+	merged, err := mergeNodeSets(left.NodeSet, right.NodeSet, ctx.docOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -759,7 +812,7 @@ func evalPathExpr(ctx *evalContext, e PathExpr) (*Result, error) {
 		if err != nil {
 			return nil, err
 		}
-		result, err = mergeNodeSets(result, subResult.NodeSet)
+		result, err = mergeNodeSets(result, subResult.NodeSet, ctx.docOrder)
 		if err != nil {
 			return nil, err
 		}
@@ -899,7 +952,7 @@ type nsNodeKey struct {
 
 // mergeNodeSets merges two node sets, deduplicating by identity,
 // and sorting in document order.
-func mergeNodeSets(a, b []helium.Node) ([]helium.Node, error) {
+func mergeNodeSets(a, b []helium.Node, cache *docOrderCache) ([]helium.Node, error) {
 	seen := make(map[helium.Node]bool, len(a)+len(b))
 	nsKeys := make(map[nsNodeKey]bool)
 	var result []helium.Node
@@ -928,56 +981,12 @@ func mergeNodeSets(a, b []helium.Node) ([]helium.Node, error) {
 	if len(result) > maxNodeSetLength {
 		return nil, ErrNodeSetLimit
 	}
+	if len(result) > 0 {
+		cache.buildFrom(documentRoot(result[0]))
+	}
 	sort.SliceStable(result, func(i, j int) bool {
-		return documentPosition(result[i]) < documentPosition(result[j])
+		return cache.position(result[i]) < cache.position(result[j])
 	})
 	return result, nil
 }
 
-// documentPosition returns an integer representing document order by
-// performing a pre-order walk from the root. This is O(n) per call
-// but correct for all tree shapes.
-func documentPosition(n helium.Node) int {
-	// Namespace nodes are not in the document tree. Position them
-	// right after their parent element so they sort correctly relative
-	// to other node types.
-	if n.Type() == helium.NamespaceNode {
-		parent := n.Parent()
-		if parent == nil {
-			return 0
-		}
-		return documentPosition(parent)
-	}
-	root := documentRoot(n)
-	pos := 0
-	found := -1
-	walkDocOrder(root, n, &pos, &found)
-	return found
-}
-
-func walkDocOrder(cur, target helium.Node, pos *int, found *int) {
-	if *found >= 0 {
-		return
-	}
-	if cur == target {
-		*found = *pos
-		return
-	}
-	*pos++
-	// Walk attributes (they precede children in document order)
-	if elem, ok := cur.(*helium.Element); ok {
-		for _, attr := range elem.Attributes() {
-			if helium.Node(attr) == target {
-				*found = *pos
-				return
-			}
-			*pos++
-		}
-	}
-	for c := cur.FirstChild(); c != nil; c = c.NextSibling() {
-		walkDocOrder(c, target, pos, found)
-		if *found >= 0 {
-			return
-		}
-	}
-}
