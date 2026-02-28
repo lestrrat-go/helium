@@ -361,21 +361,6 @@ func tryMatchElementParticle(p *Particle, edecl *ElementDecl, children []childEl
 	return count, nil
 }
 
-// resolveSubstType returns the type to use for validating a child element
-// against a particle. If the child is a substitution group member, use its type.
-func resolveSubstType(child childElem, edecl *ElementDecl, schema *Schema) *TypeDef {
-	if matchesDeclDirect(child, edecl) {
-		return edecl.Type
-	}
-	if schema != nil {
-		for _, member := range schema.substGroups[edecl.Name] {
-			if matchesDeclDirect(child, member) {
-				return member.Type
-			}
-		}
-	}
-	return edecl.Type
-}
 
 func tryMatchModelGroup(mg *ModelGroup, children []childElem, pos int, schema *Schema) (int, error) {
 	switch mg.Compositor {
