@@ -13,9 +13,13 @@ import (
 )
 
 // Parse parses HTML data and returns a helium Document.
-func Parse(data []byte) (*helium.Document, error) {
+func Parse(data []byte, options ...ParseOption) (*helium.Document, error) {
+	var cfg parseConfig
+	for _, o := range options {
+		o(&cfg)
+	}
 	tb := newTreeBuilder()
-	p := newParser(data, tb)
+	p := newParser(data, tb, cfg)
 	if err := p.parse(); err != nil {
 		return nil, err
 	}
@@ -26,17 +30,21 @@ func Parse(data []byte) (*helium.Document, error) {
 }
 
 // ParseFile reads and parses an HTML file.
-func ParseFile(filename string) (*helium.Document, error) {
+func ParseFile(filename string, options ...ParseOption) (*helium.Document, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
-	return Parse(data)
+	return Parse(data, options...)
 }
 
 // ParseWithSAX parses HTML data, firing SAX events to the given handler
 // without building a DOM tree.
-func ParseWithSAX(data []byte, handler SAXHandler) error {
-	p := newParser(data, handler)
+func ParseWithSAX(data []byte, handler SAXHandler, options ...ParseOption) error {
+	var cfg parseConfig
+	for _, o := range options {
+		o(&cfg)
+	}
+	p := newParser(data, handler, cfg)
 	return p.parse()
 }

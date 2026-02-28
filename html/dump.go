@@ -34,7 +34,12 @@ const defaultHTMLDTD = `<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional
 
 // DumpDoc serializes an HTML document to the writer.
 // Mirrors libxml2's htmlDocContentDumpOutput.
-func DumpDoc(out io.Writer, doc *helium.Document) error {
+func DumpDoc(out io.Writer, doc *helium.Document, options ...DumpOption) error {
+	var cfg dumpConfig
+	for _, o := range options {
+		o(&cfg)
+	}
+
 	// If the document was parsed from Latin-1/Windows-1252, convert
 	// UTF-8 output back to single-byte encoding to match libxml2.
 	// strict=true for explicit ISO-8859-1 charset (numeric char refs for
@@ -52,7 +57,7 @@ func DumpDoc(out io.Writer, doc *helium.Document) error {
 		if err := dumpDTD(out, dtd); err != nil {
 			return err
 		}
-	} else if doc.Type() == helium.HTMLDocumentNode {
+	} else if !cfg.noDefaultDTD && doc.Type() == helium.HTMLDocumentNode {
 		_, _ = io.WriteString(out, defaultHTMLDTD)
 	}
 
