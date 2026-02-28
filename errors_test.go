@@ -3,8 +3,10 @@ package helium
 import (
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/lestrrat-go/helium/sax"
 	"github.com/stretchr/testify/require"
 )
 
@@ -94,4 +96,39 @@ func TestErrorLevelConstants(t *testing.T) {
 	require.True(t, ErrorLevelNone < ErrorLevelWarning)
 	require.True(t, ErrorLevelWarning < ErrorLevelError)
 	require.True(t, ErrorLevelError < ErrorLevelFatal)
+}
+
+func TestParseNoError(t *testing.T) {
+	// Malformed XML triggers SAX Error callback
+	const input = `<?xml version="1.0"?><root><child>text</chld></root>`
+
+	t.Run("SAX Error callback fires by default", func(t *testing.T) {
+		var called atomic.Int32
+		s := sax.New()
+		s.ErrorHandler = sax.ErrorFunc(func(_ sax.Context, message string, args ...interface{}) error {
+			called.Add(1)
+			return nil
+		})
+
+		p := NewParser()
+		p.SetSAXHandler(s)
+		_, _ = p.Parse([]byte(input))
+		require.Greater(t, called.Load(), int32(0), "SAX Error handler should be called")
+	})
+
+	t.Run("ParseNoError suppresses SAX Error callback", func(t *testing.T) {
+		var called atomic.Int32
+		s := sax.New()
+		s.ErrorHandler = sax.ErrorFunc(func(_ sax.Context, message string, args ...interface{}) error {
+			called.Add(1)
+			return nil
+		})
+
+		p := NewParser()
+		p.SetSAXHandler(s)
+		p.SetOption(ParseNoError)
+		_, err := p.Parse([]byte(input))
+		require.Error(t, err, "parse should still return error")
+		require.Equal(t, int32(0), called.Load(), "SAX Error handler should NOT be called with ParseNoError")
+	})
 }
