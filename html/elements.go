@@ -151,7 +151,7 @@ func lookupElement(name string) *htmlElemDesc {
 // isHeadElement returns true if the tag belongs in <head>.
 func isHeadElement(name string) bool {
 	switch strings.ToLower(name) {
-	case "title", "base", "link", "meta", "style", "script", "noscript":
+	case "title", "base", "link", "meta", "style", "script":
 		return true
 	}
 	return false
