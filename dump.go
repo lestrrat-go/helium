@@ -779,6 +779,12 @@ func (d *Dumper) dumpNs(out io.Writer, ns *Namespace) error {
 		return nil
 	}
 
+	// Skip the implicit xml: prefix namespace declaration.
+	// libxml2: xmlNsDumpOutput skips prefix "xml" unconditionally.
+	if ns.prefix == "xml" {
+		return nil
+	}
+
 	_, _ = io.WriteString(out, " ")
 
 	if ns.prefix == "" {
