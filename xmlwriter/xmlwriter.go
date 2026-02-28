@@ -93,12 +93,69 @@ func New(w io.Writer, opts ...Option) *Writer {
 	return wr
 }
 
-// writeStr writes a string to the underlying writer, recording any error.
+type escapeMode int
+
+const (
+	escapeNone escapeMode = iota
+	escapeText
+	escapeAttr
+)
+
+// writeStr writes a raw string to the underlying writer.
 func (w *Writer) writeStr(s string) {
 	if w.err != nil {
 		return
 	}
 	_, w.err = io.WriteString(w.out, s)
+}
+
+// writeEscaped writes a string with the specified escaping mode.
+func (w *Writer) writeEscaped(s string, escape escapeMode) {
+	if w.err != nil {
+		return
+	}
+	if escape == escapeNone {
+		_, w.err = io.WriteString(w.out, s)
+		return
+	}
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '&':
+			w.writeStr("&amp;")
+		case '<':
+			w.writeStr("&lt;")
+		case '>':
+			w.writeStr("&gt;")
+		case '\r':
+			w.writeStr("&#13;")
+		case '"':
+			if escape == escapeAttr && w.quoteChar == '"' {
+				w.writeStr("&quot;")
+			} else {
+				w.writeByte('"')
+			}
+		case '\'':
+			if escape == escapeAttr && w.quoteChar == '\'' {
+				w.writeStr("&apos;")
+			} else {
+				w.writeByte('\'')
+			}
+		case '\n':
+			if escape == escapeAttr {
+				w.writeStr("&#10;")
+			} else {
+				w.writeByte('\n')
+			}
+		case '\t':
+			if escape == escapeAttr {
+				w.writeStr("&#9;")
+			} else {
+				w.writeByte('\t')
+			}
+		default:
+			w.writeByte(s[i])
+		}
+	}
 }
 
 // writeByte writes a single byte.
@@ -225,54 +282,12 @@ func qualifiedName(prefix, localName string) string {
 
 // writeTextEscaped writes text content with XML escaping for element bodies.
 func (w *Writer) writeTextEscaped(s string) {
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '&':
-			w.writeStr("&amp;")
-		case '<':
-			w.writeStr("&lt;")
-		case '>':
-			w.writeStr("&gt;")
-		case '\r':
-			w.writeStr("&#13;")
-		default:
-			w.writeByte(s[i])
-		}
-	}
+	w.writeEscaped(s, escapeText)
 }
 
 // writeAttrEscaped writes text content with XML escaping for attribute values.
 func (w *Writer) writeAttrEscaped(s string) {
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '&':
-			w.writeStr("&amp;")
-		case '<':
-			w.writeStr("&lt;")
-		case '>':
-			w.writeStr("&gt;")
-		case '"':
-			if w.quoteChar == '"' {
-				w.writeStr("&quot;")
-			} else {
-				w.writeByte('"')
-			}
-		case '\'':
-			if w.quoteChar == '\'' {
-				w.writeStr("&apos;")
-			} else {
-				w.writeByte('\'')
-			}
-		case '\n':
-			w.writeStr("&#10;")
-		case '\r':
-			w.writeStr("&#13;")
-		case '\t':
-			w.writeStr("&#9;")
-		default:
-			w.writeByte(s[i])
-		}
-	}
+	w.writeEscaped(s, escapeAttr)
 }
 
 // --- Document lifecycle ---
@@ -912,7 +927,7 @@ func (w *Writer) WriteDTDEntity(pe bool, name, content string) error {
 	w.writeStr(name)
 	w.writeByte(' ')
 	w.writeByte(w.quoteChar)
-	w.writeStr(content)
+	w.writeAttrEscaped(content)
 	w.writeByte(w.quoteChar)
 	w.writeByte('>')
 	return w.err
