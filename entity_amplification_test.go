@@ -97,6 +97,66 @@ func TestPredefinedEntities(t *testing.T) {
 	require.NotNil(t, doc)
 }
 
+func TestPredefinedEntityRedeclaration(t *testing.T) {
+	t.Run("valid redeclaration accepted", func(t *testing.T) {
+		// §4.6: redeclaring lt with content "<" (via &#60;) is allowed.
+		xml := `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ENTITY lt "&#60;">
+]>
+<root>&lt;</root>`
+		_, err := Parse([]byte(xml))
+		require.NoError(t, err)
+	})
+
+	t.Run("invalid redeclaration rejected", func(t *testing.T) {
+		// §4.6: redeclaring lt with wrong content is a hard error.
+		xml := `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ENTITY lt "X">
+]>
+<root>&lt;</root>`
+		_, err := Parse([]byte(xml))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "redeclared")
+	})
+
+	t.Run("valid redeclaration with char ref accepted", func(t *testing.T) {
+		// Content is &#60; (char ref for <), which resolves to <
+		xml := `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ENTITY lt "&#60;">
+  <!ENTITY gt "&#62;">
+  <!ENTITY amp "&#38;">
+  <!ENTITY apos "&#39;">
+  <!ENTITY quot "&#34;">
+]>
+<root/>`
+		_, err := Parse([]byte(xml))
+		require.NoError(t, err)
+	})
+
+	t.Run("DTD.AddEntity rejects wrong content", func(t *testing.T) {
+		dtd := newDTD()
+		_, err := dtd.AddEntity("amp", InternalGeneralEntity, "", "", "wrong")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "redeclared")
+	})
+
+	t.Run("DTD.AddEntity accepts correct content", func(t *testing.T) {
+		dtd := newDTD()
+		_, err := dtd.AddEntity("amp", InternalGeneralEntity, "", "", "&")
+		require.NoError(t, err)
+	})
+
+	t.Run("DTD.AddEntity accepts char ref content", func(t *testing.T) {
+		dtd := newDTD()
+		// &#60; resolves to <
+		_, err := dtd.AddEntity("lt", InternalGeneralEntity, "", "", "&#60;")
+		require.NoError(t, err)
+	})
+}
+
 func TestEntityDepthLimit(t *testing.T) {
 	// Build deeply nested entity references (depth > 40).
 	var dtd strings.Builder

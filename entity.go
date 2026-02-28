@@ -1,6 +1,11 @@
 package helium
 
-import "errors"
+import (
+	"errors"
+	"strconv"
+	"strings"
+	"unicode/utf8"
+)
 
 type EntityType int
 
@@ -37,6 +42,71 @@ var (
 	EntityApostrophe = newEntity("apos", InternalPredefinedEntity, "", "", "'", "&apos;")
 	EntityQuote      = newEntity("quot", InternalPredefinedEntity, "", "", `"`, "&quot;")
 )
+
+// predefinedEntityContent maps predefined entity names to their required
+// content per XML §4.6. Used by DTD.AddEntity to reject invalid redeclarations.
+var predefinedEntityContent = map[string]string{
+	"lt":   "<",
+	"gt":   ">",
+	"amp":  "&",
+	"apos": "'",
+	"quot": `"`,
+}
+
+// resolveCharRefs resolves all numeric character references (&#NNN; and
+// &#xHHH;) in s, returning the resolved string. Used to normalize entity
+// content before comparing against predefined entity values.
+func resolveCharRefs(s string) string {
+	if !strings.Contains(s, "&#") {
+		return s
+	}
+	var b strings.Builder
+	for len(s) > 0 {
+		idx := strings.Index(s, "&#")
+		if idx < 0 {
+			b.WriteString(s)
+			break
+		}
+		b.WriteString(s[:idx])
+		s = s[idx+2:] // skip "&#"
+		var r rune
+		var ok bool
+		if len(s) > 0 && s[0] == 'x' {
+			// hex: &#xHHH;
+			s = s[1:]
+			semi := strings.IndexByte(s, ';')
+			if semi < 0 {
+				b.WriteString("&#x")
+				continue
+			}
+			v, err := strconv.ParseInt(s[:semi], 16, 32)
+			if err == nil && v > 0 && utf8.ValidRune(rune(v)) {
+				r = rune(v)
+				ok = true
+			}
+			s = s[semi+1:]
+		} else {
+			// decimal: &#NNN;
+			semi := strings.IndexByte(s, ';')
+			if semi < 0 {
+				b.WriteString("&#")
+				continue
+			}
+			v, err := strconv.ParseInt(s[:semi], 10, 32)
+			if err == nil && v > 0 && utf8.ValidRune(rune(v)) {
+				r = rune(v)
+				ok = true
+			}
+			s = s[semi+1:]
+		}
+		if ok {
+			b.WriteRune(r)
+		} else {
+			b.WriteString("&#") // malformed ref, keep literal
+		}
+	}
+	return b.String()
+}
 
 func resolvePredefinedEntity(name string) (*Entity, error) {
 	switch name {
