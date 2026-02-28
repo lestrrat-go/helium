@@ -21,7 +21,7 @@ func Evaluate(doc *helium.Document, expr string) ([]helium.Node, error) {
 	}
 
 	switch scheme {
-	case "xpointer":
+	case "xpointer", "xpath1":
 		return xpath.Find(doc, body)
 	case "element":
 		return evaluateElement(doc, body)
