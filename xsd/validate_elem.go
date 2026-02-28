@@ -307,7 +307,11 @@ func matchElementParticle(parent *helium.Element, p *Particle, edecl *ElementDec
 		td := resolveSubstType(child, edecl, schema)
 		td = resolveXsiType(child.elem, td, schema)
 		if td != nil {
-			if err := validateElementContent(child.elem, td, schema, filename, out); err != nil {
+			if hasXsiNil(child.elem) {
+				if err := validateNilledElement(child.elem, edecl, td, schema, filename, out); err != nil {
+					contentErr = err
+				}
+			} else if err := validateElementContent(child.elem, td, schema, filename, out); err != nil {
 				contentErr = err
 			}
 		}
