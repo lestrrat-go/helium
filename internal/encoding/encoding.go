@@ -14,6 +14,7 @@ import (
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/encoding/traditionalchinese"
 	"golang.org/x/text/encoding/unicode"
+	"golang.org/x/text/encoding/unicode/utf32"
 )
 
 var encodingNameNormalizer = strings.NewReplacer(
@@ -126,6 +127,18 @@ func Load(name string) enc.Encoding {
 		return charmap.CodePage1140
 	case "ibm1141", "ibm01141", "cp1141", "ccsid01141":
 		return codePage1141
+	case "ucs4be", "utf32be", "iso10646ucs4":
+		return utf32.UTF32(utf32.BigEndian, utf32.IgnoreBOM)
+	case "ucs4le", "utf32le":
+		return utf32.UTF32(utf32.LittleEndian, utf32.IgnoreBOM)
+	case "ucs4", "utf32":
+		return utf32.UTF32(utf32.BigEndian, utf32.UseBOM)
+	case "ucs42143":
+		return &ucs4SwapEncoding{swap: swap2143}
+	case "ucs43412":
+		return &ucs4SwapEncoding{swap: swap3412}
+	case "ucs2":
+		return unicode.UTF16(unicode.BigEndian, unicode.IgnoreBOM)
 	}
 	return nil
 }
