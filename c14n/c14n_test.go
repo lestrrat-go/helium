@@ -286,3 +286,33 @@ func TestC14N11WithoutComments(t *testing.T) {
 		})
 	}
 }
+
+func TestRelativeNamespaceURIRejected(t *testing.T) {
+	// C14N spec requires failure on relative namespace URIs.
+	xml := `<?xml version="1.0"?><root xmlns:bad="relative/uri"><child/></root>`
+	doc, err := helium.Parse([]byte(xml))
+	require.NoError(t, err)
+
+	_, err = c14n.CanonicalizeTo(doc, c14n.C14N10)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "relative namespace URI")
+}
+
+func TestAbsoluteNamespaceURIAccepted(t *testing.T) {
+	xml := `<?xml version="1.0"?><root xmlns:ok="http://example.com"><child/></root>`
+	doc, err := helium.Parse([]byte(xml))
+	require.NoError(t, err)
+
+	_, err = c14n.CanonicalizeTo(doc, c14n.C14N10)
+	require.NoError(t, err)
+}
+
+func TestEmptyNamespaceURIAccepted(t *testing.T) {
+	// Empty namespace URI (default namespace undeclaration) must be allowed.
+	xml := `<?xml version="1.0"?><root xmlns="http://example.com"><child xmlns=""/></root>`
+	doc, err := helium.Parse([]byte(xml))
+	require.NoError(t, err)
+
+	_, err = c14n.CanonicalizeTo(doc, c14n.C14N10)
+	require.NoError(t, err)
+}
