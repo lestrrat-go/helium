@@ -55,16 +55,16 @@ func NewDocument(version, encoding string, standalone DocumentStandaloneType) *D
 	return doc
 }
 
-func (d Document) XMLString() (string, error) {
+func (d Document) XMLString(options ...DumpOption) (string, error) {
 	out := bytes.Buffer{}
-	if err := d.XML(&out); err != nil {
+	if err := d.XML(&out, options...); err != nil {
 		return "", err
 	}
 	return out.String(), nil
 }
 
-func (d *Document) XML(out io.Writer) error {
-	return (&Dumper{}).DumpDoc(out, d)
+func (d *Document) XML(out io.Writer, options ...DumpOption) error {
+	return newDumper(options).DumpDoc(out, d)
 }
 
 func (d *Document) AddChild(cur Node) error {
@@ -75,7 +75,7 @@ func (d *Document) AddContent(b []byte) error {
 	return addContent(d, b)
 }
 
-func (d *Document) AddSibling(n Node) error {
+func (d *Document) AddSibling(_ Node) error {
 	return errors.New("can't add sibling to a document")
 }
 
@@ -113,7 +113,7 @@ func (d *Document) ExtSubset() *DTD {
 	return d.extSubset
 }
 
-func (d *Document) Replace(n Node) {
+func (d *Document) Replace(_ Node) {
 	panic("d.Replace does not make sense")
 }
 
