@@ -215,6 +215,23 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool, escapeNonASCII bool) 
 	return nil
 }
 
+// DumpOption configures serialization behavior for Dumper, Document.XML,
+// Document.XMLString, Element.XML, and Element.XMLString.
+type DumpOption func(*Dumper)
+
+// WithFormat enables indented (pretty-printed) output.  Each child element
+// is emitted on its own line with indentation.  Elements that contain only
+// text / entity-ref / CDATA children are kept inline (no extra whitespace).
+func WithFormat() DumpOption {
+	return func(d *Dumper) { d.Format = true }
+}
+
+// WithIndentString sets the string used for each indent level.
+// The default is two spaces ("  ").
+func WithIndentString(s string) DumpOption {
+	return func(d *Dumper) { d.IndentString = s }
+}
+
 // Dumper serializes an XML document tree.
 // escapeNonASCII controls whether characters U+0080–U+00FF are emitted as
 // numeric character references (&#xNN;).  libxml2 only does this when the
@@ -232,6 +249,14 @@ type Dumper struct {
 	isXHTML        bool
 	encoding       string // document encoding, used for XHTML meta injection
 	indent         int    // current indent depth (used when Format is true)
+}
+
+func newDumper(options []DumpOption) *Dumper {
+	d := &Dumper{}
+	for _, opt := range options {
+		opt(d)
+	}
+	return d
 }
 
 func (d *Dumper) indentStr() string {
@@ -320,7 +345,7 @@ func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 	d.escapeNonASCII = true
 	if enc := doc.encoding; enc != "" {
 		lower := strings.ToLower(enc)
-		if lower != "utf-8" && lower != "utf8" && lower != "us-ascii" && lower != "ascii" {
+		if lower != "utf-8" && lower != encUTF8 && lower != "us-ascii" && lower != "ascii" {
 			if e := henc.Load(enc); e != nil {
 				d.escapeNonASCII = false
 				w := e.NewEncoder().Writer(out)

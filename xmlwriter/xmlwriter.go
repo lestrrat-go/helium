@@ -23,7 +23,8 @@ const (
 	statePI                           // after PI target, before content
 	statePIText                       // inside PI content
 	stateCDATA                        // inside CDATA section
-	stateDTD                          // inside DTD internal subset
+	stateDTD                          // inside DTD (before internal subset)
+	stateDTDText                      // inside DTD internal subset ([ has been written)
 )
 
 // elementEntry tracks an open element on the stack.
@@ -317,7 +318,7 @@ func (w *Writer) EndDocument() error {
 			return err
 		}
 	}
-	if w.indent != "" {
+	if w.indent == "" {
 		w.writeStr("\n")
 	}
 	w.state = stateNone
@@ -817,15 +818,28 @@ func (w *Writer) StartDTD(name, pubid, sysid string) error {
 	return w.err
 }
 
+// ensureDTDInternalSubset writes the opening " [" for the DTD internal
+// subset if it hasn't been written yet.
+func (w *Writer) ensureDTDInternalSubset() {
+	if w.state == stateDTD {
+		w.writeStr(" [")
+		w.state = stateDTDText
+	}
+}
+
 // EndDTD closes the DOCTYPE declaration.
 func (w *Writer) EndDTD() error {
 	if w.err != nil {
 		return w.err
 	}
-	if w.state != stateDTD {
+	if w.state != stateDTD && w.state != stateDTDText {
 		return errors.New("xmlwriter: EndDTD called outside DTD")
 	}
-	w.writeByte('>')
+	if w.state == stateDTDText {
+		w.writeStr("]>")
+	} else {
+		w.writeByte('>')
+	}
 	w.state = stateDocument
 	return w.err
 }
@@ -848,9 +862,10 @@ func (w *Writer) WriteDTDElement(name, content string) error {
 	if w.err != nil {
 		return w.err
 	}
-	if w.state != stateDTD {
+	if w.state != stateDTD && w.state != stateDTDText {
 		return errors.New("xmlwriter: WriteDTDElement called outside DTD")
 	}
+	w.ensureDTDInternalSubset()
 	w.writeStr("<!ELEMENT ")
 	w.writeStr(name)
 	w.writeByte(' ')
@@ -864,9 +879,10 @@ func (w *Writer) WriteDTDAttlist(name, content string) error {
 	if w.err != nil {
 		return w.err
 	}
-	if w.state != stateDTD {
+	if w.state != stateDTD && w.state != stateDTDText {
 		return errors.New("xmlwriter: WriteDTDAttlist called outside DTD")
 	}
+	w.ensureDTDInternalSubset()
 	w.writeStr("<!ATTLIST ")
 	w.writeStr(name)
 	w.writeByte(' ')
@@ -881,9 +897,10 @@ func (w *Writer) WriteDTDEntity(pe bool, name, content string) error {
 	if w.err != nil {
 		return w.err
 	}
-	if w.state != stateDTD {
+	if w.state != stateDTD && w.state != stateDTDText {
 		return errors.New("xmlwriter: WriteDTDEntity called outside DTD")
 	}
+	w.ensureDTDInternalSubset()
 	w.writeStr("<!ENTITY ")
 	if pe {
 		w.writeStr("% ")
@@ -902,9 +919,10 @@ func (w *Writer) WriteDTDExternalEntity(pe bool, name, pubid, sysid, ndata strin
 	if w.err != nil {
 		return w.err
 	}
-	if w.state != stateDTD {
+	if w.state != stateDTD && w.state != stateDTDText {
 		return errors.New("xmlwriter: WriteDTDExternalEntity called outside DTD")
 	}
+	w.ensureDTDInternalSubset()
 	w.writeStr("<!ENTITY ")
 	if pe {
 		w.writeStr("% ")
@@ -938,9 +956,10 @@ func (w *Writer) WriteDTDNotation(name, pubid, sysid string) error {
 	if w.err != nil {
 		return w.err
 	}
-	if w.state != stateDTD {
+	if w.state != stateDTD && w.state != stateDTDText {
 		return errors.New("xmlwriter: WriteDTDNotation called outside DTD")
 	}
+	w.ensureDTDInternalSubset()
 	w.writeStr("<!NOTATION ")
 	w.writeStr(name)
 	if pubid != "" {

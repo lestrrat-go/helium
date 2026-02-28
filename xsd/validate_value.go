@@ -203,14 +203,16 @@ func validateBuiltinValue(value, builtinLocal string) error {
 		"nonNegativeInteger", "unsignedLong", "unsignedInt", "unsignedShort", "unsignedByte",
 		"positiveInteger":
 		return validateInteger(value)
-	case "float", "double":
-		return validateFloat(value)
 	case "hexBinary":
 		return validateHexBinary(value)
-	case "base64Binary":
-		return validateBase64Binary(value)
 	case "date":
 		return validateDate(value)
+	case "boolean":
+		return validateBoolean(value)
+	case "language":
+		return validateLanguage(value)
+	case "float", "double":
+		return validateFloat(value)
 	case "dateTime":
 		return validateDateTime(value)
 	case "time":
@@ -223,30 +225,31 @@ func validateBuiltinValue(value, builtinLocal string) error {
 		return validateGYearMonth(value)
 	case "gMonth":
 		return validateGMonth(value)
-	case "gMonthDay":
-		return validateGMonthDay(value)
 	case "gDay":
 		return validateGDay(value)
-	case "boolean":
-		return validateBoolean(value)
-	case "language":
-		return validateLanguage(value)
-	case "Name":
-		return validateName(value)
+	case "gMonthDay":
+		return validateGMonthDay(value)
 	case "NCName", "ID", "IDREF", "ENTITY":
 		return validateNCName(value)
+	case "Name":
+		return validateName(value)
 	case "NMTOKEN":
 		return validateNMTOKEN(value)
+	case "QName", "NOTATION":
+		return validateQName(value)
+	case "base64Binary":
+		return validateBase64Binary(value)
 	case "normalizedString":
 		return validateNormalizedString(value)
 	case "token":
 		return validateToken(value)
-	case "QName", "NOTATION":
-		return validateQName(value)
+	case "IDREFS", "ENTITIES":
+		return validateSpaceSeparatedList(value, validateNCName)
+	case "NMTOKENS":
+		return validateSpaceSeparatedList(value, validateNMTOKEN)
 	case "anyURI":
 		return nil
 	default:
-		// No value-space validation for other types (string, etc.)
 		return nil
 	}
 }
@@ -283,8 +286,11 @@ func validateHexBinary(value string) error {
 	return nil
 }
 
+// tzSuffix is the timezone suffix pattern shared by date/time types.
+const tzSuffix = `([Zz]|[+-]\d{2}:\d{2})?`
+
 // dateRegex is a basic match for xs:date: YYYY-MM-DD with optional timezone.
-var dateRegex = regexp.MustCompile(`^-?\d{4,}-\d{2}-\d{2}([Zz]|[+-]\d{2}:\d{2})?$`)
+var dateRegex = regexp.MustCompile(`^-?\d{4,}-\d{2}-\d{2}` + tzSuffix + `$`)
 
 func validateDate(value string) error {
 	if !dateRegex.MatchString(value) {
@@ -311,7 +317,7 @@ func validateBoolean(value string) error {
 	return fmt.Errorf("invalid boolean")
 }
 
-// floatRegex matches the lexical space of xs:float and xs:double.
+// floatRegex matches xs:float and xs:double.
 var floatRegex = regexp.MustCompile(`^[+-]?((\d+\.?\d*|\.\d+)([eE][+-]?\d+)?|INF|NaN)$`)
 
 func validateFloat(value string) error {
@@ -321,8 +327,8 @@ func validateFloat(value string) error {
 	return nil
 }
 
-// dateTimeRegex matches the lexical space of xs:dateTime.
-var dateTimeRegex = regexp.MustCompile(`^-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})?$`)
+// dateTimeRegex matches xs:dateTime.
+var dateTimeRegex = regexp.MustCompile(`^-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?` + tzSuffix + `$`)
 
 func validateDateTime(value string) error {
 	if !dateTimeRegex.MatchString(value) {
@@ -331,8 +337,8 @@ func validateDateTime(value string) error {
 	return nil
 }
 
-// timeRegex matches the lexical space of xs:time.
-var timeRegex = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})?$`)
+// timeRegex matches xs:time.
+var timeRegex = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}(\.\d+)?` + tzSuffix + `$`)
 
 func validateTime(value string) error {
 	if !timeRegex.MatchString(value) {
@@ -341,24 +347,27 @@ func validateTime(value string) error {
 	return nil
 }
 
-// durationRegex matches the lexical space of xs:duration.
-// Must have at least one component after P (or after T).
+// durationRegex matches xs:duration.
 var durationRegex = regexp.MustCompile(`^-?P(\d+Y)?(\d+M)?(\d+D)?(T(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$`)
 
 func validateDuration(value string) error {
 	if !durationRegex.MatchString(value) {
 		return fmt.Errorf("invalid duration")
 	}
-	// Must have at least one component: reject bare "P" or "PT".
-	stripped := strings.TrimPrefix(value, "-")
-	if stripped == "P" || stripped == "PT" {
+	// At least one component must be present after P.
+	s := value
+	if len(s) > 0 && s[0] == '-' {
+		s = s[1:]
+	}
+	s = s[1:] // remove 'P'
+	if s == "" || s == "T" {
 		return fmt.Errorf("invalid duration")
 	}
 	return nil
 }
 
-// gYearRegex matches the lexical space of xs:gYear.
-var gYearRegex = regexp.MustCompile(`^-?\d{4,}([Zz]|[+-]\d{2}:\d{2})?$`)
+// gYearRegex matches xs:gYear.
+var gYearRegex = regexp.MustCompile(`^-?\d{4,}` + tzSuffix + `$`)
 
 func validateGYear(value string) error {
 	if !gYearRegex.MatchString(value) {
@@ -367,8 +376,8 @@ func validateGYear(value string) error {
 	return nil
 }
 
-// gYearMonthRegex matches the lexical space of xs:gYearMonth.
-var gYearMonthRegex = regexp.MustCompile(`^-?\d{4,}-\d{2}([Zz]|[+-]\d{2}:\d{2})?$`)
+// gYearMonthRegex matches xs:gYearMonth.
+var gYearMonthRegex = regexp.MustCompile(`^-?\d{4,}-\d{2}` + tzSuffix + `$`)
 
 func validateGYearMonth(value string) error {
 	if !gYearMonthRegex.MatchString(value) {
@@ -377,8 +386,8 @@ func validateGYearMonth(value string) error {
 	return nil
 }
 
-// gMonthRegex matches the lexical space of xs:gMonth.
-var gMonthRegex = regexp.MustCompile(`^--\d{2}([Zz]|[+-]\d{2}:\d{2})?$`)
+// gMonthRegex matches xs:gMonth.
+var gMonthRegex = regexp.MustCompile(`^--\d{2}` + tzSuffix + `$`)
 
 func validateGMonth(value string) error {
 	if !gMonthRegex.MatchString(value) {
@@ -387,18 +396,8 @@ func validateGMonth(value string) error {
 	return nil
 }
 
-// gMonthDayRegex matches the lexical space of xs:gMonthDay.
-var gMonthDayRegex = regexp.MustCompile(`^--\d{2}-\d{2}([Zz]|[+-]\d{2}:\d{2})?$`)
-
-func validateGMonthDay(value string) error {
-	if !gMonthDayRegex.MatchString(value) {
-		return fmt.Errorf("invalid gMonthDay")
-	}
-	return nil
-}
-
-// gDayRegex matches the lexical space of xs:gDay.
-var gDayRegex = regexp.MustCompile(`^---\d{2}([Zz]|[+-]\d{2}:\d{2})?$`)
+// gDayRegex matches xs:gDay.
+var gDayRegex = regexp.MustCompile(`^---\d{2}` + tzSuffix + `$`)
 
 func validateGDay(value string) error {
 	if !gDayRegex.MatchString(value) {
@@ -407,30 +406,38 @@ func validateGDay(value string) error {
 	return nil
 }
 
-// nameRegex matches the lexical space of xs:Name.
-// NameStartChar: letter, _, :
-// NameChar: NameStartChar + digit, -, .
-var nameRegex = regexp.MustCompile(`^[a-zA-Z_:][a-zA-Z0-9_.:\-]*$`)
+// gMonthDayRegex matches xs:gMonthDay.
+var gMonthDayRegex = regexp.MustCompile(`^--\d{2}-\d{2}` + tzSuffix + `$`)
 
-func validateName(value string) error {
-	if value == "" || !nameRegex.MatchString(value) {
-		return fmt.Errorf("invalid Name")
+func validateGMonthDay(value string) error {
+	if !gMonthDayRegex.MatchString(value) {
+		return fmt.Errorf("invalid gMonthDay")
 	}
 	return nil
 }
 
-// ncNameRegex matches the lexical space of xs:NCName (Name without colons).
-var ncNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_.\-]*$`)
+// ncNameRegex matches XML NCName: letter or underscore, then name chars (no colon).
+var ncNameRegex = regexp.MustCompile(`^[a-zA-Z_][\w.-]*$`)
 
 func validateNCName(value string) error {
-	if value == "" || !ncNameRegex.MatchString(value) {
+	if !ncNameRegex.MatchString(value) {
 		return fmt.Errorf("invalid NCName")
 	}
 	return nil
 }
 
-// nmtokenRegex matches the lexical space of xs:NMTOKEN.
-var nmtokenRegex = regexp.MustCompile(`^[a-zA-Z0-9_.:\-]+$`)
+// nameRegex matches XML Name: like NCName but allows colon.
+var nameRegex = regexp.MustCompile(`^[a-zA-Z_:][\w.:-]*$`)
+
+func validateName(value string) error {
+	if !nameRegex.MatchString(value) {
+		return fmt.Errorf("invalid Name")
+	}
+	return nil
+}
+
+// nmtokenRegex matches XML NMTOKEN: one or more name characters.
+var nmtokenRegex = regexp.MustCompile(`^[\w.:-]+$`)
 
 func validateNMTOKEN(value string) error {
 	if !nmtokenRegex.MatchString(value) {
@@ -459,8 +466,22 @@ func validateToken(value string) error {
 	return nil
 }
 
+func validateQName(value string) error {
+	parts := strings.SplitN(value, ":", 2)
+	if len(parts) == 1 {
+		return validateNCName(value)
+	}
+	if err := validateNCName(parts[0]); err != nil {
+		return fmt.Errorf("invalid QName")
+	}
+	if err := validateNCName(parts[1]); err != nil {
+		return fmt.Errorf("invalid QName")
+	}
+	return nil
+}
+
 // base64Regex matches the lexical space of xs:base64Binary.
-var base64Regex = regexp.MustCompile(`^[A-Za-z0-9+/\s]*(={0,2}\s*)?$`)
+var base64Regex = regexp.MustCompile(`^[A-Za-z0-9+/=\s]*$`)
 
 func validateBase64Binary(value string) error {
 	if !base64Regex.MatchString(value) {
@@ -469,12 +490,18 @@ func validateBase64Binary(value string) error {
 	return nil
 }
 
-// qnameRegex matches the lexical space of xs:QName and xs:NOTATION.
-var qnameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_.\-]*(:[a-zA-Z_][a-zA-Z0-9_.\-]*)?$`)
-
-func validateQName(value string) error {
-	if value == "" || !qnameRegex.MatchString(value) {
-		return fmt.Errorf("invalid QName")
+func validateSpaceSeparatedList(value string, validateItem func(string) error) error {
+	if value == "" {
+		return fmt.Errorf("empty list")
+	}
+	items := strings.Fields(value)
+	if len(items) == 0 {
+		return fmt.Errorf("empty list")
+	}
+	for _, item := range items {
+		if err := validateItem(item); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -199,6 +199,130 @@ func TestGoldenFiles(t *testing.T) {
 	t.Logf("Results: %d passed, %d failed, %d skipped (out of %d total)", passed, failed, skipped, len(cases))
 }
 
+func TestXsiNil(t *testing.T) {
+	const schemaSrc = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="nillable-elem" type="xs:string" nillable="true" minOccurs="0"/>
+        <xs:element name="non-nillable-elem" type="xs:string" minOccurs="0"/>
+        <xs:element name="nillable-complex" nillable="true" minOccurs="0">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="child" type="xs:string" minOccurs="0"/>
+            </xs:sequence>
+            <xs:attribute name="attr1" type="xs:string"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	schemaDoc, err := helium.Parse([]byte(schemaSrc))
+	require.NoError(t, err)
+
+	schema, err := xsd.Compile(schemaDoc)
+	require.NoError(t, err)
+
+	t.Run("nillable element with xsi:nil=true validates", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <nillable-elem xsi:nil="true"/>
+</root>`))
+		require.NoError(t, err)
+
+		result := xsd.Validate(doc, schema)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+	})
+
+	t.Run("non-nillable element with xsi:nil=true fails", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <non-nillable-elem xsi:nil="true"/>
+</root>`))
+		require.NoError(t, err)
+
+		result := xsd.Validate(doc, schema)
+		require.Contains(t, result, "not nillable")
+		require.Contains(t, result, "fails to validate")
+	})
+
+	t.Run("nilled element with text content fails", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <nillable-elem xsi:nil="true">some text</nillable-elem>
+</root>`))
+		require.NoError(t, err)
+
+		result := xsd.Validate(doc, schema)
+		require.Contains(t, result, "nilled")
+		require.Contains(t, result, "fails to validate")
+	})
+
+	t.Run("nilled element with child element fails", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <nillable-complex xsi:nil="true"><child>x</child></nillable-complex>
+</root>`))
+		require.NoError(t, err)
+
+		result := xsd.Validate(doc, schema)
+		require.Contains(t, result, "nilled")
+		require.Contains(t, result, "fails to validate")
+	})
+
+	t.Run("nilled complex element with attributes validates", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <nillable-complex xsi:nil="true" attr1="val"/>
+</root>`))
+		require.NoError(t, err)
+
+		result := xsd.Validate(doc, schema)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+	})
+
+	t.Run("nillable element without xsi:nil validates normally", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <nillable-elem>hello</nillable-elem>
+</root>`))
+		require.NoError(t, err)
+
+		result := xsd.Validate(doc, schema)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+	})
+
+	t.Run("xsi:nil=1 is equivalent to true", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <nillable-elem xsi:nil="1"/>
+</root>`))
+		require.NoError(t, err)
+
+		result := xsd.Validate(doc, schema)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+	})
+
+	t.Run("xsi:nil=false does not trigger nil handling", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <nillable-elem xsi:nil="false">hello</nillable-elem>
+</root>`))
+		require.NoError(t, err)
+
+		result := xsd.Validate(doc, schema)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+	})
+}
+
 // extractBaseName extracts the base name from a result file name.
 // e.g. "all_0_3" → "all", "list0_0_2" → "list0", "elem0_0_0" → "elem0"
 func extractBaseName(name string) string {
@@ -209,4 +333,87 @@ func extractBaseName(name string) string {
 		return name
 	}
 	return strings.Join(parts[:len(parts)-2], "_")
+}
+
+func TestDefaultFixedValidation(t *testing.T) {
+	compileAndValidate := func(t *testing.T, xsdStr, xmlStr string) string {
+		t.Helper()
+		xsdDoc, err := helium.Parse([]byte(xsdStr))
+		require.NoError(t, err, "XSD parse failed")
+		schema, err := xsd.Compile(xsdDoc)
+		require.NoError(t, err, "schema compilation failed")
+		require.Empty(t, schema.CompileErrors(), "unexpected compile errors")
+
+		xmlDoc, err := helium.Parse([]byte(xmlStr))
+		require.NoError(t, err, "XML parse failed")
+		return xsd.Validate(xmlDoc, schema, xsd.WithFilename("test.xml"))
+	}
+
+	t.Run("element_fixed_correct_value", func(t *testing.T) {
+		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:string" fixed="hello"/>
+</xs:schema>`
+		xmlStr := `<root>hello</root>`
+		result := compileAndValidate(t, xsdStr, xmlStr)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+	})
+
+	t.Run("element_fixed_wrong_value", func(t *testing.T) {
+		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:string" fixed="hello"/>
+</xs:schema>`
+		xmlStr := `<root>wrong</root>`
+		result := compileAndValidate(t, xsdStr, xmlStr)
+		require.Contains(t, result, "fixed value constraint")
+		require.Contains(t, result, "fails to validate")
+	})
+
+	t.Run("element_fixed_empty", func(t *testing.T) {
+		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:string" fixed="hello"/>
+</xs:schema>`
+		xmlStr := `<root/>`
+		result := compileAndValidate(t, xsdStr, xmlStr)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+	})
+
+	t.Run("element_default_empty_integer", func(t *testing.T) {
+		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:integer" default="42"/>
+</xs:schema>`
+		xmlStr := `<root/>`
+		result := compileAndValidate(t, xsdStr, xmlStr)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+	})
+
+	t.Run("attribute_fixed_correct", func(t *testing.T) {
+		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="color" type="xs:string" fixed="red"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		xmlStr := `<root color="red"/>`
+		result := compileAndValidate(t, xsdStr, xmlStr)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+	})
+
+	t.Run("attribute_fixed_wrong", func(t *testing.T) {
+		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="color" type="xs:string" fixed="red"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		xmlStr := `<root color="blue"/>`
+		result := compileAndValidate(t, xsdStr, xmlStr)
+		require.Contains(t, result, "fixed value constraint")
+		require.Contains(t, result, "fails to validate")
+	})
 }

@@ -5,6 +5,16 @@ import (
 	"fmt"
 )
 
+// ErrorLevel represents the severity of a parse error.
+type ErrorLevel int
+
+const (
+	ErrorLevelNone    ErrorLevel = iota
+	ErrorLevelWarning
+	ErrorLevelError
+	ErrorLevelFatal
+)
+
 var (
 	ErrNilNode            = errors.New("nil node")
 	ErrInvalidOperation   = errors.New("operation cannot be performed")
@@ -26,7 +36,8 @@ type ErrAttrNotFound struct {
 type ErrParseError struct {
 	Column     int
 	Err        error
-	Location   int
+	File       string
+	Level      ErrorLevel
 	Line       string
 	LineNumber int
 }
@@ -79,6 +90,16 @@ var (
 )
 
 func (e ErrParseError) Error() string {
+	if e.File != "" {
+		return fmt.Sprintf(
+			"%s: %s at line %d, column %d\n -> '%s' <-- around here",
+			e.File,
+			e.Err,
+			e.LineNumber,
+			e.Column,
+			e.Line,
+		)
+	}
 	return fmt.Sprintf(
 		"%s at line %d, column %d\n -> '%s' <-- around here",
 		e.Err,
@@ -88,10 +109,14 @@ func (e ErrParseError) Error() string {
 	)
 }
 
+func (e ErrParseError) Unwrap() error {
+	return e.Err
+}
+
 func (e ErrUnimplemented) Error() string {
 	return "unimplemented method: '" + e.target + "'"
 }
 
 func (e ErrDTDDupToken) Error() string {
-	return "standlone: attribute enumeration value token " + e.Name + " duplicated"
+	return "standalone: attribute enumeration value token " + e.Name + " duplicated"
 }

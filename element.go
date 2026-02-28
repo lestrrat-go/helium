@@ -46,16 +46,18 @@ func newElement(name string) *Element {
 	return &e
 }
 
-func (n Element) XMLString() (string, error) {
+// XMLString serializes the element to an XML string using the given options.
+func (n Element) XMLString(options ...DumpOption) (string, error) {
 	out := bytes.Buffer{}
-	if err := n.XML(&out); err != nil {
+	if err := n.XML(&out, options...); err != nil {
 		return "", err
 	}
 	return out.String(), nil
 }
 
-func (n *Element) XML(out io.Writer) error {
-	return (&Dumper{}).DumpNode(out, n)
+// XML serializes the element to w using the given options.
+func (n *Element) XML(out io.Writer, options ...DumpOption) error {
+	return newDumper(options).DumpNode(out, n)
 }
 
 // AddChild adds a new child node to the end of the children nodes.
