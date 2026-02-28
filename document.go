@@ -334,15 +334,19 @@ func (d *Document) GetEntity(name string) (ent *Entity, found bool) {
 			pdebug.Printf("Looking into internal subset...")
 		}
 		ent, found = ints.LookupEntity(name)
-		return
+		if found {
+			return
+		}
 	}
 
-	if exts := d.extSubset; exts != nil {
-		if pdebug.Enabled {
-			pdebug.Printf("Looking into external subset...")
+	if d.standalone != StandaloneExplicitYes {
+		if exts := d.extSubset; exts != nil {
+			if pdebug.Enabled {
+				pdebug.Printf("Looking into external subset...")
+			}
+			ent, found = exts.LookupEntity(name)
+			return
 		}
-		ent, found = exts.LookupEntity(name)
-		return
 	}
 
 	return
@@ -350,11 +354,15 @@ func (d *Document) GetEntity(name string) (ent *Entity, found bool) {
 
 func (d *Document) GetParameterEntity(name string) (*Entity, bool) {
 	if ints := d.intSubset; ints != nil {
-		return ints.LookupParameterEntity(name)
+		if ent, ok := ints.LookupParameterEntity(name); ok {
+			return ent, true
+		}
 	}
 
-	if exts := d.extSubset; exts != nil {
-		return exts.LookupParameterEntity(name)
+	if d.standalone != StandaloneExplicitYes {
+		if exts := d.extSubset; exts != nil {
+			return exts.LookupParameterEntity(name)
+		}
 	}
 
 	return nil, false

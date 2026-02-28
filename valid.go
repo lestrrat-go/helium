@@ -202,14 +202,37 @@ func (e *ValidationError) hasErrors() bool {
 	return len(e.Errors) > 0
 }
 
+// docDTDs returns the DTDs to search in order, respecting standalone.
+func docDTDs(doc *Document) []*DTD {
+	var dtds []*DTD
+	if doc.intSubset != nil {
+		dtds = append(dtds, doc.intSubset)
+	}
+	if doc.standalone != StandaloneExplicitYes && doc.extSubset != nil {
+		dtds = append(dtds, doc.extSubset)
+	}
+	return dtds
+}
+
+// lookupElementDecl searches both intSubset and extSubset for an element declaration.
+func lookupElementDecl(doc *Document, name, prefix string) (*ElementDecl, *DTD) {
+	for _, dtd := range docDTDs(doc) {
+		if edecl, ok := dtd.LookupElement(name, prefix); ok {
+			return edecl, dtd
+		}
+		if edecl, ok := dtd.LookupElement(name, ""); ok {
+			return edecl, dtd
+		}
+	}
+	return nil, nil
+}
+
 // validateDocument validates a parsed document against its DTD.
 // This is the equivalent of libxml2's xmlValidateDocument.
 func validateDocument(doc *Document) *ValidationError {
 	ve := &ValidationError{}
 
-	dtd := doc.intSubset
-	if dtd == nil {
-		// No DTD means nothing to validate against
+	if doc.intSubset == nil && doc.extSubset == nil {
 		return nil
 	}
 
@@ -219,7 +242,7 @@ func validateDocument(doc *Document) *ValidationError {
 			return nil
 		}
 		elem := n.(*Element)
-		validateOneElement(doc, dtd, elem, ve)
+		validateOneElement(doc, elem, ve)
 		return nil
 	})
 
@@ -230,22 +253,17 @@ func validateDocument(doc *Document) *ValidationError {
 }
 
 // validateOneElement checks a single element against DTD declarations.
-func validateOneElement(doc *Document, dtd *DTD, elem *Element, ve *ValidationError) {
+func validateOneElement(doc *Document, elem *Element, ve *ValidationError) {
 	name := elem.LocalName()
 
-	// Look up the element declaration
-	edecl, ok := dtd.LookupElement(name, elem.Prefix())
-	if !ok {
-		// Try without prefix (common case for unprefixed documents)
-		edecl, ok = dtd.LookupElement(name, "")
-	}
-	if !ok {
+	edecl, dtd := lookupElementDecl(doc, name, elem.Prefix())
+	if edecl == nil {
 		ve.addf("element %s: no declaration found", name)
 		return
 	}
 
 	// Validate attributes against their declarations
-	validateElementAttributes(doc, dtd, elem, edecl, ve)
+	validateElementAttributes(doc, elem, edecl, ve)
 
 	// Validate element content model
 	validateElementContent(dtd, elem, edecl, ve)
@@ -255,7 +273,7 @@ func validateOneElement(doc *Document, dtd *DTD, elem *Element, ve *ValidationEr
 // - All #REQUIRED attributes are present
 // - #FIXED attributes have the correct value
 // - No undeclared attributes (if element is fully declared)
-func validateElementAttributes(doc *Document, dtd *DTD, elem *Element, edecl *ElementDecl, ve *ValidationError) {
+func validateElementAttributes(doc *Document, elem *Element, edecl *ElementDecl, ve *ValidationError) {
 	ename := elem.LocalName()
 	attrs := elem.Attributes()
 
@@ -265,27 +283,34 @@ func validateElementAttributes(doc *Document, dtd *DTD, elem *Element, edecl *El
 		present[a.LocalName()] = a.Value()
 	}
 
-	// Check all declared attributes for this element
-	for _, adecl := range dtd.AttributesForElement(ename) {
-		aname := adecl.name
-
-		val, found := present[aname]
-
-		switch adecl.def {
-		case AttrDefaultRequired:
-			if !found {
-				ve.addf("element %s: attribute %s is required", ename, aname)
+	// Check all declared attributes from both subsets, dedup by name
+	seen := make(map[string]bool)
+	for _, dtd := range docDTDs(doc) {
+		for _, adecl := range dtd.AttributesForElement(ename) {
+			aname := adecl.name
+			if seen[aname] {
+				continue
 			}
-		case AttrDefaultFixed:
-			if found && val != adecl.defvalue {
-				ve.addf("element %s: attribute %s has value %q but must be %q", ename, aname, val, adecl.defvalue)
-			}
-		}
+			seen[aname] = true
 
-		// Validate attribute value against its type (if present)
-		if found {
-			if err := validateAttributeValueInternal(doc, adecl.atype, val); err != nil {
-				ve.addf("element %s: attribute %s: %s", ename, aname, err)
+			val, found := present[aname]
+
+			switch adecl.def {
+			case AttrDefaultRequired:
+				if !found {
+					ve.addf("element %s: attribute %s is required", ename, aname)
+				}
+			case AttrDefaultFixed:
+				if found && val != adecl.defvalue {
+					ve.addf("element %s: attribute %s has value %q but must be %q", ename, aname, val, adecl.defvalue)
+				}
+			}
+
+			// Validate attribute value against its type (if present)
+			if found {
+				if err := validateAttributeValueInternal(doc, adecl.atype, val); err != nil {
+					ve.addf("element %s: attribute %s: %s", ename, aname, err)
+				}
 			}
 		}
 	}
