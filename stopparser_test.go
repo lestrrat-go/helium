@@ -1,0 +1,196 @@
+package helium
+
+import (
+	"bytes"
+	"testing"
+
+	"github.com/lestrrat-go/helium/sax"
+	"github.com/stretchr/testify/require"
+)
+
+func TestStopParserInCharacters(t *testing.T) {
+	const input = `<?xml version="1.0"?>
+<root>
+  <a>hello</a>
+  <b>world</b>
+</root>`
+
+	s := sax.New()
+	s.CharactersHandler = sax.CharactersFunc(func(ctx sax.Context, ch []byte) error {
+		if string(ch) == "hello" {
+			StopParser(ctx)
+		}
+		return nil
+	})
+
+	p := NewParser()
+	p.SetSAXHandler(s)
+
+	_, err := p.Parse([]byte(input))
+	require.NoError(t, err, "StopParser should not produce an error")
+}
+
+func TestStopParserInStartElementNS(t *testing.T) {
+	const input = `<?xml version="1.0"?>
+<root>
+  <a>hello</a>
+  <target>stop here</target>
+  <c>should not reach</c>
+</root>`
+
+	var seen []string
+	s := sax.New()
+	s.StartElementNSHandler = sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+		seen = append(seen, localname)
+		if localname == "target" {
+			StopParser(ctx)
+		}
+		return nil
+	})
+
+	p := NewParser()
+	p.SetSAXHandler(s)
+
+	_, err := p.Parse([]byte(input))
+	require.NoError(t, err, "StopParser should not produce an error")
+	require.Contains(t, seen, "root")
+	require.Contains(t, seen, "a")
+	require.Contains(t, seen, "target")
+	require.NotContains(t, seen, "c", "elements after stop should not be seen")
+}
+
+func TestStopParserViaPushParser(t *testing.T) {
+	const input = `<?xml version="1.0"?>
+<root>
+  <a>hello</a>
+  <b>world</b>
+</root>`
+
+	s := sax.New()
+	s.StartElementNSHandler = sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+		if localname == "b" {
+			StopParser(ctx)
+		}
+		return nil
+	})
+
+	p := NewParser()
+	p.SetSAXHandler(s)
+	pp := p.NewPushParser()
+	require.NoError(t, pp.Push([]byte(input)))
+	_, err := pp.Close()
+	require.NoError(t, err, "PushParser Close should not produce an error after StopParser")
+}
+
+func TestStopParserInStartDocument(t *testing.T) {
+	const input = `<?xml version="1.0"?><root><child/></root>`
+
+	s := sax.New()
+	s.StartDocumentHandler = sax.StartDocumentFunc(func(ctx sax.Context) error {
+		StopParser(ctx)
+		return nil
+	})
+
+	p := NewParser()
+	p.SetSAXHandler(s)
+
+	_, err := p.Parse([]byte(input))
+	require.NoError(t, err, "StopParser in StartDocument should not produce an error")
+}
+
+func TestStopParserReturnsPartialDoc(t *testing.T) {
+	const input = `<?xml version="1.0"?>
+<root>
+  <a>hello</a>
+  <b>world</b>
+  <c>end</c>
+</root>`
+
+	// Use a tree builder as base, add stop logic on top
+	tb := NewTreeBuilder()
+
+	// Wrap the tree builder so it builds the tree, but stop at <b>
+	wrapper := sax.New()
+	wrapper.SetDocumentLocatorHandler = sax.SetDocumentLocatorFunc(func(ctx sax.Context, loc sax.DocumentLocator) error {
+		return tb.SetDocumentLocator(ctx, loc)
+	})
+	wrapper.StartDocumentHandler = sax.StartDocumentFunc(func(ctx sax.Context) error {
+		return tb.StartDocument(ctx)
+	})
+	wrapper.EndDocumentHandler = sax.EndDocumentFunc(func(ctx sax.Context) error {
+		return tb.EndDocument(ctx)
+	})
+	wrapper.StartElementNSHandler = sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+		if localname == "b" {
+			StopParser(ctx)
+			return nil
+		}
+		return tb.StartElementNS(ctx, localname, prefix, uri, namespaces, attrs)
+	})
+	wrapper.EndElementNSHandler = sax.EndElementNSFunc(func(ctx sax.Context, localname, prefix, uri string) error {
+		return tb.EndElementNS(ctx, localname, prefix, uri)
+	})
+	wrapper.CharactersHandler = sax.CharactersFunc(func(ctx sax.Context, ch []byte) error {
+		return tb.Characters(ctx, ch)
+	})
+	wrapper.IgnorableWhitespaceHandler = sax.IgnorableWhitespaceFunc(func(ctx sax.Context, ch []byte) error {
+		return tb.IgnorableWhitespace(ctx, ch)
+	})
+	wrapper.CommentHandler = sax.CommentFunc(func(ctx sax.Context, value []byte) error {
+		return tb.Comment(ctx, value)
+	})
+	wrapper.ProcessingInstructionHandler = sax.ProcessingInstructionFunc(func(ctx sax.Context, target, data string) error {
+		return tb.ProcessingInstruction(ctx, target, data)
+	})
+	wrapper.CDataBlockHandler = sax.CDataBlockFunc(func(ctx sax.Context, value []byte) error {
+		return tb.CDataBlock(ctx, value)
+	})
+	wrapper.ReferenceHandler = sax.ReferenceFunc(func(ctx sax.Context, name string) error {
+		return tb.Reference(ctx, name)
+	})
+
+	p := NewParser()
+	p.SetSAXHandler(wrapper)
+
+	doc, err := p.Parse([]byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	// The partial doc should have <root> with <a> but not <b> or <c>
+	var buf bytes.Buffer
+	var d Dumper
+	require.NoError(t, d.DumpDoc(&buf, doc))
+	out := buf.String()
+	require.Contains(t, out, "<a>")
+	require.Contains(t, out, "hello")
+	require.NotContains(t, out, "<b>")
+	require.NotContains(t, out, "<c>")
+}
+
+func TestStopParserWithNilContext(t *testing.T) {
+	// StopParser with a non-ParserStopper context should be a no-op
+	StopParser(nil)
+	StopParser("not a parser stopper")
+}
+
+func TestStopParserViaParseReader(t *testing.T) {
+	const input = `<?xml version="1.0"?>
+<root>
+  <a>hello</a>
+  <b>world</b>
+</root>`
+
+	s := sax.New()
+	s.StartElementNSHandler = sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+		if localname == "b" {
+			StopParser(ctx)
+		}
+		return nil
+	})
+
+	p := NewParser()
+	p.SetSAXHandler(s)
+
+	_, err := p.ParseReader(bytes.NewReader([]byte(input)))
+	require.NoError(t, err, "StopParser should not produce an error via ParseReader")
+}

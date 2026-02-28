@@ -108,6 +108,7 @@ type parserCtx struct {
 	maxAmpl     int   // max amplification factor (default 5, 0 = disabled via ParseHuge)
 	// nbentities int
 	inputTab inputStack
+	stopped  bool
 }
 
 type SubstitutionType int
@@ -240,6 +241,13 @@ func (ctx *parserCtx) release() error {
 	ctx.sax = nil
 	ctx.userData = nil
 	return nil
+}
+
+// StopParser signals the parser to stop at the next opportunity.
+// It implements the ParserStopper interface.
+func (ctx *parserCtx) StopParser() {
+	ctx.stopped = true
+	ctx.instate = psEOF
 }
 
 // LineNumber implements sax.DocumentLocator.
@@ -377,6 +385,9 @@ func (ctx *parserCtx) deliverCharacters(handler func(sax.Context, []byte) error,
 	if bufSize <= 0 || len(data) <= bufSize {
 		switch err := handler(ctx.userData, data); err {
 		case nil, sax.ErrHandlerUnspecified:
+			if ctx.stopped {
+				return errParserStopped
+			}
 			return nil
 		default:
 			return ctx.error(err)
@@ -384,6 +395,10 @@ func (ctx *parserCtx) deliverCharacters(handler func(sax.Context, []byte) error,
 	}
 
 	for len(data) > 0 {
+		if ctx.stopped {
+			return errParserStopped
+		}
+
 		end := bufSize
 		if end >= len(data) {
 			// Remaining data fits in one chunk.
@@ -415,6 +430,10 @@ func (ctx *parserCtx) deliverCharacters(handler func(sax.Context, []byte) error,
 }
 
 func (ctx *parserCtx) error(err error) error {
+	// errParserStopped is not a real error; pass through unwrapped.
+	if errors.Is(err, errParserStopped) {
+		return errParserStopped
+	}
 	// If it's wrapped, just return as is
 	if _, ok := err.(ErrParseError); ok {
 		return err
@@ -683,6 +702,10 @@ func (ctx *parserCtx) parseDocument() error {
 		}
 	}
 
+	if ctx.stopped {
+		return errParserStopped
+	}
+
 	// Misc part of the prolog
 	if err := ctx.parseMisc(); err != nil {
 		return ctx.error(err)
@@ -747,6 +770,11 @@ func (ctx *parserCtx) parseDocument() error {
 		if err := ctx.parseElement(); err != nil {
 			return ctx.error(err)
 		}
+
+		if ctx.stopped {
+			return errParserStopped
+		}
+
 		ctx.instate = psEpilogue
 
 		if err := ctx.parseMisc(); err != nil {
@@ -794,7 +822,7 @@ func (ctx *parserCtx) parseContent() error {
 		panic("did not get rune cursor")
 	}
 
-	for !cur.Done() {
+	for !cur.Done() && !ctx.stopped {
 		if cur.HasPrefixString("</") {
 			break
 		}
@@ -837,6 +865,10 @@ func (ctx *parserCtx) parseContent() error {
 		if err := ctx.parseCharData(false); err != nil {
 			return err
 		}
+	}
+
+	if ctx.stopped {
+		return errParserStopped
 	}
 
 	return nil
@@ -2737,6 +2769,9 @@ func (ctx *parserCtx) parseInternalSubset() error {
 	}
 
 	for {
+		if ctx.stopped {
+			return errParserStopped
+		}
 		// Get current cursor in case parameter entity expansion changed the input
 		cur = ctx.getCursor()
 		if cur == nil || cur.Done() || cur.Peek() == ']' {
