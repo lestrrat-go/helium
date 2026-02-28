@@ -93,3 +93,96 @@ func TestDOMToXMLString(t *testing.T) {
 
 	t.Logf("%s", str)
 }
+
+func TestFormatOutput(t *testing.T) {
+	t.Run("nested elements", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
+		require.NoError(t, err)
+
+		str, err := doc.XMLString(helium.WithFormat())
+		require.NoError(t, err)
+
+		expected := "<?xml version=\"1.0\"?>\n<root>\n  <child>\n    <grandchild/>\n  </child>\n</root>\n"
+		require.Equal(t, expected, str)
+	})
+
+	t.Run("text-only element stays inline", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?><root><child>hello</child></root>`))
+		require.NoError(t, err)
+
+		str, err := doc.XMLString(helium.WithFormat())
+		require.NoError(t, err)
+
+		expected := "<?xml version=\"1.0\"?>\n<root>\n  <child>hello</child>\n</root>\n"
+		require.Equal(t, expected, str)
+	})
+
+	t.Run("custom indent string", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
+		require.NoError(t, err)
+
+		str, err := doc.XMLString(helium.WithFormat(), helium.WithIndentString("\t"))
+		require.NoError(t, err)
+
+		expected := "<?xml version=\"1.0\"?>\n<root>\n\t<child>\n\t\t<grandchild/>\n\t</child>\n</root>\n"
+		require.Equal(t, expected, str)
+	})
+
+	t.Run("without format stays compact", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
+		require.NoError(t, err)
+
+		str, err := doc.XMLString()
+		require.NoError(t, err)
+
+		expected := "<?xml version=\"1.0\"?>\n<root><child><grandchild/></child></root>\n"
+		require.Equal(t, expected, str)
+	})
+
+	t.Run("multiple children", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?><root><a/><b/><c/></root>`))
+		require.NoError(t, err)
+
+		str, err := doc.XMLString(helium.WithFormat())
+		require.NoError(t, err)
+
+		expected := "<?xml version=\"1.0\"?>\n<root>\n  <a/>\n  <b/>\n  <c/>\n</root>\n"
+		require.Equal(t, expected, str)
+	})
+
+	t.Run("element XMLString with format", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+
+		str, err := root.XMLString(helium.WithFormat())
+		require.NoError(t, err)
+
+		expected := "<root>\n  <child>\n    <grandchild/>\n  </child>\n</root>"
+		require.Equal(t, expected, str)
+	})
+
+	t.Run("comment and PI children", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?><root><!--comment--><child/><?pi data?></root>`))
+		require.NoError(t, err)
+
+		str, err := doc.XMLString(helium.WithFormat())
+		require.NoError(t, err)
+
+		expected := "<?xml version=\"1.0\"?>\n<root>\n  <!--comment-->\n  <child/>\n  <?pi data?>\n</root>\n"
+		require.Equal(t, expected, str)
+	})
+
+	t.Run("deeply nested", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?><a><b><c><d>text</d></c></b></a>`))
+		require.NoError(t, err)
+
+		str, err := doc.XMLString(helium.WithFormat())
+		require.NoError(t, err)
+
+		expected := "<?xml version=\"1.0\"?>\n<a>\n  <b>\n    <c>\n      <d>text</d>\n    </c>\n  </b>\n</a>\n"
+		require.Equal(t, expected, str)
+	})
+}
