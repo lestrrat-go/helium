@@ -124,6 +124,51 @@ func TestExtSubsetLookup_StandaloneYesPreventsExtSubset(t *testing.T) {
 	require.Contains(t, ve.Error(), "no declaration found")
 }
 
+func TestEnumerationAttributeValidation(t *testing.T) {
+	t.Run("valid value accepted", func(t *testing.T) {
+		xml := `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ELEMENT root EMPTY>
+  <!ATTLIST root color (red|green|blue) #REQUIRED>
+]>
+<root color="green"/>`
+		p := NewParser()
+		p.SetOption(ParseDTDValid)
+		p.SetOption(ParseDTDAttr)
+		_, err := p.Parse([]byte(xml))
+		require.NoError(t, err)
+	})
+
+	t.Run("invalid value rejected", func(t *testing.T) {
+		xml := `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ELEMENT root EMPTY>
+  <!ATTLIST root color (red|green|blue) #REQUIRED>
+]>
+<root color="yellow"/>`
+		p := NewParser()
+		p.SetOption(ParseDTDValid)
+		p.SetOption(ParseDTDAttr)
+		_, err := p.Parse([]byte(xml))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "not among the enumerated set")
+	})
+
+	t.Run("default value used when absent", func(t *testing.T) {
+		xml := `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ELEMENT root EMPTY>
+  <!ATTLIST root color (red|green|blue) "red">
+]>
+<root/>`
+		p := NewParser()
+		p.SetOption(ParseDTDValid)
+		p.SetOption(ParseDTDAttr)
+		_, err := p.Parse([]byte(xml))
+		require.NoError(t, err)
+	})
+}
+
 func TestExtSubsetLookup_ParameterEntityInExtSubset(t *testing.T) {
 	doc := buildTestDoc(StandaloneImplicitNo)
 
