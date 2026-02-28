@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<!DOCTYPE doc [
+<!NOTATION gif SYSTEM "viewgif.exe" >
+<!NOTATION jpeg PUBLIC "-//JPEG//EN" "viewer.exe" >
+<!ELEMENT doc (#PCDATA)>
+]>
+<doc>hello</doc>
