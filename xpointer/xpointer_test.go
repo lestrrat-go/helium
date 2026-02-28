@@ -138,6 +138,51 @@ func TestParseSchemeCircumflexEscape(t *testing.T) {
 	})
 }
 
+func TestCascadingParts(t *testing.T) {
+	// Document with known structure: <book><chapter><image/></chapter></book>
+	doc, err := helium.Parse([]byte(`<book><chapter><image href="linus.gif"/></chapter></book>`))
+	require.NoError(t, err)
+
+	t.Run("first part fails, second succeeds", func(t *testing.T) {
+		// element(foo) fails (no ID "foo"), element(/1/1/1) succeeds
+		nodes, err := Evaluate(doc, "element(foo)element(/1/1/1)")
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+		require.Equal(t, "image", nodes[0].(*helium.Element).LocalName())
+	})
+
+	t.Run("first part succeeds, second ignored", func(t *testing.T) {
+		// element(/1/1/1) succeeds immediately, element(foo) never tried
+		nodes, err := Evaluate(doc, "element(/1/1/1)element(foo)")
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+		require.Equal(t, "image", nodes[0].(*helium.Element).LocalName())
+	})
+
+	t.Run("all parts fail", func(t *testing.T) {
+		// Both element(foo) and element(bar) fail
+		nodes, err := Evaluate(doc, "element(foo)element(bar)")
+		require.NoError(t, err)
+		require.Nil(t, nodes)
+	})
+
+	t.Run("xpath1 cascade", func(t *testing.T) {
+		// First XPath returns empty, second finds the element
+		nodes, err := Evaluate(doc, "xpath1(//nonexistent)xpath1(//image)")
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+		require.Equal(t, "image", nodes[0].(*helium.Element).LocalName())
+	})
+
+	t.Run("error in first part falls back to second", func(t *testing.T) {
+		// xpointer with invalid XPath errors, element() succeeds
+		nodes, err := Evaluate(doc, "xpointer(:::invalid)element(/1/1/1)")
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+		require.Equal(t, "image", nodes[0].(*helium.Element).LocalName())
+	})
+}
+
 func TestParseParts(t *testing.T) {
 	t.Run("single scheme", func(t *testing.T) {
 		parts, err := parseParts("xpointer(/root)")

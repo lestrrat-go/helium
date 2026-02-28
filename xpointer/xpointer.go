@@ -21,14 +21,21 @@ type xptrPart struct {
 //   - xmlns(prefix=uri) scheme: registers namespace bindings for subsequent parts
 //   - element(/1/2/3) scheme: child-sequence navigation
 //   - shorthand pointer: looks up by ID via Document.GetElementByID
+//
+// Multiple scheme parts are evaluated left-to-right with cascading fallback:
+// the first part that produces a non-empty result wins. xmlns() parts
+// accumulate namespace bindings for all subsequent parts.
 func Evaluate(doc *helium.Document, expr string) ([]helium.Node, error) {
 	parts, err := parseParts(expr)
 	if err != nil {
 		return nil, err
 	}
 
-	// Collect xmlns() namespace bindings and find the evaluable part.
+	// Evaluate parts left-to-right with cascading fallback.
+	// xmlns() parts accumulate namespace bindings; other parts are
+	// tried in order and the first non-empty result is returned.
 	var nsMap map[string]string
+	var lastErr error
 	for _, p := range parts {
 		if p.scheme == "xmlns" {
 			prefix, uri, ok := parseXmlnsBody(p.body)
@@ -42,10 +49,22 @@ func Evaluate(doc *helium.Document, expr string) ([]helium.Node, error) {
 			continue
 		}
 
-		return evaluatePart(doc, p, nsMap)
+		nodes, err := evaluatePart(doc, p, nsMap)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if len(nodes) > 0 {
+			return nodes, nil
+		}
+		// Empty result — try next part.
 	}
 
-	return nil, fmt.Errorf("xpointer: no evaluable scheme found in %q", expr)
+	// All parts exhausted with no non-empty result.
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, nil
 }
 
 // evaluatePart evaluates a single non-xmlns XPointer part.
