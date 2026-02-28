@@ -342,6 +342,20 @@ func validateElementAttributes(doc *Document, elem *Element, edecl *ElementDecl,
 					vctx.ve.addf("element %s: attribute %s: %s", ename, aname, err)
 				}
 
+				// Check enumeration value against declared tokens
+				if adecl.atype == AttrEnumeration && len(adecl.tree) > 0 {
+					inEnum := false
+					for _, token := range adecl.tree {
+						if token == val {
+							inEnum = true
+							break
+						}
+					}
+					if !inEnum {
+						vctx.ve.addf("element %s: attribute %s value %q is not among the enumerated set", ename, aname, val)
+					}
+				}
+
 				// Track ID uniqueness and collect IDREFs
 				switch adecl.atype {
 				case AttrID:
