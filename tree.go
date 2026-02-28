@@ -170,6 +170,25 @@ func LookupNSByHref(e *Element, href string) *Namespace {
 	return nil
 }
 
+// lookupAttributeDecl looks up an attribute declaration in the document's
+// internal and external DTD subsets.
+func lookupAttributeDecl(doc *Document, name, prefix, elem string) *AttributeDecl {
+	if doc == nil {
+		return nil
+	}
+	if dtd := doc.IntSubset(); dtd != nil {
+		if decl, ok := dtd.LookupAttribute(name, prefix, elem); ok {
+			return decl
+		}
+	}
+	if dtd := doc.ExtSubset(); dtd != nil {
+		if decl, ok := dtd.LookupAttribute(name, prefix, elem); ok {
+			return decl
+		}
+	}
+	return nil
+}
+
 func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 	//	ctx := ctxif.(*parserCtx)
 	if pdebug.Enabled {
@@ -228,6 +247,19 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 			if err := e.SetAttribute(attr.Name(), attr.Value()); err != nil {
 				return err
 			}
+		}
+	}
+
+	// Propagate attribute types from DTD declarations.
+	elemName := localname
+	if prefix != "" {
+		elemName = prefix + ":" + localname
+	}
+	for _, a := range e.Attributes() {
+		aLocalName := a.LocalName()
+		aPrefix := a.Prefix()
+		if decl := lookupAttributeDecl(doc, aLocalName, aPrefix, elemName); decl != nil {
+			a.SetAType(decl.AType())
 		}
 	}
 
