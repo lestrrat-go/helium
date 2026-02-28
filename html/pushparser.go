@@ -15,19 +15,20 @@ import (
 // buffers all data because the HTML parser operates on []byte directly
 // rather than an io.Reader.
 type PushParser struct {
-	buf bytes.Buffer
-	sax SAXHandler
+	buf     bytes.Buffer
+	sax     SAXHandler
+	options []ParseOption
 }
 
 // NewPushParser creates an HTML PushParser that builds a DOM tree.
-func NewPushParser() *PushParser {
-	return &PushParser{}
+func NewPushParser(options ...ParseOption) *PushParser {
+	return &PushParser{options: options}
 }
 
 // NewPushParserWithSAX creates an HTML PushParser that fires SAX events
 // to the given handler instead of building a DOM tree.
-func NewPushParserWithSAX(h SAXHandler) *PushParser {
-	return &PushParser{sax: h}
+func NewPushParserWithSAX(h SAXHandler, options ...ParseOption) *PushParser {
+	return &PushParser{sax: h, options: options}
 }
 
 // Push appends a chunk of HTML data to the internal buffer.
@@ -46,7 +47,7 @@ func (pp *PushParser) Write(p []byte) (int, error) {
 func (pp *PushParser) Close() (*helium.Document, error) {
 	data := pp.buf.Bytes()
 	if pp.sax != nil {
-		return nil, ParseWithSAX(data, pp.sax)
+		return nil, ParseWithSAX(data, pp.sax, pp.options...)
 	}
-	return Parse(data)
+	return Parse(data, pp.options...)
 }

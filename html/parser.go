@@ -42,6 +42,8 @@ type parser struct {
 	// Empty means UTF-8 (no conversion was needed). "ISO-8859-1" means the
 	// input was Latin-1/Windows-1252 and was converted to UTF-8 for parsing.
 	detectedEncoding string
+
+	cfg parseConfig
 }
 
 // parserLocator implements DocumentLocator.
@@ -54,7 +56,7 @@ func (l *parserLocator) ColumnNumber() int { return l.p.col }
 func (l *parserLocator) GetPublicId() string { return "" }
 func (l *parserLocator) GetSystemId() string { return "" }
 
-func newParser(input []byte, sax SAXHandler) *parser {
+func newParser(input []byte, sax SAXHandler, cfg parseConfig) *parser {
 	// Normalize \r\n → \n and standalone \r → \n (HTML spec line normalization)
 	normalized := normalizeNewlines(input)
 
@@ -95,6 +97,7 @@ func newParser(input []byte, sax SAXHandler) *parser {
 		encodingErrorLine: encErrLine,
 		encodingErrorCol:  encErrCol,
 		detectedEncoding:  detectedEnc,
+		cfg:               cfg,
 	}
 	p.locator = &parserLocator{p: p}
 	return p
@@ -356,7 +359,7 @@ func (p *parser) htmlAutoCloseOnClose(endTag string) {
 	for p.currentName() != "" && p.currentName() != endTag {
 		cur := p.currentName()
 		if desc := lookupElement(cur); desc != nil && desc.EndTag == 3 {
-			_ = p.sax.Error("Opening and ending tag mismatch: %s and %s", endTag, cur)
+			_ = p.emitError("Opening and ending tag mismatch: %s and %s", endTag, cur)
 		}
 		p.popName()
 		_ = p.sax.EndElement(cur)
@@ -373,6 +376,9 @@ func (p *parser) htmlAutoCloseOnEnd() {
 
 // htmlCheckImplied inserts implied html/head/body elements as needed.
 func (p *parser) htmlCheckImplied(newTag string) {
+	if p.cfg.noImplied {
+		return
+	}
 	if newTag == "html" {
 		return
 	}
@@ -537,13 +543,13 @@ func (p *parser) parseEndTag() {
 	}
 
 	if malformed {
-		_ = p.sax.Error("Unexpected end tag : %s", name+string(junkChar))
+		_ = p.emitError("Unexpected end tag : %s", name+string(junkChar))
 		return
 	}
 
 	// Check if this end tag matches anything on the stack
 	if !p.hasOnStack(name) {
-		_ = p.sax.Error("Unexpected end tag : %s", name)
+		_ = p.emitError("Unexpected end tag : %s", name)
 		return
 	}
 
@@ -552,7 +558,7 @@ func (p *parser) parseEndTag() {
 
 	// After auto-close, check for tag mismatch
 	if p.currentName() != "" && p.currentName() != name {
-		_ = p.sax.Error("Opening and ending tag mismatch: %s and %s", name, p.currentName())
+		_ = p.emitError("Opening and ending tag mismatch: %s and %s", name, p.currentName())
 	}
 
 	// If the current open element matches, close it
@@ -824,18 +830,46 @@ func (p *parser) parseCharRef() {
 	_ = p.emitCharacters([]byte(text))
 }
 
+// emitError fires a SAX Error event unless suppressed by WithNoError.
+func (p *parser) emitError(msg string, args ...interface{}) error {
+	if p.cfg.noError {
+		return nil
+	}
+	return p.sax.Error(msg, args...)
+}
+
 // emitCharacters fires the appropriate SAX Characters event.
+// When noBlanks is set, whitespace-only data is suppressed unless
+// inside a raw-text element (script, style, etc.).
 func (p *parser) emitCharacters(data []byte) error {
+	if p.cfg.noBlanks && isAllWhitespace(data) {
+		if !p.inRawTextElement() {
+			return nil
+		}
+	}
 	if p.encodingError && bytes.ContainsRune(data, '\uFFFD') {
 		// Temporarily override line/col so the DocumentLocator reports
 		// the position of the first invalid byte in the original input.
 		savedLine, savedCol := p.line, p.col
 		p.line, p.col = p.encodingErrorLine, p.encodingErrorCol
-		_ = p.sax.Error("Invalid bytes in character encoding")
+		_ = p.emitError("Invalid bytes in character encoding")
 		p.line, p.col = savedLine, savedCol
 		p.encodingError = false
 	}
 	return p.sax.Characters(data)
+}
+
+// inRawTextElement reports whether the parser is currently inside a raw-text
+// element (script, style, iframe, xmp, etc.) or an RCDATA element (title,
+// textarea). Whitespace inside these elements must be preserved even with
+// noBlanks.
+func (p *parser) inRawTextElement() bool {
+	name := p.currentName()
+	if name == "" {
+		return false
+	}
+	desc := lookupElement(name)
+	return desc != nil && desc.DataMode >= dataRCDATA
 }
 
 // scriptState tracks the parser state within script content.
