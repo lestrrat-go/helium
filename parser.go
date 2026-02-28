@@ -161,3 +161,135 @@ func (p *Parser) SetBaseURI(uri string) {
 func (p *Parser) SetCatalog(c icatalog.Resolver) {
 	p.catalog = c
 }
+
+// ParseInNodeContext parses an XML fragment in the context of an existing
+// node. The node provides in-scope namespace declarations and document-level
+// DTD/entity context. Returns the first node of the parsed fragment list
+// (siblings linked via NextSibling). The returned nodes are not attached
+// to any parent.
+func ParseInNodeContext(node Node, data []byte) (Node, error) {
+	return NewParser().ParseInNodeContext(node, data)
+}
+
+// ParseInNodeContext parses an XML fragment in the context of an existing
+// node. The node provides in-scope namespace declarations and document-level
+// DTD/entity context. Returns the first node of the parsed fragment list
+// (siblings linked via NextSibling). The returned nodes are not attached
+// to any parent.
+func (p *Parser) ParseInNodeContext(node Node, data []byte) (Node, error) {
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("=== START Parser.ParseInNodeContext ===")
+		defer g.IRelease("=== END Parser.ParseInNodeContext ===")
+	}
+
+	if node == nil {
+		return nil, errors.New("node must not be nil")
+	}
+
+	// Walk up to the nearest element or document node.
+	var ctxElem *Element
+	var doc *Document
+	cur := node
+	for cur != nil {
+		switch v := cur.(type) {
+		case *Document:
+			doc = v
+			goto found
+		case *Element:
+			ctxElem = v
+			doc = v.doc
+			goto found
+		}
+		cur = cur.Parent()
+	}
+	return nil, errors.New("no element or document context found")
+
+found:
+	if doc == nil {
+		doc = NewDocument("1.0", "", StandaloneImplicitNo)
+	}
+
+	newctx := &parserCtx{}
+	if err := newctx.init(p, bytes.NewReader(data)); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := newctx.release(); err != nil {
+			if pdebug.Enabled {
+				pdebug.Printf("newctx.release() failed: %s", err)
+			}
+		}
+	}()
+
+	// Save the document's children and restore them afterward.
+	fc := doc.FirstChild()
+	lc := doc.LastChild()
+	doc.setFirstChild(nil)
+	doc.setLastChild(nil)
+	defer func() {
+		doc.setFirstChild(fc)
+		doc.setLastChild(lc)
+	}()
+
+	newctx.doc = doc
+
+	// Push in-scope namespaces from the context element into the parser's
+	// namespace stack so that the fragment can resolve prefixed names.
+	if ctxElem != nil {
+		nsList := collectInScopeNamespaces(ctxElem)
+		for _, ns := range nsList {
+			newctx.pushNS(ns.Prefix(), ns.URI())
+		}
+	}
+
+	// Create pseudoroot element, push to node stack.
+	newRoot, err := doc.CreateElement("pseudoroot")
+	if err != nil {
+		return nil, err
+	}
+	newctx.pushNode(newRoot)
+	newctx.elem = newRoot
+	if err := doc.AddChild(newRoot); err != nil {
+		return nil, err
+	}
+
+	if err := newctx.switchEncoding(); err != nil {
+		return nil, err
+	}
+	if err := newctx.parseContent(); err != nil {
+		return nil, err
+	}
+
+	// Extract children from pseudoroot.
+	if child := doc.FirstChild(); child != nil {
+		if grandchild := child.FirstChild(); grandchild != nil {
+			for e := grandchild; e != nil; e = e.NextSibling() {
+				e.SetTreeDoc(doc)
+				e.SetParent(nil)
+			}
+			return grandchild, nil
+		}
+	}
+
+	return nil, nil
+}
+
+// collectInScopeNamespaces walks up from elem collecting all namespace
+// declarations. Inner declarations shadow outer ones (closer to elem wins).
+func collectInScopeNamespaces(elem *Element) []*Namespace {
+	seen := map[string]bool{}
+	var result []*Namespace
+	var cur Node = elem
+	for cur != nil {
+		if e, ok := cur.(*Element); ok {
+			for _, ns := range e.Namespaces() {
+				if !seen[ns.Prefix()] {
+					seen[ns.Prefix()] = true
+					result = append(result, ns)
+				}
+			}
+		}
+		cur = cur.Parent()
+	}
+	return result
+}

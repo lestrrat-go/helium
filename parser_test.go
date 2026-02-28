@@ -623,3 +623,163 @@ func TestParseDTDValidIDRefsMissing(t *testing.T) {
 	require.Error(t, err, "IDREFS with missing ref should fail")
 	require.Contains(t, err.Error(), "unknown ID")
 }
+
+func TestParseInNodeContext(t *testing.T) {
+	t.Run("basic fragment", func(t *testing.T) {
+		doc, err := Parse([]byte(`<root/>`))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+
+		result, err := ParseInNodeContext(root, []byte(`<child/>`))
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, ElementNode, result.Type())
+		require.Equal(t, "child", result.Name())
+		require.Nil(t, result.Parent())
+	})
+
+	t.Run("multiple sibling nodes", func(t *testing.T) {
+		doc, err := Parse([]byte(`<root/>`))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		result, err := ParseInNodeContext(root, []byte(`<a/><b/>text`))
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, "a", result.Name())
+
+		sib := result.NextSibling()
+		require.NotNil(t, sib)
+		require.Equal(t, "b", sib.Name())
+
+		text := sib.NextSibling()
+		require.NotNil(t, text)
+		require.Equal(t, TextNode, text.Type())
+		require.Equal(t, "text", string(text.Content()))
+	})
+
+	t.Run("namespace inheritance", func(t *testing.T) {
+		doc, err := Parse([]byte(`<root xmlns:ns="http://example.com/ns"><child/></root>`))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		result, err := ParseInNodeContext(root, []byte(`<ns:item>hello</ns:item>`))
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, ElementNode, result.Type())
+		// The element should have been parsed successfully using the inherited ns prefix
+		elem, ok := result.(*Element)
+		require.True(t, ok)
+		require.Equal(t, "ns:item", elem.Name())
+	})
+
+	t.Run("nested namespace inheritance", func(t *testing.T) {
+		doc, err := Parse([]byte(`<root xmlns:a="http://a.example.com"><middle xmlns:b="http://b.example.com"><child/></middle></root>`))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		middle := root.FirstChild()
+		require.NotNil(t, middle)
+
+		// Parse fragment in context of middle — should see both a: and b: prefixes
+		result, err := ParseInNodeContext(middle, []byte(`<a:x/><b:y/>`))
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, "a:x", result.Name())
+		sib := result.NextSibling()
+		require.NotNil(t, sib)
+		require.Equal(t, "b:y", sib.Name())
+	})
+
+	t.Run("fragment with own namespaces", func(t *testing.T) {
+		doc, err := Parse([]byte(`<root/>`))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		result, err := ParseInNodeContext(root, []byte(`<ns:item xmlns:ns="http://example.com/ns">hello</ns:item>`))
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, "ns:item", result.Name())
+	})
+
+	t.Run("document as context", func(t *testing.T) {
+		doc, err := Parse([]byte(`<root/>`))
+		require.NoError(t, err)
+
+		result, err := ParseInNodeContext(doc, []byte(`<elem/>`))
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, "elem", result.Name())
+	})
+
+	t.Run("non-element context walks up", func(t *testing.T) {
+		doc, err := Parse([]byte(`<root xmlns:ns="http://example.com/ns"><child>some text</child></root>`))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		child := root.FirstChild()
+		require.NotNil(t, child)
+		textNode := child.FirstChild()
+		require.NotNil(t, textNode)
+		require.Equal(t, TextNode, textNode.Type())
+
+		// Parse in context of text node — should walk up to <child> then <root>
+		result, err := ParseInNodeContext(textNode, []byte(`<ns:item/>`))
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, "ns:item", result.Name())
+	})
+
+	t.Run("DTD entity resolution", func(t *testing.T) {
+		doc, err := Parse([]byte(`<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY greeting "hello world">
+]>
+<doc/>`))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		p := NewParser()
+		p.SetOption(ParseNoEnt)
+		result, err := p.ParseInNodeContext(root, []byte(`<item>&greeting;</item>`))
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, "item", result.Name())
+		// The entity should have been resolved
+		require.Equal(t, "hello world", string(result.FirstChild().Content()))
+	})
+
+	t.Run("empty fragment", func(t *testing.T) {
+		doc, err := Parse([]byte(`<root/>`))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		result, err := ParseInNodeContext(root, []byte(``))
+		require.NoError(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("nil node", func(t *testing.T) {
+		_, err := ParseInNodeContext(nil, []byte(`<child/>`))
+		require.Error(t, err)
+	})
+
+	t.Run("original document preserved", func(t *testing.T) {
+		doc, err := Parse([]byte(`<root><existing/></root>`))
+		require.NoError(t, err)
+
+		root := doc.DocumentElement()
+		_, err = ParseInNodeContext(root, []byte(`<new/>`))
+		require.NoError(t, err)
+
+		// Original document should still have its children
+		require.NotNil(t, doc.FirstChild())
+		docRoot := doc.DocumentElement()
+		require.NotNil(t, docRoot)
+		require.Equal(t, "root", docRoot.Name())
+		require.NotNil(t, docRoot.FirstChild())
+		require.Equal(t, "existing", docRoot.FirstChild().Name())
+	})
+}
