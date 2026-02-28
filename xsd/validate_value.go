@@ -560,6 +560,24 @@ func checkFacets(value string, fs *FacetSet, builtinLocal, elemName, filename st
 		}
 	}
 
+	// minExclusive.
+	if fs.MinExclusive != nil {
+		if !checkMinExclusive(value, *fs.MinExclusive) {
+			msg := fmt.Sprintf("[facet 'minExclusive'] The value '%s' must be greater than '%s'.", value, *fs.MinExclusive)
+			out.WriteString(validityError(filename, line, elemName, msg))
+			anyErr = fmt.Errorf("minExclusive")
+		}
+	}
+
+	// maxExclusive.
+	if fs.MaxExclusive != nil {
+		if !checkMaxExclusive(value, *fs.MaxExclusive) {
+			msg := fmt.Sprintf("[facet 'maxExclusive'] The value '%s' must be less than '%s'.", value, *fs.MaxExclusive)
+			out.WriteString(validityError(filename, line, elemName, msg))
+			anyErr = fmt.Errorf("maxExclusive")
+		}
+	}
+
 	// totalDigits.
 	if fs.TotalDigits != nil {
 		digits := countTotalDigits(value)
@@ -567,6 +585,16 @@ func checkFacets(value string, fs *FacetSet, builtinLocal, elemName, filename st
 			msg := fmt.Sprintf("[facet 'totalDigits'] The value '%s' has more digits than are allowed ('%d').", value, *fs.TotalDigits)
 			out.WriteString(validityError(filename, line, elemName, msg))
 			anyErr = fmt.Errorf("totalDigits")
+		}
+	}
+
+	// fractionDigits.
+	if fs.FractionDigits != nil {
+		frac := countFractionDigits(value)
+		if frac > *fs.FractionDigits {
+			msg := fmt.Sprintf("[facet 'fractionDigits'] The value '%s' has more fractional digits than are allowed ('%d').", value, *fs.FractionDigits)
+			out.WriteString(validityError(filename, line, elemName, msg))
+			anyErr = fmt.Errorf("fractionDigits")
 		}
 	}
 
@@ -630,6 +658,26 @@ func checkMaxInclusive(value, max string) bool {
 	return v.Cmp(m) <= 0
 }
 
+// checkMinExclusive compares value > min as decimal numbers.
+func checkMinExclusive(value, min string) bool {
+	v, ok1 := new(big.Rat).SetString(value)
+	m, ok2 := new(big.Rat).SetString(min)
+	if !ok1 || !ok2 {
+		return true // can't compare, don't error
+	}
+	return v.Cmp(m) > 0
+}
+
+// checkMaxExclusive compares value < max as decimal numbers.
+func checkMaxExclusive(value, max string) bool {
+	v, ok1 := new(big.Rat).SetString(value)
+	m, ok2 := new(big.Rat).SetString(max)
+	if !ok1 || !ok2 {
+		return true
+	}
+	return v.Cmp(m) < 0
+}
+
 // countTotalDigits counts the total number of significant digits in a decimal value.
 // Per XML Schema spec: strip sign, then count digits in the numeral excluding
 // leading zeros before the integer part and trailing zeros after the fraction.
@@ -660,6 +708,21 @@ func countTotalDigits(value string) int {
 		return 1 // "0.0" has 1 digit
 	}
 	return total
+}
+
+// countFractionDigits counts the number of digits after the decimal point.
+// If there is no decimal point, returns 0.
+// Trailing zeros are significant: "1.20" → 2, "1.0" → 1.
+func countFractionDigits(value string) int {
+	s := value
+	if len(s) > 0 && (s[0] == '+' || s[0] == '-') {
+		s = s[1:]
+	}
+	dotIdx := strings.Index(s, ".")
+	if dotIdx < 0 {
+		return 0
+	}
+	return len(s) - dotIdx - 1
 }
 
 // facetLength returns the effective length of a value for facet checking.

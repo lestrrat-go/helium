@@ -145,14 +145,18 @@ type TypeDef struct {
 
 // FacetSet holds facet constraints for a simple type restriction.
 type FacetSet struct {
-	Enumeration  []string
-	MinInclusive *string
-	MaxInclusive *string
-	TotalDigits  *int
-	Length       *int
-	MinLength    *int
-	MaxLength    *int
-	Pattern      *string
+	Enumeration    []string
+	MinInclusive   *string
+	MaxInclusive   *string
+	MinExclusive   *string
+	MaxExclusive   *string
+	TotalDigits    *int
+	FractionDigits *int
+	Length         *int
+	MinLength      *int
+	MaxLength      *int
+	Pattern        *string
+	WhiteSpace     *string
 }
 
 // AttrUse is a stub for attribute use declarations (future phases).
