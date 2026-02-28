@@ -358,13 +358,13 @@ func TestStartDTDWithInternalDecls(t *testing.T) {
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
 	expected := "<?xml version=\"1.0\"?>" +
-		"<!DOCTYPE root" +
+		"<!DOCTYPE root [" +
 		"<!ELEMENT root (child)>" +
 		"<!ELEMENT child (#PCDATA)>" +
 		"<!ATTLIST root id CDATA #IMPLIED>" +
 		"<!ENTITY copy \"\u00A9\">" +
 		"<!ENTITY % content \"stuff\">" +
-		"><root/>"
+		"]><root/>"
 	require.Equal(t, expected, strings.TrimRight(buf.String(), "\n"))
 }
 
@@ -378,7 +378,7 @@ func TestDTDExternalEntity(t *testing.T) {
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
-	expected := `<?xml version="1.0"?><!DOCTYPE root<!ENTITY logo SYSTEM "logo.gif" NDATA gif>><root/>`
+	expected := `<?xml version="1.0"?><!DOCTYPE root [<!ENTITY logo SYSTEM "logo.gif" NDATA gif>]><root/>`
 	require.Equal(t, expected, strings.TrimRight(buf.String(), "\n"))
 }
 
@@ -392,7 +392,7 @@ func TestDTDNotation(t *testing.T) {
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
-	expected := `<?xml version="1.0"?><!DOCTYPE root<!NOTATION gif SYSTEM "image/gif">><root/>`
+	expected := `<?xml version="1.0"?><!DOCTYPE root [<!NOTATION gif SYSTEM "image/gif">]><root/>`
 	require.Equal(t, expected, strings.TrimRight(buf.String(), "\n"))
 }
 
@@ -408,7 +408,7 @@ func TestIndentation(t *testing.T) {
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
-	expected := "<?xml version=\"1.0\"?>\n<root>\n  <child>text</child>\n  <child/>\n</root>\n"
+	expected := "<?xml version=\"1.0\"?>\n<root>\n  <child>text</child>\n  <child/>\n</root>"
 	require.Equal(t, expected, buf.String())
 }
 
@@ -629,7 +629,7 @@ func TestCompleteDocumentIndented(t *testing.T) {
 		"<root>\n" +
 		"  <name>John</name>\n" +
 		"  <age>30</age>\n" +
-		"</root>\n"
+		"</root>"
 	require.Equal(t, expected, buf.String())
 }
 

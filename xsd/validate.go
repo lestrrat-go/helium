@@ -81,10 +81,14 @@ func validateRootElement(elem *helium.Element, schema *Schema, filename string, 
 	}
 
 	td := resolveXsiType(elem, edecl.Type, schema)
-	return validateElementContent(elem, td, schema, filename, out)
+	if hasXsiNil(elem) {
+		return validateNilledElement(elem, edecl, td, schema, filename, out)
+	}
+
+	return validateElementContent(elem, edecl, td, schema, filename, out)
 }
 
-func validateElementContent(elem *helium.Element, td *TypeDef, schema *Schema, filename string, out *strings.Builder) error {
+func validateElementContent(elem *helium.Element, edecl *ElementDecl, td *TypeDef, schema *Schema, filename string, out *strings.Builder) error {
 	// Validate attributes.
 	if err := validateAttributes(elem, td, schema, filename, out); err != nil {
 		return err
@@ -94,7 +98,7 @@ func validateElementContent(elem *helium.Element, td *TypeDef, schema *Schema, f
 	case ContentTypeEmpty:
 		return validateEmptyContent(elem, filename, out)
 	case ContentTypeSimple:
-		return validateSimpleContent(elem, td, filename, out)
+		return validateSimpleContent(elem, edecl, td, filename, out)
 	case ContentTypeElementOnly, ContentTypeMixed:
 		if td.ContentModel == nil {
 			// No content model means anything goes (for mixed) or empty (for element-only).
@@ -108,7 +112,7 @@ func validateElementContent(elem *helium.Element, td *TypeDef, schema *Schema, f
 	return nil
 }
 
-func validateSimpleContent(elem *helium.Element, td *TypeDef, filename string, out *strings.Builder) error {
+func validateSimpleContent(elem *helium.Element, edecl *ElementDecl, td *TypeDef, filename string, out *strings.Builder) error {
 	// Simple content types must not have child elements.
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		if child.Type() == helium.ElementNode {
@@ -118,10 +122,31 @@ func validateSimpleContent(elem *helium.Element, td *TypeDef, filename string, o
 		}
 	}
 
+	value := elemTextContent(elem)
+	isEmpty := value == ""
+
+	// Effective value: substitute default/fixed for empty elements.
+	effectiveValue := value
+	if isEmpty && edecl != nil {
+		if edecl.Fixed != nil {
+			effectiveValue = *edecl.Fixed
+		} else if edecl.Default != nil {
+			effectiveValue = *edecl.Default
+		}
+	}
+
+	// Fixed value mismatch check (only when element has actual content).
+	if !isEmpty && edecl != nil && edecl.Fixed != nil {
+		if strings.TrimSpace(value) != strings.TrimSpace(*edecl.Fixed) {
+			msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", strings.TrimSpace(value), *edecl.Fixed)
+			out.WriteString(validityError(filename, elem.Line(), elemDisplayName(elem), msg))
+			return fmt.Errorf("fixed value constraint")
+		}
+	}
+
 	// Validate the text value against the type.
 	if td != nil && (td.Facets != nil || resolveVariety(td) == TypeVarietyList || resolveVariety(td) == TypeVarietyUnion || builtinBaseLocal(td) != "" && builtinBaseLocal(td) != "string" && builtinBaseLocal(td) != "anySimpleType") {
-		value := elemTextContent(elem)
-		return validateValue(value, td, elemDisplayName(elem), filename, elem.Line(), out)
+		return validateValue(effectiveValue, td, elemDisplayName(elem), filename, elem.Line(), out)
 	}
 
 	return nil
@@ -219,13 +244,19 @@ func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, filen
 		allowed[au.Name] = au
 	}
 
-	// Check for unknown attributes.
+	// Check for unknown attributes and fixed value constraints.
 	for _, a := range elem.Attributes() {
 		if isSpecialAttr(a) {
 			continue
 		}
 		aqn := QName{Local: a.LocalName(), NS: a.URI()}
-		if _, ok := allowed[aqn]; ok {
+		if au, ok := allowed[aqn]; ok {
+			if au.Fixed != nil && a.Value() != *au.Fixed {
+				ad := attrDisplayName(a)
+				msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *au.Fixed)
+				out.WriteString(validityErrorAttr(filename, elem.Line(), elemDisplayName(elem), ad, msg))
+				return fmt.Errorf("fixed value constraint")
+			}
 			continue
 		}
 		// Not in explicit declarations — check anyAttribute wildcard.
@@ -347,6 +378,56 @@ func isBlank(b []byte) bool {
 }
 
 const xsiNS = "http://www.w3.org/2001/XMLSchema-instance"
+
+// hasXsiNil returns true if the element has xsi:nil="true".
+func hasXsiNil(elem *helium.Element) bool {
+	for _, a := range elem.Attributes() {
+		if a.URI() == xsiNS && a.LocalName() == "nil" {
+			return a.Value() == "true" || a.Value() == "1"
+		}
+	}
+	return false
+}
+
+// validateNilledElement handles an element with xsi:nil="true".
+// If the declaration is nillable, validates that the element has no character
+// or element content (attributes are still checked).  If not nillable,
+// reports a validity error.
+func validateNilledElement(elem *helium.Element, edecl *ElementDecl, td *TypeDef, schema *Schema, filename string, out *strings.Builder) error {
+	dn := elemDisplayName(elem)
+
+	if !edecl.Nillable {
+		out.WriteString(validityError(filename, elem.Line(), dn,
+			"Element is not nillable."))
+		return fmt.Errorf("element not nillable")
+	}
+
+	// Validate attributes even for nilled elements.
+	if td != nil {
+		if err := validateAttributes(elem, td, schema, filename, out); err != nil {
+			return err
+		}
+	}
+
+	// xsi:nil="true" — the element must have no character or element children.
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		switch child.Type() {
+		case helium.ElementNode:
+			ce := child.(*helium.Element)
+			out.WriteString(validityError(filename, ce.Line(), elemDisplayName(ce),
+				"This element is not expected, because the element '"+dn+"' is nilled."))
+			return fmt.Errorf("content in nilled element")
+		case helium.TextNode, helium.CDATASectionNode:
+			if !isBlank(child.Content()) {
+				out.WriteString(validityError(filename, elem.Line(), dn,
+					"Character content is not allowed, because the element is nilled."))
+				return fmt.Errorf("content in nilled element")
+			}
+		}
+	}
+
+	return nil
+}
 
 // resolveXsiType checks if the element has an xsi:type attribute and, if so,
 // resolves it to a type definition in the schema. Returns the resolved type

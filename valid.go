@@ -202,6 +202,13 @@ func (e *ValidationError) hasErrors() bool {
 	return len(e.Errors) > 0
 }
 
+// validCtx carries validation state through the document walk.
+type validCtx struct {
+	ve     *ValidationError
+	ids    map[string]bool // ID values seen (uniqueness check)
+	idrefs map[string]bool // IDREF values to resolve (cross-ref check)
+}
+
 // docDTDs returns the DTDs to search in order, respecting standalone.
 func docDTDs(doc *Document) []*DTD {
 	var dtds []*DTD
@@ -230,7 +237,11 @@ func lookupElementDecl(doc *Document, name, prefix string) (*ElementDecl, *DTD) 
 // validateDocument validates a parsed document against its DTD.
 // This is the equivalent of libxml2's xmlValidateDocument.
 func validateDocument(doc *Document) *ValidationError {
-	ve := &ValidationError{}
+	vctx := &validCtx{
+		ve:     &ValidationError{},
+		ids:    make(map[string]bool),
+		idrefs: make(map[string]bool),
+	}
 
 	if doc.intSubset == nil && doc.extSubset == nil {
 		return nil
@@ -242,38 +253,43 @@ func validateDocument(doc *Document) *ValidationError {
 			return nil
 		}
 		elem := n.(*Element)
-		validateOneElement(doc, elem, ve)
+		validateOneElement(doc, elem, vctx)
 		return nil
 	})
 
-	if ve.hasErrors() {
-		return ve
+	// Cross-reference check: every IDREF must match an existing ID
+	validateDocumentFinal(vctx)
+
+	if vctx.ve.hasErrors() {
+		return vctx.ve
 	}
 	return nil
 }
 
 // validateOneElement checks a single element against DTD declarations.
-func validateOneElement(doc *Document, elem *Element, ve *ValidationError) {
+func validateOneElement(doc *Document, elem *Element, vctx *validCtx) {
 	name := elem.LocalName()
 
 	edecl, dtd := lookupElementDecl(doc, name, elem.Prefix())
 	if edecl == nil {
-		ve.addf("element %s: no declaration found", name)
+		vctx.ve.addf("element %s: no declaration found", name)
 		return
 	}
 
 	// Validate attributes against their declarations
-	validateElementAttributes(doc, elem, edecl, ve)
+	validateElementAttributes(doc, elem, edecl, vctx)
 
 	// Validate element content model
-	validateElementContent(dtd, elem, edecl, ve)
+	validateElementContent(dtd, elem, edecl, vctx.ve)
 }
 
 // validateElementAttributes checks that:
 // - All #REQUIRED attributes are present
 // - #FIXED attributes have the correct value
 // - No undeclared attributes (if element is fully declared)
-func validateElementAttributes(doc *Document, elem *Element, edecl *ElementDecl, ve *ValidationError) {
+// - ID values are unique across the document
+// - IDREF/IDREFS values are recorded for cross-reference checking
+func validateElementAttributes(doc *Document, elem *Element, edecl *ElementDecl, vctx *validCtx) {
 	ename := elem.LocalName()
 	attrs := elem.Attributes()
 
@@ -298,20 +314,46 @@ func validateElementAttributes(doc *Document, elem *Element, edecl *ElementDecl,
 			switch adecl.def {
 			case AttrDefaultRequired:
 				if !found {
-					ve.addf("element %s: attribute %s is required", ename, aname)
+					vctx.ve.addf("element %s: attribute %s is required", ename, aname)
 				}
 			case AttrDefaultFixed:
 				if found && val != adecl.defvalue {
-					ve.addf("element %s: attribute %s has value %q but must be %q", ename, aname, val, adecl.defvalue)
+					vctx.ve.addf("element %s: attribute %s has value %q but must be %q", ename, aname, val, adecl.defvalue)
 				}
 			}
 
 			// Validate attribute value against its type (if present)
 			if found {
 				if err := validateAttributeValueInternal(doc, adecl.atype, val); err != nil {
-					ve.addf("element %s: attribute %s: %s", ename, aname, err)
+					vctx.ve.addf("element %s: attribute %s: %s", ename, aname, err)
+				}
+
+				// Track ID uniqueness and collect IDREFs
+				switch adecl.atype {
+				case AttrID:
+					if vctx.ids[val] {
+						vctx.ve.addf("element %s: duplicate ID %q", ename, val)
+					} else {
+						vctx.ids[val] = true
+					}
+				case AttrIDRef:
+					vctx.idrefs[val] = true
+				case AttrIDRefs:
+					for _, ref := range strings.Fields(val) {
+						vctx.idrefs[ref] = true
+					}
 				}
 			}
+		}
+	}
+}
+
+// validateDocumentFinal performs post-walk cross-reference checks.
+// Every IDREF value must match an ID declared somewhere in the document.
+func validateDocumentFinal(vctx *validCtx) {
+	for ref := range vctx.idrefs {
+		if !vctx.ids[ref] {
+			vctx.ve.addf("IDREF %q references unknown ID", ref)
 		}
 	}
 }

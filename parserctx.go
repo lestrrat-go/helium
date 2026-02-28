@@ -408,7 +408,7 @@ func (ctx *parserCtx) error(err error) error {
 		return err
 	}
 
-	e := ErrParseError{Err: err}
+	e := ErrParseError{Err: err, Level: ErrorLevelError, File: ctx.baseURI}
 	if cur := ctx.getCursor(); cur != nil {
 		e.Column = cur.Column()
 		e.LineNumber = cur.LineNumber()
@@ -1090,7 +1090,7 @@ func (ctx *parserCtx) parseStartTag() error {
 	// Attributes defaulting: apply DTD-declared default attribute values.
 	// NOTE: #FIXED/#REQUIRED validation and element content model checking
 	// are done post-parse via validateDocument() when ParseDTDValid is set.
-	// ID/IDREF uniqueness checks are not yet implemented.
+	// ID/IDREF uniqueness checks are done post-parse via validateDocument().
 	if len(ctx.attsDefault) > 0 {
 		var elemName string
 		if prefix != "" {

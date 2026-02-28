@@ -8,6 +8,13 @@ import (
 
 const maxParseDepth = 5000
 
+var (
+	errExpectedRParenAfterNode   = errors.New("expected ')' after node(")
+	errExpectedRParenAfterText   = errors.New("expected ')' after text(")
+	errExpectedRParenAfterComment = errors.New("expected ')' after comment(")
+	errExpectedRParenAfterPI     = errors.New("expected ')' after processing-instruction(")
+)
+
 // Parser builds an AST from a token stream.
 type Parser struct {
 	lexer *Lexer
@@ -26,7 +33,7 @@ func Parse(expr string) (Expr, error) {
 		return nil, err
 	}
 	if tok := p.lexer.Peek(); tok.Type != TokenEOF {
-		return nil, fmt.Errorf("unexpected token %s after expression", tok)
+		return nil, fmt.Errorf("%w: %s after expression", ErrUnexpectedToken, tok)
 	}
 	return e, nil
 }
@@ -35,7 +42,7 @@ func Parse(expr string) (Expr, error) {
 func (p *Parser) parseExpr() (Expr, error) {
 	p.depth++
 	if p.depth > maxParseDepth {
-		return nil, fmt.Errorf("xpath: expression nesting too deep")
+		return nil, ErrExprTooDeep
 	}
 	defer func() { p.depth-- }()
 	return p.parseOrExpr()
@@ -282,17 +289,33 @@ func (p *Parser) parsePrimaryExpr() (Expr, error) {
 		return parseNumberLiteral(tok.Value)
 
 	case TokenName:
-		// Check if it's a function call (Name followed by '(')
 		p.lexer.Next()
+
+		// Unqualified function call: name(
 		if p.lexer.Peek().Type == TokenLParen {
-			return p.parseFunctionCall(tok.Value)
+			return p.parseFunctionCall("", tok.Value)
 		}
+
+		// QName function call: prefix:name(
+		if p.lexer.Peek().Type == TokenColon {
+			p.lexer.Next() // consume ':'
+			localTok := p.lexer.Peek()
+			if localTok.Type == TokenName {
+				p.lexer.Next() // consume local name
+				if p.lexer.Peek().Type == TokenLParen {
+					return p.parseFunctionCall(tok.Value, localTok.Value)
+				}
+				p.lexer.Backup() // local name
+			}
+			p.lexer.Backup() // ':'
+		}
+
 		// Not a function call — put the name back and let the caller handle it
 		p.lexer.Backup()
-		return nil, fmt.Errorf("unexpected token %s in primary expression", tok)
+		return nil, fmt.Errorf("%w: %s in primary expression", ErrUnexpectedToken, tok)
 
 	default:
-		return nil, fmt.Errorf("unexpected token %s in primary expression", tok)
+		return nil, fmt.Errorf("%w: %s in primary expression", ErrUnexpectedToken, tok)
 	}
 }
 
@@ -304,7 +327,7 @@ func (p *Parser) parseParenExpr() (Expr, error) {
 		return nil, err
 	}
 	if p.lexer.Peek().Type != TokenRParen {
-		return nil, fmt.Errorf("expected ')' but got %s", p.lexer.Peek())
+		return nil, fmt.Errorf("%w: ')' but got %s", ErrExpectedToken, p.lexer.Peek())
 	}
 	p.lexer.Next()
 	return expr, nil
@@ -322,7 +345,7 @@ func parseNumberLiteral(s string) (NumberExpr, error) {
 
 // parseFunctionCall parses function arguments after the name has been consumed.
 // The opening '(' is the next token.
-func (p *Parser) parseFunctionCall(name string) (Expr, error) {
+func (p *Parser) parseFunctionCall(prefix, name string) (Expr, error) {
 	p.lexer.Next() // consume '('
 	var args []Expr
 	if p.lexer.Peek().Type != TokenRParen {
@@ -339,10 +362,14 @@ func (p *Parser) parseFunctionCall(name string) (Expr, error) {
 		}
 	}
 	if p.lexer.Peek().Type != TokenRParen {
-		return nil, fmt.Errorf("expected ')' in function call %s but got %s", name, p.lexer.Peek())
+		displayName := name
+		if prefix != "" {
+			displayName = prefix + ":" + name
+		}
+		return nil, fmt.Errorf("%w: ')' in function call %s but got %s", ErrExpectedToken, displayName, p.lexer.Peek())
 	}
 	p.lexer.Next()
-	return FunctionCall{Name: name, Args: args}, nil
+	return FunctionCall{Prefix: prefix, Name: name, Args: args}, nil
 }
 
 // parseLocationPath parses → AbsoluteLocationPath | RelativeLocationPath.
@@ -465,7 +492,7 @@ func (p *Parser) parseStep() (Step, error) {
 				axis = a
 				p.lexer.Next() // consume '::'
 			} else {
-				return Step{}, fmt.Errorf("unknown axis %q", tok.Value)
+				return Step{}, fmt.Errorf("%w: %q", ErrUnknownAxis, tok.Value)
 			}
 		} else {
 			p.lexer.Backup() // not an axis, put name back
@@ -504,7 +531,7 @@ func (p *Parser) parseNodeTest(_ AxisType) (NodeTest, error) {
 	}
 
 	if tok.Type != TokenName {
-		return nil, fmt.Errorf("expected node test but got %s", tok)
+		return nil, fmt.Errorf("%w: node test but got %s", ErrExpectedToken, tok)
 	}
 
 	p.lexer.Next()
@@ -535,21 +562,21 @@ func (p *Parser) parseNodeTypeTest(name string) (NodeTest, bool, error) {
 	case "node":
 		p.lexer.Next() // (
 		if p.lexer.Peek().Type != TokenRParen {
-			return nil, true, fmt.Errorf("expected ')' after node(")
+			return nil, true, errExpectedRParenAfterNode
 		}
 		p.lexer.Next() // )
 		return TypeTest{Type: NodeTestNode}, true, nil
 	case "text":
 		p.lexer.Next()
 		if p.lexer.Peek().Type != TokenRParen {
-			return nil, true, fmt.Errorf("expected ')' after text(")
+			return nil, true, errExpectedRParenAfterText
 		}
 		p.lexer.Next()
 		return TypeTest{Type: NodeTestText}, true, nil
 	case "comment":
 		p.lexer.Next()
 		if p.lexer.Peek().Type != TokenRParen {
-			return nil, true, fmt.Errorf("expected ')' after comment(")
+			return nil, true, errExpectedRParenAfterComment
 		}
 		p.lexer.Next()
 		return TypeTest{Type: NodeTestComment}, true, nil
@@ -560,7 +587,7 @@ func (p *Parser) parseNodeTypeTest(name string) (NodeTest, bool, error) {
 			target = p.lexer.Next().Value
 		}
 		if p.lexer.Peek().Type != TokenRParen {
-			return nil, true, fmt.Errorf("expected ')' after processing-instruction(")
+			return nil, true, errExpectedRParenAfterPI
 		}
 		p.lexer.Next()
 		return PITest{Target: target}, true, nil
@@ -581,13 +608,13 @@ func (p *Parser) parseQNameTest(prefix string) (NodeTest, error) {
 		p.lexer.Next()
 		return NameTest{Prefix: prefix, Local: next.Value}, nil
 	}
-	return nil, fmt.Errorf("expected name or '*' after '%s:'", prefix)
+	return nil, fmt.Errorf("%w: name or '*' after '%s:'", ErrExpectedToken, prefix)
 }
 
 // parsePredicate parses → '[' Expr ']'.
 func (p *Parser) parsePredicate() (Expr, error) {
 	if p.lexer.Peek().Type != TokenLBracket {
-		return nil, fmt.Errorf("expected '[' but got %s", p.lexer.Peek())
+		return nil, fmt.Errorf("%w: '[' but got %s", ErrExpectedToken, p.lexer.Peek())
 	}
 	p.lexer.Next()
 
@@ -597,7 +624,7 @@ func (p *Parser) parsePredicate() (Expr, error) {
 	}
 
 	if p.lexer.Peek().Type != TokenRBracket {
-		return nil, fmt.Errorf("expected ']' but got %s", p.lexer.Peek())
+		return nil, fmt.Errorf("%w: ']' but got %s", ErrExpectedToken, p.lexer.Peek())
 	}
 	p.lexer.Next()
 	return expr, nil
@@ -629,6 +656,27 @@ func (p *Parser) looksLikeStep() bool {
 				return true
 			}
 			return false // function call
+		}
+		if next.Type == TokenColon {
+			// Could be prefix:local (name test) or prefix:name( (QName function call).
+			// Peek further: Name : Name ( → function call, not a step.
+			p.lexer.Next() // consume prefix
+			p.lexer.Next() // consume ':'
+			localTok := p.lexer.Peek()
+			if localTok.Type == TokenName {
+				p.lexer.Next() // consume local name
+				afterLocal := p.lexer.Peek()
+				p.lexer.Backup() // local name
+				p.lexer.Backup() // ':'
+				p.lexer.Backup() // prefix
+				if afterLocal.Type == TokenLParen {
+					return false // QName function call
+				}
+				return true // QName step (ns:elem)
+			}
+			p.lexer.Backup() // ':'
+			p.lexer.Backup() // prefix
+			return true // prefix:* or similar
 		}
 		return true // plain name test
 	}
