@@ -93,5 +93,5 @@ func (e ErrUnimplemented) Error() string {
 }
 
 func (e ErrDTDDupToken) Error() string {
-	return "standlone: attribute enumeration value token " + e.Name + " duplicated"
+	return "standalone: attribute enumeration value token " + e.Name + " duplicated"
 }
