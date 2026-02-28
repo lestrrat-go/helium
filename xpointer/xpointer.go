@@ -153,16 +153,20 @@ func parseScheme(expr string) (scheme, body, remaining string, err error) {
 	scheme = expr[:idx]
 	rest := expr[idx+1:]
 
-	// Find matching closing paren using balanced parenthesis counting
+	// Find matching closing paren using balanced parenthesis counting.
+	// Circumflex (^) escapes the next character per the XPointer framework:
+	// ^( and ^) are literal parens, ^^ is a literal circumflex.
 	depth := 1
 	for i := 0; i < len(rest); i++ {
 		switch rest[i] {
+		case '^':
+			i++ // skip escaped character
 		case '(':
 			depth++
 		case ')':
 			depth--
 			if depth == 0 {
-				return scheme, rest[:i], rest[i+1:], nil
+				return scheme, unescapeXPointer(rest[:i]), rest[i+1:], nil
 			}
 		}
 	}
@@ -227,4 +231,23 @@ func nthElementChild(n helium.Node, index int) helium.Node {
 		}
 	}
 	return nil
+}
+
+// unescapeXPointer handles circumflex escaping per the XPointer framework spec:
+// ^) -> ), ^( -> (, ^^ -> ^.
+func unescapeXPointer(s string) string {
+	if !strings.ContainsRune(s, '^') {
+		return s
+	}
+	var sb strings.Builder
+	sb.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] == '^' && i+1 < len(s) {
+			i++
+			sb.WriteByte(s[i])
+		} else {
+			sb.WriteByte(s[i])
+		}
+	}
+	return sb.String()
 }

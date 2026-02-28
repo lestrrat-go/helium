@@ -83,6 +83,61 @@ func TestXmlnsScheme(t *testing.T) {
 	})
 }
 
+func TestUnescapeXPointer(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"no escape", "hello", "hello"},
+		{"escaped paren close", "a^)b", "a)b"},
+		{"escaped paren open", "a^(b", "a(b"},
+		{"escaped circumflex", "a^^b", "a^b"},
+		{"multiple escapes", "^(^)^^", "()^"},
+		{"empty", "", ""},
+		{"trailing circumflex", "a^", "a^"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, unescapeXPointer(tt.in))
+		})
+	}
+}
+
+func TestParseSchemeCircumflexEscape(t *testing.T) {
+	t.Run("escaped close paren", func(t *testing.T) {
+		scheme, body, remaining, err := parseScheme("xpointer(a^)b)")
+		require.NoError(t, err)
+		require.Equal(t, "xpointer", scheme)
+		require.Equal(t, "a)b", body)
+		require.Equal(t, "", remaining)
+	})
+
+	t.Run("escaped open paren", func(t *testing.T) {
+		scheme, body, remaining, err := parseScheme("xpointer(a^(b)")
+		require.NoError(t, err)
+		require.Equal(t, "xpointer", scheme)
+		require.Equal(t, "a(b", body)
+		require.Equal(t, "", remaining)
+	})
+
+	t.Run("escaped circumflex", func(t *testing.T) {
+		scheme, body, remaining, err := parseScheme("xpointer(a^^b)")
+		require.NoError(t, err)
+		require.Equal(t, "xpointer", scheme)
+		require.Equal(t, "a^b", body)
+		require.Equal(t, "", remaining)
+	})
+
+	t.Run("cascade after escaped body", func(t *testing.T) {
+		scheme, body, remaining, err := parseScheme("xpointer(a^)b)element(/1)")
+		require.NoError(t, err)
+		require.Equal(t, "xpointer", scheme)
+		require.Equal(t, "a)b", body)
+		require.Equal(t, "element(/1)", remaining)
+	})
+}
+
 func TestParseParts(t *testing.T) {
 	t.Run("single scheme", func(t *testing.T) {
 		parts, err := parseParts("xpointer(/root)")
