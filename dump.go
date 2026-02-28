@@ -440,8 +440,7 @@ func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
 		_, _ = io.WriteString(out, "\"")
 	}
 
-	if len(dtd.entities) == 0 && len(dtd.elements) == 0 && len(dtd.pentities) == 0 && len(dtd.attributes) == 0 {
-		/* (dtd.notations == NULL) && */
+	if len(dtd.entities) == 0 && len(dtd.elements) == 0 && len(dtd.pentities) == 0 && len(dtd.attributes) == 0 && len(dtd.notations) == 0 {
 		_, _ = io.WriteString(out, ">")
 		return nil
 	}
@@ -690,6 +689,24 @@ func (d *Dumper) dumpEntityDecl(out io.Writer, ent *Entity) error {
 	return nil
 }
 
+func (d *Dumper) dumpNotationDecl(out io.Writer, n *Notation) error {
+	_, _ = io.WriteString(out, "<!NOTATION ")
+	_, _ = io.WriteString(out, n.name)
+	if n.publicID != "" {
+		_, _ = io.WriteString(out, " PUBLIC ")
+		_ = dumpQuotedString(out, n.publicID)
+		if n.systemID != "" {
+			_, _ = io.WriteString(out, " ")
+			_ = dumpQuotedString(out, n.systemID)
+		}
+	} else {
+		_, _ = io.WriteString(out, " SYSTEM ")
+		_ = dumpQuotedString(out, n.systemID)
+	}
+	_, _ = io.WriteString(out, " >\n")
+	return nil
+}
+
 func (d *Dumper) dumpElementDecl(out io.Writer, n *ElementDecl) error {
 	switch n.decltype {
 	case EmptyElementType:
@@ -899,6 +916,11 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		return nil
 	case EntityNode:
 		if err = d.dumpEntityDecl(out, n.(*Entity)); err != nil {
+			return err
+		}
+		return nil
+	case NotationNode:
+		if err = d.dumpNotationDecl(out, n.(*Notation)); err != nil {
 			return err
 		}
 		return nil

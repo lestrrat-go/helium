@@ -670,7 +670,13 @@ func (t *TreeBuilder) NotationDecl(ctxif sax.Context, name string, publicID stri
 		defer g.IRelease("END tree.NotationDecl")
 	}
 
-	return nil
+	ctx := ctxif.(*parserCtx)
+	dtd := ctx.doc.intSubset
+	if dtd == nil {
+		return nil
+	}
+	_, err := dtd.AddNotation(name, publicID, systemID)
+	return err
 }
 
 func (t *TreeBuilder) Reference(ctxif sax.Context, name string) error {

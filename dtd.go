@@ -14,9 +14,24 @@ type DTD struct {
 	elements   map[string]*ElementDecl
 	entities   map[string]*Entity
 	pentities  map[string]*Entity
+	notations  map[string]*Notation
 	externalID string
 	systemID   string
 }
+
+// Notation is a notation declaration from a DTD.
+type Notation struct {
+	docnode
+	publicID string
+	systemID string
+}
+
+func (n *Notation) AddChild(cur Node) error  { return addChild(n, cur) }
+func (n *Notation) AddContent(b []byte) error { return addContent(n, b) }
+func (n *Notation) AddSibling(cur Node) error { return addSibling(n, cur) }
+func (n *Notation) Replace(cur Node)          { replaceNode(n, cur) }
+func (n *Notation) SetTreeDoc(doc *Document)  { setTreeDoc(n, doc) }
+func (n *Notation) Free()                     {}
 
 // AttributeDecl is an xml attribute delcaration from DTD
 type AttributeDecl struct {
@@ -85,6 +100,7 @@ func newDTD() *DTD {
 		elements:   map[string]*ElementDecl{},
 		entities:   map[string]*Entity{},
 		pentities:  map[string]*Entity{},
+		notations:  map[string]*Notation{},
 	}
 	dtd.etype = DTDNode
 	return dtd
@@ -132,6 +148,23 @@ func (dtd *DTD) AddEntity(name string, typ EntityType, publicID, systemID, conte
 		return nil, err
 	}
 	return ent, nil
+}
+
+func (dtd *DTD) AddNotation(name, publicID, systemID string) (*Notation, error) {
+	if _, ok := dtd.notations[name]; ok {
+		return nil, fmt.Errorf("redefinition of notation %s", name)
+	}
+	nota := &Notation{}
+	nota.etype = NotationNode
+	nota.name = name
+	nota.publicID = publicID
+	nota.systemID = systemID
+	nota.doc = dtd.doc
+	dtd.notations[name] = nota
+	if err := dtd.AddChild(nota); err != nil {
+		return nil, err
+	}
+	return nota, nil
 }
 
 func (dtd *DTD) AddElementDecl(name string, typ ElementTypeVal, content *ElementContent) (*ElementDecl, error) {
