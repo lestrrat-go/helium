@@ -368,6 +368,20 @@ func TestStartDTDWithInternalDecls(t *testing.T) {
 	require.Equal(t, expected, strings.TrimRight(buf.String(), "\n"))
 }
 
+func TestWriteDTDEntityEscaping(t *testing.T) {
+	var buf bytes.Buffer
+	w := New(&buf)
+	require.NoError(t, w.StartDocument("", "", ""))
+	require.NoError(t, w.StartDTD("root", "", ""))
+	require.NoError(t, w.WriteDTDEntity(false, "ent", `he said "hello" & <goodbye>`))
+	require.NoError(t, w.EndDTD())
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.EndElement())
+	require.NoError(t, w.EndDocument())
+	expected := "<?xml version=\"1.0\"?>\n<!DOCTYPE root [<!ENTITY ent \"he said &quot;hello&quot; &amp; &lt;goodbye&gt;\">]><root/>"
+	require.Equal(t, expected, strings.TrimRight(buf.String(), "\n"))
+}
+
 func TestDTDExternalEntity(t *testing.T) {
 	var buf bytes.Buffer
 	w := New(&buf)
