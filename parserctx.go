@@ -372,6 +372,9 @@ func (ctx *parserCtx) init(p *Parser, in io.Reader) error {
 		if ctx.options.IsSet(ParseHuge) {
 			ctx.maxAmpl = 0
 		}
+		if ctx.options.IsSet(ParseSkipIDs) {
+			ctx.loadsubset.Set(SkipIDs)
+		}
 	}
 	return nil
 }
@@ -4400,6 +4403,9 @@ func (ctx *parserCtx) cleanSpecialAttributes() {
 }
 
 func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ AttributeType) {
+	if typ == AttrID && ctx.loadsubset.IsSet(SkipIDs) {
+		return
+	}
 	key := elemName + ":" + attrName
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START addSpecialAttribute(%s, %d)", key, typ)
@@ -4807,6 +4813,10 @@ func (ctx *parserCtx) parseExternalID() (string, string, error) {
 }
 
 func (ctx *parserCtx) parseExternalEntityPrivate(uri, externalID string) (Node, error) {
+	if ctx.options.IsSet(ParseNoXXE) {
+		return nil, nil
+	}
+
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START parseExternalEntityPrivate(uri=%s, externalID=%s)", uri, externalID)
 		defer g.IRelease("END parseExternalEntityPrivate")

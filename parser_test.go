@@ -783,3 +783,74 @@ func TestParseInNodeContext(t *testing.T) {
 		require.Equal(t, "existing", docRoot.FirstChild().Name())
 	})
 }
+
+func TestParseNoXXE(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY ext SYSTEM "ext.xml">
+]>
+<doc>&ext;</doc>`
+
+	resolved := false
+	s := sax.New()
+	s.ResolveEntityHandler = sax.ResolveEntityFunc(func(_ sax.Context, publicID, systemID string) (sax.ParseInput, error) {
+		resolved = true
+		return newStringParseInput("<inner>hello</inner>", systemID), nil
+	})
+
+	p := NewParser()
+	p.SetSAXHandler(s)
+	p.SetOption(ParseNoEnt | ParseNoXXE)
+	_, err := p.Parse([]byte(input))
+	// With ParseNoXXE, external entity loading is blocked.
+	// The entity reference remains unresolved; no error but external content not loaded.
+	_ = err
+	require.False(t, resolved, "ResolveEntity should not be called with ParseNoXXE")
+}
+
+func TestParseNoXXEExternalDTD(t *testing.T) {
+	t.Parallel()
+
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc SYSTEM "ext.dtd">
+<doc/>`
+
+	resolved := false
+	s := sax.New()
+	s.ResolveEntityHandler = sax.ResolveEntityFunc(func(_ sax.Context, publicID, systemID string) (sax.ParseInput, error) {
+		resolved = true
+		return newStringParseInput("<!ELEMENT doc EMPTY>", systemID), nil
+	})
+
+	p := NewParser()
+	p.SetSAXHandler(s)
+	p.SetOption(ParseDTDLoad | ParseNoXXE)
+	_, err := p.Parse([]byte(input))
+	_ = err
+	require.False(t, resolved, "external DTD should not be loaded with ParseNoXXE")
+}
+
+func TestParseSkipIDs(t *testing.T) {
+	t.Parallel()
+
+	// Verify that ParseSkipIDs wires to SkipIDs and prevents
+	// ID attributes from being added to attsSpecial.
+	ctx := &parserCtx{}
+	p := NewParser()
+	p.SetOption(ParseSkipIDs)
+	require.NoError(t, ctx.init(p, strings.NewReader("<root/>")))
+
+	require.True(t, ctx.loadsubset.IsSet(SkipIDs), "ParseSkipIDs should set SkipIDs on loadsubset")
+
+	// addSpecialAttribute with AttrID should be a no-op when SkipIDs is set.
+	ctx.addSpecialAttribute("doc", "id", AttrID)
+	_, found := ctx.attsSpecial["doc:id"]
+	require.False(t, found, "AttrID should not be interned when SkipIDs is set")
+
+	// Non-ID attributes should still be added.
+	ctx.addSpecialAttribute("doc", "name", AttrNmtoken)
+	_, found = ctx.attsSpecial["doc:name"]
+	require.True(t, found, "non-ID attributes should still be interned")
+}
