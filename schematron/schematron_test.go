@@ -154,7 +154,7 @@ func TestGoldenFiles(t *testing.T) {
 }
 
 // extractBaseName extracts the base name from a result file name.
-// e.g. "zvon1_0" -> "zvon1", "cve-2025-49794_0" -> "cve-2025-49794"
+// e.g. "zvon1_0" -> "zvon1", "cve-2025-49794_0" -> "cve-2025-49794".
 func extractBaseName(name string) string {
 	idx := strings.LastIndex(name, "_")
 	if idx < 0 {

@@ -14,8 +14,12 @@ func TestParseSimplePath(t *testing.T) {
 	require.True(t, lp.Absolute)
 	require.Len(t, lp.Steps, 2)
 	require.Equal(t, AxisChild, lp.Steps[0].Axis)
-	require.Equal(t, "a", lp.Steps[0].NodeTest.(NameTest).Local)
-	require.Equal(t, "b", lp.Steps[1].NodeTest.(NameTest).Local)
+	nt0, ok0 := lp.Steps[0].NodeTest.(NameTest)
+	require.True(t, ok0)
+	require.Equal(t, "a", nt0.Local)
+	nt1, ok1 := lp.Steps[1].NodeTest.(NameTest)
+	require.True(t, ok1)
+	require.Equal(t, "b", nt1.Local)
 }
 
 func TestParseRelativePath(t *testing.T) {
@@ -37,7 +41,9 @@ func TestParseDoubleSlash(t *testing.T) {
 	require.Len(t, lp.Steps, 2)
 	require.Equal(t, AxisDescendantOrSelf, lp.Steps[0].Axis)
 	require.Equal(t, AxisChild, lp.Steps[1].Axis)
-	require.Equal(t, "a", lp.Steps[1].NodeTest.(NameTest).Local)
+	nt, ok2 := lp.Steps[1].NodeTest.(NameTest)
+	require.True(t, ok2)
+	require.Equal(t, "a", nt.Local)
 }
 
 func TestParseAxis(t *testing.T) {
@@ -47,7 +53,9 @@ func TestParseAxis(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, lp.Steps, 1)
 	require.Equal(t, AxisDescendant, lp.Steps[0].Axis)
-	require.Equal(t, "para", lp.Steps[0].NodeTest.(NameTest).Local)
+	nt, ok2 := lp.Steps[0].NodeTest.(NameTest)
+	require.True(t, ok2)
+	require.Equal(t, "para", nt.Local)
 }
 
 func TestParseAttribute(t *testing.T) {
@@ -57,7 +65,9 @@ func TestParseAttribute(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, lp.Steps, 1)
 	require.Equal(t, AxisAttribute, lp.Steps[0].Axis)
-	require.Equal(t, "id", lp.Steps[0].NodeTest.(NameTest).Local)
+	nt, ok2 := lp.Steps[0].NodeTest.(NameTest)
+	require.True(t, ok2)
+	require.Equal(t, "id", nt.Local)
 }
 
 func TestParsePredicate(t *testing.T) {
@@ -95,7 +105,9 @@ func TestParseWildcard(t *testing.T) {
 	require.NoError(t, err)
 	lp, ok := expr.(*LocationPath)
 	require.True(t, ok)
-	require.Equal(t, "*", lp.Steps[0].NodeTest.(NameTest).Local)
+	nt, ok2 := lp.Steps[0].NodeTest.(NameTest)
+	require.True(t, ok2)
+	require.Equal(t, "*", nt.Local)
 }
 
 func TestParseNodeTest(t *testing.T) {
@@ -156,10 +168,16 @@ func TestParseComplexExpr(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, lp.Absolute)
 	require.Len(t, lp.Steps, 3)
-	require.Equal(t, "bookstore", lp.Steps[0].NodeTest.(NameTest).Local)
-	require.Equal(t, "book", lp.Steps[1].NodeTest.(NameTest).Local)
+	nt0, ok0 := lp.Steps[0].NodeTest.(NameTest)
+	require.True(t, ok0)
+	require.Equal(t, "bookstore", nt0.Local)
+	nt1, ok1 := lp.Steps[1].NodeTest.(NameTest)
+	require.True(t, ok1)
+	require.Equal(t, "book", nt1.Local)
 	require.Len(t, lp.Steps[1].Predicates, 1)
-	require.Equal(t, "title", lp.Steps[2].NodeTest.(NameTest).Local)
+	nt2, ok2 := lp.Steps[2].NodeTest.(NameTest)
+	require.True(t, ok2)
+	require.Equal(t, "title", nt2.Local)
 }
 
 func TestParseRootOnly(t *testing.T) {
@@ -233,7 +251,62 @@ func TestParseQNameStep(t *testing.T) {
 	require.NoError(t, err)
 	lp, ok := expr.(*LocationPath)
 	require.True(t, ok)
-	nt := lp.Steps[0].NodeTest.(NameTest)
+	nt, ok2 := lp.Steps[0].NodeTest.(NameTest)
+	require.True(t, ok2)
 	require.Equal(t, "ns", nt.Prefix)
 	require.Equal(t, "elem", nt.Local)
+}
+
+func TestParseQNameFunctionCall(t *testing.T) {
+	expr, err := Parse("ext:hello('x')")
+	require.NoError(t, err)
+	fc, ok := expr.(FunctionCall)
+	require.True(t, ok)
+	require.Equal(t, "ext", fc.Prefix)
+	require.Equal(t, "hello", fc.Name)
+	require.Len(t, fc.Args, 1)
+}
+
+func TestParseQNameFunctionCallNoArgs(t *testing.T) {
+	expr, err := Parse("ext:now()")
+	require.NoError(t, err)
+	fc, ok := expr.(FunctionCall)
+	require.True(t, ok)
+	require.Equal(t, "ext", fc.Prefix)
+	require.Equal(t, "now", fc.Name)
+	require.Len(t, fc.Args, 0)
+}
+
+func TestParseQNameStepNotFunction(t *testing.T) {
+	// ns:elem without ( should still be parsed as a name test step
+	expr, err := Parse("ns:elem")
+	require.NoError(t, err)
+	lp, ok := expr.(*LocationPath)
+	require.True(t, ok)
+	nt, ok2 := lp.Steps[0].NodeTest.(NameTest)
+	require.True(t, ok2)
+	require.Equal(t, "ns", nt.Prefix)
+	require.Equal(t, "elem", nt.Local)
+}
+
+func TestParseUnqualifiedFunctionCallPrefix(t *testing.T) {
+	// Unqualified function call should have empty prefix
+	expr, err := Parse("count(//item)")
+	require.NoError(t, err)
+	fc, ok := expr.(FunctionCall)
+	require.True(t, ok)
+	require.Equal(t, "", fc.Prefix)
+	require.Equal(t, "count", fc.Name)
+}
+
+func TestParseQNameFunctionInPath(t *testing.T) {
+	// QName function call followed by path: ext:func()/child
+	expr, err := Parse("ext:func()/child")
+	require.NoError(t, err)
+	pe, ok := expr.(PathExpr)
+	require.True(t, ok)
+	fc, ok := pe.Filter.(FunctionCall)
+	require.True(t, ok)
+	require.Equal(t, "ext", fc.Prefix)
+	require.Equal(t, "func", fc.Name)
 }

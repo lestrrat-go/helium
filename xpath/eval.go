@@ -17,14 +17,16 @@ const (
 
 // evalContext holds the evaluation state for an XPath expression.
 type evalContext struct {
-	node       helium.Node
-	position   int
-	size       int
-	namespaces map[string]string
-	variables  map[string]interface{}
-	depth      int
-	opCount    *int // shared across the entire evaluation tree
-	opLimit    int  // 0 = unlimited
+	node        helium.Node
+	position    int
+	size        int
+	namespaces  map[string]string
+	variables   map[string]interface{}
+	functions   map[string]Function
+	functionsNS map[QualifiedName]Function
+	depth       int
+	opCount     *int // shared across the entire evaluation tree
+	opLimit     int  // 0 = unlimited
 }
 
 func newEvalContext(node helium.Node) *evalContext {
@@ -39,14 +41,16 @@ func newEvalContext(node helium.Node) *evalContext {
 
 func (ctx *evalContext) withNode(n helium.Node, pos, size int) *evalContext {
 	return &evalContext{
-		node:       n,
-		position:   pos,
-		size:       size,
-		namespaces: ctx.namespaces,
-		variables:  ctx.variables,
-		depth:      ctx.depth,
-		opCount:    ctx.opCount,
-		opLimit:    ctx.opLimit,
+		node:        n,
+		position:    pos,
+		size:        size,
+		namespaces:  ctx.namespaces,
+		variables:   ctx.variables,
+		functions:   ctx.functions,
+		functionsNS: ctx.functionsNS,
+		depth:       ctx.depth,
+		opCount:     ctx.opCount,
+		opLimit:     ctx.opLimit,
 	}
 }
 
@@ -140,7 +144,7 @@ func dispatchCompoundExpr(ctx *evalContext, expr Expr) (*Result, error) {
 	case PathExpr:
 		return evalPathExpr(ctx, e)
 	default:
-		return nil, fmt.Errorf("unsupported expression type: %T", expr)
+		return nil, fmt.Errorf("%w: %T", ErrUnsupportedExpr, expr)
 	}
 }
 
@@ -434,7 +438,7 @@ func evalBinaryExpr(ctx *evalContext, e BinaryExpr) (*Result, error) {
 	case TokenPlus, TokenMinus, TokenStar, TokenDiv, TokenMod:
 		return evalArithmetic(ctx, e)
 	}
-	return nil, fmt.Errorf("unsupported binary operator: %s", e.Op)
+	return nil, fmt.Errorf("%w: %s", ErrUnsupportedBinaryOp, e.Op)
 }
 
 func evalOr(ctx *evalContext, e BinaryExpr) (*Result, error) {
@@ -678,11 +682,11 @@ func evalUnaryExpr(ctx *evalContext, e UnaryExpr) (*Result, error) {
 
 func evalVariableExpr(ctx *evalContext, e VariableExpr) (*Result, error) {
 	if ctx.variables == nil {
-		return nil, fmt.Errorf("undefined variable: $%s", e.Name)
+		return nil, fmt.Errorf("%w: $%s", ErrUndefinedVariable, e.Name)
 	}
 	v, ok := ctx.variables[e.Name]
 	if !ok {
-		return nil, fmt.Errorf("undefined variable: $%s", e.Name)
+		return nil, fmt.Errorf("%w: $%s", ErrUndefinedVariable, e.Name)
 	}
 	switch val := v.(type) {
 	case []helium.Node:
@@ -694,7 +698,7 @@ func evalVariableExpr(ctx *evalContext, e VariableExpr) (*Result, error) {
 	case bool:
 		return &Result{Type: BooleanResult, Boolean: val}, nil
 	default:
-		return nil, fmt.Errorf("unsupported variable type for $%s: %T", e.Name, v)
+		return nil, fmt.Errorf("%w: $%s is %T", ErrUnsupportedVariableType, e.Name, v)
 	}
 }
 
@@ -704,7 +708,7 @@ func evalFilterExpr(ctx *evalContext, e FilterExpr) (*Result, error) {
 		return nil, err
 	}
 	if r.Type != NodeSetResult {
-		return nil, fmt.Errorf("filter expression requires a node-set")
+		return nil, ErrFilterNotNodeSet
 	}
 	nodes := r.NodeSet
 	for _, pred := range e.Predicates {
@@ -726,7 +730,7 @@ func evalUnionExpr(ctx *evalContext, e UnionExpr) (*Result, error) {
 		return nil, err
 	}
 	if left.Type != NodeSetResult || right.Type != NodeSetResult {
-		return nil, fmt.Errorf("union operator requires node-sets")
+		return nil, ErrUnionNotNodeSet
 	}
 	// Merge and deduplicate, preserving document order
 	merged, err := mergeNodeSets(left.NodeSet, right.NodeSet)
@@ -745,7 +749,7 @@ func evalPathExpr(ctx *evalContext, e PathExpr) (*Result, error) {
 		return r, nil
 	}
 	if r.Type != NodeSetResult {
-		return nil, fmt.Errorf("path expression requires a node-set")
+		return nil, ErrPathNotNodeSet
 	}
 
 	var result []helium.Node

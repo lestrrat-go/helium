@@ -1,6 +1,7 @@
 package schematron
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -13,15 +14,20 @@ const (
 	nsASCC = "http://www.ascc.net/xml/schematron"
 )
 
-func compileSchema(doc *helium.Document, cfg *compileConfig) (*Schema, error) {
+var (
+	errNoRootElement   = errors.New("schematron: no root element")
+	errNotSchemaElement = errors.New("schematron: root element is not a Schematron <schema>")
+)
+
+func compileSchema(doc *helium.Document, _ *compileConfig) (*Schema, error) {
 	root := findDocumentElement(doc)
 	if root == nil {
-		return nil, fmt.Errorf("schematron: no root element")
+		return nil, errNoRootElement
 	}
 
 	schNS := detectNamespace(root)
 	if schNS == "" {
-		return nil, fmt.Errorf("schematron: root element is not a Schematron <schema>")
+		return nil, errNotSchemaElement
 	}
 
 	schema := &Schema{
@@ -32,27 +38,19 @@ func compileSchema(doc *helium.Document, cfg *compileConfig) (*Schema, error) {
 	var warnings strings.Builder
 
 	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
-		if child.Type() != helium.ElementNode {
+		elem, ok := child.(*helium.Element)
+		if !ok {
 			continue
 		}
-		elem := child.(*helium.Element)
 		localName := stripPrefix(elem.Name())
 
 		switch localName {
 		case "title":
 			schema.title = elemTextContent(elem)
 		case "ns":
-			prefix := getAttr(elem, "prefix")
-			uri := getAttr(elem, "uri")
-			if prefix != "" && uri != "" {
-				schema.namespaces[prefix] = uri
-			}
+			addNamespace(schema.namespaces, elem)
 		case "pattern":
-			p, err := compilePattern(elem, schNS, schema, &errors)
-			if err != nil {
-				return nil, err
-			}
-			if p != nil {
+			if p := compilePattern(elem, schNS, &errors); p != nil {
 				schema.patterns = append(schema.patterns, p)
 			}
 		}
@@ -63,7 +61,7 @@ func compileSchema(doc *helium.Document, cfg *compileConfig) (*Schema, error) {
 	return schema, nil
 }
 
-func compilePattern(elem *helium.Element, schNS string, schema *Schema, errors *strings.Builder) (*pattern, error) {
+func compilePattern(elem *helium.Element, schNS string, errors *strings.Builder) *pattern {
 	p := &pattern{
 		name: getAttr(elem, "name"),
 	}
@@ -72,30 +70,26 @@ func compilePattern(elem *helium.Element, schNS string, schema *Schema, errors *
 	}
 
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		if child.Type() != helium.ElementNode {
+		ruleElem, ok := child.(*helium.Element)
+		if !ok {
 			continue
 		}
-		ruleElem := child.(*helium.Element)
 		if stripPrefix(ruleElem.Name()) != "rule" {
 			continue
 		}
 
-		r, err := compileRule(ruleElem, schNS, schema, errors)
-		if err != nil {
-			return nil, err
-		}
-		if r != nil {
+		if r := compileRule(ruleElem, schNS, errors); r != nil {
 			p.rules = append(p.rules, r)
 		}
 	}
 
-	return p, nil
+	return p
 }
 
-func compileRule(elem *helium.Element, schNS string, schema *Schema, errors *strings.Builder) (*rule, error) {
+func compileRule(elem *helium.Element, schNS string, errors *strings.Builder) *rule {
 	context := getAttr(elem, "context")
 	if context == "" {
-		return nil, nil
+		return nil
 	}
 
 	xpathExpr := contextToXPath(context)
@@ -103,7 +97,7 @@ func compileRule(elem *helium.Element, schNS string, schema *Schema, errors *str
 	compiled, err := xpath.Compile(xpathExpr)
 	if err != nil {
 		fmt.Fprintf(errors, "element rule: Failed to compile context expression '%s': %s\n", context, err)
-		return nil, nil
+		return nil
 	}
 
 	r := &rule{
@@ -113,42 +107,37 @@ func compileRule(elem *helium.Element, schNS string, schema *Schema, errors *str
 	}
 
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		if child.Type() != helium.ElementNode {
+		childElem, ok := child.(*helium.Element)
+		if !ok {
 			continue
 		}
-		childElem := child.(*helium.Element)
-		localName := stripPrefix(childElem.Name())
-
-		switch localName {
-		case "let":
-			lb, err := compileLet(childElem)
-			if err != nil {
-				fmt.Fprintf(errors, "element let: Failed to compile expression: %s\n", err)
-				continue
-			}
-			if lb != nil {
-				r.lets = append(r.lets, lb)
-			}
-		case "assert":
-			t, err := compileTest(childElem, testAssert, schNS, errors)
-			if err != nil {
-				return nil, err
-			}
-			if t != nil {
-				r.tests = append(r.tests, t)
-			}
-		case "report":
-			t, err := compileTest(childElem, testReport, schNS, errors)
-			if err != nil {
-				return nil, err
-			}
-			if t != nil {
-				r.tests = append(r.tests, t)
-			}
-		}
+		compileRuleChild(r, childElem, schNS, errors)
 	}
 
-	return r, nil
+	return r
+}
+
+// compileRuleChild processes a single child element of a <rule>.
+func compileRuleChild(r *rule, childElem *helium.Element, schNS string, errors *strings.Builder) {
+	switch stripPrefix(childElem.Name()) {
+	case "let":
+		lb, err := compileLet(childElem)
+		if err != nil {
+			fmt.Fprintf(errors, "element let: Failed to compile expression: %s\n", err)
+			return
+		}
+		if lb != nil {
+			r.lets = append(r.lets, lb)
+		}
+	case "assert":
+		if t := compileTest(childElem, testAssert, schNS, errors); t != nil {
+			r.tests = append(r.tests, t)
+		}
+	case "report":
+		if t := compileTest(childElem, testReport, schNS, errors); t != nil {
+			r.tests = append(r.tests, t)
+		}
+	}
 }
 
 func compileLet(elem *helium.Element) (*letBinding, error) {
@@ -160,7 +149,7 @@ func compileLet(elem *helium.Element) (*letBinding, error) {
 
 	compiled, err := xpath.Compile(value)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("schematron: compile let expression: %w", err)
 	}
 
 	return &letBinding{
@@ -169,16 +158,16 @@ func compileLet(elem *helium.Element) (*letBinding, error) {
 	}, nil
 }
 
-func compileTest(elem *helium.Element, typ testType, schNS string, errors *strings.Builder) (*test, error) {
+func compileTest(elem *helium.Element, typ testType, schNS string, errors *strings.Builder) *test {
 	testExpr := getAttr(elem, "test")
 	if testExpr == "" {
-		return nil, nil
+		return nil
 	}
 
 	compiled, err := xpath.Compile(testExpr)
 	if err != nil {
 		fmt.Fprintf(errors, "element %s: Failed to compile test expression '%s': %s\n", testTypeName(typ), testExpr, err)
-		return nil, nil
+		return nil
 	}
 
 	msg := parseMessage(elem, schNS, errors)
@@ -189,10 +178,10 @@ func compileTest(elem *helium.Element, typ testType, schNS string, errors *strin
 		compiled: compiled,
 		message:  msg,
 		line:     elem.Line(),
-	}, nil
+	}
 }
 
-func parseMessage(elem *helium.Element, schNS string, errors *strings.Builder) []messagePart {
+func parseMessage(elem *helium.Element, _ string, errors *strings.Builder) []messagePart {
 	var parts []messagePart
 
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
@@ -200,39 +189,45 @@ func parseMessage(elem *helium.Element, schNS string, errors *strings.Builder) [
 		case helium.TextNode:
 			parts = append(parts, textPart{text: string(child.Content())})
 		case helium.ElementNode:
-			childElem := child.(*helium.Element)
-			localName := stripPrefix(childElem.Name())
-
-			switch localName {
-			case "name":
-				path := getAttr(childElem, "path")
-				if path == "" {
-					path = "."
-				}
-				compiled, err := xpath.Compile(path)
-				if err != nil {
-					fmt.Fprintf(errors, "element name: Failed to compile path '%s': %s\n", path, err)
-					parts = append(parts, namePart{path: path})
-				} else {
-					parts = append(parts, namePart{path: path, expr: compiled})
-				}
-			case "value-of":
-				sel := getAttr(childElem, "select")
-				if sel == "" {
-					continue
-				}
-				compiled, err := xpath.Compile(sel)
-				if err != nil {
-					// XPath compile error — record in errors but still add the part
-					// so validation can emit the error at runtime
-					parts = append(parts, valueOfPart{sel: sel})
-				} else {
-					parts = append(parts, valueOfPart{sel: sel, expr: compiled})
-				}
+			childElem, ok := child.(*helium.Element)
+			if !ok {
+				continue
 			}
+			parts = parseMessageElement(childElem, parts, errors)
 		}
 	}
 
+	return parts
+}
+
+// parseMessageElement processes a single element child of a message/assert/report,
+// appending the appropriate messagePart to parts and returning the updated slice.
+func parseMessageElement(childElem *helium.Element, parts []messagePart, errors *strings.Builder) []messagePart {
+	switch stripPrefix(childElem.Name()) {
+	case "name":
+		path := getAttr(childElem, "path")
+		if path == "" {
+			path = "."
+		}
+		compiled, err := xpath.Compile(path)
+		if err != nil {
+			fmt.Fprintf(errors, "element name: Failed to compile path '%s': %s\n", path, err)
+			return append(parts, namePart{path: path})
+		}
+		return append(parts, namePart{path: path, expr: compiled})
+	case "value-of":
+		sel := getAttr(childElem, "select")
+		if sel == "" {
+			return parts
+		}
+		compiled, err := xpath.Compile(sel)
+		if err != nil {
+			// XPath compile error — record in errors but still add the part
+			// so validation can emit the error at runtime
+			return append(parts, valueOfPart{sel: sel})
+		}
+		return append(parts, valueOfPart{sel: sel, expr: compiled})
+	}
 	return parts
 }
 
@@ -315,4 +310,14 @@ func elemTextContent(elem *helium.Element) string {
 
 func findDocumentElement(doc *helium.Document) *helium.Element {
 	return doc.DocumentElement()
+}
+
+// addNamespace registers a namespace binding from a <ns> element if
+// both the prefix and uri attributes are non-empty.
+func addNamespace(namespaces map[string]string, elem *helium.Element) {
+	prefix := getAttr(elem, "prefix")
+	uri := getAttr(elem, "uri")
+	if prefix != "" && uri != "" {
+		namespaces[prefix] = uri
+	}
 }

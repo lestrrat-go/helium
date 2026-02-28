@@ -5,6 +5,7 @@
 package schematron
 
 import (
+	"fmt"
 	"os"
 
 	helium "github.com/lestrrat-go/helium"
@@ -27,11 +28,11 @@ func CompileFile(path string, opts ...CompileOption) (*Schema, error) {
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("schematron: read file: %w", err)
 	}
 	doc, err := helium.Parse(data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("schematron: parse document: %w", err)
 	}
 	return compileSchema(doc, cfg)
 }
