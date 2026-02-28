@@ -19,6 +19,7 @@ var (
 	ErrNilNode            = errors.New("nil node")
 	ErrInvalidOperation   = errors.New("operation cannot be performed")
 	ErrDuplicateAttribute = errors.New("duplicate attribute")
+	errParserStopped      = errors.New("parser stopped")
 )
 
 type ErrUnimplemented struct {

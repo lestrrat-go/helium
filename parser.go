@@ -2,12 +2,29 @@ package helium
 
 import (
 	"bytes"
+	"errors"
 	"io"
 
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 )
+
+// ParserStopper is implemented by the parser context passed as sax.Context
+// to SAX callbacks. SAX handlers can type-assert the context to this
+// interface and call StopParser to abort parsing early without error.
+type ParserStopper interface {
+	StopParser()
+}
+
+// StopParser tells the parser to stop at the next opportunity. Call this
+// from any SAX callback to abort parsing early. The parse functions will
+// return the partial document built so far with a nil error.
+func StopParser(ctx sax.Context) {
+	if s, ok := ctx.(ParserStopper); ok {
+		s.StopParser()
+	}
+}
 
 type Parser struct {
 	sax            sax.SAX2Handler
@@ -48,6 +65,9 @@ func (p *Parser) Parse(b []byte) (*Document, error) {
 	}()
 
 	if err := ctx.parseDocument(); err != nil {
+		if errors.Is(err, errParserStopped) {
+			return ctx.doc, nil
+		}
 		if p != nil && p.options.IsSet(ParseRecover) {
 			// ParseRecover: return the partial document along with the error
 			return ctx.doc, err
@@ -94,6 +114,9 @@ func (p *Parser) ParseReader(r io.Reader) (*Document, error) {
 	}()
 
 	if err := ctx.parseDocument(); err != nil {
+		if errors.Is(err, errParserStopped) {
+			return ctx.doc, nil
+		}
 		if p != nil && p.options.IsSet(ParseRecover) {
 			return ctx.doc, err
 		}
