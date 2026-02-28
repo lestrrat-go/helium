@@ -414,6 +414,13 @@ func (ctx *parserCtx) error(err error) error {
 		e.LineNumber = cur.LineNumber()
 		e.Line = cur.Line()
 	}
+
+	// Fire the SAX Error callback unless ParseNoError is set.
+	// This mirrors how ParseNoWarning gates SAX Warning callbacks.
+	if s := ctx.sax; s != nil && !ctx.options.IsSet(ParseNoError) {
+		_ = s.Error(ctx.userData, e.Error())
+	}
+
 	return e
 }
 
