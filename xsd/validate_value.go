@@ -7,11 +7,68 @@ import (
 	"strings"
 )
 
+// resolveWhiteSpace returns the effective whiteSpace facet value for a type,
+// walking the base type chain. Returns "collapse" as default per XSD spec
+// (most derived types default to collapse).
+func resolveWhiteSpace(td *TypeDef) string {
+	for cur := td; cur != nil; cur = cur.BaseType {
+		if cur.Facets != nil && cur.Facets.WhiteSpace != nil {
+			return *cur.Facets.WhiteSpace
+		}
+	}
+	return "collapse"
+}
+
+// normalizeWhiteSpace applies XSD whitespace normalization to a value.
+//   - "preserve": no change
+//   - "replace": replace \t, \n, \r with space
+//   - "collapse": replace + collapse consecutive spaces + trim
+func normalizeWhiteSpace(value, mode string) string {
+	switch mode {
+	case "preserve":
+		return value
+	case "replace":
+		return strings.Map(func(r rune) rune {
+			if r == '\t' || r == '\n' || r == '\r' {
+				return ' '
+			}
+			return r
+		}, value)
+	default: // "collapse"
+		replaced := strings.Map(func(r rune) rune {
+			if r == '\t' || r == '\n' || r == '\r' {
+				return ' '
+			}
+			return r
+		}, value)
+		return collapseSpaces(replaced)
+	}
+}
+
+// collapseSpaces collapses consecutive spaces and trims leading/trailing spaces.
+func collapseSpaces(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	inSpace := true // treat start as space to trim leading
+	for i := 0; i < len(s); i++ {
+		if s[i] == ' ' {
+			inSpace = true
+		} else {
+			if inSpace && b.Len() > 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteByte(s[i])
+			inSpace = false
+		}
+	}
+	return b.String()
+}
+
 // validateValue validates a text value against a simple type definition.
 // It writes any errors to out and returns an error if the value is invalid.
 func validateValue(value string, td *TypeDef, elemName, filename string, line int, out *strings.Builder) error {
-	// Collapse whitespace: trim leading/trailing whitespace.
-	trimmed := strings.TrimSpace(value)
+	// Apply whitespace normalization per the type's whiteSpace facet.
+	trimmed := normalizeWhiteSpace(value, resolveWhiteSpace(td))
 
 	// Check if this is a list type.
 	if resolveVariety(td) == TypeVarietyList {
@@ -57,7 +114,7 @@ func validateUnionValue(value string, td *TypeDef, elemName, filename string, li
 
 	// First, check restriction facets on the union type itself (e.g., enumeration).
 	// If the type has facets and the value doesn't match them, that's the error.
-	trimmed := strings.TrimSpace(value)
+	trimmed := normalizeWhiteSpace(value, resolveWhiteSpace(td))
 	if td.Facets != nil {
 		var facetBuf strings.Builder
 		if err := checkFacets(trimmed, td.Facets, "", elemName, filename, line, &facetBuf); err != nil {
