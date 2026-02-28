@@ -232,6 +232,13 @@ func WithIndentString(s string) DumpOption {
 	return func(d *Dumper) { d.IndentString = s }
 }
 
+// WithNoEmpty forces empty elements to be serialized as open+close tag
+// pairs (e.g., <br></br>) instead of self-closing tags (<br/>).
+// Mirrors libxml2's XML_SAVE_NO_EMPTY option.
+func WithNoEmpty() DumpOption {
+	return func(d *Dumper) { d.NoEmpty = true }
+}
+
 // Dumper serializes an XML document tree.
 // escapeNonASCII controls whether characters U+0080–U+00FF are emitted as
 // numeric character references (&#xNN;).  libxml2 only does this when the
@@ -244,6 +251,8 @@ type Dumper struct {
 	IndentString string
 	// SkipDTD omits DTD nodes from output when set to true.
 	SkipDTD bool
+	// NoEmpty forces empty elements to use open+close tags instead of self-closing.
+	NoEmpty bool
 
 	escapeNonASCII bool
 	isXHTML        bool
@@ -954,7 +963,13 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 		}
 
 		if child := e.FirstChild(); child == nil {
-			_, _ = io.WriteString(out, "/>")
+			if d.NoEmpty {
+				_, _ = io.WriteString(out, "></")
+				_, _ = io.WriteString(out, name)
+				_, _ = io.WriteString(out, ">")
+			} else {
+				_, _ = io.WriteString(out, "/>")
+			}
 			return nil
 		}
 	}

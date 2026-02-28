@@ -203,3 +203,60 @@ func TestFormatOutput(t *testing.T) {
 		require.Equal(t, expected, str)
 	})
 }
+
+func TestNoEmpty(t *testing.T) {
+	t.Run("empty element uses open+close tags", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?><root><br/></root>`))
+		require.NoError(t, err)
+
+		str, err := doc.XMLString(helium.WithNoEmpty())
+		require.NoError(t, err)
+
+		expected := "<?xml version=\"1.0\"?>\n<root><br></br></root>\n"
+		require.Equal(t, expected, str)
+	})
+
+	t.Run("non-empty element unchanged", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?><root><p>text</p></root>`))
+		require.NoError(t, err)
+
+		str, err := doc.XMLString(helium.WithNoEmpty())
+		require.NoError(t, err)
+
+		expected := "<?xml version=\"1.0\"?>\n<root><p>text</p></root>\n"
+		require.Equal(t, expected, str)
+	})
+
+	t.Run("empty element with attributes", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?><root><img src="a.png"/></root>`))
+		require.NoError(t, err)
+
+		str, err := doc.XMLString(helium.WithNoEmpty())
+		require.NoError(t, err)
+
+		expected := "<?xml version=\"1.0\"?>\n<root><img src=\"a.png\"></img></root>\n"
+		require.Equal(t, expected, str)
+	})
+
+	t.Run("combined with format", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?><root><a/><b/></root>`))
+		require.NoError(t, err)
+
+		str, err := doc.XMLString(helium.WithNoEmpty(), helium.WithFormat())
+		require.NoError(t, err)
+
+		expected := "<?xml version=\"1.0\"?>\n<root>\n  <a></a>\n  <b></b>\n</root>\n"
+		require.Equal(t, expected, str)
+	})
+
+	t.Run("without NoEmpty stays self-closing", func(t *testing.T) {
+		doc, err := helium.Parse([]byte(`<?xml version="1.0"?><root><br/></root>`))
+		require.NoError(t, err)
+
+		str, err := doc.XMLString()
+		require.NoError(t, err)
+
+		expected := "<?xml version=\"1.0\"?>\n<root><br/></root>\n"
+		require.Equal(t, expected, str)
+	})
+}
