@@ -81,15 +81,14 @@ func validateRootElement(elem *helium.Element, schema *Schema, filename string, 
 	}
 
 	td := resolveXsiType(elem, edecl.Type, schema)
-
 	if hasXsiNil(elem) {
 		return validateNilledElement(elem, edecl, td, schema, filename, out)
 	}
 
-	return validateElementContent(elem, td, schema, filename, out)
+	return validateElementContent(elem, edecl, td, schema, filename, out)
 }
 
-func validateElementContent(elem *helium.Element, td *TypeDef, schema *Schema, filename string, out *strings.Builder) error {
+func validateElementContent(elem *helium.Element, edecl *ElementDecl, td *TypeDef, schema *Schema, filename string, out *strings.Builder) error {
 	// Validate attributes.
 	if err := validateAttributes(elem, td, schema, filename, out); err != nil {
 		return err
@@ -99,7 +98,7 @@ func validateElementContent(elem *helium.Element, td *TypeDef, schema *Schema, f
 	case ContentTypeEmpty:
 		return validateEmptyContent(elem, filename, out)
 	case ContentTypeSimple:
-		return validateSimpleContent(elem, td, filename, out)
+		return validateSimpleContent(elem, edecl, td, filename, out)
 	case ContentTypeElementOnly, ContentTypeMixed:
 		if td.ContentModel == nil {
 			// No content model means anything goes (for mixed) or empty (for element-only).
@@ -113,7 +112,7 @@ func validateElementContent(elem *helium.Element, td *TypeDef, schema *Schema, f
 	return nil
 }
 
-func validateSimpleContent(elem *helium.Element, td *TypeDef, filename string, out *strings.Builder) error {
+func validateSimpleContent(elem *helium.Element, edecl *ElementDecl, td *TypeDef, filename string, out *strings.Builder) error {
 	// Simple content types must not have child elements.
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		if child.Type() == helium.ElementNode {
@@ -123,10 +122,31 @@ func validateSimpleContent(elem *helium.Element, td *TypeDef, filename string, o
 		}
 	}
 
+	value := elemTextContent(elem)
+	isEmpty := value == ""
+
+	// Effective value: substitute default/fixed for empty elements.
+	effectiveValue := value
+	if isEmpty && edecl != nil {
+		if edecl.Fixed != nil {
+			effectiveValue = *edecl.Fixed
+		} else if edecl.Default != nil {
+			effectiveValue = *edecl.Default
+		}
+	}
+
+	// Fixed value mismatch check (only when element has actual content).
+	if !isEmpty && edecl != nil && edecl.Fixed != nil {
+		if strings.TrimSpace(value) != strings.TrimSpace(*edecl.Fixed) {
+			msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", strings.TrimSpace(value), *edecl.Fixed)
+			out.WriteString(validityError(filename, elem.Line(), elemDisplayName(elem), msg))
+			return fmt.Errorf("fixed value constraint")
+		}
+	}
+
 	// Validate the text value against the type.
 	if td != nil && (td.Facets != nil || resolveVariety(td) == TypeVarietyList || resolveVariety(td) == TypeVarietyUnion || builtinBaseLocal(td) != "" && builtinBaseLocal(td) != "string" && builtinBaseLocal(td) != "anySimpleType") {
-		value := elemTextContent(elem)
-		return validateValue(value, td, elemDisplayName(elem), filename, elem.Line(), out)
+		return validateValue(effectiveValue, td, elemDisplayName(elem), filename, elem.Line(), out)
 	}
 
 	return nil
@@ -224,13 +244,19 @@ func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, filen
 		allowed[au.Name] = au
 	}
 
-	// Check for unknown attributes.
+	// Check for unknown attributes and fixed value constraints.
 	for _, a := range elem.Attributes() {
 		if isSpecialAttr(a) {
 			continue
 		}
 		aqn := QName{Local: a.LocalName(), NS: a.URI()}
-		if _, ok := allowed[aqn]; ok {
+		if au, ok := allowed[aqn]; ok {
+			if au.Fixed != nil && a.Value() != *au.Fixed {
+				ad := attrDisplayName(a)
+				msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *au.Fixed)
+				out.WriteString(validityErrorAttr(filename, elem.Line(), elemDisplayName(elem), ad, msg))
+				return fmt.Errorf("fixed value constraint")
+			}
 			continue
 		}
 		// Not in explicit declarations — check anyAttribute wildcard.

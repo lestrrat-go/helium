@@ -334,3 +334,86 @@ func extractBaseName(name string) string {
 	}
 	return strings.Join(parts[:len(parts)-2], "_")
 }
+
+func TestDefaultFixedValidation(t *testing.T) {
+	compileAndValidate := func(t *testing.T, xsdStr, xmlStr string) string {
+		t.Helper()
+		xsdDoc, err := helium.Parse([]byte(xsdStr))
+		require.NoError(t, err, "XSD parse failed")
+		schema, err := xsd.Compile(xsdDoc)
+		require.NoError(t, err, "schema compilation failed")
+		require.Empty(t, schema.CompileErrors(), "unexpected compile errors")
+
+		xmlDoc, err := helium.Parse([]byte(xmlStr))
+		require.NoError(t, err, "XML parse failed")
+		return xsd.Validate(xmlDoc, schema, xsd.WithFilename("test.xml"))
+	}
+
+	t.Run("element_fixed_correct_value", func(t *testing.T) {
+		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:string" fixed="hello"/>
+</xs:schema>`
+		xmlStr := `<root>hello</root>`
+		result := compileAndValidate(t, xsdStr, xmlStr)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+	})
+
+	t.Run("element_fixed_wrong_value", func(t *testing.T) {
+		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:string" fixed="hello"/>
+</xs:schema>`
+		xmlStr := `<root>wrong</root>`
+		result := compileAndValidate(t, xsdStr, xmlStr)
+		require.Contains(t, result, "fixed value constraint")
+		require.Contains(t, result, "fails to validate")
+	})
+
+	t.Run("element_fixed_empty", func(t *testing.T) {
+		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:string" fixed="hello"/>
+</xs:schema>`
+		xmlStr := `<root/>`
+		result := compileAndValidate(t, xsdStr, xmlStr)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+	})
+
+	t.Run("element_default_empty_integer", func(t *testing.T) {
+		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:integer" default="42"/>
+</xs:schema>`
+		xmlStr := `<root/>`
+		result := compileAndValidate(t, xsdStr, xmlStr)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+	})
+
+	t.Run("attribute_fixed_correct", func(t *testing.T) {
+		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="color" type="xs:string" fixed="red"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		xmlStr := `<root color="red"/>`
+		result := compileAndValidate(t, xsdStr, xmlStr)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+	})
+
+	t.Run("attribute_fixed_wrong", func(t *testing.T) {
+		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="color" type="xs:string" fixed="red"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		xmlStr := `<root color="blue"/>`
+		result := compileAndValidate(t, xsdStr, xmlStr)
+		require.Contains(t, result, "fixed value constraint")
+		require.Contains(t, result, "fails to validate")
+	})
+}
