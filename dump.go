@@ -239,6 +239,12 @@ func WithNoEmpty() DumpOption {
 	return func(d *Dumper) { d.NoEmpty = true }
 }
 
+// WithNoDecl suppresses the <?xml ...?> declaration from the output.
+// Equivalent to libxml2's XML_SAVE_NO_DECL flag.
+func WithNoDecl() DumpOption {
+	return func(d *Dumper) { d.NoDecl = true }
+}
+
 // Dumper serializes an XML document tree.
 // escapeNonASCII controls whether characters U+0080–U+00FF are emitted as
 // numeric character references (&#xNN;).  libxml2 only does this when the
@@ -253,6 +259,8 @@ type Dumper struct {
 	SkipDTD bool
 	// NoEmpty forces empty elements to use open+close tags instead of self-closing.
 	NoEmpty bool
+	// NoDecl suppresses the <?xml ...?> declaration.
+	NoDecl bool
 
 	escapeNonASCII bool
 	isXHTML        bool
@@ -817,8 +825,10 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 	var err error
 	switch n.Type() {
 	case DocumentNode:
-		if err = d.dumpDocContent(out, n); err != nil {
-			return err
+		if !d.NoDecl {
+			if err = d.dumpDocContent(out, n); err != nil {
+				return err
+			}
 		}
 		return nil
 	case DTDNode:
