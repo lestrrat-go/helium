@@ -81,6 +81,8 @@ type ElementDecl struct {
 	SubstitutionGroup QName // QName of the substitution group head (zero value if none)
 	IsRef             bool  // true if this was created from a ref="..." attribute
 	IDCs              []*IDConstraint
+	Default           *string // nil = not set
+	Fixed             *string // nil = not set
 }
 
 // IDCKind describes the kind of identity constraint.
@@ -153,6 +155,8 @@ type AttrUse struct {
 	TypeName   QName
 	Required   bool
 	Prohibited bool
+	Default    *string // nil = not set
+	Fixed      *string // nil = not set
 }
 
 // ModelGroup is a content model compositor (sequence, choice, all).

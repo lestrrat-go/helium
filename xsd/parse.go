@@ -34,6 +34,8 @@ type compiler struct {
 	itemTypeRefs map[*TypeDef]QName
 	// unresolved union member type references
 	unionMemberRefs []unionMemberRef
+	// unresolved attribute references: maps from AttrUse to global attr QName
+	attrRefs map[*AttrUse]QName
 	// schema error/warning collection
 	schemaErrors   strings.Builder
 	schemaWarnings strings.Builder
@@ -89,6 +91,7 @@ func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*S
 		globalElemSources: make(map[*ElementDecl]elemRefSource),
 		typeDefSources:    make(map[*TypeDef]typeDefSource),
 		itemTypeRefs:      make(map[*TypeDef]QName),
+		attrRefs:          make(map[*AttrUse]QName),
 		importedNS:        make(map[string]string),
 	}
 	if cfg != nil {
@@ -346,6 +349,7 @@ func (c *compiler) loadImport(location, namespace string) error {
 		globalElemSources: make(map[*ElementDecl]elemRefSource),
 		typeDefSources:    make(map[*TypeDef]typeDefSource),
 		itemTypeRefs:      make(map[*TypeDef]QName),
+		attrRefs:          make(map[*AttrUse]QName),
 		filename:          impFilename,
 		importedNS:        make(map[string]string),
 	}
@@ -431,6 +435,9 @@ func (c *compiler) loadImport(location, namespace string) error {
 		c.itemTypeRefs[td] = qn
 	}
 	c.unionMemberRefs = append(c.unionMemberRefs, impC.unionMemberRefs...)
+	for au, qn := range impC.attrRefs {
+		c.attrRefs[au] = qn
+	}
 
 	return nil
 }
@@ -452,6 +459,12 @@ func (c *compiler) parseGlobalElement(elem *helium.Element) error {
 
 	if sg := getAttr(elem, "substitutionGroup"); sg != "" {
 		decl.SubstitutionGroup = c.resolveQName(elem, sg)
+	}
+	if v := getAttr(elem, "default"); v != "" {
+		decl.Default = &v
+	}
+	if v := getAttr(elem, "fixed"); v != "" {
+		decl.Fixed = &v
 	}
 
 	typeRef := getAttr(elem, "type")
@@ -1151,6 +1164,12 @@ func (c *compiler) parseLocalElement(elem *helium.Element) (*Particle, error) {
 		MinOccurs: minOcc,
 		MaxOccurs: maxOcc,
 	}
+	if v := getAttr(elem, "default"); v != "" {
+		edecl.Default = &v
+	}
+	if v := getAttr(elem, "fixed"); v != "" {
+		edecl.Fixed = &v
+	}
 
 	typeRef := getAttr(elem, "type")
 	if typeRef != "" {
@@ -1260,6 +1279,12 @@ func (c *compiler) parseGlobalAttribute(elem *helium.Element) {
 	if typeRef := getAttr(elem, "type"); typeRef != "" {
 		au.TypeName = c.resolveQName(elem, typeRef)
 	}
+	if v := getAttr(elem, "default"); v != "" {
+		au.Default = &v
+	}
+	if v := getAttr(elem, "fixed"); v != "" {
+		au.Fixed = &v
+	}
 	c.schema.globalAttrs[au.Name] = au
 }
 
@@ -1272,6 +1297,13 @@ func (c *compiler) parseAttributeUse(elem *helium.Element) *AttrUse {
 		if getAttr(elem, "use") == "required" {
 			au.Required = true
 		}
+		if v := getAttr(elem, "default"); v != "" {
+			au.Default = &v
+		}
+		if v := getAttr(elem, "fixed"); v != "" {
+			au.Fixed = &v
+		}
+		c.attrRefs[au] = qn
 		return au
 	}
 
@@ -1293,6 +1325,12 @@ func (c *compiler) parseAttributeUse(elem *helium.Element) *AttrUse {
 	case "prohibited":
 		au.Prohibited = true
 	}
+	if v := getAttr(elem, "default"); v != "" {
+		au.Default = &v
+	}
+	if v := getAttr(elem, "fixed"); v != "" {
+		au.Fixed = &v
+	}
 	return au
 }
 
@@ -1309,6 +1347,12 @@ func (c *compiler) resolveRefs() error {
 			// First check if this is a reference to a global element.
 			if ge, ok := c.schema.elements[qn]; ok {
 				edecl.Type = ge.Type
+				if edecl.Default == nil {
+					edecl.Default = ge.Default
+				}
+				if edecl.Fixed == nil {
+					edecl.Fixed = ge.Fixed
+				}
 				continue
 			}
 			// For ref elements, report unresolved element declaration error.
@@ -1410,6 +1454,23 @@ func (c *compiler) resolveRefs() error {
 			if attrs, ok := c.schema.attrGroups[qn]; ok {
 				td.Attributes = append(td.Attributes, attrs...)
 			}
+		}
+	}
+
+	// Resolve attribute references: copy Default/Fixed/TypeName from global attr.
+	for au, qn := range c.attrRefs {
+		ga, ok := c.schema.globalAttrs[qn]
+		if !ok {
+			continue
+		}
+		if au.Default == nil {
+			au.Default = ga.Default
+		}
+		if au.Fixed == nil {
+			au.Fixed = ga.Fixed
+		}
+		if au.TypeName == (QName{}) {
+			au.TypeName = ga.TypeName
 		}
 	}
 

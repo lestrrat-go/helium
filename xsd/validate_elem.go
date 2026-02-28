@@ -299,21 +299,39 @@ func matchElementParticle(parent *helium.Element, p *Particle, edecl *ElementDec
 
 	// Validate each matched child element's own content model.
 	// Continue after value/content errors so all errors are reported.
-	// For substitution group members, use the member's type instead of the head's type.
+	// For substitution group members, use the member's declaration (type + default/fixed).
 	// xsi:type overrides the declared type for polymorphism.
 	var contentErr error
 	for i := 0; i < count; i++ {
 		child := children[pos+i]
-		td := resolveSubstType(child, edecl, schema)
+		actualDecl := resolveSubstDecl(child, edecl, schema)
+		td := actualDecl.Type
 		td = resolveXsiType(child.elem, td, schema)
 		if td != nil {
-			if err := validateElementContent(child.elem, td, schema, filename, out); err != nil {
+			if err := validateElementContent(child.elem, actualDecl, td, schema, filename, out); err != nil {
 				contentErr = err
 			}
 		}
 	}
 
 	return count, contentErr
+}
+
+// resolveSubstDecl returns the actual element declaration for a child element.
+// If the child matches the declaration directly, returns the original declaration.
+// If the child is a substitution group member, returns the member's declaration.
+func resolveSubstDecl(child childElem, edecl *ElementDecl, schema *Schema) *ElementDecl {
+	if matchesDeclDirect(child, edecl) {
+		return edecl
+	}
+	if schema != nil {
+		for _, member := range schema.substGroups[edecl.Name] {
+			if matchesDeclDirect(child, member) {
+				return member
+			}
+		}
+	}
+	return edecl
 }
 
 // tryMatchParticle is like matchParticle but does not write errors.
