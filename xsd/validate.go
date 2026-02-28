@@ -81,6 +81,10 @@ func validateRootElement(elem *helium.Element, schema *Schema, filename string, 
 	}
 
 	td := resolveXsiType(elem, edecl.Type, schema)
+	if hasXsiNil(elem) {
+		return validateNilledElement(elem, edecl, td, schema, filename, out)
+	}
+
 	return validateElementContent(elem, edecl, td, schema, filename, out)
 }
 
@@ -374,6 +378,56 @@ func isBlank(b []byte) bool {
 }
 
 const xsiNS = "http://www.w3.org/2001/XMLSchema-instance"
+
+// hasXsiNil returns true if the element has xsi:nil="true".
+func hasXsiNil(elem *helium.Element) bool {
+	for _, a := range elem.Attributes() {
+		if a.URI() == xsiNS && a.LocalName() == "nil" {
+			return a.Value() == "true" || a.Value() == "1"
+		}
+	}
+	return false
+}
+
+// validateNilledElement handles an element with xsi:nil="true".
+// If the declaration is nillable, validates that the element has no character
+// or element content (attributes are still checked).  If not nillable,
+// reports a validity error.
+func validateNilledElement(elem *helium.Element, edecl *ElementDecl, td *TypeDef, schema *Schema, filename string, out *strings.Builder) error {
+	dn := elemDisplayName(elem)
+
+	if !edecl.Nillable {
+		out.WriteString(validityError(filename, elem.Line(), dn,
+			"Element is not nillable."))
+		return fmt.Errorf("element not nillable")
+	}
+
+	// Validate attributes even for nilled elements.
+	if td != nil {
+		if err := validateAttributes(elem, td, schema, filename, out); err != nil {
+			return err
+		}
+	}
+
+	// xsi:nil="true" — the element must have no character or element children.
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		switch child.Type() {
+		case helium.ElementNode:
+			ce := child.(*helium.Element)
+			out.WriteString(validityError(filename, ce.Line(), elemDisplayName(ce),
+				"This element is not expected, because the element '"+dn+"' is nilled."))
+			return fmt.Errorf("content in nilled element")
+		case helium.TextNode, helium.CDATASectionNode:
+			if !isBlank(child.Content()) {
+				out.WriteString(validityError(filename, elem.Line(), dn,
+					"Character content is not allowed, because the element is nilled."))
+				return fmt.Errorf("content in nilled element")
+			}
+		}
+	}
+
+	return nil
+}
 
 // resolveXsiType checks if the element has an xsi:type attribute and, if so,
 // resolves it to a type definition in the schema. Returns the resolved type

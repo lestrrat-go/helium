@@ -52,20 +52,22 @@ func (s *Schema) TargetNamespace() string {
 // ContentTypeKind describes the content type of a complex type.
 type ContentTypeKind int
 
+// ContentTypeKind values.
 const (
-	ContentTypeEmpty       ContentTypeKind = iota
-	ContentTypeSimple                      // text-only content
-	ContentTypeElementOnly                 // child elements only (no mixed text)
-	ContentTypeMixed                       // elements + text interleaved
+	ContentTypeEmpty       ContentTypeKind = iota // element has no content
+	ContentTypeSimple                             // text-only content
+	ContentTypeElementOnly                        // child elements only (no mixed text)
+	ContentTypeMixed                              // elements + text interleaved
 )
 
 // ModelGroupKind describes the compositor of a model group.
 type ModelGroupKind int
 
+// ModelGroupKind values.
 const (
-	CompositorSequence ModelGroupKind = iota
-	CompositorChoice
-	CompositorAll
+	CompositorSequence ModelGroupKind = iota // xs:sequence
+	CompositorChoice                         // xs:choice
+	CompositorAll                            // xs:all
 )
 
 // Unbounded is the sentinel for maxOccurs="unbounded".
@@ -78,6 +80,7 @@ type ElementDecl struct {
 	MinOccurs         int
 	MaxOccurs         int // -1 = unbounded
 	Abstract          bool
+	Nillable          bool  // true if the element may carry xsi:nil="true"
 	SubstitutionGroup QName // QName of the substitution group head (zero value if none)
 	IsRef             bool  // true if this was created from a ref="..." attribute
 	IDCs              []*IDConstraint
@@ -88,10 +91,11 @@ type ElementDecl struct {
 // IDCKind describes the kind of identity constraint.
 type IDCKind int
 
+// IDCKind values.
 const (
-	IDCUnique IDCKind = iota
-	IDCKey
-	IDCKeyRef
+	IDCUnique IDCKind = iota // xs:unique
+	IDCKey                   // xs:key
+	IDCKeyRef                // xs:keyref
 )
 
 // IDConstraint represents an xs:unique, xs:key, or xs:keyref identity constraint.
@@ -107,19 +111,21 @@ type IDConstraint struct {
 // DerivationKind describes how a type is derived from its base.
 type DerivationKind int
 
+// DerivationKind values.
 const (
-	DerivationNone        DerivationKind = iota
-	DerivationExtension
-	DerivationRestriction
+	DerivationNone        DerivationKind = iota // no derivation
+	DerivationExtension                         // derived by extension
+	DerivationRestriction                       // derived by restriction
 )
 
 // TypeVariety describes the variety of a simple type definition.
 type TypeVariety int
 
+// TypeVariety values.
 const (
-	TypeVarietyAtomic TypeVariety = iota
-	TypeVarietyList
-	TypeVarietyUnion
+	TypeVarietyAtomic TypeVariety = iota // atomic simple type
+	TypeVarietyList                      // list of atomic values
+	TypeVarietyUnion                     // union of simple types
 )
 
 // TypeDef is a schema type definition.
@@ -186,10 +192,20 @@ type Particle struct {
 // ProcessContentsKind describes how matching elements are validated.
 type ProcessContentsKind int
 
+// ProcessContentsKind values.
 const (
-	ProcessStrict ProcessContentsKind = iota
-	ProcessLax
-	ProcessSkip
+	ProcessStrict ProcessContentsKind = iota // validate against schema
+	ProcessLax                               // validate if declaration found, skip otherwise
+	ProcessSkip                              // skip validation entirely
+)
+
+// Wildcard namespace constraint tokens used in xs:any/@namespace.
+const (
+	WildcardNSAny             = "##any"
+	WildcardNSOther           = "##other"
+	WildcardNSLocal           = "##local"
+	WildcardNSTargetNamespace = "##targetNamespace"
+	WildcardNSNotAbsent       = "##not-absent"
 )
 
 // Wildcard represents an xs:any or xs:anyAttribute wildcard.

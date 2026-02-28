@@ -13,6 +13,12 @@ import (
 
 const xsdNS = "http://www.w3.org/2001/XMLSchema"
 
+// attrValTrue and attrValQualified are common XML attribute value strings.
+const (
+	attrValTrue      = "true"
+	attrValQualified = "qualified"
+)
+
 // compiler holds state during schema compilation.
 type compiler struct {
 	schema  *Schema
@@ -99,8 +105,8 @@ func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*S
 	}
 
 	c.schema.targetNamespace = getAttr(root, "targetNamespace")
-	c.schema.elemFormQualified = getAttr(root, "elementFormDefault") == "qualified"
-	c.schema.attrFormQualified = getAttr(root, "attributeFormDefault") == "qualified"
+	c.schema.elemFormQualified = getAttr(root, "elementFormDefault") == attrValQualified
+	c.schema.attrFormQualified = getAttr(root, "attributeFormDefault") == attrValQualified
 
 	// Register built-in types.
 	registerBuiltinTypes(c.schema)
@@ -118,9 +124,7 @@ func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*S
 	}
 
 	// Second pass: resolve type references.
-	if err := c.resolveRefs(); err != nil {
-		return nil, err
-	}
+	c.resolveRefs()
 
 	// Build substitution group membership map and detect circular references.
 	for _, edecl := range c.schema.elements {
@@ -280,10 +284,10 @@ func (c *compiler) loadInclude(location string, includeElem *helium.Element) err
 	savedAttrForm := c.schema.attrFormQualified
 	savedIncludeFile := c.includeFile
 	if v := getAttr(incRoot, "elementFormDefault"); v != "" {
-		c.schema.elemFormQualified = v == "qualified"
+		c.schema.elemFormQualified = v == attrValQualified
 	}
 	if v := getAttr(incRoot, "attributeFormDefault"); v != "" {
-		c.schema.attrFormQualified = v == "qualified"
+		c.schema.attrFormQualified = v == attrValQualified
 	}
 
 	// Set the include file path for duplicate element error reporting.
@@ -303,7 +307,7 @@ func (c *compiler) loadInclude(location string, includeElem *helium.Element) err
 }
 
 // loadImport loads an imported schema and merges its declarations.
-func (c *compiler) loadImport(location, namespace string) error {
+func (c *compiler) loadImport(location, _ string) error {
 	path := location
 	if c.baseDir != "" {
 		path = filepath.Join(c.baseDir, location)
@@ -355,8 +359,8 @@ func (c *compiler) loadImport(location, namespace string) error {
 	}
 
 	impC.schema.targetNamespace = getAttr(impRoot, "targetNamespace")
-	impC.schema.elemFormQualified = getAttr(impRoot, "elementFormDefault") == "qualified"
-	impC.schema.attrFormQualified = getAttr(impRoot, "attributeFormDefault") == "qualified"
+	impC.schema.elemFormQualified = getAttr(impRoot, "elementFormDefault") == attrValQualified
+	impC.schema.attrFormQualified = getAttr(impRoot, "attributeFormDefault") == attrValQualified
 
 	registerBuiltinTypes(impC.schema)
 
@@ -454,7 +458,8 @@ func (c *compiler) parseGlobalElement(elem *helium.Element) error {
 		Name:      QName{Local: name, NS: c.schema.targetNamespace},
 		MinOccurs: 1,
 		MaxOccurs: 1,
-		Abstract:  getAttr(elem, "abstract") == "true",
+		Abstract:  getAttr(elem, "abstract") == attrValTrue,
+		Nillable:  getAttr(elem, "nillable") == attrValTrue,
 	}
 
 	if sg := getAttr(elem, "substitutionGroup"); sg != "" {
@@ -554,7 +559,7 @@ func (c *compiler) parseComplexType(elem *helium.Element) (*TypeDef, error) {
 	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: true}
 
 	mixed := getAttr(elem, "mixed")
-	if mixed == "true" {
+	if mixed == attrValTrue {
 		td.ContentType = ContentTypeMixed
 	}
 
@@ -613,9 +618,7 @@ func (c *compiler) parseComplexType(elem *helium.Element) (*TypeDef, error) {
 				return nil, err
 			}
 		case isXSDElement(ce, "simpleContent"):
-			if err := c.parseSimpleContent(ce, td); err != nil {
-				return nil, err
-			}
+			c.parseSimpleContent(ce, td)
 		case isXSDElement(ce, "attribute"):
 			au := c.parseAttributeUse(ce)
 			td.Attributes = append(td.Attributes, au)
@@ -771,7 +774,7 @@ func (c *compiler) parseExtension(elem *helium.Element, td *TypeDef) error {
 	return nil
 }
 
-func (c *compiler) parseSimpleContent(elem *helium.Element, td *TypeDef) error {
+func (c *compiler) parseSimpleContent(elem *helium.Element, td *TypeDef) {
 	td.ContentType = ContentTypeSimple
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		if child.Type() != helium.ElementNode {
@@ -797,7 +800,6 @@ func (c *compiler) parseSimpleContent(elem *helium.Element, td *TypeDef) error {
 			c.parseSimpleContentChildren(ce, td)
 		}
 	}
-	return nil
 }
 
 // parseSimpleContentChildren parses attribute/attributeGroup children within
@@ -1155,7 +1157,7 @@ func (c *compiler) parseLocalElement(elem *helium.Element) (*Particle, error) {
 	// Determine element namespace based on form and elementFormDefault.
 	elemNS := ""
 	form := getAttr(elem, "form")
-	if form == "qualified" || (form == "" && c.schema.elemFormQualified) {
+	if form == attrValQualified || (form == "" && c.schema.elemFormQualified) {
 		elemNS = c.schema.targetNamespace
 	}
 
@@ -1163,6 +1165,7 @@ func (c *compiler) parseLocalElement(elem *helium.Element) (*Particle, error) {
 		Name:      QName{Local: name, NS: elemNS},
 		MinOccurs: minOcc,
 		MaxOccurs: maxOcc,
+		Nillable:  getAttr(elem, "nillable") == attrValTrue,
 	}
 	if v := getAttr(elem, "default"); v != "" {
 		edecl.Default = &v
@@ -1222,7 +1225,7 @@ func (c *compiler) parseWildcard(elem *helium.Element) *Particle {
 
 	ns := getAttr(elem, "namespace")
 	if ns == "" {
-		ns = "##any"
+		ns = WildcardNSAny
 	}
 
 	pc := ProcessStrict
@@ -1248,7 +1251,7 @@ func (c *compiler) parseWildcard(elem *helium.Element) *Particle {
 func (c *compiler) parseAnyAttribute(elem *helium.Element) *Wildcard {
 	ns := getAttr(elem, "namespace")
 	if ns == "" {
-		ns = "##any"
+		ns = WildcardNSAny
 	}
 
 	pc := ProcessStrict
@@ -1312,7 +1315,7 @@ func (c *compiler) parseAttributeUse(elem *helium.Element) *AttrUse {
 	// Determine attribute namespace based on form and attributeFormDefault.
 	attrNS := ""
 	form := getAttr(elem, "form")
-	if form == "qualified" || (form == "" && c.schema.attrFormQualified) {
+	if form == attrValQualified || (form == "" && c.schema.attrFormQualified) {
 		attrNS = c.schema.targetNamespace
 	}
 	au.Name = QName{Local: name, NS: attrNS}
@@ -1334,7 +1337,7 @@ func (c *compiler) parseAttributeUse(elem *helium.Element) *AttrUse {
 	return au
 }
 
-func (c *compiler) resolveRefs() error {
+func (c *compiler) resolveRefs() {
 	// Resolve element type references.
 	// Two passes: the first pass resolves type-name refs and may leave
 	// element-to-element refs with nil Type (because the target global element
@@ -1353,6 +1356,7 @@ func (c *compiler) resolveRefs() error {
 				if edecl.Fixed == nil {
 					edecl.Fixed = ge.Fixed
 				}
+				edecl.Nillable = ge.Nillable
 				continue
 			}
 			// For ref elements, report unresolved element declaration error.
@@ -1586,7 +1590,6 @@ func (c *compiler) resolveRefs() error {
 		}
 	}
 
-	return nil
 }
 
 // checkRestrictionAttrs validates that a restriction-derived type's attributes
@@ -1688,11 +1691,11 @@ func (c *compiler) checkRestrictionAttrs(td *TypeDef) {
 // of the namespace constraint of super, per XSD §3.10.6.
 func wildcardNSSubset(sub, super *Wildcard) bool {
 	// ##any is a superset of everything.
-	if super.Namespace == "##any" {
+	if super.Namespace == WildcardNSAny {
 		return true
 	}
 	// If sub is ##any but super is not, sub is not a subset.
-	if sub.Namespace == "##any" {
+	if sub.Namespace == WildcardNSAny {
 		return false
 	}
 	// Both are specific namespace sets — sub must be contained in super.
@@ -1710,22 +1713,22 @@ func wildcardNSSubset(sub, super *Wildcard) bool {
 func wildcardNSSet(wc *Wildcard) map[string]bool {
 	s := make(map[string]bool)
 	switch wc.Namespace {
-	case "##any":
+	case WildcardNSAny:
 		// Matches everything — not representable as a finite set.
-	case "##other":
+	case WildcardNSOther:
 		// Everything except target namespace and absent (empty) — not finite.
 		// For subset checking, treat as "not targetNS".
-	case "##local":
+	case WildcardNSLocal:
 		s[""] = true
-	case "##targetNamespace":
+	case WildcardNSTargetNamespace:
 		s[wc.TargetNS] = true
 	default:
 		// Space-separated list of URIs, possibly including ##local and ##targetNamespace.
 		for _, token := range strings.Fields(wc.Namespace) {
 			switch token {
-			case "##local":
+			case WildcardNSLocal:
 				s[""] = true
-			case "##targetNamespace":
+			case WildcardNSTargetNamespace:
 				s[wc.TargetNS] = true
 			default:
 				s[token] = true
@@ -1748,12 +1751,12 @@ func wildcardUnion(w1, w2 *Wildcard) *Wildcard {
 	tns := w1.TargetNS
 
 	// Case 2: If either is ##any, result is ##any.
-	if w1.Namespace == "##any" || w2.Namespace == "##any" {
-		return &Wildcard{Namespace: "##any", ProcessContents: pc, TargetNS: tns}
+	if w1.Namespace == WildcardNSAny || w2.Namespace == WildcardNSAny {
+		return &Wildcard{Namespace: WildcardNSAny, ProcessContents: pc, TargetNS: tns}
 	}
 
-	w1IsNeg := w1.Namespace == "##other" || w1.Namespace == "##not-absent"
-	w2IsNeg := w2.Namespace == "##other" || w2.Namespace == "##not-absent"
+	w1IsNeg := w1.Namespace == WildcardNSOther || w1.Namespace == WildcardNSNotAbsent
+	w2IsNeg := w2.Namespace == WildcardNSOther || w2.Namespace == WildcardNSNotAbsent
 
 	// Case 1: Both are the same value.
 	if w1.Namespace == w2.Namespace && w1.TargetNS == w2.TargetNS {
@@ -1778,7 +1781,7 @@ func wildcardUnion(w1, w2 *Wildcard) *Wildcard {
 			return &Wildcard{Namespace: w1.Namespace, ProcessContents: pc, TargetNS: tns}
 		}
 		// Different negated values → not(absent).
-		return &Wildcard{Namespace: "##not-absent", ProcessContents: pc, TargetNS: tns}
+		return &Wildcard{Namespace: WildcardNSNotAbsent, ProcessContents: pc, TargetNS: tns}
 	}
 
 	// Cases 5 & 6: One is a negation, the other is a set.
@@ -1798,20 +1801,20 @@ func wildcardUnion(w1, w2 *Wildcard) *Wildcard {
 		// Case 6: neg is not(absent).
 		if hasAbsent {
 			// 6.1: Set includes absent → any.
-			return &Wildcard{Namespace: "##any", ProcessContents: pc, TargetNS: tns}
+			return &Wildcard{Namespace: WildcardNSAny, ProcessContents: pc, TargetNS: tns}
 		}
 		// 6.2: Set doesn't include absent → not(absent).
-		return &Wildcard{Namespace: "##not-absent", ProcessContents: pc, TargetNS: tns}
+		return &Wildcard{Namespace: WildcardNSNotAbsent, ProcessContents: pc, TargetNS: tns}
 	}
 
 	// Case 5: neg is not(ns).
 	if hasNegated && hasAbsent {
 		// 5.1: Set includes both negated ns and absent → any.
-		return &Wildcard{Namespace: "##any", ProcessContents: pc, TargetNS: tns}
+		return &Wildcard{Namespace: WildcardNSAny, ProcessContents: pc, TargetNS: tns}
 	}
 	if hasNegated && !hasAbsent {
 		// 5.2: Set includes negated ns but not absent → not(absent).
-		return &Wildcard{Namespace: "##not-absent", ProcessContents: pc, TargetNS: tns}
+		return &Wildcard{Namespace: WildcardNSNotAbsent, ProcessContents: pc, TargetNS: tns}
 	}
 	if !hasNegated && !hasAbsent {
 		// 5.4: Set includes neither → the negation.
@@ -1819,13 +1822,13 @@ func wildcardUnion(w1, w2 *Wildcard) *Wildcard {
 	}
 	// 5.3: Set includes absent but not negated ns → not expressible.
 	// Fall back to ##any (permissive).
-	return &Wildcard{Namespace: "##any", ProcessContents: pc, TargetNS: tns}
+	return &Wildcard{Namespace: WildcardNSAny, ProcessContents: pc, TargetNS: tns}
 }
 
 // wildcardNegatedNS returns the namespace being negated.
 // For ##other, it's the target namespace. For ##not-absent, it's "".
 func wildcardNegatedNS(wc *Wildcard) string {
-	if wc.Namespace == "##not-absent" {
+	if wc.Namespace == WildcardNSNotAbsent {
 		return ""
 	}
 	// ##other negates the target namespace.
@@ -1837,7 +1840,7 @@ func wildcardFromSet(s map[string]bool, pc ProcessContentsKind, tns string) *Wil
 	var parts []string
 	for ns := range s {
 		if ns == "" {
-			parts = append(parts, "##local")
+			parts = append(parts, WildcardNSLocal)
 		} else {
 			parts = append(parts, ns)
 		}
@@ -2062,7 +2065,7 @@ func registerBuiltinTypes(s *Schema) {
 		if name == "anyType" {
 			td.ContentType = ContentTypeMixed
 			td.AnyAttribute = &Wildcard{
-				Namespace:       "##any",
+				Namespace:       WildcardNSAny,
 				ProcessContents: ProcessLax,
 			}
 		}
