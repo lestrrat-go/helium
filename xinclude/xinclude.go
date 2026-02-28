@@ -18,6 +18,7 @@ const (
 	xiNamespaceLegacy = "http://www.w3.org/2001/XInclude"
 	xiNamespaceNew    = "http://www.w3.org/2003/XInclude"
 	maxDepth          = 40
+	maxURILength      = 2000
 )
 
 // Resolver loads content from a URI.
@@ -139,6 +140,9 @@ func (p *processor) processNode(n helium.Node) error {
 	// Recurse into remaining children (including newly inserted content)
 	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
 		if c.Type() == helium.ElementNode {
+			if isFallback(c) {
+				return fmt.Errorf("xi:fallback is not the child of an 'include'")
+			}
 			if err := p.processNode(c); err != nil {
 				return err
 			}
@@ -148,6 +152,10 @@ func (p *processor) processNode(n helium.Node) error {
 }
 
 func (p *processor) processInclude(inc *helium.Element) error {
+	if err := validateIncludeChildren(inc); err != nil {
+		return err
+	}
+
 	href := getAttr(inc, "href")
 	xptrExpr := getAttr(inc, "xpointer")
 	parse := getAttr(inc, "parse")
@@ -160,6 +168,11 @@ func (p *processor) processInclude(inc *helium.Element) error {
 	if idx := strings.IndexByte(href, '#'); idx >= 0 {
 		fragment = href[idx+1:]
 		href = href[:idx]
+	}
+
+	// URI length limit (matches libxml2's XML_MAX_URI_LENGTH)
+	if len(href) > maxURILength {
+		return fmt.Errorf("xi:include: URI too long")
 	}
 
 	// 2003 namespace with fragment in href is an error per spec
@@ -233,7 +246,7 @@ func (p *processor) processInclude(inc *helium.Element) error {
 }
 
 func (p *processor) includeXML(inc *helium.Element, uri string, incBase string) error {
-	doc, err := p.loadXMLDoc(uri)
+	doc, err := p.loadXMLDoc(uri, false)
 	if err != nil {
 		return err
 	}
@@ -253,6 +266,10 @@ func (p *processor) includeXML(inc *helium.Element, uri string, incBase string) 
 		unlinkNode(inc)
 		p.count++
 		return nil
+	}
+
+	if err := checkMultiRootInclusion(inc, nodes); err != nil {
+		return err
 	}
 
 	// Set xml:base on included content (if not suppressed)
@@ -301,7 +318,7 @@ func (p *processor) includeXMLWithXPointer(inc *helium.Element, uri string, xptr
 		// current document (via base URI) to avoid seeing nodes that were
 		// inserted by previous XInclude processing in this pass.
 		if p.baseURI != "" {
-			doc, err = p.loadXMLDoc(p.baseURI)
+			doc, err = p.loadXMLDoc(p.baseURI, true)
 			if err != nil {
 				return err
 			}
@@ -309,7 +326,7 @@ func (p *processor) includeXMLWithXPointer(inc *helium.Element, uri string, xptr
 			doc = inc.OwnerDocument()
 		}
 	} else {
-		doc, err = p.loadXMLDoc(uri)
+		doc, err = p.loadXMLDoc(uri, true)
 		if err != nil {
 			return err
 		}
@@ -359,6 +376,10 @@ func (p *processor) includeXMLWithXPointer(inc *helium.Element, uri string, xptr
 				computeBaseForIncludedNode(elem, srcBases[i], fixupTargetBase)
 			}
 		}
+	}
+
+	if err := checkMultiRootInclusion(inc, copies); err != nil {
+		return err
 	}
 
 	p.replaceWithNodes(inc, copies)
@@ -411,8 +432,13 @@ func propagateDTD(src, dst *helium.Document) {
 	}
 }
 
-func (p *processor) loadXMLDoc(uri string) (*helium.Document, error) {
-	if entry, ok := p.docCache[uri]; ok {
+func (p *processor) loadXMLDoc(uri string, substituteEntities bool) (*helium.Document, error) {
+	cacheKey := uri
+	if substituteEntities {
+		cacheKey = uri + "\x00noent"
+	}
+
+	if entry, ok := p.docCache[cacheKey]; ok {
 		if entry.err != nil {
 			return nil, entry.err
 		}
@@ -424,7 +450,7 @@ func (p *processor) loadXMLDoc(uri string) (*helium.Document, error) {
 
 	rc, err := p.resolver.Resolve(uri, p.baseURI)
 	if err != nil {
-		p.docCache[uri] = docCacheEntry{err: err}
+		p.docCache[cacheKey] = docCacheEntry{err: err}
 		return nil, err
 	}
 	defer func() { _ = rc.Close() }()
@@ -432,23 +458,27 @@ func (p *processor) loadXMLDoc(uri string) (*helium.Document, error) {
 	data, err := io.ReadAll(rc)
 	if err != nil {
 		wrapErr := fmt.Errorf("xi:include: error reading %q: %w", uri, err)
-		p.docCache[uri] = docCacheEntry{err: wrapErr}
+		p.docCache[cacheKey] = docCacheEntry{err: wrapErr}
 		return nil, wrapErr
 	}
 
 	parser := helium.NewParser()
-	parser.SetOption(helium.ParseDTDLoad)
+	opts := helium.ParseDTDLoad
+	if substituteEntities {
+		opts |= helium.ParseNoEnt
+	}
+	parser.SetOption(opts)
 	parser.SetBaseURI(uri)
 	doc, err := parser.Parse(data)
 	if err != nil {
 		wrapErr := fmt.Errorf("xi:include: error parsing %q: %w", uri, err)
-		p.docCache[uri] = docCacheEntry{err: wrapErr}
+		p.docCache[cacheKey] = docCacheEntry{err: wrapErr}
 		return nil, wrapErr
 	}
 
 	// Cache successful parse (note: nodes will be detached, so subsequent
 	// inclusions of the same URI will need re-parsing via Resolve)
-	p.docCache[uri] = docCacheEntry{doc: doc}
+	p.docCache[cacheKey] = docCacheEntry{doc: doc}
 	return doc, nil
 }
 
@@ -655,6 +685,67 @@ func unlinkNode(n helium.Node) {
 	n.SetNextSibling(nil)
 }
 
+func isXINamespace(ns string) bool {
+	return ns == xiNamespaceLegacy || ns == xiNamespaceNew
+}
+
+func isFallback(n helium.Node) bool {
+	if n.Type() != helium.ElementNode {
+		return false
+	}
+	elem, ok := n.(*helium.Element)
+	if !ok {
+		return false
+	}
+	return elem.LocalName() == "fallback" && isXINamespace(getNamespaceURI(elem))
+}
+
+func validateIncludeChildren(inc *helium.Element) error {
+	nsURI := getNamespaceURI(inc)
+	var fallbackCount int
+	for c := inc.FirstChild(); c != nil; c = c.NextSibling() {
+		if c.Type() != helium.ElementNode {
+			continue
+		}
+		elem, ok := c.(*helium.Element)
+		if !ok {
+			continue
+		}
+		cNS := getNamespaceURI(elem)
+		if elem.LocalName() == "include" && isXINamespace(cNS) {
+			return fmt.Errorf("xi:include has an 'include' child")
+		}
+		if elem.LocalName() == "fallback" && cNS == nsURI {
+			fallbackCount++
+			if fallbackCount > 1 {
+				return fmt.Errorf("xi:include has multiple fallback children")
+			}
+		}
+	}
+	return nil
+}
+
+func checkMultiRootInclusion(inc *helium.Element, nodes []helium.Node) error {
+	parent := inc.Parent()
+	if parent == nil || parent.Type() == helium.ElementNode {
+		return nil
+	}
+	// Parent is a Document node — count element nodes in replacement
+	var elemCount int
+	for _, n := range nodes {
+		if n.Type() == helium.ElementNode {
+			elemCount++
+		}
+	}
+	if elemCount > 1 {
+		return fmt.Errorf("xi:include: would result in multiple root nodes")
+	}
+	if elemCount == 0 {
+		return fmt.Errorf("xi:include: would result in no root node")
+	}
+	return nil
+}
+
 func isXInclude(n helium.Node) bool {
 	if n.Type() != helium.ElementNode {
 		return false
@@ -663,8 +754,7 @@ func isXInclude(n helium.Node) bool {
 	if !ok {
 		return false
 	}
-	ns := getNamespaceURI(elem)
-	return elem.LocalName() == "include" && (ns == xiNamespaceLegacy || ns == xiNamespaceNew)
+	return elem.LocalName() == "include" && isXINamespace(getNamespaceURI(elem))
 }
 
 func getNamespaceURI(n helium.Node) string {
