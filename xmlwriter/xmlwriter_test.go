@@ -48,7 +48,7 @@ func TestSimpleElement(t *testing.T) {
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
-	require.Equal(t, `<?xml version="1.0"?><root/>`, strings.TrimRight(buf.String(), "\n"))
+	require.Equal(t, "<?xml version=\"1.0\"?>\n<root/>", strings.TrimRight(buf.String(), "\n"))
 }
 
 func TestElementWithText(t *testing.T) {
@@ -59,7 +59,7 @@ func TestElementWithText(t *testing.T) {
 	require.NoError(t, w.WriteString("hello"))
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
-	require.Equal(t, `<?xml version="1.0"?><root>hello</root>`, strings.TrimRight(buf.String(), "\n"))
+	require.Equal(t, "<?xml version=\"1.0\"?>\n<root>hello</root>", strings.TrimRight(buf.String(), "\n"))
 }
 
 func TestElementWithEscaping(t *testing.T) {
@@ -81,7 +81,7 @@ func TestNestedElements(t *testing.T) {
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
-	require.Equal(t, `<?xml version="1.0"?><root><child>text</child></root>`, strings.TrimRight(buf.String(), "\n"))
+	require.Equal(t, "<?xml version=\"1.0\"?>\n<root><child>text</child></root>", strings.TrimRight(buf.String(), "\n"))
 }
 
 func TestAttribute(t *testing.T) {
@@ -139,7 +139,7 @@ func TestSingleQuotes(t *testing.T) {
 	require.NoError(t, w.WriteAttribute("key", "it's"))
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
-	require.Equal(t, `<?xml version='1.0'?><root key='it&apos;s'/>`, strings.TrimRight(buf.String(), "\n"))
+	require.Equal(t, "<?xml version='1.0'?>\n<root key='it&apos;s'/>", strings.TrimRight(buf.String(), "\n"))
 }
 
 func TestDoubleQuotesInSingleQuoteMode(t *testing.T) {
@@ -183,7 +183,7 @@ func TestComment(t *testing.T) {
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
-	require.Equal(t, `<?xml version="1.0"?><!-- a comment --><root/>`, strings.TrimRight(buf.String(), "\n"))
+	require.Equal(t, "<?xml version=\"1.0\"?>\n<!-- a comment --><root/>", strings.TrimRight(buf.String(), "\n"))
 }
 
 func TestCommentInsideElement(t *testing.T) {
@@ -203,7 +203,7 @@ func TestPI(t *testing.T) {
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
-	require.Equal(t, `<?xml version="1.0"?><?php echo "hello";?><root/>`, strings.TrimRight(buf.String(), "\n"))
+	require.Equal(t, "<?xml version=\"1.0\"?>\n<?php echo \"hello\";?><root/>", strings.TrimRight(buf.String(), "\n"))
 }
 
 func TestPIEmptyContent(t *testing.T) {
@@ -315,7 +315,7 @@ func TestDTD(t *testing.T) {
 	require.NoError(t, w.StartElement("html"))
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
-	expected := `<?xml version="1.0"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html/>`
+	expected := "<?xml version=\"1.0\"?>\n<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\"><html/>"
 	require.Equal(t, expected, strings.TrimRight(buf.String(), "\n"))
 }
 
@@ -327,7 +327,7 @@ func TestDTDSystem(t *testing.T) {
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
-	expected := `<?xml version="1.0"?><!DOCTYPE root SYSTEM "root.dtd"><root/>`
+	expected := "<?xml version=\"1.0\"?>\n<!DOCTYPE root SYSTEM \"root.dtd\"><root/>"
 	require.Equal(t, expected, strings.TrimRight(buf.String(), "\n"))
 }
 
@@ -339,7 +339,7 @@ func TestDTDWithSubset(t *testing.T) {
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
-	expected := `<?xml version="1.0"?><!DOCTYPE root [<!ELEMENT root (#PCDATA)>]><root/>`
+	expected := "<?xml version=\"1.0\"?>\n<!DOCTYPE root [<!ELEMENT root (#PCDATA)>]><root/>"
 	require.Equal(t, expected, strings.TrimRight(buf.String(), "\n"))
 }
 
@@ -357,7 +357,7 @@ func TestStartDTDWithInternalDecls(t *testing.T) {
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
-	expected := "<?xml version=\"1.0\"?>" +
+	expected := "<?xml version=\"1.0\"?>\n" +
 		"<!DOCTYPE root [" +
 		"<!ELEMENT root (child)>" +
 		"<!ELEMENT child (#PCDATA)>" +
@@ -378,7 +378,7 @@ func TestDTDExternalEntity(t *testing.T) {
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
-	expected := `<?xml version="1.0"?><!DOCTYPE root [<!ENTITY logo SYSTEM "logo.gif" NDATA gif>]><root/>`
+	expected := "<?xml version=\"1.0\"?>\n<!DOCTYPE root [<!ENTITY logo SYSTEM \"logo.gif\" NDATA gif>]><root/>"
 	require.Equal(t, expected, strings.TrimRight(buf.String(), "\n"))
 }
 
@@ -392,7 +392,7 @@ func TestDTDNotation(t *testing.T) {
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
-	expected := `<?xml version="1.0"?><!DOCTYPE root [<!NOTATION gif SYSTEM "image/gif">]><root/>`
+	expected := "<?xml version=\"1.0\"?>\n<!DOCTYPE root [<!NOTATION gif SYSTEM \"image/gif\">]><root/>"
 	require.Equal(t, expected, strings.TrimRight(buf.String(), "\n"))
 }
 
@@ -445,7 +445,7 @@ func TestEndDocumentClosesAll(t *testing.T) {
 	require.NoError(t, w.StartElement("b"))
 	require.NoError(t, w.StartElement("c"))
 	require.NoError(t, w.EndDocument())
-	require.Equal(t, `<?xml version="1.0"?><a><b><c/></b></a>`, strings.TrimRight(buf.String(), "\n"))
+	require.Equal(t, "<?xml version=\"1.0\"?>\n<a><b><c/></b></a>", strings.TrimRight(buf.String(), "\n"))
 }
 
 func TestStateValidation(t *testing.T) {
@@ -569,7 +569,7 @@ func TestStartCommentViaStartEnd(t *testing.T) {
 	require.NoError(t, w.WriteString(" hello "))
 	require.NoError(t, w.EndComment())
 	require.NoError(t, w.EndDocument())
-	require.Equal(t, `<?xml version="1.0"?><!-- hello -->`, strings.TrimRight(buf.String(), "\n"))
+	require.Equal(t, "<?xml version=\"1.0\"?>\n<!-- hello -->", strings.TrimRight(buf.String(), "\n"))
 }
 
 func TestStartPIViaStartEnd(t *testing.T) {
@@ -580,7 +580,7 @@ func TestStartPIViaStartEnd(t *testing.T) {
 	require.NoError(t, w.WriteString(" data"))
 	require.NoError(t, w.EndPI())
 	require.NoError(t, w.EndDocument())
-	require.Equal(t, `<?xml version="1.0"?><?target data?>`, strings.TrimRight(buf.String(), "\n"))
+	require.Equal(t, "<?xml version=\"1.0\"?>\n<?target data?>", strings.TrimRight(buf.String(), "\n"))
 }
 
 func TestCompleteDocument(t *testing.T) {
@@ -606,7 +606,7 @@ func TestCompleteDocument(t *testing.T) {
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
 
-	expected := `<?xml version="1.0" encoding="UTF-8"?>` +
+	expected := "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
 		`<!-- Generated document -->` +
 		`<catalog xmlns="http://example.com/catalog">` +
 		`<book id="bk101"><title>XML Developer's Guide</title><price>44.95</price></book>` +
@@ -651,7 +651,7 @@ func TestWriteRawInDocument(t *testing.T) {
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
-	require.Equal(t, "<?xml version=\"1.0\"?>\n<root/>", strings.TrimRight(buf.String(), "\n"))
+	require.Equal(t, "<?xml version=\"1.0\"?>\n\n<root/>", strings.TrimRight(buf.String(), "\n"))
 }
 
 func TestNamespaceElementWithAttribute(t *testing.T) {
