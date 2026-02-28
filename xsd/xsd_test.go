@@ -417,3 +417,229 @@ func TestDefaultFixedValidation(t *testing.T) {
 		require.Contains(t, result, "fails to validate")
 	})
 }
+
+func TestRedefine(t *testing.T) {
+	tmpDir := filepath.Join("..", ".tmp", "redefine-test")
+	require.NoError(t, os.MkdirAll(tmpDir, 0o755))
+	t.Cleanup(func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			t.Logf("failed to remove temp dir %s: %v", tmpDir, err)
+		}
+	})
+
+	writeFile := func(t *testing.T, name, content string) string {
+		t.Helper()
+		p := filepath.Join(tmpDir, name)
+		require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
+		return p
+	}
+
+	compileAndValidate := func(t *testing.T, xsdPath, xmlStr string) string {
+		t.Helper()
+		schema, err := xsd.CompileFile(xsdPath)
+		require.NoError(t, err, "schema compilation failed")
+		require.Empty(t, schema.CompileErrors(), "unexpected compile errors: %s", schema.CompileErrors())
+
+		xmlDoc, err := helium.Parse([]byte(xmlStr))
+		require.NoError(t, err, "XML parse failed")
+		return xsd.Validate(xmlDoc, schema)
+	}
+
+	t.Run("complexType_extension", func(t *testing.T) {
+		writeFile(t, "base-ct-ext.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="personType">
+    <xs:sequence>
+      <xs:element name="name" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`)
+
+		mainPath := writeFile(t, "main-ct-ext.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-ct-ext.xsd">
+    <xs:complexType name="personType">
+      <xs:complexContent>
+        <xs:extension base="personType">
+          <xs:sequence>
+            <xs:element name="age" type="xs:integer"/>
+          </xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:redefine>
+  <xs:element name="person" type="personType"/>
+</xs:schema>`)
+
+		result := compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+<person><name>Alice</name><age>30</age></person>`)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+
+		result = compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+<person><name>Alice</name></person>`)
+		require.Contains(t, result, "fails to validate")
+	})
+
+	t.Run("complexType_restriction", func(t *testing.T) {
+		writeFile(t, "base-ct-restr.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="itemType">
+    <xs:sequence>
+      <xs:element name="name" type="xs:string"/>
+      <xs:element name="desc" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`)
+
+		mainPath := writeFile(t, "main-ct-restr.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-ct-restr.xsd">
+    <xs:complexType name="itemType">
+      <xs:complexContent>
+        <xs:restriction base="itemType">
+          <xs:sequence>
+            <xs:element name="name" type="xs:string"/>
+          </xs:sequence>
+        </xs:restriction>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:redefine>
+  <xs:element name="item" type="itemType"/>
+</xs:schema>`)
+
+		result := compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+<item><name>Widget</name></item>`)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+	})
+
+	t.Run("simpleType_restriction", func(t *testing.T) {
+		writeFile(t, "base-st.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="nameType">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+</xs:schema>`)
+
+		mainPath := writeFile(t, "main-st.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-st.xsd">
+    <xs:simpleType name="nameType">
+      <xs:restriction base="nameType">
+        <xs:maxLength value="5"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:redefine>
+  <xs:element name="val" type="nameType"/>
+</xs:schema>`)
+
+		result := compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+<val>Hi</val>`)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+
+		result = compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+<val>TooLongValue</val>`)
+		require.Contains(t, result, "fails to validate")
+	})
+
+	t.Run("group_redefine", func(t *testing.T) {
+		writeFile(t, "base-grp.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="fieldsGroup">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+    </xs:sequence>
+  </xs:group>
+</xs:schema>`)
+
+		mainPath := writeFile(t, "main-grp.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-grp.xsd">
+    <xs:group name="fieldsGroup">
+      <xs:sequence>
+        <xs:group ref="fieldsGroup"/>
+        <xs:element name="b" type="xs:string"/>
+      </xs:sequence>
+    </xs:group>
+  </xs:redefine>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:group ref="fieldsGroup"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`)
+
+		result := compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+<root><a>1</a><b>2</b></root>`)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+
+		result = compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+<root><a>1</a></root>`)
+		require.Contains(t, result, "fails to validate")
+	})
+
+	t.Run("attributeGroup_redefine", func(t *testing.T) {
+		writeFile(t, "base-ag.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="myAttrs">
+    <xs:attribute name="attr1" type="xs:string"/>
+  </xs:attributeGroup>
+</xs:schema>`)
+
+		mainPath := writeFile(t, "main-ag.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base-ag.xsd">
+    <xs:attributeGroup name="myAttrs">
+      <xs:attributeGroup ref="myAttrs"/>
+      <xs:attribute name="attr2" type="xs:string"/>
+    </xs:attributeGroup>
+  </xs:redefine>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attributeGroup ref="myAttrs"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`)
+
+		result := compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+<root attr1="a" attr2="b"/>`)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+	})
+
+	t.Run("chameleon_redefine", func(t *testing.T) {
+		// Redefined schema has no targetNamespace — adopts the including schema's NS.
+		writeFile(t, "base-chameleon.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="codeType">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+</xs:schema>`)
+
+		mainPath := writeFile(t, "main-chameleon.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/ns"
+           xmlns:tns="http://example.com/ns">
+  <xs:redefine schemaLocation="base-chameleon.xsd">
+    <xs:simpleType name="codeType">
+      <xs:restriction base="tns:codeType">
+        <xs:maxLength value="10"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:redefine>
+  <xs:element name="code" type="tns:codeType"/>
+</xs:schema>`)
+
+		result := compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+<code xmlns="http://example.com/ns">ABC</code>`)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+
+		result = compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+<code xmlns="http://example.com/ns">VeryLongCodeValue</code>`)
+		require.Contains(t, result, "fails to validate")
+	})
+}
