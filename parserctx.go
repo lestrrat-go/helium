@@ -4480,6 +4480,9 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 	}
 
 	attr.SetDefault(true)
+	if decl := lookupAttributeDecl(ctx.doc, local, prefix, elemName); decl != nil {
+		attr.SetAType(decl.AType())
+	}
 	ctx.attsDefault[elemName] = append(existing, attr)
 
 	/*

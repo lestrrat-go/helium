@@ -30,7 +30,7 @@ type Enumeration []string
 
 type Attribute struct {
 	docnode
-	// atype       AttributeType
+	atype       AttributeType
 	defaultAttr bool
 	ns          *Namespace
 }
@@ -106,6 +106,16 @@ func (n *Attribute) Replace(cur Node) {
 
 func (n *Attribute) SetTreeDoc(doc *Document) {
 	setTreeDoc(n, doc)
+}
+
+// AType returns the attribute type (e.g. AttrID, AttrCDATA).
+func (n *Attribute) AType() AttributeType {
+	return n.atype
+}
+
+// SetAType sets the attribute type.
+func (n *Attribute) SetAType(v AttributeType) {
+	n.atype = v
 }
 
 func (n *Attribute) SetDefault(b bool) {
