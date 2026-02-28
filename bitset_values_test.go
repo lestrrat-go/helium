@@ -32,6 +32,11 @@ func TestParseOptionBitPositions(t *testing.T) {
 	require.Equal(t, ParseOption(524288), ParseHuge)
 	require.Equal(t, ParseOption(2097152), ParseIgnoreEnc)
 	require.Equal(t, ParseOption(4194304), ParseBigLines)
+	require.Equal(t, ParseOption(8388608), ParseNoXXE)
+	require.Equal(t, ParseOption(16777216), ParseNoUnzip)
+	require.Equal(t, ParseOption(33554432), ParseNoSysCatalog)
+	require.Equal(t, ParseOption(67108864), ParseCatalogPI)
+	require.Equal(t, ParseOption(134217728), ParseSkipIDs)
 }
 
 func TestParseOptionFlagsAreUnique(t *testing.T) {
@@ -58,6 +63,11 @@ func TestParseOptionFlagsAreUnique(t *testing.T) {
 		ParseHuge,
 		ParseIgnoreEnc,
 		ParseBigLines,
+		ParseNoXXE,
+		ParseNoUnzip,
+		ParseNoSysCatalog,
+		ParseCatalogPI,
+		ParseSkipIDs,
 	})
 }
 

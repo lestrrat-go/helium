@@ -40,8 +40,13 @@ const (
 	ParseCompact    ParseOption = 1 << (iota + 1) /* compact small text nodes */
 	ParseNoBaseFix  ParseOption = 1 << (iota + 2) /* do not fixup XINCLUDE xml:base uris */
 	ParseHuge       ParseOption = 1 << (iota + 2) /* relax any hardcoded limit from the parser */
-	ParseIgnoreEnc  ParseOption = 1 << (iota + 3) /* ignore internal document encoding hint */
-	ParseBigLines   ParseOption = 1 << (iota + 3) /* Store big lines numbers in text PSVI field */
+	ParseIgnoreEnc      ParseOption = 1 << (iota + 3) /* ignore internal document encoding hint */
+	ParseBigLines       ParseOption = 1 << (iota + 3) /* Store big lines numbers in text PSVI field */
+	ParseNoXXE          ParseOption = 1 << (iota + 3) /* block external entity/DTD loading */
+	ParseNoUnzip        ParseOption = 1 << (iota + 3) /* no-op: helium has no built-in decompression */
+	ParseNoSysCatalog   ParseOption = 1 << (iota + 3) /* no-op: helium has no global system catalog */
+	ParseCatalogPI      ParseOption = 1 << (iota + 3) /* no-op: catalog PIs not yet supported */
+	ParseSkipIDs        ParseOption = 1 << (iota + 3) /* skip ID attribute interning */
 )
 
 func (p *ParseOption) Set(n ParseOption) {

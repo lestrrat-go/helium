@@ -430,6 +430,10 @@ func (t *TreeBuilder) ExternalSubset(ctxif sax.Context, name, eid, uri string) e
 
 	ctx := ctxif.(*parserCtx)
 
+	if ctx.options.IsSet(ParseNoXXE) {
+		return nil
+	}
+
 	if !ctx.loadsubset.IsSet(DetectIDs) {
 		return nil
 	}
