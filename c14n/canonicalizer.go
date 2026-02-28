@@ -1,6 +1,7 @@
 package c14n
 
 import (
+	"fmt"
 	"io"
 	"net/url"
 	"path/filepath"
@@ -138,7 +139,25 @@ func (c *canonicalizer) processDocument() error {
 	return nil
 }
 
+// checkForRelativeNamespaces checks that no namespace declaration on the
+// element has a relative URI.  The C14N spec requires implementations to
+// report failure when a relative namespace URI is encountered.
+// Mirrors libxml2's xmlC14NCheckForRelativeNamespaces (c14n.c:1338-1373).
+func checkForRelativeNamespaces(e *helium.Element) error {
+	for _, ns := range e.Namespaces() {
+		uri := ns.URI()
+		if uri != "" && !strings.Contains(uri, ":") {
+			return fmt.Errorf("c14n: relative namespace URI %q on element %s", uri, e.Name())
+		}
+	}
+	return nil
+}
+
 func (c *canonicalizer) processElement(e *helium.Element) error {
+	if err := checkForRelativeNamespaces(e); err != nil {
+		return err
+	}
+
 	visible := c.isVisible(e)
 
 	// Push a namespace frame for this element (visible or not)
