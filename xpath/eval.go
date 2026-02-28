@@ -61,6 +61,43 @@ func (ctx *evalContext) countOps(n int) error {
 	return nil
 }
 
+func (ctx *evalContext) Node() helium.Node {
+	if ctx == nil {
+		return nil
+	}
+	return ctx.node
+}
+
+func (ctx *evalContext) Position() int {
+	if ctx == nil {
+		return 0
+	}
+	return ctx.position
+}
+
+func (ctx *evalContext) Size() int {
+	if ctx == nil {
+		return 0
+	}
+	return ctx.size
+}
+
+func (ctx *evalContext) Namespace(prefix string) (string, bool) {
+	if ctx == nil || ctx.namespaces == nil {
+		return "", false
+	}
+	uri, ok := ctx.namespaces[prefix]
+	return uri, ok
+}
+
+func (ctx *evalContext) Variable(name string) (interface{}, bool) {
+	if ctx == nil || ctx.variables == nil {
+		return nil, false
+	}
+	v, ok := ctx.variables[name]
+	return v, ok
+}
+
 // eval dispatches to the appropriate evaluator for each AST node type.
 func eval(ctx *evalContext, expr Expr) (*Result, error) {
 	ctx.depth++

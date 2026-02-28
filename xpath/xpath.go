@@ -50,6 +50,29 @@ type Context struct {
 	OpLimit    int                    // 0 = unlimited (default); matches libxml2's opLimit
 }
 
+// Function is the interface for an XPath function implementation.
+// Arguments are pre-evaluated before Eval is called.
+type Function interface {
+	Eval(ctx FunctionContext, args []*Result) (*Result, error)
+}
+
+// FunctionFunc adapts a function to the Function interface.
+type FunctionFunc func(ctx FunctionContext, args []*Result) (*Result, error)
+
+// Eval calls f(ctx, args).
+func (f FunctionFunc) Eval(ctx FunctionContext, args []*Result) (*Result, error) {
+	return f(ctx, args)
+}
+
+// FunctionContext provides read-only access to function-evaluation state.
+type FunctionContext interface {
+	Node() helium.Node
+	Position() int
+	Size() int
+	Namespace(prefix string) (string, bool)
+	Variable(name string) (interface{}, bool)
+}
+
 // Expression is a compiled XPath expression, reusable across evaluations.
 type Expression struct {
 	source string
