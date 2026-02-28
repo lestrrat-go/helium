@@ -180,14 +180,21 @@ func xpathResultToString(r *xpath.Result) string {
 		return fmt.Sprintf("%g", r.Number)
 	case xpath.BooleanResult:
 		if r.Boolean {
-			return "true"
+			return "True"
 		}
-		return "false"
+		return "False"
 	case xpath.NodeSetResult:
-		if len(r.NodeSet) > 0 {
-			return string(r.NodeSet[0].Content())
+		if len(r.NodeSet) == 0 {
+			return ""
 		}
-		return ""
+		var sb strings.Builder
+		for i, n := range r.NodeSet {
+			if i > 0 {
+				sb.WriteByte(' ')
+			}
+			sb.WriteString(n.Name())
+		}
+		return sb.String()
 	}
 	return ""
 }
