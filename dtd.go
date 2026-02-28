@@ -106,6 +106,17 @@ func (dtd *DTD) AddEntity(name string, typ EntityType, publicID, systemID, conte
 		return nil, fmt.Errorf("invalid entity type: %d", typ)
 	}
 
+	// XML §4.6: predefined entities (lt, gt, amp, apos, quot) may be
+	// redeclared, but only if the content resolves to the same character.
+	// The content may contain character references (e.g., "&#60;" for "<")
+	// that must be resolved before comparison.
+	// libxml2: xmlAddEntity checks this and returns XML_ERR_REDECL_PREDEF_ENTITY.
+	if typ == InternalGeneralEntity {
+		if expected, ok := predefinedEntityContent[name]; ok && resolveCharRefs(content) != expected {
+			return nil, fmt.Errorf("entity '%s' redeclared with wrong content", name)
+		}
+	}
+
 	ent := newEntity(name, typ, publicID, systemID, content, "")
 	ent.doc = dtd.doc
 	table[name] = ent
