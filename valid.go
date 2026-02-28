@@ -209,6 +209,31 @@ type validCtx struct {
 	idrefs map[string]bool // IDREF values to resolve (cross-ref check)
 }
 
+// docDTDs returns the DTDs to search in order, respecting standalone.
+func docDTDs(doc *Document) []*DTD {
+	var dtds []*DTD
+	if doc.intSubset != nil {
+		dtds = append(dtds, doc.intSubset)
+	}
+	if doc.standalone != StandaloneExplicitYes && doc.extSubset != nil {
+		dtds = append(dtds, doc.extSubset)
+	}
+	return dtds
+}
+
+// lookupElementDecl searches both intSubset and extSubset for an element declaration.
+func lookupElementDecl(doc *Document, name, prefix string) (*ElementDecl, *DTD) {
+	for _, dtd := range docDTDs(doc) {
+		if edecl, ok := dtd.LookupElement(name, prefix); ok {
+			return edecl, dtd
+		}
+		if edecl, ok := dtd.LookupElement(name, ""); ok {
+			return edecl, dtd
+		}
+	}
+	return nil, nil
+}
+
 // validateDocument validates a parsed document against its DTD.
 // This is the equivalent of libxml2's xmlValidateDocument.
 func validateDocument(doc *Document) *ValidationError {
@@ -218,9 +243,7 @@ func validateDocument(doc *Document) *ValidationError {
 		idrefs: make(map[string]bool),
 	}
 
-	dtd := doc.intSubset
-	if dtd == nil {
-		// No DTD means nothing to validate against
+	if doc.intSubset == nil && doc.extSubset == nil {
 		return nil
 	}
 
@@ -230,7 +253,7 @@ func validateDocument(doc *Document) *ValidationError {
 			return nil
 		}
 		elem := n.(*Element)
-		validateOneElement(doc, dtd, elem, vctx)
+		validateOneElement(doc, elem, vctx)
 		return nil
 	})
 
@@ -244,22 +267,17 @@ func validateDocument(doc *Document) *ValidationError {
 }
 
 // validateOneElement checks a single element against DTD declarations.
-func validateOneElement(doc *Document, dtd *DTD, elem *Element, vctx *validCtx) {
+func validateOneElement(doc *Document, elem *Element, vctx *validCtx) {
 	name := elem.LocalName()
 
-	// Look up the element declaration
-	edecl, ok := dtd.LookupElement(name, elem.Prefix())
-	if !ok {
-		// Try without prefix (common case for unprefixed documents)
-		edecl, ok = dtd.LookupElement(name, "")
-	}
-	if !ok {
+	edecl, dtd := lookupElementDecl(doc, name, elem.Prefix())
+	if edecl == nil {
 		vctx.ve.addf("element %s: no declaration found", name)
 		return
 	}
 
 	// Validate attributes against their declarations
-	validateElementAttributes(doc, dtd, elem, edecl, vctx)
+	validateElementAttributes(doc, elem, edecl, vctx)
 
 	// Validate element content model
 	validateElementContent(dtd, elem, edecl, vctx.ve)
@@ -271,7 +289,7 @@ func validateOneElement(doc *Document, dtd *DTD, elem *Element, vctx *validCtx) 
 // - No undeclared attributes (if element is fully declared)
 // - ID values are unique across the document
 // - IDREF/IDREFS values are recorded for cross-reference checking
-func validateElementAttributes(doc *Document, dtd *DTD, elem *Element, edecl *ElementDecl, vctx *validCtx) {
+func validateElementAttributes(doc *Document, elem *Element, edecl *ElementDecl, vctx *validCtx) {
 	ename := elem.LocalName()
 	attrs := elem.Attributes()
 
@@ -281,42 +299,49 @@ func validateElementAttributes(doc *Document, dtd *DTD, elem *Element, edecl *El
 		present[a.LocalName()] = a.Value()
 	}
 
-	// Check all declared attributes for this element
-	for _, adecl := range dtd.AttributesForElement(ename) {
-		aname := adecl.name
-
-		val, found := present[aname]
-
-		switch adecl.def {
-		case AttrDefaultRequired:
-			if !found {
-				vctx.ve.addf("element %s: attribute %s is required", ename, aname)
+	// Check all declared attributes from both subsets, dedup by name
+	seen := make(map[string]bool)
+	for _, dtd := range docDTDs(doc) {
+		for _, adecl := range dtd.AttributesForElement(ename) {
+			aname := adecl.name
+			if seen[aname] {
+				continue
 			}
-		case AttrDefaultFixed:
-			if found && val != adecl.defvalue {
-				vctx.ve.addf("element %s: attribute %s has value %q but must be %q", ename, aname, val, adecl.defvalue)
-			}
-		}
+			seen[aname] = true
 
-		// Validate attribute value against its type (if present)
-		if found {
-			if err := validateAttributeValueInternal(doc, adecl.atype, val); err != nil {
-				vctx.ve.addf("element %s: attribute %s: %s", ename, aname, err)
-			}
+			val, found := present[aname]
 
-			// Track ID uniqueness and collect IDREFs
-			switch adecl.atype {
-			case AttrID:
-				if vctx.ids[val] {
-					vctx.ve.addf("element %s: duplicate ID %q", ename, val)
-				} else {
-					vctx.ids[val] = true
+			switch adecl.def {
+			case AttrDefaultRequired:
+				if !found {
+					vctx.ve.addf("element %s: attribute %s is required", ename, aname)
 				}
-			case AttrIDRef:
-				vctx.idrefs[val] = true
-			case AttrIDRefs:
-				for _, ref := range strings.Fields(val) {
-					vctx.idrefs[ref] = true
+			case AttrDefaultFixed:
+				if found && val != adecl.defvalue {
+					vctx.ve.addf("element %s: attribute %s has value %q but must be %q", ename, aname, val, adecl.defvalue)
+				}
+			}
+
+			// Validate attribute value against its type (if present)
+			if found {
+				if err := validateAttributeValueInternal(doc, adecl.atype, val); err != nil {
+					vctx.ve.addf("element %s: attribute %s: %s", ename, aname, err)
+				}
+
+				// Track ID uniqueness and collect IDREFs
+				switch adecl.atype {
+				case AttrID:
+					if vctx.ids[val] {
+						vctx.ve.addf("element %s: duplicate ID %q", ename, val)
+					} else {
+						vctx.ids[val] = true
+					}
+				case AttrIDRef:
+					vctx.idrefs[val] = true
+				case AttrIDRefs:
+					for _, ref := range strings.Fields(val) {
+						vctx.idrefs[ref] = true
+					}
 				}
 			}
 		}
