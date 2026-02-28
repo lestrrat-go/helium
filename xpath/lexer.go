@@ -97,7 +97,7 @@ func (l *Lexer) tokenize() error {
 				l.emit(TokenNotEquals, "!=")
 				l.advance(1)
 			} else {
-				return fmt.Errorf("unexpected '!' at position %d", l.pos-1)
+				return fmt.Errorf("%w: '!' at position %d", ErrUnexpectedChar, l.pos-1)
 			}
 		case r == '<':
 			l.advance(1)
@@ -149,7 +149,7 @@ func (l *Lexer) tokenize() error {
 			l.advance(1)
 			name := l.scanNCName()
 			if name == "" {
-				return fmt.Errorf("expected variable name after '$' at position %d", l.pos)
+				return fmt.Errorf("%w: variable name after '$' at position %d", ErrUnexpectedToken, l.pos)
 			}
 			l.emit(TokenVariableRef, name)
 		case r == '"' || r == '\'':
@@ -163,7 +163,7 @@ func (l *Lexer) tokenize() error {
 		case isNCNameStart(r):
 			l.scanNameOrKeyword()
 		default:
-			return fmt.Errorf("unexpected character %q at position %d", string(r), l.pos)
+			return fmt.Errorf("%w: %q at position %d", ErrUnexpectedChar, string(r), l.pos)
 		}
 	}
 	return nil
@@ -174,8 +174,8 @@ func (l *Lexer) peekRune() rune {
 	return r
 }
 
-func (l *Lexer) advance(n int) {
-	l.pos += n
+func (l *Lexer) advance(_ int) {
+	l.pos++
 }
 
 func (l *Lexer) emit(typ TokenType, value string) {
@@ -220,7 +220,7 @@ func (l *Lexer) scanString() (string, error) {
 		}
 		l.advance(1)
 	}
-	return "", fmt.Errorf("unterminated string starting at position %d", start-1)
+	return "", fmt.Errorf("%w: starting at position %d", ErrUnterminatedString, start-1)
 }
 
 func (l *Lexer) scanNumber() {

@@ -125,6 +125,9 @@ func formatMessage(parts []messagePart, node helium.Node, xctx *xpath.Context, o
 func formatXPathError(err error) string {
 	msg := err.Error()
 	// Map helium xpath error messages to libxml2 format.
+	if strings.HasPrefix(msg, "xpath: unknown function: ") {
+		return "Unregistered function: " + strings.TrimPrefix(msg, "xpath: unknown function: ")
+	}
 	if strings.HasPrefix(msg, "unknown function: ") {
 		return "Unregistered function: " + strings.TrimPrefix(msg, "unknown function: ")
 	}

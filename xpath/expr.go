@@ -151,9 +151,11 @@ type VariableExpr struct {
 func (VariableExpr) exprNode() {}
 
 // FunctionCall represents a function invocation.
+// Prefix is set for namespace-qualified calls (e.g., ext:func()).
 type FunctionCall struct {
-	Name string
-	Args []Expr
+	Prefix string // optional namespace prefix
+	Name   string // local name
+	Args   []Expr
 }
 
 func (FunctionCall) exprNode() {}

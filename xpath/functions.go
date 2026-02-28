@@ -1,11 +1,44 @@
 package xpath
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+)
+
+// sentinel errors for XPath built-in function argument validation.
+var (
+	errLastNoArgs           = errors.New("last() takes no arguments")
+	errPositionNoArgs       = errors.New("position() takes no arguments")
+	errCountOneArg          = errors.New("count() takes exactly 1 argument")
+	errCountNodeSet         = errors.New("count() argument must be a node-set")
+	errIDOneArg             = errors.New("id() takes exactly 1 argument")
+	errExpected01Args       = errors.New("expected 0 or 1 arguments")
+	errArgMustBeNodeSet     = errors.New("argument must be a node-set")
+	errStringArgs           = errors.New("string() takes 0 or 1 arguments")
+	errConcatArgs           = errors.New("concat() requires at least 2 arguments")
+	errStartsWithArgs       = errors.New("starts-with() takes exactly 2 arguments")
+	errContainsArgs         = errors.New("contains() takes exactly 2 arguments")
+	errSubstringBeforeArgs  = errors.New("substring-before() takes exactly 2 arguments")
+	errSubstringAfterArgs   = errors.New("substring-after() takes exactly 2 arguments")
+	errSubstringArgs        = errors.New("substring() takes 2 or 3 arguments")
+	errStringLengthArgs     = errors.New("string-length() takes 0 or 1 arguments")
+	errNormalizeSpaceArgs   = errors.New("normalize-space() takes 0 or 1 arguments")
+	errTranslateArgs        = errors.New("translate() takes exactly 3 arguments")
+	errBooleanOneArg        = errors.New("boolean() takes exactly 1 argument")
+	errNotOneArg            = errors.New("not() takes exactly 1 argument")
+	errTrueNoArgs           = errors.New("true() takes no arguments")
+	errFalseNoArgs          = errors.New("false() takes no arguments")
+	errLangOneArg           = errors.New("lang() takes exactly 1 argument")
+	errNumberArgs           = errors.New("number() takes 0 or 1 arguments")
+	errSumOneArg            = errors.New("sum() takes exactly 1 argument")
+	errSumNodeSet           = errors.New("sum() argument must be a node-set")
+	errFloorOneArg          = errors.New("floor() takes exactly 1 argument")
+	errCeilingOneArg        = errors.New("ceiling() takes exactly 1 argument")
+	errRoundOneArg          = errors.New("round() takes exactly 1 argument")
 )
 
 type builtinFunction struct {
@@ -15,7 +48,7 @@ type builtinFunction struct {
 func (f builtinFunction) Eval(ctx FunctionContext, args []*Result) (*Result, error) {
 	c, ok := ctx.(*evalContext)
 	if !ok || c == nil {
-		return nil, fmt.Errorf("invalid function context type: %T", ctx)
+		return nil, fmt.Errorf("%w: %T", ErrInvalidFunctionContext, ctx)
 	}
 	return f.callback(c, args)
 }
@@ -65,9 +98,21 @@ func evalFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, error) {
 	if err := ctx.countOps(1); err != nil {
 		return nil, err
 	}
-	fn, ok := builtinFunctions[fc.Name]
-	if !ok {
-		return nil, fmt.Errorf("unknown function: %s", fc.Name)
+
+	// Namespaced function call: resolve prefix to URI and look up in functionsNS.
+	if fc.Prefix != "" {
+		return evalNamespacedFunctionCall(ctx, fc)
+	}
+
+	// Unqualified: built-ins take priority, then user-registered functions.
+	var fn Function
+	if f, ok := builtinFunctions[fc.Name]; ok {
+		fn = f
+	} else if ctx.functions != nil {
+		fn = ctx.functions[fc.Name]
+	}
+	if fn == nil {
+		return nil, fmt.Errorf("%w: %s", ErrUnknownFunction, fc.Name)
 	}
 
 	// Pre-evaluate all arguments.
@@ -80,38 +125,67 @@ func evalFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, error) {
 		args[i] = r
 	}
 
-	return fn.Eval(ctx, args)
+	return fn.Eval(ctx, args) //nolint:wrapcheck
+}
+
+func evalNamespacedFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, error) {
+	if ctx.namespaces == nil {
+		return nil, fmt.Errorf("%w: %s", ErrUnknownFunctionNamespace, fc.Prefix)
+	}
+	uri, ok := ctx.namespaces[fc.Prefix]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrUnknownFunctionNamespace, fc.Prefix)
+	}
+	var fn Function
+	if ctx.functionsNS != nil {
+		fn = ctx.functionsNS[QualifiedName{URI: uri, Name: fc.Name}]
+	}
+	if fn == nil {
+		return nil, fmt.Errorf("%w: {%s}%s", ErrUnknownFunction, uri, fc.Name)
+	}
+
+	// Pre-evaluate all arguments.
+	args := make([]*Result, len(fc.Args))
+	for i, expr := range fc.Args {
+		r, err := eval(ctx, expr)
+		if err != nil {
+			return nil, err
+		}
+		args[i] = r
+	}
+
+	return fn.Eval(ctx, args) //nolint:wrapcheck
 }
 
 // --- Node-set functions ---
 
 func fnLast(ctx *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 0 {
-		return nil, fmt.Errorf("last() takes no arguments")
+		return nil, errLastNoArgs
 	}
 	return &Result{Type: NumberResult, Number: float64(ctx.size)}, nil
 }
 
 func fnPosition(ctx *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 0 {
-		return nil, fmt.Errorf("position() takes no arguments")
+		return nil, errPositionNoArgs
 	}
 	return &Result{Type: NumberResult, Number: float64(ctx.position)}, nil
 }
 
 func fnCount(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 1 {
-		return nil, fmt.Errorf("count() takes exactly 1 argument")
+		return nil, errCountOneArg
 	}
 	if args[0].Type != NodeSetResult {
-		return nil, fmt.Errorf("count() argument must be a node-set")
+		return nil, errCountNodeSet
 	}
 	return &Result{Type: NumberResult, Number: float64(len(args[0].NodeSet))}, nil
 }
 
 func fnID(ctx *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 1 {
-		return nil, fmt.Errorf("id() takes exactly 1 argument")
+		return nil, errIDOneArg
 	}
 
 	idValues := collectIDValues(args[0])
@@ -225,10 +299,10 @@ func nodeArgOrContext(ctx *evalContext, args []*Result) (helium.Node, bool, erro
 		return ctx.node, true, nil
 	}
 	if len(args) != 1 {
-		return nil, false, fmt.Errorf("expected 0 or 1 arguments")
+		return nil, false, errExpected01Args
 	}
 	if args[0].Type != NodeSetResult {
-		return nil, false, fmt.Errorf("argument must be a node-set")
+		return nil, false, errArgMustBeNodeSet
 	}
 	if len(args[0].NodeSet) == 0 {
 		return nil, false, nil
@@ -244,14 +318,14 @@ func fnString(ctx *evalContext, args []*Result) (*Result, error) {
 		return &Result{Type: StringResult, String: s}, nil
 	}
 	if len(args) != 1 {
-		return nil, fmt.Errorf("string() takes 0 or 1 arguments")
+		return nil, errStringArgs
 	}
 	return &Result{Type: StringResult, String: resultToString(args[0])}, nil
 }
 
 func fnConcat(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) < 2 {
-		return nil, fmt.Errorf("concat() requires at least 2 arguments")
+		return nil, errConcatArgs
 	}
 	var b strings.Builder
 	for _, r := range args {
@@ -262,7 +336,7 @@ func fnConcat(_ *evalContext, args []*Result) (*Result, error) {
 
 func fnStartsWith(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 2 {
-		return nil, fmt.Errorf("starts-with() takes exactly 2 arguments")
+		return nil, errStartsWithArgs
 	}
 	s := resultToString(args[0])
 	prefix := resultToString(args[1])
@@ -271,7 +345,7 @@ func fnStartsWith(_ *evalContext, args []*Result) (*Result, error) {
 
 func fnContains(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 2 {
-		return nil, fmt.Errorf("contains() takes exactly 2 arguments")
+		return nil, errContainsArgs
 	}
 	s := resultToString(args[0])
 	sub := resultToString(args[1])
@@ -280,7 +354,7 @@ func fnContains(_ *evalContext, args []*Result) (*Result, error) {
 
 func fnSubstringBefore(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 2 {
-		return nil, fmt.Errorf("substring-before() takes exactly 2 arguments")
+		return nil, errSubstringBeforeArgs
 	}
 	s := resultToString(args[0])
 	sep := resultToString(args[1])
@@ -293,7 +367,7 @@ func fnSubstringBefore(_ *evalContext, args []*Result) (*Result, error) {
 
 func fnSubstringAfter(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 2 {
-		return nil, fmt.Errorf("substring-after() takes exactly 2 arguments")
+		return nil, errSubstringAfterArgs
 	}
 	s := resultToString(args[0])
 	sep := resultToString(args[1])
@@ -306,7 +380,7 @@ func fnSubstringAfter(_ *evalContext, args []*Result) (*Result, error) {
 
 func fnSubstring(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) < 2 || len(args) > 3 {
-		return nil, fmt.Errorf("substring() takes 2 or 3 arguments")
+		return nil, errSubstringArgs
 	}
 	s := resultToString(args[0])
 	startPos := resultToNumber(args[1])
@@ -358,7 +432,7 @@ func fnStringLength(ctx *evalContext, args []*Result) (*Result, error) {
 	case 1:
 		s = resultToString(args[0])
 	default:
-		return nil, fmt.Errorf("string-length() takes 0 or 1 arguments")
+		return nil, errStringLengthArgs
 	}
 	return &Result{Type: NumberResult, Number: float64(len([]rune(s)))}, nil
 }
@@ -371,7 +445,7 @@ func fnNormalizeSpace(ctx *evalContext, args []*Result) (*Result, error) {
 	case 1:
 		s = resultToString(args[0])
 	default:
-		return nil, fmt.Errorf("normalize-space() takes 0 or 1 arguments")
+		return nil, errNormalizeSpaceArgs
 	}
 
 	// Strip leading/trailing whitespace and collapse internal whitespace
@@ -381,7 +455,7 @@ func fnNormalizeSpace(ctx *evalContext, args []*Result) (*Result, error) {
 
 func fnTranslate(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 3 {
-		return nil, fmt.Errorf("translate() takes exactly 3 arguments")
+		return nil, errTranslateArgs
 	}
 	s := resultToString(args[0])
 	from := resultToString(args[1])
@@ -428,35 +502,35 @@ func buildTranslateMap(fromRunes, toRunes []rune) (mapping map[rune]rune, remove
 
 func fnBoolean(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 1 {
-		return nil, fmt.Errorf("boolean() takes exactly 1 argument")
+		return nil, errBooleanOneArg
 	}
 	return &Result{Type: BooleanResult, Boolean: resultToBoolean(args[0])}, nil
 }
 
 func fnNot(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 1 {
-		return nil, fmt.Errorf("not() takes exactly 1 argument")
+		return nil, errNotOneArg
 	}
 	return &Result{Type: BooleanResult, Boolean: !resultToBoolean(args[0])}, nil
 }
 
 func fnTrue(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 0 {
-		return nil, fmt.Errorf("true() takes no arguments")
+		return nil, errTrueNoArgs
 	}
 	return &Result{Type: BooleanResult, Boolean: true}, nil
 }
 
 func fnFalse(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 0 {
-		return nil, fmt.Errorf("false() takes no arguments")
+		return nil, errFalseNoArgs
 	}
 	return &Result{Type: BooleanResult, Boolean: false}, nil
 }
 
 func fnLang(ctx *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 1 {
-		return nil, fmt.Errorf("lang() takes exactly 1 argument")
+		return nil, errLangOneArg
 	}
 	langArg := strings.ToLower(resultToString(args[0]))
 
@@ -487,17 +561,17 @@ func fnNumber(ctx *evalContext, args []*Result) (*Result, error) {
 		return &Result{Type: NumberResult, Number: stringToNumber(s)}, nil
 	}
 	if len(args) != 1 {
-		return nil, fmt.Errorf("number() takes 0 or 1 arguments")
+		return nil, errNumberArgs
 	}
 	return &Result{Type: NumberResult, Number: resultToNumber(args[0])}, nil
 }
 
 func fnSum(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 1 {
-		return nil, fmt.Errorf("sum() takes exactly 1 argument")
+		return nil, errSumOneArg
 	}
 	if args[0].Type != NodeSetResult {
-		return nil, fmt.Errorf("sum() argument must be a node-set")
+		return nil, errSumNodeSet
 	}
 	var total float64
 	for _, n := range args[0].NodeSet {
@@ -508,21 +582,21 @@ func fnSum(_ *evalContext, args []*Result) (*Result, error) {
 
 func fnFloor(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 1 {
-		return nil, fmt.Errorf("floor() takes exactly 1 argument")
+		return nil, errFloorOneArg
 	}
 	return &Result{Type: NumberResult, Number: math.Floor(resultToNumber(args[0]))}, nil
 }
 
 func fnCeiling(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 1 {
-		return nil, fmt.Errorf("ceiling() takes exactly 1 argument")
+		return nil, errCeilingOneArg
 	}
 	return &Result{Type: NumberResult, Number: math.Ceil(resultToNumber(args[0]))}, nil
 }
 
 func fnRound(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 1 {
-		return nil, fmt.Errorf("round() takes exactly 1 argument")
+		return nil, errRoundOneArg
 	}
 	n := resultToNumber(args[0])
 	// XPath round: round half towards positive infinity, preserve -0
