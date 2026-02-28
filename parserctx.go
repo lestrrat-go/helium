@@ -258,6 +258,18 @@ func (ctx *parserCtx) ColumnNumber() int {
 	return 0
 }
 
+// GetPublicId implements sax.DocumentLocator.
+// Always returns an empty string (libxml2 always returns NULL).
+func (ctx *parserCtx) GetPublicId() string {
+	return ""
+}
+
+// GetSystemId implements sax.DocumentLocator.
+// Returns the base URI of the document being parsed.
+func (ctx *parserCtx) GetSystemId() string {
+	return ctx.baseURI
+}
+
 var bufferPool = sync.Pool{
 	New: allocByteBuffer,
 }

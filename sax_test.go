@@ -182,6 +182,34 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 	return s
 }
 
+func TestDocumentLocatorIds(t *testing.T) {
+	const baseURI = "test://document.xml"
+	var gotPublicId, gotSystemId string
+
+	s := sax.New()
+	s.SetDocumentLocatorHandler = sax.SetDocumentLocatorFunc(func(_ sax.Context, loc sax.DocumentLocator) error {
+		gotPublicId = loc.GetPublicId()
+		gotSystemId = loc.GetSystemId()
+		return nil
+	})
+	s.StartDocumentHandler = sax.StartDocumentFunc(func(_ sax.Context) error { return nil })
+	s.EndDocumentHandler = sax.EndDocumentFunc(func(_ sax.Context) error { return nil })
+	s.StartElementNSHandler = sax.StartElementNSFunc(func(_ sax.Context, _, _, _ string, _ []sax.Namespace, _ []sax.Attribute) error {
+		return nil
+	})
+	s.EndElementNSHandler = sax.EndElementNSFunc(func(_ sax.Context, _, _, _ string) error { return nil })
+	s.CharactersHandler = sax.CharactersFunc(func(_ sax.Context, _ []byte) error { return nil })
+
+	p := NewParser()
+	p.SetSAXHandler(s)
+	p.SetBaseURI(baseURI)
+
+	_, err := p.Parse([]byte(`<root/>`))
+	require.NoError(t, err, "Parse should succeed")
+	require.Equal(t, "", gotPublicId, "GetPublicId should return empty string")
+	require.Equal(t, baseURI, gotSystemId, "GetSystemId should return base URI")
+}
+
 func TestSAXEvents(t *testing.T) {
 	skipped := map[string]struct{}{}
 
