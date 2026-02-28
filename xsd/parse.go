@@ -942,6 +942,16 @@ func (c *compiler) parseFacets(restriction *helium.Element) *FacetSet {
 				fs = &FacetSet{}
 			}
 			fs.MaxInclusive = &val
+		case "minExclusive":
+			if fs == nil {
+				fs = &FacetSet{}
+			}
+			fs.MinExclusive = &val
+		case "maxExclusive":
+			if fs == nil {
+				fs = &FacetSet{}
+			}
+			fs.MaxExclusive = &val
 		case "totalDigits":
 			if fs == nil {
 				fs = &FacetSet{}
@@ -966,6 +976,17 @@ func (c *compiler) parseFacets(restriction *helium.Element) *FacetSet {
 			}
 			n := parseOccurs(val, 0)
 			fs.MaxLength = &n
+		case "fractionDigits":
+			if fs == nil {
+				fs = &FacetSet{}
+			}
+			n := parseOccurs(val, 0)
+			fs.FractionDigits = &n
+		case "whiteSpace":
+			if fs == nil {
+				fs = &FacetSet{}
+			}
+			fs.WhiteSpace = &val
 		case "pattern":
 			if fs == nil {
 				fs = &FacetSet{}
