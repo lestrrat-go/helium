@@ -118,7 +118,11 @@ func (w *Writer) writeIndent() {
 		// Don't write a leading newline before the very first output
 		return
 	}
-	w.writeStr("\n")
+	// At depth 0 (root level), StartDocument already wrote a trailing
+	// newline, so skip the extra newline that writeIndent would add.
+	if w.depth > 0 {
+		w.writeStr("\n")
+	}
 	for i := 0; i < w.depth; i++ {
 		w.writeStr(w.indent)
 	}
@@ -301,7 +305,7 @@ func (w *Writer) StartDocument(version, encoding, standalone string) error {
 		w.writeStr(standalone)
 		w.writeByte(w.quoteChar)
 	}
-	w.writeStr("?>")
+	w.writeStr("?>\n")
 	w.state = stateDocument
 	w.hasOutput = true
 	return w.err
