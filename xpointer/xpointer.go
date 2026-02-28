@@ -9,52 +9,145 @@ import (
 	"github.com/lestrrat-go/helium/xpath"
 )
 
+// xptrPart represents a single parsed XPointer scheme(body) part.
+type xptrPart struct {
+	scheme string
+	body   string
+}
+
 // Evaluate evaluates an XPointer expression against a document and returns
 // the matching nodes. It supports:
-//   - xpointer(expr) scheme: delegates to XPath
+//   - xpointer(expr) / xpath1(expr) scheme: delegates to XPath
+//   - xmlns(prefix=uri) scheme: registers namespace bindings for subsequent parts
 //   - element(/1/2/3) scheme: child-sequence navigation
 //   - shorthand pointer: looks up by ID via Document.GetElementByID
 func Evaluate(doc *helium.Document, expr string) ([]helium.Node, error) {
-	scheme, body, err := parseScheme(expr)
+	parts, err := parseParts(expr)
 	if err != nil {
 		return nil, err
 	}
 
-	switch scheme {
+	// Collect xmlns() namespace bindings and find the evaluable part.
+	var nsMap map[string]string
+	for _, p := range parts {
+		if p.scheme == "xmlns" {
+			prefix, uri, ok := parseXmlnsBody(p.body)
+			if !ok {
+				return nil, fmt.Errorf("xpointer: invalid xmlns() body %q", p.body)
+			}
+			if nsMap == nil {
+				nsMap = make(map[string]string)
+			}
+			nsMap[prefix] = uri
+			continue
+		}
+
+		return evaluatePart(doc, p, nsMap)
+	}
+
+	return nil, fmt.Errorf("xpointer: no evaluable scheme found in %q", expr)
+}
+
+// evaluatePart evaluates a single non-xmlns XPointer part.
+func evaluatePart(doc *helium.Document, p xptrPart, nsMap map[string]string) ([]helium.Node, error) {
+	switch p.scheme {
 	case "xpointer", "xpath1":
-		return xpath.Find(doc, body)
+		if len(nsMap) > 0 {
+			return findWithContext(doc, p.body, nsMap)
+		}
+		return xpath.Find(doc, p.body)
 	case "element":
-		return evaluateElement(doc, body)
+		return evaluateElement(doc, p.body)
 	case "": // shorthand pointer (bare name = ID)
-		elem := doc.GetElementByID(body)
+		elem := doc.GetElementByID(p.body)
 		if elem == nil {
 			return nil, nil
 		}
 		return []helium.Node{elem}, nil
 	default:
-		return nil, fmt.Errorf("xpointer: unsupported scheme %q", scheme)
+		return nil, fmt.Errorf("xpointer: unsupported scheme %q", p.scheme)
 	}
+}
+
+// findWithContext compiles an XPath expression and evaluates it with
+// namespace bindings, returning a node-set.
+func findWithContext(node helium.Node, expr string, nsMap map[string]string) ([]helium.Node, error) {
+	xctx := &xpath.Context{Namespaces: nsMap}
+	r, err := xpath.EvaluateWithContext(node, expr, xctx)
+	if err != nil {
+		return nil, err
+	}
+	if r.Type != xpath.NodeSetResult {
+		return nil, xpath.ErrNotNodeSet
+	}
+	return r.NodeSet, nil
+}
+
+// parseXmlnsBody parses "prefix=uri" from an xmlns() body.
+func parseXmlnsBody(body string) (prefix, uri string, ok bool) {
+	i := strings.IndexByte(body, '=')
+	if i < 1 {
+		return "", "", false
+	}
+	return body[:i], body[i+1:], true
 }
 
 // ParseFragmentID splits a URI fragment into its XPointer scheme and body.
 // For a bare name like "foo", it returns scheme="" and body="foo".
 // For "xpointer(//p)", it returns scheme="xpointer" and body="//p".
 func ParseFragmentID(fragment string) (scheme, body string, err error) {
-	return parseScheme(fragment)
+	s, b, _, err := parseScheme(fragment)
+	return s, b, err
 }
 
-// parseScheme parses an XPointer expression into scheme and body.
-// Uses balanced parenthesis matching per the XPointer framework.
-func parseScheme(expr string) (scheme, body string, err error) {
+// parseParts parses an XPointer expression into a sequence of scheme(body) parts.
+// Handles multiple consecutive parts like "xmlns(...)xpath1(...)".
+func parseParts(expr string) ([]xptrPart, error) {
 	if expr == "" {
-		return "", "", fmt.Errorf("xpointer: empty expression")
+		return nil, fmt.Errorf("xpointer: empty expression")
+	}
+
+	var parts []xptrPart
+	rest := expr
+	for rest != "" {
+		rest = strings.TrimLeft(rest, " \t\r\n")
+		if rest == "" {
+			break
+		}
+
+		scheme, body, remaining, err := parseScheme(rest)
+		if err != nil {
+			return nil, err
+		}
+
+		parts = append(parts, xptrPart{scheme: scheme, body: body})
+
+		// Bare name (no scheme) consumes everything
+		if scheme == "" {
+			break
+		}
+		rest = remaining
+	}
+
+	if len(parts) == 0 {
+		return nil, fmt.Errorf("xpointer: empty expression")
+	}
+	return parts, nil
+}
+
+// parseScheme parses the first XPointer scheme(body) from expr.
+// Returns the scheme, body, remaining string after the closing paren, and any error.
+// For bare names (no parenthesis), remaining is empty.
+func parseScheme(expr string) (scheme, body, remaining string, err error) {
+	if expr == "" {
+		return "", "", "", fmt.Errorf("xpointer: empty expression")
 	}
 
 	// Look for scheme(body) pattern
 	idx := strings.IndexByte(expr, '(')
 	if idx < 0 {
 		// No parenthesis: shorthand pointer (bare name)
-		return "", expr, nil
+		return "", expr, "", nil
 	}
 
 	scheme = expr[:idx]
@@ -69,12 +162,12 @@ func parseScheme(expr string) (scheme, body string, err error) {
 		case ')':
 			depth--
 			if depth == 0 {
-				return scheme, rest[:i], nil
+				return scheme, rest[:i], rest[i+1:], nil
 			}
 		}
 	}
 
-	return "", "", fmt.Errorf("xpointer: unbalanced parentheses in %q", expr)
+	return "", "", "", fmt.Errorf("xpointer: unbalanced parentheses in %q", expr)
 }
 
 // evaluateElement handles the element() scheme.
