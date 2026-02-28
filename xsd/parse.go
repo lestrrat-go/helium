@@ -234,6 +234,14 @@ func (c *compiler) processIncludes(root *helium.Element) error {
 
 			// Track the imported namespace.
 			c.importedNS[ns] = loc
+		case isXSDElement(elem, "redefine"):
+			loc := getAttr(elem, "schemaLocation")
+			if loc == "" {
+				continue
+			}
+			if err := c.loadRedefine(loc, elem); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -304,6 +312,192 @@ func (c *compiler) loadInclude(location string, includeElem *helium.Element) err
 	c.includeFile = savedIncludeFile
 
 	return err
+}
+
+// loadRedefine loads a schema via xs:redefine and processes override children.
+// It works like xs:include (merging original declarations) but then applies
+// redefinitions for complexType, simpleType, group, and attributeGroup children.
+func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) error {
+	// Phase A: Load the redefined schema (same as include).
+	path := location
+	if c.baseDir != "" {
+		path = filepath.Join(c.baseDir, location)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("xsd: failed to load redefine %q: %w", location, err)
+	}
+
+	doc, err := helium.Parse(data)
+	if err != nil {
+		return fmt.Errorf("xsd: failed to parse redefine %q: %w", location, err)
+	}
+
+	incRoot := findDocumentElement(doc)
+	if incRoot == nil || !isXSDElement(incRoot, "schema") {
+		return fmt.Errorf("xsd: redefined document %q is not an xs:schema", location)
+	}
+
+	// Check target namespace compatibility (same rules as include).
+	incTargetNS := getAttr(incRoot, "targetNamespace")
+	if incTargetNS != "" && incTargetNS != c.schema.targetNamespace {
+		displayLoc := location
+		if c.filename != "" {
+			displayLoc = filepath.Join(filepath.Dir(c.filename), location)
+		}
+		c.schemaErrors.WriteString(schemaParserError(c.filename, redefineElem.Line(),
+			redefineElem.LocalName(), "redefine",
+			"The target namespace '"+incTargetNS+"' of the included/redefined schema '"+displayLoc+"' differs from '"+c.schema.targetNamespace+"' of the including/redefining schema."))
+		return nil
+	}
+
+	// Save/restore form-qualified settings (chameleon support).
+	savedElemForm := c.schema.elemFormQualified
+	savedAttrForm := c.schema.attrFormQualified
+	savedIncludeFile := c.includeFile
+	if v := getAttr(incRoot, "elementFormDefault"); v != "" {
+		c.schema.elemFormQualified = v == attrValQualified
+	}
+	if v := getAttr(incRoot, "attributeFormDefault"); v != "" {
+		c.schema.attrFormQualified = v == attrValQualified
+	}
+	if c.filename != "" {
+		c.includeFile = filepath.Join(filepath.Dir(c.filename), location)
+	}
+
+	// Parse the included schema's declarations into the current compiler.
+	if err := c.parseSchemaChildren(incRoot); err != nil {
+		c.schema.elemFormQualified = savedElemForm
+		c.schema.attrFormQualified = savedAttrForm
+		c.includeFile = savedIncludeFile
+		return err
+	}
+
+	// Phase B: Process redefine children (overrides).
+	for child := redefineElem.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		elem := child.(*helium.Element)
+		switch {
+		case isXSDElement(elem, "annotation"):
+			// skip
+		case isXSDElement(elem, "complexType"):
+			name := getAttr(elem, "name")
+			if name == "" {
+				continue
+			}
+			qn := QName{Local: name, NS: c.schema.targetNamespace}
+			origType := c.schema.types[qn]
+			if err := c.parseNamedComplexType(elem); err != nil {
+				c.schema.elemFormQualified = savedElemForm
+				c.schema.attrFormQualified = savedAttrForm
+				c.includeFile = savedIncludeFile
+				return err
+			}
+			// Patch self-reference: redirect the typeRef to a temporary key
+			// holding the original type, so resolveRefs handles extension
+			// merge (content model + attribute inheritance) naturally.
+			newType := c.schema.types[qn]
+			if origType != nil {
+				if refQN, ok := c.typeRefs[newType]; ok && refQN == qn {
+					origKey := QName{Local: "\x00redefine:" + name, NS: qn.NS}
+					c.schema.types[origKey] = origType
+					c.typeRefs[newType] = origKey
+				}
+			}
+		case isXSDElement(elem, "simpleType"):
+			name := getAttr(elem, "name")
+			if name == "" {
+				continue
+			}
+			qn := QName{Local: name, NS: c.schema.targetNamespace}
+			origType := c.schema.types[qn]
+			if err := c.parseNamedSimpleType(elem); err != nil {
+				c.schema.elemFormQualified = savedElemForm
+				c.schema.attrFormQualified = savedAttrForm
+				c.includeFile = savedIncludeFile
+				return err
+			}
+			newType := c.schema.types[qn]
+			if origType != nil {
+				if refQN, ok := c.typeRefs[newType]; ok && refQN == qn {
+					origKey := QName{Local: "\x00redefine:" + name, NS: qn.NS}
+					c.schema.types[origKey] = origType
+					c.typeRefs[newType] = origKey
+				}
+			}
+		case isXSDElement(elem, "group"):
+			name := getAttr(elem, "name")
+			if name == "" {
+				continue
+			}
+			qn := QName{Local: name, NS: c.schema.targetNamespace}
+			origGroup := c.schema.groups[qn]
+			// Snapshot existing groupRefs keys.
+			existingRefs := make(map[*ModelGroup]bool, len(c.groupRefs))
+			for mg := range c.groupRefs {
+				existingRefs[mg] = true
+			}
+			if err := c.parseNamedGroup(elem); err != nil {
+				c.schema.elemFormQualified = savedElemForm
+				c.schema.attrFormQualified = savedAttrForm
+				c.includeFile = savedIncludeFile
+				return err
+			}
+			// Patch self-reference: find newly-added groupRefs entries referencing qn.
+			if origGroup != nil {
+				for mg, refQN := range c.groupRefs {
+					if existingRefs[mg] {
+						continue
+					}
+					if refQN == qn {
+						mg.Compositor = origGroup.Compositor
+						mg.Particles = origGroup.Particles
+						delete(c.groupRefs, mg)
+					}
+				}
+			}
+		case isXSDElement(elem, "attributeGroup"):
+			name := getAttr(elem, "name")
+			if name == "" {
+				continue
+			}
+			qn := QName{Local: name, NS: c.schema.targetNamespace}
+			origAttrs := c.schema.attrGroups[qn]
+			// Build the new attribute list manually, expanding self-references
+			// inline. parseNamedAttributeGroup only collects xs:attribute children
+			// and doesn't handle xs:attributeGroup ref children within a definition.
+			var attrs []*AttrUse
+			for gc := elem.FirstChild(); gc != nil; gc = gc.NextSibling() {
+				if gc.Type() != helium.ElementNode {
+					continue
+				}
+				gce := gc.(*helium.Element)
+				switch {
+				case isXSDElement(gce, "attribute"):
+					au := c.parseAttributeUse(gce)
+					attrs = append(attrs, au)
+				case isXSDElement(gce, "attributeGroup"):
+					if ref := getAttr(gce, "ref"); ref != "" {
+						refQN := c.resolveQName(gce, ref)
+						if refQN == qn && origAttrs != nil {
+							attrs = append(attrs, origAttrs...)
+						}
+					}
+				}
+			}
+			c.schema.attrGroups[qn] = attrs
+		}
+	}
+
+	// Restore form-qualified settings and include file.
+	c.schema.elemFormQualified = savedElemForm
+	c.schema.attrFormQualified = savedAttrForm
+	c.includeFile = savedIncludeFile
+
+	return nil
 }
 
 // loadImport loads an imported schema and merges its declarations.
