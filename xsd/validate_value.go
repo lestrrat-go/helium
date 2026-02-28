@@ -203,14 +203,48 @@ func validateBuiltinValue(value, builtinLocal string) error {
 		"nonNegativeInteger", "unsignedLong", "unsignedInt", "unsignedShort", "unsignedByte",
 		"positiveInteger":
 		return validateInteger(value)
+	case "float", "double":
+		return validateFloat(value)
 	case "hexBinary":
 		return validateHexBinary(value)
+	case "base64Binary":
+		return validateBase64Binary(value)
 	case "date":
 		return validateDate(value)
+	case "dateTime":
+		return validateDateTime(value)
+	case "time":
+		return validateTime(value)
+	case "duration":
+		return validateDuration(value)
+	case "gYear":
+		return validateGYear(value)
+	case "gYearMonth":
+		return validateGYearMonth(value)
+	case "gMonth":
+		return validateGMonth(value)
+	case "gMonthDay":
+		return validateGMonthDay(value)
+	case "gDay":
+		return validateGDay(value)
 	case "boolean":
 		return validateBoolean(value)
 	case "language":
 		return validateLanguage(value)
+	case "Name":
+		return validateName(value)
+	case "NCName", "ID", "IDREF", "ENTITY":
+		return validateNCName(value)
+	case "NMTOKEN":
+		return validateNMTOKEN(value)
+	case "normalizedString":
+		return validateNormalizedString(value)
+	case "token":
+		return validateToken(value)
+	case "QName", "NOTATION":
+		return validateQName(value)
+	case "anyURI":
+		return nil
 	default:
 		// No value-space validation for other types (string, etc.)
 		return nil
@@ -275,6 +309,174 @@ func validateBoolean(value string) error {
 		return nil
 	}
 	return fmt.Errorf("invalid boolean")
+}
+
+// floatRegex matches the lexical space of xs:float and xs:double.
+var floatRegex = regexp.MustCompile(`^[+-]?((\d+\.?\d*|\.\d+)([eE][+-]?\d+)?|INF|NaN)$`)
+
+func validateFloat(value string) error {
+	if !floatRegex.MatchString(value) {
+		return fmt.Errorf("invalid float")
+	}
+	return nil
+}
+
+// dateTimeRegex matches the lexical space of xs:dateTime.
+var dateTimeRegex = regexp.MustCompile(`^-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})?$`)
+
+func validateDateTime(value string) error {
+	if !dateTimeRegex.MatchString(value) {
+		return fmt.Errorf("invalid dateTime")
+	}
+	return nil
+}
+
+// timeRegex matches the lexical space of xs:time.
+var timeRegex = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})?$`)
+
+func validateTime(value string) error {
+	if !timeRegex.MatchString(value) {
+		return fmt.Errorf("invalid time")
+	}
+	return nil
+}
+
+// durationRegex matches the lexical space of xs:duration.
+// Must have at least one component after P (or after T).
+var durationRegex = regexp.MustCompile(`^-?P(\d+Y)?(\d+M)?(\d+D)?(T(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$`)
+
+func validateDuration(value string) error {
+	if !durationRegex.MatchString(value) {
+		return fmt.Errorf("invalid duration")
+	}
+	// Must have at least one component: reject bare "P" or "PT".
+	stripped := strings.TrimPrefix(value, "-")
+	if stripped == "P" || stripped == "PT" {
+		return fmt.Errorf("invalid duration")
+	}
+	return nil
+}
+
+// gYearRegex matches the lexical space of xs:gYear.
+var gYearRegex = regexp.MustCompile(`^-?\d{4,}([Zz]|[+-]\d{2}:\d{2})?$`)
+
+func validateGYear(value string) error {
+	if !gYearRegex.MatchString(value) {
+		return fmt.Errorf("invalid gYear")
+	}
+	return nil
+}
+
+// gYearMonthRegex matches the lexical space of xs:gYearMonth.
+var gYearMonthRegex = regexp.MustCompile(`^-?\d{4,}-\d{2}([Zz]|[+-]\d{2}:\d{2})?$`)
+
+func validateGYearMonth(value string) error {
+	if !gYearMonthRegex.MatchString(value) {
+		return fmt.Errorf("invalid gYearMonth")
+	}
+	return nil
+}
+
+// gMonthRegex matches the lexical space of xs:gMonth.
+var gMonthRegex = regexp.MustCompile(`^--\d{2}([Zz]|[+-]\d{2}:\d{2})?$`)
+
+func validateGMonth(value string) error {
+	if !gMonthRegex.MatchString(value) {
+		return fmt.Errorf("invalid gMonth")
+	}
+	return nil
+}
+
+// gMonthDayRegex matches the lexical space of xs:gMonthDay.
+var gMonthDayRegex = regexp.MustCompile(`^--\d{2}-\d{2}([Zz]|[+-]\d{2}:\d{2})?$`)
+
+func validateGMonthDay(value string) error {
+	if !gMonthDayRegex.MatchString(value) {
+		return fmt.Errorf("invalid gMonthDay")
+	}
+	return nil
+}
+
+// gDayRegex matches the lexical space of xs:gDay.
+var gDayRegex = regexp.MustCompile(`^---\d{2}([Zz]|[+-]\d{2}:\d{2})?$`)
+
+func validateGDay(value string) error {
+	if !gDayRegex.MatchString(value) {
+		return fmt.Errorf("invalid gDay")
+	}
+	return nil
+}
+
+// nameRegex matches the lexical space of xs:Name.
+// NameStartChar: letter, _, :
+// NameChar: NameStartChar + digit, -, .
+var nameRegex = regexp.MustCompile(`^[a-zA-Z_:][a-zA-Z0-9_.:\-]*$`)
+
+func validateName(value string) error {
+	if value == "" || !nameRegex.MatchString(value) {
+		return fmt.Errorf("invalid Name")
+	}
+	return nil
+}
+
+// ncNameRegex matches the lexical space of xs:NCName (Name without colons).
+var ncNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_.\-]*$`)
+
+func validateNCName(value string) error {
+	if value == "" || !ncNameRegex.MatchString(value) {
+		return fmt.Errorf("invalid NCName")
+	}
+	return nil
+}
+
+// nmtokenRegex matches the lexical space of xs:NMTOKEN.
+var nmtokenRegex = regexp.MustCompile(`^[a-zA-Z0-9_.:\-]+$`)
+
+func validateNMTOKEN(value string) error {
+	if !nmtokenRegex.MatchString(value) {
+		return fmt.Errorf("invalid NMTOKEN")
+	}
+	return nil
+}
+
+func validateNormalizedString(value string) error {
+	if strings.ContainsAny(value, "\t\n\r") {
+		return fmt.Errorf("invalid normalizedString")
+	}
+	return nil
+}
+
+func validateToken(value string) error {
+	if strings.ContainsAny(value, "\t\n\r") {
+		return fmt.Errorf("invalid token")
+	}
+	if value != strings.TrimSpace(value) {
+		return fmt.Errorf("invalid token")
+	}
+	if strings.Contains(value, "  ") {
+		return fmt.Errorf("invalid token")
+	}
+	return nil
+}
+
+// base64Regex matches the lexical space of xs:base64Binary.
+var base64Regex = regexp.MustCompile(`^[A-Za-z0-9+/\s]*(={0,2}\s*)?$`)
+
+func validateBase64Binary(value string) error {
+	if !base64Regex.MatchString(value) {
+		return fmt.Errorf("invalid base64Binary")
+	}
+	return nil
+}
+
+// qnameRegex matches the lexical space of xs:QName and xs:NOTATION.
+var qnameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_.\-]*(:[a-zA-Z_][a-zA-Z0-9_.\-]*)?$`)
+
+func validateQName(value string) error {
+	if value == "" || !qnameRegex.MatchString(value) {
+		return fmt.Errorf("invalid QName")
+	}
+	return nil
 }
 
 // validateFacets checks all applicable facets for a type and its ancestors.
