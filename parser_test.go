@@ -522,3 +522,104 @@ func TestValidateAttributeValueInternal(t *testing.T) {
 		require.NoError(t, validateAttributeValueInternal(nil, AttrCDATA, "anything goes here!"))
 	})
 }
+
+func TestParseDTDValidIDUnique(t *testing.T) {
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (item, item)>
+  <!ELEMENT item EMPTY>
+  <!ATTLIST item id ID #REQUIRED>
+]>
+<doc><item id="a"/><item id="b"/></doc>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	_, err := p.Parse([]byte(input))
+	require.NoError(t, err)
+}
+
+func TestParseDTDValidIDDuplicate(t *testing.T) {
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (item, item)>
+  <!ELEMENT item EMPTY>
+  <!ATTLIST item id ID #REQUIRED>
+]>
+<doc><item id="a"/><item id="a"/></doc>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	_, err := p.Parse([]byte(input))
+	require.Error(t, err, "duplicate ID should fail")
+	require.Contains(t, err.Error(), "duplicate ID")
+}
+
+func TestParseDTDValidIDRefValid(t *testing.T) {
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (item, ref)>
+  <!ELEMENT item EMPTY>
+  <!ELEMENT ref EMPTY>
+  <!ATTLIST item id ID #REQUIRED>
+  <!ATTLIST ref target IDREF #REQUIRED>
+]>
+<doc><item id="x"/><ref target="x"/></doc>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	_, err := p.Parse([]byte(input))
+	require.NoError(t, err)
+}
+
+func TestParseDTDValidIDRefMissing(t *testing.T) {
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (item, ref)>
+  <!ELEMENT item EMPTY>
+  <!ELEMENT ref EMPTY>
+  <!ATTLIST item id ID #REQUIRED>
+  <!ATTLIST ref target IDREF #REQUIRED>
+]>
+<doc><item id="x"/><ref target="y"/></doc>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	_, err := p.Parse([]byte(input))
+	require.Error(t, err, "IDREF to missing ID should fail")
+	require.Contains(t, err.Error(), "unknown ID")
+}
+
+func TestParseDTDValidIDRefsValid(t *testing.T) {
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (item, item, refs)>
+  <!ELEMENT item EMPTY>
+  <!ELEMENT refs EMPTY>
+  <!ATTLIST item id ID #REQUIRED>
+  <!ATTLIST refs targets IDREFS #REQUIRED>
+]>
+<doc><item id="a"/><item id="b"/><refs targets="a b"/></doc>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	_, err := p.Parse([]byte(input))
+	require.NoError(t, err)
+}
+
+func TestParseDTDValidIDRefsMissing(t *testing.T) {
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (item, refs)>
+  <!ELEMENT item EMPTY>
+  <!ELEMENT refs EMPTY>
+  <!ATTLIST item id ID #REQUIRED>
+  <!ATTLIST refs targets IDREFS #REQUIRED>
+]>
+<doc><item id="a"/><refs targets="a z"/></doc>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDValid)
+	_, err := p.Parse([]byte(input))
+	require.Error(t, err, "IDREFS with missing ref should fail")
+	require.Contains(t, err.Error(), "unknown ID")
+}
