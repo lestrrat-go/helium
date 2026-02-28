@@ -71,9 +71,20 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 
 					if fire {
 						valid = false
-						msg := formatMessage(t.message, node, ruleCtx, &out)
-						nodePath := getNodePath(node)
-						out.WriteString(schematronError(filename, node.Line(), node.Name(), nodePath, msg))
+						if cfg.errorHandler != nil {
+							msg := formatMessage(t.message, node, ruleCtx, &out)
+							cfg.errorHandler.HandleError(ValidationError{
+								Filename: filename,
+								Line:     node.Line(),
+								Element:  node.Name(),
+								Path:     getNodePath(node),
+								Message:  msg,
+							})
+						} else if !cfg.quiet {
+							msg := formatMessage(t.message, node, ruleCtx, &out)
+							nodePath := getNodePath(node)
+							out.WriteString(schematronError(filename, node.Line(), node.Name(), nodePath, msg))
+						}
 					}
 				}
 			}

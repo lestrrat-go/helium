@@ -162,3 +162,127 @@ func extractBaseName(name string) string {
 	}
 	return name[:idx]
 }
+
+// compileAndValidate is a helper that compiles a schema from a string and
+// validates an XML document string against it, returning the validation output.
+func compileAndValidate(t *testing.T, schemaXML, instanceXML string, opts ...schematron.ValidateOption) string {
+	t.Helper()
+	sDoc, err := helium.Parse([]byte(schemaXML))
+	require.NoError(t, err)
+	schema, err := schematron.Compile(sDoc)
+	require.NoError(t, err)
+	doc, err := helium.Parse([]byte(instanceXML))
+	require.NoError(t, err)
+	return schematron.Validate(doc, schema, opts...)
+}
+
+func TestWithQuiet(t *testing.T) {
+	const sct = `<schema xmlns="http://www.ascc.net/xml/schematron">
+  <pattern name="test">
+    <rule context="AAA">
+      <assert test="BBB">BBB element is missing.</assert>
+      <report test="BBB">BBB element is present.</report>
+    </rule>
+  </pattern>
+</schema>`
+
+	t.Run("failing document", func(t *testing.T) {
+		// Without quiet: per-error lines + "fails to validate"
+		got := compileAndValidate(t, sct, `<AAA><CCC/></AAA>`, schematron.WithFilename("test.xml"))
+		require.Contains(t, got, "schematron error")
+		require.Contains(t, got, "fails to validate")
+
+		// With quiet: only "fails to validate" line, no per-error lines
+		quiet := compileAndValidate(t, sct, `<AAA><CCC/></AAA>`, schematron.WithFilename("test.xml"), schematron.WithQuiet())
+		require.NotContains(t, quiet, "schematron error")
+		require.Equal(t, "test.xml fails to validate\n", quiet)
+	})
+
+	t.Run("passing document", func(t *testing.T) {
+		// This schema only has a report (no assert), so a doc without BBB validates.
+		const reportOnly = `<schema xmlns="http://www.ascc.net/xml/schematron">
+  <pattern name="test">
+    <rule context="AAA">
+      <report test="CCC">CCC is present.</report>
+    </rule>
+  </pattern>
+</schema>`
+		// Without quiet: report fires, "fails to validate"
+		got := compileAndValidate(t, reportOnly, `<AAA><CCC/></AAA>`, schematron.WithFilename("test.xml"))
+		require.Contains(t, got, "CCC is present")
+
+		// With quiet: report suppressed, but since the report fired, it still "fails to validate"
+		quiet := compileAndValidate(t, reportOnly, `<AAA><CCC/></AAA>`, schematron.WithFilename("test.xml"), schematron.WithQuiet())
+		require.NotContains(t, quiet, "CCC is present")
+		require.Equal(t, "test.xml fails to validate\n", quiet)
+	})
+}
+
+func TestWithErrorHandler(t *testing.T) {
+	const sct = `<schema xmlns="http://www.ascc.net/xml/schematron">
+  <pattern name="test">
+    <rule context="AAA">
+      <assert test="BBB">BBB element is missing.</assert>
+      <assert test="@name">AAA needs name attribute.</assert>
+    </rule>
+  </pattern>
+</schema>`
+
+	t.Run("errors delivered to handler", func(t *testing.T) {
+		var errors []schematron.ValidationError
+		handler := schematron.ErrorHandlerFunc(func(e schematron.ValidationError) {
+			errors = append(errors, e)
+		})
+
+		got := compileAndValidate(t, sct, `<AAA><CCC/></AAA>`,
+			schematron.WithFilename("test.xml"),
+			schematron.WithErrorHandler(handler),
+		)
+
+		// String output should not contain per-error lines
+		require.NotContains(t, got, "schematron error")
+		require.Contains(t, got, "fails to validate")
+
+		// Handler should have received both errors
+		require.Len(t, errors, 2)
+		require.Equal(t, "BBB element is missing.", errors[0].Message)
+		require.Equal(t, "AAA", errors[0].Element)
+		require.Equal(t, "/AAA", errors[0].Path)
+		require.Equal(t, "test.xml", errors[0].Filename)
+		require.Equal(t, "AAA needs name attribute.", errors[1].Message)
+	})
+
+	t.Run("passing document no handler calls", func(t *testing.T) {
+		var errors []schematron.ValidationError
+		handler := schematron.ErrorHandlerFunc(func(e schematron.ValidationError) {
+			errors = append(errors, e)
+		})
+
+		got := compileAndValidate(t, sct, `<AAA name="x"><BBB/></AAA>`,
+			schematron.WithFilename("test.xml"),
+			schematron.WithErrorHandler(handler),
+		)
+
+		require.Contains(t, got, "validates")
+		require.NotContains(t, got, "fails")
+		require.Empty(t, errors)
+	})
+
+	t.Run("quiet with error handler delivers errors", func(t *testing.T) {
+		// When both quiet and error handler are set, errors go to the handler
+		var errors []schematron.ValidationError
+		handler := schematron.ErrorHandlerFunc(func(e schematron.ValidationError) {
+			errors = append(errors, e)
+		})
+
+		got := compileAndValidate(t, sct, `<AAA><CCC/></AAA>`,
+			schematron.WithFilename("test.xml"),
+			schematron.WithQuiet(),
+			schematron.WithErrorHandler(handler),
+		)
+
+		require.NotContains(t, got, "schematron error")
+		require.Contains(t, got, "fails to validate")
+		require.Len(t, errors, 2)
+	})
+}
