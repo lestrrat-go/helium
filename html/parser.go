@@ -838,14 +838,6 @@ func (p *parser) emitError(msg string, args ...interface{}) error {
 	return p.sax.Error(msg, args...)
 }
 
-// emitWarning fires a SAX Warning event unless suppressed by WithNoWarning.
-func (p *parser) emitWarning(msg string, args ...interface{}) error {
-	if p.cfg.noWarning {
-		return nil
-	}
-	return p.sax.Warning(msg, args...)
-}
-
 // emitCharacters fires the appropriate SAX Characters event.
 // When noBlanks is set, whitespace-only data is suppressed unless
 // inside a raw-text element (script, style, etc.).
