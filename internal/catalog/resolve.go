@@ -55,6 +55,13 @@ func (c *Catalog) ResolveURI(uri string) string {
 	if c == nil || uri == "" {
 		return ""
 	}
+
+	// Unwrap urn:publicid: URNs and delegate to Resolve as a public ID,
+	// matching libxml2's xmlCatalogListXMLResolveURI behavior.
+	if pubID := UnwrapURN(uri); pubID != "" {
+		return c.Resolve(pubID, "")
+	}
+
 	ret := c.resolveURI(uri)
 	if ret == CatalogBreak {
 		return ""
