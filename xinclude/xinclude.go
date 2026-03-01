@@ -87,7 +87,11 @@ type processor struct {
 // Process performs XInclude processing on the document.
 // Returns the number of substitutions made, or an error.
 func Process(doc *helium.Document, opts ...Option) (int, error) {
-	return ProcessTree(doc, opts...)
+	count, err := ProcessTree(doc, opts...)
+	if count > 0 {
+		doc.SetProperties(doc.Properties() | helium.DocXInclude)
+	}
+	return count, err
 }
 
 // ProcessTree performs XInclude processing starting from any node in the tree.
