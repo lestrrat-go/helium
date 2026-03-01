@@ -29,7 +29,7 @@ type Notation struct {
 func (n *Notation) AddChild(cur Node) error  { return addChild(n, cur) }
 func (n *Notation) AddContent(b []byte) error { return addContent(n, b) }
 func (n *Notation) AddSibling(cur Node) error { return addSibling(n, cur) }
-func (n *Notation) Replace(cur Node)          { replaceNode(n, cur) }
+func (n *Notation) Replace(cur Node) error     { return replaceNode(n, cur) }
 func (n *Notation) SetTreeDoc(doc *Document)  { setTreeDoc(n, doc) }
 func (n *Notation) Free()                     {}
 
@@ -329,8 +329,8 @@ func (dtd *DTD) AddSibling(cur Node) error {
 	return addSibling(dtd, cur)
 }
 
-func (dtd *DTD) Replace(cur Node) {
-	replaceNode(dtd, cur)
+func (dtd *DTD) Replace(cur Node) error {
+	return replaceNode(dtd, cur)
 }
 
 func (dtd *DTD) SetTreeDoc(doc *Document) {

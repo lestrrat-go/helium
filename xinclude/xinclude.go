@@ -682,7 +682,7 @@ func spliceReplace(target helium.Node, nodes []helium.Node) {
 	afterTarget := target.NextSibling()
 
 	// Replace target with the first node (handles parent firstChild/lastChild)
-	target.Replace(nodes[0])
+	_ = target.Replace(nodes[0])
 
 	// Chain remaining nodes after the first
 	prev := nodes[0]

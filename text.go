@@ -50,8 +50,8 @@ func (n Text) Content() []byte {
 	return n.content
 }
 
-func (n *Text) Replace(cur Node) {
-	replaceNode(n, cur)
+func (n *Text) Replace(cur Node) error {
+	return replaceNode(n, cur)
 }
 
 func (n *Text) SetTreeDoc(doc *Document) {

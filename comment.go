@@ -34,8 +34,8 @@ func (n Comment) Content() []byte {
 	return n.content
 }
 
-func (n *Comment) Replace(cur Node) {
-	replaceNode(n, cur)
+func (n *Comment) Replace(cur Node) error {
+	return replaceNode(n, cur)
 }
 
 func (n *Comment) SetTreeDoc(doc *Document) {

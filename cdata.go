@@ -32,8 +32,8 @@ func (n CDATASection) Content() []byte {
 	return n.content
 }
 
-func (n *CDATASection) Replace(cur Node) {
-	replaceNode(n, cur)
+func (n *CDATASection) Replace(cur Node) error {
+	return replaceNode(n, cur)
 }
 
 func (n *CDATASection) SetTreeDoc(doc *Document) {

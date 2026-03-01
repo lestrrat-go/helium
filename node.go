@@ -23,7 +23,7 @@ type Node interface {
 	OwnerDocument() *Document
 	Parent() Node
 	PrevSibling() Node
-	Replace(Node)
+	Replace(Node) error
 	SetLine(int)
 	SetNextSibling(Node)
 	SetOwnerDocument(doc *Document)
@@ -304,7 +304,7 @@ func UnlinkNode(n Node) {
 	n.SetNextSibling(nil)
 }
 
-func replaceNode(n Node, cur Node) {
+func replaceNode(n Node, cur Node) error {
 	if next := n.NextSibling(); next != nil {
 		cur.SetNextSibling(next) // cur.next = n.next
 		next.SetPrevSibling(cur) // n.next.prev = cur
@@ -324,6 +324,7 @@ func replaceNode(n Node, cur Node) {
 		}
 		cur.SetParent(parent)
 	}
+	return nil
 }
 
 func (n node) Namespace() *Namespace {

@@ -162,8 +162,8 @@ func (d *Document) ExtSubset() *DTD {
 	return d.extSubset
 }
 
-func (d *Document) Replace(_ Node) {
-	panic("d.Replace does not make sense")
+func (d *Document) Replace(_ Node) error {
+	return ErrInvalidOperation
 }
 
 // DocumentElement returns the root element of the document, or nil if none exists.
@@ -199,7 +199,9 @@ func (d *Document) SetDocumentElement(root Node) error {
 			return err
 		}
 	} else {
-		old.Replace(root)
+		if err := old.Replace(root); err != nil {
+			return err
+		}
 	}
 	return nil
 }
