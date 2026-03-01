@@ -46,6 +46,30 @@ func TestDumpLegacyCompatSuppressed(t *testing.T) {
 	require.True(t, strings.HasPrefix(output, "<!DOCTYPE html>\n"), "about:legacy-compat SYSTEM ID should be suppressed, got: %s", output)
 }
 
+func TestDumpNameAttrURIOnAnchor(t *testing.T) {
+	// "name" on <a> should be URI-escaped (space -> %20)
+	input := `<html><body><a name="foo bar">link</a></body></html>`
+	doc, err := Parse([]byte(input))
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	require.NoError(t, DumpDoc(&buf, doc, WithNoDefaultDTD()))
+	output := buf.String()
+	require.Contains(t, output, `name="foo%20bar"`, "name on <a> should be URI-escaped")
+}
+
+func TestDumpNameAttrNonURIOnMeta(t *testing.T) {
+	// "name" on non-<a> elements should NOT be URI-escaped
+	input := `<html><head><meta name="foo bar"></head><body></body></html>`
+	doc, err := Parse([]byte(input))
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	require.NoError(t, DumpDoc(&buf, doc, WithNoDefaultDTD()))
+	output := buf.String()
+	require.Contains(t, output, `name="foo bar"`, "name on <meta> should not be URI-escaped")
+}
+
 func TestOptionsNoBlanks(t *testing.T) {
 	input := `<html> <body> <p>text</p> </body> </html>`
 	doc, err := Parse([]byte(input), WithNoBlanks())
