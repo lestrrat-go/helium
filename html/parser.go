@@ -2,6 +2,7 @@ package html
 
 import (
 	"bytes"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -313,12 +314,7 @@ func (p *parser) popName() string {
 
 // hasOnStack checks if the given element name is on the open element stack.
 func (p *parser) hasOnStack(name string) bool {
-	for _, n := range p.nameStack {
-		if n == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(p.nameStack, name)
 }
 
 // isMisplacedStructural checks whether a structural element (html/head/body)
