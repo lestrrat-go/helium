@@ -491,6 +491,146 @@ func TestMatchContentModel(t *testing.T) {
 	}
 }
 
+func TestIsValidNameStartChar(t *testing.T) {
+	tests := []struct {
+		name string
+		r    rune
+		want bool
+	}{
+		// ASCII letters and underscore
+		{"A", 'A', true},
+		{"Z", 'Z', true},
+		{"a", 'a', true},
+		{"z", 'z', true},
+		{"underscore", '_', true},
+
+		// Rejected ASCII
+		{"colon", ':', false},    // colon excluded in helium (namespace-aware)
+		{"digit 0", '0', false},  // digit not a start char
+		{"hyphen", '-', false},   // not a start char
+		{"dot", '.', false},      // not a start char
+		{"space", ' ', false},    // not a name char at all
+		{"at", '@', false},       // between Z and a
+		{"bracket", '[', false},  // between Z and a
+
+		// Latin supplement boundaries
+		{"U+00BF (before range)", 0xBF, false},   // just before 0xC0
+		{"U+00C0 (start)", 0xC0, true},           // À
+		{"U+00D6 (end)", 0xD6, true},             // Ö
+		{"U+00D7 (multiply sign)", 0xD7, false},  // × excluded
+		{"U+00D8 (start)", 0xD8, true},           // Ø
+		{"U+00F6 (end)", 0xF6, true},             // ö
+		{"U+00F7 (division sign)", 0xF7, false},  // ÷ excluded
+		{"U+00F8 (start)", 0xF8, true},           // ø
+
+		// Range gaps
+		{"U+0300 (combining)", 0x0300, false},     // combining diacritical — not a start char
+		{"U+036F (combining end)", 0x036F, false},  // not a start char
+		{"U+0370 (Greek)", 0x0370, true},
+		{"U+037D (end)", 0x037D, true},
+		{"U+037E (Greek question mark)", 0x037E, false}, // excluded
+		{"U+037F (start)", 0x037F, true},
+
+		// Zero-width range
+		{"U+200C (ZWNJ)", 0x200C, true},
+		{"U+200D (ZWJ)", 0x200D, true},
+		{"U+200B (before range)", 0x200B, false},
+		{"U+200E (after range)", 0x200E, false},
+
+		// CJK gap: 0x2070-0x218F
+		{"U+2070", 0x2070, true},
+		{"U+218F (end)", 0x218F, true},
+		{"U+2190 (arrows)", 0x2190, false},
+
+		// Gap between ranges: 0x2FEF end, 0x3001 start
+		{"U+2FEF (end)", 0x2FEF, true},
+		{"U+2FF0 (ideographic desc)", 0x2FF0, false}, // gap
+		{"U+3000 (CJK space)", 0x3000, false},        // gap
+		{"U+3001 (start)", 0x3001, true},
+
+		// Upper BMP boundaries
+		{"U+D7FF (end)", 0xD7FF, true},
+		{"U+F900 (CJK compat)", 0xF900, true},
+		{"U+FDCF (end)", 0xFDCF, true},
+		{"U+FDD0 (nonchar)", 0xFDD0, false},
+		{"U+FDF0 (start)", 0xFDF0, true},
+		{"U+FFFD (end)", 0xFFFD, true},
+		{"U+FFFE (nonchar)", 0xFFFE, false},
+
+		// Supplementary planes
+		{"U+10000 (start)", 0x10000, true},
+		{"U+EFFFF (end)", 0xEFFFF, true},
+		{"U+F0000 (private use)", 0xF0000, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isValidNameStartChar(tt.r)
+			require.Equal(t, tt.want, got, "isValidNameStartChar(U+%04X)", tt.r)
+		})
+	}
+}
+
+func TestIsValidNameChar(t *testing.T) {
+	tests := []struct {
+		name string
+		r    rune
+		want bool
+	}{
+		// NameChar additions beyond NameStartChar
+		{"digit 0", '0', true},
+		{"digit 9", '9', true},
+		{"hyphen", '-', true},
+		{"dot", '.', true},
+		{"middle dot U+00B7", 0xB7, true},
+		{"combining U+0300", 0x0300, true},
+		{"combining U+036F", 0x036F, true},
+		{"U+02FF (before combining)", 0x02FF, true}, // in NameStartChar range 0xF8-0x2FF
+		{"extender U+203F", 0x203F, true},
+		{"extender U+2040", 0x2040, true},
+
+		// Still not valid
+		{"space", ' ', false},
+		{"U+00B6 (pilcrow)", 0xB6, false},
+		{"U+00B8 (cedilla)", 0xB8, false},
+		{"U+2041 (caret insertion)", 0x2041, false},
+		{"colon", ':', false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isValidNameChar(tt.r)
+			require.Equal(t, tt.want, got, "isValidNameChar(U+%04X)", tt.r)
+		})
+	}
+}
+
+func TestIsValidName(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"simple", "foo", true},
+		{"with digits", "foo123", true},
+		{"with hyphen", "foo-bar", true},
+		{"with dot", "foo.bar", true},
+		{"starts with underscore", "_foo", true},
+		{"starts with digit", "1foo", false},
+		{"starts with hyphen", "-foo", false},
+		{"empty", "", false},
+		{"unicode letter start", "\u00C0foo", true},      // À
+		{"middle dot in name", "foo\u00B7bar", true},      // ·
+		{"combining in name", "foo\u0300bar", true},       // combining grave
+		{"multiply sign start", "\u00D7foo", false},       // ×
+		{"division sign start", "\u00F7foo", false},       // ÷
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isValidName(tt.input)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestExtSubsetLookup_ParameterEntityInExtSubset(t *testing.T) {
 	doc := buildTestDoc(StandaloneImplicitNo)
 
