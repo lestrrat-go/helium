@@ -767,9 +767,36 @@ func getNamespaceURI(n helium.Node) string {
 	return ""
 }
 
+// getAttr performs a 3-pass attribute lookup matching libxml2's xmlXIncludeGetProp:
+// 1. Try attribute with the element's XInclude namespace URI
+// 2. Try attribute with the other XInclude namespace URI
+// 3. Try unqualified attribute (no namespace)
 func getAttr(elem *helium.Element, name string) string {
-	for _, a := range elem.Attributes() {
-		if a.LocalName() == name {
+	elemNS := getNamespaceURI(elem)
+	var otherNS string
+	if elemNS == xiNamespaceLegacy {
+		otherNS = xiNamespaceNew
+	} else {
+		otherNS = xiNamespaceLegacy
+	}
+
+	attrs := elem.Attributes()
+
+	// Pass 1: element's own XInclude namespace
+	for _, a := range attrs {
+		if a.LocalName() == name && a.URI() == elemNS {
+			return a.Value()
+		}
+	}
+	// Pass 2: the other XInclude namespace
+	for _, a := range attrs {
+		if a.LocalName() == name && a.URI() == otherNS {
+			return a.Value()
+		}
+	}
+	// Pass 3: unqualified (no namespace)
+	for _, a := range attrs {
+		if a.LocalName() == name && a.URI() == "" {
 			return a.Value()
 		}
 	}
