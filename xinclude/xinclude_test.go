@@ -865,3 +865,57 @@ func TestXIncludeParseNoEntWithXPointer(t *testing.T) {
 	}
 	require.True(t, found, "included <item> element not found")
 }
+
+// countingResolver wraps a stringResolver and counts Resolve calls per URI.
+type countingResolver struct {
+	inner *stringResolver
+	calls map[string]int
+}
+
+func (r *countingResolver) Resolve(href, base string) (io.ReadCloser, error) {
+	if r.calls == nil {
+		r.calls = make(map[string]int)
+	}
+	r.calls[href]++
+	return r.inner.Resolve(href, base)
+}
+
+func TestXIncludeDocCacheAvoidsReResolve(t *testing.T) {
+	// When the same URI is included multiple times, the resolver should
+	// only be called once — subsequent includes reuse cached bytes.
+	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<xi:include href="shared.xml"/>
+		<xi:include href="shared.xml"/>
+		<xi:include href="shared.xml"/>
+	</root>`)
+
+	resolver := &countingResolver{
+		inner: &stringResolver{
+			files: map[string]string{
+				"shared.xml": `<item>cached</item>`,
+			},
+		},
+	}
+
+	count, err := xinclude.Process(doc,
+		xinclude.WithResolver(resolver),
+		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoBaseFixup(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 3, count)
+
+	// Resolver should be called only once for "shared.xml"
+	require.Equal(t, 1, resolver.calls["shared.xml"])
+
+	// All three inclusions should produce independent nodes
+	root := docElement(doc)
+	var items int
+	for c := root.FirstChild(); c != nil; c = c.NextSibling() {
+		if c.Type() == helium.ElementNode {
+			items++
+			require.Equal(t, "item", c.(*helium.Element).LocalName())
+		}
+	}
+	require.Equal(t, 3, items)
+}
