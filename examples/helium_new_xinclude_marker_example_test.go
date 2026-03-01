@@ -6,9 +6,9 @@ import (
 	"github.com/lestrrat-go/helium"
 )
 
-func Example_helium_new_xinclude_node() {
+func Example_helium_new_xinclude_marker() {
 	doc := helium.CreateDocument()
-	n := helium.NewXIncludeNode(doc, helium.XIncludeStartNode, "include")
+	n := helium.NewXIncludeMarker(doc, helium.XIncludeStartNode, "include")
 	fmt.Println(n.Type() == helium.XIncludeStartNode)
 	fmt.Println(n.Name())
 	// Output:
