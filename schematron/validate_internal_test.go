@@ -311,3 +311,50 @@ func TestXpathResultToStringNodeSet(t *testing.T) {
 		require.Equal(t, "a b c", xpathResultToString(r))
 	})
 }
+
+func TestContextToXPath(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		expect string
+	}{
+		{"simple element", "a", "//a"},
+		{"absolute", "/a", "/a"},
+		{"union", "a | b", "//a | //b"},
+		{"mixed absolute/relative union", "/a | b", "/a | //b"},
+		{"multi-step union", "a/b | c/d", "//a/b | //c/d"},
+		{"predicate with pipe", "a[contains(., '|')]", "//a[contains(., '|')]"},
+		{"wildcard", "*", "//*"},
+		{"root wildcard", "/*", "/*"},
+		{"leading/trailing spaces", "  a | b  ", "//a | //b"},
+		{"predicate with bracket", "a[@x='1'] | b", "//a[@x='1'] | //b"},
+		{"nested parens with pipe", "a[f(.|b)] | c", "//a[f(.|b)] | //c"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.expect, contextToXPath(tt.input))
+		})
+	}
+}
+
+func TestUnionContextIntegration(t *testing.T) {
+	schemaXML := `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern>
+			<rule context="invoice | credit-note">
+				<assert test="@id">Missing id attribute</assert>
+			</rule>
+		</pattern>
+	</schema>`
+	schema := compileTestSchema(t, schemaXML)
+	require.Equal(t, "", schema.CompileErrors())
+
+	doc, err := helium.Parse([]byte(`<root><invoice/><credit-note/><other/></root>`))
+	require.NoError(t, err)
+
+	output := Validate(doc, schema)
+	// Both invoice and credit-note should trigger the assert.
+	require.Contains(t, output, "invoice")
+	require.Contains(t, output, "credit-note")
+	// "other" should not be mentioned in failures.
+	require.NotContains(t, output, "other")
+}
