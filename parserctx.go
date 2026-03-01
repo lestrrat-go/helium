@@ -2651,20 +2651,12 @@ func (ctx *parserCtx) areBlanks(s string, blankChars bool) (ret bool) {
 		return
 	}
 
-	/*
-	   if ((ctxt->node->children == NULL) &&
-	       (RAW == '<') && (NXT(1) == '/')) return(0);
-
-	   lastChild = xmlGetLastChild(ctxt->node);
-	   if (lastChild == NULL) {
-	       if ((ctxt->node->type != XML_ELEMENT_NODE) &&
-	           (ctxt->node->content != NULL)) return(0);
-	   } else if (xmlNodeIsText(lastChild))
-	       return(0);
-	   else if ((ctxt->node->children != NULL) &&
-	            (xmlNodeIsText(ctxt->node->children)))
-	       return(0);
-	*/
+	// libxml2's areBlanks has additional heuristic checks here (children-empty +
+	// </close check, lastChild text node check). These are not applicable in helium
+	// because peekNode() returns parser-stack elements that don't have children
+	// (children are added to tree builder elements via ctx.elem, which is separate).
+	// When ctx.doc != nil, IsMixedElement above handles the classification.
+	// When ctx.doc == nil (SAX-only mode), there is no tree to inspect.
 	ret = true
 	return
 }
