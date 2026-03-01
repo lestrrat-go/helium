@@ -70,7 +70,7 @@ type evalContext struct {
 	position    int
 	size        int
 	namespaces  map[string]string
-	variables   map[string]interface{}
+	variables   map[string]any
 	functions   map[string]Function
 	functionsNS map[QualifiedName]Function
 	depth       int
@@ -146,7 +146,7 @@ func (ctx *evalContext) Namespace(prefix string) (string, bool) {
 	return uri, ok
 }
 
-func (ctx *evalContext) Variable(name string) (interface{}, bool) {
+func (ctx *evalContext) Variable(name string) (any, bool) {
 	if ctx == nil || ctx.variables == nil {
 		return nil, false
 	}

@@ -68,14 +68,14 @@ func (s *nodeStack) PeekOne() *Element {
 	return l[0].(*Element)
 }
 
-// the reason we're using interface{} here is that we may have to
+// the reason we're using any here is that we may have to
 // push a ByteCursor or a RuneCursor, and they don't share
 // a common API
-func (s *inputStack) Push(c interface{}) {
+func (s *inputStack) Push(c any) {
 	s.SimpleStack.Push(stack.AnyItem(c))
 }
 
-func (s *inputStack) Pop() interface{} {
+func (s *inputStack) Pop() any {
 	defer s.SimpleStack.Pop() // nolint:staticcheck
 	if e := s.PeekOne(); e != nil {
 		return e
@@ -83,10 +83,10 @@ func (s *inputStack) Pop() interface{} {
 	return nil
 }
 
-func (s *inputStack) PeekOne() interface{} {
+func (s *inputStack) PeekOne() any {
 	l := s.SimpleStack.Peek(1) // nolint:staticcheck
 	if len(l) != 1 {
 		return nil
 	}
-	return l[0].(interface{})
+	return l[0]
 }

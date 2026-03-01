@@ -100,7 +100,7 @@ type parserCtx struct {
 	nsTab    nsStack
 	nsNrTab  []int // number of ns bindings pushed per element (parallel to nodeTab)
 	doc      *Document
-	userData interface{}
+	userData any
 	nodeTab  nodeStack
 	elemidx     int
 	sizeentcopy int64 // cumulative entity expansion bytes (non-entity-specific)
@@ -149,7 +149,7 @@ const (
 	cbGetParameterEntity
 )
 
-func (ctx *parserCtx) fireSAXCallback(typ int, args ...interface{}) error {
+func (ctx *parserCtx) fireSAXCallback(typ int, args ...any) error {
 	// This is ugly, but I *REALLY* wanted to catch all occurences of
 	// SAX callbacks being fired in one shot. optimize it later
 
@@ -287,7 +287,7 @@ var bufferPool = sync.Pool{
 	New: allocByteBuffer,
 }
 
-func allocByteBuffer() interface{} {
+func allocByteBuffer() any {
 	if pdebug.Enabled {
 		pdebug.Printf("Allocating new bytes.Buffer...")
 	}
@@ -299,7 +299,7 @@ func releaseBuffer(b *bytes.Buffer) {
 	bufferPool.Put(b)
 }
 
-func (ctx *parserCtx) pushInput(in interface{}) {
+func (ctx *parserCtx) pushInput(in any) {
 	if pdebug.Enabled {
 		pdebug.Printf("pushInput (n = %d -> %d)", ctx.inputTab.Len(), ctx.inputTab.Len()+1)
 	}
@@ -335,11 +335,11 @@ func (ctx *parserCtx) getCursor() strcursor.Cursor {
 	return nil
 }
 
-func (ctx *parserCtx) popInput() interface{} {
+func (ctx *parserCtx) popInput() any {
 	return ctx.inputTab.Pop()
 }
 
-func (ctx *parserCtx) currentInputID() interface{} {
+func (ctx *parserCtx) currentInputID() any {
 	return ctx.inputTab.PeekOne()
 }
 
@@ -497,7 +497,7 @@ func (ctx *parserCtx) errorAtLevel(err error, level ErrorLevel) error {
 // and location info, then fires the SAX Warning callback with the structured
 // error. Returns nil for non-fatal warnings. If the SAX Warning handler
 // returns an error, returns the ErrParseError.
-func (ctx *parserCtx) warning(format string, args ...interface{}) error {
+func (ctx *parserCtx) warning(format string, args ...any) error {
 	msg := fmt.Sprintf(format, args...)
 	if s := ctx.sax; s != nil && !ctx.options.IsSet(ParseNoWarning) {
 		e := ErrParseError{Err: errors.New(msg), Level: ErrorLevelWarning, File: ctx.baseURI}
@@ -5153,7 +5153,7 @@ func (ctx *parserCtx) parseExternalEntityPrivate(uri, externalID string) (Node, 
 
 var ErrParseSucceeded = errors.New("parse succeeded")
 
-func (ctx *parserCtx) parseBalancedChunkInternal(chunk []byte, userData interface{}) (Node, error) {
+func (ctx *parserCtx) parseBalancedChunkInternal(chunk []byte, userData any) (Node, error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START parseBalancedChunkInternal")
 		defer g.IRelease("END parseBalancedChunkInternal")
@@ -5319,7 +5319,7 @@ func (ctx *parserCtx) parseReference() error {
 	// the document entity by default.
 	var parsedEnt Node
 	if (wasChecked == 0 || (ent.firstChild == nil && ctx.options.IsSet(ParseNoEnt))) && (EntityType(ent.EntityType()) != ExternalGeneralParsedEntity || ctx.options.IsSet(ParseNoEnt|ParseDTDValid)) {
-		var userData interface{}
+		var userData any
 		if ctx.userData != ctx {
 			userData = ctx.userData
 		}
@@ -5387,7 +5387,7 @@ func (ctx *parserCtx) parseReference() error {
 		// though parsing for first checking go though the entity
 		// content to generate callbacks associated to the entity
 		if wasChecked != 0 {
-			var userData interface{}
+			var userData any
 			if ctx.userData != ctx {
 				userData = ctx.userData
 			}

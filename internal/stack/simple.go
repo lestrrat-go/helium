@@ -1,6 +1,6 @@
 package stack
 
-type AnyItem interface{}
+type AnyItem any
 type SimpleStack []AnyItem
 
 func (s *SimpleStack) Push(i AnyItem) {

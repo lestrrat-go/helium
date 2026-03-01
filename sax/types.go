@@ -3,7 +3,7 @@ package sax
 // Context is always passed as the first argument to SAX handlers.
 // It is intentionally left as an opaque value so applications can
 // use type assertions to pass whatever object they need to pass.
-type Context interface{}
+type Context = any
 
 // DocumentLocator provides document position information to SAX handlers.
 // The parser passes an implementation to SetDocumentLocator at the start
@@ -37,8 +37,13 @@ type Entity interface {
 	MarkChecked()
 }
 
-type Enumeration interface{}
-type ElementContent interface{}
+// Enumeration is a placeholder for libxml2's xmlEnumeration structure,
+// not yet fully modeled in Go (libxml2: xmlEnumeration).
+type Enumeration = any
+
+// ElementContent is a placeholder for libxml2's xmlElementContent structure,
+// not yet fully modeled in Go (libxml2: xmlElementContent).
+type ElementContent = any
 
 type Namespace interface {
 	Prefix() string

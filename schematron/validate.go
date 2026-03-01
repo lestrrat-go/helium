@@ -39,7 +39,7 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 				// libxml2's xmlSchematronRegisterVariables behavior.
 				ruleCtx := xctx
 				if len(r.lets) > 0 {
-					vars := make(map[string]interface{})
+					vars := make(map[string]any)
 					for k, v := range xctx.Variables {
 						vars[k] = v
 					}
@@ -240,7 +240,7 @@ func xpathResultToName(r *xpath.Result) string {
 }
 
 // xpathResultToValue converts an XPath result to a value suitable for variable binding.
-func xpathResultToValue(r *xpath.Result) interface{} {
+func xpathResultToValue(r *xpath.Result) any {
 	switch r.Type {
 	case xpath.NodeSetResult:
 		return r.NodeSet

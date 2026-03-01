@@ -66,11 +66,11 @@ type IgnorableWhitespaceHandler interface {
 }
 
 type ErrorHandler interface {
-	Error(msg string, args ...interface{}) error
+	Error(msg string, args ...any) error
 }
 
 type WarningHandler interface {
-	Warning(msg string, args ...interface{}) error
+	Warning(msg string, args ...any) error
 }
 
 // Func type adapters. Each implements its corresponding handler interface.
@@ -123,13 +123,13 @@ type IgnorableWhitespaceFunc func(ch []byte) error
 
 func (f IgnorableWhitespaceFunc) IgnorableWhitespace(ch []byte) error { return f(ch) }
 
-type ErrorFunc func(msg string, args ...interface{}) error
+type ErrorFunc func(msg string, args ...any) error
 
-func (f ErrorFunc) Error(msg string, args ...interface{}) error { return f(msg, args...) }
+func (f ErrorFunc) Error(msg string, args ...any) error { return f(msg, args...) }
 
-type WarningFunc func(msg string, args ...interface{}) error
+type WarningFunc func(msg string, args ...any) error
 
-func (f WarningFunc) Warning(msg string, args ...interface{}) error { return f(msg, args...) }
+func (f WarningFunc) Warning(msg string, args ...any) error { return f(msg, args...) }
 
 // SAXHandler is the HTML SAX1 handler interface. Unlike the XML SAX2Handler,
 // this uses simple element names (no namespaces) matching libxml2's HTML SAX.
@@ -245,14 +245,14 @@ func (s *SAXCallbacks) IgnorableWhitespace(ch []byte) error {
 	return nil
 }
 
-func (s *SAXCallbacks) Error(msg string, args ...interface{}) error {
+func (s *SAXCallbacks) Error(msg string, args ...any) error {
 	if h := s.ErrorHandler; h != nil {
 		return h.Error(msg, args...)
 	}
 	return nil
 }
 
-func (s *SAXCallbacks) Warning(msg string, args ...interface{}) error {
+func (s *SAXCallbacks) Warning(msg string, args ...any) error {
 	if h := s.WarningHandler; h != nil {
 		return h.Warning(msg, args...)
 	}

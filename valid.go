@@ -204,7 +204,7 @@ func (e *ValidationError) Error() string {
 	return strings.Join(e.Errors, "; ")
 }
 
-func (e *ValidationError) addf(format string, args ...interface{}) {
+func (e *ValidationError) addf(format string, args ...any) {
 	e.Errors = append(e.Errors, fmt.Sprintf(format, args...))
 }
 
