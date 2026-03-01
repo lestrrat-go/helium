@@ -877,16 +877,28 @@ func (w *Writer) StartDTD(name, pubid, sysid string) error {
 	w.writeStr("<!DOCTYPE ")
 	w.writeStr(name)
 	if pubid != "" {
-		w.writeStr(" PUBLIC ")
+		if w.indent != "" {
+			w.writeStr("\nPUBLIC ")
+		} else {
+			w.writeStr(" PUBLIC ")
+		}
 		w.writeByte(w.quoteChar)
 		w.writeStr(pubid)
 		w.writeByte(w.quoteChar)
-		w.writeByte(' ')
+		if w.indent != "" {
+			w.writeStr("\n       ")
+		} else {
+			w.writeByte(' ')
+		}
 		w.writeByte(w.quoteChar)
 		w.writeStr(sysid)
 		w.writeByte(w.quoteChar)
 	} else if sysid != "" {
-		w.writeStr(" SYSTEM ")
+		if w.indent != "" {
+			w.writeStr("\nSYSTEM ")
+		} else {
+			w.writeStr(" SYSTEM ")
+		}
 		w.writeByte(w.quoteChar)
 		w.writeStr(sysid)
 		w.writeByte(w.quoteChar)
@@ -916,6 +928,10 @@ func (w *Writer) EndDTD() error {
 		w.writeStr("]>")
 	} else {
 		w.writeByte('>')
+	}
+	if w.indent != "" {
+		w.writeStr("\n")
+		w.wroteNL = true
 	}
 	w.state = stateDocument
 	return w.err

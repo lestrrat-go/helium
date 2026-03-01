@@ -447,6 +447,32 @@ func TestDTDNotation(t *testing.T) {
 	require.Equal(t, expected, strings.TrimRight(buf.String(), "\n"))
 }
 
+func TestDTDIndentPublicSystem(t *testing.T) {
+	var buf bytes.Buffer
+	w := New(&buf, WithIndent("  "))
+	require.NoError(t, w.StartDocument("", "", ""))
+	require.NoError(t, w.WriteDTD("html", "-//W3C//DTD XHTML 1.0//EN", "xhtml1.dtd", ""))
+	require.NoError(t, w.StartElement("html"))
+	require.NoError(t, w.EndElement())
+	require.NoError(t, w.EndDocument())
+	expected := "<?xml version=\"1.0\"?>\n\n" +
+		"<!DOCTYPE html\nPUBLIC \"-//W3C//DTD XHTML 1.0//EN\"\n       \"xhtml1.dtd\">\n<html/>"
+	require.Equal(t, expected, buf.String())
+}
+
+func TestDTDIndentSystemOnly(t *testing.T) {
+	var buf bytes.Buffer
+	w := New(&buf, WithIndent("  "))
+	require.NoError(t, w.StartDocument("", "", ""))
+	require.NoError(t, w.WriteDTD("root", "", "root.dtd", ""))
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.EndElement())
+	require.NoError(t, w.EndDocument())
+	expected := "<?xml version=\"1.0\"?>\n\n" +
+		"<!DOCTYPE root\nSYSTEM \"root.dtd\">\n<root/>"
+	require.Equal(t, expected, buf.String())
+}
+
 func TestIndentation(t *testing.T) {
 	var buf bytes.Buffer
 	w := New(&buf, WithIndent("  "))
