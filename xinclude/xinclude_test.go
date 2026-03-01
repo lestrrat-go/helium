@@ -939,7 +939,7 @@ func TestXIncludeEntityMerge(t *testing.T) {
 
 	count, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.NoError(t, err)
@@ -985,7 +985,7 @@ func TestXIncludeEntityMergeConflict(t *testing.T) {
 	var warnings []string
 	count, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 		xinclude.WithWarningHandler(func(msg string) {
 			warnings = append(warnings, msg)
@@ -1026,7 +1026,7 @@ func TestXIncludeEntityMergeNoTargetDTD(t *testing.T) {
 
 	count, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.NoError(t, err)
