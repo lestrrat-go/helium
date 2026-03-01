@@ -77,7 +77,12 @@ func evaluatePart(doc *helium.Document, p xptrPart, nsMap map[string]string) ([]
 		return xpath.Find(doc, p.body)
 	case "element":
 		return evaluateElement(doc, p.body)
-	case "": // shorthand pointer (bare name = ID)
+	case "": // shorthand pointer or bare child sequence
+		if strings.ContainsRune(p.body, '/') {
+			// Bare child sequence (/1/2/3) or name+child sequence (name/1/2).
+			// libxml2 supports these at top level without element() wrapper.
+			return evaluateElement(doc, p.body)
+		}
 		elem := doc.GetElementByID(p.body)
 		if elem == nil {
 			return nil, nil
