@@ -1,6 +1,7 @@
 package relaxng
 
 // Grammar is a compiled RELAX NG schema.
+// (libxml2: xmlRelaxNGPtr)
 type Grammar struct {
 	start           *pattern
 	defines         map[string]*pattern

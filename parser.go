@@ -26,6 +26,7 @@ func StopParser(ctx sax.Context) {
 	}
 }
 
+// Parser holds configuration for XML parsing (libxml2: xmlParserCtxt).
 type Parser struct {
 	sax            sax.SAX2Handler
 	charBufferSize int
@@ -34,6 +35,8 @@ type Parser struct {
 	catalog        icatalog.Resolver
 }
 
+// Parse parses XML from a byte slice and returns the resulting Document
+// (libxml2: xmlParseDoc / xmlParseMemory).
 func Parse(b []byte) (*Document, error) {
 	p := NewParser()
 	return p.Parse(b)
@@ -85,7 +88,8 @@ func (p *Parser) Parse(b []byte) (*Document, error) {
 	return ctx.doc, nil
 }
 
-// ParseReader parses XML from an io.Reader and returns the resulting Document.
+// ParseReader parses XML from an io.Reader and returns the resulting Document
+// (libxml2: xmlReadIO).
 // This is identical to Parse but reads from a stream instead of a byte slice.
 // EBCDIC encoding detection is not supported when parsing from a reader.
 func ParseReader(r io.Reader) (*Document, error) {

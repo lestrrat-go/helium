@@ -1,5 +1,7 @@
 package helium
 
+// ProcessingInstruction represents an XML processing instruction node
+// (libxml2: xmlNode with type XML_PI_NODE).
 type ProcessingInstruction struct {
 	docnode
 	target string

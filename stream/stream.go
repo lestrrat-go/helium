@@ -58,6 +58,8 @@ type nsScope struct {
 //
 // The zero value of Writer is not ready to use because it has no output
 // destination. Construct a Writer with NewWriter.
+//
+// (libxml2: xmlTextWriter)
 type Writer struct {
 	out        io.Writer
 	indent     string // indent string per level; empty = no indentation
@@ -92,6 +94,7 @@ func WithQuoteChar(q byte) Option {
 }
 
 // NewWriter creates a Writer that writes to w.
+// (libxml2: xmlNewTextWriterMemory)
 func NewWriter(w io.Writer, opts ...Option) *Writer {
 	wr := &Writer{
 		out:       w,

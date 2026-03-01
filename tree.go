@@ -62,9 +62,12 @@ type fileParseInput struct {
 
 func (f *fileParseInput) URI() string { return f.uri }
 
+// TreeBuilder is a SAX2 handler that builds a DOM tree from SAX events,
+// analogous to libxml2's default SAX handler (xmlSAX2InitDefaultSAXHandler).
 type TreeBuilder struct {
 }
 
+// NewTreeBuilder creates a new TreeBuilder that builds a DOM tree from SAX events.
 func NewTreeBuilder() *TreeBuilder {
 	return &TreeBuilder{}
 }

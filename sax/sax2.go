@@ -10,7 +10,8 @@ import "errors"
 var ErrHandlerUnspecified = errors.New("handler unspecified")
 
 // SAX2Handler is an interface for anything that can satisfy
-// helium's expected SAX2 API
+// helium's expected SAX2 API.
+// (libxml2: xmlSAXHandler / xmlSAXHandlerPtr)
 type SAX2Handler interface {
 	AttributeDecl(ctx Context, elem string, fullname string, typ int, def int, defaultValue string, tree Enumeration) error
 	CDataBlock(ctx Context, value []byte) error
@@ -274,7 +275,8 @@ func (f WarningFunc) Handle(ctx Context, err error) error {
 	return f(ctx, err)
 }
 
-// SAX2 is the callback based SAX2 handler.
+// SAX2 is a callback-based SAX2 handler.
+// (libxml2: xmlSAXHandler with function pointers)
 type SAX2 struct {
 	AttributeDeclHandler AttributeDecl
 	CDataBlockHandler CDataBlock

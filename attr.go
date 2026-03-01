@@ -28,6 +28,7 @@ const (
 
 type Enumeration []string
 
+// Attribute represents an XML attribute (libxml2: xmlAttr).
 type Attribute struct {
 	docnode
 	atype       AttributeType

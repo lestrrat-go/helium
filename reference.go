@@ -1,5 +1,7 @@
 package helium
 
+// EntityRef represents an entity reference node in the DOM tree
+// (libxml2: xmlNode with type XML_ENTITY_REF_NODE).
 type EntityRef struct {
 	node
 }

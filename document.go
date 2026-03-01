@@ -36,6 +36,7 @@ const (
 	DocHTML                                 // parsed or built as HTML
 )
 
+// Document represents an XML document (libxml2: xmlDoc).
 type Document struct {
 	docnode
 	version    string

@@ -51,7 +51,8 @@ import "errors"
 var ErrHandlerUnspecified = errors.New("handler unspecified")
 
 // SAX2Handler is an interface for anything that can satisfy
-// helium's expected SAX2 API
+// helium's expected SAX2 API.
+// (libxml2: xmlSAXHandler / xmlSAXHandlerPtr)
 type SAX2Handler interface {
 EOM
 
@@ -87,7 +88,8 @@ EOM
 
 # Generate SAX2 struct
 print $out <<EOM;
-// $klass is the callback based SAX2 handler.
+// $klass is a callback-based SAX2 handler.
+// (libxml2: xmlSAXHandler with function pointers)
 type $klass struct {
 EOM
 

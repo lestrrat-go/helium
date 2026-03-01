@@ -18,6 +18,7 @@ const (
 	InternalPredefinedEntity
 )
 
+// Entity represents an XML entity declaration (libxml2: xmlEntity).
 type Entity struct {
 	node
 	orig       string     // content without substitution

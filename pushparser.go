@@ -87,10 +87,11 @@ type pushResult struct {
 	err error
 }
 
-// PushParser provides an incremental XML parsing interface. Data is pushed
-// via Push or Write, and the parser processes tokens as they become available
-// in a background goroutine. Call Close to signal end-of-input and retrieve
-// the parsed Document.
+// PushParser provides an incremental XML parsing interface
+// (libxml2: xmlParserCtxt in push mode).
+// Data is pushed via Push or Write, and the parser processes tokens as
+// they become available in a background goroutine. Call Close to signal
+// end-of-input and retrieve the parsed Document.
 type PushParser struct {
 	stream    *pushStream
 	done      chan pushResult

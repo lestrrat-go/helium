@@ -85,6 +85,7 @@ const (
 )
 
 // Result holds the outcome of an XPath evaluation.
+// (libxml2: xmlXPathObject)
 type Result struct {
 	Type    ResultType
 	NodeSet []helium.Node
@@ -125,6 +126,7 @@ type FunctionContext interface {
 
 // Context carries namespace bindings, variable bindings, and custom function
 // registrations for expression evaluation.
+// (libxml2: xmlXPathContext)
 type Context struct {
 	Namespaces  map[string]string          // prefix → URI
 	Variables   map[string]interface{}     // name → value ([]helium.Node, string, float64, bool)
@@ -161,6 +163,7 @@ type Expression struct {
 }
 
 // Compile parses an XPath expression string into a reusable Expression.
+// (libxml2: xmlXPathCompile / xmlXPathCtxtCompile)
 func Compile(expr string) (*Expression, error) {
 	ast, err := Parse(expr)
 	if err != nil {
@@ -179,6 +182,7 @@ func MustCompile(expr string) *Expression {
 }
 
 // Evaluate evaluates the compiled expression against the given context node.
+// (libxml2: xmlXPathCompiledEval)
 func (e *Expression) Evaluate(node helium.Node) (*Result, error) {
 	ctx := newEvalContext(node)
 	return eval(ctx, e.ast)
@@ -220,6 +224,7 @@ func Find(node helium.Node, expr string) ([]helium.Node, error) {
 }
 
 // Evaluate is a convenience function: compile + evaluate in one call.
+// (libxml2: xmlXPathCompiledEval)
 func Evaluate(node helium.Node, expr string) (*Result, error) {
 	compiled, err := Compile(expr)
 	if err != nil {

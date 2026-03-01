@@ -16,9 +16,9 @@ type Mode int
 // C14N10 selects Canonical XML 1.0, ExclusiveC14N10 selects Exclusive Canonical
 // XML 1.0, and C14N11 selects Canonical XML 1.1.
 const (
-	C14N10          Mode = iota // Canonical XML 1.0
-	ExclusiveC14N10             // Exclusive Canonical XML 1.0
-	C14N11                      // Canonical XML 1.1
+	C14N10          Mode = iota // Canonical XML 1.0 (libxml2: XML_C14N_1_0)
+	ExclusiveC14N10             // Exclusive Canonical XML 1.0 (libxml2: XML_C14N_EXCLUSIVE_1_0)
+	C14N11                      // Canonical XML 1.1 (libxml2: XML_C14N_1_1)
 )
 
 // Option configures the canonicalizer.
@@ -62,6 +62,7 @@ func WithInclusiveNamespaces(prefixes []string) Option {
 }
 
 // Canonicalize writes the canonical form of doc to out.
+// (libxml2: xmlC14NDocSaveTo)
 func Canonicalize(out io.Writer, doc *helium.Document, mode Mode, opts ...Option) error {
 	c := &canonicalizer{
 		doc:  doc,
@@ -75,6 +76,7 @@ func Canonicalize(out io.Writer, doc *helium.Document, mode Mode, opts ...Option
 }
 
 // CanonicalizeTo returns the canonical form of doc as a byte slice.
+// (libxml2: xmlC14NDocSaveTo)
 func CanonicalizeTo(doc *helium.Document, mode Mode, opts ...Option) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := Canonicalize(&buf, doc, mode, opts...); err != nil {

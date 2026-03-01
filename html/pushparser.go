@@ -14,6 +14,8 @@ import (
 // Unlike the XML PushParser which parses concurrently, the HTML PushParser
 // buffers all data because the HTML parser operates on []byte directly
 // rather than an io.Reader.
+//
+// (libxml2: htmlCreatePushParserCtxt)
 type PushParser struct {
 	buf     bytes.Buffer
 	sax     SAXHandler

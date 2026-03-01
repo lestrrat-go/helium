@@ -1,5 +1,6 @@
 package helium
 
+// Namespace represents an XML namespace declaration (libxml2: xmlNs).
 type Namespace struct {
 	etype   ElementType
 	href    string

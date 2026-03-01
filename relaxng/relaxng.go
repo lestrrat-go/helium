@@ -10,6 +10,7 @@ import (
 )
 
 // Compile compiles a RELAX NG document into a Grammar.
+// (libxml2: xmlRelaxNGNewParserCtxt + xmlRelaxNGParse)
 func Compile(doc *helium.Document, opts ...CompileOption) (*Grammar, error) {
 	cfg := &compileConfig{}
 	for _, o := range opts {
@@ -49,6 +50,7 @@ func CompileFile(path string, opts ...CompileOption) (*Grammar, error) {
 
 // Validate validates a document against a compiled grammar.
 // It returns the validation output string in libxml2-compatible format.
+// (libxml2: xmlRelaxNGValidateDoc)
 func Validate(doc *helium.Document, grammar *Grammar, opts ...ValidateOption) string {
 	cfg := &validateConfig{}
 	for _, o := range opts {
