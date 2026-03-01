@@ -212,8 +212,12 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 		}
 		return nil
 	})
-	s.WarningHandler = sax.WarningFunc(func(_ sax.Context, msg string, args ...interface{}) error {
-		_, _ = fmt.Fprintf(out, "SAX.warning: %s\n", fmt.Sprintf(msg, args...))
+	s.WarningHandler = sax.WarningFunc(func(_ sax.Context, err error) error {
+		msg := err.Error()
+		if e, ok := err.(ErrParseError); ok {
+			msg = e.Err.Error()
+		}
+		_, _ = fmt.Fprintf(out, "SAX.warning: %s\n", msg)
 		return nil
 	})
 	return s

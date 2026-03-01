@@ -339,6 +339,10 @@ func (ctx *parserCtx) popInput() interface{} {
 	return ctx.inputTab.Pop()
 }
 
+func (ctx *parserCtx) currentInputID() interface{} {
+	return ctx.inputTab.PeekOne()
+}
+
 func (ctx *parserCtx) init(p *Parser, in io.Reader) error {
 	ctx.pushInput(strcursor.NewByteCursor(in))
 	ctx.detectedEncoding = encUTF8
@@ -467,12 +471,12 @@ func (ctx *parserCtx) errorAtLevel(err error, level ErrorLevel) error {
 		switch level {
 		case ErrorLevelWarning:
 			if !ctx.options.IsSet(ParseNoWarning) {
-				_ = s.Warning(ctx.userData, e.Error())
+				_ = s.Warning(ctx.userData, e)
 			}
 		default:
 			// Fire the SAX Error callback unless ParseNoError is set.
 			if !ctx.options.IsSet(ParseNoError) {
-				_ = s.Error(ctx.userData, e.Error())
+				_ = s.Error(ctx.userData, e)
 			}
 		}
 	}
@@ -481,21 +485,21 @@ func (ctx *parserCtx) errorAtLevel(err error, level ErrorLevel) error {
 }
 
 // warning wraps a warning condition in ErrParseError with ErrorLevelWarning
-// and location info, then fires the SAX Warning callback with the raw message.
-// Returns nil for non-fatal warnings. If the SAX Warning handler returns an
-// error, wraps it in ErrParseError with ErrorLevelWarning.
+// and location info, then fires the SAX Warning callback with the structured
+// error. Returns nil for non-fatal warnings. If the SAX Warning handler
+// returns an error, returns the ErrParseError.
 func (ctx *parserCtx) warning(format string, args ...interface{}) error {
 	msg := fmt.Sprintf(format, args...)
 	if s := ctx.sax; s != nil && !ctx.options.IsSet(ParseNoWarning) {
-		switch err := s.Warning(ctx.userData, msg); err {
+		e := ErrParseError{Err: errors.New(msg), Level: ErrorLevelWarning, File: ctx.baseURI}
+		if cur := ctx.getCursor(); cur != nil {
+			e.Column = cur.Column()
+			e.LineNumber = cur.LineNumber()
+			e.Line = cur.Line()
+		}
+		switch err := s.Warning(ctx.userData, e); err {
 		case nil, sax.ErrHandlerUnspecified:
 		default:
-			e := ErrParseError{Err: err, Level: ErrorLevelWarning, File: ctx.baseURI}
-			if cur := ctx.getCursor(); cur != nil {
-				e.Column = cur.Column()
-				e.LineNumber = cur.LineNumber()
-				e.Line = cur.Line()
-			}
 			return e
 		}
 	}
@@ -3284,6 +3288,7 @@ func (ctx *parserCtx) parseElementDecl() (ElementTypeVal, error) {
 	if !cur.ConsumeString("<!ELEMENT") {
 		return UndefinedElementType, ctx.error(ErrInvalidElementDecl)
 	}
+	startInput := ctx.currentInputID()
 
 	if !isBlankCh(cur.Peek()) {
 		return UndefinedElementType, ctx.error(ErrSpaceRequired)
@@ -3349,12 +3354,10 @@ func (ctx *parserCtx) parseElementDecl() (ElementTypeVal, error) {
 		return UndefinedElementType, err
 	}
 
-	/*
-	           if (input != ctxt->input) {
-	               xmlFatalErrMsg(ctxt, XML_ERR_ENTITY_BOUNDARY,
-	   "Element declaration doesn't start and stop in the same entity\n");
-	           }
-	*/
+	if ctx.currentInputID() != startInput {
+		return UndefinedElementType, ctx.error(
+			fmt.Errorf("%w: element declaration doesn't start and stop in the same entity", ErrEntityBoundary))
+	}
 
 	if s := ctx.sax; s != nil {
 		switch err := s.ElementDecl(ctx.userData, name, int(etype), content); err {
@@ -3447,17 +3450,15 @@ func (ctx *parserCtx) parseElementMixedContentDecl() (*ElementContent, error) {
 	if !cur.ConsumeString("#PCDATA") {
 		return nil, ctx.error(ErrPCDATARequired)
 	}
+	startInput := ctx.currentInputID()
 
 	ctx.skipBlanks()
 
 	if cur.Peek() == ')' {
-		/*
-		               if ((ctxt->validate) && (ctxt->input->id != inputchk)) {
-		                   xmlValidityError(ctxt, XML_ERR_ENTITY_BOUNDARY,
-		   "Element content declaration doesn't start and stop in the same entity\n",
-		                                    NULL, NULL);
-		               }
-		*/
+		if ctx.valid && ctx.currentInputID() != startInput {
+			_ = ctx.warning("element content declaration doesn't start and stop in the same entity\n")
+			ctx.valid = false
+		}
 		if err := cur.Advance(1); err != nil {
 			return nil, ctx.error(err)
 		}
@@ -3539,13 +3540,10 @@ func (ctx *parserCtx) parseElementMixedContentDecl() (*ElementContent, error) {
 		if retelem != nil {
 			retelem.coccur = ElementContentMult
 		}
-		/*
-		               if ((ctxt->validate) && (ctxt->input->id != inputchk)) {
-		                   xmlValidityError(ctxt, XML_ERR_ENTITY_BOUNDARY,
-		   "Element content declaration doesn't start and stop in the same entity\n",
-		                                    NULL, NULL);
-		   					}
-		*/
+		if ctx.valid && ctx.currentInputID() != startInput {
+			_ = ctx.warning("element content declaration doesn't start and stop in the same entity\n")
+			ctx.valid = false
+		}
 	}
 	return retelem, nil
 }
@@ -3590,6 +3588,7 @@ func (ctx *parserCtx) parseElementChildrenContentDeclPriv(depth int) (*ElementCo
 	if depth > maxDepth {
 		return nil, fmt.Errorf("xmlParseElementChildrenContentDecl : depth %d too deep", depth)
 	}
+	startInput := ctx.currentInputID()
 
 	var curelem *ElementContent
 	var retelem *ElementContent
@@ -3752,13 +3751,10 @@ LOOP:
 	if err := cur.Advance(1); err != nil {
 		return nil, ctx.error(err)
 	}
-	/*
-	   	    if ((ctxt->validate) && (ctxt->input->id != inputchk)) {
-	           xmlValidityError(ctxt, XML_ERR_ENTITY_BOUNDARY,
-	   "Element content declaration doesn't start and stop in the same entity\n",
-	                            NULL, NULL);
-	       }
-	*/
+	if ctx.valid && ctx.currentInputID() != startInput {
+		_ = ctx.warning("element content declaration doesn't start and stop in the same entity\n")
+		ctx.valid = false
+	}
 
 	c := cur.Peek()
 	switch c {
@@ -4774,6 +4770,7 @@ func (ctx *parserCtx) parseAttributeListDecl() error {
 	if !cur.ConsumeString("<!ATTLIST") {
 		return nil
 	}
+	startInput := ctx.currentInputID()
 
 	if !isBlankCh(cur.Peek()) {
 		return ctx.error(ErrSpaceRequired)
@@ -4850,13 +4847,10 @@ func (ctx *parserCtx) parseAttributeListDecl() error {
 		ctx.addSpecialAttribute(elemName, attrName, typ)
 
 		if cur.Peek() == '>' {
-			/*
-			           if (input != ctxt->input) {
-			               xmlValidityError(ctxt, XML_ERR_ENTITY_BOUNDARY,
-			   "Attribute list declaration doesn't start and stop in the same entity\n",
-			                                NULL, NULL);
-			           }
-			*/
+			if ctx.currentInputID() != startInput {
+				_ = ctx.warning("attribute list declaration doesn't start and stop in the same entity\n")
+				ctx.valid = false
+			}
 			if err := cur.Advance(1); err != nil {
 				return err
 			}

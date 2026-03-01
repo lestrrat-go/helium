@@ -20,7 +20,7 @@ type SAX2Handler interface {
 	EndDocument(ctx Context) error
 	EndElementNS(ctx Context, localname string, prefix string, uri string) error
 	EntityDecl(ctx Context, name string, typ int, publicID string, systemID string, content string) error
-	Error(ctx Context, message string, args ...interface{}) error
+	Error(ctx Context, err error) error
 	ExternalSubset(ctx Context, name string, externalID string, systemID string) error
 	GetEntity(ctx Context, name string) (Entity, error)
 	GetParameterEntity(ctx Context, name string) (Entity, error)
@@ -37,7 +37,7 @@ type SAX2Handler interface {
 	StartDocument(ctx Context) error
 	StartElementNS(ctx Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error
 	UnparsedEntityDecl(ctx Context, name string, publicID string, systemID string, notationName string) error
-	Warning(ctx Context, msg string, args ...interface{}) error
+	Warning(ctx Context, err error) error
 }
 
 // AttributeDecl is the interface for the AttributeDecl handler.
@@ -114,11 +114,11 @@ func (f EntityDeclFunc) Handle(ctx Context, name string, typ int, publicID strin
 
 // Error is the interface for the Error handler.
 type Error interface {
-	Handle(ctx Context, message string, args ...interface{}) error
+	Handle(ctx Context, err error) error
 }
 
-func (f ErrorFunc) Handle(ctx Context, message string, args ...interface{}) error {
-	return f(ctx, message, args...)
+func (f ErrorFunc) Handle(ctx Context, err error) error {
+	return f(ctx, err)
 }
 
 // ExternalSubset is the interface for the ExternalSubset handler.
@@ -267,11 +267,11 @@ func (f UnparsedEntityDeclFunc) Handle(ctx Context, name string, publicID string
 
 // Warning is the interface for the Warning handler.
 type Warning interface {
-	Handle(ctx Context, msg string, args ...interface{}) error
+	Handle(ctx Context, err error) error
 }
 
-func (f WarningFunc) Handle(ctx Context, msg string, args ...interface{}) error {
-	return f(ctx, msg, args...)
+func (f WarningFunc) Handle(ctx Context, err error) error {
+	return f(ctx, err)
 }
 
 // SAX2 is the callback based SAX2 handler.
@@ -366,9 +366,9 @@ func (s SAX2) EntityDecl(ctx Context, name string, typ int, publicID string, sys
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) Error(ctx Context, message string, args ...interface{}) error {
+func (s SAX2) Error(ctx Context, err error) error {
 	if h := s.ErrorHandler; h != nil {
-		return h.Handle(ctx, message, args...)
+		return h.Handle(ctx, err)
 	}
 	return ErrHandlerUnspecified;
 }
@@ -485,9 +485,9 @@ func (s SAX2) UnparsedEntityDecl(ctx Context, name string, publicID string, syst
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) Warning(ctx Context, msg string, args ...interface{}) error {
+func (s SAX2) Warning(ctx Context, err error) error {
 	if h := s.WarningHandler; h != nil {
-		return h.Handle(ctx, msg, args...)
+		return h.Handle(ctx, err)
 	}
 	return ErrHandlerUnspecified;
 }

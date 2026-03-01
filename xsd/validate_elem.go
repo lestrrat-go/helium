@@ -309,7 +309,11 @@ func matchElementParticle(parent *helium.Element, p *Particle, edecl *ElementDec
 		child := children[pos+i]
 		actualDecl := resolveSubstDecl(child, edecl, schema)
 		td := actualDecl.Type
-		td = resolveXsiType(child.elem, td, schema)
+		td, xsiErr := resolveXsiType(child.elem, td, schema, filename, out)
+		if xsiErr != nil {
+			contentErr = xsiErr
+			continue
+		}
 		if td != nil && td.Abstract {
 			msg := "The type definition is abstract."
 			out.WriteString(validityError(filename, child.elem.Line(), elemDisplayName(child.elem), msg))

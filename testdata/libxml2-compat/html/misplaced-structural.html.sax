@@ -1,0 +1,39 @@
+SAX.setDocumentLocator()
+SAX.startDocument()
+SAX.startElement(html)
+SAX.characters(
+, 1)
+SAX.startElement(head)
+SAX.startElement(title)
+SAX.characters(test, 4)
+SAX.endElement(title)
+SAX.endElement(head)
+SAX.characters(
+, 1)
+SAX.startElement(body)
+SAX.characters(
+, 1)
+SAX.characters(
+, 1)
+SAX.characters(
+, 1)
+SAX.characters(
+, 1)
+SAX.startElement(p)
+SAX.characters(hello, 5)
+SAX.endElement(p)
+SAX.characters(
+, 1)
+SAX.characters(
+, 1)
+SAX.characters(
+, 1)
+SAX.characters(
+, 1)
+SAX.endElement(body)
+SAX.characters(
+, 1)
+SAX.endElement(html)
+SAX.characters(
+, 1)
+SAX.endDocument()
