@@ -3508,7 +3508,11 @@ func (ctx *parserCtx) parseElementChildrenContentDeclPriv(depth int) (*ElementCo
 		defer g.IRelease("END parseElementChildrenContentDeclPriv(%d)", depth)
 	}
 
-	if depth > 128 { // XML_PARSE_HUGE -> 2048
+	maxDepth := 128
+	if ctx.options.IsSet(ParseHuge) {
+		maxDepth = 2048
+	}
+	if depth > maxDepth {
 		return nil, fmt.Errorf("xmlParseElementChildrenContentDecl : depth %d too deep", depth)
 	}
 
