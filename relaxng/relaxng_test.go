@@ -248,3 +248,162 @@ func TestCheckCombine(t *testing.T) {
 		require.Empty(t, grammar.CompileErrors())
 	})
 }
+
+func TestCheckRules(t *testing.T) {
+	const rngNS = "http://relaxng.org/ns/structure/1.0"
+
+	compile := func(t *testing.T, input string) *relaxng.Grammar {
+		t.Helper()
+		doc, err := helium.Parse([]byte(input))
+		require.NoError(t, err)
+		grammar, err := relaxng.Compile(doc, relaxng.WithSchemaFilename("test.rng"))
+		require.NoError(t, err)
+		return grammar
+	}
+
+	t.Run("list//element", func(t *testing.T) {
+		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+  <list><element name="a"><empty/></element></list>
+</element>`)
+		require.Contains(t, g.CompileErrors(), "Found forbidden pattern list//element")
+	})
+
+	t.Run("attribute//element", func(t *testing.T) {
+		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+  <attribute name="a"><element name="b"><empty/></element></attribute>
+</element>`)
+		require.Contains(t, g.CompileErrors(), "Found forbidden pattern attribute//element")
+	})
+
+	t.Run("list//list", func(t *testing.T) {
+		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+  <list><list><data type="string" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes"/></list></list>
+</element>`)
+		require.Contains(t, g.CompileErrors(), "Found forbidden pattern list//list")
+	})
+
+	t.Run("attribute//attribute", func(t *testing.T) {
+		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+  <attribute name="a"><attribute name="b"/></attribute>
+</element>`)
+		require.Contains(t, g.CompileErrors(), "Found forbidden pattern attribute//attribute")
+	})
+
+	t.Run("start//attribute", func(t *testing.T) {
+		g := compile(t, `<grammar xmlns="`+rngNS+`">
+  <start><attribute name="a"/></start>
+</grammar>`)
+		require.Contains(t, g.CompileErrors(), "Found forbidden pattern start//attribute")
+	})
+
+	t.Run("oneOrMore//group//attribute", func(t *testing.T) {
+		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+  <oneOrMore><group><attribute name="a"/></group></oneOrMore>
+</element>`)
+		require.Contains(t, g.CompileErrors(), "Found forbidden pattern oneOrMore//group//attribute")
+	})
+
+	t.Run("oneOrMore//interleave//attribute", func(t *testing.T) {
+		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+  <oneOrMore><interleave><attribute name="a"/><text/></interleave></oneOrMore>
+</element>`)
+		require.Contains(t, g.CompileErrors(), "Found forbidden pattern oneOrMore//interleave//attribute")
+	})
+
+	t.Run("anyName attribute without oneOrMore warning", func(t *testing.T) {
+		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+  <attribute><anyName/></attribute>
+</element>`)
+		require.Empty(t, g.CompileErrors())
+		require.Contains(t, g.CompileWarnings(), "Found anyName attribute without oneOrMore ancestor")
+	})
+
+	t.Run("nsName attribute without oneOrMore warning", func(t *testing.T) {
+		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+  <attribute><nsName ns="http://example.com"/></attribute>
+</element>`)
+		require.Empty(t, g.CompileErrors())
+		require.Contains(t, g.CompileWarnings(), "Found nsName attribute without oneOrMore ancestor")
+	})
+
+	t.Run("anyName attribute with oneOrMore no warning", func(t *testing.T) {
+		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+  <oneOrMore><attribute><anyName/></attribute></oneOrMore>
+</element>`)
+		require.Empty(t, g.CompileErrors())
+		require.Empty(t, g.CompileWarnings())
+	})
+
+	t.Run("element resets context", func(t *testing.T) {
+		// attribute inside element inside list: element resets context,
+		// so the attribute should not trigger list//attribute.
+		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+  <list>
+    <element name="inner">
+      <attribute name="a"/>
+    </element>
+  </list>
+</element>`)
+		// list//element error expected (element inside list is still forbidden),
+		// but no list//attribute error.
+		require.Contains(t, g.CompileErrors(), "Found forbidden pattern list//element")
+		require.NotContains(t, g.CompileErrors(), "list//attribute")
+	})
+
+	t.Run("valid schema", func(t *testing.T) {
+		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+  <oneOrMore>
+    <element name="item">
+      <attribute name="id"/>
+      <text/>
+    </element>
+  </oneOrMore>
+</element>`)
+		require.Empty(t, g.CompileErrors())
+		require.Empty(t, g.CompileWarnings())
+	})
+
+	t.Run("data/except//element", func(t *testing.T) {
+		g := compile(t, `<element name="root" xmlns="`+rngNS+`"
+  datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <data type="string">
+    <except><element name="a"><empty/></element></except>
+  </data>
+</element>`)
+		require.Contains(t, g.CompileErrors(), "Found forbidden pattern data/except//element")
+	})
+
+	t.Run("list//text", func(t *testing.T) {
+		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+  <list><text/></list>
+</element>`)
+		require.Contains(t, g.CompileErrors(), "Found forbidden pattern list//text")
+	})
+
+	t.Run("list//interleave", func(t *testing.T) {
+		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+  <list>
+    <interleave>
+      <data type="string" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes"/>
+      <data type="integer" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes"/>
+    </interleave>
+  </list>
+</element>`)
+		require.Contains(t, g.CompileErrors(), "Found forbidden pattern list//interleave")
+	})
+
+	t.Run("ref in data/except", func(t *testing.T) {
+		g := compile(t, `<grammar xmlns="`+rngNS+`"
+  datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <start>
+    <element name="root">
+      <data type="string">
+        <except><ref name="foo"/></except>
+      </data>
+    </element>
+  </start>
+  <define name="foo"><value>x</value></define>
+</grammar>`)
+		require.Contains(t, g.CompileErrors(), "Found forbidden pattern data/except//ref")
+	})
+}
