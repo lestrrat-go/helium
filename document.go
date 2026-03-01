@@ -27,6 +27,7 @@ type Document struct {
 
 	intSubset *DTD
 	extSubset *DTD
+	ids       map[string]*Element
 }
 
 func CreateDocument() *Document {
@@ -616,10 +617,26 @@ func (d *Document) CreateCharRef(name string) (*EntityRef, error) {
 	return n, nil
 }
 
+// RegisterID associates an ID value with an element in the document's
+// ID table. This is called during parsing to build an O(1) lookup table
+// for GetElementByID, mirroring libxml2's xmlAddID.
+func (d *Document) RegisterID(id string, elem *Element) {
+	if d.ids == nil {
+		d.ids = make(map[string]*Element)
+	}
+	d.ids[id] = elem
+}
+
 // GetElementByID returns the first element in the document whose ID matches
-// the given value. It checks xml:id attributes first, then falls back to
-// DTD-declared ID attributes.
+// the given value. If the document's ID table has been populated (during
+// parsing), it performs an O(1) hash lookup. Otherwise it falls back to an
+// O(n) tree walk checking xml:id and DTD-declared ID attributes.
 func (d *Document) GetElementByID(id string) *Element {
+	if d.ids != nil {
+		return d.ids[id]
+	}
+
+	// Fallback: O(n) tree walk for documents not built via parser.
 	var found *Element
 	_ = Walk(d, func(n Node) error {
 		if n.Type() != ElementNode {
