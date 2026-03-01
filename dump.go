@@ -57,6 +57,9 @@ func dumpQuotedString(out io.Writer, s string) error {
 		if _, err := io.WriteString(out, s[:dqi]); err != nil {
 			return err
 		}
+		if _, err := io.WriteString(out, "&quot;"); err != nil {
+			return err
+		}
 		s = s[dqi+1:]
 		dqi = strings.IndexByte(s, qch_dquote[0])
 	}
