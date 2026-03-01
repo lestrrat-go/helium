@@ -70,6 +70,32 @@ func TestDumpNameAttrNonURIOnMeta(t *testing.T) {
 	require.Contains(t, output, `name="foo bar"`, "name on <meta> should not be URI-escaped")
 }
 
+func TestDuplicateAttrKeepsFirst(t *testing.T) {
+	// libxml2 keeps the first occurrence and silently drops duplicates.
+	input := `<html><body><div class="first" class="second">x</div></body></html>`
+	doc, err := Parse([]byte(input))
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	require.NoError(t, DumpDoc(&buf, doc, WithNoDefaultDTD()))
+	output := buf.String()
+	require.Contains(t, output, `class="first"`, "first occurrence should be kept")
+	require.NotContains(t, output, `class="second"`, "duplicate should be dropped")
+}
+
+func TestDuplicateAttrCaseInsensitive(t *testing.T) {
+	// HTML attribute names are case-insensitive; CLASS and class are the same.
+	input := `<html><body><div CLASS="upper" class="lower">x</div></body></html>`
+	doc, err := Parse([]byte(input))
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	require.NoError(t, DumpDoc(&buf, doc, WithNoDefaultDTD()))
+	output := buf.String()
+	require.Contains(t, output, `class="upper"`, "first (case-insensitive) should be kept")
+	require.NotContains(t, output, `class="lower"`, "duplicate should be dropped")
+}
+
 func TestOptionsNoBlanks(t *testing.T) {
 	input := `<html> <body> <p>text</p> </body> </html>`
 	doc, err := Parse([]byte(input), WithNoBlanks())
