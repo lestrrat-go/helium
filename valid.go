@@ -380,6 +380,33 @@ func validateElementAttributes(doc *Document, elem *Element, edecl *ElementDecl,
 					for _, ref := range strings.Fields(val) {
 						vctx.idrefs[ref] = true
 					}
+				case AttrEntity:
+					ent, ok := doc.GetEntity(val)
+					if !ok {
+						vctx.ve.addf("element %s: attribute %s references undeclared entity %q", ename, aname, val)
+					} else if EntityType(ent.EntityType()) != ExternalGeneralUnparsedEntity {
+						vctx.ve.addf("element %s: attribute %s references entity %q which is not unparsed", ename, aname, val)
+					}
+				case AttrEntities:
+					for _, entName := range strings.Fields(val) {
+						ent, ok := doc.GetEntity(entName)
+						if !ok {
+							vctx.ve.addf("element %s: attribute %s references undeclared entity %q", ename, aname, entName)
+						} else if EntityType(ent.EntityType()) != ExternalGeneralUnparsedEntity {
+							vctx.ve.addf("element %s: attribute %s references entity %q which is not unparsed", ename, aname, entName)
+						}
+					}
+				case AttrNotation:
+					notFound := true
+					for _, dtd := range docDTDs(doc) {
+						if _, ok := dtd.LookupNotation(val); ok {
+							notFound = false
+							break
+						}
+					}
+					if notFound {
+						vctx.ve.addf("element %s: attribute %s references undeclared notation %q", ename, aname, val)
+					}
 				}
 			}
 		}
