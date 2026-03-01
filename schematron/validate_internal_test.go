@@ -100,6 +100,83 @@ func TestCompileValueOfNoSelect(t *testing.T) {
 	require.Contains(t, schema.CompileErrors(), "value-of has no select attribute")
 }
 
+func TestXpathResultToNameNamespace(t *testing.T) {
+	t.Run("namespaced element", func(t *testing.T) {
+		doc := helium.CreateDocument()
+		e, err := doc.CreateElement("item")
+		require.NoError(t, err)
+		require.NoError(t, e.SetNamespace("ns", "http://example.com"))
+		require.NoError(t, e.SetNamespace("ns", "http://example.com", true))
+
+		r := &xpath.Result{
+			Type:    xpath.NodeSetResult,
+			NodeSet: []helium.Node{e},
+		}
+		require.Equal(t, "ns:item", xpathResultToName(r))
+	})
+
+	t.Run("non-namespaced element", func(t *testing.T) {
+		doc := helium.CreateDocument()
+		e, err := doc.CreateElement("item")
+		require.NoError(t, err)
+		require.NoError(t, doc.AddChild(e))
+
+		r := &xpath.Result{
+			Type:    xpath.NodeSetResult,
+			NodeSet: []helium.Node{e},
+		}
+		require.Equal(t, "item", xpathResultToName(r))
+	})
+
+	t.Run("namespaced attribute", func(t *testing.T) {
+		doc := helium.CreateDocument()
+		e, err := doc.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, doc.AddChild(e))
+		ns := helium.NewNamespace("foo", "http://example.com/foo")
+		require.NoError(t, e.SetAttributeNS("bar", "val", ns))
+
+		// Find the attribute.
+		var attr *helium.Attribute
+		for _, a := range e.Attributes() {
+			if a.LocalName() == "bar" {
+				attr = a
+				break
+			}
+		}
+		require.NotNil(t, attr)
+
+		r := &xpath.Result{
+			Type:    xpath.NodeSetResult,
+			NodeSet: []helium.Node{attr},
+		}
+		require.Equal(t, "foo:bar", xpathResultToName(r))
+	})
+
+	t.Run("non-namespaced attribute", func(t *testing.T) {
+		doc := helium.CreateDocument()
+		e, err := doc.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, doc.AddChild(e))
+		require.NoError(t, e.SetAttribute("baz", "val"))
+
+		var attr *helium.Attribute
+		for _, a := range e.Attributes() {
+			if a.LocalName() == "baz" {
+				attr = a
+				break
+			}
+		}
+		require.NotNil(t, attr)
+
+		r := &xpath.Result{
+			Type:    xpath.NodeSetResult,
+			NodeSet: []helium.Node{attr},
+		}
+		require.Equal(t, "baz", xpathResultToName(r))
+	})
+}
+
 func TestXpathResultToStringBoolean(t *testing.T) {
 	t.Run("true", func(t *testing.T) {
 		r := &xpath.Result{Type: xpath.BooleanResult, Boolean: true}

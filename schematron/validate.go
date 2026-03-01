@@ -220,7 +220,7 @@ func xpathResultToName(r *xpath.Result) string {
 		}
 		// Use type assertion for attributes since Attribute.Type() may not be set correctly.
 		if attr, ok := n.(*helium.Attribute); ok {
-			return attr.LocalName()
+			return attr.Name()
 		}
 	}
 	return ""
