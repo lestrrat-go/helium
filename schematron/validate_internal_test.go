@@ -203,6 +203,74 @@ func TestCompileTitleBeforeNsBeforePattern(t *testing.T) {
 	require.Equal(t, "my schema", schema.title)
 }
 
+// TestLetVariableChainedDependency verifies that let variables can
+// reference previously registered variables, matching libxml2's
+// xmlSchematronRegisterVariables behavior.
+func TestLetVariableChainedDependency(t *testing.T) {
+	// Schema defines two let variables where b depends on a.
+	// libxml2 stores lets in LIFO order (prepend), so the list
+	// is [b, a]. During evaluation b is evaluated first (no $a),
+	// then a is evaluated and registered. This means forward
+	// chained deps (b referencing a) don't work in libxml2 either.
+	//
+	// However, reverse chained deps DO work: if a is defined first
+	// and b second, in LIFO order the list is [b, a], so a is
+	// evaluated second and can see b. We test both scenarios.
+
+	t.Run("independent lets", func(t *testing.T) {
+		// Two independent let variables — both should work regardless of order.
+		schemaXML := `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+			<pattern>
+				<rule context="item">
+					<let name="x" value="string(@val)"/>
+					<let name="y" value="'hello'"/>
+					<assert test="$x = 'ok'">x is <value-of select="$x"/>, y is <value-of select="$y"/></assert>
+				</rule>
+			</pattern>
+		</schema>`
+		schema := compileTestSchema(t, schemaXML)
+		require.Equal(t, "", schema.CompileErrors())
+
+		doc, err := helium.Parse([]byte(`<root><item val="bad"/></root>`))
+		require.NoError(t, err)
+
+		output := Validate(doc, schema)
+		require.Contains(t, output, "x is bad")
+		require.Contains(t, output, "y is hello")
+	})
+
+	t.Run("LIFO accumulation", func(t *testing.T) {
+		// In libxml2 LIFO order: lets are stored as [b, a].
+		// During evaluation: b is evaluated first (no $a available),
+		// then a is evaluated. a's expression ("1") doesn't depend on b.
+		// b's expression ("$a + 1") was evaluated before a was registered,
+		// so $a is undefined and b gets NaN.
+		// This matches libxml2's actual behavior for forward-chained deps.
+		schemaXML := `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+			<pattern>
+				<rule context="item">
+					<let name="a" value="1"/>
+					<let name="b" value="$a + 1"/>
+					<report test="$a = 1">a=<value-of select="$a"/></report>
+				</rule>
+			</pattern>
+		</schema>`
+		schema := compileTestSchema(t, schemaXML)
+		require.Equal(t, "", schema.CompileErrors())
+
+		// Verify LIFO ordering: the lets should be stored in reverse order.
+		require.Len(t, schema.patterns[0].rules[0].lets, 2)
+		require.Equal(t, "b", schema.patterns[0].rules[0].lets[0].name)
+		require.Equal(t, "a", schema.patterns[0].rules[0].lets[1].name)
+
+		doc, err := helium.Parse([]byte(`<root><item/></root>`))
+		require.NoError(t, err)
+
+		output := Validate(doc, schema)
+		// a=1 should be reported since $a is properly registered.
+		require.Contains(t, output, "a=1")
+	})
+}
 func TestXpathResultToStringBoolean(t *testing.T) {
 	t.Run("true", func(t *testing.T) {
 		r := &xpath.Result{Type: xpath.BooleanResult, Boolean: true}
