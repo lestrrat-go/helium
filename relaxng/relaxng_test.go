@@ -163,3 +163,88 @@ func TestGoldenFiles(t *testing.T) {
 
 	t.Logf("Results: %d passed, %d failed, %d skipped (out of %d total)", passed, failed, skipped, len(cases))
 }
+
+func TestCheckCombine(t *testing.T) {
+	t.Run("conflicting define combine modes", func(t *testing.T) {
+		input := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start><ref name="foo"/></start>
+  <define name="foo" combine="choice">
+    <element name="a"><empty/></element>
+  </define>
+  <define name="foo" combine="interleave">
+    <element name="b"><empty/></element>
+  </define>
+</grammar>`
+		doc, err := helium.Parse([]byte(input))
+		require.NoError(t, err)
+		grammar, err := relaxng.Compile(doc)
+		require.NoError(t, err)
+		require.Contains(t, grammar.CompileErrors(), "Defines for foo use both 'interleave' and 'choice'")
+	})
+
+	t.Run("multiple defines without combine", func(t *testing.T) {
+		input := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start><ref name="foo"/></start>
+  <define name="foo">
+    <element name="a"><empty/></element>
+  </define>
+  <define name="foo">
+    <element name="b"><empty/></element>
+  </define>
+</grammar>`
+		doc, err := helium.Parse([]byte(input))
+		require.NoError(t, err)
+		grammar, err := relaxng.Compile(doc)
+		require.NoError(t, err)
+		require.Contains(t, grammar.CompileErrors(), "Some defines for foo needs the combine attribute")
+	})
+
+	t.Run("conflicting start combine modes", func(t *testing.T) {
+		input := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start combine="choice">
+    <element name="a"><empty/></element>
+  </start>
+  <start combine="interleave">
+    <element name="b"><empty/></element>
+  </start>
+</grammar>`
+		doc, err := helium.Parse([]byte(input))
+		require.NoError(t, err)
+		grammar, err := relaxng.Compile(doc)
+		require.NoError(t, err)
+		require.Contains(t, grammar.CompileErrors(), "<start> use both 'interleave' and 'choice'")
+	})
+
+	t.Run("multiple starts without combine", func(t *testing.T) {
+		input := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="a"><empty/></element>
+  </start>
+  <start>
+    <element name="b"><empty/></element>
+  </start>
+</grammar>`
+		doc, err := helium.Parse([]byte(input))
+		require.NoError(t, err)
+		grammar, err := relaxng.Compile(doc)
+		require.NoError(t, err)
+		require.Contains(t, grammar.CompileErrors(), "Some <start> element miss the combine attribute")
+	})
+
+	t.Run("valid combine modes agree", func(t *testing.T) {
+		input := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start><ref name="foo"/></start>
+  <define name="foo" combine="choice">
+    <element name="a"><empty/></element>
+  </define>
+  <define name="foo" combine="choice">
+    <element name="b"><empty/></element>
+  </define>
+</grammar>`
+		doc, err := helium.Parse([]byte(input))
+		require.NoError(t, err)
+		grammar, err := relaxng.Compile(doc)
+		require.NoError(t, err)
+		require.Empty(t, grammar.CompileErrors())
+	})
+}
