@@ -211,3 +211,84 @@ func TestWarningLocationInfo(t *testing.T) {
 		require.Equal(t, int32(0), called.Load(), "warning handler should NOT be called with ParseNoWarning")
 	})
 }
+
+func TestFormatError(t *testing.T) {
+	t.Run("parser error with file", func(t *testing.T) {
+		pe := ErrParseError{
+			Err:        ErrGtRequired,
+			File:       "test.xml",
+			Level:      ErrorLevelFatal,
+			Line:       "<foo bar",
+			LineNumber: 1,
+			Column:     9,
+		}
+		got := pe.FormatError()
+		require.Equal(t, "test.xml:1: parser error : '>' was required here\n<foo bar\n        ^", got)
+	})
+
+	t.Run("namespace error with file", func(t *testing.T) {
+		pe := ErrParseError{
+			Domain:     ErrorDomainNamespace,
+			Err:        errors.New("namespace 'xLink' not found"),
+			File:       "gradient.xml",
+			Level:      ErrorLevelFatal,
+			Line:       "<linearGradient xLink:href='#g'/>",
+			LineNumber: 5,
+			Column:     34,
+		}
+		got := pe.FormatError()
+		require.Equal(t, "gradient.xml:5: namespace error : namespace 'xLink' not found\n<linearGradient xLink:href='#g'/>\n                                 ^", got)
+	})
+
+	t.Run("warning level", func(t *testing.T) {
+		pe := ErrParseError{
+			Err:        errors.New("something fishy"),
+			Level:      ErrorLevelWarning,
+			Line:       "<root/>",
+			LineNumber: 1,
+			Column:     3,
+		}
+		got := pe.FormatError()
+		require.Equal(t, "parser warning : something fishy\n<root/>\n  ^", got)
+	})
+
+	t.Run("without file", func(t *testing.T) {
+		pe := ErrParseError{
+			Err:        ErrSpaceRequired,
+			Level:      ErrorLevelError,
+			Line:       "<foo>",
+			LineNumber: 1,
+			Column:     5,
+		}
+		got := pe.FormatError()
+		require.Equal(t, "parser error : space required\n<foo>\n    ^", got)
+	})
+
+	t.Run("no context line", func(t *testing.T) {
+		pe := ErrParseError{
+			Err:        ErrPrematureEOF,
+			File:       "empty.xml",
+			Level:      ErrorLevelFatal,
+			LineNumber: 1,
+			Column:     1,
+		}
+		got := pe.FormatError()
+		require.Equal(t, "empty.xml:1: parser error : end of document reached", got)
+	})
+}
+
+func TestErrorDomainDefault(t *testing.T) {
+	var pe ErrParseError
+	require.Equal(t, ErrorDomainParser, pe.Domain)
+}
+
+func TestNamespaceErrorDomain(t *testing.T) {
+	const input = `<root xmlns:a="urn:a"><a:child xmlns:a="">text</a:child></root>`
+
+	_, err := Parse([]byte(input))
+	require.Error(t, err)
+
+	var pe ErrParseError
+	require.True(t, errors.As(err, &pe))
+	require.Equal(t, ErrorDomainNamespace, pe.Domain)
+}
