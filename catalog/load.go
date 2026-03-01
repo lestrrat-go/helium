@@ -66,13 +66,18 @@ func loadFromBytes(data []byte, baseURI string) (*icatalog.Catalog, error) {
 		cat.Pref = icatalog.ParsePrefer(v)
 	}
 
-	parseEntries(root, cat.Pref, baseURI, &cat.Entries)
+	var warnings []string
+	parseEntries(root, cat.Pref, baseURI, &cat.Entries, &warnings)
+	cat.Warnings = warnings
 
 	return cat, nil
 }
 
 // parseEntries walks child elements of parent and appends catalog entries.
-func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string, entries *[]icatalog.Entry) {
+// Warnings for invalid entries (missing required attributes) are collected
+// in warnings rather than silently skipping, matching libxml2's
+// XML_CATALOG_MISSING_ATTR error reporting.
+func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string, entries *[]icatalog.Entry, warnings *[]string) {
 	if v := getAttrNS(parent, "base", "http://www.w3.org/XML/1998/namespace"); v != "" {
 		baseURI = icatalog.ResolveURI(baseURI, v)
 	}
@@ -103,98 +108,129 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 		case "public":
 			pubID := icatalog.NormalizePublicID(getAttr(elem, "publicId"))
 			uri := icatalog.ResolveURI(elemBase, getAttr(elem, "uri"))
-			if pubID != "" && uri != "" {
-				*entries = append(*entries, icatalog.Entry{
-					Typ:    icatalog.EntryPublic,
-					Name:   pubID,
-					URL:    uri,
-					Prefer: elemPrefer,
-				})
+			if pubID == "" || uri == "" {
+				*warnings = append(*warnings, missingAttrWarning("public", "publicId", "uri", pubID, uri))
+				continue
 			}
+			*entries = append(*entries, icatalog.Entry{
+				Typ:    icatalog.EntryPublic,
+				Name:   pubID,
+				URL:    uri,
+				Prefer: elemPrefer,
+			})
 		case "system":
 			sysID := getAttr(elem, "systemId")
 			uri := icatalog.ResolveURI(elemBase, getAttr(elem, "uri"))
-			if sysID != "" && uri != "" {
-				*entries = append(*entries, icatalog.Entry{
-					Typ:  icatalog.EntrySystem,
-					Name: sysID,
-					URL:  uri,
-				})
+			if sysID == "" || uri == "" {
+				*warnings = append(*warnings, missingAttrWarning("system", "systemId", "uri", sysID, uri))
+				continue
 			}
+			*entries = append(*entries, icatalog.Entry{
+				Typ:  icatalog.EntrySystem,
+				Name: sysID,
+				URL:  uri,
+			})
 		case "rewriteSystem":
 			startString := getAttr(elem, "systemIdStartString")
 			prefix := icatalog.ResolveURI(elemBase, getAttr(elem, "rewritePrefix"))
-			if startString != "" && prefix != "" {
-				*entries = append(*entries, icatalog.Entry{
-					Typ:  icatalog.EntryRewriteSystem,
-					Name: startString,
-					URL:  prefix,
-				})
+			if startString == "" || prefix == "" {
+				*warnings = append(*warnings, missingAttrWarning("rewriteSystem", "systemIdStartString", "rewritePrefix", startString, prefix))
+				continue
 			}
+			*entries = append(*entries, icatalog.Entry{
+				Typ:  icatalog.EntryRewriteSystem,
+				Name: startString,
+				URL:  prefix,
+			})
 		case "delegatePublic":
 			startString := icatalog.NormalizePublicID(getAttr(elem, "publicIdStartString"))
 			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, "catalog"))
-			if startString != "" && catFile != "" {
-				*entries = append(*entries, icatalog.Entry{
-					Typ:    icatalog.EntryDelegatePublic,
-					Name:   startString,
-					URL:    catFile,
-					Prefer: elemPrefer,
-				})
+			if startString == "" || catFile == "" {
+				*warnings = append(*warnings, missingAttrWarning("delegatePublic", "publicIdStartString", "catalog", startString, catFile))
+				continue
 			}
+			*entries = append(*entries, icatalog.Entry{
+				Typ:    icatalog.EntryDelegatePublic,
+				Name:   startString,
+				URL:    catFile,
+				Prefer: elemPrefer,
+			})
 		case "delegateSystem":
 			startString := getAttr(elem, "systemIdStartString")
 			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, "catalog"))
-			if startString != "" && catFile != "" {
-				*entries = append(*entries, icatalog.Entry{
-					Typ:  icatalog.EntryDelegateSystem,
-					Name: startString,
-					URL:  catFile,
-				})
+			if startString == "" || catFile == "" {
+				*warnings = append(*warnings, missingAttrWarning("delegateSystem", "systemIdStartString", "catalog", startString, catFile))
+				continue
 			}
+			*entries = append(*entries, icatalog.Entry{
+				Typ:  icatalog.EntryDelegateSystem,
+				Name: startString,
+				URL:  catFile,
+			})
 		case "uri":
 			name := getAttr(elem, "name")
 			uri := icatalog.ResolveURI(elemBase, getAttr(elem, "uri"))
-			if name != "" && uri != "" {
-				*entries = append(*entries, icatalog.Entry{
-					Typ:  icatalog.EntryURI,
-					Name: name,
-					URL:  uri,
-				})
+			if name == "" || uri == "" {
+				*warnings = append(*warnings, missingAttrWarning("uri", "name", "uri", name, uri))
+				continue
 			}
+			*entries = append(*entries, icatalog.Entry{
+				Typ:  icatalog.EntryURI,
+				Name: name,
+				URL:  uri,
+			})
 		case "rewriteURI":
 			startString := getAttr(elem, "uriStartString")
 			prefix := icatalog.ResolveURI(elemBase, getAttr(elem, "rewritePrefix"))
-			if startString != "" && prefix != "" {
-				*entries = append(*entries, icatalog.Entry{
-					Typ:  icatalog.EntryRewriteURI,
-					Name: startString,
-					URL:  prefix,
-				})
+			if startString == "" || prefix == "" {
+				*warnings = append(*warnings, missingAttrWarning("rewriteURI", "uriStartString", "rewritePrefix", startString, prefix))
+				continue
 			}
+			*entries = append(*entries, icatalog.Entry{
+				Typ:  icatalog.EntryRewriteURI,
+				Name: startString,
+				URL:  prefix,
+			})
 		case "delegateURI":
 			startString := getAttr(elem, "uriStartString")
 			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, "catalog"))
-			if startString != "" && catFile != "" {
-				*entries = append(*entries, icatalog.Entry{
-					Typ:  icatalog.EntryDelegateURI,
-					Name: startString,
-					URL:  catFile,
-				})
+			if startString == "" || catFile == "" {
+				*warnings = append(*warnings, missingAttrWarning("delegateURI", "uriStartString", "catalog", startString, catFile))
+				continue
 			}
+			*entries = append(*entries, icatalog.Entry{
+				Typ:  icatalog.EntryDelegateURI,
+				Name: startString,
+				URL:  catFile,
+			})
 		case "nextCatalog":
 			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, "catalog"))
-			if catFile != "" {
-				if !icatalog.HasNextCatalog(*entries, catFile) {
-					*entries = append(*entries, icatalog.Entry{
-						Typ: icatalog.EntryNextCatalog,
-						URL: catFile,
-					})
-				}
+			if catFile == "" {
+				*warnings = append(*warnings, fmt.Sprintf("catalog: <%s> missing required attribute %q", "nextCatalog", "catalog"))
+				continue
+			}
+			if !icatalog.HasNextCatalog(*entries, catFile) {
+				*entries = append(*entries, icatalog.Entry{
+					Typ: icatalog.EntryNextCatalog,
+					URL: catFile,
+				})
 			}
 		case "group":
-			parseEntries(elem, elemPrefer, elemBase, entries)
+			parseEntries(elem, elemPrefer, elemBase, entries, warnings)
 		}
+	}
+}
+
+// missingAttrWarning builds a warning message for a catalog entry with
+// missing required attributes.
+func missingAttrWarning(elemName, attr1Name, attr2Name, attr1Val, attr2Val string) string {
+	switch {
+	case attr1Val == "" && attr2Val == "":
+		return fmt.Sprintf("catalog: <%s> missing required attributes %q and %q", elemName, attr1Name, attr2Name)
+	case attr1Val == "":
+		return fmt.Sprintf("catalog: <%s> missing required attribute %q", elemName, attr1Name)
+	default:
+		return fmt.Sprintf("catalog: <%s> missing required attribute %q", elemName, attr2Name)
 	}
 }
 

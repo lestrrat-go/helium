@@ -34,3 +34,13 @@ func (c *Catalog) ResolveURI(uri string) string {
 	}
 	return c.cat.ResolveURI(uri)
 }
+
+// Warnings returns non-fatal issues encountered during catalog parsing,
+// such as entries with missing required attributes. Valid entries are still
+// loaded and usable even when warnings are present.
+func (c *Catalog) Warnings() []string {
+	if c == nil {
+		return nil
+	}
+	return c.cat.Warnings
+}

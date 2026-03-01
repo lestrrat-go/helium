@@ -270,4 +270,84 @@ func TestNilCatalog(t *testing.T) {
 	var c *Catalog
 	require.Equal(t, "", c.Resolve("foo", "bar"))
 	require.Equal(t, "", c.ResolveURI("foo"))
+	require.Nil(t, c.Warnings())
+}
+
+func TestWarningsForInvalidEntries(t *testing.T) {
+	t.Run("missing publicId", func(t *testing.T) {
+		data := []byte(`<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <public uri="file:///foo.dtd"/>
+  <system systemId="bar" uri="file:///bar.dtd"/>
+</catalog>`)
+		ic, err := loadFromBytes(data, "/test/catalog.xml")
+		require.NoError(t, err)
+		cat := &Catalog{cat: ic}
+
+		// Only the valid system entry should be loaded
+		require.Len(t, ic.Entries, 1)
+		require.Equal(t, icatalog.EntrySystem, ic.Entries[0].Typ)
+
+		// Warning for the broken public entry
+		require.Len(t, cat.Warnings(), 1)
+		require.Contains(t, cat.Warnings()[0], "publicId")
+	})
+
+	t.Run("missing uri", func(t *testing.T) {
+		data := []byte(`<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <system systemId="foo"/>
+</catalog>`)
+		ic, err := loadFromBytes(data, "/test/catalog.xml")
+		require.NoError(t, err)
+		cat := &Catalog{cat: ic}
+
+		require.Len(t, ic.Entries, 0)
+		require.Len(t, cat.Warnings(), 1)
+		require.Contains(t, cat.Warnings()[0], "<system>")
+		require.Contains(t, cat.Warnings()[0], "uri")
+	})
+
+	t.Run("missing nextCatalog catalog attr", func(t *testing.T) {
+		data := []byte(`<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <nextCatalog/>
+</catalog>`)
+		ic, err := loadFromBytes(data, "/test/catalog.xml")
+		require.NoError(t, err)
+		cat := &Catalog{cat: ic}
+
+		require.Len(t, ic.Entries, 0)
+		require.Len(t, cat.Warnings(), 1)
+		require.Contains(t, cat.Warnings()[0], "nextCatalog")
+	})
+
+	t.Run("valid catalog no warnings", func(t *testing.T) {
+		data := []byte(`<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <public publicId="-//OASIS//DTD DocBook XML V4.5//EN" uri="file:///docbook.dtd"/>
+  <system systemId="http://example.com/foo.dtd" uri="file:///foo.dtd"/>
+</catalog>`)
+		ic, err := loadFromBytes(data, "/test/catalog.xml")
+		require.NoError(t, err)
+		cat := &Catalog{cat: ic}
+
+		require.Len(t, ic.Entries, 2)
+		require.Empty(t, cat.Warnings())
+	})
+
+	t.Run("multiple missing attrs", func(t *testing.T) {
+		data := []byte(`<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <public/>
+  <system/>
+  <uri/>
+</catalog>`)
+		ic, err := loadFromBytes(data, "/test/catalog.xml")
+		require.NoError(t, err)
+		cat := &Catalog{cat: ic}
+
+		require.Len(t, ic.Entries, 0)
+		require.Len(t, cat.Warnings(), 3)
+	})
 }
