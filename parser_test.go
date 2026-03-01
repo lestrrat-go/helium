@@ -945,3 +945,99 @@ func TestConditionalSectionExternalDTD(t *testing.T) {
 	require.NoError(t, d.DumpDoc(&buf, doc))
 	require.Equal(t, string(expected), buf.String())
 }
+
+func TestXMLSpacePreserve(t *testing.T) {
+	t.Run("preserve keeps whitespace with ParseNoBlanks", func(t *testing.T) {
+		const input = `<?xml version="1.0"?>
+<root xml:space="preserve">
+  <child>text</child>
+</root>`
+		p := NewParser()
+		p.SetOption(ParseNoBlanks)
+		doc, err := p.Parse([]byte(input))
+		require.NoError(t, err, "Parse should succeed")
+
+		root := findDocumentElement(doc)
+		require.NotNil(t, root, "document element must exist")
+		first := root.FirstChild()
+		require.NotNil(t, first, "root must have children")
+		// With xml:space="preserve", blank-only text nodes must be kept even with ParseNoBlanks.
+		require.Equal(t, TextNode, first.Type(), "first child should be text node (preserved whitespace)")
+	})
+
+	t.Run("default reverts preserve", func(t *testing.T) {
+		// xml:space="default" on an element should cause blanks to be stripped
+		// even when a parent had xml:space="preserve".
+		// Note: libxml2's spaceTab is per-element (not inherited), so only
+		// the element with the explicit attribute is affected.
+		const input = `<?xml version="1.0"?>
+<root xml:space="preserve">
+  <child xml:space="default">
+    <leaf>text</leaf>
+  </child>
+</root>`
+		p := NewParser()
+		p.SetOption(ParseNoBlanks)
+		doc, err := p.Parse([]byte(input))
+		require.NoError(t, err, "Parse should succeed")
+
+		root := findDocumentElement(doc)
+		require.NotNil(t, root, "document element must exist")
+		// root has xml:space="preserve", so its whitespace text nodes are kept
+		require.Equal(t, TextNode, root.FirstChild().Type(), "root whitespace should be preserved")
+
+		// Find <child>
+		var child Node
+		for c := root.FirstChild(); c != nil; c = c.NextSibling() {
+			if c.Type() == ElementNode && c.(*Element).LocalName() == "child" {
+				child = c
+				break
+			}
+		}
+		require.NotNil(t, child, "child element must exist")
+		// child has xml:space="default", so blanks should be stripped
+		first := child.FirstChild()
+		require.NotNil(t, first, "child must have children")
+		require.Equal(t, ElementNode, first.Type(), "child's first child should be element (blanks stripped by default)")
+	})
+
+	t.Run("preserve pops correctly after element closes", func(t *testing.T) {
+		const input = `<?xml version="1.0"?>
+<root>
+  <preserved xml:space="preserve">
+    <child>text</child>
+  </preserved>
+  <normal>
+    <child>text</child>
+  </normal>
+</root>`
+		p := NewParser()
+		p.SetOption(ParseNoBlanks)
+		doc, err := p.Parse([]byte(input))
+		require.NoError(t, err, "Parse should succeed")
+
+		root := findDocumentElement(doc)
+		require.NotNil(t, root, "document element must exist")
+
+		// Find <preserved> and <normal>
+		var preserved, normal Node
+		for c := root.FirstChild(); c != nil; c = c.NextSibling() {
+			if c.Type() == ElementNode {
+				switch c.(*Element).LocalName() {
+				case "preserved":
+					preserved = c
+				case "normal":
+					normal = c
+				}
+			}
+		}
+		require.NotNil(t, preserved, "preserved element must exist")
+		require.NotNil(t, normal, "normal element must exist")
+
+		// preserved's first child should be whitespace text
+		require.Equal(t, TextNode, preserved.FirstChild().Type(), "preserved whitespace should be kept")
+
+		// normal's first child should be element (blanks stripped)
+		require.Equal(t, ElementNode, normal.FirstChild().Type(), "normal whitespace should be stripped")
+	})
+}
