@@ -96,6 +96,7 @@ func TestUnescapeXPointer(t *testing.T) {
 		{"multiple escapes", "^(^)^^", "()^"},
 		{"empty", "", ""},
 		{"trailing circumflex", "a^", "a^"},
+		{"non-special preserved", "a^xb", "a^xb"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

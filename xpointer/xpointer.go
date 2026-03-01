@@ -262,8 +262,13 @@ func unescapeXPointer(s string) string {
 	sb.Grow(len(s))
 	for i := 0; i < len(s); i++ {
 		if s[i] == '^' && i+1 < len(s) {
-			i++
-			sb.WriteByte(s[i])
+			next := s[i+1]
+			if next == ')' || next == '(' || next == '^' {
+				i++
+				sb.WriteByte(next)
+			} else {
+				sb.WriteByte('^')
+			}
 		} else {
 			sb.WriteByte(s[i])
 		}
