@@ -149,7 +149,10 @@ func compileRuleChild(r *rule, childElem *helium.Element, schNS string, errors *
 			return
 		}
 		if lb != nil {
-			r.lets = append(r.lets, lb)
+			// Prepend to match libxml2's LIFO ordering: each new let
+			// is inserted at the head of the list, so evaluation
+			// proceeds in reverse-definition order.
+			r.lets = append([]*letBinding{lb}, r.lets...)
 		}
 	case "assert":
 		if t := compileTest(childElem, testAssert, schNS, errors); t != nil {

@@ -34,21 +34,24 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 				}
 
 				// Set up let variables for this rule.
+				// Variables are accumulated so that each let can
+				// reference previously registered variables, matching
+				// libxml2's xmlSchematronRegisterVariables behavior.
 				ruleCtx := xctx
 				if len(r.lets) > 0 {
 					vars := make(map[string]interface{})
 					for k, v := range xctx.Variables {
 						vars[k] = v
 					}
-					for _, lb := range r.lets {
-						letResult, err := lb.expr.EvaluateWithContext(node, xctx)
-						if err == nil {
-							vars[lb.name] = xpathResultToValue(letResult)
-						}
-					}
 					ruleCtx = &xpath.Context{
 						Namespaces: xctx.Namespaces,
 						Variables:  vars,
+					}
+					for _, lb := range r.lets {
+						letResult, err := lb.expr.EvaluateWithContext(node, ruleCtx)
+						if err == nil {
+							vars[lb.name] = xpathResultToValue(letResult)
+						}
 					}
 				}
 
