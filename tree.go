@@ -886,10 +886,10 @@ func (t *TreeBuilder) UnparsedEntityDecl(ctxif sax.Context, name string, publicI
 	return nil
 }
 
-func (t *TreeBuilder) Error(ctxif sax.Context, message string, args ...interface{}) error {
+func (t *TreeBuilder) Error(ctxif sax.Context, err error) error {
 	return nil
 }
 
-func (t *TreeBuilder) Warning(ctxif sax.Context, msg string, args ...interface{}) error {
+func (t *TreeBuilder) Warning(ctxif sax.Context, err error) error {
 	return nil
 }

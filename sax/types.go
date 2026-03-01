@@ -66,7 +66,7 @@ type ElementDeclFunc func(ctx Context, name string, typ int, content ElementCont
 type EndDocumentFunc func(ctx Context) error
 type EndElementNSFunc func(ctx Context, localname string, prefix string, uri string) error
 type EntityDeclFunc func(ctx Context, name string, typ int, publicID string, systemID string, content string) error
-type ErrorFunc func(ctx Context, message string, args ...interface{}) error
+type ErrorFunc func(ctx Context, err error) error
 type ExternalSubsetFunc func(ctx Context, name string, externalID string, systemID string) error
 type GetEntityFunc func(ctx Context, name string) (Entity, error)
 type GetParameterEntityFunc func(ctx Context, name string) (Entity, error)
@@ -93,4 +93,4 @@ type SetDocumentLocatorFunc func(ctx Context, locator DocumentLocator) error
 type StartDocumentFunc func(ctx Context) error
 type StartElementNSFunc func(ctx Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error
 type UnparsedEntityDeclFunc func(ctx Context, name string, publicID string, systemID string, notationName string) error
-type WarningFunc func(ctx Context, msg string, args ...interface{}) error
+type WarningFunc func(ctx Context, err error) error

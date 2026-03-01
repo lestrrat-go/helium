@@ -471,12 +471,12 @@ func (ctx *parserCtx) errorAtLevel(err error, level ErrorLevel) error {
 		switch level {
 		case ErrorLevelWarning:
 			if !ctx.options.IsSet(ParseNoWarning) {
-				_ = s.Warning(ctx.userData, e.Error())
+				_ = s.Warning(ctx.userData, e)
 			}
 		default:
 			// Fire the SAX Error callback unless ParseNoError is set.
 			if !ctx.options.IsSet(ParseNoError) {
-				_ = s.Error(ctx.userData, e.Error())
+				_ = s.Error(ctx.userData, e)
 			}
 		}
 	}
@@ -485,21 +485,21 @@ func (ctx *parserCtx) errorAtLevel(err error, level ErrorLevel) error {
 }
 
 // warning wraps a warning condition in ErrParseError with ErrorLevelWarning
-// and location info, then fires the SAX Warning callback with the raw message.
-// Returns nil for non-fatal warnings. If the SAX Warning handler returns an
-// error, wraps it in ErrParseError with ErrorLevelWarning.
+// and location info, then fires the SAX Warning callback with the structured
+// error. Returns nil for non-fatal warnings. If the SAX Warning handler
+// returns an error, returns the ErrParseError.
 func (ctx *parserCtx) warning(format string, args ...interface{}) error {
 	msg := fmt.Sprintf(format, args...)
 	if s := ctx.sax; s != nil && !ctx.options.IsSet(ParseNoWarning) {
-		switch err := s.Warning(ctx.userData, msg); err {
+		e := ErrParseError{Err: errors.New(msg), Level: ErrorLevelWarning, File: ctx.baseURI}
+		if cur := ctx.getCursor(); cur != nil {
+			e.Column = cur.Column()
+			e.LineNumber = cur.LineNumber()
+			e.Line = cur.Line()
+		}
+		switch err := s.Warning(ctx.userData, e); err {
 		case nil, sax.ErrHandlerUnspecified:
 		default:
-			e := ErrParseError{Err: err, Level: ErrorLevelWarning, File: ctx.baseURI}
-			if cur := ctx.getCursor(); cur != nil {
-				e.Column = cur.Column()
-				e.LineNumber = cur.LineNumber()
-				e.Line = cur.Line()
-			}
 			return e
 		}
 	}
