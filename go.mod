@@ -1,6 +1,6 @@
 module github.com/lestrrat-go/helium
 
-go 1.24.4
+go 1.25.7
 
 require (
 	github.com/lestrrat-go/pdebug v0.0.0-20210111095411-35b07dbf089b
