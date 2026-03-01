@@ -9,8 +9,7 @@ import (
 )
 
 type Node interface {
-	setLastChild(Node)
-	setFirstChild(Node)
+	baseDocNode() *docnode // prevents external implementation
 
 	AddChild(Node) error
 	AddContent([]byte) error
@@ -24,7 +23,7 @@ type Node interface {
 	OwnerDocument() *Document
 	Parent() Node
 	PrevSibling() Node
-	Replace(Node)
+	Replace(Node) error
 	SetLine(int)
 	SetNextSibling(Node)
 	SetOwnerDocument(doc *Document)
@@ -127,16 +126,17 @@ type Namespacer interface {
 // So basically the deal is: if you need methods that may mutate the current
 // node AND the operand node, DO NOT implement it for docnode. That includes
 // things like AddSibling, or AddChild.
-//
-// On the other hand, methods like setFirstChild and setLastChild are OK,
-// as they only mutate the current (docnode)'s pointers.
 
-func (n *docnode) setFirstChild(cur Node) {
-	n.firstChild = cur
+func (n *docnode) baseDocNode() *docnode {
+	return n
 }
 
-func (n *docnode) setLastChild(cur Node) {
-	n.lastChild = cur
+func setFirstChild(n Node, cur Node) {
+	n.baseDocNode().firstChild = cur
+}
+
+func setLastChild(n Node, cur Node) {
+	n.baseDocNode().lastChild = cur
 }
 
 func (n *docnode) SetOwnerDocument(doc *Document) {
@@ -216,8 +216,8 @@ func addChild(n Node, cur Node) error {
 		if pdebug.Enabled {
 			pdebug.Printf("LastChild is nil, setting firstChild and lastChild")
 		}
-		n.setFirstChild(cur)
-		n.setLastChild(cur)
+		setFirstChild(n, cur)
+		setLastChild(n, cur)
 		cur.SetParent(n)
 		return nil
 	}
@@ -230,7 +230,7 @@ func addChild(n Node, cur Node) error {
 
 	// If the last child was a text node, keep the old LastChild
 	if cur.Type() == TextNode && l.Type() == TextNode {
-		n.setLastChild(l)
+		setLastChild(n, l)
 	}
 	return nil
 }
@@ -254,7 +254,7 @@ func addSibling(n, cur Node) error {
 			parent := n.Parent()
 			cur.SetParent(parent)
 			if parent != nil {
-				parent.setLastChild(cur)
+				setLastChild(parent, cur)
 			}
 			return nil
 		}
@@ -285,10 +285,10 @@ func UnlinkNode(n Node) {
 
 	if parent := n.Parent(); parent != nil {
 		if parent.FirstChild() == n {
-			parent.setFirstChild(n.NextSibling())
+			setFirstChild(parent, n.NextSibling())
 		}
 		if parent.LastChild() == n {
-			parent.setLastChild(n.PrevSibling())
+			setLastChild(parent, n.PrevSibling())
 		}
 	}
 
@@ -304,7 +304,7 @@ func UnlinkNode(n Node) {
 	n.SetNextSibling(nil)
 }
 
-func replaceNode(n Node, cur Node) {
+func replaceNode(n Node, cur Node) error {
 	if next := n.NextSibling(); next != nil {
 		cur.SetNextSibling(next) // cur.next = n.next
 		next.SetPrevSibling(cur) // n.next.prev = cur
@@ -317,13 +317,14 @@ func replaceNode(n Node, cur Node) {
 
 	if parent := n.Parent(); parent != nil {
 		if parent.FirstChild() == n {
-			parent.setFirstChild(cur)
+			setFirstChild(parent, cur)
 		}
 		if parent.LastChild() == n {
-			parent.setLastChild(cur)
+			setLastChild(parent, cur)
 		}
 		cur.SetParent(parent)
 	}
+	return nil
 }
 
 func (n node) Namespace() *Namespace {

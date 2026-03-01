@@ -29,8 +29,8 @@ type Resolver interface {
 // Option configures XInclude processing behavior.
 type Option func(*processor)
 
-// WithNoXIncludeNodes suppresses XIncludeStart/End marker nodes.
-func WithNoXIncludeNodes() Option {
+// WithNoXIncludeMarkers suppresses XIncludeStart/End marker nodes.
+func WithNoXIncludeMarkers() Option {
 	return func(p *processor) { p.noMarkers = true }
 }
 
@@ -657,8 +657,8 @@ func (p *processor) replaceWithNodes(target *helium.Element, nodes []helium.Node
 
 	if !p.noMarkers {
 		doc := target.OwnerDocument()
-		startMarker := newXIncludeNode(doc, helium.XIncludeStartNode, target.Name())
-		endMarker := newXIncludeNode(doc, helium.XIncludeEndNode, target.Name())
+		startMarker := newXIncludeMarker(doc, helium.XIncludeStartNode, target.Name())
+		endMarker := newXIncludeMarker(doc, helium.XIncludeEndNode, target.Name())
 
 		expanded := make([]helium.Node, 0, len(nodes)+2)
 		expanded = append(expanded, startMarker)
@@ -682,7 +682,7 @@ func spliceReplace(target helium.Node, nodes []helium.Node) {
 	afterTarget := target.NextSibling()
 
 	// Replace target with the first node (handles parent firstChild/lastChild)
-	target.Replace(nodes[0])
+	_ = target.Replace(nodes[0])
 
 	// Chain remaining nodes after the first
 	prev := nodes[0]
@@ -973,8 +973,8 @@ func makeRelativePath(targetPath, basePath string) string {
 	return strings.ReplaceAll(rel, string(filepath.Separator), "/")
 }
 
-func newXIncludeNode(doc *helium.Document, etype helium.ElementType, name string) helium.Node {
-	return helium.NewXIncludeNode(doc, etype, name)
+func newXIncludeMarker(doc *helium.Document, etype helium.ElementType, name string) helium.Node {
+	return helium.NewXIncludeMarker(doc, etype, name)
 }
 
 // fixupNamespaceDecls ensures that elements being moved out of their declaring

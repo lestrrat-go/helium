@@ -178,8 +178,8 @@ func (e *Entity) AddSibling(cur Node) error {
 	return addSibling(e, cur)
 }
 
-func (e *Entity) Replace(cur Node) {
-	replaceNode(e, cur)
+func (e *Entity) Replace(cur Node) error {
+	return replaceNode(e, cur)
 }
 
 func (n *Entity) SetTreeDoc(doc *Document) {

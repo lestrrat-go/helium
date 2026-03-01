@@ -497,7 +497,7 @@ func TestXInclude(t *testing.T) {
 	require.Contains(t, out, `Hello</chapter>`)
 }
 
-func TestXIncludeNoXIncludeNode(t *testing.T) {
+func TestXIncludeNoXIncludeMarker(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "inc.xml", `<p>text</p>`)
 	mainXML := `<?xml version="1.0"?>
