@@ -248,7 +248,7 @@ func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Att
 			n.SetParent(attr)
 			x := n.NextSibling()
 			if x == nil {
-				setLastChild(n, x)
+				setLastChild(attr, n)
 			}
 			n = x
 		}
