@@ -53,6 +53,8 @@ func compileSchema(doc *helium.Document, _ *compileConfig) (*Schema, error) {
 			if p := compilePattern(elem, schNS, &errors); p != nil {
 				schema.patterns = append(schema.patterns, p)
 			}
+		default:
+			fmt.Fprintf(&errors, "Expecting a pattern element instead of %s\n", elem.Name())
 		}
 	}
 
