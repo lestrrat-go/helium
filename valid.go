@@ -296,6 +296,13 @@ func validateOneElement(doc *Document, elem *Element, vctx *validCtx) {
 
 	edecl, dtd := lookupElementDecl(doc, name, elem.Prefix())
 	if edecl == nil {
+		// VC: Standalone Document Declaration — if standalone="yes" and the
+		// element is declared in the external subset with element-only content,
+		// whitespace-only text nodes are a validity error (the external subset
+		// would have caused them to be treated as ignorable whitespace).
+		if doc.standalone == StandaloneExplicitYes && doc.extSubset != nil {
+			checkStandaloneWhitespace(doc.extSubset, elem, name, vctx)
+		}
 		vctx.ve.addf("element %s: no declaration found", name)
 		return
 	}
@@ -419,6 +426,27 @@ func validateDocumentFinal(vctx *validCtx) {
 	for ref := range vctx.idrefs {
 		if !vctx.ids[ref] {
 			vctx.ve.addf("IDREF %q references unknown ID", ref)
+		}
+	}
+}
+
+// checkStandaloneWhitespace checks whether an element declared in the
+// external subset with element-only content contains whitespace-only text
+// nodes. Per the VC: Standalone Document Declaration (XML §2.9), a
+// standalone="yes" document must not contain such whitespace when the
+// element declaration comes from the external subset.
+func checkStandaloneWhitespace(extSubset *DTD, elem *Element, name string, vctx *validCtx) {
+	extDecl, ok := extSubset.LookupElement(name, elem.Prefix())
+	if !ok {
+		extDecl, ok = extSubset.LookupElement(name, "")
+	}
+	if !ok || extDecl.decltype != ElementElementType {
+		return
+	}
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Type() == TextNode && isBlankContent(child.Content()) {
+			vctx.ve.addf("standalone: element %s declared in the external subset contains white spaces nodes", name)
+			return
 		}
 	}
 }
