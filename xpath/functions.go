@@ -288,7 +288,20 @@ func fnName(ctx *evalContext, args []*Result) (*Result, error) {
 	if !ok {
 		return &Result{Type: StringResult}, nil
 	}
-	return &Result{Type: StringResult, String: n.Name()}, nil
+	return &Result{Type: StringResult, String: nameOf(n)}, nil
+}
+
+// nameOf returns the XPath name() of a node. Per the XPath spec, name()
+// returns the QName for elements/attributes, the target for PIs, the prefix
+// for namespace nodes, and empty string for all other node types.
+func nameOf(n helium.Node) string {
+	switch n.Type() {
+	case helium.ElementNode, helium.AttributeNode,
+		helium.ProcessingInstructionNode, helium.NamespaceNode:
+		return n.Name()
+	default:
+		return ""
+	}
 }
 
 // nodeArgOrContext returns the first node from an optional node-set argument,
