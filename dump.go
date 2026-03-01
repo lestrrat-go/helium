@@ -1106,7 +1106,7 @@ func (d *Dumper) dumpXHTMLNode(out io.Writer, n Node) error {
 	}
 
 	if e.FirstChild() == nil {
-		if e.ns == nil && xhtmlVoidElements[localName] && !addMeta {
+		if (e.ns == nil || e.ns.Prefix() == "") && xhtmlVoidElements[localName] && !addMeta {
 			// C.2: Empty void elements: " />"
 			_, _ = io.WriteString(out, " />")
 		} else {
