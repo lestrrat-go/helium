@@ -47,12 +47,12 @@ func Example_xinclude_with_resolver() {
 	// Process the XInclude directives with our custom resolver.
 	//
 	// WithResolver supplies the custom Resolver implementation.
-	// WithNoXIncludeNodes removes the xi:include namespace declaration
+	// WithNoXIncludeMarkers removes the xi:include marker nodes
 	//   from the output after processing.
 	// WithNoBaseFixup prevents adding xml:base attributes to included content.
 	n, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	if err != nil {

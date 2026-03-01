@@ -23,7 +23,7 @@ func Example_xinclude_process_tree() {
 			},
 		}),
 		xinclude.WithNoBaseFixup(),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 	)
 	if err != nil {
 		fmt.Printf("xinclude failed: %s\n", err)

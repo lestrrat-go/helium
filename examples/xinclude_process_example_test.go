@@ -93,9 +93,9 @@ func Example_xinclude_process() {
 	}
 	fmt.Printf("with markers:\n%s", s)
 
-	// --- WithNoXIncludeNodes: clean output ---
+	// --- WithNoXIncludeMarkers: clean output ---
 	//
-	// WithNoXIncludeNodes (equivalent to libxml2's XML_PARSE_NOXINCNODE)
+	// WithNoXIncludeMarkers (equivalent to libxml2's XML_PARSE_NOXINCNODE)
 	// removes the xi:include elements entirely after substitution,
 	// leaving only the included content in the tree.
 	doc, err = parseMain()
@@ -107,7 +107,7 @@ func Example_xinclude_process() {
 	n, err = xinclude.Process(doc,
 		xinclude.WithBaseURI(mainPath),
 		xinclude.WithNoBaseFixup(),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 	)
 	if err != nil {
 		fmt.Printf("xinclude error: %s\n", err)
