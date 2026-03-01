@@ -37,31 +37,32 @@ func compileSchema(doc *helium.Document, _ *compileConfig) (*Schema, error) {
 	var errors strings.Builder
 	var warnings strings.Builder
 
-	// libxml2 enforces strict ordering: <title> before <ns> before <pattern>.
-	// phase tracks where we are: 0=title, 1=ns, 2=pattern.
-	phase := 0
-	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
-		elem, ok := child.(*helium.Element)
-		if !ok {
-			continue
-		}
-		localName := stripPrefix(elem.Name())
+	// Phase-based parsing matching libxml2's xmlSchematronParse ordering:
+	// title, then ns elements, then pattern elements.
+	elem := nextSchematronElement(root.FirstChild())
 
-		switch {
-		case localName == "title" && phase == 0:
-			schema.title = elemTextContent(elem)
-			phase = 1
-		case localName == "ns" && phase < 2:
-			addNamespace(schema.namespaces, elem)
-			phase = 1
-		case localName == "pattern":
-			phase = 2
+	// Phase 1: optional title
+	if elem != nil && stripPrefix(elem.Name()) == "title" {
+		schema.title = elemTextContent(elem)
+		elem = nextSchematronElement(elem.NextSibling())
+	}
+
+	// Phase 2: ns elements
+	for elem != nil && stripPrefix(elem.Name()) == "ns" {
+		addNamespace(schema.namespaces, elem)
+		elem = nextSchematronElement(elem.NextSibling())
+	}
+
+	// Phase 3: pattern elements (anything else is an error)
+	for elem != nil {
+		if stripPrefix(elem.Name()) == "pattern" {
 			if p := compilePattern(elem, schNS, &errors); p != nil {
 				schema.patterns = append(schema.patterns, p)
 			}
-		default:
+		} else {
 			fmt.Fprintf(&errors, "Expecting a pattern element instead of %s\n", elem.Name())
 		}
+		elem = nextSchematronElement(elem.NextSibling())
 	}
 
 	if len(schema.patterns) == 0 {
@@ -332,6 +333,19 @@ func elemTextContent(elem *helium.Element) string {
 		}
 	}
 	return sb.String()
+}
+
+// nextSchematronElement advances from the given node to the next sibling
+// that is an *helium.Element, skipping text, comments, and PIs.
+// This mirrors libxml2's NEXT_SCHEMATRON macro.
+func nextSchematronElement(n helium.Node) *helium.Element {
+	for n != nil {
+		if elem, ok := n.(*helium.Element); ok {
+			return elem
+		}
+		n = n.NextSibling()
+	}
+	return nil
 }
 
 func findDocumentElement(doc *helium.Document) *helium.Element {
