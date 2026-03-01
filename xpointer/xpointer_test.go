@@ -190,6 +190,35 @@ func TestCascadingParts(t *testing.T) {
 	})
 }
 
+func TestBareNameChildSequence(t *testing.T) {
+	// Parse with NewParser so xml:id registers in the ID table.
+	p := helium.NewParser()
+	doc, err := p.Parse([]byte(`<?xml version="1.0"?>
+<root xml:id="r"><a><b>found</b></a></root>`))
+	require.NoError(t, err)
+
+	t.Run("name/1/1 navigates from ID", func(t *testing.T) {
+		// "r/1/1" = look up ID "r", then 1st child (a), then 1st child (b)
+		nodes, err := Evaluate(doc, "r/1/1")
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+		require.Equal(t, "b", nodes[0].(*helium.Element).LocalName())
+	})
+
+	t.Run("name/1 navigates one level", func(t *testing.T) {
+		nodes, err := Evaluate(doc, "r/1")
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+		require.Equal(t, "a", nodes[0].(*helium.Element).LocalName())
+	})
+
+	t.Run("unknown ID returns nil", func(t *testing.T) {
+		nodes, err := Evaluate(doc, "nosuchid/1")
+		require.NoError(t, err)
+		require.Nil(t, nodes)
+	})
+}
+
 func TestParseParts(t *testing.T) {
 	t.Run("single scheme", func(t *testing.T) {
 		parts, err := parseParts("xpointer(/root)")
