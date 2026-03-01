@@ -888,8 +888,7 @@ func elemNS(elem *helium.Element) string {
 }
 
 func isRNGElement(elem *helium.Element) bool {
-	ns := elemNS(elem)
-	return ns == rngNS || ns == ""
+	return elem.Namespace() != nil && elemNS(elem) == rngNS
 }
 
 func isRNG(elem *helium.Element, localName string) bool {
