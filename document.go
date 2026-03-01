@@ -24,6 +24,7 @@ type Document struct {
 	version    string
 	encoding   string
 	standalone DocumentStandaloneType
+	url        string // document URI for base URI resolution (mirrors libxml2's xmlDoc.URL)
 
 	intSubset *DTD
 	extSubset *DTD
@@ -104,6 +105,17 @@ func (d *Document) Standalone() DocumentStandaloneType {
 
 func (d *Document) Version() string {
 	return d.version
+}
+
+// URL returns the document URI, used as the base for relative URI resolution.
+// This mirrors libxml2's xmlDoc.URL field.
+func (d *Document) URL() string {
+	return d.url
+}
+
+// SetURL sets the document URI.
+func (d *Document) SetURL(url string) {
+	d.url = url
 }
 
 func (d *Document) IntSubset() *DTD {
