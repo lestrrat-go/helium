@@ -697,3 +697,139 @@ func TestRedefine(t *testing.T) {
 		require.Contains(t, result, "fails to validate")
 	})
 }
+
+func TestFacetConsistency(t *testing.T) {
+	compileWithErrors := func(t *testing.T, xsdStr string) string {
+		t.Helper()
+		xsdDoc, err := helium.Parse([]byte(xsdStr))
+		require.NoError(t, err, "XSD parse failed")
+		schema, err := xsd.Compile(xsdDoc, xsd.WithSchemaFilename("test.xsd"))
+		require.NoError(t, err, "schema compilation failed")
+		return schema.CompileErrors()
+	}
+
+	t.Run("minLength_greater_than_maxLength", func(t *testing.T) {
+		errs := compileWithErrors(t, `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="badType">
+    <xs:restriction base="xs:string">
+      <xs:minLength value="5"/>
+      <xs:maxLength value="3"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`)
+		require.Contains(t, errs, "'minLength' to be greater than the value of 'maxLength'")
+	})
+
+	t.Run("length_with_minLength", func(t *testing.T) {
+		errs := compileWithErrors(t, `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="badType">
+    <xs:restriction base="xs:string">
+      <xs:length value="5"/>
+      <xs:minLength value="3"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`)
+		require.Contains(t, errs, "both 'length' and either of 'minLength' or 'maxLength'")
+	})
+
+	t.Run("maxInclusive_with_maxExclusive", func(t *testing.T) {
+		errs := compileWithErrors(t, `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="badType">
+    <xs:restriction base="xs:decimal">
+      <xs:maxInclusive value="10"/>
+      <xs:maxExclusive value="10"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`)
+		require.Contains(t, errs, "both 'maxInclusive' and 'maxExclusive'")
+	})
+
+	t.Run("minInclusive_with_minExclusive", func(t *testing.T) {
+		errs := compileWithErrors(t, `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="badType">
+    <xs:restriction base="xs:decimal">
+      <xs:minInclusive value="5"/>
+      <xs:minExclusive value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`)
+		require.Contains(t, errs, "both 'minInclusive' and 'minExclusive'")
+	})
+
+	t.Run("minInclusive_greater_than_maxInclusive", func(t *testing.T) {
+		errs := compileWithErrors(t, `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="badType">
+    <xs:restriction base="xs:decimal">
+      <xs:minInclusive value="10"/>
+      <xs:maxInclusive value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`)
+		require.Contains(t, errs, "'minInclusive' to be greater than the value of 'maxInclusive'")
+	})
+
+	t.Run("fractionDigits_greater_than_totalDigits", func(t *testing.T) {
+		errs := compileWithErrors(t, `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="badType">
+    <xs:restriction base="xs:decimal">
+      <xs:totalDigits value="3"/>
+      <xs:fractionDigits value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`)
+		require.Contains(t, errs, "'fractionDigits' to be greater than the value of 'totalDigits'")
+	})
+
+	t.Run("valid_minLength_maxLength", func(t *testing.T) {
+		errs := compileWithErrors(t, `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="goodType">
+    <xs:restriction base="xs:string">
+      <xs:minLength value="2"/>
+      <xs:maxLength value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`)
+		require.Empty(t, errs)
+	})
+
+	t.Run("derived_widens_maxLength", func(t *testing.T) {
+		errs := compileWithErrors(t, `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="baseType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="derivedType">
+    <xs:restriction base="baseType">
+      <xs:maxLength value="10"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`)
+		require.Contains(t, errs, "'maxLength' value '10' is greater than the 'maxLength' value of the base type '5'")
+	})
+
+	t.Run("derived_widens_minLength", func(t *testing.T) {
+		errs := compileWithErrors(t, `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="baseType">
+    <xs:restriction base="xs:string">
+      <xs:minLength value="3"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="derivedType">
+    <xs:restriction base="baseType">
+      <xs:minLength value="1"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`)
+		require.Contains(t, errs, "'minLength' value '1' is less than the 'minLength' value of the base type '3'")
+	})
+}

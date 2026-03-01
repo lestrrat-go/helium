@@ -126,6 +126,9 @@ func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*S
 	// Second pass: resolve type references.
 	c.resolveRefs()
 
+	// Check facet consistency after refs are resolved (base types are available).
+	c.checkFacetConsistency()
+
 	// Build substitution group membership map and detect circular references.
 	for _, edecl := range c.schema.elements {
 		if edecl.SubstitutionGroup == (QName{}) {
@@ -745,6 +748,7 @@ func (c *compiler) parseNamedSimpleType(elem *helium.Element) error {
 		return err
 	}
 	td.Name = QName{Local: name, NS: c.schema.targetNamespace}
+	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: false}
 	c.schema.types[td.Name] = td
 	return nil
 }
