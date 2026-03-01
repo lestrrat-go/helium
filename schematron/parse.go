@@ -259,14 +259,50 @@ func parseMessageElement(childElem *helium.Element, parts []messagePart, errors 
 }
 
 // contextToXPath converts a Schematron rule context pattern to an XPath expression.
-// Absolute patterns (starting with /) are used as-is.
-// Relative patterns get "//" prefixed to match anywhere in the document.
+// For union patterns (e.g. "a | b"), each alternative is processed independently:
+// relative parts get "//" prefixed, absolute parts are kept as-is.
 func contextToXPath(context string) string {
-	trimmed := strings.TrimSpace(context)
-	if strings.HasPrefix(trimmed, "/") {
-		return trimmed
+	parts := splitTopLevelUnion(context)
+	for i, p := range parts {
+		p = strings.TrimSpace(p)
+		if !strings.HasPrefix(p, "/") {
+			p = "//" + p
+		}
+		parts[i] = p
 	}
-	return "//" + trimmed
+	return strings.Join(parts, " | ")
+}
+
+// splitTopLevelUnion splits s on "|" characters that are not inside
+// brackets, parentheses, or string literals.
+func splitTopLevelUnion(s string) []string {
+	var parts []string
+	depth := 0     // tracks [] and () nesting
+	var quote byte // tracks ' or " literal state
+	start := 0
+
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		switch {
+		case quote != 0:
+			if ch == quote {
+				quote = 0
+			}
+		case ch == '\'' || ch == '"':
+			quote = ch
+		case ch == '[' || ch == '(':
+			depth++
+		case ch == ']' || ch == ')':
+			if depth > 0 {
+				depth--
+			}
+		case ch == '|' && depth == 0:
+			parts = append(parts, s[start:i])
+			start = i + 1
+		}
+	}
+	parts = append(parts, s[start:])
+	return parts
 }
 
 func testTypeName(typ testType) string {
