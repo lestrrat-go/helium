@@ -63,8 +63,8 @@ func WithParseFlags(flags helium.ParseOption) Option {
 }
 
 type docCacheEntry struct {
-	doc *helium.Document
-	err error
+	data []byte // raw bytes for re-parsing
+	err  error
 }
 
 type txtCacheEntry struct {
@@ -78,7 +78,7 @@ type processor struct {
 	resolver    Resolver
 	baseURI     string
 	expanding   map[string]bool       // circular inclusion detection (set during recursive expansion)
-	docCache    map[string]docCacheEntry // cached parsed documents
+	docCache    map[string]docCacheEntry // cached raw bytes for XML documents
 	txtCache    map[string]txtCacheEntry // cached text inclusions
 	depth       int
 	count       int
@@ -446,10 +446,9 @@ func (p *processor) loadXMLDoc(uri string, substituteEntities bool) (*helium.Doc
 		if entry.err != nil {
 			return nil, entry.err
 		}
-		// Re-parse from cache: we need a fresh copy since nodes get moved into
-		// the target document. Re-resolve to get the data again.
-		// Actually, we cache the raw bytes and re-parse each time to get
-		// independent node trees.
+		// Re-parse from cached bytes: each inclusion needs independent
+		// nodes since they get moved into the target document tree.
+		return p.parseXMLData(entry.data, uri, substituteEntities)
 	}
 
 	rc, err := p.resolver.Resolve(uri, p.baseURI)
@@ -466,6 +465,18 @@ func (p *processor) loadXMLDoc(uri string, substituteEntities bool) (*helium.Doc
 		return nil, wrapErr
 	}
 
+	doc, err := p.parseXMLData(data, uri, substituteEntities)
+	if err != nil {
+		p.docCache[cacheKey] = docCacheEntry{err: err}
+		return nil, err
+	}
+
+	// Cache raw bytes for subsequent includes of the same URI
+	p.docCache[cacheKey] = docCacheEntry{data: data}
+	return doc, nil
+}
+
+func (p *processor) parseXMLData(data []byte, uri string, substituteEntities bool) (*helium.Document, error) {
 	parser := helium.NewParser()
 	opts := helium.ParseDTDLoad
 	if substituteEntities {
@@ -475,14 +486,8 @@ func (p *processor) loadXMLDoc(uri string, substituteEntities bool) (*helium.Doc
 	parser.SetBaseURI(uri)
 	doc, err := parser.Parse(data)
 	if err != nil {
-		wrapErr := fmt.Errorf("xi:include: error parsing %q: %w", uri, err)
-		p.docCache[cacheKey] = docCacheEntry{err: wrapErr}
-		return nil, wrapErr
+		return nil, fmt.Errorf("xi:include: error parsing %q: %w", uri, err)
 	}
-
-	// Cache successful parse (note: nodes will be detached, so subsequent
-	// inclusions of the same URI will need re-parsing via Resolve)
-	p.docCache[cacheKey] = docCacheEntry{doc: doc}
 	return doc, nil
 }
 
