@@ -239,10 +239,13 @@ func evaluateElement(doc *helium.Document, body string) ([]helium.Node, error) {
 }
 
 // nthElementChild returns the n-th element child (1-based) of the given node.
+// Matches libxml2's xmlXPtrGetNthChild which counts ElementNode, DocumentNode,
+// and HTMLDocumentNode.
 func nthElementChild(n helium.Node, index int) helium.Node {
 	count := 0
 	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
-		if c.Type() == helium.ElementNode {
+		switch c.Type() {
+		case helium.ElementNode, helium.DocumentNode, helium.HTMLDocumentNode:
 			count++
 			if count == index {
 				return c
