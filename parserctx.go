@@ -75,7 +75,7 @@ type parserCtx struct {
 	// remain            int
 	replaceEntities   bool
 	sax               sax.SAX2Handler
-	space             int
+	spaceTab          []int // xml:space stack: -1=inherit, 0=default, 1=preserve
 	standalone        DocumentStandaloneType
 	hasExternalSubset bool
 	inSubset          int
@@ -347,6 +347,8 @@ func (ctx *parserCtx) init(p *Parser, in io.Reader) error {
 	ctx.attsSpecial = map[string]AttributeType{}
 	ctx.attsDefault = map[string][]*Attribute{}
 	ctx.wellFormed = true
+	ctx.spaceTab = ctx.spaceTab[:0]
+	ctx.spaceTab = append(ctx.spaceTab, -1) // initial value before any element
 	ctx.inputSize = int64(len(ctx.rawInput))
 	ctx.maxAmpl = entityMaxAmplDefault
 	if p != nil {
@@ -1030,6 +1032,9 @@ func (ctx *parserCtx) parseStartTag() error {
 		return ctx.error(err)
 	}
 
+	// Push xml:space stack entry for this element (inherit parent's value by default)
+	ctx.spaceTab = append(ctx.spaceTab, -1)
+
 	nbNs := 0
 	attrs := []sax.Attribute{}
 	for ctx.instate != psEOF {
@@ -1191,6 +1196,19 @@ func (ctx *parserCtx) parseStartTag() error {
 		}
 	}
 
+	// Scan attributes for xml:space to update the space stack
+	for _, a := range attrs {
+		if a.Prefix() == XMLPrefix && a.LocalName() == "space" {
+			switch a.Value() {
+			case "preserve":
+				ctx.spaceTab[len(ctx.spaceTab)-1] = 1
+			case "default":
+				ctx.spaceTab[len(ctx.spaceTab)-1] = 0
+			}
+			break
+		}
+	}
+
 	// we push the element first, because this way we get to
 	// query for the namespace declared on this node as well
 	// via lookupNamespace
@@ -1276,6 +1294,11 @@ func (ctx *parserCtx) parseEndTag() error {
 		}
 	}
 	ctx.popNode()
+
+	// Pop xml:space stack entry for this element.
+	if len(ctx.spaceTab) > 1 {
+		ctx.spaceTab = ctx.spaceTab[:len(ctx.spaceTab)-1]
+	}
 
 	// Pop namespace bindings that were pushed by this element's start tag.
 	// This mirrors libxml2's nsPop(ctxt, nbNs) in xmlParseEndTag2.
@@ -2525,7 +2548,7 @@ func (ctx *parserCtx) areBlanks(s string, blankChars bool) (ret bool) {
 	}
 
 	// Check for xml:space value.
-	if ctx.space == 1 || ctx.space == -2 {
+	if ctx.spaceTab[len(ctx.spaceTab)-1] == 1 {
 		ret = false
 		return
 	}
