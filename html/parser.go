@@ -1041,8 +1041,11 @@ func (p *parser) parseName() string {
 }
 
 // parseAttributes parses HTML tag attributes.
+// Duplicate attribute names are silently dropped (first occurrence wins),
+// matching libxml2's htmlParseStartTag behavior.
 func (p *parser) parseAttributes() []Attribute {
 	var attrs []Attribute
+	var seen map[string]struct{}
 
 	for {
 		p.skipWhitespace()
@@ -1070,6 +1073,14 @@ func (p *parser) parseAttributes() []Attribute {
 			// Boolean attribute — no value specified
 			isBool = true
 		}
+
+		if seen == nil {
+			seen = make(map[string]struct{})
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
 
 		attrs = append(attrs, Attribute{Name: name, Value: value, Boolean: isBool})
 	}
