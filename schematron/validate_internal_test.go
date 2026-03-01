@@ -217,3 +217,24 @@ func TestXpathResultToStringNodeSet(t *testing.T) {
 		require.Equal(t, "a b c", xpathResultToString(r))
 	})
 }
+
+func TestCompileTitleAfterPattern(t *testing.T) {
+	schema := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern>
+			<rule context="*"><assert test="true()">ok</assert></rule>
+		</pattern>
+		<title>Late Title</title>
+	</schema>`)
+	require.Contains(t, schema.CompileErrors(), "Expecting a pattern element instead of title")
+	require.Equal(t, "", schema.title)
+}
+
+func TestCompileNsAfterPattern(t *testing.T) {
+	schema := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern>
+			<rule context="*"><assert test="true()">ok</assert></rule>
+		</pattern>
+		<ns prefix="ex" uri="http://example.com"/>
+	</schema>`)
+	require.Contains(t, schema.CompileErrors(), "Expecting a pattern element instead of ns")
+}
