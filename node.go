@@ -374,7 +374,7 @@ func (n node) Name() string {
 	return n.name
 }
 
-func setListDoc(n Node, doc *Document) {
+func SetListDoc(n Node, doc *Document) {
 	if n == nil || n.Type() == NamespaceDeclNode {
 		return
 	}
@@ -401,12 +401,12 @@ func setTreeDoc(n Node, doc *Document) {
 			// if prop.atype == XML_ATTRIBUTE_ID; xmlRemoveID(tree->doc, prop)
 			prop.doc = doc
 			if child := prop.firstChild; child != nil {
-				setListDoc(child, doc)
+				SetListDoc(child, doc)
 			}
 		}
 	}
 	if child := n.FirstChild(); child != nil {
-		setListDoc(child, doc)
+		SetListDoc(child, doc)
 	}
 	n.SetOwnerDocument(doc)
 }
