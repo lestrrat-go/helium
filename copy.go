@@ -95,9 +95,9 @@ func CopyDoc(src *Document) (*Document, error) {
 
 	dst := NewDocument(src.version, src.encoding, src.standalone)
 
-	// Copy DTD metadata (name, externalID, systemID) if present.
+	// Deep-copy DTD (metadata + entities, elements, attributes, notations).
 	if dtd := src.intSubset; dtd != nil {
-		if _, err := dst.CreateInternalSubset(dtd.name, dtd.externalID, dtd.systemID); err != nil {
+		if err := copyDTD(dtd, dst); err != nil {
 			return nil, err
 		}
 	}
@@ -117,4 +117,99 @@ func CopyDoc(src *Document) (*Document, error) {
 	}
 
 	return dst, nil
+}
+
+// copyDTD deep-copies src into dst's internal subset, including all
+// entities, parameter entities, element declarations, attribute
+// declarations, and notation declarations.  Children are walked in
+// order so that serialization of the copy matches the original.
+func copyDTD(src *DTD, dst *Document) error {
+	dstDTD, err := dst.CreateInternalSubset(src.name, src.externalID, src.systemID)
+	if err != nil {
+		return err
+	}
+
+	// Walk children in document order to preserve serialization ordering.
+	for c := src.FirstChild(); c != nil; c = c.NextSibling() {
+		switch c.Type() {
+		case EntityNode:
+			ent := c.(*Entity)
+			cp := copyEntity(ent, dst)
+			switch ent.entityType {
+			case InternalParameterEntity, ExternalParameterEntity:
+				dstDTD.pentities[ent.name] = cp
+			default:
+				dstDTD.entities[ent.name] = cp
+			}
+			_ = dstDTD.AddChild(cp)
+		case ElementDeclNode:
+			edecl := c.(*ElementDecl)
+			cp := copyElementDecl(edecl, dst)
+			dstDTD.elements[edecl.name+":"+edecl.prefix] = cp
+			_ = dstDTD.AddChild(cp)
+		case AttributeDeclNode:
+			adecl := c.(*AttributeDecl)
+			cp := copyAttributeDecl(adecl, dst)
+			dstDTD.attributes[adecl.name+":"+adecl.prefix+":"+adecl.elem] = cp
+			_ = dstDTD.AddChild(cp)
+		case NotationNode:
+			nota := c.(*Notation)
+			cp := copyNotation(nota, dst)
+			dstDTD.notations[nota.name] = cp
+			_ = dstDTD.AddChild(cp)
+		case CommentNode:
+			cm, _ := dst.CreateComment(copyBytes(c.Content()))
+			_ = dstDTD.AddChild(cm)
+		case ProcessingInstructionNode:
+			pi, _ := dst.CreatePI(c.Name(), string(c.Content()))
+			_ = dstDTD.AddChild(pi)
+		}
+	}
+
+	return nil
+}
+
+func copyEntity(src *Entity, doc *Document) *Entity {
+	e := newEntity(src.name, src.entityType, src.externalID, src.systemID, src.content, src.orig)
+	e.uri = src.uri
+	e.checked = src.checked
+	e.expandedSize = src.expandedSize
+	e.doc = doc
+	return e
+}
+
+func copyElementDecl(src *ElementDecl, doc *Document) *ElementDecl {
+	e := newElementDecl()
+	e.name = src.name
+	e.prefix = src.prefix
+	e.decltype = src.decltype
+	e.content = src.content.copyElementContent()
+	e.doc = doc
+	return e
+}
+
+func copyAttributeDecl(src *AttributeDecl, doc *Document) *AttributeDecl {
+	a := newAttributeDecl()
+	a.name = src.name
+	a.prefix = src.prefix
+	a.elem = src.elem
+	a.atype = src.atype
+	a.def = src.def
+	a.defvalue = src.defvalue
+	if src.tree != nil {
+		a.tree = make(Enumeration, len(src.tree))
+		copy(a.tree, src.tree)
+	}
+	a.doc = doc
+	return a
+}
+
+func copyNotation(src *Notation, doc *Document) *Notation {
+	n := &Notation{}
+	n.etype = NotationNode
+	n.name = src.name
+	n.publicID = src.publicID
+	n.systemID = src.systemID
+	n.doc = doc
+	return n
 }
