@@ -1,0 +1,2 @@
+./test/schemas/any-pc-strict1_0.xml:3: Schemas validity error : Element 'undeclared': No matching global declaration available, but demanded by the strict wildcard.
+./test/schemas/any-pc-strict1_0.xml fails to validate
