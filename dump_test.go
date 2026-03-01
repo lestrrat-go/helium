@@ -204,6 +204,24 @@ func TestFormatOutput(t *testing.T) {
 	})
 }
 
+func TestXHTMLVoidElementDefaultNS(t *testing.T) {
+	// XHTML void elements in the default namespace (prefix == "") should
+	// use self-closing " />" syntax, matching libxml2's check:
+	//   (cur->ns == NULL) || (cur->ns->prefix == NULL)
+	input := `<?xml version="1.0"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>T</title></head><body><br/></body></html>`
+	doc, err := helium.Parse([]byte(input))
+	require.NoError(t, err)
+
+	str, err := doc.XMLString()
+	require.NoError(t, err)
+
+	// <br> must be serialized as "<br />" (self-closing), not "<br></br>"
+	require.Contains(t, str, "<br />")
+	require.NotContains(t, str, "<br></br>")
+}
+
 func TestNoEmpty(t *testing.T) {
 	t.Run("empty element uses open+close tags", func(t *testing.T) {
 		doc, err := helium.Parse([]byte(`<?xml version="1.0"?><root><br/></root>`))
