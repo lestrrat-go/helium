@@ -177,6 +177,32 @@ func TestXpathResultToNameNamespace(t *testing.T) {
 	})
 }
 
+func TestCompileTitleAfterPattern(t *testing.T) {
+	schema := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern><rule context="*"><assert test="true()">ok</assert></rule></pattern>
+		<title>late title</title>
+	</schema>`)
+	require.Contains(t, schema.CompileErrors(), "Expecting a pattern element instead of title")
+}
+
+func TestCompileNsAfterPattern(t *testing.T) {
+	schema := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern><rule context="*"><assert test="true()">ok</assert></rule></pattern>
+		<ns prefix="p" uri="urn:test"/>
+	</schema>`)
+	require.Contains(t, schema.CompileErrors(), "Expecting a pattern element instead of ns")
+}
+
+func TestCompileTitleBeforeNsBeforePattern(t *testing.T) {
+	schema := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<title>my schema</title>
+		<ns prefix="p" uri="urn:test"/>
+		<pattern><rule context="*"><assert test="true()">ok</assert></rule></pattern>
+	</schema>`)
+	require.Equal(t, "", schema.CompileErrors())
+	require.Equal(t, "my schema", schema.title)
+}
+
 func TestXpathResultToStringBoolean(t *testing.T) {
 	t.Run("true", func(t *testing.T) {
 		r := &xpath.Result{Type: xpath.BooleanResult, Boolean: true}

@@ -37,6 +37,9 @@ func compileSchema(doc *helium.Document, _ *compileConfig) (*Schema, error) {
 	var errors strings.Builder
 	var warnings strings.Builder
 
+	// libxml2 enforces strict ordering: <title> before <ns> before <pattern>.
+	// phase tracks where we are: 0=title, 1=ns, 2=pattern.
+	phase := 0
 	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := child.(*helium.Element)
 		if !ok {
@@ -44,12 +47,15 @@ func compileSchema(doc *helium.Document, _ *compileConfig) (*Schema, error) {
 		}
 		localName := stripPrefix(elem.Name())
 
-		switch localName {
-		case "title":
+		switch {
+		case localName == "title" && phase == 0:
 			schema.title = elemTextContent(elem)
-		case "ns":
+			phase = 1
+		case localName == "ns" && phase < 2:
 			addNamespace(schema.namespaces, elem)
-		case "pattern":
+			phase = 1
+		case localName == "pattern":
+			phase = 2
 			if p := compilePattern(elem, schNS, &errors); p != nil {
 				schema.patterns = append(schema.patterns, p)
 			}
