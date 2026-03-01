@@ -314,6 +314,13 @@ func matchElementParticle(parent *helium.Element, p *Particle, edecl *ElementDec
 			contentErr = xsiErr
 			continue
 		}
+		// Check block flags against xsi:type derivation.
+		if td != actualDecl.Type && actualDecl.Type != nil && isDerivationBlocked(td, actualDecl.Type, actualDecl.Block) {
+			msg := "The xsi:type definition is blocked by the element declaration."
+			out.WriteString(validityError(filename, child.elem.Line(), elemDisplayName(child.elem), msg))
+			contentErr = fmt.Errorf("blocked xsi:type")
+			continue
+		}
 		if td != nil && td.Abstract {
 			msg := "The type definition is abstract."
 			out.WriteString(validityError(filename, child.elem.Line(), elemDisplayName(child.elem), msg))
@@ -595,11 +602,39 @@ func elemMatchesDeclOrSubst(child childElem, edecl *ElementDecl, schema *Schema)
 	}
 	// Check substitution group members.
 	if schema != nil {
+		// If block="substitution", skip all substitution group members.
+		if edecl.Block&BlockSubstitution != 0 {
+			return false
+		}
 		for _, member := range schema.substGroups[edecl.Name] {
 			if matchesDeclDirect(child, member) {
+				// Check if the derivation chain from member's type to head's type
+				// uses a blocked method.
+				if isDerivationBlocked(member.Type, edecl.Type, edecl.Block) {
+					continue
+				}
 				return true
 			}
 		}
+	}
+	return false
+}
+
+// isDerivationBlocked walks the BaseType chain from derived to base and returns
+// true if any step uses a derivation method blocked by the given BlockFlags.
+func isDerivationBlocked(derived, base *TypeDef, blocked BlockFlags) bool {
+	if derived == nil || base == nil || blocked == 0 {
+		return false
+	}
+	td := derived
+	for td != nil && td != base {
+		if td.Derivation == DerivationExtension && blocked&BlockExtension != 0 {
+			return true
+		}
+		if td.Derivation == DerivationRestriction && blocked&BlockRestriction != 0 {
+			return true
+		}
+		td = td.BaseType
 	}
 	return false
 }

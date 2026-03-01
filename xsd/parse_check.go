@@ -402,7 +402,18 @@ func (c *compiler) checkDocumentation(elem *helium.Element) {
 	}
 }
 
-// isValidFinal checks if a value is valid for the 'final' attribute.
+// hasAttr checks whether an attribute is physically present on the element.
+// Unlike getAttr, this distinguishes absent from empty-string.
+func hasAttr(elem *helium.Element, name string) bool {
+	for _, a := range elem.Attributes() {
+		if a.LocalName() == name {
+			return true
+		}
+	}
+	return false
+}
+
+// isValidFinal checks if a value is valid for the 'final' attribute on elements.
 func isValidFinal(v string) bool {
 	if v == "#all" {
 		return true
@@ -422,6 +433,34 @@ func isValidBlock(v string) bool {
 	}
 	for _, part := range splitSpace(v) {
 		if part != "extension" && part != "restriction" && part != "substitution" {
+			return false
+		}
+	}
+	return true
+}
+
+// isValidFinalDefault checks if a value is valid for the 'finalDefault' attribute on xs:schema.
+// Accepts #all or space-separated list of extension|restriction|list|union.
+func isValidFinalDefault(v string) bool {
+	if v == "#all" {
+		return true
+	}
+	for _, part := range splitSpace(v) {
+		if part != "extension" && part != "restriction" && part != "list" && part != "union" {
+			return false
+		}
+	}
+	return true
+}
+
+// isValidSimpleTypeFinal checks if a value is valid for the 'final' attribute on simpleType.
+// Accepts #all or space-separated list of restriction|list|union.
+func isValidSimpleTypeFinal(v string) bool {
+	if v == "#all" {
+		return true
+	}
+	for _, part := range splitSpace(v) {
+		if part != "restriction" && part != "list" && part != "union" {
 			return false
 		}
 	}

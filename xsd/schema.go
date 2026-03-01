@@ -6,11 +6,34 @@ type QName struct {
 	NS    string
 }
 
+// BlockFlags is a bitmask for the block attribute on element declarations.
+type BlockFlags uint8
+
+// BlockFlags values.
+const (
+	BlockExtension    BlockFlags = 1 << iota
+	BlockRestriction
+	BlockSubstitution
+)
+
+// FinalFlags is a bitmask for the final attribute on element/type declarations.
+type FinalFlags uint8
+
+// FinalFlags values.
+const (
+	FinalExtension  FinalFlags = 1 << iota
+	FinalRestriction
+	FinalList  // simpleType only
+	FinalUnion // simpleType only
+)
+
 // Schema represents a compiled XML Schema.
 type Schema struct {
 	targetNamespace   string
 	elemFormQualified bool // elementFormDefault="qualified"
 	attrFormQualified bool // attributeFormDefault="qualified"
+	blockDefault      BlockFlags
+	finalDefault      FinalFlags
 	elements          map[QName]*ElementDecl
 	types             map[QName]*TypeDef
 	groups            map[QName]*ModelGroup
@@ -86,6 +109,10 @@ type ElementDecl struct {
 	IDCs              []*IDConstraint
 	Default           *string // nil = not set
 	Fixed             *string // nil = not set
+	Block             BlockFlags
+	BlockSet          bool // true if block was explicitly set (even to empty)
+	Final             FinalFlags
+	FinalSet          bool // true if final was explicitly set (even to empty)
 }
 
 // IDCKind describes the kind of identity constraint.
@@ -142,6 +169,8 @@ type TypeDef struct {
 	ItemType     *TypeDef   // for list types: the item type definition
 	MemberTypes  []*TypeDef // for union types: the member type definitions
 	Abstract     bool
+	Final        FinalFlags
+	FinalSet     bool // true if final was explicitly set (even to empty)
 }
 
 // FacetSet holds facet constraints for a simple type restriction.

@@ -84,6 +84,12 @@ func validateRootElement(elem *helium.Element, schema *Schema, filename string, 
 	if err != nil {
 		return err
 	}
+	// Check block flags against xsi:type derivation.
+	if td != edecl.Type && edecl.Type != nil && isDerivationBlocked(td, edecl.Type, edecl.Block) {
+		msg := "The xsi:type definition is blocked by the element declaration."
+		out.WriteString(validityError(filename, elem.Line(), elemDisplayName(elem), msg))
+		td = edecl.Type // fall back to declared type
+	}
 	if td != nil && td.Abstract {
 		msg := "The type definition is abstract."
 		out.WriteString(validityError(filename, elem.Line(), elemDisplayName(elem), msg))
