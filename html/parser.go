@@ -373,7 +373,7 @@ func (p *parser) htmlAutoCloseOnClose(endTag string) {
 	// (inline formatting elements like b, em, font, etc.) matching libxml2.
 	for p.currentName() != "" && p.currentName() != endTag {
 		cur := p.currentName()
-		if desc := lookupElement(cur); desc != nil && desc.EndTag == 3 {
+		if desc := lookupElement(cur); desc != nil && desc.endTag == 3 {
 			_ = p.emitError("Opening and ending tag mismatch: %s and %s", endTag, cur)
 		}
 		p.popName()
@@ -513,7 +513,7 @@ func (p *parser) parseStartTag() {
 
 	// Handle void elements — immediately close
 	desc := lookupElement(name)
-	if desc != nil && desc.Empty {
+	if desc != nil && desc.empty {
 		p.popName()
 		_ = p.sax.EndElement(name)
 		return
@@ -521,7 +521,7 @@ func (p *parser) parseStartTag() {
 
 	// Handle raw text/script/RCDATA elements
 	if desc != nil {
-		switch desc.DataMode {
+		switch desc.dataMode {
 		case dataScript, dataRawText:
 			p.parseRawContent(name)
 		case dataRCDATA:
@@ -896,7 +896,7 @@ func (p *parser) inRawTextElement() bool {
 		return false
 	}
 	desc := lookupElement(name)
-	return desc != nil && desc.DataMode >= dataRCDATA
+	return desc != nil && desc.dataMode >= dataRCDATA
 }
 
 // scriptState tracks the parser state within script content.
