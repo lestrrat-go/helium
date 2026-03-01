@@ -462,6 +462,48 @@ func TestEndDocumentClosesAll(t *testing.T) {
 	require.Equal(t, "<?xml version=\"1.0\"?>\n<a><b><c/></b></a>", strings.TrimRight(buf.String(), "\n"))
 }
 
+func TestEndDocumentClosesOpenPI(t *testing.T) {
+	var buf bytes.Buffer
+	w := New(&buf)
+	require.NoError(t, w.StartDocument("", "", ""))
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.StartPI("test"))
+	require.NoError(t, w.WriteString(" data"))
+	require.NoError(t, w.EndDocument())
+	require.Equal(t, "<?xml version=\"1.0\"?>\n<root><?test data?></root>", strings.TrimRight(buf.String(), "\n"))
+}
+
+func TestEndDocumentClosesOpenCDATA(t *testing.T) {
+	var buf bytes.Buffer
+	w := New(&buf)
+	require.NoError(t, w.StartDocument("", "", ""))
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.StartCDATA())
+	require.NoError(t, w.WriteString("data"))
+	require.NoError(t, w.EndDocument())
+	require.Equal(t, "<?xml version=\"1.0\"?>\n<root><![CDATA[data]]></root>", strings.TrimRight(buf.String(), "\n"))
+}
+
+func TestEndDocumentClosesOpenComment(t *testing.T) {
+	var buf bytes.Buffer
+	w := New(&buf)
+	require.NoError(t, w.StartDocument("", "", ""))
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.StartComment())
+	require.NoError(t, w.WriteString("note"))
+	require.NoError(t, w.EndDocument())
+	require.Equal(t, "<?xml version=\"1.0\"?>\n<root><!--note--></root>", strings.TrimRight(buf.String(), "\n"))
+}
+
+func TestEndDocumentClosesOpenDTD(t *testing.T) {
+	var buf bytes.Buffer
+	w := New(&buf)
+	require.NoError(t, w.StartDocument("", "", ""))
+	require.NoError(t, w.StartDTD("root", "", ""))
+	require.NoError(t, w.EndDocument())
+	require.Equal(t, "<?xml version=\"1.0\"?>\n<!DOCTYPE root>", strings.TrimRight(buf.String(), "\n"))
+}
+
 func TestStateValidation(t *testing.T) {
 	t.Run("StartDocumentTwice", func(t *testing.T) {
 		var buf bytes.Buffer
