@@ -141,7 +141,7 @@ func dumpText(out io.Writer, n helium.Node) error {
 	parent := n.Parent()
 	if parent != nil && parent.Type() == helium.ElementNode {
 		parentName := strings.ToLower(parent.Name())
-		if desc := lookupElement(parentName); desc != nil && desc.DataMode >= dataRawText {
+		if desc := lookupElement(parentName); desc != nil && desc.dataMode >= dataRawText {
 			// Raw text element: no escaping
 			_, _ = out.Write(n.Content())
 			return nil
@@ -257,7 +257,7 @@ func dumpElement(out io.Writer, e *helium.Element) error {
 	}
 
 	// Void element: no closing tag
-	if info != nil && info.Empty {
+	if info != nil && info.empty {
 		_, _ = io.WriteString(out, ">")
 		// Format newline after void element
 		if shouldNewlineAfterVoid(e, info) {
@@ -482,7 +482,7 @@ func isTextOrEntityRef(n helium.Node) bool {
 // shouldNewlineAfterOpen returns true if a \n should be inserted after the
 // opening tag and before the first child.
 func shouldNewlineAfterOpen(e *helium.Element, info *htmlElemDesc) bool {
-	if info != nil && info.Inline != 0 {
+	if info != nil && info.inline != 0 {
 		return false
 	}
 	first := e.FirstChild()
@@ -504,7 +504,7 @@ func shouldNewlineAfterOpen(e *helium.Element, info *htmlElemDesc) bool {
 
 // shouldNewlineAfterVoid returns true if a \n should be inserted after a void element.
 func shouldNewlineAfterVoid(e *helium.Element, info *htmlElemDesc) bool {
-	if info != nil && info.Inline != 0 {
+	if info != nil && info.inline != 0 {
 		return false
 	}
 	next := e.NextSibling()
@@ -523,7 +523,7 @@ func shouldNewlineAfterVoid(e *helium.Element, info *htmlElemDesc) bool {
 // shouldNewlineBeforeClose returns true if a \n should be inserted before
 // the closing tag.
 func shouldNewlineBeforeClose(e *helium.Element, info *htmlElemDesc) bool {
-	if info != nil && info.Inline != 0 {
+	if info != nil && info.inline != 0 {
 		return false
 	}
 	last := e.LastChild()
@@ -546,7 +546,7 @@ func shouldNewlineBeforeClose(e *helium.Element, info *htmlElemDesc) bool {
 // shouldNewlineAfterClose returns true if a \n should be inserted after
 // the closing tag.
 func shouldNewlineAfterClose(e *helium.Element, info *htmlElemDesc) bool {
-	if info != nil && info.Inline != 0 {
+	if info != nil && info.inline != 0 {
 		return false
 	}
 	next := e.NextSibling()

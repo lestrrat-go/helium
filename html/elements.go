@@ -16,19 +16,19 @@ const (
 // htmlElemDesc describes an HTML element's parsing behavior.
 // Ported from libxml2's html40ElementTable (HTMLparser.c:502).
 type htmlElemDesc struct {
-	Name     string
-	StartTag int      // 0=required, 1=optional
-	EndTag   int      // 0=required, 1=optional, 2=forbidden(void), 3=stylistic(close easily)
-	SaveEnd  int      // save end tag
-	Empty    bool     // void element (no content)
-	Depr     bool     // deprecated
-	DTD      int      // 0=strict, 1=loose only, 2=frameset only
-	Inline   int      // 0=block, 1=inline, 2=both(inline+block)
-	DataMode dataMode // how to parse element content
+	name     string
+	startTag int      // 0=required, 1=optional
+	endTag   int      // 0=required, 1=optional, 2=forbidden(void), 3=stylistic(close easily)
+	saveEnd  int      // save end tag
+	empty    bool     // void element (no content)
+	depr     bool     // deprecated
+	dtd      int      // 0=strict, 1=loose only, 2=frameset only
+	inline   int      // 0=block, 1=inline, 2=both(inline+block)
+	dataMode dataMode // how to parse element content
 }
 
 // html40ElementTable is the full HTML 4.0 element table from libxml2.
-// Name, StartTag, EndTag, SaveEnd, Empty, Depr, DTD, Inline, DataMode
+// name, startTag, endTag, saveEnd, empty, depr, dtd, inline, dataMode
 var html40ElementTable = []htmlElemDesc{
 	{"a", 0, 0, 0, false, false, 0, 1, dataNormal},
 	{"abbr", 0, 0, 0, false, false, 0, 1, dataNormal},
@@ -139,7 +139,7 @@ var elemMap map[string]*htmlElemDesc
 func init() {
 	elemMap = make(map[string]*htmlElemDesc, len(html40ElementTable))
 	for i := range html40ElementTable {
-		elemMap[html40ElementTable[i].Name] = &html40ElementTable[i]
+		elemMap[html40ElementTable[i].name] = &html40ElementTable[i]
 	}
 }
 
