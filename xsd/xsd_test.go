@@ -418,6 +418,60 @@ func TestDefaultFixedValidation(t *testing.T) {
 	})
 }
 
+func TestMultipleAttributeErrors(t *testing.T) {
+	compileAndValidate := func(t *testing.T, xsdStr, xmlStr string) string {
+		t.Helper()
+		xsdDoc, err := helium.Parse([]byte(xsdStr))
+		require.NoError(t, err, "XSD parse failed")
+		schema, err := xsd.Compile(xsdDoc)
+		require.NoError(t, err, "schema compilation failed")
+		require.Empty(t, schema.CompileErrors(), "unexpected compile errors")
+
+		xmlDoc, err := helium.Parse([]byte(xmlStr))
+		require.NoError(t, err, "XML parse failed")
+		return xsd.Validate(xmlDoc, schema, xsd.WithFilename("test.xml"))
+	}
+
+	t.Run("multiple unknown attributes", func(t *testing.T) {
+		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="id" type="xs:string"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		xmlStr := `<root id="1" foo="x" bar="y"/>`
+		result := compileAndValidate(t, xsdStr, xmlStr)
+		require.Contains(t, result, "'foo' is not allowed")
+		require.Contains(t, result, "'bar' is not allowed")
+	})
+
+	t.Run("multiple missing required attributes", func(t *testing.T) {
+		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="a" type="xs:string" use="required"/>
+      <xs:attribute name="b" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		xmlStr := `<root/>`
+		result := compileAndValidate(t, xsdStr, xmlStr)
+		require.Contains(t, result, "'a' is required but missing")
+		require.Contains(t, result, "'b' is required but missing")
+	})
+
+	t.Run("no declarations multiple attrs", func(t *testing.T) {
+		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+		xmlStr := `<root x="1" y="2">text</root>`
+		result := compileAndValidate(t, xsdStr, xmlStr)
+		require.Contains(t, result, "'x' is not allowed")
+		require.Contains(t, result, "'y' is not allowed")
+	})
+}
+
 func TestRedefine(t *testing.T) {
 	tmpDir := filepath.Join("..", ".tmp", "redefine-test")
 	require.NoError(t, os.MkdirAll(tmpDir, 0o755))

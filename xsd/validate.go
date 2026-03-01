@@ -228,6 +228,8 @@ func attrDisplayName(a *helium.Attribute) string {
 }
 
 func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, filename string, out *strings.Builder) error {
+	var hasErr bool
+
 	if len(td.Attributes) == 0 && td.AnyAttribute == nil {
 		// No attribute declarations — check that instance has no attributes
 		// (except xsi: namespace attributes and xmlns which are always allowed).
@@ -238,6 +240,9 @@ func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, filen
 			ad := attrDisplayName(a)
 			msg := fmt.Sprintf("The attribute '%s' is not allowed.", ad)
 			out.WriteString(validityErrorAttr(filename, elem.Line(), elemDisplayName(elem), ad, msg))
+			hasErr = true
+		}
+		if hasErr {
 			return fmt.Errorf("attribute not allowed")
 		}
 		return nil
@@ -260,21 +265,21 @@ func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, filen
 				ad := attrDisplayName(a)
 				msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *au.Fixed)
 				out.WriteString(validityErrorAttr(filename, elem.Line(), elemDisplayName(elem), ad, msg))
-				return fmt.Errorf("fixed value constraint")
+				hasErr = true
 			}
 			continue
 		}
 		// Not in explicit declarations — check anyAttribute wildcard.
 		if td.AnyAttribute != nil && wildcardMatchesAttr(td.AnyAttribute, a.URI()) {
 			if err := validateWildcardAttr(a, elem, td.AnyAttribute, schema, filename, out); err != nil {
-				return err
+				hasErr = true
 			}
 			continue
 		}
 		ad := attrDisplayName(a)
 		msg := fmt.Sprintf("The attribute '%s' is not allowed.", ad)
 		out.WriteString(validityErrorAttr(filename, elem.Line(), elemDisplayName(elem), ad, msg))
-		return fmt.Errorf("attribute not allowed")
+		hasErr = true
 	}
 
 	// Check for required attributes.
@@ -293,10 +298,13 @@ func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, filen
 		if !found {
 			msg := fmt.Sprintf("The attribute '%s' is required but missing.", au.Name.Local)
 			out.WriteString(validityError(filename, elem.Line(), elemDisplayName(elem), msg))
-			return fmt.Errorf("missing required attribute")
+			hasErr = true
 		}
 	}
 
+	if hasErr {
+		return fmt.Errorf("attribute validation failed")
+	}
 	return nil
 }
 
