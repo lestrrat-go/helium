@@ -35,6 +35,17 @@ func TestOptionsNoDefaultDTD(t *testing.T) {
 	require.False(t, strings.Contains(noDTD.String(), "<!DOCTYPE"), "WithNoDefaultDTD should suppress DOCTYPE")
 }
 
+func TestDumpLegacyCompatSuppressed(t *testing.T) {
+	input := `<!DOCTYPE html SYSTEM "about:legacy-compat"><html><body><p>hi</p></body></html>`
+	doc, err := Parse([]byte(input))
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	require.NoError(t, DumpDoc(&buf, doc))
+	output := buf.String()
+	require.True(t, strings.HasPrefix(output, "<!DOCTYPE html>\n"), "about:legacy-compat SYSTEM ID should be suppressed, got: %s", output)
+}
+
 func TestOptionsNoBlanks(t *testing.T) {
 	input := `<html> <body> <p>text</p> </body> </html>`
 	doc, err := Parse([]byte(input), WithNoBlanks())
