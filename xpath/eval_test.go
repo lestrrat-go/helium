@@ -870,3 +870,57 @@ func TestLangNamespaceAware(t *testing.T) {
 		require.False(t, r.Boolean)
 	})
 }
+
+// --- id() function ---
+
+func TestEvalIDWithXmlID(t *testing.T) {
+	// xml:id should be recognized without a DTD
+	doc := parseXML(t, `<root><a xml:id="foo">A</a><b xml:id="bar">B</b></root>`)
+
+	t.Run("single id", func(t *testing.T) {
+		r, err := xpath.Evaluate(doc, `id("foo")`)
+		require.NoError(t, err)
+		require.Equal(t, xpath.NodeSetResult, r.Type)
+		require.Len(t, r.NodeSet, 1)
+		require.Equal(t, "a", r.NodeSet[0].Name())
+	})
+
+	t.Run("multiple ids space-separated", func(t *testing.T) {
+		r, err := xpath.Evaluate(doc, `id("foo bar")`)
+		require.NoError(t, err)
+		require.Equal(t, xpath.NodeSetResult, r.Type)
+		require.Len(t, r.NodeSet, 2)
+	})
+
+	t.Run("nonexistent id", func(t *testing.T) {
+		r, err := xpath.Evaluate(doc, `id("nonexistent")`)
+		require.NoError(t, err)
+		require.Equal(t, xpath.NodeSetResult, r.Type)
+		require.Len(t, r.NodeSet, 0)
+	})
+}
+
+func TestEvalIDWithDTD(t *testing.T) {
+	// DTD-declared ID attribute
+	doc := parseXML(t, `<!DOCTYPE root [
+		<!ELEMENT root (item*)>
+		<!ELEMENT item (#PCDATA)>
+		<!ATTLIST item myid ID #IMPLIED>
+	]>
+	<root><item myid="x1">first</item><item myid="x2">second</item></root>`)
+
+	r, err := xpath.Evaluate(doc, `id("x1")`)
+	require.NoError(t, err)
+	require.Equal(t, xpath.NodeSetResult, r.Type)
+	require.Len(t, r.NodeSet, 1)
+	require.Equal(t, "item", r.NodeSet[0].Name())
+}
+
+func TestEvalIDDeduplicates(t *testing.T) {
+	// Same ID repeated should not produce duplicate nodes
+	doc := parseXML(t, `<root><a xml:id="foo">A</a></root>`)
+	r, err := xpath.Evaluate(doc, `id("foo foo")`)
+	require.NoError(t, err)
+	require.Equal(t, xpath.NodeSetResult, r.Type)
+	require.Len(t, r.NodeSet, 1)
+}

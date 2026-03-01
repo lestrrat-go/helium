@@ -193,26 +193,28 @@ func fnID(ctx *evalContext, args []*Result) (*Result, error) {
 		return &Result{Type: NodeSetResult}, nil
 	}
 
-	// Get document and DTD
+	// Get document
 	root := documentRoot(ctx.node)
 	doc, ok := root.(*helium.Document)
 	if !ok {
 		return &Result{Type: NodeSetResult}, nil
 	}
-	dtd := doc.IntSubset()
-	if dtd == nil {
-		return &Result{Type: NodeSetResult}, nil
-	}
 
-	// Build set of target IDs for fast lookup
-	targets := make(map[string]bool, len(idValues))
-	for _, v := range idValues {
-		targets[v] = true
-	}
-
-	// Walk the document tree looking for elements with ID attributes
+	// Use Document.GetElementByID which supports both xml:id and
+	// DTD-declared ID attributes, matching libxml2's xmlGetID behavior.
+	seen := make(map[*helium.Element]struct{}, len(idValues))
 	var result []helium.Node
-	collectIDNodes(root, dtd, targets, &result)
+	for _, id := range idValues {
+		elem := doc.GetElementByID(id)
+		if elem == nil {
+			continue
+		}
+		if _, dup := seen[elem]; dup {
+			continue
+		}
+		seen[elem] = struct{}{}
+		result = append(result, elem)
+	}
 
 	return &Result{Type: NodeSetResult, NodeSet: result}, nil
 }
@@ -227,35 +229,6 @@ func collectIDValues(r *Result) []string {
 		return vals
 	}
 	return strings.Fields(resultToString(r))
-}
-
-// collectIDNodes recursively searches the subtree rooted at n for elements whose
-// DTD-declared ID attribute matches one of the target values.
-func collectIDNodes(n helium.Node, dtd *helium.DTD, targets map[string]bool, result *[]helium.Node) {
-	if elem, ok := n.(*helium.Element); ok {
-		checkElementIDMatch(elem, dtd, targets, result)
-	}
-	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
-		collectIDNodes(c, dtd, targets, result)
-	}
-}
-
-// checkElementIDMatch checks whether elem has a DTD-declared ID attribute
-// whose value is one of the target IDs.
-func checkElementIDMatch(elem *helium.Element, dtd *helium.DTD, targets map[string]bool, result *[]helium.Node) {
-	for _, adecl := range dtd.AttributesForElement(elem.LocalName()) {
-		if adecl.AType() != helium.AttrID {
-			continue
-		}
-		for _, attr := range elem.Attributes() {
-			if attr.LocalName() == adecl.Name() {
-				if targets[attr.Value()] {
-					*result = append(*result, elem)
-				}
-				break
-			}
-		}
-	}
 }
 
 func fnLocalName(ctx *evalContext, args []*Result) (*Result, error) {
