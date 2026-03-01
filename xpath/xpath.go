@@ -120,14 +120,14 @@ type FunctionContext interface {
 	Position() int
 	Size() int
 	Namespace(prefix string) (string, bool)
-	Variable(name string) (interface{}, bool)
+	Variable(name string) (any, bool)
 }
 
 // Context carries namespace bindings, variable bindings, and custom function
 // registrations for expression evaluation.
 type Context struct {
 	Namespaces  map[string]string          // prefix → URI
-	Variables   map[string]interface{}     // name → value ([]helium.Node, string, float64, bool)
+	Variables   map[string]any     // name → value ([]helium.Node, string, float64, bool)
 	OpLimit     int                        // 0 = unlimited (default); matches libxml2's opLimit
 	Functions   map[string]Function        // unqualified custom functions
 	FunctionsNS map[QualifiedName]Function // namespace-qualified custom functions

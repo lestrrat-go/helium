@@ -108,10 +108,10 @@ func (t *treeBuilder) IgnorableWhitespace(ch []byte) error {
 	return t.Characters(ch)
 }
 
-func (t *treeBuilder) Error(msg string, args ...interface{}) error {
+func (t *treeBuilder) Error(msg string, args ...any) error {
 	return nil
 }
 
-func (t *treeBuilder) Warning(msg string, args ...interface{}) error {
+func (t *treeBuilder) Warning(msg string, args ...any) error {
 	return nil
 }

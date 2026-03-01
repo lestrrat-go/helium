@@ -862,7 +862,7 @@ func (p *parser) parseCharRef() {
 }
 
 // emitError fires a SAX Error event unless suppressed by WithNoError.
-func (p *parser) emitError(msg string, args ...interface{}) error {
+func (p *parser) emitError(msg string, args ...any) error {
 	if p.cfg.noError {
 		return nil
 	}
