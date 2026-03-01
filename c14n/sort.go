@@ -1,7 +1,8 @@
 package c14n
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -15,8 +16,8 @@ type nsSortEntry struct {
 // sortNamespaces sorts namespace declarations per C14N rules:
 // by prefix lexicographically, with empty prefix (default namespace) first.
 func sortNamespaces(nss []nsSortEntry) {
-	sort.Slice(nss, func(i, j int) bool {
-		return nss[i].prefix < nss[j].prefix
+	slices.SortFunc(nss, func(a, b nsSortEntry) int {
+		return cmp.Compare(a.prefix, b.prefix)
 	})
 }
 
@@ -32,22 +33,21 @@ type attrSortEntry struct {
 // no-namespace attributes first (sorted by name), then namespaced
 // attributes sorted by (namespace URI, local name).
 func sortAttributes(attrs []attrSortEntry) {
-	sort.Slice(attrs, func(i, j int) bool {
-		ai, aj := attrs[i], attrs[j]
+	slices.SortFunc(attrs, func(a, b attrSortEntry) int {
 		// No-namespace attrs come first
-		if ai.nsURI == "" && aj.nsURI != "" {
-			return true
+		if a.nsURI == "" && b.nsURI != "" {
+			return -1
 		}
-		if ai.nsURI != "" && aj.nsURI == "" {
-			return false
+		if a.nsURI != "" && b.nsURI == "" {
+			return 1
 		}
-		if ai.nsURI == "" && aj.nsURI == "" {
-			return ai.localName < aj.localName
+		if a.nsURI == "" && b.nsURI == "" {
+			return cmp.Compare(a.localName, b.localName)
 		}
 		// Both have namespaces: sort by URI then local name
-		if ai.nsURI != aj.nsURI {
-			return ai.nsURI < aj.nsURI
+		if c := cmp.Compare(a.nsURI, b.nsURI); c != 0 {
+			return c
 		}
-		return ai.localName < aj.localName
+		return cmp.Compare(a.localName, b.localName)
 	})
 }
