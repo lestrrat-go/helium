@@ -175,9 +175,15 @@ func TestCascadingParts(t *testing.T) {
 		require.Equal(t, "image", nodes[0].(*helium.Element).LocalName())
 	})
 
-	t.Run("error in first part falls back to second", func(t *testing.T) {
-		// xpointer with invalid XPath errors, element() succeeds
-		nodes, err := Evaluate(doc, "xpointer(:::invalid)element(/1/1/1)")
+	t.Run("syntax error aborts cascade", func(t *testing.T) {
+		// xpointer with invalid XPath is a syntax error — cascade aborts
+		_, err := Evaluate(doc, "xpointer(:::invalid)element(/1/1/1)")
+		require.Error(t, err)
+	})
+
+	t.Run("unknown scheme continues cascade", func(t *testing.T) {
+		// unknown scheme allows fallback to next part
+		nodes, err := Evaluate(doc, "bogus(data)element(/1/1/1)")
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 		require.Equal(t, "image", nodes[0].(*helium.Element).LocalName())
