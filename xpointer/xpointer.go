@@ -1,6 +1,7 @@
 package xpointer
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -8,6 +9,11 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath"
 )
+
+// errUnknownScheme is returned by evaluatePart for unrecognized XPointer
+// schemes. The cascade continues past unknown-scheme errors but aborts on
+// syntax errors from known schemes, matching libxml2 behavior.
+var errUnknownScheme = errors.New("xpointer: unknown scheme")
 
 // xptrPart represents a single parsed XPointer scheme(body) part.
 type xptrPart struct {
@@ -51,6 +57,11 @@ func Evaluate(doc *helium.Document, expr string) ([]helium.Node, error) {
 
 		nodes, err := evaluatePart(doc, p, nsMap)
 		if err != nil {
+			// Unknown schemes allow cascade to continue (try next part).
+			// Syntax errors from known schemes abort immediately.
+			if !errors.Is(err, errUnknownScheme) {
+				return nil, err
+			}
 			lastErr = err
 			continue
 		}
@@ -84,7 +95,7 @@ func evaluatePart(doc *helium.Document, p xptrPart, nsMap map[string]string) ([]
 		}
 		return []helium.Node{elem}, nil
 	default:
-		return nil, fmt.Errorf("xpointer: unsupported scheme %q", p.scheme)
+		return nil, fmt.Errorf("%w: %s", errUnknownScheme, p.scheme)
 	}
 }
 
