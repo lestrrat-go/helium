@@ -310,182 +310,182 @@ func New() *SAX2 {
 	return &SAX2{}
 }
 
-func (s SAX2) AttributeDecl(ctx Context, elem string, fullname string, typ int, def int, defaultValue string, tree Enumeration) error {
+func (s *SAX2) AttributeDecl(ctx Context, elem string, fullname string, typ int, def int, defaultValue string, tree Enumeration) error {
 	if h := s.AttributeDeclHandler; h != nil {
 		return h.Handle(ctx, elem, fullname, typ, def, defaultValue, tree)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) CDataBlock(ctx Context, value []byte) error {
+func (s *SAX2) CDataBlock(ctx Context, value []byte) error {
 	if h := s.CDataBlockHandler; h != nil {
 		return h.Handle(ctx, value)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) Characters(ctx Context, ch []byte) error {
+func (s *SAX2) Characters(ctx Context, ch []byte) error {
 	if h := s.CharactersHandler; h != nil {
 		return h.Handle(ctx, ch)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) Comment(ctx Context, value []byte) error {
+func (s *SAX2) Comment(ctx Context, value []byte) error {
 	if h := s.CommentHandler; h != nil {
 		return h.Handle(ctx, value)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) ElementDecl(ctx Context, name string, typ int, content ElementContent) error {
+func (s *SAX2) ElementDecl(ctx Context, name string, typ int, content ElementContent) error {
 	if h := s.ElementDeclHandler; h != nil {
 		return h.Handle(ctx, name, typ, content)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) EndDocument(ctx Context) error {
+func (s *SAX2) EndDocument(ctx Context) error {
 	if h := s.EndDocumentHandler; h != nil {
 		return h.Handle(ctx)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) EndElementNS(ctx Context, localname string, prefix string, uri string) error {
+func (s *SAX2) EndElementNS(ctx Context, localname string, prefix string, uri string) error {
 	if h := s.EndElementNSHandler; h != nil {
 		return h.Handle(ctx, localname, prefix, uri)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) EntityDecl(ctx Context, name string, typ int, publicID string, systemID string, content string) error {
+func (s *SAX2) EntityDecl(ctx Context, name string, typ int, publicID string, systemID string, content string) error {
 	if h := s.EntityDeclHandler; h != nil {
 		return h.Handle(ctx, name, typ, publicID, systemID, content)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) Error(ctx Context, err error) error {
+func (s *SAX2) Error(ctx Context, err error) error {
 	if h := s.ErrorHandler; h != nil {
 		return h.Handle(ctx, err)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) ExternalSubset(ctx Context, name string, externalID string, systemID string) error {
+func (s *SAX2) ExternalSubset(ctx Context, name string, externalID string, systemID string) error {
 	if h := s.ExternalSubsetHandler; h != nil {
 		return h.Handle(ctx, name, externalID, systemID)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) GetEntity(ctx Context, name string) (Entity, error) {
+func (s *SAX2) GetEntity(ctx Context, name string) (Entity, error) {
 	if h := s.GetEntityHandler; h != nil {
 		return h.Handle(ctx, name)
 	}
 	return nil, ErrHandlerUnspecified;
 }
 
-func (s SAX2) GetParameterEntity(ctx Context, name string) (Entity, error) {
+func (s *SAX2) GetParameterEntity(ctx Context, name string) (Entity, error) {
 	if h := s.GetParameterEntityHandler; h != nil {
 		return h.Handle(ctx, name)
 	}
 	return nil, ErrHandlerUnspecified;
 }
 
-func (s SAX2) HasExternalSubset(ctx Context) (bool, error) {
+func (s *SAX2) HasExternalSubset(ctx Context) (bool, error) {
 	if h := s.HasExternalSubsetHandler; h != nil {
 		return h.Handle(ctx)
 	}
 	return false, ErrHandlerUnspecified;
 }
 
-func (s SAX2) HasInternalSubset(ctx Context) (bool, error) {
+func (s *SAX2) HasInternalSubset(ctx Context) (bool, error) {
 	if h := s.HasInternalSubsetHandler; h != nil {
 		return h.Handle(ctx)
 	}
 	return false, ErrHandlerUnspecified;
 }
 
-func (s SAX2) IgnorableWhitespace(ctx Context, ch []byte) error {
+func (s *SAX2) IgnorableWhitespace(ctx Context, ch []byte) error {
 	if h := s.IgnorableWhitespaceHandler; h != nil {
 		return h.Handle(ctx, ch)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) InternalSubset(ctx Context, name string, externalID string, systemID string) error {
+func (s *SAX2) InternalSubset(ctx Context, name string, externalID string, systemID string) error {
 	if h := s.InternalSubsetHandler; h != nil {
 		return h.Handle(ctx, name, externalID, systemID)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) IsStandalone(ctx Context) (bool, error) {
+func (s *SAX2) IsStandalone(ctx Context) (bool, error) {
 	if h := s.IsStandaloneHandler; h != nil {
 		return h.Handle(ctx)
 	}
 	return false, ErrHandlerUnspecified;
 }
 
-func (s SAX2) NotationDecl(ctx Context, name string, publicID string, systemID string) error {
+func (s *SAX2) NotationDecl(ctx Context, name string, publicID string, systemID string) error {
 	if h := s.NotationDeclHandler; h != nil {
 		return h.Handle(ctx, name, publicID, systemID)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) ProcessingInstruction(ctx Context, target string, data string) error {
+func (s *SAX2) ProcessingInstruction(ctx Context, target string, data string) error {
 	if h := s.ProcessingInstructionHandler; h != nil {
 		return h.Handle(ctx, target, data)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) Reference(ctx Context, name string) error {
+func (s *SAX2) Reference(ctx Context, name string) error {
 	if h := s.ReferenceHandler; h != nil {
 		return h.Handle(ctx, name)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) ResolveEntity(ctx Context, publicID string, systemID string) (ParseInput, error) {
+func (s *SAX2) ResolveEntity(ctx Context, publicID string, systemID string) (ParseInput, error) {
 	if h := s.ResolveEntityHandler; h != nil {
 		return h.Handle(ctx, publicID, systemID)
 	}
 	return nil, ErrHandlerUnspecified;
 }
 
-func (s SAX2) SetDocumentLocator(ctx Context, locator DocumentLocator) error {
+func (s *SAX2) SetDocumentLocator(ctx Context, locator DocumentLocator) error {
 	if h := s.SetDocumentLocatorHandler; h != nil {
 		return h.Handle(ctx, locator)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) StartDocument(ctx Context) error {
+func (s *SAX2) StartDocument(ctx Context) error {
 	if h := s.StartDocumentHandler; h != nil {
 		return h.Handle(ctx)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) StartElementNS(ctx Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error {
+func (s *SAX2) StartElementNS(ctx Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error {
 	if h := s.StartElementNSHandler; h != nil {
 		return h.Handle(ctx, localname, prefix, uri, namespaces, attrs)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) UnparsedEntityDecl(ctx Context, name string, publicID string, systemID string, notationName string) error {
+func (s *SAX2) UnparsedEntityDecl(ctx Context, name string, publicID string, systemID string, notationName string) error {
 	if h := s.UnparsedEntityDeclHandler; h != nil {
 		return h.Handle(ctx, name, publicID, systemID, notationName)
 	}
 	return ErrHandlerUnspecified;
 }
 
-func (s SAX2) Warning(ctx Context, err error) error {
+func (s *SAX2) Warning(ctx Context, err error) error {
 	if h := s.WarningHandler; h != nil {
 		return h.Handle(ctx, err)
 	}
