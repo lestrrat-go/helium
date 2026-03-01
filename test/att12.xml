@@ -1,0 +1,8 @@
+<!DOCTYPE doc [
+<!ENTITY img1 SYSTEM "img1.gif" NDATA gif>
+<!ENTITY img2 SYSTEM "img2.gif" NDATA gif>
+<!NOTATION gif SYSTEM "viewer.exe">
+<!ATTLIST doc imgs ENTITIES #IMPLIED>
+<!ELEMENT doc (#PCDATA)>
+]>
+<doc imgs="img1 img2"/>

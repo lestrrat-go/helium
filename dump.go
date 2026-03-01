@@ -759,6 +759,8 @@ func (d *Dumper) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
 		_, _ = io.WriteString(out, " IDREFS")
 	case AttrEntity:
 		_, _ = io.WriteString(out, " ENTITY")
+	case AttrEntities:
+		_, _ = io.WriteString(out, " ENTITIES")
 	case AttrNmtoken:
 		_, _ = io.WriteString(out, " NMTOKEN")
 	case AttrNmtokens:
