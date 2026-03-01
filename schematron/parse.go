@@ -232,6 +232,7 @@ func parseMessageElement(childElem *helium.Element, parts []messagePart, errors 
 	case "value-of":
 		sel := getAttr(childElem, "select")
 		if sel == "" {
+			fmt.Fprintf(errors, "value-of has no select attribute\n")
 			return parts
 		}
 		compiled, err := xpath.Compile(sel)

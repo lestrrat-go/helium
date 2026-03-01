@@ -91,6 +91,15 @@ func TestCompileMultipleErrors(t *testing.T) {
 	require.True(t, strings.Contains(errs, "Pattern has no rule element"))
 }
 
+func TestCompileValueOfNoSelect(t *testing.T) {
+	schema := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern>
+			<rule context="*"><assert test="true()">val: <value-of/></assert></rule>
+		</pattern>
+	</schema>`)
+	require.Contains(t, schema.CompileErrors(), "value-of has no select attribute")
+}
+
 func TestXpathResultToStringBoolean(t *testing.T) {
 	t.Run("true", func(t *testing.T) {
 		r := &xpath.Result{Type: xpath.BooleanResult, Boolean: true}
