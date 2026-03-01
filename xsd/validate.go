@@ -80,7 +80,10 @@ func validateRootElement(elem *helium.Element, schema *Schema, filename string, 
 		return nil
 	}
 
-	td := resolveXsiType(elem, edecl.Type, schema)
+	td, err := resolveXsiType(elem, edecl.Type, schema, filename, out)
+	if err != nil {
+		return err
+	}
 	if td != nil && td.Abstract {
 		msg := "The type definition is abstract."
 		out.WriteString(validityError(filename, elem.Line(), elemDisplayName(elem), msg))
@@ -442,10 +445,29 @@ func validateNilledElement(elem *helium.Element, edecl *ElementDecl, td *TypeDef
 	return nil
 }
 
+// isDerivedFrom returns true if derived is the same type as base, or if any
+// ancestor in derived's BaseType chain is base. Also returns true if base is
+// xs:anyType (the ur-type from which everything derives).
+func isDerivedFrom(derived, base *TypeDef) bool {
+	if derived == base {
+		return true
+	}
+	if base.Name.Local == "anyType" && base.Name.NS == xsdNS {
+		return true
+	}
+	for cur := derived.BaseType; cur != nil; cur = cur.BaseType {
+		if cur == base {
+			return true
+		}
+	}
+	return false
+}
+
 // resolveXsiType checks if the element has an xsi:type attribute and, if so,
 // resolves it to a type definition in the schema. Returns the resolved type
-// or the original declaredType if no xsi:type is present or resolution fails.
-func resolveXsiType(elem *helium.Element, declaredType *TypeDef, schema *Schema) *TypeDef {
+// or the original declaredType if no xsi:type is present. Returns an error
+// if the xsi:type value doesn't resolve or is not derived from the declared type.
+func resolveXsiType(elem *helium.Element, declaredType *TypeDef, schema *Schema, filename string, out *strings.Builder) (*TypeDef, error) {
 	var xsiTypeVal string
 	for _, a := range elem.Attributes() {
 		if a.URI() == xsiNS && a.LocalName() == "type" {
@@ -454,7 +476,7 @@ func resolveXsiType(elem *helium.Element, declaredType *TypeDef, schema *Schema)
 		}
 	}
 	if xsiTypeVal == "" {
-		return declaredType
+		return declaredType, nil
 	}
 
 	// Parse QName value: may be "prefix:local" or just "local".
@@ -474,8 +496,19 @@ func resolveXsiType(elem *helium.Element, declaredType *TypeDef, schema *Schema)
 		// Try with schema's target namespace.
 		td, ok = schema.LookupType(local, schema.TargetNamespace())
 	}
-	if ok {
-		return td
+	if !ok {
+		msg := fmt.Sprintf("The value '%s' of the xsi:type attribute does not resolve to a type definition.", xsiTypeVal)
+		out.WriteString(validityError(filename, elem.Line(), elemDisplayName(elem), msg))
+		return nil, fmt.Errorf("xsi:type not found")
 	}
-	return declaredType
+
+	// Check derivation: xsi:type must be the same as or derived from the declared type.
+	if declaredType != nil && !isDerivedFrom(td, declaredType) {
+		msg := fmt.Sprintf("The type definition '%s' is not validly derived from the type definition '%s'.",
+			typeDisplayName(td), typeDisplayName(declaredType))
+		out.WriteString(validityError(filename, elem.Line(), elemDisplayName(elem), msg))
+		return nil, fmt.Errorf("xsi:type not derived")
+	}
+
+	return td, nil
 }

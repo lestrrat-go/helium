@@ -74,6 +74,128 @@ func TestAbstractTypeValidation(t *testing.T) {
 		require.NotContains(t, result, "fails to validate")
 	})
 
+	t.Run("unrelated xsi:type rejected", func(t *testing.T) {
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="TypeA">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="TypeB">
+    <xs:sequence>
+      <xs:element name="b" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="root" type="TypeA"/>
+</xs:schema>`
+
+		instanceXML := `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:type="TypeB"><b>hello</b></root>`
+
+		schemaDOC, err := helium.Parse([]byte(schemaXML))
+		require.NoError(t, err)
+
+		schema, err := xsd.Compile(schemaDOC)
+		require.NoError(t, err)
+
+		doc, err := helium.Parse([]byte(instanceXML))
+		require.NoError(t, err)
+
+		result := xsd.Validate(doc, schema)
+		require.Contains(t, result, "is not validly derived from")
+		require.Contains(t, result, "fails to validate")
+	})
+
+	t.Run("non-existent xsi:type rejected", func(t *testing.T) {
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="TypeA">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="root" type="TypeA"/>
+</xs:schema>`
+
+		instanceXML := `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:type="NoSuchType"><a>hello</a></root>`
+
+		schemaDOC, err := helium.Parse([]byte(schemaXML))
+		require.NoError(t, err)
+
+		schema, err := xsd.Compile(schemaDOC)
+		require.NoError(t, err)
+
+		doc, err := helium.Parse([]byte(instanceXML))
+		require.NoError(t, err)
+
+		result := xsd.Validate(doc, schema)
+		require.Contains(t, result, "does not resolve to a type definition")
+		require.Contains(t, result, "fails to validate")
+	})
+
+	t.Run("same xsi:type as declared accepted", func(t *testing.T) {
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="TypeA">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="root" type="TypeA"/>
+</xs:schema>`
+
+		instanceXML := `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:type="TypeA"><a>hello</a></root>`
+
+		schemaDOC, err := helium.Parse([]byte(schemaXML))
+		require.NoError(t, err)
+
+		schema, err := xsd.Compile(schemaDOC)
+		require.NoError(t, err)
+
+		doc, err := helium.Parse([]byte(instanceXML))
+		require.NoError(t, err)
+
+		result := xsd.Validate(doc, schema)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+	})
+
+	t.Run("restriction xsi:type accepted", func(t *testing.T) {
+		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="BaseType">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="RestrictedType">
+    <xs:complexContent>
+      <xs:restriction base="BaseType">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="BaseType"/>
+</xs:schema>`
+
+		instanceXML := `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:type="RestrictedType"><a>hello</a></root>`
+
+		schemaDOC, err := helium.Parse([]byte(schemaXML))
+		require.NoError(t, err)
+
+		schema, err := xsd.Compile(schemaDOC)
+		require.NoError(t, err)
+
+		doc, err := helium.Parse([]byte(instanceXML))
+		require.NoError(t, err)
+
+		result := xsd.Validate(doc, schema)
+		require.Contains(t, result, "validates")
+		require.NotContains(t, result, "fails to validate")
+	})
+
 	t.Run("non-abstract type accepted", func(t *testing.T) {
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="myType">
