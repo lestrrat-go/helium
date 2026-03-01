@@ -224,6 +224,19 @@ func (n *Element) GetAttributeNS(localName, nsURI string) (string, bool) {
 	return "", false
 }
 
+// GetAttributeNodeNS returns the Attribute node with the given local name and
+// namespace URI, or nil if not found. This is the equivalent of libxml2's
+// xmlHasNsProp, returning the node itself for further inspection (e.g.,
+// checking atype or whether it is a default attribute).
+func (n *Element) GetAttributeNodeNS(localName, nsURI string) *Attribute {
+	for p := n.properties; p != nil; p = p.NextAttribute() {
+		if p.LocalName() == localName && p.URI() == nsURI {
+			return p
+		}
+	}
+	return nil
+}
+
 // RemoveAttribute removes the attribute with the given name from the element.
 // Returns true if an attribute was removed.
 func (n *Element) RemoveAttribute(name string) bool {
