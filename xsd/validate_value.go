@@ -255,11 +255,13 @@ func validateBuiltinValue(value, builtinLocal string) error {
 	switch builtinLocal {
 	case "decimal":
 		return validateDecimal(value)
-	case "integer", "nonPositiveInteger", "negativeInteger",
+	case "integer":
+		return validateInteger(value)
+	case "nonPositiveInteger", "negativeInteger",
 		"long", "int", "short", "byte",
 		"nonNegativeInteger", "unsignedLong", "unsignedInt", "unsignedShort", "unsignedByte",
 		"positiveInteger":
-		return validateInteger(value)
+		return validateIntegerWithRange(value, builtinLocal)
 	case "hexBinary":
 		return validateHexBinary(value)
 	case "date":
@@ -328,6 +330,53 @@ var integerRegex = regexp.MustCompile(`^[+-]?\d+$`)
 func validateInteger(value string) error {
 	if !integerRegex.MatchString(value) {
 		return fmt.Errorf("invalid integer")
+	}
+	return nil
+}
+
+// integerRange defines inclusive min/max bounds for integer subtypes.
+type integerRange struct {
+	min *big.Int // nil means no lower bound
+	max *big.Int // nil means no upper bound
+}
+
+var integerRanges = map[string]integerRange{
+	"byte":               {big.NewInt(-128), big.NewInt(127)},
+	"short":              {big.NewInt(-32768), big.NewInt(32767)},
+	"int":                {big.NewInt(-2147483648), big.NewInt(2147483647)},
+	"long":               {newBigInt("-9223372036854775808"), newBigInt("9223372036854775807")},
+	"unsignedByte":       {big.NewInt(0), big.NewInt(255)},
+	"unsignedShort":      {big.NewInt(0), big.NewInt(65535)},
+	"unsignedInt":        {big.NewInt(0), newBigInt("4294967295")},
+	"unsignedLong":       {big.NewInt(0), newBigInt("18446744073709551615")},
+	"nonNegativeInteger": {big.NewInt(0), nil},
+	"nonPositiveInteger": {nil, big.NewInt(0)},
+	"positiveInteger":    {big.NewInt(1), nil},
+	"negativeInteger":    {nil, big.NewInt(-1)},
+}
+
+func newBigInt(s string) *big.Int {
+	n, _ := new(big.Int).SetString(s, 10)
+	return n
+}
+
+func validateIntegerWithRange(value, typeName string) error {
+	if err := validateInteger(value); err != nil {
+		return err
+	}
+	r, ok := integerRanges[typeName]
+	if !ok {
+		return nil
+	}
+	n, ok := new(big.Int).SetString(value, 10)
+	if !ok {
+		return fmt.Errorf("invalid integer")
+	}
+	if r.min != nil && n.Cmp(r.min) < 0 {
+		return fmt.Errorf("value %s is out of range for %s", value, typeName)
+	}
+	if r.max != nil && n.Cmp(r.max) > 0 {
+		return fmt.Errorf("value %s is out of range for %s", value, typeName)
 	}
 	return nil
 }
