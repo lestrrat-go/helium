@@ -120,7 +120,7 @@ func (s $klass) $func($args) $ret {
 \tif h := s.${func}Handler; h != nil {
 \t\treturn h.Handle($ba)
 \t}
-\treturn $no_handler_ret;
+\treturn $no_handler_ret
 }
 
 EOM
