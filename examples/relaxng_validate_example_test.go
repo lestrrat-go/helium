@@ -1,0 +1,41 @@
+package examples_test
+
+import (
+	"fmt"
+
+	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/relaxng"
+)
+
+func Example_relaxng_validate() {
+	// Compile a small RELAX NG schema from XML syntax.
+	schemaDoc, err := helium.Parse([]byte(
+		`<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="book">
+      <element name="title"><text/></element>
+    </element>
+  </start>
+</grammar>`))
+	if err != nil {
+		fmt.Printf("schema parse failed: %s\n", err)
+		return
+	}
+
+	grammar, err := relaxng.Compile(schemaDoc)
+	if err != nil {
+		fmt.Printf("schema compile failed: %s\n", err)
+		return
+	}
+
+	doc, err := helium.Parse([]byte(`<book><title>Helium</title></book>`))
+	if err != nil {
+		fmt.Printf("xml parse failed: %s\n", err)
+		return
+	}
+
+	result := relaxng.Validate(doc, grammar, relaxng.WithFilename("doc.xml"))
+	fmt.Print(result)
+	// Output:
+	// doc.xml validates
+}
