@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/pdebug"
@@ -122,19 +121,30 @@ func isValidNmtoken(s string) bool {
 	return true
 }
 
-// isValidNameStartChar mirrors the XML spec NameStartChar production.
-// We reuse the same logic as isNameStartChar in parserctx.go but without
-// the colon (colons are only allowed in qualified names, not in attribute
-// default values for ID/IDREF/etc).
+// isValidNameStartChar checks the XML 1.0 NameStartChar production (without colon).
+// NameStartChar ::= ":" | [A-Z] | "_" | [a-z] | [#xC0-#xD6] | [#xD8-#xF6]
+//
+//	| [#xF8-#x2FF] | [#x370-#x37D] | [#x37F-#x1FFF] | [#x200C-#x200D]
+//	| [#x2070-#x218F] | [#x2C00-#x2FEF] | [#x3001-#xD7FF]
+//	| [#xF900-#xFDCF] | [#xFDF0-#xFFFD] | [#x10000-#xEFFFF]
 func isValidNameStartChar(r rune) bool {
-	return unicode.IsLetter(r) || r == '_'
+	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || r == '_' ||
+		(r >= 0xC0 && r <= 0xD6) || (r >= 0xD8 && r <= 0xF6) ||
+		(r >= 0xF8 && r <= 0x2FF) || (r >= 0x370 && r <= 0x37D) ||
+		(r >= 0x37F && r <= 0x1FFF) || (r >= 0x200C && r <= 0x200D) ||
+		(r >= 0x2070 && r <= 0x218F) || (r >= 0x2C00 && r <= 0x2FEF) ||
+		(r >= 0x3001 && r <= 0xD7FF) || (r >= 0xF900 && r <= 0xFDCF) ||
+		(r >= 0xFDF0 && r <= 0xFFFD) || (r >= 0x10000 && r <= 0xEFFFF)
 }
 
-// isValidNameChar mirrors the XML spec NameChar production (without colon).
+// isValidNameChar checks the XML 1.0 NameChar production (without colon).
+// NameChar ::= NameStartChar | "-" | "." | [0-9] | #xB7
+//
+//	| [#x0300-#x036F] | [#x203F-#x2040]
 func isValidNameChar(r rune) bool {
-	return r == '.' || r == '-' || r == '_' ||
-		unicode.IsLetter(r) || unicode.IsDigit(r) ||
-		unicode.In(r, unicode.Extender)
+	return isValidNameStartChar(r) ||
+		(r >= '0' && r <= '9') || r == '-' || r == '.' ||
+		r == 0xB7 || (r >= 0x0300 && r <= 0x036F) || (r >= 0x203F && r <= 0x2040)
 }
 
 // validateAttributeValueInternal validates that defvalue is legal for the
