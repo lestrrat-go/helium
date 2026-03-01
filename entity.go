@@ -154,6 +154,14 @@ func (e *Entity) EntityType() int {
 	return int(e.entityType)
 }
 
+func (e *Entity) ExternalID() string {
+	return e.externalID
+}
+
+func (e *Entity) SystemID() string {
+	return e.systemID
+}
+
 func (e *Entity) Content() []byte {
 	return []byte(e.content)
 }

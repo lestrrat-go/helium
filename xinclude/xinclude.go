@@ -62,6 +62,12 @@ func WithParseFlags(flags helium.ParseOption) Option {
 	}
 }
 
+// WithWarningHandler sets a callback for non-fatal warnings such as
+// entity definition mismatches during XInclude entity merging.
+func WithWarningHandler(fn func(msg string)) Option {
+	return func(p *processor) { p.warnHandler = fn }
+}
+
 type docCacheEntry struct {
 	data []byte // raw bytes for re-parsing
 	err  error
@@ -77,9 +83,10 @@ type processor struct {
 	noBaseFixup bool
 	resolver    Resolver
 	baseURI     string
-	expanding   map[string]bool       // circular inclusion detection (set during recursive expansion)
-	docCache    map[string]docCacheEntry // cached raw bytes for XML documents
-	txtCache    map[string]txtCacheEntry // cached text inclusions
+	expanding   map[string]bool          // circular inclusion detection (set during recursive expansion)
+	docCache    map[string]docCacheEntry  // cached raw bytes for XML documents
+	txtCache    map[string]txtCacheEntry  // cached text inclusions
+	warnHandler func(msg string)
 	depth       int
 	count       int
 }
@@ -255,7 +262,7 @@ func (p *processor) includeXML(inc *helium.Element, uri string, incBase string) 
 		return err
 	}
 
-	propagateDTD(doc, inc.OwnerDocument())
+	p.mergeEntities(doc, inc.OwnerDocument())
 
 	// Collect top-level children from included document, skipping DTD nodes
 	var nodes []helium.Node
@@ -336,7 +343,7 @@ func (p *processor) includeXMLWithXPointer(inc *helium.Element, uri string, xptr
 		}
 	}
 
-	propagateDTD(doc, inc.OwnerDocument())
+	p.mergeEntities(doc, inc.OwnerDocument())
 
 	// Evaluate XPointer expression against the document
 	nodes, err := xpointer.Evaluate(doc, xptrExpr)
@@ -419,21 +426,69 @@ func (p *processor) includeXMLWithXPointer(inc *helium.Element, uri string, xptr
 	return nil
 }
 
-// propagateDTD creates a minimal internal subset on the target document
-// when the included document has one and the target does not. This matches
-// libxml2's behavior of preserving DOCTYPE across XInclude boundaries.
-func propagateDTD(src, dst *helium.Document) {
-	if src.IntSubset() == nil || dst.IntSubset() != nil {
+// mergeEntities merges general entities from the included document's DTD
+// subsets into the target document's internal subset, matching libxml2's
+// xmlXIncludeMergeEntities behavior. Creates a minimal internal subset on
+// the target if it doesn't have one and the source does.
+func (p *processor) mergeEntities(src, dst *helium.Document) {
+	srcInt := src.IntSubset()
+	srcExt := src.ExtSubset()
+	if srcInt == nil && srcExt == nil {
 		return
 	}
-	for c := dst.FirstChild(); c != nil; c = c.NextSibling() {
-		if c.Type() == helium.ElementNode {
-			if _, err := dst.CreateInternalSubset(c.(*helium.Element).LocalName(), "", ""); err != nil {
-				return
+
+	// Ensure target has an internal subset
+	dstInt := dst.IntSubset()
+	if dstInt == nil {
+		for c := dst.FirstChild(); c != nil; c = c.NextSibling() {
+			if c.Type() == helium.ElementNode {
+				var err error
+				dstInt, err = dst.CreateInternalSubset(c.(*helium.Element).LocalName(), "", "")
+				if err != nil {
+					return
+				}
+				break
 			}
+		}
+		if dstInt == nil {
 			return
 		}
 	}
+
+	merge := func(srcDTD *helium.DTD) {
+		if srcDTD == nil {
+			return
+		}
+		srcDTD.ForEachEntity(func(name string, srcEnt *helium.Entity) {
+			existing, _ := dstInt.AddEntity(name, helium.EntityType(srcEnt.EntityType()), srcEnt.ExternalID(), srcEnt.SystemID(), string(srcEnt.Content()))
+			if existing == nil {
+				return
+			}
+			// Check for definition mismatch (first-definition-wins, warn on conflict)
+			if p.warnHandler == nil {
+				return
+			}
+			if existing.EntityType() != srcEnt.EntityType() {
+				p.warnHandler(fmt.Sprintf("xi:include: entity '%s' definition mismatch", name))
+				return
+			}
+			if srcEnt.SystemID() != "" && existing.SystemID() != "" && existing.SystemID() != srcEnt.SystemID() {
+				p.warnHandler(fmt.Sprintf("xi:include: entity '%s' definition mismatch", name))
+				return
+			}
+			if srcEnt.ExternalID() != "" && existing.ExternalID() != "" && existing.ExternalID() != srcEnt.ExternalID() {
+				p.warnHandler(fmt.Sprintf("xi:include: entity '%s' definition mismatch", name))
+				return
+			}
+			if len(srcEnt.Content()) > 0 && len(existing.Content()) > 0 && string(existing.Content()) != string(srcEnt.Content()) {
+				p.warnHandler(fmt.Sprintf("xi:include: entity '%s' definition mismatch", name))
+				return
+			}
+		})
+	}
+
+	merge(srcInt)
+	merge(srcExt)
 }
 
 func (p *processor) loadXMLDoc(uri string, substituteEntities bool) (*helium.Document, error) {
