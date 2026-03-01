@@ -73,6 +73,7 @@ func (n *AttributeDecl) Elem() string {
 
 func newAttribute(name string, ns *Namespace) *Attribute {
 	attr := &Attribute{}
+	attr.etype = AttributeNode
 	attr.name = name
 	attr.ns = ns
 	return attr
