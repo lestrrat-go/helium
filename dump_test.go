@@ -222,6 +222,37 @@ func TestXHTMLVoidElementDefaultNS(t *testing.T) {
 	require.NotContains(t, str, "<br></br>")
 }
 
+func TestXHTMLFormat(t *testing.T) {
+	t.Run("element children get indented", func(t *testing.T) {
+		input := `<?xml version="1.0"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"><body><p>hello</p><p>world</p></body></html>`
+		doc, err := helium.Parse([]byte(input))
+		require.NoError(t, err)
+
+		str, err := doc.XMLString(helium.WithFormat())
+		require.NoError(t, err)
+
+		// <body> has element children → they should be indented
+		require.Contains(t, str, "<body>\n    <p>")
+		require.Contains(t, str, "</p>\n  </body>")
+	})
+
+	t.Run("text-only elements stay inline", func(t *testing.T) {
+		input := `<?xml version="1.0"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"><body><p>hello</p></body></html>`
+		doc, err := helium.Parse([]byte(input))
+		require.NoError(t, err)
+
+		str, err := doc.XMLString(helium.WithFormat())
+		require.NoError(t, err)
+
+		// <p> has only text → no indentation inside
+		require.Contains(t, str, "<p>hello</p>")
+	})
+}
+
 func TestNoEmpty(t *testing.T) {
 	t.Run("empty element uses open+close tags", func(t *testing.T) {
 		doc, err := helium.Parse([]byte(`<?xml version="1.0"?><root><br/></root>`))
