@@ -78,7 +78,30 @@ func TestErrParseErrorLevel(t *testing.T) {
 
 	var pe ErrParseError
 	require.True(t, errors.As(err, &pe))
-	require.Equal(t, ErrorLevelError, pe.Level)
+	require.Equal(t, ErrorLevelFatal, pe.Level)
+}
+
+func TestErrParseErrorWarningLevel(t *testing.T) {
+	// XML with undefined entity reference in a non-standalone document
+	// with an external subset. The parser emits a warning (not an error)
+	// for undefined entities in this context.
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE root SYSTEM "nonexistent.dtd">
+<root>&undefined;</root>`
+
+	s := sax.New()
+	s.WarningHandler = sax.WarningFunc(func(_ sax.Context, message string, args ...interface{}) error {
+		return errors.New("warning escalated")
+	})
+
+	p := NewParser()
+	p.SetSAXHandler(s)
+	_, err := p.Parse([]byte(input))
+	require.Error(t, err)
+
+	var pe ErrParseError
+	require.True(t, errors.As(err, &pe))
+	require.Equal(t, ErrorLevelWarning, pe.Level)
 }
 
 func TestErrDTDDupTokenFixed(t *testing.T) {
