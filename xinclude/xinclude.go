@@ -263,7 +263,7 @@ func (p *processor) includeXML(inc *helium.Element, uri string, incBase string) 
 	}
 
 	if len(nodes) == 0 {
-		unlinkNode(inc)
+		helium.UnlinkNode(inc)
 		p.count++
 		return nil
 	}
@@ -341,7 +341,7 @@ func (p *processor) includeXMLWithXPointer(inc *helium.Element, uri string, xptr
 	}
 
 	if len(nodes) == 0 {
-		unlinkNode(inc)
+		helium.UnlinkNode(inc)
 		p.count++
 		return nil
 	}
@@ -561,7 +561,7 @@ func (p *processor) processFallback(inc *helium.Element, fb *helium.Element) err
 	}
 
 	if len(nodes) == 0 {
-		unlinkNode(inc)
+		helium.UnlinkNode(inc)
 		p.count++
 		return nil
 	}
@@ -580,14 +580,14 @@ func (p *processor) processFallback(inc *helium.Element, fb *helium.Element) err
 
 func (p *processor) replaceWithNodes(target *helium.Element, nodes []helium.Node) {
 	if len(nodes) == 0 {
-		unlinkNode(target)
+		helium.UnlinkNode(target)
 		return
 	}
 
 	// Detach nodes from their original parents
 	for _, n := range nodes {
 		if n.Parent() != nil {
-			unlinkNode(n)
+			helium.UnlinkNode(n)
 		}
 	}
 
@@ -611,7 +611,7 @@ func (p *processor) replaceWithNodes(target *helium.Element, nodes []helium.Node
 // updates via the exported API), then chains remaining nodes as siblings.
 func spliceReplace(target helium.Node, nodes []helium.Node) {
 	if len(nodes) == 0 {
-		unlinkNode(target)
+		helium.UnlinkNode(target)
 		return
 	}
 
@@ -638,52 +638,6 @@ func spliceReplace(target helium.Node, nodes []helium.Node) {
 	}
 }
 
-// unlinkNode removes a node from its parent's child list.
-func unlinkNode(n helium.Node) {
-	parent := n.Parent()
-	if parent == nil {
-		return
-	}
-
-	prev := n.PrevSibling()
-	next := n.NextSibling()
-
-	if prev != nil {
-		prev.SetNextSibling(next)
-	}
-	if next != nil {
-		next.SetPrevSibling(prev)
-	}
-
-	// Handle firstChild/lastChild: if this is the only child, or first/last,
-	// we need to use Replace or AddChild to properly update parent pointers.
-	// Since setFirstChild/setLastChild are unexported, we use a workaround:
-	// if n is the only child, replace with a dummy then remove it.
-	if prev == nil && next == nil {
-		// Only child — disconnect. The parent's firstChild/lastChild will be
-		// stale, but for our use case (xi:include is never the only child
-		// under document root), this should not be an issue.
-		n.SetParent(nil)
-		n.SetPrevSibling(nil)
-		n.SetNextSibling(nil)
-		return
-	}
-
-	if prev == nil && next != nil {
-		// First child but not only: use Replace to make next the first
-		n.Replace(next)
-		return
-	}
-
-	if next == nil && prev != nil {
-		// Last child: prev becomes new last.
-		prev.SetNextSibling(nil)
-	}
-
-	n.SetParent(nil)
-	n.SetPrevSibling(nil)
-	n.SetNextSibling(nil)
-}
 
 func isXINamespace(ns string) bool {
 	return ns == xiNamespaceLegacy || ns == xiNamespaceNew
