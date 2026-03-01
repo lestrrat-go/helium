@@ -107,8 +107,10 @@ type parserCtx struct {
 	inputSize   int64 // total input document size
 	maxAmpl     int   // max amplification factor (default 5, 0 = disabled via ParseHuge)
 	// nbentities int
-	inputTab inputStack
-	stopped  bool
+	inputTab   inputStack
+	stopped    bool
+	disableSAX bool  // suppress SAX callbacks after fatal error in recover mode
+	recoverErr error // first fatal error saved during recovery
 }
 
 type SubstitutionType int
@@ -153,6 +155,9 @@ func (ctx *parserCtx) fireSAXCallback(typ int, args ...interface{}) error {
 
 	s := ctx.sax
 	if s == nil {
+		return nil
+	}
+	if ctx.disableSAX {
 		return nil
 	}
 
@@ -386,6 +391,9 @@ func (ctx *parserCtx) init(p *Parser, in io.Reader) error {
 // configured (> 0). Splits never occur in the middle of a multi-byte UTF-8
 // character.
 func (ctx *parserCtx) deliverCharacters(handler func(sax.Context, []byte) error, data []byte) error {
+	if ctx.disableSAX {
+		return nil
+	}
 	bufSize := ctx.charBufferSize
 	if bufSize <= 0 || len(data) <= bufSize {
 		switch err := handler(ctx.userData, data); err {
@@ -861,48 +869,55 @@ func (ctx *parserCtx) parseContent() error {
 		panic("did not get rune cursor")
 	}
 
+	recover := ctx.options.IsSet(ParseRecover)
+
 	for !cur.Done() && !ctx.stopped {
 		if cur.HasPrefixString("</") {
 			break
 		}
 
+		var err error
 		if cur.HasPrefixString("<?") {
-			if err := ctx.parsePI(); err != nil {
-				return ctx.error(err)
+			err = ctx.parsePI()
+		} else if cur.HasPrefixString("<![CDATA[") {
+			err = ctx.parseCDSect()
+		} else if cur.HasPrefixString("<!--") {
+			err = ctx.parseComment()
+		} else if cur.HasPrefixString("<") {
+			err = ctx.parseElement()
+		} else if cur.HasPrefixString("&") {
+			err = ctx.parseReference()
+		} else {
+			if err := ctx.parseCharData(false); err != nil {
+				if !recover || errors.Is(err, errParserStopped) {
+					return err
+				}
+				if ctx.recoverErr == nil {
+					ctx.recoverErr = err
+				}
+				ctx.disableSAX = true
+				ctx.wellFormed = false
+				ctx.skipToRecoverPoint()
 			}
 			continue
 		}
 
-		if cur.HasPrefixString("<![CDATA[") {
-			if err := ctx.parseCDSect(); err != nil {
+		if err != nil {
+			if !recover || errors.Is(err, errParserStopped) {
 				return ctx.error(err)
 			}
-			continue
-		}
+			if ctx.recoverErr == nil {
+				ctx.recoverErr = err
+			}
+			ctx.disableSAX = true
+			ctx.wellFormed = false
 
-		if cur.HasPrefixString("<!--") {
-			if err := ctx.parseComment(); err != nil {
-				return ctx.error(err)
+			prevLine, prevCol := cur.LineNumber(), cur.Column()
+			ctx.skipToRecoverPoint()
+			if !cur.Done() && cur.LineNumber() == prevLine && cur.Column() == prevCol {
+				_ = cur.Advance(1)
 			}
 			continue
-		}
-
-		if cur.HasPrefixString("<") {
-			if err := ctx.parseElement(); err != nil {
-				return ctx.error(err)
-			}
-			continue
-		}
-
-		if cur.HasPrefixString("&") {
-			if err := ctx.parseReference(); err != nil {
-				return ctx.error(err)
-			}
-			continue
-		}
-
-		if err := ctx.parseCharData(false); err != nil {
-			return err
 		}
 	}
 
@@ -910,7 +925,26 @@ func (ctx *parserCtx) parseContent() error {
 		return errParserStopped
 	}
 
+	if ctx.recoverErr != nil {
+		return ctx.recoverErr
+	}
+
 	return nil
+}
+
+// skipToRecoverPoint advances the cursor past unrecoverable content to the
+// next '<' character or EOF, for re-synchronization in ParseRecover mode.
+func (ctx *parserCtx) skipToRecoverPoint() {
+	cur := ctx.getCursor()
+	if cur == nil {
+		return
+	}
+	for !cur.Done() {
+		if cur.Peek() == '<' {
+			return
+		}
+		_ = cur.Advance(1)
+	}
 }
 
 /* parse a CharData section.
@@ -971,7 +1005,7 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 	str = strings.ReplaceAll(str, "\r\n", "\n")
 	str = strings.ReplaceAll(str, "\r", "\n")
 	if ctx.instate == psCDATA {
-		if s := ctx.sax; s != nil {
+		if s := ctx.sax; s != nil && !ctx.disableSAX {
 			if ctx.options.IsSet(ParseNoCDATA) {
 				// ParseNoCDATA: deliver CDATA content as Characters instead of CDataBlock
 				if err := ctx.deliverCharacters(s.Characters, []byte(str)); err != nil {
@@ -987,13 +1021,13 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 			}
 		}
 	} else if ctx.areBlanks(str, false) {
-		if s := ctx.sax; s != nil {
+		if s := ctx.sax; s != nil && !ctx.disableSAX {
 			if err := ctx.deliverCharacters(s.IgnorableWhitespace, []byte(str)); err != nil {
 				return err
 			}
 		}
 	} else {
-		if s := ctx.sax; s != nil {
+		if s := ctx.sax; s != nil && !ctx.disableSAX {
 			if err := ctx.deliverCharacters(s.Characters, []byte(str)); err != nil {
 				return err
 			}
@@ -1256,7 +1290,7 @@ func (ctx *parserCtx) parseStartTag() error {
 		}
 	}
 
-	if s := ctx.sax; s != nil {
+	if s := ctx.sax; s != nil && !ctx.disableSAX {
 		var nslist []sax.Namespace
 		if nbNs > 0 {
 			nslist = make([]sax.Namespace, nbNs)
@@ -1319,7 +1353,7 @@ func (ctx *parserCtx) parseEndTag() error {
 	}
 
 	e := ctx.peekNode()
-	if s := ctx.sax; s != nil {
+	if s := ctx.sax; s != nil && !ctx.disableSAX {
 		switch err := s.EndElementNS(ctx, e.LocalName(), e.Prefix(), e.URI()); err {
 		case nil, sax.ErrHandlerUnspecified:
 			// no op
@@ -2244,7 +2278,7 @@ func (ctx *parserCtx) parsePI() error {
 	}
 
 	if cur.ConsumeString("?>") {
-		if s := ctx.sax; s != nil {
+		if s := ctx.sax; s != nil && !ctx.disableSAX {
 			switch err := s.ProcessingInstruction(ctx.userData, target, ""); err {
 			case nil, sax.ErrHandlerUnspecified:
 				// no op
@@ -2285,7 +2319,7 @@ func (ctx *parserCtx) parsePI() error {
 		return ctx.error(ErrInvalidProcessingInstruction)
 	}
 
-	if s := ctx.sax; s != nil {
+	if s := ctx.sax; s != nil && !ctx.disableSAX {
 		switch err := s.ProcessingInstruction(ctx.userData, target, data); err {
 		case nil, sax.ErrHandlerUnspecified:
 			// no op
@@ -2729,7 +2763,7 @@ func (ctx *parserCtx) parseComment() error {
 		return err
 	}
 
-	if sh := ctx.sax; sh != nil {
+	if sh := ctx.sax; sh != nil && !ctx.disableSAX {
 		// XML §2.11 End-of-Line Handling: normalize \r\n to \n, then lone \r to \n.
 		str = bytes.ReplaceAll(str, []byte{'\r', '\n'}, []byte{'\n'})
 		str = bytes.ReplaceAll(str, []byte{'\r'}, []byte{'\n'})

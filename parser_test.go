@@ -246,6 +246,68 @@ func TestParseRecover(t *testing.T) {
 	require.NotNil(t, doc2, "with recover, partial document should be returned")
 }
 
+func TestDisableSAXRecoverContinuesParsing(t *testing.T) {
+	// XML with a broken sibling element (mismatched end tag) followed by valid content
+	const input = `<?xml version="1.0"?>
+<root>
+  <good>ok</good>
+  <bad>text</baaaad>
+  <after>more</after>
+</root>`
+
+	p := NewParser()
+	p.SetOption(ParseRecover)
+	doc, err := p.Parse([]byte(input))
+	require.Error(t, err, "malformed XML should return error")
+	require.NotNil(t, doc, "ParseRecover should return a partial document")
+
+	root := doc.DocumentElement()
+	require.NotNil(t, root, "root element should exist")
+	require.Equal(t, "root", root.Name())
+}
+
+func TestDisableSAXCallbacksSuppressed(t *testing.T) {
+	const input = `<?xml version="1.0"?>
+<root>
+  <before/>
+  <bad>text</baaaad>
+  <after/>
+</root>`
+
+	var elements []string
+	sh := sax.New()
+	sh.StartElementNSHandler = sax.StartElementNSFunc(func(_ sax.Context, localname string, _ string, _ string, _ []sax.Namespace, _ []sax.Attribute) error {
+		elements = append(elements, localname)
+		return nil
+	})
+
+	p := NewParser()
+	p.SetSAXHandler(sh)
+	p.SetOption(ParseRecover)
+	_, err := p.Parse([]byte(input))
+	require.Error(t, err)
+
+	// "root" and "before" should have been delivered before the error.
+	// "bad" starts parsing (StartElementNS fires before content error).
+	// "after" should NOT appear because disableSAX is set after the error.
+	require.Contains(t, elements, "root")
+	require.Contains(t, elements, "before")
+	require.NotContains(t, elements, "after", "elements after error should be suppressed")
+}
+
+func TestDisableSAXNoEffectWithoutRecover(t *testing.T) {
+	const input = `<?xml version="1.0"?>
+<root>
+  <bad>text</baaaad>
+  <after/>
+</root>`
+
+	p := NewParser()
+	doc, err := p.Parse([]byte(input))
+	require.Error(t, err, "malformed XML should fail")
+	require.Nil(t, doc, "without ParseRecover, no document should be returned")
+}
+
 func TestParseExternalEntity(t *testing.T) {
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
