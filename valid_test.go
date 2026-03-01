@@ -254,12 +254,10 @@ func TestMatchContentModel(t *testing.T) {
 			want:     false,
 		},
 		{
-			// matchContentModel does not check for unconsumed children;
-			// the caller (validateElementContent) is responsible for that.
-			name:     "seq/extra element still matches",
+			name:     "seq/extra element rejected",
 			content:  ecSeq(ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
 			children: []string{"a", "b", "c", "d"},
-			want:     true,
+			want:     false,
 		},
 
 		// Choice: (a | b | c)
@@ -288,11 +286,10 @@ func TestMatchContentModel(t *testing.T) {
 			want:     false,
 		},
 		{
-			// matchContentModel does not check for unconsumed children.
-			name:     "choice/extra unconsumed",
+			name:     "choice/extra unconsumed rejected",
 			content:  ecOr(ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
 			children: []string{"a", "b"},
-			want:     true,
+			want:     false,
 		},
 
 		// Optional element: (a, b?, c)

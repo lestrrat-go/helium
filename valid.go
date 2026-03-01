@@ -498,8 +498,8 @@ func isBlankContent(b []byte) bool {
 // produce the correct result. Non-deterministic content models (which
 // violate the XML spec) may be matched incorrectly.
 func matchContentModel(content *ElementContent, children []string) bool {
-	_, ok := matchContent(content, children, 0)
-	return ok
+	consumed, ok := matchContent(content, children, 0)
+	return ok && consumed == len(children)
 }
 
 // matchContent tries to match children[pos:] against the content model,
