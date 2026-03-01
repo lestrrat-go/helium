@@ -343,6 +343,15 @@ func TestDTDWithSubset(t *testing.T) {
 	require.Equal(t, expected, strings.TrimRight(buf.String(), "\n"))
 }
 
+func TestStartDTDPubidRequiresSysid(t *testing.T) {
+	var buf bytes.Buffer
+	w := New(&buf)
+	require.NoError(t, w.StartDocument("", "", ""))
+	err := w.StartDTD("root", "-//Example//DTD Test//EN", "")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "requires sysid when pubid is provided")
+}
+
 func TestStartDTDWithInternalDecls(t *testing.T) {
 	var buf bytes.Buffer
 	w := New(&buf)

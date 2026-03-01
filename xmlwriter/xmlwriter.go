@@ -806,12 +806,16 @@ func (w *Writer) WriteCDATA(content string) error {
 // --- DTD ---
 
 // StartDTD opens a DOCTYPE declaration. pubid and sysid may be empty.
+// If pubid is non-empty, sysid must also be non-empty.
 func (w *Writer) StartDTD(name, pubid, sysid string) error {
 	if w.err != nil {
 		return w.err
 	}
 	if w.state != stateDocument {
 		return errors.New("xmlwriter: StartDTD called in invalid state")
+	}
+	if pubid != "" && sysid == "" {
+		return errors.New("xmlwriter: StartDTD requires sysid when pubid is provided")
 	}
 	if w.indent != "" {
 		w.writeStr("\n")
