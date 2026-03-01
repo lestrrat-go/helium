@@ -631,6 +631,222 @@ func TestIsValidName(t *testing.T) {
 	}
 }
 
+func TestStandaloneWhitespaceCheck(t *testing.T) {
+	t.Run("whitespace in element-only content from ext subset", func(t *testing.T) {
+		doc := NewDocument("1.0", "utf-8", StandaloneExplicitYes)
+
+		// Internal subset: declares "root" with ANY content
+		intDTD := newDTD()
+		intDTD.doc = doc
+		intDTD.etype = DTDNode
+		doc.intSubset = intDTD
+		rootDecl := newElementDecl()
+		rootDecl.name = "root"
+		rootDecl.decltype = AnyElementType
+		rootDecl.doc = doc
+		intDTD.elements = map[string]*ElementDecl{"root:": rootDecl}
+		intDTD.entities = map[string]*Entity{}
+		intDTD.pentities = map[string]*Entity{}
+		intDTD.attributes = map[string]*AttributeDecl{}
+
+		// External subset: declares "container" with element-only content (child)+
+		extDTD := newDTD()
+		extDTD.doc = doc
+		extDTD.etype = DTDNode
+		doc.extSubset = extDTD
+		containerDecl := newElementDecl()
+		containerDecl.name = "container"
+		containerDecl.decltype = ElementElementType
+		containerDecl.content = &ElementContent{
+			ctype:  ElementContentElement,
+			coccur: ElementContentPlus,
+			name:   "child",
+		}
+		containerDecl.doc = doc
+		extDTD.elements = map[string]*ElementDecl{"container:": containerDecl}
+		extDTD.entities = map[string]*Entity{}
+		extDTD.pentities = map[string]*Entity{}
+		extDTD.attributes = map[string]*AttributeDecl{}
+
+		// Build DOM: <root><container> <child/> </container></root>
+		root := newElement("root")
+		root.doc = doc
+		container := newElement("container")
+		container.doc = doc
+		_ = container.AddContent([]byte(" "))
+		child := newElement("child")
+		child.doc = doc
+		_ = container.AddChild(child)
+		_ = container.AddContent([]byte(" "))
+		_ = root.AddChild(container)
+		_ = doc.AddChild(root)
+
+		ve := validateDocument(doc)
+		require.NotNil(t, ve)
+		require.Contains(t, ve.Error(), "standalone")
+		require.Contains(t, ve.Error(), "white spaces")
+	})
+
+	t.Run("no whitespace no error", func(t *testing.T) {
+		doc := NewDocument("1.0", "utf-8", StandaloneExplicitYes)
+
+		intDTD := newDTD()
+		intDTD.doc = doc
+		intDTD.etype = DTDNode
+		doc.intSubset = intDTD
+		rootDecl := newElementDecl()
+		rootDecl.name = "root"
+		rootDecl.decltype = AnyElementType
+		rootDecl.doc = doc
+		intDTD.elements = map[string]*ElementDecl{"root:": rootDecl}
+		intDTD.entities = map[string]*Entity{}
+		intDTD.pentities = map[string]*Entity{}
+		intDTD.attributes = map[string]*AttributeDecl{}
+
+		extDTD := newDTD()
+		extDTD.doc = doc
+		extDTD.etype = DTDNode
+		doc.extSubset = extDTD
+		containerDecl := newElementDecl()
+		containerDecl.name = "container"
+		containerDecl.decltype = ElementElementType
+		containerDecl.content = &ElementContent{
+			ctype:  ElementContentElement,
+			coccur: ElementContentPlus,
+			name:   "child",
+		}
+		containerDecl.doc = doc
+		extDTD.elements = map[string]*ElementDecl{"container:": containerDecl}
+		extDTD.entities = map[string]*Entity{}
+		extDTD.pentities = map[string]*Entity{}
+		extDTD.attributes = map[string]*AttributeDecl{}
+
+		// Build DOM: <root><container><child/></container></root> (no whitespace)
+		root := newElement("root")
+		root.doc = doc
+		container := newElement("container")
+		container.doc = doc
+		child := newElement("child")
+		child.doc = doc
+		_ = container.AddChild(child)
+		_ = root.AddChild(container)
+		_ = doc.AddChild(root)
+
+		ve := validateDocument(doc)
+		require.NotNil(t, ve) // still fails with "no declaration found"
+		// But should NOT contain the standalone whitespace error
+		for _, e := range ve.Errors {
+			require.NotContains(t, e, "white spaces")
+		}
+	})
+
+	t.Run("not standalone no whitespace error", func(t *testing.T) {
+		doc := NewDocument("1.0", "utf-8", StandaloneImplicitNo)
+
+		intDTD := newDTD()
+		intDTD.doc = doc
+		intDTD.etype = DTDNode
+		doc.intSubset = intDTD
+		rootDecl := newElementDecl()
+		rootDecl.name = "root"
+		rootDecl.decltype = AnyElementType
+		rootDecl.doc = doc
+		intDTD.elements = map[string]*ElementDecl{"root:": rootDecl}
+		intDTD.entities = map[string]*Entity{}
+		intDTD.pentities = map[string]*Entity{}
+		intDTD.attributes = map[string]*AttributeDecl{}
+
+		extDTD := newDTD()
+		extDTD.doc = doc
+		extDTD.etype = DTDNode
+		doc.extSubset = extDTD
+		containerDecl := newElementDecl()
+		containerDecl.name = "container"
+		containerDecl.decltype = ElementElementType
+		containerDecl.content = &ElementContent{
+			ctype:  ElementContentElement,
+			coccur: ElementContentPlus,
+			name:   "child",
+		}
+		containerDecl.doc = doc
+		extDTD.elements = map[string]*ElementDecl{"container:": containerDecl}
+		extDTD.entities = map[string]*Entity{}
+		extDTD.pentities = map[string]*Entity{}
+		extDTD.attributes = map[string]*AttributeDecl{}
+
+		// Build DOM: <root><container> <child/> </container></root>
+		root := newElement("root")
+		root.doc = doc
+		container := newElement("container")
+		container.doc = doc
+		_ = container.AddContent([]byte(" "))
+		child := newElement("child")
+		child.doc = doc
+		_ = container.AddChild(child)
+		_ = container.AddContent([]byte(" "))
+		_ = root.AddChild(container)
+		_ = doc.AddChild(root)
+
+		ve := validateDocument(doc)
+		// Non-standalone: extSubset is searched, so container is found and
+		// validation should pass (or at least not have standalone error)
+		if ve != nil {
+			for _, e := range ve.Errors {
+				require.NotContains(t, e, "standalone")
+			}
+		}
+	})
+
+	t.Run("element in internal subset not flagged", func(t *testing.T) {
+		doc := NewDocument("1.0", "utf-8", StandaloneExplicitYes)
+
+		intDTD := newDTD()
+		intDTD.doc = doc
+		intDTD.etype = DTDNode
+		doc.intSubset = intDTD
+		// "root" declared in internal subset with element-only content
+		rootDecl := newElementDecl()
+		rootDecl.name = "root"
+		rootDecl.decltype = ElementElementType
+		rootDecl.content = &ElementContent{
+			ctype:  ElementContentElement,
+			coccur: ElementContentPlus,
+			name:   "child",
+		}
+		rootDecl.doc = doc
+		childDecl := newElementDecl()
+		childDecl.name = "child"
+		childDecl.decltype = EmptyElementType
+		childDecl.doc = doc
+		intDTD.elements = map[string]*ElementDecl{
+			"root:":  rootDecl,
+			"child:": childDecl,
+		}
+		intDTD.entities = map[string]*Entity{}
+		intDTD.pentities = map[string]*Entity{}
+		intDTD.attributes = map[string]*AttributeDecl{}
+
+		// Build DOM: <root> <child/> </root> (whitespace around child)
+		root := newElement("root")
+		root.doc = doc
+		_ = root.AddContent([]byte(" "))
+		child := newElement("child")
+		child.doc = doc
+		_ = root.AddChild(child)
+		_ = root.AddContent([]byte(" "))
+		_ = doc.AddChild(root)
+
+		ve := validateDocument(doc)
+		// Element is declared in the internal subset, so standalone whitespace
+		// check should NOT apply. Whitespace is ignorable whitespace.
+		if ve != nil {
+			for _, e := range ve.Errors {
+				require.NotContains(t, e, "standalone")
+			}
+		}
+	})
+}
+
 func TestExtSubsetLookup_ParameterEntityInExtSubset(t *testing.T) {
 	doc := buildTestDoc(StandaloneImplicitNo)
 
