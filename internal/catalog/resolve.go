@@ -19,6 +19,14 @@ func (c *Catalog) Resolve(pubID, sysID string) string {
 		return ""
 	}
 
+	// Initialize visited cache for this top-level resolution,
+	// matching libxml2's xmlResetCatalogResolveCache pattern.
+	topLevel := c.visited == nil
+	if topLevel {
+		c.visited = make(map[visitedKey]struct{})
+		defer func() { c.visited = nil }()
+	}
+
 	// Normalize public ID.
 	if pubID != "" {
 		pubID = NormalizePublicID(pubID)
@@ -54,6 +62,13 @@ func (c *Catalog) Resolve(pubID, sysID string) string {
 func (c *Catalog) ResolveURI(uri string) string {
 	if c == nil || uri == "" {
 		return ""
+	}
+
+	// Initialize visited cache for this top-level resolution.
+	topLevel := c.visited == nil
+	if topLevel {
+		c.visited = make(map[visitedKey]struct{})
+		defer func() { c.visited = nil }()
 	}
 
 	// Unwrap urn:publicid: URNs and delegate to Resolve as a public ID,
@@ -236,6 +251,9 @@ func (c *Catalog) resolveDelegateSystem(sysID string) string {
 		if err := c.lazyLoad(e); err != nil {
 			continue
 		}
+		if c.checkVisited(e.URL, "", sysID) {
+			continue
+		}
 		// Delegate with sysID only (pubID=nil per libxml2).
 		ret := e.Catalog.resolve("", sysID)
 		if ret != "" && ret != CatalogBreak {
@@ -270,6 +288,9 @@ func (c *Catalog) resolveDelegatePublic(pubID string) string {
 		if err := c.lazyLoad(e); err != nil {
 			continue
 		}
+		if c.checkVisited(e.URL, pubID, "") {
+			continue
+		}
 		// Delegate with pubID only (sysID=nil per libxml2).
 		ret := e.Catalog.resolve(pubID, "")
 		if ret != "" && ret != CatalogBreak {
@@ -301,6 +322,9 @@ func (c *Catalog) resolveDelegateURI(uri string) string {
 		if err := c.lazyLoad(e); err != nil {
 			continue
 		}
+		if c.checkVisited(e.URL, uri, "") {
+			continue
+		}
 		ret := e.Catalog.resolveURI(uri)
 		if ret != "" && ret != CatalogBreak {
 			return ret
@@ -317,6 +341,9 @@ func (c *Catalog) resolveNextCatalogs(pubID, sysID string) string {
 			continue
 		}
 		if err := c.lazyLoad(e); err != nil {
+			continue
+		}
+		if c.checkVisited(e.URL, pubID, sysID) {
 			continue
 		}
 		ret := e.Catalog.resolve(pubID, sysID)
@@ -340,6 +367,9 @@ func (c *Catalog) resolveNextCatalogsURI(uri string) string {
 		if err := c.lazyLoad(e); err != nil {
 			continue
 		}
+		if c.checkVisited(e.URL, uri, "") {
+			continue
+		}
 		ret := e.Catalog.resolveURI(uri)
 		if ret != "" && ret != CatalogBreak {
 			return ret
@@ -351,13 +381,29 @@ func (c *Catalog) resolveNextCatalogsURI(uri string) string {
 	return ""
 }
 
+// checkVisited returns true if the (url, id1, id2) combination has already
+// been visited during this resolution. If not, marks it as visited.
+// Matches libxml2's xmlCatalogResolveCacheVisited.
+func (c *Catalog) checkVisited(url, id1, id2 string) bool {
+	if c.visited == nil {
+		return false
+	}
+	key := visitedKey{url: url, id1: id1, id2: id2}
+	if _, ok := c.visited[key]; ok {
+		return true
+	}
+	c.visited[key] = struct{}{}
+	return false
+}
+
 // lazyLoad loads the catalog file for a delegate or nextCatalog entry
 // on first access via the Loader. The loaded catalog shares the parent's
-// depth counter for recursion detection.
+// depth counter and visited cache for recursion detection.
 func (c *Catalog) lazyLoad(e *Entry) error {
 	if e.Catalog != nil {
-		// Already loaded — share depth.
+		// Already loaded — share depth and visited cache.
 		e.Catalog.Depth = c.Depth
+		e.Catalog.visited = c.visited
 		return nil
 	}
 	if c.Ldr == nil {
@@ -367,8 +413,9 @@ func (c *Catalog) lazyLoad(e *Entry) error {
 	if err != nil {
 		return err
 	}
-	// Share the parent's depth counter for recursion detection.
+	// Share the parent's depth counter and visited cache.
 	cat.Depth = c.Depth
+	cat.visited = c.visited
 	e.Catalog = cat
 	return nil
 }
