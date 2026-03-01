@@ -55,6 +55,14 @@ type Loader interface {
 	Load(filename string) (*Catalog, error)
 }
 
+// visitedKey identifies a (catalogURL, id1, id2) tuple for the resolve
+// visited cache, matching libxml2's xmlCatalogResolveCacheVisited.
+type visitedKey struct {
+	url string
+	id1 string
+	id2 string
+}
+
 // Catalog holds parsed catalog entries and provides resolution.
 type Catalog struct {
 	Entries       []Entry
@@ -63,6 +71,7 @@ type Catalog struct {
 	Depth         int // recursion guard (shared across resolution chain)
 	Ldr           Loader
 	ParseWarnings string // accumulated warnings from parsing
+	visited       map[visitedKey]struct{}
 }
 
 // Resolver is the interface that the helium parser uses for catalog
