@@ -433,6 +433,10 @@ func (ctx *parserCtx) deliverCharacters(handler func(sax.Context, []byte) error,
 }
 
 func (ctx *parserCtx) error(err error) error {
+	return ctx.errorAtLevel(err, ErrorLevelFatal)
+}
+
+func (ctx *parserCtx) errorAtLevel(err error, level ErrorLevel) error {
 	// errParserStopped is not a real error; pass through unwrapped.
 	if errors.Is(err, errParserStopped) {
 		return errParserStopped
@@ -442,17 +446,25 @@ func (ctx *parserCtx) error(err error) error {
 		return err
 	}
 
-	e := ErrParseError{Err: err, Level: ErrorLevelError, File: ctx.baseURI}
+	e := ErrParseError{Err: err, Level: level, File: ctx.baseURI}
 	if cur := ctx.getCursor(); cur != nil {
 		e.Column = cur.Column()
 		e.LineNumber = cur.LineNumber()
 		e.Line = cur.Line()
 	}
 
-	// Fire the SAX Error callback unless ParseNoError is set.
-	// This mirrors how ParseNoWarning gates SAX Warning callbacks.
-	if s := ctx.sax; s != nil && !ctx.options.IsSet(ParseNoError) {
-		_ = s.Error(ctx.userData, e.Error())
+	if s := ctx.sax; s != nil {
+		switch level {
+		case ErrorLevelWarning:
+			if !ctx.options.IsSet(ParseNoWarning) {
+				_ = s.Warning(ctx.userData, e.Error())
+			}
+		default:
+			// Fire the SAX Error callback unless ParseNoError is set.
+			if !ctx.options.IsSet(ParseNoError) {
+				_ = s.Error(ctx.userData, e.Error())
+			}
+		}
 	}
 
 	return e
@@ -3133,7 +3145,7 @@ func (ctx *parserCtx) parsePEReference() error {
 			switch err := s.Warning(ctx.userData, "PEReference: %%%s; not found\n", name); err {
 			case nil, sax.ErrHandlerUnspecified:
 			default:
-				return ctx.error(err)
+				return ctx.errorAtLevel(err, ErrorLevelWarning)
 			}
 		}
 		ctx.valid = false
@@ -3149,7 +3161,7 @@ func (ctx *parserCtx) parsePEReference() error {
 				switch err := s.Warning(ctx.userData, "Internal: %%%s; is not a parameter entity\n", name); err {
 				case nil, sax.ErrHandlerUnspecified:
 				default:
-					return ctx.error(err)
+					return ctx.errorAtLevel(err, ErrorLevelWarning)
 				}
 			}
 			/*
@@ -5638,7 +5650,7 @@ func (ctx *parserCtx) parseStringEntityRef(s []byte) (sax.Entity, int, error) {
 			switch err := s.Warning(ctx.userData, "Entity '%s' not defined", name); err {
 			case nil, sax.ErrHandlerUnspecified:
 			default:
-				return nil, 0, err
+				return nil, 0, ctx.errorAtLevel(err, ErrorLevelWarning)
 			}
 		}
 		return nil, i, nil
@@ -5926,7 +5938,7 @@ func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
 				switch err := s.Warning(ctx.userData, "Entity '%s' not defined", name); err {
 				case nil, sax.ErrHandlerUnspecified:
 				default:
-					return nil, ctx.error(err)
+					return nil, ctx.errorAtLevel(err, ErrorLevelWarning)
 				}
 			}
 			if ctx.inSubset == 0 && ctx.instate != psAttributeValue {
@@ -6136,7 +6148,7 @@ func (ctx *parserCtx) handlePEReference() error {
 			switch err := s.Warning(ctx.userData, "PEReference: %%%s; not found\n", name); err {
 			case nil, sax.ErrHandlerUnspecified:
 			default:
-				return ctx.error(err)
+				return ctx.errorAtLevel(err, ErrorLevelWarning)
 			}
 		}
 		ctx.valid = false
