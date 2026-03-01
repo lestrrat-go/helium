@@ -376,6 +376,9 @@ func (w *Writer) EndDocument() error {
 
 // StartElement opens a new element with the given local name.
 func (w *Writer) StartElement(name string) error {
+	if name == "" {
+		return errors.New("xmlwriter: element name must not be empty")
+	}
 	if w.err != nil {
 		return w.err
 	}
@@ -538,6 +541,9 @@ func (w *Writer) WriteElementNS(prefix, localName, namespaceURI, content string)
 
 // StartAttribute opens an attribute on the current element.
 func (w *Writer) StartAttribute(name string) error {
+	if name == "" {
+		return errors.New("xmlwriter: attribute name must not be empty")
+	}
 	if w.err != nil {
 		return w.err
 	}
@@ -724,6 +730,9 @@ func (w *Writer) WriteComment(content string) error {
 
 // StartPI opens a processing instruction (<?target).
 func (w *Writer) StartPI(target string) error {
+	if target == "" {
+		return errors.New("xmlwriter: PI target must not be empty")
+	}
 	if w.err != nil {
 		return w.err
 	}
@@ -844,6 +853,9 @@ func (w *Writer) WriteCDATA(content string) error {
 // StartDTD opens a DOCTYPE declaration. pubid and sysid may be empty.
 // If pubid is non-empty, sysid must also be non-empty.
 func (w *Writer) StartDTD(name, pubid, sysid string) error {
+	if name == "" {
+		return errors.New("xmlwriter: DTD name must not be empty")
+	}
 	if w.err != nil {
 		return w.err
 	}
