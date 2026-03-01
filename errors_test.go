@@ -211,3 +211,58 @@ func TestWarningLocationInfo(t *testing.T) {
 		require.Equal(t, int32(0), called.Load(), "warning handler should NOT be called with ParseNoWarning")
 	})
 }
+
+func TestParserLastError(t *testing.T) {
+	p := NewParser()
+	_, err := p.Parse([]byte("<broken"))
+	require.Error(t, err)
+
+	lastErr := p.LastError()
+	require.NotNil(t, lastErr, "LastError should be set after parsing malformed XML")
+
+	var pe ErrParseError
+	require.True(t, errors.As(lastErr, &pe), "LastError should be ErrParseError")
+	require.Greater(t, pe.LineNumber, 0, "LastError should carry line number")
+}
+
+func TestParserLastErrorNilOnSuccess(t *testing.T) {
+	p := NewParser()
+	_, err := p.Parse([]byte(`<?xml version="1.0"?><root/>`))
+	require.NoError(t, err)
+	require.Nil(t, p.LastError(), "LastError should be nil after successful parse")
+}
+
+func TestParserLastErrorWarning(t *testing.T) {
+	const input = "<!DOCTYPE doc SYSTEM \"foo\">\n<doc>&undeclared;</doc>"
+
+	s := sax.New()
+	s.WarningHandler = sax.WarningFunc(func(_ sax.Context, err error) error {
+		return nil
+	})
+
+	p := NewParser()
+	p.SetSAXHandler(s)
+	_, err := p.Parse([]byte(input))
+	require.NoError(t, err)
+
+	lastErr := p.LastError()
+	require.NotNil(t, lastErr, "LastError should capture warnings")
+
+	var pe ErrParseError
+	require.True(t, errors.As(lastErr, &pe), "LastError should be ErrParseError")
+	require.Equal(t, ErrorLevelWarning, pe.Level, "LastError should have ErrorLevelWarning")
+}
+
+func TestParserLastErrorOverwrittenBySubsequentParse(t *testing.T) {
+	p := NewParser()
+
+	// First parse: malformed XML sets lastError
+	_, err := p.Parse([]byte("<broken"))
+	require.Error(t, err)
+	require.NotNil(t, p.LastError(), "LastError should be set after malformed parse")
+
+	// Second parse: valid XML clears lastError
+	_, err = p.Parse([]byte(`<?xml version="1.0"?><root/>`))
+	require.NoError(t, err)
+	require.Nil(t, p.LastError(), "LastError should be nil after subsequent successful parse")
+}

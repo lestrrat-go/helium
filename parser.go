@@ -32,6 +32,16 @@ type Parser struct {
 	options        ParseOption
 	baseURI        string
 	catalog        icatalog.Resolver
+	lastError      error
+}
+
+// LastError returns the last error or warning recorded during the most
+// recent Parse call. It returns nil if parsing succeeded without any
+// errors or warnings. The returned error is typically an ErrParseError
+// that can be inspected for structured fields (Level, File, LineNumber,
+// Column, Line).
+func (p *Parser) LastError() error {
+	return p.lastError
 }
 
 func Parse(b []byte) (*Document, error) {
@@ -55,6 +65,7 @@ func (p *Parser) Parse(b []byte) (*Document, error) {
 	if err := ctx.init(p, bytes.NewReader(b)); err != nil {
 		return nil, err
 	}
+	defer func() { p.lastError = ctx.lastError }()
 	defer func() {
 		if err := ctx.release(); err != nil {
 			// Log error but don't override the main return error
@@ -105,6 +116,7 @@ func (p *Parser) ParseReader(r io.Reader) (*Document, error) {
 	if err := ctx.init(p, r); err != nil {
 		return nil, err
 	}
+	defer func() { p.lastError = ctx.lastError }()
 	defer func() {
 		if err := ctx.release(); err != nil {
 			if pdebug.Enabled {
@@ -213,6 +225,7 @@ found:
 	if err := newctx.init(p, bytes.NewReader(data)); err != nil {
 		return nil, err
 	}
+	defer func() { p.lastError = newctx.lastError }()
 	defer func() {
 		if err := newctx.release(); err != nil {
 			if pdebug.Enabled {

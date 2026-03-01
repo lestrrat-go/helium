@@ -111,6 +111,7 @@ type parserCtx struct {
 	stopped    bool
 	disableSAX bool  // suppress SAX callbacks after fatal error in recover mode
 	recoverErr error // first fatal error saved during recovery
+	lastError  error // last error or warning set during parsing
 }
 
 type SubstitutionType int
@@ -462,6 +463,7 @@ func (ctx *parserCtx) errorAtLevel(err error, level ErrorLevel) error {
 		e.LineNumber = cur.LineNumber()
 		e.Line = cur.Line()
 	}
+	ctx.lastError = e
 
 	if s := ctx.sax; s != nil {
 		switch level {
@@ -493,6 +495,7 @@ func (ctx *parserCtx) warning(format string, args ...interface{}) error {
 			e.LineNumber = cur.LineNumber()
 			e.Line = cur.Line()
 		}
+		ctx.lastError = e
 		switch err := s.Warning(ctx.userData, e); err {
 		case nil, sax.ErrHandlerUnspecified:
 		default:
