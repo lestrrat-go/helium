@@ -8,6 +8,7 @@ import (
 
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
+	"github.com/lestrrat-go/strcursor"
 	"github.com/stretchr/testify/require"
 )
 
@@ -916,6 +917,79 @@ func TestParseSkipIDs(t *testing.T) {
 	ctx.addSpecialAttribute("doc", "name", AttrNmtoken)
 	_, found = ctx.attsSpecial["doc:name"]
 	require.True(t, found, "non-ID attributes should still be interned")
+}
+
+func TestEntityBoundaryElementDecl(t *testing.T) {
+	t.Parallel()
+	// PE starts the element declaration but the closing '>' is in the main DTD.
+	// This crosses an entity boundary → parse error (syntax or boundary).
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY % start "<!ELEMENT doc EMPTY">
+  %start;>
+]>
+<doc/>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDLoad)
+	_, err := p.Parse([]byte(input))
+	require.Error(t, err, "boundary-violating PE should cause a parse error")
+}
+
+func TestEntityBoundaryAttributeListDecl(t *testing.T) {
+	t.Parallel()
+	// PE starts the ATTLIST declaration but the closing '>' is in the main DTD.
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc EMPTY>
+  <!ENTITY % start "<!ATTLIST doc attr CDATA #IMPLIED">
+  %start;>
+]>
+<doc/>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDLoad)
+	_, err := p.Parse([]byte(input))
+	require.Error(t, err, "boundary-violating PE should cause a parse error")
+}
+
+func TestEntityBoundaryWellNestedPE(t *testing.T) {
+	t.Parallel()
+	// PE expands to a complete declaration — no boundary violation.
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY % decl "<!ELEMENT doc EMPTY>">
+  %decl;
+]>
+<doc/>`
+
+	p := NewParser()
+	p.SetOption(ParseDTDLoad)
+	doc, err := p.Parse([]byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+}
+
+func TestCurrentInputID(t *testing.T) {
+	t.Parallel()
+	// Verify that currentInputID changes when inputs are pushed/popped.
+	ctx := &parserCtx{}
+	p := NewParser()
+	require.NoError(t, ctx.init(p, strings.NewReader("<root/>")))
+
+	id1 := ctx.currentInputID()
+	require.NotNil(t, id1)
+
+	// Push a new input — currentInputID should change.
+	ctx.pushInput(strcursor.NewByteCursor(strings.NewReader("extra")))
+	id2 := ctx.currentInputID()
+	require.NotNil(t, id2)
+	require.True(t, id1 != id2, "currentInputID should differ after pushInput")
+
+	// Pop — should restore original.
+	ctx.popInput()
+	id3 := ctx.currentInputID()
+	require.True(t, id1 == id3, "currentInputID should match original after popInput")
 }
 
 func TestConditionalSectionInclude(t *testing.T) {
