@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
@@ -66,13 +67,15 @@ func loadFromBytes(data []byte, baseURI string) (*icatalog.Catalog, error) {
 		cat.Pref = icatalog.ParsePrefer(v)
 	}
 
-	parseEntries(root, cat.Pref, baseURI, &cat.Entries)
+	var warnings strings.Builder
+	parseEntries(root, cat.Pref, baseURI, &cat.Entries, &warnings)
+	cat.ParseWarnings = warnings.String()
 
 	return cat, nil
 }
 
 // parseEntries walks child elements of parent and appends catalog entries.
-func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string, entries *[]icatalog.Entry) {
+func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string, entries *[]icatalog.Entry, warnings *strings.Builder) {
 	if v := getAttrNS(parent, "base", "http://www.w3.org/XML/1998/namespace"); v != "" {
 		baseURI = icatalog.ResolveURI(baseURI, v)
 	}
@@ -103,7 +106,9 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 		case "public":
 			pubID := icatalog.NormalizePublicID(getAttr(elem, "publicId"))
 			uri := icatalog.ResolveURI(elemBase, getAttr(elem, "uri"))
-			if pubID != "" && uri != "" {
+			if pubID == "" || uri == "" {
+				catalogMissingAttr(warnings, localName, pubID, "publicId", uri, "uri")
+			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Typ:    icatalog.EntryPublic,
 					Name:   pubID,
@@ -114,7 +119,9 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 		case "system":
 			sysID := getAttr(elem, "systemId")
 			uri := icatalog.ResolveURI(elemBase, getAttr(elem, "uri"))
-			if sysID != "" && uri != "" {
+			if sysID == "" || uri == "" {
+				catalogMissingAttr(warnings, localName, sysID, "systemId", uri, "uri")
+			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Typ:  icatalog.EntrySystem,
 					Name: sysID,
@@ -124,7 +131,9 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 		case "rewriteSystem":
 			startString := getAttr(elem, "systemIdStartString")
 			prefix := icatalog.ResolveURI(elemBase, getAttr(elem, "rewritePrefix"))
-			if startString != "" && prefix != "" {
+			if startString == "" || prefix == "" {
+				catalogMissingAttr(warnings, localName, startString, "systemIdStartString", prefix, "rewritePrefix")
+			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Typ:  icatalog.EntryRewriteSystem,
 					Name: startString,
@@ -134,7 +143,9 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 		case "delegatePublic":
 			startString := icatalog.NormalizePublicID(getAttr(elem, "publicIdStartString"))
 			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, "catalog"))
-			if startString != "" && catFile != "" {
+			if startString == "" || catFile == "" {
+				catalogMissingAttr(warnings, localName, startString, "publicIdStartString", catFile, "catalog")
+			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Typ:    icatalog.EntryDelegatePublic,
 					Name:   startString,
@@ -145,7 +156,9 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 		case "delegateSystem":
 			startString := getAttr(elem, "systemIdStartString")
 			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, "catalog"))
-			if startString != "" && catFile != "" {
+			if startString == "" || catFile == "" {
+				catalogMissingAttr(warnings, localName, startString, "systemIdStartString", catFile, "catalog")
+			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Typ:  icatalog.EntryDelegateSystem,
 					Name: startString,
@@ -155,7 +168,9 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 		case "uri":
 			name := getAttr(elem, "name")
 			uri := icatalog.ResolveURI(elemBase, getAttr(elem, "uri"))
-			if name != "" && uri != "" {
+			if name == "" || uri == "" {
+				catalogMissingAttr(warnings, localName, name, "name", uri, "uri")
+			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Typ:  icatalog.EntryURI,
 					Name: name,
@@ -165,7 +180,9 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 		case "rewriteURI":
 			startString := getAttr(elem, "uriStartString")
 			prefix := icatalog.ResolveURI(elemBase, getAttr(elem, "rewritePrefix"))
-			if startString != "" && prefix != "" {
+			if startString == "" || prefix == "" {
+				catalogMissingAttr(warnings, localName, startString, "uriStartString", prefix, "rewritePrefix")
+			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Typ:  icatalog.EntryRewriteURI,
 					Name: startString,
@@ -175,7 +192,9 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 		case "delegateURI":
 			startString := getAttr(elem, "uriStartString")
 			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, "catalog"))
-			if startString != "" && catFile != "" {
+			if startString == "" || catFile == "" {
+				catalogMissingAttr(warnings, localName, startString, "uriStartString", catFile, "catalog")
+			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Typ:  icatalog.EntryDelegateURI,
 					Name: startString,
@@ -184,7 +203,9 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 			}
 		case "nextCatalog":
 			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, "catalog"))
-			if catFile != "" {
+			if catFile == "" {
+				fmt.Fprintf(warnings, "%s entry missing catalog attribute\n", localName)
+			} else {
 				if !icatalog.HasNextCatalog(*entries, catFile) {
 					*entries = append(*entries, icatalog.Entry{
 						Typ: icatalog.EntryNextCatalog,
@@ -193,7 +214,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				}
 			}
 		case "group":
-			parseEntries(elem, elemPrefer, elemBase, entries)
+			parseEntries(elem, elemPrefer, elemBase, entries, warnings)
 		}
 	}
 }
@@ -206,6 +227,16 @@ func documentElement(doc *helium.Document) *helium.Element {
 		}
 	}
 	return nil
+}
+
+// catalogMissingAttr reports which required attributes are missing on a catalog entry.
+func catalogMissingAttr(warnings *strings.Builder, elemName, val1, attr1, val2, attr2 string) {
+	if val1 == "" {
+		fmt.Fprintf(warnings, "%s entry missing %s attribute\n", elemName, attr1)
+	}
+	if val2 == "" {
+		fmt.Fprintf(warnings, "%s entry missing %s attribute\n", elemName, attr2)
+	}
 }
 
 // getAttr returns the value of the attribute with the given local name.

@@ -57,11 +57,12 @@ type Loader interface {
 
 // Catalog holds parsed catalog entries and provides resolution.
 type Catalog struct {
-	Entries []Entry
-	Pref    Prefer
-	BaseURI string
-	Depth   int // recursion guard (shared across resolution chain)
-	Ldr     Loader
+	Entries       []Entry
+	Pref          Prefer
+	BaseURI       string
+	Depth         int // recursion guard (shared across resolution chain)
+	Ldr           Loader
+	ParseWarnings string // accumulated warnings from parsing
 }
 
 // Resolver is the interface that the helium parser uses for catalog

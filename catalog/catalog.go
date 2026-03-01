@@ -34,3 +34,12 @@ func (c *Catalog) ResolveURI(uri string) string {
 	}
 	return c.cat.ResolveURI(uri)
 }
+
+// ParseWarnings returns any warnings generated during catalog parsing,
+// such as entries with missing required attributes.
+func (c *Catalog) ParseWarnings() string {
+	if c == nil {
+		return ""
+	}
+	return c.cat.ParseWarnings
+}
