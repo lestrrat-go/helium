@@ -152,6 +152,8 @@ type SAXHandler interface {
 // SAXCallbacks is a callback-based SAXHandler implementation.
 // Each field accepts either a Func adapter or any type implementing
 // the corresponding single-method Handler interface.
+// The zero value is ready to use; nil handler fields are silently
+// skipped (no-op).
 type SAXCallbacks struct {
 	SetDocumentLocatorHandler    SetDocumentLocatorHandler
 	StartDocumentHandler         StartDocumentHandler
