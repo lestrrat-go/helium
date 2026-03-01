@@ -839,3 +839,34 @@ func TestCustomFunctionWithPathExpr(t *testing.T) {
 	require.Len(t, r.NodeSet, 1)
 	require.Equal(t, "b", r.NodeSet[0].Name())
 }
+
+func TestLangNamespaceAware(t *testing.T) {
+	t.Run("xml:lang matches", func(t *testing.T) {
+		doc := parseXML(t, `<root xml:lang="en"><child/></root>`)
+		child := docElement(doc).(*helium.Element).FirstChild()
+		r, err := xpath.Evaluate(child, `lang("en")`)
+		require.NoError(t, err)
+		require.Equal(t, xpath.BooleanResult, r.Type)
+		require.True(t, r.Boolean)
+	})
+
+	t.Run("non-xml namespace lang ignored", func(t *testing.T) {
+		// A "lang" attribute in a non-XML namespace must NOT be treated as xml:lang
+		doc := parseXML(t, `<root xmlns:x="urn:other" x:lang="en"><child/></root>`)
+		child := docElement(doc).(*helium.Element).FirstChild()
+		r, err := xpath.Evaluate(child, `lang("en")`)
+		require.NoError(t, err)
+		require.Equal(t, xpath.BooleanResult, r.Type)
+		require.False(t, r.Boolean)
+	})
+
+	t.Run("unprefixed lang ignored", func(t *testing.T) {
+		// An unprefixed "lang" attribute has no namespace — not xml:lang
+		doc := parseXML(t, `<root lang="en"><child/></root>`)
+		child := docElement(doc).(*helium.Element).FirstChild()
+		r, err := xpath.Evaluate(child, `lang("en")`)
+		require.NoError(t, err)
+		require.Equal(t, xpath.BooleanResult, r.Type)
+		require.False(t, r.Boolean)
+	})
+}
