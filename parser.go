@@ -224,11 +224,11 @@ found:
 	// Save the document's children and restore them afterward.
 	fc := doc.FirstChild()
 	lc := doc.LastChild()
-	doc.setFirstChild(nil)
-	doc.setLastChild(nil)
+	setFirstChild(doc, nil)
+	setLastChild(doc, nil)
 	defer func() {
-		doc.setFirstChild(fc)
-		doc.setLastChild(lc)
+		setFirstChild(doc, fc)
+		setLastChild(doc, lc)
 	}()
 
 	newctx.doc = doc

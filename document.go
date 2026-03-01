@@ -220,8 +220,8 @@ func (d *Document) CreateReference(name string) (*EntityRef, error) {
 		// Original code says:
 		// The parent pointer in entity is a DTD pointer and thus is NOT
 		// updated.  Not sure if this is 100% correct.
-		n.setFirstChild(ent)
-		n.setLastChild(ent)
+		setFirstChild(n, ent)
+		setLastChild(n, ent)
 	}
 
 	return n, nil
@@ -243,12 +243,12 @@ func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Att
 			return
 		}
 
-		attr.setFirstChild(n)
+		setFirstChild(attr, n)
 		for n != nil {
 			n.SetParent(attr)
 			x := n.NextSibling()
 			if x == nil {
-				n.setLastChild(x)
+				setLastChild(n, x)
 			}
 			n = x
 		}
@@ -326,7 +326,7 @@ func (d *Document) CreateInternalSubset(name, externalID, systemID string) (*DTD
 			prev.SetNextSibling(cur)
 			cur.SetPrevSibling(prev)
 		} else {
-			d.setFirstChild(cur)
+			setFirstChild(d, cur)
 		}
 		root.SetPrevSibling(cur)
 	}
@@ -591,7 +591,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 					if err != nil {
 						return
 					}
-					ent.setFirstChild(refchildren)
+					setFirstChild(ent, refchildren)
 					for n := refchildren; n != nil; {
 						n.SetParent(ent)
 						if x := n.NextSibling(); x != nil {

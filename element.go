@@ -111,8 +111,8 @@ func (n *Element) SetLiteralAttribute(name, value string) {
 	attr.doc = n.doc
 	t := newText([]byte(value))
 	t.doc = n.doc
-	attr.setFirstChild(t)
-	attr.setLastChild(t)
+	setFirstChild(attr, t)
+	setLastChild(attr, t)
 	t.SetParent(attr)
 	n.addProperty(attr)
 }

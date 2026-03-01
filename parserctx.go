@@ -5092,11 +5092,11 @@ func (ctx *parserCtx) parseExternalEntityPrivate(uri, externalID string) (Node, 
 	// Save and restore the document's children
 	fc := ctx.doc.FirstChild()
 	lc := ctx.doc.LastChild()
-	ctx.doc.setFirstChild(nil)
-	ctx.doc.setLastChild(nil)
+	setFirstChild(ctx.doc, nil)
+	setLastChild(ctx.doc, nil)
 	defer func() {
-		ctx.doc.setFirstChild(fc)
-		ctx.doc.setLastChild(lc)
+		setFirstChild(ctx.doc, fc)
+		setLastChild(ctx.doc, lc)
 	}()
 	newctx.doc = ctx.doc
 	newctx.sax = ctx.sax
@@ -5191,11 +5191,11 @@ func (ctx *parserCtx) parseBalancedChunkInternal(chunk []byte, userData interfac
 	// save the document's children
 	fc := ctx.doc.FirstChild()
 	lc := ctx.doc.LastChild()
-	ctx.doc.setFirstChild(nil)
-	ctx.doc.setLastChild(nil)
+	setFirstChild(ctx.doc, nil)
+	setLastChild(ctx.doc, nil)
 	defer func() {
-		ctx.doc.setFirstChild(fc)
-		ctx.doc.setLastChild(lc)
+		setFirstChild(ctx.doc, fc)
+		setLastChild(ctx.doc, lc)
 	}()
 	newctx.doc = ctx.doc
 	newctx.sax = ctx.sax
