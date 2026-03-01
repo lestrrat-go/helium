@@ -458,11 +458,23 @@ func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
 
 	_, _ = io.WriteString(out, " [\n")
 
+	// Suppress formatting for DTD children, matching libxml2's
+	// xmlDtdDumpOutput which sets format=0, level=-1.
+	savedFormat := d.Format
+	savedIndent := d.indent
+	d.Format = false
+	d.indent = -1
+
 	for e := dtd.FirstChild(); e != nil; e = e.NextSibling() {
 		if err := d.DumpNode(out, e); err != nil {
+			d.Format = savedFormat
+			d.indent = savedIndent
 			return err
 		}
 	}
+
+	d.Format = savedFormat
+	d.indent = savedIndent
 
 	_, _ = io.WriteString(out, "]>")
 	return nil
