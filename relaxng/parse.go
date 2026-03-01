@@ -926,12 +926,12 @@ func getAttrOpt(elem *helium.Element, name string) (string, bool) {
 }
 
 // getAncestorNS walks up the RNG element tree to find the ns attribute.
+// An explicit ns="" on an ancestor stops the walk (empty namespace).
 func getAncestorNS(node *helium.Element) string {
 	current := node.Parent()
 	for current != nil {
 		if elem, ok := current.(*helium.Element); ok {
-			ns := getAttr(elem, "ns")
-			if ns != "" {
+			if ns, hasNS := getAttrOpt(elem, "ns"); hasNS {
 				return ns
 			}
 			current = elem.Parent()
