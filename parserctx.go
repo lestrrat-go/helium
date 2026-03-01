@@ -450,6 +450,15 @@ func (ctx *parserCtx) error(err error) error {
 	return ctx.errorAtLevel(err, ErrorLevelFatal)
 }
 
+func (ctx *parserCtx) namespaceError(err error) error {
+	e := ctx.errorAtLevel(err, ErrorLevelFatal)
+	if pe, ok := e.(ErrParseError); ok {
+		pe.Domain = ErrorDomainNamespace
+		return pe
+	}
+	return e
+}
+
 func (ctx *parserCtx) errorAtLevel(err error, level ErrorLevel) error {
 	// errParserStopped is not a real error; pass through unwrapped.
 	if errors.Is(err, errParserStopped) {
@@ -1158,29 +1167,29 @@ func (ctx *parserCtx) parseStartTag() error {
 			// parseAttribute for namespace attrs), so no post-processing needed.
 			if attname == XMLPrefix { // xmlns:xml
 				if attvalue != XMLNamespace {
-					return ctx.error(errors.New("xml namespace prefix mapped to wrong URI"))
+					return ctx.namespaceError(errors.New("xml namespace prefix mapped to wrong URI"))
 				}
 				// skip storing namespace definition
 				goto SkipNS
 			}
 			if attname == XMLNsPrefix { // xmlns:xmlns="..."
-				return ctx.error(errors.New("redefinition of the xmlns prefix forbidden"))
+				return ctx.namespaceError(errors.New("redefinition of the xmlns prefix forbidden"))
 			}
 
 			if attvalue == "http://www.w3.org/2000/xmlns/" {
-				return ctx.error(errors.New("reuse of the xmlns namespace name if forbidden"))
+				return ctx.namespaceError(errors.New("reuse of the xmlns namespace name if forbidden"))
 			}
 
 			if attvalue == "" {
-				return ctx.error(fmt.Errorf("xmlns:%s: Empty XML namespace is not allowed", attname))
+				return ctx.namespaceError(fmt.Errorf("xmlns:%s: Empty XML namespace is not allowed", attname))
 			}
 
 			u, err = url.Parse(attvalue)
 			if err != nil {
-				return ctx.error(fmt.Errorf("xmlns:%s: '%s' is not a validURI", attname, attvalue))
+				return ctx.namespaceError(fmt.Errorf("xmlns:%s: '%s' is not a validURI", attname, attvalue))
 			}
 			if ctx.pedantic && u.Scheme == "" {
-				return ctx.error(fmt.Errorf("xmlns:%s: URI %s is not absolute", attname, attvalue))
+				return ctx.namespaceError(fmt.Errorf("xmlns:%s: URI %s is not absolute", attname, attvalue))
 			}
 
 			existingURI = ctx.nsTab.Lookup(attname)
@@ -1286,7 +1295,7 @@ func (ctx *parserCtx) parseStartTag() error {
 	// via lookupNamespace
 	nsuri := ctx.lookupNamespace(prefix)
 	if prefix != "" && nsuri == "" {
-		return ctx.error(errors.New("namespace '" + prefix + "' not found"))
+		return ctx.namespaceError(errors.New("namespace '" + prefix + "' not found"))
 	}
 	if nsuri != "" {
 		if err := elem.SetNamespace(prefix, nsuri, true); err != nil {

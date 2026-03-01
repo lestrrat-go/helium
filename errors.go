@@ -3,6 +3,7 @@ package helium
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // ErrorLevel represents the severity of a parse error.
@@ -13,6 +14,14 @@ const (
 	ErrorLevelWarning
 	ErrorLevelError
 	ErrorLevelFatal
+)
+
+// ErrorDomain classifies the subsystem that produced an error.
+type ErrorDomain int
+
+const (
+	ErrorDomainParser    ErrorDomain = iota // default
+	ErrorDomainNamespace
 )
 
 var (
@@ -37,6 +46,7 @@ type ErrAttrNotFound struct {
 
 type ErrParseError struct {
 	Column     int
+	Domain     ErrorDomain
 	Err        error
 	File       string
 	Level      ErrorLevel
@@ -115,6 +125,51 @@ func (e ErrParseError) Error() string {
 
 func (e ErrParseError) Unwrap() error {
 	return e.Err
+}
+
+// FormatError returns a libxml2-compatible multi-line error string:
+//
+//	FILE:LINE: DOMAIN SEVERITY : MESSAGE
+//	CONTEXT_LINE
+//	     ^
+func (e ErrParseError) FormatError() string {
+	var domain string
+	switch e.Domain {
+	case ErrorDomainNamespace:
+		domain = "namespace"
+	default:
+		domain = "parser"
+	}
+
+	var severity string
+	switch e.Level {
+	case ErrorLevelWarning:
+		severity = "warning"
+	default:
+		severity = "error"
+	}
+
+	var b strings.Builder
+	if e.File != "" {
+		fmt.Fprintf(&b, "%s:%d: ", e.File, e.LineNumber)
+	}
+	fmt.Fprintf(&b, "%s %s : %s", domain, severity, e.Err)
+
+	if e.Line != "" {
+		b.WriteByte('\n')
+		b.WriteString(e.Line)
+		b.WriteByte('\n')
+		col := e.Column - 1
+		if col < 0 {
+			col = 0
+		}
+		for i := 0; i < col; i++ {
+			b.WriteByte(' ')
+		}
+		b.WriteByte('^')
+	}
+
+	return b.String()
 }
 
 func (e ErrUnimplemented) Error() string {
