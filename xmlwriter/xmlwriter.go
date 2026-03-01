@@ -59,6 +59,7 @@ type Writer struct {
 	err        error         // sticky error
 	depth      int           // current element nesting depth (for indentation)
 	hasOutput  bool          // true after first output has been written
+	wroteNL    bool          // true after EndComment/EndPI wrote trailing \n (suppresses writeIndent's \n)
 }
 
 // Option configures a Writer.
@@ -175,9 +176,12 @@ func (w *Writer) writeIndent() {
 		// Don't write a leading newline before the very first output
 		return
 	}
-	// At depth 0 (root level), StartDocument already wrote a trailing
-	// newline, so skip the extra newline that writeIndent would add.
-	if w.depth > 0 {
+	if w.wroteNL {
+		// EndComment/EndPI already wrote \n; skip the extra one.
+		w.wroteNL = false
+	} else if w.depth > 0 {
+		// At depth 0 (root level), StartDocument already wrote a trailing
+		// newline, so skip the extra newline that writeIndent would add.
 		w.writeStr("\n")
 	}
 	for i := 0; i < w.depth; i++ {
@@ -190,7 +194,11 @@ func (w *Writer) writeEndIndent() {
 	if w.indent == "" {
 		return
 	}
-	w.writeStr("\n")
+	if w.wroteNL {
+		w.wroteNL = false
+	} else {
+		w.writeStr("\n")
+	}
 	for i := 0; i < w.depth; i++ {
 		w.writeStr(w.indent)
 	}
@@ -668,6 +676,10 @@ func (w *Writer) EndComment() error {
 		return errors.New("xmlwriter: EndComment called outside comment")
 	}
 	w.writeStr("-->")
+	if w.indent != "" {
+		w.writeStr("\n")
+		w.wroteNL = true
+	}
 	if len(w.stateStack) > 0 {
 		w.state = w.stateStack[len(w.stateStack)-1]
 		w.stateStack = w.stateStack[:len(w.stateStack)-1]
@@ -726,6 +738,10 @@ func (w *Writer) EndPI() error {
 		return errors.New("xmlwriter: EndPI called outside processing instruction")
 	}
 	w.writeStr("?>")
+	if w.indent != "" {
+		w.writeStr("\n")
+		w.wroteNL = true
+	}
 	if len(w.stateStack) > 0 {
 		w.state = w.stateStack[len(w.stateStack)-1]
 		w.stateStack = w.stateStack[:len(w.stateStack)-1]

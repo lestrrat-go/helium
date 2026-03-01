@@ -451,6 +451,91 @@ func TestIndentationMixedContent(t *testing.T) {
 	require.Equal(t, "<root>text\n  <child/></root>", buf.String())
 }
 
+func TestIndentCommentNewline(t *testing.T) {
+	t.Run("comment followed by element", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := New(&buf, WithIndent("  "))
+		require.NoError(t, w.StartElement("root"))
+		require.NoError(t, w.WriteComment(" hello "))
+		require.NoError(t, w.StartElement("child"))
+		require.NoError(t, w.EndElement())
+		require.NoError(t, w.EndElement())
+		// Trailing \n after --> prevents double newline with next element's indent
+		expected := "<root><!-- hello -->\n  <child/>\n</root>"
+		require.Equal(t, expected, buf.String())
+	})
+
+	t.Run("comment as last child", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := New(&buf, WithIndent("  "))
+		require.NoError(t, w.StartElement("root"))
+		require.NoError(t, w.WriteComment(" hello "))
+		require.NoError(t, w.EndElement())
+		// Trailing \n after -->, then closing tag indented
+		expected := "<root><!-- hello -->\n</root>"
+		require.Equal(t, expected, buf.String())
+	})
+
+	t.Run("comment at document level", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := New(&buf, WithIndent("  "))
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.WriteComment(" hello "))
+		require.NoError(t, w.StartElement("root"))
+		require.NoError(t, w.EndElement())
+		require.NoError(t, w.EndDocument())
+		// Trailing \n after --> separates comment from root element
+		expected := "<?xml version=\"1.0\"?>\n<!-- hello -->\n<root/>"
+		require.Equal(t, expected, buf.String())
+	})
+
+	t.Run("no indent no trailing newline", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := New(&buf)
+		require.NoError(t, w.StartElement("root"))
+		require.NoError(t, w.WriteComment(" hello "))
+		require.NoError(t, w.EndElement())
+		expected := "<root><!-- hello --></root>"
+		require.Equal(t, expected, buf.String())
+	})
+}
+
+func TestIndentPINewline(t *testing.T) {
+	t.Run("PI followed by element", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := New(&buf, WithIndent("  "))
+		require.NoError(t, w.StartElement("root"))
+		require.NoError(t, w.WritePI("app", "data"))
+		require.NoError(t, w.StartElement("child"))
+		require.NoError(t, w.EndElement())
+		require.NoError(t, w.EndElement())
+		expected := "<root><?app data?>\n  <child/>\n</root>"
+		require.Equal(t, expected, buf.String())
+	})
+
+	t.Run("PI at document level", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := New(&buf, WithIndent("  "))
+		require.NoError(t, w.StartDocument("", "", ""))
+		require.NoError(t, w.WritePI("app", "data"))
+		require.NoError(t, w.StartElement("root"))
+		require.NoError(t, w.EndElement())
+		require.NoError(t, w.EndDocument())
+		expected := "<?xml version=\"1.0\"?>\n<?app data?>\n<root/>"
+		require.Equal(t, expected, buf.String())
+	})
+
+	t.Run("no indent no trailing newline", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := New(&buf)
+		require.NoError(t, w.StartElement("root"))
+		require.NoError(t, w.WritePI("app", "data"))
+		require.NoError(t, w.EndElement())
+		expected := "<root><?app data?></root>"
+		require.Equal(t, expected, buf.String())
+	})
+}
+
 func TestEndDocumentClosesAll(t *testing.T) {
 	var buf bytes.Buffer
 	w := New(&buf)
