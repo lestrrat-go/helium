@@ -102,34 +102,63 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 // formatMessage interpolates message parts against a context node.
 // If a value-of evaluation fails, it emits an XPath error to out and
 // stops processing further parts (matching libxml2 behavior).
+//
+// Whitespace normalization matches libxml2's xmlSchematronFormatReport:
+// after each segment (text, name, value-of), if the accumulated buffer
+// ends with whitespace, all trailing whitespace is replaced with a
+// single space. Internal whitespace within segments is preserved.
 func formatMessage(parts []messagePart, node helium.Node, xctx *xpath.Context, out *strings.Builder) string {
-	var raw strings.Builder
+	var buf []byte
 	for _, part := range parts {
 		switch p := part.(type) {
 		case textPart:
-			raw.WriteString(p.text)
+			buf = append(buf, p.text...)
 		case namePart:
 			if p.expr != nil {
 				result, err := p.expr.EvaluateWithContext(node, xctx)
 				if err == nil {
-					raw.WriteString(xpathResultToName(result))
+					buf = append(buf, xpathResultToName(result)...)
 				}
 			}
 		case valueOfPart:
 			if p.expr == nil {
 				// Compile-time error — should not happen (caught during compilation).
-				return collapseWhitespace(raw.String())
+				return string(buf)
 			}
 			result, err := p.expr.EvaluateWithContext(node, xctx)
 			if err != nil {
 				// Runtime XPath error — emit error line and stop processing.
 				fmt.Fprintf(out, "XPath error : %s\n", formatXPathError(err))
-				return collapseWhitespace(raw.String())
+				return string(buf)
 			}
-			raw.WriteString(xpathResultToString(result))
+			buf = append(buf, xpathResultToString(result)...)
 		}
+		buf = trimTrailingWS(buf)
 	}
-	return collapseWhitespace(raw.String())
+	return string(buf)
+}
+
+// trimTrailingWS replaces trailing whitespace in buf with a single space.
+// Matches libxml2's per-segment whitespace normalization in
+// xmlSchematronFormatReport (schematron.c:1515-1533).
+func trimTrailingWS(buf []byte) []byte {
+	if len(buf) == 0 {
+		return buf
+	}
+	c := buf[len(buf)-1]
+	if c != ' ' && c != '\n' && c != '\r' && c != '\t' {
+		return buf
+	}
+	end := len(buf)
+	for end > 0 {
+		c = buf[end-1]
+		if c != ' ' && c != '\n' && c != '\r' && c != '\t' {
+			break
+		}
+		end--
+	}
+	buf = buf[:end]
+	return append(buf, ' ')
 }
 
 // formatXPathError converts XPath error messages to libxml2-compatible format.
@@ -143,25 +172,6 @@ func formatXPathError(err error) string {
 		return "Unregistered function: " + strings.TrimPrefix(msg, "unknown function: ")
 	}
 	return msg
-}
-
-// collapseWhitespace replaces runs of whitespace (space, tab, newline, CR) with a single space.
-func collapseWhitespace(s string) string {
-	var sb strings.Builder
-	sb.Grow(len(s))
-	inWS := false
-	for _, r := range s {
-		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
-			if !inWS {
-				sb.WriteByte(' ')
-				inWS = true
-			}
-		} else {
-			sb.WriteRune(r)
-			inWS = false
-		}
-	}
-	return sb.String()
 }
 
 // xpathResultToBool converts an XPath result to a boolean.
