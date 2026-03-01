@@ -1257,10 +1257,18 @@ func (d *Dumper) headHasContentTypeMeta(head *Element) bool {
 }
 
 // writeMetaContentType writes the XHTML meta Content-Type tag.
+// When formatting is enabled, a newline and indent are emitted before
+// the meta tag, matching libxml2's behavior.
 func (d *Dumper) writeMetaContentType(out io.Writer) {
 	enc := d.encoding
 	if enc == "" {
 		enc = "UTF-8"
+	}
+	if d.Format {
+		_, _ = io.WriteString(out, "\n")
+		d.indent++
+		d.writeIndent(out)
+		d.indent--
 	}
 	_, _ = io.WriteString(out, `<meta http-equiv="Content-Type" content="text/html; charset=`)
 	_, _ = io.WriteString(out, enc)
