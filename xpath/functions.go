@@ -541,7 +541,7 @@ func fnLang(ctx *evalContext, args []*Result) (*Result, error) {
 			continue
 		}
 		for _, attr := range elem.Attributes() {
-			if attr.Name() == "xml:lang" || attr.LocalName() == "lang" {
+			if attr.LocalName() == "lang" && attr.URI() == helium.XMLNamespace {
 				val := strings.ToLower(attr.Value())
 				if val == langArg || strings.HasPrefix(val, langArg+"-") {
 					return &Result{Type: BooleanResult, Boolean: true}, nil
