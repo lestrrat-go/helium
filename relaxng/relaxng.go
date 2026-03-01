@@ -42,6 +42,7 @@ func CompileFile(path string, opts ...CompileOption) (*Grammar, error) {
 		}
 		return nil, err
 	}
+	doc.SetURL(path)
 	baseDir := filepath.Dir(path)
 	return compileSchema(doc, baseDir, cfg)
 }

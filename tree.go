@@ -14,10 +14,10 @@ import (
 	"github.com/lestrrat-go/strcursor"
 )
 
-// buildURI resolves a relative system ID against a base URI.
+// BuildURI resolves a relative system ID against a base URI.
 // For local file paths (no scheme or file: scheme), it uses filepath.Join.
 // For other schemes, it uses url.ResolveReference.
-func buildURI(systemID, base string) string {
+func BuildURI(systemID, base string) string {
 	u, err := url.Parse(systemID)
 	if err != nil {
 		return ""
@@ -35,7 +35,20 @@ func buildURI(systemID, base string) string {
 		if basePath == "" {
 			basePath = base
 		}
-		return filepath.Join(filepath.Dir(basePath), systemID)
+		// When the base ends with "/" it represents a directory;
+		// use it directly instead of calling filepath.Dir which
+		// would strip the last component.
+		dir := filepath.Dir(basePath)
+		if strings.HasSuffix(basePath, "/") {
+			dir = strings.TrimRight(basePath, "/")
+		}
+		result := filepath.Join(dir, systemID)
+		// Preserve trailing slash from systemID (indicates a directory
+		// base for xml:base chaining).
+		if strings.HasSuffix(systemID, "/") && !strings.HasSuffix(result, "/") {
+			result += "/"
+		}
+		return result
 	}
 
 	return baseURL.ResolveReference(u).String()
@@ -850,7 +863,7 @@ func (t *TreeBuilder) EntityDecl(ctxif sax.Context, name string, typ int, public
 	if ent.uri == "" && systemID != "" {
 		base := ctx.baseURI
 		if base != "" {
-			resolved := buildURI(systemID, base)
+			resolved := BuildURI(systemID, base)
 			if resolved != "" {
 				ent.uri = resolved
 			}

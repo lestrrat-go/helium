@@ -305,6 +305,25 @@ func combinePatterns(existing, incoming *pattern, mode string) *pattern {
 	}
 }
 
+// resolveHref resolves a relative href against xml:base ancestors and the
+// compiler's baseDir. This mirrors libxml2's xmlRelaxNGCleanupTree xml:base
+// fixup for <include> and <externalRef> hrefs.
+func (c *compiler) resolveHref(elem *helium.Element, href string) string {
+	if filepath.IsAbs(href) {
+		return href
+	}
+	if doc := elem.OwnerDocument(); doc != nil {
+		base := helium.NodeGetBase(doc, elem)
+		if base != "" {
+			return helium.BuildURI(href, base)
+		}
+	}
+	if c.baseDir != "" {
+		return filepath.Join(c.baseDir, href)
+	}
+	return href
+}
+
 // parseInclude parses an <include> element.
 func (c *compiler) parseInclude(elem *helium.Element) {
 	href := getAttr(elem, "href")
@@ -313,11 +332,7 @@ func (c *compiler) parseInclude(elem *helium.Element) {
 		return
 	}
 
-	// Resolve path
-	path := href
-	if !filepath.IsAbs(path) && c.baseDir != "" {
-		path = filepath.Join(c.baseDir, path)
-	}
+	path := c.resolveHref(elem, href)
 
 	// Recursion guard
 	for _, p := range c.includeStack {
@@ -345,6 +360,7 @@ func (c *compiler) parseInclude(elem *helium.Element) {
 		c.errors.WriteString(rngParserError(fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)))
 		return
 	}
+	doc.SetURL(path)
 
 	root := findDocumentElement(doc)
 	if root == nil || !isRNG(root, "grammar") {
@@ -714,10 +730,7 @@ func (c *compiler) parseExternalRef(node *helium.Element) *pattern {
 		return nil
 	}
 
-	path := href
-	if !filepath.IsAbs(path) && c.baseDir != "" {
-		path = filepath.Join(c.baseDir, path)
-	}
+	path := c.resolveHref(node, href)
 
 	// Recursion guard
 	for _, p := range c.includeStack {
@@ -744,6 +757,7 @@ func (c *compiler) parseExternalRef(node *helium.Element) *pattern {
 		c.errors.WriteString(rngParserError(fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)))
 		return nil
 	}
+	doc.SetURL(path)
 
 	root := findDocumentElement(doc)
 	if root == nil {
@@ -940,7 +954,7 @@ func isNameClassElement(elem *helium.Element) bool {
 func getAttr(elem *helium.Element, name string) string {
 	for _, attr := range elem.Attributes() {
 		if attr.LocalName() == name {
-			return attr.Value()
+			return strings.TrimSpace(attr.Value())
 		}
 	}
 	return ""
@@ -950,7 +964,7 @@ func getAttr(elem *helium.Element, name string) string {
 func getAttrOpt(elem *helium.Element, name string) (string, bool) {
 	for _, attr := range elem.Attributes() {
 		if attr.LocalName() == name {
-			return attr.Value(), true
+			return strings.TrimSpace(attr.Value()), true
 		}
 	}
 	return "", false

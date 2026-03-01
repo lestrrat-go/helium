@@ -1,0 +1,7 @@
+<grammar xmlns="http://relaxng.org/ns/structure/1.0"
+         xmlns:xml="http://www.w3.org/XML/1998/namespace"
+         xml:base="xmlbase/">
+  <start>
+    <externalRef href="included.rng"/>
+  </start>
+</grammar>

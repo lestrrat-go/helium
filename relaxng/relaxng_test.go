@@ -164,6 +164,60 @@ func TestGoldenFiles(t *testing.T) {
 	t.Logf("Results: %d passed, %d failed, %d skipped (out of %d total)", passed, failed, skipped, len(cases))
 }
 
+func TestGetAttrWhitespace(t *testing.T) {
+	// Verify that whitespace-padded name attributes are trimmed so that
+	// define/ref matching works correctly.
+	input := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start><ref name="  foo  "/></start>
+  <define name="  foo  ">
+    <element name="a"><empty/></element>
+  </define>
+</grammar>`
+	doc, err := helium.Parse([]byte(input))
+	require.NoError(t, err)
+
+	grammar, err := relaxng.Compile(doc)
+	require.NoError(t, err)
+	require.Empty(t, grammar.CompileErrors(), "schema with whitespace-padded names should compile without errors")
+
+	xmlData := []byte(`<a/>`)
+	xmlDoc, err := helium.Parse(xmlData)
+	require.NoError(t, err)
+
+	result := relaxng.Validate(xmlDoc, grammar)
+	require.Contains(t, result, "validates", "valid document should validate")
+}
+
+func TestXmlBaseInclude(t *testing.T) {
+	// Schema uses <div xml:base="xmlbase/"> wrapping <include href="included.rng"/>.
+	// The included file lives in testdata/xmlbase/included.rng.
+	grammar, err := relaxng.CompileFile("testdata/xmlbase_include.rng")
+	require.NoError(t, err)
+	require.Empty(t, grammar.CompileErrors(), "include via xml:base should compile without errors")
+
+	xmlData := []byte(`<sub/>`)
+	xmlDoc, err := helium.Parse(xmlData)
+	require.NoError(t, err)
+
+	result := relaxng.Validate(xmlDoc, grammar)
+	require.Contains(t, result, "validates", "valid document should validate")
+}
+
+func TestXmlBaseExternalRef(t *testing.T) {
+	// Schema uses xml:base on the root grammar element to redirect externalRef
+	// resolution to the xmlbase/ subdirectory.
+	grammar, err := relaxng.CompileFile("testdata/xmlbase_extref.rng")
+	require.NoError(t, err)
+	require.Empty(t, grammar.CompileErrors(), "externalRef via xml:base should compile without errors")
+
+	xmlData := []byte(`<sub/>`)
+	xmlDoc, err := helium.Parse(xmlData)
+	require.NoError(t, err)
+
+	result := relaxng.Validate(xmlDoc, grammar)
+	require.Contains(t, result, "validates", "valid document should validate")
+}
+
 func TestCheckCombine(t *testing.T) {
 	t.Run("conflicting define combine modes", func(t *testing.T) {
 		input := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">

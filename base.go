@@ -29,7 +29,7 @@ func NodeGetBase(doc *Document, n Node) string {
 		if base == "" {
 			base = bases[i]
 		} else {
-			base = buildURI(bases[i], base)
+			base = BuildURI(bases[i], base)
 		}
 	}
 
