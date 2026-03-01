@@ -1,4 +1,4 @@
-package xmlwriter
+package stream_test
 
 import (
 	"bytes"
@@ -6,20 +6,29 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lestrrat-go/helium/stream"
 	"github.com/stretchr/testify/require"
 )
 
 func TestStartDocument(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.EndDocument())
 	require.Equal(t, `<?xml version="1.0"?>`, strings.TrimRight(buf.String(), "\n"))
 }
 
+func TestStartDocumentZeroValueWriterReturnsError(t *testing.T) {
+	var w stream.Writer
+	require.NotPanics(t, func() {
+		err := w.StartDocument("", "", "")
+		require.ErrorContains(t, err, "output writer is nil")
+	})
+}
+
 func TestStartDocumentWithEncoding(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("1.0", "UTF-8", ""))
 	require.NoError(t, w.EndDocument())
 	require.Equal(t, `<?xml version="1.0" encoding="UTF-8"?>`, strings.TrimRight(buf.String(), "\n"))
@@ -27,7 +36,7 @@ func TestStartDocumentWithEncoding(t *testing.T) {
 
 func TestStartDocumentWithStandalone(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("1.0", "", "yes"))
 	require.NoError(t, w.EndDocument())
 	require.Equal(t, `<?xml version="1.0" standalone="yes"?>`, strings.TrimRight(buf.String(), "\n"))
@@ -35,7 +44,7 @@ func TestStartDocumentWithStandalone(t *testing.T) {
 
 func TestStartDocumentFull(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("1.0", "ISO-8859-1", "no"))
 	require.NoError(t, w.EndDocument())
 	require.Equal(t, `<?xml version="1.0" encoding="ISO-8859-1" standalone="no"?>`, strings.TrimRight(buf.String(), "\n"))
@@ -44,19 +53,19 @@ func TestStartDocumentFull(t *testing.T) {
 func TestStartDocumentEncodingValidation(t *testing.T) {
 	t.Run("valid encoding", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf)
+		w := stream.NewWriter(&buf)
 		require.NoError(t, w.StartDocument("1.0", "UTF-8", ""))
 	})
 
 	t.Run("valid encoding case insensitive", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf)
+		w := stream.NewWriter(&buf)
 		require.NoError(t, w.StartDocument("1.0", "utf-8", ""))
 	})
 
 	t.Run("invalid encoding", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf)
+		w := stream.NewWriter(&buf)
 		err := w.StartDocument("1.0", "BOGUS-999", "")
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "unsupported encoding")
@@ -64,14 +73,14 @@ func TestStartDocumentEncodingValidation(t *testing.T) {
 
 	t.Run("empty encoding skips validation", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf)
+		w := stream.NewWriter(&buf)
 		require.NoError(t, w.StartDocument("1.0", "", ""))
 	})
 }
 
 func TestSimpleElement(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.EndElement())
@@ -81,7 +90,7 @@ func TestSimpleElement(t *testing.T) {
 
 func TestElementWithText(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteString("hello"))
@@ -92,7 +101,7 @@ func TestElementWithText(t *testing.T) {
 
 func TestElementWithEscaping(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteString("a < b & c > d"))
 	require.NoError(t, w.EndElement())
@@ -101,7 +110,7 @@ func TestElementWithEscaping(t *testing.T) {
 
 func TestNestedElements(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.StartElement("child"))
@@ -114,7 +123,7 @@ func TestNestedElements(t *testing.T) {
 
 func TestAttribute(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteAttribute("key", "value"))
 	require.NoError(t, w.EndElement())
@@ -123,7 +132,7 @@ func TestAttribute(t *testing.T) {
 
 func TestAttributeEscaping(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteAttribute("key", `a"b<c&d`))
 	require.NoError(t, w.EndElement())
@@ -132,7 +141,7 @@ func TestAttributeEscaping(t *testing.T) {
 
 func TestAttributeWhitespaceEscaping(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteAttribute("key", "a\nb\tc\rd"))
 	require.NoError(t, w.EndElement())
@@ -141,7 +150,7 @@ func TestAttributeWhitespaceEscaping(t *testing.T) {
 
 func TestMultipleAttributes(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteAttribute("a", "1"))
 	require.NoError(t, w.WriteAttribute("b", "2"))
@@ -151,7 +160,7 @@ func TestMultipleAttributes(t *testing.T) {
 
 func TestAttributeWithContent(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteAttribute("a", "1"))
 	require.NoError(t, w.WriteString("text"))
@@ -161,7 +170,7 @@ func TestAttributeWithContent(t *testing.T) {
 
 func TestSingleQuotes(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf, WithQuoteChar('\''))
+	w := stream.NewWriter(&buf, stream.WithQuoteChar('\''))
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteAttribute("key", "it's"))
@@ -172,7 +181,7 @@ func TestSingleQuotes(t *testing.T) {
 
 func TestDoubleQuotesInSingleQuoteMode(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf, WithQuoteChar('\''))
+	w := stream.NewWriter(&buf, stream.WithQuoteChar('\''))
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteAttribute("key", `say "hi"`))
 	require.NoError(t, w.EndElement())
@@ -181,7 +190,7 @@ func TestDoubleQuotesInSingleQuoteMode(t *testing.T) {
 
 func TestFullEndElement(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.FullEndElement())
 	require.Equal(t, `<root></root>`, buf.String())
@@ -189,7 +198,7 @@ func TestFullEndElement(t *testing.T) {
 
 func TestFullEndElementWithAttr(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteAttribute("id", "1"))
 	require.NoError(t, w.FullEndElement())
@@ -198,14 +207,14 @@ func TestFullEndElementWithAttr(t *testing.T) {
 
 func TestWriteElement(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.WriteElement("item", "hello"))
 	require.Equal(t, `<item>hello</item>`, buf.String())
 }
 
 func TestComment(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.WriteComment(" a comment "))
 	require.NoError(t, w.StartElement("root"))
@@ -216,7 +225,7 @@ func TestComment(t *testing.T) {
 
 func TestCommentInsideElement(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteComment("inside"))
 	require.NoError(t, w.EndElement())
@@ -225,7 +234,7 @@ func TestCommentInsideElement(t *testing.T) {
 
 func TestPI(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.WritePI("php", `echo "hello";`))
 	require.NoError(t, w.StartElement("root"))
@@ -236,14 +245,14 @@ func TestPI(t *testing.T) {
 
 func TestPIEmptyContent(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.WritePI("target", ""))
 	require.Equal(t, `<?target?>`, buf.String())
 }
 
 func TestPIXmlForbidden(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	err := w.StartPI("xml")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "cannot be 'xml'")
@@ -251,7 +260,7 @@ func TestPIXmlForbidden(t *testing.T) {
 
 func TestPIXmlCaseForbidden(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	err := w.StartPI("XML")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "cannot be 'xml'")
@@ -259,7 +268,7 @@ func TestPIXmlCaseForbidden(t *testing.T) {
 
 func TestCDATA(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteCDATA("some <special> & data"))
 	require.NoError(t, w.EndElement())
@@ -268,7 +277,7 @@ func TestCDATA(t *testing.T) {
 
 func TestCDATAInvalidState(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	// CDATA can only be inside an element
 	err := w.StartCDATA()
 	require.Error(t, err)
@@ -276,7 +285,7 @@ func TestCDATAInvalidState(t *testing.T) {
 
 func TestWriteRaw(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteRaw("<already>&escaped;</already>"))
 	require.NoError(t, w.EndElement())
@@ -285,7 +294,7 @@ func TestWriteRaw(t *testing.T) {
 
 func TestNamespaceElement(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElementNS("ns", "root", "http://example.com"))
 	require.NoError(t, w.EndElement())
 	require.Equal(t, `<ns:root xmlns:ns="http://example.com"/>`, buf.String())
@@ -293,7 +302,7 @@ func TestNamespaceElement(t *testing.T) {
 
 func TestDefaultNamespace(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElementNS("", "root", "http://example.com"))
 	require.NoError(t, w.EndElement())
 	require.Equal(t, `<root xmlns="http://example.com"/>`, buf.String())
@@ -301,7 +310,7 @@ func TestDefaultNamespace(t *testing.T) {
 
 func TestNamespaceAttribute(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteAttributeNS("xlink", "href", "http://www.w3.org/1999/xlink", "http://example.com"))
 	require.NoError(t, w.EndElement())
@@ -310,7 +319,7 @@ func TestNamespaceAttribute(t *testing.T) {
 
 func TestNamespaceNotRedeclared(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElementNS("ns", "root", "http://example.com"))
 	require.NoError(t, w.StartElementNS("ns", "child", "http://example.com"))
 	require.NoError(t, w.EndElement())
@@ -320,7 +329,7 @@ func TestNamespaceNotRedeclared(t *testing.T) {
 
 func TestNamespaceRedeclaredDifferentURI(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElementNS("ns", "root", "http://example.com/1"))
 	require.NoError(t, w.StartElementNS("ns", "child", "http://example.com/2"))
 	require.NoError(t, w.EndElement())
@@ -330,14 +339,14 @@ func TestNamespaceRedeclaredDifferentURI(t *testing.T) {
 
 func TestWriteElementNS(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.WriteElementNS("ns", "item", "http://example.com", "content"))
 	require.Equal(t, `<ns:item xmlns:ns="http://example.com">content</ns:item>`, buf.String())
 }
 
 func TestDTD(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.WriteDTD("html", "-//W3C//DTD XHTML 1.0 Strict//EN", "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd", ""))
 	require.NoError(t, w.StartElement("html"))
@@ -349,7 +358,7 @@ func TestDTD(t *testing.T) {
 
 func TestDTDSystem(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.WriteDTD("root", "", "root.dtd", ""))
 	require.NoError(t, w.StartElement("root"))
@@ -361,7 +370,7 @@ func TestDTDSystem(t *testing.T) {
 
 func TestDTDWithSubset(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.WriteDTD("root", "", "", `<!ELEMENT root (#PCDATA)>`))
 	require.NoError(t, w.StartElement("root"))
@@ -373,7 +382,7 @@ func TestDTDWithSubset(t *testing.T) {
 
 func TestStartDTDPubidRequiresSysid(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	err := w.StartDTD("root", "-//Example//DTD Test//EN", "")
 	require.Error(t, err)
@@ -382,7 +391,7 @@ func TestStartDTDPubidRequiresSysid(t *testing.T) {
 
 func TestStartDTDWithInternalDecls(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.StartDTD("root", "", ""))
 	require.NoError(t, w.WriteDTDElement("root", "(child)"))
@@ -407,7 +416,7 @@ func TestStartDTDWithInternalDecls(t *testing.T) {
 
 func TestWriteDTDEntityEscaping(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.StartDTD("root", "", ""))
 	require.NoError(t, w.WriteDTDEntity(false, "ent", `he said "hello" & <goodbye>`))
@@ -421,7 +430,7 @@ func TestWriteDTDEntityEscaping(t *testing.T) {
 
 func TestDTDExternalEntity(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.StartDTD("root", "", ""))
 	require.NoError(t, w.WriteDTDExternalEntity(false, "logo", "", "logo.gif", "gif"))
@@ -435,7 +444,7 @@ func TestDTDExternalEntity(t *testing.T) {
 
 func TestDTDNotation(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.StartDTD("root", "", ""))
 	require.NoError(t, w.WriteDTDNotation("gif", "", "image/gif"))
@@ -449,7 +458,7 @@ func TestDTDNotation(t *testing.T) {
 
 func TestDTDIndentPublicSystem(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf, WithIndent("  "))
+	w := stream.NewWriter(&buf, stream.WithIndent("  "))
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.WriteDTD("html", "-//W3C//DTD XHTML 1.0//EN", "xhtml1.dtd", ""))
 	require.NoError(t, w.StartElement("html"))
@@ -462,7 +471,7 @@ func TestDTDIndentPublicSystem(t *testing.T) {
 
 func TestDTDIndentSystemOnly(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf, WithIndent("  "))
+	w := stream.NewWriter(&buf, stream.WithIndent("  "))
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.WriteDTD("root", "", "root.dtd", ""))
 	require.NoError(t, w.StartElement("root"))
@@ -475,7 +484,7 @@ func TestDTDIndentSystemOnly(t *testing.T) {
 
 func TestIndentation(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf, WithIndent("  "))
+	w := stream.NewWriter(&buf, stream.WithIndent("  "))
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.StartElement("child"))
@@ -491,7 +500,7 @@ func TestIndentation(t *testing.T) {
 
 func TestIndentationDeepNesting(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf, WithIndent("\t"))
+	w := stream.NewWriter(&buf, stream.WithIndent("\t"))
 	require.NoError(t, w.StartElement("a"))
 	require.NoError(t, w.StartElement("b"))
 	require.NoError(t, w.StartElement("c"))
@@ -504,7 +513,7 @@ func TestIndentationDeepNesting(t *testing.T) {
 
 func TestIndentationMixedContent(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf, WithIndent("  "))
+	w := stream.NewWriter(&buf, stream.WithIndent("  "))
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteString("text"))
 	require.NoError(t, w.StartElement("child"))
@@ -517,7 +526,7 @@ func TestIndentationMixedContent(t *testing.T) {
 func TestIndentCommentNewline(t *testing.T) {
 	t.Run("comment followed by element", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf, WithIndent("  "))
+		w := stream.NewWriter(&buf, stream.WithIndent("  "))
 		require.NoError(t, w.StartElement("root"))
 		require.NoError(t, w.WriteComment(" hello "))
 		require.NoError(t, w.StartElement("child"))
@@ -530,7 +539,7 @@ func TestIndentCommentNewline(t *testing.T) {
 
 	t.Run("comment as last child", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf, WithIndent("  "))
+		w := stream.NewWriter(&buf, stream.WithIndent("  "))
 		require.NoError(t, w.StartElement("root"))
 		require.NoError(t, w.WriteComment(" hello "))
 		require.NoError(t, w.EndElement())
@@ -541,7 +550,7 @@ func TestIndentCommentNewline(t *testing.T) {
 
 	t.Run("comment at document level", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf, WithIndent("  "))
+		w := stream.NewWriter(&buf, stream.WithIndent("  "))
 		require.NoError(t, w.StartDocument("", "", ""))
 		require.NoError(t, w.WriteComment(" hello "))
 		require.NoError(t, w.StartElement("root"))
@@ -554,7 +563,7 @@ func TestIndentCommentNewline(t *testing.T) {
 
 	t.Run("no indent no trailing newline", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf)
+		w := stream.NewWriter(&buf)
 		require.NoError(t, w.StartElement("root"))
 		require.NoError(t, w.WriteComment(" hello "))
 		require.NoError(t, w.EndElement())
@@ -566,7 +575,7 @@ func TestIndentCommentNewline(t *testing.T) {
 func TestIndentPINewline(t *testing.T) {
 	t.Run("PI followed by element", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf, WithIndent("  "))
+		w := stream.NewWriter(&buf, stream.WithIndent("  "))
 		require.NoError(t, w.StartElement("root"))
 		require.NoError(t, w.WritePI("app", "data"))
 		require.NoError(t, w.StartElement("child"))
@@ -578,7 +587,7 @@ func TestIndentPINewline(t *testing.T) {
 
 	t.Run("PI at document level", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf, WithIndent("  "))
+		w := stream.NewWriter(&buf, stream.WithIndent("  "))
 		require.NoError(t, w.StartDocument("", "", ""))
 		require.NoError(t, w.WritePI("app", "data"))
 		require.NoError(t, w.StartElement("root"))
@@ -590,7 +599,7 @@ func TestIndentPINewline(t *testing.T) {
 
 	t.Run("no indent no trailing newline", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf)
+		w := stream.NewWriter(&buf)
 		require.NoError(t, w.StartElement("root"))
 		require.NoError(t, w.WritePI("app", "data"))
 		require.NoError(t, w.EndElement())
@@ -601,7 +610,7 @@ func TestIndentPINewline(t *testing.T) {
 
 func TestEndDocumentClosesAll(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.StartElement("a"))
 	require.NoError(t, w.StartElement("b"))
@@ -612,7 +621,7 @@ func TestEndDocumentClosesAll(t *testing.T) {
 
 func TestEndDocumentClosesOpenPI(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.StartPI("test"))
@@ -623,7 +632,7 @@ func TestEndDocumentClosesOpenPI(t *testing.T) {
 
 func TestEndDocumentClosesOpenCDATA(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.StartCDATA())
@@ -634,7 +643,7 @@ func TestEndDocumentClosesOpenCDATA(t *testing.T) {
 
 func TestEndDocumentClosesOpenComment(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.StartComment())
@@ -645,7 +654,7 @@ func TestEndDocumentClosesOpenComment(t *testing.T) {
 
 func TestEndDocumentClosesOpenDTD(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.StartDTD("root", "", ""))
 	require.NoError(t, w.EndDocument())
@@ -655,7 +664,7 @@ func TestEndDocumentClosesOpenDTD(t *testing.T) {
 func TestStateValidation(t *testing.T) {
 	t.Run("StartDocumentTwice", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf)
+		w := stream.NewWriter(&buf)
 		require.NoError(t, w.StartDocument("", "", ""))
 		err := w.StartDocument("", "", "")
 		require.Error(t, err)
@@ -663,49 +672,49 @@ func TestStateValidation(t *testing.T) {
 
 	t.Run("AttributeOutsideElement", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf)
+		w := stream.NewWriter(&buf)
 		err := w.StartAttribute("name")
 		require.Error(t, err)
 	})
 
 	t.Run("EndElementWithoutStart", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf)
+		w := stream.NewWriter(&buf)
 		err := w.EndElement()
 		require.Error(t, err)
 	})
 
 	t.Run("EndCommentWithoutStart", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf)
+		w := stream.NewWriter(&buf)
 		err := w.EndComment()
 		require.Error(t, err)
 	})
 
 	t.Run("EndPIWithoutStart", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf)
+		w := stream.NewWriter(&buf)
 		err := w.EndPI()
 		require.Error(t, err)
 	})
 
 	t.Run("EndCDATAWithoutStart", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf)
+		w := stream.NewWriter(&buf)
 		err := w.EndCDATA()
 		require.Error(t, err)
 	})
 
 	t.Run("EndDTDWithoutStart", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf)
+		w := stream.NewWriter(&buf)
 		err := w.EndDTD()
 		require.Error(t, err)
 	})
 
 	t.Run("WriteStringInNone", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := New(&buf)
+		w := stream.NewWriter(&buf)
 		err := w.WriteString("text")
 		require.Error(t, err)
 	})
@@ -714,17 +723,17 @@ func TestStateValidation(t *testing.T) {
 func TestStickyError(t *testing.T) {
 	// Use a writer that fails after N bytes
 	fw := &failWriter{failAfter: 5}
-	w := New(fw)
+	w := stream.NewWriter(fw)
 	_ = w.StartDocument("", "", "")
-	// After the error, all subsequent calls should return the same error
-	require.Error(t, w.err)
+	// After the error, subsequent calls should continue returning an error.
+	require.Error(t, w.Flush())
 	err := w.StartElement("root")
 	require.Error(t, err)
 }
 
 func TestFlush(t *testing.T) {
 	fb := &flushableBuffer{}
-	w := New(fb)
+	w := stream.NewWriter(fb)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.EndElement())
 	require.NoError(t, w.Flush())
@@ -733,7 +742,7 @@ func TestFlush(t *testing.T) {
 
 func TestStartAttributeViaStartEnd(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.StartAttribute("key"))
 	require.NoError(t, w.WriteString("val"))
@@ -744,7 +753,7 @@ func TestStartAttributeViaStartEnd(t *testing.T) {
 
 func TestStartAttributeMultiPart(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.StartAttribute("key"))
 	require.NoError(t, w.WriteString("part1"))
@@ -756,7 +765,7 @@ func TestStartAttributeMultiPart(t *testing.T) {
 
 func TestEndElementClosesAttribute(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.StartAttribute("key"))
 	require.NoError(t, w.WriteString("val"))
@@ -767,7 +776,7 @@ func TestEndElementClosesAttribute(t *testing.T) {
 
 func TestStartCommentViaStartEnd(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.StartComment())
 	require.NoError(t, w.WriteString(" hello "))
@@ -778,7 +787,7 @@ func TestStartCommentViaStartEnd(t *testing.T) {
 
 func TestStartPIViaStartEnd(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.StartPI("target"))
 	require.NoError(t, w.WriteString(" data"))
@@ -789,7 +798,7 @@ func TestStartPIViaStartEnd(t *testing.T) {
 
 func TestCompleteDocument(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("1.0", "UTF-8", ""))
 	require.NoError(t, w.WriteComment(" Generated document "))
 	require.NoError(t, w.StartElement("catalog"))
@@ -821,7 +830,7 @@ func TestCompleteDocument(t *testing.T) {
 
 func TestCompleteDocumentIndented(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf, WithIndent("  "))
+	w := stream.NewWriter(&buf, stream.WithIndent("  "))
 	require.NoError(t, w.StartDocument("1.0", "UTF-8", ""))
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteElement("name", "John"))
@@ -840,7 +849,7 @@ func TestCompleteDocumentIndented(t *testing.T) {
 func TestWithoutStartDocument(t *testing.T) {
 	// Writer should work without StartDocument for fragment output
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteString("hello"))
 	require.NoError(t, w.EndElement())
@@ -849,7 +858,7 @@ func TestWithoutStartDocument(t *testing.T) {
 
 func TestWriteRawInDocument(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.WriteRaw("\n"))
 	require.NoError(t, w.StartElement("root"))
@@ -860,7 +869,7 @@ func TestWriteRawInDocument(t *testing.T) {
 
 func TestNamespaceElementWithAttribute(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElementNS("soap", "Envelope", "http://schemas.xmlsoap.org/soap/envelope/"))
 	require.NoError(t, w.WriteAttributeNS("soap", "encodingStyle", "http://schemas.xmlsoap.org/soap/envelope/", "http://schemas.xmlsoap.org/soap/encoding/"))
 	require.NoError(t, w.StartElementNS("soap", "Body", "http://schemas.xmlsoap.org/soap/envelope/"))
@@ -873,7 +882,7 @@ func TestNamespaceElementWithAttribute(t *testing.T) {
 
 func TestEmptyElementSibling(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.StartElement("a"))
 	require.NoError(t, w.EndElement())
@@ -885,7 +894,7 @@ func TestEmptyElementSibling(t *testing.T) {
 
 func TestWriteAttributeNS(t *testing.T) {
 	var buf bytes.Buffer
-	w := New(&buf)
+	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteAttributeNS("xml", "lang", "", "en"))
 	require.NoError(t, w.EndElement())

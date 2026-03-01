@@ -1,8 +1,8 @@
-// Package xmlwriter implements a streaming XML writer equivalent to
-// libxml2's xmlTextWriter. It produces well-formed XML incrementally
-// via method calls, writing directly to an io.Writer without building
-// an in-memory DOM tree.
-package xmlwriter
+// Package stream implements a streaming XML writer.
+// It produces well-formed XML incrementally via method calls,
+// writing directly to an io.Writer without building an in-memory
+// DOM tree.
+package stream
 
 import (
 	"errors"
@@ -10,8 +10,10 @@ import (
 	"io"
 	"strings"
 
-	iencoding "github.com/lestrrat-go/helium/internal/encoding"
+	"github.com/lestrrat-go/helium/internal/encoding"
 )
+
+var errNilOutputWriter = errors.New("stream: output writer is nil")
 
 // writerState tracks what context the writer is currently in.
 type writerState int
@@ -52,9 +54,10 @@ type nsScope struct {
 
 // Writer writes XML incrementally to an io.Writer.
 //
-// A Writer is stateful and is not safe for concurrent use. Use each Writer
-// instance from only a single goroutine at a time, or serialize all access
-// externally.
+// Writer is not safe for concurrent use by multiple goroutines.
+//
+// The zero value of Writer is not ready to use because it has no output
+// destination. Construct a Writer with NewWriter.
 type Writer struct {
 	out        io.Writer
 	indent     string // indent string per level; empty = no indentation
@@ -78,7 +81,7 @@ func WithIndent(indent string) Option {
 	return func(w *Writer) { w.indent = indent }
 }
 
-// WithQuoteChar sets the attribute value quote character. Must be '"' or '\''.
+// WithQuoteChar sets the attribute value quote character. Must be '"' or '\”.
 // Default is '"'.
 func WithQuoteChar(q byte) Option {
 	return func(w *Writer) {
@@ -88,8 +91,8 @@ func WithQuoteChar(q byte) Option {
 	}
 }
 
-// New creates a Writer that writes to w.
-func New(w io.Writer, opts ...Option) *Writer {
+// NewWriter creates a Writer that writes to w.
+func NewWriter(w io.Writer, opts ...Option) *Writer {
 	wr := &Writer{
 		out:       w,
 		quoteChar: '"',
@@ -109,9 +112,20 @@ const (
 	escapeAttr
 )
 
+func (w *Writer) ensureWritable() bool {
+	if w.err != nil {
+		return false
+	}
+	if w.out == nil {
+		w.err = errNilOutputWriter
+		return false
+	}
+	return true
+}
+
 // writeStr writes a raw string to the underlying writer.
 func (w *Writer) writeStr(s string) {
-	if w.err != nil {
+	if !w.ensureWritable() {
 		return
 	}
 	_, w.err = io.WriteString(w.out, s)
@@ -119,7 +133,7 @@ func (w *Writer) writeStr(s string) {
 
 // writeEscaped writes a string with the specified escaping mode.
 func (w *Writer) writeEscaped(s string, escape escapeMode) {
-	if w.err != nil {
+	if !w.ensureWritable() {
 		return
 	}
 	if escape == escapeNone {
@@ -168,7 +182,7 @@ func (w *Writer) writeEscaped(s string, escape escapeMode) {
 
 // writeByte writes a single byte.
 func (w *Writer) writeByte(b byte) {
-	if w.err != nil {
+	if !w.ensureWritable() {
 		return
 	}
 	_, w.err = w.out.Write([]byte{b})
@@ -309,12 +323,12 @@ func (w *Writer) writeAttrEscaped(s string) {
 
 // StartDocument writes the XML declaration. Pass "" for any parameter to
 // use its default (version="1.0", no encoding, no standalone).
-func (w *Writer) StartDocument(version, encoding, standalone string) error {
+func (w *Writer) StartDocument(version, enc, standalone string) error {
 	if w.err != nil {
 		return w.err
 	}
 	if w.state != stateNone {
-		return errors.New("xmlwriter: StartDocument called in invalid state")
+		return errors.New("stream: StartDocument called in invalid state")
 	}
 	if version == "" {
 		version = "1.0"
@@ -323,13 +337,13 @@ func (w *Writer) StartDocument(version, encoding, standalone string) error {
 	w.writeByte(w.quoteChar)
 	w.writeStr(version)
 	w.writeByte(w.quoteChar)
-	if encoding != "" {
-		if iencoding.Load(encoding) == nil {
-			return fmt.Errorf("xmlwriter: unsupported encoding %q", encoding)
+	if enc != "" {
+		if encoding.Load(enc) == nil {
+			return fmt.Errorf("stream: unsupported encoding %q", enc)
 		}
 		w.writeStr(" encoding=")
 		w.writeByte(w.quoteChar)
-		w.writeStr(encoding)
+		w.writeStr(enc)
 		w.writeByte(w.quoteChar)
 	}
 	if standalone != "" {
@@ -387,7 +401,7 @@ func (w *Writer) EndDocument() error {
 // StartElement opens a new element with the given local name.
 func (w *Writer) StartElement(name string) error {
 	if name == "" {
-		return errors.New("xmlwriter: element name must not be empty")
+		return errors.New("stream: element name must not be empty")
 	}
 	if w.err != nil {
 		return w.err
@@ -398,7 +412,7 @@ func (w *Writer) StartElement(name string) error {
 	case stateName:
 		w.closeTagIfOpen()
 	default:
-		return errors.New("xmlwriter: StartElement called in invalid state")
+		return errors.New("stream: StartElement called in invalid state")
 	}
 
 	// Mark parent as having children
@@ -439,7 +453,7 @@ func (w *Writer) EndElement() error {
 		return w.err
 	}
 	if len(w.elemStack) == 0 {
-		return errors.New("xmlwriter: EndElement called with no open element")
+		return errors.New("stream: EndElement called with no open element")
 	}
 	if w.state == stateAttribute {
 		if err := w.EndAttribute(); err != nil {
@@ -488,7 +502,7 @@ func (w *Writer) FullEndElement() error {
 		return w.err
 	}
 	if len(w.elemStack) == 0 {
-		return errors.New("xmlwriter: FullEndElement called with no open element")
+		return errors.New("stream: FullEndElement called with no open element")
 	}
 	if w.state == stateAttribute {
 		if err := w.EndAttribute(); err != nil {
@@ -552,13 +566,13 @@ func (w *Writer) WriteElementNS(prefix, localName, namespaceURI, content string)
 // StartAttribute opens an attribute on the current element.
 func (w *Writer) StartAttribute(name string) error {
 	if name == "" {
-		return errors.New("xmlwriter: attribute name must not be empty")
+		return errors.New("stream: attribute name must not be empty")
 	}
 	if w.err != nil {
 		return w.err
 	}
 	if w.state != stateName {
-		return errors.New("xmlwriter: StartAttribute called outside element opening tag")
+		return errors.New("stream: StartAttribute called outside element opening tag")
 	}
 	w.writeByte(' ')
 	w.writeStr(name)
@@ -583,7 +597,7 @@ func (w *Writer) EndAttribute() error {
 		return w.err
 	}
 	if w.state != stateAttribute {
-		return errors.New("xmlwriter: EndAttribute called outside attribute")
+		return errors.New("stream: EndAttribute called outside attribute")
 	}
 	w.writeByte(w.quoteChar)
 	// Restore previous state
@@ -648,7 +662,7 @@ func (w *Writer) WriteString(content string) error {
 	case stateCDATA:
 		w.writeStr(content)
 	default:
-		return errors.New("xmlwriter: WriteString called in invalid state")
+		return errors.New("stream: WriteString called in invalid state")
 	}
 	return w.err
 }
@@ -673,7 +687,7 @@ func (w *Writer) WriteRaw(content string) error {
 	case stateAttribute:
 		w.writeStr(content)
 	default:
-		return errors.New("xmlwriter: WriteRaw called in invalid state")
+		return errors.New("stream: WriteRaw called in invalid state")
 	}
 	return w.err
 }
@@ -691,7 +705,7 @@ func (w *Writer) StartComment() error {
 	case stateName:
 		w.closeTagIfOpen()
 	default:
-		return errors.New("xmlwriter: StartComment called in invalid state")
+		return errors.New("stream: StartComment called in invalid state")
 	}
 	if len(w.elemStack) > 0 {
 		w.elemStack[len(w.elemStack)-1].empty = false
@@ -709,7 +723,7 @@ func (w *Writer) EndComment() error {
 		return w.err
 	}
 	if w.state != stateComment {
-		return errors.New("xmlwriter: EndComment called outside comment")
+		return errors.New("stream: EndComment called outside comment")
 	}
 	w.writeStr("-->")
 	if w.indent != "" {
@@ -741,7 +755,7 @@ func (w *Writer) WriteComment(content string) error {
 // StartPI opens a processing instruction (<?target).
 func (w *Writer) StartPI(target string) error {
 	if target == "" {
-		return errors.New("xmlwriter: PI target must not be empty")
+		return errors.New("stream: PI target must not be empty")
 	}
 	if w.err != nil {
 		return w.err
@@ -752,10 +766,10 @@ func (w *Writer) StartPI(target string) error {
 	case stateName:
 		w.closeTagIfOpen()
 	default:
-		return errors.New("xmlwriter: StartPI called in invalid state")
+		return errors.New("stream: StartPI called in invalid state")
 	}
 	if strings.EqualFold(target, "xml") {
-		return errors.New("xmlwriter: PI target cannot be 'xml'")
+		return errors.New("stream: PI target cannot be 'xml'")
 	}
 	if len(w.elemStack) > 0 {
 		w.elemStack[len(w.elemStack)-1].empty = false
@@ -774,7 +788,7 @@ func (w *Writer) EndPI() error {
 		return w.err
 	}
 	if w.state != statePI && w.state != statePIText {
-		return errors.New("xmlwriter: EndPI called outside processing instruction")
+		return errors.New("stream: EndPI called outside processing instruction")
 	}
 	w.writeStr("?>")
 	if w.indent != "" {
@@ -817,7 +831,7 @@ func (w *Writer) StartCDATA() error {
 	case stateName:
 		w.closeTagIfOpen()
 	default:
-		return errors.New("xmlwriter: StartCDATA called in invalid state")
+		return errors.New("stream: StartCDATA called in invalid state")
 	}
 	if len(w.elemStack) > 0 {
 		w.elemStack[len(w.elemStack)-1].empty = false
@@ -835,7 +849,7 @@ func (w *Writer) EndCDATA() error {
 		return w.err
 	}
 	if w.state != stateCDATA {
-		return errors.New("xmlwriter: EndCDATA called outside CDATA section")
+		return errors.New("stream: EndCDATA called outside CDATA section")
 	}
 	w.writeStr("]]>")
 	if len(w.stateStack) > 0 {
@@ -864,16 +878,16 @@ func (w *Writer) WriteCDATA(content string) error {
 // If pubid is non-empty, sysid must also be non-empty.
 func (w *Writer) StartDTD(name, pubid, sysid string) error {
 	if name == "" {
-		return errors.New("xmlwriter: DTD name must not be empty")
+		return errors.New("stream: DTD name must not be empty")
 	}
 	if w.err != nil {
 		return w.err
 	}
 	if w.state != stateDocument {
-		return errors.New("xmlwriter: StartDTD called in invalid state")
+		return errors.New("stream: StartDTD called in invalid state")
 	}
 	if pubid != "" && sysid == "" {
-		return errors.New("xmlwriter: StartDTD requires sysid when pubid is provided")
+		return errors.New("stream: StartDTD requires sysid when pubid is provided")
 	}
 	if w.indent != "" {
 		w.writeStr("\n")
@@ -926,7 +940,7 @@ func (w *Writer) EndDTD() error {
 		return w.err
 	}
 	if w.state != stateDTD && w.state != stateDTDText {
-		return errors.New("xmlwriter: EndDTD called outside DTD")
+		return errors.New("stream: EndDTD called outside DTD")
 	}
 	if w.state == stateDTDText {
 		w.writeStr("]>")
@@ -960,7 +974,7 @@ func (w *Writer) WriteDTDElement(name, content string) error {
 		return w.err
 	}
 	if w.state != stateDTD && w.state != stateDTDText {
-		return errors.New("xmlwriter: WriteDTDElement called outside DTD")
+		return errors.New("stream: WriteDTDElement called outside DTD")
 	}
 	w.ensureDTDInternalSubset()
 	w.writeStr("<!ELEMENT ")
@@ -977,7 +991,7 @@ func (w *Writer) WriteDTDAttlist(name, content string) error {
 		return w.err
 	}
 	if w.state != stateDTD && w.state != stateDTDText {
-		return errors.New("xmlwriter: WriteDTDAttlist called outside DTD")
+		return errors.New("stream: WriteDTDAttlist called outside DTD")
 	}
 	w.ensureDTDInternalSubset()
 	w.writeStr("<!ATTLIST ")
@@ -995,7 +1009,7 @@ func (w *Writer) WriteDTDEntity(pe bool, name, content string) error {
 		return w.err
 	}
 	if w.state != stateDTD && w.state != stateDTDText {
-		return errors.New("xmlwriter: WriteDTDEntity called outside DTD")
+		return errors.New("stream: WriteDTDEntity called outside DTD")
 	}
 	w.ensureDTDInternalSubset()
 	w.writeStr("<!ENTITY ")
@@ -1017,7 +1031,7 @@ func (w *Writer) WriteDTDExternalEntity(pe bool, name, pubid, sysid, ndata strin
 		return w.err
 	}
 	if w.state != stateDTD && w.state != stateDTDText {
-		return errors.New("xmlwriter: WriteDTDExternalEntity called outside DTD")
+		return errors.New("stream: WriteDTDExternalEntity called outside DTD")
 	}
 	w.ensureDTDInternalSubset()
 	w.writeStr("<!ENTITY ")
@@ -1054,7 +1068,7 @@ func (w *Writer) WriteDTDNotation(name, pubid, sysid string) error {
 		return w.err
 	}
 	if w.state != stateDTD && w.state != stateDTDText {
-		return errors.New("xmlwriter: WriteDTDNotation called outside DTD")
+		return errors.New("stream: WriteDTDNotation called outside DTD")
 	}
 	w.ensureDTDInternalSubset()
 	w.writeStr("<!NOTATION ")
