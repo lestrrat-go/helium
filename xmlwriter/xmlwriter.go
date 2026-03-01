@@ -334,10 +334,30 @@ func (w *Writer) StartDocument(version, encoding, standalone string) error {
 	return w.err
 }
 
-// EndDocument closes all open elements and flushes the output.
+// EndDocument auto-closes any open constructs (PI, CDATA, comment, DTD,
+// elements) and flushes the output.
 func (w *Writer) EndDocument() error {
 	if w.err != nil {
 		return w.err
+	}
+	// Auto-close any open construct before closing elements.
+	switch w.state {
+	case statePI, statePIText:
+		if err := w.EndPI(); err != nil {
+			return err
+		}
+	case stateCDATA:
+		if err := w.EndCDATA(); err != nil {
+			return err
+		}
+	case stateComment:
+		if err := w.EndComment(); err != nil {
+			return err
+		}
+	case stateDTD, stateDTDText:
+		if err := w.EndDTD(); err != nil {
+			return err
+		}
 	}
 	// Close all open elements
 	for len(w.elemStack) > 0 {
