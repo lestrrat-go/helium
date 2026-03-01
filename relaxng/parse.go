@@ -70,6 +70,7 @@ func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*G
 	c.popGrammar()
 
 	c.grammar.start = startPat
+	c.checkRules()
 	c.grammar.compileErrors = c.errors.String()
 	c.grammar.compileWarnings = c.warnings.String()
 
