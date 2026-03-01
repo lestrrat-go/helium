@@ -1,3 +1,5 @@
+// Package xpointer implements XPointer framework and element() scheme resolution
+// (libxml2: xpointer module / xmlXPtrEval).
 package xpointer
 
 import (
