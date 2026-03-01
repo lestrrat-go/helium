@@ -73,6 +73,7 @@ func (t *TreeBuilder) StartDocument(ctxif sax.Context) error {
 
 	ctx := ctxif.(*parserCtx)
 	ctx.doc = NewDocument(ctx.version, ctx.encoding, ctx.standalone)
+	ctx.doc.ids = make(map[string]*Element)
 	return nil
 }
 
@@ -260,6 +261,15 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 		aPrefix := a.Prefix()
 		if decl := lookupAttributeDecl(doc, aLocalName, aPrefix, elemName); decl != nil {
 			a.SetAType(decl.AType())
+		}
+	}
+
+	// Register ID attributes in the document's ID table for O(1) lookup.
+	if !ctx.loadsubset.IsSet(SkipIDs) {
+		for _, a := range e.Attributes() {
+			if a.Name() == "xml:id" || a.AType() == AttrID {
+				doc.RegisterID(a.Value(), e)
+			}
 		}
 	}
 
