@@ -795,6 +795,39 @@ func TestXIncludeURITooLong(t *testing.T) {
 	require.Contains(t, err.Error(), "URI too long")
 }
 
+func TestXIncludeNamespacedAttr(t *testing.T) {
+	// xi:include with namespace-qualified xi:href attribute should work
+	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<xi:include xi:href="included.xml"/>
+	</root>`)
+
+	resolver := &stringResolver{
+		files: map[string]string{
+			"included.xml": `<chapter>Namespaced</chapter>`,
+		},
+	}
+
+	count, err := xinclude.Process(doc,
+		xinclude.WithResolver(resolver),
+		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoBaseFixup(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+
+	root := docElement(doc)
+	var found bool
+	for c := root.FirstChild(); c != nil; c = c.NextSibling() {
+		if c.Type() == helium.ElementNode {
+			if c.(*helium.Element).LocalName() == "chapter" {
+				found = true
+				require.Equal(t, "Namespaced", string(c.Content()))
+			}
+		}
+	}
+	require.True(t, found, "included <chapter> element not found with namespace-qualified href")
+}
+
 func TestXIncludeParseNoEntWithXPointer(t *testing.T) {
 	// Document with entity reference that should be resolved before XPointer
 	resolver := &stringResolver{
