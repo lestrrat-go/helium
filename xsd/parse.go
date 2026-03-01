@@ -108,6 +108,28 @@ func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*S
 	c.schema.elemFormQualified = getAttr(root, "elementFormDefault") == attrValQualified
 	c.schema.attrFormQualified = getAttr(root, "attributeFormDefault") == attrValQualified
 
+	// Parse blockDefault attribute.
+	if v := getAttr(root, "blockDefault"); v != "" {
+		if !isValidBlock(v) && c.filename != "" {
+			c.schemaErrors.WriteString(schemaParserErrorAttr(c.filename, root.Line(),
+				root.LocalName(), "schema", "blockDefault",
+				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | substitution))'."))
+		} else {
+			c.schema.blockDefault = parseBlockFlags(v)
+		}
+	}
+
+	// Parse finalDefault attribute.
+	if v := getAttr(root, "finalDefault"); v != "" {
+		if !isValidFinalDefault(v) && c.filename != "" {
+			c.schemaErrors.WriteString(schemaParserErrorAttr(c.filename, root.Line(),
+				root.LocalName(), "schema", "finalDefault",
+				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | list | union))'."))
+		} else {
+			c.schema.finalDefault = parseFinalFlags(v)
+		}
+	}
+
 	// Register built-in types.
 	registerBuiltinTypes(c.schema)
 
@@ -148,6 +170,12 @@ func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*S
 		sort.Slice(members, func(i, j int) bool {
 			return members[i].Name.Local < members[j].Name.Local
 		})
+	}
+
+	// Enforce final on type derivations.
+	if c.filename != "" && c.schemaErrors.Len() == 0 {
+		c.checkFinalOnTypes()
+		c.checkFinalOnSubstGroups()
 	}
 
 	c.schema.compileErrors = c.schemaErrors.String()
@@ -290,15 +318,23 @@ func (c *compiler) loadInclude(location string, includeElem *helium.Element) err
 	// The included schema's elementFormDefault/attributeFormDefault are
 	// applied within the included declarations.
 
-	// Save current form-qualified settings and temporarily apply included schema's settings.
+	// Save current form-qualified and default settings, then apply included schema's settings.
 	savedElemForm := c.schema.elemFormQualified
 	savedAttrForm := c.schema.attrFormQualified
+	savedBlockDefault := c.schema.blockDefault
+	savedFinalDefault := c.schema.finalDefault
 	savedIncludeFile := c.includeFile
 	if v := getAttr(incRoot, "elementFormDefault"); v != "" {
 		c.schema.elemFormQualified = v == attrValQualified
 	}
 	if v := getAttr(incRoot, "attributeFormDefault"); v != "" {
 		c.schema.attrFormQualified = v == attrValQualified
+	}
+	if v := getAttr(incRoot, "blockDefault"); v != "" {
+		c.schema.blockDefault = parseBlockFlags(v)
+	}
+	if v := getAttr(incRoot, "finalDefault"); v != "" {
+		c.schema.finalDefault = parseFinalFlags(v)
 	}
 
 	// Set the include file path for duplicate element error reporting.
@@ -309,9 +345,11 @@ func (c *compiler) loadInclude(location string, includeElem *helium.Element) err
 	// Parse the included schema's declarations into the current compiler.
 	err = c.parseSchemaChildren(incRoot)
 
-	// Restore form-qualified settings and include file.
+	// Restore form-qualified settings, defaults, and include file.
 	c.schema.elemFormQualified = savedElemForm
 	c.schema.attrFormQualified = savedAttrForm
+	c.schema.blockDefault = savedBlockDefault
+	c.schema.finalDefault = savedFinalDefault
 	c.includeFile = savedIncludeFile
 
 	return err
@@ -355,15 +393,23 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 		return nil
 	}
 
-	// Save/restore form-qualified settings (chameleon support).
+	// Save/restore form-qualified settings and defaults (chameleon support).
 	savedElemForm := c.schema.elemFormQualified
 	savedAttrForm := c.schema.attrFormQualified
+	savedBlockDefault := c.schema.blockDefault
+	savedFinalDefault := c.schema.finalDefault
 	savedIncludeFile := c.includeFile
 	if v := getAttr(incRoot, "elementFormDefault"); v != "" {
 		c.schema.elemFormQualified = v == attrValQualified
 	}
 	if v := getAttr(incRoot, "attributeFormDefault"); v != "" {
 		c.schema.attrFormQualified = v == attrValQualified
+	}
+	if v := getAttr(incRoot, "blockDefault"); v != "" {
+		c.schema.blockDefault = parseBlockFlags(v)
+	}
+	if v := getAttr(incRoot, "finalDefault"); v != "" {
+		c.schema.finalDefault = parseFinalFlags(v)
 	}
 	if c.filename != "" {
 		c.includeFile = filepath.Join(filepath.Dir(c.filename), location)
@@ -373,6 +419,8 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 	if err := c.parseSchemaChildren(incRoot); err != nil {
 		c.schema.elemFormQualified = savedElemForm
 		c.schema.attrFormQualified = savedAttrForm
+		c.schema.blockDefault = savedBlockDefault
+		c.schema.finalDefault = savedFinalDefault
 		c.includeFile = savedIncludeFile
 		return err
 	}
@@ -396,6 +444,8 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 			if err := c.parseNamedComplexType(elem); err != nil {
 				c.schema.elemFormQualified = savedElemForm
 				c.schema.attrFormQualified = savedAttrForm
+				c.schema.blockDefault = savedBlockDefault
+				c.schema.finalDefault = savedFinalDefault
 				c.includeFile = savedIncludeFile
 				return err
 			}
@@ -420,6 +470,8 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 			if err := c.parseNamedSimpleType(elem); err != nil {
 				c.schema.elemFormQualified = savedElemForm
 				c.schema.attrFormQualified = savedAttrForm
+				c.schema.blockDefault = savedBlockDefault
+				c.schema.finalDefault = savedFinalDefault
 				c.includeFile = savedIncludeFile
 				return err
 			}
@@ -446,6 +498,8 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 			if err := c.parseNamedGroup(elem); err != nil {
 				c.schema.elemFormQualified = savedElemForm
 				c.schema.attrFormQualified = savedAttrForm
+				c.schema.blockDefault = savedBlockDefault
+				c.schema.finalDefault = savedFinalDefault
 				c.includeFile = savedIncludeFile
 				return err
 			}
@@ -495,9 +549,11 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 		}
 	}
 
-	// Restore form-qualified settings and include file.
+	// Restore form-qualified settings, defaults, and include file.
 	c.schema.elemFormQualified = savedElemForm
 	c.schema.attrFormQualified = savedAttrForm
+	c.schema.blockDefault = savedBlockDefault
+	c.schema.finalDefault = savedFinalDefault
 	c.includeFile = savedIncludeFile
 
 	return nil
@@ -558,6 +614,12 @@ func (c *compiler) loadImport(location, _ string) error {
 	impC.schema.targetNamespace = getAttr(impRoot, "targetNamespace")
 	impC.schema.elemFormQualified = getAttr(impRoot, "elementFormDefault") == attrValQualified
 	impC.schema.attrFormQualified = getAttr(impRoot, "attributeFormDefault") == attrValQualified
+	if v := getAttr(impRoot, "blockDefault"); v != "" {
+		impC.schema.blockDefault = parseBlockFlags(v)
+	}
+	if v := getAttr(impRoot, "finalDefault"); v != "" {
+		impC.schema.finalDefault = parseFinalFlags(v)
+	}
 
 	registerBuiltinTypes(impC.schema)
 
@@ -669,6 +731,20 @@ func (c *compiler) parseGlobalElement(elem *helium.Element) error {
 		decl.Fixed = &v
 	}
 
+	// Parse block/final attributes with schema defaults.
+	if hasAttr(elem, "block") {
+		decl.Block = parseBlockFlags(getAttr(elem, "block"))
+		decl.BlockSet = true
+	} else {
+		decl.Block = c.schema.blockDefault
+	}
+	if hasAttr(elem, "final") {
+		decl.Final = parseElemFinalFlags(getAttr(elem, "final"))
+		decl.FinalSet = true
+	} else {
+		decl.Final = FinalFlags(c.schema.finalDefault) & (FinalExtension | FinalRestriction)
+	}
+
 	typeRef := getAttr(elem, "type")
 	if typeRef != "" {
 		qn := c.resolveQName(elem, typeRef)
@@ -732,6 +808,15 @@ func (c *compiler) parseNamedComplexType(elem *helium.Element) error {
 	}
 	td.Name = QName{Local: name, NS: c.schema.targetNamespace}
 	td.Abstract = getAttr(elem, "abstract") == attrValTrue
+
+	// Parse final attribute with schema default.
+	if hasAttr(elem, "final") {
+		td.Final = parseElemFinalFlags(getAttr(elem, "final"))
+		td.FinalSet = true
+	} else {
+		td.Final = FinalFlags(c.schema.finalDefault) & (FinalExtension | FinalRestriction)
+	}
+
 	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: false}
 	c.schema.types[td.Name] = td
 	return nil
@@ -748,6 +833,15 @@ func (c *compiler) parseNamedSimpleType(elem *helium.Element) error {
 		return err
 	}
 	td.Name = QName{Local: name, NS: c.schema.targetNamespace}
+
+	// Parse final attribute with schema default.
+	if hasAttr(elem, "final") {
+		td.Final = parseFinalFlags(getAttr(elem, "final"))
+		td.FinalSet = true
+	} else {
+		td.Final = FinalFlags(c.schema.finalDefault) & (FinalRestriction | FinalList | FinalUnion)
+	}
+
 	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: false}
 	c.schema.types[td.Name] = td
 	return nil
@@ -1394,6 +1488,14 @@ func (c *compiler) parseLocalElement(elem *helium.Element) (*Particle, error) {
 		edecl.Fixed = &v
 	}
 
+	// Parse block attribute with schema default (local elements cannot have final).
+	if hasAttr(elem, "block") {
+		edecl.Block = parseBlockFlags(getAttr(elem, "block"))
+		edecl.BlockSet = true
+	} else {
+		edecl.Block = c.schema.blockDefault
+	}
+
 	typeRef := getAttr(elem, "type")
 	if typeRef != "" {
 		qn := c.resolveQName(elem, typeRef)
@@ -1577,6 +1679,15 @@ func (c *compiler) resolveRefs() {
 					edecl.Fixed = ge.Fixed
 				}
 				edecl.Nillable = ge.Nillable
+				edecl.Abstract = ge.Abstract
+				if !edecl.BlockSet {
+					edecl.Block = ge.Block
+					edecl.BlockSet = ge.BlockSet
+				}
+				if !edecl.FinalSet {
+					edecl.Final = ge.Final
+					edecl.FinalSet = ge.FinalSet
+				}
 				continue
 			}
 			// For ref elements, report unresolved element declaration error.
@@ -2118,6 +2229,93 @@ func (c *compiler) checkCircularSubstGroup(edecl *ElementDecl) {
 	}
 }
 
+// checkFinalOnTypes checks that no type derivation violates the base type's final constraint.
+func (c *compiler) checkFinalOnTypes() {
+	for _, td := range c.schema.types {
+		src := c.typeDefSources[td]
+
+		// Check base type final for extension/restriction derivation.
+		if td.BaseType != nil && td.BaseType.Final != 0 {
+			baseFinal := td.BaseType.Final
+			if td.Derivation == DerivationExtension && baseFinal&FinalExtension != 0 {
+				component := td.Name.Local
+				if src.isLocal {
+					component = "local complex type"
+				}
+				c.schemaErrors.WriteString(schemaComponentError(c.filename, src.line, "complexType", component,
+					"Derivation by extension is forbidden by the base type '"+td.BaseType.Name.Local+"'."))
+			}
+			if td.Derivation == DerivationRestriction && baseFinal&FinalRestriction != 0 {
+				component := td.Name.Local
+				if src.isLocal {
+					component = "local complex type"
+				}
+				c.schemaErrors.WriteString(schemaComponentError(c.filename, src.line, "complexType", component,
+					"Derivation by restriction is forbidden by the base type '"+td.BaseType.Name.Local+"'."))
+			}
+		}
+
+		// simpleType list: check if item type forbids list derivation.
+		if td.Variety == TypeVarietyList && td.ItemType != nil && td.ItemType.Final&FinalList != 0 {
+			c.schemaErrors.WriteString(schemaComponentError(c.filename, src.line, "simpleType", td.Name.Local,
+				"Derivation by list is forbidden by the item type '"+td.ItemType.Name.Local+"'."))
+		}
+		// simpleType union: check if any member type forbids union derivation.
+		if td.Variety == TypeVarietyUnion {
+			for _, member := range td.MemberTypes {
+				if member.Final&FinalUnion != 0 {
+					c.schemaErrors.WriteString(schemaComponentError(c.filename, src.line, "simpleType", td.Name.Local,
+						"Derivation by union is forbidden by the member type '"+member.Name.Local+"'."))
+				}
+			}
+		}
+	}
+}
+
+// checkFinalOnSubstGroups checks that substitution group members do not violate
+// the head element's final constraint.
+func (c *compiler) checkFinalOnSubstGroups() {
+	for headQN, members := range c.schema.substGroups {
+		head, ok := c.schema.elements[headQN]
+		if !ok {
+			continue
+		}
+		if head.Final == 0 {
+			continue
+		}
+		for _, member := range members {
+			if head.Final&FinalExtension != 0 && derivationUsesMethod(member.Type, head.Type, DerivationExtension) {
+				if src, ok := c.globalElemSources[member]; ok {
+					c.schemaErrors.WriteString(schemaElemDeclError(c.filename, src.line, member.Name.Local,
+						"The substitution group affiliation is forbidden by the head element's final value."))
+				}
+			}
+			if head.Final&FinalRestriction != 0 && derivationUsesMethod(member.Type, head.Type, DerivationRestriction) {
+				if src, ok := c.globalElemSources[member]; ok {
+					c.schemaErrors.WriteString(schemaElemDeclError(c.filename, src.line, member.Name.Local,
+						"The substitution group affiliation is forbidden by the head element's final value."))
+				}
+			}
+		}
+	}
+}
+
+// derivationUsesMethod walks the BaseType chain from derived to base and
+// returns true if any step in the chain uses the given derivation method.
+func derivationUsesMethod(derived, base *TypeDef, method DerivationKind) bool {
+	if derived == nil || base == nil {
+		return false
+	}
+	td := derived
+	for td != nil && td != base {
+		if td.Derivation == method {
+			return true
+		}
+		td = td.BaseType
+	}
+	return false
+}
+
 // resolveQName resolves a prefixed name (like "xsd:string") to a QName
 // using the namespace declarations in scope on the given element.
 func (c *compiler) resolveQName(elem *helium.Element, ref string) QName {
@@ -2227,6 +2425,64 @@ func getAttr(elem *helium.Element, name string) string {
 		}
 	}
 	return ""
+}
+
+// parseBlockFlags parses a block attribute value into BlockFlags.
+func parseBlockFlags(v string) BlockFlags {
+	if v == "#all" {
+		return BlockExtension | BlockRestriction | BlockSubstitution
+	}
+	var f BlockFlags
+	for _, part := range splitSpace(v) {
+		switch part {
+		case "extension":
+			f |= BlockExtension
+		case "restriction":
+			f |= BlockRestriction
+		case "substitution":
+			f |= BlockSubstitution
+		}
+	}
+	return f
+}
+
+// parseFinalFlags parses a finalDefault or simpleType final attribute value into FinalFlags.
+func parseFinalFlags(v string) FinalFlags {
+	if v == "#all" {
+		return FinalExtension | FinalRestriction | FinalList | FinalUnion
+	}
+	var f FinalFlags
+	for _, part := range splitSpace(v) {
+		switch part {
+		case "extension":
+			f |= FinalExtension
+		case "restriction":
+			f |= FinalRestriction
+		case "list":
+			f |= FinalList
+		case "union":
+			f |= FinalUnion
+		}
+	}
+	return f
+}
+
+// parseElemFinalFlags parses a final attribute value for elements/complexTypes
+// (only extension/restriction are valid).
+func parseElemFinalFlags(v string) FinalFlags {
+	if v == "#all" {
+		return FinalExtension | FinalRestriction
+	}
+	var f FinalFlags
+	for _, part := range splitSpace(v) {
+		switch part {
+		case "extension":
+			f |= FinalExtension
+		case "restriction":
+			f |= FinalRestriction
+		}
+	}
+	return f
 }
 
 func lookupNS(elem *helium.Element, prefix string) string {
