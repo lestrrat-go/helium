@@ -83,6 +83,14 @@ func (t *TreeBuilder) EndDocument(ctxif sax.Context) error {
 		g := pdebug.IPrintf("START tree.EndDocument")
 		defer g.IRelease("END tree.EndDocument")
 	}
+
+	ctx := ctxif.(*parserCtx)
+	if ctx.doc != nil && ctx.wellFormed {
+		ctx.doc.properties |= DocWellFormed
+		if ctx.valid {
+			ctx.doc.properties |= DocDTDValid
+		}
+	}
 	return nil
 }
 

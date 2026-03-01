@@ -19,12 +19,30 @@ const (
 	StandaloneImplicitNo   = -2
 )
 
+// DocProperties is a bitmask of document properties, mirroring
+// libxml2's xmlDocProperties. Properties are set by the parser
+// or by user code to record how the document was produced and
+// what validations it passed.
+type DocProperties int
+
+const (
+	DocWellFormed DocProperties = 1 << iota // document is XML well-formed
+	DocNSValid                              // document is namespace-valid
+	DocOld10                                // parsed with XML 1.0 (4th edition or earlier)
+	DocDTDValid                             // DTD validation was successful
+	DocXInclude                             // XInclude substitution was done
+	DocUserBuilt                            // built via API, not by parsing
+	DocInternal                             // built for internal processing
+	DocHTML                                 // parsed or built as HTML
+)
+
 type Document struct {
 	docnode
 	version    string
 	encoding   string
 	standalone DocumentStandaloneType
 	url        string // document URI for base URI resolution (mirrors libxml2's xmlDoc.URL)
+	properties DocProperties
 
 	intSubset *DTD
 	extSubset *DTD
@@ -32,13 +50,16 @@ type Document struct {
 }
 
 func CreateDocument() *Document {
-	return NewDocument("1.0", "", StandaloneImplicitNo)
+	doc := NewDocument("1.0", "", StandaloneImplicitNo)
+	doc.properties |= DocUserBuilt
+	return doc
 }
 
 // NewHTMLDocument creates a new HTML document (HTMLDocumentNode type).
 func NewHTMLDocument() *Document {
 	doc := &Document{
 		standalone: StandaloneNoXMLDecl,
+		properties: DocHTML,
 	}
 	doc.etype = HTMLDocumentNode
 	doc.name = "(document)"
@@ -116,6 +137,21 @@ func (d *Document) URL() string {
 // SetURL sets the document URI.
 func (d *Document) SetURL(url string) {
 	d.url = url
+}
+
+// Properties returns the document's property flags.
+func (d *Document) Properties() DocProperties {
+	return d.properties
+}
+
+// SetProperties replaces the document's property flags.
+func (d *Document) SetProperties(p DocProperties) {
+	d.properties = p
+}
+
+// HasProperty reports whether all bits in p are set.
+func (d *Document) HasProperty(p DocProperties) bool {
+	return d.properties&p == p
 }
 
 func (d *Document) IntSubset() *DTD {
