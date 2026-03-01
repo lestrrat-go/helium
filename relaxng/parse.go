@@ -32,8 +32,9 @@ type grammarScope struct {
 
 // defineEntry tracks a define and its combine mode.
 type defineEntry struct {
-	pattern *pattern
-	combine string // "choice" or "interleave", or "" for none
+	pattern   *pattern
+	combine   string // "choice" or "interleave", or "" for none
+	noCombine int    // count of definitions with no combine attribute
 }
 
 func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*Grammar, error) {
@@ -207,11 +208,25 @@ func (c *compiler) parseStart(elem *helium.Element) {
 	g := c.currentGrammar()
 	existing, ok := g.defines["##start"]
 	if !ok {
-		g.defines["##start"] = &defineEntry{pattern: pat, combine: combine}
+		noCombine := 0
+		if combine == "" {
+			noCombine = 1
+		}
+		g.defines["##start"] = &defineEntry{pattern: pat, combine: combine, noCombine: noCombine}
 		return
 	}
 
-	// Multiple <start> — combine
+	// Multiple <start> — validate combine modes.
+	if combine == "" {
+		existing.noCombine++
+	}
+	if existing.noCombine > 1 {
+		c.errors.WriteString(rngParserError("Some <start> element miss the combine attribute"))
+	}
+	if combine != "" && existing.combine != "" && combine != existing.combine {
+		c.errors.WriteString(rngParserError("<start> use both 'interleave' and 'choice'"))
+	}
+
 	combineMode := combine
 	if combineMode == "" {
 		combineMode = existing.combine
@@ -237,11 +252,27 @@ func (c *compiler) parseDefine(elem *helium.Element) {
 	g := c.currentGrammar()
 	existing, ok := g.defines[name]
 	if !ok {
-		g.defines[name] = &defineEntry{pattern: pat, combine: combine}
+		noCombine := 0
+		if combine == "" {
+			noCombine = 1
+		}
+		g.defines[name] = &defineEntry{pattern: pat, combine: combine, noCombine: noCombine}
 		return
 	}
 
-	// Multiple <define> with same name — combine
+	// Multiple <define> with same name — validate combine modes.
+	if combine == "" {
+		existing.noCombine++
+	}
+	if existing.noCombine > 1 {
+		c.errors.WriteString(rngParserError(
+			fmt.Sprintf("Some defines for %s needs the combine attribute", name)))
+	}
+	if combine != "" && existing.combine != "" && combine != existing.combine {
+		c.errors.WriteString(rngParserError(
+			fmt.Sprintf("Defines for %s use both 'interleave' and 'choice'", name)))
+	}
+
 	combineMode := combine
 	if combineMode == "" {
 		combineMode = existing.combine
