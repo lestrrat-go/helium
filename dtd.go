@@ -290,6 +290,11 @@ func (dtd *DTD) LookupParameterEntity(name string) (*Entity, bool) {
 	return ret, ok
 }
 
+func (dtd *DTD) LookupNotation(name string) (*Notation, bool) {
+	ret, ok := dtd.notations[name]
+	return ret, ok
+}
+
 func (dtd *DTD) GetElementDesc(name string) (*ElementDecl, bool) {
 	ret, ok := dtd.elements[name]
 	return ret, ok

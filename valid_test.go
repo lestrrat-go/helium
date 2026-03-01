@@ -508,3 +508,122 @@ func TestExtSubsetLookup_ParameterEntityInExtSubset(t *testing.T) {
 	_, found = doc.GetParameterEntity("pEnt")
 	require.False(t, found, "standalone=yes should prevent extSubset parameter entity lookup")
 }
+
+func TestEntityAttributeValidation(t *testing.T) {
+	t.Run("valid unparsed entity", func(t *testing.T) {
+		xml := `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ELEMENT root EMPTY>
+  <!NOTATION gif SYSTEM "image/gif">
+  <!ENTITY logo SYSTEM "logo.gif" NDATA gif>
+  <!ATTLIST root img ENTITY #REQUIRED>
+]>
+<root img="logo"/>`
+		p := NewParser()
+		p.SetOption(ParseDTDValid)
+		p.SetOption(ParseDTDAttr)
+		_, err := p.Parse([]byte(xml))
+		require.NoError(t, err)
+	})
+
+	t.Run("undeclared entity", func(t *testing.T) {
+		xml := `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ELEMENT root EMPTY>
+  <!ATTLIST root img ENTITY #REQUIRED>
+]>
+<root img="noSuchEntity"/>`
+		p := NewParser()
+		p.SetOption(ParseDTDValid)
+		p.SetOption(ParseDTDAttr)
+		_, err := p.Parse([]byte(xml))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "undeclared entity")
+	})
+
+	t.Run("wrong entity type (internal)", func(t *testing.T) {
+		xml := `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ELEMENT root EMPTY>
+  <!ENTITY internalEnt "hello">
+  <!ATTLIST root img ENTITY #REQUIRED>
+]>
+<root img="internalEnt"/>`
+		p := NewParser()
+		p.SetOption(ParseDTDValid)
+		p.SetOption(ParseDTDAttr)
+		_, err := p.Parse([]byte(xml))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "not unparsed")
+	})
+}
+
+func TestEntitiesAttributeValidation(t *testing.T) {
+	t.Run("valid multiple unparsed entities", func(t *testing.T) {
+		xml := `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ELEMENT root EMPTY>
+  <!NOTATION gif SYSTEM "image/gif">
+  <!ENTITY logo1 SYSTEM "logo1.gif" NDATA gif>
+  <!ENTITY logo2 SYSTEM "logo2.gif" NDATA gif>
+  <!ATTLIST root imgs ENTITIES #REQUIRED>
+]>
+<root imgs="logo1 logo2"/>`
+		p := NewParser()
+		p.SetOption(ParseDTDValid)
+		p.SetOption(ParseDTDAttr)
+		_, err := p.Parse([]byte(xml))
+		require.NoError(t, err)
+	})
+
+	t.Run("one undeclared entity", func(t *testing.T) {
+		xml := `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ELEMENT root EMPTY>
+  <!NOTATION gif SYSTEM "image/gif">
+  <!ENTITY logo1 SYSTEM "logo1.gif" NDATA gif>
+  <!ATTLIST root imgs ENTITIES #REQUIRED>
+]>
+<root imgs="logo1 noSuchEntity"/>`
+		p := NewParser()
+		p.SetOption(ParseDTDValid)
+		p.SetOption(ParseDTDAttr)
+		_, err := p.Parse([]byte(xml))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "undeclared entity")
+	})
+}
+
+func TestNotationAttributeValidation(t *testing.T) {
+	t.Run("valid notation", func(t *testing.T) {
+		xml := `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ELEMENT root EMPTY>
+  <!NOTATION gif SYSTEM "image/gif">
+  <!NOTATION png SYSTEM "image/png">
+  <!ATTLIST root fmt NOTATION (gif|png) #REQUIRED>
+]>
+<root fmt="gif"/>`
+		p := NewParser()
+		p.SetOption(ParseDTDValid)
+		p.SetOption(ParseDTDAttr)
+		_, err := p.Parse([]byte(xml))
+		require.NoError(t, err)
+	})
+
+	t.Run("undeclared notation", func(t *testing.T) {
+		xml := `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ELEMENT root EMPTY>
+  <!NOTATION gif SYSTEM "image/gif">
+  <!ATTLIST root fmt NOTATION (gif|png) #REQUIRED>
+]>
+<root fmt="png"/>`
+		p := NewParser()
+		p.SetOption(ParseDTDValid)
+		p.SetOption(ParseDTDAttr)
+		_, err := p.Parse([]byte(xml))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "undeclared notation")
+	})
+}
