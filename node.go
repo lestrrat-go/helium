@@ -9,6 +9,8 @@ import (
 )
 
 type Node interface {
+	baseDocNode() *docnode // prevents external implementation
+
 	AddChild(Node) error
 	AddContent([]byte) error
 	AddSibling(Node) error
@@ -130,11 +132,11 @@ func (n *docnode) baseDocNode() *docnode {
 }
 
 func setFirstChild(n Node, cur Node) {
-	n.(interface{ baseDocNode() *docnode }).baseDocNode().firstChild = cur
+	n.baseDocNode().firstChild = cur
 }
 
 func setLastChild(n Node, cur Node) {
-	n.(interface{ baseDocNode() *docnode }).baseDocNode().lastChild = cur
+	n.baseDocNode().lastChild = cur
 }
 
 func (n *docnode) SetOwnerDocument(doc *Document) {

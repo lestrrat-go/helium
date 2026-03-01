@@ -63,7 +63,7 @@ func TestXIncludeBasicXML(t *testing.T) {
 
 	count, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.NoError(t, err)
@@ -98,7 +98,7 @@ func TestXIncludeText(t *testing.T) {
 
 	count, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.NoError(t, err)
@@ -121,7 +121,7 @@ func TestXIncludeFallback(t *testing.T) {
 
 	count, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.NoError(t, err)
@@ -150,7 +150,7 @@ func TestXIncludeMissingNoFallback(t *testing.T) {
 
 	_, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 	)
 	require.Error(t, err)
 }
@@ -169,7 +169,7 @@ func TestXIncludeCircularDetection(t *testing.T) {
 
 	_, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.Error(t, err)
@@ -229,7 +229,7 @@ func TestXIncludeMultiple(t *testing.T) {
 
 	count, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.NoError(t, err)
@@ -254,7 +254,7 @@ func TestXIncludeNoHref(t *testing.T) {
 
 	_, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 	)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "missing href")
@@ -273,7 +273,7 @@ func TestXIncludeBaseFixup(t *testing.T) {
 
 	count, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 	)
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
@@ -311,7 +311,7 @@ func TestXIncludeNested(t *testing.T) {
 
 	count, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.NoError(t, err)
@@ -343,7 +343,7 @@ func TestXIncludeNested(t *testing.T) {
 func TestXIncludeNoIncludes(t *testing.T) {
 	doc := parseXML(t, `<root><a/><b/></root>`)
 
-	count, err := xinclude.Process(doc, xinclude.WithNoXIncludeNodes())
+	count, err := xinclude.Process(doc, xinclude.WithNoXIncludeMarkers())
 	require.NoError(t, err)
 	require.Equal(t, 0, count)
 }
@@ -364,7 +364,7 @@ func TestXIncludeNewNamespace(t *testing.T) {
 
 	count, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.NoError(t, err)
@@ -395,7 +395,7 @@ func TestXIncludeNewNamespaceFallback(t *testing.T) {
 
 	count, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.NoError(t, err)
@@ -429,7 +429,7 @@ func TestXIncludeDepthLimit(t *testing.T) {
 
 	_, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.Error(t, err)
@@ -451,7 +451,7 @@ func TestXIncludeSameURLTwice(t *testing.T) {
 
 	count, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.NoError(t, err)
@@ -484,7 +484,7 @@ func TestXIncludeTextEncoding(t *testing.T) {
 
 	count, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.NoError(t, err)
@@ -511,7 +511,7 @@ func TestXIncludeProcessTree(t *testing.T) {
 	// Process from the document (same as Process)
 	count, err := xinclude.ProcessTree(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.NoError(t, err)
@@ -625,7 +625,7 @@ func TestLibxml2XIncludeGolden(t *testing.T) {
 			require.NoError(t, err, "parsing %s", name)
 
 			_, procErr := xinclude.Process(doc,
-				xinclude.WithNoXIncludeNodes(),
+				xinclude.WithNoXIncludeMarkers(),
 				xinclude.WithBaseURI(docPath),
 			)
 
@@ -676,7 +676,7 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 			require.NoError(t, err, "parsing %s", name)
 
 			_, err = xinclude.Process(doc,
-				xinclude.WithNoXIncludeNodes(),
+				xinclude.WithNoXIncludeMarkers(),
 				xinclude.WithBaseURI(docPath),
 			)
 			require.NoError(t, err, "processing %s", name)
@@ -711,7 +711,7 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 			require.NoError(t, err, "parsing %s", tc.name)
 
 			_, err = xinclude.Process(doc,
-				xinclude.WithNoXIncludeNodes(),
+				xinclude.WithNoXIncludeMarkers(),
 				xinclude.WithBaseURI(docPath),
 			)
 			require.Error(t, err, "expected error for %s", tc.name)
@@ -739,7 +739,7 @@ func TestXIncludeIncludeInInclude(t *testing.T) {
 
 	_, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.Error(t, err)
@@ -758,7 +758,7 @@ func TestXIncludeMultipleFallback(t *testing.T) {
 
 	_, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.Error(t, err)
@@ -771,7 +771,7 @@ func TestXIncludeFallbackOutsideInclude(t *testing.T) {
 	</root>`)
 
 	_, err := xinclude.Process(doc,
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.Error(t, err)
@@ -788,7 +788,7 @@ func TestXIncludeURITooLong(t *testing.T) {
 
 	_, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.Error(t, err)
@@ -809,7 +809,7 @@ func TestXIncludeNamespacedAttr(t *testing.T) {
 
 	count, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.NoError(t, err)
@@ -846,7 +846,7 @@ func TestXIncludeParseNoEntWithXPointer(t *testing.T) {
 
 	count, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.NoError(t, err)
@@ -899,7 +899,7 @@ func TestXIncludeDocCacheAvoidsReResolve(t *testing.T) {
 
 	count, err := xinclude.Process(doc,
 		xinclude.WithResolver(resolver),
-		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
 	require.NoError(t, err)
