@@ -23,7 +23,7 @@ type DocumentLocator interface {
 // io.Reader for the content. The URI method returns the resolved URI
 // of the input source (used for relative URI resolution).
 type ParseInput interface {
-	Read(p []byte) (n int, err error)
+	Read(p []byte) (int, error)
 	URI() string
 }
 
