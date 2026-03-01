@@ -110,6 +110,27 @@ func TestGetAttributeNS(t *testing.T) {
 	require.False(t, ok)
 }
 
+func TestGetAttributeNodeNS(t *testing.T) {
+	doc := CreateDocument()
+	e, err := doc.CreateElement("root")
+	require.NoError(t, err)
+
+	ns := NewNamespace("x", "http://example.com")
+	require.NoError(t, e.SetAttributeNS("attr", "val", ns))
+
+	attr := e.GetAttributeNodeNS("attr", "http://example.com")
+	require.NotNil(t, attr)
+	require.Equal(t, "attr", attr.LocalName())
+	require.Equal(t, "val", attr.Value())
+	require.Equal(t, "http://example.com", attr.URI())
+
+	attr = e.GetAttributeNodeNS("attr", "http://other.com")
+	require.Nil(t, attr)
+
+	attr = e.GetAttributeNodeNS("missing", "http://example.com")
+	require.Nil(t, attr)
+}
+
 func TestRemoveAttribute(t *testing.T) {
 	doc := CreateDocument()
 	e, err := doc.CreateElement("root")
