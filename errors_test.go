@@ -2,6 +2,7 @@ package helium
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -153,5 +154,60 @@ func TestParseNoError(t *testing.T) {
 		_, err := p.Parse([]byte(input))
 		require.Error(t, err, "parse should still return error")
 		require.Equal(t, int32(0), called.Load(), "SAX Error handler should NOT be called with ParseNoError")
+	})
+}
+
+func TestWarningLocationInfo(t *testing.T) {
+	// XML with external subset makes undeclared entity references a warning
+	// rather than an error.
+	const input = "<!DOCTYPE doc SYSTEM \"foo\">\n<doc>&undeclared;</doc>"
+
+	t.Run("warning handler error wrapped with ErrorLevelWarning", func(t *testing.T) {
+		handlerErr := fmt.Errorf("warning escalated")
+		s := sax.New()
+		s.WarningHandler = sax.WarningFunc(func(_ sax.Context, msg string, args ...interface{}) error {
+			return handlerErr
+		})
+
+		p := NewParser()
+		p.SetSAXHandler(s)
+		_, err := p.Parse([]byte(input))
+		require.Error(t, err)
+
+		var pe ErrParseError
+		require.True(t, errors.As(err, &pe), "error should be ErrParseError")
+		require.Equal(t, ErrorLevelWarning, pe.Level, "warning should have ErrorLevelWarning")
+		require.Greater(t, pe.LineNumber, 0, "warning should carry line number")
+	})
+
+	t.Run("warning handler nil does not produce error", func(t *testing.T) {
+		var warnings []string
+		s := sax.New()
+		s.WarningHandler = sax.WarningFunc(func(_ sax.Context, msg string, args ...interface{}) error {
+			warnings = append(warnings, msg)
+			return nil
+		})
+
+		p := NewParser()
+		p.SetSAXHandler(s)
+		_, err := p.Parse([]byte(input))
+		require.NoError(t, err)
+		require.NotEmpty(t, warnings, "warning handler should be called")
+		require.Contains(t, warnings[0], "undeclared")
+	})
+
+	t.Run("ParseNoWarning suppresses warning callback", func(t *testing.T) {
+		var called atomic.Int32
+		s := sax.New()
+		s.WarningHandler = sax.WarningFunc(func(_ sax.Context, msg string, args ...interface{}) error {
+			called.Add(1)
+			return nil
+		})
+
+		p := NewParser()
+		p.SetSAXHandler(s)
+		p.SetOption(ParseNoWarning)
+		_, _ = p.Parse([]byte(input))
+		require.Equal(t, int32(0), called.Load(), "warning handler should NOT be called with ParseNoWarning")
 	})
 }

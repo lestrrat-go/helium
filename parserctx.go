@@ -470,6 +470,28 @@ func (ctx *parserCtx) errorAtLevel(err error, level ErrorLevel) error {
 	return e
 }
 
+// warning wraps a warning condition in ErrParseError with ErrorLevelWarning
+// and location info, then fires the SAX Warning callback with the raw message.
+// Returns nil for non-fatal warnings. If the SAX Warning handler returns an
+// error, wraps it in ErrParseError with ErrorLevelWarning.
+func (ctx *parserCtx) warning(format string, args ...interface{}) error {
+	msg := fmt.Sprintf(format, args...)
+	if s := ctx.sax; s != nil && !ctx.options.IsSet(ParseNoWarning) {
+		switch err := s.Warning(ctx.userData, msg); err {
+		case nil, sax.ErrHandlerUnspecified:
+		default:
+			e := ErrParseError{Err: err, Level: ErrorLevelWarning, File: ctx.baseURI}
+			if cur := ctx.getCursor(); cur != nil {
+				e.Column = cur.Column()
+				e.LineNumber = cur.LineNumber()
+				e.Line = cur.Line()
+			}
+			return e
+		}
+	}
+	return nil
+}
+
 const (
 	encNone     = ""
 	encUCS4BE   = "ucs4be"
@@ -3141,12 +3163,8 @@ func (ctx *parserCtx) parsePEReference() error {
 		 * ... The declaration of a parameter entity must
 		 * precede any reference to it...
 		 */
-		if s := ctx.sax; s != nil && !ctx.options.IsSet(ParseNoWarning) {
-			switch err := s.Warning(ctx.userData, "PEReference: %%%s; not found\n", name); err {
-			case nil, sax.ErrHandlerUnspecified:
-			default:
-				return ctx.errorAtLevel(err, ErrorLevelWarning)
-			}
+		if err := ctx.warning("PEReference: %%%s; not found\n", name); err != nil {
+			return err
 		}
 		ctx.valid = false
 		if err := ctx.entityCheck(entity, 0, 0); err != nil {
@@ -3157,12 +3175,8 @@ func (ctx *parserCtx) parsePEReference() error {
 		 * Internal checking in case the entity quest barfed
 		 */
 		if etype := EntityType(entity.EntityType()); etype != InternalParameterEntity && etype != ExternalParameterEntity {
-			if s := ctx.sax; s != nil && !ctx.options.IsSet(ParseNoWarning) {
-				switch err := s.Warning(ctx.userData, "Internal: %%%s; is not a parameter entity\n", name); err {
-				case nil, sax.ErrHandlerUnspecified:
-				default:
-					return ctx.errorAtLevel(err, ErrorLevelWarning)
-				}
+			if err := ctx.warning("Internal: %%%s; is not a parameter entity\n", name); err != nil {
+				return err
 			}
 			/*
 			   } else if (ctxt->input->free != deallocblankswrapper) {
@@ -5646,12 +5660,8 @@ func (ctx *parserCtx) parseStringEntityRef(s []byte) (sax.Entity, int, error) {
 		}
 		// Entity not found but cannot flag as error (external subset/PE refs).
 		// Emit a warning matching libxml2's xmlWarningMsg behavior.
-		if s := ctx.sax; s != nil && !ctx.options.IsSet(ParseNoWarning) {
-			switch err := s.Warning(ctx.userData, "Entity '%s' not defined", name); err {
-			case nil, sax.ErrHandlerUnspecified:
-			default:
-				return nil, 0, ctx.errorAtLevel(err, ErrorLevelWarning)
-			}
+		if err := ctx.warning("Entity '%s' not defined", name); err != nil {
+			return nil, 0, err
 		}
 		return nil, i, nil
 	}
@@ -5934,12 +5944,8 @@ func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
 		if ctx.standalone == StandaloneExplicitYes || (!ctx.hasExternalSubset && ctx.hasPERefs) {
 			return nil, ctx.error(ErrUndeclaredEntity)
 		} else {
-			if s := ctx.sax; s != nil && !ctx.options.IsSet(ParseNoWarning) {
-				switch err := s.Warning(ctx.userData, "Entity '%s' not defined", name); err {
-				case nil, sax.ErrHandlerUnspecified:
-				default:
-					return nil, ctx.errorAtLevel(err, ErrorLevelWarning)
-				}
+			if err := ctx.warning("Entity '%s' not defined", name); err != nil {
+				return nil, err
 			}
 			if ctx.inSubset == 0 && ctx.instate != psAttributeValue {
 				if s := ctx.sax; s != nil {
@@ -6144,12 +6150,8 @@ func (ctx *parserCtx) handlePEReference() error {
 		// parameter entities with "standalone='no'", ...
 		// ... The declaration of a parameter entity must precede
 		// any reference to it...
-		if s := ctx.sax; s != nil && !ctx.options.IsSet(ParseNoWarning) {
-			switch err := s.Warning(ctx.userData, "PEReference: %%%s; not found\n", name); err {
-			case nil, sax.ErrHandlerUnspecified:
-			default:
-				return ctx.errorAtLevel(err, ErrorLevelWarning)
-			}
+		if err := ctx.warning("PEReference: %%%s; not found\n", name); err != nil {
+			return err
 		}
 		ctx.valid = false
 		if err := ctx.entityCheck(nil, 0, 0); err != nil {
