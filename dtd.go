@@ -8,6 +8,7 @@ import (
 	"github.com/lestrrat-go/pdebug"
 )
 
+// DTD represents an XML Document Type Definition (libxml2: xmlDtd).
 type DTD struct {
 	docnode
 	attributes map[string]*AttributeDecl

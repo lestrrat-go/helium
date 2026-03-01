@@ -12,6 +12,7 @@ import (
 )
 
 // Compile compiles a Schematron document into a Schema.
+// (libxml2: xmlSchematronNewParserCtxt + xmlSchematronParse)
 func Compile(doc *helium.Document, opts ...CompileOption) (*Schema, error) {
 	cfg := &compileConfig{}
 	for _, o := range opts {
@@ -39,6 +40,7 @@ func CompileFile(path string, opts ...CompileOption) (*Schema, error) {
 
 // Validate validates a document against a compiled schema.
 // It returns the validation output string in libxml2-compatible format.
+// (libxml2: xmlSchematronValidateDoc)
 func Validate(doc *helium.Document, schema *Schema, opts ...ValidateOption) string {
 	cfg := &validateConfig{}
 	for _, o := range opts {

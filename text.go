@@ -2,8 +2,7 @@ package helium
 
 import "github.com/lestrrat-go/pdebug"
 
-// Text is just a wrapper around Node so that we can
-// use Go-ish type checks
+// Text represents an XML text node (libxml2: xmlNode with type XML_TEXT_NODE).
 type Text struct {
 	node
 }

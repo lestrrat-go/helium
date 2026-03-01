@@ -8,6 +8,7 @@ import (
 	"github.com/lestrrat-go/pdebug"
 )
 
+// Node represents a node in an XML document tree (libxml2: xmlNode).
 type Node interface {
 	baseDocNode() *docnode // prevents external implementation
 
@@ -166,6 +167,9 @@ func addContent(n Node, b []byte) error {
 
 type WalkFunc func(Node) error
 
+// Walk performs a depth-first traversal of the node tree rooted at n,
+// calling f for each node. There is no direct libxml2 equivalent; callers
+// typically write manual tree traversal loops in C.
 func Walk(n Node, f WalkFunc) error {
 	if n == nil {
 		return errors.New("nil node")

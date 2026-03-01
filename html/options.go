@@ -12,6 +12,7 @@ type parseConfig struct {
 type ParseOption func(*parseConfig)
 
 // WithNoImplied suppresses automatic insertion of implied html/head/body elements.
+// (libxml2: HTML_PARSE_NOIMPLIED)
 func WithNoImplied() ParseOption {
 	return func(c *parseConfig) {
 		c.noImplied = true
@@ -19,6 +20,7 @@ func WithNoImplied() ParseOption {
 }
 
 // WithNoBlanks removes whitespace-only text nodes from the DOM.
+// (libxml2: HTML_PARSE_NOBLANKS)
 func WithNoBlanks() ParseOption {
 	return func(c *parseConfig) {
 		c.noBlanks = true
@@ -26,6 +28,7 @@ func WithNoBlanks() ParseOption {
 }
 
 // WithNoError suppresses error messages from the SAX error handler.
+// (libxml2: HTML_PARSE_NOERROR)
 func WithNoError() ParseOption {
 	return func(c *parseConfig) {
 		c.noError = true
@@ -33,6 +36,7 @@ func WithNoError() ParseOption {
 }
 
 // WithNoWarning suppresses warning messages from the SAX warning handler.
+// (libxml2: HTML_PARSE_NOWARNING)
 func WithNoWarning() ParseOption {
 	return func(c *parseConfig) {
 		c.noWarning = true

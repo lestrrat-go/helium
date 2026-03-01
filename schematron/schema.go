@@ -5,6 +5,7 @@ import (
 )
 
 // Schema is a compiled Schematron schema.
+// (libxml2: xmlSchematronPtr)
 type Schema struct {
 	patterns        []*pattern
 	namespaces      map[string]string // prefix -> URI from <ns> elements

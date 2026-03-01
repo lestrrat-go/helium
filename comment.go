@@ -1,7 +1,6 @@
 package helium
 
-// Comment is just a wrapper around Node so that we can
-// use Go-ish type checks
+// Comment represents an XML comment node (libxml2: xmlNode with type XML_COMMENT_NODE).
 type Comment struct {
 	node
 }

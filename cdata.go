@@ -1,7 +1,7 @@
 package helium
 
-// CDATASection represents a CDATA section node in the DOM tree.
-// In libxml2 this is an xmlNode with type XML_CDATA_SECTION_NODE.
+// CDATASection represents a CDATA section node in the DOM tree
+// (libxml2: xmlNode with type XML_CDATA_SECTION_NODE).
 type CDATASection struct {
 	node
 }

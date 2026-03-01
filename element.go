@@ -7,8 +7,7 @@ import (
 	"github.com/lestrrat-go/pdebug"
 )
 
-// Element is just a wrapper around Node so that we can
-// use Go-ish type checks
+// Element represents an XML element node (libxml2: xmlNode with type XML_ELEMENT_NODE).
 type Element struct {
 	node
 }
@@ -60,7 +59,7 @@ func (n *Element) XML(out io.Writer, options ...DumpOption) error {
 	return newDumper(options).DumpNode(out, n)
 }
 
-// AddChild adds a new child node to the end of the children nodes.
+// AddChild adds a new child node to the end of the children nodes (libxml2: xmlAddChild).
 func (n *Element) AddChild(cur Node) error {
 	return addChild(n, cur)
 }
@@ -73,7 +72,7 @@ func (n *Element) AddContent(b []byte) error {
 	return addContent(n, b)
 }
 
-// AddSibling adds a new sibling to the end of the sibling nodes.
+// AddSibling adds a new sibling to the end of the sibling nodes (libxml2: xmlAddSibling).
 func (n *Element) AddSibling(cur Node) error {
 	return addSibling(n, cur)
 }

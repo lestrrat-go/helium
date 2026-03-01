@@ -28,6 +28,7 @@ const (
 )
 
 // Schema represents a compiled XML Schema.
+// (libxml2: xmlSchema)
 type Schema struct {
 	targetNamespace   string
 	elemFormQualified bool // elementFormDefault="qualified"

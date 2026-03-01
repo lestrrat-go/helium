@@ -248,8 +248,8 @@ func WithNoDecl() DumpOption {
 	return func(d *Dumper) { d.NoDecl = true }
 }
 
-// Dumper serializes an XML document tree.
-// escapeNonASCII controls whether characters U+0080–U+00FF are emitted as
+// Dumper serializes an XML document tree (libxml2: xmlSaveCtxt).
+// escapeNonASCII controls whether characters U+0080-U+00FF are emitted as
 // numeric character references (&#xNN;).  libxml2 only does this when the
 // output encoding is UTF-8; when an encoding handler is present the
 // characters pass through and the encoder converts them.
@@ -353,6 +353,8 @@ var htmlBooleanAttrs = map[string]bool{
 	"selected": true,
 }
 
+// DumpDoc serializes a complete Document to the given writer
+// (libxml2: xmlDocDumpFormatMemory / xmlSaveDoc).
 func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START Dumper.DumpDoc")
@@ -850,6 +852,8 @@ func (d *Dumper) dumpNs(out io.Writer, ns *Namespace) error {
 	return nil
 }
 
+// DumpNode serializes a single node and its subtree to the given writer
+// (libxml2: xmlNodeDump).
 func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START Dumper.DumpNode '%s'", n.Name())
