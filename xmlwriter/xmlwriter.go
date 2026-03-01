@@ -51,6 +51,10 @@ type nsScope struct {
 }
 
 // Writer writes XML incrementally to an io.Writer.
+//
+// A Writer is stateful and is not safe for concurrent use. Use each Writer
+// instance from only a single goroutine at a time, or serialize all access
+// externally.
 type Writer struct {
 	out        io.Writer
 	indent     string // indent string per level; empty = no indentation
