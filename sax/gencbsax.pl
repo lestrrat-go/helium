@@ -116,7 +116,7 @@ foreach my $func (@handler_funcs) {
             split /\s*,\s*/, $ret =~ s{\(([^\)]+)\)}{$1}r;
     my $ba = bare_args($args);
     print $out <<EOM
-func (s $klass) $func($args) $ret {
+func (s *$klass) $func($args) $ret {
 \tif h := s.${func}Handler; h != nil {
 \t\treturn h.Handle($ba)
 \t}
