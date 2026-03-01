@@ -772,17 +772,12 @@ func compareValues(a, b, builtinLocal string) (int, bool) {
 	case "duration":
 		return compareDuration(a, b)
 	default:
-		return compareDecimal(a, b)
+		cmp := compareDecimal(a, b)
+		if cmp == -2 {
+			return 0, false
+		}
+		return cmp, true
 	}
-}
-
-func compareDecimal(a, b string) (int, bool) {
-	va, ok1 := new(big.Rat).SetString(a)
-	vb, ok2 := new(big.Rat).SetString(b)
-	if !ok1 || !ok2 {
-		return 0, false
-	}
-	return va.Cmp(vb), true
 }
 
 func parseXSDFloat(s string) (float64, bool) {
