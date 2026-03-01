@@ -667,7 +667,10 @@ func (w *Writer) WriteString(content string) error {
 	return w.err
 }
 
-// WriteRaw writes content without any escaping.
+// WriteRaw writes content directly without any escaping.
+// Callers must ensure the content is well-formed XML; passing
+// untrusted input may produce malformed output or introduce
+// XML injection vulnerabilities.
 func (w *Writer) WriteRaw(content string) error {
 	if w.err != nil {
 		return w.err
