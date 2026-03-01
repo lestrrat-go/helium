@@ -31,6 +31,10 @@ type parser struct {
 	// locator for SetDocumentLocator
 	locator *parserLocator
 
+	// depth tracks discarded misplaced structural elements (html/head/body)
+	// so their corresponding end tags are also silently skipped.
+	depth int
+
 	// encodingError is set when invalid bytes were found in a UTF-8 declared
 	// document and replaced with U+FFFD. The SAX error is emitted once when
 	// the first characters event containing U+FFFD is encountered.
@@ -317,6 +321,21 @@ func (p *parser) hasOnStack(name string) bool {
 	return false
 }
 
+// isMisplacedStructural checks whether a structural element (html/head/body)
+// is misplaced and should be silently discarded. Matches libxml2's
+// HTMLparser.c misplaced-element detection.
+func (p *parser) isMisplacedStructural(name string) bool {
+	switch name {
+	case "html":
+		return len(p.nameStack) > 0
+	case "head":
+		return len(p.nameStack) != 1
+	case "body":
+		return p.hasOnStack("body")
+	}
+	return false
+}
+
 // getEndPriority returns the priority for end tag handling.
 func getEndPriority(name string) int {
 	if pri, ok := htmlEndPriority[name]; ok {
@@ -486,6 +505,12 @@ func (p *parser) parseStartTag() {
 	p.htmlAutoClose(name)
 	p.htmlCheckImplied(name)
 
+	// Discard misplaced structural elements (html/head/body)
+	if p.isMisplacedStructural(name) {
+		p.depth++
+		return
+	}
+
 	// Fire SAX event
 	p.pushName(name)
 	_ = p.sax.StartElement(name, attrs)
@@ -544,6 +569,12 @@ func (p *parser) parseEndTag() {
 
 	if malformed {
 		_ = p.emitError("Unexpected end tag : %s", name+string(junkChar))
+		return
+	}
+
+	// Skip end tags for discarded misplaced structural elements
+	if (name == "html" || name == "head" || name == "body") && p.depth > 0 {
+		p.depth--
 		return
 	}
 
