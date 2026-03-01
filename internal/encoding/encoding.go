@@ -33,19 +33,19 @@ func normalizeEncodingName(name string) string {
 
 func Load(name string) enc.Encoding {
 	switch normalizeEncodingName(name) {
-	case "utf8", "unicode11utf8", "unicode20utf8":
+	case "utf8", "unicode11utf8", "unicode20utf8", "xunicode20utf8":
 		return unicode.UTF8
 	case "usascii", "ascii", "ansix341968", "csascii":
 		return unicode.UTF8
-	case "utf16le":
+	case "utf16le", "unicodefeff":
 		return unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM)
-	case "utf16be":
+	case "utf16be", "unicodefffe":
 		return unicode.UTF16(unicode.BigEndian, unicode.IgnoreBOM)
 	case "utf16", "unicode", "csunicode":
 		return unicode.UTF16(unicode.LittleEndian, unicode.UseBOM)
-	case "eucjp", "xeucjp":
+	case "eucjp", "xeucjp", "cseucpkdfmtjapanese":
 		return japanese.EUCJP
-	case "shiftjis", "cp932", "sjis", "ms932", "mskanji", "windows31j", "xsjis":
+	case "shiftjis", "cp932", "sjis", "ms932", "mskanji", "windows31j", "xsjis", "csshiftjis":
 		return japanese.ShiftJIS
 	case "jis", "iso2022jp", "csiso2022jp":
 		return japanese.ISO2022JP
@@ -69,7 +69,7 @@ func Load(name string) enc.Encoding {
 		return withC1Fallback(charmap.ISO8859_15)
 	case "iso885916", "latin10", "l10":
 		return withC1Fallback(charmap.ISO8859_16)
-	case "iso88592", "iso885921987", "isoir101", "latin2", "l2", "csisolatin2":
+	case "iso88592", "iso885921987", "isoir101", "latin2", "l2", "csisolatin2", "isolatin2":
 		return withC1Fallback(charmap.ISO8859_2)
 	case "iso88593", "iso885931988", "isoir109", "latin3", "l3", "csisolatin3":
 		return withC1Fallback(charmap.ISO8859_3)
@@ -77,11 +77,11 @@ func Load(name string) enc.Encoding {
 		return withC1Fallback(charmap.ISO8859_4)
 	case "iso88595", "iso885951988", "isoir144", "cyrillic", "csisolatincyrillic":
 		return withC1Fallback(charmap.ISO8859_5)
-	case "iso88596", "iso885961987", "isoir127", "arabic", "ecma114", "asmo708", "csisolatinarabic":
+	case "iso88596", "iso885961987", "isoir127", "arabic", "ecma114", "asmo708", "csisolatinarabic", "csiso88596e", "csiso88596i":
 		return withC1Fallback(charmap.ISO8859_6)
-	case "iso88597", "iso885971987", "isoir126", "greek", "greek8", "elot928", "ecma118", "csisolatingreek":
+	case "iso88597", "iso885971987", "isoir126", "greek", "greek8", "elot928", "ecma118", "csisolatingreek", "suneugreek":
 		return withC1Fallback(charmap.ISO8859_7)
-	case "iso88598", "iso885981988", "isoir138", "hebrew", "csisolatinhebrew":
+	case "iso88598", "iso885981988", "isoir138", "hebrew", "csisolatinhebrew", "csiso88598e", "csiso88598i", "logical", "visual":
 		return withC1Fallback(charmap.ISO8859_8)
 	case "iso88599", "iso885991989", "isoir148", "latin5", "l5", "csisolatin5":
 		return withC1Fallback(charmap.ISO8859_9)
@@ -101,7 +101,7 @@ func Load(name string) enc.Encoding {
 		return withC1Fallback(charmap.Windows1250)
 	case "windows1251", "cp1251":
 		return withC1Fallback(charmap.Windows1251)
-	case "iso88591", "iso885911987", "isoir100", "latin1", "l1", "ibm819", "cp819", "csisolatin1", "windows1252", "cp1252":
+	case "iso88591", "iso885911987", "isoir100", "latin1", "l1", "ibm819", "cp819", "csisolatin1", "windows1252", "cp1252", "isolatin1", "xcp1252":
 		return withC1Fallback(charmap.Windows1252)
 	case "windows1253", "cp1253":
 		return withC1Fallback(charmap.Windows1253)
@@ -137,7 +137,7 @@ func Load(name string) enc.Encoding {
 		return &ucs4SwapEncoding{swap: swap2143}
 	case "ucs43412":
 		return &ucs4SwapEncoding{swap: swap3412}
-	case "ucs2":
+	case "ucs2", "iso10646ucs2":
 		return unicode.UTF16(unicode.BigEndian, unicode.IgnoreBOM)
 	}
 	return nil
