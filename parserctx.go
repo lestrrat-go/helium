@@ -2459,7 +2459,7 @@ func (ctx *parserCtx) parseNCName() (ncname string, err error) {
 	defer releaseBuffer(buf)
 
 	var c rune
-	if c = cur.Peek(); c == ' ' || c == '>' || c == '/' || !isNameStartChar(c) {
+	if c = cur.Peek(); c == ' ' || c == '>' || c == '/' || c == ':' || !isNameStartChar(c) {
 		err = ctx.error(errors.New("invalid name start char"))
 		return
 	}
