@@ -398,6 +398,168 @@ func TestCopyDoc(t *testing.T) {
 		require.Equal(t, "root", dst.IntSubset().Name())
 	})
 
+	t.Run("DTD entities copied", func(t *testing.T) {
+		src := CreateDocument()
+		dtd, err := src.CreateInternalSubset("root", "", "")
+		require.NoError(t, err)
+
+		_, err = dtd.AddEntity("foo", InternalGeneralEntity, "", "", "bar")
+		require.NoError(t, err)
+		_, err = dtd.AddEntity("baz", InternalGeneralEntity, "", "", "qux")
+		require.NoError(t, err)
+
+		root, err := src.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, src.AddChild(root))
+
+		dst, err := CopyDoc(src)
+		require.NoError(t, err)
+
+		dstDTD := dst.IntSubset()
+		require.NotNil(t, dstDTD)
+
+		ent, ok := dstDTD.LookupEntity("foo")
+		require.True(t, ok)
+		require.Equal(t, "bar", string(ent.Content()))
+
+		ent, ok = dstDTD.LookupEntity("baz")
+		require.True(t, ok)
+		require.Equal(t, "qux", string(ent.Content()))
+
+		// Verify independence: mutating src doesn't affect dst.
+		srcEnt, _ := src.IntSubset().LookupEntity("foo")
+		require.NotSame(t, srcEnt, ent)
+	})
+
+	t.Run("DTD element declarations copied", func(t *testing.T) {
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ELEMENT root (child)>
+  <!ELEMENT child (#PCDATA)>
+]>
+<root><child>text</child></root>`
+
+		p := NewParser()
+		src, err := p.Parse([]byte(input))
+		require.NoError(t, err)
+
+		dst, err := CopyDoc(src)
+		require.NoError(t, err)
+
+		dstDTD := dst.IntSubset()
+		require.NotNil(t, dstDTD)
+
+		edecl, ok := dstDTD.LookupElement("root", "")
+		require.True(t, ok)
+		require.Equal(t, ElementElementType, edecl.decltype)
+
+		edecl, ok = dstDTD.LookupElement("child", "")
+		require.True(t, ok)
+		require.Equal(t, MixedElementType, edecl.decltype)
+	})
+
+	t.Run("DTD attribute declarations copied", func(t *testing.T) {
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ELEMENT root EMPTY>
+  <!ATTLIST root id ID #IMPLIED>
+  <!ATTLIST root class CDATA "default">
+]>
+<root id="x"/>`
+
+		p := NewParser()
+		src, err := p.Parse([]byte(input))
+		require.NoError(t, err)
+
+		dst, err := CopyDoc(src)
+		require.NoError(t, err)
+
+		dstDTD := dst.IntSubset()
+		require.NotNil(t, dstDTD)
+
+		adecl, ok := dstDTD.LookupAttribute("id", "", "root")
+		require.True(t, ok)
+		require.Equal(t, AttrID, adecl.AType())
+
+		adecl, ok = dstDTD.LookupAttribute("class", "", "root")
+		require.True(t, ok)
+		require.Equal(t, AttrCDATA, adecl.AType())
+		require.Equal(t, "default", adecl.defvalue)
+	})
+
+	t.Run("DTD notations copied", func(t *testing.T) {
+		src := CreateDocument()
+		dtd, err := src.CreateInternalSubset("root", "", "")
+		require.NoError(t, err)
+
+		_, err = dtd.AddNotation("gif", "image/gif", "")
+		require.NoError(t, err)
+
+		root, err := src.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, src.AddChild(root))
+
+		dst, err := CopyDoc(src)
+		require.NoError(t, err)
+
+		dstDTD := dst.IntSubset()
+		require.NotNil(t, dstDTD)
+
+		nota, ok := dstDTD.notations["gif"]
+		require.True(t, ok)
+		require.Equal(t, "gif", nota.Name())
+		require.Equal(t, "image/gif", nota.publicID)
+	})
+
+	t.Run("DTD parameter entities copied", func(t *testing.T) {
+		src := CreateDocument()
+		dtd, err := src.CreateInternalSubset("root", "", "")
+		require.NoError(t, err)
+
+		_, err = dtd.AddEntity("pe", InternalParameterEntity, "", "", "param-content")
+		require.NoError(t, err)
+
+		root, err := src.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, src.AddChild(root))
+
+		dst, err := CopyDoc(src)
+		require.NoError(t, err)
+
+		dstDTD := dst.IntSubset()
+		require.NotNil(t, dstDTD)
+
+		pent, ok := dstDTD.LookupParameterEntity("pe")
+		require.True(t, ok)
+		require.Equal(t, "param-content", string(pent.Content()))
+	})
+
+	t.Run("copied DTD serializes correctly", func(t *testing.T) {
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE root [
+<!ELEMENT root (child)>
+<!ELEMENT child (#PCDATA)>
+<!ENTITY foo "bar">
+<!ATTLIST root id ID #IMPLIED>
+]>
+<root id="x"><child>text</child></root>`
+
+		p := NewParser()
+		src, err := p.Parse([]byte(input))
+		require.NoError(t, err)
+
+		srcXML, err := src.XMLString()
+		require.NoError(t, err)
+
+		dst, err := CopyDoc(src)
+		require.NoError(t, err)
+
+		dstXML, err := dst.XMLString()
+		require.NoError(t, err)
+
+		require.Equal(t, srcXML, dstXML)
+	})
+
 	t.Run("nil document", func(t *testing.T) {
 		_, err := CopyDoc(nil)
 		require.Error(t, err)
