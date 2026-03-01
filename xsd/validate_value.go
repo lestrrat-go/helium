@@ -947,16 +947,12 @@ func parseXSDDate(s string) (xsdDateTime, bool) {
 	if len(s) < 10 || s[4] != '-' || s[7] != '-' {
 		return dt, false
 	}
-	year, err := strconv.Atoi(s[0:4])
-	if err != nil {
-		return dt, false
-	}
 	// Handle years > 4 digits.
 	dashIdx := strings.IndexByte(s, '-')
 	if dashIdx < 4 {
 		return dt, false
 	}
-	year, err = strconv.Atoi(s[:dashIdx])
+	year, err := strconv.Atoi(s[:dashIdx])
 	if err != nil {
 		return dt, false
 	}
