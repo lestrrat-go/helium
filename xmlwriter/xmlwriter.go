@@ -6,8 +6,11 @@ package xmlwriter
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strings"
+
+	iencoding "github.com/lestrrat-go/helium/internal/encoding"
 )
 
 // writerState tracks what context the writer is currently in.
@@ -317,6 +320,9 @@ func (w *Writer) StartDocument(version, encoding, standalone string) error {
 	w.writeStr(version)
 	w.writeByte(w.quoteChar)
 	if encoding != "" {
+		if iencoding.Load(encoding) == nil {
+			return fmt.Errorf("xmlwriter: unsupported encoding %q", encoding)
+		}
 		w.writeStr(" encoding=")
 		w.writeByte(w.quoteChar)
 		w.writeStr(encoding)

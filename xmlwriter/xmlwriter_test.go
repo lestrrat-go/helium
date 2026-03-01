@@ -41,6 +41,34 @@ func TestStartDocumentFull(t *testing.T) {
 	require.Equal(t, `<?xml version="1.0" encoding="ISO-8859-1" standalone="no"?>`, strings.TrimRight(buf.String(), "\n"))
 }
 
+func TestStartDocumentEncodingValidation(t *testing.T) {
+	t.Run("valid encoding", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := New(&buf)
+		require.NoError(t, w.StartDocument("1.0", "UTF-8", ""))
+	})
+
+	t.Run("valid encoding case insensitive", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := New(&buf)
+		require.NoError(t, w.StartDocument("1.0", "utf-8", ""))
+	})
+
+	t.Run("invalid encoding", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := New(&buf)
+		err := w.StartDocument("1.0", "BOGUS-999", "")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "unsupported encoding")
+	})
+
+	t.Run("empty encoding skips validation", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := New(&buf)
+		require.NoError(t, w.StartDocument("1.0", "", ""))
+	})
+}
+
 func TestSimpleElement(t *testing.T) {
 	var buf bytes.Buffer
 	w := New(&buf)
