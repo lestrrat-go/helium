@@ -1,0 +1,2 @@
+./test/schemas/any-pc-strict1_2.xml:3: Schemas validity error : Element 'declared': Element content is not allowed, because the content type is a simple type definition.
+./test/schemas/any-pc-strict1_2.xml fails to validate

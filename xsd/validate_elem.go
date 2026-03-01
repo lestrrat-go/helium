@@ -472,6 +472,47 @@ func matchWildcardParticle(parent *helium.Element, p *Particle, wc *Wildcard, ch
 		return count, fmt.Errorf("wildcard not matched")
 	}
 
+	// Validate matched elements per processContents.
+	if wc.ProcessContents != ProcessSkip {
+		var contentErr error
+		for i := 0; i < count; i++ {
+			child := children[pos+i]
+			edecl := lookupElemDecl(child.elem, schema)
+			if edecl == nil {
+				if wc.ProcessContents == ProcessStrict {
+					msg := "No matching global declaration available, but demanded by the strict wildcard."
+					out.WriteString(validityError(filename, child.elem.Line(), child.displayName, msg))
+					contentErr = fmt.Errorf("strict wildcard: no global element decl")
+				}
+				continue
+			}
+			td := edecl.Type
+			td, xsiErr := resolveXsiType(child.elem, td, schema, filename, out)
+			if xsiErr != nil {
+				contentErr = xsiErr
+				continue
+			}
+			if td != nil && td.Abstract {
+				msg := "The type definition is abstract."
+				out.WriteString(validityError(filename, child.elem.Line(), elemDisplayName(child.elem), msg))
+				contentErr = fmt.Errorf("abstract type")
+				continue
+			}
+			if td != nil {
+				if hasXsiNil(child.elem) {
+					if err := validateNilledElement(child.elem, edecl, td, schema, filename, out); err != nil {
+						contentErr = err
+					}
+				} else if err := validateElementContent(child.elem, edecl, td, schema, filename, out); err != nil {
+					contentErr = err
+				}
+			}
+		}
+		if contentErr != nil {
+			return count, contentErr
+		}
+	}
+
 	return count, nil
 }
 
