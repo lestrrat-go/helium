@@ -128,7 +128,7 @@ func dumpDTD(out io.Writer, dtd *helium.DTD) error {
 			_, _ = io.WriteString(out, sysID)
 			_, _ = io.WriteString(out, "\"")
 		}
-	} else if sysID != "" {
+	} else if sysID != "" && sysID != "about:legacy-compat" {
 		_, _ = io.WriteString(out, " SYSTEM \"")
 		_, _ = io.WriteString(out, sysID)
 		_, _ = io.WriteString(out, "\"")
