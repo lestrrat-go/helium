@@ -280,6 +280,12 @@ func (dtd *DTD) RegisterAttribute(attr *AttributeDecl) error {
 	return nil
 }
 
+func (dtd *DTD) ForEachEntity(fn func(name string, ent *Entity)) {
+	for name, ent := range dtd.entities {
+		fn(name, ent)
+	}
+}
+
 func (dtd *DTD) LookupEntity(name string) (*Entity, bool) {
 	ret, ok := dtd.entities[name]
 	return ret, ok

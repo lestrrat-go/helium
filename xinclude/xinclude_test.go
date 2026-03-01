@@ -919,3 +919,125 @@ func TestXIncludeDocCacheAvoidsReResolve(t *testing.T) {
 	}
 	require.Equal(t, 3, items)
 }
+
+func TestXIncludeEntityMerge(t *testing.T) {
+	// Included document defines entities; they should be merged into target's internal subset.
+	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<xi:include href="entities.xml"/>
+	</root>`)
+
+	resolver := &stringResolver{
+		files: map[string]string{
+			"entities.xml": `<?xml version="1.0"?>
+<!DOCTYPE chapter [
+  <!ENTITY greet "hello">
+  <!ENTITY farewell "goodbye">
+]>
+<chapter>&greet;</chapter>`,
+		},
+	}
+
+	count, err := xinclude.Process(doc,
+		xinclude.WithResolver(resolver),
+		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoBaseFixup(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+
+	// Target document should now have an internal subset with the merged entities
+	intSub := doc.IntSubset()
+	require.NotNil(t, intSub, "target document should have an internal subset")
+
+	greet, ok := intSub.LookupEntity("greet")
+	require.True(t, ok, "entity 'greet' should exist in target")
+	require.Equal(t, "hello", string(greet.Content()))
+
+	farewell, ok := intSub.LookupEntity("farewell")
+	require.True(t, ok, "entity 'farewell' should exist in target")
+	require.Equal(t, "goodbye", string(farewell.Content()))
+}
+
+func TestXIncludeEntityMergeConflict(t *testing.T) {
+	// Target and included document both define the same entity with different content.
+	// Target's definition should win (first-definition-wins) and warning should fire.
+	parser := helium.NewParser()
+	parser.SetOption(helium.ParseDTDLoad)
+	doc, err := parser.Parse([]byte(`<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ENTITY greeting "target-value">
+]>
+<root xmlns:xi="http://www.w3.org/2001/XInclude">
+	<xi:include href="conflict.xml"/>
+</root>`))
+	require.NoError(t, err)
+
+	resolver := &stringResolver{
+		files: map[string]string{
+			"conflict.xml": `<?xml version="1.0"?>
+<!DOCTYPE chapter [
+  <!ENTITY greeting "included-value">
+]>
+<chapter>text</chapter>`,
+		},
+	}
+
+	var warnings []string
+	count, err := xinclude.Process(doc,
+		xinclude.WithResolver(resolver),
+		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoBaseFixup(),
+		xinclude.WithWarningHandler(func(msg string) {
+			warnings = append(warnings, msg)
+		}),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+
+	// Target's definition wins
+	intSub := doc.IntSubset()
+	require.NotNil(t, intSub)
+	ent, ok := intSub.LookupEntity("greeting")
+	require.True(t, ok)
+	require.Equal(t, "target-value", string(ent.Content()))
+
+	// Warning should have been emitted
+	require.Len(t, warnings, 1)
+	require.Contains(t, warnings[0], "greeting")
+	require.Contains(t, warnings[0], "mismatch")
+}
+
+func TestXIncludeEntityMergeNoTargetDTD(t *testing.T) {
+	// Target has no DTD; included document has entities.
+	// An internal subset should be created on the target and entities merged.
+	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
+		<xi:include href="with-entities.xml"/>
+	</root>`)
+
+	resolver := &stringResolver{
+		files: map[string]string{
+			"with-entities.xml": `<?xml version="1.0"?>
+<!DOCTYPE section [
+  <!ENTITY author "Alice">
+]>
+<section>&author;</section>`,
+		},
+	}
+
+	count, err := xinclude.Process(doc,
+		xinclude.WithResolver(resolver),
+		xinclude.WithNoXIncludeNodes(),
+		xinclude.WithNoBaseFixup(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+
+	// Verify internal subset was created
+	intSub := doc.IntSubset()
+	require.NotNil(t, intSub, "internal subset should have been created on target")
+
+	// Verify entity was merged
+	ent, ok := intSub.LookupEntity("author")
+	require.True(t, ok, "entity 'author' should exist in target")
+	require.Equal(t, "Alice", string(ent.Content()))
+}
