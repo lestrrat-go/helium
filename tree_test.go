@@ -227,6 +227,52 @@ func TestNodeGetBase(t *testing.T) {
 	})
 }
 
+func TestDocumentURL(t *testing.T) {
+	t.Run("set and get URL", func(t *testing.T) {
+		doc := CreateDocument()
+		require.Equal(t, "", doc.URL())
+
+		doc.SetURL("http://example.com/doc.xml")
+		require.Equal(t, "http://example.com/doc.xml", doc.URL())
+	})
+
+	t.Run("URL used as base in NodeGetBase", func(t *testing.T) {
+		doc := CreateDocument()
+		doc.SetURL("http://example.com/dir/doc.xml")
+
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, doc.AddChild(root))
+
+		base := NodeGetBase(doc, root)
+		require.Equal(t, "http://example.com/dir/doc.xml", base)
+	})
+
+	t.Run("URL with relative xml:base", func(t *testing.T) {
+		doc := CreateDocument()
+		doc.SetURL("http://example.com/dir/doc.xml")
+
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, doc.AddChild(root))
+
+		xmlNS := NewNamespace("xml", XMLNamespace)
+		require.NoError(t, root.SetAttributeNS("base", "sub/", xmlNS))
+
+		base := NodeGetBase(doc, root)
+		require.Equal(t, "http://example.com/dir/sub/", base)
+	})
+
+	t.Run("URL set during parsing", func(t *testing.T) {
+		const input = `<?xml version="1.0"?><root/>`
+		p := NewParser()
+		p.SetBaseURI("/some/path/doc.xml")
+		doc, err := p.Parse([]byte(input))
+		require.NoError(t, err)
+		require.Equal(t, "/some/path/doc.xml", doc.URL())
+	})
+}
+
 func TestCopyNode(t *testing.T) {
 	t.Run("element with children and attrs", func(t *testing.T) {
 		src := CreateDocument()

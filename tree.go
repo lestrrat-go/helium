@@ -74,6 +74,7 @@ func (t *TreeBuilder) StartDocument(ctxif sax.Context) error {
 	ctx := ctxif.(*parserCtx)
 	ctx.doc = NewDocument(ctx.version, ctx.encoding, ctx.standalone)
 	ctx.doc.ids = make(map[string]*Element)
+	ctx.doc.url = ctx.baseURI
 	return nil
 }
 

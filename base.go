@@ -18,10 +18,10 @@ func NodeGetBase(doc *Document, n Node) string {
 		}
 	}
 
-	// Use the document's URI as the starting base, if available.
+	// Use the document's URL as the starting base, if available.
 	var base string
-	if doc != nil && doc.name != "" && doc.name != "(document)" {
-		base = doc.name
+	if doc != nil && doc.url != "" {
+		base = doc.url
 	}
 
 	// Resolve from outermost ancestor inward (reverse order).
