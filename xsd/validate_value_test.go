@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -193,6 +194,108 @@ func TestBuiltinTypeValidation(t *testing.T) {
 			for _, v := range tt.invalid {
 				err := validateBuiltinValue(v, tt.typeName)
 				require.Error(t, err, "type %s should reject %q", tt.typeName, v)
+			}
+		})
+	}
+}
+
+func TestCompareValues(t *testing.T) {
+	tests := []struct {
+		typ  string
+		a, b string
+		want int  // -1, 0, 1
+		ok   bool // false means indeterminate
+	}{
+		// decimal
+		{"decimal", "1.0", "2.0", -1, true},
+		{"decimal", "2.0", "1.0", 1, true},
+		{"decimal", "3.14", "3.14", 0, true},
+		{"decimal", "-1", "1", -1, true},
+		{"decimal", "0.5", "0.50", 0, true},
+
+		// integer (uses decimal path)
+		{"integer", "10", "20", -1, true},
+		{"integer", "100", "100", 0, true},
+		{"integer", "-5", "5", -1, true},
+
+		// float
+		{"float", "1.0", "2.0", -1, true},
+		{"float", "2.0", "1.0", 1, true},
+		{"float", "3.14", "3.14", 0, true},
+		{"float", "INF", "1.0", 1, true},
+		{"float", "-INF", "1.0", -1, true},
+		{"float", "-INF", "INF", -1, true},
+		{"float", "INF", "INF", 0, true},
+		{"float", "NaN", "1.0", 0, false},
+		{"float", "1.0", "NaN", 0, false},
+		{"float", "NaN", "NaN", 0, false},
+		{"float", "1e2", "100", 0, true},
+		{"float", "1.5E-3", "0.0015", 0, true},
+
+		// double (same path as float)
+		{"double", "INF", "-INF", 1, true},
+		{"double", "1e10", "9999999999", 1, true},
+
+		// dateTime
+		{"dateTime", "2023-01-15T10:30:00", "2023-01-15T10:30:00", 0, true},
+		{"dateTime", "2023-01-15T10:30:00", "2023-01-16T10:30:00", -1, true},
+		{"dateTime", "2023-01-15T10:30:00Z", "2023-01-15T11:30:00+01:00", 0, true},
+		{"dateTime", "2023-01-15T10:30:00Z", "2023-01-15T10:30:00", 0, false}, // mixed TZ
+
+		// date
+		{"date", "2023-01-15", "2023-01-16", -1, true},
+		{"date", "2023-01-15", "2023-01-15", 0, true},
+		{"date", "2023-12-31", "2023-01-01", 1, true},
+		{"date", "2023-01-15Z", "2023-01-15+00:00", 0, true},
+
+		// time
+		{"time", "10:30:00", "11:30:00", -1, true},
+		{"time", "10:30:00", "10:30:00", 0, true},
+		{"time", "23:59:59", "00:00:00", 1, true},
+		{"time", "10:30:00Z", "11:30:00+01:00", 0, true},
+
+		// gYear
+		{"gYear", "2023", "2024", -1, true},
+		{"gYear", "2023", "2023", 0, true},
+		{"gYear", "-0001", "2023", -1, true},
+
+		// gYearMonth
+		{"gYearMonth", "2023-01", "2023-02", -1, true},
+		{"gYearMonth", "2023-06", "2023-06", 0, true},
+
+		// gMonth
+		{"gMonth", "--01", "--02", -1, true},
+		{"gMonth", "--12", "--12", 0, true},
+		{"gMonth", "--12", "--01", 1, true},
+
+		// gDay
+		{"gDay", "---01", "---02", -1, true},
+		{"gDay", "---15", "---15", 0, true},
+		{"gDay", "---31", "---01", 1, true},
+
+		// gMonthDay
+		{"gMonthDay", "--01-15", "--01-16", -1, true},
+		{"gMonthDay", "--06-01", "--06-01", 0, true},
+		{"gMonthDay", "--12-31", "--01-01", 1, true},
+
+		// duration
+		{"duration", "P1Y", "P2Y", -1, true},
+		{"duration", "P1Y", "P1Y", 0, true},
+		{"duration", "P2Y", "P1Y", 1, true},
+		{"duration", "PT3600S", "PT1H", 0, true},
+		{"duration", "P1D", "PT86400S", 0, true},
+		{"duration", "-P1Y", "P1Y", -1, true},
+		{"duration", "P1Y2M", "P1Y3M", -1, true},
+		{"duration", "P1M", "P30D", 0, false}, // indeterminate: months vs days
+	}
+
+	for _, tt := range tests {
+		name := fmt.Sprintf("%s/%s_vs_%s", tt.typ, tt.a, tt.b)
+		t.Run(name, func(t *testing.T) {
+			got, ok := compareValues(tt.a, tt.b, tt.typ)
+			require.Equal(t, tt.ok, ok, "ok mismatch")
+			if ok {
+				require.Equal(t, tt.want, got, "cmp mismatch")
 			}
 		})
 	}
