@@ -1124,7 +1124,17 @@ func (d *Dumper) dumpXHTMLNode(out io.Writer, n Node) error {
 		} else {
 			if addMeta {
 				_, _ = io.WriteString(out, ">")
+				if d.Format {
+					_, _ = io.WriteString(out, "\n")
+					d.indent++
+					d.writeIndent(out)
+				}
 				d.writeMetaContentType(out)
+				if d.Format {
+					_, _ = io.WriteString(out, "\n")
+					d.indent--
+					d.writeIndent(out)
+				}
 			} else {
 				_, _ = io.WriteString(out, ">")
 			}
@@ -1137,11 +1147,27 @@ func (d *Dumper) dumpXHTMLNode(out io.Writer, n Node) error {
 	}
 
 	_, _ = io.WriteString(out, ">")
+
+	textOnly := d.Format && hasOnlyTextChildren(e)
+	if d.Format && !textOnly {
+		_, _ = io.WriteString(out, "\n")
+		d.indent++
+	}
+
 	if addMeta {
+		if d.Format && !textOnly {
+			d.writeIndent(out)
+		}
 		d.writeMetaContentType(out)
+		if d.Format && !textOnly {
+			_, _ = io.WriteString(out, "\n")
+		}
 	}
 
 	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
+		if d.Format && !textOnly {
+			d.writeIndent(out)
+		}
 		if child.Type() == ElementNode {
 			if err := d.dumpXHTMLNode(out, child); err != nil {
 				return err
@@ -1151,6 +1177,14 @@ func (d *Dumper) dumpXHTMLNode(out io.Writer, n Node) error {
 				return err
 			}
 		}
+		if d.Format && !textOnly {
+			_, _ = io.WriteString(out, "\n")
+		}
+	}
+
+	if d.Format && !textOnly {
+		d.indent--
+		d.writeIndent(out)
 	}
 
 	_, _ = io.WriteString(out, "</")
@@ -1263,12 +1297,6 @@ func (d *Dumper) writeMetaContentType(out io.Writer) {
 	enc := d.encoding
 	if enc == "" {
 		enc = "UTF-8"
-	}
-	if d.Format {
-		_, _ = io.WriteString(out, "\n")
-		d.indent++
-		d.writeIndent(out)
-		d.indent--
 	}
 	_, _ = io.WriteString(out, `<meta http-equiv="Content-Type" content="text/html; charset=`)
 	_, _ = io.WriteString(out, enc)
