@@ -18,10 +18,8 @@ var (
 	htmlAttrEscQuot = []byte("&quot;")
 )
 
-// htmlURIAttrs is the set of HTML attributes that contain URIs.
-// Based on libxml2's htmlAttrDumpOutput (HTMLtree.c).
-// Note: libxml2 also includes "name" but that causes issues since name
-// is used for non-URI purposes (meta name, form element name, etc.).
+// htmlURIAttrs is the set of HTML attributes that always contain URIs.
+// "name" is treated as a URI attribute only on <a> elements (see isURIAttr).
 var htmlURIAttrs = map[string]bool{
 	"href":   true,
 	"action": true,
@@ -316,7 +314,8 @@ func dumpAttributes(out io.Writer, e *helium.Element) error {
 		}
 
 		val := attr.Value()
-		isURI := htmlURIAttrs[attrName]
+		elemName := strings.ToLower(e.LocalName())
+		isURI := htmlURIAttrs[attrName] || (attrName == "name" && elemName == "a")
 		if isURI {
 			val = uriEscapeStr(val)
 		}
