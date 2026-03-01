@@ -122,6 +122,66 @@ func TestBuiltinTypeValidation(t *testing.T) {
 			valid:    []string{"", "http://example.com", "urn:isbn:123", "anything goes"},
 			invalid:  []string{},
 		},
+		{
+			typeName: "byte",
+			valid:    []string{"-128", "0", "127", "+0"},
+			invalid:  []string{"-129", "128", "999", "abc"},
+		},
+		{
+			typeName: "short",
+			valid:    []string{"-32768", "0", "32767"},
+			invalid:  []string{"-32769", "32768"},
+		},
+		{
+			typeName: "int",
+			valid:    []string{"-2147483648", "0", "2147483647"},
+			invalid:  []string{"-2147483649", "2147483648"},
+		},
+		{
+			typeName: "long",
+			valid:    []string{"-9223372036854775808", "0", "9223372036854775807"},
+			invalid:  []string{"-9223372036854775809", "9223372036854775808"},
+		},
+		{
+			typeName: "unsignedByte",
+			valid:    []string{"0", "255"},
+			invalid:  []string{"-1", "256"},
+		},
+		{
+			typeName: "unsignedShort",
+			valid:    []string{"0", "65535"},
+			invalid:  []string{"-1", "65536"},
+		},
+		{
+			typeName: "unsignedInt",
+			valid:    []string{"0", "4294967295"},
+			invalid:  []string{"-1", "4294967296"},
+		},
+		{
+			typeName: "unsignedLong",
+			valid:    []string{"0", "18446744073709551615"},
+			invalid:  []string{"-1", "18446744073709551616"},
+		},
+		{
+			typeName: "nonNegativeInteger",
+			valid:    []string{"0", "1", "999999999999999999"},
+			invalid:  []string{"-1", "-100"},
+		},
+		{
+			typeName: "nonPositiveInteger",
+			valid:    []string{"0", "-1", "-999999999999999999"},
+			invalid:  []string{"1", "100"},
+		},
+		{
+			typeName: "positiveInteger",
+			valid:    []string{"1", "100", "999999999999999999"},
+			invalid:  []string{"0", "-1"},
+		},
+		{
+			typeName: "negativeInteger",
+			valid:    []string{"-1", "-100", "-999999999999999999"},
+			invalid:  []string{"0", "1"},
+		},
 	}
 
 	for _, tt := range tests {
