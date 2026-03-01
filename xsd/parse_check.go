@@ -453,20 +453,6 @@ func isValidFinalDefault(v string) bool {
 	return true
 }
 
-// isValidSimpleTypeFinal checks if a value is valid for the 'final' attribute on simpleType.
-// Accepts #all or space-separated list of restriction|list|union.
-func isValidSimpleTypeFinal(v string) bool {
-	if v == "#all" {
-		return true
-	}
-	for _, part := range splitSpace(v) {
-		if part != "restriction" && part != "list" && part != "union" {
-			return false
-		}
-	}
-	return true
-}
-
 // splitSpace splits a string on whitespace.
 func splitSpace(s string) []string {
 	var parts []string
