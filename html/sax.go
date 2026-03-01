@@ -1,5 +1,12 @@
 package html
 
+import "errors"
+
+// ErrHandlerUnspecified is returned when a SAXCallbacks method is called
+// but no handler is registered for that event. This is not a fatal error
+// and can be ignored if the caller only listens to specific events.
+var ErrHandlerUnspecified = errors.New("handler unspecified")
+
 // DocumentLocator provides document position information to SAX handlers.
 type DocumentLocator interface {
 	LineNumber() int
@@ -172,89 +179,89 @@ func (s *SAXCallbacks) SetDocumentLocator(loc DocumentLocator) error {
 	if h := s.SetDocumentLocatorHandler; h != nil {
 		return h.SetDocumentLocator(loc)
 	}
-	return nil
+	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) StartDocument() error {
 	if h := s.StartDocumentHandler; h != nil {
 		return h.StartDocument()
 	}
-	return nil
+	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) EndDocument() error {
 	if h := s.EndDocumentHandler; h != nil {
 		return h.EndDocument()
 	}
-	return nil
+	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) StartElement(name string, attrs []Attribute) error {
 	if h := s.StartElementHandler; h != nil {
 		return h.StartElement(name, attrs)
 	}
-	return nil
+	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) EndElement(name string) error {
 	if h := s.EndElementHandler; h != nil {
 		return h.EndElement(name)
 	}
-	return nil
+	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) Characters(ch []byte) error {
 	if h := s.CharactersHandler; h != nil {
 		return h.Characters(ch)
 	}
-	return nil
+	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) CDataBlock(value []byte) error {
 	if h := s.CDataBlockHandler; h != nil {
 		return h.CDataBlock(value)
 	}
-	return nil
+	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) Comment(value []byte) error {
 	if h := s.CommentHandler; h != nil {
 		return h.Comment(value)
 	}
-	return nil
+	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) InternalSubset(name, externalID, systemID string) error {
 	if h := s.InternalSubsetHandler; h != nil {
 		return h.InternalSubset(name, externalID, systemID)
 	}
-	return nil
+	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) ProcessingInstruction(target, data string) error {
 	if h := s.ProcessingInstructionHandler; h != nil {
 		return h.ProcessingInstruction(target, data)
 	}
-	return nil
+	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) IgnorableWhitespace(ch []byte) error {
 	if h := s.IgnorableWhitespaceHandler; h != nil {
 		return h.IgnorableWhitespace(ch)
 	}
-	return nil
+	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) Error(msg string, args ...interface{}) error {
 	if h := s.ErrorHandler; h != nil {
 		return h.Error(msg, args...)
 	}
-	return nil
+	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) Warning(msg string, args ...interface{}) error {
 	if h := s.WarningHandler; h != nil {
 		return h.Warning(msg, args...)
 	}
-	return nil
+	return ErrHandlerUnspecified
 }
