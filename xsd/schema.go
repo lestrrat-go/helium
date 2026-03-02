@@ -190,7 +190,8 @@ type FacetSet struct {
 	WhiteSpace     *string
 }
 
-// AttrUse is a stub for attribute use declarations (future phases).
+// AttrUse represents an attribute use in a complex type definition.
+// (libxml2: xmlSchemaAttributeUsePtr)
 type AttrUse struct {
 	Name       QName
 	TypeName   QName
