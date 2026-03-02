@@ -197,8 +197,7 @@ func (ctx *parserCtx) pushNode(e *Element) {
 		if l := ctx.nodeTab.Len(); l <= 0 {
 			pdebug.Printf("  (EMPTY node stack)")
 		} else {
-			for i, elem := range ctx.nodeTab.SimpleStack {
-				e := elem.(*Element)
+			for i, e := range ctx.nodeTab.Stack {
 				pdebug.Printf("  %003d: %s (%p)", i, e.Name(), e)
 			}
 		}
@@ -227,8 +226,7 @@ func (ctx *parserCtx) popNode() (elem *Element) {
 			if l := ctx.nodeTab.Len(); l <= 0 {
 				pdebug.Printf("  (EMPTY node stack)")
 			} else {
-				for i, elem := range ctx.nodeTab.SimpleStack {
-					e := elem.(*Element)
+				for i, e := range ctx.nodeTab.Stack {
 					pdebug.Printf("  %003d: %s (%p)", i, e.Name(), e)
 				}
 			}
@@ -1311,7 +1309,7 @@ func (ctx *parserCtx) parseStartTag() error {
 			nslist = make([]sax.Namespace, nbNs)
 			// workaround []*Namespace != []sax.Namespace
 			for i, ns := range ctx.nsTab.Peek(nbNs) {
-				nslist[i] = ns.(nsStackItem)
+				nslist[i] = ns
 			}
 		}
 		switch err := s.StartElementNS(ctx.userData, elem.LocalName(), prefix, nsuri, nslist, attrs); err {

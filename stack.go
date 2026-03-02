@@ -3,15 +3,15 @@ package helium
 import "github.com/lestrrat-go/helium/internal/stack"
 
 type nodeStack struct {
-	stack.SimpleStack
+	stack.Stack[*Element]
 }
 
 type inputStack struct {
-	stack.SimpleStack
+	stack.Stack[any]
 }
 
 type nsStack struct {
-	stack.UniqueStack
+	stack.KeyedStack[nsStackItem]
 }
 
 type nsStackItem struct {
@@ -36,24 +36,24 @@ func (i nsStackItem) Key() string {
 func (s *nsStack) Push(prefix, uri string) {
 	// Force-append: namespace prefixes may be redeclared on child elements
 	// (shadowing the parent's binding), so we must allow duplicate keys.
-	// UniqueStack.Lookup searches from the end, giving correct shadowing.
-	s.UniqueStack = append(s.UniqueStack, nsStackItem{prefix: prefix, href: uri})
+	// KeyedStack.Lookup searches from the end, giving correct shadowing.
+	s.KeyedStack = append(s.KeyedStack, nsStackItem{prefix: prefix, href: uri})
 }
 
 func (s *nsStack) Lookup(prefix string) string {
-	item := s.UniqueStack.Lookup(prefix)
-	if item == stack.NilItem {
+	item, ok := s.KeyedStack.Lookup(prefix)
+	if !ok {
 		return ""
 	}
-	return item.(nsStackItem).href
+	return item.href
 }
 
 func (s *nodeStack) Push(e *Element) {
-	s.SimpleStack.Push(stack.AnyItem(e))
+	s.Stack.Push(e)
 }
 
 func (s *nodeStack) Pop() *Element {
-	defer s.SimpleStack.Pop()
+	defer s.Stack.Pop()
 	if e := s.PeekOne(); e != nil {
 		return e
 	}
@@ -61,22 +61,22 @@ func (s *nodeStack) Pop() *Element {
 }
 
 func (s *nodeStack) PeekOne() *Element {
-	l := s.SimpleStack.Peek(1) // nolint:staticcheck
+	l := s.Peek(1)
 	if len(l) != 1 {
 		return nil
 	}
-	return l[0].(*Element)
+	return l[0]
 }
 
 // the reason we're using any here is that we may have to
 // push a ByteCursor or a RuneCursor, and they don't share
 // a common API
 func (s *inputStack) Push(c any) {
-	s.SimpleStack.Push(stack.AnyItem(c))
+	s.Stack.Push(c)
 }
 
 func (s *inputStack) Pop() any {
-	defer s.SimpleStack.Pop() // nolint:staticcheck
+	defer s.Stack.Pop()
 	if e := s.PeekOne(); e != nil {
 		return e
 	}
@@ -84,7 +84,7 @@ func (s *inputStack) Pop() any {
 }
 
 func (s *inputStack) PeekOne() any {
-	l := s.SimpleStack.Peek(1) // nolint:staticcheck
+	l := s.Peek(1)
 	if len(l) != 1 {
 		return nil
 	}

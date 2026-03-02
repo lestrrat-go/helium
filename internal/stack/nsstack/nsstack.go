@@ -22,7 +22,7 @@ func (i Item) Key() string {
 }
 
 type Stack struct {
-	stack.UniqueStack
+	stack.KeyedStack[Item]
 }
 
 func New() Stack {
@@ -30,13 +30,13 @@ func New() Stack {
 }
 
 func (s *Stack) Push(prefix, uri string) {
-	_ = s.UniqueStack.Push(Item{prefix: prefix, href: uri})
+	_ = s.KeyedStack.Push(Item{prefix: prefix, href: uri})
 }
 
 func (s *Stack) Lookup(prefix string) string {
-	item := s.UniqueStack.Lookup(prefix)
-	if item == stack.NilItem {
+	item, ok := s.KeyedStack.Lookup(prefix)
+	if !ok {
 		return ""
 	}
-	return item.(Item).href
+	return item.href
 }
