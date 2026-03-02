@@ -21,12 +21,7 @@ type canonicalizer struct {
 	nsStack           *visibleNSStack
 	// nsNodesByElement indexes NamespaceNodeWrapper nodes by their parent element.
 	// Built once during process() when nodeSet is non-nil.
-	nsNodesByElement map[helium.Node][]nsNodeInfo
-}
-
-type nsNodeInfo struct {
-	prefix string
-	uri    string
+	nsNodesByElement map[helium.Node][]nsSortEntry
 }
 
 // attrPrefix safely returns the namespace prefix for an attribute,
@@ -78,13 +73,13 @@ func (c *canonicalizer) process() error {
 
 	// Build namespace node index for node-set mode
 	if c.nodeSet != nil {
-		c.nsNodesByElement = make(map[helium.Node][]nsNodeInfo)
+		c.nsNodesByElement = make(map[helium.Node][]nsSortEntry)
 		for n := range c.nodeSet {
 			if n.Type() == helium.NamespaceNode {
 				parent := n.Parent()
 				prefix := n.Name()
 				uri := string(n.Content())
-				c.nsNodesByElement[parent] = append(c.nsNodesByElement[parent], nsNodeInfo{
+				c.nsNodesByElement[parent] = append(c.nsNodesByElement[parent], nsSortEntry{
 					prefix: prefix,
 					uri:    uri,
 				})
@@ -385,7 +380,7 @@ func (c *canonicalizer) renderNamespacesNodeSet(e *helium.Element) error {
 			hasDefaultNS = true
 		}
 		if !c.nsRenderedByAncestor(e, nsn.prefix, nsn.uri) {
-			toOutput = append(toOutput, nsSortEntry(nsn))
+			toOutput = append(toOutput, nsn)
 		}
 	}
 
@@ -424,7 +419,7 @@ func (c *canonicalizer) renderNSNodesAsText(e *helium.Element) error {
 		if nsn.prefix == helium.XMLPrefix {
 			continue
 		}
-		toOutput = append(toOutput, nsSortEntry(nsn))
+		toOutput = append(toOutput, nsn)
 	}
 	sortNamespaces(toOutput)
 
@@ -456,7 +451,7 @@ func (c *canonicalizer) renderNSNodesAsTextExclusive(e *helium.Element) error {
 		if _, ok := c.inclusivePrefixes[nsn.prefix]; !ok {
 			continue
 		}
-		toOutput = append(toOutput, nsSortEntry(nsn))
+		toOutput = append(toOutput, nsn)
 	}
 	sortNamespaces(toOutput)
 
