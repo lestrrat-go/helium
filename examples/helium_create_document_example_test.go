@@ -50,9 +50,9 @@ func Example_helium_create_document() {
 		return
 	}
 
-	// AddContent creates a text node with the given bytes and
+	// AppendText creates a text node with the given bytes and
 	// appends it as a child of the element.
-	if err := title.AddContent([]byte("XML in Practice")); err != nil {
+	if err := title.AppendText([]byte("XML in Practice")); err != nil {
 		fmt.Printf("failed to add content: %s\n", err)
 		return
 	}

@@ -13,7 +13,8 @@ type Node interface {
 	baseDocNode() *docnode // prevents external implementation
 
 	AddChild(Node) error
-	AddContent([]byte) error
+	// AppendText appends text content to this node (libxml2: xmlNodeAddContent).
+	AppendText([]byte) error
 	AddSibling(Node) error
 	Content() []byte
 	FirstChild() Node
@@ -160,7 +161,7 @@ func (n docnode) Content() []byte {
 	return b.Bytes()
 }
 
-func addContent(n Node, b []byte) error {
+func appendText(n Node, b []byte) error {
 	t := newText(b)
 	return n.AddChild(t)
 }

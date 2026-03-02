@@ -18,16 +18,16 @@ func newText(b []byte) *Text {
 
 func (n *Text) AddChild(cur Node) error {
 	if t, ok := cur.(*Text); ok {
-		return n.AddContent(t.content)
+		return n.AppendText(t.content)
 	}
 	return ErrInvalidOperation
 }
 
-func (n *Text) AddContent(b []byte) error {
+func (n *Text) AppendText(b []byte) error {
 	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Text.AddContent '%s' (%p)", b, n)
+		g := pdebug.IPrintf("START Text.AppendText '%s' (%p)", b, n)
 		defer func() {
-			g.IRelease("END Text.AddContent '%s'", n.content)
+			g.IRelease("END Text.AppendText '%s'", n.content)
 		}()
 	}
 	n.content = append(n.content, b...)
@@ -40,7 +40,7 @@ func (n *Text) AddSibling(cur Node) error {
 		defer g.IRelease("END Text.AddSibling")
 	}
 	if cur.Type() == TextNode {
-		return n.AddContent(cur.Content())
+		return n.AppendText(cur.Content())
 	}
 	return addSibling(n, cur)
 }

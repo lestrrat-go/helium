@@ -284,7 +284,7 @@ func TestCopyNode(t *testing.T) {
 		child, err := src.CreateElement("child")
 		require.NoError(t, err)
 		require.NoError(t, root.AddChild(child))
-		require.NoError(t, child.AddContent([]byte("hello")))
+		require.NoError(t, child.AppendText([]byte("hello")))
 
 		dst := NewDefaultDocument()
 		copied, err := CopyNode(root, dst)
@@ -370,7 +370,7 @@ func TestCopyDoc(t *testing.T) {
 		root, err := src.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, src.AddChild(root))
-		require.NoError(t, root.AddContent([]byte("hello")))
+		require.NoError(t, root.AppendText([]byte("hello")))
 
 		dst, err := CopyDoc(src)
 		require.NoError(t, err)

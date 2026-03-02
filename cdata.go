@@ -19,7 +19,7 @@ func (n *CDATASection) AddChild(cur Node) error {
 	return ErrInvalidOperation
 }
 
-func (n *CDATASection) AddContent(b []byte) error {
+func (n *CDATASection) AppendText(b []byte) error {
 	n.content = append(n.content, b...)
 	return nil
 }

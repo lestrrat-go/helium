@@ -18,8 +18,8 @@ func (n *XIncludeMarker) AddChild(cur Node) error {
 	return addChild(n, cur)
 }
 
-func (n *XIncludeMarker) AddContent(b []byte) error {
-	return addContent(n, b)
+func (n *XIncludeMarker) AppendText(b []byte) error {
+	return appendText(n, b)
 }
 
 func (n *XIncludeMarker) AddSibling(cur Node) error {
