@@ -7,7 +7,7 @@ import (
 	"github.com/lestrrat-go/helium/html"
 )
 
-func Example_html_new_push_parser_with_sax() {
+func Example_html_new_sax_push_parser() {
 	var sawTitle bool
 	handler := &html.SAXCallbacks{}
 	handler.OnStartElement = html.StartElementFunc(func(name string, _ []html.Attribute) error {
@@ -17,7 +17,7 @@ func Example_html_new_push_parser_with_sax() {
 		return nil
 	})
 
-	pp := html.NewPushParserWithSAX(handler)
+	pp := html.NewSAXPushParser(handler)
 	if err := pp.Push([]byte(`<h1>Title</h1>`)); err != nil {
 		fmt.Printf("push failed: %s\n", err)
 		return

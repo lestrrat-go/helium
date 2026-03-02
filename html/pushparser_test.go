@@ -82,7 +82,7 @@ func TestHTMLPushParserSAXMode(t *testing.T) {
 		OnSetDocumentLocator: SetDocumentLocatorFunc(func(loc DocumentLocator) error { return nil }),
 	}
 
-	pp := NewPushParserWithSAX(handler)
+	pp := NewSAXPushParser(handler)
 	require.NoError(t, pp.Push(input))
 	doc, err := pp.Close()
 	require.NoError(t, err)

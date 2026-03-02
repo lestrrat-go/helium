@@ -27,9 +27,10 @@ func NewPushParser(options ...ParseOption) *PushParser {
 	return &PushParser{options: options}
 }
 
-// NewPushParserWithSAX creates an HTML PushParser that fires SAX events
+// NewSAXPushParser creates an HTML PushParser that fires SAX events
 // to the given handler instead of building a DOM tree.
-func NewPushParserWithSAX(h SAXHandler, options ...ParseOption) *PushParser {
+// (libxml2: htmlCreatePushParserCtxt with SAX handler)
+func NewSAXPushParser(h SAXHandler, options ...ParseOption) *PushParser {
 	return &PushParser{sax: h, options: options}
 }
 
