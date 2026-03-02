@@ -1,6 +1,9 @@
 package helium
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // CopyNode creates a deep copy of src, owned by targetDoc.
 // Supports Element, Text, Comment, CDATASection, PI, and EntityRef nodes.
@@ -9,11 +12,11 @@ func CopyNode(src Node, targetDoc *Document) (Node, error) {
 	case ElementNode:
 		return copyElement(src.(*Element), targetDoc)
 	case TextNode:
-		return targetDoc.CreateText(copyBytes(src.Content()))
+		return targetDoc.CreateText(slices.Clone(src.Content()))
 	case CommentNode:
-		return targetDoc.CreateComment(copyBytes(src.Content()))
+		return targetDoc.CreateComment(slices.Clone(src.Content()))
 	case CDATASectionNode:
-		return targetDoc.CreateCDATASection(copyBytes(src.Content()))
+		return targetDoc.CreateCDATASection(slices.Clone(src.Content()))
 	case ProcessingInstructionNode:
 		return targetDoc.CreatePI(src.Name(), string(src.Content()))
 	case EntityRefNode:
@@ -76,15 +79,6 @@ func copyElement(src *Element, doc *Document) (*Element, error) {
 	}
 
 	return elem, nil
-}
-
-func copyBytes(b []byte) []byte {
-	if b == nil {
-		return nil
-	}
-	c := make([]byte, len(b))
-	copy(c, b)
-	return c
 }
 
 // CopyDoc creates a deep copy of a document including all children.
@@ -158,7 +152,7 @@ func copyDTD(src *DTD, dst *Document) error {
 			dstDTD.notations[nota.name] = cp
 			_ = dstDTD.AddChild(cp)
 		case CommentNode:
-			cm, _ := dst.CreateComment(copyBytes(c.Content()))
+			cm, _ := dst.CreateComment(slices.Clone(c.Content()))
 			_ = dstDTD.AddChild(cm)
 		case ProcessingInstructionNode:
 			pi, _ := dst.CreatePI(c.Name(), string(c.Content()))
