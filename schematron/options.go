@@ -1,16 +1,29 @@
 package schematron
 
+import (
+	helium "github.com/lestrrat-go/helium"
+)
+
 // CompileOption configures schema compilation.
 type CompileOption func(*compileConfig)
 
 type compileConfig struct {
-	filename string
+	filename     string
+	errorHandler helium.ErrorHandler
 }
 
 // WithSchemaFilename sets the schema filename used in compilation error messages.
 func WithSchemaFilename(name string) CompileOption {
 	return func(c *compileConfig) {
 		c.filename = name
+	}
+}
+
+// WithCompileErrorHandler sets a handler that receives compilation errors.
+// When set, errors are delivered to the handler instead of being discarded.
+func WithCompileErrorHandler(h helium.ErrorHandler) CompileOption {
+	return func(c *compileConfig) {
+		c.errorHandler = h
 	}
 }
 

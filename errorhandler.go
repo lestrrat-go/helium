@@ -34,6 +34,19 @@ type NilErrorHandler struct{}
 
 func (NilErrorHandler) Handle(context.Context, error) {}
 
+type leveledError struct {
+	msg   string
+	level ErrorLevel
+}
+
+func (e *leveledError) Error() string         { return e.msg }
+func (e *leveledError) ErrorLevel() ErrorLevel { return e.level }
+
+// NewLeveledError creates an error that implements ErrorLeveler.
+func NewLeveledError(msg string, level ErrorLevel) error {
+	return &leveledError{msg: msg, level: level}
+}
+
 type errorAccumulator struct {
 	level  ErrorLevel
 	mu     sync.Mutex

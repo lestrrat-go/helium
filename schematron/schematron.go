@@ -7,6 +7,7 @@ package schematron
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	helium "github.com/lestrrat-go/helium"
@@ -19,7 +20,13 @@ func Compile(doc *helium.Document, opts ...CompileOption) (*Schema, error) {
 	for _, o := range opts {
 		o(cfg)
 	}
-	return compileSchema(doc, cfg)
+	schema, err := compileSchema(doc, cfg)
+	if cfg.errorHandler != nil {
+		if cl, ok := cfg.errorHandler.(io.Closer); ok {
+			cl.Close()
+		}
+	}
+	return schema, err
 }
 
 // CompileFile reads and compiles a Schematron file into a Schema.
@@ -36,7 +43,13 @@ func CompileFile(path string, opts ...CompileOption) (*Schema, error) {
 	if err != nil {
 		return nil, fmt.Errorf("schematron: parse document: %w", err)
 	}
-	return compileSchema(doc, cfg)
+	schema, compileErr := compileSchema(doc, cfg)
+	if cfg.errorHandler != nil {
+		if cl, ok := cfg.errorHandler.(io.Closer); ok {
+			cl.Close()
+		}
+	}
+	return schema, compileErr
 }
 
 // ValidateError holds detailed validation failure output.

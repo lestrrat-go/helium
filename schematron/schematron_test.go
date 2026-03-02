@@ -13,6 +13,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// partitionCompileErrors splits collected errors by severity.
+// Errors with ErrorLevelFatal go to "errors"; all others to "warnings".
+func partitionCompileErrors(errs []error) (warnings, errors string) {
+	var w, e strings.Builder
+	for _, err := range errs {
+		if l, ok := err.(helium.ErrorLeveler); ok && l.ErrorLevel() == helium.ErrorLevelFatal {
+			e.WriteString(err.Error())
+		} else {
+			w.WriteString(err.Error())
+		}
+	}
+	return w.String(), e.String()
+}
+
 const testdataBase = "../testdata/libxml2-compat/schematron"
 
 type testCase struct {
@@ -125,12 +139,15 @@ func TestGoldenFiles(t *testing.T) {
 			expected, err := os.ReadFile(tc.errPath)
 			require.NoError(t, err)
 
-			schema, err := schematron.CompileFile(tc.sctPath)
+			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+			schema, err := schematron.CompileFile(tc.sctPath, schematron.WithCompileErrorHandler(collector))
 			require.NoError(t, err, "schema compilation failed for %s", tc.sctPath)
+			collector.Close()
+			compileWarnings, compileErrors := partitionCompileErrors(collector.Errors())
 
 			var got string
-			if schema.CompileErrors() != "" {
-				got = schema.CompileWarnings() + schema.CompileErrors()
+			if compileErrors != "" {
+				got = compileWarnings + compileErrors
 			} else {
 				xmlData, err := os.ReadFile(tc.xmlPath)
 				require.NoError(t, err)
@@ -140,9 +157,9 @@ func TestGoldenFiles(t *testing.T) {
 				filename := "./test/schematron/" + tc.xmlBase
 				err = schematron.Validate(doc, schema, schematron.WithFilename(filename))
 				if err != nil {
-					got = schema.CompileWarnings() + err.Error()
+					got = compileWarnings + err.Error()
 				} else {
-					got = schema.CompileWarnings() + filename + " validates\n"
+					got = compileWarnings + filename + " validates\n"
 				}
 			}
 

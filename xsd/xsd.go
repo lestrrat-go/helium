@@ -5,6 +5,7 @@ package xsd
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -18,7 +19,13 @@ func Compile(doc *helium.Document, opts ...CompileOption) (*Schema, error) {
 	for _, o := range opts {
 		o(cfg)
 	}
-	return compileSchema(doc, "", cfg)
+	schema, err := compileSchema(doc, "", cfg)
+	if cfg.errorHandler != nil {
+		if cl, ok := cfg.errorHandler.(io.Closer); ok {
+			cl.Close()
+		}
+	}
+	return schema, err
 }
 
 // CompileFile reads and compiles an XSD file into a Schema.
@@ -36,7 +43,13 @@ func CompileFile(path string, opts ...CompileOption) (*Schema, error) {
 		return nil, err
 	}
 	baseDir := filepath.Dir(path)
-	return compileSchema(doc, baseDir, cfg)
+	schema, compileErr := compileSchema(doc, baseDir, cfg)
+	if cfg.errorHandler != nil {
+		if cl, ok := cfg.errorHandler.(io.Closer); ok {
+			cl.Close()
+		}
+	}
+	return schema, compileErr
 }
 
 // ValidateError holds detailed validation failure output.

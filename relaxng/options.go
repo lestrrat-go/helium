@@ -1,16 +1,26 @@
 package relaxng
 
+import helium "github.com/lestrrat-go/helium"
+
 // CompileOption configures schema compilation.
 type CompileOption func(*compileConfig)
 
 type compileConfig struct {
-	filename string // RNG filename for error messages
+	filename     string // RNG filename for error messages
+	errorHandler helium.ErrorHandler
 }
 
 // WithSchemaFilename sets the RNG filename used in schema compilation error messages.
 func WithSchemaFilename(name string) CompileOption {
 	return func(c *compileConfig) {
 		c.filename = name
+	}
+}
+
+// WithCompileErrorHandler sets a handler that receives schema compilation errors.
+func WithCompileErrorHandler(h helium.ErrorHandler) CompileOption {
+	return func(c *compileConfig) {
+		c.errorHandler = h
 	}
 }
 

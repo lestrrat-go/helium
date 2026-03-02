@@ -40,20 +40,7 @@ type Schema struct {
 	groups            map[QName]*ModelGroup
 	attrGroups        map[QName][]*AttrUse
 	globalAttrs       map[QName]*AttrUse
-	substGroups       map[QName][]*ElementDecl // head QName → member element declarations
-	compileErrors     string                   // accumulated compilation error messages
-	compileWarnings   string                   // accumulated compilation warnings
-}
-
-// CompileErrors returns any schema compilation error messages
-// in libxml2-compatible format. Empty string means no errors.
-func (s *Schema) CompileErrors() string {
-	return s.compileErrors
-}
-
-// CompileWarnings returns any schema compilation warning messages.
-func (s *Schema) CompileWarnings() string {
-	return s.compileWarnings
+	substGroups map[QName][]*ElementDecl // head QName → member element declarations
 }
 
 // LookupElement returns the global element declaration for the given name.

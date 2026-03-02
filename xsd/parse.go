@@ -43,10 +43,10 @@ type compiler struct {
 	unionMemberRefs []unionMemberRef
 	// unresolved attribute references: maps from AttrUse to global attr QName
 	attrRefs map[*AttrUse]QName
-	// schema error/warning collection
-	schemaErrors   strings.Builder
-	schemaWarnings strings.Builder
-	filename       string // XSD filename for error messages
+	// error handler for reporting schema errors/warnings
+	errorHandler helium.ErrorHandler
+	errorCount   int    // count of fatal errors reported
+	filename     string // XSD filename for error messages
 	includeFile    string // currently-included file path (for duplicate element errors)
 	// importedNS tracks which namespaces have been imported and their schema locations.
 	importedNS map[string]string // namespace → schema location
@@ -101,8 +101,12 @@ func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*S
 		attrRefs:          make(map[*AttrUse]QName),
 		importedNS:        make(map[string]string),
 	}
+	c.errorHandler = helium.NilErrorHandler{}
 	if cfg != nil {
 		c.filename = cfg.filename
+		if cfg.errorHandler != nil {
+			c.errorHandler = cfg.errorHandler
+		}
 	}
 
 	c.schema.targetNamespace = getAttr(root, "targetNamespace")
@@ -112,9 +116,10 @@ func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*S
 	// Parse blockDefault attribute.
 	if v := getAttr(root, "blockDefault"); v != "" {
 		if !isValidBlock(v) && c.filename != "" {
-			c.schemaErrors.WriteString(schemaParserErrorAttr(c.filename, root.Line(),
+			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, root.Line(),
 				root.LocalName(), "schema", "blockDefault",
-				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | substitution))'."))
+				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | substitution))'."), helium.ErrorLevelFatal))
+			c.errorCount++
 		} else {
 			c.schema.blockDefault = parseBlockFlags(v)
 		}
@@ -123,9 +128,10 @@ func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*S
 	// Parse finalDefault attribute.
 	if v := getAttr(root, "finalDefault"); v != "" {
 		if !isValidFinalDefault(v) && c.filename != "" {
-			c.schemaErrors.WriteString(schemaParserErrorAttr(c.filename, root.Line(),
+			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, root.Line(),
 				root.LocalName(), "schema", "finalDefault",
-				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | list | union))'."))
+				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | list | union))'."), helium.ErrorLevelFatal))
+			c.errorCount++
 		} else {
 			c.schema.finalDefault = parseFinalFlags(v)
 		}
@@ -174,13 +180,11 @@ func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*S
 	}
 
 	// Enforce final on type derivations.
-	if c.filename != "" && c.schemaErrors.Len() == 0 {
+	if c.filename != "" && c.errorCount == 0 {
 		c.checkFinalOnTypes()
 		c.checkFinalOnSubstGroups()
 	}
 
-	c.schema.compileErrors = c.schemaErrors.String()
-	c.schema.compileWarnings = c.schemaWarnings.String()
 	return c.schema, nil
 }
 
@@ -246,9 +250,9 @@ func (c *compiler) processIncludes(root *helium.Element) error {
 			if prevLoc, ok := c.importedNS[ns]; ok && c.filename != "" {
 				displayLoc := filepath.Join(filepath.Dir(c.filename), loc)
 				displayPrevLoc := filepath.Join(filepath.Dir(c.filename), prevLoc)
-				c.schemaWarnings.WriteString(schemaParserWarning(c.filename, elem.Line(),
+				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserWarning(c.filename, elem.Line(),
 					elem.LocalName(), "import",
-					"Skipping import of schema located at '"+displayLoc+"' for the namespace '"+ns+"', since this namespace was already imported with the schema located at '"+displayPrevLoc+"'."))
+					"Skipping import of schema located at '"+displayLoc+"' for the namespace '"+ns+"', since this namespace was already imported with the schema located at '"+displayPrevLoc+"'."), helium.ErrorLevelWarning))
 				continue
 			}
 
@@ -256,10 +260,10 @@ func (c *compiler) processIncludes(root *helium.Element) error {
 				// Import failure — report warning if we have a filename.
 				if c.filename != "" {
 					displayLoc := filepath.Join(filepath.Dir(c.filename), loc)
-					fmt.Fprintf(&c.schemaWarnings, "I/O warning : failed to load \"%s\": %s\n", displayLoc, "No such file or directory")
-					c.schemaWarnings.WriteString(schemaParserWarning(c.filename, elem.Line(),
+					c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(fmt.Sprintf("I/O warning : failed to load \"%s\": %s\n", displayLoc, "No such file or directory"), helium.ErrorLevelWarning))
+					c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserWarning(c.filename, elem.Line(),
 						elem.LocalName(), "import",
-						"Failed to locate a schema at location '"+displayLoc+"'. Skipping the import."))
+						"Failed to locate a schema at location '"+displayLoc+"'. Skipping the import."), helium.ErrorLevelWarning))
 				}
 				continue
 			}
@@ -308,9 +312,10 @@ func (c *compiler) loadInclude(location string, includeElem *helium.Element) err
 		if c.filename != "" {
 			displayLoc = filepath.Join(filepath.Dir(c.filename), location)
 		}
-		c.schemaErrors.WriteString(schemaParserError(c.filename, includeElem.Line(),
+		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, includeElem.Line(),
 			includeElem.LocalName(), "include",
-			"The target namespace '"+incTargetNS+"' of the included/redefined schema '"+displayLoc+"' differs from '"+c.schema.targetNamespace+"' of the including/redefining schema."))
+			"The target namespace '"+incTargetNS+"' of the included/redefined schema '"+displayLoc+"' differs from '"+c.schema.targetNamespace+"' of the including/redefining schema."), helium.ErrorLevelFatal))
+		c.errorCount++
 		return nil
 	}
 
@@ -388,9 +393,10 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 		if c.filename != "" {
 			displayLoc = filepath.Join(filepath.Dir(c.filename), location)
 		}
-		c.schemaErrors.WriteString(schemaParserError(c.filename, redefineElem.Line(),
+		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, redefineElem.Line(),
 			redefineElem.LocalName(), "redefine",
-			"The target namespace '"+incTargetNS+"' of the included/redefined schema '"+displayLoc+"' differs from '"+c.schema.targetNamespace+"' of the including/redefining schema."))
+			"The target namespace '"+incTargetNS+"' of the included/redefined schema '"+displayLoc+"' differs from '"+c.schema.targetNamespace+"' of the including/redefining schema."), helium.ErrorLevelFatal))
+		c.errorCount++
 		return nil
 	}
 
@@ -608,9 +614,15 @@ func (c *compiler) loadImport(location, _ string) error {
 		typeDefSources:    make(map[*TypeDef]typeDefSource),
 		itemTypeRefs:      make(map[*TypeDef]QName),
 		attrRefs:          make(map[*AttrUse]QName),
-		filename:          impFilename,
-		importedNS:        make(map[string]string),
+		filename:   impFilename,
+		importedNS: make(map[string]string),
 	}
+
+	// Sub-compiler collects errors into its own collector so we can
+	// conditionally forward them. This matches libxml2's behavior of
+	// stopping error reporting after the first import failure.
+	subCollector := helium.NewErrorCollector(context.TODO(), helium.ErrorLevelNone)
+	impC.errorHandler = subCollector
 
 	impC.schema.targetNamespace = getAttr(impRoot, "targetNamespace")
 	impC.schema.elemFormQualified = getAttr(impRoot, "elementFormDefault") == attrValQualified
@@ -634,13 +646,18 @@ func (c *compiler) loadImport(location, _ string) error {
 		_ = err
 	}
 
-	// Propagate compile errors from the imported schema's parsing phase.
-	// Only propagate if there are no prior errors (matches libxml2 behavior
-	// of stopping error reporting after first import failure).
-	if impC.schemaErrors.Len() > 0 {
-		if c.schemaErrors.Len() == 0 {
-			c.schemaErrors.WriteString(impC.schemaErrors.String())
+	subCollector.Close()
+
+	// Only propagate sub-compiler errors to the parent if the parent has no
+	// prior errors. This matches libxml2's behavior of stopping error reporting
+	// after the first import failure.
+	if impC.errorCount > 0 {
+		if c.errorCount == 0 {
+			for _, e := range subCollector.Errors() {
+				c.errorHandler.Handle(context.TODO(), e)
+			}
 		}
+		c.errorCount += impC.errorCount
 		return nil
 	}
 
@@ -786,9 +803,10 @@ func (c *compiler) parseGlobalElement(elem *helium.Element) error {
 		if decl.Name.NS != "" {
 			qnDisplay = "'{" + decl.Name.NS + "}" + decl.Name.Local + "'"
 		}
-		c.schemaErrors.WriteString(schemaParserError(c.includeFile, elem.Line(),
+		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.includeFile, elem.Line(),
 			elem.LocalName(), "element",
-			"A global element declaration "+qnDisplay+" does already exist."))
+			"A global element declaration "+qnDisplay+" does already exist."), helium.ErrorLevelFatal))
+		c.errorCount++
 		return nil
 	}
 
@@ -1049,8 +1067,8 @@ func (c *compiler) parseExtension(elem *helium.Element, td *TypeDef) error {
 		case isXSDElement(ce, "attribute"):
 			if getAttr(ce, "use") == "prohibited" {
 				if c.filename != "" {
-					c.schemaWarnings.WriteString(schemaParserWarning(c.filename, ce.Line(), ce.LocalName(), "attribute",
-						"Skipping attribute use prohibition, since it is pointless when extending a type."))
+					c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserWarning(c.filename, ce.Line(), ce.LocalName(), "attribute",
+						"Skipping attribute use prohibition, since it is pointless when extending a type."), helium.ErrorLevelWarning))
 				}
 				continue
 			}
@@ -1695,7 +1713,8 @@ func (c *compiler) resolveRefs() {
 			if edecl.IsRef {
 				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
 					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) element declaration.", qn.NS, qn.Local)
-					c.schemaErrors.WriteString(schemaParserErrorAttr(c.filename, src.line, src.elemName, "element", "ref", msg))
+					c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, src.line, src.elemName, "element", "ref", msg), helium.ErrorLevelFatal))
+					c.errorCount++
 				}
 				edecl.Type = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
 				continue
@@ -1706,7 +1725,8 @@ func (c *compiler) resolveRefs() {
 				if qn.NS == xsdNS {
 					if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
 						msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
-						c.schemaErrors.WriteString(schemaElemDeclErrorAttr(c.filename, src.line, src.elemName, "type", msg))
+						c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaElemDeclErrorAttr(c.filename, src.line, src.elemName, "type", msg), helium.ErrorLevelFatal))
+						c.errorCount++
 					}
 				}
 				td = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
@@ -1836,8 +1856,9 @@ func (c *compiler) resolveRefs() {
 				if !src.isLocal {
 					component = "complex type '" + td.Name.Local + "'"
 				}
-				c.schemaErrors.WriteString(schemaComponentError(c.filename, src.line, "complexType", component,
-					"The content type of both, the type and its base type, must either 'mixed' or 'element-only'."))
+				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
+					"The content type of both, the type and its base type, must either 'mixed' or 'element-only'."), helium.ErrorLevelFatal))
+				c.errorCount++
 			}
 			continue
 		}
@@ -1876,7 +1897,8 @@ func (c *compiler) resolveRefs() {
 							component = td.Name.Local
 						}
 						msg := fmt.Sprintf("Duplicate attribute use '%s'.", au.Name.Local)
-						c.schemaErrors.WriteString(schemaComponentError(c.filename, src.line, "complexType", component, msg))
+						c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
+						c.errorCount++
 					}
 				}
 			}
@@ -1914,7 +1936,7 @@ func (c *compiler) resolveRefs() {
 	// Check UPA (Unique Particle Attribution) for all complex types with content models.
 	// Only run UPA if there are no prior schema errors (libxml2 skips UPA when
 	// the schema has structural parse errors).
-	if c.filename != "" && c.schemaErrors.Len() == 0 {
+	if c.filename != "" && c.errorCount == 0 {
 		for td, src := range c.typeDefSources {
 			if td.ContentModel != nil {
 				c.checkUPA(td, src)
@@ -1962,14 +1984,16 @@ func (c *compiler) checkRestrictionAttrs(td *TypeDef) {
 			// Check use consistency: optional cannot restrict required.
 			if baseAU.Required && !au.Required {
 				msg := fmt.Sprintf("The 'optional' attribute use is inconsistent with the corresponding 'required' attribute use of the base complex type definition %s.", baseQualified)
-				c.schemaErrors.WriteString(schemaComponentError(c.filename, src.line, "complexType",
-					component+", attribute use '"+au.Name.Local+"'", msg))
+				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType",
+					component+", attribute use '"+au.Name.Local+"'", msg), helium.ErrorLevelFatal))
+				c.errorCount++
 			}
 		} else if td.BaseType.AnyAttribute == nil {
 			// No matching attribute and no wildcard in base.
 			msg := fmt.Sprintf("Neither a matching attribute use, nor a matching wildcard exists in the base complex type definition %s.", baseQualified)
-			c.schemaErrors.WriteString(schemaComponentError(c.filename, src.line, "complexType",
-				component+", attribute use '"+au.Name.Local+"'", msg))
+			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType",
+				component+", attribute use '"+au.Name.Local+"'", msg), helium.ErrorLevelFatal))
+			c.errorCount++
 		}
 	}
 
@@ -1985,7 +2009,8 @@ func (c *compiler) checkRestrictionAttrs(td *TypeDef) {
 		derived, found := derivedAttrs[baseAU.Name.Local]
 		if !found || derived.Prohibited {
 			msg := fmt.Sprintf("A matching attribute use for the 'required' attribute use '%s' of the base complex type definition %s is missing.", baseAU.Name.Local, baseQualified)
-			c.schemaErrors.WriteString(schemaComponentError(c.filename, src.line, "complexType", component, msg))
+			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
+			c.errorCount++
 		}
 	}
 
@@ -1994,12 +2019,14 @@ func (c *compiler) checkRestrictionAttrs(td *TypeDef) {
 		// 4.1: Base must also have a wildcard.
 		if td.BaseType.AnyAttribute == nil {
 			msg := fmt.Sprintf("The complex type definition has an attribute wildcard, but the base complex type definition %s does not have one.", baseQualified)
-			c.schemaErrors.WriteString(schemaComponentError(c.filename, src.line, "complexType", component, msg))
+			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
+			c.errorCount++
 		} else {
 			// 4.2: Derived namespace must be subset of base namespace.
 			if !wildcardNSSubset(td.AnyAttribute, td.BaseType.AnyAttribute) {
 				msg := fmt.Sprintf("The attribute wildcard is not a valid subset of the wildcard in the base complex type definition %s.", baseQualified)
-				c.schemaErrors.WriteString(schemaComponentError(c.filename, src.line, "complexType", component, msg))
+				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component, msg), helium.ErrorLevelFatal))
+				c.errorCount++
 			}
 			// 4.3: Derived processContents must be >= base strength (strict > lax > skip).
 			// libxml2 attributes this error to the base type's source location.
@@ -2013,7 +2040,8 @@ func (c *compiler) checkRestrictionAttrs(td *TypeDef) {
 					}
 				}
 				msg := fmt.Sprintf("The {process contents} of the attribute wildcard is weaker than the one in the base complex type definition %s.", baseQualified)
-				c.schemaErrors.WriteString(schemaComponentError(c.filename, errLine, "complexType", errComponent, msg))
+				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, errLine, "complexType", errComponent, msg), helium.ErrorLevelFatal))
+				c.errorCount++
 			}
 		}
 	}
@@ -2212,8 +2240,10 @@ func (c *compiler) checkCircularSubstGroup(edecl *ElementDecl) {
 				msg := fmt.Sprintf("The element declaration '%s' defines a circular substitution group to element declaration '%s'.",
 					edecl.Name.Local, current.Local)
 				errStr := schemaElemDeclError(c.filename, src.line, edecl.Name.Local, msg)
-				c.schemaErrors.WriteString(errStr)
-				c.schemaErrors.WriteString(errStr)
+				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(errStr, helium.ErrorLevelFatal))
+				c.errorCount++
+				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(errStr, helium.ErrorLevelFatal))
+				c.errorCount++
 			}
 			return
 		}
@@ -2243,30 +2273,34 @@ func (c *compiler) checkFinalOnTypes() {
 				if src.isLocal {
 					component = "local complex type"
 				}
-				c.schemaErrors.WriteString(schemaComponentError(c.filename, src.line, "complexType", component,
-					"Derivation by extension is forbidden by the base type '"+td.BaseType.Name.Local+"'."))
+				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
+					"Derivation by extension is forbidden by the base type '"+td.BaseType.Name.Local+"'."), helium.ErrorLevelFatal))
+				c.errorCount++
 			}
 			if td.Derivation == DerivationRestriction && baseFinal&FinalRestriction != 0 {
 				component := td.Name.Local
 				if src.isLocal {
 					component = "local complex type"
 				}
-				c.schemaErrors.WriteString(schemaComponentError(c.filename, src.line, "complexType", component,
-					"Derivation by restriction is forbidden by the base type '"+td.BaseType.Name.Local+"'."))
+				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
+					"Derivation by restriction is forbidden by the base type '"+td.BaseType.Name.Local+"'."), helium.ErrorLevelFatal))
+				c.errorCount++
 			}
 		}
 
 		// simpleType list: check if item type forbids list derivation.
 		if td.Variety == TypeVarietyList && td.ItemType != nil && td.ItemType.Final&FinalList != 0 {
-			c.schemaErrors.WriteString(schemaComponentError(c.filename, src.line, "simpleType", td.Name.Local,
-				"Derivation by list is forbidden by the item type '"+td.ItemType.Name.Local+"'."))
+			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "simpleType", td.Name.Local,
+				"Derivation by list is forbidden by the item type '"+td.ItemType.Name.Local+"'."), helium.ErrorLevelFatal))
+			c.errorCount++
 		}
 		// simpleType union: check if any member type forbids union derivation.
 		if td.Variety == TypeVarietyUnion {
 			for _, member := range td.MemberTypes {
 				if member.Final&FinalUnion != 0 {
-					c.schemaErrors.WriteString(schemaComponentError(c.filename, src.line, "simpleType", td.Name.Local,
-						"Derivation by union is forbidden by the member type '"+member.Name.Local+"'."))
+					c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "simpleType", td.Name.Local,
+						"Derivation by union is forbidden by the member type '"+member.Name.Local+"'."), helium.ErrorLevelFatal))
+					c.errorCount++
 				}
 			}
 		}
@@ -2287,14 +2321,16 @@ func (c *compiler) checkFinalOnSubstGroups() {
 		for _, member := range members {
 			if head.Final&FinalExtension != 0 && derivationUsesMethod(member.Type, head.Type, DerivationExtension) {
 				if src, ok := c.globalElemSources[member]; ok {
-					c.schemaErrors.WriteString(schemaElemDeclError(c.filename, src.line, member.Name.Local,
-						"The substitution group affiliation is forbidden by the head element's final value."))
+					c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaElemDeclError(c.filename, src.line, member.Name.Local,
+						"The substitution group affiliation is forbidden by the head element's final value."), helium.ErrorLevelFatal))
+					c.errorCount++
 				}
 			}
 			if head.Final&FinalRestriction != 0 && derivationUsesMethod(member.Type, head.Type, DerivationRestriction) {
 				if src, ok := c.globalElemSources[member]; ok {
-					c.schemaErrors.WriteString(schemaElemDeclError(c.filename, src.line, member.Name.Local,
-						"The substitution group affiliation is forbidden by the head element's final value."))
+					c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaElemDeclError(c.filename, src.line, member.Name.Local,
+						"The substitution group affiliation is forbidden by the head element's final value."), helium.ErrorLevelFatal))
+					c.errorCount++
 				}
 			}
 		}
