@@ -277,7 +277,7 @@ func TestDisableSAXCallbacksSuppressed(t *testing.T) {
 
 	var elements []string
 	sh := sax.New()
-	sh.StartElementNSHandler = sax.StartElementNSFunc(func(_ sax.Context, localname string, _ string, _ string, _ []sax.Namespace, _ []sax.Attribute) error {
+	sh.OnStartElementNS = sax.StartElementNSFunc(func(_ sax.Context, localname string, _ string, _ string, _ []sax.Namespace, _ []sax.Attribute) error {
 		elements = append(elements, localname)
 		return nil
 	})
@@ -318,7 +318,7 @@ func TestParseExternalEntity(t *testing.T) {
 
 	// Provide a ResolveEntity handler that returns inline content
 	s := sax.New()
-	s.ResolveEntityHandler = sax.ResolveEntityFunc(func(_ sax.Context, publicID, systemID string) (sax.ParseInput, error) {
+	s.OnResolveEntity = sax.ResolveEntityFunc(func(_ sax.Context, publicID, systemID string) (sax.ParseInput, error) {
 		if systemID == "ext.xml" {
 			return newStringParseInput("<inner>hello</inner>", systemID), nil
 		}
@@ -859,7 +859,7 @@ func TestParseNoXXE(t *testing.T) {
 
 	resolved := false
 	s := sax.New()
-	s.ResolveEntityHandler = sax.ResolveEntityFunc(func(_ sax.Context, publicID, systemID string) (sax.ParseInput, error) {
+	s.OnResolveEntity = sax.ResolveEntityFunc(func(_ sax.Context, publicID, systemID string) (sax.ParseInput, error) {
 		resolved = true
 		return newStringParseInput("<inner>hello</inner>", systemID), nil
 	})
@@ -883,7 +883,7 @@ func TestParseNoXXEExternalDTD(t *testing.T) {
 
 	resolved := false
 	s := sax.New()
-	s.ResolveEntityHandler = sax.ResolveEntityFunc(func(_ sax.Context, publicID, systemID string) (sax.ParseInput, error) {
+	s.OnResolveEntity = sax.ResolveEntityFunc(func(_ sax.Context, publicID, systemID string) (sax.ParseInput, error) {
 		resolved = true
 		return newStringParseInput("<!ELEMENT doc EMPTY>", systemID), nil
 	})

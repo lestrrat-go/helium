@@ -91,7 +91,7 @@ func TestErrParseErrorWarningLevel(t *testing.T) {
 <root>&undefined;</root>`
 
 	s := sax.New()
-	s.WarningHandler = sax.WarningFunc(func(_ sax.Context, err error) error {
+	s.OnWarning = sax.WarningFunc(func(_ sax.Context, err error) error {
 		return errors.New("warning escalated")
 	})
 
@@ -129,7 +129,7 @@ func TestParseNoError(t *testing.T) {
 	t.Run("SAX Error callback fires by default", func(t *testing.T) {
 		var called atomic.Int32
 		s := sax.New()
-		s.ErrorHandler = sax.ErrorFunc(func(_ sax.Context, err error) error {
+		s.OnError = sax.ErrorFunc(func(_ sax.Context, err error) error {
 			called.Add(1)
 			return nil
 		})
@@ -143,7 +143,7 @@ func TestParseNoError(t *testing.T) {
 	t.Run("ParseNoError suppresses SAX Error callback", func(t *testing.T) {
 		var called atomic.Int32
 		s := sax.New()
-		s.ErrorHandler = sax.ErrorFunc(func(_ sax.Context, err error) error {
+		s.OnError = sax.ErrorFunc(func(_ sax.Context, err error) error {
 			called.Add(1)
 			return nil
 		})
@@ -165,7 +165,7 @@ func TestWarningLocationInfo(t *testing.T) {
 	t.Run("warning handler error wrapped with ErrorLevelWarning", func(t *testing.T) {
 		handlerErr := fmt.Errorf("warning escalated")
 		s := sax.New()
-		s.WarningHandler = sax.WarningFunc(func(_ sax.Context, err error) error {
+		s.OnWarning = sax.WarningFunc(func(_ sax.Context, err error) error {
 			return handlerErr
 		})
 
@@ -183,7 +183,7 @@ func TestWarningLocationInfo(t *testing.T) {
 	t.Run("warning handler nil does not produce error", func(t *testing.T) {
 		var warnings []string
 		s := sax.New()
-		s.WarningHandler = sax.WarningFunc(func(_ sax.Context, err error) error {
+		s.OnWarning = sax.WarningFunc(func(_ sax.Context, err error) error {
 			warnings = append(warnings, err.Error())
 			return nil
 		})
@@ -199,7 +199,7 @@ func TestWarningLocationInfo(t *testing.T) {
 	t.Run("ParseNoWarning suppresses warning callback", func(t *testing.T) {
 		var called atomic.Int32
 		s := sax.New()
-		s.WarningHandler = sax.WarningFunc(func(_ sax.Context, err error) error {
+		s.OnWarning = sax.WarningFunc(func(_ sax.Context, err error) error {
 			called.Add(1)
 			return nil
 		})

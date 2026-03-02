@@ -278,32 +278,32 @@ func (f WarningFunc) Handle(ctx Context, err error) error {
 // SAX2 is a callback-based SAX2 handler.
 // (libxml2: xmlSAXHandler with function pointers)
 type SAX2 struct {
-	AttributeDeclHandler AttributeDecl
-	CDataBlockHandler CDataBlock
-	CharactersHandler Characters
-	CommentHandler Comment
-	ElementDeclHandler ElementDecl
-	EndDocumentHandler EndDocument
-	EndElementNSHandler EndElementNS
-	EntityDeclHandler EntityDecl
-	ErrorHandler Error
-	ExternalSubsetHandler ExternalSubset
-	GetEntityHandler GetEntity
-	GetParameterEntityHandler GetParameterEntity
-	HasExternalSubsetHandler HasExternalSubset
-	HasInternalSubsetHandler HasInternalSubset
-	IgnorableWhitespaceHandler IgnorableWhitespace
-	InternalSubsetHandler InternalSubset
-	IsStandaloneHandler IsStandalone
-	NotationDeclHandler NotationDecl
-	ProcessingInstructionHandler ProcessingInstruction
-	ReferenceHandler Reference
-	ResolveEntityHandler ResolveEntity
-	SetDocumentLocatorHandler SetDocumentLocator
-	StartDocumentHandler StartDocument
-	StartElementNSHandler StartElementNS
-	UnparsedEntityDeclHandler UnparsedEntityDecl
-	WarningHandler Warning
+	OnAttributeDecl AttributeDecl
+	OnCDataBlock CDataBlock
+	OnCharacters Characters
+	OnComment Comment
+	OnElementDecl ElementDecl
+	OnEndDocument EndDocument
+	OnEndElementNS EndElementNS
+	OnEntityDecl EntityDecl
+	OnError Error
+	OnExternalSubset ExternalSubset
+	OnGetEntity GetEntity
+	OnGetParameterEntity GetParameterEntity
+	OnHasExternalSubset HasExternalSubset
+	OnHasInternalSubset HasInternalSubset
+	OnIgnorableWhitespace IgnorableWhitespace
+	OnInternalSubset InternalSubset
+	OnIsStandalone IsStandalone
+	OnNotationDecl NotationDecl
+	OnProcessingInstruction ProcessingInstruction
+	OnReference Reference
+	OnResolveEntity ResolveEntity
+	OnSetDocumentLocator SetDocumentLocator
+	OnStartDocument StartDocument
+	OnStartElementNS StartElementNS
+	OnUnparsedEntityDecl UnparsedEntityDecl
+	OnWarning Warning
 }
 
 // New creates a new instance of SAX2. All callbacks are
@@ -313,182 +313,182 @@ func New() *SAX2 {
 }
 
 func (s *SAX2) AttributeDecl(ctx Context, elem string, fullname string, typ int, def int, defaultValue string, tree Enumeration) error {
-	if h := s.AttributeDeclHandler; h != nil {
+	if h := s.OnAttributeDecl; h != nil {
 		return h.Handle(ctx, elem, fullname, typ, def, defaultValue, tree)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) CDataBlock(ctx Context, value []byte) error {
-	if h := s.CDataBlockHandler; h != nil {
+	if h := s.OnCDataBlock; h != nil {
 		return h.Handle(ctx, value)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) Characters(ctx Context, ch []byte) error {
-	if h := s.CharactersHandler; h != nil {
+	if h := s.OnCharacters; h != nil {
 		return h.Handle(ctx, ch)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) Comment(ctx Context, value []byte) error {
-	if h := s.CommentHandler; h != nil {
+	if h := s.OnComment; h != nil {
 		return h.Handle(ctx, value)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) ElementDecl(ctx Context, name string, typ int, content ElementContent) error {
-	if h := s.ElementDeclHandler; h != nil {
+	if h := s.OnElementDecl; h != nil {
 		return h.Handle(ctx, name, typ, content)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) EndDocument(ctx Context) error {
-	if h := s.EndDocumentHandler; h != nil {
+	if h := s.OnEndDocument; h != nil {
 		return h.Handle(ctx)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) EndElementNS(ctx Context, localname string, prefix string, uri string) error {
-	if h := s.EndElementNSHandler; h != nil {
+	if h := s.OnEndElementNS; h != nil {
 		return h.Handle(ctx, localname, prefix, uri)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) EntityDecl(ctx Context, name string, typ int, publicID string, systemID string, content string) error {
-	if h := s.EntityDeclHandler; h != nil {
+	if h := s.OnEntityDecl; h != nil {
 		return h.Handle(ctx, name, typ, publicID, systemID, content)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) Error(ctx Context, err error) error {
-	if h := s.ErrorHandler; h != nil {
+	if h := s.OnError; h != nil {
 		return h.Handle(ctx, err)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) ExternalSubset(ctx Context, name string, externalID string, systemID string) error {
-	if h := s.ExternalSubsetHandler; h != nil {
+	if h := s.OnExternalSubset; h != nil {
 		return h.Handle(ctx, name, externalID, systemID)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) GetEntity(ctx Context, name string) (Entity, error) {
-	if h := s.GetEntityHandler; h != nil {
+	if h := s.OnGetEntity; h != nil {
 		return h.Handle(ctx, name)
 	}
 	return nil, ErrHandlerUnspecified;
 }
 
 func (s *SAX2) GetParameterEntity(ctx Context, name string) (Entity, error) {
-	if h := s.GetParameterEntityHandler; h != nil {
+	if h := s.OnGetParameterEntity; h != nil {
 		return h.Handle(ctx, name)
 	}
 	return nil, ErrHandlerUnspecified;
 }
 
 func (s *SAX2) HasExternalSubset(ctx Context) (bool, error) {
-	if h := s.HasExternalSubsetHandler; h != nil {
+	if h := s.OnHasExternalSubset; h != nil {
 		return h.Handle(ctx)
 	}
 	return false, ErrHandlerUnspecified;
 }
 
 func (s *SAX2) HasInternalSubset(ctx Context) (bool, error) {
-	if h := s.HasInternalSubsetHandler; h != nil {
+	if h := s.OnHasInternalSubset; h != nil {
 		return h.Handle(ctx)
 	}
 	return false, ErrHandlerUnspecified;
 }
 
 func (s *SAX2) IgnorableWhitespace(ctx Context, ch []byte) error {
-	if h := s.IgnorableWhitespaceHandler; h != nil {
+	if h := s.OnIgnorableWhitespace; h != nil {
 		return h.Handle(ctx, ch)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) InternalSubset(ctx Context, name string, externalID string, systemID string) error {
-	if h := s.InternalSubsetHandler; h != nil {
+	if h := s.OnInternalSubset; h != nil {
 		return h.Handle(ctx, name, externalID, systemID)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) IsStandalone(ctx Context) (bool, error) {
-	if h := s.IsStandaloneHandler; h != nil {
+	if h := s.OnIsStandalone; h != nil {
 		return h.Handle(ctx)
 	}
 	return false, ErrHandlerUnspecified;
 }
 
 func (s *SAX2) NotationDecl(ctx Context, name string, publicID string, systemID string) error {
-	if h := s.NotationDeclHandler; h != nil {
+	if h := s.OnNotationDecl; h != nil {
 		return h.Handle(ctx, name, publicID, systemID)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) ProcessingInstruction(ctx Context, target string, data string) error {
-	if h := s.ProcessingInstructionHandler; h != nil {
+	if h := s.OnProcessingInstruction; h != nil {
 		return h.Handle(ctx, target, data)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) Reference(ctx Context, name string) error {
-	if h := s.ReferenceHandler; h != nil {
+	if h := s.OnReference; h != nil {
 		return h.Handle(ctx, name)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) ResolveEntity(ctx Context, publicID string, systemID string) (ParseInput, error) {
-	if h := s.ResolveEntityHandler; h != nil {
+	if h := s.OnResolveEntity; h != nil {
 		return h.Handle(ctx, publicID, systemID)
 	}
 	return nil, ErrHandlerUnspecified;
 }
 
 func (s *SAX2) SetDocumentLocator(ctx Context, locator DocumentLocator) error {
-	if h := s.SetDocumentLocatorHandler; h != nil {
+	if h := s.OnSetDocumentLocator; h != nil {
 		return h.Handle(ctx, locator)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) StartDocument(ctx Context) error {
-	if h := s.StartDocumentHandler; h != nil {
+	if h := s.OnStartDocument; h != nil {
 		return h.Handle(ctx)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) StartElementNS(ctx Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error {
-	if h := s.StartElementNSHandler; h != nil {
+	if h := s.OnStartElementNS; h != nil {
 		return h.Handle(ctx, localname, prefix, uri, namespaces, attrs)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) UnparsedEntityDecl(ctx Context, name string, publicID string, systemID string, notationName string) error {
-	if h := s.UnparsedEntityDeclHandler; h != nil {
+	if h := s.OnUnparsedEntityDecl; h != nil {
 		return h.Handle(ctx, name, publicID, systemID, notationName)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) Warning(ctx Context, err error) error {
-	if h := s.WarningHandler; h != nil {
+	if h := s.OnWarning; h != nil {
 		return h.Handle(ctx, err)
 	}
 	return ErrHandlerUnspecified
