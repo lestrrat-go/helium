@@ -33,7 +33,9 @@ type Entity interface {
 	SetOrig(string)
 	EntityType() int
 	Content() []byte
+	// Checked reports whether this entity's content has been parsed (libxml2: ent->checked).
 	Checked() bool
+	// MarkChecked marks this entity as having been parsed (libxml2: ent->checked).
 	MarkChecked()
 }
 
