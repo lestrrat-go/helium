@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	henc "github.com/lestrrat-go/helium/internal/encoding"
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/pdebug"
 )
 
@@ -654,7 +655,7 @@ func (d *Writer) dumpEntityDecl(out io.Writer, ent *Entity) error {
 	}
 
 	switch etype := ent.entityType; etype {
-	case InternalGeneralEntity:
+	case enum.InternalGeneralEntity:
 		_, _ = io.WriteString(out, "<!ENTITY ")
 		_, _ = io.WriteString(out, ent.name)
 		_, _ = io.WriteString(out, " ")
@@ -668,7 +669,7 @@ func (d *Writer) dumpEntityDecl(out io.Writer, ent *Entity) error {
 			}
 		}
 		_, _ = io.WriteString(out, ">\n")
-	case ExternalGeneralParsedEntity, ExternalGeneralUnparsedEntity:
+	case enum.ExternalGeneralParsedEntity, enum.ExternalGeneralUnparsedEntity:
 		_, _ = io.WriteString(out, "<!ENTITY ")
 		_, _ = io.WriteString(out, ent.name)
 		if ent.externalID != "" {
@@ -681,7 +682,7 @@ func (d *Writer) dumpEntityDecl(out io.Writer, ent *Entity) error {
 			_ = dumpQuotedString(out, ent.systemID)
 		}
 
-		if etype == ExternalGeneralUnparsedEntity {
+		if etype == enum.ExternalGeneralUnparsedEntity {
 			if ent.content != "" {
 				_, _ = io.WriteString(out, " NDATA ")
 				if ent.orig != "" {
@@ -692,7 +693,7 @@ func (d *Writer) dumpEntityDecl(out io.Writer, ent *Entity) error {
 			}
 		}
 		_, _ = io.WriteString(out, ">\n")
-	case InternalParameterEntity:
+	case enum.InternalParameterEntity:
 		_, _ = io.WriteString(out, "<!ENTITY % ")
 		_, _ = io.WriteString(out, ent.name)
 		_, _ = io.WriteString(out, " ")
@@ -706,7 +707,7 @@ func (d *Writer) dumpEntityDecl(out io.Writer, ent *Entity) error {
 			}
 		}
 		_, _ = io.WriteString(out, ">\n")
-	case ExternalParameterEntity:
+	case enum.ExternalParameterEntity:
 		_, _ = io.WriteString(out, "<!ENTITY % ")
 		_, _ = io.WriteString(out, ent.name)
 		if ent.externalID != "" {
@@ -744,13 +745,13 @@ func (d *Writer) dumpNotationDecl(out io.Writer, n *Notation) error {
 
 func (d *Writer) dumpElementDecl(out io.Writer, n *ElementDecl) error {
 	switch n.decltype {
-	case EmptyElementType:
+	case enum.EmptyElementType:
 		dumpElementDeclPrologue(out, n)
 		_, _ = io.WriteString(out, " EMPTY>\n")
-	case AnyElementType:
+	case enum.AnyElementType:
 		dumpElementDeclPrologue(out, n)
 		_, _ = io.WriteString(out, " ANY>\n")
-	case MixedElementType, ElementElementType:
+	case enum.MixedElementType, enum.ElementElementType:
 		dumpElementDeclPrologue(out, n)
 		_, _ = io.WriteString(out, " ")
 		if err := dumpElementContent(out, n.content, true); err != nil {
@@ -773,28 +774,28 @@ func (d *Writer) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
 	}
 	_, _ = io.WriteString(out, n.name)
 	switch n.atype {
-	case AttrCDATA:
+	case enum.AttrCDATA:
 		_, _ = io.WriteString(out, " CDATA")
-	case AttrID:
+	case enum.AttrID:
 		_, _ = io.WriteString(out, " ID")
-	case AttrIDRef:
+	case enum.AttrIDRef:
 		_, _ = io.WriteString(out, " IDREF")
-	case AttrIDRefs:
+	case enum.AttrIDRefs:
 		_, _ = io.WriteString(out, " IDREFS")
-	case AttrEntity:
+	case enum.AttrEntity:
 		_, _ = io.WriteString(out, " ENTITY")
-	case AttrEntities:
+	case enum.AttrEntities:
 		_, _ = io.WriteString(out, " ENTITIES")
-	case AttrNmtoken:
+	case enum.AttrNmtoken:
 		_, _ = io.WriteString(out, " NMTOKEN")
-	case AttrNmtokens:
+	case enum.AttrNmtokens:
 		_, _ = io.WriteString(out, " NMTOKENS")
-	case AttrEnumeration:
+	case enum.AttrEnumeration:
 		_, _ = io.WriteString(out, " (")
 		if err := d.dumpEnumeration(out, n.tree); err != nil {
 			return err
 		}
-	case AttrNotation:
+	case enum.AttrNotation:
 		_, _ = io.WriteString(out, " NOTATION (")
 		if err := d.dumpEnumeration(out, n.tree); err != nil {
 			return err
@@ -804,13 +805,13 @@ func (d *Writer) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
 	}
 
 	switch n.def {
-	case AttrDefaultNone:
+	case enum.AttrDefaultNone:
 		// no op
-	case AttrDefaultRequired:
+	case enum.AttrDefaultRequired:
 		_, _ = io.WriteString(out, " #REQUIRED")
-	case AttrDefaultImplied:
+	case enum.AttrDefaultImplied:
 		_, _ = io.WriteString(out, " #IMPLIED")
-	case AttrDefaultFixed:
+	case enum.AttrDefaultFixed:
 		_, _ = io.WriteString(out, " #FIXED")
 	default:
 		return errors.New("invalid AttributeDecl default value type")

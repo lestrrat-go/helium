@@ -1,37 +1,13 @@
 package helium
 
-type AttributeType int
-
-const (
-	AttrInvalid AttributeType = iota
-	AttrCDATA
-	AttrID
-	AttrIDRef
-	AttrIDRefs
-	AttrEntity
-	AttrEntities
-	AttrNmtoken
-	AttrNmtokens
-	AttrEnumeration
-	AttrNotation
-)
-
-type AttributeDefault int
-
-const (
-	AttrDefaultInvalid AttributeDefault = iota
-	AttrDefaultNone
-	AttrDefaultRequired
-	AttrDefaultImplied
-	AttrDefaultFixed
-)
+import "github.com/lestrrat-go/helium/enum"
 
 type Enumeration []string
 
 // Attribute represents an XML attribute (libxml2: xmlAttr).
 type Attribute struct {
 	docnode
-	atype       AttributeType
+	atype       enum.AttributeType
 	defaultAttr bool
 	ns          *Namespace
 }
@@ -62,8 +38,8 @@ func (n *AttributeDecl) SetTreeDoc(doc *Document) {
 	setTreeDoc(n, doc)
 }
 
-// AType returns the attribute type (e.g. AttrID, AttrCDATA).
-func (n *AttributeDecl) AType() AttributeType {
+// AType returns the attribute type (e.g. enum.AttrID, enum.AttrCDATA).
+func (n *AttributeDecl) AType() enum.AttributeType {
 	return n.atype
 }
 
@@ -110,13 +86,13 @@ func (n *Attribute) SetTreeDoc(doc *Document) {
 	setTreeDoc(n, doc)
 }
 
-// AType returns the attribute type (e.g. AttrID, AttrCDATA).
-func (n *Attribute) AType() AttributeType {
+// AType returns the attribute type (e.g. enum.AttrID, enum.AttrCDATA).
+func (n *Attribute) AType() enum.AttributeType {
 	return n.atype
 }
 
 // SetAType sets the attribute type.
-func (n *Attribute) SetAType(v AttributeType) {
+func (n *Attribute) SetAType(v enum.AttributeType) {
 	n.atype = v
 }
 

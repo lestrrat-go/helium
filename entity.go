@@ -5,17 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
-)
 
-type EntityType int
-
-const (
-	InternalGeneralEntity EntityType = iota + 1
-	ExternalGeneralParsedEntity
-	ExternalGeneralUnparsedEntity
-	InternalParameterEntity
-	ExternalParameterEntity
-	InternalPredefinedEntity
+	"github.com/lestrrat-go/helium/enum"
 )
 
 // Entity represents an XML entity declaration (libxml2: xmlEntity).
@@ -23,7 +14,7 @@ type Entity struct {
 	node
 	orig       string     // content without substitution
 	content    string     // content or ndata if unparsed
-	entityType EntityType // the entity type
+	entityType enum.EntityType // the entity type
 	externalID string     // external identifier for PUBLIC
 	systemID   string     // URI for a SYSTEM or PUBLIC entity
 	uri        string     // the full URI as computed
@@ -37,11 +28,11 @@ type Entity struct {
 }
 
 var (
-	EntityLT         = newEntity("lt", InternalPredefinedEntity, "", "", "<", "&lt;")
-	EntityGT         = newEntity("gt", InternalPredefinedEntity, "", "", ">", "&gt;")
-	EntityAmpersand  = newEntity("amp", InternalPredefinedEntity, "", "", "&", "&amp;")
-	EntityApostrophe = newEntity("apos", InternalPredefinedEntity, "", "", "'", "&apos;")
-	EntityQuote      = newEntity("quot", InternalPredefinedEntity, "", "", `"`, "&quot;")
+	EntityLT         = newEntity("lt", enum.InternalPredefinedEntity, "", "", "<", "&lt;")
+	EntityGT         = newEntity("gt", enum.InternalPredefinedEntity, "", "", ">", "&gt;")
+	EntityAmpersand  = newEntity("amp", enum.InternalPredefinedEntity, "", "", "&", "&amp;")
+	EntityApostrophe = newEntity("apos", enum.InternalPredefinedEntity, "", "", "'", "&apos;")
+	EntityQuote      = newEntity("quot", enum.InternalPredefinedEntity, "", "", `"`, "&quot;")
 )
 
 // predefinedEntityContent maps predefined entity names to their required
@@ -126,7 +117,7 @@ func resolvePredefinedEntity(name string) (*Entity, error) {
 	}
 }
 
-func newEntity(name string, typ EntityType, publicID, systemID, notation, orig string) *Entity {
+func newEntity(name string, typ enum.EntityType, publicID, systemID, notation, orig string) *Entity {
 	e := &Entity{
 		content:    notation,
 		entityType: typ,
@@ -154,8 +145,8 @@ func (e *Entity) SetOrig(s string) {
 	e.orig = s
 }
 
-func (e *Entity) EntityType() int {
-	return int(e.entityType)
+func (e *Entity) EntityType() enum.EntityType {
+	return e.entityType
 }
 
 func (e *Entity) ExternalID() string {

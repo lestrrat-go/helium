@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium/sax"
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/pdebug"
 	"github.com/lestrrat-go/strcursor"
 )
@@ -292,7 +293,7 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 	// Register ID attributes in the document's ID table for O(1) lookup.
 	if !ctx.loadsubset.IsSet(SkipIDs) {
 		for _, a := range e.Attributes() {
-			if a.Name() == "xml:id" || a.AType() == AttrID {
+			if a.Name() == "xml:id" || a.AType() == enum.AttrID {
 				doc.RegisterID(a.Value(), e)
 			}
 		}
@@ -607,7 +608,7 @@ func (t *TreeBuilder) GetParameterEntity(ctxif sax.Context, name string) (sax.En
 	return nil, ErrEntityNotFound
 }
 
-func (t *TreeBuilder) AttributeDecl(ctxif sax.Context, eName string, aName string, typ int, deftype int, value string, enumif sax.Enumeration) error {
+func (t *TreeBuilder) AttributeDecl(ctxif sax.Context, eName string, aName string, typ enum.AttributeType, deftype enum.AttributeDefault, value string, enumif sax.Enumeration) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.AttributeDecl name = '%s', elem = '%s'", aName, eName)
 		defer g.IRelease("END tree.AttributeDecl")
@@ -615,10 +616,10 @@ func (t *TreeBuilder) AttributeDecl(ctxif sax.Context, eName string, aName strin
 
 	ctx := ctxif.(*parserCtx)
 
-	if aName == "xml:id" && typ != int(AttrID) {
+	if aName == "xml:id" && typ != enum.AttrID {
 		// libxml2 says "raise the error but keep the validity flag"
 		// but I don't know if we can do that..
-		return errors.New("xml:id: attribute type should be AttrID")
+		return errors.New("xml:id: attribute type should be enum.AttrID")
 	}
 	var prefix string
 	var local string
@@ -637,14 +638,14 @@ func (t *TreeBuilder) AttributeDecl(ctxif sax.Context, eName string, aName strin
 		if pdebug.Enabled {
 			pdebug.Printf("Processing intSubset...")
 		}
-		if _, err := ctx.addAttributeDecl(doc.intSubset, eName, local, prefix, AttributeType(typ), AttributeDefault(deftype), value, enum); err != nil {
+		if _, err := ctx.addAttributeDecl(doc.intSubset, eName, local, prefix, typ, deftype, value, enum); err != nil {
 			return err
 		}
 	case 2:
 		if pdebug.Enabled {
 			pdebug.Printf("Processing extSubset...")
 		}
-		if _, err := ctx.addAttributeDecl(doc.extSubset, eName, local, prefix, AttributeType(typ), AttributeDefault(deftype), value, enum); err != nil {
+		if _, err := ctx.addAttributeDecl(doc.extSubset, eName, local, prefix, typ, deftype, value, enum); err != nil {
 			return err
 		}
 	default:
@@ -659,7 +660,7 @@ func (t *TreeBuilder) AttributeDecl(ctxif sax.Context, eName string, aName strin
 	return nil
 }
 
-func (t *TreeBuilder) ElementDecl(ctxif sax.Context, name string, typ int, content sax.ElementContent) error {
+func (t *TreeBuilder) ElementDecl(ctxif sax.Context, name string, typ enum.ElementType, content sax.ElementContent) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.ElementDecl")
 		defer g.IRelease("END tree.ElementDecl")
@@ -677,7 +678,7 @@ func (t *TreeBuilder) ElementDecl(ctxif sax.Context, name string, typ int, conte
 		return errors.New("sax.ElementDecl called while not in subset")
 	}
 
-	_, err := dtd.AddElementDecl(name, ElementTypeVal(typ), content.(*ElementContent))
+	_, err := dtd.AddElementDecl(name, typ, content.(*ElementContent))
 	if err != nil {
 		return err
 	}
@@ -838,7 +839,7 @@ func (t *TreeBuilder) StartEntity(ctxif sax.Context, name string) error {
 	return nil
 }
 
-func (t *TreeBuilder) EntityDecl(ctxif sax.Context, name string, typ int, publicID string, systemID string, notation string) error {
+func (t *TreeBuilder) EntityDecl(ctxif sax.Context, name string, typ enum.EntityType, publicID string, systemID string, notation string) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.EntityDecl '%s' -> '%s'", name, notation)
 		defer g.IRelease("END tree.EntityDecl")
@@ -856,7 +857,7 @@ func (t *TreeBuilder) EntityDecl(ctxif sax.Context, name string, typ int, public
 		return errors.New("sax.EntityDecl called while note in subset")
 	}
 
-	ent, err := dtd.AddEntity(name, EntityType(typ), publicID, systemID, notation)
+	ent, err := dtd.AddEntity(name, typ, publicID, systemID, notation)
 	if err != nil {
 		return err
 	}
@@ -898,7 +899,7 @@ func (t *TreeBuilder) UnparsedEntityDecl(ctxif sax.Context, name string, publicI
 		return errors.New("sax.UnparsedEntityDecl called while not in subset")
 	}
 
-	_, _ = dtd.AddEntity(name, ExternalGeneralUnparsedEntity, publicID, systemID, notation)
+	_, _ = dtd.AddEntity(name, enum.ExternalGeneralUnparsedEntity, publicID, systemID, notation)
 	return nil
 }
 

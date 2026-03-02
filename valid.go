@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/pdebug"
 )
 
@@ -149,17 +150,17 @@ func isValidNameChar(r rune) bool {
 
 // validateAttributeValueInternal validates that defvalue is legal for the
 // declared attribute type. Mirrors xmlValidateAttributeDecl() in libxml2.
-func validateAttributeValueInternal(doc *Document, typ AttributeType, defvalue string) error {
+func validateAttributeValueInternal(doc *Document, typ enum.AttributeType, defvalue string) error {
 	switch typ {
-	case AttrCDATA:
+	case enum.AttrCDATA:
 		// Any string is valid for CDATA
 		return nil
-	case AttrID, AttrIDRef, AttrEntity:
+	case enum.AttrID, enum.AttrIDRef, enum.AttrEntity:
 		// Must match the Name production
 		if !isValidName(defvalue) {
 			return fmt.Errorf("value %q is not a valid Name", defvalue)
 		}
-	case AttrIDRefs, AttrEntities:
+	case enum.AttrIDRefs, enum.AttrEntities:
 		// Must match Names production: Name (S Name)*
 		for _, tok := range strings.Fields(defvalue) {
 			if !isValidName(tok) {
@@ -169,11 +170,11 @@ func validateAttributeValueInternal(doc *Document, typ AttributeType, defvalue s
 		if len(strings.Fields(defvalue)) == 0 {
 			return errors.New("value must not be empty")
 		}
-	case AttrNmtoken:
+	case enum.AttrNmtoken:
 		if !isValidNmtoken(defvalue) {
 			return fmt.Errorf("value %q is not a valid NMTOKEN", defvalue)
 		}
-	case AttrNmtokens:
+	case enum.AttrNmtokens:
 		for _, tok := range strings.Fields(defvalue) {
 			if !isValidNmtoken(tok) {
 				return fmt.Errorf("value %q is not a valid NMTOKEN", tok)
@@ -182,7 +183,7 @@ func validateAttributeValueInternal(doc *Document, typ AttributeType, defvalue s
 		if len(strings.Fields(defvalue)) == 0 {
 			return errors.New("value must not be empty")
 		}
-	case AttrEnumeration, AttrNotation:
+	case enum.AttrEnumeration, enum.AttrNotation:
 		// These are validated against the enumeration tree at a higher
 		// level; the value must match one of the declared tokens, but
 		// that information isn't available here. Just check that it's
@@ -343,11 +344,11 @@ func validateElementAttributes(doc *Document, elem *Element, edecl *ElementDecl,
 			val, found := present[aname]
 
 			switch adecl.def {
-			case AttrDefaultRequired:
+			case enum.AttrDefaultRequired:
 				if !found {
 					vctx.ve.addf("element %s: attribute %s is required", ename, aname)
 				}
-			case AttrDefaultFixed:
+			case enum.AttrDefaultFixed:
 				if found && val != adecl.defvalue {
 					vctx.ve.addf("element %s: attribute %s has value %q but must be %q", ename, aname, val, adecl.defvalue)
 				}
@@ -360,7 +361,7 @@ func validateElementAttributes(doc *Document, elem *Element, edecl *ElementDecl,
 				}
 
 				// Check enumeration value against declared tokens
-				if adecl.atype == AttrEnumeration && len(adecl.tree) > 0 {
+				if adecl.atype == enum.AttrEnumeration && len(adecl.tree) > 0 {
 					inEnum := false
 					for _, token := range adecl.tree {
 						if token == val {
@@ -375,35 +376,35 @@ func validateElementAttributes(doc *Document, elem *Element, edecl *ElementDecl,
 
 				// Track ID uniqueness and collect IDREFs
 				switch adecl.atype {
-				case AttrID:
+				case enum.AttrID:
 					if vctx.ids[val] {
 						vctx.ve.addf("element %s: duplicate ID %q", ename, val)
 					} else {
 						vctx.ids[val] = true
 					}
-				case AttrIDRef:
+				case enum.AttrIDRef:
 					vctx.idrefs[val] = true
-				case AttrIDRefs:
+				case enum.AttrIDRefs:
 					for _, ref := range strings.Fields(val) {
 						vctx.idrefs[ref] = true
 					}
-				case AttrEntity:
+				case enum.AttrEntity:
 					ent, ok := doc.GetEntity(val)
 					if !ok {
 						vctx.ve.addf("element %s: attribute %s references undeclared entity %q", ename, aname, val)
-					} else if EntityType(ent.EntityType()) != ExternalGeneralUnparsedEntity {
+					} else if ent.EntityType() != enum.ExternalGeneralUnparsedEntity {
 						vctx.ve.addf("element %s: attribute %s references entity %q which is not unparsed", ename, aname, val)
 					}
-				case AttrEntities:
+				case enum.AttrEntities:
 					for _, entName := range strings.Fields(val) {
 						ent, ok := doc.GetEntity(entName)
 						if !ok {
 							vctx.ve.addf("element %s: attribute %s references undeclared entity %q", ename, aname, entName)
-						} else if EntityType(ent.EntityType()) != ExternalGeneralUnparsedEntity {
+						} else if ent.EntityType() != enum.ExternalGeneralUnparsedEntity {
 							vctx.ve.addf("element %s: attribute %s references entity %q which is not unparsed", ename, aname, entName)
 						}
 					}
-				case AttrNotation:
+				case enum.AttrNotation:
 					notFound := true
 					for _, dtd := range docDTDs(doc) {
 						if _, ok := dtd.LookupNotation(val); ok {
@@ -440,7 +441,7 @@ func checkStandaloneWhitespace(extSubset *DTD, elem *Element, name string, vctx 
 	if !ok {
 		extDecl, ok = extSubset.LookupElement(name, "")
 	}
-	if !ok || extDecl.decltype != ElementElementType {
+	if !ok || extDecl.decltype != enum.ElementElementType {
 		return
 	}
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
@@ -457,18 +458,18 @@ func validateElementContent(dtd *DTD, elem *Element, edecl *ElementDecl, ve *Val
 	ename := elem.LocalName()
 
 	switch edecl.decltype {
-	case EmptyElementType:
+	case enum.EmptyElementType:
 		// EMPTY elements must have no children
 		if elem.FirstChild() != nil {
 			ve.addf("element %s: declared EMPTY but has content", ename)
 		}
-	case AnyElementType:
+	case enum.AnyElementType:
 		// ANY allows anything
-	case MixedElementType:
+	case enum.MixedElementType:
 		// Mixed content: (#PCDATA | elem1 | elem2 | ...)*
 		// All child elements must be in the declared list
 		validateMixedContent(elem, edecl.content, ve)
-	case ElementElementType:
+	case enum.ElementElementType:
 		// Element content: must match the content model exactly
 		children := collectChildElements(elem)
 		if !matchContentModel(edecl.content, children) {

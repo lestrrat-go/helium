@@ -3,6 +3,7 @@ package helium
 import (
 	"testing"
 
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
 )
 
@@ -403,9 +404,9 @@ func TestCopyDoc(t *testing.T) {
 		dtd, err := src.CreateInternalSubset("root", "", "")
 		require.NoError(t, err)
 
-		_, err = dtd.AddEntity("foo", InternalGeneralEntity, "", "", "bar")
+		_, err = dtd.AddEntity("foo", enum.InternalGeneralEntity, "", "", "bar")
 		require.NoError(t, err)
-		_, err = dtd.AddEntity("baz", InternalGeneralEntity, "", "", "qux")
+		_, err = dtd.AddEntity("baz", enum.InternalGeneralEntity, "", "", "qux")
 		require.NoError(t, err)
 
 		root, err := src.CreateElement("root")
@@ -451,11 +452,11 @@ func TestCopyDoc(t *testing.T) {
 
 		edecl, ok := dstDTD.LookupElement("root", "")
 		require.True(t, ok)
-		require.Equal(t, ElementElementType, edecl.decltype)
+		require.Equal(t, enum.ElementElementType, edecl.decltype)
 
 		edecl, ok = dstDTD.LookupElement("child", "")
 		require.True(t, ok)
-		require.Equal(t, MixedElementType, edecl.decltype)
+		require.Equal(t, enum.MixedElementType, edecl.decltype)
 	})
 
 	t.Run("DTD attribute declarations copied", func(t *testing.T) {
@@ -479,11 +480,11 @@ func TestCopyDoc(t *testing.T) {
 
 		adecl, ok := dstDTD.LookupAttribute("id", "", "root")
 		require.True(t, ok)
-		require.Equal(t, AttrID, adecl.AType())
+		require.Equal(t, enum.AttrID, adecl.AType())
 
 		adecl, ok = dstDTD.LookupAttribute("class", "", "root")
 		require.True(t, ok)
-		require.Equal(t, AttrCDATA, adecl.AType())
+		require.Equal(t, enum.AttrCDATA, adecl.AType())
 		require.Equal(t, "default", adecl.defvalue)
 	})
 
@@ -516,7 +517,7 @@ func TestCopyDoc(t *testing.T) {
 		dtd, err := src.CreateInternalSubset("root", "", "")
 		require.NoError(t, err)
 
-		_, err = dtd.AddEntity("pe", InternalParameterEntity, "", "", "param-content")
+		_, err = dtd.AddEntity("pe", enum.InternalParameterEntity, "", "", "param-content")
 		require.NoError(t, err)
 
 		root, err := src.CreateElement("root")

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
 )
 
@@ -138,21 +139,21 @@ func TestPredefinedEntityRedeclaration(t *testing.T) {
 
 	t.Run("DTD.AddEntity rejects wrong content", func(t *testing.T) {
 		dtd := newDTD()
-		_, err := dtd.AddEntity("amp", InternalGeneralEntity, "", "", "wrong")
+		_, err := dtd.AddEntity("amp", enum.InternalGeneralEntity, "", "", "wrong")
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "redeclared")
 	})
 
 	t.Run("DTD.AddEntity accepts correct content", func(t *testing.T) {
 		dtd := newDTD()
-		_, err := dtd.AddEntity("amp", InternalGeneralEntity, "", "", "&")
+		_, err := dtd.AddEntity("amp", enum.InternalGeneralEntity, "", "", "&")
 		require.NoError(t, err)
 	})
 
 	t.Run("DTD.AddEntity accepts char ref content", func(t *testing.T) {
 		dtd := newDTD()
 		// &#60; resolves to <
-		_, err := dtd.AddEntity("lt", InternalGeneralEntity, "", "", "&#60;")
+		_, err := dtd.AddEntity("lt", enum.InternalGeneralEntity, "", "", "&#60;")
 		require.NoError(t, err)
 	})
 }

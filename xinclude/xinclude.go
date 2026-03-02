@@ -463,7 +463,7 @@ func (p *processor) mergeEntities(src, dst *helium.Document) {
 			return
 		}
 		srcDTD.ForEachEntity(func(name string, srcEnt *helium.Entity) {
-			existing, _ := dstInt.AddEntity(name, helium.EntityType(srcEnt.EntityType()), srcEnt.ExternalID(), srcEnt.SystemID(), string(srcEnt.Content()))
+			existing, _ := dstInt.AddEntity(name, srcEnt.EntityType(), srcEnt.ExternalID(), srcEnt.SystemID(), string(srcEnt.Content()))
 			if existing == nil {
 				return
 			}

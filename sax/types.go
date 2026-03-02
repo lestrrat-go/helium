@@ -1,5 +1,7 @@
 package sax
 
+import "github.com/lestrrat-go/helium/enum"
+
 // Context is always passed as the first argument to SAX handlers.
 // It is intentionally left as an opaque value so applications can
 // use type assertions to pass whatever object they need to pass.
@@ -31,7 +33,7 @@ type ParseInput interface {
 type Entity interface {
 	Name() string
 	SetOrig(string)
-	EntityType() int
+	EntityType() enum.EntityType
 	Content() []byte
 	// Checked reports whether this entity's content has been parsed (libxml2: ent->checked).
 	Checked() bool
@@ -65,14 +67,14 @@ type Attribute interface {
 
 // SAX functions
 
-type AttributeDeclFunc func(ctx Context, elem string, fullname string, typ int, def int, defaultValue string, tree Enumeration) error
+type AttributeDeclFunc func(ctx Context, elem string, fullname string, typ enum.AttributeType, def enum.AttributeDefault, defaultValue string, tree Enumeration) error
 type CDataBlockFunc func(ctx Context, value []byte) error
 type CharactersFunc func(ctx Context, ch []byte) error
 type CommentFunc func(ctx Context, value []byte) error
-type ElementDeclFunc func(ctx Context, name string, typ int, content ElementContent) error
+type ElementDeclFunc func(ctx Context, name string, typ enum.ElementType, content ElementContent) error
 type EndDocumentFunc func(ctx Context) error
 type EndElementNSFunc func(ctx Context, localname string, prefix string, uri string) error
-type EntityDeclFunc func(ctx Context, name string, typ int, publicID string, systemID string, content string) error
+type EntityDeclFunc func(ctx Context, name string, typ enum.EntityType, publicID string, systemID string, content string) error
 type ErrorFunc func(ctx Context, err error) error
 type ExternalSubsetFunc func(ctx Context, name string, externalID string, systemID string) error
 type GetEntityFunc func(ctx Context, name string) (Entity, error)

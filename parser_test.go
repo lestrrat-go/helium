@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium/sax"
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/pdebug"
 	"github.com/lestrrat-go/strcursor"
 	"github.com/stretchr/testify/require"
@@ -559,31 +560,31 @@ func TestParseDTDValidRepeatContentEmpty(t *testing.T) {
 
 func TestValidateAttributeValueInternal(t *testing.T) {
 	t.Run("ID valid", func(t *testing.T) {
-		require.NoError(t, validateAttributeValueInternal(nil, AttrID, "myid"))
+		require.NoError(t, validateAttributeValueInternal(nil, enum.AttrID, "myid"))
 	})
 	t.Run("ID invalid", func(t *testing.T) {
-		require.Error(t, validateAttributeValueInternal(nil, AttrID, "123"))
+		require.Error(t, validateAttributeValueInternal(nil, enum.AttrID, "123"))
 	})
 	t.Run("NMTOKEN valid", func(t *testing.T) {
-		require.NoError(t, validateAttributeValueInternal(nil, AttrNmtoken, "hello-world"))
+		require.NoError(t, validateAttributeValueInternal(nil, enum.AttrNmtoken, "hello-world"))
 	})
 	t.Run("NMTOKEN valid digits", func(t *testing.T) {
-		require.NoError(t, validateAttributeValueInternal(nil, AttrNmtoken, "123"))
+		require.NoError(t, validateAttributeValueInternal(nil, enum.AttrNmtoken, "123"))
 	})
 	t.Run("NMTOKEN invalid", func(t *testing.T) {
-		require.Error(t, validateAttributeValueInternal(nil, AttrNmtoken, "hello world"))
+		require.Error(t, validateAttributeValueInternal(nil, enum.AttrNmtoken, "hello world"))
 	})
 	t.Run("NMTOKENS valid", func(t *testing.T) {
-		require.NoError(t, validateAttributeValueInternal(nil, AttrNmtokens, "hello world"))
+		require.NoError(t, validateAttributeValueInternal(nil, enum.AttrNmtokens, "hello world"))
 	})
 	t.Run("IDREFS valid", func(t *testing.T) {
-		require.NoError(t, validateAttributeValueInternal(nil, AttrIDRefs, "id1 id2"))
+		require.NoError(t, validateAttributeValueInternal(nil, enum.AttrIDRefs, "id1 id2"))
 	})
 	t.Run("IDREFS invalid", func(t *testing.T) {
-		require.Error(t, validateAttributeValueInternal(nil, AttrIDRefs, "id1 123"))
+		require.Error(t, validateAttributeValueInternal(nil, enum.AttrIDRefs, "id1 123"))
 	})
 	t.Run("CDATA anything", func(t *testing.T) {
-		require.NoError(t, validateAttributeValueInternal(nil, AttrCDATA, "anything goes here!"))
+		require.NoError(t, validateAttributeValueInternal(nil, enum.AttrCDATA, "anything goes here!"))
 	})
 }
 
@@ -909,12 +910,12 @@ func TestParseSkipIDs(t *testing.T) {
 	require.True(t, ctx.loadsubset.IsSet(SkipIDs), "ParseSkipIDs should set SkipIDs on loadsubset")
 
 	// addSpecialAttribute with AttrID should be a no-op when SkipIDs is set.
-	ctx.addSpecialAttribute("doc", "id", AttrID)
+	ctx.addSpecialAttribute("doc", "id", enum.AttrID)
 	_, found := ctx.attsSpecial["doc:id"]
 	require.False(t, found, "AttrID should not be interned when SkipIDs is set")
 
 	// Non-ID attributes should still be added.
-	ctx.addSpecialAttribute("doc", "name", AttrNmtoken)
+	ctx.addSpecialAttribute("doc", "name", enum.AttrNmtoken)
 	_, found = ctx.attsSpecial["doc:name"]
 	require.True(t, found, "non-ID attributes should still be interned")
 }

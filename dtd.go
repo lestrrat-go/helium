@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/pdebug"
 )
 
@@ -37,35 +38,23 @@ func (n *Notation) Free()                     {}
 // AttributeDecl is an xml attribute delcaration from DTD
 type AttributeDecl struct {
 	docnode
-	atype    AttributeType    // attribute type
-	def      AttributeDefault // default
-	defvalue string           // ... or the default value
-	tree     Enumeration      // ... or the numeration tree, if any
-	prefix   string           // the namespace prefix, if any
-	elem     string           // name of the element holding the attribute
+	atype    enum.AttributeType    // attribute type
+	def      enum.AttributeDefault // default
+	defvalue string                   // ... or the default value
+	tree     Enumeration              // ... or the numeration tree, if any
+	prefix   string                   // the namespace prefix, if any
+	elem     string                   // name of the element holding the attribute
 }
 
 // ElementDecl is an xml element declaration from DTD
 type ElementDecl struct {
 	docnode
-	decltype   ElementTypeVal
+	decltype   enum.ElementType
 	content    *ElementContent
 	attributes *AttributeDecl
 	prefix     string
 	// xmlRegexpPtr contModel
 }
-
-// ElementTypeVal represents the different possibilities for an element
-// content type.
-type ElementTypeVal int
-
-const (
-	UndefinedElementType ElementTypeVal = iota
-	EmptyElementType
-	AnyElementType
-	MixedElementType
-	ElementElementType
-)
 
 type ElementContentType int
 
@@ -107,15 +96,15 @@ func newDTD() *DTD {
 	return dtd
 }
 
-func (dtd *DTD) AddEntity(name string, typ EntityType, publicID, systemID, content string) (*Entity, error) {
+func (dtd *DTD) AddEntity(name string, typ enum.EntityType, publicID, systemID, content string) (*Entity, error) {
 	var table map[string]*Entity
 
 	switch typ {
-	case InternalGeneralEntity, ExternalGeneralParsedEntity, ExternalGeneralUnparsedEntity:
+	case enum.InternalGeneralEntity, enum.ExternalGeneralParsedEntity, enum.ExternalGeneralUnparsedEntity:
 		table = dtd.entities
-	case InternalParameterEntity, ExternalParameterEntity:
+	case enum.InternalParameterEntity, enum.ExternalParameterEntity:
 		table = dtd.pentities
-	case InternalPredefinedEntity:
+	case enum.InternalPredefinedEntity:
 		return nil, errors.New("cannot register a predefined entity")
 	}
 
@@ -128,7 +117,7 @@ func (dtd *DTD) AddEntity(name string, typ EntityType, publicID, systemID, conte
 	// The content may contain character references (e.g., "&#60;" for "<")
 	// that must be resolved before comparison.
 	// libxml2: xmlAddEntity checks this and returns XML_ERR_REDECL_PREDEF_ENTITY.
-	if typ == InternalGeneralEntity {
+	if typ == enum.InternalGeneralEntity {
 		if expected, ok := predefinedEntityContent[name]; ok && resolveCharRefs(content) != expected {
 			return nil, fmt.Errorf("entity '%s' redeclared with wrong content", name)
 		}
@@ -168,18 +157,18 @@ func (dtd *DTD) AddNotation(name, publicID, systemID string) (*Notation, error) 
 	return nota, nil
 }
 
-func (dtd *DTD) AddElementDecl(name string, typ ElementTypeVal, content *ElementContent) (*ElementDecl, error) {
+func (dtd *DTD) AddElementDecl(name string, typ enum.ElementType, content *ElementContent) (*ElementDecl, error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START dtd.AddElementDecl '%s'", name)
 		defer g.IRelease("END dtd.AddElementDecl")
 	}
 
 	switch typ {
-	case EmptyElementType, AnyElementType:
+	case enum.EmptyElementType, enum.AnyElementType:
 		if content != nil {
 			return nil, errors.New("content must be nil for EMPTY/ANY elements")
 		}
-	case MixedElementType, ElementElementType:
+	case enum.MixedElementType, enum.ElementElementType:
 		if content == nil {
 			return nil, errors.New("content must be non-nil for MIXED/ELEMENT elements")
 		}
@@ -198,7 +187,7 @@ func (dtd *DTD) AddElementDecl(name string, typ ElementTypeVal, content *Element
 	// internal subset.
 	if doc := dtd.doc; doc != nil && doc.intSubset != nil {
 		decl, ok := doc.intSubset.LookupElement(name, prefix)
-		if ok && decl.decltype == UndefinedElementType {
+		if ok && decl.decltype == enum.UndefinedElementType {
 			oldattrs = decl.attributes
 			decl.attributes = nil
 			doc.intSubset.RemoveElement(name, prefix)
@@ -209,7 +198,7 @@ func (dtd *DTD) AddElementDecl(name string, typ ElementTypeVal, content *Element
 	// was registered first
 	decl, ok := dtd.elements[name+":"+prefix]
 	if ok {
-		if decl.decltype != UndefinedElementType {
+		if decl.decltype != enum.UndefinedElementType {
 			return nil, errors.New("redefinition of element " + name)
 		}
 	} else {
