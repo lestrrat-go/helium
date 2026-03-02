@@ -46,7 +46,8 @@ func (pp *PushParser) Write(p []byte) (int, error) {
 }
 
 // Close parses the accumulated HTML data and returns the resulting Document.
-// In SAX mode, it returns (nil, error) after firing all SAX events.
+// When created with [NewPushParserWithSAX], it fires SAX events and always
+// returns a nil Document; the returned error is non-nil only on parse failure.
 func (pp *PushParser) Close() (*helium.Document, error) {
 	data := pp.buf.Bytes()
 	if pp.sax != nil {
