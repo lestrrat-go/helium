@@ -7,7 +7,7 @@ import (
 )
 
 func TestLexerBasicPath(t *testing.T) {
-	l, err := NewLexer("/foo/bar")
+	l, err := newLexer("/foo/bar")
 	require.NoError(t, err)
 
 	tokens := l.Tokens()
@@ -21,7 +21,7 @@ func TestLexerBasicPath(t *testing.T) {
 }
 
 func TestLexerDoubleSlash(t *testing.T) {
-	l, err := NewLexer("//div")
+	l, err := newLexer("//div")
 	require.NoError(t, err)
 
 	tokens := l.Tokens()
@@ -32,7 +32,7 @@ func TestLexerDoubleSlash(t *testing.T) {
 }
 
 func TestLexerAttribute(t *testing.T) {
-	l, err := NewLexer("@id")
+	l, err := newLexer("@id")
 	require.NoError(t, err)
 
 	tokens := l.Tokens()
@@ -43,7 +43,7 @@ func TestLexerAttribute(t *testing.T) {
 }
 
 func TestLexerPredicate(t *testing.T) {
-	l, err := NewLexer("item[3]")
+	l, err := newLexer("item[3]")
 	require.NoError(t, err)
 
 	tokens := l.Tokens()
@@ -57,14 +57,14 @@ func TestLexerPredicate(t *testing.T) {
 }
 
 func TestLexerStringLiterals(t *testing.T) {
-	l, err := NewLexer(`"hello"`)
+	l, err := newLexer(`"hello"`)
 	require.NoError(t, err)
 	tokens := l.Tokens()
 	require.Len(t, tokens, 1)
 	require.Equal(t, TokenString, tokens[0].Type)
 	require.Equal(t, "hello", tokens[0].Value)
 
-	l, err = NewLexer(`'world'`)
+	l, err = newLexer(`'world'`)
 	require.NoError(t, err)
 	tokens = l.Tokens()
 	require.Len(t, tokens, 1)
@@ -73,14 +73,14 @@ func TestLexerStringLiterals(t *testing.T) {
 }
 
 func TestLexerNumber(t *testing.T) {
-	l, err := NewLexer("42")
+	l, err := newLexer("42")
 	require.NoError(t, err)
 	tokens := l.Tokens()
 	require.Len(t, tokens, 1)
 	require.Equal(t, TokenNumber, tokens[0].Type)
 	require.Equal(t, "42", tokens[0].Value)
 
-	l, err = NewLexer("3.14")
+	l, err = newLexer("3.14")
 	require.NoError(t, err)
 	tokens = l.Tokens()
 	require.Len(t, tokens, 1)
@@ -90,7 +90,7 @@ func TestLexerNumber(t *testing.T) {
 
 func TestLexerOperators(t *testing.T) {
 	// "a and b" — "and" follows a name, so it's an operator
-	l, err := NewLexer("a and b")
+	l, err := newLexer("a and b")
 	require.NoError(t, err)
 	tokens := l.Tokens()
 	require.Len(t, tokens, 3)
@@ -100,25 +100,25 @@ func TestLexerOperators(t *testing.T) {
 }
 
 func TestLexerOperatorKeywords(t *testing.T) {
-	l, err := NewLexer("a or b")
+	l, err := newLexer("a or b")
 	require.NoError(t, err)
 	tokens := l.Tokens()
 	require.Len(t, tokens, 3)
 	require.Equal(t, TokenOr, tokens[1].Type)
 
-	l, err = NewLexer("a mod b")
+	l, err = newLexer("a mod b")
 	require.NoError(t, err)
 	tokens = l.Tokens()
 	require.Equal(t, TokenMod, tokens[1].Type)
 
-	l, err = NewLexer("a div b")
+	l, err = newLexer("a div b")
 	require.NoError(t, err)
 	tokens = l.Tokens()
 	require.Equal(t, TokenDiv, tokens[1].Type)
 }
 
 func TestLexerAxisNotation(t *testing.T) {
-	l, err := NewLexer("child::para")
+	l, err := newLexer("child::para")
 	require.NoError(t, err)
 	tokens := l.Tokens()
 	require.Len(t, tokens, 3)
@@ -130,7 +130,7 @@ func TestLexerAxisNotation(t *testing.T) {
 }
 
 func TestLexerDots(t *testing.T) {
-	l, err := NewLexer("../child")
+	l, err := newLexer("../child")
 	require.NoError(t, err)
 	tokens := l.Tokens()
 	require.Len(t, tokens, 3)
@@ -140,7 +140,7 @@ func TestLexerDots(t *testing.T) {
 }
 
 func TestLexerVariable(t *testing.T) {
-	l, err := NewLexer("$x")
+	l, err := newLexer("$x")
 	require.NoError(t, err)
 	tokens := l.Tokens()
 	require.Len(t, tokens, 1)
@@ -149,25 +149,25 @@ func TestLexerVariable(t *testing.T) {
 }
 
 func TestLexerComparison(t *testing.T) {
-	l, err := NewLexer("a != b")
+	l, err := newLexer("a != b")
 	require.NoError(t, err)
 	tokens := l.Tokens()
 	require.Len(t, tokens, 3)
 	require.Equal(t, TokenNotEquals, tokens[1].Type)
 
-	l, err = NewLexer("a <= b")
+	l, err = newLexer("a <= b")
 	require.NoError(t, err)
 	tokens = l.Tokens()
 	require.Equal(t, TokenLessEq, tokens[1].Type)
 
-	l, err = NewLexer("a >= b")
+	l, err = newLexer("a >= b")
 	require.NoError(t, err)
 	tokens = l.Tokens()
 	require.Equal(t, TokenGreaterEq, tokens[1].Type)
 }
 
 func TestLexerFunctionCall(t *testing.T) {
-	l, err := NewLexer("count(//item)")
+	l, err := newLexer("count(//item)")
 	require.NoError(t, err)
 	tokens := l.Tokens()
 	require.Len(t, tokens, 5)
@@ -180,7 +180,7 @@ func TestLexerFunctionCall(t *testing.T) {
 }
 
 func TestLexerQName(t *testing.T) {
-	l, err := NewLexer("ns:elem")
+	l, err := newLexer("ns:elem")
 	require.NoError(t, err)
 	tokens := l.Tokens()
 	require.Len(t, tokens, 3)
@@ -192,7 +192,7 @@ func TestLexerQName(t *testing.T) {
 }
 
 func TestLexerNamespaceWildcard(t *testing.T) {
-	l, err := NewLexer("ns:*")
+	l, err := newLexer("ns:*")
 	require.NoError(t, err)
 	tokens := l.Tokens()
 	require.Len(t, tokens, 3)
@@ -203,7 +203,7 @@ func TestLexerNamespaceWildcard(t *testing.T) {
 }
 
 func TestLexerComplex(t *testing.T) {
-	l, err := NewLexer(`/bookstore/book[price>35.00]/title`)
+	l, err := newLexer(`/bookstore/book[price>35.00]/title`)
 	require.NoError(t, err)
 	tokens := l.Tokens()
 
@@ -232,7 +232,7 @@ func TestLexerComplex(t *testing.T) {
 }
 
 func TestLexerUnion(t *testing.T) {
-	l, err := NewLexer("a | b")
+	l, err := newLexer("a | b")
 	require.NoError(t, err)
 	tokens := l.Tokens()
 	require.Len(t, tokens, 3)
@@ -241,7 +241,7 @@ func TestLexerUnion(t *testing.T) {
 
 func TestLexerAndAsName(t *testing.T) {
 	// "and" at the start of an expression is a name, not an operator
-	l, err := NewLexer("and")
+	l, err := newLexer("and")
 	require.NoError(t, err)
 	tokens := l.Tokens()
 	require.Len(t, tokens, 1)
@@ -250,7 +250,7 @@ func TestLexerAndAsName(t *testing.T) {
 }
 
 func TestLexerStar(t *testing.T) {
-	l, err := NewLexer("child::*")
+	l, err := newLexer("child::*")
 	require.NoError(t, err)
 	tokens := l.Tokens()
 	require.Len(t, tokens, 3)
