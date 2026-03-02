@@ -48,12 +48,12 @@ type dumpConfig struct {
 	noDefaultDTD bool
 }
 
-// DumpOption configures HTML serialization behavior.
-type DumpOption func(*dumpConfig)
+// WriteOption configures HTML serialization behavior.
+type WriteOption func(*dumpConfig)
 
 // WithNoDefaultDTD suppresses output of a default DOCTYPE when the document
 // has no DTD.
-func WithNoDefaultDTD() DumpOption {
+func WithNoDefaultDTD() WriteOption {
 	return func(c *dumpConfig) {
 		c.noDefaultDTD = true
 	}

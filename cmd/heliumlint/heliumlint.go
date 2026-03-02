@@ -489,12 +489,12 @@ func processInput(cfg *config, input namedInput, cat *catalog.Catalog, schema *x
 	}
 
 	// Standard dump
-	d := helium.Dumper{
+	d := helium.Writer{
 		Format:       cfg.format,
 		IndentString: "  ",
 		SkipDTD:      cfg.dropdtd,
 	}
-	if dErr := d.DumpDoc(out, doc); dErr != nil {
+	if dErr := d.WriteDoc(out, doc); dErr != nil {
 		if cfg.timing {
 			fmt.Fprintf(os.Stderr, "Saving took %s\n", time.Since(t0))
 		}
@@ -514,7 +514,7 @@ func evalXPath(cfg *config, doc *helium.Document, out io.Writer) int {
 		return exitXPath
 	}
 
-	d := helium.Dumper{}
+	d := helium.Writer{}
 
 	switch result.Type {
 	case xpath.NodeSetResult:
@@ -529,7 +529,7 @@ func evalXPath(cfg *config, doc *helium.Document, out io.Writer) int {
 					return exitXPath
 				}
 			default:
-				if dErr := d.DumpNode(out, node); dErr != nil {
+				if dErr := d.WriteNode(out, node); dErr != nil {
 					fmt.Fprintf(os.Stderr, "%s\n", dErr)
 					return exitXPath
 				}

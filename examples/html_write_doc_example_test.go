@@ -8,8 +8,8 @@ import (
 	"github.com/lestrrat-go/helium/html"
 )
 
-func Example_html_dump_doc() {
-	// Parse HTML first, then serialize with html.DumpDoc.
+func Example_html_write_doc() {
+	// Parse HTML first, then serialize with html.WriteDoc.
 	doc, err := html.Parse([]byte(`<html><body><div>Hello</div></body></html>`))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
@@ -17,8 +17,8 @@ func Example_html_dump_doc() {
 	}
 
 	var buf bytes.Buffer
-	if err := html.DumpDoc(&buf, doc); err != nil {
-		fmt.Printf("failed to dump: %s\n", err)
+	if err := html.WriteDoc(&buf, doc); err != nil {
+		fmt.Printf("failed to write: %s\n", err)
 		return
 	}
 

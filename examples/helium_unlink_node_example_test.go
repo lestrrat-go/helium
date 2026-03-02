@@ -19,9 +19,9 @@ func Example_helium_unlink_node() {
 	helium.UnlinkNode(a)
 
 	var buf bytes.Buffer
-	var d helium.Dumper
-	if err := d.DumpNode(&buf, root); err != nil {
-		fmt.Printf("dump failed: %s\n", err)
+	var d helium.Writer
+	if err := d.WriteNode(&buf, root); err != nil {
+		fmt.Printf("write failed: %s\n", err)
 		return
 	}
 

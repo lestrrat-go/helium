@@ -79,7 +79,7 @@ func NewDocument(version, encoding string, standalone DocumentStandaloneType) *D
 	return doc
 }
 
-func (d Document) XMLString(options ...DumpOption) (string, error) {
+func (d Document) XMLString(options ...WriteOption) (string, error) {
 	out := bytes.Buffer{}
 	if err := d.XML(&out, options...); err != nil {
 		return "", err
@@ -87,8 +87,8 @@ func (d Document) XMLString(options ...DumpOption) (string, error) {
 	return out.String(), nil
 }
 
-func (d *Document) XML(out io.Writer, options ...DumpOption) error {
-	return newDumper(options).DumpDoc(out, d)
+func (d *Document) XML(out io.Writer, options ...WriteOption) error {
+	return newWriter(options).WriteDoc(out, d)
 }
 
 func (d *Document) AddChild(cur Node) error {

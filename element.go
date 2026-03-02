@@ -46,7 +46,7 @@ func newElement(name string) *Element {
 }
 
 // XMLString serializes the element to an XML string using the given options.
-func (n Element) XMLString(options ...DumpOption) (string, error) {
+func (n Element) XMLString(options ...WriteOption) (string, error) {
 	out := bytes.Buffer{}
 	if err := n.XML(&out, options...); err != nil {
 		return "", err
@@ -55,8 +55,8 @@ func (n Element) XMLString(options ...DumpOption) (string, error) {
 }
 
 // XML serializes the element to w using the given options.
-func (n *Element) XML(out io.Writer, options ...DumpOption) error {
-	return newDumper(options).DumpNode(out, n)
+func (n *Element) XML(out io.Writer, options ...WriteOption) error {
+	return newWriter(options).WriteNode(out, n)
 }
 
 // AddChild adds a new child node to the end of the children nodes (libxml2: xmlAddChild).

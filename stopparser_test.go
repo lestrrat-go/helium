@@ -158,8 +158,8 @@ func TestStopParserReturnsPartialDoc(t *testing.T) {
 
 	// The partial doc should have <root> with <a> but not <b> or <c>
 	var buf bytes.Buffer
-	var d Dumper
-	require.NoError(t, d.DumpDoc(&buf, doc))
+	var d Writer
+	require.NoError(t, d.WriteDoc(&buf, doc))
 	out := buf.String()
 	require.Contains(t, out, "<a>")
 	require.Contains(t, out, "hello")
