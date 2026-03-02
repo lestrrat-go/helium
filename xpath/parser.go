@@ -15,19 +15,19 @@ var (
 	errExpectedRParenAfterPI     = errors.New("expected ')' after processing-instruction(")
 )
 
-// Parser builds an AST from a token stream.
-type Parser struct {
-	lexer *Lexer
+// parser builds an AST from a token stream.
+type parser struct {
+	lexer *lexer
 	depth int
 }
 
 // Parse parses an XPath expression string into an AST.
 func Parse(expr string) (Expr, error) {
-	l, err := NewLexer(expr)
+	l, err := newLexer(expr)
 	if err != nil {
 		return nil, err
 	}
-	p := &Parser{lexer: l}
+	p := &parser{lexer: l}
 	e, err := p.parseExpr()
 	if err != nil {
 		return nil, err
@@ -39,7 +39,7 @@ func Parse(expr string) (Expr, error) {
 }
 
 // parseExpr parses → OrExpr.
-func (p *Parser) parseExpr() (Expr, error) {
+func (p *parser) parseExpr() (Expr, error) {
 	p.depth++
 	if p.depth > maxParseDepth {
 		return nil, ErrExprTooDeep
@@ -49,7 +49,7 @@ func (p *Parser) parseExpr() (Expr, error) {
 }
 
 // parseOrExpr parses → AndExpr ('or' AndExpr)*.
-func (p *Parser) parseOrExpr() (Expr, error) {
+func (p *parser) parseOrExpr() (Expr, error) {
 	left, err := p.parseAndExpr()
 	if err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ func (p *Parser) parseOrExpr() (Expr, error) {
 }
 
 // parseAndExpr parses → EqualityExpr ('and' EqualityExpr)*.
-func (p *Parser) parseAndExpr() (Expr, error) {
+func (p *parser) parseAndExpr() (Expr, error) {
 	left, err := p.parseEqualityExpr()
 	if err != nil {
 		return nil, err
@@ -83,7 +83,7 @@ func (p *Parser) parseAndExpr() (Expr, error) {
 }
 
 // parseEqualityExpr parses → RelationalExpr (('=' | '!=') RelationalExpr)*.
-func (p *Parser) parseEqualityExpr() (Expr, error) {
+func (p *parser) parseEqualityExpr() (Expr, error) {
 	left, err := p.parseRelationalExpr()
 	if err != nil {
 		return nil, err
@@ -104,7 +104,7 @@ func (p *Parser) parseEqualityExpr() (Expr, error) {
 }
 
 // parseRelationalExpr parses → AdditiveExpr (('<'|'>'|'<='|'>=') AdditiveExpr)*.
-func (p *Parser) parseRelationalExpr() (Expr, error) {
+func (p *parser) parseRelationalExpr() (Expr, error) {
 	left, err := p.parseAdditiveExpr()
 	if err != nil {
 		return nil, err
@@ -126,7 +126,7 @@ func (p *Parser) parseRelationalExpr() (Expr, error) {
 }
 
 // parseAdditiveExpr parses → MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*.
-func (p *Parser) parseAdditiveExpr() (Expr, error) {
+func (p *parser) parseAdditiveExpr() (Expr, error) {
 	left, err := p.parseMultiplicativeExpr()
 	if err != nil {
 		return nil, err
@@ -147,7 +147,7 @@ func (p *Parser) parseAdditiveExpr() (Expr, error) {
 }
 
 // parseMultiplicativeExpr parses → UnaryExpr (('*' | 'div' | 'mod') UnaryExpr)*.
-func (p *Parser) parseMultiplicativeExpr() (Expr, error) {
+func (p *parser) parseMultiplicativeExpr() (Expr, error) {
 	left, err := p.parseUnaryExpr()
 	if err != nil {
 		return nil, err
@@ -170,7 +170,7 @@ func (p *Parser) parseMultiplicativeExpr() (Expr, error) {
 }
 
 // parseUnaryExpr parses → '-'* UnionExpr.
-func (p *Parser) parseUnaryExpr() (Expr, error) {
+func (p *parser) parseUnaryExpr() (Expr, error) {
 	negate := 0
 	for p.lexer.Peek().Type == TokenMinus {
 		p.lexer.Next()
@@ -187,7 +187,7 @@ func (p *Parser) parseUnaryExpr() (Expr, error) {
 }
 
 // parseUnionExpr parses → PathExpr ('|' PathExpr)*.
-func (p *Parser) parseUnionExpr() (Expr, error) {
+func (p *parser) parseUnionExpr() (Expr, error) {
 	left, err := p.parsePathExpr()
 	if err != nil {
 		return nil, err
@@ -204,7 +204,7 @@ func (p *Parser) parseUnionExpr() (Expr, error) {
 }
 
 // parsePathExpr → LocationPath | FilterExpr (('/' | '//') RelativeLocationPath)?
-func (p *Parser) parsePathExpr() (Expr, error) {
+func (p *parser) parsePathExpr() (Expr, error) {
 	tok := p.lexer.Peek()
 
 	// Absolute location path starts with / or //
@@ -247,7 +247,7 @@ func (p *Parser) parsePathExpr() (Expr, error) {
 }
 
 // parseFilterExpr parses → PrimaryExpr Predicate*.
-func (p *Parser) parseFilterExpr() (Expr, error) {
+func (p *parser) parseFilterExpr() (Expr, error) {
 	primary, err := p.parsePrimaryExpr()
 	if err != nil {
 		return nil, err
@@ -269,7 +269,7 @@ func (p *Parser) parseFilterExpr() (Expr, error) {
 }
 
 // parsePrimaryExpr parses → VariableRef | '(' Expr ')' | Literal | Number | FunctionCall.
-func (p *Parser) parsePrimaryExpr() (Expr, error) {
+func (p *parser) parsePrimaryExpr() (Expr, error) {
 	tok := p.lexer.Peek()
 
 	switch tok.Type {
@@ -320,7 +320,7 @@ func (p *Parser) parsePrimaryExpr() (Expr, error) {
 }
 
 // parseParenExpr parses a parenthesised expression.
-func (p *Parser) parseParenExpr() (Expr, error) {
+func (p *parser) parseParenExpr() (Expr, error) {
 	p.lexer.Next() // consume '('
 	expr, err := p.parseExpr()
 	if err != nil {
@@ -345,7 +345,7 @@ func parseNumberLiteral(s string) (NumberExpr, error) {
 
 // parseFunctionCall parses function arguments after the name has been consumed.
 // The opening '(' is the next token.
-func (p *Parser) parseFunctionCall(prefix, name string) (Expr, error) {
+func (p *parser) parseFunctionCall(prefix, name string) (Expr, error) {
 	p.lexer.Next() // consume '('
 	var args []Expr
 	if p.lexer.Peek().Type != TokenRParen {
@@ -373,7 +373,7 @@ func (p *Parser) parseFunctionCall(prefix, name string) (Expr, error) {
 }
 
 // parseLocationPath parses → AbsoluteLocationPath | RelativeLocationPath.
-func (p *Parser) parseLocationPath() (Expr, error) {
+func (p *parser) parseLocationPath() (Expr, error) {
 	tok := p.lexer.Peek()
 
 	path := &LocationPath{}
@@ -419,7 +419,7 @@ func (p *Parser) parseLocationPath() (Expr, error) {
 }
 
 // parseRelativeLocationPath parses → Step (('/' | '//') Step)*.
-func (p *Parser) parseRelativeLocationPath() ([]Step, error) {
+func (p *parser) parseRelativeLocationPath() ([]Step, error) {
 	step, err := p.parseStep()
 	if err != nil {
 		return nil, err
@@ -457,7 +457,7 @@ loop:
 }
 
 // parseStep parses → AxisSpecifier NodeTest Predicate* | AbbreviatedStep.
-func (p *Parser) parseStep() (Step, error) {
+func (p *parser) parseStep() (Step, error) {
 	tok := p.lexer.Peek()
 
 	// Abbreviated step: .
@@ -521,7 +521,7 @@ func (p *Parser) parseStep() (Step, error) {
 }
 
 // parseNodeTest parses → NameTest | NodeType '(' ')' | 'processing-instruction' '(' Literal ')'.
-func (p *Parser) parseNodeTest(_ AxisType) (NodeTest, error) {
+func (p *parser) parseNodeTest(_ AxisType) (NodeTest, error) {
 	tok := p.lexer.Peek()
 
 	// * wildcard
@@ -557,7 +557,7 @@ func (p *Parser) parseNodeTest(_ AxisType) (NodeTest, error) {
 // processing-instruction()). It returns (result, true, nil) on success,
 // (nil, false, nil) when the name is not a node-type keyword, and
 // (nil, false, err) on a parse error.
-func (p *Parser) parseNodeTypeTest(name string) (NodeTest, bool, error) {
+func (p *parser) parseNodeTypeTest(name string) (NodeTest, bool, error) {
 	switch name {
 	case "node":
 		p.lexer.Next() // (
@@ -597,7 +597,7 @@ func (p *Parser) parseNodeTypeTest(name string) (NodeTest, bool, error) {
 
 // parseQNameTest parses a prefix:local or prefix:* name test, given that the
 // prefix token has already been consumed and a ':' token has been peeked.
-func (p *Parser) parseQNameTest(prefix string) (NodeTest, error) {
+func (p *parser) parseQNameTest(prefix string) (NodeTest, error) {
 	p.lexer.Next() // consume ':'
 	next := p.lexer.Peek()
 	if next.Type == TokenStar {
@@ -612,7 +612,7 @@ func (p *Parser) parseQNameTest(prefix string) (NodeTest, error) {
 }
 
 // parsePredicate parses → '[' Expr ']'.
-func (p *Parser) parsePredicate() (Expr, error) {
+func (p *parser) parsePredicate() (Expr, error) {
 	if p.lexer.Peek().Type != TokenLBracket {
 		return nil, fmt.Errorf("%w: '[' but got %s", ErrExpectedToken, p.lexer.Peek())
 	}
@@ -632,7 +632,7 @@ func (p *Parser) parsePredicate() (Expr, error) {
 
 // looksLikeStep returns true if the next token(s) look like the start
 // of a location step (as opposed to a primary expression).
-func (p *Parser) looksLikeStep() bool {
+func (p *parser) looksLikeStep() bool {
 	tok := p.lexer.Peek()
 	switch tok.Type {
 	case TokenDot, TokenDotDot, TokenAt, TokenStar:

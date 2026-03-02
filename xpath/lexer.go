@@ -7,17 +7,17 @@ import (
 	"unicode/utf8"
 )
 
-// Lexer tokenizes an XPath expression string.
-type Lexer struct {
+// lexer tokenizes an XPath expression string.
+type lexer struct {
 	input  string
 	pos    int
 	tokens []Token
 	idx    int // read cursor into tokens
 }
 
-// NewLexer creates a lexer and tokenizes the entire input.
-func NewLexer(input string) (*Lexer, error) {
-	l := &Lexer{input: input}
+// newLexer creates a lexer and tokenizes the entire input.
+func newLexer(input string) (*lexer, error) {
+	l := &lexer{input: input}
 	if err := l.tokenize(); err != nil {
 		return nil, err
 	}
@@ -25,7 +25,7 @@ func NewLexer(input string) (*Lexer, error) {
 }
 
 // Next returns the next token and advances the cursor.
-func (l *Lexer) Next() Token {
+func (l *lexer) Next() Token {
 	if l.idx >= len(l.tokens) {
 		return Token{Type: TokenEOF}
 	}
@@ -35,7 +35,7 @@ func (l *Lexer) Next() Token {
 }
 
 // Peek returns the next token without advancing.
-func (l *Lexer) Peek() Token {
+func (l *lexer) Peek() Token {
 	if l.idx >= len(l.tokens) {
 		return Token{Type: TokenEOF}
 	}
@@ -43,18 +43,18 @@ func (l *Lexer) Peek() Token {
 }
 
 // Backup moves the cursor back by one token.
-func (l *Lexer) Backup() {
+func (l *lexer) Backup() {
 	if l.idx > 0 {
 		l.idx--
 	}
 }
 
 // Tokens returns all tokens (for testing).
-func (l *Lexer) Tokens() []Token {
+func (l *lexer) Tokens() []Token {
 	return l.tokens
 }
 
-func (l *Lexer) tokenize() error {
+func (l *lexer) tokenize() error {
 	for l.pos < len(l.input) {
 		l.skipWhitespace()
 		if l.pos >= len(l.input) {
@@ -169,20 +169,20 @@ func (l *Lexer) tokenize() error {
 	return nil
 }
 
-func (l *Lexer) peekRune() rune {
+func (l *lexer) peekRune() rune {
 	r, _ := utf8.DecodeRuneInString(l.input[l.pos:])
 	return r
 }
 
-func (l *Lexer) advance(_ int) {
+func (l *lexer) advance(_ int) {
 	l.pos++
 }
 
-func (l *Lexer) emit(typ TokenType, value string) {
+func (l *lexer) emit(typ TokenType, value string) {
 	l.tokens = append(l.tokens, Token{Type: typ, Value: value})
 }
 
-func (l *Lexer) skipWhitespace() {
+func (l *lexer) skipWhitespace() {
 	for l.pos < len(l.input) {
 		r, size := utf8.DecodeRuneInString(l.input[l.pos:])
 		if !unicode.IsSpace(r) {
@@ -192,7 +192,7 @@ func (l *Lexer) skipWhitespace() {
 	}
 }
 
-func (l *Lexer) scanNCName() string {
+func (l *lexer) scanNCName() string {
 	start := l.pos
 	for l.pos < len(l.input) {
 		r, size := utf8.DecodeRuneInString(l.input[l.pos:])
@@ -208,7 +208,7 @@ func (l *Lexer) scanNCName() string {
 	return l.input[start:l.pos]
 }
 
-func (l *Lexer) scanString() (string, error) {
+func (l *lexer) scanString() (string, error) {
 	quote := l.input[l.pos]
 	l.advance(1)
 	start := l.pos
@@ -223,7 +223,7 @@ func (l *Lexer) scanString() (string, error) {
 	return "", fmt.Errorf("%w: starting at position %d", ErrUnterminatedString, start-1)
 }
 
-func (l *Lexer) scanNumber() {
+func (l *lexer) scanNumber() {
 	start := l.pos
 	for l.pos < len(l.input) && l.input[l.pos] >= '0' && l.input[l.pos] <= '9' {
 		l.pos++
@@ -251,7 +251,7 @@ func (l *Lexer) scanNumber() {
 // (and, or, div, mod) or a regular name. It also handles the :: suffix
 // for axis names and checks for a following '(' which indicates a
 // function call or node type test.
-func (l *Lexer) scanNameOrKeyword() {
+func (l *lexer) scanNameOrKeyword() {
 	name := l.scanNCName()
 
 	// Check for '::'  → axis name
@@ -312,7 +312,7 @@ func (l *Lexer) scanNameOrKeyword() {
 //
 // In other words, if the last token is a value-producing token, the next
 // name should be parsed as an operator keyword.
-func (l *Lexer) isOperatorContext(name string) bool {
+func (l *lexer) isOperatorContext(name string) bool {
 	if name != "and" && name != "or" && name != "mod" && name != "div" {
 		return false
 	}
@@ -341,7 +341,7 @@ func isNCNameChar(r rune) bool {
 }
 
 // PrettyTokens returns a human-readable representation of all tokens.
-func (l *Lexer) PrettyTokens() string {
+func (l *lexer) PrettyTokens() string {
 	var b strings.Builder
 	for i, t := range l.tokens {
 		if i > 0 {
