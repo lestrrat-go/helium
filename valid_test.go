@@ -135,7 +135,7 @@ func TestEnumerationAttributeValidation(t *testing.T) {
 		p := NewParser()
 		p.SetOption(ParseDTDValid)
 		p.SetOption(ParseDTDAttr)
-		_, err := p.Parse([]byte(xml))
+		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
 
@@ -149,7 +149,7 @@ func TestEnumerationAttributeValidation(t *testing.T) {
 		p := NewParser()
 		p.SetOption(ParseDTDValid)
 		p.SetOption(ParseDTDAttr)
-		_, err := p.Parse([]byte(xml))
+		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not among the enumerated set")
 	})
@@ -164,7 +164,7 @@ func TestEnumerationAttributeValidation(t *testing.T) {
 		p := NewParser()
 		p.SetOption(ParseDTDValid)
 		p.SetOption(ParseDTDAttr)
-		_, err := p.Parse([]byte(xml))
+		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
 }
@@ -505,27 +505,27 @@ func TestIsValidNameStartChar(t *testing.T) {
 		{"underscore", '_', true},
 
 		// Rejected ASCII
-		{"colon", ':', false},    // colon excluded in helium (namespace-aware)
-		{"digit 0", '0', false},  // digit not a start char
-		{"hyphen", '-', false},   // not a start char
-		{"dot", '.', false},      // not a start char
-		{"space", ' ', false},    // not a name char at all
-		{"at", '@', false},       // between Z and a
-		{"bracket", '[', false},  // between Z and a
+		{"colon", ':', false},   // colon excluded in helium (namespace-aware)
+		{"digit 0", '0', false}, // digit not a start char
+		{"hyphen", '-', false},  // not a start char
+		{"dot", '.', false},     // not a start char
+		{"space", ' ', false},   // not a name char at all
+		{"at", '@', false},      // between Z and a
+		{"bracket", '[', false}, // between Z and a
 
 		// Latin supplement boundaries
-		{"U+00BF (before range)", 0xBF, false},   // just before 0xC0
-		{"U+00C0 (start)", 0xC0, true},           // À
-		{"U+00D6 (end)", 0xD6, true},             // Ö
-		{"U+00D7 (multiply sign)", 0xD7, false},  // × excluded
-		{"U+00D8 (start)", 0xD8, true},           // Ø
-		{"U+00F6 (end)", 0xF6, true},             // ö
-		{"U+00F7 (division sign)", 0xF7, false},  // ÷ excluded
-		{"U+00F8 (start)", 0xF8, true},           // ø
+		{"U+00BF (before range)", 0xBF, false},  // just before 0xC0
+		{"U+00C0 (start)", 0xC0, true},          // À
+		{"U+00D6 (end)", 0xD6, true},            // Ö
+		{"U+00D7 (multiply sign)", 0xD7, false}, // × excluded
+		{"U+00D8 (start)", 0xD8, true},          // Ø
+		{"U+00F6 (end)", 0xF6, true},            // ö
+		{"U+00F7 (division sign)", 0xF7, false}, // ÷ excluded
+		{"U+00F8 (start)", 0xF8, true},          // ø
 
 		// Range gaps
 		{"U+0300 (combining)", 0x0300, false},     // combining diacritical — not a start char
-		{"U+036F (combining end)", 0x036F, false},  // not a start char
+		{"U+036F (combining end)", 0x036F, false}, // not a start char
 		{"U+0370 (Greek)", 0x0370, true},
 		{"U+037D (end)", 0x037D, true},
 		{"U+037E (Greek question mark)", 0x037E, false}, // excluded
@@ -617,11 +617,11 @@ func TestIsValidName(t *testing.T) {
 		{"starts with digit", "1foo", false},
 		{"starts with hyphen", "-foo", false},
 		{"empty", "", false},
-		{"unicode letter start", "\u00C0foo", true},      // À
-		{"middle dot in name", "foo\u00B7bar", true},      // ·
-		{"combining in name", "foo\u0300bar", true},       // combining grave
-		{"multiply sign start", "\u00D7foo", false},       // ×
-		{"division sign start", "\u00F7foo", false},       // ÷
+		{"unicode letter start", "\u00C0foo", true},  // À
+		{"middle dot in name", "foo\u00B7bar", true}, // ·
+		{"combining in name", "foo\u0300bar", true},  // combining grave
+		{"multiply sign start", "\u00D7foo", false},  // ×
+		{"division sign start", "\u00F7foo", false},  // ÷
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -878,7 +878,7 @@ func TestEntityAttributeValidation(t *testing.T) {
 		p := NewParser()
 		p.SetOption(ParseDTDValid)
 		p.SetOption(ParseDTDAttr)
-		_, err := p.Parse([]byte(xml))
+		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
 
@@ -892,7 +892,7 @@ func TestEntityAttributeValidation(t *testing.T) {
 		p := NewParser()
 		p.SetOption(ParseDTDValid)
 		p.SetOption(ParseDTDAttr)
-		_, err := p.Parse([]byte(xml))
+		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "undeclared entity")
 	})
@@ -908,7 +908,7 @@ func TestEntityAttributeValidation(t *testing.T) {
 		p := NewParser()
 		p.SetOption(ParseDTDValid)
 		p.SetOption(ParseDTDAttr)
-		_, err := p.Parse([]byte(xml))
+		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not unparsed")
 	})
@@ -928,7 +928,7 @@ func TestEntitiesAttributeValidation(t *testing.T) {
 		p := NewParser()
 		p.SetOption(ParseDTDValid)
 		p.SetOption(ParseDTDAttr)
-		_, err := p.Parse([]byte(xml))
+		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
 
@@ -944,7 +944,7 @@ func TestEntitiesAttributeValidation(t *testing.T) {
 		p := NewParser()
 		p.SetOption(ParseDTDValid)
 		p.SetOption(ParseDTDAttr)
-		_, err := p.Parse([]byte(xml))
+		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "undeclared entity")
 	})
@@ -963,7 +963,7 @@ func TestNotationAttributeValidation(t *testing.T) {
 		p := NewParser()
 		p.SetOption(ParseDTDValid)
 		p.SetOption(ParseDTDAttr)
-		_, err := p.Parse([]byte(xml))
+		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
 
@@ -978,7 +978,7 @@ func TestNotationAttributeValidation(t *testing.T) {
 		p := NewParser()
 		p.SetOption(ParseDTDValid)
 		p.SetOption(ParseDTDAttr)
-		_, err := p.Parse([]byte(xml))
+		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "undeclared notation")
 	})

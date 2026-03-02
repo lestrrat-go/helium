@@ -2,13 +2,14 @@ package examples_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
 )
 
 func Example_helium_serialize() {
-	doc, err := helium.Parse([]byte(`<root><child>text</child></root>`))
+	doc, err := helium.Parse(context.Background(), []byte(`<root><child>text</child></root>`))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

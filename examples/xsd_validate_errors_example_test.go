@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -24,7 +25,7 @@ func Example_xsd_validate_errors() {
 </xs:schema>`
 
 	// Compile the schema from an in-memory document.
-	schemaDoc, err := helium.Parse([]byte(schemaSrc))
+	schemaDoc, err := helium.Parse(context.Background(), []byte(schemaSrc))
 	if err != nil {
 		fmt.Printf("failed to parse schema: %s\n", err)
 		return
@@ -38,7 +39,7 @@ func Example_xsd_validate_errors() {
 	// This document is intentionally invalid: the required "version"
 	// attribute is missing from <root>.
 	const src = `<root><item>one</item></root>`
-	doc, err := helium.Parse([]byte(src))
+	doc, err := helium.Parse(context.Background(), []byte(src))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

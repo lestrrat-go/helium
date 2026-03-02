@@ -1,13 +1,14 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
 )
 
 func Example_helium_copy_doc() {
-	src, err := helium.Parse([]byte(`<root><child>hello</child></root>`))
+	src, err := helium.Parse(context.Background(), []byte(`<root><child>hello</child></root>`))
 	if err != nil {
 		fmt.Printf("parse failed: %s\n", err)
 		return

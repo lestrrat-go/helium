@@ -74,7 +74,7 @@ func TestErrParseErrorErrorString(t *testing.T) {
 }
 
 func TestErrParseErrorLevel(t *testing.T) {
-	_, err := Parse([]byte("<broken"))
+	_, err := Parse(t.Context(), []byte("<broken"))
 	require.Error(t, err)
 
 	var pe ErrParseError
@@ -97,7 +97,7 @@ func TestErrParseErrorWarningLevel(t *testing.T) {
 
 	p := NewParser()
 	p.SetSAXHandler(s)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err)
 
 	var pe ErrParseError
@@ -136,7 +136,7 @@ func TestParseNoError(t *testing.T) {
 
 		p := NewParser()
 		p.SetSAXHandler(s)
-		_, _ = p.Parse([]byte(input))
+		_, _ = p.Parse(t.Context(), []byte(input))
 		require.Greater(t, called.Load(), int32(0), "SAX Error handler should be called")
 	})
 
@@ -151,7 +151,7 @@ func TestParseNoError(t *testing.T) {
 		p := NewParser()
 		p.SetSAXHandler(s)
 		p.SetOption(ParseNoError)
-		_, err := p.Parse([]byte(input))
+		_, err := p.Parse(t.Context(), []byte(input))
 		require.Error(t, err, "parse should still return error")
 		require.Equal(t, int32(0), called.Load(), "SAX Error handler should NOT be called with ParseNoError")
 	})
@@ -171,7 +171,7 @@ func TestWarningLocationInfo(t *testing.T) {
 
 		p := NewParser()
 		p.SetSAXHandler(s)
-		_, err := p.Parse([]byte(input))
+		_, err := p.Parse(t.Context(), []byte(input))
 		require.Error(t, err)
 
 		var pe ErrParseError
@@ -190,7 +190,7 @@ func TestWarningLocationInfo(t *testing.T) {
 
 		p := NewParser()
 		p.SetSAXHandler(s)
-		_, err := p.Parse([]byte(input))
+		_, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		require.NotEmpty(t, warnings, "warning handler should be called")
 		require.Contains(t, warnings[0], "undeclared")
@@ -207,7 +207,7 @@ func TestWarningLocationInfo(t *testing.T) {
 		p := NewParser()
 		p.SetSAXHandler(s)
 		p.SetOption(ParseNoWarning)
-		_, _ = p.Parse([]byte(input))
+		_, _ = p.Parse(t.Context(), []byte(input))
 		require.Equal(t, int32(0), called.Load(), "warning handler should NOT be called with ParseNoWarning")
 	})
 }
@@ -285,7 +285,7 @@ func TestErrorDomainDefault(t *testing.T) {
 func TestNamespaceErrorDomain(t *testing.T) {
 	const input = `<root xmlns:a="urn:a"><a:child xmlns:a="">text</a:child></root>`
 
-	_, err := Parse([]byte(input))
+	_, err := Parse(t.Context(), []byte(input))
 	require.Error(t, err)
 
 	var pe ErrParseError

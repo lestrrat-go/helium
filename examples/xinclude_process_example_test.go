@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -60,7 +61,7 @@ func Example_xinclude_process() {
 		}
 		p := helium.NewParser()
 		p.SetBaseURI(mainPath)
-		return p.Parse(data)
+		return p.Parse(context.Background(), data)
 	}
 
 	// --- Default behavior: marker nodes ---

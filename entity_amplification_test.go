@@ -27,7 +27,7 @@ func TestBillionLaughs(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseNoEnt)
-	_, err := p.Parse([]byte(xml))
+	_, err := p.Parse(t.Context(), []byte(xml))
 	require.Error(t, err, "billion laughs should be rejected")
 	require.Contains(t, err.Error(), "amplification")
 }
@@ -45,7 +45,7 @@ func TestQuadraticBlowup(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseNoEnt)
-	_, err := p.Parse([]byte(xml))
+	_, err := p.Parse(t.Context(), []byte(xml))
 	require.Error(t, err, "quadratic blowup should be rejected")
 	require.Contains(t, err.Error(), "amplification")
 }
@@ -60,7 +60,7 @@ func TestNormalEntities(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseNoEnt)
-	doc, err := p.Parse([]byte(xml))
+	doc, err := p.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 	require.NotNil(t, doc)
 }
@@ -81,7 +81,7 @@ func TestParseHugeDisablesGuard(t *testing.T) {
 	p := NewParser()
 	p.SetOption(ParseNoEnt)
 	p.SetOption(ParseHuge)
-	doc, err := p.Parse([]byte(xml))
+	doc, err := p.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 	require.NotNil(t, doc)
 }
@@ -92,7 +92,7 @@ func TestPredefinedEntities(t *testing.T) {
 <root>&lt;&gt;&amp;&apos;&quot;</root>`
 
 	p := NewParser()
-	doc, err := p.Parse([]byte(xml))
+	doc, err := p.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 	require.NotNil(t, doc)
 }
@@ -105,7 +105,7 @@ func TestPredefinedEntityRedeclaration(t *testing.T) {
   <!ENTITY lt "&#60;">
 ]>
 <root>&lt;</root>`
-		_, err := Parse([]byte(xml))
+		_, err := Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
 
@@ -116,7 +116,7 @@ func TestPredefinedEntityRedeclaration(t *testing.T) {
   <!ENTITY lt "X">
 ]>
 <root>&lt;</root>`
-		_, err := Parse([]byte(xml))
+		_, err := Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "redeclared")
 	})
@@ -132,7 +132,7 @@ func TestPredefinedEntityRedeclaration(t *testing.T) {
   <!ENTITY quot "&#34;">
 ]>
 <root/>`
-		_, err := Parse([]byte(xml))
+		_, err := Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
 
@@ -171,7 +171,7 @@ func TestEntityDepthLimit(t *testing.T) {
 	p := NewParser()
 	p.SetOption(ParseNoEnt)
 	p.SetOption(ParseHuge) // disable amplification guard to test depth only
-	_, err := p.Parse([]byte(dtd.String()))
+	_, err := p.Parse(t.Context(), []byte(dtd.String()))
 	require.Error(t, err, "depth > 40 should still error")
 	require.Contains(t, err.Error(), "entity loop")
 }

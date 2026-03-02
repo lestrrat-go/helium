@@ -28,10 +28,10 @@ func dumpHTMLDoc(t *testing.T, doc *helium.Document) string {
 func TestHTMLPushParserSingleChunk(t *testing.T) {
 	input := []byte(testHTML)
 
-	want, err := Parse(input)
+	want, err := Parse(t.Context(), input)
 	require.NoError(t, err)
 
-	pp := NewPushParser()
+	pp := NewPushParser(t.Context())
 	require.NoError(t, pp.Push(input))
 	got, err := pp.Close()
 	require.NoError(t, err)
@@ -41,10 +41,10 @@ func TestHTMLPushParserSingleChunk(t *testing.T) {
 func TestHTMLPushParserMultiChunk(t *testing.T) {
 	input := []byte(testHTML)
 
-	want, err := Parse(input)
+	want, err := Parse(t.Context(), input)
 	require.NoError(t, err)
 
-	pp := NewPushParser()
+	pp := NewPushParser(t.Context())
 	// Push in 20-byte chunks
 	for i := 0; i < len(input); i += 20 {
 		end := i + 20
@@ -77,12 +77,12 @@ func TestHTMLPushParserSAXMode(t *testing.T) {
 		OnInternalSubset:        InternalSubsetFunc(func(name, eid, sid string) error { return nil }),
 		OnProcessingInstruction: ProcessingInstructionFunc(func(t, d string) error { return nil }),
 		OnIgnorableWhitespace:   IgnorableWhitespaceFunc(func(ch []byte) error { return nil }),
-		OnError:              ErrorFunc(func(err error) error { return nil }),
-		OnWarning:            WarningFunc(func(err error) error { return nil }),
-		OnSetDocumentLocator: SetDocumentLocatorFunc(func(loc DocumentLocator) error { return nil }),
+		OnError:                 ErrorFunc(func(err error) error { return nil }),
+		OnWarning:               WarningFunc(func(err error) error { return nil }),
+		OnSetDocumentLocator:    SetDocumentLocatorFunc(func(loc DocumentLocator) error { return nil }),
 	}
 
-	pp := NewSAXPushParser(handler)
+	pp := NewSAXPushParser(t.Context(), handler)
 	require.NoError(t, pp.Push(input))
 	doc, err := pp.Close()
 	require.NoError(t, err)
@@ -96,10 +96,10 @@ func TestHTMLPushParserSAXMode(t *testing.T) {
 func TestHTMLPushParserIOCopy(t *testing.T) {
 	input := []byte(testHTML)
 
-	want, err := Parse(input)
+	want, err := Parse(t.Context(), input)
 	require.NoError(t, err)
 
-	pp := NewPushParser()
+	pp := NewPushParser(t.Context())
 	n, err := io.Copy(pp, bytes.NewReader(input))
 	require.NoError(t, err)
 	require.Equal(t, int64(len(input)), n)

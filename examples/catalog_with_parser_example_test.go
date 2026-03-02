@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -46,7 +47,7 @@ func Example_catalog_with_parser() {
 
 	// Parse a simple document. The catalog is available for any external
 	// entity references the parser might encounter during parsing.
-	doc, err := p.Parse([]byte(`<root/>`))
+	doc, err := p.Parse(context.Background(), []byte(`<root/>`))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

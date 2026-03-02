@@ -2,6 +2,7 @@ package helium
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"sync"
@@ -102,7 +103,7 @@ type PushParser struct {
 // NewPushParser creates a PushParser using the given Parser's configuration.
 // The parser runs in a background goroutine, reading from an internal buffer
 // as data is pushed.
-func (p *Parser) NewPushParser() *PushParser {
+func (p *Parser) NewPushParser(ctx context.Context) *PushParser {
 	stream := newPushStream()
 	pp := &PushParser{
 		stream: stream,
@@ -121,7 +122,7 @@ func (p *Parser) NewPushParser() *PushParser {
 			pp.done <- res
 		}()
 
-		doc, err := p.ParseReader(stream)
+		doc, err := p.ParseReader(ctx, stream)
 		res = pushResult{doc: doc, err: err}
 	}()
 

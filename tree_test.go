@@ -267,7 +267,7 @@ func TestDocumentURL(t *testing.T) {
 		const input = `<?xml version="1.0"?><root/>`
 		p := NewParser()
 		p.SetBaseURI("/some/path/doc.xml")
-		doc, err := p.Parse([]byte(input))
+		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		require.Equal(t, "/some/path/doc.xml", doc.URL())
 	})
@@ -440,7 +440,7 @@ func TestCopyDoc(t *testing.T) {
 <root><child>text</child></root>`
 
 		p := NewParser()
-		src, err := p.Parse([]byte(input))
+		src, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 
 		dst, err := CopyDoc(src)
@@ -468,7 +468,7 @@ func TestCopyDoc(t *testing.T) {
 <root id="x"/>`
 
 		p := NewParser()
-		src, err := p.Parse([]byte(input))
+		src, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 
 		dst, err := CopyDoc(src)
@@ -545,7 +545,7 @@ func TestCopyDoc(t *testing.T) {
 <root id="x"><child>text</child></root>`
 
 		p := NewParser()
-		src, err := p.Parse([]byte(input))
+		src, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 
 		srcXML, err := src.XMLString()

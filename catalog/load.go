@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -42,7 +43,7 @@ func loadInternal(filename string) (*icatalog.Catalog, error) {
 
 func loadFromBytes(data []byte, baseURI string) (*icatalog.Catalog, error) {
 	p := helium.NewParser()
-	doc, err := p.Parse(data)
+	doc, err := p.Parse(context.Background(), data)
 	if err != nil {
 		return nil, fmt.Errorf("catalog: failed to parse %q: %w", baseURI, err)
 	}
@@ -60,7 +61,7 @@ func loadFromBytes(data []byte, baseURI string) (*icatalog.Catalog, error) {
 	cat := &icatalog.Catalog{
 		Prefer:  icatalog.PreferPublic, // default per OASIS spec
 		BaseURI: baseURI,
-		Loader:     loader{},
+		Loader:  loader{},
 	}
 
 	if v := getAttr(root, "prefer"); v != "" {
@@ -110,7 +111,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				catalogMissingAttr(warnings, localName, pubID, "publicId", uri, "uri")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
-					Type:    icatalog.EntryPublic,
+					Type:   icatalog.EntryPublic,
 					Name:   pubID,
 					URL:    uri,
 					Prefer: elemPrefer,
@@ -123,7 +124,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				catalogMissingAttr(warnings, localName, sysID, "systemId", uri, "uri")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
-					Type:  icatalog.EntrySystem,
+					Type: icatalog.EntrySystem,
 					Name: sysID,
 					URL:  uri,
 				})
@@ -135,7 +136,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				catalogMissingAttr(warnings, localName, startString, "systemIdStartString", prefix, "rewritePrefix")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
-					Type:  icatalog.EntryRewriteSystem,
+					Type: icatalog.EntryRewriteSystem,
 					Name: startString,
 					URL:  prefix,
 				})
@@ -147,7 +148,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				catalogMissingAttr(warnings, localName, startString, "publicIdStartString", catFile, "catalog")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
-					Type:    icatalog.EntryDelegatePublic,
+					Type:   icatalog.EntryDelegatePublic,
 					Name:   startString,
 					URL:    catFile,
 					Prefer: elemPrefer,
@@ -160,7 +161,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				catalogMissingAttr(warnings, localName, startString, "systemIdStartString", catFile, "catalog")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
-					Type:  icatalog.EntryDelegateSystem,
+					Type: icatalog.EntryDelegateSystem,
 					Name: startString,
 					URL:  catFile,
 				})
@@ -172,7 +173,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				catalogMissingAttr(warnings, localName, name, "name", uri, "uri")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
-					Type:  icatalog.EntryURI,
+					Type: icatalog.EntryURI,
 					Name: name,
 					URL:  uri,
 				})
@@ -184,7 +185,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				catalogMissingAttr(warnings, localName, startString, "uriStartString", prefix, "rewritePrefix")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
-					Type:  icatalog.EntryRewriteURI,
+					Type: icatalog.EntryRewriteURI,
 					Name: startString,
 					URL:  prefix,
 				})
@@ -196,7 +197,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				catalogMissingAttr(warnings, localName, startString, "uriStartString", catFile, "catalog")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
-					Type:  icatalog.EntryDelegateURI,
+					Type: icatalog.EntryDelegateURI,
 					Name: startString,
 					URL:  catFile,
 				})
@@ -209,7 +210,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				if !icatalog.HasNextCatalog(*entries, catFile) {
 					*entries = append(*entries, icatalog.Entry{
 						Type: icatalog.EntryNextCatalog,
-						URL: catFile,
+						URL:  catFile,
 					})
 				}
 			}

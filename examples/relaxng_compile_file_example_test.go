@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -31,7 +32,7 @@ func Example_relaxng_compile_file() {
 		return
 	}
 
-	doc, err := helium.Parse([]byte(`<book><title>Helium</title></book>`))
+	doc, err := helium.Parse(context.Background(), []byte(`<book><title>Helium</title></book>`))
 	if err != nil {
 		fmt.Printf("parse failed: %s\n", err)
 		return

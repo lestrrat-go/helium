@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
@@ -29,7 +30,7 @@ func Example_sax_count_elements() {
 	p := helium.NewParser()
 	p.SetSAXHandler(handler)
 
-	_, err := p.Parse([]byte(src))
+	_, err := p.Parse(context.Background(), []byte(src))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

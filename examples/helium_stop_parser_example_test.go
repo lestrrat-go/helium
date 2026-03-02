@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
@@ -20,7 +21,7 @@ func Example_helium_stop_parser() {
 
 	p := helium.NewParser()
 	p.SetSAXHandler(s)
-	_, err := p.Parse([]byte(`<root><a/><stop/><b/></root>`))
+	_, err := p.Parse(context.Background(), []byte(`<root><a/><stop/><b/></root>`))
 	if err != nil {
 		fmt.Printf("parse failed: %s\n", err)
 		return

@@ -204,7 +204,7 @@ func TestDocumentLocatorIDs(t *testing.T) {
 	p.SetSAXHandler(s)
 	p.SetBaseURI(baseURI)
 
-	_, err := p.Parse([]byte(`<root/>`))
+	_, err := p.Parse(t.Context(), []byte(`<root/>`))
 	require.NoError(t, err, "Parse should succeed")
 	require.Equal(t, "", gotPublicID, "GetPublicID should return empty string")
 	require.Equal(t, baseURI, gotSystemID, "GetSystemID should return base URI")
@@ -249,7 +249,7 @@ func TestSAXEvents(t *testing.T) {
 		p := NewParser()
 		p.SetSAXHandler(newEventEmitter(&out))
 
-		_, err = p.Parse(in)
+		_, err = p.Parse(t.Context(), in)
 		if err != nil {
 			t.Logf("source XML: %s", in)
 		}

@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
@@ -20,7 +21,7 @@ func Example_xpath_compile() {
 	// String() returns the original expression text.
 	fmt.Printf("expression: %s\n", expr.String())
 
-	doc, err := helium.Parse([]byte(`<root><a><x/><y/></a><b><z/></b></root>`))
+	doc, err := helium.Parse(context.Background(), []byte(`<root><a><x/><y/></a><b><z/></b></root>`))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

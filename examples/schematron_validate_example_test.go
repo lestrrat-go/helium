@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
@@ -9,7 +10,7 @@ import (
 
 func Example_schematron_validate() {
 	// Compile a minimal Schematron schema with one assertion.
-	schemaDoc, err := helium.Parse([]byte(
+	schemaDoc, err := helium.Parse(context.Background(), []byte(
 		`<schema xmlns="http://www.ascc.net/xml/schematron">
   <pattern name="book-check">
     <rule context="book">
@@ -28,7 +29,7 @@ func Example_schematron_validate() {
 		return
 	}
 
-	doc, err := helium.Parse([]byte(`<book><title>Helium</title></book>`))
+	doc, err := helium.Parse(context.Background(), []byte(`<book><title>Helium</title></book>`))
 	if err != nil {
 		fmt.Printf("xml parse failed: %s\n", err)
 		return

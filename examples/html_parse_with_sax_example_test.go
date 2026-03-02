@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -26,7 +27,7 @@ func Example_html_parse_with_sax() {
 		return nil
 	})
 
-	if err := html.ParseWithSAX([]byte(`<h1>Title</h1>`), handler); err != nil {
+	if err := html.ParseWithSAX(context.Background(), []byte(`<h1>Title</h1>`), handler); err != nil {
 		fmt.Printf("failed to parse with SAX: %s\n", err)
 		return
 	}

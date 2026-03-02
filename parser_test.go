@@ -47,7 +47,7 @@ func TestDetectBOM(t *testing.T) {
 func TestEmptyDocument(t *testing.T) {
 	p := NewParser()
 	// BOM only
-	_, err := p.Parse([]byte{0x00, 0x00, 0x00, 0x3C})
+	_, err := p.Parse(t.Context(), []byte{0x00, 0x00, 0x00, 0x3C})
 	require.Error(t, err, "Parsing BOM only should fail")
 }
 
@@ -65,7 +65,7 @@ func TestParseXMLDecl(t *testing.T) {
 
 	for input, expect := range inputs {
 		p := NewParser()
-		doc, err := p.Parse([]byte(input))
+		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "Parse should succeed for '%s'", input)
 
 		require.Equal(t, expect.version, doc.Version(), "version matches")
@@ -84,7 +84,7 @@ func TestParseMisc(t *testing.T) {
 
 	for _, input := range inputs {
 		p := NewParser()
-		doc, err := p.Parse([]byte(input))
+		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "Parse should succeed for '%s'", input)
 
 		// XXX Not sure if this is right, but I'm going to assume it's ok
@@ -123,7 +123,7 @@ L
 O!]]></child>
 </root>`
 	p := NewParser()
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse should succeed for '%s'", input)
 }
 
@@ -138,7 +138,7 @@ func TestParseBad(t *testing.T) {
 	}
 	p := NewParser()
 	for _, input := range inputs {
-		_, err := p.Parse([]byte(input))
+		_, err := p.Parse(t.Context(), []byte(input))
 		require.Error(t, err, "Parse should fail for '%s'", input)
 	}
 }
@@ -149,7 +149,7 @@ func TestParseNamespace(t *testing.T) {
   <helium:child>foo</helium:child>
 </helium:root>`
 	p := NewParser()
-	doc, err := p.Parse([]byte(input))
+	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse should succeed for '%s'", input)
 
 	if pdebug.Enabled {
@@ -168,7 +168,7 @@ func TestParseNoBlanks(t *testing.T) {
 </root>`
 	p := NewParser()
 	p.SetOption(ParseNoBlanks)
-	doc, err := p.Parse([]byte(input))
+	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse should succeed")
 
 	// With ParseNoBlanks, blank-only text nodes between elements should be stripped.
@@ -186,7 +186,7 @@ func TestParseNoCDATA(t *testing.T) {
 
 	// Without ParseNoCDATA: tree should have a CDATA node
 	p1 := NewParser()
-	doc1, err := p1.Parse([]byte(input))
+	doc1, err := p1.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse should succeed")
 	root1 := findDocumentElement(doc1)
 	require.NotNil(t, root1)
@@ -197,7 +197,7 @@ func TestParseNoCDATA(t *testing.T) {
 	// With ParseNoCDATA: CDATA should be delivered as text
 	p2 := NewParser()
 	p2.SetOption(ParseNoCDATA)
-	doc2, err := p2.Parse([]byte(input))
+	doc2, err := p2.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse should succeed")
 	root2 := findDocumentElement(doc2)
 	require.NotNil(t, root2)
@@ -216,13 +216,13 @@ func TestParsePedantic(t *testing.T) {
 
 	// Without pedantic: should succeed
 	p1 := NewParser()
-	_, err := p1.Parse([]byte(input))
+	_, err := p1.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "without pedantic, relative URI should be accepted")
 
 	// With pedantic: should fail (relative URI)
 	p2 := NewParser()
 	p2.SetOption(ParsePedantic)
-	_, err = p2.Parse([]byte(input))
+	_, err = p2.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "with pedantic, relative URI should be rejected")
 }
 
@@ -235,14 +235,14 @@ func TestParseRecover(t *testing.T) {
 
 	// Without ParseRecover: error, no document
 	p1 := NewParser()
-	doc1, err := p1.Parse([]byte(input))
+	doc1, err := p1.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "malformed XML should fail")
 	require.Nil(t, doc1, "without recover, no document returned")
 
 	// With ParseRecover: error, but partial document returned
 	p2 := NewParser()
 	p2.SetOption(ParseRecover)
-	doc2, err := p2.Parse([]byte(input))
+	doc2, err := p2.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "malformed XML should still return error")
 	require.NotNil(t, doc2, "with recover, partial document should be returned")
 }
@@ -258,7 +258,7 @@ func TestDisableSAXRecoverContinuesParsing(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseRecover)
-	doc, err := p.Parse([]byte(input))
+	doc, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "malformed XML should return error")
 	require.NotNil(t, doc, "ParseRecover should return a partial document")
 
@@ -285,7 +285,7 @@ func TestDisableSAXCallbacksSuppressed(t *testing.T) {
 	p := NewParser()
 	p.SetSAXHandler(sh)
 	p.SetOption(ParseRecover)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err)
 
 	// "root" and "before" should have been delivered before the error.
@@ -304,7 +304,7 @@ func TestDisableSAXNoEffectWithoutRecover(t *testing.T) {
 </root>`
 
 	p := NewParser()
-	doc, err := p.Parse([]byte(input))
+	doc, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "malformed XML should fail")
 	require.Nil(t, doc, "without ParseRecover, no document should be returned")
 }
@@ -328,7 +328,7 @@ func TestParseExternalEntity(t *testing.T) {
 	p := NewParser()
 	p.SetSAXHandler(s)
 	p.SetOption(ParseNoEnt)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse with external entity should succeed")
 }
 
@@ -355,7 +355,7 @@ func TestParseDTDValidRequiredAttribute(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	doc, err := p.Parse([]byte(input))
+	doc, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "missing #REQUIRED attribute should fail validation")
 	require.NotNil(t, doc, "document should still be returned with validation error")
 
@@ -376,7 +376,7 @@ func TestParseDTDValidRequiredPresent(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
 
@@ -391,7 +391,7 @@ func TestParseDTDValidFixedMismatch(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "#FIXED attribute value mismatch should fail")
 
 	ve, ok := err.(*ValidationError)
@@ -410,7 +410,7 @@ func TestParseDTDValidFixedCorrect(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
 
@@ -425,7 +425,7 @@ func TestParseDTDValidEmptyElement(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "EMPTY element with content should fail")
 
 	ve, ok := err.(*ValidationError)
@@ -445,7 +445,7 @@ func TestParseDTDValidElementContent(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
 
@@ -461,7 +461,7 @@ func TestParseDTDValidElementContentMismatch(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "wrong element order should fail content model")
 }
 
@@ -476,7 +476,7 @@ func TestParseDTDValidMixedContent(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
 
@@ -492,7 +492,7 @@ func TestParseDTDValidMixedContentBadChild(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "<b> not allowed in mixed content (a)")
 }
 
@@ -507,7 +507,7 @@ func TestParseDTDValidNoFlag(t *testing.T) {
 
 	p := NewParser()
 	// Don't set ParseDTDValid
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "without ParseDTDValid, validation should not run")
 }
 
@@ -523,7 +523,7 @@ func TestParseDTDValidChoiceContent(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
 
@@ -538,7 +538,7 @@ func TestParseDTDValidRepeatContent(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
 
@@ -553,7 +553,7 @@ func TestParseDTDValidRepeatContentEmpty(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "(a)+ requires at least one <a>")
 }
 
@@ -598,7 +598,7 @@ func TestParseDTDValidIDUnique(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
 
@@ -613,7 +613,7 @@ func TestParseDTDValidIDDuplicate(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "duplicate ID should fail")
 	require.Contains(t, err.Error(), "duplicate ID")
 }
@@ -631,7 +631,7 @@ func TestParseDTDValidIDRefValid(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
 
@@ -648,7 +648,7 @@ func TestParseDTDValidIDRefMissing(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "IDREF to missing ID should fail")
 	require.Contains(t, err.Error(), "unknown ID")
 }
@@ -666,7 +666,7 @@ func TestParseDTDValidIDRefsValid(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
 
@@ -683,20 +683,20 @@ func TestParseDTDValidIDRefsMissing(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "IDREFS with missing ref should fail")
 	require.Contains(t, err.Error(), "unknown ID")
 }
 
 func TestParseInNodeContext(t *testing.T) {
 	t.Run("basic fragment", func(t *testing.T) {
-		doc, err := Parse([]byte(`<root/>`))
+		doc, err := Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
 		require.NotNil(t, root)
 
-		result, err := ParseInNodeContext(root, []byte(`<child/>`))
+		result, err := ParseInNodeContext(t.Context(), root, []byte(`<child/>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, ElementNode, result.Type())
@@ -705,11 +705,11 @@ func TestParseInNodeContext(t *testing.T) {
 	})
 
 	t.Run("multiple sibling nodes", func(t *testing.T) {
-		doc, err := Parse([]byte(`<root/>`))
+		doc, err := Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		result, err := ParseInNodeContext(root, []byte(`<a/><b/>text`))
+		result, err := ParseInNodeContext(t.Context(), root, []byte(`<a/><b/>text`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, "a", result.Name())
@@ -725,11 +725,11 @@ func TestParseInNodeContext(t *testing.T) {
 	})
 
 	t.Run("namespace inheritance", func(t *testing.T) {
-		doc, err := Parse([]byte(`<root xmlns:ns="http://example.com/ns"><child/></root>`))
+		doc, err := Parse(t.Context(), []byte(`<root xmlns:ns="http://example.com/ns"><child/></root>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		result, err := ParseInNodeContext(root, []byte(`<ns:item>hello</ns:item>`))
+		result, err := ParseInNodeContext(t.Context(), root, []byte(`<ns:item>hello</ns:item>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, ElementNode, result.Type())
@@ -740,7 +740,7 @@ func TestParseInNodeContext(t *testing.T) {
 	})
 
 	t.Run("nested namespace inheritance", func(t *testing.T) {
-		doc, err := Parse([]byte(`<root xmlns:a="http://a.example.com"><middle xmlns:b="http://b.example.com"><child/></middle></root>`))
+		doc, err := Parse(t.Context(), []byte(`<root xmlns:a="http://a.example.com"><middle xmlns:b="http://b.example.com"><child/></middle></root>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
@@ -748,7 +748,7 @@ func TestParseInNodeContext(t *testing.T) {
 		require.NotNil(t, middle)
 
 		// Parse fragment in context of middle — should see both a: and b: prefixes
-		result, err := ParseInNodeContext(middle, []byte(`<a:x/><b:y/>`))
+		result, err := ParseInNodeContext(t.Context(), middle, []byte(`<a:x/><b:y/>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, "a:x", result.Name())
@@ -758,28 +758,28 @@ func TestParseInNodeContext(t *testing.T) {
 	})
 
 	t.Run("fragment with own namespaces", func(t *testing.T) {
-		doc, err := Parse([]byte(`<root/>`))
+		doc, err := Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		result, err := ParseInNodeContext(root, []byte(`<ns:item xmlns:ns="http://example.com/ns">hello</ns:item>`))
+		result, err := ParseInNodeContext(t.Context(), root, []byte(`<ns:item xmlns:ns="http://example.com/ns">hello</ns:item>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, "ns:item", result.Name())
 	})
 
 	t.Run("document as context", func(t *testing.T) {
-		doc, err := Parse([]byte(`<root/>`))
+		doc, err := Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
-		result, err := ParseInNodeContext(doc, []byte(`<elem/>`))
+		result, err := ParseInNodeContext(t.Context(), doc, []byte(`<elem/>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, "elem", result.Name())
 	})
 
 	t.Run("non-element context walks up", func(t *testing.T) {
-		doc, err := Parse([]byte(`<root xmlns:ns="http://example.com/ns"><child>some text</child></root>`))
+		doc, err := Parse(t.Context(), []byte(`<root xmlns:ns="http://example.com/ns"><child>some text</child></root>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
@@ -790,14 +790,14 @@ func TestParseInNodeContext(t *testing.T) {
 		require.Equal(t, TextNode, textNode.Type())
 
 		// Parse in context of text node — should walk up to <child> then <root>
-		result, err := ParseInNodeContext(textNode, []byte(`<ns:item/>`))
+		result, err := ParseInNodeContext(t.Context(), textNode, []byte(`<ns:item/>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, "ns:item", result.Name())
 	})
 
 	t.Run("DTD entity resolution", func(t *testing.T) {
-		doc, err := Parse([]byte(`<?xml version="1.0"?>
+		doc, err := Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <!DOCTYPE doc [
   <!ENTITY greeting "hello world">
 ]>
@@ -807,7 +807,7 @@ func TestParseInNodeContext(t *testing.T) {
 		root := doc.DocumentElement()
 		p := NewParser()
 		p.SetOption(ParseNoEnt)
-		result, err := p.ParseInNodeContext(root, []byte(`<item>&greeting;</item>`))
+		result, err := p.ParseInNodeContext(t.Context(), root, []byte(`<item>&greeting;</item>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, "item", result.Name())
@@ -816,26 +816,26 @@ func TestParseInNodeContext(t *testing.T) {
 	})
 
 	t.Run("empty fragment", func(t *testing.T) {
-		doc, err := Parse([]byte(`<root/>`))
+		doc, err := Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		result, err := ParseInNodeContext(root, []byte(``))
+		result, err := ParseInNodeContext(t.Context(), root, []byte(``))
 		require.NoError(t, err)
 		require.Nil(t, result)
 	})
 
 	t.Run("nil node", func(t *testing.T) {
-		_, err := ParseInNodeContext(nil, []byte(`<child/>`))
+		_, err := ParseInNodeContext(t.Context(), nil, []byte(`<child/>`))
 		require.Error(t, err)
 	})
 
 	t.Run("original document preserved", func(t *testing.T) {
-		doc, err := Parse([]byte(`<root><existing/></root>`))
+		doc, err := Parse(t.Context(), []byte(`<root><existing/></root>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		_, err = ParseInNodeContext(root, []byte(`<new/>`))
+		_, err = ParseInNodeContext(t.Context(), root, []byte(`<new/>`))
 		require.NoError(t, err)
 
 		// Original document should still have its children
@@ -867,7 +867,7 @@ func TestParseNoXXE(t *testing.T) {
 	p := NewParser()
 	p.SetSAXHandler(s)
 	p.SetOption(ParseNoEnt | ParseNoXXE)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	// With ParseNoXXE, external entity loading is blocked.
 	// The entity reference remains unresolved; no error but external content not loaded.
 	_ = err
@@ -891,7 +891,7 @@ func TestParseNoXXEExternalDTD(t *testing.T) {
 	p := NewParser()
 	p.SetSAXHandler(s)
 	p.SetOption(ParseDTDLoad | ParseNoXXE)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	_ = err
 	require.False(t, resolved, "external DTD should not be loaded with ParseNoXXE")
 }
@@ -932,7 +932,7 @@ func TestEntityBoundaryElementDecl(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDLoad)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "boundary-violating PE should cause a parse error")
 }
 
@@ -949,7 +949,7 @@ func TestEntityBoundaryAttributeListDecl(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDLoad)
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "boundary-violating PE should cause a parse error")
 }
 
@@ -965,7 +965,7 @@ func TestEntityBoundaryWellNestedPE(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDLoad)
-	doc, err := p.Parse([]byte(input))
+	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 	require.NotNil(t, doc)
 }
@@ -1006,7 +1006,7 @@ func TestConditionalSectionInclude(t *testing.T) {
 
 	p := NewParser()
 	p.SetOption(ParseDTDValid)
-	doc, err := p.Parse([]byte(input))
+	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "INCLUDE conditional section should parse successfully")
 	require.NotNil(t, doc)
 
@@ -1027,7 +1027,7 @@ func TestConditionalSectionIgnore(t *testing.T) {
 <doc>hello</doc>`
 
 	p := NewParser()
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "IGNORE section content should be skipped")
 }
 
@@ -1042,7 +1042,7 @@ func TestConditionalSectionInternalSubsetPE(t *testing.T) {
 <doc>hello</doc>`
 
 	p := NewParser()
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "PE-expanded conditional section in internal subset should work")
 }
 
@@ -1056,7 +1056,7 @@ func TestConditionalSectionErrors(t *testing.T) {
 ]>
 <doc/>`
 		p := NewParser()
-		_, err := p.Parse([]byte(input))
+		_, err := p.Parse(t.Context(), []byte(input))
 		require.Error(t, err, "invalid keyword should fail")
 	})
 }
@@ -1069,7 +1069,7 @@ func TestConditionalSectionExternalDTD(t *testing.T) {
 	p := NewParser()
 	p.SetOption(ParseDTDLoad)
 	p.SetBaseURI(path)
-	doc, err := p.Parse(input)
+	doc, err := p.Parse(t.Context(), input)
 	require.NoError(t, err, "external DTD with conditional sections should parse")
 	require.NotNil(t, doc)
 
@@ -1090,7 +1090,7 @@ func TestXMLSpacePreserve(t *testing.T) {
 </root>`
 		p := NewParser()
 		p.SetOption(ParseNoBlanks)
-		doc, err := p.Parse([]byte(input))
+		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "Parse should succeed")
 
 		root := findDocumentElement(doc)
@@ -1114,7 +1114,7 @@ func TestXMLSpacePreserve(t *testing.T) {
 </root>`
 		p := NewParser()
 		p.SetOption(ParseNoBlanks)
-		doc, err := p.Parse([]byte(input))
+		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "Parse should succeed")
 
 		root := findDocumentElement(doc)
@@ -1149,7 +1149,7 @@ func TestXMLSpacePreserve(t *testing.T) {
 </root>`
 		p := NewParser()
 		p.SetOption(ParseNoBlanks)
-		doc, err := p.Parse([]byte(input))
+		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "Parse should succeed")
 
 		root := findDocumentElement(doc)

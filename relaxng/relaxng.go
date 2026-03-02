@@ -2,6 +2,7 @@
 package relaxng
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -29,7 +30,7 @@ func CompileFile(path string, opts ...CompileOption) (*Grammar, error) {
 	if err != nil {
 		return nil, err
 	}
-	doc, err := helium.Parse(data)
+	doc, err := helium.Parse(context.Background(), data)
 	if err != nil {
 		var pe helium.ErrParseError
 		if errors.As(err, &pe) {

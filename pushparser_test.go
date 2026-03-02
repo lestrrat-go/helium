@@ -27,11 +27,11 @@ func dumpDoc(t *testing.T, doc *Document) string {
 func TestPushParserSingleChunk(t *testing.T) {
 	input := []byte(testXML)
 
-	want, err := Parse(input)
+	want, err := Parse(t.Context(), input)
 	require.NoError(t, err)
 
 	p := NewParser()
-	pp := p.NewPushParser()
+	pp := p.NewPushParser(t.Context())
 	require.NoError(t, pp.Push(input))
 	got, err := pp.Close()
 	require.NoError(t, err)
@@ -41,13 +41,13 @@ func TestPushParserSingleChunk(t *testing.T) {
 func TestPushParserMultiChunk(t *testing.T) {
 	input := []byte(testXML)
 
-	want, err := Parse(input)
+	want, err := Parse(t.Context(), input)
 	require.NoError(t, err)
 
 	// Split at various positions: mid-tag, mid-attribute, mid-text
 	splits := []int{5, 15, 30, 50, 80}
 	p := NewParser()
-	pp := p.NewPushParser()
+	pp := p.NewPushParser(t.Context())
 
 	prev := 0
 	for _, pos := range splits {
@@ -69,11 +69,11 @@ func TestPushParserMultiChunk(t *testing.T) {
 func TestPushParserByteAtATime(t *testing.T) {
 	input := []byte(testXML)
 
-	want, err := Parse(input)
+	want, err := Parse(t.Context(), input)
 	require.NoError(t, err)
 
 	p := NewParser()
-	pp := p.NewPushParser()
+	pp := p.NewPushParser(t.Context())
 	for i := 0; i < len(input); i++ {
 		require.NoError(t, pp.Push(input[i:i+1]))
 	}
@@ -91,7 +91,7 @@ func TestPushParserSAXEvents(t *testing.T) {
 	wantHandler := newEventEmitter(&wantBuf)
 	p1 := NewParser()
 	p1.SetSAXHandler(wantHandler)
-	_, err := p1.Parse(input)
+	_, err := p1.Parse(t.Context(), input)
 	require.NoError(t, err)
 
 	// Capture SAX events from push parse
@@ -99,7 +99,7 @@ func TestPushParserSAXEvents(t *testing.T) {
 	gotHandler := newEventEmitter(&gotBuf)
 	p2 := NewParser()
 	p2.SetSAXHandler(gotHandler)
-	pp := p2.NewPushParser()
+	pp := p2.NewPushParser(t.Context())
 	require.NoError(t, pp.Push(input))
 	_, err = pp.Close()
 	require.NoError(t, err)
@@ -111,7 +111,7 @@ func TestPushParserMalformedXML(t *testing.T) {
 	input := []byte(`<?xml version="1.0"?><root><child>text</chld></root>`)
 
 	p := NewParser()
-	pp := p.NewPushParser()
+	pp := p.NewPushParser(t.Context())
 	require.NoError(t, pp.Push(input))
 	_, err := pp.Close()
 	require.Error(t, err)
@@ -121,7 +121,7 @@ func TestPushParserPushAfterError(t *testing.T) {
 	malformed := []byte(`<?xml version="1.0"?><root><bad`)
 
 	p := NewParser()
-	pp := p.NewPushParser()
+	pp := p.NewPushParser(t.Context())
 	require.NoError(t, pp.Push(malformed))
 
 	// Close the stream to trigger EOF in the parser, which should fail
@@ -135,7 +135,7 @@ func TestPushParserPushAfterError(t *testing.T) {
 
 func TestPushParserEmptyInput(t *testing.T) {
 	p := NewParser()
-	pp := p.NewPushParser()
+	pp := p.NewPushParser(t.Context())
 	_, err := pp.Close()
 	require.Error(t, err, "empty input should produce an error")
 }
@@ -143,11 +143,11 @@ func TestPushParserEmptyInput(t *testing.T) {
 func TestPushParserIOCopy(t *testing.T) {
 	input := []byte(testXML)
 
-	want, err := Parse(input)
+	want, err := Parse(t.Context(), input)
 	require.NoError(t, err)
 
 	p := NewParser()
-	pp := p.NewPushParser()
+	pp := p.NewPushParser(t.Context())
 	n, err := io.Copy(pp, bytes.NewReader(input))
 	require.NoError(t, err)
 	require.Equal(t, int64(len(input)), n)
@@ -161,7 +161,7 @@ func TestPushParserCloseIdempotent(t *testing.T) {
 	input := []byte(testXML)
 
 	p := NewParser()
-	pp := p.NewPushParser()
+	pp := p.NewPushParser(t.Context())
 	require.NoError(t, pp.Push(input))
 
 	doc1, err1 := pp.Close()
@@ -179,11 +179,11 @@ func TestPushParserWithDTD(t *testing.T) {
 ]>
 <doc><child>hello</child></doc>`)
 
-	want, err := Parse(input)
+	want, err := Parse(t.Context(), input)
 	require.NoError(t, err)
 
 	p := NewParser()
-	pp := p.NewPushParser()
+	pp := p.NewPushParser(t.Context())
 	require.NoError(t, pp.Push(input))
 
 	got, err := pp.Close()
@@ -197,11 +197,11 @@ func TestPushParserWithNamespaces(t *testing.T) {
   <x:child x:attr="val">text</x:child>
 </root>`)
 
-	want, err := Parse(input)
+	want, err := Parse(t.Context(), input)
 	require.NoError(t, err)
 
 	p := NewParser()
-	pp := p.NewPushParser()
+	pp := p.NewPushParser(t.Context())
 	require.NoError(t, pp.Push(input))
 
 	got, err := pp.Close()
@@ -216,12 +216,12 @@ func TestPushParserRealFile(t *testing.T) {
 		t.Skipf("test file not available: %v", err)
 	}
 
-	want, err := Parse(input)
+	want, err := Parse(t.Context(), input)
 	require.NoError(t, err)
 
 	// Push in 64-byte chunks
 	p := NewParser()
-	pp := p.NewPushParser()
+	pp := p.NewPushParser(t.Context())
 	for i := 0; i < len(input); i += 64 {
 		end := i + 64
 		if end > len(input) {

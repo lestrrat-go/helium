@@ -2,6 +2,7 @@ package examples_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
@@ -9,7 +10,7 @@ import (
 )
 
 func Example_c14n_canonicalize_writer() {
-	doc, err := helium.Parse([]byte(`<root b="2" a="1"><child/></root>`))
+	doc, err := helium.Parse(context.Background(), []byte(`<root b="2" a="1"><child/></root>`))
 	if err != nil {
 		fmt.Printf("parse failed: %s\n", err)
 		return

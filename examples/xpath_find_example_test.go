@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
@@ -8,7 +9,7 @@ import (
 )
 
 func Example_xpath_find() {
-	doc, err := helium.Parse([]byte(`<catalog><book id="1">Go</book><book id="2">XML</book><magazine/></catalog>`))
+	doc, err := helium.Parse(context.Background(), []byte(`<catalog><book id="1">Go</book><book id="2">XML</book><magazine/></catalog>`))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

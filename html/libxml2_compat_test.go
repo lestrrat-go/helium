@@ -108,7 +108,7 @@ func init() {
 // htmlEncodeEntities converts a byte slice to display form matching libxml2's
 // htmlEncodeEntities: ASCII printable chars pass through, &/</>  are entity-encoded,
 // non-ASCII chars are looked up by codepoint and displayed as &name; or &#num;.
-// quoteChar is additionally encoded (0 for none, '\'' for attribute values).
+// quoteChar is additionally encoded (0 for none, '\” for attribute values).
 // The output is truncated to outMax bytes (matching libxml2's outlen=30 buffer).
 func htmlEncodeEntities(data []byte, outMax int, quoteChar rune) string {
 	var out bytes.Buffer
@@ -156,7 +156,7 @@ func htmlEncodeEntities(data []byte, outMax int, quoteChar rune) string {
 }
 
 // htmlEncodeEntitiesAttr encodes attribute value for display (no length limit,
-// quote char '\'' is also encoded).
+// quote char '\” is also encoded).
 func htmlEncodeEntitiesAttr(data string) string {
 	return htmlEncodeEntities([]byte(data), len(data)*10, '\'')
 }
@@ -394,7 +394,7 @@ func TestLibxml2CompatHTMLSAX(t *testing.T) {
 
 			var buf bytes.Buffer
 			handler := newHTMLSAXEventEmitter(&buf)
-			err = html.ParseWithSAX(input, handler)
+			err = html.ParseWithSAX(t.Context(), input, handler)
 			require.NoError(t, err, "ParseWithSAX should succeed (file = %s)", name)
 
 			actual := buf.String()
@@ -477,7 +477,7 @@ func TestHTMLSerialization(t *testing.T) {
 				}
 			}()
 
-			doc, err := html.ParseFile(filepath.Join(dir, name))
+			doc, err := html.ParseFile(t.Context(), filepath.Join(dir, name))
 			require.NoError(t, err, "ParseFile should succeed (file = %s)", name)
 
 			var buf bytes.Buffer
@@ -694,7 +694,7 @@ func TestHTMLErrors(t *testing.T) {
 			require.NoError(t, err, "reading expected .err file")
 
 			handler, errors := newHTMLErrorCollector()
-			err = html.ParseWithSAX(input, handler)
+			err = html.ParseWithSAX(t.Context(), input, handler)
 			require.NoError(t, err, "ParseWithSAX should succeed (file = %s)", name)
 
 			actual := formatHTMLErrors(name, input, *errors)

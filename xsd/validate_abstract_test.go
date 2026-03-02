@@ -21,13 +21,13 @@ func TestAbstractTypeValidation(t *testing.T) {
 
 		instanceXML := `<root><value>hello</value></root>`
 
-		schemaDOC, err := helium.Parse([]byte(schemaXML))
+		schemaDOC, err := helium.Parse(t.Context(), []byte(schemaXML))
 		require.NoError(t, err)
 
 		schema, err := xsd.Compile(schemaDOC)
 		require.NoError(t, err)
 
-		doc, err := helium.Parse([]byte(instanceXML))
+		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 		require.NoError(t, err)
 
 		err = xsd.Validate(doc, schema)
@@ -59,13 +59,13 @@ func TestAbstractTypeValidation(t *testing.T) {
   <value>hello</value>
 </root>`
 
-		schemaDOC, err := helium.Parse([]byte(schemaXML))
+		schemaDOC, err := helium.Parse(t.Context(), []byte(schemaXML))
 		require.NoError(t, err)
 
 		schema, err := xsd.Compile(schemaDOC)
 		require.NoError(t, err)
 
-		doc, err := helium.Parse([]byte(instanceXML))
+		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 		require.NoError(t, err)
 
 		err = xsd.Validate(doc, schema)
@@ -90,13 +90,13 @@ func TestAbstractTypeValidation(t *testing.T) {
 		instanceXML := `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:type="TypeB"><b>hello</b></root>`
 
-		schemaDOC, err := helium.Parse([]byte(schemaXML))
+		schemaDOC, err := helium.Parse(t.Context(), []byte(schemaXML))
 		require.NoError(t, err)
 
 		schema, err := xsd.Compile(schemaDOC)
 		require.NoError(t, err)
 
-		doc, err := helium.Parse([]byte(instanceXML))
+		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 		require.NoError(t, err)
 
 		err = xsd.Validate(doc, schema)
@@ -117,13 +117,13 @@ func TestAbstractTypeValidation(t *testing.T) {
 		instanceXML := `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:type="NoSuchType"><a>hello</a></root>`
 
-		schemaDOC, err := helium.Parse([]byte(schemaXML))
+		schemaDOC, err := helium.Parse(t.Context(), []byte(schemaXML))
 		require.NoError(t, err)
 
 		schema, err := xsd.Compile(schemaDOC)
 		require.NoError(t, err)
 
-		doc, err := helium.Parse([]byte(instanceXML))
+		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 		require.NoError(t, err)
 
 		err = xsd.Validate(doc, schema)
@@ -144,13 +144,13 @@ func TestAbstractTypeValidation(t *testing.T) {
 		instanceXML := `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:type="TypeA"><a>hello</a></root>`
 
-		schemaDOC, err := helium.Parse([]byte(schemaXML))
+		schemaDOC, err := helium.Parse(t.Context(), []byte(schemaXML))
 		require.NoError(t, err)
 
 		schema, err := xsd.Compile(schemaDOC)
 		require.NoError(t, err)
 
-		doc, err := helium.Parse([]byte(instanceXML))
+		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 		require.NoError(t, err)
 
 		err = xsd.Validate(doc, schema)
@@ -179,13 +179,13 @@ func TestAbstractTypeValidation(t *testing.T) {
 		instanceXML := `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:type="RestrictedType"><a>hello</a></root>`
 
-		schemaDOC, err := helium.Parse([]byte(schemaXML))
+		schemaDOC, err := helium.Parse(t.Context(), []byte(schemaXML))
 		require.NoError(t, err)
 
 		schema, err := xsd.Compile(schemaDOC)
 		require.NoError(t, err)
 
-		doc, err := helium.Parse([]byte(instanceXML))
+		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 		require.NoError(t, err)
 
 		err = xsd.Validate(doc, schema)
@@ -204,13 +204,13 @@ func TestAbstractTypeValidation(t *testing.T) {
 
 		instanceXML := `<root><value>hello</value></root>`
 
-		schemaDOC, err := helium.Parse([]byte(schemaXML))
+		schemaDOC, err := helium.Parse(t.Context(), []byte(schemaXML))
 		require.NoError(t, err)
 
 		schema, err := xsd.Compile(schemaDOC)
 		require.NoError(t, err)
 
-		doc, err := helium.Parse([]byte(instanceXML))
+		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 		require.NoError(t, err)
 
 		err = xsd.Validate(doc, schema)

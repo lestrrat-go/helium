@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -393,7 +394,7 @@ func processInput(cfg *config, input namedInput, cat *catalog.Catalog, schema *x
 			p.SetCatalog(cat)
 		}
 
-		doc, err = p.Parse(buf)
+		doc, err = p.Parse(context.Background(), buf)
 		if cfg.timing {
 			fmt.Fprintf(os.Stderr, "Parsing took %s\n", time.Since(t0))
 		}
@@ -563,4 +564,3 @@ func evalXPath(cfg *config, doc *helium.Document, out io.Writer) int {
 	}
 	return exitOK
 }
-

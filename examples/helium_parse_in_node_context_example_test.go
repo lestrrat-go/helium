@@ -1,19 +1,20 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
 )
 
 func Example_helium_parse_in_node_context() {
-	doc, err := helium.Parse([]byte(`<root xmlns:ns="urn:ns"><existing/></root>`))
+	doc, err := helium.Parse(context.Background(), []byte(`<root xmlns:ns="urn:ns"><existing/></root>`))
 	if err != nil {
 		fmt.Printf("parse failed: %s\n", err)
 		return
 	}
 
-	n, err := helium.ParseInNodeContext(doc.DocumentElement(), []byte(`<ns:item>ok</ns:item>`))
+	n, err := helium.ParseInNodeContext(context.Background(), doc.DocumentElement(), []byte(`<ns:item>ok</ns:item>`))
 	if err != nil {
 		fmt.Printf("parse in context failed: %s\n", err)
 		return

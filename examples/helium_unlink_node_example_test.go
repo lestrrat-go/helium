@@ -2,13 +2,14 @@ package examples_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
 )
 
 func Example_helium_unlink_node() {
-	doc, err := helium.Parse([]byte(`<root><a/><b/></root>`))
+	doc, err := helium.Parse(context.Background(), []byte(`<root><a/><b/></root>`))
 	if err != nil {
 		fmt.Printf("parse failed: %s\n", err)
 		return

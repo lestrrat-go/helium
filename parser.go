@@ -2,6 +2,7 @@ package helium
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 
@@ -37,9 +38,9 @@ type Parser struct {
 
 // Parse parses XML from a byte slice and returns the resulting Document
 // (libxml2: xmlParseDoc / xmlParseMemory).
-func Parse(b []byte) (*Document, error) {
+func Parse(ctx context.Context, b []byte) (*Document, error) {
 	p := NewParser()
-	return p.Parse(b)
+	return p.Parse(ctx, b)
 }
 
 func NewParser() *Parser {
@@ -48,18 +49,18 @@ func NewParser() *Parser {
 	}
 }
 
-func (p *Parser) Parse(b []byte) (*Document, error) {
+func (p *Parser) Parse(ctx context.Context, b []byte) (*Document, error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("=== START Parser.Parse ===")
 		defer g.IRelease("=== END Parser.Parse ===")
 	}
 
-	ctx := &parserCtx{rawInput: b, baseURI: p.baseURI}
-	if err := ctx.init(p, bytes.NewReader(b)); err != nil {
+	pctx := &parserCtx{goCtx: ctx, rawInput: b, baseURI: p.baseURI}
+	if err := pctx.init(p, bytes.NewReader(b)); err != nil {
 		return nil, err
 	}
 	defer func() {
-		if err := ctx.release(); err != nil {
+		if err := pctx.release(); err != nil {
 			// Log error but don't override the main return error
 			if pdebug.Enabled {
 				pdebug.Printf("ctx.release() failed: %s", err)
@@ -67,73 +68,73 @@ func (p *Parser) Parse(b []byte) (*Document, error) {
 		}
 	}()
 
-	if err := ctx.parseDocument(); err != nil {
+	if err := pctx.parseDocument(); err != nil {
 		if errors.Is(err, errParserStopped) {
-			return ctx.doc, nil
+			return pctx.doc, nil
 		}
 		if p != nil && p.options.IsSet(ParseRecover) {
 			// ParseRecover: return the partial document along with the error
-			return ctx.doc, err
+			return pctx.doc, err
 		}
 		return nil, err
 	}
 
 	// DTD validation: run post-parse document validation when requested.
-	if p != nil && p.options.IsSet(ParseDTDValid) && ctx.doc != nil {
-		if ve := validateDocument(ctx.doc); ve != nil {
-			return ctx.doc, ve
+	if p != nil && p.options.IsSet(ParseDTDValid) && pctx.doc != nil {
+		if ve := validateDocument(pctx.doc); ve != nil {
+			return pctx.doc, ve
 		}
 	}
 
-	return ctx.doc, nil
+	return pctx.doc, nil
 }
 
 // ParseReader parses XML from an io.Reader and returns the resulting Document
 // (libxml2: xmlReadIO).
 // This is identical to Parse but reads from a stream instead of a byte slice.
 // EBCDIC encoding detection is not supported when parsing from a reader.
-func ParseReader(r io.Reader) (*Document, error) {
-	return NewParser().ParseReader(r)
+func ParseReader(ctx context.Context, r io.Reader) (*Document, error) {
+	return NewParser().ParseReader(ctx, r)
 }
 
 // ParseReader parses XML from an io.Reader and returns the resulting Document.
 // This is identical to Parse but reads from a stream instead of a byte slice.
 // EBCDIC encoding detection is not supported when parsing from a reader.
-func (p *Parser) ParseReader(r io.Reader) (*Document, error) {
+func (p *Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("=== START Parser.ParseReader ===")
 		defer g.IRelease("=== END Parser.ParseReader ===")
 	}
 
-	ctx := &parserCtx{baseURI: p.baseURI}
-	if err := ctx.init(p, r); err != nil {
+	pctx := &parserCtx{goCtx: ctx, baseURI: p.baseURI}
+	if err := pctx.init(p, r); err != nil {
 		return nil, err
 	}
 	defer func() {
-		if err := ctx.release(); err != nil {
+		if err := pctx.release(); err != nil {
 			if pdebug.Enabled {
 				pdebug.Printf("ctx.release() failed: %s", err)
 			}
 		}
 	}()
 
-	if err := ctx.parseDocument(); err != nil {
+	if err := pctx.parseDocument(); err != nil {
 		if errors.Is(err, errParserStopped) {
-			return ctx.doc, nil
+			return pctx.doc, nil
 		}
 		if p != nil && p.options.IsSet(ParseRecover) {
-			return ctx.doc, err
+			return pctx.doc, err
 		}
 		return nil, err
 	}
 
-	if p != nil && p.options.IsSet(ParseDTDValid) && ctx.doc != nil {
-		if ve := validateDocument(ctx.doc); ve != nil {
-			return ctx.doc, ve
+	if p != nil && p.options.IsSet(ParseDTDValid) && pctx.doc != nil {
+		if ve := validateDocument(pctx.doc); ve != nil {
+			return pctx.doc, ve
 		}
 	}
 
-	return ctx.doc, nil
+	return pctx.doc, nil
 }
 
 func (p *Parser) SetSAXHandler(s sax.SAX2Handler) {
@@ -171,8 +172,8 @@ func (p *Parser) SetCatalog(c icatalog.Resolver) {
 // DTD/entity context. Returns the first node of the parsed fragment list
 // (siblings linked via NextSibling). The returned nodes are not attached
 // to any parent.
-func ParseInNodeContext(node Node, data []byte) (Node, error) {
-	return NewParser().ParseInNodeContext(node, data)
+func ParseInNodeContext(ctx context.Context, node Node, data []byte) (Node, error) {
+	return NewParser().ParseInNodeContext(ctx, node, data)
 }
 
 // ParseInNodeContext parses an XML fragment in the context of an existing
@@ -180,7 +181,7 @@ func ParseInNodeContext(node Node, data []byte) (Node, error) {
 // DTD/entity context. Returns the first node of the parsed fragment list
 // (siblings linked via NextSibling). The returned nodes are not attached
 // to any parent.
-func (p *Parser) ParseInNodeContext(node Node, data []byte) (Node, error) {
+func (p *Parser) ParseInNodeContext(ctx context.Context, node Node, data []byte) (Node, error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("=== START Parser.ParseInNodeContext ===")
 		defer g.IRelease("=== END Parser.ParseInNodeContext ===")
@@ -213,7 +214,7 @@ found:
 		doc = NewDocument("1.0", "", StandaloneImplicitNo)
 	}
 
-	newctx := &parserCtx{}
+	newctx := &parserCtx{goCtx: ctx}
 	if err := newctx.init(p, bytes.NewReader(data)); err != nil {
 		return nil, err
 	}

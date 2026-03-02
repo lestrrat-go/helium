@@ -2,6 +2,7 @@ package helium
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -12,8 +13,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/lestrrat-go/helium/internal/encoding"
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
+	"github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 	"github.com/lestrrat-go/strcursor"
@@ -59,6 +60,7 @@ const (
 )
 
 type parserCtx struct {
+	goCtx   context.Context
 	options ParseOption
 	// ctx.encoding contains the explicit encoding. ctx.detectedEncoding
 	// contains the encoding as detected by inspecting BOM, etc.
@@ -93,15 +95,15 @@ type parserCtx struct {
 	depth             int
 	loadsubset        LoadSubsetOption
 	charBufferSize    int
-	baseURI           string             // document base URI for resolving external references
+	baseURI           string            // document base URI for resolving external references
 	catalog           icatalog.Resolver // XML catalog for entity resolution
-	elem              *Element         // current context element
+	elem              *Element          // current context element
 
-	nsTab    nsStack
-	nsNrTab  []int // number of ns bindings pushed per element (parallel to nodeTab)
-	doc      *Document
-	userData any
-	nodeTab  nodeStack
+	nsTab       nsStack
+	nsNrTab     []int // number of ns bindings pushed per element (parallel to nodeTab)
+	doc         *Document
+	userData    any
+	nodeTab     nodeStack
 	elemidx     int
 	sizeentcopy int64 // cumulative entity expansion bytes (non-entity-specific)
 	inputSize   int64 // total input document size
@@ -1158,7 +1160,7 @@ func (ctx *parserCtx) parseStartTag() error {
 			ctx.skipBlanks()
 			continue
 		} else if aprefix == XMLNsPrefix {
-			var u *url.URL      // predeclare, so we can use goto SkipNS
+			var u *url.URL         // predeclare, so we can use goto SkipNS
 			var existingURI string // predeclare, so we can use goto SkipNS
 
 			// <elem xmlns:foo="...">
