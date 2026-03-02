@@ -13,13 +13,13 @@ func Example_html_parse_with_sax() {
 	var sawTitle bool
 
 	handler := &html.SAXCallbacks{}
-	handler.StartElementHandler = html.StartElementFunc(func(name string, _ []html.Attribute) error {
+	handler.OnStartElement = html.StartElementFunc(func(name string, _ []html.Attribute) error {
 		if strings.EqualFold(name, "h1") {
 			sawH1 = true
 		}
 		return nil
 	})
-	handler.CharactersHandler = html.CharactersFunc(func(ch []byte) error {
+	handler.OnCharacters = html.CharactersFunc(func(ch []byte) error {
 		if strings.TrimSpace(string(ch)) == "Title" {
 			sawTitle = true
 		}

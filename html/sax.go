@@ -159,107 +159,107 @@ type SAXHandler interface {
 // The zero value is ready to use; nil handler fields are silently
 // skipped (no-op).
 type SAXCallbacks struct {
-	SetDocumentLocatorHandler    SetDocumentLocatorHandler
-	StartDocumentHandler         StartDocumentHandler
-	EndDocumentHandler           EndDocumentHandler
-	StartElementHandler          StartElementHandler
-	EndElementHandler            EndElementHandler
-	CharactersHandler            CharactersHandler
-	CDataBlockHandler            CDataBlockHandler
-	CommentHandler               CommentHandler
-	InternalSubsetHandler        InternalSubsetHandler
-	ProcessingInstructionHandler ProcessingInstructionHandler
-	IgnorableWhitespaceHandler   IgnorableWhitespaceHandler
-	ErrorHandler                 ErrorHandler
-	WarningHandler               WarningHandler
+	OnSetDocumentLocator    SetDocumentLocatorHandler
+	OnStartDocument         StartDocumentHandler
+	OnEndDocument           EndDocumentHandler
+	OnStartElement          StartElementHandler
+	OnEndElement            EndElementHandler
+	OnCharacters            CharactersHandler
+	OnCDataBlock            CDataBlockHandler
+	OnComment               CommentHandler
+	OnInternalSubset        InternalSubsetHandler
+	OnProcessingInstruction ProcessingInstructionHandler
+	OnIgnorableWhitespace   IgnorableWhitespaceHandler
+	OnError                 ErrorHandler
+	OnWarning               WarningHandler
 }
 
 func (s *SAXCallbacks) SetDocumentLocator(loc DocumentLocator) error {
-	if h := s.SetDocumentLocatorHandler; h != nil {
+	if h := s.OnSetDocumentLocator; h != nil {
 		return h.SetDocumentLocator(loc)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) StartDocument() error {
-	if h := s.StartDocumentHandler; h != nil {
+	if h := s.OnStartDocument; h != nil {
 		return h.StartDocument()
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) EndDocument() error {
-	if h := s.EndDocumentHandler; h != nil {
+	if h := s.OnEndDocument; h != nil {
 		return h.EndDocument()
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) StartElement(name string, attrs []Attribute) error {
-	if h := s.StartElementHandler; h != nil {
+	if h := s.OnStartElement; h != nil {
 		return h.StartElement(name, attrs)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) EndElement(name string) error {
-	if h := s.EndElementHandler; h != nil {
+	if h := s.OnEndElement; h != nil {
 		return h.EndElement(name)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) Characters(ch []byte) error {
-	if h := s.CharactersHandler; h != nil {
+	if h := s.OnCharacters; h != nil {
 		return h.Characters(ch)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) CDataBlock(value []byte) error {
-	if h := s.CDataBlockHandler; h != nil {
+	if h := s.OnCDataBlock; h != nil {
 		return h.CDataBlock(value)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) Comment(value []byte) error {
-	if h := s.CommentHandler; h != nil {
+	if h := s.OnComment; h != nil {
 		return h.Comment(value)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) InternalSubset(name, externalID, systemID string) error {
-	if h := s.InternalSubsetHandler; h != nil {
+	if h := s.OnInternalSubset; h != nil {
 		return h.InternalSubset(name, externalID, systemID)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) ProcessingInstruction(target, data string) error {
-	if h := s.ProcessingInstructionHandler; h != nil {
+	if h := s.OnProcessingInstruction; h != nil {
 		return h.ProcessingInstruction(target, data)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) IgnorableWhitespace(ch []byte) error {
-	if h := s.IgnorableWhitespaceHandler; h != nil {
+	if h := s.OnIgnorableWhitespace; h != nil {
 		return h.IgnorableWhitespace(ch)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) Error(err error) error {
-	if h := s.ErrorHandler; h != nil {
+	if h := s.OnError; h != nil {
 		return h.Error(err)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) Warning(err error) error {
-	if h := s.WarningHandler; h != nil {
+	if h := s.OnWarning; h != nil {
 		return h.Warning(err)
 	}
 	return ErrHandlerUnspecified
