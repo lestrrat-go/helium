@@ -1,24 +1,6 @@
 package xsd
 
-import (
-	"fmt"
-	"strings"
-)
-
-// SchemaError collects validation errors in libxml2-compatible format.
-type SchemaError struct {
-	errors []string
-}
-
-// Error returns all collected errors joined by newlines.
-func (e *SchemaError) Error() string {
-	return strings.Join(e.errors, "")
-}
-
-// Errors returns the individual error strings.
-func (e *SchemaError) Errors() []string {
-	return e.errors
-}
+import "fmt"
 
 // validityError formats a validation error in libxml2 format:
 //
