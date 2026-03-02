@@ -7,9 +7,9 @@ import (
 )
 
 func Example_helium_create_namespaced() {
-	// CreateDocument creates a minimal document with just an XML declaration
+	// NewDefaultDocument creates a minimal document with just an XML declaration
 	// (version="1.0", no encoding, no standalone).
-	doc := helium.CreateDocument()
+	doc := helium.NewDefaultDocument()
 
 	root, err := doc.CreateElement("feed")
 	if err != nil {

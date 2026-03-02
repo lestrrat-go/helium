@@ -50,7 +50,9 @@ type Document struct {
 	ids       map[string]*Element
 }
 
-func CreateDocument() *Document {
+// NewDefaultDocument creates a minimal user-built document with version "1.0",
+// no encoding, and implicit-no standalone.
+func NewDefaultDocument() *Document {
 	doc := NewDocument("1.0", "", StandaloneImplicitNo)
 	doc.properties |= DocUserBuilt
 	return doc

@@ -59,7 +59,7 @@ func TestGetElementByID(t *testing.T) {
 	t.Run("fallback tree walk for programmatic documents", func(t *testing.T) {
 		// Documents built without parsing have no ID table,
 		// so GetElementByID falls back to O(n) tree walk.
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		root, err := doc.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(root))

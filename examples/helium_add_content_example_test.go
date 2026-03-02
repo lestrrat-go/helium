@@ -7,7 +7,7 @@ import (
 )
 
 func Example_helium_add_content() {
-	doc := helium.CreateDocument()
+	doc := helium.NewDefaultDocument()
 
 	root, err := doc.CreateElement("msg")
 	if err != nil {
