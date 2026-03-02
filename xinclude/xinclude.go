@@ -376,7 +376,7 @@ func (p *processor) includeXMLWithXPointer(inc *helium.Element, uri string, xptr
 	targetDoc := inc.OwnerDocument()
 	var copies []helium.Node
 	for _, n := range nodes {
-		c, copyErr := xpointer.CopyNode(n, targetDoc)
+		c, copyErr := helium.CopyNode(n, targetDoc)
 		if copyErr != nil {
 			return fmt.Errorf("xi:include: copy failed: %w", copyErr)
 		}
