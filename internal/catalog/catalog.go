@@ -24,19 +24,19 @@ const (
 	PreferSystem        // prefer="system"
 )
 
-// EntryType identifies the kind of catalog entry.
+// EntryType identifies the kind of catalog entry (libxml2: xmlCatalogEntryType).
 type EntryType int
 
 const (
-	EntryPublic EntryType = iota
-	EntrySystem
-	EntryRewriteSystem
-	EntryDelegatePublic
-	EntryDelegateSystem
-	EntryURI
-	EntryRewriteURI
-	EntryDelegateURI
-	EntryNextCatalog
+	EntryPublic         EntryType = iota // (libxml2: XML_CATA_PUBLIC)
+	EntrySystem                          // (libxml2: XML_CATA_SYSTEM)
+	EntryRewriteSystem                   // (libxml2: XML_CATA_REWRITE_SYSTEM)
+	EntryDelegatePublic                  // (libxml2: XML_CATA_DELEGATE_PUBLIC)
+	EntryDelegateSystem                  // (libxml2: XML_CATA_DELEGATE_SYSTEM)
+	EntryURI                             // (libxml2: XML_CATA_URI)
+	EntryRewriteURI                      // (libxml2: XML_CATA_REWRITE_URI)
+	EntryDelegateURI                     // (libxml2: XML_CATA_DELEGATE_URI)
+	EntryNextCatalog                     // (libxml2: XML_CATA_NEXT_CATALOG)
 )
 
 // Entry represents a single catalog entry parsed from an XML catalog file.
