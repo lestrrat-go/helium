@@ -17,11 +17,11 @@ func Example_sax_count_elements() {
 
 	handler := sax.New()
 
-	// Only set StartElementNSHandler — we don't need end-element or
+	// Only set OnStartElementNS — we don't need end-element or
 	// character callbacks for simple counting.
 	// Wrap the function with sax.StartElementNSFunc to satisfy the
 	// sax.StartElementNS interface expected by the handler field.
-	handler.StartElementNSHandler = sax.StartElementNSFunc(func(_ sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	handler.OnStartElementNS = sax.StartElementNSFunc(func(_ sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		counts[localname]++
 		return nil
 	})

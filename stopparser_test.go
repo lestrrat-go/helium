@@ -16,7 +16,7 @@ func TestStopParserInCharacters(t *testing.T) {
 </root>`
 
 	s := sax.New()
-	s.CharactersHandler = sax.CharactersFunc(func(ctx sax.Context, ch []byte) error {
+	s.OnCharacters = sax.CharactersFunc(func(ctx sax.Context, ch []byte) error {
 		if string(ch) == "hello" {
 			StopParser(ctx)
 		}
@@ -40,7 +40,7 @@ func TestStopParserInStartElementNS(t *testing.T) {
 
 	var seen []string
 	s := sax.New()
-	s.StartElementNSHandler = sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	s.OnStartElementNS = sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		seen = append(seen, localname)
 		if localname == "target" {
 			StopParser(ctx)
@@ -67,7 +67,7 @@ func TestStopParserViaPushParser(t *testing.T) {
 </root>`
 
 	s := sax.New()
-	s.StartElementNSHandler = sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	s.OnStartElementNS = sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		if localname == "b" {
 			StopParser(ctx)
 		}
@@ -86,7 +86,7 @@ func TestStopParserInStartDocument(t *testing.T) {
 	const input = `<?xml version="1.0"?><root><child/></root>`
 
 	s := sax.New()
-	s.StartDocumentHandler = sax.StartDocumentFunc(func(ctx sax.Context) error {
+	s.OnStartDocument = sax.StartDocumentFunc(func(ctx sax.Context) error {
 		StopParser(ctx)
 		return nil
 	})
@@ -111,41 +111,41 @@ func TestStopParserReturnsPartialDoc(t *testing.T) {
 
 	// Wrap the tree builder so it builds the tree, but stop at <b>
 	wrapper := sax.New()
-	wrapper.SetDocumentLocatorHandler = sax.SetDocumentLocatorFunc(func(ctx sax.Context, loc sax.DocumentLocator) error {
+	wrapper.OnSetDocumentLocator = sax.SetDocumentLocatorFunc(func(ctx sax.Context, loc sax.DocumentLocator) error {
 		return tb.SetDocumentLocator(ctx, loc)
 	})
-	wrapper.StartDocumentHandler = sax.StartDocumentFunc(func(ctx sax.Context) error {
+	wrapper.OnStartDocument = sax.StartDocumentFunc(func(ctx sax.Context) error {
 		return tb.StartDocument(ctx)
 	})
-	wrapper.EndDocumentHandler = sax.EndDocumentFunc(func(ctx sax.Context) error {
+	wrapper.OnEndDocument = sax.EndDocumentFunc(func(ctx sax.Context) error {
 		return tb.EndDocument(ctx)
 	})
-	wrapper.StartElementNSHandler = sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	wrapper.OnStartElementNS = sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		if localname == "b" {
 			StopParser(ctx)
 			return nil
 		}
 		return tb.StartElementNS(ctx, localname, prefix, uri, namespaces, attrs)
 	})
-	wrapper.EndElementNSHandler = sax.EndElementNSFunc(func(ctx sax.Context, localname, prefix, uri string) error {
+	wrapper.OnEndElementNS = sax.EndElementNSFunc(func(ctx sax.Context, localname, prefix, uri string) error {
 		return tb.EndElementNS(ctx, localname, prefix, uri)
 	})
-	wrapper.CharactersHandler = sax.CharactersFunc(func(ctx sax.Context, ch []byte) error {
+	wrapper.OnCharacters = sax.CharactersFunc(func(ctx sax.Context, ch []byte) error {
 		return tb.Characters(ctx, ch)
 	})
-	wrapper.IgnorableWhitespaceHandler = sax.IgnorableWhitespaceFunc(func(ctx sax.Context, ch []byte) error {
+	wrapper.OnIgnorableWhitespace = sax.IgnorableWhitespaceFunc(func(ctx sax.Context, ch []byte) error {
 		return tb.IgnorableWhitespace(ctx, ch)
 	})
-	wrapper.CommentHandler = sax.CommentFunc(func(ctx sax.Context, value []byte) error {
+	wrapper.OnComment = sax.CommentFunc(func(ctx sax.Context, value []byte) error {
 		return tb.Comment(ctx, value)
 	})
-	wrapper.ProcessingInstructionHandler = sax.ProcessingInstructionFunc(func(ctx sax.Context, target, data string) error {
+	wrapper.OnProcessingInstruction = sax.ProcessingInstructionFunc(func(ctx sax.Context, target, data string) error {
 		return tb.ProcessingInstruction(ctx, target, data)
 	})
-	wrapper.CDataBlockHandler = sax.CDataBlockFunc(func(ctx sax.Context, value []byte) error {
+	wrapper.OnCDataBlock = sax.CDataBlockFunc(func(ctx sax.Context, value []byte) error {
 		return tb.CDataBlock(ctx, value)
 	})
-	wrapper.ReferenceHandler = sax.ReferenceFunc(func(ctx sax.Context, name string) error {
+	wrapper.OnReference = sax.ReferenceFunc(func(ctx sax.Context, name string) error {
 		return tb.Reference(ctx, name)
 	})
 
@@ -181,7 +181,7 @@ func TestStopParserViaParseReader(t *testing.T) {
 </root>`
 
 	s := sax.New()
-	s.StartElementNSHandler = sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	s.OnStartElementNS = sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		if localname == "b" {
 			StopParser(ctx)
 		}
