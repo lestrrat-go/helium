@@ -339,22 +339,25 @@ func (n node) Namespaces() []*Namespace {
 	return n.nsDefs
 }
 
-func (n *node) SetNamespace(prefix, uri string, activate ...bool) error {
+// DeclareNamespace declares a namespace on this node without making it the
+// node's active namespace (libxml2: xmlNewNs).
+func (n *node) DeclareNamespace(prefix, uri string) error {
 	ns, err := n.doc.CreateNamespace(prefix, uri)
 	if err != nil {
 		return err
 	}
+	n.nsDefs = append(n.nsDefs, ns)
+	return nil
+}
 
-	a := false
-	if len(activate) > 0 {
-		a = activate[0]
+// SetActiveNamespace declares a namespace and sets it as this node's active
+// namespace (libxml2: xmlSetNs).
+func (n *node) SetActiveNamespace(prefix, uri string) error {
+	ns, err := n.doc.CreateNamespace(prefix, uri)
+	if err != nil {
+		return err
 	}
-	if a {
-		n.ns = ns
-	} else {
-		n.nsDefs = append(n.nsDefs, ns)
-	}
-
+	n.ns = ns
 	return nil
 }
 

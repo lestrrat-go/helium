@@ -107,7 +107,7 @@ func TestLookupNSByHref(t *testing.T) {
 		doc := CreateDocument()
 		e, err := doc.CreateElement("root")
 		require.NoError(t, err)
-		require.NoError(t, e.SetNamespace("x", "http://example.com"))
+		require.NoError(t, e.DeclareNamespace("x", "http://example.com"))
 
 		ns := LookupNSByHref(e, "http://example.com")
 		require.NotNil(t, ns)
@@ -118,7 +118,7 @@ func TestLookupNSByHref(t *testing.T) {
 		doc := CreateDocument()
 		parent, err := doc.CreateElement("parent")
 		require.NoError(t, err)
-		require.NoError(t, parent.SetNamespace("x", "http://example.com"))
+		require.NoError(t, parent.DeclareNamespace("x", "http://example.com"))
 
 		child, err := doc.CreateElement("child")
 		require.NoError(t, err)
@@ -153,7 +153,7 @@ func TestLookupNSByPrefix(t *testing.T) {
 	doc := CreateDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
-	require.NoError(t, e.SetNamespace("x", "http://example.com"))
+	require.NoError(t, e.DeclareNamespace("x", "http://example.com"))
 
 	ns := LookupNSByPrefix(e, "x")
 	require.NotNil(t, ns)
@@ -351,8 +351,8 @@ func TestCopyNode(t *testing.T) {
 		src := CreateDocument()
 		root, err := src.CreateElement("root")
 		require.NoError(t, err)
-		require.NoError(t, root.SetNamespace("x", "http://example.com"))
-		require.NoError(t, root.SetNamespace("x", "http://example.com", true))
+		require.NoError(t, root.DeclareNamespace("x", "http://example.com"))
+		require.NoError(t, root.SetActiveNamespace("x", "http://example.com"))
 		require.NoError(t, src.AddChild(root))
 
 		dst := CreateDocument()

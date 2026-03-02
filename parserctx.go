@@ -1298,7 +1298,7 @@ func (ctx *parserCtx) parseStartTag() error {
 		return ctx.namespaceError(errors.New("namespace '" + prefix + "' not found"))
 	}
 	if nsuri != "" {
-		if err := elem.SetNamespace(prefix, nsuri, true); err != nil {
+		if err := elem.SetActiveNamespace(prefix, nsuri); err != nil {
 			return err
 		}
 	}

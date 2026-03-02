@@ -35,7 +35,7 @@ func copyElement(src *Element, doc *Document) (*Element, error) {
 	// Copy namespace declarations (nsDefs)
 	if nc, ok := Node(src).(NamespaceContainer); ok {
 		for _, ns := range nc.Namespaces() {
-			if err := elem.SetNamespace(ns.Prefix(), ns.URI()); err != nil {
+			if err := elem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
 				return nil, err
 			}
 			declaredPrefixes[ns.Prefix()] = true
@@ -46,12 +46,12 @@ func copyElement(src *Element, doc *Document) (*Element, error) {
 	if nsr, ok := Node(src).(Namespacer); ok {
 		if ns := nsr.Namespace(); ns != nil {
 			if ns.Prefix() != "" && !declaredPrefixes[ns.Prefix()] {
-				if err := elem.SetNamespace(ns.Prefix(), ns.URI()); err != nil {
+				if err := elem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
 					return nil, err
 				}
 				declaredPrefixes[ns.Prefix()] = true
 			}
-			if err := elem.SetNamespace(ns.Prefix(), ns.URI(), true); err != nil {
+			if err := elem.SetActiveNamespace(ns.Prefix(), ns.URI()); err != nil {
 				return nil, err
 			}
 		}

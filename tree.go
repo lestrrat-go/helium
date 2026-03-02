@@ -239,13 +239,13 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 	e.SetLine(ctx.LineNumber())
 
 	if uri != "" {
-		if err := e.SetNamespace(prefix, uri, true); err != nil {
+		if err := e.SetActiveNamespace(prefix, uri); err != nil {
 			return err
 		}
 	}
 
 	for _, ns := range namespaces {
-		if err := e.SetNamespace(ns.Prefix(), ns.URI(), false); err != nil {
+		if err := e.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
 			return err
 		}
 	}

@@ -105,8 +105,8 @@ func TestXpathResultToNameNamespace(t *testing.T) {
 		doc := helium.CreateDocument()
 		e, err := doc.CreateElement("item")
 		require.NoError(t, err)
-		require.NoError(t, e.SetNamespace("ns", "http://example.com"))
-		require.NoError(t, e.SetNamespace("ns", "http://example.com", true))
+		require.NoError(t, e.DeclareNamespace("ns", "http://example.com"))
+		require.NoError(t, e.SetActiveNamespace("ns", "http://example.com"))
 
 		r := &xpath.Result{
 			Type:    xpath.NodeSetResult,
