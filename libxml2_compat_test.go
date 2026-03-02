@@ -94,7 +94,7 @@ func TestLibxml2Compat(t *testing.T) {
 			}
 
 			var buf bytes.Buffer
-			d := helium.Writer{}
+			d := helium.NewWriter()
 			if err := d.WriteDoc(&buf, doc); err != nil {
 				t.Fatalf("dumping %s: %v", name, err)
 			}

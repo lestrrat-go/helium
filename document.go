@@ -88,7 +88,7 @@ func (d Document) XMLString(options ...WriteOption) (string, error) {
 }
 
 func (d *Document) XML(out io.Writer, options ...WriteOption) error {
-	return newWriter(options).WriteDoc(out, d)
+	return NewWriter(options...).WriteDoc(out, d)
 }
 
 func (d *Document) AddChild(cur Node) error {

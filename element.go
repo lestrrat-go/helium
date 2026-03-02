@@ -56,7 +56,7 @@ func (n Element) XMLString(options ...WriteOption) (string, error) {
 
 // XML serializes the element to w using the given options.
 func (n *Element) XML(out io.Writer, options ...WriteOption) error {
-	return newWriter(options).WriteNode(out, n)
+	return NewWriter(options...).WriteNode(out, n)
 }
 
 // AddChild adds a new child node to the end of the children nodes (libxml2: xmlAddChild).

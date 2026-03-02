@@ -1077,7 +1077,7 @@ func TestConditionalSectionExternalDTD(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	d := &Writer{}
+	d := NewWriter()
 	require.NoError(t, d.WriteDoc(&buf, doc))
 	require.Equal(t, string(expected), buf.String())
 }
