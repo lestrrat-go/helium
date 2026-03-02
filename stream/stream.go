@@ -83,8 +83,8 @@ func WithIndent(indent string) Option {
 	return func(w *Writer) { w.indent = indent }
 }
 
-// WithQuoteChar sets the attribute value quote character. Must be '"' or '\”.
-// Default is '"'.
+// WithQuoteChar sets the attribute value quote character. Must be '”' or '\'';
+// any other value is silently ignored. Default is '”'.
 func WithQuoteChar(q byte) Option {
 	return func(w *Writer) {
 		if q == '\'' || q == '"' {
@@ -1102,7 +1102,8 @@ func (w *Writer) WriteDTDNotation(name, pubid, sysid string) error {
 
 // --- Flush ---
 
-// Flush flushes any buffered data to the underlying writer.
+// Flush delegates to the underlying writer's Flush method if it
+// implements one (e.g. *bufio.Writer). It is a no-op otherwise.
 func (w *Writer) Flush() error {
 	if w.err != nil {
 		return w.err
