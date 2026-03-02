@@ -35,7 +35,7 @@ func validateIDConstraints(elem *helium.Element, edecl *ElementDecl, schema *Sch
 
 	for _, idc := range edecl.IDCs {
 		// Use the schema's namespace context for XPath evaluation.
-		nsCtx := &xpath.Context{Namespaces: idc.Namespaces}
+		nsCtx := xpath.NewContext(xpath.WithNamespaces(idc.Namespaces))
 		table, err := evaluateIDC(elem, idc, nsCtx)
 		if err != nil {
 			continue

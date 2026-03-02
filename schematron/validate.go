@@ -14,9 +14,9 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 	var out strings.Builder
 	valid := true
 
-	xctx := &xpath.Context{
-		Namespaces: schema.namespaces,
-	}
+	xctx := xpath.NewContext(
+		xpath.WithNamespaces(schema.namespaces),
+	)
 
 	for _, pat := range schema.patterns {
 		for _, r := range pat.rules {
@@ -40,13 +40,13 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 				ruleCtx := xctx
 				if len(r.lets) > 0 {
 					vars := make(map[string]any)
-					for k, v := range xctx.Variables {
+					for k, v := range xctx.Variables() {
 						vars[k] = v
 					}
-					ruleCtx = &xpath.Context{
-						Namespaces: xctx.Namespaces,
-						Variables:  vars,
-					}
+					ruleCtx = xpath.NewContext(
+						xpath.WithNamespaces(xctx.Namespaces()),
+						xpath.WithVariables(vars),
+					)
 					for _, lb := range r.lets {
 						letResult, err := lb.expr.EvaluateWith(node, ruleCtx)
 						if err == nil {
