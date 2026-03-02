@@ -87,7 +87,7 @@ func TestHeliumLintGolden(t *testing.T) {
 
 		// Generate output using helium.Writer like heliumlint does
 		var output bytes.Buffer
-		d := helium.Writer{}
+		d := helium.NewWriter()
 		require.NoError(t, d.WriteDoc(&output, doc))
 
 		actual := output.String()

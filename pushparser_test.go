@@ -19,7 +19,7 @@ const testXML = `<?xml version="1.0"?>
 func dumpDoc(t *testing.T, doc *Document) string {
 	t.Helper()
 	var buf bytes.Buffer
-	var d Writer
+	d := NewWriter()
 	require.NoError(t, d.WriteDoc(&buf, doc))
 	return buf.String()
 }

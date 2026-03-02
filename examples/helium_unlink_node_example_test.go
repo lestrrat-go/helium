@@ -19,7 +19,7 @@ func Example_helium_unlink_node() {
 	helium.UnlinkNode(a)
 
 	var buf bytes.Buffer
-	var d helium.Writer
+	d := helium.NewWriter()
 	if err := d.WriteNode(&buf, root); err != nil {
 		fmt.Printf("write failed: %s\n", err)
 		return

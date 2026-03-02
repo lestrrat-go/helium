@@ -226,68 +226,78 @@ type WriteOption func(*Writer)
 // is emitted on its own line with indentation.  Elements that contain only
 // text / entity-ref / CDATA children are kept inline (no extra whitespace).
 func WithFormat() WriteOption {
-	return func(d *Writer) { d.Format = true }
+	return func(d *Writer) { d.format = true }
 }
 
 // WithIndentString sets the string used for each indent level.
 // The default is two spaces ("  ").
 func WithIndentString(s string) WriteOption {
-	return func(d *Writer) { d.IndentString = s }
+	return func(d *Writer) { d.indentString = s }
 }
 
 // WithNoEmpty forces empty elements to be serialized as open+close tag
 // pairs (e.g., <br></br>) instead of self-closing tags (<br/>).
 // Mirrors libxml2's XML_SAVE_NO_EMPTY option.
 func WithNoEmpty() WriteOption {
-	return func(d *Writer) { d.NoEmpty = true }
+	return func(d *Writer) { d.noEmpty = true }
 }
 
 // WithNoDecl suppresses the <?xml ...?> declaration from the output.
 // Equivalent to libxml2's XML_SAVE_NO_DECL flag.
 func WithNoDecl() WriteOption {
-	return func(d *Writer) { d.NoDecl = true }
+	return func(d *Writer) { d.noDecl = true }
+}
+
+// WithSkipDTD omits DTD nodes from serialized output (libxml2: XML_SAVE_NO_DTD).
+func WithSkipDTD() WriteOption {
+	return func(d *Writer) { d.skipDTD = true }
 }
 
 // Writer serializes an XML document tree (libxml2: xmlSaveCtxt).
-// escapeNonASCII controls whether characters U+0080-U+00FF are emitted as
-// numeric character references (&#xNN;).  libxml2 only does this when the
-// output encoding is UTF-8; when an encoding handler is present the
-// characters pass through and the encoder converts them.
+//
+// All serialization behavior is configured via WriteOption functional options
+// passed to NewWriter:
+//
+//   - WithFormat: indented (pretty-printed) output
+//   - WithIndentString: string used for each indent level (default "  ")
+//   - WithSkipDTD: omit DTD nodes from output
+//   - WithNoEmpty: force open+close tags for empty elements
+//   - WithNoDecl: suppress the <?xml ...?> declaration
+//
+// The escapeNonASCII flag is set automatically by WriteDoc based on the
+// document's encoding: when the output encoding is UTF-8 characters
+// U+0080-U+00FF are emitted as numeric character references (&#xNN;);
+// when an encoding handler is present they pass through for re-encoding.
 type Writer struct {
-	// Format enables indented output when set to true.
-	Format bool
-	// IndentString is the string used for each indent level (default "  ").
-	IndentString string
-	// SkipDTD omits DTD nodes from output when set to true.
-	SkipDTD bool
-	// NoEmpty forces empty elements to use open+close tags instead of self-closing.
-	NoEmpty bool
-	// NoDecl suppresses the <?xml ...?> declaration.
-	NoDecl bool
-
+	format         bool
+	indentString   string
+	skipDTD        bool
+	noEmpty        bool
+	noDecl         bool
 	escapeNonASCII bool
 	isXHTML        bool
 	encoding       string // document encoding, used for XHTML meta injection
-	indent         int    // current indent depth (used when Format is true)
+	indent         int    // current indent depth (used when format is true)
 }
 
-func newWriter(options []WriteOption) *Writer {
+// NewWriter creates a Writer configured with the given options.
+func NewWriter(opts ...WriteOption) *Writer {
 	d := &Writer{}
-	for _, opt := range options {
+	for _, opt := range opts {
 		opt(d)
 	}
 	return d
 }
 
 func (d *Writer) indentStr() string {
-	if d.IndentString == "" {
+	if d.indentString == "" {
 		return "  "
 	}
-	return d.IndentString
+	return d.indentString
 }
 
 func (d *Writer) writeIndent(out io.Writer) {
-	if !d.Format || d.indent <= 0 {
+	if !d.format || d.indent <= 0 {
 		return
 	}
 	s := d.indentStr()
@@ -391,7 +401,7 @@ func (d *Writer) WriteDoc(out io.Writer, doc *Document) error {
 	}
 
 	for e := doc.FirstChild(); e != nil; e = e.NextSibling() {
-		if d.SkipDTD && e.Type() == DTDNode {
+		if d.skipDTD && e.Type() == DTDNode {
 			continue
 		}
 		if d.isXHTML && e.Type() == ElementNode {
@@ -462,20 +472,20 @@ func (d *Writer) dumpDTD(out io.Writer, n Node) error {
 
 	// Suppress formatting for DTD children, matching libxml2's
 	// xmlDtdDumpOutput which sets format=0, level=-1.
-	savedFormat := d.Format
+	savedFormat := d.format
 	savedIndent := d.indent
-	d.Format = false
+	d.format = false
 	d.indent = -1
 
 	for e := dtd.FirstChild(); e != nil; e = e.NextSibling() {
 		if err := d.WriteNode(out, e); err != nil {
-			d.Format = savedFormat
+			d.format = savedFormat
 			d.indent = savedIndent
 			return err
 		}
 	}
 
-	d.Format = savedFormat
+	d.format = savedFormat
 	d.indent = savedIndent
 
 	_, _ = io.WriteString(out, "]>")
@@ -863,7 +873,7 @@ func (d *Writer) WriteNode(out io.Writer, n Node) error {
 	var err error
 	switch n.Type() {
 	case DocumentNode:
-		if !d.NoDecl {
+		if !d.noDecl {
 			if err = d.dumpDocContent(out, n); err != nil {
 				return err
 			}
@@ -1016,7 +1026,7 @@ func (d *Writer) WriteNode(out io.Writer, n Node) error {
 		}
 
 		if child := e.FirstChild(); child == nil {
-			if d.NoEmpty {
+			if d.noEmpty {
 				_, _ = io.WriteString(out, "></")
 				_, _ = io.WriteString(out, name)
 				_, _ = io.WriteString(out, ">")
@@ -1030,23 +1040,23 @@ func (d *Writer) WriteNode(out io.Writer, n Node) error {
 	_, _ = io.WriteString(out, ">")
 
 	if child := n.FirstChild(); child != nil {
-		textOnly := d.Format && hasOnlyTextChildren(n)
-		if d.Format && !textOnly {
+		textOnly := d.format && hasOnlyTextChildren(n)
+		if d.format && !textOnly {
 			_, _ = io.WriteString(out, "\n")
 			d.indent++
 		}
 		for ; child != nil; child = child.NextSibling() {
-			if d.Format && !textOnly {
+			if d.format && !textOnly {
 				d.writeIndent(out)
 			}
 			if err := d.WriteNode(out, child); err != nil {
 				return err
 			}
-			if d.Format && !textOnly {
+			if d.format && !textOnly {
 				_, _ = io.WriteString(out, "\n")
 			}
 		}
-		if d.Format && !textOnly {
+		if d.format && !textOnly {
 			d.indent--
 			d.writeIndent(out)
 		}
@@ -1128,13 +1138,13 @@ func (d *Writer) dumpXHTMLNode(out io.Writer, n Node) error {
 		} else {
 			if addMeta {
 				_, _ = io.WriteString(out, ">")
-				if d.Format {
+				if d.format {
 					_, _ = io.WriteString(out, "\n")
 					d.indent++
 					d.writeIndent(out)
 				}
 				d.writeMetaContentType(out)
-				if d.Format {
+				if d.format {
 					_, _ = io.WriteString(out, "\n")
 					d.indent--
 					d.writeIndent(out)
@@ -1152,24 +1162,24 @@ func (d *Writer) dumpXHTMLNode(out io.Writer, n Node) error {
 
 	_, _ = io.WriteString(out, ">")
 
-	textOnly := d.Format && hasOnlyTextChildren(e)
-	if d.Format && !textOnly {
+	textOnly := d.format && hasOnlyTextChildren(e)
+	if d.format && !textOnly {
 		_, _ = io.WriteString(out, "\n")
 		d.indent++
 	}
 
 	if addMeta {
-		if d.Format && !textOnly {
+		if d.format && !textOnly {
 			d.writeIndent(out)
 		}
 		d.writeMetaContentType(out)
-		if d.Format && !textOnly {
+		if d.format && !textOnly {
 			_, _ = io.WriteString(out, "\n")
 		}
 	}
 
 	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
-		if d.Format && !textOnly {
+		if d.format && !textOnly {
 			d.writeIndent(out)
 		}
 		if child.Type() == ElementNode {
@@ -1181,12 +1191,12 @@ func (d *Writer) dumpXHTMLNode(out io.Writer, n Node) error {
 				return err
 			}
 		}
-		if d.Format && !textOnly {
+		if d.format && !textOnly {
 			_, _ = io.WriteString(out, "\n")
 		}
 	}
 
-	if d.Format && !textOnly {
+	if d.format && !textOnly {
 		d.indent--
 		d.writeIndent(out)
 	}
