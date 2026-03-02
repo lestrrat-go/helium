@@ -445,7 +445,7 @@ func matchTypeTest(test TypeTest, n helium.Node) bool {
 		return n.Type() == helium.TextNode || n.Type() == helium.CDATASectionNode
 	case NodeTestComment:
 		return n.Type() == helium.CommentNode
-	case NodeTestPI:
+	case NodeTestProcessingInstruction:
 		return n.Type() == helium.ProcessingInstructionNode
 	}
 	return false

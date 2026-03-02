@@ -72,7 +72,7 @@ const (
 	NodeTestNode NodeTestType = iota // node()
 	NodeTestText                     // text()
 	NodeTestComment                  // comment()
-	NodeTestPI                       // processing-instruction()
+	NodeTestProcessingInstruction    // processing-instruction()
 )
 
 // NameTest matches by qualified name. Local=="*" is a wildcard.
