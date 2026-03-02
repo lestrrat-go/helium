@@ -77,8 +77,8 @@ func TestHTMLPushParserSAXMode(t *testing.T) {
 		InternalSubsetHandler:        InternalSubsetFunc(func(name, eid, sid string) error { return nil }),
 		ProcessingInstructionHandler: ProcessingInstructionFunc(func(t, d string) error { return nil }),
 		IgnorableWhitespaceHandler:   IgnorableWhitespaceFunc(func(ch []byte) error { return nil }),
-		ErrorHandler:                 ErrorFunc(func(msg string, args ...interface{}) error { return nil }),
-		WarningHandler:               WarningFunc(func(msg string, args ...interface{}) error { return nil }),
+		ErrorHandler:                 ErrorFunc(func(err error) error { return nil }),
+		WarningHandler:               WarningFunc(func(err error) error { return nil }),
 		SetDocumentLocatorHandler:    SetDocumentLocatorFunc(func(loc DocumentLocator) error { return nil }),
 	}
 

@@ -116,7 +116,7 @@ func TestOptionsNoBlanks(t *testing.T) {
 func TestOptionsNoError(t *testing.T) {
 	var errorCalled bool
 	sax := &SAXCallbacks{
-		ErrorHandler: ErrorFunc(func(msg string, args ...interface{}) error {
+		ErrorHandler: ErrorFunc(func(err error) error {
 			errorCalled = true
 			return nil
 		}),
@@ -133,7 +133,7 @@ func TestOptionsNoError(t *testing.T) {
 func TestOptionsNoErrorDefault(t *testing.T) {
 	var errorCalled bool
 	sax := &SAXCallbacks{
-		ErrorHandler: ErrorFunc(func(msg string, args ...interface{}) error {
+		ErrorHandler: ErrorFunc(func(err error) error {
 			errorCalled = true
 			return nil
 		}),
@@ -149,7 +149,7 @@ func TestOptionsNoErrorDefault(t *testing.T) {
 func TestOptionsNoWarning(t *testing.T) {
 	var warningCalled bool
 	sax := &SAXCallbacks{
-		WarningHandler: WarningFunc(func(msg string, args ...interface{}) error {
+		WarningHandler: WarningFunc(func(err error) error {
 			warningCalled = true
 			return nil
 		}),
