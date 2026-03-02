@@ -10,7 +10,7 @@ import (
 func Example_html_new_push_parser_with_sax() {
 	var sawTitle bool
 	handler := &html.SAXCallbacks{}
-	handler.StartElementHandler = html.StartElementFunc(func(name string, _ []html.Attribute) error {
+	handler.OnStartElement = html.StartElementFunc(func(name string, _ []html.Attribute) error {
 		if strings.EqualFold(name, "h1") {
 			sawTitle = true
 		}

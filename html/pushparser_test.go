@@ -64,22 +64,22 @@ func TestHTMLPushParserSAXMode(t *testing.T) {
 
 	var elements []string
 	handler := &SAXCallbacks{
-		StartDocumentHandler: StartDocumentFunc(func() error { return nil }),
-		EndDocumentHandler:   EndDocumentFunc(func() error { return nil }),
-		StartElementHandler: StartElementFunc(func(name string, attrs []Attribute) error {
+		OnStartDocument: StartDocumentFunc(func() error { return nil }),
+		OnEndDocument:   EndDocumentFunc(func() error { return nil }),
+		OnStartElement: StartElementFunc(func(name string, attrs []Attribute) error {
 			elements = append(elements, name)
 			return nil
 		}),
-		EndElementHandler:            EndElementFunc(func(name string) error { return nil }),
-		CharactersHandler:            CharactersFunc(func(ch []byte) error { return nil }),
-		CommentHandler:               CommentFunc(func(value []byte) error { return nil }),
-		CDataBlockHandler:            CDataBlockFunc(func(value []byte) error { return nil }),
-		InternalSubsetHandler:        InternalSubsetFunc(func(name, eid, sid string) error { return nil }),
-		ProcessingInstructionHandler: ProcessingInstructionFunc(func(t, d string) error { return nil }),
-		IgnorableWhitespaceHandler:   IgnorableWhitespaceFunc(func(ch []byte) error { return nil }),
-		ErrorHandler:                 ErrorFunc(func(err error) error { return nil }),
-		WarningHandler:               WarningFunc(func(err error) error { return nil }),
-		SetDocumentLocatorHandler:    SetDocumentLocatorFunc(func(loc DocumentLocator) error { return nil }),
+		OnEndElement:            EndElementFunc(func(name string) error { return nil }),
+		OnCharacters:            CharactersFunc(func(ch []byte) error { return nil }),
+		OnComment:               CommentFunc(func(value []byte) error { return nil }),
+		OnCDataBlock:            CDataBlockFunc(func(value []byte) error { return nil }),
+		OnInternalSubset:        InternalSubsetFunc(func(name, eid, sid string) error { return nil }),
+		OnProcessingInstruction: ProcessingInstructionFunc(func(t, d string) error { return nil }),
+		OnIgnorableWhitespace:   IgnorableWhitespaceFunc(func(ch []byte) error { return nil }),
+		OnError:              ErrorFunc(func(err error) error { return nil }),
+		OnWarning:            WarningFunc(func(err error) error { return nil }),
+		OnSetDocumentLocator: SetDocumentLocatorFunc(func(loc DocumentLocator) error { return nil }),
 	}
 
 	pp := NewPushParserWithSAX(handler)
