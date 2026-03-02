@@ -149,12 +149,11 @@ func TestGoldenFiles(t *testing.T) {
 			rngFilename := "./test/relaxng/" + tc.rngBase
 			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 			grammar, err := relaxng.CompileFile(tc.rngPath, relaxng.WithSchemaFilename(rngFilename), relaxng.WithCompileErrorHandler(collector))
-			require.NoError(t, err, "schema compilation returned error for %s", tc.rngPath)
 			_ = collector.Close()
 			compileWarnings, compileErrors := partitionCompileErrors(collector.Errors())
 
 			var got string
-			if compileErrors != "" {
+			if err != nil {
 				got = compileWarnings + compileErrors
 				got += "Relax-NG schema " + rngFilename + " failed to compile\n"
 			} else {
@@ -264,7 +263,7 @@ func TestCheckCombine(t *testing.T) {
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = relaxng.Compile(doc, relaxng.WithCompileErrorHandler(collector))
-		require.NoError(t, err)
+		require.Error(t, err)
 		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
 		require.Contains(t, compileErrors, "Defines for foo use both 'interleave' and 'choice'")
@@ -284,7 +283,7 @@ func TestCheckCombine(t *testing.T) {
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = relaxng.Compile(doc, relaxng.WithCompileErrorHandler(collector))
-		require.NoError(t, err)
+		require.Error(t, err)
 		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
 		require.Contains(t, compileErrors, "Some defines for foo needs the combine attribute")
@@ -303,7 +302,7 @@ func TestCheckCombine(t *testing.T) {
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = relaxng.Compile(doc, relaxng.WithCompileErrorHandler(collector))
-		require.NoError(t, err)
+		require.Error(t, err)
 		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
 		require.Contains(t, compileErrors, "<start> use both 'interleave' and 'choice'")
@@ -322,7 +321,7 @@ func TestCheckCombine(t *testing.T) {
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = relaxng.Compile(doc, relaxng.WithCompileErrorHandler(collector))
-		require.NoError(t, err)
+		require.Error(t, err)
 		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
 		require.Contains(t, compileErrors, "Some <start> element miss the combine attribute")
@@ -357,8 +356,7 @@ func TestCheckRules(t *testing.T) {
 		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		_, err = relaxng.Compile(doc, relaxng.WithSchemaFilename("test.rng"), relaxng.WithCompileErrorHandler(collector))
-		require.NoError(t, err)
+		_, _ = relaxng.Compile(doc, relaxng.WithSchemaFilename("test.rng"), relaxng.WithCompileErrorHandler(collector))
 		_ = collector.Close()
 		compileWarnings, compileErrors = partitionCompileErrors(collector.Errors())
 		return compileErrors, compileWarnings

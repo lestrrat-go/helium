@@ -57,11 +57,12 @@ func CompileFile(path string, opts ...CompileOption) (*Grammar, error) {
 			}
 			errs := formatXMLParseError(filename, pe)
 			errs += rngParserError("xmlRelaxNGParse: could not load " + filename)
+			compileErr := helium.NewLeveledError(errs, helium.ErrorLevelFatal)
 			if cfg.errorHandler != nil {
-				cfg.errorHandler.Handle(context.TODO(), helium.NewLeveledError(errs, helium.ErrorLevelFatal))
+				cfg.errorHandler.Handle(context.TODO(), compileErr)
 			}
 			closeHandler()
-			return &Grammar{}, nil
+			return nil, compileErr
 		}
 		closeHandler()
 		return nil, err

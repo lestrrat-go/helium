@@ -56,10 +56,10 @@ func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*G
 
 	root := findDocumentElement(doc)
 	if root == nil {
-		msg := rngParserError("xmlRelaxNGParse: could not find root element")
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(msg, helium.ErrorLevelFatal))
+		compileErr := helium.NewLeveledError(rngParserError("xmlRelaxNGParse: could not find root element"), helium.ErrorLevelFatal)
+		c.errorHandler.Handle(context.TODO(), compileErr)
 		c.errorCount++
-		return c.grammar, nil
+		return nil, compileErr
 	}
 
 	c.pushGrammar()
@@ -80,6 +80,9 @@ func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*G
 	c.grammar.start = startPat
 	c.checkRules()
 
+	if c.errorCount > 0 {
+		return nil, fmt.Errorf("relaxng: schema compilation failed with %d error(s)", c.errorCount)
+	}
 	return c.grammar, nil
 }
 
