@@ -125,7 +125,7 @@ func evaluateNodeSet(t *testing.T, doc *helium.Document, expr string, nss map[st
 		Namespaces: nss,
 	}
 
-	result, err := xpath.EvaluateWithContext(doc, expr, ctx)
+	result, err := xpath.EvaluateWith(doc, expr, ctx)
 	require.NoError(t, err, "evaluating xpath: %s", expr)
 	require.Equal(t, xpath.NodeSetResult, result.Type, "xpath result is not a node set")
 	return result.NodeSet

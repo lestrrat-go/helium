@@ -20,7 +20,7 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 
 	for _, pat := range schema.patterns {
 		for _, r := range pat.rules {
-			result, err := r.contextExpr.EvaluateWithContext(doc, xctx)
+			result, err := r.contextExpr.EvaluateWith(doc, xctx)
 			if err != nil {
 				continue
 			}
@@ -48,7 +48,7 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 						Variables:  vars,
 					}
 					for _, lb := range r.lets {
-						letResult, err := lb.expr.EvaluateWithContext(node, ruleCtx)
+						letResult, err := lb.expr.EvaluateWith(node, ruleCtx)
 						if err == nil {
 							vars[lb.name] = xpathResultToValue(letResult)
 						}
@@ -56,7 +56,7 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 				}
 
 				for _, t := range r.tests {
-					testResult, err := t.compiled.EvaluateWithContext(node, ruleCtx)
+					testResult, err := t.compiled.EvaluateWith(node, ruleCtx)
 					if err != nil {
 						continue
 					}
@@ -118,7 +118,7 @@ func formatMessage(parts []messagePart, node helium.Node, xctx *xpath.Context, o
 			buf = append(buf, p.text...)
 		case namePart:
 			if p.expr != nil {
-				result, err := p.expr.EvaluateWithContext(node, xctx)
+				result, err := p.expr.EvaluateWith(node, xctx)
 				if err == nil {
 					buf = append(buf, xpathResultToName(result)...)
 				}
@@ -128,7 +128,7 @@ func formatMessage(parts []messagePart, node helium.Node, xctx *xpath.Context, o
 				// Compile-time error — should not happen (caught during compilation).
 				return string(buf)
 			}
-			result, err := p.expr.EvaluateWithContext(node, xctx)
+			result, err := p.expr.EvaluateWith(node, xctx)
 			if err != nil {
 				// Runtime XPath error — emit error line and stop processing.
 				fmt.Fprintf(out, "XPath error : %s\n", formatXPathError(err))

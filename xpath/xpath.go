@@ -188,8 +188,8 @@ func (e *Expression) Evaluate(node helium.Node) (*Result, error) {
 	return eval(ctx, e.ast)
 }
 
-// EvaluateWithContext evaluates with explicit namespace/variable bindings.
-func (e *Expression) EvaluateWithContext(node helium.Node, xctx *Context) (*Result, error) {
+// EvaluateWith evaluates with explicit namespace/variable bindings.
+func (e *Expression) EvaluateWith(node helium.Node, xctx *Context) (*Result, error) {
 	ctx := newEvalContext(node)
 	if xctx != nil {
 		ctx.namespaces = xctx.Namespaces
@@ -233,11 +233,11 @@ func Evaluate(node helium.Node, expr string) (*Result, error) {
 	return compiled.Evaluate(node)
 }
 
-// EvaluateWithContext evaluates with explicit namespace/variable bindings.
-func EvaluateWithContext(node helium.Node, expr string, xctx *Context) (*Result, error) {
+// EvaluateWith evaluates with explicit namespace/variable bindings.
+func EvaluateWith(node helium.Node, expr string, xctx *Context) (*Result, error) {
 	compiled, err := Compile(expr)
 	if err != nil {
 		return nil, err
 	}
-	return compiled.EvaluateWithContext(node, xctx)
+	return compiled.EvaluateWith(node, xctx)
 }
