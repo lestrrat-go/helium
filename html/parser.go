@@ -59,7 +59,11 @@ type parserLocator struct {
 
 func (l *parserLocator) LineNumber() int   { return l.p.line }
 func (l *parserLocator) ColumnNumber() int { return l.p.col }
+
+// GetPublicID returns the public identifier of the document being parsed (libxml2: xmlSAXLocator.getPublicId).
 func (l *parserLocator) GetPublicID() string { return "" }
+
+// GetSystemID returns the system identifier (URI/filename) of the document being parsed (libxml2: xmlSAXLocator.getSystemId).
 func (l *parserLocator) GetSystemID() string { return "" }
 
 func newParser(input []byte, sax SAXHandler, cfg parseConfig) *parser {

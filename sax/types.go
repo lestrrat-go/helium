@@ -11,10 +11,10 @@ type Context = any
 type DocumentLocator interface {
 	LineNumber() int
 	ColumnNumber() int
-	// GetPublicID returns the public identifier of the document being parsed.
+	// GetPublicID returns the public identifier of the document being parsed (libxml2: xmlSAXLocator.getPublicId).
 	// In practice this always returns an empty string (libxml2 always returns NULL).
 	GetPublicID() string
-	// GetSystemID returns the system identifier (URI/filename) of the document being parsed.
+	// GetSystemID returns the system identifier (URI/filename) of the document being parsed (libxml2: xmlSAXLocator.getSystemId).
 	GetSystemID() string
 }
 
