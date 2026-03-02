@@ -7,7 +7,7 @@ import (
 )
 
 func Example_helium_new_xinclude_marker() {
-	doc := helium.CreateDocument()
+	doc := helium.NewDefaultDocument()
 	n := helium.NewXIncludeMarker(doc, helium.XIncludeStartNode, "include")
 	fmt.Println(n.Type() == helium.XIncludeStartNode)
 	fmt.Println(n.Name())

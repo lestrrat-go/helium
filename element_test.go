@@ -63,7 +63,7 @@ func TestElementContent(t *testing.T) {
 }
 
 func TestGetAttribute(t *testing.T) {
-	doc := CreateDocument()
+	doc := NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 	require.NoError(t, e.SetAttribute("id", "123"))
@@ -82,7 +82,7 @@ func TestGetAttribute(t *testing.T) {
 }
 
 func TestHasAttribute(t *testing.T) {
-	doc := CreateDocument()
+	doc := NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 	require.NoError(t, e.SetAttribute("id", "123"))
@@ -92,7 +92,7 @@ func TestHasAttribute(t *testing.T) {
 }
 
 func TestGetAttributeNS(t *testing.T) {
-	doc := CreateDocument()
+	doc := NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 
@@ -111,7 +111,7 @@ func TestGetAttributeNS(t *testing.T) {
 }
 
 func TestGetAttributeNodeNS(t *testing.T) {
-	doc := CreateDocument()
+	doc := NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 
@@ -132,7 +132,7 @@ func TestGetAttributeNodeNS(t *testing.T) {
 }
 
 func TestRemoveAttribute(t *testing.T) {
-	doc := CreateDocument()
+	doc := NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 	require.NoError(t, e.SetAttribute("a", "1"))
@@ -163,7 +163,7 @@ func TestRemoveAttribute(t *testing.T) {
 }
 
 func TestRemoveAttributeNS(t *testing.T) {
-	doc := CreateDocument()
+	doc := NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 

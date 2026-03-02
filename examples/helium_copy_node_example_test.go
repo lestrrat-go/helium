@@ -14,7 +14,7 @@ func Example_helium_copy_node() {
 	}
 	item := src.DocumentElement().FirstChild()
 
-	dst := helium.CreateDocument()
+	dst := helium.NewDefaultDocument()
 	copied, err := helium.CopyNode(item, dst)
 	if err != nil {
 		fmt.Printf("copy failed: %s\n", err)

@@ -8,7 +8,7 @@ import (
 
 func TestDocumentElement(t *testing.T) {
 	t.Run("with element", func(t *testing.T) {
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		e, err := doc.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(e))
@@ -18,13 +18,13 @@ func TestDocumentElement(t *testing.T) {
 	})
 
 	t.Run("without element", func(t *testing.T) {
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		got := doc.DocumentElement()
 		require.Nil(t, got)
 	})
 
 	t.Run("PI before element", func(t *testing.T) {
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		pi, err := doc.CreatePI("target", "data")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(pi))
@@ -104,7 +104,7 @@ func TestUnlinkNode(t *testing.T) {
 
 func TestLookupNSByHref(t *testing.T) {
 	t.Run("found on element", func(t *testing.T) {
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		e, err := doc.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, e.DeclareNamespace("x", "http://example.com"))
@@ -115,7 +115,7 @@ func TestLookupNSByHref(t *testing.T) {
 	})
 
 	t.Run("found on ancestor", func(t *testing.T) {
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		parent, err := doc.CreateElement("parent")
 		require.NoError(t, err)
 		require.NoError(t, parent.DeclareNamespace("x", "http://example.com"))
@@ -130,7 +130,7 @@ func TestLookupNSByHref(t *testing.T) {
 	})
 
 	t.Run("xml namespace", func(t *testing.T) {
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		e, err := doc.CreateElement("root")
 		require.NoError(t, err)
 
@@ -140,7 +140,7 @@ func TestLookupNSByHref(t *testing.T) {
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		e, err := doc.CreateElement("root")
 		require.NoError(t, err)
 
@@ -150,7 +150,7 @@ func TestLookupNSByHref(t *testing.T) {
 }
 
 func TestLookupNSByPrefix(t *testing.T) {
-	doc := CreateDocument()
+	doc := NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 	require.NoError(t, e.DeclareNamespace("x", "http://example.com"))
@@ -169,7 +169,7 @@ func TestLookupNSByPrefix(t *testing.T) {
 
 func TestNodeGetBase(t *testing.T) {
 	t.Run("no base", func(t *testing.T) {
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		e, err := doc.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(e))
@@ -179,7 +179,7 @@ func TestNodeGetBase(t *testing.T) {
 	})
 
 	t.Run("direct xml:base", func(t *testing.T) {
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		e, err := doc.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(e))
@@ -192,7 +192,7 @@ func TestNodeGetBase(t *testing.T) {
 	})
 
 	t.Run("inherited xml:base", func(t *testing.T) {
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		parent, err := doc.CreateElement("parent")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(parent))
@@ -209,7 +209,7 @@ func TestNodeGetBase(t *testing.T) {
 	})
 
 	t.Run("relative resolution", func(t *testing.T) {
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		parent, err := doc.CreateElement("parent")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(parent))
@@ -229,7 +229,7 @@ func TestNodeGetBase(t *testing.T) {
 
 func TestDocumentURL(t *testing.T) {
 	t.Run("set and get URL", func(t *testing.T) {
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		require.Equal(t, "", doc.URL())
 
 		doc.SetURL("http://example.com/doc.xml")
@@ -237,7 +237,7 @@ func TestDocumentURL(t *testing.T) {
 	})
 
 	t.Run("URL used as base in NodeGetBase", func(t *testing.T) {
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		doc.SetURL("http://example.com/dir/doc.xml")
 
 		root, err := doc.CreateElement("root")
@@ -249,7 +249,7 @@ func TestDocumentURL(t *testing.T) {
 	})
 
 	t.Run("URL with relative xml:base", func(t *testing.T) {
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		doc.SetURL("http://example.com/dir/doc.xml")
 
 		root, err := doc.CreateElement("root")
@@ -275,7 +275,7 @@ func TestDocumentURL(t *testing.T) {
 
 func TestCopyNode(t *testing.T) {
 	t.Run("element with children and attrs", func(t *testing.T) {
-		src := CreateDocument()
+		src := NewDefaultDocument()
 		root, err := src.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, root.SetAttribute("id", "1"))
@@ -286,7 +286,7 @@ func TestCopyNode(t *testing.T) {
 		require.NoError(t, root.AddChild(child))
 		require.NoError(t, child.AddContent([]byte("hello")))
 
-		dst := CreateDocument()
+		dst := NewDefaultDocument()
 		copied, err := CopyNode(root, dst)
 		require.NoError(t, err)
 
@@ -301,11 +301,11 @@ func TestCopyNode(t *testing.T) {
 	})
 
 	t.Run("text node", func(t *testing.T) {
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		txt, err := doc.CreateText([]byte("hello"))
 		require.NoError(t, err)
 
-		dst := CreateDocument()
+		dst := NewDefaultDocument()
 		copied, err := CopyNode(txt, dst)
 		require.NoError(t, err)
 		require.Equal(t, TextNode, copied.Type())
@@ -313,11 +313,11 @@ func TestCopyNode(t *testing.T) {
 	})
 
 	t.Run("comment node", func(t *testing.T) {
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		c, err := doc.CreateComment([]byte("a comment"))
 		require.NoError(t, err)
 
-		dst := CreateDocument()
+		dst := NewDefaultDocument()
 		copied, err := CopyNode(c, dst)
 		require.NoError(t, err)
 		require.Equal(t, CommentNode, copied.Type())
@@ -325,11 +325,11 @@ func TestCopyNode(t *testing.T) {
 	})
 
 	t.Run("CDATA node", func(t *testing.T) {
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		cd, err := doc.CreateCDATASection([]byte("cdata content"))
 		require.NoError(t, err)
 
-		dst := CreateDocument()
+		dst := NewDefaultDocument()
 		copied, err := CopyNode(cd, dst)
 		require.NoError(t, err)
 		require.Equal(t, CDATASectionNode, copied.Type())
@@ -337,25 +337,25 @@ func TestCopyNode(t *testing.T) {
 	})
 
 	t.Run("PI node", func(t *testing.T) {
-		doc := CreateDocument()
+		doc := NewDefaultDocument()
 		pi, err := doc.CreatePI("target", "data")
 		require.NoError(t, err)
 
-		dst := CreateDocument()
+		dst := NewDefaultDocument()
 		copied, err := CopyNode(pi, dst)
 		require.NoError(t, err)
 		require.Equal(t, ProcessingInstructionNode, copied.Type())
 	})
 
 	t.Run("element with namespaces", func(t *testing.T) {
-		src := CreateDocument()
+		src := NewDefaultDocument()
 		root, err := src.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, root.DeclareNamespace("x", "http://example.com"))
 		require.NoError(t, root.SetActiveNamespace("x", "http://example.com"))
 		require.NoError(t, src.AddChild(root))
 
-		dst := CreateDocument()
+		dst := NewDefaultDocument()
 		copied, err := CopyNode(root, dst)
 		require.NoError(t, err)
 
@@ -366,7 +366,7 @@ func TestCopyNode(t *testing.T) {
 
 func TestCopyDoc(t *testing.T) {
 	t.Run("document with children", func(t *testing.T) {
-		src := CreateDocument()
+		src := NewDefaultDocument()
 		root, err := src.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, src.AddChild(root))
@@ -384,7 +384,7 @@ func TestCopyDoc(t *testing.T) {
 	})
 
 	t.Run("document with DTD", func(t *testing.T) {
-		src := CreateDocument()
+		src := NewDefaultDocument()
 		_, err := src.CreateInternalSubset("root", "", "root.dtd")
 		require.NoError(t, err)
 
@@ -399,7 +399,7 @@ func TestCopyDoc(t *testing.T) {
 	})
 
 	t.Run("DTD entities copied", func(t *testing.T) {
-		src := CreateDocument()
+		src := NewDefaultDocument()
 		dtd, err := src.CreateInternalSubset("root", "", "")
 		require.NoError(t, err)
 
@@ -488,7 +488,7 @@ func TestCopyDoc(t *testing.T) {
 	})
 
 	t.Run("DTD notations copied", func(t *testing.T) {
-		src := CreateDocument()
+		src := NewDefaultDocument()
 		dtd, err := src.CreateInternalSubset("root", "", "")
 		require.NoError(t, err)
 
@@ -512,7 +512,7 @@ func TestCopyDoc(t *testing.T) {
 	})
 
 	t.Run("DTD parameter entities copied", func(t *testing.T) {
-		src := CreateDocument()
+		src := NewDefaultDocument()
 		dtd, err := src.CreateInternalSubset("root", "", "")
 		require.NoError(t, err)
 

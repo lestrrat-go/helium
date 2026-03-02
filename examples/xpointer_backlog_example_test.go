@@ -14,7 +14,7 @@ func Example_xpointer_copy_node() {
 		return
 	}
 
-	dst := helium.CreateDocument()
+	dst := helium.NewDefaultDocument()
 	copied, err := xpointer.CopyNode(src.DocumentElement().FirstChild(), dst)
 	if err != nil {
 		fmt.Printf("copy failed: %s\n", err)

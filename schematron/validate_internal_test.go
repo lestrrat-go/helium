@@ -102,7 +102,7 @@ func TestCompileValueOfNoSelect(t *testing.T) {
 
 func TestXpathResultToNameNamespace(t *testing.T) {
 	t.Run("namespaced element", func(t *testing.T) {
-		doc := helium.CreateDocument()
+		doc := helium.NewDefaultDocument()
 		e, err := doc.CreateElement("item")
 		require.NoError(t, err)
 		require.NoError(t, e.DeclareNamespace("ns", "http://example.com"))
@@ -116,7 +116,7 @@ func TestXpathResultToNameNamespace(t *testing.T) {
 	})
 
 	t.Run("non-namespaced element", func(t *testing.T) {
-		doc := helium.CreateDocument()
+		doc := helium.NewDefaultDocument()
 		e, err := doc.CreateElement("item")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(e))
@@ -129,7 +129,7 @@ func TestXpathResultToNameNamespace(t *testing.T) {
 	})
 
 	t.Run("namespaced attribute", func(t *testing.T) {
-		doc := helium.CreateDocument()
+		doc := helium.NewDefaultDocument()
 		e, err := doc.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(e))
@@ -154,7 +154,7 @@ func TestXpathResultToNameNamespace(t *testing.T) {
 	})
 
 	t.Run("non-namespaced attribute", func(t *testing.T) {
-		doc := helium.CreateDocument()
+		doc := helium.NewDefaultDocument()
 		e, err := doc.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(e))

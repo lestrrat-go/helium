@@ -79,7 +79,7 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 }
 
 func TestDOMToXMLString(t *testing.T) {
-	doc := helium.CreateDocument()
+	doc := helium.NewDefaultDocument()
 	//	defer doc.Free()
 
 	root, err := doc.CreateElement("root")
@@ -95,7 +95,7 @@ func TestDOMToXMLString(t *testing.T) {
 }
 
 func TestDumpNsSkipsXmlPrefix(t *testing.T) {
-	doc := helium.CreateDocument()
+	doc := helium.NewDefaultDocument()
 	root, err := doc.CreateElement("root")
 	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
