@@ -23,7 +23,7 @@ func Compile(doc *helium.Document, opts ...CompileOption) (*Schema, error) {
 	schema, err := compileSchema(doc, cfg)
 	if cfg.errorHandler != nil {
 		if cl, ok := cfg.errorHandler.(io.Closer); ok {
-			cl.Close()
+			_ = cl.Close()
 		}
 	}
 	return schema, err
@@ -46,7 +46,7 @@ func CompileFile(path string, opts ...CompileOption) (*Schema, error) {
 	schema, compileErr := compileSchema(doc, cfg)
 	if cfg.errorHandler != nil {
 		if cl, ok := cfg.errorHandler.(io.Closer); ok {
-			cl.Close()
+			_ = cl.Close()
 		}
 	}
 	return schema, compileErr

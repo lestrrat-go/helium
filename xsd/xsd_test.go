@@ -186,7 +186,7 @@ func TestGoldenFiles(t *testing.T) {
 			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 			schema, err := xsd.CompileFile(tc.xsdPath, xsd.WithSchemaFilename(xsdFilename), xsd.WithCompileErrorHandler(collector))
 			require.NoError(t, err, "schema compilation failed for %s", tc.xsdPath)
-			collector.Close()
+			_ = collector.Close()
 			compileWarnings, compileErrors := partitionCompileErrors(collector.Errors())
 
 			var got string
@@ -360,7 +360,7 @@ func TestDefaultFixedValidation(t *testing.T) {
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		schema, err := xsd.Compile(xsdDoc, xsd.WithCompileErrorHandler(collector))
 		require.NoError(t, err, "schema compilation failed")
-		collector.Close()
+		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
 		require.Empty(t, compileErrors, "unexpected compile errors")
 
@@ -442,7 +442,7 @@ func TestMultipleAttributeErrors(t *testing.T) {
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		schema, err := xsd.Compile(xsdDoc, xsd.WithCompileErrorHandler(collector))
 		require.NoError(t, err, "schema compilation failed")
-		collector.Close()
+		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
 		require.Empty(t, compileErrors, "unexpected compile errors")
 
@@ -515,7 +515,7 @@ func TestRedefine(t *testing.T) {
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		schema, err := xsd.CompileFile(xsdPath, xsd.WithCompileErrorHandler(collector))
 		require.NoError(t, err, "schema compilation failed")
-		collector.Close()
+		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
 		require.Empty(t, compileErrors, "unexpected compile errors: %s", compileErrors)
 
@@ -725,7 +725,7 @@ func TestFacetConsistency(t *testing.T) {
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = xsd.Compile(xsdDoc, xsd.WithSchemaFilename("test.xsd"), xsd.WithCompileErrorHandler(collector))
 		require.NoError(t, err, "schema compilation failed")
-		collector.Close()
+		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
 		return compileErrors
 	}

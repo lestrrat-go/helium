@@ -23,7 +23,7 @@ func Example_helium_error_collector() {
 	collector.Handle(ctx, errors.New("second warning"))
 
 	// Close drains any buffered errors from the internal sink.
-	collector.Close()
+	_ = collector.Close()
 
 	// Errors() returns all collected errors.
 	for _, e := range collector.Errors() {
@@ -55,7 +55,7 @@ func Example_helium_error_collector_filter() {
 		Level: helium.ErrorLevelFatal,
 	})
 
-	warnings.Close()
+	_ = warnings.Close()
 
 	// Only the warning was collected; the fatal error was filtered out.
 	fmt.Printf("collected: %d\n", len(warnings.Errors()))

@@ -28,7 +28,7 @@ func Example_sink_new() {
 	s.Handle(ctx, "charlie")
 
 	// Close waits for all buffered items to be processed.
-	s.Close()
+	_ = s.Close()
 
 	for _, v := range collected {
 		fmt.Println(v)

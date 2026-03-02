@@ -142,7 +142,7 @@ func TestGoldenFiles(t *testing.T) {
 			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 			schema, err := schematron.CompileFile(tc.sctPath, schematron.WithCompileErrorHandler(collector))
 			require.NoError(t, err, "schema compilation failed for %s", tc.sctPath)
-			collector.Close()
+			_ = collector.Close()
 			compileWarnings, compileErrors := partitionCompileErrors(collector.Errors())
 
 			var got string

@@ -646,7 +646,7 @@ func (c *compiler) loadImport(location, _ string) error {
 		_ = err
 	}
 
-	subCollector.Close()
+	_ = subCollector.Close()
 
 	// Only propagate sub-compiler errors to the parent if the parent has no
 	// prior errors. This matches libxml2's behavior of stopping error reporting

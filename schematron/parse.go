@@ -69,7 +69,7 @@ func compileSchema(doc *helium.Document, cfg *compileConfig) (*Schema, error) {
 	}
 
 	if len(schema.patterns) == 0 {
-		eh.Handle(context.TODO(), helium.NewLeveledError(fmt.Sprintf("schema has no pattern element\n"), helium.ErrorLevelFatal))
+		eh.Handle(context.TODO(), helium.NewLeveledError("schema has no pattern element\n", helium.ErrorLevelFatal))
 	}
 
 	return schema, nil
@@ -99,7 +99,7 @@ func compilePattern(elem *helium.Element, schNS string, eh helium.ErrorHandler) 
 	}
 
 	if len(p.rules) == 0 {
-		eh.Handle(context.TODO(), helium.NewLeveledError(fmt.Sprintf("Pattern has no rule element\n"), helium.ErrorLevelFatal))
+		eh.Handle(context.TODO(), helium.NewLeveledError("Pattern has no rule element\n", helium.ErrorLevelFatal))
 	}
 
 	return p
@@ -108,7 +108,7 @@ func compilePattern(elem *helium.Element, schNS string, eh helium.ErrorHandler) 
 func compileRule(elem *helium.Element, schNS string, eh helium.ErrorHandler) *rule {
 	ctx := getAttr(elem, "context")
 	if ctx == "" {
-		eh.Handle(context.TODO(), helium.NewLeveledError(fmt.Sprintf("rule has an empty context attribute\n"), helium.ErrorLevelFatal))
+		eh.Handle(context.TODO(), helium.NewLeveledError("rule has an empty context attribute\n", helium.ErrorLevelFatal))
 		return nil
 	}
 
@@ -135,7 +135,7 @@ func compileRule(elem *helium.Element, schNS string, eh helium.ErrorHandler) *ru
 	}
 
 	if len(r.tests) == 0 {
-		eh.Handle(context.TODO(), helium.NewLeveledError(fmt.Sprintf("rule has no assert nor report element\n"), helium.ErrorLevelFatal))
+		eh.Handle(context.TODO(), helium.NewLeveledError("rule has no assert nor report element\n", helium.ErrorLevelFatal))
 	}
 
 	return r
@@ -245,7 +245,7 @@ func parseMessageElement(childElem *helium.Element, parts []messagePart, eh heli
 	case "value-of":
 		sel := getAttr(childElem, "select")
 		if sel == "" {
-			eh.Handle(context.TODO(), helium.NewLeveledError(fmt.Sprintf("value-of has no select attribute\n"), helium.ErrorLevelFatal))
+			eh.Handle(context.TODO(), helium.NewLeveledError("value-of has no select attribute\n", helium.ErrorLevelFatal))
 			return parts
 		}
 		compiled, err := xpath.Compile(sel)

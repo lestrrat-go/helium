@@ -21,7 +21,7 @@ func Compile(doc *helium.Document, opts ...CompileOption) (*Grammar, error) {
 	grammar, err := compileSchema(doc, "", cfg)
 	if cfg.errorHandler != nil {
 		if cl, ok := cfg.errorHandler.(io.Closer); ok {
-			cl.Close()
+			_ = cl.Close()
 		}
 	}
 	return grammar, err
@@ -37,7 +37,7 @@ func CompileFile(path string, opts ...CompileOption) (*Grammar, error) {
 	closeHandler := func() {
 		if cfg.errorHandler != nil {
 			if cl, ok := cfg.errorHandler.(io.Closer); ok {
-				cl.Close()
+				_ = cl.Close()
 			}
 		}
 	}

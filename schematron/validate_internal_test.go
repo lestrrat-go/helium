@@ -16,7 +16,7 @@ func compileTestSchema(t *testing.T, xml string) (*Schema, string) {
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 	schema, err := Compile(doc, WithCompileErrorHandler(collector))
 	require.NoError(t, err)
-	collector.Close()
+	_ = collector.Close()
 	var b strings.Builder
 	for _, e := range collector.Errors() {
 		b.WriteString(e.Error())

@@ -259,7 +259,7 @@ func catalogMissingAttr(ctx context.Context, eh helium.ErrorHandler, elemName, v
 // closeHandler closes the error handler if it implements io.Closer.
 func closeHandler(eh helium.ErrorHandler) {
 	if c, ok := eh.(io.Closer); ok {
-		c.Close()
+		_ = c.Close()
 	}
 }
 

@@ -15,7 +15,7 @@ func compileWithErrors(t *testing.T, schemaXML string) (*xsd.Schema, string) {
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 	schema, err := xsd.Compile(schemaDOC, xsd.WithSchemaFilename("test.xsd"), xsd.WithCompileErrorHandler(collector))
 	require.NoError(t, err)
-	collector.Close()
+	_ = collector.Close()
 	_, errs := partitionCompileErrors(collector.Errors())
 	return schema, errs
 }
