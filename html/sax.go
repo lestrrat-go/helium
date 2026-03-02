@@ -1,22 +1,19 @@
 package html
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/lestrrat-go/helium/sax"
+)
 
 // ErrHandlerUnspecified is returned when a SAXCallbacks method is called
 // but no handler is registered for that event. This is not a fatal error
 // and can be ignored if the caller only listens to specific events.
 var ErrHandlerUnspecified = errors.New("handler unspecified")
 
-// DocumentLocator provides document position information to SAX handlers.
-type DocumentLocator interface {
-	LineNumber() int
-	ColumnNumber() int
-	// GetPublicID returns the public identifier of the document being parsed (libxml2: xmlSAXLocator.getPublicId).
-	// In practice this always returns an empty string.
-	GetPublicID() string
-	// GetSystemID returns the system identifier (URI/filename) of the document being parsed (libxml2: xmlSAXLocator.getSystemId).
-	GetSystemID() string
-}
+// DocumentLocator is an alias for [sax.DocumentLocator].
+// (libxml2: xmlSAXLocator)
+type DocumentLocator = sax.DocumentLocator
 
 // Attribute represents an HTML element attribute (name=value pair).
 type Attribute struct {
