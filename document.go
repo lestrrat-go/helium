@@ -51,7 +51,7 @@ type Document struct {
 }
 
 // NewDefaultDocument creates a minimal user-built document with version "1.0",
-// no encoding, and implicit-no standalone.
+// no encoding, and implicit-no standalone (libxml2: xmlNewDoc).
 func NewDefaultDocument() *Document {
 	doc := NewDocument("1.0", "", StandaloneImplicitNo)
 	doc.properties |= DocUserBuilt
