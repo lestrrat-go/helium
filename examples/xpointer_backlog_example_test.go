@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpointer"
 )
 
 func Example_xpointer_copy_node() {
@@ -16,7 +15,7 @@ func Example_xpointer_copy_node() {
 	}
 
 	dst := helium.NewDefaultDocument()
-	copied, err := xpointer.CopyNode(src.DocumentElement().FirstChild(), dst)
+	copied, err := helium.CopyNode(src.DocumentElement().FirstChild(), dst)
 	if err != nil {
 		fmt.Printf("copy failed: %s\n", err)
 		return
