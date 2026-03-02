@@ -149,7 +149,12 @@ func TestGoldenFiles(t *testing.T) {
 
 				// Validate.
 				filename := "./test/relaxng/" + tc.xmlBase
-				got = grammar.CompileWarnings() + relaxng.Validate(doc, grammar, relaxng.WithFilename(filename))
+				err = relaxng.Validate(doc, grammar, relaxng.WithFilename(filename))
+				if err != nil {
+					got = grammar.CompileWarnings() + err.Error()
+				} else {
+					got = grammar.CompileWarnings() + filename + " validates\n"
+				}
 			}
 
 			if got == string(expected) {
@@ -184,8 +189,8 @@ func TestGetAttrWhitespace(t *testing.T) {
 	xmlDoc, err := helium.Parse(xmlData)
 	require.NoError(t, err)
 
-	result := relaxng.Validate(xmlDoc, grammar)
-	require.Contains(t, result, "validates", "valid document should validate")
+	err = relaxng.Validate(xmlDoc, grammar)
+	require.NoError(t, err, "valid document should validate")
 }
 
 func TestXmlBaseInclude(t *testing.T) {
@@ -199,8 +204,8 @@ func TestXmlBaseInclude(t *testing.T) {
 	xmlDoc, err := helium.Parse(xmlData)
 	require.NoError(t, err)
 
-	result := relaxng.Validate(xmlDoc, grammar)
-	require.Contains(t, result, "validates", "valid document should validate")
+	err = relaxng.Validate(xmlDoc, grammar)
+	require.NoError(t, err, "valid document should validate")
 }
 
 func TestXmlBaseExternalRef(t *testing.T) {
@@ -214,8 +219,8 @@ func TestXmlBaseExternalRef(t *testing.T) {
 	xmlDoc, err := helium.Parse(xmlData)
 	require.NoError(t, err)
 
-	result := relaxng.Validate(xmlDoc, grammar)
-	require.Contains(t, result, "validates", "valid document should validate")
+	err = relaxng.Validate(xmlDoc, grammar)
+	require.NoError(t, err, "valid document should validate")
 }
 
 func TestCheckCombine(t *testing.T) {

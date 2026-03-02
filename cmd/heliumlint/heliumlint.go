@@ -436,16 +436,13 @@ func processInput(cfg *config, input namedInput, cat *catalog.Catalog, schema *x
 		if cfg.timing {
 			t0 = time.Now()
 		}
-		result := xsd.Validate(doc, schema)
+		err := xsd.Validate(doc, schema)
 		if cfg.timing {
 			fmt.Fprintf(os.Stderr, "Validating took %s\n", time.Since(t0))
 		}
-		if strings.Contains(result, "fails to validate") {
-			fmt.Fprint(os.Stderr, result)
+		if err != nil {
+			fmt.Fprint(os.Stderr, err)
 			return exitValidation
-		}
-		if !cfg.quiet {
-			fmt.Fprint(os.Stderr, result)
 		}
 	}
 

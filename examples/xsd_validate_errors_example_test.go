@@ -44,10 +44,11 @@ func Example_xsd_validate_errors() {
 		return
 	}
 
-	// Validate returns a result string. When validation fails, the string
-	// contains "fails to validate" along with detailed error messages.
-	result := xsd.Validate(doc, schema)
-	fmt.Println(strings.Contains(result, "fails to validate"))
+	// Validate returns an error when the document is invalid.
+	// The error message contains "fails to validate" along with details.
+	if err := xsd.Validate(doc, schema); err != nil {
+		fmt.Println(strings.Contains(err.Error(), "fails to validate"))
+	}
 	// Output:
 	// true
 }

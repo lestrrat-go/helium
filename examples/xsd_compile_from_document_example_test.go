@@ -2,7 +2,6 @@ package examples_test
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xsd"
@@ -39,8 +38,8 @@ func Example_xsd_compile_from_document() {
 	}
 
 	// Validate the document against the compiled schema.
-	result := xsd.Validate(doc, schema)
-	fmt.Println(strings.Contains(result, "validates"))
+	if err := xsd.Validate(doc, schema); err != nil {
+		fmt.Println(err)
+	}
 	// Output:
-	// true
 }

@@ -234,9 +234,10 @@ func TestLetVariableChainedDependency(t *testing.T) {
 		doc, err := helium.Parse([]byte(`<root><item val="bad"/></root>`))
 		require.NoError(t, err)
 
-		output := Validate(doc, schema)
-		require.Contains(t, output, "x is bad")
-		require.Contains(t, output, "y is hello")
+		err = Validate(doc, schema)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "x is bad")
+		require.Contains(t, err.Error(), "y is hello")
 	})
 
 	t.Run("LIFO accumulation", func(t *testing.T) {
@@ -266,9 +267,10 @@ func TestLetVariableChainedDependency(t *testing.T) {
 		doc, err := helium.Parse([]byte(`<root><item/></root>`))
 		require.NoError(t, err)
 
-		output := Validate(doc, schema)
+		err = Validate(doc, schema)
 		// a=1 should be reported since $a is properly registered.
-		require.Contains(t, output, "a=1")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "a=1")
 	})
 }
 func TestXpathResultToStringBoolean(t *testing.T) {
@@ -351,10 +353,11 @@ func TestUnionContextIntegration(t *testing.T) {
 	doc, err := helium.Parse([]byte(`<root><invoice/><credit-note/><other/></root>`))
 	require.NoError(t, err)
 
-	output := Validate(doc, schema)
+	err = Validate(doc, schema)
 	// Both invoice and credit-note should trigger the assert.
-	require.Contains(t, output, "invoice")
-	require.Contains(t, output, "credit-note")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invoice")
+	require.Contains(t, err.Error(), "credit-note")
 	// "other" should not be mentioned in failures.
-	require.NotContains(t, output, "other")
+	require.NotContains(t, err.Error(), "other")
 }

@@ -184,7 +184,12 @@ func TestGoldenFiles(t *testing.T) {
 
 				// Validate. Prepend any compile warnings to the output.
 				filename := "./test/schemas/" + tc.xmlBase
-				got = schema.CompileWarnings() + xsd.Validate(doc, schema, xsd.WithFilename(filename))
+				err = xsd.Validate(doc, schema, xsd.WithFilename(filename))
+				if err != nil {
+					got = schema.CompileWarnings() + err.Error()
+				} else {
+					got = schema.CompileWarnings() + filename + " validates\n"
+				}
 			}
 
 			if got == string(expected) {
@@ -233,9 +238,8 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		result := xsd.Validate(doc, schema)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		err = xsd.Validate(doc, schema)
+		require.NoError(t, err)
 	})
 
 	t.Run("non-nillable element with xsi:nil=true fails", func(t *testing.T) {
@@ -245,9 +249,9 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		result := xsd.Validate(doc, schema)
-		require.Contains(t, result, "not nillable")
-		require.Contains(t, result, "fails to validate")
+		err = xsd.Validate(doc, schema)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "not nillable")
 	})
 
 	t.Run("nilled element with text content fails", func(t *testing.T) {
@@ -257,9 +261,9 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		result := xsd.Validate(doc, schema)
-		require.Contains(t, result, "nilled")
-		require.Contains(t, result, "fails to validate")
+		err = xsd.Validate(doc, schema)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "nilled")
 	})
 
 	t.Run("nilled element with child element fails", func(t *testing.T) {
@@ -269,9 +273,9 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		result := xsd.Validate(doc, schema)
-		require.Contains(t, result, "nilled")
-		require.Contains(t, result, "fails to validate")
+		err = xsd.Validate(doc, schema)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "nilled")
 	})
 
 	t.Run("nilled complex element with attributes validates", func(t *testing.T) {
@@ -281,9 +285,8 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		result := xsd.Validate(doc, schema)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		err = xsd.Validate(doc, schema)
+		require.NoError(t, err)
 	})
 
 	t.Run("nillable element without xsi:nil validates normally", func(t *testing.T) {
@@ -293,9 +296,8 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		result := xsd.Validate(doc, schema)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		err = xsd.Validate(doc, schema)
+		require.NoError(t, err)
 	})
 
 	t.Run("xsi:nil=1 is equivalent to true", func(t *testing.T) {
@@ -305,9 +307,8 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		result := xsd.Validate(doc, schema)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		err = xsd.Validate(doc, schema)
+		require.NoError(t, err)
 	})
 
 	t.Run("xsi:nil=false does not trigger nil handling", func(t *testing.T) {
@@ -317,9 +318,8 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		result := xsd.Validate(doc, schema)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		err = xsd.Validate(doc, schema)
+		require.NoError(t, err)
 	})
 }
 
@@ -336,7 +336,7 @@ func extractBaseName(name string) string {
 }
 
 func TestDefaultFixedValidation(t *testing.T) {
-	compileAndValidate := func(t *testing.T, xsdStr, xmlStr string) string {
+	compileAndValidate := func(t *testing.T, xsdStr, xmlStr string) error {
 		t.Helper()
 		xsdDoc, err := helium.Parse([]byte(xsdStr))
 		require.NoError(t, err, "XSD parse failed")
@@ -354,9 +354,8 @@ func TestDefaultFixedValidation(t *testing.T) {
   <xs:element name="root" type="xs:string" fixed="hello"/>
 </xs:schema>`
 		xmlStr := `<root>hello</root>`
-		result := compileAndValidate(t, xsdStr, xmlStr)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		err := compileAndValidate(t, xsdStr, xmlStr)
+		require.NoError(t, err)
 	})
 
 	t.Run("element_fixed_wrong_value", func(t *testing.T) {
@@ -364,9 +363,9 @@ func TestDefaultFixedValidation(t *testing.T) {
   <xs:element name="root" type="xs:string" fixed="hello"/>
 </xs:schema>`
 		xmlStr := `<root>wrong</root>`
-		result := compileAndValidate(t, xsdStr, xmlStr)
-		require.Contains(t, result, "fixed value constraint")
-		require.Contains(t, result, "fails to validate")
+		err := compileAndValidate(t, xsdStr, xmlStr)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "fixed value constraint")
 	})
 
 	t.Run("element_fixed_empty", func(t *testing.T) {
@@ -374,9 +373,8 @@ func TestDefaultFixedValidation(t *testing.T) {
   <xs:element name="root" type="xs:string" fixed="hello"/>
 </xs:schema>`
 		xmlStr := `<root/>`
-		result := compileAndValidate(t, xsdStr, xmlStr)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		err := compileAndValidate(t, xsdStr, xmlStr)
+		require.NoError(t, err)
 	})
 
 	t.Run("element_default_empty_integer", func(t *testing.T) {
@@ -384,9 +382,8 @@ func TestDefaultFixedValidation(t *testing.T) {
   <xs:element name="root" type="xs:integer" default="42"/>
 </xs:schema>`
 		xmlStr := `<root/>`
-		result := compileAndValidate(t, xsdStr, xmlStr)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		err := compileAndValidate(t, xsdStr, xmlStr)
+		require.NoError(t, err)
 	})
 
 	t.Run("attribute_fixed_correct", func(t *testing.T) {
@@ -398,9 +395,8 @@ func TestDefaultFixedValidation(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		xmlStr := `<root color="red"/>`
-		result := compileAndValidate(t, xsdStr, xmlStr)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		err := compileAndValidate(t, xsdStr, xmlStr)
+		require.NoError(t, err)
 	})
 
 	t.Run("attribute_fixed_wrong", func(t *testing.T) {
@@ -412,14 +408,14 @@ func TestDefaultFixedValidation(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		xmlStr := `<root color="blue"/>`
-		result := compileAndValidate(t, xsdStr, xmlStr)
-		require.Contains(t, result, "fixed value constraint")
-		require.Contains(t, result, "fails to validate")
+		err := compileAndValidate(t, xsdStr, xmlStr)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "fixed value constraint")
 	})
 }
 
 func TestMultipleAttributeErrors(t *testing.T) {
-	compileAndValidate := func(t *testing.T, xsdStr, xmlStr string) string {
+	compileAndValidate := func(t *testing.T, xsdStr, xmlStr string) error {
 		t.Helper()
 		xsdDoc, err := helium.Parse([]byte(xsdStr))
 		require.NoError(t, err, "XSD parse failed")
@@ -441,9 +437,10 @@ func TestMultipleAttributeErrors(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		xmlStr := `<root id="1" foo="x" bar="y"/>`
-		result := compileAndValidate(t, xsdStr, xmlStr)
-		require.Contains(t, result, "'foo' is not allowed")
-		require.Contains(t, result, "'bar' is not allowed")
+		err := compileAndValidate(t, xsdStr, xmlStr)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "'foo' is not allowed")
+		require.Contains(t, err.Error(), "'bar' is not allowed")
 	})
 
 	t.Run("multiple missing required attributes", func(t *testing.T) {
@@ -456,9 +453,10 @@ func TestMultipleAttributeErrors(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		xmlStr := `<root/>`
-		result := compileAndValidate(t, xsdStr, xmlStr)
-		require.Contains(t, result, "'a' is required but missing")
-		require.Contains(t, result, "'b' is required but missing")
+		err := compileAndValidate(t, xsdStr, xmlStr)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "'a' is required but missing")
+		require.Contains(t, err.Error(), "'b' is required but missing")
 	})
 
 	t.Run("no declarations multiple attrs", func(t *testing.T) {
@@ -466,9 +464,10 @@ func TestMultipleAttributeErrors(t *testing.T) {
   <xs:element name="root" type="xs:string"/>
 </xs:schema>`
 		xmlStr := `<root x="1" y="2">text</root>`
-		result := compileAndValidate(t, xsdStr, xmlStr)
-		require.Contains(t, result, "'x' is not allowed")
-		require.Contains(t, result, "'y' is not allowed")
+		err := compileAndValidate(t, xsdStr, xmlStr)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "'x' is not allowed")
+		require.Contains(t, err.Error(), "'y' is not allowed")
 	})
 }
 
@@ -488,7 +487,7 @@ func TestRedefine(t *testing.T) {
 		return p
 	}
 
-	compileAndValidate := func(t *testing.T, xsdPath, xmlStr string) string {
+	compileAndValidate := func(t *testing.T, xsdPath, xmlStr string) error {
 		t.Helper()
 		schema, err := xsd.CompileFile(xsdPath)
 		require.NoError(t, err, "schema compilation failed")
@@ -525,14 +524,13 @@ func TestRedefine(t *testing.T) {
   <xs:element name="person" type="personType"/>
 </xs:schema>`)
 
-		result := compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+		err := compileAndValidate(t, mainPath, `<?xml version="1.0"?>
 <person><name>Alice</name><age>30</age></person>`)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		require.NoError(t, err)
 
-		result = compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+		err = compileAndValidate(t, mainPath, `<?xml version="1.0"?>
 <person><name>Alice</name></person>`)
-		require.Contains(t, result, "fails to validate")
+		require.Error(t, err)
 	})
 
 	t.Run("complexType_restriction", func(t *testing.T) {
@@ -562,10 +560,9 @@ func TestRedefine(t *testing.T) {
   <xs:element name="item" type="itemType"/>
 </xs:schema>`)
 
-		result := compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+		err := compileAndValidate(t, mainPath, `<?xml version="1.0"?>
 <item><name>Widget</name></item>`)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		require.NoError(t, err)
 	})
 
 	t.Run("simpleType_restriction", func(t *testing.T) {
@@ -588,14 +585,13 @@ func TestRedefine(t *testing.T) {
   <xs:element name="val" type="nameType"/>
 </xs:schema>`)
 
-		result := compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+		err := compileAndValidate(t, mainPath, `<?xml version="1.0"?>
 <val>Hi</val>`)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		require.NoError(t, err)
 
-		result = compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+		err = compileAndValidate(t, mainPath, `<?xml version="1.0"?>
 <val>TooLongValue</val>`)
-		require.Contains(t, result, "fails to validate")
+		require.Error(t, err)
 	})
 
 	t.Run("group_redefine", func(t *testing.T) {
@@ -625,14 +621,13 @@ func TestRedefine(t *testing.T) {
   </xs:element>
 </xs:schema>`)
 
-		result := compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+		err := compileAndValidate(t, mainPath, `<?xml version="1.0"?>
 <root><a>1</a><b>2</b></root>`)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		require.NoError(t, err)
 
-		result = compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+		err = compileAndValidate(t, mainPath, `<?xml version="1.0"?>
 <root><a>1</a></root>`)
-		require.Contains(t, result, "fails to validate")
+		require.Error(t, err)
 	})
 
 	t.Run("attributeGroup_redefine", func(t *testing.T) {
@@ -658,10 +653,9 @@ func TestRedefine(t *testing.T) {
   </xs:element>
 </xs:schema>`)
 
-		result := compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+		err := compileAndValidate(t, mainPath, `<?xml version="1.0"?>
 <root attr1="a" attr2="b"/>`)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		require.NoError(t, err)
 	})
 
 	t.Run("chameleon_redefine", func(t *testing.T) {
@@ -687,14 +681,13 @@ func TestRedefine(t *testing.T) {
   <xs:element name="code" type="tns:codeType"/>
 </xs:schema>`)
 
-		result := compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+		err := compileAndValidate(t, mainPath, `<?xml version="1.0"?>
 <code xmlns="http://example.com/ns">ABC</code>`)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		require.NoError(t, err)
 
-		result = compileAndValidate(t, mainPath, `<?xml version="1.0"?>
+		err = compileAndValidate(t, mainPath, `<?xml version="1.0"?>
 <code xmlns="http://example.com/ns">VeryLongCodeValue</code>`)
-		require.Contains(t, result, "fails to validate")
+		require.Error(t, err)
 	})
 }
 

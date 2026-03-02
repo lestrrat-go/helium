@@ -34,8 +34,8 @@ func Example_relaxng_validate() {
 		return
 	}
 
-	result := relaxng.Validate(doc, grammar, relaxng.WithFilename("doc.xml"))
-	fmt.Print(result)
+	if err := relaxng.Validate(doc, grammar, relaxng.WithFilename("doc.xml")); err != nil {
+		fmt.Println(err)
+	}
 	// Output:
-	// doc.xml validates
 }

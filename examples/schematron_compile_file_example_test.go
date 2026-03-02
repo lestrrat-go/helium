@@ -37,8 +37,8 @@ func Example_schematron_compile_file() {
 		return
 	}
 
-	result := schematron.Validate(doc, schema, schematron.WithFilename("doc.xml"))
-	fmt.Print(result)
+	if err := schematron.Validate(doc, schema, schematron.WithFilename("doc.xml")); err != nil {
+		fmt.Println(err)
+	}
 	// Output:
-	// doc.xml validates
 }
