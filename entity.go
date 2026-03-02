@@ -139,10 +139,13 @@ func newEntity(name string, typ EntityType, publicID, systemID, notation, orig s
 	return e
 }
 
+// Checked reports whether this entity's content has been parsed and validated,
+// used to prevent infinite recursion during entity expansion (libxml2: ent->checked).
 func (e *Entity) Checked() bool {
 	return e.checked & 1 == 1
 }
 
+// MarkChecked marks this entity as having been parsed and validated (libxml2: ent->checked).
 func (e *Entity) MarkChecked() {
 	e.checked |= 1
 }
