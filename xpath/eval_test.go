@@ -430,7 +430,7 @@ func TestEvalVariable(t *testing.T) {
 	doc := parseXML(t, `<root><a/><b/></root>`)
 	expr, err := xpath.Compile("$x + 1")
 	require.NoError(t, err)
-	r, err := expr.EvaluateWithContext(doc, &xpath.Context{
+	r, err := expr.EvaluateWith(doc, &xpath.Context{
 		Variables: map[string]interface{}{
 			"x": float64(41),
 		},
@@ -595,21 +595,21 @@ func TestOpLimit(t *testing.T) {
 	require.NoError(t, err)
 
 	// With a very small op limit, evaluation should fail
-	_, err = compiled.EvaluateWithContext(doc, &xpath.Context{
+	_, err = compiled.EvaluateWith(doc, &xpath.Context{
 		OpLimit: 1,
 	})
 	require.Error(t, err)
 	require.True(t, errors.Is(err, xpath.ErrOpLimit))
 
 	// With a generous limit, it should succeed
-	r, err := compiled.EvaluateWithContext(doc, &xpath.Context{
+	r, err := compiled.EvaluateWith(doc, &xpath.Context{
 		OpLimit: 10000,
 	})
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 5)
 
 	// Without limit (zero), it should succeed
-	r, err = compiled.EvaluateWithContext(doc, &xpath.Context{
+	r, err = compiled.EvaluateWith(doc, &xpath.Context{
 		OpLimit: 0,
 	})
 	require.NoError(t, err)
@@ -622,12 +622,12 @@ func TestOpLimitFunctionCalls(t *testing.T) {
 	require.NoError(t, err)
 
 	// concat counts as 1 function-call op; limit of 0 means unlimited
-	r, err := compiled.EvaluateWithContext(doc, &xpath.Context{OpLimit: 0})
+	r, err := compiled.EvaluateWith(doc, &xpath.Context{OpLimit: 0})
 	require.NoError(t, err)
 	require.Equal(t, "abc", r.String)
 
 	// With limit too low for the function call
-	_, err = compiled.EvaluateWithContext(doc, &xpath.Context{OpLimit: 0})
+	_, err = compiled.EvaluateWith(doc, &xpath.Context{OpLimit: 0})
 	require.NoError(t, err) // 0 = unlimited
 }
 
@@ -680,7 +680,7 @@ func TestCustomFunctionUnqualified(t *testing.T) {
 		},
 	}
 
-	r, err := compiled.EvaluateWithContext(doc, ctx)
+	r, err := compiled.EvaluateWith(doc, ctx)
 	require.NoError(t, err)
 	require.Equal(t, xpath.NumberResult, r.Type)
 	require.Equal(t, 10.0, r.Number)
@@ -705,7 +705,7 @@ func TestCustomFunctionNamespaced(t *testing.T) {
 		},
 	}
 
-	r, err := compiled.EvaluateWithContext(doc, ctx)
+	r, err := compiled.EvaluateWith(doc, ctx)
 	require.NoError(t, err)
 	require.Equal(t, xpath.StringResult, r.Type)
 	require.Equal(t, "Hello, world!", r.String)
@@ -727,7 +727,7 @@ func TestCustomFunctionNamespacedUnresolvedPrefix(t *testing.T) {
 	require.NoError(t, err)
 
 	// No namespace binding for "ext"
-	_, err = compiled.EvaluateWithContext(doc, &xpath.Context{})
+	_, err = compiled.EvaluateWith(doc, &xpath.Context{})
 	require.Error(t, err)
 	require.True(t, errors.Is(err, xpath.ErrUnknownFunctionNamespace))
 }
@@ -743,7 +743,7 @@ func TestCustomFunctionNamespacedNotFound(t *testing.T) {
 			"ext": "urn:test:ext",
 		},
 	}
-	_, err = compiled.EvaluateWithContext(doc, ctx)
+	_, err = compiled.EvaluateWith(doc, ctx)
 	require.Error(t, err)
 	require.True(t, errors.Is(err, xpath.ErrUnknownFunction))
 }
@@ -762,7 +762,7 @@ func TestCustomFunctionBuiltinNotOverridden(t *testing.T) {
 		},
 	}
 
-	r, err := compiled.EvaluateWithContext(doc, ctx)
+	r, err := compiled.EvaluateWith(doc, ctx)
 	require.NoError(t, err)
 	require.Equal(t, 3.0, r.Number) // built-in wins
 }
@@ -784,7 +784,7 @@ func TestCustomFunctionContextValues(t *testing.T) {
 		},
 	}
 
-	r, err := compiled.EvaluateWithContext(doc, ctx)
+	r, err := compiled.EvaluateWith(doc, ctx)
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 1)
 	require.Equal(t, "b", r.NodeSet[0].Name())
@@ -833,7 +833,7 @@ func TestCustomFunctionWithPathExpr(t *testing.T) {
 		},
 	}
 
-	r, err := compiled.EvaluateWithContext(doc, ctx)
+	r, err := compiled.EvaluateWith(doc, ctx)
 	require.NoError(t, err)
 	require.Equal(t, xpath.NodeSetResult, r.Type)
 	require.Len(t, r.NodeSet, 1)

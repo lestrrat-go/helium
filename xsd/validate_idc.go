@@ -82,7 +82,7 @@ func validateIDConstraints(elem *helium.Element, edecl *ElementDecl, schema *Sch
 // evaluateIDC evaluates the selector and field XPaths for a single IDC.
 func evaluateIDC(elem *helium.Element, idc *IDConstraint, nsCtx *xpath.Context) (*idcTable, error) {
 	// Evaluate selector XPath.
-	selectorResult, err := xpath.EvaluateWithContext(elem, idc.Selector, nsCtx)
+	selectorResult, err := xpath.EvaluateWith(elem, idc.Selector, nsCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +103,7 @@ func evaluateIDC(elem *helium.Element, idc *IDConstraint, nsCtx *xpath.Context) 
 		// Evaluate each field XPath relative to the selected node.
 		allPresent := true
 		for _, fieldXPath := range idc.Fields {
-			fieldResult, err := xpath.EvaluateWithContext(node, fieldXPath, nsCtx)
+			fieldResult, err := xpath.EvaluateWith(node, fieldXPath, nsCtx)
 			if err != nil {
 				allPresent = false
 				break

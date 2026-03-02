@@ -110,7 +110,7 @@ func evaluatePart(doc *helium.Document, p xptrPart, nsMap map[string]string) ([]
 // namespace bindings, returning a node-set.
 func findWithContext(node helium.Node, expr string, nsMap map[string]string) ([]helium.Node, error) {
 	xctx := &xpath.Context{Namespaces: nsMap}
-	r, err := xpath.EvaluateWithContext(node, expr, xctx)
+	r, err := xpath.EvaluateWith(node, expr, xctx)
 	if err != nil {
 		return nil, err
 	}

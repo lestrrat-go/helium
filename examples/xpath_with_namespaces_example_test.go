@@ -31,8 +31,8 @@ func Example_xpath_with_namespaces() {
 		},
 	}
 
-	// EvaluateWithContext uses the provided context for namespace resolution.
-	r, err := xpath.EvaluateWithContext(doc, "//x:item", ctx)
+	// EvaluateWith evaluates with explicit namespace/variable bindings.
+	r, err := xpath.EvaluateWith(doc, "//x:item", ctx)
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
 		return
