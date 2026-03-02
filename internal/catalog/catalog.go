@@ -69,9 +69,8 @@ type Catalog struct {
 	Prefer        Prefer
 	BaseURI       string
 	Depth         int // recursion guard (shared across resolution chain)
-	Loader        Loader
-	ParseWarnings string // accumulated warnings from parsing
-	visited       map[visitedKey]struct{}
+	Loader  Loader
+	visited map[visitedKey]struct{}
 }
 
 // Resolver is the interface that the helium parser uses for catalog

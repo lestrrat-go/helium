@@ -3,31 +3,48 @@ package catalog
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 )
 
 // loader implements icatalog.Loader using helium's parser.
-type loader struct{}
+type loader struct {
+	errorHandler helium.ErrorHandler
+}
 
-func (loader) Load(filename string) (*icatalog.Catalog, error) {
-	return loadInternal(filename)
+func (l loader) Load(filename string) (*icatalog.Catalog, error) {
+	return loadInternal(filename, l.errorHandler)
 }
 
 // Load parses an OASIS XML Catalog file and returns a Catalog.
-func Load(filename string) (*Catalog, error) {
-	ic, err := loadInternal(filename)
+func Load(filename string, opts ...LoadOption) (*Catalog, error) {
+	var cfg loadConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
+
+	var eh helium.ErrorHandler
+	if cfg.errorHandler != nil {
+		eh = cfg.errorHandler
+	} else {
+		eh = helium.NilErrorHandler{}
+	}
+
+	ic, err := loadInternal(filename, eh)
 	if err != nil {
+		closeHandler(eh)
 		return nil, err
 	}
+
+	closeHandler(eh)
 	return &Catalog{cat: ic}, nil
 }
 
-func loadInternal(filename string) (*icatalog.Catalog, error) {
+func loadInternal(filename string, eh helium.ErrorHandler) (*icatalog.Catalog, error) {
 	absPath, err := filepath.Abs(filename)
 	if err != nil {
 		return nil, fmt.Errorf("catalog: failed to resolve path %q: %w", filename, err)
@@ -38,10 +55,10 @@ func loadInternal(filename string) (*icatalog.Catalog, error) {
 		return nil, fmt.Errorf("catalog: failed to read %q: %w", absPath, err)
 	}
 
-	return loadFromBytes(data, absPath)
+	return loadFromBytes(data, absPath, eh)
 }
 
-func loadFromBytes(data []byte, baseURI string) (*icatalog.Catalog, error) {
+func loadFromBytes(data []byte, baseURI string, eh helium.ErrorHandler) (*icatalog.Catalog, error) {
 	p := helium.NewParser()
 	doc, err := p.Parse(context.Background(), data)
 	if err != nil {
@@ -61,22 +78,21 @@ func loadFromBytes(data []byte, baseURI string) (*icatalog.Catalog, error) {
 	cat := &icatalog.Catalog{
 		Prefer:  icatalog.PreferPublic, // default per OASIS spec
 		BaseURI: baseURI,
-		Loader:  loader{},
+		Loader:  loader{errorHandler: eh},
 	}
 
 	if v := getAttr(root, "prefer"); v != "" {
 		cat.Prefer = icatalog.ParsePrefer(v)
 	}
 
-	var warnings strings.Builder
-	parseEntries(root, cat.Prefer, baseURI, &cat.Entries, &warnings)
-	cat.ParseWarnings = warnings.String()
+	ctx := context.Background()
+	parseEntries(ctx, root, cat.Prefer, baseURI, &cat.Entries, eh)
 
 	return cat, nil
 }
 
 // parseEntries walks child elements of parent and appends catalog entries.
-func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string, entries *[]icatalog.Entry, warnings *strings.Builder) {
+func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.Prefer, baseURI string, entries *[]icatalog.Entry, eh helium.ErrorHandler) {
 	if v := getAttrNS(parent, "base", "http://www.w3.org/XML/1998/namespace"); v != "" {
 		baseURI = icatalog.ResolveURI(baseURI, v)
 	}
@@ -108,7 +124,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 			pubID := icatalog.NormalizePublicID(getAttr(elem, "publicId"))
 			uri := icatalog.ResolveURI(elemBase, getAttr(elem, "uri"))
 			if pubID == "" || uri == "" {
-				catalogMissingAttr(warnings, localName, pubID, "publicId", uri, "uri")
+				catalogMissingAttr(ctx, eh, localName, pubID, "publicId", uri, "uri")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Type:   icatalog.EntryPublic,
@@ -121,7 +137,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 			sysID := getAttr(elem, "systemId")
 			uri := icatalog.ResolveURI(elemBase, getAttr(elem, "uri"))
 			if sysID == "" || uri == "" {
-				catalogMissingAttr(warnings, localName, sysID, "systemId", uri, "uri")
+				catalogMissingAttr(ctx, eh, localName, sysID, "systemId", uri, "uri")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Type: icatalog.EntrySystem,
@@ -133,7 +149,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 			startString := getAttr(elem, "systemIdStartString")
 			prefix := icatalog.ResolveURI(elemBase, getAttr(elem, "rewritePrefix"))
 			if startString == "" || prefix == "" {
-				catalogMissingAttr(warnings, localName, startString, "systemIdStartString", prefix, "rewritePrefix")
+				catalogMissingAttr(ctx, eh, localName, startString, "systemIdStartString", prefix, "rewritePrefix")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Type: icatalog.EntryRewriteSystem,
@@ -145,7 +161,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 			startString := icatalog.NormalizePublicID(getAttr(elem, "publicIdStartString"))
 			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, "catalog"))
 			if startString == "" || catFile == "" {
-				catalogMissingAttr(warnings, localName, startString, "publicIdStartString", catFile, "catalog")
+				catalogMissingAttr(ctx, eh, localName, startString, "publicIdStartString", catFile, "catalog")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Type:   icatalog.EntryDelegatePublic,
@@ -158,7 +174,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 			startString := getAttr(elem, "systemIdStartString")
 			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, "catalog"))
 			if startString == "" || catFile == "" {
-				catalogMissingAttr(warnings, localName, startString, "systemIdStartString", catFile, "catalog")
+				catalogMissingAttr(ctx, eh, localName, startString, "systemIdStartString", catFile, "catalog")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Type: icatalog.EntryDelegateSystem,
@@ -170,7 +186,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 			name := getAttr(elem, "name")
 			uri := icatalog.ResolveURI(elemBase, getAttr(elem, "uri"))
 			if name == "" || uri == "" {
-				catalogMissingAttr(warnings, localName, name, "name", uri, "uri")
+				catalogMissingAttr(ctx, eh, localName, name, "name", uri, "uri")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Type: icatalog.EntryURI,
@@ -182,7 +198,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 			startString := getAttr(elem, "uriStartString")
 			prefix := icatalog.ResolveURI(elemBase, getAttr(elem, "rewritePrefix"))
 			if startString == "" || prefix == "" {
-				catalogMissingAttr(warnings, localName, startString, "uriStartString", prefix, "rewritePrefix")
+				catalogMissingAttr(ctx, eh, localName, startString, "uriStartString", prefix, "rewritePrefix")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Type: icatalog.EntryRewriteURI,
@@ -194,7 +210,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 			startString := getAttr(elem, "uriStartString")
 			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, "catalog"))
 			if startString == "" || catFile == "" {
-				catalogMissingAttr(warnings, localName, startString, "uriStartString", catFile, "catalog")
+				catalogMissingAttr(ctx, eh, localName, startString, "uriStartString", catFile, "catalog")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Type: icatalog.EntryDelegateURI,
@@ -205,7 +221,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 		case "nextCatalog":
 			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, "catalog"))
 			if catFile == "" {
-				fmt.Fprintf(warnings, "%s entry missing catalog attribute\n", localName)
+				eh.Handle(ctx, fmt.Errorf("%s entry missing catalog attribute", localName))
 			} else {
 				if !icatalog.HasNextCatalog(*entries, catFile) {
 					*entries = append(*entries, icatalog.Entry{
@@ -215,7 +231,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				}
 			}
 		case "group":
-			parseEntries(elem, elemPrefer, elemBase, entries, warnings)
+			parseEntries(ctx, elem, elemPrefer, elemBase, entries, eh)
 		}
 	}
 }
@@ -231,12 +247,19 @@ func documentElement(doc *helium.Document) *helium.Element {
 }
 
 // catalogMissingAttr reports which required attributes are missing on a catalog entry.
-func catalogMissingAttr(warnings *strings.Builder, elemName, val1, attr1, val2, attr2 string) {
+func catalogMissingAttr(ctx context.Context, eh helium.ErrorHandler, elemName, val1, attr1, val2, attr2 string) {
 	if val1 == "" {
-		fmt.Fprintf(warnings, "%s entry missing %s attribute\n", elemName, attr1)
+		eh.Handle(ctx, fmt.Errorf("%s entry missing %s attribute", elemName, attr1))
 	}
 	if val2 == "" {
-		fmt.Fprintf(warnings, "%s entry missing %s attribute\n", elemName, attr2)
+		eh.Handle(ctx, fmt.Errorf("%s entry missing %s attribute", elemName, attr2))
+	}
+}
+
+// closeHandler closes the error handler if it implements io.Closer.
+func closeHandler(eh helium.ErrorHandler) {
+	if c, ok := eh.(io.Closer); ok {
+		c.Close()
 	}
 }
 

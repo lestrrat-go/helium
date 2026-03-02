@@ -1,0 +1,115 @@
+package sink_test
+
+import (
+	"context"
+	"errors"
+	"io"
+	"sync"
+	"testing"
+
+	"github.com/lestrrat-go/helium/sink"
+	"github.com/stretchr/testify/require"
+)
+
+// compile-time assertions
+var _ io.Closer = (*sink.Sink[error])(nil)
+
+func TestSinkHandleAndClose(t *testing.T) {
+	ctx := context.Background()
+	var mu sync.Mutex
+	var got []string
+
+	s := sink.New[string](ctx, sink.HandlerFunc[string](func(_ context.Context, v string) {
+		mu.Lock()
+		got = append(got, v)
+		mu.Unlock()
+	}))
+
+	s.Handle(ctx, "a")
+	s.Handle(ctx, "b")
+	s.Handle(ctx, "c")
+
+	require.NoError(t, s.Close())
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, []string{"a", "b", "c"}, got)
+}
+
+func TestSinkCloseDrains(t *testing.T) {
+	ctx := context.Background()
+	var mu sync.Mutex
+	var got []int
+
+	s := sink.New[int](ctx, sink.HandlerFunc[int](func(_ context.Context, v int) {
+		mu.Lock()
+		got = append(got, v)
+		mu.Unlock()
+	}), sink.WithBufferSize(16))
+
+	for i := range 10 {
+		s.Handle(ctx, i)
+	}
+
+	require.NoError(t, s.Close())
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, got, 10)
+}
+
+func TestSinkCloseMultipleTimes(t *testing.T) {
+	ctx := context.Background()
+	s := sink.New[int](ctx, sink.HandlerFunc[int](func(_ context.Context, _ int) {}))
+	require.NoError(t, s.Close())
+	require.NoError(t, s.Close())
+}
+
+func TestSinkNilReceiver(t *testing.T) {
+	var s *sink.Sink[error]
+	s.Handle(context.Background(), errors.New("test"))
+	require.NoError(t, s.Close())
+}
+
+func TestSinkCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var mu sync.Mutex
+	var got []string
+
+	s := sink.New[string](ctx, sink.HandlerFunc[string](func(_ context.Context, v string) {
+		mu.Lock()
+		got = append(got, v)
+		mu.Unlock()
+	}))
+
+	s.Handle(ctx, "before-cancel")
+	cancel()
+
+	require.NoError(t, s.Close())
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Contains(t, got, "before-cancel")
+}
+
+func TestSinkErrorSatisfiesErrorHandler(t *testing.T) {
+	// ErrorHandler is Handle(context.Context, error)
+	// *sink.Sink[error] has Handle(context.Context, error)
+	ctx := context.Background()
+	var mu sync.Mutex
+	var got []error
+
+	s := sink.New[error](ctx, sink.HandlerFunc[error](func(_ context.Context, err error) {
+		mu.Lock()
+		got = append(got, err)
+		mu.Unlock()
+	}))
+
+	testErr := errors.New("test error")
+	s.Handle(ctx, testErr)
+	require.NoError(t, s.Close())
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, []error{testErr}, got)
+}

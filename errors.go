@@ -103,6 +103,10 @@ var (
 	ErrValueRequired                = errors.New("value required")
 )
 
+func (e ErrParseError) ErrorLevel() ErrorLevel {
+	return e.Level
+}
+
 func (e ErrParseError) Error() string {
 	if e.File != "" {
 		return fmt.Sprintf(
