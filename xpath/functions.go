@@ -326,7 +326,7 @@ func fnStartsWith(_ *evalContext, args []*Result) (*Result, error) {
 	}
 	s := resultToString(args[0])
 	prefix := resultToString(args[1])
-	return &Result{Type: BooleanResult, Boolean: strings.HasPrefix(s, prefix)}, nil
+	return &Result{Type: BooleanResult, Bool: strings.HasPrefix(s, prefix)}, nil
 }
 
 func fnContains(_ *evalContext, args []*Result) (*Result, error) {
@@ -335,7 +335,7 @@ func fnContains(_ *evalContext, args []*Result) (*Result, error) {
 	}
 	s := resultToString(args[0])
 	sub := resultToString(args[1])
-	return &Result{Type: BooleanResult, Boolean: strings.Contains(s, sub)}, nil
+	return &Result{Type: BooleanResult, Bool: strings.Contains(s, sub)}, nil
 }
 
 func fnSubstringBefore(_ *evalContext, args []*Result) (*Result, error) {
@@ -490,28 +490,28 @@ func fnBoolean(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 1 {
 		return nil, errBooleanOneArg
 	}
-	return &Result{Type: BooleanResult, Boolean: resultToBoolean(args[0])}, nil
+	return &Result{Type: BooleanResult, Bool: resultToBoolean(args[0])}, nil
 }
 
 func fnNot(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 1 {
 		return nil, errNotOneArg
 	}
-	return &Result{Type: BooleanResult, Boolean: !resultToBoolean(args[0])}, nil
+	return &Result{Type: BooleanResult, Bool: !resultToBoolean(args[0])}, nil
 }
 
 func fnTrue(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 0 {
 		return nil, errTrueNoArgs
 	}
-	return &Result{Type: BooleanResult, Boolean: true}, nil
+	return &Result{Type: BooleanResult, Bool: true}, nil
 }
 
 func fnFalse(_ *evalContext, args []*Result) (*Result, error) {
 	if len(args) != 0 {
 		return nil, errFalseNoArgs
 	}
-	return &Result{Type: BooleanResult, Boolean: false}, nil
+	return &Result{Type: BooleanResult, Bool: false}, nil
 }
 
 func fnLang(ctx *evalContext, args []*Result) (*Result, error) {
@@ -530,13 +530,13 @@ func fnLang(ctx *evalContext, args []*Result) (*Result, error) {
 			if attr.LocalName() == "lang" && attr.URI() == helium.XMLNamespace {
 				val := strings.ToLower(attr.Value())
 				if val == langArg || strings.HasPrefix(val, langArg+"-") {
-					return &Result{Type: BooleanResult, Boolean: true}, nil
+					return &Result{Type: BooleanResult, Bool: true}, nil
 				}
-				return &Result{Type: BooleanResult, Boolean: false}, nil
+				return &Result{Type: BooleanResult, Bool: false}, nil
 			}
 		}
 	}
-	return &Result{Type: BooleanResult, Boolean: false}, nil
+	return &Result{Type: BooleanResult, Bool: false}, nil
 }
 
 // --- Number functions ---

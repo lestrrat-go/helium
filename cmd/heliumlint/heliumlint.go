@@ -543,7 +543,7 @@ func evalXPath(cfg *config, doc *helium.Document, out io.Writer) int {
 			}
 		}
 	case xpath.BooleanResult:
-		if result.Boolean {
+		if result.Bool {
 			if _, wErr := fmt.Fprintln(out, "true"); wErr != nil {
 				return exitXPath
 			}

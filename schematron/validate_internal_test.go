@@ -275,11 +275,11 @@ func TestLetVariableChainedDependency(t *testing.T) {
 }
 func TestXpathResultToStringBoolean(t *testing.T) {
 	t.Run("true", func(t *testing.T) {
-		r := &xpath.Result{Type: xpath.BooleanResult, Boolean: true}
+		r := &xpath.Result{Type: xpath.BooleanResult, Bool: true}
 		require.Equal(t, "True", xpathResultToString(r))
 	})
 	t.Run("false", func(t *testing.T) {
-		r := &xpath.Result{Type: xpath.BooleanResult, Boolean: false}
+		r := &xpath.Result{Type: xpath.BooleanResult, Bool: false}
 		require.Equal(t, "False", xpathResultToString(r))
 	})
 }
