@@ -224,12 +224,12 @@ func newHTMLSAXEventEmitter(out *bytes.Buffer) html.SAXHandler {
 		fmt.Fprintf(out, "SAX.characters(%s, %d)\n", display, len(ch))
 		return nil
 	})
-	s.WarningHandler = html.WarningFunc(func(msg string, args ...interface{}) error {
-		fmt.Fprintf(out, "SAX.warning: %s\n", fmt.Sprintf(msg, args...))
+	s.WarningHandler = html.WarningFunc(func(err error) error {
+		fmt.Fprintf(out, "SAX.warning: %s\n", err.Error())
 		return nil
 	})
-	s.ErrorHandler = html.ErrorFunc(func(msg string, args ...interface{}) error {
-		fmt.Fprintf(out, "SAX.error: %s\n", fmt.Sprintf(msg, args...))
+	s.ErrorHandler = html.ErrorFunc(func(err error) error {
+		fmt.Fprintf(out, "SAX.error: %s\n", err.Error())
 		return nil
 	})
 	return s
@@ -517,11 +517,11 @@ func newHTMLErrorCollector() (html.SAXHandler, *[]htmlError) {
 		loc = l
 		return nil
 	})
-	s.ErrorHandler = html.ErrorFunc(func(msg string, args ...any) error {
+	s.ErrorHandler = html.ErrorFunc(func(err error) error {
 		errors = append(errors, htmlError{
 			line: loc.LineNumber(),
 			col:  loc.ColumnNumber(),
-			msg:  fmt.Sprintf(msg, args...),
+			msg:  err.Error(),
 		})
 		return nil
 	})

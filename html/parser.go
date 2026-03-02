@@ -2,6 +2,7 @@ package html
 
 import (
 	"bytes"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -862,7 +863,7 @@ func (p *parser) emitError(msg string, args ...any) error {
 	if p.cfg.noError {
 		return nil
 	}
-	return p.sax.Error(msg, args...)
+	return p.sax.Error(fmt.Errorf(msg, args...))
 }
 
 // emitCharacters fires the appropriate SAX Characters event.
