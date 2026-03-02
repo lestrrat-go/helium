@@ -271,13 +271,13 @@ func (ctx *parserCtx) ColumnNumber() int {
 	return 0
 }
 
-// GetPublicID implements sax.DocumentLocator.
+// GetPublicID returns the public identifier of the document being parsed (libxml2: xmlSAXLocator.getPublicId).
 // Always returns an empty string (libxml2 always returns NULL).
 func (ctx *parserCtx) GetPublicID() string {
 	return ""
 }
 
-// GetSystemID implements sax.DocumentLocator.
+// GetSystemID returns the system identifier (URI/filename) of the document being parsed (libxml2: xmlSAXLocator.getSystemId).
 // Returns the base URI of the document being parsed.
 func (ctx *parserCtx) GetSystemID() string {
 	return ctx.baseURI
