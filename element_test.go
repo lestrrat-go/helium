@@ -30,7 +30,7 @@ func TestElementTree(t *testing.T) {
 	require.Equal(t, e2, e3.PrevSibling(), "e3.PrevSibling is e2")
 	require.Equal(t, nil, e2.PrevSibling(), "e2.PrevSibling is nil")
 
-	require.NoError(t, e2.AddContent([]byte("e2")), "e2.AddContent succeeds")
+	require.NoError(t, e2.AppendText([]byte("e2")), "e2.AppendText succeeds")
 	require.Equal(t, []byte("e2"), e2.Content(), "e2.Content matches")
 
 	for _, e := range []Node{e2, e3, e4} {
@@ -45,7 +45,7 @@ func TestElementTree(t *testing.T) {
 func TestElementContent(t *testing.T) {
 	e := newElement("root")
 	for _, chunk := range [][]byte{[]byte("Hello "), []byte("World!")} {
-		require.NoError(t, e.AddContent(chunk), "AddContent succeeds")
+		require.NoError(t, e.AppendText(chunk), "AppendText succeeds")
 	}
 
 	require.IsType(t, newText(nil), e.LastChild(), "LastChild is a Text node")

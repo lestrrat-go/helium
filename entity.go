@@ -171,8 +171,8 @@ func (e *Entity) AddChild(cur Node) error {
 	return addChild(e, cur)
 }
 
-func (e *Entity) AddContent(b []byte) error {
-	return addContent(e, b)
+func (e *Entity) AppendText(b []byte) error {
+	return appendText(e, b)
 }
 
 func (e *Entity) AddSibling(cur Node) error {

@@ -23,7 +23,7 @@ func (n *NamespaceNodeWrapper) Content() []byte {
 }
 
 func (n *NamespaceNodeWrapper) AddChild(Node) error   { return nil }
-func (n *NamespaceNodeWrapper) AddContent([]byte) error { return nil }
+func (n *NamespaceNodeWrapper) AppendText([]byte) error { return nil }
 func (n *NamespaceNodeWrapper) AddSibling(Node) error  { return nil }
 func (n *NamespaceNodeWrapper) Replace(Node) error     { return nil }
 func (n *NamespaceNodeWrapper) SetTreeDoc(*Document)   {}

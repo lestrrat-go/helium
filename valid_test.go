@@ -673,11 +673,11 @@ func TestStandaloneWhitespaceCheck(t *testing.T) {
 		root.doc = doc
 		container := newElement("container")
 		container.doc = doc
-		_ = container.AddContent([]byte(" "))
+		_ = container.AppendText([]byte(" "))
 		child := newElement("child")
 		child.doc = doc
 		_ = container.AddChild(child)
-		_ = container.AddContent([]byte(" "))
+		_ = container.AppendText([]byte(" "))
 		_ = root.AddChild(container)
 		_ = doc.AddChild(root)
 
@@ -779,11 +779,11 @@ func TestStandaloneWhitespaceCheck(t *testing.T) {
 		root.doc = doc
 		container := newElement("container")
 		container.doc = doc
-		_ = container.AddContent([]byte(" "))
+		_ = container.AppendText([]byte(" "))
 		child := newElement("child")
 		child.doc = doc
 		_ = container.AddChild(child)
-		_ = container.AddContent([]byte(" "))
+		_ = container.AppendText([]byte(" "))
 		_ = root.AddChild(container)
 		_ = doc.AddChild(root)
 
@@ -829,11 +829,11 @@ func TestStandaloneWhitespaceCheck(t *testing.T) {
 		// Build DOM: <root> <child/> </root> (whitespace around child)
 		root := newElement("root")
 		root.doc = doc
-		_ = root.AddContent([]byte(" "))
+		_ = root.AppendText([]byte(" "))
 		child := newElement("child")
 		child.doc = doc
 		_ = root.AddChild(child)
-		_ = root.AddContent([]byte(" "))
+		_ = root.AppendText([]byte(" "))
 		_ = doc.AddChild(root)
 
 		ve := validateDocument(doc)

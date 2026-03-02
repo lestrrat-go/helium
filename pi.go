@@ -24,8 +24,8 @@ func (p *ProcessingInstruction) AddChild(cur Node) error {
 	return addChild(p, cur)
 }
 
-func (p *ProcessingInstruction) AddContent(b []byte) error {
-	return addContent(p, b)
+func (p *ProcessingInstruction) AppendText(b []byte) error {
+	return appendText(p, b)
 }
 
 func (p *ProcessingInstruction) AddSibling(cur Node) error {

@@ -6,7 +6,7 @@ import (
 	"github.com/lestrrat-go/helium"
 )
 
-func Example_helium_add_content() {
+func Example_helium_append_text() {
 	doc := helium.NewDefaultDocument()
 
 	root, err := doc.CreateElement("msg")
@@ -19,15 +19,15 @@ func Example_helium_add_content() {
 		return
 	}
 
-	// AddContent appends text to the element. If the last child is already
+	// AppendText appends text to the element. If the last child is already
 	// a text node, the new content is merged into it (concatenated),
 	// rather than creating a separate text node. This means two consecutive
-	// AddContent calls produce a single text node "hello world".
-	if err := root.AddContent([]byte("hello ")); err != nil {
+	// AppendText calls produce a single text node "hello world".
+	if err := root.AppendText([]byte("hello ")); err != nil {
 		fmt.Printf("failed to add content: %s\n", err)
 		return
 	}
-	if err := root.AddContent([]byte("world")); err != nil {
+	if err := root.AppendText([]byte("world")); err != nil {
 		fmt.Printf("failed to add content: %s\n", err)
 		return
 	}

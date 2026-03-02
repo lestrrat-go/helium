@@ -97,8 +97,8 @@ func (d *Document) AddChild(cur Node) error {
 	return addChild(d, cur)
 }
 
-func (d *Document) AddContent(b []byte) error {
-	return addContent(d, b)
+func (d *Document) AppendText(b []byte) error {
+	return appendText(d, b)
 }
 
 func (d *Document) AddSibling(_ Node) error {

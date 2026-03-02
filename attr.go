@@ -46,8 +46,8 @@ func (n *AttributeDecl) AddChild(cur Node) error {
 	return addChild(n, cur)
 }
 
-func (n *AttributeDecl) AddContent(b []byte) error {
-	return addContent(n, b)
+func (n *AttributeDecl) AppendText(b []byte) error {
+	return appendText(n, b)
 }
 
 func (n *AttributeDecl) AddSibling(cur Node) error {
@@ -94,8 +94,8 @@ func (n *Attribute) AddChild(cur Node) error {
 	return addChild(n, cur)
 }
 
-func (n *Attribute) AddContent(b []byte) error {
-	return addContent(n, b)
+func (n *Attribute) AppendText(b []byte) error {
+	return appendText(n, b)
 }
 
 func (n *Attribute) AddSibling(cur Node) error {

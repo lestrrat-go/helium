@@ -14,12 +14,12 @@ func newComment(b []byte) *Comment {
 
 func (n *Comment) AddChild(cur Node) error {
 	if t, ok := cur.(*Comment); ok {
-		return n.AddContent(t.content)
+		return n.AppendText(t.content)
 	}
 	return ErrInvalidOperation
 }
 
-func (n *Comment) AddContent(b []byte) error {
+func (n *Comment) AppendText(b []byte) error {
 	n.content = append(n.content, b...)
 	return nil
 }

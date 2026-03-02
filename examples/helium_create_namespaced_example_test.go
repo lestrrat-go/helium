@@ -46,7 +46,7 @@ func Example_helium_create_namespaced() {
 		fmt.Printf("failed to create element: %s\n", err)
 		return
 	}
-	if err := title.AddContent([]byte("Example")); err != nil {
+	if err := title.AppendText([]byte("Example")); err != nil {
 		fmt.Printf("failed to add content: %s\n", err)
 		return
 	}

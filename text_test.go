@@ -6,9 +6,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTextAddContent(t *testing.T) {
+func TestTextAppendText(t *testing.T) {
 	n := newText([]byte("Hello "))
-	require.NoError(t, n.AddContent([]byte("World!")), "AddContent succeeds")
+	require.NoError(t, n.AppendText([]byte("World!")), "AppendText succeeds")
 
 	require.Equal(t, []byte("Hello World!"), n.Content(), "Content matches")
 }

@@ -358,10 +358,10 @@ func (t *TreeBuilder) Characters(ctxif sax.Context, data []byte) error {
 	}
 
 	if pdebug.Enabled {
-		pdebug.Printf("Calling AddContent() on '%s' node", n.Name())
+		pdebug.Printf("Calling AppendText() on '%s' node", n.Name())
 	}
 
-	return n.AddContent(data)
+	return n.AppendText(data)
 }
 
 // CDataBlock mirrors xmlSAX2Text(ctxt, value, len, XML_CDATA_SECTION_NODE)

@@ -86,7 +86,7 @@ func TestDOMToXMLString(t *testing.T) {
 	require.NoError(t, err, `CreateElement("root") succeeds`)
 
 	require.NoError(t, doc.SetDocumentElement(root))
-	require.NoError(t, root.AddContent([]byte(`Hello, World!`)))
+	require.NoError(t, root.AppendText([]byte(`Hello, World!`)))
 
 	str, err := doc.XMLString()
 	require.NoError(t, err, "XMLString(doc) succeeds")

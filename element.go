@@ -22,8 +22,8 @@ func (n *ElementDecl) AddChild(cur Node) error {
 	return addChild(n, cur)
 }
 
-func (n *ElementDecl) AddContent(b []byte) error {
-	return addContent(n, b)
+func (n *ElementDecl) AppendText(b []byte) error {
+	return appendText(n, b)
 }
 
 func (n *ElementDecl) AddSibling(cur Node) error {
@@ -64,12 +64,13 @@ func (n *Element) AddChild(cur Node) error {
 	return addChild(n, cur)
 }
 
-func (n *Element) AddContent(b []byte) error {
+// AppendText appends text content to this node (libxml2: xmlNodeAddContent).
+func (n *Element) AppendText(b []byte) error {
 	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Element.AddContent '%s'", b)
-		defer g.IRelease("END Element.AddContent")
+		g := pdebug.IPrintf("START Element.AppendText '%s'", b)
+		defer g.IRelease("END Element.AppendText")
 	}
-	return addContent(n, b)
+	return appendText(n, b)
 }
 
 // AddSibling adds a new sibling to the end of the sibling nodes (libxml2: xmlAddSibling).

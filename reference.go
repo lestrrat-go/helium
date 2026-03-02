@@ -16,8 +16,8 @@ func (e *EntityRef) AddChild(cur Node) error {
 	return addChild(e, cur)
 }
 
-func (e *EntityRef) AddContent(b []byte) error {
-	return addContent(e, b)
+func (e *EntityRef) AppendText(b []byte) error {
+	return appendText(e, b)
 }
 
 func (e *EntityRef) AddSibling(cur Node) error {

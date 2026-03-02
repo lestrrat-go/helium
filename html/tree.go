@@ -73,14 +73,14 @@ func (t *treeBuilder) Characters(ch []byte) error {
 	if t.cur == nil || t.cur == t.doc {
 		return nil
 	}
-	return t.cur.AddContent(ch)
+	return t.cur.AppendText(ch)
 }
 
 func (t *treeBuilder) CDataBlock(value []byte) error {
 	if t.cur == nil || t.cur == t.doc {
 		return nil
 	}
-	return t.cur.AddContent(value)
+	return t.cur.AppendText(value)
 }
 
 func (t *treeBuilder) Comment(value []byte) error {
