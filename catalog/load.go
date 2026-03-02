@@ -58,17 +58,17 @@ func loadFromBytes(data []byte, baseURI string) (*icatalog.Catalog, error) {
 	}
 
 	cat := &icatalog.Catalog{
-		Pref:    icatalog.PreferPublic, // default per OASIS spec
+		Prefer:  icatalog.PreferPublic, // default per OASIS spec
 		BaseURI: baseURI,
-		Ldr:     loader{},
+		Loader:     loader{},
 	}
 
 	if v := getAttr(root, "prefer"); v != "" {
-		cat.Pref = icatalog.ParsePrefer(v)
+		cat.Prefer = icatalog.ParsePrefer(v)
 	}
 
 	var warnings strings.Builder
-	parseEntries(root, cat.Pref, baseURI, &cat.Entries, &warnings)
+	parseEntries(root, cat.Prefer, baseURI, &cat.Entries, &warnings)
 	cat.ParseWarnings = warnings.String()
 
 	return cat, nil
@@ -110,7 +110,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				catalogMissingAttr(warnings, localName, pubID, "publicId", uri, "uri")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
-					Typ:    icatalog.EntryPublic,
+					Type:    icatalog.EntryPublic,
 					Name:   pubID,
 					URL:    uri,
 					Prefer: elemPrefer,
@@ -123,7 +123,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				catalogMissingAttr(warnings, localName, sysID, "systemId", uri, "uri")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
-					Typ:  icatalog.EntrySystem,
+					Type:  icatalog.EntrySystem,
 					Name: sysID,
 					URL:  uri,
 				})
@@ -135,7 +135,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				catalogMissingAttr(warnings, localName, startString, "systemIdStartString", prefix, "rewritePrefix")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
-					Typ:  icatalog.EntryRewriteSystem,
+					Type:  icatalog.EntryRewriteSystem,
 					Name: startString,
 					URL:  prefix,
 				})
@@ -147,7 +147,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				catalogMissingAttr(warnings, localName, startString, "publicIdStartString", catFile, "catalog")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
-					Typ:    icatalog.EntryDelegatePublic,
+					Type:    icatalog.EntryDelegatePublic,
 					Name:   startString,
 					URL:    catFile,
 					Prefer: elemPrefer,
@@ -160,7 +160,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				catalogMissingAttr(warnings, localName, startString, "systemIdStartString", catFile, "catalog")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
-					Typ:  icatalog.EntryDelegateSystem,
+					Type:  icatalog.EntryDelegateSystem,
 					Name: startString,
 					URL:  catFile,
 				})
@@ -172,7 +172,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				catalogMissingAttr(warnings, localName, name, "name", uri, "uri")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
-					Typ:  icatalog.EntryURI,
+					Type:  icatalog.EntryURI,
 					Name: name,
 					URL:  uri,
 				})
@@ -184,7 +184,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				catalogMissingAttr(warnings, localName, startString, "uriStartString", prefix, "rewritePrefix")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
-					Typ:  icatalog.EntryRewriteURI,
+					Type:  icatalog.EntryRewriteURI,
 					Name: startString,
 					URL:  prefix,
 				})
@@ -196,7 +196,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 				catalogMissingAttr(warnings, localName, startString, "uriStartString", catFile, "catalog")
 			} else {
 				*entries = append(*entries, icatalog.Entry{
-					Typ:  icatalog.EntryDelegateURI,
+					Type:  icatalog.EntryDelegateURI,
 					Name: startString,
 					URL:  catFile,
 				})
@@ -208,7 +208,7 @@ func parseEntries(parent *helium.Element, prefer icatalog.Prefer, baseURI string
 			} else {
 				if !icatalog.HasNextCatalog(*entries, catFile) {
 					*entries = append(*entries, icatalog.Entry{
-						Typ: icatalog.EntryNextCatalog,
+						Type: icatalog.EntryNextCatalog,
 						URL: catFile,
 					})
 				}

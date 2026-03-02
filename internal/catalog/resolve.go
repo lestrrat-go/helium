@@ -104,7 +104,7 @@ func (c *Catalog) resolve(pubID, sysID string) string {
 	if sysID != "" {
 		for i := range c.Entries {
 			e := &c.Entries[i]
-			switch e.Typ {
+			switch e.Type {
 			case EntrySystem:
 				if e.Name == sysID {
 					return e.URL
@@ -142,7 +142,7 @@ func (c *Catalog) resolve(pubID, sysID string) string {
 	if pubID != "" {
 		for i := range c.Entries {
 			e := &c.Entries[i]
-			switch e.Typ {
+			switch e.Type {
 			case EntryPublic:
 				if e.Name == pubID {
 					return e.URL
@@ -191,7 +191,7 @@ func (c *Catalog) resolveURI(uri string) string {
 
 	for i := range c.Entries {
 		e := &c.Entries[i]
-		switch e.Typ {
+		switch e.Type {
 		case EntryURI:
 			if e.Name == uri {
 				return e.URL
@@ -235,7 +235,7 @@ func (c *Catalog) resolveDelegateSystem(sysID string) string {
 
 	for i := range c.Entries {
 		e := &c.Entries[i]
-		if e.Typ != EntryDelegateSystem {
+		if e.Type != EntryDelegateSystem {
 			continue
 		}
 		if !strings.HasPrefix(sysID, e.Name) {
@@ -269,7 +269,7 @@ func (c *Catalog) resolveDelegatePublic(pubID string) string {
 
 	for i := range c.Entries {
 		e := &c.Entries[i]
-		if e.Typ != EntryDelegatePublic {
+		if e.Type != EntryDelegatePublic {
 			continue
 		}
 		if e.Prefer != PreferPublic {
@@ -306,7 +306,7 @@ func (c *Catalog) resolveDelegateURI(uri string) string {
 
 	for i := range c.Entries {
 		e := &c.Entries[i]
-		if e.Typ != EntryDelegateURI && e.Typ != EntryDelegateSystem {
+		if e.Type != EntryDelegateURI && e.Type != EntryDelegateSystem {
 			continue
 		}
 		if !strings.HasPrefix(uri, e.Name) {
@@ -337,7 +337,7 @@ func (c *Catalog) resolveDelegateURI(uri string) string {
 func (c *Catalog) resolveNextCatalogs(pubID, sysID string) string {
 	for i := range c.Entries {
 		e := &c.Entries[i]
-		if e.Typ != EntryNextCatalog {
+		if e.Type != EntryNextCatalog {
 			continue
 		}
 		if err := c.lazyLoad(e); err != nil {
@@ -361,7 +361,7 @@ func (c *Catalog) resolveNextCatalogs(pubID, sysID string) string {
 func (c *Catalog) resolveNextCatalogsURI(uri string) string {
 	for i := range c.Entries {
 		e := &c.Entries[i]
-		if e.Typ != EntryNextCatalog {
+		if e.Type != EntryNextCatalog {
 			continue
 		}
 		if err := c.lazyLoad(e); err != nil {
@@ -406,10 +406,10 @@ func (c *Catalog) lazyLoad(e *Entry) error {
 		e.Catalog.visited = c.visited
 		return nil
 	}
-	if c.Ldr == nil {
+	if c.Loader == nil {
 		return nil
 	}
-	cat, err := c.Ldr.Load(e.URL)
+	cat, err := c.Loader.Load(e.URL)
 	if err != nil {
 		return err
 	}
