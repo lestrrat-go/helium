@@ -17,16 +17,16 @@ const testdataBase = "../testdata/libxml2-compat/c14n"
 // knownParseFailures lists test cases that fail during parsing due to
 // helium parser limitations (not C14N bugs).
 var knownParseFailures = map[string]string{
-	"without-comments/example-3":            "duplicate namespace declaration handling",
-	"without-comments/example-4":            "entity reference in single-quoted attribute",
-	"without-comments/test-2":               "duplicate namespace declaration handling",
-	"without-comments/test-3":               "duplicate namespace declaration handling",
-	"with-comments/example-3":               "duplicate namespace declaration handling",
-	"with-comments/example-4":               "entity reference in single-quoted attribute",
-	"exc-without-comments/test-0":           "duplicate namespace declaration handling",
-	"exc-without-comments/test-1":           "duplicate namespace declaration handling",
-	"1-1-without-comments/example-3":        "duplicate namespace declaration handling",
-	"1-1-without-comments/example-4":        "entity reference in single-quoted attribute",
+	"without-comments/example-3":     "duplicate namespace declaration handling",
+	"without-comments/example-4":     "entity reference in single-quoted attribute",
+	"without-comments/test-2":        "duplicate namespace declaration handling",
+	"without-comments/test-3":        "duplicate namespace declaration handling",
+	"with-comments/example-3":        "duplicate namespace declaration handling",
+	"with-comments/example-4":        "entity reference in single-quoted attribute",
+	"exc-without-comments/test-0":    "duplicate namespace declaration handling",
+	"exc-without-comments/test-1":    "duplicate namespace declaration handling",
+	"1-1-without-comments/example-3": "duplicate namespace declaration handling",
+	"1-1-without-comments/example-4": "entity reference in single-quoted attribute",
 }
 
 func parseTestDoc(t *testing.T, path string) *helium.Document {
@@ -41,7 +41,7 @@ func parseTestDoc(t *testing.T, path string) *helium.Document {
 	p.SetOption(helium.ParseDTDAttr)
 	p.SetBaseURI(path)
 
-	doc, err := p.Parse(data)
+	doc, err := p.Parse(t.Context(), data)
 	require.NoError(t, err, "parsing test file %s", path)
 	return doc
 }
@@ -66,7 +66,7 @@ func parseXPathFile(t *testing.T, path string) (string, map[string]string) {
 	p.SetOption(helium.ParseNoEnt)
 	p.SetOption(helium.ParseDTDLoad)
 	p.SetOption(helium.ParseDTDAttr)
-	doc, err := p.Parse(data)
+	doc, err := p.Parse(t.Context(), data)
 	require.NoError(t, err, "parsing xpath file %s", path)
 
 	// Find the XPath element
@@ -290,7 +290,7 @@ func TestC14N11WithoutComments(t *testing.T) {
 func TestRelativeNamespaceURIRejected(t *testing.T) {
 	// C14N spec requires failure on relative namespace URIs.
 	xml := `<?xml version="1.0"?><root xmlns:bad="relative/uri"><child/></root>`
-	doc, err := helium.Parse([]byte(xml))
+	doc, err := helium.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 
 	_, err = c14n.CanonicalizeTo(doc, c14n.C14N10)
@@ -300,7 +300,7 @@ func TestRelativeNamespaceURIRejected(t *testing.T) {
 
 func TestAbsoluteNamespaceURIAccepted(t *testing.T) {
 	xml := `<?xml version="1.0"?><root xmlns:ok="http://example.com"><child/></root>`
-	doc, err := helium.Parse([]byte(xml))
+	doc, err := helium.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 
 	_, err = c14n.CanonicalizeTo(doc, c14n.C14N10)
@@ -310,7 +310,7 @@ func TestAbsoluteNamespaceURIAccepted(t *testing.T) {
 func TestEmptyNamespaceURIAccepted(t *testing.T) {
 	// Empty namespace URI (default namespace undeclaration) must be allowed.
 	xml := `<?xml version="1.0"?><root xmlns="http://example.com"><child xmlns=""/></root>`
-	doc, err := helium.Parse([]byte(xml))
+	doc, err := helium.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 
 	_, err = c14n.CanonicalizeTo(doc, c14n.C14N10)

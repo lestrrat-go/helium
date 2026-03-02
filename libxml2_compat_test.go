@@ -88,7 +88,7 @@ func TestLibxml2Compat(t *testing.T) {
 			require.NoError(t, err, "reading expected file")
 
 			p := helium.NewParser()
-			doc, err := p.Parse(input)
+			doc, err := p.Parse(t.Context(), input)
 			if err != nil {
 				t.Fatalf("parsing %s: %v", name, err)
 			}

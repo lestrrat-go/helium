@@ -4,6 +4,7 @@
 package xsd
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 
@@ -30,7 +31,7 @@ func CompileFile(path string, opts ...CompileOption) (*Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-	doc, err := helium.Parse(data)
+	doc, err := helium.Parse(context.Background(), data)
 	if err != nil {
 		return nil, err
 	}

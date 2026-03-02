@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
@@ -13,7 +14,7 @@ func Example_c14n_canonicalize() {
 	// so the canonical form will have a="1" before b="2".
 	const src = `<root b="2" a="1"><child/></root>`
 
-	doc, err := helium.Parse([]byte(src))
+	doc, err := helium.Parse(context.Background(), []byte(src))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

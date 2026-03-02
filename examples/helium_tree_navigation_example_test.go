@@ -1,13 +1,14 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
 )
 
 func Example_helium_tree_navigation() {
-	doc, err := helium.Parse([]byte(`<root><a/><b/><c/></root>`))
+	doc, err := helium.Parse(context.Background(), []byte(`<root><a/><b/><c/></root>`))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

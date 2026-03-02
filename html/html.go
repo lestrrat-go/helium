@@ -7,6 +7,7 @@
 package html
 
 import (
+	"context"
 	"os"
 
 	"github.com/lestrrat-go/helium"
@@ -14,7 +15,7 @@ import (
 
 // Parse parses HTML data and returns a helium Document.
 // (libxml2: htmlParseDoc)
-func Parse(data []byte, options ...ParseOption) (*helium.Document, error) {
+func Parse(ctx context.Context, data []byte, options ...ParseOption) (*helium.Document, error) {
 	var cfg parseConfig
 	for _, o := range options {
 		o(&cfg)
@@ -32,18 +33,18 @@ func Parse(data []byte, options ...ParseOption) (*helium.Document, error) {
 
 // ParseFile reads and parses an HTML file.
 // (libxml2: htmlParseFile)
-func ParseFile(filename string, options ...ParseOption) (*helium.Document, error) {
+func ParseFile(ctx context.Context, filename string, options ...ParseOption) (*helium.Document, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
-	return Parse(data, options...)
+	return Parse(ctx, data, options...)
 }
 
 // ParseWithSAX parses HTML data, firing SAX events to the given handler
 // without building a DOM tree.
 // (libxml2: htmlSAXParseDoc)
-func ParseWithSAX(data []byte, handler SAXHandler, options ...ParseOption) error {
+func ParseWithSAX(ctx context.Context, data []byte, handler SAXHandler, options ...ParseOption) error {
 	var cfg parseConfig
 	for _, o := range options {
 		o(&cfg)

@@ -144,7 +144,7 @@ func TestGoldenFiles(t *testing.T) {
 				// Parse instance.
 				xmlData, err := os.ReadFile(tc.xmlPath)
 				require.NoError(t, err)
-				doc, err := helium.Parse(xmlData)
+				doc, err := helium.Parse(t.Context(), xmlData)
 				require.NoError(t, err, "XML parse failed for %s", tc.xmlPath)
 
 				// Validate.
@@ -178,7 +178,7 @@ func TestGetAttrWhitespace(t *testing.T) {
     <element name="a"><empty/></element>
   </define>
 </grammar>`
-	doc, err := helium.Parse([]byte(input))
+	doc, err := helium.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 
 	grammar, err := relaxng.Compile(doc)
@@ -186,7 +186,7 @@ func TestGetAttrWhitespace(t *testing.T) {
 	require.Empty(t, grammar.CompileErrors(), "schema with whitespace-padded names should compile without errors")
 
 	xmlData := []byte(`<a/>`)
-	xmlDoc, err := helium.Parse(xmlData)
+	xmlDoc, err := helium.Parse(t.Context(), xmlData)
 	require.NoError(t, err)
 
 	err = relaxng.Validate(xmlDoc, grammar)
@@ -201,7 +201,7 @@ func TestXmlBaseInclude(t *testing.T) {
 	require.Empty(t, grammar.CompileErrors(), "include via xml:base should compile without errors")
 
 	xmlData := []byte(`<sub/>`)
-	xmlDoc, err := helium.Parse(xmlData)
+	xmlDoc, err := helium.Parse(t.Context(), xmlData)
 	require.NoError(t, err)
 
 	err = relaxng.Validate(xmlDoc, grammar)
@@ -216,7 +216,7 @@ func TestXmlBaseExternalRef(t *testing.T) {
 	require.Empty(t, grammar.CompileErrors(), "externalRef via xml:base should compile without errors")
 
 	xmlData := []byte(`<sub/>`)
-	xmlDoc, err := helium.Parse(xmlData)
+	xmlDoc, err := helium.Parse(t.Context(), xmlData)
 	require.NoError(t, err)
 
 	err = relaxng.Validate(xmlDoc, grammar)
@@ -234,7 +234,7 @@ func TestCheckCombine(t *testing.T) {
     <element name="b"><empty/></element>
   </define>
 </grammar>`
-		doc, err := helium.Parse([]byte(input))
+		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		grammar, err := relaxng.Compile(doc)
 		require.NoError(t, err)
@@ -251,7 +251,7 @@ func TestCheckCombine(t *testing.T) {
     <element name="b"><empty/></element>
   </define>
 </grammar>`
-		doc, err := helium.Parse([]byte(input))
+		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		grammar, err := relaxng.Compile(doc)
 		require.NoError(t, err)
@@ -267,7 +267,7 @@ func TestCheckCombine(t *testing.T) {
     <element name="b"><empty/></element>
   </start>
 </grammar>`
-		doc, err := helium.Parse([]byte(input))
+		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		grammar, err := relaxng.Compile(doc)
 		require.NoError(t, err)
@@ -283,7 +283,7 @@ func TestCheckCombine(t *testing.T) {
     <element name="b"><empty/></element>
   </start>
 </grammar>`
-		doc, err := helium.Parse([]byte(input))
+		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		grammar, err := relaxng.Compile(doc)
 		require.NoError(t, err)
@@ -300,7 +300,7 @@ func TestCheckCombine(t *testing.T) {
     <element name="b"><empty/></element>
   </define>
 </grammar>`
-		doc, err := helium.Parse([]byte(input))
+		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		grammar, err := relaxng.Compile(doc)
 		require.NoError(t, err)
@@ -313,7 +313,7 @@ func TestCheckRules(t *testing.T) {
 
 	compile := func(t *testing.T, input string) *relaxng.Grammar {
 		t.Helper()
-		doc, err := helium.Parse([]byte(input))
+		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		grammar, err := relaxng.Compile(doc, relaxng.WithSchemaFilename("test.rng"))
 		require.NoError(t, err)

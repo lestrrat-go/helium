@@ -1,6 +1,7 @@
 package relaxng
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -356,7 +357,7 @@ func (c *compiler) parseInclude(elem *helium.Element) {
 		c.errors.WriteString(rngParserError(fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)))
 		return
 	}
-	doc, err := helium.Parse(data)
+	doc, err := helium.Parse(context.Background(), data)
 	if err != nil {
 		c.errors.WriteString(rngParserError(fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)))
 		return
@@ -753,7 +754,7 @@ func (c *compiler) parseExternalRef(node *helium.Element) *pattern {
 		c.errors.WriteString(rngParserError(fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)))
 		return nil
 	}
-	doc, err := helium.Parse(data)
+	doc, err := helium.Parse(context.Background(), data)
 	if err != nil {
 		c.errors.WriteString(rngParserError(fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)))
 		return nil

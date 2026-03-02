@@ -390,7 +390,7 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 			p := NewParser()
 			p.SetSAXHandler(newLibxml2EventEmitter(&buf))
 
-			_, err = p.Parse(input)
+			_, err = p.Parse(t.Context(), input)
 			if err != nil {
 				t.Logf("source XML: %s", input)
 			}

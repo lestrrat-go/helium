@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,7 +37,7 @@ func Example_xsd_compile_file() {
 		return
 	}
 
-	doc, err := helium.Parse([]byte(`<greeting>hello</greeting>`))
+	doc, err := helium.Parse(context.Background(), []byte(`<greeting>hello</greeting>`))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

@@ -179,7 +179,7 @@ func TestGoldenFiles(t *testing.T) {
 				// Parse instance.
 				xmlData, err := os.ReadFile(tc.xmlPath)
 				require.NoError(t, err)
-				doc, err := helium.Parse(xmlData)
+				doc, err := helium.Parse(t.Context(), xmlData)
 				require.NoError(t, err, "XML parse failed for %s", tc.xmlPath)
 
 				// Validate. Prepend any compile warnings to the output.
@@ -225,14 +225,14 @@ func TestXsiNil(t *testing.T) {
   </xs:element>
 </xs:schema>`
 
-	schemaDoc, err := helium.Parse([]byte(schemaSrc))
+	schemaDoc, err := helium.Parse(t.Context(), []byte(schemaSrc))
 	require.NoError(t, err)
 
 	schema, err := xsd.Compile(schemaDoc)
 	require.NoError(t, err)
 
 	t.Run("nillable element with xsi:nil=true validates", func(t *testing.T) {
-		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+		doc, err := helium.Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <nillable-elem xsi:nil="true"/>
 </root>`))
@@ -243,7 +243,7 @@ func TestXsiNil(t *testing.T) {
 	})
 
 	t.Run("non-nillable element with xsi:nil=true fails", func(t *testing.T) {
-		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+		doc, err := helium.Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <non-nillable-elem xsi:nil="true"/>
 </root>`))
@@ -255,7 +255,7 @@ func TestXsiNil(t *testing.T) {
 	})
 
 	t.Run("nilled element with text content fails", func(t *testing.T) {
-		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+		doc, err := helium.Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <nillable-elem xsi:nil="true">some text</nillable-elem>
 </root>`))
@@ -267,7 +267,7 @@ func TestXsiNil(t *testing.T) {
 	})
 
 	t.Run("nilled element with child element fails", func(t *testing.T) {
-		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+		doc, err := helium.Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <nillable-complex xsi:nil="true"><child>x</child></nillable-complex>
 </root>`))
@@ -279,7 +279,7 @@ func TestXsiNil(t *testing.T) {
 	})
 
 	t.Run("nilled complex element with attributes validates", func(t *testing.T) {
-		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+		doc, err := helium.Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <nillable-complex xsi:nil="true" attr1="val"/>
 </root>`))
@@ -290,7 +290,7 @@ func TestXsiNil(t *testing.T) {
 	})
 
 	t.Run("nillable element without xsi:nil validates normally", func(t *testing.T) {
-		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+		doc, err := helium.Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <nillable-elem>hello</nillable-elem>
 </root>`))
@@ -301,7 +301,7 @@ func TestXsiNil(t *testing.T) {
 	})
 
 	t.Run("xsi:nil=1 is equivalent to true", func(t *testing.T) {
-		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+		doc, err := helium.Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <nillable-elem xsi:nil="1"/>
 </root>`))
@@ -312,7 +312,7 @@ func TestXsiNil(t *testing.T) {
 	})
 
 	t.Run("xsi:nil=false does not trigger nil handling", func(t *testing.T) {
-		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+		doc, err := helium.Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <nillable-elem xsi:nil="false">hello</nillable-elem>
 </root>`))
@@ -338,13 +338,13 @@ func extractBaseName(name string) string {
 func TestDefaultFixedValidation(t *testing.T) {
 	compileAndValidate := func(t *testing.T, xsdStr, xmlStr string) error {
 		t.Helper()
-		xsdDoc, err := helium.Parse([]byte(xsdStr))
+		xsdDoc, err := helium.Parse(t.Context(), []byte(xsdStr))
 		require.NoError(t, err, "XSD parse failed")
 		schema, err := xsd.Compile(xsdDoc)
 		require.NoError(t, err, "schema compilation failed")
 		require.Empty(t, schema.CompileErrors(), "unexpected compile errors")
 
-		xmlDoc, err := helium.Parse([]byte(xmlStr))
+		xmlDoc, err := helium.Parse(t.Context(), []byte(xmlStr))
 		require.NoError(t, err, "XML parse failed")
 		return xsd.Validate(xmlDoc, schema, xsd.WithFilename("test.xml"))
 	}
@@ -417,13 +417,13 @@ func TestDefaultFixedValidation(t *testing.T) {
 func TestMultipleAttributeErrors(t *testing.T) {
 	compileAndValidate := func(t *testing.T, xsdStr, xmlStr string) error {
 		t.Helper()
-		xsdDoc, err := helium.Parse([]byte(xsdStr))
+		xsdDoc, err := helium.Parse(t.Context(), []byte(xsdStr))
 		require.NoError(t, err, "XSD parse failed")
 		schema, err := xsd.Compile(xsdDoc)
 		require.NoError(t, err, "schema compilation failed")
 		require.Empty(t, schema.CompileErrors(), "unexpected compile errors")
 
-		xmlDoc, err := helium.Parse([]byte(xmlStr))
+		xmlDoc, err := helium.Parse(t.Context(), []byte(xmlStr))
 		require.NoError(t, err, "XML parse failed")
 		return xsd.Validate(xmlDoc, schema, xsd.WithFilename("test.xml"))
 	}
@@ -493,7 +493,7 @@ func TestRedefine(t *testing.T) {
 		require.NoError(t, err, "schema compilation failed")
 		require.Empty(t, schema.CompileErrors(), "unexpected compile errors: %s", schema.CompileErrors())
 
-		xmlDoc, err := helium.Parse([]byte(xmlStr))
+		xmlDoc, err := helium.Parse(t.Context(), []byte(xmlStr))
 		require.NoError(t, err, "XML parse failed")
 		return xsd.Validate(xmlDoc, schema)
 	}
@@ -694,7 +694,7 @@ func TestRedefine(t *testing.T) {
 func TestFacetConsistency(t *testing.T) {
 	compileWithErrors := func(t *testing.T, xsdStr string) string {
 		t.Helper()
-		xsdDoc, err := helium.Parse([]byte(xsdStr))
+		xsdDoc, err := helium.Parse(t.Context(), []byte(xsdStr))
 		require.NoError(t, err, "XSD parse failed")
 		schema, err := xsd.Compile(xsdDoc, xsd.WithSchemaFilename("test.xsd"))
 		require.NoError(t, err, "schema compilation failed")

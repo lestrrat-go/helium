@@ -14,7 +14,7 @@ func TestGetElementByID(t *testing.T) {
   <b xml:id="second">two</b>
 </root>`
 		p := NewParser()
-		doc, err := p.Parse([]byte(input))
+		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 
 		// O(1) lookup via ID table
@@ -44,7 +44,7 @@ func TestGetElementByID(t *testing.T) {
 </root>`
 		p := NewParser()
 		p.SetOption(ParseDTDLoad | ParseDTDAttr)
-		doc, err := p.Parse([]byte(input))
+		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 
 		elem := doc.GetElementByID("x1")
@@ -84,7 +84,7 @@ func TestGetElementByID(t *testing.T) {
   <child xml:id="c"/>
 </root>`
 		p := NewParser()
-		doc, err := p.Parse([]byte(input))
+		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 
 		// Verify the ID table exists and is populated

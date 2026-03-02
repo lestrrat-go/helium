@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
@@ -15,7 +16,7 @@ func Example_xsd_compile_from_document() {
 </xs:schema>`
 
 	// Parse the schema source into a DOM document first.
-	schemaDoc, err := helium.Parse([]byte(schemaSrc))
+	schemaDoc, err := helium.Parse(context.Background(), []byte(schemaSrc))
 	if err != nil {
 		fmt.Printf("failed to parse schema: %s\n", err)
 		return
@@ -31,7 +32,7 @@ func Example_xsd_compile_from_document() {
 	}
 
 	// Parse the document to validate.
-	doc, err := helium.Parse([]byte(`<greeting>hello</greeting>`))
+	doc, err := helium.Parse(context.Background(), []byte(`<greeting>hello</greeting>`))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

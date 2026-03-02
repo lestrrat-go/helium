@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -31,7 +32,7 @@ func Example_xinclude_with_resolver() {
 	// The document contains an xi:include that references "greeting.xml".
 	const src = `<doc xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="greeting.xml"/></doc>`
 
-	doc, err := helium.Parse([]byte(src))
+	doc, err := helium.Parse(context.Background(), []byte(src))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

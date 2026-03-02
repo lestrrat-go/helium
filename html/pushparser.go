@@ -2,6 +2,7 @@ package html
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/lestrrat-go/helium"
 )
@@ -17,21 +18,22 @@ import (
 //
 // (libxml2: htmlCreatePushParserCtxt)
 type PushParser struct {
+	ctx     context.Context
 	buf     bytes.Buffer
 	sax     SAXHandler
 	options []ParseOption
 }
 
 // NewPushParser creates an HTML PushParser that builds a DOM tree.
-func NewPushParser(options ...ParseOption) *PushParser {
-	return &PushParser{options: options}
+func NewPushParser(ctx context.Context, options ...ParseOption) *PushParser {
+	return &PushParser{ctx: ctx, options: options}
 }
 
 // NewSAXPushParser creates an HTML PushParser that fires SAX events
 // to the given handler instead of building a DOM tree.
 // (libxml2: htmlCreatePushParserCtxt with SAX handler)
-func NewSAXPushParser(h SAXHandler, options ...ParseOption) *PushParser {
-	return &PushParser{sax: h, options: options}
+func NewSAXPushParser(ctx context.Context, h SAXHandler, options ...ParseOption) *PushParser {
+	return &PushParser{ctx: ctx, sax: h, options: options}
 }
 
 // Push appends a chunk of HTML data to the internal buffer.
@@ -46,12 +48,12 @@ func (pp *PushParser) Write(p []byte) (int, error) {
 }
 
 // Close parses the accumulated HTML data and returns the resulting Document.
-// When created with [NewPushParserWithSAX], it fires SAX events and always
+// When created with [NewSAXPushParser], it fires SAX events and always
 // returns a nil Document; the returned error is non-nil only on parse failure.
 func (pp *PushParser) Close() (*helium.Document, error) {
 	data := pp.buf.Bytes()
 	if pp.sax != nil {
-		return nil, ParseWithSAX(data, pp.sax, pp.options...)
+		return nil, ParseWithSAX(pp.ctx, data, pp.sax, pp.options...)
 	}
-	return Parse(data, pp.options...)
+	return Parse(pp.ctx, data, pp.options...)
 }

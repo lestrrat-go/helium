@@ -26,7 +26,7 @@ func TestStopParserInCharacters(t *testing.T) {
 	p := NewParser()
 	p.SetSAXHandler(s)
 
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "StopParser should not produce an error")
 }
 
@@ -51,7 +51,7 @@ func TestStopParserInStartElementNS(t *testing.T) {
 	p := NewParser()
 	p.SetSAXHandler(s)
 
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "StopParser should not produce an error")
 	require.Contains(t, seen, "root")
 	require.Contains(t, seen, "a")
@@ -76,7 +76,7 @@ func TestStopParserViaPushParser(t *testing.T) {
 
 	p := NewParser()
 	p.SetSAXHandler(s)
-	pp := p.NewPushParser()
+	pp := p.NewPushParser(t.Context())
 	require.NoError(t, pp.Push([]byte(input)))
 	_, err := pp.Close()
 	require.NoError(t, err, "PushParser Close should not produce an error after StopParser")
@@ -94,7 +94,7 @@ func TestStopParserInStartDocument(t *testing.T) {
 	p := NewParser()
 	p.SetSAXHandler(s)
 
-	_, err := p.Parse([]byte(input))
+	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "StopParser in StartDocument should not produce an error")
 }
 
@@ -152,7 +152,7 @@ func TestStopParserReturnsPartialDoc(t *testing.T) {
 	p := NewParser()
 	p.SetSAXHandler(wrapper)
 
-	doc, err := p.Parse([]byte(input))
+	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 	require.NotNil(t, doc)
 
@@ -191,6 +191,6 @@ func TestStopParserViaParseReader(t *testing.T) {
 	p := NewParser()
 	p.SetSAXHandler(s)
 
-	_, err := p.ParseReader(bytes.NewReader([]byte(input)))
+	_, err := p.ParseReader(t.Context(), bytes.NewReader([]byte(input)))
 	require.NoError(t, err, "StopParser should not produce an error via ParseReader")
 }

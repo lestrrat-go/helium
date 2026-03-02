@@ -2,6 +2,7 @@ package examples_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 
@@ -10,7 +11,7 @@ import (
 
 func Example_html_write_doc() {
 	// Parse HTML first, then serialize with html.WriteDoc.
-	doc, err := html.Parse([]byte(`<html><body><div>Hello</div></body></html>`))
+	doc, err := html.Parse(context.Background(), []byte(`<html><body><div>Hello</div></body></html>`))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

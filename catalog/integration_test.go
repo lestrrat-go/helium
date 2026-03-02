@@ -39,7 +39,7 @@ func TestCatalogExternalSubset(t *testing.T) {
 	p.SetOption(helium.ParseDTDAttr)
 	p.SetCatalog(cat)
 
-	doc, err := p.Parse([]byte(xmlContent))
+	doc, err := p.Parse(t.Context(), []byte(xmlContent))
 	require.NoError(t, err)
 	require.NotNil(t, doc)
 
@@ -83,7 +83,7 @@ func TestCatalogPublicIDResolution(t *testing.T) {
 	p.SetOption(helium.ParseDTDAttr)
 	p.SetCatalog(cat)
 
-	doc, err := p.Parse([]byte(xmlContent))
+	doc, err := p.Parse(t.Context(), []byte(xmlContent))
 	require.NoError(t, err)
 	require.NotNil(t, doc)
 
@@ -108,7 +108,7 @@ func TestCatalogNoCatalog(t *testing.T) {
 	p := helium.NewParser()
 	p.SetOption(helium.ParseDTDLoad)
 
-	doc, err := p.Parse([]byte(xmlContent))
+	doc, err := p.Parse(t.Context(), []byte(xmlContent))
 	require.NoError(t, err)
 	require.NotNil(t, doc)
 

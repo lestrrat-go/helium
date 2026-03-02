@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -17,7 +18,7 @@ func Example_html_new_sax_push_parser() {
 		return nil
 	})
 
-	pp := html.NewSAXPushParser(handler)
+	pp := html.NewSAXPushParser(context.Background(), handler)
 	if err := pp.Push([]byte(`<h1>Title</h1>`)); err != nil {
 		fmt.Printf("push failed: %s\n", err)
 		return

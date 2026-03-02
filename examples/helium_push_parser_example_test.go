@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
@@ -10,7 +11,7 @@ import (
 func Example_helium_push_parser() {
 	// PushParser allows incremental parsing when XML arrives in chunks.
 	p := helium.NewParser()
-	pp := p.NewPushParser()
+	pp := p.NewPushParser(context.Background())
 
 	if err := pp.Push([]byte(`<root><item>alpha</item>`)); err != nil {
 		fmt.Printf("push failed: %s\n", err)

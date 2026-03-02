@@ -11,7 +11,7 @@ import (
 
 func compileTestSchema(t *testing.T, xml string) *Schema {
 	t.Helper()
-	doc, err := helium.Parse([]byte(xml))
+	doc, err := helium.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 	schema, err := Compile(doc)
 	require.NoError(t, err)
@@ -231,7 +231,7 @@ func TestLetVariableChainedDependency(t *testing.T) {
 		schema := compileTestSchema(t, schemaXML)
 		require.Equal(t, "", schema.CompileErrors())
 
-		doc, err := helium.Parse([]byte(`<root><item val="bad"/></root>`))
+		doc, err := helium.Parse(t.Context(), []byte(`<root><item val="bad"/></root>`))
 		require.NoError(t, err)
 
 		err = Validate(doc, schema)
@@ -264,7 +264,7 @@ func TestLetVariableChainedDependency(t *testing.T) {
 		require.Equal(t, "b", schema.patterns[0].rules[0].lets[0].name)
 		require.Equal(t, "a", schema.patterns[0].rules[0].lets[1].name)
 
-		doc, err := helium.Parse([]byte(`<root><item/></root>`))
+		doc, err := helium.Parse(t.Context(), []byte(`<root><item/></root>`))
 		require.NoError(t, err)
 
 		err = Validate(doc, schema)
@@ -285,7 +285,7 @@ func TestXpathResultToStringBoolean(t *testing.T) {
 }
 
 func TestXpathResultToStringNodeSet(t *testing.T) {
-	doc, err := helium.Parse([]byte(`<root><a/><b/><c/></root>`))
+	doc, err := helium.Parse(t.Context(), []byte(`<root><a/><b/><c/></root>`))
 	require.NoError(t, err)
 
 	root := doc.DocumentElement()
@@ -350,7 +350,7 @@ func TestUnionContextIntegration(t *testing.T) {
 	schema := compileTestSchema(t, schemaXML)
 	require.Equal(t, "", schema.CompileErrors())
 
-	doc, err := helium.Parse([]byte(`<root><invoice/><credit-note/><other/></root>`))
+	doc, err := helium.Parse(t.Context(), []byte(`<root><invoice/><credit-note/><other/></root>`))
 	require.NoError(t, err)
 
 	err = Validate(doc, schema)

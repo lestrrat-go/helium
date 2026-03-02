@@ -9,7 +9,7 @@ import (
 )
 
 func TestOptionsNoImplied(t *testing.T) {
-	doc, err := Parse([]byte(`<p>hello</p>`), WithNoImplied())
+	doc, err := Parse(t.Context(), []byte(`<p>hello</p>`), WithNoImplied())
 	require.NoError(t, err)
 
 	// Without NoImplied, the parser would insert <html><body> around <p>.
@@ -21,7 +21,7 @@ func TestOptionsNoImplied(t *testing.T) {
 
 func TestOptionsNoDefaultDTD(t *testing.T) {
 	// Parse a document without any DOCTYPE
-	doc, err := Parse([]byte(`<html><body><p>hi</p></body></html>`))
+	doc, err := Parse(t.Context(), []byte(`<html><body><p>hi</p></body></html>`))
 	require.NoError(t, err)
 
 	// Without NoDefaultDTD, serialization adds a default DOCTYPE
@@ -37,7 +37,7 @@ func TestOptionsNoDefaultDTD(t *testing.T) {
 
 func TestWriteLegacyCompatSuppressed(t *testing.T) {
 	input := `<!DOCTYPE html SYSTEM "about:legacy-compat"><html><body><p>hi</p></body></html>`
-	doc, err := Parse([]byte(input))
+	doc, err := Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
@@ -49,7 +49,7 @@ func TestWriteLegacyCompatSuppressed(t *testing.T) {
 func TestWriteNameAttrURIOnAnchor(t *testing.T) {
 	// "name" on <a> should be URI-escaped (space -> %20)
 	input := `<html><body><a name="foo bar">link</a></body></html>`
-	doc, err := Parse([]byte(input))
+	doc, err := Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
@@ -61,7 +61,7 @@ func TestWriteNameAttrURIOnAnchor(t *testing.T) {
 func TestWriteNameAttrNonURIOnMeta(t *testing.T) {
 	// "name" on non-<a> elements should NOT be URI-escaped
 	input := `<html><head><meta name="foo bar"></head><body></body></html>`
-	doc, err := Parse([]byte(input))
+	doc, err := Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
@@ -73,7 +73,7 @@ func TestWriteNameAttrNonURIOnMeta(t *testing.T) {
 func TestDuplicateAttrKeepsFirst(t *testing.T) {
 	// libxml2 keeps the first occurrence and silently drops duplicates.
 	input := `<html><body><div class="first" class="second">x</div></body></html>`
-	doc, err := Parse([]byte(input))
+	doc, err := Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
@@ -86,7 +86,7 @@ func TestDuplicateAttrKeepsFirst(t *testing.T) {
 func TestDuplicateAttrCaseInsensitive(t *testing.T) {
 	// HTML attribute names are case-insensitive; CLASS and class are the same.
 	input := `<html><body><div CLASS="upper" class="lower">x</div></body></html>`
-	doc, err := Parse([]byte(input))
+	doc, err := Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
@@ -98,7 +98,7 @@ func TestDuplicateAttrCaseInsensitive(t *testing.T) {
 
 func TestOptionsNoBlanks(t *testing.T) {
 	input := `<html> <body> <p>text</p> </body> </html>`
-	doc, err := Parse([]byte(input), WithNoBlanks())
+	doc, err := Parse(t.Context(), []byte(input), WithNoBlanks())
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
@@ -125,7 +125,7 @@ func TestOptionsNoError(t *testing.T) {
 	// Parse malformed HTML that would normally trigger errors
 	// (e.g., unexpected end tag)
 	input := `<html><body></nonexistent></body></html>`
-	err := ParseWithSAX([]byte(input), sax, WithNoError())
+	err := ParseWithSAX(t.Context(), []byte(input), sax, WithNoError())
 	require.NoError(t, err)
 	require.False(t, errorCalled, "error handler should not be called with WithNoError")
 }
@@ -141,7 +141,7 @@ func TestOptionsNoErrorDefault(t *testing.T) {
 
 	// Without NoError, the error handler should be called
 	input := `<html><body></nonexistent></body></html>`
-	err := ParseWithSAX([]byte(input), sax)
+	err := ParseWithSAX(t.Context(), []byte(input), sax)
 	require.NoError(t, err)
 	require.True(t, errorCalled, "error handler should be called without WithNoError")
 }
@@ -157,13 +157,13 @@ func TestOptionsNoWarning(t *testing.T) {
 
 	// Parse valid HTML with WithNoWarning
 	input := `<html><body><p>hello</p></body></html>`
-	err := ParseWithSAX([]byte(input), sax, WithNoWarning())
+	err := ParseWithSAX(t.Context(), []byte(input), sax, WithNoWarning())
 	require.NoError(t, err)
 	require.False(t, warningCalled, "warning handler should not be called with WithNoWarning")
 }
 
 func TestOptionsPushParserCarriesOptions(t *testing.T) {
-	pp := NewPushParser(WithNoImplied())
+	pp := NewPushParser(t.Context(), WithNoImplied())
 	require.NoError(t, pp.Push([]byte(`<p>hello</p>`)))
 	doc, err := pp.Close()
 	require.NoError(t, err)

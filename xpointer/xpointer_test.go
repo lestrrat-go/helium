@@ -8,7 +8,7 @@ import (
 )
 
 func TestEvaluateXPath1(t *testing.T) {
-	doc, err := helium.Parse([]byte("<root><child>text</child></root>"))
+	doc, err := helium.Parse(t.Context(), []byte("<root><child>text</child></root>"))
 	require.NoError(t, err)
 
 	nodes, err := Evaluate(doc, "xpath1(/root/child)")
@@ -40,7 +40,7 @@ func TestParseFragmentID(t *testing.T) {
 func TestXmlnsScheme(t *testing.T) {
 	t.Run("xmlns with xpath1", func(t *testing.T) {
 		// Mirrors libxml2 issue289base test
-		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+		doc, err := helium.Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <rootB xmlns="abc://d/e:f">
 </rootB>`))
 		require.NoError(t, err)
@@ -52,7 +52,7 @@ func TestXmlnsScheme(t *testing.T) {
 	})
 
 	t.Run("xmlns with xpointer", func(t *testing.T) {
-		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+		doc, err := helium.Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:ns="urn:test"><ns:child>hello</ns:child></root>`))
 		require.NoError(t, err)
 
@@ -63,7 +63,7 @@ func TestXmlnsScheme(t *testing.T) {
 	})
 
 	t.Run("multiple xmlns bindings", func(t *testing.T) {
-		doc, err := helium.Parse([]byte(`<?xml version="1.0"?>
+		doc, err := helium.Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:a="urn:a" xmlns:b="urn:b"><a:x/><b:y/></root>`))
 		require.NoError(t, err)
 
@@ -74,7 +74,7 @@ func TestXmlnsScheme(t *testing.T) {
 	})
 
 	t.Run("invalid xmlns body", func(t *testing.T) {
-		doc, err := helium.Parse([]byte(`<root/>`))
+		doc, err := helium.Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
 		_, err = Evaluate(doc, `xmlns(noequalssign) xpointer(/root)`)
@@ -141,7 +141,7 @@ func TestParseSchemeCircumflexEscape(t *testing.T) {
 
 func TestCascadingParts(t *testing.T) {
 	// Document with known structure: <book><chapter><image/></chapter></book>
-	doc, err := helium.Parse([]byte(`<book><chapter><image href="linus.gif"/></chapter></book>`))
+	doc, err := helium.Parse(t.Context(), []byte(`<book><chapter><image href="linus.gif"/></chapter></book>`))
 	require.NoError(t, err)
 
 	t.Run("first part fails, second succeeds", func(t *testing.T) {
@@ -193,7 +193,7 @@ func TestCascadingParts(t *testing.T) {
 func TestBareNameChildSequence(t *testing.T) {
 	// Parse with NewParser so xml:id registers in the ID table.
 	p := helium.NewParser()
-	doc, err := p.Parse([]byte(`<?xml version="1.0"?>
+	doc, err := p.Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xml:id="r"><a><b>found</b></a></root>`))
 	require.NoError(t, err)
 

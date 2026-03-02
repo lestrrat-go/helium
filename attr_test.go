@@ -24,7 +24,7 @@ func TestAttributeAType(t *testing.T) {
 
 		p := NewParser()
 		p.SetOption(ParseDTDAttr)
-		doc, err := p.Parse([]byte(xml))
+		doc, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
@@ -59,7 +59,7 @@ func TestAttributeAType(t *testing.T) {
 
 		p := NewParser()
 		p.SetOption(ParseDTDAttr)
-		doc, err := p.Parse([]byte(xml))
+		doc, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
@@ -84,7 +84,7 @@ func TestAttributeAType(t *testing.T) {
 <root attr="value"/>`
 
 		p := NewParser()
-		doc, err := p.Parse([]byte(xml))
+		doc, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
@@ -105,7 +105,7 @@ func TestAttributeAType(t *testing.T) {
 
 		p := NewParser()
 		p.SetOption(ParseDTDAttr)
-		doc, err := p.Parse([]byte(xml))
+		doc, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()

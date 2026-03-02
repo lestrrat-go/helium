@@ -10,7 +10,7 @@ import (
 
 func compileWithErrors(t *testing.T, schemaXML string) *xsd.Schema {
 	t.Helper()
-	schemaDOC, err := helium.Parse([]byte(schemaXML))
+	schemaDOC, err := helium.Parse(t.Context(), []byte(schemaXML))
 	require.NoError(t, err)
 	schema, err := xsd.Compile(schemaDOC, xsd.WithSchemaFilename("test.xsd"))
 	require.NoError(t, err)
@@ -21,7 +21,7 @@ func compileAndValidate(t *testing.T, schemaXML, instanceXML string) error {
 	t.Helper()
 	schema := compileWithErrors(t, schemaXML)
 	require.Empty(t, schema.CompileErrors(), "unexpected compile errors")
-	doc, err := helium.Parse([]byte(instanceXML))
+	doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 	require.NoError(t, err)
 	return xsd.Validate(doc, schema, xsd.WithFilename("test.xml"))
 }

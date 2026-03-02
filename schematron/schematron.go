@@ -5,6 +5,7 @@
 package schematron
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -31,7 +32,7 @@ func CompileFile(path string, opts ...CompileOption) (*Schema, error) {
 	if err != nil {
 		return nil, fmt.Errorf("schematron: read file: %w", err)
 	}
-	doc, err := helium.Parse(data)
+	doc, err := helium.Parse(context.Background(), data)
 	if err != nil {
 		return nil, fmt.Errorf("schematron: parse document: %w", err)
 	}

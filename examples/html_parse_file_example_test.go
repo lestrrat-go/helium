@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -25,7 +26,7 @@ func Example_html_parse_file() {
 		return
 	}
 
-	doc, err := html.ParseFile(f.Name())
+	doc, err := html.ParseFile(context.Background(), f.Name())
 	if err != nil {
 		fmt.Printf("parse file failed: %s\n", err)
 		return

@@ -3,6 +3,7 @@
 package xinclude
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/url"
@@ -86,8 +87,8 @@ type processor struct {
 	resolver    Resolver
 	baseURI     string
 	expanding   map[string]bool          // circular inclusion detection (set during recursive expansion)
-	docCache    map[string]docCacheEntry  // cached raw bytes for XML documents
-	txtCache    map[string]txtCacheEntry  // cached text inclusions
+	docCache    map[string]docCacheEntry // cached raw bytes for XML documents
+	txtCache    map[string]txtCacheEntry // cached text inclusions
 	warnHandler func(msg string)
 	depth       int
 	count       int
@@ -541,7 +542,7 @@ func (p *processor) parseXMLData(data []byte, uri string, substituteEntities boo
 	}
 	parser.SetOption(opts)
 	parser.SetBaseURI(uri)
-	doc, err := parser.Parse(data)
+	doc, err := parser.Parse(context.Background(), data)
 	if err != nil {
 		return nil, fmt.Errorf("xi:include: error parsing %q: %w", uri, err)
 	}
@@ -704,7 +705,6 @@ func spliceReplace(target helium.Node, nodes []helium.Node) {
 	}
 }
 
-
 func isXINamespace(ns string) bool {
 	return ns == xiNamespaceLegacy || ns == xiNamespaceNew
 }
@@ -822,7 +822,6 @@ func getAttr(elem *helium.Element, name string) string {
 	}
 	return ""
 }
-
 
 func resolveURI(href, base string) (string, error) {
 	hrefURL, err := url.Parse(href)

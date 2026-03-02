@@ -15,7 +15,7 @@ import (
 
 func parseXML(t *testing.T, s string) *helium.Document {
 	t.Helper()
-	doc, err := helium.Parse([]byte(s))
+	doc, err := helium.Parse(t.Context(), []byte(s))
 	require.NoError(t, err)
 	return doc
 }
@@ -621,7 +621,7 @@ func TestLibxml2XIncludeGolden(t *testing.T) {
 			data, err := os.ReadFile(docPath)
 			require.NoError(t, err)
 
-			doc, err := helium.Parse(data)
+			doc, err := helium.Parse(t.Context(), data)
 			require.NoError(t, err, "parsing %s", name)
 
 			_, procErr := xinclude.Process(doc,
@@ -672,7 +672,7 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 			data, err := os.ReadFile(docPath)
 			require.NoError(t, err)
 
-			doc, err := helium.Parse(data)
+			doc, err := helium.Parse(t.Context(), data)
 			require.NoError(t, err, "parsing %s", name)
 
 			_, err = xinclude.Process(doc,
@@ -707,7 +707,7 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 			data, err := os.ReadFile(docPath)
 			require.NoError(t, err)
 
-			doc, err := helium.Parse(data)
+			doc, err := helium.Parse(t.Context(), data)
 			require.NoError(t, err, "parsing %s", tc.name)
 
 			_, err = xinclude.Process(doc,
@@ -963,7 +963,7 @@ func TestXIncludeEntityMergeConflict(t *testing.T) {
 	// Target's definition should win (first-definition-wins) and warning should fire.
 	parser := helium.NewParser()
 	parser.SetOption(helium.ParseDTDLoad)
-	doc, err := parser.Parse([]byte(`<?xml version="1.0"?>
+	doc, err := parser.Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <!DOCTYPE root [
   <!ENTITY greeting "target-value">
 ]>

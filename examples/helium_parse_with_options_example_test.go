@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
@@ -22,7 +23,7 @@ func Example_helium_parse_with_options() {
 	// This is useful when you want a compact DOM without insignificant whitespace.
 	p.SetOption(helium.ParseNoBlanks)
 
-	doc, err := p.Parse([]byte(src))
+	doc, err := p.Parse(context.Background(), []byte(src))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

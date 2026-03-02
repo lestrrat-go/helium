@@ -2,6 +2,7 @@ package examples_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 
@@ -10,7 +11,7 @@ import (
 )
 
 func Example_html_write_node() {
-	doc, err := html.Parse([]byte(`<div><p>Hello</p></div>`))
+	doc, err := html.Parse(context.Background(), []byte(`<div><p>Hello</p></div>`))
 	if err != nil {
 		fmt.Printf("parse failed: %s\n", err)
 		return

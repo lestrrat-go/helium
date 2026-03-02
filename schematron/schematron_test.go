@@ -134,7 +134,7 @@ func TestGoldenFiles(t *testing.T) {
 			} else {
 				xmlData, err := os.ReadFile(tc.xmlPath)
 				require.NoError(t, err)
-				doc, err := helium.Parse(xmlData)
+				doc, err := helium.Parse(t.Context(), xmlData)
 				require.NoError(t, err, "XML parse failed for %s", tc.xmlPath)
 
 				filename := "./test/schematron/" + tc.xmlBase
@@ -172,11 +172,11 @@ func extractBaseName(name string) string {
 // validates an XML document string against it, returning the validation error.
 func compileAndValidate(t *testing.T, schemaXML, instanceXML string, opts ...schematron.ValidateOption) error {
 	t.Helper()
-	sDoc, err := helium.Parse([]byte(schemaXML))
+	sDoc, err := helium.Parse(t.Context(), []byte(schemaXML))
 	require.NoError(t, err)
 	schema, err := schematron.Compile(sDoc)
 	require.NoError(t, err)
-	doc, err := helium.Parse([]byte(instanceXML))
+	doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 	require.NoError(t, err)
 	return schematron.Validate(doc, schema, opts...)
 }
