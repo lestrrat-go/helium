@@ -41,7 +41,7 @@ const (
 
 // Entry represents a single catalog entry parsed from an XML catalog file.
 type Entry struct {
-	Typ  EntryType
+	Type EntryType
 	Name string // match key (publicId, systemId prefix, URI, name)
 	URL  string // resolved URL (value resolved against xml:base)
 
@@ -66,10 +66,10 @@ type visitedKey struct {
 // Catalog holds parsed catalog entries and provides resolution.
 type Catalog struct {
 	Entries       []Entry
-	Pref          Prefer
+	Prefer        Prefer
 	BaseURI       string
 	Depth         int // recursion guard (shared across resolution chain)
-	Ldr           Loader
+	Loader        Loader
 	ParseWarnings string // accumulated warnings from parsing
 	visited       map[visitedKey]struct{}
 }

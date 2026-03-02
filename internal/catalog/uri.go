@@ -72,7 +72,7 @@ func ParsePrefer(v string) Prefer {
 // HasNextCatalog checks if an identical nextCatalog entry already exists.
 func HasNextCatalog(entries []Entry, url string) bool {
 	for i := range entries {
-		if entries[i].Typ == EntryNextCatalog && entries[i].URL == url {
+		if entries[i].Type == EntryNextCatalog && entries[i].URL == url {
 			return true
 		}
 	}

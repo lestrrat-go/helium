@@ -12,12 +12,12 @@ func TestResolveURIUnwrapsURN(t *testing.T) {
 	cat := &Catalog{
 		Entries: []Entry{
 			{
-				Typ:  EntryPublic,
+				Type:  EntryPublic,
 				Name: "-//OASIS//DTD DocBook XML V4.1.2//EN",
 				URL:  "file:///usr/share/xml/docbook.dtd",
 			},
 		},
-		Pref: PreferPublic,
+		Prefer: PreferPublic,
 	}
 
 	// The URN encoding of "-//OASIS//DTD DocBook XML V4.1.2//EN" per RFC 3151:
@@ -35,7 +35,7 @@ func TestResolveURINonURNUnchanged(t *testing.T) {
 	cat := &Catalog{
 		Entries: []Entry{
 			{
-				Typ:  EntryURI,
+				Type:  EntryURI,
 				Name: "http://example.com/schema.xsd",
 				URL:  "file:///local/schema.xsd",
 			},
@@ -51,12 +51,12 @@ func TestResolveURIURNNotFound(t *testing.T) {
 	cat := &Catalog{
 		Entries: []Entry{
 			{
-				Typ:  EntryPublic,
+				Type:  EntryPublic,
 				Name: "-//Other//DTD//EN",
 				URL:  "file:///other.dtd",
 			},
 		},
-		Pref: PreferPublic,
+		Prefer: PreferPublic,
 	}
 
 	// URN that unwraps to a public ID not in the catalog.
@@ -87,7 +87,7 @@ func TestVisitedCacheSkipsDuplicate(t *testing.T) {
 	// cache, the target would be entered twice for the same query.
 	target := &Catalog{
 		Entries: []Entry{
-			{Typ: EntrySystem, Name: "http://example.com/foo.dtd", URL: "file:///local/foo.dtd"},
+			{Type: EntrySystem, Name: "http://example.com/foo.dtd", URL: "file:///local/foo.dtd"},
 		},
 	}
 
@@ -98,10 +98,10 @@ func TestVisitedCacheSkipsDuplicate(t *testing.T) {
 
 	root := &Catalog{
 		Entries: []Entry{
-			{Typ: EntryNextCatalog, URL: "shared.xml"},
-			{Typ: EntryNextCatalog, URL: "shared.xml"},
+			{Type: EntryNextCatalog, URL: "shared.xml"},
+			{Type: EntryNextCatalog, URL: "shared.xml"},
 		},
-		Ldr: loader,
+		Loader: loader,
 	}
 
 	// Query that misses in root but falls through to nextCatalog entries.
@@ -122,7 +122,7 @@ func TestVisitedCacheStillResolves(t *testing.T) {
 	// Ensure the visited cache doesn't prevent valid resolution.
 	target := &Catalog{
 		Entries: []Entry{
-			{Typ: EntrySystem, Name: "http://example.com/foo.dtd", URL: "file:///local/foo.dtd"},
+			{Type: EntrySystem, Name: "http://example.com/foo.dtd", URL: "file:///local/foo.dtd"},
 		},
 	}
 
@@ -133,10 +133,10 @@ func TestVisitedCacheStillResolves(t *testing.T) {
 
 	root := &Catalog{
 		Entries: []Entry{
-			{Typ: EntryNextCatalog, URL: "shared.xml"},
-			{Typ: EntryNextCatalog, URL: "shared.xml"},
+			{Type: EntryNextCatalog, URL: "shared.xml"},
+			{Type: EntryNextCatalog, URL: "shared.xml"},
 		},
-		Ldr: loader,
+		Loader: loader,
 	}
 
 	got := root.Resolve("", "http://example.com/foo.dtd")
@@ -148,8 +148,8 @@ func TestVisitedCachePerQuery(t *testing.T) {
 	// queries should each be able to visit the same catalog.
 	target := &Catalog{
 		Entries: []Entry{
-			{Typ: EntrySystem, Name: "http://example.com/a.dtd", URL: "file:///a.dtd"},
-			{Typ: EntrySystem, Name: "http://example.com/b.dtd", URL: "file:///b.dtd"},
+			{Type: EntrySystem, Name: "http://example.com/a.dtd", URL: "file:///a.dtd"},
+			{Type: EntrySystem, Name: "http://example.com/b.dtd", URL: "file:///b.dtd"},
 		},
 	}
 
@@ -160,9 +160,9 @@ func TestVisitedCachePerQuery(t *testing.T) {
 
 	root := &Catalog{
 		Entries: []Entry{
-			{Typ: EntryNextCatalog, URL: "shared.xml"},
+			{Type: EntryNextCatalog, URL: "shared.xml"},
 		},
-		Ldr: loader,
+		Loader: loader,
 	}
 
 	got := root.Resolve("", "http://example.com/a.dtd")
