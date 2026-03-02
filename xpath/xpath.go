@@ -128,11 +128,68 @@ type FunctionContext interface {
 // registrations for expression evaluation.
 // (libxml2: xmlXPathContext)
 type Context struct {
-	Namespaces  map[string]string          // prefix → URI
-	Variables   map[string]any     // name → value ([]helium.Node, string, float64, bool)
-	OpLimit     int                        // 0 = unlimited (default); matches libxml2's opLimit
-	Functions   map[string]Function        // unqualified custom functions
-	FunctionsNS map[QualifiedName]Function // namespace-qualified custom functions
+	namespaces  map[string]string          // prefix → URI
+	variables   map[string]any             // name → value ([]helium.Node, string, float64, bool)
+	opLimit     int                        // 0 = unlimited (default); matches libxml2's opLimit
+	functions   map[string]Function        // unqualified custom functions
+	functionsNS map[QualifiedName]Function // namespace-qualified custom functions
+}
+
+// ContextOption configures a Context during construction.
+type ContextOption func(*Context)
+
+// WithNamespaces sets namespace prefix→URI bindings on the context.
+func WithNamespaces(ns map[string]string) ContextOption {
+	return func(c *Context) {
+		c.namespaces = ns
+	}
+}
+
+// WithVariables sets variable name→value bindings on the context.
+func WithVariables(vars map[string]any) ContextOption {
+	return func(c *Context) {
+		c.variables = vars
+	}
+}
+
+// WithOpLimit sets the operation counter limit (0 = unlimited).
+func WithOpLimit(limit int) ContextOption {
+	return func(c *Context) {
+		c.opLimit = limit
+	}
+}
+
+// WithFunctions sets unqualified custom function registrations.
+func WithFunctions(fns map[string]Function) ContextOption {
+	return func(c *Context) {
+		c.functions = fns
+	}
+}
+
+// WithFunctionsNS sets namespace-qualified custom function registrations.
+func WithFunctionsNS(fns map[QualifiedName]Function) ContextOption {
+	return func(c *Context) {
+		c.functionsNS = fns
+	}
+}
+
+// NewContext creates a new Context with the given options.
+func NewContext(opts ...ContextOption) *Context {
+	c := &Context{}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
+}
+
+// Namespaces returns the namespace prefix→URI bindings.
+func (c *Context) Namespaces() map[string]string {
+	return c.namespaces
+}
+
+// Variables returns the variable name→value bindings.
+func (c *Context) Variables() map[string]any {
+	return c.variables
 }
 
 // RegisterFunction registers an unqualified custom XPath function.
@@ -141,19 +198,19 @@ func (c *Context) RegisterFunction(name string, fn Function) error {
 	if _, ok := builtinFunctions[name]; ok {
 		return fmt.Errorf("cannot override built-in function %q: %w", name, ErrUnknownFunction)
 	}
-	if c.Functions == nil {
-		c.Functions = make(map[string]Function)
+	if c.functions == nil {
+		c.functions = make(map[string]Function)
 	}
-	c.Functions[name] = fn
+	c.functions[name] = fn
 	return nil
 }
 
 // RegisterFunctionNS registers a namespace-qualified custom XPath function.
 func (c *Context) RegisterFunctionNS(uri, name string, fn Function) {
-	if c.FunctionsNS == nil {
-		c.FunctionsNS = make(map[QualifiedName]Function)
+	if c.functionsNS == nil {
+		c.functionsNS = make(map[QualifiedName]Function)
 	}
-	c.FunctionsNS[QualifiedName{URI: uri, Name: name}] = fn
+	c.functionsNS[QualifiedName{URI: uri, Name: name}] = fn
 }
 
 // Expression is a compiled XPath expression, reusable across evaluations.
@@ -192,11 +249,11 @@ func (e *Expression) Evaluate(node helium.Node) (*Result, error) {
 func (e *Expression) EvaluateWith(node helium.Node, xctx *Context) (*Result, error) {
 	ctx := newEvalContext(node)
 	if xctx != nil {
-		ctx.namespaces = xctx.Namespaces
-		ctx.variables = xctx.Variables
-		ctx.opLimit = xctx.OpLimit
-		ctx.functions = xctx.Functions
-		ctx.functionsNS = xctx.FunctionsNS
+		ctx.namespaces = xctx.namespaces
+		ctx.variables = xctx.variables
+		ctx.opLimit = xctx.opLimit
+		ctx.functions = xctx.functions
+		ctx.functionsNS = xctx.functionsNS
 	}
 	return eval(ctx, e.ast)
 }
