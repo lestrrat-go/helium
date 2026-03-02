@@ -85,10 +85,10 @@ func TestHeliumLintGolden(t *testing.T) {
 		doc, err := p.Parse(input)
 		require.NoError(t, err, "helium.Parse should succeed for %s", fn)
 
-		// Generate output using helium.Dumper like heliumlint does
+		// Generate output using helium.Writer like heliumlint does
 		var output bytes.Buffer
-		d := helium.Dumper{}
-		require.NoError(t, d.DumpDoc(&output, doc))
+		d := helium.Writer{}
+		require.NoError(t, d.WriteDoc(&output, doc))
 
 		actual := output.String()
 		expected := string(golden)

@@ -218,42 +218,42 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool, escapeNonASCII bool) 
 	return nil
 }
 
-// DumpOption configures serialization behavior for Dumper, Document.XML,
+// WriteOption configures serialization behavior for Writer, Document.XML,
 // Document.XMLString, Element.XML, and Element.XMLString.
-type DumpOption func(*Dumper)
+type WriteOption func(*Writer)
 
 // WithFormat enables indented (pretty-printed) output.  Each child element
 // is emitted on its own line with indentation.  Elements that contain only
 // text / entity-ref / CDATA children are kept inline (no extra whitespace).
-func WithFormat() DumpOption {
-	return func(d *Dumper) { d.Format = true }
+func WithFormat() WriteOption {
+	return func(d *Writer) { d.Format = true }
 }
 
 // WithIndentString sets the string used for each indent level.
 // The default is two spaces ("  ").
-func WithIndentString(s string) DumpOption {
-	return func(d *Dumper) { d.IndentString = s }
+func WithIndentString(s string) WriteOption {
+	return func(d *Writer) { d.IndentString = s }
 }
 
 // WithNoEmpty forces empty elements to be serialized as open+close tag
 // pairs (e.g., <br></br>) instead of self-closing tags (<br/>).
 // Mirrors libxml2's XML_SAVE_NO_EMPTY option.
-func WithNoEmpty() DumpOption {
-	return func(d *Dumper) { d.NoEmpty = true }
+func WithNoEmpty() WriteOption {
+	return func(d *Writer) { d.NoEmpty = true }
 }
 
 // WithNoDecl suppresses the <?xml ...?> declaration from the output.
 // Equivalent to libxml2's XML_SAVE_NO_DECL flag.
-func WithNoDecl() DumpOption {
-	return func(d *Dumper) { d.NoDecl = true }
+func WithNoDecl() WriteOption {
+	return func(d *Writer) { d.NoDecl = true }
 }
 
-// Dumper serializes an XML document tree (libxml2: xmlSaveCtxt).
+// Writer serializes an XML document tree (libxml2: xmlSaveCtxt).
 // escapeNonASCII controls whether characters U+0080-U+00FF are emitted as
 // numeric character references (&#xNN;).  libxml2 only does this when the
 // output encoding is UTF-8; when an encoding handler is present the
 // characters pass through and the encoder converts them.
-type Dumper struct {
+type Writer struct {
 	// Format enables indented output when set to true.
 	Format bool
 	// IndentString is the string used for each indent level (default "  ").
@@ -271,22 +271,22 @@ type Dumper struct {
 	indent         int    // current indent depth (used when Format is true)
 }
 
-func newDumper(options []DumpOption) *Dumper {
-	d := &Dumper{}
+func newWriter(options []WriteOption) *Writer {
+	d := &Writer{}
 	for _, opt := range options {
 		opt(d)
 	}
 	return d
 }
 
-func (d *Dumper) indentStr() string {
+func (d *Writer) indentStr() string {
 	if d.IndentString == "" {
 		return "  "
 	}
 	return d.IndentString
 }
 
-func (d *Dumper) writeIndent(out io.Writer) {
+func (d *Writer) writeIndent(out io.Writer) {
 	if !d.Format || d.indent <= 0 {
 		return
 	}
@@ -353,12 +353,12 @@ var htmlBooleanAttrs = map[string]bool{
 	"selected": true,
 }
 
-// DumpDoc serializes a complete Document to the given writer
+// WriteDoc serializes a complete Document to the given writer
 // (libxml2: xmlDocDumpFormatMemory / xmlSaveDoc).
-func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
+func (d *Writer) WriteDoc(out io.Writer, doc *Document) error {
 	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Dumper.DumpDoc")
-		defer g.IRelease("END Dumper.DumpDoc")
+		g := pdebug.IPrintf("START Writer.WriteDoc")
+		defer g.IRelease("END Writer.WriteDoc")
 	}
 
 	// Mirrors libxml2's xmlSaveWriteText: when output encoding is UTF-8
@@ -386,7 +386,7 @@ func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 		d.isXHTML = isXHTMLDTD(dtd)
 	}
 
-	if err := d.DumpNode(out, doc); err != nil {
+	if err := d.WriteNode(out, doc); err != nil {
 		return err
 	}
 
@@ -399,7 +399,7 @@ func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 				return err
 			}
 		} else {
-			if err := d.DumpNode(out, e); err != nil {
+			if err := d.WriteNode(out, e); err != nil {
 				return err
 			}
 		}
@@ -408,10 +408,10 @@ func (d *Dumper) DumpDoc(out io.Writer, doc *Document) error {
 	return nil
 }
 
-func (d *Dumper) dumpDocContent(out io.Writer, n Node) error {
+func (d *Writer) dumpDocContent(out io.Writer, n Node) error {
 	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Dumper.dumpDocContent")
-		defer g.IRelease("END Dumper.dumpDocContent")
+		g := pdebug.IPrintf("START Writer.dumpDocContent")
+		defer g.IRelease("END Writer.dumpDocContent")
 	}
 
 	doc := n.(*Document)
@@ -436,7 +436,7 @@ func (d *Dumper) dumpDocContent(out io.Writer, n Node) error {
 	return nil
 }
 
-func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
+func (d *Writer) dumpDTD(out io.Writer, n Node) error {
 	dtd := n.(*DTD)
 	_, _ = io.WriteString(out, "<!DOCTYPE ")
 	_, _ = io.WriteString(out, dtd.Name())
@@ -468,7 +468,7 @@ func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
 	d.indent = -1
 
 	for e := dtd.FirstChild(); e != nil; e = e.NextSibling() {
-		if err := d.DumpNode(out, e); err != nil {
+		if err := d.WriteNode(out, e); err != nil {
 			d.Format = savedFormat
 			d.indent = savedIndent
 			return err
@@ -482,7 +482,7 @@ func (d *Dumper) dumpDTD(out io.Writer, n Node) error {
 	return nil
 }
 
-func (d *Dumper) dumpEnumeration(out io.Writer, n Enumeration) error {
+func (d *Writer) dumpEnumeration(out io.Writer, n Enumeration) error {
 	l := len(n)
 	for i, v := range n {
 		_, _ = io.WriteString(out, v)
@@ -505,8 +505,8 @@ func dumpElementDeclPrologue(out io.Writer, n *ElementDecl) {
 
 func dumpElementContent(out io.Writer, n *ElementContent, glob bool) error {
 	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Dumper.dumpElementContent n = '%s'", n.name)
-		defer g.IRelease("END Dumper.dumpElementContent")
+		g := pdebug.IPrintf("START Writer.dumpElementContent n = '%s'", n.name)
+		defer g.IRelease("END Writer.dumpElementContent")
 	}
 	if n == nil {
 		return nil
@@ -638,7 +638,7 @@ func dumpEntityContent(out io.Writer, content string) error {
 	return nil
 }
 
-func (d *Dumper) dumpEntityDecl(out io.Writer, ent *Entity) error {
+func (d *Writer) dumpEntityDecl(out io.Writer, ent *Entity) error {
 	if ent == nil {
 		return nil
 	}
@@ -714,7 +714,7 @@ func (d *Dumper) dumpEntityDecl(out io.Writer, ent *Entity) error {
 	return nil
 }
 
-func (d *Dumper) dumpNotationDecl(out io.Writer, n *Notation) error {
+func (d *Writer) dumpNotationDecl(out io.Writer, n *Notation) error {
 	_, _ = io.WriteString(out, "<!NOTATION ")
 	_, _ = io.WriteString(out, n.name)
 	if n.publicID != "" {
@@ -732,7 +732,7 @@ func (d *Dumper) dumpNotationDecl(out io.Writer, n *Notation) error {
 	return nil
 }
 
-func (d *Dumper) dumpElementDecl(out io.Writer, n *ElementDecl) error {
+func (d *Writer) dumpElementDecl(out io.Writer, n *ElementDecl) error {
 	switch n.decltype {
 	case EmptyElementType:
 		dumpElementDeclPrologue(out, n)
@@ -753,7 +753,7 @@ func (d *Dumper) dumpElementDecl(out io.Writer, n *ElementDecl) error {
 	return nil
 }
 
-func (d *Dumper) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
+func (d *Writer) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
 	_, _ = io.WriteString(out, "<!ATTLIST ")
 	_, _ = io.WriteString(out, n.elem)
 	_, _ = io.WriteString(out, " ")
@@ -817,7 +817,7 @@ func (d *Dumper) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
 	return nil
 }
 
-func (d *Dumper) dumpNsList(out io.Writer, nslist []*Namespace) error {
+func (d *Writer) dumpNsList(out io.Writer, nslist []*Namespace) error {
 	for _, ns := range nslist {
 		if err := d.dumpNs(out, ns); err != nil {
 			return err
@@ -826,7 +826,7 @@ func (d *Dumper) dumpNsList(out io.Writer, nslist []*Namespace) error {
 	return nil
 }
 
-func (d *Dumper) dumpNs(out io.Writer, ns *Namespace) error {
+func (d *Writer) dumpNs(out io.Writer, ns *Namespace) error {
 	if ns.href == "" {
 		// no op
 		return nil
@@ -852,12 +852,12 @@ func (d *Dumper) dumpNs(out io.Writer, ns *Namespace) error {
 	return nil
 }
 
-// DumpNode serializes a single node and its subtree to the given writer
+// WriteNode serializes a single node and its subtree to the given writer
 // (libxml2: xmlNodeDump).
-func (d *Dumper) DumpNode(out io.Writer, n Node) error {
+func (d *Writer) WriteNode(out io.Writer, n Node) error {
 	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Dumper.DumpNode '%s'", n.Name())
-		defer g.IRelease("END Dumper.DumpNode")
+		g := pdebug.IPrintf("START Writer.WriteNode '%s'", n.Name())
+		defer g.IRelease("END Writer.WriteNode")
 	}
 
 	var err error
@@ -962,7 +962,7 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 	}
 
 	if pdebug.Enabled {
-		g := pdebug.IPrintf("START DumpNode(fallthrough)")
+		g := pdebug.IPrintf("START WriteNode(fallthrough)")
 		defer g.IRelease("END DUmpNode(fallthrough)")
 	}
 
@@ -991,7 +991,7 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 
 	if e, ok := n.(*Element); ok {
 		for attr := e.properties; attr != nil; {
-			g := pdebug.IPrintf("START DumpNode(fallthrough->attribute(%s))", attr.Name())
+			g := pdebug.IPrintf("START WriteNode(fallthrough->attribute(%s))", attr.Name())
 			_, _ = io.WriteString(out, " "+attr.Name()+`="`)
 			count := 0
 			for achld := attr.FirstChild(); achld != nil; achld = achld.NextSibling() {
@@ -1001,7 +1001,7 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 						return err
 					}
 				} else {
-					if err := d.DumpNode(out, achld); err != nil {
+					if err := d.WriteNode(out, achld); err != nil {
 						return err
 					}
 				}
@@ -1039,7 +1039,7 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 			if d.Format && !textOnly {
 				d.writeIndent(out)
 			}
-			if err := d.DumpNode(out, child); err != nil {
+			if err := d.WriteNode(out, child); err != nil {
 				return err
 			}
 			if d.Format && !textOnly {
@@ -1061,12 +1061,12 @@ func (d *Dumper) DumpNode(out io.Writer, n Node) error {
 
 // dumpXHTMLNode serializes a node using XHTML rules.
 // Mirrors xhtmlNodeDumpOutput in xmlsave.c.
-func (d *Dumper) dumpXHTMLNode(out io.Writer, n Node) error {
+func (d *Writer) dumpXHTMLNode(out io.Writer, n Node) error {
 	switch n.Type() {
 	case ElementNode:
 		// handled below
 	default:
-		return d.DumpNode(out, n)
+		return d.WriteNode(out, n)
 	}
 
 	e := n.(*Element)
@@ -1177,7 +1177,7 @@ func (d *Dumper) dumpXHTMLNode(out io.Writer, n Node) error {
 				return err
 			}
 		} else {
-			if err := d.DumpNode(out, child); err != nil {
+			if err := d.WriteNode(out, child); err != nil {
 				return err
 			}
 		}
@@ -1201,7 +1201,7 @@ func (d *Dumper) dumpXHTMLNode(out io.Writer, n Node) error {
 // - Boolean attribute normalization (C.5)
 // - lang/xml:lang mirroring (C.7)
 // - name/id mirroring (C.8)
-func (d *Dumper) dumpXHTMLAttrList(out io.Writer, e *Element) {
+func (d *Writer) dumpXHTMLAttrList(out io.Writer, e *Element) {
 	var langAttr, xmlLangAttr, nameAttr, idAttr *Attribute
 	localName := e.LocalName()
 
@@ -1235,7 +1235,7 @@ func (d *Dumper) dumpXHTMLAttrList(out io.Writer, e *Element) {
 				if achld.Type() == TextNode {
 					_ = escapeAttrValue(out, achld.Content(), d.escapeNonASCII)
 				} else {
-					_ = d.DumpNode(out, achld)
+					_ = d.WriteNode(out, achld)
 				}
 			}
 		}
@@ -1269,7 +1269,7 @@ func (d *Dumper) dumpXHTMLAttrList(out io.Writer, e *Element) {
 
 // headHasContentTypeMeta checks if a <head> element already has a
 // <meta http-equiv="Content-Type"> child.
-func (d *Dumper) headHasContentTypeMeta(head *Element) bool {
+func (d *Writer) headHasContentTypeMeta(head *Element) bool {
 	for child := head.FirstChild(); child != nil; child = child.NextSibling() {
 		if child.Type() != ElementNode {
 			continue
@@ -1297,7 +1297,7 @@ func (d *Dumper) headHasContentTypeMeta(head *Element) bool {
 // writeMetaContentType writes the XHTML meta Content-Type tag.
 // When formatting is enabled, a newline and indent are emitted before
 // the meta tag, matching libxml2's behavior.
-func (d *Dumper) writeMetaContentType(out io.Writer) {
+func (d *Writer) writeMetaContentType(out io.Writer) {
 	enc := d.encoding
 	if enc == "" {
 		enc = "UTF-8"

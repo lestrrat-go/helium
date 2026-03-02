@@ -418,7 +418,7 @@ func TestLibxml2CompatHTMLSAX(t *testing.T) {
 	}
 }
 
-// TestHTMLSerialization parses HTML files to DOM, serializes with DumpDoc,
+// TestHTMLSerialization parses HTML files to DOM, serializes with WriteDoc,
 // and compares output against .expected golden files.
 //
 // Environment variable HELIUM_HTML_TEST_FILES can be set to test only
@@ -481,8 +481,8 @@ func TestHTMLSerialization(t *testing.T) {
 			require.NoError(t, err, "ParseFile should succeed (file = %s)", name)
 
 			var buf bytes.Buffer
-			err = html.DumpDoc(&buf, doc)
-			require.NoError(t, err, "DumpDoc should succeed (file = %s)", name)
+			err = html.WriteDoc(&buf, doc)
+			require.NoError(t, err, "WriteDoc should succeed (file = %s)", name)
 
 			expected, err := os.ReadFile(expectedPath)
 			require.NoError(t, err, "reading expected file")

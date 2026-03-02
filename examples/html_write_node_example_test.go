@@ -9,7 +9,7 @@ import (
 	"github.com/lestrrat-go/helium/xpath"
 )
 
-func Example_html_dump_node() {
+func Example_html_write_node() {
 	doc, err := html.Parse([]byte(`<div><p>Hello</p></div>`))
 	if err != nil {
 		fmt.Printf("parse failed: %s\n", err)
@@ -23,8 +23,8 @@ func Example_html_dump_node() {
 	}
 
 	var buf bytes.Buffer
-	if err := html.DumpNode(&buf, nodes[0]); err != nil {
-		fmt.Printf("dump failed: %s\n", err)
+	if err := html.WriteNode(&buf, nodes[0]); err != nil {
+		fmt.Printf("write failed: %s\n", err)
 		return
 	}
 

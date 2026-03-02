@@ -26,46 +26,46 @@ func TestOptionsNoDefaultDTD(t *testing.T) {
 
 	// Without NoDefaultDTD, serialization adds a default DOCTYPE
 	var withDTD bytes.Buffer
-	require.NoError(t, DumpDoc(&withDTD, doc))
+	require.NoError(t, WriteDoc(&withDTD, doc))
 	require.True(t, strings.Contains(withDTD.String(), "<!DOCTYPE"), "default should include DOCTYPE")
 
 	// With NoDefaultDTD, no DOCTYPE in output
 	var noDTD bytes.Buffer
-	require.NoError(t, DumpDoc(&noDTD, doc, WithNoDefaultDTD()))
+	require.NoError(t, WriteDoc(&noDTD, doc, WithNoDefaultDTD()))
 	require.False(t, strings.Contains(noDTD.String(), "<!DOCTYPE"), "WithNoDefaultDTD should suppress DOCTYPE")
 }
 
-func TestDumpLegacyCompatSuppressed(t *testing.T) {
+func TestWriteLegacyCompatSuppressed(t *testing.T) {
 	input := `<!DOCTYPE html SYSTEM "about:legacy-compat"><html><body><p>hi</p></body></html>`
 	doc, err := Parse([]byte(input))
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, DumpDoc(&buf, doc))
+	require.NoError(t, WriteDoc(&buf, doc))
 	output := buf.String()
 	require.True(t, strings.HasPrefix(output, "<!DOCTYPE html>\n"), "about:legacy-compat SYSTEM ID should be suppressed, got: %s", output)
 }
 
-func TestDumpNameAttrURIOnAnchor(t *testing.T) {
+func TestWriteNameAttrURIOnAnchor(t *testing.T) {
 	// "name" on <a> should be URI-escaped (space -> %20)
 	input := `<html><body><a name="foo bar">link</a></body></html>`
 	doc, err := Parse([]byte(input))
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, DumpDoc(&buf, doc, WithNoDefaultDTD()))
+	require.NoError(t, WriteDoc(&buf, doc, WithNoDefaultDTD()))
 	output := buf.String()
 	require.Contains(t, output, `name="foo%20bar"`, "name on <a> should be URI-escaped")
 }
 
-func TestDumpNameAttrNonURIOnMeta(t *testing.T) {
+func TestWriteNameAttrNonURIOnMeta(t *testing.T) {
 	// "name" on non-<a> elements should NOT be URI-escaped
 	input := `<html><head><meta name="foo bar"></head><body></body></html>`
 	doc, err := Parse([]byte(input))
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, DumpDoc(&buf, doc, WithNoDefaultDTD()))
+	require.NoError(t, WriteDoc(&buf, doc, WithNoDefaultDTD()))
 	output := buf.String()
 	require.Contains(t, output, `name="foo bar"`, "name on <meta> should not be URI-escaped")
 }
@@ -77,7 +77,7 @@ func TestDuplicateAttrKeepsFirst(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, DumpDoc(&buf, doc, WithNoDefaultDTD()))
+	require.NoError(t, WriteDoc(&buf, doc, WithNoDefaultDTD()))
 	output := buf.String()
 	require.Contains(t, output, `class="first"`, "first occurrence should be kept")
 	require.NotContains(t, output, `class="second"`, "duplicate should be dropped")
@@ -90,7 +90,7 @@ func TestDuplicateAttrCaseInsensitive(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, DumpDoc(&buf, doc, WithNoDefaultDTD()))
+	require.NoError(t, WriteDoc(&buf, doc, WithNoDefaultDTD()))
 	output := buf.String()
 	require.Contains(t, output, `class="upper"`, "first (case-insensitive) should be kept")
 	require.NotContains(t, output, `class="lower"`, "duplicate should be dropped")
@@ -102,7 +102,7 @@ func TestOptionsNoBlanks(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, DumpDoc(&buf, doc, WithNoDefaultDTD()))
+	require.NoError(t, WriteDoc(&buf, doc, WithNoDefaultDTD()))
 	output := buf.String()
 
 	// The output should not contain whitespace between tags

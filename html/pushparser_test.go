@@ -21,7 +21,7 @@ const testHTML = `<!DOCTYPE html>
 func dumpHTMLDoc(t *testing.T, doc *helium.Document) string {
 	t.Helper()
 	var buf bytes.Buffer
-	require.NoError(t, DumpDoc(&buf, doc))
+	require.NoError(t, WriteDoc(&buf, doc))
 	return buf.String()
 }
 
