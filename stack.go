@@ -61,7 +61,7 @@ func (s *nodeStack) Pop() *Element {
 }
 
 func (s *nodeStack) PeekOne() *Element {
-	l := s.Stack.Peek(1)
+	l := s.Peek(1)
 	if len(l) != 1 {
 		return nil
 	}
@@ -84,7 +84,7 @@ func (s *inputStack) Pop() any {
 }
 
 func (s *inputStack) PeekOne() any {
-	l := s.Stack.Peek(1)
+	l := s.Peek(1)
 	if len(l) != 1 {
 		return nil
 	}
