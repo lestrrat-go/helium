@@ -21,11 +21,11 @@ func Example_helium_create_namespaced() {
 		return
 	}
 
-	// SetNamespace declares a namespace on the element.
+	// DeclareNamespace declares a namespace on the element.
 	// The first argument is the prefix (empty string "" means default namespace).
 	// The second argument is the namespace URI.
 	// This produces xmlns="http://www.w3.org/2005/Atom" on the element.
-	if err := root.SetNamespace("", "http://www.w3.org/2005/Atom"); err != nil {
+	if err := root.DeclareNamespace("", "http://www.w3.org/2005/Atom"); err != nil {
 		fmt.Printf("failed to set namespace: %s\n", err)
 		return
 	}

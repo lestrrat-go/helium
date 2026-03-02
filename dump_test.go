@@ -101,7 +101,7 @@ func TestDumpNsSkipsXmlPrefix(t *testing.T) {
 	require.NoError(t, doc.SetDocumentElement(root))
 
 	// Add explicit xml: namespace declaration to the element
-	require.NoError(t, root.SetNamespace("xml", helium.XMLNamespace))
+	require.NoError(t, root.DeclareNamespace("xml", helium.XMLNamespace))
 
 	str, err := doc.XMLString()
 	require.NoError(t, err)

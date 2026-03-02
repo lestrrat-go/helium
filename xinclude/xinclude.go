@@ -1001,7 +1001,7 @@ func fixupNamespaceDecls(n helium.Node) {
 	if nsr, ok := helium.Node(elem).(helium.Namespacer); ok {
 		if ns := nsr.Namespace(); ns != nil {
 			if ns.Prefix() != "" && !declared[ns.Prefix()] {
-				_ = elem.SetNamespace(ns.Prefix(), ns.URI())
+				_ = elem.DeclareNamespace(ns.Prefix(), ns.URI())
 			}
 		}
 	}
