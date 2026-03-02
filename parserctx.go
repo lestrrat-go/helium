@@ -271,15 +271,15 @@ func (ctx *parserCtx) ColumnNumber() int {
 	return 0
 }
 
-// GetPublicId implements sax.DocumentLocator.
+// GetPublicID implements sax.DocumentLocator.
 // Always returns an empty string (libxml2 always returns NULL).
-func (ctx *parserCtx) GetPublicId() string {
+func (ctx *parserCtx) GetPublicID() string {
 	return ""
 }
 
-// GetSystemId implements sax.DocumentLocator.
+// GetSystemID implements sax.DocumentLocator.
 // Returns the base URI of the document being parsed.
-func (ctx *parserCtx) GetSystemId() string {
+func (ctx *parserCtx) GetSystemID() string {
 	return ctx.baseURI
 }
 

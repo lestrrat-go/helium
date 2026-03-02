@@ -11,11 +11,11 @@ type Context = any
 type DocumentLocator interface {
 	LineNumber() int
 	ColumnNumber() int
-	// GetPublicId returns the public identifier of the document being parsed.
+	// GetPublicID returns the public identifier of the document being parsed.
 	// In practice this always returns an empty string (libxml2 always returns NULL).
-	GetPublicId() string
-	// GetSystemId returns the system identifier (URI/filename) of the document being parsed.
-	GetSystemId() string
+	GetPublicID() string
+	// GetSystemID returns the system identifier (URI/filename) of the document being parsed.
+	GetSystemID() string
 }
 
 // ParseInput represents an input source for the parser, typically used

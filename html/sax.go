@@ -11,11 +11,11 @@ var ErrHandlerUnspecified = errors.New("handler unspecified")
 type DocumentLocator interface {
 	LineNumber() int
 	ColumnNumber() int
-	// GetPublicId returns the public identifier of the document being parsed.
+	// GetPublicID returns the public identifier of the document being parsed.
 	// In practice this always returns an empty string.
-	GetPublicId() string
-	// GetSystemId returns the system identifier (URI/filename) of the document being parsed.
-	GetSystemId() string
+	GetPublicID() string
+	// GetSystemID returns the system identifier (URI/filename) of the document being parsed.
+	GetSystemID() string
 }
 
 // Attribute represents an HTML element attribute (name=value pair).
