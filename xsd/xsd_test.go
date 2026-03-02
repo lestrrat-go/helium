@@ -13,6 +13,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// partitionCompileErrors splits collected errors by severity.
+// Errors with ErrorLevelFatal go to "errors"; all others to "warnings".
+func partitionCompileErrors(errs []error) (warnings, errors string) {
+	var w, e strings.Builder
+	for _, err := range errs {
+		if l, ok := err.(helium.ErrorLeveler); ok && l.ErrorLevel() == helium.ErrorLevelFatal {
+			e.WriteString(err.Error())
+		} else {
+			w.WriteString(err.Error())
+		}
+	}
+	return w.String(), e.String()
+}
+
 const testdataBase = "../testdata/libxml2-compat/schemas"
 
 // testCase represents a single golden-file test: one (schema, instance) pair.
@@ -169,12 +183,15 @@ func TestGoldenFiles(t *testing.T) {
 
 			// Compile schema.
 			xsdFilename := "./test/schemas/" + tc.xsdBase
-			schema, err := xsd.CompileFile(tc.xsdPath, xsd.WithSchemaFilename(xsdFilename))
+			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+			schema, err := xsd.CompileFile(tc.xsdPath, xsd.WithSchemaFilename(xsdFilename), xsd.WithCompileErrorHandler(collector))
 			require.NoError(t, err, "schema compilation failed for %s", tc.xsdPath)
+			_ = collector.Close()
+			compileWarnings, compileErrors := partitionCompileErrors(collector.Errors())
 
 			var got string
-			if schema.CompileErrors() != "" {
-				got = schema.CompileWarnings() + schema.CompileErrors()
+			if compileErrors != "" {
+				got = compileWarnings + compileErrors
 			} else {
 				// Parse instance.
 				xmlData, err := os.ReadFile(tc.xmlPath)
@@ -186,9 +203,9 @@ func TestGoldenFiles(t *testing.T) {
 				filename := "./test/schemas/" + tc.xmlBase
 				err = xsd.Validate(doc, schema, xsd.WithFilename(filename))
 				if err != nil {
-					got = schema.CompileWarnings() + err.Error()
+					got = compileWarnings + err.Error()
 				} else {
-					got = schema.CompileWarnings() + filename + " validates\n"
+					got = compileWarnings + filename + " validates\n"
 				}
 			}
 
@@ -340,9 +357,12 @@ func TestDefaultFixedValidation(t *testing.T) {
 		t.Helper()
 		xsdDoc, err := helium.Parse(t.Context(), []byte(xsdStr))
 		require.NoError(t, err, "XSD parse failed")
-		schema, err := xsd.Compile(xsdDoc)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		schema, err := xsd.Compile(xsdDoc, xsd.WithCompileErrorHandler(collector))
 		require.NoError(t, err, "schema compilation failed")
-		require.Empty(t, schema.CompileErrors(), "unexpected compile errors")
+		_ = collector.Close()
+		_, compileErrors := partitionCompileErrors(collector.Errors())
+		require.Empty(t, compileErrors, "unexpected compile errors")
 
 		xmlDoc, err := helium.Parse(t.Context(), []byte(xmlStr))
 		require.NoError(t, err, "XML parse failed")
@@ -419,9 +439,12 @@ func TestMultipleAttributeErrors(t *testing.T) {
 		t.Helper()
 		xsdDoc, err := helium.Parse(t.Context(), []byte(xsdStr))
 		require.NoError(t, err, "XSD parse failed")
-		schema, err := xsd.Compile(xsdDoc)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		schema, err := xsd.Compile(xsdDoc, xsd.WithCompileErrorHandler(collector))
 		require.NoError(t, err, "schema compilation failed")
-		require.Empty(t, schema.CompileErrors(), "unexpected compile errors")
+		_ = collector.Close()
+		_, compileErrors := partitionCompileErrors(collector.Errors())
+		require.Empty(t, compileErrors, "unexpected compile errors")
 
 		xmlDoc, err := helium.Parse(t.Context(), []byte(xmlStr))
 		require.NoError(t, err, "XML parse failed")
@@ -489,9 +512,12 @@ func TestRedefine(t *testing.T) {
 
 	compileAndValidate := func(t *testing.T, xsdPath, xmlStr string) error {
 		t.Helper()
-		schema, err := xsd.CompileFile(xsdPath)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		schema, err := xsd.CompileFile(xsdPath, xsd.WithCompileErrorHandler(collector))
 		require.NoError(t, err, "schema compilation failed")
-		require.Empty(t, schema.CompileErrors(), "unexpected compile errors: %s", schema.CompileErrors())
+		_ = collector.Close()
+		_, compileErrors := partitionCompileErrors(collector.Errors())
+		require.Empty(t, compileErrors, "unexpected compile errors: %s", compileErrors)
 
 		xmlDoc, err := helium.Parse(t.Context(), []byte(xmlStr))
 		require.NoError(t, err, "XML parse failed")
@@ -696,9 +722,12 @@ func TestFacetConsistency(t *testing.T) {
 		t.Helper()
 		xsdDoc, err := helium.Parse(t.Context(), []byte(xsdStr))
 		require.NoError(t, err, "XSD parse failed")
-		schema, err := xsd.Compile(xsdDoc, xsd.WithSchemaFilename("test.xsd"))
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = xsd.Compile(xsdDoc, xsd.WithSchemaFilename("test.xsd"), xsd.WithCompileErrorHandler(collector))
 		require.NoError(t, err, "schema compilation failed")
-		return schema.CompileErrors()
+		_ = collector.Close()
+		_, compileErrors := partitionCompileErrors(collector.Errors())
+		return compileErrors
 	}
 
 	t.Run("minLength_greater_than_maxLength", func(t *testing.T) {

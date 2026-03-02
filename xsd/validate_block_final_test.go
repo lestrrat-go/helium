@@ -8,19 +8,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func compileWithErrors(t *testing.T, schemaXML string) *xsd.Schema {
+func compileWithErrors(t *testing.T, schemaXML string) (*xsd.Schema, string) {
 	t.Helper()
 	schemaDOC, err := helium.Parse(t.Context(), []byte(schemaXML))
 	require.NoError(t, err)
-	schema, err := xsd.Compile(schemaDOC, xsd.WithSchemaFilename("test.xsd"))
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	schema, err := xsd.Compile(schemaDOC, xsd.WithSchemaFilename("test.xsd"), xsd.WithCompileErrorHandler(collector))
 	require.NoError(t, err)
-	return schema
+	_ = collector.Close()
+	_, errs := partitionCompileErrors(collector.Errors())
+	return schema, errs
 }
 
 func compileAndValidate(t *testing.T, schemaXML, instanceXML string) error {
 	t.Helper()
-	schema := compileWithErrors(t, schemaXML)
-	require.Empty(t, schema.CompileErrors(), "unexpected compile errors")
+	schema, errs := compileWithErrors(t, schemaXML)
+	require.Empty(t, errs, "unexpected compile errors")
 	doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 	require.NoError(t, err)
 	return xsd.Validate(doc, schema, xsd.WithFilename("test.xml"))
@@ -168,8 +171,8 @@ func TestFinalDefault(t *testing.T) {
   </xs:complexType>
   <xs:element name="root" type="baseType"/>
 </xs:schema>`
-		schema := compileWithErrors(t, schemaXML)
-		require.Contains(t, schema.CompileErrors(), "Derivation by restriction is forbidden")
+		_, errs := compileWithErrors(t, schemaXML)
+		require.Contains(t, errs, "Derivation by restriction is forbidden")
 	})
 
 	t.Run("finalDefault=extension produces compile error for extension derivation", func(t *testing.T) {
@@ -191,8 +194,8 @@ func TestFinalDefault(t *testing.T) {
   </xs:complexType>
   <xs:element name="root" type="baseType"/>
 </xs:schema>`
-		schema := compileWithErrors(t, schemaXML)
-		require.Contains(t, schema.CompileErrors(), "Derivation by extension is forbidden")
+		_, errs := compileWithErrors(t, schemaXML)
+		require.Contains(t, errs, "Derivation by extension is forbidden")
 	})
 }
 
@@ -215,8 +218,8 @@ func TestFinalOnComplexType(t *testing.T) {
   </xs:complexType>
   <xs:element name="root" type="baseType"/>
 </xs:schema>`
-		schema := compileWithErrors(t, schemaXML)
-		require.Contains(t, schema.CompileErrors(), "Derivation by extension is forbidden")
+		_, errs := compileWithErrors(t, schemaXML)
+		require.Contains(t, errs, "Derivation by extension is forbidden")
 	})
 
 	t.Run("final=restriction allows extension", func(t *testing.T) {
@@ -237,8 +240,8 @@ func TestFinalOnComplexType(t *testing.T) {
   </xs:complexType>
   <xs:element name="root" type="baseType"/>
 </xs:schema>`
-		schema := compileWithErrors(t, schemaXML)
-		require.Empty(t, schema.CompileErrors())
+		_, errs := compileWithErrors(t, schemaXML)
+		require.Empty(t, errs)
 	})
 }
 
@@ -269,8 +272,8 @@ func TestFinalOnSubstGroupHead(t *testing.T) {
     </xs:complexType>
   </xs:element>
 </xs:schema>`
-		schema := compileWithErrors(t, schemaXML)
-		require.Contains(t, schema.CompileErrors(), "forbidden by the head element's final value")
+		_, errs := compileWithErrors(t, schemaXML)
+		require.Contains(t, errs, "forbidden by the head element's final value")
 	})
 }
 
@@ -280,9 +283,9 @@ func TestInvalidBlockDefaultFinalDefault(t *testing.T) {
   blockDefault="invalid">
   <xs:element name="root" type="xs:string"/>
 </xs:schema>`
-		schema := compileWithErrors(t, schemaXML)
-		require.Contains(t, schema.CompileErrors(), "blockDefault")
-		require.Contains(t, schema.CompileErrors(), "is not valid")
+		_, errs := compileWithErrors(t, schemaXML)
+		require.Contains(t, errs, "blockDefault")
+		require.Contains(t, errs, "is not valid")
 	})
 
 	t.Run("invalid finalDefault produces compile error", func(t *testing.T) {
@@ -290,9 +293,9 @@ func TestInvalidBlockDefaultFinalDefault(t *testing.T) {
   finalDefault="invalid">
   <xs:element name="root" type="xs:string"/>
 </xs:schema>`
-		schema := compileWithErrors(t, schemaXML)
-		require.Contains(t, schema.CompileErrors(), "finalDefault")
-		require.Contains(t, schema.CompileErrors(), "is not valid")
+		_, errs := compileWithErrors(t, schemaXML)
+		require.Contains(t, errs, "finalDefault")
+		require.Contains(t, errs, "is not valid")
 	})
 }
 
@@ -334,8 +337,8 @@ func TestExplicitEmptyOverridesDefault(t *testing.T) {
   </xs:complexType>
   <xs:element name="root" type="baseType"/>
 </xs:schema>`
-		schema := compileWithErrors(t, schemaXML)
-		require.Empty(t, schema.CompileErrors())
+		_, errs := compileWithErrors(t, schemaXML)
+		require.Empty(t, errs)
 	})
 }
 
@@ -351,8 +354,8 @@ func TestSimpleTypeFinal(t *testing.T) {
   </xs:simpleType>
   <xs:element name="root" type="myIntList"/>
 </xs:schema>`
-		schema := compileWithErrors(t, schemaXML)
-		require.Contains(t, schema.CompileErrors(), "Derivation by list is forbidden")
+		_, errs := compileWithErrors(t, schemaXML)
+		require.Contains(t, errs, "Derivation by list is forbidden")
 	})
 
 	t.Run("finalDefault=union blocks simpleType union derivation", func(t *testing.T) {
@@ -366,7 +369,7 @@ func TestSimpleTypeFinal(t *testing.T) {
   </xs:simpleType>
   <xs:element name="root" type="myUnion"/>
 </xs:schema>`
-		schema := compileWithErrors(t, schemaXML)
-		require.Contains(t, schema.CompileErrors(), "Derivation by union is forbidden")
+		_, errs := compileWithErrors(t, schemaXML)
+		require.Contains(t, errs, "Derivation by union is forbidden")
 	})
 }

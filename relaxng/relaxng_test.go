@@ -13,6 +13,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// partitionCompileErrors splits collected errors by severity.
+// Errors with ErrorLevelFatal go to "errors"; all others to "warnings".
+func partitionCompileErrors(errs []error) (warnings, errors string) {
+	var w, e strings.Builder
+	for _, err := range errs {
+		if l, ok := err.(helium.ErrorLeveler); ok && l.ErrorLevel() == helium.ErrorLevelFatal {
+			e.WriteString(err.Error())
+		} else {
+			w.WriteString(err.Error())
+		}
+	}
+	return w.String(), e.String()
+}
+
 const testdataBase = "../testdata/libxml2-compat/relaxng"
 
 // testCase represents a single golden-file test: one (schema, instance) pair.
@@ -133,12 +147,15 @@ func TestGoldenFiles(t *testing.T) {
 
 			// Compile schema.
 			rngFilename := "./test/relaxng/" + tc.rngBase
-			grammar, err := relaxng.CompileFile(tc.rngPath, relaxng.WithSchemaFilename(rngFilename))
+			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+			grammar, err := relaxng.CompileFile(tc.rngPath, relaxng.WithSchemaFilename(rngFilename), relaxng.WithCompileErrorHandler(collector))
 			require.NoError(t, err, "schema compilation returned error for %s", tc.rngPath)
+			_ = collector.Close()
+			compileWarnings, compileErrors := partitionCompileErrors(collector.Errors())
 
 			var got string
-			if grammar.CompileErrors() != "" {
-				got = grammar.CompileWarnings() + grammar.CompileErrors()
+			if compileErrors != "" {
+				got = compileWarnings + compileErrors
 				got += "Relax-NG schema " + rngFilename + " failed to compile\n"
 			} else {
 				// Parse instance.
@@ -151,9 +168,9 @@ func TestGoldenFiles(t *testing.T) {
 				filename := "./test/relaxng/" + tc.xmlBase
 				err = relaxng.Validate(doc, grammar, relaxng.WithFilename(filename))
 				if err != nil {
-					got = grammar.CompileWarnings() + err.Error()
+					got = compileWarnings + err.Error()
 				} else {
-					got = grammar.CompileWarnings() + filename + " validates\n"
+					got = compileWarnings + filename + " validates\n"
 				}
 			}
 
@@ -181,9 +198,12 @@ func TestGetAttrWhitespace(t *testing.T) {
 	doc, err := helium.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 
-	grammar, err := relaxng.Compile(doc)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	grammar, err := relaxng.Compile(doc, relaxng.WithCompileErrorHandler(collector))
 	require.NoError(t, err)
-	require.Empty(t, grammar.CompileErrors(), "schema with whitespace-padded names should compile without errors")
+	_ = collector.Close()
+	_, compileErrors := partitionCompileErrors(collector.Errors())
+	require.Empty(t, compileErrors, "schema with whitespace-padded names should compile without errors")
 
 	xmlData := []byte(`<a/>`)
 	xmlDoc, err := helium.Parse(t.Context(), xmlData)
@@ -196,9 +216,12 @@ func TestGetAttrWhitespace(t *testing.T) {
 func TestXmlBaseInclude(t *testing.T) {
 	// Schema uses <div xml:base="xmlbase/"> wrapping <include href="included.rng"/>.
 	// The included file lives in testdata/xmlbase/included.rng.
-	grammar, err := relaxng.CompileFile("testdata/xmlbase_include.rng")
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	grammar, err := relaxng.CompileFile("testdata/xmlbase_include.rng", relaxng.WithCompileErrorHandler(collector))
 	require.NoError(t, err)
-	require.Empty(t, grammar.CompileErrors(), "include via xml:base should compile without errors")
+	_ = collector.Close()
+	_, compileErrors := partitionCompileErrors(collector.Errors())
+	require.Empty(t, compileErrors, "include via xml:base should compile without errors")
 
 	xmlData := []byte(`<sub/>`)
 	xmlDoc, err := helium.Parse(t.Context(), xmlData)
@@ -211,9 +234,12 @@ func TestXmlBaseInclude(t *testing.T) {
 func TestXmlBaseExternalRef(t *testing.T) {
 	// Schema uses xml:base on the root grammar element to redirect externalRef
 	// resolution to the xmlbase/ subdirectory.
-	grammar, err := relaxng.CompileFile("testdata/xmlbase_extref.rng")
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	grammar, err := relaxng.CompileFile("testdata/xmlbase_extref.rng", relaxng.WithCompileErrorHandler(collector))
 	require.NoError(t, err)
-	require.Empty(t, grammar.CompileErrors(), "externalRef via xml:base should compile without errors")
+	_ = collector.Close()
+	_, compileErrors := partitionCompileErrors(collector.Errors())
+	require.Empty(t, compileErrors, "externalRef via xml:base should compile without errors")
 
 	xmlData := []byte(`<sub/>`)
 	xmlDoc, err := helium.Parse(t.Context(), xmlData)
@@ -236,9 +262,12 @@ func TestCheckCombine(t *testing.T) {
 </grammar>`
 		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
-		grammar, err := relaxng.Compile(doc)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = relaxng.Compile(doc, relaxng.WithCompileErrorHandler(collector))
 		require.NoError(t, err)
-		require.Contains(t, grammar.CompileErrors(), "Defines for foo use both 'interleave' and 'choice'")
+		_ = collector.Close()
+		_, compileErrors := partitionCompileErrors(collector.Errors())
+		require.Contains(t, compileErrors, "Defines for foo use both 'interleave' and 'choice'")
 	})
 
 	t.Run("multiple defines without combine", func(t *testing.T) {
@@ -253,9 +282,12 @@ func TestCheckCombine(t *testing.T) {
 </grammar>`
 		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
-		grammar, err := relaxng.Compile(doc)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = relaxng.Compile(doc, relaxng.WithCompileErrorHandler(collector))
 		require.NoError(t, err)
-		require.Contains(t, grammar.CompileErrors(), "Some defines for foo needs the combine attribute")
+		_ = collector.Close()
+		_, compileErrors := partitionCompileErrors(collector.Errors())
+		require.Contains(t, compileErrors, "Some defines for foo needs the combine attribute")
 	})
 
 	t.Run("conflicting start combine modes", func(t *testing.T) {
@@ -269,9 +301,12 @@ func TestCheckCombine(t *testing.T) {
 </grammar>`
 		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
-		grammar, err := relaxng.Compile(doc)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = relaxng.Compile(doc, relaxng.WithCompileErrorHandler(collector))
 		require.NoError(t, err)
-		require.Contains(t, grammar.CompileErrors(), "<start> use both 'interleave' and 'choice'")
+		_ = collector.Close()
+		_, compileErrors := partitionCompileErrors(collector.Errors())
+		require.Contains(t, compileErrors, "<start> use both 'interleave' and 'choice'")
 	})
 
 	t.Run("multiple starts without combine", func(t *testing.T) {
@@ -285,9 +320,12 @@ func TestCheckCombine(t *testing.T) {
 </grammar>`
 		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
-		grammar, err := relaxng.Compile(doc)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = relaxng.Compile(doc, relaxng.WithCompileErrorHandler(collector))
 		require.NoError(t, err)
-		require.Contains(t, grammar.CompileErrors(), "Some <start> element miss the combine attribute")
+		_ = collector.Close()
+		_, compileErrors := partitionCompileErrors(collector.Errors())
+		require.Contains(t, compileErrors, "Some <start> element miss the combine attribute")
 	})
 
 	t.Run("valid combine modes agree", func(t *testing.T) {
@@ -302,101 +340,107 @@ func TestCheckCombine(t *testing.T) {
 </grammar>`
 		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
-		grammar, err := relaxng.Compile(doc)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = relaxng.Compile(doc, relaxng.WithCompileErrorHandler(collector))
 		require.NoError(t, err)
-		require.Empty(t, grammar.CompileErrors())
+		_ = collector.Close()
+		_, compileErrors := partitionCompileErrors(collector.Errors())
+		require.Empty(t, compileErrors)
 	})
 }
 
 func TestCheckRules(t *testing.T) {
 	const rngNS = "http://relaxng.org/ns/structure/1.0"
 
-	compile := func(t *testing.T, input string) *relaxng.Grammar {
+	compile := func(t *testing.T, input string) (compileErrors, compileWarnings string) {
 		t.Helper()
 		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
-		grammar, err := relaxng.Compile(doc, relaxng.WithSchemaFilename("test.rng"))
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		_, err = relaxng.Compile(doc, relaxng.WithSchemaFilename("test.rng"), relaxng.WithCompileErrorHandler(collector))
 		require.NoError(t, err)
-		return grammar
+		_ = collector.Close()
+		compileWarnings, compileErrors = partitionCompileErrors(collector.Errors())
+		return compileErrors, compileWarnings
 	}
 
 	t.Run("list//element", func(t *testing.T) {
-		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <list><element name="a"><empty/></element></list>
 </element>`)
-		require.Contains(t, g.CompileErrors(), "Found forbidden pattern list//element")
+		require.Contains(t, errs, "Found forbidden pattern list//element")
 	})
 
 	t.Run("attribute//element", func(t *testing.T) {
-		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <attribute name="a"><element name="b"><empty/></element></attribute>
 </element>`)
-		require.Contains(t, g.CompileErrors(), "Found forbidden pattern attribute//element")
+		require.Contains(t, errs, "Found forbidden pattern attribute//element")
 	})
 
 	t.Run("list//list", func(t *testing.T) {
-		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <list><list><data type="string" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes"/></list></list>
 </element>`)
-		require.Contains(t, g.CompileErrors(), "Found forbidden pattern list//list")
+		require.Contains(t, errs, "Found forbidden pattern list//list")
 	})
 
 	t.Run("attribute//attribute", func(t *testing.T) {
-		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <attribute name="a"><attribute name="b"/></attribute>
 </element>`)
-		require.Contains(t, g.CompileErrors(), "Found forbidden pattern attribute//attribute")
+		require.Contains(t, errs, "Found forbidden pattern attribute//attribute")
 	})
 
 	t.Run("start//attribute", func(t *testing.T) {
-		g := compile(t, `<grammar xmlns="`+rngNS+`">
+		errs, _ := compile(t, `<grammar xmlns="`+rngNS+`">
   <start><attribute name="a"/></start>
 </grammar>`)
-		require.Contains(t, g.CompileErrors(), "Found forbidden pattern start//attribute")
+		require.Contains(t, errs, "Found forbidden pattern start//attribute")
 	})
 
 	t.Run("oneOrMore//group//attribute", func(t *testing.T) {
-		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <oneOrMore><group><attribute name="a"/></group></oneOrMore>
 </element>`)
-		require.Contains(t, g.CompileErrors(), "Found forbidden pattern oneOrMore//group//attribute")
+		require.Contains(t, errs, "Found forbidden pattern oneOrMore//group//attribute")
 	})
 
 	t.Run("oneOrMore//interleave//attribute", func(t *testing.T) {
-		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <oneOrMore><interleave><attribute name="a"/><text/></interleave></oneOrMore>
 </element>`)
-		require.Contains(t, g.CompileErrors(), "Found forbidden pattern oneOrMore//interleave//attribute")
+		require.Contains(t, errs, "Found forbidden pattern oneOrMore//interleave//attribute")
 	})
 
 	t.Run("anyName attribute without oneOrMore warning", func(t *testing.T) {
-		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+		errs, warnings := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <attribute><anyName/></attribute>
 </element>`)
-		require.Empty(t, g.CompileErrors())
-		require.Contains(t, g.CompileWarnings(), "Found anyName attribute without oneOrMore ancestor")
+		require.Empty(t, errs)
+		require.Contains(t, warnings, "Found anyName attribute without oneOrMore ancestor")
 	})
 
 	t.Run("nsName attribute without oneOrMore warning", func(t *testing.T) {
-		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+		errs, warnings := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <attribute><nsName ns="http://example.com"/></attribute>
 </element>`)
-		require.Empty(t, g.CompileErrors())
-		require.Contains(t, g.CompileWarnings(), "Found nsName attribute without oneOrMore ancestor")
+		require.Empty(t, errs)
+		require.Contains(t, warnings, "Found nsName attribute without oneOrMore ancestor")
 	})
 
 	t.Run("anyName attribute with oneOrMore no warning", func(t *testing.T) {
-		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+		errs, warnings := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <oneOrMore><attribute><anyName/></attribute></oneOrMore>
 </element>`)
-		require.Empty(t, g.CompileErrors())
-		require.Empty(t, g.CompileWarnings())
+		require.Empty(t, errs)
+		require.Empty(t, warnings)
 	})
 
 	t.Run("element resets context", func(t *testing.T) {
 		// attribute inside element inside list: element resets context,
 		// so the attribute should not trigger list//attribute.
-		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <list>
     <element name="inner">
       <attribute name="a"/>
@@ -405,12 +449,12 @@ func TestCheckRules(t *testing.T) {
 </element>`)
 		// list//element error expected (element inside list is still forbidden),
 		// but no list//attribute error.
-		require.Contains(t, g.CompileErrors(), "Found forbidden pattern list//element")
-		require.NotContains(t, g.CompileErrors(), "list//attribute")
+		require.Contains(t, errs, "Found forbidden pattern list//element")
+		require.NotContains(t, errs, "list//attribute")
 	})
 
 	t.Run("valid schema", func(t *testing.T) {
-		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+		errs, warnings := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <oneOrMore>
     <element name="item">
       <attribute name="id"/>
@@ -418,29 +462,29 @@ func TestCheckRules(t *testing.T) {
     </element>
   </oneOrMore>
 </element>`)
-		require.Empty(t, g.CompileErrors())
-		require.Empty(t, g.CompileWarnings())
+		require.Empty(t, errs)
+		require.Empty(t, warnings)
 	})
 
 	t.Run("data/except//element", func(t *testing.T) {
-		g := compile(t, `<element name="root" xmlns="`+rngNS+`"
+		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`"
   datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
   <data type="string">
     <except><element name="a"><empty/></element></except>
   </data>
 </element>`)
-		require.Contains(t, g.CompileErrors(), "Found forbidden pattern data/except//element")
+		require.Contains(t, errs, "Found forbidden pattern data/except//element")
 	})
 
 	t.Run("list//text", func(t *testing.T) {
-		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <list><text/></list>
 </element>`)
-		require.Contains(t, g.CompileErrors(), "Found forbidden pattern list//text")
+		require.Contains(t, errs, "Found forbidden pattern list//text")
 	})
 
 	t.Run("list//interleave", func(t *testing.T) {
-		g := compile(t, `<element name="root" xmlns="`+rngNS+`">
+		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <list>
     <interleave>
       <data type="string" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes"/>
@@ -448,11 +492,11 @@ func TestCheckRules(t *testing.T) {
     </interleave>
   </list>
 </element>`)
-		require.Contains(t, g.CompileErrors(), "Found forbidden pattern list//interleave")
+		require.Contains(t, errs, "Found forbidden pattern list//interleave")
 	})
 
 	t.Run("ref in data/except", func(t *testing.T) {
-		g := compile(t, `<grammar xmlns="`+rngNS+`"
+		errs, _ := compile(t, `<grammar xmlns="`+rngNS+`"
   datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
   <start>
     <element name="root">
@@ -463,6 +507,6 @@ func TestCheckRules(t *testing.T) {
   </start>
   <define name="foo"><value>x</value></define>
 </grammar>`)
-		require.Contains(t, g.CompileErrors(), "Found forbidden pattern data/except//ref")
+		require.Contains(t, errs, "Found forbidden pattern data/except//ref")
 	})
 }

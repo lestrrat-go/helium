@@ -7,6 +7,7 @@
 package catalog
 
 import (
+	helium "github.com/lestrrat-go/helium"
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 )
 
@@ -35,11 +36,15 @@ func (c *Catalog) ResolveURI(uri string) string {
 	return c.cat.ResolveURI(uri)
 }
 
-// ParseWarnings returns any warnings generated during catalog parsing,
-// such as entries with missing required attributes.
-func (c *Catalog) ParseWarnings() string {
-	if c == nil {
-		return ""
-	}
-	return c.cat.ParseWarnings
+// LoadOption configures the behavior of Load.
+type LoadOption func(*loadConfig)
+
+type loadConfig struct {
+	errorHandler helium.ErrorHandler
+}
+
+// WithErrorHandler sets the error handler that receives warnings
+// during catalog parsing (e.g. missing required attributes).
+func WithErrorHandler(h helium.ErrorHandler) LoadOption {
+	return func(c *loadConfig) { c.errorHandler = h }
 }

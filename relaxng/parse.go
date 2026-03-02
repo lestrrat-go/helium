@@ -18,8 +18,8 @@ type compiler struct {
 	grammar      *Grammar
 	baseDir      string
 	filename     string
-	errors       strings.Builder
-	warnings     strings.Builder
+	errorHandler helium.ErrorHandler
+	errorCount   int
 	includeStack []string // recursion guard for include/externalRef
 	includeLimit int
 	// grammarStack tracks nested grammars for parentRef resolution.
@@ -39,19 +39,26 @@ type defineEntry struct {
 }
 
 func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*Grammar, error) {
+	var eh helium.ErrorHandler = helium.NilErrorHandler{}
+	if cfg.errorHandler != nil {
+		eh = cfg.errorHandler
+	}
+
 	c := &compiler{
 		grammar: &Grammar{
 			defines: make(map[string]*pattern),
 		},
 		baseDir:      baseDir,
 		filename:     cfg.filename,
+		errorHandler: eh,
 		includeLimit: 1000,
 	}
 
 	root := findDocumentElement(doc)
 	if root == nil {
-		c.errors.WriteString(rngParserError("xmlRelaxNGParse: could not find root element"))
-		c.grammar.compileErrors = c.errors.String()
+		msg := rngParserError("xmlRelaxNGParse: could not find root element")
+		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(msg, helium.ErrorLevelFatal))
+		c.errorCount++
 		return c.grammar, nil
 	}
 
@@ -72,8 +79,6 @@ func compileSchema(doc *helium.Document, baseDir string, cfg *compileConfig) (*G
 
 	c.grammar.start = startPat
 	c.checkRules()
-	c.grammar.compileErrors = c.errors.String()
-	c.grammar.compileWarnings = c.warnings.String()
 
 	return c.grammar, nil
 }
@@ -128,8 +133,10 @@ func (c *compiler) checkRefCycles() {
 	for name := range c.grammar.defines {
 		visiting := map[string]bool{name: true}
 		if ref := c.findCycleInPattern(c.grammar.defines[name], visiting); ref != nil {
-			c.errors.WriteString(rngParserErrorAt(c.filename, ref.line, "ref",
-				fmt.Sprintf("Detected a cycle in %s references", ref.name)))
+			msg := rngParserErrorAt(c.filename, ref.line, "ref",
+				fmt.Sprintf("Detected a cycle in %s references", ref.name))
+			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(msg, helium.ErrorLevelFatal))
+			c.errorCount++
 			return
 		}
 	}
@@ -223,10 +230,12 @@ func (c *compiler) parseStart(elem *helium.Element) {
 		existing.noCombine++
 	}
 	if existing.noCombine > 1 {
-		c.errors.WriteString(rngParserError("Some <start> element miss the combine attribute"))
+		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(rngParserError("Some <start> element miss the combine attribute"), helium.ErrorLevelFatal))
+		c.errorCount++
 	}
 	if combine != "" && existing.combine != "" && combine != existing.combine {
-		c.errors.WriteString(rngParserError("<start> use both 'interleave' and 'choice'"))
+		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(rngParserError("<start> use both 'interleave' and 'choice'"), helium.ErrorLevelFatal))
+		c.errorCount++
 	}
 
 	combineMode := combine
@@ -267,12 +276,14 @@ func (c *compiler) parseDefine(elem *helium.Element) {
 		existing.noCombine++
 	}
 	if existing.noCombine > 1 {
-		c.errors.WriteString(rngParserError(
-			fmt.Sprintf("Some defines for %s needs the combine attribute", name)))
+		msg := fmt.Sprintf("Some defines for %s needs the combine attribute", name)
+		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
+		c.errorCount++
 	}
 	if combine != "" && existing.combine != "" && combine != existing.combine {
-		c.errors.WriteString(rngParserError(
-			fmt.Sprintf("Defines for %s use both 'interleave' and 'choice'", name)))
+		msg := fmt.Sprintf("Defines for %s use both 'interleave' and 'choice'", name)
+		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
+		c.errorCount++
 	}
 
 	combineMode := combine
@@ -330,7 +341,8 @@ func (c *compiler) resolveHref(elem *helium.Element, href string) string {
 func (c *compiler) parseInclude(elem *helium.Element) {
 	href := getAttr(elem, "href")
 	if href == "" {
-		c.errors.WriteString(rngParserError("include has no href attribute"))
+		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(rngParserError("include has no href attribute"), helium.ErrorLevelFatal))
+		c.errorCount++
 		return
 	}
 
@@ -339,12 +351,15 @@ func (c *compiler) parseInclude(elem *helium.Element) {
 	// Recursion guard
 	for _, p := range c.includeStack {
 		if p == path {
-			c.errors.WriteString(rngParserError(fmt.Sprintf("Detected an Include recursion for %s", href)))
+			msg := fmt.Sprintf("Detected an Include recursion for %s", href)
+			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
+			c.errorCount++
 			return
 		}
 	}
 	if len(c.includeStack) >= c.includeLimit {
-		c.errors.WriteString(rngParserError("Include limit reached"))
+		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(rngParserError("Include limit reached"), helium.ErrorLevelFatal))
+		c.errorCount++
 		return
 	}
 
@@ -354,19 +369,25 @@ func (c *compiler) parseInclude(elem *helium.Element) {
 	// Read and parse the included file
 	data, err := os.ReadFile(path)
 	if err != nil {
-		c.errors.WriteString(rngParserError(fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)))
+		msg := fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)
+		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
+		c.errorCount++
 		return
 	}
 	doc, err := helium.Parse(context.Background(), data)
 	if err != nil {
-		c.errors.WriteString(rngParserError(fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)))
+		msg := fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)
+		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
+		c.errorCount++
 		return
 	}
 	doc.SetURL(path)
 
 	root := findDocumentElement(doc)
 	if root == nil || !isRNG(root, "grammar") {
-		c.errors.WriteString(rngParserError(fmt.Sprintf("xmlRelaxNGParse: included file %s is not a grammar", href)))
+		msg := fmt.Sprintf("xmlRelaxNGParse: included file %s is not a grammar", href)
+		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
+		c.errorCount++
 		return
 	}
 
@@ -496,14 +517,16 @@ func (c *compiler) parsePattern(node *helium.Element) *pattern {
 	case "ref":
 		name := getAttr(node, "name")
 		if name == "" {
-			c.errors.WriteString(rngParserError("ref has no name"))
+			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(rngParserError("ref has no name"), helium.ErrorLevelFatal))
+			c.errorCount++
 			return nil
 		}
 		return &pattern{kind: patternRef, name: name, line: node.Line()}
 	case "parentRef":
 		name := getAttr(node, "name")
 		if name == "" {
-			c.errors.WriteString(rngParserError("parentRef has no name"))
+			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(rngParserError("parentRef has no name"), helium.ErrorLevelFatal))
+			c.errorCount++
 			return nil
 		}
 		return &pattern{kind: patternParentRef, name: name, line: node.Line()}
@@ -728,7 +751,8 @@ func (c *compiler) parseValue(node *helium.Element) *pattern {
 func (c *compiler) parseExternalRef(node *helium.Element) *pattern {
 	href := getAttr(node, "href")
 	if href == "" {
-		c.errors.WriteString(rngParserError("externalRef has no href attribute"))
+		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(rngParserError("externalRef has no href attribute"), helium.ErrorLevelFatal))
+		c.errorCount++
 		return nil
 	}
 
@@ -737,12 +761,15 @@ func (c *compiler) parseExternalRef(node *helium.Element) *pattern {
 	// Recursion guard
 	for _, p := range c.includeStack {
 		if p == path {
-			c.errors.WriteString(rngParserError(fmt.Sprintf("Detected an externalRef recursion for %s", href)))
+			msg := fmt.Sprintf("Detected an externalRef recursion for %s", href)
+			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
+			c.errorCount++
 			return nil
 		}
 	}
 	if len(c.includeStack) >= c.includeLimit {
-		c.errors.WriteString(rngParserError("Include limit reached"))
+		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(rngParserError("Include limit reached"), helium.ErrorLevelFatal))
+		c.errorCount++
 		return nil
 	}
 
@@ -751,19 +778,25 @@ func (c *compiler) parseExternalRef(node *helium.Element) *pattern {
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		c.errors.WriteString(rngParserError(fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)))
+		msg := fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)
+		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
+		c.errorCount++
 		return nil
 	}
 	doc, err := helium.Parse(context.Background(), data)
 	if err != nil {
-		c.errors.WriteString(rngParserError(fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)))
+		msg := fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)
+		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
+		c.errorCount++
 		return nil
 	}
 	doc.SetURL(path)
 
 	root := findDocumentElement(doc)
 	if root == nil {
-		c.errors.WriteString(rngParserError(fmt.Sprintf("xmlRelaxNGParse: external ref %s has no root", href)))
+		msg := fmt.Sprintf("xmlRelaxNGParse: external ref %s has no root", href)
+		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
+		c.errorCount++
 		return nil
 	}
 
@@ -1015,8 +1048,10 @@ func getDatatypeLibrary(node *helium.Element) string {
 // addSchemaError records a schema compilation error.
 func (c *compiler) addSchemaError(node *helium.Element, msg string) {
 	line := node.Line()
-	fmt.Fprintf(&c.errors, "%s:%d: element %s: Relax-NG parser error : %s\n",
+	formatted := fmt.Sprintf("%s:%d: element %s: Relax-NG parser error : %s\n",
 		c.filename, line, node.LocalName(), msg)
+	c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(formatted, helium.ErrorLevelFatal))
+	c.errorCount++
 }
 
 // hasDataContent checks if any pattern in the slice is a data/value/list pattern.

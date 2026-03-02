@@ -7,21 +7,9 @@ import (
 // Schema is a compiled Schematron schema.
 // (libxml2: xmlSchematronPtr)
 type Schema struct {
-	patterns        []*pattern
-	namespaces      map[string]string // prefix -> URI from <ns> elements
-	title           string
-	compileErrors   string
-	compileWarnings string
-}
-
-// CompileErrors returns any errors encountered during schema compilation.
-func (s *Schema) CompileErrors() string {
-	return s.compileErrors
-}
-
-// CompileWarnings returns any warnings encountered during schema compilation.
-func (s *Schema) CompileWarnings() string {
-	return s.compileWarnings
+	patterns   []*pattern
+	namespaces map[string]string // prefix -> URI from <ns> elements
+	title      string
 }
 
 type pattern struct {

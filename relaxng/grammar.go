@@ -3,21 +3,8 @@ package relaxng
 // Grammar is a compiled RELAX NG schema, analogous to [xsd.Schema].
 // (libxml2: xmlRelaxNGPtr)
 type Grammar struct {
-	start           *pattern
-	defines         map[string]*pattern
-	compileErrors   string
-	compileWarnings string
-}
-
-// CompileErrors returns any schema compilation error messages
-// in libxml2-compatible format. Empty string means no errors.
-func (g *Grammar) CompileErrors() string {
-	return g.compileErrors
-}
-
-// CompileWarnings returns any schema compilation warning messages.
-func (g *Grammar) CompileWarnings() string {
-	return g.compileWarnings
+	start   *pattern
+	defines map[string]*pattern
 }
 
 // patternKind enumerates RELAX NG pattern types.

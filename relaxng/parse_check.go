@@ -1,6 +1,11 @@
 package relaxng
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+
+	helium "github.com/lestrrat-go/helium"
+)
 
 // ruleFlags tracks ancestor context for forbidden-pattern-nesting checks.
 type ruleFlags int
@@ -177,22 +182,27 @@ func (c *compiler) checkPattern(pat *pattern, flags ruleFlags, visited map[strin
 // addPatternError records a forbidden-nesting error.
 func (c *compiler) addPatternError(p *pattern, msg string) {
 	elemName := patternElemName(p.kind)
+	var formatted string
 	if c.filename != "" {
-		c.errors.WriteString(rngParserErrorAt(c.filename, p.line, elemName, msg))
+		formatted = rngParserErrorAt(c.filename, p.line, elemName, msg)
 	} else {
-		c.errors.WriteString(rngParserError(msg))
+		formatted = rngParserError(msg)
 	}
+	c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(formatted, helium.ErrorLevelFatal))
+	c.errorCount++
 }
 
 // addPatternWarning records a forbidden-nesting warning.
 func (c *compiler) addPatternWarning(p *pattern, msg string) {
 	elemName := patternElemName(p.kind)
+	var formatted string
 	if c.filename != "" {
-		fmt.Fprintf(&c.warnings, "%s:%d: element %s: Relax-NG parser warning : %s\n",
+		formatted = fmt.Sprintf("%s:%d: element %s: Relax-NG parser warning : %s\n",
 			c.filename, p.line, elemName, msg)
 	} else {
-		fmt.Fprintf(&c.warnings, "Relax-NG parser warning : %s\n", msg)
+		formatted = fmt.Sprintf("Relax-NG parser warning : %s\n", msg)
 	}
+	c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(formatted, helium.ErrorLevelWarning))
 }
 
 // patternElemName returns the XML element name for a pattern kind.

@@ -4,6 +4,7 @@ package relaxng
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -17,7 +18,13 @@ func Compile(doc *helium.Document, opts ...CompileOption) (*Grammar, error) {
 	for _, o := range opts {
 		o(cfg)
 	}
-	return compileSchema(doc, "", cfg)
+	grammar, err := compileSchema(doc, "", cfg)
+	if cfg.errorHandler != nil {
+		if cl, ok := cfg.errorHandler.(io.Closer); ok {
+			_ = cl.Close()
+		}
+	}
+	return grammar, err
 }
 
 // CompileFile reads and compiles a RELAX NG file into a Grammar.
@@ -26,8 +33,18 @@ func CompileFile(path string, opts ...CompileOption) (*Grammar, error) {
 	for _, o := range opts {
 		o(cfg)
 	}
+
+	closeHandler := func() {
+		if cfg.errorHandler != nil {
+			if cl, ok := cfg.errorHandler.(io.Closer); ok {
+				_ = cl.Close()
+			}
+		}
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
+		closeHandler()
 		return nil, err
 	}
 	doc, err := helium.Parse(context.Background(), data)
@@ -40,13 +57,20 @@ func CompileFile(path string, opts ...CompileOption) (*Grammar, error) {
 			}
 			errs := formatXMLParseError(filename, pe)
 			errs += rngParserError("xmlRelaxNGParse: could not load " + filename)
-			return &Grammar{compileErrors: errs}, nil
+			if cfg.errorHandler != nil {
+				cfg.errorHandler.Handle(context.TODO(), helium.NewLeveledError(errs, helium.ErrorLevelFatal))
+			}
+			closeHandler()
+			return &Grammar{}, nil
 		}
+		closeHandler()
 		return nil, err
 	}
 	doc.SetURL(path)
 	baseDir := filepath.Dir(path)
-	return compileSchema(doc, baseDir, cfg)
+	grammar, compileErr := compileSchema(doc, baseDir, cfg)
+	closeHandler()
+	return grammar, compileErr
 }
 
 // ValidateError holds detailed validation failure output.
