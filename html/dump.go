@@ -30,8 +30,8 @@ var htmlURIAttrs = map[string]bool{
 // Mirrors libxml2's htmlDocContentDumpOutput behavior.
 const defaultHTMLDTD = `<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN" "http://www.w3.org/TR/REC-html40/loose.dtd">` + "\n"
 
-// WriteDoc serializes an HTML document to the writer.
-// (libxml2: htmlDocContentDumpOutput)
+// WriteDoc serializes an HTML document to the writer
+// (libxml2: htmlDocContentDumpOutput).
 func WriteDoc(out io.Writer, doc *helium.Document, options ...WriteOption) error {
 	var cfg dumpConfig
 	for _, o := range options {
@@ -72,8 +72,8 @@ func WriteDoc(out io.Writer, doc *helium.Document, options ...WriteOption) error
 	return nil
 }
 
-// WriteNode serializes an HTML node to the writer.
-// (libxml2: htmlNodeDumpOutput)
+// WriteNode serializes an HTML node to the writer
+// (libxml2: htmlNodeDumpOutput).
 func WriteNode(out io.Writer, n helium.Node) error {
 	return dumpNode(out, n)
 }
