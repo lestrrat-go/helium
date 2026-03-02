@@ -182,14 +182,14 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 	return s
 }
 
-func TestDocumentLocatorIds(t *testing.T) {
+func TestDocumentLocatorIDs(t *testing.T) {
 	const baseURI = "test://document.xml"
-	var gotPublicId, gotSystemId string
+	var gotPublicID, gotSystemID string
 
 	s := sax.New()
 	s.SetDocumentLocatorHandler = sax.SetDocumentLocatorFunc(func(_ sax.Context, loc sax.DocumentLocator) error {
-		gotPublicId = loc.GetPublicId()
-		gotSystemId = loc.GetSystemId()
+		gotPublicID = loc.GetPublicID()
+		gotSystemID = loc.GetSystemID()
 		return nil
 	})
 	s.StartDocumentHandler = sax.StartDocumentFunc(func(_ sax.Context) error { return nil })
@@ -206,8 +206,8 @@ func TestDocumentLocatorIds(t *testing.T) {
 
 	_, err := p.Parse([]byte(`<root/>`))
 	require.NoError(t, err, "Parse should succeed")
-	require.Equal(t, "", gotPublicId, "GetPublicId should return empty string")
-	require.Equal(t, baseURI, gotSystemId, "GetSystemId should return base URI")
+	require.Equal(t, "", gotPublicID, "GetPublicID should return empty string")
+	require.Equal(t, baseURI, gotSystemID, "GetSystemID should return base URI")
 }
 
 func TestSAXEvents(t *testing.T) {

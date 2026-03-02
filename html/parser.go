@@ -58,8 +58,8 @@ type parserLocator struct {
 
 func (l *parserLocator) LineNumber() int   { return l.p.line }
 func (l *parserLocator) ColumnNumber() int { return l.p.col }
-func (l *parserLocator) GetPublicId() string { return "" }
-func (l *parserLocator) GetSystemId() string { return "" }
+func (l *parserLocator) GetPublicID() string { return "" }
+func (l *parserLocator) GetSystemID() string { return "" }
 
 func newParser(input []byte, sax SAXHandler, cfg parseConfig) *parser {
 	// Normalize \r\n → \n and standalone \r → \n (HTML spec line normalization)
