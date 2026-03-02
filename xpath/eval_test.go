@@ -176,21 +176,21 @@ func TestEvalEquals(t *testing.T) {
 	r, err := xpath.Evaluate(doc, "/root/a = 'hello'")
 	require.NoError(t, err)
 	require.Equal(t, xpath.BooleanResult, r.Type)
-	require.True(t, r.Boolean)
+	require.True(t, r.Bool)
 }
 
 func TestEvalNotEquals(t *testing.T) {
 	doc := parseXML(t, `<root><a>hello</a></root>`)
 	r, err := xpath.Evaluate(doc, "/root/a != 'world'")
 	require.NoError(t, err)
-	require.True(t, r.Boolean)
+	require.True(t, r.Bool)
 }
 
 func TestEvalNumericComparison(t *testing.T) {
 	doc := parseXML(t, `<root><price>35</price></root>`)
 	r, err := xpath.Evaluate(doc, "/root/price > 30")
 	require.NoError(t, err)
-	require.True(t, r.Boolean)
+	require.True(t, r.Bool)
 }
 
 // --- Arithmetic ---
@@ -237,14 +237,14 @@ func TestEvalOr(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
 	r, err := xpath.Evaluate(doc, "true() or false()")
 	require.NoError(t, err)
-	require.True(t, r.Boolean)
+	require.True(t, r.Bool)
 }
 
 func TestEvalAnd(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
 	r, err := xpath.Evaluate(doc, "true() and false()")
 	require.NoError(t, err)
-	require.False(t, r.Boolean)
+	require.False(t, r.Bool)
 }
 
 // --- Union ---
@@ -276,14 +276,14 @@ func TestEvalStartsWith(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
 	r, err := xpath.Evaluate(doc, "starts-with('hello', 'hel')")
 	require.NoError(t, err)
-	require.True(t, r.Boolean)
+	require.True(t, r.Bool)
 }
 
 func TestEvalContains(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
 	r, err := xpath.Evaluate(doc, "contains('hello world', 'world')")
 	require.NoError(t, err)
-	require.True(t, r.Boolean)
+	require.True(t, r.Bool)
 }
 
 func TestEvalSubstringBefore(t *testing.T) {
@@ -339,18 +339,18 @@ func TestEvalNot(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
 	r, err := xpath.Evaluate(doc, "not(false())")
 	require.NoError(t, err)
-	require.True(t, r.Boolean)
+	require.True(t, r.Bool)
 }
 
 func TestEvalBoolean(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
 	r, err := xpath.Evaluate(doc, "boolean(1)")
 	require.NoError(t, err)
-	require.True(t, r.Boolean)
+	require.True(t, r.Bool)
 
 	r, err = xpath.Evaluate(doc, "boolean(0)")
 	require.NoError(t, err)
-	require.False(t, r.Boolean)
+	require.False(t, r.Bool)
 }
 
 // --- Number functions ---
@@ -778,7 +778,7 @@ func TestCustomFunctionContextValues(t *testing.T) {
 				// Return true only for position 2
 				return &xpath.Result{
 					Type:    xpath.BooleanResult,
-					Boolean: fctx.Position() == 2,
+					Bool: fctx.Position() == 2,
 				}, nil
 			}),
 		},
@@ -795,7 +795,7 @@ func TestRegisterFunctionHelper(t *testing.T) {
 
 	// Registering a new function should succeed
 	err := ctx.RegisterFunction("myfunc", xpath.FunctionFunc(func(_ xpath.FunctionContext, _ []*xpath.Result) (*xpath.Result, error) {
-		return &xpath.Result{Type: xpath.BooleanResult, Boolean: true}, nil
+		return &xpath.Result{Type: xpath.BooleanResult, Bool: true}, nil
 	}))
 	require.NoError(t, err)
 	require.NotNil(t, ctx.Functions["myfunc"])
@@ -810,7 +810,7 @@ func TestRegisterFunctionHelper(t *testing.T) {
 func TestRegisterFunctionNSHelper(t *testing.T) {
 	ctx := &xpath.Context{}
 	ctx.RegisterFunctionNS("urn:test", "myfunc", xpath.FunctionFunc(func(_ xpath.FunctionContext, _ []*xpath.Result) (*xpath.Result, error) {
-		return &xpath.Result{Type: xpath.BooleanResult, Boolean: true}, nil
+		return &xpath.Result{Type: xpath.BooleanResult, Bool: true}, nil
 	}))
 	key := xpath.QualifiedName{URI: "urn:test", Name: "myfunc"}
 	require.NotNil(t, ctx.FunctionsNS[key])
@@ -847,7 +847,7 @@ func TestLangNamespaceAware(t *testing.T) {
 		r, err := xpath.Evaluate(child, `lang("en")`)
 		require.NoError(t, err)
 		require.Equal(t, xpath.BooleanResult, r.Type)
-		require.True(t, r.Boolean)
+		require.True(t, r.Bool)
 	})
 
 	t.Run("non-xml namespace lang ignored", func(t *testing.T) {
@@ -857,7 +857,7 @@ func TestLangNamespaceAware(t *testing.T) {
 		r, err := xpath.Evaluate(child, `lang("en")`)
 		require.NoError(t, err)
 		require.Equal(t, xpath.BooleanResult, r.Type)
-		require.False(t, r.Boolean)
+		require.False(t, r.Bool)
 	})
 
 	t.Run("unprefixed lang ignored", func(t *testing.T) {
@@ -867,7 +867,7 @@ func TestLangNamespaceAware(t *testing.T) {
 		r, err := xpath.Evaluate(child, `lang("en")`)
 		require.NoError(t, err)
 		require.Equal(t, xpath.BooleanResult, r.Type)
-		require.False(t, r.Boolean)
+		require.False(t, r.Bool)
 	})
 }
 

@@ -500,13 +500,13 @@ func evalOr(ctx *evalContext, e BinaryExpr) (*Result, error) {
 		return nil, err
 	}
 	if resultToBoolean(left) {
-		return &Result{Type: BooleanResult, Boolean: true}, nil
+		return &Result{Type: BooleanResult, Bool: true}, nil
 	}
 	right, err := eval(ctx, e.Right)
 	if err != nil {
 		return nil, err
 	}
-	return &Result{Type: BooleanResult, Boolean: resultToBoolean(right)}, nil
+	return &Result{Type: BooleanResult, Bool: resultToBoolean(right)}, nil
 }
 
 func evalAnd(ctx *evalContext, e BinaryExpr) (*Result, error) {
@@ -515,13 +515,13 @@ func evalAnd(ctx *evalContext, e BinaryExpr) (*Result, error) {
 		return nil, err
 	}
 	if !resultToBoolean(left) {
-		return &Result{Type: BooleanResult, Boolean: false}, nil
+		return &Result{Type: BooleanResult, Bool: false}, nil
 	}
 	right, err := eval(ctx, e.Right)
 	if err != nil {
 		return nil, err
 	}
-	return &Result{Type: BooleanResult, Boolean: resultToBoolean(right)}, nil
+	return &Result{Type: BooleanResult, Bool: resultToBoolean(right)}, nil
 }
 
 func evalComparison(ctx *evalContext, e BinaryExpr) (*Result, error) {
@@ -534,7 +534,7 @@ func evalComparison(ctx *evalContext, e BinaryExpr) (*Result, error) {
 		return nil, err
 	}
 	b := compareResults(e.Op, left, right)
-	return &Result{Type: BooleanResult, Boolean: b}, nil
+	return &Result{Type: BooleanResult, Bool: b}, nil
 }
 
 // compareResults implements XPath comparison semantics including node-set comparisons.
@@ -626,17 +626,17 @@ func compareWithScalar(op TokenType, nodeStr string, scalar *Result) bool {
 	case BooleanResult:
 		nb := len(nodeStr) > 0
 		if op == TokenEquals {
-			return nb == scalar.Boolean
+			return nb == scalar.Bool
 		}
 		if op == TokenNotEquals {
-			return nb != scalar.Boolean
+			return nb != scalar.Bool
 		}
 		// Relational with boolean: convert both to number
 		var ln, rn float64
 		if nb {
 			ln = 1
 		}
-		if scalar.Boolean {
+		if scalar.Bool {
 			rn = 1
 		}
 		return compareNumbers(op, ln, rn)
@@ -749,7 +749,7 @@ func evalVariableExpr(ctx *evalContext, e VariableExpr) (*Result, error) {
 	case float64:
 		return &Result{Type: NumberResult, Number: val}, nil
 	case bool:
-		return &Result{Type: BooleanResult, Boolean: val}, nil
+		return &Result{Type: BooleanResult, Bool: val}, nil
 	default:
 		return nil, fmt.Errorf("%w: $%s is %T", ErrUnsupportedVariableType, e.Name, v)
 	}
@@ -863,7 +863,7 @@ func resultToString(r *Result) string {
 	case StringResult:
 		return r.String
 	case BooleanResult:
-		if r.Boolean {
+		if r.Bool {
 			return "true"
 		}
 		return "false"
@@ -886,7 +886,7 @@ func resultToNumber(r *Result) float64 {
 	case StringResult:
 		return stringToNumber(r.String)
 	case BooleanResult:
-		if r.Boolean {
+		if r.Bool {
 			return 1
 		}
 		return 0
@@ -900,7 +900,7 @@ func resultToNumber(r *Result) float64 {
 func resultToBoolean(r *Result) bool {
 	switch r.Type {
 	case BooleanResult:
-		return r.Boolean
+		return r.Bool
 	case NumberResult:
 		return r.Number != 0 && !math.IsNaN(r.Number)
 	case StringResult:

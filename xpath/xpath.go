@@ -89,7 +89,7 @@ const (
 type Result struct {
 	Type    ResultType
 	NodeSet []helium.Node
-	Boolean bool
+	Bool bool
 	Number  float64
 	String  string
 }

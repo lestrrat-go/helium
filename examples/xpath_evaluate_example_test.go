@@ -37,13 +37,13 @@ func Example_xpath_evaluate() {
 	fmt.Printf("sum: %.0f\n", r.Number)
 
 	// Comparison expressions return a boolean result, available
-	// in the Boolean field.
+	// in the Bool field.
 	r, err = xpath.Evaluate(doc, "count(//item) > 2")
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
 		return
 	}
-	fmt.Printf("more than 2: %t\n", r.Boolean)
+	fmt.Printf("more than 2: %t\n", r.Bool)
 	// Output:
 	// string: 10
 	// sum: 60

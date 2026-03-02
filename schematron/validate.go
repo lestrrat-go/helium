@@ -181,7 +181,7 @@ func formatXPathError(err error) string {
 func xpathResultToBool(r *xpath.Result) bool {
 	switch r.Type {
 	case xpath.BooleanResult:
-		return r.Boolean
+		return r.Bool
 	case xpath.NumberResult:
 		return r.Number != 0 && !math.IsNaN(r.Number)
 	case xpath.StringResult:
@@ -203,7 +203,7 @@ func xpathResultToString(r *xpath.Result) string {
 		}
 		return fmt.Sprintf("%g", r.Number)
 	case xpath.BooleanResult:
-		if r.Boolean {
+		if r.Bool {
 			return "True"
 		}
 		return "False"
@@ -249,7 +249,7 @@ func xpathResultToValue(r *xpath.Result) any {
 	case xpath.NumberResult:
 		return r.Number
 	case xpath.BooleanResult:
-		return r.Boolean
+		return r.Bool
 	}
 	return nil
 }
