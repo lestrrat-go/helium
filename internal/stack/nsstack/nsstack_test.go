@@ -3,7 +3,6 @@ package nsstack_test
 import (
 	"testing"
 
-	"github.com/lestrrat-go/helium/internal/stack"
 	"github.com/lestrrat-go/helium/internal/stack/nsstack"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +18,7 @@ func TestNsStack(t *testing.T) {
 	require.Equal(t, "http://www.w3.org/2000/09/xmldsig#", item, `Lookup("ds") succeeds`)
 
 	item = s.Lookup("xml")
-	require.NotEqual(t, stack.NilItem, item, `Lookup("xm") is not a NilItem`)
+	require.NotEqual(t, "", item, `Lookup("xml") is not empty`)
 
 	require.Equal(t, "http://www.w3.org/XML/1998/namespace", item, `Lookup("xml") succeeds`)
 

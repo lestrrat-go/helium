@@ -1,12 +1,5 @@
 package stack
 
-type nilItem struct{}
-
-func (i nilItem) Key() string {
-	return ""
-}
-
-var NilItem = nilItem{}
 type StackImpl interface {
 	Cap() int
 	Len() int
@@ -27,7 +20,7 @@ func stackPop(s StackImpl, n int) {
 		}
 	}
 
-	if c := s.Cap(); c > 20 && c > s.Len() * 2 {
+	if c := s.Cap(); c > 20 && c > s.Len()*2 {
 		s.Realloc()
 	}
 }
