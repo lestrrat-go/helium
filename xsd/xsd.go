@@ -38,13 +38,26 @@ func CompileFile(path string, opts ...CompileOption) (*Schema, error) {
 	return compileSchema(doc, baseDir, cfg)
 }
 
+// ValidateError holds detailed validation failure output.
+type ValidateError struct {
+	Output string // libxml2-compatible validation output
+}
+
+func (e *ValidateError) Error() string {
+	return e.Output
+}
+
 // Validate validates a document against a compiled schema.
-// It returns the validation output string in libxml2-compatible format.
+// It returns nil if the document is valid, or a *ValidateError with details.
 // (libxml2: xmlSchemaValidateDoc)
-func Validate(doc *helium.Document, schema *Schema, opts ...ValidateOption) string {
+func Validate(doc *helium.Document, schema *Schema, opts ...ValidateOption) error {
 	cfg := &validateConfig{}
 	for _, o := range opts {
 		o(cfg)
 	}
-	return validateDocument(doc, schema, cfg)
+	output, valid := validateDocument(doc, schema, cfg)
+	if valid {
+		return nil
+	}
+	return &ValidateError{Output: output}
 }

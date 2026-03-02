@@ -2,7 +2,6 @@ package examples_test
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xsd"
@@ -45,10 +44,9 @@ func Example_xsd_validate() {
 	}
 
 	// Validate checks the document against the compiled schema.
-	// The result string contains "validates" if the document is valid,
-	// or error messages describing validation failures.
-	result := xsd.Validate(doc, schema)
-	fmt.Println(strings.Contains(result, "validates"))
+	// It returns nil if the document is valid, or a *ValidateError with details.
+	if err := xsd.Validate(doc, schema); err != nil {
+		fmt.Println(err)
+	}
 	// Output:
-	// true
 }

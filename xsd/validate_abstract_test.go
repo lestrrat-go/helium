@@ -1,7 +1,6 @@
 package xsd_test
 
 import (
-	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -31,9 +30,9 @@ func TestAbstractTypeValidation(t *testing.T) {
 		doc, err := helium.Parse([]byte(instanceXML))
 		require.NoError(t, err)
 
-		result := xsd.Validate(doc, schema)
-		require.Contains(t, result, "The type definition is abstract.")
-		require.Contains(t, result, "fails to validate")
+		err = xsd.Validate(doc, schema)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "The type definition is abstract.")
 	})
 
 	t.Run("concrete derived type via xsi:type accepted", func(t *testing.T) {
@@ -69,9 +68,8 @@ func TestAbstractTypeValidation(t *testing.T) {
 		doc, err := helium.Parse([]byte(instanceXML))
 		require.NoError(t, err)
 
-		result := xsd.Validate(doc, schema)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		err = xsd.Validate(doc, schema)
+		require.NoError(t, err)
 	})
 
 	t.Run("unrelated xsi:type rejected", func(t *testing.T) {
@@ -101,9 +99,9 @@ func TestAbstractTypeValidation(t *testing.T) {
 		doc, err := helium.Parse([]byte(instanceXML))
 		require.NoError(t, err)
 
-		result := xsd.Validate(doc, schema)
-		require.Contains(t, result, "is not validly derived from")
-		require.Contains(t, result, "fails to validate")
+		err = xsd.Validate(doc, schema)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "is not validly derived from")
 	})
 
 	t.Run("non-existent xsi:type rejected", func(t *testing.T) {
@@ -128,9 +126,9 @@ func TestAbstractTypeValidation(t *testing.T) {
 		doc, err := helium.Parse([]byte(instanceXML))
 		require.NoError(t, err)
 
-		result := xsd.Validate(doc, schema)
-		require.Contains(t, result, "does not resolve to a type definition")
-		require.Contains(t, result, "fails to validate")
+		err = xsd.Validate(doc, schema)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "does not resolve to a type definition")
 	})
 
 	t.Run("same xsi:type as declared accepted", func(t *testing.T) {
@@ -155,9 +153,8 @@ func TestAbstractTypeValidation(t *testing.T) {
 		doc, err := helium.Parse([]byte(instanceXML))
 		require.NoError(t, err)
 
-		result := xsd.Validate(doc, schema)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		err = xsd.Validate(doc, schema)
+		require.NoError(t, err)
 	})
 
 	t.Run("restriction xsi:type accepted", func(t *testing.T) {
@@ -191,9 +188,8 @@ func TestAbstractTypeValidation(t *testing.T) {
 		doc, err := helium.Parse([]byte(instanceXML))
 		require.NoError(t, err)
 
-		result := xsd.Validate(doc, schema)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		err = xsd.Validate(doc, schema)
+		require.NoError(t, err)
 	})
 
 	t.Run("non-abstract type accepted", func(t *testing.T) {
@@ -217,7 +213,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 		doc, err := helium.Parse([]byte(instanceXML))
 		require.NoError(t, err)
 
-		result := xsd.Validate(doc, schema)
-		require.True(t, strings.Contains(result, "validates") && !strings.Contains(result, "fails to validate"))
+		err = xsd.Validate(doc, schema)
+		require.NoError(t, err)
 	})
 }

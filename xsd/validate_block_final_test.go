@@ -17,7 +17,7 @@ func compileWithErrors(t *testing.T, schemaXML string) *xsd.Schema {
 	return schema
 }
 
-func compileAndValidate(t *testing.T, schemaXML, instanceXML string) string {
+func compileAndValidate(t *testing.T, schemaXML, instanceXML string) error {
 	t.Helper()
 	schema := compileWithErrors(t, schemaXML)
 	require.Empty(t, schema.CompileErrors(), "unexpected compile errors")
@@ -55,8 +55,8 @@ func TestBlockDefault(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		instanceXML := `<root><member><value>hi</value><extra>more</extra></member></root>`
-		result := compileAndValidate(t, schemaXML, instanceXML)
-		require.Contains(t, result, "fails to validate")
+		err := compileAndValidate(t, schemaXML, instanceXML)
+		require.Error(t, err)
 	})
 
 	t.Run("blockDefault=#all blocks xsi:type with extension", func(t *testing.T) {
@@ -80,8 +80,9 @@ func TestBlockDefault(t *testing.T) {
 </xs:schema>`
 		instanceXML := `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:type="derivedType"><value>hi</value><extra>more</extra></root>`
-		result := compileAndValidate(t, schemaXML, instanceXML)
-		require.Contains(t, result, "blocked by the element declaration")
+		err := compileAndValidate(t, schemaXML, instanceXML)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "blocked by the element declaration")
 	})
 }
 
@@ -106,8 +107,9 @@ func TestBlockOnElement(t *testing.T) {
 </xs:schema>`
 		instanceXML := `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:type="derivedType"><value>hi</value><extra>more</extra></root>`
-		result := compileAndValidate(t, schemaXML, instanceXML)
-		require.Contains(t, result, "blocked by the element declaration")
+		err := compileAndValidate(t, schemaXML, instanceXML)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "blocked by the element declaration")
 	})
 
 	t.Run("block=substitution blocks substitution group members", func(t *testing.T) {
@@ -123,8 +125,8 @@ func TestBlockOnElement(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		instanceXML := `<root><member>hello</member></root>`
-		result := compileAndValidate(t, schemaXML, instanceXML)
-		require.Contains(t, result, "fails to validate")
+		err := compileAndValidate(t, schemaXML, instanceXML)
+		require.Error(t, err)
 	})
 
 	t.Run("explicit block= overrides blockDefault", func(t *testing.T) {
@@ -141,9 +143,8 @@ func TestBlockOnElement(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		instanceXML := `<root><member>hello</member></root>`
-		result := compileAndValidate(t, schemaXML, instanceXML)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		err := compileAndValidate(t, schemaXML, instanceXML)
+		require.NoError(t, err)
 	})
 }
 
@@ -310,9 +311,8 @@ func TestExplicitEmptyOverridesDefault(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		instanceXML := `<root><member>hello</member></root>`
-		result := compileAndValidate(t, schemaXML, instanceXML)
-		require.Contains(t, result, "validates")
-		require.NotContains(t, result, "fails to validate")
+		err := compileAndValidate(t, schemaXML, instanceXML)
+		require.NoError(t, err)
 	})
 
 	t.Run("explicit final= empty overrides finalDefault", func(t *testing.T) {

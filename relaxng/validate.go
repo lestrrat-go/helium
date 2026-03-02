@@ -20,9 +20,9 @@ type validator struct {
 
 const maxValidationDepth = 500
 
-func validateDocument(doc *helium.Document, grammar *Grammar, cfg *validateConfig) string {
+func validateDocument(doc *helium.Document, grammar *Grammar, cfg *validateConfig) (string, bool) {
 	if grammar == nil || grammar.start == nil {
-		return cfg.filename + " fails to validate\n"
+		return cfg.filename + " fails to validate\n", false
 	}
 
 	v := &validator{
@@ -35,7 +35,7 @@ func validateDocument(doc *helium.Document, grammar *Grammar, cfg *validateConfi
 	if root == nil {
 		v.valid = false
 		v.errors.WriteString(v.filename + " fails to validate\n")
-		return v.errors.String()
+		return v.errors.String(), false
 	}
 
 	// Create initial state: the root element
@@ -60,7 +60,7 @@ func validateDocument(doc *helium.Document, grammar *Grammar, cfg *validateConfi
 		v.errors.WriteString(v.filename + " fails to validate\n")
 	}
 
-	return v.errors.String()
+	return v.errors.String(), v.valid
 }
 
 // validState tracks the current position during validation.

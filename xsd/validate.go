@@ -7,14 +7,15 @@ import (
 	helium "github.com/lestrrat-go/helium"
 )
 
-func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig) string {
+func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig) (string, bool) {
 	filename := cfg.filename
 	var out strings.Builder
 	valid := true
 
 	root := findDocumentElement(doc)
 	if root == nil {
-		return filename + " fails to validate\n"
+		out.WriteString(filename + " fails to validate\n")
+		return out.String(), false
 	}
 
 	// Walk the document tree for content model validation.
@@ -49,7 +50,7 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 	} else {
 		out.WriteString(filename + " fails to validate\n")
 	}
-	return out.String()
+	return out.String(), valid
 }
 
 func validateElement(elem *helium.Element, schema *Schema, filename string, out *strings.Builder) error {

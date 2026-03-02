@@ -9,7 +9,7 @@ import (
 	"github.com/lestrrat-go/helium/xpath"
 )
 
-func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig) string {
+func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig) (string, bool) {
 	filename := cfg.filename
 	var out strings.Builder
 	valid := true
@@ -99,7 +99,7 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 	} else {
 		out.WriteString(filename + " fails to validate\n")
 	}
-	return out.String()
+	return out.String(), valid
 }
 
 // formatMessage interpolates message parts against a context node.
