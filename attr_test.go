@@ -3,6 +3,7 @@ package helium
 import (
 	"testing"
 
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,13 +31,13 @@ func TestAttributeAType(t *testing.T) {
 		root := doc.DocumentElement()
 		require.NotNil(t, root)
 
-		expected := map[string]AttributeType{
-			"name": AttrCDATA,
-			"id":   AttrID,
-			"ref":  AttrIDRef,
-			"refs": AttrIDRefs,
-			"tok":  AttrNmtoken,
-			"toks": AttrNmtokens,
+		expected := map[string]enum.AttributeType{
+			"name": enum.AttrCDATA,
+			"id":   enum.AttrID,
+			"ref":  enum.AttrIDRef,
+			"refs": enum.AttrIDRefs,
+			"tok":  enum.AttrNmtoken,
+			"toks": enum.AttrNmtokens,
 		}
 
 		for _, attr := range root.Attributes() {
@@ -65,9 +66,9 @@ func TestAttributeAType(t *testing.T) {
 		root := doc.DocumentElement()
 		require.NotNil(t, root)
 
-		expected := map[string]AttributeType{
-			"name": AttrCDATA,
-			"role": AttrNmtoken,
+		expected := map[string]enum.AttributeType{
+			"name": enum.AttrCDATA,
+			"role": enum.AttrNmtoken,
 		}
 
 		attrs := root.Attributes()
@@ -92,7 +93,7 @@ func TestAttributeAType(t *testing.T) {
 
 		attrs := root.Attributes()
 		require.Len(t, attrs, 1)
-		require.Equal(t, AttrInvalid, attrs[0].AType())
+		require.Equal(t, enum.AttrInvalid, attrs[0].AType())
 	})
 
 	t.Run("enumeration attributes carry atype", func(t *testing.T) {
@@ -113,6 +114,6 @@ func TestAttributeAType(t *testing.T) {
 
 		attrs := root.Attributes()
 		require.Len(t, attrs, 1)
-		require.Equal(t, AttrEnumeration, attrs[0].AType())
+		require.Equal(t, enum.AttrEnumeration, attrs[0].AType())
 	})
 }

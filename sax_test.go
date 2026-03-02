@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium/sax"
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/pdebug"
 	"github.com/stretchr/testify/require"
 )
@@ -22,7 +23,7 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.SetDocumentLocator()\n")
 		return nil
 	})
-	s.OnAttributeDecl = sax.AttributeDeclFunc(func(_ sax.Context, elemName string, attrName string, typ int, deftype int, defvalue string, enum sax.Enumeration) error {
+	s.OnAttributeDecl = sax.AttributeDeclFunc(func(_ sax.Context, elemName string, attrName string, typ enum.AttributeType, deftype enum.AttributeDefault, defvalue string, enum sax.Enumeration) error {
 		// eek, defvalue is an interface, and interface == nil is only true
 		// if the interface has no value AND not type, so.. hmmm.
 		if defvalue == "" {
@@ -59,7 +60,7 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		return ent, nil
 	})
 
-	s.OnEntityDecl = sax.EntityDeclFunc(func(ctxif sax.Context, name string, typ int, publicID string, systemID string, notation string) error {
+	s.OnEntityDecl = sax.EntityDeclFunc(func(ctxif sax.Context, name string, typ enum.EntityType, publicID string, systemID string, notation string) error {
 		if pdebug.Enabled {
 			g := pdebug.Marker("EntityDecl handler for sax_test.go")
 			defer g.End()
@@ -67,9 +68,9 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.UnparsedEntityDecl(%s, %d, %s, %s, %s)\n",
 			name, typ, publicID, systemID, notation)
 
-		entities[name] = newEntity(name, EntityType(typ), publicID, systemID, notation, "")
+		entities[name] = newEntity(name, typ, publicID, systemID, notation, "")
 		if pdebug.Enabled {
-			pdebug.Printf("registered entity '%s' (entity type = '%s', publicID = '%s', systemID = '%s', notation = '%s')", name, EntityType(typ), publicID, systemID, notation)
+			pdebug.Printf("registered entity '%s' (entity type = '%s', publicID = '%s', systemID = '%s', notation = '%s')", name, typ, publicID, systemID, notation)
 		}
 		return nil
 	})
@@ -77,7 +78,7 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.ExternalSubset(%s, %s, %s)\n", name, externalID, systemID)
 		return nil
 	})
-	s.OnElementDecl = sax.ElementDeclFunc(func(_ sax.Context, name string, typ int, content sax.ElementContent) error {
+	s.OnElementDecl = sax.ElementDeclFunc(func(_ sax.Context, name string, typ enum.ElementType, content sax.ElementContent) error {
 		_, _ = fmt.Fprintf(out, "SAX.ElementDecl(%s, %d, ...)\n", name, typ)
 		return nil
 	})

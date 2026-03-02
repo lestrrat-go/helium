@@ -3,6 +3,7 @@ package helium
 import (
 	"testing"
 
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,7 +22,7 @@ func buildTestDoc(standalone DocumentStandaloneType) *Document {
 
 	rootDecl := newElementDecl()
 	rootDecl.name = "root"
-	rootDecl.decltype = AnyElementType
+	rootDecl.decltype = enum.AnyElementType
 	rootDecl.doc = doc
 	intDTD.elements = map[string]*ElementDecl{
 		"root:": rootDecl,
@@ -38,13 +39,13 @@ func buildTestDoc(standalone DocumentStandaloneType) *Document {
 
 	childDecl := newElementDecl()
 	childDecl.name = "child"
-	childDecl.decltype = EmptyElementType
+	childDecl.decltype = enum.EmptyElementType
 	childDecl.doc = doc
 	extDTD.elements = map[string]*ElementDecl{
 		"child:": childDecl,
 	}
 
-	extEnt := newEntity("extEnt", InternalGeneralEntity, "", "", "hello", "")
+	extEnt := newEntity("extEnt", enum.InternalGeneralEntity, "", "", "hello", "")
 	extEnt.doc = doc
 	extDTD.entities = map[string]*Entity{
 		"extEnt": extEnt,
@@ -54,8 +55,8 @@ func buildTestDoc(standalone DocumentStandaloneType) *Document {
 	attrDecl := newAttributeDecl()
 	attrDecl.name = "role"
 	attrDecl.elem = "child"
-	attrDecl.atype = AttrCDATA
-	attrDecl.def = AttrDefaultRequired
+	attrDecl.atype = enum.AttrCDATA
+	attrDecl.def = enum.AttrDefaultRequired
 	attrDecl.doc = doc
 	extDTD.attributes = map[string]*AttributeDecl{
 		"role::child": attrDecl,
@@ -642,7 +643,7 @@ func TestStandaloneWhitespaceCheck(t *testing.T) {
 		doc.intSubset = intDTD
 		rootDecl := newElementDecl()
 		rootDecl.name = "root"
-		rootDecl.decltype = AnyElementType
+		rootDecl.decltype = enum.AnyElementType
 		rootDecl.doc = doc
 		intDTD.elements = map[string]*ElementDecl{"root:": rootDecl}
 		intDTD.entities = map[string]*Entity{}
@@ -656,7 +657,7 @@ func TestStandaloneWhitespaceCheck(t *testing.T) {
 		doc.extSubset = extDTD
 		containerDecl := newElementDecl()
 		containerDecl.name = "container"
-		containerDecl.decltype = ElementElementType
+		containerDecl.decltype = enum.ElementElementType
 		containerDecl.content = &ElementContent{
 			ctype:  ElementContentElement,
 			coccur: ElementContentPlus,
@@ -696,7 +697,7 @@ func TestStandaloneWhitespaceCheck(t *testing.T) {
 		doc.intSubset = intDTD
 		rootDecl := newElementDecl()
 		rootDecl.name = "root"
-		rootDecl.decltype = AnyElementType
+		rootDecl.decltype = enum.AnyElementType
 		rootDecl.doc = doc
 		intDTD.elements = map[string]*ElementDecl{"root:": rootDecl}
 		intDTD.entities = map[string]*Entity{}
@@ -709,7 +710,7 @@ func TestStandaloneWhitespaceCheck(t *testing.T) {
 		doc.extSubset = extDTD
 		containerDecl := newElementDecl()
 		containerDecl.name = "container"
-		containerDecl.decltype = ElementElementType
+		containerDecl.decltype = enum.ElementElementType
 		containerDecl.content = &ElementContent{
 			ctype:  ElementContentElement,
 			coccur: ElementContentPlus,
@@ -749,7 +750,7 @@ func TestStandaloneWhitespaceCheck(t *testing.T) {
 		doc.intSubset = intDTD
 		rootDecl := newElementDecl()
 		rootDecl.name = "root"
-		rootDecl.decltype = AnyElementType
+		rootDecl.decltype = enum.AnyElementType
 		rootDecl.doc = doc
 		intDTD.elements = map[string]*ElementDecl{"root:": rootDecl}
 		intDTD.entities = map[string]*Entity{}
@@ -762,7 +763,7 @@ func TestStandaloneWhitespaceCheck(t *testing.T) {
 		doc.extSubset = extDTD
 		containerDecl := newElementDecl()
 		containerDecl.name = "container"
-		containerDecl.decltype = ElementElementType
+		containerDecl.decltype = enum.ElementElementType
 		containerDecl.content = &ElementContent{
 			ctype:  ElementContentElement,
 			coccur: ElementContentPlus,
@@ -807,7 +808,7 @@ func TestStandaloneWhitespaceCheck(t *testing.T) {
 		// "root" declared in internal subset with element-only content
 		rootDecl := newElementDecl()
 		rootDecl.name = "root"
-		rootDecl.decltype = ElementElementType
+		rootDecl.decltype = enum.ElementElementType
 		rootDecl.content = &ElementContent{
 			ctype:  ElementContentElement,
 			coccur: ElementContentPlus,
@@ -816,7 +817,7 @@ func TestStandaloneWhitespaceCheck(t *testing.T) {
 		rootDecl.doc = doc
 		childDecl := newElementDecl()
 		childDecl.name = "child"
-		childDecl.decltype = EmptyElementType
+		childDecl.decltype = enum.EmptyElementType
 		childDecl.doc = doc
 		intDTD.elements = map[string]*ElementDecl{
 			"root:":  rootDecl,
@@ -851,7 +852,7 @@ func TestExtSubsetLookup_ParameterEntityInExtSubset(t *testing.T) {
 	doc := buildTestDoc(StandaloneImplicitNo)
 
 	// Add a parameter entity to extSubset
-	pent := newEntity("pEnt", InternalParameterEntity, "", "", "param-value", "")
+	pent := newEntity("pEnt", enum.InternalParameterEntity, "", "", "param-value", "")
 	pent.doc = doc
 	doc.extSubset.pentities["pEnt"] = pent
 

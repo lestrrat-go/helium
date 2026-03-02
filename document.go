@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/pdebug"
 )
 
@@ -433,11 +434,11 @@ func (d *Document) IsMixedElement(name string) (bool, error) {
 	}
 
 	switch edecl.decltype {
-	case UndefinedElementType:
+	case enum.UndefinedElementType:
 		return false, errors.New("element declaration not found")
-	case ElementElementType:
+	case enum.ElementElementType:
 		return false, nil
-	case EmptyElementType, AnyElementType, MixedElementType:
+	case enum.EmptyElementType, enum.AnyElementType, enum.MixedElementType:
 		/*
 		 * return 1 for EMPTY since we want VC error to pop up
 		 * on <empty>     </empty> for example
@@ -550,7 +551,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 			// Predefined entities are inlined; all others (resolved or not)
 			// become entity reference nodes. This matches libxml2's
 			// xmlNodeParseAttValue behavior in tree.c.
-			if ok && ent.EntityType() == int(InternalPredefinedEntity) {
+			if ok && ent.EntityType() == enum.InternalPredefinedEntity {
 				_, _ = buf.Write(ent.Content())
 			} else {
 				// flush the buffer so far
@@ -709,7 +710,7 @@ func (d *Document) GetElementByID(id string) *Element {
 				continue
 			}
 			for _, adecl := range dtd.AttributesForElement(elem.LocalName()) {
-				if adecl.AType() != AttrID {
+				if adecl.AType() != enum.AttrID {
 					continue
 				}
 				for _, a := range elem.Attributes() {
@@ -725,7 +726,7 @@ func (d *Document) GetElementByID(id string) *Element {
 	return found
 }
 
-func (d *Document) AddEntity(name string, typ EntityType, externalID, systemID, content string) (*Entity, error) {
+func (d *Document) AddEntity(name string, typ enum.EntityType, externalID, systemID, content string) (*Entity, error) {
 	if d.intSubset == nil {
 		return nil, errors.New("document without internal subset")
 	}

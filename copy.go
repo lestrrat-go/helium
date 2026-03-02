@@ -3,6 +3,8 @@ package helium
 import (
 	"fmt"
 	"slices"
+
+	"github.com/lestrrat-go/helium/enum"
 )
 
 // CopyNode creates a deep copy of src, owned by targetDoc.
@@ -130,7 +132,7 @@ func copyDTD(src *DTD, dst *Document) error {
 			ent := c.(*Entity)
 			cp := copyEntity(ent, dst)
 			switch ent.entityType {
-			case InternalParameterEntity, ExternalParameterEntity:
+			case enum.InternalParameterEntity, enum.ExternalParameterEntity:
 				dstDTD.pentities[ent.name] = cp
 			default:
 				dstDTD.entities[ent.name] = cp

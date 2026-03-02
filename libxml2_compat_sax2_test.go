@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium/sax"
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
 )
 
@@ -47,18 +48,16 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.externalSubset(%s, %s, %s)\n", name, externalID, systemID)
 		return nil
 	})
-	s.OnEntityDecl = sax.EntityDeclFunc(func(_ sax.Context, name string, typ int, publicID string, systemID string, content string) error {
+	s.OnEntityDecl = sax.EntityDeclFunc(func(_ sax.Context, name string, typ enum.EntityType, publicID string, systemID string, content string) error {
 		// External entities (types 2, 3, 5) have no content — libxml2 prints (null).
 		contentStr := content
-		et := EntityType(typ)
-		if content == "" && (et == ExternalGeneralParsedEntity || et == ExternalGeneralUnparsedEntity || et == ExternalParameterEntity) {
+		if content == "" && (typ == enum.ExternalGeneralParsedEntity || typ == enum.ExternalGeneralUnparsedEntity || typ == enum.ExternalParameterEntity) {
 			contentStr = "(null)"
 		}
 		_, _ = fmt.Fprintf(out, "SAX.entityDecl(%s, %d, %s, %s, %s)\n",
 			name, typ, nullOrString(publicID), nullOrString(systemID), contentStr)
-		ent := newEntity(name, EntityType(typ), publicID, systemID, content, "")
-		et = EntityType(typ)
-		if et == InternalParameterEntity || et == ExternalParameterEntity {
+		ent := newEntity(name, typ, publicID, systemID, content, "")
+		if typ == enum.InternalParameterEntity || typ == enum.ExternalParameterEntity {
 			peEntities[name] = ent
 		} else {
 			entities[name] = ent
@@ -74,14 +73,14 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.notationDecl(%s, %s, %s)\n", name, nullOrString(publicID), nullOrString(systemID))
 		return nil
 	})
-	s.OnAttributeDecl = sax.AttributeDeclFunc(func(_ sax.Context, elemName string, attrName string, typ int, deftype int, defvalue string, _ sax.Enumeration) error {
+	s.OnAttributeDecl = sax.AttributeDeclFunc(func(_ sax.Context, elemName string, attrName string, typ enum.AttributeType, deftype enum.AttributeDefault, defvalue string, _ sax.Enumeration) error {
 		if defvalue == "" {
 			defvalue = "NULL"
 		}
 		_, _ = fmt.Fprintf(out, "SAX.attributeDecl(%s, %s, %d, %d, %s, ...)\n", elemName, attrName, typ, deftype, defvalue)
 		return nil
 	})
-	s.OnElementDecl = sax.ElementDeclFunc(func(_ sax.Context, name string, typ int, _ sax.ElementContent) error {
+	s.OnElementDecl = sax.ElementDeclFunc(func(_ sax.Context, name string, typ enum.ElementType, _ sax.ElementContent) error {
 		_, _ = fmt.Fprintf(out, "SAX.elementDecl(%s, %d, ...)\n", name, typ)
 		return nil
 	})

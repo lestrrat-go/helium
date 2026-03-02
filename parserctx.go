@@ -16,6 +16,7 @@ import (
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/sax"
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/pdebug"
 	"github.com/lestrrat-go/strcursor"
 )
@@ -86,7 +87,7 @@ type parserCtx struct {
 	extSubSystem      string
 	extSubURI         string
 	version           string
-	attsSpecial       map[string]AttributeType
+	attsSpecial       map[string]enum.AttributeType
 	attsDefault       map[string][]*Attribute
 	valid             bool
 	hasPERefs         bool
@@ -169,7 +170,7 @@ func (ctx *parserCtx) fireSAXCallback(typ int, args ...any) error {
 			g := pdebug.Marker("EntityDecl callback")
 			defer g.End()
 		}
-		return s.EntityDecl(ctx.userData, args[0].(string), int(InternalParameterEntity), "", "", args[1].(string))
+		return s.EntityDecl(ctx.userData, args[0].(string), enum.InternalParameterEntity, "", "", args[1].(string))
 	case cbGetParameterEntity:
 		if pdebug.Enabled {
 			g := pdebug.Marker("GetParameterEntity callback")
@@ -353,7 +354,7 @@ func (ctx *parserCtx) init(p *Parser, in io.Reader) error {
 	ctx.instate = psStart
 	ctx.userData = ctx // circular dep?!
 	ctx.standalone = StandaloneImplicitNo
-	ctx.attsSpecial = map[string]AttributeType{}
+	ctx.attsSpecial = map[string]enum.AttributeType{}
 	ctx.attsDefault = map[string][]*Attribute{}
 	ctx.wellFormed = true
 	ctx.spaceTab = ctx.spaceTab[:0]
@@ -1469,7 +1470,7 @@ func (ctx *parserCtx) parseAttributeValueInternal(qch rune, normalize bool) (val
 					continue
 				}
 
-				if ent.entityType == InternalPredefinedEntity {
+				if ent.entityType == enum.InternalPredefinedEntity {
 					if ent.content == "&" && !ctx.replaceEntities {
 						_, _ = b.WriteString("&#38;")
 					} else {
@@ -1556,7 +1557,7 @@ func (ctx *parserCtx) parseAttribute(elemName string) (local string, prefix stri
 	if pdebug.Enabled {
 		pdebug.Printf("looked up attribute %s:%s -> %d (%t)", elemName, l, attType, ok)
 	}
-	if ok && attType != AttrInvalid {
+	if ok && attType != enum.AttrInvalid {
 		normalize = true
 	}
 	ctx.skipBlanks()
@@ -3236,7 +3237,7 @@ func (ctx *parserCtx) parsePEReference() error {
 		/*
 		 * Internal checking in case the entity quest barfed
 		 */
-		if etype := EntityType(entity.EntityType()); etype != InternalParameterEntity && etype != ExternalParameterEntity {
+		if etype := entity.EntityType(); etype != enum.InternalParameterEntity && etype != enum.ExternalParameterEntity {
 			if err := ctx.warning("Internal: %%%s; is not a parameter entity\n", name); err != nil {
 				return err
 			}
@@ -3284,7 +3285,7 @@ func (ctx *parserCtx) parsePEReference() error {
  *
  * Returns the type of the element, or -1 in case of error
  */
-func (ctx *parserCtx) parseElementDecl() (ElementTypeVal, error) {
+func (ctx *parserCtx) parseElementDecl() (enum.ElementType, error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START parseElementDecl")
 		defer g.IRelease("END parseElementDecl")
@@ -3295,18 +3296,18 @@ func (ctx *parserCtx) parseElementDecl() (ElementTypeVal, error) {
 		panic("did not get rune cursor")
 	}
 	if !cur.ConsumeString("<!ELEMENT") {
-		return UndefinedElementType, ctx.error(ErrInvalidElementDecl)
+		return enum.UndefinedElementType, ctx.error(ErrInvalidElementDecl)
 	}
 	startInput := ctx.currentInputID()
 
 	if !isBlankCh(cur.Peek()) {
-		return UndefinedElementType, ctx.error(ErrSpaceRequired)
+		return enum.UndefinedElementType, ctx.error(ErrSpaceRequired)
 	}
 	ctx.skipBlanks()
 
 	name, err := ctx.parseName()
 	if err != nil {
-		return UndefinedElementType, ctx.error(err)
+		return enum.UndefinedElementType, ctx.error(err)
 	}
 
 	/* XXX WHAT?
@@ -3315,20 +3316,20 @@ func (ctx *parserCtx) parseElementDecl() (ElementTypeVal, error) {
 	*/
 
 	if !isBlankCh(cur.Peek()) {
-		return UndefinedElementType, ctx.error(ErrSpaceRequired)
+		return enum.UndefinedElementType, ctx.error(ErrSpaceRequired)
 	}
 	ctx.skipBlanks()
 
-	var etype ElementTypeVal
+	var etype enum.ElementType
 	var content *ElementContent
 	if cur.ConsumeString("EMPTY") {
-		etype = EmptyElementType
+		etype = enum.EmptyElementType
 	} else if cur.ConsumeString("ANY") {
-		etype = AnyElementType
+		etype = enum.AnyElementType
 	} else if cur.Peek() == '(' {
 		content, etype, err = ctx.parseElementContentDecl()
 		if err != nil {
-			return UndefinedElementType, ctx.error(err)
+			return enum.UndefinedElementType, ctx.error(err)
 		}
 		/*
 			} else {
@@ -3357,23 +3358,23 @@ func (ctx *parserCtx) parseElementDecl() (ElementTypeVal, error) {
 	*/
 
 	if cur.Peek() != '>' {
-		return UndefinedElementType, ctx.error(ErrGtRequired)
+		return enum.UndefinedElementType, ctx.error(ErrGtRequired)
 	}
 	if err := cur.Advance(1); err != nil {
-		return UndefinedElementType, err
+		return enum.UndefinedElementType, err
 	}
 
 	if ctx.currentInputID() != startInput {
-		return UndefinedElementType, ctx.error(
+		return enum.UndefinedElementType, ctx.error(
 			fmt.Errorf("%w: element declaration doesn't start and stop in the same entity", ErrEntityBoundary))
 	}
 
 	if s := ctx.sax; s != nil {
-		switch err := s.ElementDecl(ctx.userData, name, int(etype), content); err {
+		switch err := s.ElementDecl(ctx.userData, name, etype, content); err {
 		case nil, sax.ErrHandlerUnspecified:
 			// no op
 		default:
-			return UndefinedElementType, ctx.error(err)
+			return enum.UndefinedElementType, ctx.error(err)
 		}
 	}
 	/*
@@ -3402,7 +3403,7 @@ func (ctx *parserCtx) parseElementDecl() (ElementTypeVal, error) {
 	return etype, nil
 }
 
-func (ctx *parserCtx) parseElementContentDecl() (*ElementContent, ElementTypeVal, error) {
+func (ctx *parserCtx) parseElementContentDecl() (*ElementContent, enum.ElementType, error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START parseElementContentDecl")
 		defer g.IRelease("END parseElementContentDecl")
@@ -3413,33 +3414,33 @@ func (ctx *parserCtx) parseElementContentDecl() (*ElementContent, ElementTypeVal
 		panic("did not get rune cursor")
 	}
 	if cur.Peek() != '(' {
-		return nil, UndefinedElementType, ctx.error(ErrOpenParenRequired)
+		return nil, enum.UndefinedElementType, ctx.error(ErrOpenParenRequired)
 	}
 	if err := cur.Advance(1); err != nil {
-		return nil, UndefinedElementType, err
+		return nil, enum.UndefinedElementType, err
 	}
 
 	if ctx.instate == psEOF {
-		return nil, UndefinedElementType, ctx.error(ErrEOF)
+		return nil, enum.UndefinedElementType, ctx.error(ErrEOF)
 	}
 
 	ctx.skipBlanks()
 
 	var ec *ElementContent
 	var err error
-	var etype ElementTypeVal
+	var etype enum.ElementType
 	if cur.HasPrefixString("#PCDATA") {
 		ec, err = ctx.parseElementMixedContentDecl()
 		if err != nil {
-			return nil, UndefinedElementType, ctx.error(err)
+			return nil, enum.UndefinedElementType, ctx.error(err)
 		}
-		etype = MixedElementType
+		etype = enum.MixedElementType
 	} else {
 		ec, err = ctx.parseElementChildrenContentDeclPriv(0)
 		if err != nil {
-			return nil, UndefinedElementType, ctx.error(err)
+			return nil, enum.UndefinedElementType, ctx.error(err)
 		}
-		etype = ElementElementType
+		etype = enum.ElementElementType
 	}
 
 	ctx.skipBlanks()
@@ -3921,7 +3922,7 @@ func (ctx *parserCtx) decodeEntitiesInternal(s []byte, what SubstitutionType, de
 				return "", err
 			}
 
-			if EntityType(ent.EntityType()) == InternalPredefinedEntity {
+			if ent.EntityType() == enum.InternalPredefinedEntity {
 				if len(ent.Content()) == 0 {
 					return "", errors.New("predefined entity has no content")
 				}
@@ -4107,7 +4108,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 					return ctx.error(errors.New("err uri fragment"))
 				} else {
 					if s := ctx.sax; s != nil {
-						switch err := s.EntityDecl(ctx.userData, name, int(ExternalParameterEntity), literal, uri, ""); err {
+						switch err := s.EntityDecl(ctx.userData, name, enum.ExternalParameterEntity, literal, uri, ""); err {
 						case nil, sax.ErrHandlerUnspecified:
 							// no op
 						default:
@@ -4126,7 +4127,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 			hasOrig = true
 			if err == nil {
 				if s := ctx.sax; s != nil {
-					switch err := s.EntityDecl(ctx.userData, name, int(InternalGeneralEntity), "", "", value); err {
+					switch err := s.EntityDecl(ctx.userData, name, enum.InternalGeneralEntity, "", "", value); err {
 					case nil, sax.ErrHandlerUnspecified:
 						// no op
 					default:
@@ -4183,7 +4184,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 						pdebug.Printf("Calling s.EntityDecl with %s -> %s", name, literal)
 					}
 					// External parsed entity: publicID=uri, systemID=literal
-					switch err := s.EntityDecl(ctx.userData, name, int(ExternalGeneralParsedEntity), uri, literal, ""); err {
+					switch err := s.EntityDecl(ctx.userData, name, enum.ExternalGeneralParsedEntity, uri, literal, ""); err {
 					case nil, sax.ErrHandlerUnspecified:
 						// no op
 					default:
@@ -4357,7 +4358,7 @@ func (ctx *parserCtx) parseEnumerationType() (Enumeration, error) {
  *
  * Returns: XML_ATTRIBUTE_ENUMERATION or XML_ATTRIBUTE_NOTATION
  */
-func (ctx *parserCtx) parseEnumeratedType() (AttributeType, Enumeration, error) {
+func (ctx *parserCtx) parseEnumeratedType() (enum.AttributeType, Enumeration, error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START parseEnumeratedType")
 		defer g.IRelease("END parseEnumeratedType")
@@ -4369,22 +4370,22 @@ func (ctx *parserCtx) parseEnumeratedType() (AttributeType, Enumeration, error) 
 	}
 	if cur.ConsumeString("NOTATION") {
 		if !isBlankCh(cur.Peek()) {
-			return AttrInvalid, nil, ctx.error(ErrSpaceRequired)
+			return enum.AttrInvalid, nil, ctx.error(ErrSpaceRequired)
 		}
 		ctx.skipBlanks()
-		enum, err := ctx.parseNotationType()
+		tree, err := ctx.parseNotationType()
 		if err != nil {
-			return AttrInvalid, nil, ctx.error(err)
+			return enum.AttrInvalid, nil, ctx.error(err)
 		}
 
-		return AttrNotation, enum, nil
+		return enum.AttrNotation, tree, nil
 	}
 
-	enum, err := ctx.parseEnumerationType()
+	tree, err := ctx.parseEnumerationType()
 	if err != nil {
-		return AttrInvalid, enum, ctx.error(err)
+		return enum.AttrInvalid, tree, ctx.error(err)
 	}
-	return AttrEnumeration, enum, nil
+	return enum.AttrEnumeration, tree, nil
 }
 
 /*
@@ -4428,7 +4429,7 @@ func (ctx *parserCtx) parseEnumeratedType() (AttributeType, Enumeration, error) 
  *
  * Returns the attribute type
  */
-func (ctx *parserCtx) parseAttributeType() (AttributeType, Enumeration, error) {
+func (ctx *parserCtx) parseAttributeType() (enum.AttributeType, Enumeration, error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START parseAttributeType")
 		defer g.IRelease("END parseAttributeType")
@@ -4439,28 +4440,28 @@ func (ctx *parserCtx) parseAttributeType() (AttributeType, Enumeration, error) {
 		panic("did not get rune cursor")
 	}
 	if cur.ConsumeString("CDATA") {
-		return AttrCDATA, nil, nil
+		return enum.AttrCDATA, nil, nil
 	}
 	if cur.ConsumeString("IDREFS") {
-		return AttrIDRefs, nil, nil
+		return enum.AttrIDRefs, nil, nil
 	}
 	if cur.ConsumeString("IDREF") {
-		return AttrIDRef, nil, nil
+		return enum.AttrIDRef, nil, nil
 	}
 	if cur.ConsumeString("ID") {
-		return AttrID, nil, nil
+		return enum.AttrID, nil, nil
 	}
 	if cur.ConsumeString("ENTITY") {
-		return AttrEntity, nil, nil
+		return enum.AttrEntity, nil, nil
 	}
 	if cur.ConsumeString("ENTITIES") {
-		return AttrEntities, nil, nil
+		return enum.AttrEntities, nil, nil
 	}
 	if cur.ConsumeString("NMTOKENS") {
-		return AttrNmtokens, nil, nil
+		return enum.AttrNmtokens, nil, nil
 	}
 	if cur.ConsumeString("NMTOKEN") {
-		return AttrNmtoken, nil, nil
+		return enum.AttrNmtoken, nil, nil
 	}
 
 	return ctx.parseEnumeratedType()
@@ -4490,7 +4491,7 @@ func (ctx *parserCtx) parseAttributeType() (AttributeType, Enumeration, error) {
  * returns: XML_ATTRIBUTE_NONE, XML_ATTRIBUTE_REQUIRED, XML_ATTRIBUTE_IMPLIED
  *          or XML_ATTRIBUTE_FIXED.
  */
-func (ctx *parserCtx) parseDefaultDecl() (deftype AttributeDefault, defvalue string, err error) {
+func (ctx *parserCtx) parseDefaultDecl() (deftype enum.AttributeDefault, defvalue string, err error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START parseDefaultDecl")
 		defer func() {
@@ -4498,24 +4499,24 @@ func (ctx *parserCtx) parseDefaultDecl() (deftype AttributeDefault, defvalue str
 		}()
 	}
 
-	deftype = AttrDefaultNone
+	deftype = enum.AttrDefaultNone
 	cur := ctx.getCursor()
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
 	if cur.ConsumeString("#REQUIRED") {
-		deftype = AttrDefaultRequired
+		deftype = enum.AttrDefaultRequired
 		return
 	}
 	if cur.ConsumeString("#IMPLIED") {
-		deftype = AttrDefaultImplied
+		deftype = enum.AttrDefaultImplied
 		return
 	}
 
 	if cur.ConsumeString("#FIXED") {
-		deftype = AttrDefaultFixed
+		deftype = enum.AttrDefaultFixed
 		if !isBlankCh(cur.Peek()) {
-			deftype = AttrDefaultInvalid
+			deftype = enum.AttrDefaultInvalid
 			err = ctx.error(ErrSpaceRequired)
 			return
 		}
@@ -4528,7 +4529,7 @@ func (ctx *parserCtx) parseDefaultDecl() (deftype AttributeDefault, defvalue str
 		return s, err
 	})
 	if err != nil {
-		deftype = AttrDefaultInvalid
+		deftype = enum.AttrDefaultInvalid
 		err = ctx.error(err)
 		return
 	}
@@ -4612,7 +4613,7 @@ func (ctx *parserCtx) cleanSpecialAttributes() {
 		defer g.IRelease("END cleanSpecialAttribute")
 	}
 	for k, v := range ctx.attsSpecial {
-		if v == AttrCDATA {
+		if v == enum.AttrCDATA {
 			if pdebug.Enabled {
 				pdebug.Printf("removing %s from special attribute set", k)
 			}
@@ -4621,8 +4622,8 @@ func (ctx *parserCtx) cleanSpecialAttributes() {
 	}
 }
 
-func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ AttributeType) {
-	if typ == AttrID && ctx.loadsubset.IsSet(SkipIDs) {
+func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ enum.AttributeType) {
+	if typ == enum.AttrID && ctx.loadsubset.IsSet(SkipIDs) {
 		return
 	}
 	key := elemName + ":" + attrName
@@ -4633,7 +4634,7 @@ func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ Attribu
 	ctx.attsSpecial[key] = typ
 }
 
-func (ctx *parserCtx) lookupSpecialAttribute(elemName, attrName string) (AttributeType, bool) {
+func (ctx *parserCtx) lookupSpecialAttribute(elemName, attrName string) (enum.AttributeType, bool) {
 	key := elemName + ":" + attrName
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START lookupSpecialAttribute(%s)", key)
@@ -4643,7 +4644,7 @@ func (ctx *parserCtx) lookupSpecialAttribute(elemName, attrName string) (Attribu
 	return v, ok
 }
 
-func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefix string, atype AttributeType, def AttributeDefault, defvalue string, tree Enumeration) (attr *AttributeDecl, err error) {
+func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefix string, atype enum.AttributeType, def enum.AttributeDefault, defvalue string, tree Enumeration) (attr *AttributeDecl, err error) {
 	if dtd == nil {
 		err = errors.New("dtd required")
 		return
@@ -4658,7 +4659,7 @@ func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefi
 	}
 
 	switch atype {
-	case AttrCDATA, AttrID, AttrIDRef, AttrIDRefs, AttrEntity, AttrEntities, AttrNmtoken, AttrNmtokens, AttrEnumeration, AttrNotation:
+	case enum.AttrCDATA, enum.AttrID, enum.AttrIDRef, enum.AttrIDRefs, enum.AttrEntity, enum.AttrEntities, enum.AttrNmtoken, enum.AttrNmtokens, enum.AttrEnumeration, enum.AttrNotation:
 		// ok. no op
 	default:
 		err = errors.New("invalid attribute type")
@@ -4802,7 +4803,7 @@ func (ctx *parserCtx) parseAttributeListDecl() error {
 		}
 		ctx.skipBlanks()
 
-		typ, enum, err := ctx.parseAttributeType()
+		typ, tree, err := ctx.parseAttributeType()
 		if err != nil {
 			return ctx.error(err)
 		}
@@ -4817,7 +4818,7 @@ func (ctx *parserCtx) parseAttributeListDecl() error {
 			return ctx.error(err)
 		}
 
-		if typ != AttrCDATA && def != AttrDefaultInvalid {
+		if typ != enum.AttrCDATA && def != enum.AttrDefaultInvalid {
 			defvalue = ctx.attrNormalizeSpace(defvalue)
 		}
 
@@ -4839,7 +4840,7 @@ func (ctx *parserCtx) parseAttributeListDecl() error {
 		   }
 		*/
 		if s := ctx.sax; s != nil {
-			switch err := s.AttributeDecl(ctx.userData, elemName, attrName, int(typ), int(def), defvalue, enum); err {
+			switch err := s.AttributeDecl(ctx.userData, elemName, attrName, typ, def, defvalue, tree); err {
 			case nil, sax.ErrHandlerUnspecified:
 				// no op
 			default:
@@ -4847,7 +4848,7 @@ func (ctx *parserCtx) parseAttributeListDecl() error {
 			}
 		}
 
-		if defvalue != "" && def != AttrDefaultImplied && def != AttrDefaultRequired {
+		if defvalue != "" && def != enum.AttrDefaultImplied && def != enum.AttrDefaultRequired {
 			ctx.addAttributeDefault(elemName, attrName, defvalue)
 		}
 
@@ -5292,7 +5293,7 @@ func (ctx *parserCtx) parseReference() error {
 	wasChecked := ent.checked
 
 	// special case for predefined entities
-	if ent.name == "" || EntityType(ent.EntityType()) == InternalPredefinedEntity {
+	if ent.name == "" || ent.EntityType() == enum.InternalPredefinedEntity {
 		if ent.content == "" {
 			return nil
 		}
@@ -5318,7 +5319,7 @@ func (ctx *parserCtx) parseReference() error {
 	// far more secure as the parser will only process data coming from
 	// the document entity by default.
 	var parsedEnt Node
-	if (wasChecked == 0 || (ent.firstChild == nil && ctx.options.IsSet(ParseNoEnt))) && (EntityType(ent.EntityType()) != ExternalGeneralParsedEntity || ctx.options.IsSet(ParseNoEnt|ParseDTDValid)) {
+	if (wasChecked == 0 || (ent.firstChild == nil && ctx.options.IsSet(ParseNoEnt))) && (ent.EntityType() != enum.ExternalGeneralParsedEntity || ctx.options.IsSet(ParseNoEnt|ParseDTDValid)) {
 		var userData any
 		if ctx.userData != ctx {
 			userData = ctx.userData
@@ -5326,7 +5327,7 @@ func (ctx *parserCtx) parseReference() error {
 
 		sizeBefore := ctx.sizeentcopy
 
-		if EntityType(ent.EntityType()) == InternalGeneralEntity {
+		if ent.EntityType() == enum.InternalGeneralEntity {
 			parsedEnt, err = ctx.parseBalancedChunkInternal([]byte(ent.Content()), userData)
 			switch err {
 			case nil, ErrParseSucceeded:
@@ -5334,7 +5335,7 @@ func (ctx *parserCtx) parseReference() error {
 			default:
 				return err
 			}
-		} else if EntityType(ent.EntityType()) == ExternalGeneralParsedEntity {
+		} else if ent.EntityType() == enum.ExternalGeneralParsedEntity {
 			parsedEnt, err = ctx.parseExternalEntityPrivate(ent.uri, ent.externalID)
 			switch err {
 			case nil, ErrParseSucceeded:
@@ -5391,7 +5392,7 @@ func (ctx *parserCtx) parseReference() error {
 			if ctx.userData != ctx {
 				userData = ctx.userData
 			}
-			if EntityType(ent.EntityType()) == InternalGeneralEntity {
+			if ent.EntityType() == enum.InternalGeneralEntity {
 				parsedEnt, err = ctx.parseBalancedChunkInternal([]byte(ent.Content()), userData)
 				_ = parsedEnt
 				switch err {
@@ -5400,7 +5401,7 @@ func (ctx *parserCtx) parseReference() error {
 				default:
 					return err
 				}
-			} else if EntityType(ent.EntityType()) == ExternalGeneralParsedEntity {
+			} else if ent.EntityType() == enum.ExternalGeneralParsedEntity {
 				parsedEnt, err = ctx.parseExternalEntityPrivate(ent.uri, ent.externalID)
 				_ = parsedEnt
 				switch err {
@@ -5724,7 +5725,7 @@ func (ctx *parserCtx) parseStringEntityRef(s []byte) (sax.Entity, int, error) {
 	 * unparsed entity
 	 */
 
-	if EntityType(loadedEnt.EntityType()) == ExternalGeneralUnparsedEntity {
+	if loadedEnt.EntityType() == enum.ExternalGeneralUnparsedEntity {
 		return nil, 0, fmt.Errorf("entity reference to unparsed entity '%s'", name)
 	}
 
@@ -5733,7 +5734,7 @@ func (ctx *parserCtx) parseStringEntityRef(s []byte) (sax.Entity, int, error) {
 	 * Attribute values cannot contain direct or indirect
 	 * entity references to external entities.
 	 */
-	if ctx.instate == psAttributeValue && EntityType(loadedEnt.EntityType()) == ExternalGeneralParsedEntity {
+	if ctx.instate == psAttributeValue && loadedEnt.EntityType() == enum.ExternalGeneralParsedEntity {
 		return nil, 0, fmt.Errorf("attribute references enternal entity '%s'", name)
 	}
 
@@ -5743,7 +5744,7 @@ func (ctx *parserCtx) parseStringEntityRef(s []byte) (sax.Entity, int, error) {
 	 * indirectly in an attribute value (other than "&lt;") must
 	 * not contain a <.
 	 */
-	if ctx.instate == psAttributeValue && len(loadedEnt.Content()) > 0 && EntityType(loadedEnt.EntityType()) == InternalPredefinedEntity && bytes.IndexByte(loadedEnt.Content(), '<') > -1 {
+	if ctx.instate == psAttributeValue && len(loadedEnt.Content()) > 0 && loadedEnt.EntityType() == enum.InternalPredefinedEntity && bytes.IndexByte(loadedEnt.Content(), '<') > -1 {
 		return nil, 0, fmt.Errorf("'<' in entity '%s' is not allowed in attribute values", name)
 	}
 
@@ -5751,8 +5752,8 @@ func (ctx *parserCtx) parseStringEntityRef(s []byte) (sax.Entity, int, error) {
 	 * Internal check, no parameter entities here ...
 	 */
 
-	switch EntityType(loadedEnt.EntityType()) {
-	case InternalParameterEntity, ExternalParameterEntity:
+	switch loadedEnt.EntityType() {
+	case enum.InternalParameterEntity, enum.ExternalParameterEntity:
 		return nil, 0, fmt.Errorf("attempt to reference the parameter entity '%s'", name)
 	}
 
@@ -5803,8 +5804,8 @@ func (ctx *parserCtx) parseStringPEReference(s []byte) (sax.Entity, int, error) 
 		}
 		// xmlParseEntityCheck(ctxt, 0, NULL, 0)
 	} else {
-		switch EntityType(loadedEnt.EntityType()) {
-		case InternalParameterEntity, ExternalParameterEntity:
+		switch loadedEnt.EntityType() {
+		case enum.InternalParameterEntity, enum.ExternalParameterEntity:
 		default:
 			return nil, 0, fmt.Errorf("not a parmeter entity: %%%s", name)
 		}
@@ -6015,17 +6016,17 @@ func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
 			ctx.valid = false
 			return nil, nil
 		}
-	} else if ent.entityType == ExternalGeneralUnparsedEntity {
+	} else if ent.entityType == enum.ExternalGeneralUnparsedEntity {
 		// [ WFC: Parsed Entity ]
 		// An entity reference must not contain the name of an
 		// unparsed entity
 		return nil, ctx.error(errors.New("entity reference to unparsed entity"))
-	} else if ctx.instate == psAttributeValue && ent.entityType == ExternalGeneralParsedEntity {
+	} else if ctx.instate == psAttributeValue && ent.entityType == enum.ExternalGeneralParsedEntity {
 		// [ WFC: No External Entity References ]
 		// Attribute values cannot contain direct or indirect
 		// entity references to external entities.
 		return nil, ctx.error(errors.New("attribute references external entity"))
-	} else if ctx.instate == psAttributeValue && ent.entityType != InternalPredefinedEntity {
+	} else if ctx.instate == psAttributeValue && ent.entityType != enum.InternalPredefinedEntity {
 		// [ WFC: No < in Attribute Values ]
 		// The replacement text of any entity referred to directly or
 		// indirectly in an attribute value (other than "&lt;") must
@@ -6036,8 +6037,8 @@ func (ctx *parserCtx) parseEntityRef() (ent *Entity, err error) {
 	} else {
 		// Internal check, no parameter entities here ...
 		switch ent.entityType {
-		case InternalParameterEntity:
-		case ExternalParameterEntity:
+		case enum.InternalParameterEntity:
+		case enum.ExternalParameterEntity:
 			return nil, ctx.error(errors.New("attempt to reference the parameter entity"))
 		}
 	}
@@ -6217,8 +6218,8 @@ func (ctx *parserCtx) handlePEReference() error {
 		               return;
 		*/
 	} else {
-		switch EntityType(entity.EntityType()) {
-		case InternalParameterEntity, ExternalParameterEntity:
+		switch entity.EntityType() {
+		case enum.InternalParameterEntity, enum.ExternalParameterEntity:
 			// OK
 		default:
 			return fmt.Errorf("entity is a parameter: PEReference: %%%s; is not a parameter entity", name)
