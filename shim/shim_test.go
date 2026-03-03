@@ -325,6 +325,19 @@ func TestUnmarshalEmbeddedPointerMatchStdlib(t *testing.T) {
 	require.Equal(t, stdOut, shimOut)
 }
 
+func TestUnmarshalRecursiveEmbeddedDoesNotRecurseForever(t *testing.T) {
+	type Recursive struct {
+		Value string `xml:"value"`
+		*Recursive
+	}
+
+	input := []byte(`<root><value>ok</value></root>`)
+
+	var shimOut Recursive
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, "ok", shimOut.Value)
+}
+
 func TestUnmarshalNamespacePathMatchStdlib(t *testing.T) {
 	type payload struct {
 		Value string `xml:"urn:root a>b"`

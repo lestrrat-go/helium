@@ -323,7 +323,7 @@ func buildFieldBindings(t reflect.Type) []fieldBinding {
 	}
 
 	bindings := make([]fieldBinding, 0, t.NumField())
-	collectFieldBindings(t, nil, &bindings)
+	collectFieldBindings(t, nil, &bindings, map[reflect.Type]bool{})
 	bindings = resolveBindingConflicts(bindings)
 
 	fieldBindingCache.Store(t, bindings)
@@ -385,14 +385,25 @@ func preferBinding(candidate, current fieldBinding) bool {
 	return false
 }
 
-func collectFieldBindings(t reflect.Type, parentIndex []int, out *[]fieldBinding) {
+func collectFieldBindings(t reflect.Type, parentIndex []int, out *[]fieldBinding, seen map[reflect.Type]bool) {
+	if seen[t] {
+		return
+	}
+	seen[t] = true
+	defer func() {
+		delete(seen, t)
+	}()
+
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
 		idx := append(append([]int(nil), parentIndex...), i)
 
 		if shouldFlattenEmbeddedField(f) {
-			collectFieldBindings(derefType(f.Type), idx, out)
-			continue
+			embeddedType := derefType(f.Type)
+			if !seen[embeddedType] {
+				collectFieldBindings(embeddedType, idx, out, seen)
+				continue
+			}
 		}
 
 		binding := parseFieldBinding(f)
