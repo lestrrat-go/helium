@@ -410,7 +410,7 @@ func buildFieldBindings(t reflect.Type) ([]fieldBinding, error) {
 }
 
 func validateTagPathConflicts(t reflect.Type, bindings []fieldBinding) error {
-	seen := make(map[string]fieldBinding, len(bindings))
+	paths := make([]fieldBinding, 0, len(bindings))
 
 	for _, binding := range bindings {
 		if binding.omit || !binding.fieldExport {
@@ -423,20 +423,41 @@ func validateTagPathConflicts(t reflect.Type, bindings []fieldBinding) error {
 			continue
 		}
 
-		key := strings.Join(binding.path, ">")
-		if prev, ok := seen[key]; ok {
-			return &TagPathError{
-				Struct: t,
-				Field1: prev.fieldName,
-				Tag1:   prev.rawName,
-				Field2: binding.fieldName,
-				Tag2:   binding.rawName,
+		for _, prev := range paths {
+			if pathConflicts(prev.path, binding.path) {
+				return &TagPathError{
+					Struct: t,
+					Field1: prev.fieldName,
+					Tag1:   prev.rawName,
+					Field2: binding.fieldName,
+					Tag2:   binding.rawName,
+				}
 			}
 		}
-		seen[key] = binding
+
+		paths = append(paths, binding)
 	}
 
 	return nil
+}
+
+func pathConflicts(a, b []string) bool {
+	if len(a) == 0 || len(b) == 0 {
+		return false
+	}
+
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
+	}
+
+	for i := 0; i < n; i++ {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+
+	return true
 }
 
 func resolveBindingConflicts(bindings []fieldBinding) []fieldBinding {
