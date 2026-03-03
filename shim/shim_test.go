@@ -285,6 +285,43 @@ func TestUnmarshalEmbeddedFieldMatchStdlib(t *testing.T) {
 	require.Equal(t, stdOut, shimOut)
 }
 
+func TestUnmarshalEmbeddedConflictPrecedenceMatchStdlib(t *testing.T) {
+	type Embedded struct {
+		Name string `xml:"name"`
+	}
+	type payload struct {
+		Embedded
+		Name string `xml:"name"`
+	}
+
+	input := []byte(`<payload><name>v</name></payload>`)
+
+	var stdOut payload
+	stdErr := stdxml.Unmarshal(input, &stdOut)
+
+	var shimOut payload
+	shimErr := shim.Unmarshal(input, &shimOut)
+
+	require.Equal(t, stdErr == nil, shimErr == nil)
+	if stdErr == nil {
+		require.Equal(t, stdOut, shimOut)
+	}
+}
+
+func TestUnmarshalNamespacePathMatchStdlib(t *testing.T) {
+	type payload struct {
+		Value string `xml:"urn:root a>b"`
+	}
+
+	input := []byte(`<root xmlns="urn:root"><a><b>ok</b></a></root>`)
+
+	var stdOut payload
+	var shimOut payload
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
+}
+
 func TestDecoderDecodeMatchesStdlib(t *testing.T) {
 	type item struct {
 		XMLName stdxml.Name `xml:"item"`

@@ -324,9 +324,65 @@ func buildFieldBindings(t reflect.Type) []fieldBinding {
 
 	bindings := make([]fieldBinding, 0, t.NumField())
 	collectFieldBindings(t, nil, &bindings)
+	bindings = resolveBindingConflicts(bindings)
 
 	fieldBindingCache.Store(t, bindings)
 	return bindings
+}
+
+func resolveBindingConflicts(bindings []fieldBinding) []fieldBinding {
+	kept := make([]fieldBinding, 0, len(bindings))
+	seen := make(map[string]int, len(bindings))
+
+	for _, binding := range bindings {
+		if binding.omit || !binding.fieldExport {
+			kept = append(kept, binding)
+			continue
+		}
+
+		key := bindingKey(binding)
+		if prevIdx, ok := seen[key]; ok {
+			if preferBinding(binding, kept[prevIdx]) {
+				kept[prevIdx] = binding
+			}
+			continue
+		}
+
+		seen[key] = len(kept)
+		kept = append(kept, binding)
+	}
+
+	return kept
+}
+
+func bindingKey(binding fieldBinding) string {
+	kind := "elem"
+	if binding.isAttr {
+		kind = "attr"
+	}
+	if binding.isCharData {
+		kind = "chardata"
+	}
+	if binding.isInnerXML {
+		kind = "innerxml"
+	}
+	if binding.isAny {
+		kind = "any"
+	}
+
+	name := binding.rawName
+	if len(binding.path) > 0 {
+		name = strings.Join(binding.path, ">")
+	}
+
+	return kind + "|" + name
+}
+
+func preferBinding(candidate, current fieldBinding) bool {
+	if len(candidate.index) != len(current.index) {
+		return len(candidate.index) < len(current.index)
+	}
+	return false
 }
 
 func collectFieldBindings(t reflect.Type, parentIndex []int, out *[]fieldBinding) {
