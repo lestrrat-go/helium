@@ -416,6 +416,53 @@ func TestUnmarshalFloat32OverflowMatchStdlib(t *testing.T) {
 	require.Equal(t, stdErr == nil, shimErr == nil)
 }
 
+func TestUnmarshalUnsupportedFieldTypeMatchStdlib(t *testing.T) {
+	type payload struct {
+		M map[string]string `xml:"m"`
+	}
+
+	input := []byte(`<root><m><k>v</k></m></root>`)
+
+	var stdOut payload
+	stdErr := stdxml.Unmarshal(input, &stdOut)
+
+	var shimOut payload
+	shimErr := shim.Unmarshal(input, &shimOut)
+
+	require.Equal(t, stdErr == nil, shimErr == nil)
+}
+
+func TestUnmarshalSliceElementsMatchStdlib(t *testing.T) {
+	type payload struct {
+		Items []string `xml:"item"`
+	}
+
+	input := []byte(`<root><item>a</item><item>b</item><item>c</item></root>`)
+
+	var stdOut payload
+	var shimOut payload
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
+}
+
+func TestUnmarshalSliceStructElementsMatchStdlib(t *testing.T) {
+	type item struct {
+		Value string `xml:",chardata"`
+	}
+	type payload struct {
+		Items []item `xml:"item"`
+	}
+
+	input := []byte(`<root><item>a</item><item>b</item></root>`)
+
+	var stdOut payload
+	var shimOut payload
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
+}
+
 func TestDecoderDecodeMatchesStdlib(t *testing.T) {
 	type item struct {
 		XMLName stdxml.Name `xml:"item"`

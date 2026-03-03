@@ -112,6 +112,24 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 			if len(path) == 0 {
 				path = []string{binding.rawName}
 			}
+
+			if field.Kind() == reflect.Slice && field.Type().Elem().Kind() != reflect.Uint8 {
+				for {
+					idx, matched := findPath(children, consumed, path)
+					if matched == nil {
+						break
+					}
+					consumed[idx] = true
+
+					item := reflect.New(field.Type().Elem()).Elem()
+					if err := assignFromElement(item, matched); err != nil {
+						return err
+					}
+					field.Set(reflect.Append(field, item))
+				}
+				continue
+			}
+
 			idx, matched := findPath(children, consumed, path)
 			if matched == nil {
 				continue
@@ -233,6 +251,9 @@ func assignFromText(field reflect.Value, value string) error {
 			field.SetBytes([]byte(value))
 			return nil
 		}
+		return unsupportedUnmarshalTypeError(field.Type())
+	case reflect.Map, reflect.Interface, reflect.Func, reflect.Chan:
+		return unsupportedUnmarshalTypeError(field.Type())
 	}
 
 	if isXMLNameType(field.Type()) {
@@ -243,7 +264,11 @@ func assignFromText(field reflect.Value, value string) error {
 		return nil
 	}
 
-	return nil
+	return unsupportedUnmarshalTypeError(field.Type())
+}
+
+func unsupportedUnmarshalTypeError(t reflect.Type) error {
+	return UnmarshalError("cannot unmarshal into " + t.String())
 }
 
 func interfaceCandidates(v reflect.Value) []any {
