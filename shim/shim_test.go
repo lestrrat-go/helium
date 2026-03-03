@@ -343,6 +343,72 @@ func TestUnmarshalEmptyInputMatchStdlib(t *testing.T) {
 	}
 }
 
+func TestUnmarshalWhitespaceOnlyInputMatchStdlib(t *testing.T) {
+	input := []byte(" \n\t  ")
+
+	var stdOut struct{}
+	var shimOut struct{}
+
+	stdErr := stdxml.Unmarshal(input, &stdOut)
+	shimErr := shim.Unmarshal(input, &shimOut)
+
+	require.Equal(t, stdErr == nil, shimErr == nil)
+	if stdErr != nil && shimErr != nil {
+		require.Equal(t, stdErr.Error(), shimErr.Error())
+	}
+}
+
+func TestUnmarshalTopLevelStringMatchStdlib(t *testing.T) {
+	input := []byte(`<root>value</root>`)
+
+	var stdOut string
+	var shimOut string
+
+	stdErr := stdxml.Unmarshal(input, &stdOut)
+	shimErr := shim.Unmarshal(input, &shimOut)
+
+	require.Equal(t, stdErr == nil, shimErr == nil)
+	if stdErr != nil && shimErr != nil {
+		require.Equal(t, stdErr.Error(), shimErr.Error())
+	} else {
+		require.Equal(t, stdOut, shimOut)
+	}
+}
+
+func TestUnmarshalTopLevelBytesMatchStdlib(t *testing.T) {
+	input := []byte(`<root>value</root>`)
+
+	var stdOut []byte
+	var shimOut []byte
+
+	stdErr := stdxml.Unmarshal(input, &stdOut)
+	shimErr := shim.Unmarshal(input, &shimOut)
+
+	require.Equal(t, stdErr == nil, shimErr == nil)
+	if stdErr != nil && shimErr != nil {
+		require.Equal(t, stdErr.Error(), shimErr.Error())
+	} else {
+		require.Equal(t, stdOut, shimOut)
+	}
+}
+
+func TestUnmarshalTopLevelBoolMatchStdlib(t *testing.T) {
+	input := []byte(`<root>true</root>`)
+
+	var stdOut bool
+	var shimOut bool
+
+	stdErr := stdxml.Unmarshal(input, &stdOut)
+	shimErr := shim.Unmarshal(input, &shimOut)
+
+	require.Equal(t, stdErr == nil, shimErr == nil)
+	if stdErr != nil && shimErr != nil {
+		require.Equal(t, stdErr.Error(), shimErr.Error())
+	} else {
+		require.Equal(t, stdOut, shimOut)
+	}
+}
+
 func TestUnmarshalNamespaceTagsMatchStdlib(t *testing.T) {
 	type payload struct {
 		XMLName stdxml.Name `xml:"urn:root root"`
