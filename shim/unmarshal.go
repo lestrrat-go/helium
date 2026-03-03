@@ -71,6 +71,7 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 	bindings := buildFieldBindings(target.Type())
 	children := childElements(elem)
 	consumed := make(map[int]bool)
+	consumedAttr := make(map[int]bool)
 
 	for _, binding := range bindings {
 		if binding.omit || !binding.fieldExport {
@@ -86,8 +87,22 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 		case binding.isXMLName:
 			setXMLName(field, elem)
 		case binding.isAttr:
-			attr, ok := lookupAttr(elem, binding.name, binding.nameSpace, binding.hasNameSpace)
+			if binding.isAny {
+				for i, attr := range elem.Attributes() {
+					if consumedAttr[i] {
+						continue
+					}
+					consumedAttr[i] = true
+					if err := assignFromAttr(field, attr); err != nil {
+						return err
+					}
+				}
+				continue
+			}
+
+			idx, attr, ok := lookupAttr(elem, binding.name, binding.nameSpace, binding.hasNameSpace)
 			if ok {
+				consumedAttr[idx] = true
 				if err := assignFromAttr(field, attr); err != nil {
 					return err
 				}
@@ -173,6 +188,16 @@ func assignFromElement(field reflect.Value, elem *helium.Element) error {
 
 func assignFromAttr(field reflect.Value, attr *helium.Attribute) error {
 	if !field.CanSet() {
+		return nil
+	}
+
+	if field.Kind() == reflect.Slice && field.Type().Elem() == reflect.TypeOf(stdxml.Attr{}) {
+		field.Set(reflect.Append(field, reflect.ValueOf(toStdAttr(attr))))
+		return nil
+	}
+
+	if field.Type() == reflect.TypeOf(stdxml.Attr{}) {
+		field.Set(reflect.ValueOf(toStdAttr(attr)))
 		return nil
 	}
 
@@ -295,10 +320,7 @@ func tryUnmarshalTextHook(field reflect.Value, value string) (bool, error) {
 }
 
 func tryUnmarshalXMLAttrHook(field reflect.Value, attr *helium.Attribute) (bool, error) {
-	xa := stdxml.Attr{
-		Name:  stdxml.Name{Space: attr.URI(), Local: localName(attr.Name())},
-		Value: attr.Value(),
-	}
+	xa := toStdAttr(attr)
 
 	for _, candidate := range interfaceCandidates(field) {
 		if hook, ok := candidate.(UnmarshalerAttr); ok {
@@ -685,17 +707,24 @@ func localName(name string) string {
 	return name
 }
 
-func lookupAttr(elem *helium.Element, name, space string, hasSpace bool) (*helium.Attribute, bool) {
-	for _, attr := range elem.Attributes() {
+func lookupAttr(elem *helium.Element, name, space string, hasSpace bool) (int, *helium.Attribute, bool) {
+	for i, attr := range elem.Attributes() {
 		if localName(attr.Name()) != name {
 			continue
 		}
 		if hasSpace && attr.URI() != space {
 			continue
 		}
-		return attr, true
+		return i, attr, true
 	}
-	return nil, false
+	return -1, nil, false
+}
+
+func toStdAttr(attr *helium.Attribute) stdxml.Attr {
+	return stdxml.Attr{
+		Name:  stdxml.Name{Space: attr.URI(), Local: localName(attr.Name())},
+		Value: attr.Value(),
+	}
 }
 
 func setXMLName(field reflect.Value, elem *helium.Element) {

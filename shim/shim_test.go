@@ -463,6 +463,21 @@ func TestUnmarshalSliceStructElementsMatchStdlib(t *testing.T) {
 	require.Equal(t, stdOut, shimOut)
 }
 
+func TestUnmarshalAnyAttrMatchStdlib(t *testing.T) {
+	type payload struct {
+		ID    string        `xml:"id,attr"`
+		Attrs []stdxml.Attr `xml:",any,attr"`
+	}
+
+	input := []byte(`<root id="42" a="x" b="y" c="z"/>`)
+
+	var stdOut payload
+	var shimOut payload
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
+}
+
 func TestDecoderDecodeMatchesStdlib(t *testing.T) {
 	type item struct {
 		XMLName stdxml.Name `xml:"item"`
