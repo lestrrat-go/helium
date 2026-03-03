@@ -115,6 +115,98 @@ func TestMarshalMarshalIndentUnmarshalBasic(t *testing.T) {
 	require.Equal(t, in.Title, out.Title, "Unmarshal Title mismatch")
 }
 
+func TestUnmarshalTagSemanticsMatchStdlib(t *testing.T) {
+	type anyNode struct {
+		XMLName stdxml.Name
+		Text    string `xml:",chardata"`
+	}
+	type payload struct {
+		XMLName stdxml.Name `xml:"root"`
+		ID      string      `xml:"id,attr"`
+		Text    string      `xml:",chardata"`
+		Inner   string      `xml:",innerxml"`
+		PathVal string      `xml:"a>b>c"`
+		Any     anyNode     `xml:",any"`
+	}
+
+	input := []byte(`<root id="x">prefix<a><b><c>path</c></b></a><inner><x>1</x></inner><extra>any</extra></root>`)
+
+	var stdOut payload
+	var shimOut payload
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+
+	require.Equal(t, stdOut.ID, shimOut.ID, "attr mismatch")
+	require.Equal(t, stdOut.PathVal, shimOut.PathVal, "path tag mismatch")
+	require.Equal(t, stdOut.Any.XMLName, shimOut.Any.XMLName, "any XMLName mismatch")
+	require.Equal(t, stdOut.Any.Text, shimOut.Any.Text, "any text mismatch")
+	require.Equal(t, stdOut.Inner, shimOut.Inner, "innerxml mismatch")
+	require.Equal(t, stdOut.Text, shimOut.Text, "chardata mismatch")
+}
+
+func TestDecoderDecodeMatchesStdlib(t *testing.T) {
+	type item struct {
+		XMLName stdxml.Name `xml:"item"`
+		ID      string      `xml:"id,attr"`
+		Value   string      `xml:",chardata"`
+	}
+
+	input := []byte(`<item id="42">hello</item>`)
+
+	var stdItem item
+	stdDec := stdxml.NewDecoder(bytes.NewReader(input))
+	require.NoError(t, stdDec.Decode(&stdItem))
+
+	var shimItem item
+	shimDec := shim.NewDecoder(bytes.NewReader(input))
+	require.NoError(t, shimDec.Decode(&shimItem))
+
+	require.Equal(t, stdItem, shimItem, "Decode result mismatch")
+}
+
+func TestDecoderDecodeElementMatchesStdlib(t *testing.T) {
+	type child struct {
+		XMLName stdxml.Name `xml:"child"`
+		Value   string      `xml:",chardata"`
+	}
+
+	input := []byte(`<root><child>one</child><child>two</child></root>`)
+
+	stdDec := stdxml.NewDecoder(bytes.NewReader(input))
+	shimDec := shim.NewDecoder(bytes.NewReader(input))
+
+	consumeRootStart := func(next func() (stdxml.Token, error)) stdxml.StartElement {
+		for {
+			tok, err := next()
+			require.NoError(t, err)
+			if se, ok := tok.(stdxml.StartElement); ok && se.Name.Local == "root" {
+				return se
+			}
+		}
+	}
+	_ = consumeRootStart(stdDec.Token)
+	_ = consumeRootStart(func() (stdxml.Token, error) { return shimDec.Token() })
+
+	nextChildStart := func(next func() (stdxml.Token, error)) stdxml.StartElement {
+		for {
+			tok, err := next()
+			require.NoError(t, err)
+			if se, ok := tok.(stdxml.StartElement); ok && se.Name.Local == "child" {
+				return se
+			}
+		}
+	}
+
+	stdStart := nextChildStart(stdDec.Token)
+	shimStart := nextChildStart(func() (stdxml.Token, error) { return shimDec.Token() })
+
+	var stdChild child
+	var shimChild child
+	require.NoError(t, stdDec.DecodeElement(&stdChild, &stdStart))
+	require.NoError(t, shimDec.DecodeElement(&shimChild, &shimStart))
+	require.Equal(t, stdChild, shimChild, "DecodeElement first child mismatch")
+}
+
 func TestAPICompilesWithInterfaces(t *testing.T) {
 	var _ io.Reader = bytes.NewReader(nil)
 	_ = shim.NewDecoder(bytes.NewReader(nil))

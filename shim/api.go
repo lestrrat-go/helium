@@ -17,16 +17,16 @@ func MarshalIndent(v any, prefix, indent string) ([]byte, error) {
 	return stdxml.MarshalIndent(v, prefix, indent)
 }
 
-func Unmarshal(data []byte, v any) error {
-	return stdxml.Unmarshal(data, v)
-}
-
 func NewDecoder(r io.Reader) *Decoder {
-	return stdxml.NewDecoder(r)
+	dec, err := newDecoderFromReader(r)
+	if err != nil {
+		return &Decoder{line: 1, column: 1}
+	}
+	return dec
 }
 
 func NewTokenDecoder(t TokenReader) *Decoder {
-	return stdxml.NewTokenDecoder(t)
+	return newDecoderFromTokenReader(t)
 }
 
 func NewEncoder(w io.Writer) *Encoder {
