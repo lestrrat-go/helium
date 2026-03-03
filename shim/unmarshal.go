@@ -6,6 +6,7 @@ import (
 	"encoding"
 	stdxml "encoding/xml"
 	"fmt"
+	"io"
 	"reflect"
 	"strconv"
 	"strings"
@@ -44,6 +45,9 @@ func Unmarshal(data []byte, v any) error {
 	}
 	if rv.IsNil() {
 		return fmt.Errorf("nil pointer passed to Unmarshal")
+	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		return io.EOF
 	}
 
 	doc, err := helium.Parse(context.Background(), data)

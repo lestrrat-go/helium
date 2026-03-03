@@ -328,6 +328,21 @@ func TestUnmarshalTopLevelUnsupportedTypeMatchStdlib(t *testing.T) {
 	}
 }
 
+func TestUnmarshalEmptyInputMatchStdlib(t *testing.T) {
+	input := []byte("")
+
+	var stdOut struct{}
+	var shimOut struct{}
+
+	stdErr := stdxml.Unmarshal(input, &stdOut)
+	shimErr := shim.Unmarshal(input, &shimOut)
+
+	require.Equal(t, stdErr == nil, shimErr == nil)
+	if stdErr != nil && shimErr != nil {
+		require.Equal(t, stdErr.Error(), shimErr.Error())
+	}
+}
+
 func TestUnmarshalNamespaceTagsMatchStdlib(t *testing.T) {
 	type payload struct {
 		XMLName stdxml.Name `xml:"urn:root root"`
