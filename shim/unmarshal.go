@@ -67,6 +67,14 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 		return decodeElementInto(target.Elem(), elem)
 	}
 
+	handled, err := tryUnmarshalXMLHook(target, elem)
+	if err != nil {
+		return err
+	}
+	if handled {
+		return nil
+	}
+
 	if target.Kind() != reflect.Struct {
 		return assignFromText(target, elementText(elem))
 	}

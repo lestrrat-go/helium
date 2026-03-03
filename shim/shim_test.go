@@ -233,6 +233,21 @@ func (h *hookElem) UnmarshalXML(dec *stdxml.Decoder, start stdxml.StartElement) 
 	return nil
 }
 
+type topHook struct {
+	Value string
+}
+
+func (h *topHook) UnmarshalXML(dec *stdxml.Decoder, start stdxml.StartElement) error {
+	var tmp struct {
+		Text string `xml:",chardata"`
+	}
+	if err := dec.DecodeElement(&tmp, &start); err != nil {
+		return err
+	}
+	h.Value = start.Name.Local + ":" + tmp.Text
+	return nil
+}
+
 func TestUnmarshalInterfaceHooksMatchStdlib(t *testing.T) {
 	type payload struct {
 		XMLName stdxml.Name `xml:"root"`
@@ -245,6 +260,16 @@ func TestUnmarshalInterfaceHooksMatchStdlib(t *testing.T) {
 
 	var stdOut payload
 	var shimOut payload
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
+}
+
+func TestUnmarshalTopLevelXMLHookMatchStdlib(t *testing.T) {
+	input := []byte(`<root>value</root>`)
+
+	var stdOut topHook
+	var shimOut topHook
 	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
 	require.NoError(t, shim.Unmarshal(input, &shimOut))
 	require.Equal(t, stdOut, shimOut)
@@ -623,6 +648,7 @@ func TestUnmarshalTagPathConflictMatchStdlib(t *testing.T) {
 		_, stdIs := stdErr.(*stdxml.TagPathError)
 		_, shimIs := shimErr.(*stdxml.TagPathError)
 		require.Equal(t, stdIs, shimIs)
+		require.Equal(t, stdErr.Error(), shimErr.Error())
 	}
 }
 
@@ -645,6 +671,7 @@ func TestUnmarshalTagPathPrefixConflictMatchStdlib(t *testing.T) {
 		_, stdIs := stdErr.(*stdxml.TagPathError)
 		_, shimIs := shimErr.(*stdxml.TagPathError)
 		require.Equal(t, stdIs, shimIs)
+		require.Equal(t, stdErr.Error(), shimErr.Error())
 	}
 }
 
@@ -667,6 +694,7 @@ func TestUnmarshalTagPathDirectVsNestedConflictMatchStdlib(t *testing.T) {
 		_, stdIs := stdErr.(*stdxml.TagPathError)
 		_, shimIs := shimErr.(*stdxml.TagPathError)
 		require.Equal(t, stdIs, shimIs)
+		require.Equal(t, stdErr.Error(), shimErr.Error())
 	}
 }
 
