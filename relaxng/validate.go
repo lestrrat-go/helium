@@ -1501,6 +1501,7 @@ func (v *validator) validateList(pat *pattern, state *validState) int {
 // collectText consumes text nodes from the state and returns their content.
 func (v *validator) collectText(state *validState) string {
 	var sb strings.Builder
+loop:
 	for len(state.seq) > 0 {
 		node := state.seq[0]
 		switch node.Type() {
@@ -1515,10 +1516,9 @@ func (v *validator) collectText(state *validState) string {
 			}
 			state.seq = state.seq[1:]
 		default:
-			goto done
+			break loop
 		}
 	}
-done:
 	return sb.String()
 }
 
