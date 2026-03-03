@@ -366,6 +366,56 @@ func TestUnmarshalNamespaceAttrMismatchMatchStdlib(t *testing.T) {
 	require.Equal(t, stdOut, shimOut)
 }
 
+func TestUnmarshalNumericOverflowMatchStdlib(t *testing.T) {
+	type payload struct {
+		I8  int8  `xml:"i8"`
+		U8  uint8 `xml:"u8"`
+		I16 int16 `xml:"i16"`
+	}
+
+	input := []byte(`<root><i8>128</i8><u8>999</u8><i16>12</i16></root>`)
+
+	var stdOut payload
+	stdErr := stdxml.Unmarshal(input, &stdOut)
+
+	var shimOut payload
+	shimErr := shim.Unmarshal(input, &shimOut)
+
+	require.Equal(t, stdErr == nil, shimErr == nil)
+}
+
+func TestUnmarshalUnsignedNegativeMatchStdlib(t *testing.T) {
+	type payload struct {
+		U uint `xml:"u"`
+	}
+
+	input := []byte(`<root><u>-1</u></root>`)
+
+	var stdOut payload
+	stdErr := stdxml.Unmarshal(input, &stdOut)
+
+	var shimOut payload
+	shimErr := shim.Unmarshal(input, &shimOut)
+
+	require.Equal(t, stdErr == nil, shimErr == nil)
+}
+
+func TestUnmarshalFloat32OverflowMatchStdlib(t *testing.T) {
+	type payload struct {
+		F float32 `xml:"f"`
+	}
+
+	input := []byte(`<root><f>1e40</f></root>`)
+
+	var stdOut payload
+	stdErr := stdxml.Unmarshal(input, &stdOut)
+
+	var shimOut payload
+	shimErr := shim.Unmarshal(input, &shimOut)
+
+	require.Equal(t, stdErr == nil, shimErr == nil)
+}
+
 func TestDecoderDecodeMatchesStdlib(t *testing.T) {
 	type item struct {
 		XMLName stdxml.Name `xml:"item"`

@@ -208,21 +208,21 @@ func assignFromText(field reflect.Value, value string) error {
 		field.SetBool(b)
 		return nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		i, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+		i, err := strconv.ParseInt(strings.TrimSpace(value), 10, field.Type().Bits())
 		if err != nil {
 			return err
 		}
 		field.SetInt(i)
 		return nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		u, err := strconv.ParseUint(strings.TrimSpace(value), 10, 64)
+		u, err := strconv.ParseUint(strings.TrimSpace(value), 10, field.Type().Bits())
 		if err != nil {
 			return err
 		}
 		field.SetUint(u)
 		return nil
 	case reflect.Float32, reflect.Float64:
-		f, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		f, err := strconv.ParseFloat(strings.TrimSpace(value), field.Type().Bits())
 		if err != nil {
 			return err
 		}
