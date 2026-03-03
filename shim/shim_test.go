@@ -255,6 +255,15 @@ func (h *topTextHook) UnmarshalText(text []byte) error {
 	return nil
 }
 
+type textStructHook struct {
+	Value string
+}
+
+func (h *textStructHook) UnmarshalText(text []byte) error {
+	h.Value = "struct:" + string(text)
+	return nil
+}
+
 func TestUnmarshalInterfaceHooksMatchStdlib(t *testing.T) {
 	type payload struct {
 		XMLName stdxml.Name `xml:"root"`
@@ -287,6 +296,30 @@ func TestUnmarshalTopLevelTextHookMatchStdlib(t *testing.T) {
 
 	var stdOut topTextHook
 	var shimOut topTextHook
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
+}
+
+func TestUnmarshalTopLevelTextStructHookMatchStdlib(t *testing.T) {
+	input := []byte(`<root>value</root>`)
+
+	var stdOut textStructHook
+	var shimOut textStructHook
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
+}
+
+func TestUnmarshalFieldTextStructHookMatchStdlib(t *testing.T) {
+	type payload struct {
+		Hook textStructHook `xml:"hook"`
+	}
+
+	input := []byte(`<root><hook>value</hook></root>`)
+
+	var stdOut payload
+	var shimOut payload
 	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
 	require.NoError(t, shim.Unmarshal(input, &shimOut))
 	require.Equal(t, stdOut, shimOut)
