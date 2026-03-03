@@ -15,6 +15,7 @@ import (
 )
 
 type fieldBinding struct {
+	fieldName    string
 	index        []int
 	rawName      string
 	name         string
@@ -70,7 +71,10 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 		return assignFromText(target, elementText(elem))
 	}
 
-	bindings := buildFieldBindings(target.Type())
+	bindings, err := buildFieldBindings(target.Type())
+	if err != nil {
+		return err
+	}
 	if err := validateXMLNameExpectation(bindings, elem); err != nil {
 		return err
 	}
@@ -389,17 +393,50 @@ func tryUnmarshalXMLHook(field reflect.Value, elem *helium.Element) (bool, error
 	return false, nil
 }
 
-func buildFieldBindings(t reflect.Type) []fieldBinding {
+func buildFieldBindings(t reflect.Type) ([]fieldBinding, error) {
 	if cached, ok := fieldBindingCache.Load(t); ok {
-		return cached.([]fieldBinding)
+		return cached.([]fieldBinding), nil
 	}
 
 	bindings := make([]fieldBinding, 0, t.NumField())
 	collectFieldBindings(t, nil, &bindings, map[reflect.Type]bool{})
+	if err := validateTagPathConflicts(t, bindings); err != nil {
+		return nil, err
+	}
 	bindings = resolveBindingConflicts(bindings)
 
 	fieldBindingCache.Store(t, bindings)
-	return bindings
+	return bindings, nil
+}
+
+func validateTagPathConflicts(t reflect.Type, bindings []fieldBinding) error {
+	seen := make(map[string]fieldBinding, len(bindings))
+
+	for _, binding := range bindings {
+		if binding.omit || !binding.fieldExport {
+			continue
+		}
+		if binding.isAttr || binding.isCharData || binding.isCData || binding.isInnerXML || binding.isComment || binding.isAny || binding.isXMLName {
+			continue
+		}
+		if len(binding.path) == 0 {
+			continue
+		}
+
+		key := strings.Join(binding.path, ">")
+		if prev, ok := seen[key]; ok {
+			return &TagPathError{
+				Struct: t,
+				Field1: prev.fieldName,
+				Tag1:   prev.rawName,
+				Field2: binding.fieldName,
+				Tag2:   binding.rawName,
+			}
+		}
+		seen[key] = binding
+	}
+
+	return nil
 }
 
 func resolveBindingConflicts(bindings []fieldBinding) []fieldBinding {
@@ -561,6 +598,7 @@ func fieldByIndexAlloc(v reflect.Value, index []int) (reflect.Value, bool) {
 
 func parseFieldBinding(f reflect.StructField) fieldBinding {
 	b := fieldBinding{
+		fieldName:   f.Name,
 		rawName:     f.Name,
 		name:        f.Name,
 		fieldType:   f.Type,

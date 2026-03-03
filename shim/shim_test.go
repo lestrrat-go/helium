@@ -582,6 +582,50 @@ func TestUnmarshalXMLNameMismatchMatchStdlib(t *testing.T) {
 	}
 }
 
+func TestUnmarshalXMLNameNamespaceMismatchMatchStdlib(t *testing.T) {
+	type payload struct {
+		XMLName stdxml.Name `xml:"urn:expected root"`
+	}
+
+	input := []byte(`<root xmlns="urn:actual"/>`)
+
+	var stdOut payload
+	stdErr := stdxml.Unmarshal(input, &stdOut)
+
+	var shimOut payload
+	shimErr := shim.Unmarshal(input, &shimOut)
+
+	require.Equal(t, stdErr == nil, shimErr == nil)
+	if stdErr != nil && shimErr != nil {
+		_, stdIs := stdErr.(stdxml.UnmarshalError)
+		_, shimIs := shimErr.(stdxml.UnmarshalError)
+		require.Equal(t, stdIs, shimIs)
+		require.Equal(t, stdErr.Error(), shimErr.Error())
+	}
+}
+
+func TestUnmarshalTagPathConflictMatchStdlib(t *testing.T) {
+	type payload struct {
+		A string `xml:"a>b"`
+		B string `xml:"a>b"`
+	}
+
+	input := []byte(`<root><a><b>x</b></a></root>`)
+
+	var stdOut payload
+	stdErr := stdxml.Unmarshal(input, &stdOut)
+
+	var shimOut payload
+	shimErr := shim.Unmarshal(input, &shimOut)
+
+	require.Equal(t, stdErr == nil, shimErr == nil)
+	if stdErr != nil && shimErr != nil {
+		_, stdIs := stdErr.(*stdxml.TagPathError)
+		_, shimIs := shimErr.(*stdxml.TagPathError)
+		require.Equal(t, stdIs, shimIs)
+	}
+}
+
 func TestUnmarshalCommentFieldMatchStdlib(t *testing.T) {
 	type payload struct {
 		Comment string `xml:",comment"`
