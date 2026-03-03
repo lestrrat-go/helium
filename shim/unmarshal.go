@@ -444,10 +444,10 @@ func validateXMLNameExpectation(bindings []fieldBinding, elem *helium.Element) e
 		}
 
 		if localName(elem.Name()) != local {
-			return fmt.Errorf("expected element type <%s> but have <%s>", local, localName(elem.Name()))
+			return UnmarshalError(fmt.Sprintf("expected element type <%s> but have <%s>", local, localName(elem.Name())))
 		}
 		if hasSpace && elem.URI() != space {
-			return fmt.Errorf("expected element <%s> in name space %s but have %s", local, space, elem.URI())
+			return UnmarshalError(fmt.Sprintf("expected element <%s> in name space %s but have %s", local, space, elem.URI()))
 		}
 		return nil
 	}

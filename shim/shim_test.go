@@ -493,6 +493,21 @@ func TestUnmarshalAnySingleAttrMatchStdlib(t *testing.T) {
 	require.Equal(t, stdOut, shimOut)
 }
 
+func TestUnmarshalAnySingleAttrStringMatchStdlib(t *testing.T) {
+	type payload struct {
+		ID   string `xml:"id,attr"`
+		Attr string `xml:",any,attr"`
+	}
+
+	input := []byte(`<root id="42" b="y" c="z"/>`)
+
+	var stdOut payload
+	var shimOut payload
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
+}
+
 func TestUnmarshalAnySliceElementsMatchStdlib(t *testing.T) {
 	type anyNode struct {
 		XMLName stdxml.Name
@@ -530,6 +545,20 @@ func TestUnmarshalAnySingleWithMultipleMatchesMatchStdlib(t *testing.T) {
 	require.Equal(t, stdOut, shimOut)
 }
 
+func TestUnmarshalAnySingleStringMultipleMatchesMatchStdlib(t *testing.T) {
+	type payload struct {
+		Any string `xml:",any"`
+	}
+
+	input := []byte(`<root><x>1</x><y>2</y></root>`)
+
+	var stdOut payload
+	var shimOut payload
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
+}
+
 func TestUnmarshalXMLNameMismatchMatchStdlib(t *testing.T) {
 	type payload struct {
 		XMLName stdxml.Name `xml:"expected"`
@@ -545,6 +574,12 @@ func TestUnmarshalXMLNameMismatchMatchStdlib(t *testing.T) {
 	shimErr := shim.Unmarshal(input, &shimOut)
 
 	require.Equal(t, stdErr == nil, shimErr == nil)
+	if stdErr != nil && shimErr != nil {
+		_, stdIs := stdErr.(stdxml.UnmarshalError)
+		_, shimIs := shimErr.(stdxml.UnmarshalError)
+		require.Equal(t, stdIs, shimIs)
+		require.Equal(t, stdErr.Error(), shimErr.Error())
+	}
 }
 
 func TestUnmarshalCommentFieldMatchStdlib(t *testing.T) {
@@ -554,6 +589,20 @@ func TestUnmarshalCommentFieldMatchStdlib(t *testing.T) {
 	}
 
 	input := []byte(`<root><!--a--><keep>v</keep><!--b--></root>`)
+
+	var stdOut payload
+	var shimOut payload
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
+}
+
+func TestUnmarshalCommentFieldNestedMatchStdlib(t *testing.T) {
+	type payload struct {
+		Comment string `xml:",comment"`
+	}
+
+	input := []byte(`<root><!--a--><child><!--n--></child><!--b--></root>`)
 
 	var stdOut payload
 	var shimOut payload
