@@ -1,0 +1,87 @@
+#!perl
+use strict;
+use File::Temp;
+
+# Accept a list of filenames, and process them
+# if any of them has a diff, commit it
+
+my $repo = $ENV{GITHUB_REPOSITORY} || 'lestrrat-go/helium';
+my $link_ref = $ENV{GITHUB_BASE_REF} || $ENV{GITHUB_REF_NAME} || $ENV{GITHUB_REF} || 'main';
+$link_ref =~ s{^refs/heads/}{};
+
+# Keep compatibility with develop/vN style branches if used
+if ($link_ref =~ /^develop\/(v\d+)$/) {
+    $link_ref = $1;
+}
+
+my @files = @ARGV;
+my @has_diff;
+for my $filename (@files) {
+    open(my $src, '<', $filename) or die $!;
+
+    my $output = File::Temp->new(SUFFIX => '.md');
+    my $skip_until_end;
+    for my $line (<$src>) {
+        if ($line =~ /^<!-- END INCLUDE -->$/) {
+            $skip_until_end = 0;
+        } elsif ($skip_until_end) {
+            next;
+        }
+        if ($line !~ /(^<!-- INCLUDE\(([^\),]+)(?:,([^\)]+))?\) -->)$/) {
+            $output->print($line);
+            next;
+        }
+        $output->print("$1\n");
+
+        my $include_filename = $2;
+        my $options = $3;
+
+        $output->print("```go\n");
+        my $content = do {
+            open(my $file, '<', $include_filename) or die "failed to include file $include_filename from source file $filename: $!";
+            local $/;
+            <$file>;
+        };
+        $content =~ s{^(\t+)}{"  " x length($1)}gsme;
+        $output->print($content);
+        $output->print("```\n");
+
+        $output->print("source: [$include_filename](https://github.com/$repo/blob/$link_ref/$include_filename)\n");
+
+        # now we need to skip copying until the end of INCLUDE
+        $skip_until_end = 1;
+    }
+    $output->close();
+    close($src);
+
+    if (!$ENV{AUTODOC_DRYRUN}) {
+        rename $output->filename, $filename or die $!;
+        my $diff = `git diff $filename`;
+        if ($diff) {
+            push @has_diff, $filename;
+        }
+    }
+}
+
+if (!$ENV{AUTODOC_DRYRUN}) {
+    if (@has_diff && $ENV{GITHUB_TOKEN}) {
+        my $head_ref = $ENV{GITHUB_HEAD_REF} || 'main';
+        $head_ref =~ s{[^A-Za-z0-9._/-]}{-}g;
+        my $autodoc_branch = "autodoc-pr-$head_ref";
+        my $base_ref = $ENV{GITHUB_BASE_REF} || 'main';
+
+        # Write multi-line commit message in a file
+        my $commit_message_file = File::Temp->new(SUFFIX => '.txt');
+        print $commit_message_file "autodoc updates\n\n";
+        print "  - $_\n" for @has_diff;
+        $commit_message_file->close();
+
+        system("git", "remote", "set-url", "origin", "https://github-actions:$ENV{GITHUB_TOKEN}\@github.com/$repo") == 0 or die $!;
+        system("git", "config", "--global", "user.name", "$ENV{GITHUB_ACTOR}") == 0 or die $!;
+        system("git", "config", "--global", "user.email", "$ENV{GITHUB_ACTOR}\@users.noreply.github.com") == 0 or die $!;
+        system("git", "switch", "-c", $autodoc_branch) == 0 or die $!;
+        system("git", "commit", "-F", $commit_message_file->filename, @files) == 0 or die $!;
+        system("git", "push", "origin", "HEAD:$autodoc_branch") == 0 or die $!;
+        system("gh", "pr", "create", "--base", $base_ref, "--fill") == 0 or die $!;
+    }
+}

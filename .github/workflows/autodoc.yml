@@ -1,0 +1,27 @@
+name: Auto-Doc
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  autodoc:
+    runs-on: ubuntu-latest
+    name: "Run commands to generate documentation"
+    if: github.event.pull_request.merged == true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Process markdown files
+        run: |
+          find . -name '*.md' -not -name 'AGENTS.md' -not -name 'CLAUDE.md' | xargs perl tools/autodoc.pl
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
