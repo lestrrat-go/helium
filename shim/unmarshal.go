@@ -333,7 +333,7 @@ func assignFromText(field reflect.Value, value string) error {
 }
 
 func unsupportedUnmarshalTypeError(t reflect.Type) error {
-	return UnmarshalError("cannot unmarshal into " + t.String())
+	return UnmarshalError("unknown type " + t.String())
 }
 
 func interfaceCandidates(v reflect.Value) []any {
