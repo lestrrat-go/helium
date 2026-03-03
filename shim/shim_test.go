@@ -308,12 +308,43 @@ func TestUnmarshalEmbeddedConflictPrecedenceMatchStdlib(t *testing.T) {
 	}
 }
 
+func TestUnmarshalEmbeddedPointerMatchStdlib(t *testing.T) {
+	type Embedded struct {
+		ID string `xml:"id,attr"`
+	}
+	type payload struct {
+		*Embedded
+	}
+
+	input := []byte(`<payload id="x"/>`)
+
+	var stdOut payload
+	var shimOut payload
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
+}
+
 func TestUnmarshalNamespacePathMatchStdlib(t *testing.T) {
 	type payload struct {
 		Value string `xml:"urn:root a>b"`
 	}
 
 	input := []byte(`<root xmlns="urn:root"><a><b>ok</b></a></root>`)
+
+	var stdOut payload
+	var shimOut payload
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
+}
+
+func TestUnmarshalNamespaceAttrMismatchMatchStdlib(t *testing.T) {
+	type payload struct {
+		ID string `xml:"urn:other id,attr"`
+	}
+
+	input := []byte(`<root xmlns:a="urn:attr" a:id="42"/>`)
 
 	var stdOut payload
 	var shimOut payload
