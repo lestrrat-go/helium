@@ -39,8 +39,11 @@ var fieldBindingCache sync.Map
 
 func Unmarshal(data []byte, v any) error {
 	rv := reflect.ValueOf(v)
-	if rv.Kind() != reflect.Pointer || rv.IsNil() {
-		return fmt.Errorf("shim: unmarshal target must be a non-nil pointer")
+	if !rv.IsValid() || rv.Kind() != reflect.Pointer {
+		return fmt.Errorf("non-pointer passed to Unmarshal")
+	}
+	if rv.IsNil() {
+		return fmt.Errorf("nil pointer passed to Unmarshal")
 	}
 
 	doc, err := helium.Parse(context.Background(), data)

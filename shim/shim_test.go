@@ -248,6 +248,13 @@ func (h *topHook) UnmarshalXML(dec *stdxml.Decoder, start stdxml.StartElement) e
 	return nil
 }
 
+type topTextHook string
+
+func (h *topTextHook) UnmarshalText(text []byte) error {
+	*h = topTextHook("text:" + string(text))
+	return nil
+}
+
 func TestUnmarshalInterfaceHooksMatchStdlib(t *testing.T) {
 	type payload struct {
 		XMLName stdxml.Name `xml:"root"`
@@ -273,6 +280,37 @@ func TestUnmarshalTopLevelXMLHookMatchStdlib(t *testing.T) {
 	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
 	require.NoError(t, shim.Unmarshal(input, &shimOut))
 	require.Equal(t, stdOut, shimOut)
+}
+
+func TestUnmarshalTopLevelTextHookMatchStdlib(t *testing.T) {
+	input := []byte(`<root>value</root>`)
+
+	var stdOut topTextHook
+	var shimOut topTextHook
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
+}
+
+func TestUnmarshalInvalidTargetErrorsMatchStdlib(t *testing.T) {
+	input := []byte(`<root>value</root>`)
+
+	var stdNonPtr string
+	stdNonPtrErr := stdxml.Unmarshal(input, stdNonPtr)
+	shimNonPtrErr := shim.Unmarshal(input, stdNonPtr)
+	require.Equal(t, stdNonPtrErr == nil, shimNonPtrErr == nil)
+	if stdNonPtrErr != nil && shimNonPtrErr != nil {
+		require.Equal(t, stdNonPtrErr.Error(), shimNonPtrErr.Error())
+	}
+
+	var stdNilPtr *string
+	var shimNilPtr *string
+	stdNilPtrErr := stdxml.Unmarshal(input, stdNilPtr)
+	shimNilPtrErr := shim.Unmarshal(input, shimNilPtr)
+	require.Equal(t, stdNilPtrErr == nil, shimNilPtrErr == nil)
+	if stdNilPtrErr != nil && shimNilPtrErr != nil {
+		require.Equal(t, stdNilPtrErr.Error(), shimNilPtrErr.Error())
+	}
 }
 
 func TestUnmarshalNamespaceTagsMatchStdlib(t *testing.T) {
