@@ -71,6 +71,9 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 	}
 
 	bindings := buildFieldBindings(target.Type())
+	if err := validateXMLNameExpectation(bindings, elem); err != nil {
+		return err
+	}
 	children := childElements(elem)
 	consumed := make(map[int]bool)
 	consumedAttr := make(map[int]bool)
@@ -422,6 +425,34 @@ func resolveBindingConflicts(bindings []fieldBinding) []fieldBinding {
 	}
 
 	return kept
+}
+
+func validateXMLNameExpectation(bindings []fieldBinding, elem *helium.Element) error {
+	for _, binding := range bindings {
+		if !binding.isXMLName || binding.omit {
+			continue
+		}
+
+		spec := strings.TrimSpace(binding.rawName)
+		if spec == "" || spec == "XMLName" {
+			return nil
+		}
+
+		space, local, hasSpace := parseTagNameSpec(spec)
+		if local == "" {
+			return nil
+		}
+
+		if localName(elem.Name()) != local {
+			return fmt.Errorf("expected element type <%s> but have <%s>", local, localName(elem.Name()))
+		}
+		if hasSpace && elem.URI() != space {
+			return fmt.Errorf("expected element <%s> in name space %s but have %s", local, space, elem.URI())
+		}
+		return nil
+	}
+
+	return nil
 }
 
 func bindingKey(binding fieldBinding) string {
