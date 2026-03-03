@@ -3,28 +3,36 @@ package shim
 import (
 	"bytes"
 	"context"
+	"encoding"
+	stdxml "encoding/xml"
 	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 
 	helium "github.com/lestrrat-go/helium"
 )
 
 type fieldBinding struct {
-	index       int
-	name        string
-	path        []string
-	isAttr      bool
-	isCharData  bool
-	isInnerXML  bool
-	isAny       bool
-	isXMLName   bool
-	omit        bool
-	fieldType   reflect.Type
-	fieldIsPtr  bool
-	fieldExport bool
+	index        []int
+	rawName      string
+	name         string
+	nameSpace    string
+	hasNameSpace bool
+	path         []string
+	isAttr       bool
+	isCharData   bool
+	isInnerXML   bool
+	isAny        bool
+	isXMLName    bool
+	omit         bool
+	fieldType    reflect.Type
+	fieldIsPtr   bool
+	fieldExport  bool
 }
+
+var fieldBindingCache sync.Map
 
 func Unmarshal(data []byte, v any) error {
 	rv := reflect.ValueOf(v)
@@ -69,15 +77,18 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 			continue
 		}
 
-		field := target.Field(binding.index)
+		field, ok := fieldByIndexAlloc(target, binding.index)
+		if !ok {
+			continue
+		}
 
 		switch {
 		case binding.isXMLName:
 			setXMLName(field, elem)
 		case binding.isAttr:
-			value, ok := attrValue(elem, binding.name)
+			attr, ok := lookupAttr(elem, binding.name, binding.nameSpace, binding.hasNameSpace)
 			if ok {
-				if err := assignFromText(field, value); err != nil {
+				if err := assignFromAttr(field, attr); err != nil {
 					return err
 				}
 			}
@@ -99,7 +110,7 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 		default:
 			path := binding.path
 			if len(path) == 0 {
-				path = []string{binding.name}
+				path = []string{binding.rawName}
 			}
 			idx, matched := findPath(children, consumed, path)
 			if matched == nil {
@@ -127,11 +138,42 @@ func assignFromElement(field reflect.Value, elem *helium.Element) error {
 		return assignFromElement(field.Elem(), elem)
 	}
 
+	handled, err := tryUnmarshalXMLHook(field, elem)
+	if err != nil {
+		return err
+	}
+	if handled {
+		return nil
+	}
+
 	if field.Kind() == reflect.Struct && !isXMLNameType(field.Type()) {
 		return decodeElementInto(field, elem)
 	}
 
 	return assignFromText(field, elementText(elem))
+}
+
+func assignFromAttr(field reflect.Value, attr *helium.Attribute) error {
+	if !field.CanSet() {
+		return nil
+	}
+
+	if field.Kind() == reflect.Pointer {
+		if field.IsNil() {
+			field.Set(reflect.New(field.Type().Elem()))
+		}
+		return assignFromAttr(field.Elem(), attr)
+	}
+
+	handled, err := tryUnmarshalXMLAttrHook(field, attr)
+	if err != nil {
+		return err
+	}
+	if handled {
+		return nil
+	}
+
+	return assignFromText(field, attr.Value())
 }
 
 func assignFromText(field reflect.Value, value string) error {
@@ -144,6 +186,14 @@ func assignFromText(field reflect.Value, value string) error {
 			field.Set(reflect.New(field.Type().Elem()))
 		}
 		return assignFromText(field.Elem(), value)
+	}
+
+	handled, err := tryUnmarshalTextHook(field, value)
+	if err != nil {
+		return err
+	}
+	if handled {
+		return nil
 	}
 
 	switch field.Kind() {
@@ -196,19 +246,155 @@ func assignFromText(field reflect.Value, value string) error {
 	return nil
 }
 
+func interfaceCandidates(v reflect.Value) []any {
+	candidates := make([]any, 0, 2)
+	if v.IsValid() && v.CanInterface() {
+		candidates = append(candidates, v.Interface())
+	}
+	if v.IsValid() && v.CanAddr() && v.Addr().CanInterface() {
+		candidates = append(candidates, v.Addr().Interface())
+	}
+	return candidates
+}
+
+func tryUnmarshalTextHook(field reflect.Value, value string) (bool, error) {
+	for _, candidate := range interfaceCandidates(field) {
+		if hook, ok := candidate.(encoding.TextUnmarshaler); ok {
+			if err := hook.UnmarshalText([]byte(value)); err != nil {
+				return true, err
+			}
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func tryUnmarshalXMLAttrHook(field reflect.Value, attr *helium.Attribute) (bool, error) {
+	xa := stdxml.Attr{
+		Name:  stdxml.Name{Space: attr.URI(), Local: localName(attr.Name())},
+		Value: attr.Value(),
+	}
+
+	for _, candidate := range interfaceCandidates(field) {
+		if hook, ok := candidate.(UnmarshalerAttr); ok {
+			if err := hook.UnmarshalXMLAttr(xa); err != nil {
+				return true, err
+			}
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func tryUnmarshalXMLHook(field reflect.Value, elem *helium.Element) (bool, error) {
+	xmlBytes, err := outerXML(elem)
+	if err != nil {
+		return false, err
+	}
+
+	for _, candidate := range interfaceCandidates(field) {
+		hook, ok := candidate.(Unmarshaler)
+		if !ok {
+			continue
+		}
+
+		dec := stdxml.NewDecoder(bytes.NewReader(xmlBytes))
+		tok, err := dec.Token()
+		if err != nil {
+			return true, err
+		}
+		start, ok := tok.(stdxml.StartElement)
+		if !ok {
+			return true, fmt.Errorf("shim: expected start element token, got %T", tok)
+		}
+		if err := hook.UnmarshalXML(dec, start); err != nil {
+			return true, err
+		}
+		return true, nil
+	}
+
+	return false, nil
+}
+
 func buildFieldBindings(t reflect.Type) []fieldBinding {
+	if cached, ok := fieldBindingCache.Load(t); ok {
+		return cached.([]fieldBinding)
+	}
+
 	bindings := make([]fieldBinding, 0, t.NumField())
+	collectFieldBindings(t, nil, &bindings)
+
+	fieldBindingCache.Store(t, bindings)
+	return bindings
+}
+
+func collectFieldBindings(t reflect.Type, parentIndex []int, out *[]fieldBinding) {
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
+		idx := append(append([]int(nil), parentIndex...), i)
+
+		if shouldFlattenEmbeddedField(f) {
+			collectFieldBindings(derefType(f.Type), idx, out)
+			continue
+		}
+
 		binding := parseFieldBinding(f)
-		binding.index = i
-		bindings = append(bindings, binding)
+		binding.index = idx
+		*out = append(*out, binding)
 	}
-	return bindings
+}
+
+func shouldFlattenEmbeddedField(f reflect.StructField) bool {
+	if !f.Anonymous {
+		return false
+	}
+	if f.PkgPath != "" {
+		return false
+	}
+	tag := f.Tag.Get("xml")
+	if tag == "-" {
+		return false
+	}
+	if tag != "" {
+		return false
+	}
+	ft := derefType(f.Type)
+	if ft.Kind() != reflect.Struct {
+		return false
+	}
+	if isXMLNameType(ft) {
+		return false
+	}
+	return true
+}
+
+func fieldByIndexAlloc(v reflect.Value, index []int) (reflect.Value, bool) {
+	cur := v
+	for _, i := range index {
+		if cur.Kind() == reflect.Pointer {
+			if cur.IsNil() {
+				if !cur.CanSet() {
+					return reflect.Value{}, false
+				}
+				cur.Set(reflect.New(cur.Type().Elem()))
+			}
+			cur = cur.Elem()
+		}
+		if cur.Kind() != reflect.Struct {
+			return reflect.Value{}, false
+		}
+		cur = cur.Field(i)
+	}
+	if !cur.IsValid() {
+		return reflect.Value{}, false
+	}
+	return cur, true
 }
 
 func parseFieldBinding(f reflect.StructField) fieldBinding {
 	b := fieldBinding{
+		rawName:     f.Name,
 		name:        f.Name,
 		fieldType:   f.Type,
 		fieldIsPtr:  f.Type.Kind() == reflect.Pointer,
@@ -233,11 +419,12 @@ func parseFieldBinding(f reflect.StructField) fieldBinding {
 	parts := strings.Split(tag, ",")
 	name := strings.TrimSpace(parts[0])
 	if name != "" {
-		b.name = name
+		b.rawName = name
+		b.nameSpace, b.name, b.hasNameSpace = parseTagNameSpec(name)
 	}
 
-	if strings.Contains(b.name, ">") {
-		segments := strings.Split(b.name, ">")
+	if strings.Contains(b.rawName, ">") {
+		segments := strings.Split(b.rawName, ">")
 		b.path = make([]string, 0, len(segments))
 		for _, segment := range segments {
 			segment = strings.TrimSpace(segment)
@@ -291,6 +478,18 @@ func innerXML(elem *helium.Element) string {
 	return b.String()
 }
 
+func outerXML(elem *helium.Element) ([]byte, error) {
+	if elem == nil {
+		return nil, nil
+	}
+	var b bytes.Buffer
+	w := helium.NewWriter(helium.WithNoDecl())
+	if err := w.WriteNode(&b, elem); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}
+
 func childElements(elem *helium.Element) []*helium.Element {
 	result := make([]*helium.Element, 0)
 	if elem == nil {
@@ -322,7 +521,7 @@ func findPath(children []*helium.Element, consumed map[int]bool, path []string) 
 		if consumed[i] {
 			continue
 		}
-		if localName(child.Name()) != path[0] {
+		if !matchElementByTag(child, path[0]) {
 			continue
 		}
 		if len(path) == 1 {
@@ -332,7 +531,7 @@ func findPath(children []*helium.Element, consumed map[int]bool, path []string) 
 		cur := child
 		ok := true
 		for _, name := range path[1:] {
-			next := firstChildByName(cur, name)
+			next := firstChildByTag(cur, name)
 			if next == nil {
 				ok = false
 				break
@@ -347,17 +546,44 @@ func findPath(children []*helium.Element, consumed map[int]bool, path []string) 
 	return -1, nil
 }
 
-func firstChildByName(elem *helium.Element, name string) *helium.Element {
+func firstChildByTag(elem *helium.Element, tag string) *helium.Element {
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
 		ce := child.(*helium.Element)
-		if localName(ce.Name()) == name {
+		if matchElementByTag(ce, tag) {
 			return ce
 		}
 	}
 	return nil
+}
+
+func matchElementByTag(elem *helium.Element, tag string) bool {
+	space, local, hasSpace := parseTagNameSpec(tag)
+	if localName(elem.Name()) != local {
+		return false
+	}
+	if hasSpace {
+		return elem.URI() == space
+	}
+	return true
+}
+
+func parseTagNameSpec(tag string) (space, local string, hasSpace bool) {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return "", "", false
+	}
+	parts := strings.SplitN(tag, " ", 2)
+	if len(parts) == 2 {
+		space = strings.TrimSpace(parts[0])
+		local = strings.TrimSpace(parts[1])
+		if local != "" {
+			return space, local, true
+		}
+	}
+	return "", tag, false
 }
 
 func localName(name string) string {
@@ -367,13 +593,17 @@ func localName(name string) string {
 	return name
 }
 
-func attrValue(elem *helium.Element, name string) (string, bool) {
+func lookupAttr(elem *helium.Element, name, space string, hasSpace bool) (*helium.Attribute, bool) {
 	for _, attr := range elem.Attributes() {
-		if localName(attr.Name()) == name {
-			return attr.Value(), true
+		if localName(attr.Name()) != name {
+			continue
 		}
+		if hasSpace && attr.URI() != space {
+			continue
+		}
+		return attr, true
 	}
-	return "", false
+	return nil, false
 }
 
 func setXMLName(field reflect.Value, elem *helium.Element) {

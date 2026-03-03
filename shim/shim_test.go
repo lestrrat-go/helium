@@ -5,6 +5,7 @@ import (
 	stdxml "encoding/xml"
 	"fmt"
 	"io"
+	"sync"
 	"testing"
 
 	"github.com/lestrrat-go/helium/shim"
@@ -142,6 +143,146 @@ func TestUnmarshalTagSemanticsMatchStdlib(t *testing.T) {
 	require.Equal(t, stdOut.Any.Text, shimOut.Any.Text, "any text mismatch")
 	require.Equal(t, stdOut.Inner, shimOut.Inner, "innerxml mismatch")
 	require.Equal(t, stdOut.Text, shimOut.Text, "chardata mismatch")
+}
+
+func TestUnmarshalRepeatedConsistency(t *testing.T) {
+	type payload struct {
+		XMLName stdxml.Name `xml:"item"`
+		ID      string      `xml:"id,attr"`
+		Value   string      `xml:",chardata"`
+	}
+
+	input := []byte(`<item id="42">hello</item>`)
+
+	var want payload
+	require.NoError(t, stdxml.Unmarshal(input, &want))
+
+	for i := 0; i < 100; i++ {
+		var got payload
+		require.NoError(t, shim.Unmarshal(input, &got))
+		require.Equal(t, want, got)
+	}
+}
+
+func TestUnmarshalConcurrentConsistency(t *testing.T) {
+	type payload struct {
+		XMLName stdxml.Name `xml:"item"`
+		ID      string      `xml:"id,attr"`
+		Value   string      `xml:",chardata"`
+	}
+
+	input := []byte(`<item id="42">hello</item>`)
+
+	var want payload
+	require.NoError(t, stdxml.Unmarshal(input, &want))
+
+	const workers = 16
+	const iterations = 50
+
+	errCh := make(chan error, workers*iterations)
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < iterations; i++ {
+				var got payload
+				if err := shim.Unmarshal(input, &got); err != nil {
+					errCh <- err
+					return
+				}
+				if got != want {
+					errCh <- fmt.Errorf("unexpected output: got=%+v want=%+v", got, want)
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		require.NoError(t, err)
+	}
+}
+
+type hookAttr string
+
+func (h *hookAttr) UnmarshalXMLAttr(attr stdxml.Attr) error {
+	*h = hookAttr("attr:" + attr.Value)
+	return nil
+}
+
+type hookText string
+
+func (h *hookText) UnmarshalText(text []byte) error {
+	*h = hookText("text:" + string(text))
+	return nil
+}
+
+type hookElem string
+
+func (h *hookElem) UnmarshalXML(dec *stdxml.Decoder, start stdxml.StartElement) error {
+	var tmp struct {
+		Text string `xml:",chardata"`
+	}
+	if err := dec.DecodeElement(&tmp, &start); err != nil {
+		return err
+	}
+	*h = hookElem("elem:" + tmp.Text)
+	return nil
+}
+
+func TestUnmarshalInterfaceHooksMatchStdlib(t *testing.T) {
+	type payload struct {
+		XMLName stdxml.Name `xml:"root"`
+		ID      hookAttr    `xml:"id,attr"`
+		Name    hookText    `xml:"name"`
+		Item    hookElem    `xml:"item"`
+	}
+
+	input := []byte(`<root id="x"><name>n</name><item>v</item></root>`)
+
+	var stdOut payload
+	var shimOut payload
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
+}
+
+func TestUnmarshalNamespaceTagsMatchStdlib(t *testing.T) {
+	type payload struct {
+		XMLName stdxml.Name `xml:"urn:root root"`
+		ID      string      `xml:"urn:attr id,attr"`
+		Child   string      `xml:"urn:root child"`
+	}
+
+	input := []byte(`<root xmlns="urn:root" xmlns:a="urn:attr" a:id="42"><child>hello</child></root>`)
+
+	var stdOut payload
+	var shimOut payload
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
+}
+
+func TestUnmarshalEmbeddedFieldMatchStdlib(t *testing.T) {
+	type Embedded struct {
+		ID   string `xml:"id,attr"`
+		Name string `xml:"name"`
+	}
+	type payload struct {
+		XMLName stdxml.Name `xml:"root"`
+		Embedded
+	}
+
+	input := []byte(`<root id="x"><name>n</name></root>`)
+
+	var stdOut payload
+	var shimOut payload
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
 }
 
 func TestDecoderDecodeMatchesStdlib(t *testing.T) {
