@@ -648,6 +648,28 @@ func TestUnmarshalTagPathPrefixConflictMatchStdlib(t *testing.T) {
 	}
 }
 
+func TestUnmarshalTagPathDirectVsNestedConflictMatchStdlib(t *testing.T) {
+	type payload struct {
+		A string `xml:"a"`
+		B string `xml:"a>b"`
+	}
+
+	input := []byte(`<root><a>x<b>y</b></a></root>`)
+
+	var stdOut payload
+	stdErr := stdxml.Unmarshal(input, &stdOut)
+
+	var shimOut payload
+	shimErr := shim.Unmarshal(input, &shimOut)
+
+	require.Equal(t, stdErr == nil, shimErr == nil)
+	if stdErr != nil && shimErr != nil {
+		_, stdIs := stdErr.(*stdxml.TagPathError)
+		_, shimIs := shimErr.(*stdxml.TagPathError)
+		require.Equal(t, stdIs, shimIs)
+	}
+}
+
 func TestUnmarshalCommentFieldMatchStdlib(t *testing.T) {
 	type payload struct {
 		Comment string `xml:",comment"`

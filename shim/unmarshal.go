@@ -419,12 +419,22 @@ func validateTagPathConflicts(t reflect.Type, bindings []fieldBinding) error {
 		if binding.isAttr || binding.isCharData || binding.isCData || binding.isInnerXML || binding.isComment || binding.isAny || binding.isXMLName {
 			continue
 		}
-		if len(binding.path) == 0 {
-			continue
+		path := binding.path
+		if len(path) == 0 {
+			path = []string{binding.rawName}
 		}
+		bindingHasPath := len(binding.path) > 0
 
 		for _, prev := range paths {
-			if pathConflicts(prev.path, binding.path) {
+			prevPath := prev.path
+			if len(prevPath) == 0 {
+				prevPath = []string{prev.rawName}
+			}
+			prevHasPath := len(prev.path) > 0
+			if !bindingHasPath && !prevHasPath {
+				continue
+			}
+			if pathConflicts(prevPath, path) {
 				return &TagPathError{
 					Struct: t,
 					Field1: prev.fieldName,
