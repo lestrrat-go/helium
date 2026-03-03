@@ -23,6 +23,7 @@ type fieldBinding struct {
 	path         []string
 	isAttr       bool
 	isCharData   bool
+	isCData      bool
 	isInnerXML   bool
 	isComment    bool
 	isAny        bool
@@ -109,6 +110,10 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 				}
 			}
 		case binding.isCharData:
+			if err := assignFromText(field, elementText(elem)); err != nil {
+				return err
+			}
+		case binding.isCData:
 			if err := assignFromText(field, elementText(elem)); err != nil {
 				return err
 			}
@@ -571,6 +576,8 @@ func parseFieldBinding(f reflect.StructField) fieldBinding {
 			b.isAttr = true
 		case "chardata":
 			b.isCharData = true
+		case "cdata":
+			b.isCData = true
 		case "innerxml":
 			b.isInnerXML = true
 		case "comment":

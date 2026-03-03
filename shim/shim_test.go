@@ -527,6 +527,21 @@ func TestUnmarshalCommentFieldMatchStdlib(t *testing.T) {
 	require.Equal(t, stdOut, shimOut)
 }
 
+func TestUnmarshalCdataFieldMatchStdlib(t *testing.T) {
+	type payload struct {
+		Data string `xml:",cdata"`
+		Keep string `xml:"keep"`
+	}
+
+	input := []byte(`<root><![CDATA[a]]>b<keep>v</keep><![CDATA[c]]></root>`)
+
+	var stdOut payload
+	var shimOut payload
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
+}
+
 func TestDecoderDecodeMatchesStdlib(t *testing.T) {
 	type item struct {
 		XMLName stdxml.Name `xml:"item"`
