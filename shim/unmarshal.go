@@ -116,6 +116,18 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 				return err
 			}
 		case binding.isAny:
+			if field.Kind() == reflect.Slice && field.Type().Elem().Kind() != reflect.Uint8 {
+				for idx, anyElem := firstUnconsumed(children, consumed); anyElem != nil; idx, anyElem = firstUnconsumed(children, consumed) {
+					consumed[idx] = true
+					item := reflect.New(field.Type().Elem()).Elem()
+					if err := assignFromElement(item, anyElem); err != nil {
+						return err
+					}
+					field.Set(reflect.Append(field, item))
+				}
+				continue
+			}
+
 			for idx, anyElem := firstUnconsumed(children, consumed); anyElem != nil; idx, anyElem = firstUnconsumed(children, consumed) {
 				consumed[idx] = true
 				if err := assignFromElement(field, anyElem); err != nil {
