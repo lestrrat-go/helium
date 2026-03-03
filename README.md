@@ -3,6 +3,8 @@
 [![Build Status](https://travis-ci.org/lestrrat-go/helium.svg?branch=main)](https://travis-ci.org/lestrrat-go/helium)
 [![GoDoc](https://godoc.org/github.com/lestrrat-go/helium?status.svg)](https://godoc.org/github.com/lestrrat-go/helium)
 
+** WARNING: THIS SOFTWARE SHOULD BE CONSIDERED ALPHA. ALL API STILL SUBJECT TO CHANGE **
+
 Pure-Go replacement of libxml2. Initially by hand, and later with the help of AI agents.
 
 Attempts to do everything libxml2 can, while making it more idiomatic Go where it makes sense to do so.
