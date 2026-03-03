@@ -24,6 +24,7 @@ type fieldBinding struct {
 	isAttr       bool
 	isCharData   bool
 	isInnerXML   bool
+	isComment    bool
 	isAny        bool
 	isXMLName    bool
 	omit         bool
@@ -113,6 +114,10 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 			}
 		case binding.isInnerXML:
 			if err := assignFromText(field, innerXML(elem)); err != nil {
+				return err
+			}
+		case binding.isComment:
+			if err := assignFromText(field, elementComment(elem)); err != nil {
 				return err
 			}
 		case binding.isAny:
@@ -568,6 +573,8 @@ func parseFieldBinding(f reflect.StructField) fieldBinding {
 			b.isCharData = true
 		case "innerxml":
 			b.isInnerXML = true
+		case "comment":
+			b.isComment = true
 		case "any":
 			b.isAny = true
 		}
@@ -600,6 +607,19 @@ func innerXML(elem *helium.Element) string {
 	w := helium.NewWriter(helium.WithNoDecl())
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		_ = w.WriteNode(&b, child)
+	}
+	return b.String()
+}
+
+func elementComment(elem *helium.Element) string {
+	if elem == nil {
+		return ""
+	}
+	var b strings.Builder
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		if comment, ok := child.(*helium.Comment); ok {
+			b.Write(comment.Content())
+		}
 	}
 	return b.String()
 }

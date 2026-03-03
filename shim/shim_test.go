@@ -512,6 +512,21 @@ func TestUnmarshalAnySliceElementsMatchStdlib(t *testing.T) {
 	require.Equal(t, stdOut, shimOut)
 }
 
+func TestUnmarshalCommentFieldMatchStdlib(t *testing.T) {
+	type payload struct {
+		Comment string `xml:",comment"`
+		Keep    string `xml:"keep"`
+	}
+
+	input := []byte(`<root><!--a--><keep>v</keep><!--b--></root>`)
+
+	var stdOut payload
+	var shimOut payload
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
+}
+
 func TestDecoderDecodeMatchesStdlib(t *testing.T) {
 	type item struct {
 		XMLName stdxml.Name `xml:"item"`
