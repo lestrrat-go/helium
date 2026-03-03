@@ -563,10 +563,7 @@ func parseFieldBinding(f reflect.StructField) fieldBinding {
 		segments := strings.Split(b.rawName, ">")
 		b.path = make([]string, 0, len(segments))
 		for _, segment := range segments {
-			segment = strings.TrimSpace(segment)
-			if segment != "" {
-				b.path = append(b.path, segment)
-			}
+			b.path = append(b.path, strings.TrimSpace(segment))
 		}
 	}
 

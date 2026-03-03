@@ -542,6 +542,20 @@ func TestUnmarshalCdataFieldMatchStdlib(t *testing.T) {
 	require.Equal(t, stdOut, shimOut)
 }
 
+func TestUnmarshalPathWithAdjacentSeparatorsMatchStdlib(t *testing.T) {
+	type payload struct {
+		Value string `xml:"a>>b"`
+	}
+
+	input := []byte(`<root><a><b>ok</b></a></root>`)
+
+	var stdOut payload
+	var shimOut payload
+	require.NoError(t, stdxml.Unmarshal(input, &stdOut))
+	require.NoError(t, shim.Unmarshal(input, &shimOut))
+	require.Equal(t, stdOut, shimOut)
+}
+
 func TestDecoderDecodeMatchesStdlib(t *testing.T) {
 	type item struct {
 		XMLName stdxml.Name `xml:"item"`
