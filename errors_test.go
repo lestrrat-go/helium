@@ -47,6 +47,7 @@ func TestErrParseErrorAs(t *testing.T) {
 
 func TestErrParseErrorErrorString(t *testing.T) {
 	t.Run("without file", func(t *testing.T) {
+		t.Parallel()
 		pe := helium.ErrParseError{
 			Err:        helium.ErrSpaceRequired,
 			Level:      helium.ErrorLevelError,
@@ -62,6 +63,7 @@ func TestErrParseErrorErrorString(t *testing.T) {
 	})
 
 	t.Run("with file", func(t *testing.T) {
+		t.Parallel()
 		pe := helium.ErrParseError{
 			Err:        helium.ErrSpaceRequired,
 			File:       "test.xml",
@@ -129,6 +131,7 @@ func TestParseNoError(t *testing.T) {
 	const input = `<?xml version="1.0"?><root><child>text</chld></root>`
 
 	t.Run("SAX Error callback fires by default", func(t *testing.T) {
+		t.Parallel()
 		var called atomic.Int32
 		s := sax.New()
 		s.OnError = sax.ErrorFunc(func(_ sax.Context, err error) error {
@@ -143,6 +146,7 @@ func TestParseNoError(t *testing.T) {
 	})
 
 	t.Run("helium.ParseNoError suppresses SAX Error callback", func(t *testing.T) {
+		t.Parallel()
 		var called atomic.Int32
 		s := sax.New()
 		s.OnError = sax.ErrorFunc(func(_ sax.Context, err error) error {
@@ -165,6 +169,7 @@ func TestWarningLocationInfo(t *testing.T) {
 	const input = "<!DOCTYPE doc SYSTEM \"foo\">\n<doc>&undeclared;</doc>"
 
 	t.Run("warning handler error wrapped with helium.ErrorLevelWarning", func(t *testing.T) {
+		t.Parallel()
 		handlerErr := fmt.Errorf("warning escalated")
 		s := sax.New()
 		s.OnWarning = sax.WarningFunc(func(_ sax.Context, err error) error {
@@ -183,6 +188,7 @@ func TestWarningLocationInfo(t *testing.T) {
 	})
 
 	t.Run("warning handler nil does not produce error", func(t *testing.T) {
+		t.Parallel()
 		var warnings []string
 		s := sax.New()
 		s.OnWarning = sax.WarningFunc(func(_ sax.Context, err error) error {
@@ -199,6 +205,7 @@ func TestWarningLocationInfo(t *testing.T) {
 	})
 
 	t.Run("helium.ParseNoWarning suppresses warning callback", func(t *testing.T) {
+		t.Parallel()
 		var called atomic.Int32
 		s := sax.New()
 		s.OnWarning = sax.WarningFunc(func(_ sax.Context, err error) error {
@@ -216,6 +223,7 @@ func TestWarningLocationInfo(t *testing.T) {
 
 func TestFormatError(t *testing.T) {
 	t.Run("parser error with file", func(t *testing.T) {
+		t.Parallel()
 		pe := helium.ErrParseError{
 			Err:        helium.ErrGtRequired,
 			File:       "test.xml",
@@ -229,6 +237,7 @@ func TestFormatError(t *testing.T) {
 	})
 
 	t.Run("namespace error with file", func(t *testing.T) {
+		t.Parallel()
 		pe := helium.ErrParseError{
 			Domain:     helium.ErrorDomainNamespace,
 			Err:        errors.New("namespace 'xLink' not found"),
@@ -243,6 +252,7 @@ func TestFormatError(t *testing.T) {
 	})
 
 	t.Run("warning level", func(t *testing.T) {
+		t.Parallel()
 		pe := helium.ErrParseError{
 			Err:        errors.New("something fishy"),
 			Level:      helium.ErrorLevelWarning,
@@ -255,6 +265,7 @@ func TestFormatError(t *testing.T) {
 	})
 
 	t.Run("without file", func(t *testing.T) {
+		t.Parallel()
 		pe := helium.ErrParseError{
 			Err:        helium.ErrSpaceRequired,
 			Level:      helium.ErrorLevelError,
@@ -267,6 +278,7 @@ func TestFormatError(t *testing.T) {
 	})
 
 	t.Run("no context line", func(t *testing.T) {
+		t.Parallel()
 		pe := helium.ErrParseError{
 			Err:        helium.ErrPrematureEOF,
 			File:       "empty.xml",

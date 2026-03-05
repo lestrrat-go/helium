@@ -65,17 +65,169 @@ func TestParseArgsDefaults(t *testing.T) {
 	require.Equal(t, helium.ParseOption(0), cfg.parseOptions)
 }
 
-func TestParseArgsVersion(t *testing.T) {
-	cfg, files := parseArgs([]string{"--version"})
-	require.NotNil(t, cfg)
-	require.True(t, cfg.version)
-	require.Empty(t, files)
-}
+func TestParseArgsSimpleCases(t *testing.T) {
+	tests := []struct {
+		name       string
+		args       []string
+		wantFiles  []string
+		check      func(*testing.T, *config)
+		filesUnset bool
+	}{
+		{
+			name: "version",
+			args: []string{"--version"},
+			check: func(t *testing.T, cfg *config) {
+				t.Helper()
+				require.True(t, cfg.version)
+			},
+		},
+		{
+			name: "single dash",
+			args: []string{"-noblanks"},
+			check: func(t *testing.T, cfg *config) {
+				t.Helper()
+				require.True(t, cfg.parseOptions.IsSet(helium.ParseNoBlanks))
+			},
+		},
+		{
+			name: "dtdattr",
+			args: []string{"--dtdattr"},
+			check: func(t *testing.T, cfg *config) {
+				t.Helper()
+				require.True(t, cfg.parseOptions.IsSet(helium.ParseDTDAttr))
+				require.True(t, cfg.parseOptions.IsSet(helium.ParseDTDLoad))
+			},
+		},
+		{
+			name: "valid",
+			args: []string{"--valid"},
+			check: func(t *testing.T, cfg *config) {
+				t.Helper()
+				require.True(t, cfg.parseOptions.IsSet(helium.ParseDTDValid))
+				require.True(t, cfg.parseOptions.IsSet(helium.ParseDTDLoad))
+			},
+		},
+		{
+			name: "xinclude",
+			args: []string{"--xinclude"},
+			check: func(t *testing.T, cfg *config) {
+				t.Helper()
+				require.True(t, cfg.doXInclude)
+				require.True(t, cfg.parseOptions.IsSet(helium.ParseXInclude))
+			},
+		},
+		{
+			name: "xpath implies noout",
+			args: []string{"--xpath", "//a"},
+			check: func(t *testing.T, cfg *config) {
+				t.Helper()
+				require.Equal(t, "//a", cfg.xpathExpr)
+				require.True(t, cfg.noout)
+			},
+		},
+		{
+			name: "pretty",
+			args: []string{"--pretty", "2"},
+			check: func(t *testing.T, cfg *config) {
+				t.Helper()
+				require.Equal(t, 2, cfg.pretty)
+			},
+		},
+		{
+			name: "repeat",
+			args: []string{"--repeat", "5"},
+			check: func(t *testing.T, cfg *config) {
+				t.Helper()
+				require.Equal(t, 5, cfg.repeat)
+			},
+		},
+		{
+			name:      "schema",
+			args:      []string{"--schema", "test.xsd", "test.xml"},
+			wantFiles: []string{"test.xml"},
+			check: func(t *testing.T, cfg *config) {
+				t.Helper()
+				require.Equal(t, "test.xsd", cfg.schemaFile)
+			},
+		},
+		{
+			name:      "output",
+			args:      []string{"--output", "out.xml", "in.xml"},
+			wantFiles: []string{"in.xml"},
+			check: func(t *testing.T, cfg *config) {
+				t.Helper()
+				require.Equal(t, "out.xml", cfg.outputFile)
+			},
+		},
+		{
+			name: "encode",
+			args: []string{"--encode", "UTF-8"},
+			check: func(t *testing.T, cfg *config) {
+				t.Helper()
+				require.Equal(t, "UTF-8", cfg.encode)
+			},
+		},
+		{
+			name: "path",
+			args: []string{"--path", "/usr/share/dtd"},
+			check: func(t *testing.T, cfg *config) {
+				t.Helper()
+				require.Equal(t, "/usr/share/dtd", cfg.pathDirs)
+			},
+		},
+		{
+			name: "catalogs",
+			args: []string{"--catalogs"},
+			check: func(t *testing.T, cfg *config) {
+				t.Helper()
+				require.True(t, cfg.catalogs)
+			},
+		},
+		{
+			name: "nocatalogs",
+			args: []string{"--nocatalogs"},
+			check: func(t *testing.T, cfg *config) {
+				t.Helper()
+				require.True(t, cfg.noCatalogs)
+			},
+		},
+		{
+			name: "boolean flags",
+			args: []string{"--noout", "--format", "--quiet", "--timing", "--dropdtd", "--nowarning"},
+			check: func(t *testing.T, cfg *config) {
+				t.Helper()
+				require.True(t, cfg.noout)
+				require.True(t, cfg.format)
+				require.True(t, cfg.quiet)
+				require.True(t, cfg.timing)
+				require.True(t, cfg.dropdtd)
+				require.True(t, cfg.parseOptions.IsSet(helium.ParseNoWarning))
+			},
+		},
+		{
+			name:      "files collected",
+			args:      []string{"--noblanks", "a.xml", "b.xml"},
+			wantFiles: []string{"a.xml", "b.xml"},
+			check: func(t *testing.T, cfg *config) {
+				t.Helper()
+				require.NotNil(t, cfg)
+			},
+		},
+	}
 
-func TestParseArgsSingleDash(t *testing.T) {
-	cfg, _ := parseArgs([]string{"-noblanks"})
-	require.NotNil(t, cfg)
-	require.True(t, cfg.parseOptions.IsSet(helium.ParseNoBlanks))
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg, files := parseArgs(tc.args)
+			require.NotNil(t, cfg)
+			if tc.wantFiles != nil {
+				require.Equal(t, tc.wantFiles, files)
+			} else {
+				require.Empty(t, files)
+			}
+			tc.check(t, cfg)
+		})
+	}
 }
 
 func TestParseArgsAllParserFlags(t *testing.T) {
@@ -100,34 +252,6 @@ func TestParseArgsAllParserFlags(t *testing.T) {
 	require.True(t, cfg.parseOptions.IsSet(helium.ParseNoBaseFix))
 }
 
-func TestParseArgsDtdattr(t *testing.T) {
-	cfg, _ := parseArgs([]string{"--dtdattr"})
-	require.NotNil(t, cfg)
-	require.True(t, cfg.parseOptions.IsSet(helium.ParseDTDAttr))
-	require.True(t, cfg.parseOptions.IsSet(helium.ParseDTDLoad))
-}
-
-func TestParseArgsValid(t *testing.T) {
-	cfg, _ := parseArgs([]string{"--valid"})
-	require.NotNil(t, cfg)
-	require.True(t, cfg.parseOptions.IsSet(helium.ParseDTDValid))
-	require.True(t, cfg.parseOptions.IsSet(helium.ParseDTDLoad))
-}
-
-func TestParseArgsXInclude(t *testing.T) {
-	cfg, _ := parseArgs([]string{"--xinclude"})
-	require.NotNil(t, cfg)
-	require.True(t, cfg.doXInclude)
-	require.True(t, cfg.parseOptions.IsSet(helium.ParseXInclude))
-}
-
-func TestParseArgsXPathImpliesNoout(t *testing.T) {
-	cfg, _ := parseArgs([]string{"--xpath", "//a"})
-	require.NotNil(t, cfg)
-	require.Equal(t, "//a", cfg.xpathExpr)
-	require.True(t, cfg.noout)
-}
-
 func TestParseArgsC14nModes(t *testing.T) {
 	tests := []struct {
 		flag string
@@ -144,76 +268,24 @@ func TestParseArgsC14nModes(t *testing.T) {
 	}
 }
 
-func TestParseArgsPretty(t *testing.T) {
-	cfg, _ := parseArgs([]string{"--pretty", "2"})
-	require.NotNil(t, cfg)
-	require.Equal(t, 2, cfg.pretty)
-}
+func TestParseArgsInvalidCases(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "unrecognized", args: []string{"--nonexistent-flag"}},
+		{name: "pretty invalid", args: []string{"--pretty", "xyz"}},
+		{name: "repeat invalid", args: []string{"--repeat", "abc"}},
+		{name: "repeat zero", args: []string{"--repeat", "0"}},
+	}
 
-func TestParseArgsRepeat(t *testing.T) {
-	cfg, _ := parseArgs([]string{"--repeat", "5"})
-	require.NotNil(t, cfg)
-	require.Equal(t, 5, cfg.repeat)
-}
-
-func TestParseArgsSchema(t *testing.T) {
-	cfg, files := parseArgs([]string{"--schema", "test.xsd", "test.xml"})
-	require.NotNil(t, cfg)
-	require.Equal(t, "test.xsd", cfg.schemaFile)
-	require.Equal(t, []string{"test.xml"}, files)
-}
-
-func TestParseArgsOutput(t *testing.T) {
-	cfg, files := parseArgs([]string{"--output", "out.xml", "in.xml"})
-	require.NotNil(t, cfg)
-	require.Equal(t, "out.xml", cfg.outputFile)
-	require.Equal(t, []string{"in.xml"}, files)
-}
-
-func TestParseArgsEncode(t *testing.T) {
-	cfg, _ := parseArgs([]string{"--encode", "UTF-8"})
-	require.NotNil(t, cfg)
-	require.Equal(t, "UTF-8", cfg.encode)
-}
-
-func TestParseArgsPath(t *testing.T) {
-	cfg, _ := parseArgs([]string{"--path", "/usr/share/dtd"})
-	require.NotNil(t, cfg)
-	require.Equal(t, "/usr/share/dtd", cfg.pathDirs)
-}
-
-func TestParseArgsCatalogs(t *testing.T) {
-	cfg, _ := parseArgs([]string{"--catalogs"})
-	require.NotNil(t, cfg)
-	require.True(t, cfg.catalogs)
-}
-
-func TestParseArgsNoCatalogs(t *testing.T) {
-	cfg, _ := parseArgs([]string{"--nocatalogs"})
-	require.NotNil(t, cfg)
-	require.True(t, cfg.noCatalogs)
-}
-
-func TestParseArgsBooleanFlags(t *testing.T) {
-	cfg, _ := parseArgs([]string{"--noout", "--format", "--quiet", "--timing", "--dropdtd", "--nowarning"})
-	require.NotNil(t, cfg)
-	require.True(t, cfg.noout)
-	require.True(t, cfg.format)
-	require.True(t, cfg.quiet)
-	require.True(t, cfg.timing)
-	require.True(t, cfg.dropdtd)
-	require.True(t, cfg.parseOptions.IsSet(helium.ParseNoWarning))
-}
-
-func TestParseArgsFilesCollected(t *testing.T) {
-	cfg, files := parseArgs([]string{"--noblanks", "a.xml", "b.xml"})
-	require.NotNil(t, cfg)
-	require.Equal(t, []string{"a.xml", "b.xml"}, files)
-}
-
-func TestParseArgsUnrecognized(t *testing.T) {
-	cfg, _ := parseArgs([]string{"--nonexistent-flag"})
-	require.Nil(t, cfg)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg, _ := parseArgs(tc.args)
+			require.Nil(t, cfg)
+		})
+	}
 }
 
 func TestParseArgsMissingValues(t *testing.T) {
@@ -222,21 +294,6 @@ func TestParseArgsMissingValues(t *testing.T) {
 		cfg, _ := parseArgs([]string{flag})
 		require.Nil(t, cfg, "flag %s without value should fail", flag)
 	}
-}
-
-func TestParseArgsPrettyInvalid(t *testing.T) {
-	cfg, _ := parseArgs([]string{"--pretty", "xyz"})
-	require.Nil(t, cfg)
-}
-
-func TestParseArgsRepeatInvalid(t *testing.T) {
-	cfg, _ := parseArgs([]string{"--repeat", "abc"})
-	require.Nil(t, cfg)
-}
-
-func TestParseArgsRepeatZero(t *testing.T) {
-	cfg, _ := parseArgs([]string{"--repeat", "0"})
-	require.Nil(t, cfg)
 }
 
 // =====================================================================
@@ -327,35 +384,63 @@ func TestRecover(t *testing.T) {
 
 // --- Output control ---
 
-func TestNoOut(t *testing.T) {
-	out, code := runWithStdin(t, `<root/>`, "--noout")
-	require.Equal(t, 0, code)
-	require.Empty(t, out)
-}
+func TestOutputControlModes(t *testing.T) {
+	tests := []struct {
+		name            string
+		xml             string
+		args            []string
+		wantContains    []string
+		wantNotContains []string
+		wantEmpty       bool
+	}{
+		{
+			name:      "noout",
+			xml:       `<root/>`,
+			args:      []string{"--noout"},
+			wantEmpty: true,
+		},
+		{
+			name:         "format",
+			xml:          `<a><b><c>text</c></b></a>`,
+			args:         []string{"--format"},
+			wantContains: []string{"  <b>", "    <c>text</c>"},
+		},
+		{
+			name:         "format preserves text",
+			xml:          `<a><b>hello</b></a>`,
+			args:         []string{"--format"},
+			wantContains: []string{"<b>hello</b>"},
+		},
+		{
+			name:         "pretty 0",
+			xml:          `<a><b><c/></b></a>`,
+			args:         []string{"--pretty", "0"},
+			wantContains: []string{`<a><b><c/></b></a>`},
+		},
+		{
+			name:         "pretty 1",
+			xml:          `<a><b><c/></b></a>`,
+			args:         []string{"--pretty", "1"},
+			wantContains: []string{"  <b>"},
+		},
+	}
 
-func TestFormat(t *testing.T) {
-	out, code := runWithStdin(t, `<a><b><c>text</c></b></a>`, "--format")
-	require.Equal(t, 0, code)
-	require.Contains(t, out, "  <b>")
-	require.Contains(t, out, "    <c>text</c>")
-}
-
-func TestFormatPreservesTextContent(t *testing.T) {
-	out, code := runWithStdin(t, `<a><b>hello</b></a>`, "--format")
-	require.Equal(t, 0, code)
-	require.Contains(t, out, "<b>hello</b>")
-}
-
-func TestPretty0(t *testing.T) {
-	out, code := runWithStdin(t, `<a><b><c/></b></a>`, "--pretty", "0")
-	require.Equal(t, 0, code)
-	require.Contains(t, out, `<a><b><c/></b></a>`)
-}
-
-func TestPretty1(t *testing.T) {
-	out, code := runWithStdin(t, `<a><b><c/></b></a>`, "--pretty", "1")
-	require.Equal(t, 0, code)
-	require.Contains(t, out, "  <b>")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			out, code := runWithStdin(t, tc.xml, tc.args...)
+			require.Equal(t, 0, code)
+			if tc.wantEmpty {
+				require.Empty(t, out)
+			}
+			for _, s := range tc.wantContains {
+				require.Contains(t, out, s)
+			}
+			for _, s := range tc.wantNotContains {
+				require.NotContains(t, out, s)
+			}
+		})
+	}
 }
 
 func TestOutputFile(t *testing.T) {
@@ -381,34 +466,55 @@ func TestOutputFile(t *testing.T) {
 
 // --- C14N ---
 
-func TestC14N(t *testing.T) {
-	out, code := runWithStdin(t, `<b a="1" c="2"/>`, "--c14n")
-	require.Equal(t, 0, code)
-	require.Contains(t, out, `<b a="1" c="2"></b>`)
-}
+func TestC14NModes(t *testing.T) {
+	tests := []struct {
+		name         string
+		xml          string
+		args         []string
+		wantContains []string
+	}{
+		{
+			name:         "c14n",
+			xml:          `<b a="1" c="2"/>`,
+			args:         []string{"--c14n"},
+			wantContains: []string{`<b a="1" c="2"></b>`},
+		},
+		{
+			name:         "c14n attribute order",
+			xml:          `<e z="1" a="2"/>`,
+			args:         []string{"--c14n"},
+			wantContains: []string{`<e a="2" z="1"></e>`},
+		},
+		{
+			name:         "c14n comment",
+			xml:          `<a><!-- comment --></a>`,
+			args:         []string{"--c14n"},
+			wantContains: []string{`<!-- comment -->`},
+		},
+		{
+			name:         "c14n11",
+			xml:          `<a/>`,
+			args:         []string{"--c14n11"},
+			wantContains: []string{`<a></a>`},
+		},
+		{
+			name:         "exc-c14n",
+			xml:          `<a xmlns:n="http://example.com"><b/></a>`,
+			args:         []string{"--exc-c14n"},
+			wantContains: []string{`<b></b>`},
+		},
+	}
 
-func TestC14NAttributeOrder(t *testing.T) {
-	out, code := runWithStdin(t, `<e z="1" a="2"/>`, "--c14n")
-	require.Equal(t, 0, code)
-	require.Contains(t, out, `<e a="2" z="1"></e>`)
-}
-
-func TestC14NComment(t *testing.T) {
-	out, code := runWithStdin(t, `<a><!-- comment --></a>`, "--c14n")
-	require.Equal(t, 0, code)
-	require.Contains(t, out, `<!-- comment -->`)
-}
-
-func TestC14N11(t *testing.T) {
-	out, code := runWithStdin(t, `<a/>`, "--c14n11")
-	require.Equal(t, 0, code)
-	require.Contains(t, out, `<a></a>`)
-}
-
-func TestExcC14N(t *testing.T) {
-	out, code := runWithStdin(t, `<a xmlns:n="http://example.com"><b/></a>`, "--exc-c14n")
-	require.Equal(t, 0, code)
-	require.Contains(t, out, `<b></b>`)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			out, code := runWithStdin(t, tc.xml, tc.args...)
+			require.Equal(t, 0, code)
+			for _, s := range tc.wantContains {
+				require.Contains(t, out, s)
+			}
+		})
+	}
 }
 
 func TestC14NFile(t *testing.T) {
@@ -422,52 +528,85 @@ func TestC14NFile(t *testing.T) {
 
 // --- XPath ---
 
-func TestXPathNodeSet(t *testing.T) {
-	out, code := runWithStdin(t, `<a><b>1</b><b>2</b></a>`, "--xpath", "//b")
-	require.Equal(t, 0, code)
-	require.Contains(t, out, `<b>1</b>`)
-	require.Contains(t, out, `<b>2</b>`)
-}
+func TestXPathExpressions(t *testing.T) {
+	tests := []struct {
+		name            string
+		xml             string
+		expr            string
+		wantCode        int
+		wantContains    []string
+		wantNotContains []string
+	}{
+		{
+			name:         "node set",
+			xml:          `<a><b>1</b><b>2</b></a>`,
+			expr:         "//b",
+			wantCode:     0,
+			wantContains: []string{`<b>1</b>`, `<b>2</b>`},
+		},
+		{
+			name:         "count",
+			xml:          `<a><b/><b/><b/></a>`,
+			expr:         "count(//b)",
+			wantCode:     0,
+			wantContains: []string{"3"},
+		},
+		{
+			name:         "string",
+			xml:          `<a><b>hello</b></a>`,
+			expr:         "string(//b)",
+			wantCode:     0,
+			wantContains: []string{"hello"},
+		},
+		{
+			name:         "boolean true",
+			xml:          `<a><b/></a>`,
+			expr:         "boolean(//b)",
+			wantCode:     0,
+			wantContains: []string{"true"},
+		},
+		{
+			name:         "boolean false",
+			xml:          `<a/>`,
+			expr:         "boolean(//b)",
+			wantCode:     0,
+			wantContains: []string{"false"},
+		},
+		{
+			name:            "xpath implies noout",
+			xml:             `<a><b/></a>`,
+			expr:            "count(//b)",
+			wantCode:        0,
+			wantNotContains: []string{`<?xml`},
+		},
+		{
+			name:         "attribute",
+			xml:          `<a foo="bar"/>`,
+			expr:         "/a/@foo",
+			wantCode:     0,
+			wantContains: []string{"bar"},
+		},
+		{
+			name:     "invalid expression",
+			xml:      `<a/>`,
+			expr:     "///invalid[[[",
+			wantCode: exitXPath,
+		},
+	}
 
-func TestXPathCount(t *testing.T) {
-	out, code := runWithStdin(t, `<a><b/><b/><b/></a>`, "--xpath", "count(//b)")
-	require.Equal(t, 0, code)
-	require.Contains(t, out, "3")
-}
-
-func TestXPathString(t *testing.T) {
-	out, code := runWithStdin(t, `<a><b>hello</b></a>`, "--xpath", "string(//b)")
-	require.Equal(t, 0, code)
-	require.Contains(t, out, "hello")
-}
-
-func TestXPathBoolean(t *testing.T) {
-	out, code := runWithStdin(t, `<a><b/></a>`, "--xpath", "boolean(//b)")
-	require.Equal(t, 0, code)
-	require.Contains(t, out, "true")
-}
-
-func TestXPathBooleanFalse(t *testing.T) {
-	out, code := runWithStdin(t, `<a/>`, "--xpath", "boolean(//b)")
-	require.Equal(t, 0, code)
-	require.Contains(t, out, "false")
-}
-
-func TestXPathImpliesNoout(t *testing.T) {
-	out, code := runWithStdin(t, `<a><b/></a>`, "--xpath", "count(//b)")
-	require.Equal(t, 0, code)
-	require.NotContains(t, out, `<?xml`)
-}
-
-func TestXPathInvalidExpression(t *testing.T) {
-	_, code := runWithStdin(t, `<a/>`, "--xpath", "///invalid[[[")
-	require.Equal(t, exitXPath, code)
-}
-
-func TestXPathAttribute(t *testing.T) {
-	out, code := runWithStdin(t, `<a foo="bar"/>`, "--xpath", "/a/@foo")
-	require.Equal(t, 0, code)
-	require.Contains(t, out, "bar")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			out, code := runWithStdin(t, tc.xml, "--xpath", tc.expr)
+			require.Equal(t, tc.wantCode, code)
+			for _, s := range tc.wantContains {
+				require.Contains(t, out, s)
+			}
+			for _, s := range tc.wantNotContains {
+				require.NotContains(t, out, s)
+			}
+		})
+	}
 }
 
 func TestXPathWithFile(t *testing.T) {
@@ -528,45 +667,54 @@ func TestXIncludeTextInclusion(t *testing.T) {
 
 // --- Schema validation ---
 
-func TestSchemaValid(t *testing.T) {
-	dir := t.TempDir()
-	xsdContent := `<?xml version="1.0"?>
+func TestSchemaValidation(t *testing.T) {
+	tests := []struct {
+		name      string
+		xsdType   string
+		xmlValue  string
+		wantCode  int
+		wantEmpty bool
+	}{
+		{
+			name:      "valid",
+			xsdType:   "xs:string",
+			xmlValue:  "hello",
+			wantCode:  exitOK,
+			wantEmpty: true,
+		},
+		{
+			name:     "invalid",
+			xsdType:  "xs:integer",
+			xmlValue: "not-an-integer",
+			wantCode: exitValidation,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			xsdContent := `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  <xs:element name="root" type="xs:string"/>
+  <xs:element name="root" type="` + tc.xsdType + `"/>
 </xs:schema>`
-	xsdFile := writeFile(t, dir, "test.xsd", xsdContent)
-	xmlFile := writeFile(t, dir, "test.xml", `<?xml version="1.0"?><root>hello</root>`)
+			xsdFile := writeFile(t, dir, "test.xsd", xsdContent)
+			xmlFile := writeFile(t, dir, "test.xml", `<?xml version="1.0"?><root>`+tc.xmlValue+`</root>`)
 
-	cfg, files := parseArgs([]string{"--schema", xsdFile, "--noout", xmlFile})
-	require.NotNil(t, cfg)
+			cfg, files := parseArgs([]string{"--schema", xsdFile, "--noout", xmlFile})
+			require.NotNil(t, cfg)
 
-	schema, err := compileSchema(cfg)
-	require.NoError(t, err)
+			schema, err := compileSchema(cfg)
+			require.NoError(t, err)
 
-	var out strings.Builder
-	code := processInput(cfg, namedInput{name: files[0]}, nil, schema, &out)
-	require.Equal(t, exitOK, code)
-	require.Empty(t, out.String())
-}
-
-func TestSchemaInvalid(t *testing.T) {
-	dir := t.TempDir()
-	xsdContent := `<?xml version="1.0"?>
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  <xs:element name="root" type="xs:integer"/>
-</xs:schema>`
-	xsdFile := writeFile(t, dir, "test.xsd", xsdContent)
-	xmlFile := writeFile(t, dir, "test.xml", `<?xml version="1.0"?><root>not-an-integer</root>`)
-
-	cfg, files := parseArgs([]string{"--schema", xsdFile, "--noout", xmlFile})
-	require.NotNil(t, cfg)
-
-	schema, err := compileSchema(cfg)
-	require.NoError(t, err)
-
-	var out strings.Builder
-	code := processInput(cfg, namedInput{name: files[0]}, nil, schema, &out)
-	require.Equal(t, exitValidation, code)
+			var out strings.Builder
+			code := processInput(cfg, namedInput{name: files[0]}, nil, schema, &out)
+			require.Equal(t, tc.wantCode, code)
+			if tc.wantEmpty {
+				require.Empty(t, out.String())
+			}
+		})
+	}
 }
 
 // --- Behavioral flags ---
@@ -716,16 +864,32 @@ func TestFormatNestedElements(t *testing.T) {
 	require.NotEmpty(t, indented)
 }
 
-func TestFormatMixedContent(t *testing.T) {
-	// Element with both text and element children
-	out, code := runWithStdin(t, `<a>text<b/></a>`, "--format")
-	require.Equal(t, 0, code)
-	require.Contains(t, out, `<a>`)
-	require.Contains(t, out, `<b/>`)
-}
+func TestFormatAdditionalCases(t *testing.T) {
+	tests := []struct {
+		name         string
+		xml          string
+		wantContains []string
+	}{
+		{
+			name:         "mixed content",
+			xml:          `<a>text<b/></a>`,
+			wantContains: []string{`<a>`, `<b/>`},
+		},
+		{
+			name:         "empty element",
+			xml:          `<a><b/></a>`,
+			wantContains: []string{`  <b/>`},
+		},
+	}
 
-func TestFormatEmptyElement(t *testing.T) {
-	out, code := runWithStdin(t, `<a><b/></a>`, "--format")
-	require.Equal(t, 0, code)
-	require.Contains(t, out, `  <b/>`)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			out, code := runWithStdin(t, tc.xml, "--format")
+			require.Equal(t, 0, code)
+			for _, s := range tc.wantContains {
+				require.Contains(t, out, s)
+			}
+		})
+	}
 }

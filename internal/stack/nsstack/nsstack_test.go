@@ -8,6 +8,8 @@ import (
 )
 
 func TestNsStack(t *testing.T) {
+	t.Parallel()
+
 	s := nsstack.New()
 	s.Push("xml", "http://www.w3.org/XML/1998/namespace")
 	s.Push("ds", "http://www.w3.org/2000/09/xmldsig#")

@@ -28,13 +28,11 @@ func Example_stream_indent() {
 	// WriteElement is a convenience method: start tag + text + end tag.
 	// With indentation enabled, each child element is placed on its own
 	// line with the appropriate indent level.
-	if err := w.WriteElement("child", "one"); err != nil {
-		fmt.Printf("error: %s\n", err)
-		return
-	}
-	if err := w.WriteElement("child", "two"); err != nil {
-		fmt.Printf("error: %s\n", err)
-		return
+	for _, v := range []string{"one", "two"} {
+		if err := w.WriteElement("child", v); err != nil {
+			fmt.Printf("error: %s\n", err)
+			return
+		}
 	}
 
 	// EndDocument closes <root> and flushes.

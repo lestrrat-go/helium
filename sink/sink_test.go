@@ -15,7 +15,9 @@ import (
 var _ io.Closer = (*sink.Sink[error])(nil)
 
 func TestSinkHandleAndClose(t *testing.T) {
-	ctx := context.Background()
+	t.Parallel()
+
+	ctx := t.Context()
 	var mu sync.Mutex
 	var got []string
 
@@ -25,19 +27,22 @@ func TestSinkHandleAndClose(t *testing.T) {
 		mu.Unlock()
 	}))
 
-	s.Handle(ctx, "a")
-	s.Handle(ctx, "b")
-	s.Handle(ctx, "c")
+	want := []string{"a", "b", "c"}
+	for _, v := range want {
+		s.Handle(ctx, v)
+	}
 
 	require.NoError(t, s.Close())
 
 	mu.Lock()
 	defer mu.Unlock()
-	require.Equal(t, []string{"a", "b", "c"}, got)
+	require.Equal(t, want, got)
 }
 
 func TestSinkCloseDrains(t *testing.T) {
-	ctx := context.Background()
+	t.Parallel()
+
+	ctx := t.Context()
 	var mu sync.Mutex
 	var got []int
 
@@ -59,20 +64,25 @@ func TestSinkCloseDrains(t *testing.T) {
 }
 
 func TestSinkCloseMultipleTimes(t *testing.T) {
-	ctx := context.Background()
-	s := sink.New[int](ctx, sink.HandlerFunc[int](func(_ context.Context, _ int) {}))
+	t.Parallel()
+
+	s := sink.New[int](t.Context(), sink.HandlerFunc[int](func(_ context.Context, _ int) {}))
 	require.NoError(t, s.Close())
 	require.NoError(t, s.Close())
 }
 
 func TestSinkNilReceiver(t *testing.T) {
+	t.Parallel()
+
 	var s *sink.Sink[error]
-	s.Handle(context.Background(), errors.New("test"))
+	s.Handle(t.Context(), errors.New("test"))
 	require.NoError(t, s.Close())
 }
 
 func TestSinkCancelledContext(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
 	var mu sync.Mutex
 	var got []string
 
@@ -93,9 +103,11 @@ func TestSinkCancelledContext(t *testing.T) {
 }
 
 func TestSinkErrorSatisfiesErrorHandler(t *testing.T) {
+	t.Parallel()
+
 	// ErrorHandler is Handle(context.Context, error)
 	// *sink.Sink[error] has Handle(context.Context, error)
-	ctx := context.Background()
+	ctx := t.Context()
 	var mu sync.Mutex
 	var got []error
 

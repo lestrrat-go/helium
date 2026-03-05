@@ -309,3 +309,48 @@ func TestNoEmpty(t *testing.T) {
 		require.Equal(t, expected, str)
 	})
 }
+
+func TestDumpQuotingViaPublicAPI(t *testing.T) {
+	tests := []struct {
+		name     string
+		inputXML string
+		expected string
+	}{
+		{
+			name: "doctype system id without quotes",
+			inputXML: `<?xml version="1.0"?>
+<!DOCTYPE root SYSTEM "hello">
+<root/>`,
+			expected: `<!DOCTYPE root SYSTEM "hello">`,
+		},
+		{
+			name: "doctype system id with only single quotes",
+			inputXML: `<?xml version="1.0"?>
+<!DOCTYPE root SYSTEM "it's">
+<root/>`,
+			expected: `<!DOCTYPE root SYSTEM "it's">`,
+		},
+		{
+			name: "internal entity with both quote kinds",
+			inputXML: `<?xml version="1.0"?>
+<!DOCTYPE root [
+<!ENTITY e "it's a &quot;test&quot;">
+]>
+<root/>`,
+			expected: `<!ENTITY e "it's a &quot;test&quot;">`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.Parse(t.Context(), []byte(tt.inputXML))
+			require.NoError(t, err)
+
+			got, err := doc.XMLString()
+			require.NoError(t, err)
+			require.Contains(t, got, tt.expected)
+		})
+	}
+}

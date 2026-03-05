@@ -1,7 +1,6 @@
 package helium_test
 
 import (
-	"context"
 	"errors"
 	"io"
 	"testing"
@@ -21,61 +20,90 @@ var (
 )
 
 func TestNilErrorHandler(t *testing.T) {
-	var h helium.NilErrorHandler
-	h.Handle(context.Background(), errors.New("should not panic"))
+	t.Parallel()
+
+	helium.NilErrorHandler{}.Handle(t.Context(), errors.New("should not panic"))
 }
 
 func TestErrorCollectorCollectsAll(t *testing.T) {
-	ctx := context.Background()
+	t.Parallel()
+
+	ctx := t.Context()
 	ec := helium.NewErrorCollector(ctx, helium.ErrorLevelNone)
 
-	ec.Handle(ctx, errors.New("one"))
-	ec.Handle(ctx, errors.New("two"))
-	ec.Handle(ctx, errors.New("three"))
+	want := []string{"one", "two", "three"}
+	for _, msg := range want {
+		ec.Handle(ctx, errors.New(msg))
+	}
 
 	require.NoError(t, ec.Close())
 
 	errs := ec.Errors()
-	require.Len(t, errs, 3)
-	require.Equal(t, "one", errs[0].Error())
-	require.Equal(t, "two", errs[1].Error())
-	require.Equal(t, "three", errs[2].Error())
+	require.Len(t, errs, len(want))
+	for i, err := range errs {
+		require.Equal(t, want[i], err.Error())
+	}
 }
 
 func TestErrorCollectorFiltersLevel(t *testing.T) {
-	ctx := context.Background()
+	t.Parallel()
 
-	t.Run("warnings only", func(t *testing.T) {
-		ec := helium.NewErrorCollector(ctx, helium.ErrorLevelWarning)
+	tests := []struct {
+		name     string
+		level    helium.ErrorLevel
+		inputs   []error
+		wantLen  int
+		contains string
+	}{
+		{
+			name:  "warnings only",
+			level: helium.ErrorLevelWarning,
+			inputs: []error{
+				helium.ErrParseError{Err: errors.New("warn"), Level: helium.ErrorLevelWarning},
+				helium.ErrParseError{Err: errors.New("err"), Level: helium.ErrorLevelError},
+				helium.ErrParseError{Err: errors.New("fatal"), Level: helium.ErrorLevelFatal},
+				errors.New("plain"),
+			},
+			wantLen: 2,
+		},
+		{
+			name:  "fatal only",
+			level: helium.ErrorLevelFatal,
+			inputs: []error{
+				helium.ErrParseError{Err: errors.New("warn"), Level: helium.ErrorLevelWarning},
+				helium.ErrParseError{Err: errors.New("fatal"), Level: helium.ErrorLevelFatal},
+				errors.New("plain"),
+			},
+			wantLen:  1,
+			contains: "fatal",
+		},
+	}
 
-		ec.Handle(ctx, helium.ErrParseError{Err: errors.New("warn"), Level: helium.ErrorLevelWarning})
-		ec.Handle(ctx, helium.ErrParseError{Err: errors.New("err"), Level: helium.ErrorLevelError})
-		ec.Handle(ctx, helium.ErrParseError{Err: errors.New("fatal"), Level: helium.ErrorLevelFatal})
-		ec.Handle(ctx, errors.New("plain"))
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-		require.NoError(t, ec.Close())
+			ctx := t.Context()
+			ec := helium.NewErrorCollector(ctx, tc.level)
+			for _, in := range tc.inputs {
+				ec.Handle(ctx, in)
+			}
 
-		errs := ec.Errors()
-		require.Len(t, errs, 2)
-	})
+			require.NoError(t, ec.Close())
 
-	t.Run("fatal only", func(t *testing.T) {
-		ec := helium.NewErrorCollector(ctx, helium.ErrorLevelFatal)
-
-		ec.Handle(ctx, helium.ErrParseError{Err: errors.New("warn"), Level: helium.ErrorLevelWarning})
-		ec.Handle(ctx, helium.ErrParseError{Err: errors.New("fatal"), Level: helium.ErrorLevelFatal})
-		ec.Handle(ctx, errors.New("plain"))
-
-		require.NoError(t, ec.Close())
-
-		errs := ec.Errors()
-		require.Len(t, errs, 1)
-		require.Contains(t, errs[0].Error(), "fatal")
-	})
+			errs := ec.Errors()
+			require.Len(t, errs, tc.wantLen)
+			if tc.contains != "" {
+				require.Contains(t, errs[0].Error(), tc.contains)
+			}
+		})
+	}
 }
 
 func TestErrorCollectorErrorsReturnsCopy(t *testing.T) {
-	ctx := context.Background()
+	t.Parallel()
+
+	ctx := t.Context()
 	ec := helium.NewErrorCollector(ctx, helium.ErrorLevelNone)
 
 	ec.Handle(ctx, errors.New("one"))
@@ -90,13 +118,16 @@ func TestErrorCollectorErrorsReturnsCopy(t *testing.T) {
 }
 
 func TestErrorCollectorCloseMultipleTimes(t *testing.T) {
-	ctx := context.Background()
-	ec := helium.NewErrorCollector(ctx, helium.ErrorLevelNone)
+	t.Parallel()
+
+	ec := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 	require.NoError(t, ec.Close())
 	require.NoError(t, ec.Close())
 }
 
 func TestErrParseErrorImplementsErrorLeveler(t *testing.T) {
+	t.Parallel()
+
 	pe := helium.ErrParseError{
 		Err:   errors.New("test"),
 		Level: helium.ErrorLevelFatal,
@@ -105,7 +136,9 @@ func TestErrParseErrorImplementsErrorLeveler(t *testing.T) {
 }
 
 func TestErrorCollectorPlainErrorsDefaultToWarning(t *testing.T) {
-	ctx := context.Background()
+	t.Parallel()
+
+	ctx := t.Context()
 
 	ec := helium.NewErrorCollector(ctx, helium.ErrorLevelWarning)
 	ec.Handle(ctx, errors.New("plain error without ErrorLeveler"))

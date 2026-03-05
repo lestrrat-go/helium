@@ -127,7 +127,6 @@ func TestGoldenFiles(t *testing.T) {
 	failed := 0
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			if filterEnv != "" && !strings.Contains(tc.name, filterEnv) {
 				t.Skip("filtered out by HELIUM_RELAXNG_TEST_FILES")

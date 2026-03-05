@@ -11,6 +11,7 @@ import (
 
 func TestAttributeAType(t *testing.T) {
 	t.Run("explicit attributes carry atype", func(t *testing.T) {
+		t.Parallel()
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE person [
   <!ELEMENT person EMPTY>
@@ -50,6 +51,7 @@ func TestAttributeAType(t *testing.T) {
 	})
 
 	t.Run("default attributes carry atype", func(t *testing.T) {
+		t.Parallel()
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE person [
   <!ELEMENT person EMPTY>
@@ -83,6 +85,7 @@ func TestAttributeAType(t *testing.T) {
 	})
 
 	t.Run("attributes without DTD have AttrInvalid", func(t *testing.T) {
+		t.Parallel()
 		xml := `<?xml version="1.0"?>
 <root attr="value"/>`
 
@@ -99,6 +102,7 @@ func TestAttributeAType(t *testing.T) {
 	})
 
 	t.Run("enumeration attributes carry atype", func(t *testing.T) {
+		t.Parallel()
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE root [
   <!ELEMENT root EMPTY>

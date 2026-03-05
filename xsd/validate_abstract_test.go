@@ -10,6 +10,7 @@ import (
 
 func TestAbstractTypeValidation(t *testing.T) {
 	t.Run("abstract complex type rejected", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="baseType" abstract="true">
     <xs:sequence>
@@ -36,6 +37,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 	})
 
 	t.Run("concrete derived type via xsi:type accepted", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   targetNamespace="http://example.com" xmlns:tns="http://example.com"
   elementFormDefault="qualified">
@@ -73,6 +75,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 	})
 
 	t.Run("unrelated xsi:type rejected", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="TypeA">
     <xs:sequence>
@@ -105,6 +108,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 	})
 
 	t.Run("non-existent xsi:type rejected", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="TypeA">
     <xs:sequence>
@@ -132,6 +136,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 	})
 
 	t.Run("same xsi:type as declared accepted", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="TypeA">
     <xs:sequence>
@@ -158,6 +163,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 	})
 
 	t.Run("restriction xsi:type accepted", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="BaseType">
     <xs:sequence>
@@ -193,6 +199,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 	})
 
 	t.Run("non-abstract type accepted", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="myType">
     <xs:sequence>

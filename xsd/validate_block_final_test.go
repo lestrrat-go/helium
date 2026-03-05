@@ -31,6 +31,7 @@ func compileAndValidate(t *testing.T, schemaXML, instanceXML string) error {
 
 func TestBlockDefault(t *testing.T) {
 	t.Run("blockDefault=#all blocks substitution group", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   blockDefault="#all">
   <xs:complexType name="baseType">
@@ -63,6 +64,7 @@ func TestBlockDefault(t *testing.T) {
 	})
 
 	t.Run("blockDefault=#all blocks xsi:type with extension", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   blockDefault="#all">
   <xs:complexType name="baseType">
@@ -91,6 +93,7 @@ func TestBlockDefault(t *testing.T) {
 
 func TestBlockOnElement(t *testing.T) {
 	t.Run("block=extension blocks xsi:type with extension-derived type", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="baseType">
     <xs:sequence>
@@ -116,6 +119,7 @@ func TestBlockOnElement(t *testing.T) {
 	})
 
 	t.Run("block=substitution blocks substitution group members", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="head" type="xs:string" block="substitution"/>
   <xs:element name="member" type="xs:string" substitutionGroup="head"/>
@@ -133,6 +137,7 @@ func TestBlockOnElement(t *testing.T) {
 	})
 
 	t.Run("explicit block= overrides blockDefault", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   blockDefault="#all">
   <xs:element name="head" type="xs:string" block=""/>
@@ -153,6 +158,7 @@ func TestBlockOnElement(t *testing.T) {
 
 func TestFinalDefault(t *testing.T) {
 	t.Run("finalDefault=restriction produces compile error for restriction derivation", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   finalDefault="restriction">
   <xs:complexType name="baseType">
@@ -176,6 +182,7 @@ func TestFinalDefault(t *testing.T) {
 	})
 
 	t.Run("finalDefault=extension produces compile error for extension derivation", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   finalDefault="extension">
   <xs:complexType name="baseType">
@@ -201,6 +208,7 @@ func TestFinalDefault(t *testing.T) {
 
 func TestFinalOnComplexType(t *testing.T) {
 	t.Run("final=extension on complexType blocks extension derivation", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="baseType" final="extension">
     <xs:sequence>
@@ -223,6 +231,7 @@ func TestFinalOnComplexType(t *testing.T) {
 	})
 
 	t.Run("final=restriction allows extension", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="baseType" final="restriction">
     <xs:sequence>
@@ -247,6 +256,7 @@ func TestFinalOnComplexType(t *testing.T) {
 
 func TestFinalOnSubstGroupHead(t *testing.T) {
 	t.Run("final=extension on head blocks extension-derived member", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="baseType">
     <xs:sequence>
@@ -279,6 +289,7 @@ func TestFinalOnSubstGroupHead(t *testing.T) {
 
 func TestInvalidBlockDefaultFinalDefault(t *testing.T) {
 	t.Run("invalid blockDefault produces compile error", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   blockDefault="invalid">
   <xs:element name="root" type="xs:string"/>
@@ -289,6 +300,7 @@ func TestInvalidBlockDefaultFinalDefault(t *testing.T) {
 	})
 
 	t.Run("invalid finalDefault produces compile error", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   finalDefault="invalid">
   <xs:element name="root" type="xs:string"/>
@@ -301,6 +313,7 @@ func TestInvalidBlockDefaultFinalDefault(t *testing.T) {
 
 func TestExplicitEmptyOverridesDefault(t *testing.T) {
 	t.Run("explicit block= empty overrides blockDefault for substitution", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   blockDefault="substitution">
   <xs:element name="head" type="xs:string" block=""/>
@@ -319,6 +332,7 @@ func TestExplicitEmptyOverridesDefault(t *testing.T) {
 	})
 
 	t.Run("explicit final= empty overrides finalDefault", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   finalDefault="#all">
   <xs:complexType name="baseType" final="">
@@ -344,6 +358,7 @@ func TestExplicitEmptyOverridesDefault(t *testing.T) {
 
 func TestSimpleTypeFinal(t *testing.T) {
 	t.Run("finalDefault=list blocks simpleType list derivation", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   finalDefault="list">
   <xs:simpleType name="myInt">
@@ -359,6 +374,7 @@ func TestSimpleTypeFinal(t *testing.T) {
 	})
 
 	t.Run("finalDefault=union blocks simpleType union derivation", func(t *testing.T) {
+		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   finalDefault="union">
   <xs:simpleType name="myStr">

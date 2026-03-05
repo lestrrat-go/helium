@@ -1,13 +1,18 @@
-package helium_test
+package helium
 
 import (
 	"bytes"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/sax"
 	"github.com/stretchr/testify/require"
 )
 
@@ -77,7 +82,7 @@ func TestLibxml2Compat(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			defer func() {
 				if r := recover(); r != nil {
-					t.Fatalf("panic: %v", r)
+					require.Failf(t, "panic", "%v", r)
 				}
 			}()
 
@@ -87,17 +92,13 @@ func TestLibxml2Compat(t *testing.T) {
 			expected, err := os.ReadFile(expectedPath)
 			require.NoError(t, err, "reading expected file")
 
-			p := helium.NewParser()
+			p := NewParser()
 			doc, err := p.Parse(t.Context(), input)
-			if err != nil {
-				t.Fatalf("parsing %s: %v", name, err)
-			}
+			require.NoError(t, err, "parsing %s", name)
 
 			var buf bytes.Buffer
-			d := helium.NewWriter()
-			if err := d.WriteDoc(&buf, doc); err != nil {
-				t.Fatalf("dumping %s: %v", name, err)
-			}
+			d := NewWriter()
+			require.NoError(t, d.WriteDoc(&buf, doc), "dumping %s", name)
 
 			actual := buf.String()
 
@@ -107,6 +108,404 @@ func TestLibxml2Compat(t *testing.T) {
 				t.Logf("Actual output saved to %s", errPath)
 			}
 			require.Equal(t, string(expected), actual, "output should match libxml2 expected result")
+		})
+	}
+}
+
+func nullOrString(s string) string {
+	if s == "" {
+		return "(null)"
+	}
+	return s
+}
+
+func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
+	entities := map[string]*Entity{}
+	peEntities := map[string]*Entity{}
+	s := sax.New()
+
+	s.OnSetDocumentLocator = sax.SetDocumentLocatorFunc(func(_ sax.Context, _ sax.DocumentLocator) error {
+		_, _ = fmt.Fprintf(out, "SAX.setDocumentLocator()\n")
+		return nil
+	})
+	s.OnStartDocument = sax.StartDocumentFunc(func(_ sax.Context) error {
+		_, _ = fmt.Fprintf(out, "SAX.startDocument()\n")
+		return nil
+	})
+	s.OnEndDocument = sax.EndDocumentFunc(func(_ sax.Context) error {
+		_, _ = fmt.Fprintf(out, "SAX.endDocument()\n")
+		return nil
+	})
+	s.OnInternalSubset = sax.InternalSubsetFunc(func(_ sax.Context, name, externalID, systemID string) error {
+		_, _ = fmt.Fprintf(out, "SAX.internalSubset(%s, %s, %s)\n", name, externalID, systemID)
+		return nil
+	})
+	s.OnExternalSubset = sax.ExternalSubsetFunc(func(_ sax.Context, name, externalID, systemID string) error {
+		_, _ = fmt.Fprintf(out, "SAX.externalSubset(%s, %s, %s)\n", name, externalID, systemID)
+		return nil
+	})
+	s.OnEntityDecl = sax.EntityDeclFunc(func(_ sax.Context, name string, typ enum.EntityType, publicID string, systemID string, content string) error {
+		// External entities (types 2, 3, 5) have no content — libxml2 prints (null).
+		contentStr := content
+		if content == "" && (typ == enum.ExternalGeneralParsedEntity || typ == enum.ExternalGeneralUnparsedEntity || typ == enum.ExternalParameterEntity) {
+			contentStr = "(null)"
+		}
+		_, _ = fmt.Fprintf(out, "SAX.entityDecl(%s, %d, %s, %s, %s)\n",
+			name, typ, nullOrString(publicID), nullOrString(systemID), contentStr)
+		ent := newEntity(name, typ, publicID, systemID, content, "")
+		if typ == enum.InternalParameterEntity || typ == enum.ExternalParameterEntity {
+			peEntities[name] = ent
+		} else {
+			entities[name] = ent
+		}
+		return nil
+	})
+	s.OnUnparsedEntityDecl = sax.UnparsedEntityDeclFunc(func(_ sax.Context, name string, publicID string, systemID string, notationName string) error {
+		_, _ = fmt.Fprintf(out, "SAX.unparsedEntityDecl(%s, %s, %s, %s)\n",
+			name, nullOrString(publicID), systemID, notationName)
+		return nil
+	})
+	s.OnNotationDecl = sax.NotationDeclFunc(func(_ sax.Context, name string, publicID string, systemID string) error {
+		_, _ = fmt.Fprintf(out, "SAX.notationDecl(%s, %s, %s)\n", name, nullOrString(publicID), nullOrString(systemID))
+		return nil
+	})
+	s.OnAttributeDecl = sax.AttributeDeclFunc(func(_ sax.Context, elemName string, attrName string, typ enum.AttributeType, deftype enum.AttributeDefault, defvalue string, _ sax.Enumeration) error {
+		if defvalue == "" {
+			defvalue = "NULL"
+		}
+		_, _ = fmt.Fprintf(out, "SAX.attributeDecl(%s, %s, %d, %d, %s, ...)\n", elemName, attrName, typ, deftype, defvalue)
+		return nil
+	})
+	s.OnElementDecl = sax.ElementDeclFunc(func(_ sax.Context, name string, typ enum.ElementType, _ sax.ElementContent) error {
+		_, _ = fmt.Fprintf(out, "SAX.elementDecl(%s, %d, ...)\n", name, typ)
+		return nil
+	})
+	s.OnGetEntity = sax.GetEntityFunc(func(_ sax.Context, name string) (sax.Entity, error) {
+		_, _ = fmt.Fprintf(out, "SAX.getEntity(%s)\n", name)
+		ent, ok := entities[name]
+		if !ok {
+			return nil, nil
+		}
+		return ent, nil
+	})
+	s.OnGetParameterEntity = sax.GetParameterEntityFunc(func(_ sax.Context, name string) (sax.Entity, error) {
+		_, _ = fmt.Fprintf(out, "SAX.getParameterEntity(%s)\n", name)
+		ent, ok := peEntities[name]
+		if !ok {
+			return nil, nil
+		}
+		return ent, nil
+	})
+	s.OnReference = sax.ReferenceFunc(func(_ sax.Context, name string) error {
+		_, _ = fmt.Fprintf(out, "SAX.reference(%s)\n", name)
+		return nil
+	})
+	s.OnComment = sax.CommentFunc(func(_ sax.Context, data []byte) error {
+		_, _ = fmt.Fprintf(out, "SAX.comment(%s)\n", data)
+		return nil
+	})
+	s.OnProcessingInstruction = sax.ProcessingInstructionFunc(func(_ sax.Context, target string, data string) error {
+		_, _ = fmt.Fprintf(out, "SAX.processingInstruction(%s, %s)\n", target, data)
+		return nil
+	})
+	s.OnCDataBlock = sax.CDataBlockFunc(func(_ sax.Context, data []byte) error {
+		output := string(data)
+		if len(output) > 20 {
+			output = output[:20]
+		}
+		_, _ = fmt.Fprintf(out, "SAX.pcdata(%s, %d)\n", output, len(data))
+		return nil
+	})
+	charHandler := func(name string, _ sax.Context, data []byte) error {
+		output := string(data)
+		if len(output) > 30 {
+			output = output[:30]
+		}
+		_, _ = fmt.Fprintf(out, "SAX.%s(%s, %d)\n", name, output, len(data))
+		return nil
+	}
+	s.OnCharacters = sax.CharactersFunc(func(ctx sax.Context, data []byte) error {
+		return charHandler("characters", ctx, data)
+	})
+	// libxml2 in non-validating mode always emits characters(), never
+	// ignorableWhitespace(). Map accordingly.
+	s.OnIgnorableWhitespace = sax.IgnorableWhitespaceFunc(func(ctx sax.Context, data []byte) error {
+		return charHandler("characters", ctx, data)
+	})
+	s.OnStartElementNS = sax.StartElementNSFunc(func(_ sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+		_, _ = fmt.Fprintf(out, "SAX.startElementNs(%s, ", localname)
+
+		if prefix != "" {
+			_, _ = fmt.Fprintf(out, "%s, ", prefix)
+		} else {
+			_, _ = fmt.Fprintf(out, "NULL, ")
+		}
+
+		if uri != "" {
+			_, _ = fmt.Fprintf(out, "'%s', ", uri)
+		} else {
+			_, _ = fmt.Fprintf(out, "NULL, ")
+		}
+
+		lns := len(namespaces)
+		_, _ = fmt.Fprintf(out, "%d, ", lns)
+		for _, ns := range namespaces {
+			if p := ns.Prefix(); p != "" {
+				_, _ = fmt.Fprintf(out, "xmlns:%s='%s'", p, ns.URI())
+			} else {
+				_, _ = fmt.Fprintf(out, "xmlns='%s'", ns.URI())
+			}
+			_, _ = fmt.Fprintf(out, ", ")
+		}
+
+		defaulted := 0
+		for _, attr := range attrs {
+			if attr.IsDefault() {
+				defaulted++
+			}
+		}
+
+		_, _ = fmt.Fprintf(out, "%d, %d",
+			len(attrs),
+			defaulted,
+		)
+
+		if len(attrs) > 0 {
+			_, _ = fmt.Fprintf(out, ", ")
+			for i, attr := range attrs {
+				// Truncate attribute value preview at 4 bytes (matching
+				// libxml2's C-level %.4s which is byte-based, unlike Go's
+				// %.4s which is rune-based).
+				val := attr.Value()
+				preview := val
+				if len(preview) > 4 {
+					preview = preview[:4]
+				}
+				_, _ = fmt.Fprintf(out, "%s='%s...', %d", attr.Name(), preview, len(val))
+				if i < len(attrs)-1 {
+					_, _ = fmt.Fprintf(out, ", ")
+				}
+			}
+		}
+
+		_, _ = fmt.Fprintln(out, ")")
+		return nil
+	})
+	s.OnEndElementNS = sax.EndElementNSFunc(func(_ sax.Context, localname, prefix, uri string) error {
+		_, _ = fmt.Fprintf(out, "SAX.endElementNs(%s, ", localname)
+
+		if prefix != "" {
+			_, _ = fmt.Fprintf(out, "%s, ", prefix)
+		} else {
+			_, _ = fmt.Fprintf(out, "NULL, ")
+		}
+
+		if uri != "" {
+			_, _ = fmt.Fprintf(out, "'%s')\n", uri)
+		} else {
+			_, _ = fmt.Fprintf(out, "NULL)\n")
+		}
+		return nil
+	})
+	s.OnWarning = sax.WarningFunc(func(_ sax.Context, err error) error {
+		msg := err.Error()
+		if e, ok := err.(ErrParseError); ok {
+			msg = e.Err.Error()
+		}
+		_, _ = fmt.Fprintf(out, "SAX.warning: %s\n", msg)
+		return nil
+	})
+	return s
+}
+
+// mergeCharactersEvents normalizes a SAX2 event trace by collapsing runs of
+// consecutive SAX.characters() events into a single event whose byte-length
+// is the sum of the individual lengths.
+//
+// Why this is needed:
+//
+// The XML specification (§2.10) allows a SAX parser to split character data
+// into arbitrarily many characters() callbacks. libxml2 and helium both
+// exercise this freedom, but they split at different boundaries:
+//
+//   - libxml2 splits at internal I/O buffer boundaries. For native UTF-8
+//     input the buffer is ~4000 bytes; for transcoded input (UTF-16,
+//     ISO-8859-*, EUC-JP, …) it is ~300 bytes. The split points depend on
+//     the byte offset within the file, not on the logical structure of the
+//     character data.
+//
+//   - helium splits at entity-reference boundaries. When character data
+//     contains entity references (e.g. &lt; &gt; &amp; &apos;), helium
+//     emits separate characters() events for the text before, the
+//     replacement text, and the text after each reference. It may also
+//     split at multi-byte character boundaries in transcoded input.
+//
+// Because the split points differ, the raw SAX2 traces from the two parsers
+// can never match line-for-line even though the delivered character content
+// is semantically identical. Merging consecutive characters() events on
+// both sides before comparison eliminates these irrelevant differences.
+//
+// Re-truncation to 30 bytes:
+//
+// The SAX2 event emitter (charHandler, above) mirrors libxml2's testSAX.c
+// behaviour: it truncates the displayed character content to 30 bytes while
+// still reporting the true byte-length. When libxml2 splits a large text
+// node into N buffer-sized chunks, each chunk's display is independently
+// truncated. Concatenating those truncated displays produces a string much
+// longer than 30 bytes but consisting of disjoint 30-byte windows into the
+// original data — essentially meaningless for comparison.
+//
+// To make the merged events comparable, we re-truncate the concatenated
+// display to 30 bytes after merging. This way both the golden file (merged
+// from libxml2's buffer-split events) and helium's output (merged from
+// entity-ref-split events) end up showing just the first 30 bytes of the
+// text node's content, which will agree as long as the underlying data is
+// the same.
+var reCharEvent = regexp.MustCompile(`(?s)^SAX\.characters\((.*), (\d+)\)\n$`)
+
+func mergeCharactersEvents(s string) string {
+	// Phase 1: split the trace into individual SAX events.
+	// Each event starts with "SAX." at column 0 and may span multiple
+	// lines (character content can contain embedded newlines).
+	var events []string
+	cur := ""
+	for _, line := range strings.SplitAfter(s, "\n") {
+		if strings.HasPrefix(line, "SAX.") && cur != "" {
+			events = append(events, cur)
+			cur = line
+		} else {
+			cur += line
+		}
+	}
+	if cur != "" {
+		events = append(events, cur)
+	}
+
+	// Phase 2: walk the events and merge consecutive characters() runs.
+	var out []string
+	mergedData := ""
+	mergedLen := 0
+
+	flushMerged := func() {
+		if mergedLen > 0 {
+			// Re-truncate to 30 bytes (see doc comment above).
+			if len(mergedData) > 30 {
+				mergedData = mergedData[:30]
+			}
+			out = append(out, fmt.Sprintf("SAX.characters(%s, %d)\n", mergedData, mergedLen))
+			mergedData = ""
+			mergedLen = 0
+		}
+	}
+
+	for _, ev := range events {
+		if m := reCharEvent.FindStringSubmatch(ev); m != nil {
+			mergedData += m[1]
+			n, _ := strconv.Atoi(m[2])
+			mergedLen += n
+		} else {
+			flushMerged()
+			out = append(out, ev)
+		}
+	}
+	flushMerged()
+	return strings.Join(out, "")
+}
+
+// TestLibxml2CompatSAX2 runs helium's SAX2 event stream against libxml2's
+// SAX2 golden files (.sax2.expected) in testdata/libxml2-compat/.
+//
+// Environment variable HELIUM_LIBXML2_SAX2_TEST_FILES can be set to test
+// only specific files:
+//
+//	HELIUM_LIBXML2_SAX2_TEST_FILES=att1,xml2 go test -run TestLibxml2CompatSAX2
+func TestLibxml2CompatSAX2(t *testing.T) {
+	dir := "testdata/libxml2-compat"
+
+	if _, err := os.Stat(dir); err != nil {
+		t.Skipf("testdata/libxml2-compat not found; run testdata/libxml2/generate.sh first")
+	}
+
+	skipped := map[string]string{}
+
+	only := map[string]struct{}{}
+	if v := os.Getenv("HELIUM_LIBXML2_SAX2_TEST_FILES"); v != "" {
+		for _, f := range strings.Split(v, ",") {
+			only[strings.TrimSpace(f)] = struct{}{}
+		}
+	}
+
+	files, err := os.ReadDir(dir)
+	require.NoError(t, err, "os.ReadDir should succeed")
+
+	for _, fi := range files {
+		if fi.IsDir() {
+			continue
+		}
+
+		name := fi.Name()
+
+		// Skip golden/err files — only process XML input files
+		if strings.HasSuffix(name, ".expected") || strings.HasSuffix(name, ".err") ||
+			strings.HasSuffix(name, ".sax2.expected") || strings.HasSuffix(name, ".sax2.err") {
+			continue
+		}
+
+		// Check if a SAX2 golden file exists for this input
+		sax2ExpectedPath := filepath.Join(dir, name+".sax2.expected")
+		if _, err := os.Stat(sax2ExpectedPath); err != nil {
+			continue
+		}
+
+		if len(only) > 0 {
+			if _, ok := only[name]; !ok {
+				continue
+			}
+		}
+
+		if reason, ok := skipped[name]; ok {
+			t.Logf("Skipping %s: %s", name, reason)
+			continue
+		}
+
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					require.Failf(t, "panic", "%v", r)
+				}
+			}()
+
+			input, err := os.ReadFile(filepath.Join(dir, name))
+			require.NoError(t, err, "reading input file")
+
+			expected, err := os.ReadFile(sax2ExpectedPath)
+			require.NoError(t, err, "reading expected SAX2 file")
+
+			var buf bytes.Buffer
+			p := NewParser()
+			p.SetSAXHandler(newLibxml2EventEmitter(&buf))
+
+			_, err = p.Parse(t.Context(), input)
+			if err != nil {
+				t.Logf("source XML: %s", input)
+			}
+			require.NoError(t, err, "Parse should succeed (file = %s)", name)
+
+			actual := buf.String()
+			// Merge consecutive SAX.characters() events on both the golden
+			// file and helium's output before comparing. Without this,
+			// differences in split boundaries (libxml2: I/O buffer edges;
+			// helium: entity-ref / multi-byte boundaries) cause spurious
+			// mismatches even though the underlying character data is the
+			// same. See mergeCharactersEvents for details.
+			normalizedExpected := mergeCharactersEvents(string(expected))
+			normalizedActual := mergeCharactersEvents(actual)
+			if normalizedExpected != normalizedActual {
+				errPath := filepath.Join(dir, name+".sax2.err")
+				_ = os.WriteFile(errPath, []byte(actual), 0600)
+				t.Logf("Actual output saved to %s", errPath)
+			}
+			require.Equal(t, normalizedExpected, normalizedActual, "SAX2 event streams should match (file = %s)", name)
 		})
 	}
 }
