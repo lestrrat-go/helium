@@ -217,6 +217,7 @@ func TestParseArgsSimpleCases(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			cfg, files := parseArgs(tc.args)
 			require.NotNil(t, cfg)
 			if tc.wantFiles != nil {
@@ -280,6 +281,7 @@ func TestParseArgsInvalidCases(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			cfg, _ := parseArgs(tc.args)
 			require.Nil(t, cfg)
 		})
@@ -425,6 +427,7 @@ func TestOutputControlModes(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			out, code := runWithStdin(t, tc.xml, tc.args...)
 			require.Equal(t, 0, code)
 			if tc.wantEmpty {
@@ -504,6 +507,7 @@ func TestC14NModes(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			out, code := runWithStdin(t, tc.xml, tc.args...)
 			require.Equal(t, 0, code)
 			for _, s := range tc.wantContains {
@@ -592,6 +596,7 @@ func TestXPathExpressions(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			out, code := runWithStdin(t, tc.xml, "--xpath", tc.expr)
 			require.Equal(t, tc.wantCode, code)
 			for _, s := range tc.wantContains {
@@ -687,6 +692,7 @@ func TestSchemaValidation(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			xsdContent := `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -878,6 +884,7 @@ func TestFormatAdditionalCases(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			out, code := runWithStdin(t, tc.xml, "--format")
 			require.Equal(t, 0, code)
 			for _, s := range tc.wantContains {

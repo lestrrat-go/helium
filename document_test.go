@@ -8,6 +8,7 @@ import (
 
 func TestGetElementByID(t *testing.T) {
 	t.Run("xml:id via parser", func(t *testing.T) {
+		t.Parallel()
 		const input = `<?xml version="1.0"?>
 <root>
   <a xml:id="first">one</a>
@@ -32,6 +33,7 @@ func TestGetElementByID(t *testing.T) {
 	})
 
 	t.Run("DTD-declared ID via parser", func(t *testing.T) {
+		t.Parallel()
 		const input = `<?xml version="1.0"?>
 <!DOCTYPE root [
   <!ELEMENT root (item*)>
@@ -57,6 +59,7 @@ func TestGetElementByID(t *testing.T) {
 	})
 
 	t.Run("fallback tree walk for programmatic documents", func(t *testing.T) {
+		t.Parallel()
 		// Documents built without parsing have no ID table,
 		// so GetElementByID falls back to O(n) tree walk.
 		doc := NewDefaultDocument()
@@ -79,6 +82,7 @@ func TestGetElementByID(t *testing.T) {
 	})
 
 	t.Run("ID table populated on parse", func(t *testing.T) {
+		t.Parallel()
 		const input = `<?xml version="1.0"?>
 <root xml:id="r">
   <child xml:id="c"/>

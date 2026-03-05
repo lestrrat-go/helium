@@ -187,6 +187,7 @@ func TestBuiltinTypeValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.typeName, func(t *testing.T) {
+			t.Parallel()
 			for _, v := range tt.valid {
 				err := validateBuiltinValue(v, tt.typeName)
 				require.NoError(t, err, "type %s should accept %q", tt.typeName, v)
@@ -292,6 +293,7 @@ func TestCompareValues(t *testing.T) {
 	for _, tt := range tests {
 		name := fmt.Sprintf("%s/%s_vs_%s", tt.typ, tt.a, tt.b)
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			got, ok := compareValues(tt.a, tt.b, tt.typ)
 			require.Equal(t, tt.ok, ok, "ok mismatch")
 			if ok {
