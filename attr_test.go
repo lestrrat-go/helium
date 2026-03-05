@@ -1,7 +1,9 @@
-package helium
+package helium_test
 
 import (
 	"testing"
+
+	"github.com/lestrrat-go/helium"
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
@@ -23,8 +25,8 @@ func TestAttributeAType(t *testing.T) {
 ]>
 <person name="Alice" id="p1" ref="p1" refs="p1" tok="abc" toks="abc def"/>`
 
-		p := NewParser()
-		p.SetOption(ParseDTDAttr)
+		p := helium.NewParser()
+		p.SetOption(helium.ParseDTDAttr)
 		doc, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 
@@ -58,8 +60,8 @@ func TestAttributeAType(t *testing.T) {
 ]>
 <person/>`
 
-		p := NewParser()
-		p.SetOption(ParseDTDAttr)
+		p := helium.NewParser()
+		p.SetOption(helium.ParseDTDAttr)
 		doc, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 
@@ -84,7 +86,7 @@ func TestAttributeAType(t *testing.T) {
 		xml := `<?xml version="1.0"?>
 <root attr="value"/>`
 
-		p := NewParser()
+		p := helium.NewParser()
 		doc, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 
@@ -104,8 +106,8 @@ func TestAttributeAType(t *testing.T) {
 ]>
 <root color="green"/>`
 
-		p := NewParser()
-		p.SetOption(ParseDTDAttr)
+		p := helium.NewParser()
+		p.SetOption(helium.ParseDTDAttr)
 		doc, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 

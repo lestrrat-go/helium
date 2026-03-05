@@ -1,10 +1,12 @@
-package catalog
+package catalog_test
 
 import (
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/lestrrat-go/helium/catalog"
 
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/stretchr/testify/require"
@@ -15,13 +17,13 @@ func testdataDir() string {
 	return filepath.Join(filepath.Dir(file), "..", "testdata", "libxml2-compat", "catalogs")
 }
 
-func loadTestCatalog(t *testing.T, name string) *Catalog {
+func loadTestCatalog(t *testing.T, name string) *catalog.Catalog {
 	t.Helper()
 	dir := testdataDir()
 	if _, err := os.Stat(dir); err != nil {
 		t.Skipf("testdata/libxml2-compat/catalogs not found; run testdata/libxml2/generate.sh first")
 	}
-	cat, err := Load(filepath.Join(dir, name))
+	cat, err := catalog.Load(filepath.Join(dir, name))
 	require.NoError(t, err, "loading catalog %s", name)
 	return cat
 }
@@ -262,12 +264,12 @@ func TestResolveURI(t *testing.T) {
 }
 
 func TestLoadError(t *testing.T) {
-	_, err := Load("/nonexistent/catalog.xml")
+	_, err := catalog.Load("/nonexistent/catalog.xml")
 	require.Error(t, err)
 }
 
 func TestNilCatalog(t *testing.T) {
-	var c *Catalog
+	var c *catalog.Catalog
 	require.Equal(t, "", c.Resolve("foo", "bar"))
 	require.Equal(t, "", c.ResolveURI("foo"))
 }

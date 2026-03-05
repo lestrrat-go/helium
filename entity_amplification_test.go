@@ -1,9 +1,11 @@
-package helium
+package helium_test
 
 import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/lestrrat-go/helium"
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
@@ -26,8 +28,8 @@ func TestBillionLaughs(t *testing.T) {
 ]>
 <root>&lol9;</root>`
 
-	p := NewParser()
-	p.SetOption(ParseNoEnt)
+	p := helium.NewParser()
+	p.SetOption(helium.ParseNoEnt)
 	_, err := p.Parse(t.Context(), []byte(xml))
 	require.Error(t, err, "billion laughs should be rejected")
 	require.Contains(t, err.Error(), "amplification")
@@ -35,7 +37,7 @@ func TestBillionLaughs(t *testing.T) {
 
 func TestQuadraticBlowup(t *testing.T) {
 	// Large entity repeated many times: quadratic blowup.
-	// Entity content is 100KB, referenced 100 times → 10MB expansion from ~110KB input.
+	// helium.Entity content is 100KB, referenced 100 times → 10MB expansion from ~110KB input.
 	bigContent := strings.Repeat("A", 100_000)
 	refs := strings.Repeat("&big;", 100)
 	xml := fmt.Sprintf(`<?xml version="1.0"?>
@@ -44,8 +46,8 @@ func TestQuadraticBlowup(t *testing.T) {
 ]>
 <root>%s</root>`, bigContent, refs)
 
-	p := NewParser()
-	p.SetOption(ParseNoEnt)
+	p := helium.NewParser()
+	p.SetOption(helium.ParseNoEnt)
 	_, err := p.Parse(t.Context(), []byte(xml))
 	require.Error(t, err, "quadratic blowup should be rejected")
 	require.Contains(t, err.Error(), "amplification")
@@ -59,15 +61,15 @@ func TestNormalEntities(t *testing.T) {
 ]>
 <root>&greeting;</root>`
 
-	p := NewParser()
-	p.SetOption(ParseNoEnt)
+	p := helium.NewParser()
+	p.SetOption(helium.ParseNoEnt)
 	doc, err := p.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 	require.NotNil(t, doc)
 }
 
 func TestParseHugeDisablesGuard(t *testing.T) {
-	// With ParseHuge, billion laughs should be allowed (guard disabled).
+	// With helium.ParseHuge, billion laughs should be allowed (guard disabled).
 	// Use a smaller version to avoid actual memory exhaustion.
 	xml := `<?xml version="1.0"?>
 <!DOCTYPE lolz [
@@ -79,9 +81,9 @@ func TestParseHugeDisablesGuard(t *testing.T) {
 ]>
 <root>&lol5;</root>`
 
-	p := NewParser()
-	p.SetOption(ParseNoEnt)
-	p.SetOption(ParseHuge)
+	p := helium.NewParser()
+	p.SetOption(helium.ParseNoEnt)
+	p.SetOption(helium.ParseHuge)
 	doc, err := p.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 	require.NotNil(t, doc)
@@ -92,7 +94,7 @@ func TestPredefinedEntities(t *testing.T) {
 	xml := `<?xml version="1.0"?>
 <root>&lt;&gt;&amp;&apos;&quot;</root>`
 
-	p := NewParser()
+	p := helium.NewParser()
 	doc, err := p.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 	require.NotNil(t, doc)
@@ -106,7 +108,7 @@ func TestPredefinedEntityRedeclaration(t *testing.T) {
   <!ENTITY lt "&#60;">
 ]>
 <root>&lt;</root>`
-		_, err := Parse(t.Context(), []byte(xml))
+		_, err := helium.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
 
@@ -117,7 +119,7 @@ func TestPredefinedEntityRedeclaration(t *testing.T) {
   <!ENTITY lt "X">
 ]>
 <root>&lt;</root>`
-		_, err := Parse(t.Context(), []byte(xml))
+		_, err := helium.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "redeclared")
 	})
@@ -133,27 +135,33 @@ func TestPredefinedEntityRedeclaration(t *testing.T) {
   <!ENTITY quot "&#34;">
 ]>
 <root/>`
-		_, err := Parse(t.Context(), []byte(xml))
+		_, err := helium.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
 
 	t.Run("DTD.AddEntity rejects wrong content", func(t *testing.T) {
-		dtd := newDTD()
-		_, err := dtd.AddEntity("amp", enum.InternalGeneralEntity, "", "", "wrong")
+		doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+		dtd, err := doc.CreateDTD()
+		require.NoError(t, err)
+		_, err = dtd.AddEntity("amp", enum.InternalGeneralEntity, "", "", "wrong")
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "redeclared")
 	})
 
 	t.Run("DTD.AddEntity accepts correct content", func(t *testing.T) {
-		dtd := newDTD()
-		_, err := dtd.AddEntity("amp", enum.InternalGeneralEntity, "", "", "&")
+		doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+		dtd, err := doc.CreateDTD()
+		require.NoError(t, err)
+		_, err = dtd.AddEntity("amp", enum.InternalGeneralEntity, "", "", "&")
 		require.NoError(t, err)
 	})
 
 	t.Run("DTD.AddEntity accepts char ref content", func(t *testing.T) {
-		dtd := newDTD()
+		doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+		dtd, err := doc.CreateDTD()
+		require.NoError(t, err)
 		// &#60; resolves to <
-		_, err := dtd.AddEntity("lt", enum.InternalGeneralEntity, "", "", "&#60;")
+		_, err = dtd.AddEntity("lt", enum.InternalGeneralEntity, "", "", "&#60;")
 		require.NoError(t, err)
 	})
 }
@@ -169,9 +177,9 @@ func TestEntityDepthLimit(t *testing.T) {
 	dtd.WriteString("]>\n")
 	dtd.WriteString("<root>&e45;</root>")
 
-	p := NewParser()
-	p.SetOption(ParseNoEnt)
-	p.SetOption(ParseHuge) // disable amplification guard to test depth only
+	p := helium.NewParser()
+	p.SetOption(helium.ParseNoEnt)
+	p.SetOption(helium.ParseHuge) // disable amplification guard to test depth only
 	_, err := p.Parse(t.Context(), []byte(dtd.String()))
 	require.Error(t, err, "depth > 40 should still error")
 	require.Contains(t, err.Error(), "entity loop")
