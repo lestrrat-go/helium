@@ -23,9 +23,9 @@ func Example_sink_new() {
 		collected = append(collected, v)
 	}))
 
-	s.Handle(ctx, "alpha")
-	s.Handle(ctx, "bravo")
-	s.Handle(ctx, "charlie")
+	for _, v := range []string{"alpha", "bravo", "charlie"} {
+		s.Handle(ctx, v)
+	}
 
 	// Close waits for all buffered items to be processed.
 	_ = s.Close()

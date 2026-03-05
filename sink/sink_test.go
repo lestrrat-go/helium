@@ -27,15 +27,16 @@ func TestSinkHandleAndClose(t *testing.T) {
 		mu.Unlock()
 	}))
 
-	s.Handle(ctx, "a")
-	s.Handle(ctx, "b")
-	s.Handle(ctx, "c")
+	want := []string{"a", "b", "c"}
+	for _, v := range want {
+		s.Handle(ctx, v)
+	}
 
 	require.NoError(t, s.Close())
 
 	mu.Lock()
 	defer mu.Unlock()
-	require.Equal(t, []string{"a", "b", "c"}, got)
+	require.Equal(t, want, got)
 }
 
 func TestSinkCloseDrains(t *testing.T) {

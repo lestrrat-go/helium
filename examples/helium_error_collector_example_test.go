@@ -19,8 +19,9 @@ func Example_helium_error_collector() {
 	collector := helium.NewErrorCollector(ctx, helium.ErrorLevelNone)
 
 	// Report some errors. In real usage the parser/compiler calls Handle.
-	collector.Handle(ctx, errors.New("first warning"))
-	collector.Handle(ctx, errors.New("second warning"))
+	for _, msg := range []string{"first warning", "second warning"} {
+		collector.Handle(ctx, errors.New(msg))
+	}
 
 	// Close drains any buffered errors from the internal sink.
 	_ = collector.Close()

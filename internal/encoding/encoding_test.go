@@ -95,7 +95,6 @@ func TestLoadAliasCoverage(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.canonical, func(t *testing.T) {
 			t.Parallel()
 
@@ -222,7 +221,6 @@ func TestUCS4RoundTrip(t *testing.T) {
 	testStr := "Hello, World!"
 
 	for _, name := range []string{"ucs4be", "ucs4le", "ucs4_2143", "ucs4_3412"} {
-		name := name
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
