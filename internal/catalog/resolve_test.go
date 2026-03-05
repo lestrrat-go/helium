@@ -8,11 +8,13 @@ import (
 )
 
 func TestResolveURIUnwrapsURN(t *testing.T) {
+	t.Parallel()
+
 	// Catalog with a public entry for "-//OASIS//DTD DocBook XML V4.1.2//EN".
 	cat := &Catalog{
 		Entries: []Entry{
 			{
-				Type:  EntryPublic,
+				Type: EntryPublic,
 				Name: "-//OASIS//DTD DocBook XML V4.1.2//EN",
 				URL:  "file:///usr/share/xml/docbook.dtd",
 			},
@@ -32,10 +34,12 @@ func TestResolveURIUnwrapsURN(t *testing.T) {
 }
 
 func TestResolveURINonURNUnchanged(t *testing.T) {
+	t.Parallel()
+
 	cat := &Catalog{
 		Entries: []Entry{
 			{
-				Type:  EntryURI,
+				Type: EntryURI,
 				Name: "http://example.com/schema.xsd",
 				URL:  "file:///local/schema.xsd",
 			},
@@ -48,10 +52,12 @@ func TestResolveURINonURNUnchanged(t *testing.T) {
 }
 
 func TestResolveURIURNNotFound(t *testing.T) {
+	t.Parallel()
+
 	cat := &Catalog{
 		Entries: []Entry{
 			{
-				Type:  EntryPublic,
+				Type: EntryPublic,
 				Name: "-//Other//DTD//EN",
 				URL:  "file:///other.dtd",
 			},
@@ -82,6 +88,8 @@ func (l *countingLoader) Load(filename string) (*Catalog, error) {
 }
 
 func TestVisitedCacheSkipsDuplicate(t *testing.T) {
+	t.Parallel()
+
 	// Build a catalog graph where the same target catalog ("shared.xml")
 	// is reachable from two nextCatalog entries. Without the visited
 	// cache, the target would be entered twice for the same query.
@@ -119,6 +127,8 @@ func TestVisitedCacheSkipsDuplicate(t *testing.T) {
 }
 
 func TestVisitedCacheStillResolves(t *testing.T) {
+	t.Parallel()
+
 	// Ensure the visited cache doesn't prevent valid resolution.
 	target := &Catalog{
 		Entries: []Entry{
@@ -144,6 +154,8 @@ func TestVisitedCacheStillResolves(t *testing.T) {
 }
 
 func TestVisitedCachePerQuery(t *testing.T) {
+	t.Parallel()
+
 	// The visited cache is per top-level Resolve call. Two different
 	// queries should each be able to visit the same catalog.
 	target := &Catalog{

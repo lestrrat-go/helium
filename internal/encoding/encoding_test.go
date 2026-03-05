@@ -8,6 +8,8 @@ import (
 )
 
 func TestISO88591(t *testing.T) {
+	t.Parallel()
+
 	e := Load("iso-8859-1")
 	require.NotNil(t, e)
 
@@ -28,6 +30,8 @@ func TestISO88591(t *testing.T) {
 }
 
 func TestLoadAliasCoverage(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		canonical string
 		aliases   []string
@@ -91,7 +95,10 @@ func TestLoadAliasCoverage(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.canonical, func(t *testing.T) {
+			t.Parallel()
+
 			requireEncodingLoadable(t, tt.canonical)
 			for _, alias := range tt.aliases {
 				requireEquivalentEncoding(t, tt.canonical, alias)
@@ -101,11 +108,15 @@ func TestLoadAliasCoverage(t *testing.T) {
 }
 
 func TestUCS4Decode(t *testing.T) {
+	t.Parallel()
+
 	// "A" = U+0041, "<" = U+003C
 	codePoints := []uint32{0x0041, 0x003C}
 	wantUTF8 := "A<"
 
 	t.Run("UCS-4BE", func(t *testing.T) {
+		t.Parallel()
+
 		e := Load("ucs4be")
 		require.NotNil(t, e)
 		var buf []byte
@@ -120,6 +131,8 @@ func TestUCS4Decode(t *testing.T) {
 	})
 
 	t.Run("UCS-4LE", func(t *testing.T) {
+		t.Parallel()
+
 		e := Load("ucs4le")
 		require.NotNil(t, e)
 		var buf []byte
@@ -134,6 +147,8 @@ func TestUCS4Decode(t *testing.T) {
 	})
 
 	t.Run("UCS-4 2143", func(t *testing.T) {
+		t.Parallel()
+
 		e := Load("ucs4_2143")
 		require.NotNil(t, e)
 		// 2143 byte order: for code point 0x00000041 (BE: 00 00 00 41)
@@ -151,6 +166,8 @@ func TestUCS4Decode(t *testing.T) {
 	})
 
 	t.Run("UCS-4 3412", func(t *testing.T) {
+		t.Parallel()
+
 		e := Load("ucs4_3412")
 		require.NotNil(t, e)
 		// 3412 byte order: for code point 0x00000041 (BE: 00 00 00 41)
@@ -169,6 +186,8 @@ func TestUCS4Decode(t *testing.T) {
 }
 
 func TestUCS4Aliases(t *testing.T) {
+	t.Parallel()
+
 	aliases := []string{
 		"ucs4be", "ucs-4be", "utf-32be", "utf32be", "ISO-10646-UCS-4",
 	}
@@ -183,6 +202,8 @@ func TestUCS4Aliases(t *testing.T) {
 }
 
 func TestUCS2(t *testing.T) {
+	t.Parallel()
+
 	e := Load("ucs-2")
 	require.NotNil(t, e)
 
@@ -195,11 +216,16 @@ func TestUCS2(t *testing.T) {
 }
 
 func TestUCS4RoundTrip(t *testing.T) {
+	t.Parallel()
+
 	// Test that encode → decode is identity for BMP characters.
 	testStr := "Hello, World!"
 
 	for _, name := range []string{"ucs4be", "ucs4le", "ucs4_2143", "ucs4_3412"} {
+		name := name
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			e := Load(name)
 			require.NotNil(t, e)
 
@@ -215,6 +241,8 @@ func TestUCS4RoundTrip(t *testing.T) {
 }
 
 func TestLoadUnknown(t *testing.T) {
+	t.Parallel()
+
 	require.Nil(t, Load("definitely-not-an-encoding"))
 }
 

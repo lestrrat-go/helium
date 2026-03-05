@@ -11,6 +11,8 @@ import (
 )
 
 func TestCatalogExternalSubset(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 
 	// DTD that declares a default attribute.
@@ -58,6 +60,8 @@ func TestCatalogExternalSubset(t *testing.T) {
 }
 
 func TestCatalogPublicIDResolution(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 
 	dtdContent := `<!ATTLIST item category CDATA "general">`
@@ -101,6 +105,8 @@ func TestCatalogPublicIDResolution(t *testing.T) {
 }
 
 func TestCatalogNoCatalog(t *testing.T) {
+	t.Parallel()
+
 	xmlContent := `<?xml version="1.0"?>
 <!DOCTYPE doc SYSTEM "http://example.com/nonexistent.dtd">
 <doc/>`

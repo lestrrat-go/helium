@@ -1,7 +1,6 @@
 package helium_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -9,8 +8,12 @@ import (
 )
 
 func TestChildren(t *testing.T) {
+	t.Parallel()
+
 	t.Run("direct children", func(t *testing.T) {
-		doc, err := helium.Parse(context.Background(), []byte(`<root><a/><b/><c/></root>`))
+		t.Parallel()
+
+		doc, err := helium.Parse(t.Context(), []byte(`<root><a/><b/><c/></root>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
@@ -22,7 +25,9 @@ func TestChildren(t *testing.T) {
 	})
 
 	t.Run("empty", func(t *testing.T) {
-		doc, err := helium.Parse(context.Background(), []byte(`<root/>`))
+		t.Parallel()
+
+		doc, err := helium.Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
 		var count int
@@ -33,6 +38,8 @@ func TestChildren(t *testing.T) {
 	})
 
 	t.Run("nil node", func(t *testing.T) {
+		t.Parallel()
+
 		var count int
 		for range helium.Children(nil) {
 			count++
@@ -41,7 +48,9 @@ func TestChildren(t *testing.T) {
 	})
 
 	t.Run("break early", func(t *testing.T) {
-		doc, err := helium.Parse(context.Background(), []byte(`<root><a/><b/><c/></root>`))
+		t.Parallel()
+
+		doc, err := helium.Parse(t.Context(), []byte(`<root><a/><b/><c/></root>`))
 		require.NoError(t, err)
 
 		var names []string
@@ -55,7 +64,9 @@ func TestChildren(t *testing.T) {
 	})
 
 	t.Run("mixed node types", func(t *testing.T) {
-		doc, err := helium.Parse(context.Background(), []byte(`<root>text<a/><!--comment--></root>`))
+		t.Parallel()
+
+		doc, err := helium.Parse(t.Context(), []byte(`<root>text<a/><!--comment--></root>`))
 		require.NoError(t, err)
 
 		var types []helium.ElementType
@@ -71,8 +82,12 @@ func TestChildren(t *testing.T) {
 }
 
 func TestDescendants(t *testing.T) {
+	t.Parallel()
+
 	t.Run("flat children", func(t *testing.T) {
-		doc, err := helium.Parse(context.Background(), []byte(`<root><a/><b/></root>`))
+		t.Parallel()
+
+		doc, err := helium.Parse(t.Context(), []byte(`<root><a/><b/></root>`))
 		require.NoError(t, err)
 
 		var names []string
@@ -83,7 +98,9 @@ func TestDescendants(t *testing.T) {
 	})
 
 	t.Run("nested pre-order", func(t *testing.T) {
-		doc, err := helium.Parse(context.Background(), []byte(`<root><a><b/></a><c/></root>`))
+		t.Parallel()
+
+		doc, err := helium.Parse(t.Context(), []byte(`<root><a><b/></a><c/></root>`))
 		require.NoError(t, err)
 
 		var names []string
@@ -96,7 +113,9 @@ func TestDescendants(t *testing.T) {
 	})
 
 	t.Run("excludes self", func(t *testing.T) {
-		doc, err := helium.Parse(context.Background(), []byte(`<root><a/></root>`))
+		t.Parallel()
+
+		doc, err := helium.Parse(t.Context(), []byte(`<root><a/></root>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
@@ -106,6 +125,8 @@ func TestDescendants(t *testing.T) {
 	})
 
 	t.Run("nil node", func(t *testing.T) {
+		t.Parallel()
+
 		var count int
 		for range helium.Descendants(nil) {
 			count++
@@ -114,7 +135,9 @@ func TestDescendants(t *testing.T) {
 	})
 
 	t.Run("break early", func(t *testing.T) {
-		doc, err := helium.Parse(context.Background(), []byte(`<root><a><b/></a><c/></root>`))
+		t.Parallel()
+
+		doc, err := helium.Parse(t.Context(), []byte(`<root><a><b/></a><c/></root>`))
 		require.NoError(t, err)
 
 		var names []string
@@ -131,8 +154,12 @@ func TestDescendants(t *testing.T) {
 }
 
 func TestChildElements(t *testing.T) {
+	t.Parallel()
+
 	t.Run("filters non-elements", func(t *testing.T) {
-		doc, err := helium.Parse(context.Background(), []byte(`<root>text<a/><!--comment--><b/></root>`))
+		t.Parallel()
+
+		doc, err := helium.Parse(t.Context(), []byte(`<root>text<a/><!--comment--><b/></root>`))
 		require.NoError(t, err)
 
 		var names []string
@@ -143,7 +170,9 @@ func TestChildElements(t *testing.T) {
 	})
 
 	t.Run("empty when only text", func(t *testing.T) {
-		doc, err := helium.Parse(context.Background(), []byte(`<root>hello</root>`))
+		t.Parallel()
+
+		doc, err := helium.Parse(t.Context(), []byte(`<root>hello</root>`))
 		require.NoError(t, err)
 
 		var count int
@@ -154,6 +183,8 @@ func TestChildElements(t *testing.T) {
 	})
 
 	t.Run("nil node", func(t *testing.T) {
+		t.Parallel()
+
 		var count int
 		for range helium.ChildElements(nil) {
 			count++
