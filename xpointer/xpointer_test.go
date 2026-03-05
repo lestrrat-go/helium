@@ -1,7 +1,6 @@
 package xpointer_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -284,16 +283,7 @@ func TestMultiSchemeExpressionsTable(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var doc *helium.Document
-			var err error
-
-			if strings.Contains(tt.xml, "xml:id") {
-				// Use NewParser for ID registration
-				p := helium.NewParser()
-				doc, err = p.Parse(t.Context(), []byte(tt.xml))
-			} else {
-				doc, err = helium.Parse(t.Context(), []byte(tt.xml))
-			}
+			doc, err := helium.Parse(t.Context(), []byte(tt.xml))
 			require.NoError(t, err)
 
 			nodes, err := xpointer.Evaluate(doc, tt.expr)
