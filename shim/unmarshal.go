@@ -389,7 +389,12 @@ func assignFromText(field reflect.Value, value string) error {
 }
 
 func unsupportedUnmarshalTypeError(t reflect.Type) error {
-	return UnmarshalError("unknown type " + t.String())
+	switch t.Kind() {
+	case reflect.Interface:
+		return UnmarshalError("cannot unmarshal into " + t.String())
+	default:
+		return UnmarshalError("unknown type " + t.String())
+	}
 }
 
 func interfaceCandidates(v reflect.Value) []any {
