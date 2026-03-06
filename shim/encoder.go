@@ -58,7 +58,7 @@ func (enc *Encoder) EncodeToken(t Token) error {
 	case Directive:
 		return enc.writeDirective(v)
 	}
-	return nil
+	return fmt.Errorf("xml: EncodeToken of invalid token type")
 }
 
 func (enc *Encoder) writeIndent(depth int) {

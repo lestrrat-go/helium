@@ -2503,7 +2503,6 @@ func TestRace9796Stdlib(t *testing.T) {
 
 // Issue 11719. EncodeToken used to silently eat tokens with an invalid type.
 func TestSimpleUseOfEncodeTokenStdlib(t *testing.T) {
-	t.Skip("shim: EncodeToken does not reject pointer types yet")
 	var buf strings.Builder
 	enc := NewEncoder(&buf)
 	if err := enc.EncodeToken(&StartElement{Name: Name{"", "object1"}}); err == nil {
