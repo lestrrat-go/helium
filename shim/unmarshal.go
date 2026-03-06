@@ -317,28 +317,48 @@ func assignFromText(field reflect.Value, value string) error {
 		field.SetString(value)
 		return nil
 	case reflect.Bool:
-		b, err := strconv.ParseBool(strings.TrimSpace(value))
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			field.SetBool(false)
+			return nil
+		}
+		b, err := strconv.ParseBool(trimmed)
 		if err != nil {
 			return err
 		}
 		field.SetBool(b)
 		return nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		i, err := strconv.ParseInt(strings.TrimSpace(value), 10, field.Type().Bits())
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			field.SetInt(0)
+			return nil
+		}
+		i, err := strconv.ParseInt(trimmed, 10, field.Type().Bits())
 		if err != nil {
 			return err
 		}
 		field.SetInt(i)
 		return nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		u, err := strconv.ParseUint(strings.TrimSpace(value), 10, field.Type().Bits())
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			field.SetUint(0)
+			return nil
+		}
+		u, err := strconv.ParseUint(trimmed, 10, field.Type().Bits())
 		if err != nil {
 			return err
 		}
 		field.SetUint(u)
 		return nil
 	case reflect.Float32, reflect.Float64:
-		f, err := strconv.ParseFloat(strings.TrimSpace(value), field.Type().Bits())
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			field.SetFloat(0)
+			return nil
+		}
+		f, err := strconv.ParseFloat(trimmed, field.Type().Bits())
 		if err != nil {
 			return err
 		}

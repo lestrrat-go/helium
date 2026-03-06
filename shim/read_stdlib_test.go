@@ -829,7 +829,6 @@ const emptyXMLStdlib = `
 
 // golang.org/issues/13417
 func TestUnmarshalEmptyValuesStdlib(t *testing.T) {
-	t.Skip("shim: empty element value parsing for numeric types not implemented")
 	// Test first with a zero-valued dst.
 	v := new(Parent)
 	if err := Unmarshal([]byte(emptyXMLStdlib), v); err != nil {
