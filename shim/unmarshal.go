@@ -19,6 +19,7 @@ type fieldBinding struct {
 	fieldName    string
 	index        []int
 	rawName      string
+	tagPath      string // original tag path string for TagPathError (empty if field name derived)
 	name         string
 	nameSpace    string
 	hasNameSpace bool
@@ -609,24 +610,22 @@ func validateTagPathConflicts(t reflect.Type, bindings []fieldBinding) error {
 		if len(path) == 0 {
 			path = []string{binding.rawName}
 		}
-		bindingHasPath := len(binding.path) > 0
 
 		for _, prev := range paths {
 			prevPath := prev.path
 			if len(prevPath) == 0 {
 				prevPath = []string{prev.rawName}
 			}
-			prevHasPath := len(prev.path) > 0
-			if !bindingHasPath && !prevHasPath {
+			if len(prev.index) != len(binding.index) {
 				continue
 			}
 			if pathConflicts(prevPath, path) {
 				return &TagPathError{
 					Struct: t,
 					Field1: prev.fieldName,
-					Tag1:   prev.rawName,
+					Tag1:   prev.tagPath,
 					Field2: binding.fieldName,
-					Tag2:   binding.rawName,
+					Tag2:   binding.tagPath,
 				}
 			}
 		}
@@ -842,6 +841,7 @@ func parseFieldBinding(f reflect.StructField) fieldBinding {
 	name := strings.TrimSpace(parts[0])
 	if name != "" {
 		b.rawName = name
+		b.tagPath = name
 		b.nameSpace, b.name, b.hasNameSpace = parseTagNameSpec(name)
 	}
 

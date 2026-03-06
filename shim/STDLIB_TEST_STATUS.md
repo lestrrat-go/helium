@@ -1,6 +1,6 @@
 # Stdlib encoding/xml Test Compatibility Status
 
-350 pass, 86 skip, 0 fail. Skipped tests are grouped by feature gap below.
+352 pass, 84 skip, 0 fail. Skipped tests are grouped by feature gap below.
 
 Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
 
@@ -178,11 +178,9 @@ The shim's innerxml capture serializes empty elements as self-closed (`<T1/>`) w
 
 - [x] `TestUnmarshalEmptyValuesStdlib` — empty element value parsing for numeric types
 
-## Tag Path Conflict Detection [M]
+## ~~Tag Path Conflict Detection~~ ✅
 
-Stdlib detects conflicting struct tag paths (e.g. `xml:"items>item1"` vs `xml:"items"`) and returns `*TagPathError`. Fix: add pre-flight path analysis when building field bindings.
-
-- [ ] `TestUnmarshalBadPathsStdlib` — tag path conflict detection
+- [x] `TestUnmarshalBadPathsStdlib` — tag path conflict detection
 
 ## ~~interface{} Field Support (unmarshal)~~ ✅ (partial)
 

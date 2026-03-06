@@ -332,7 +332,6 @@ var badPathTestsStdlib = []struct {
 }
 
 func TestUnmarshalBadPathsStdlib(t *testing.T) {
-	t.Skip("shim: tag path conflict detection for non-path vs path fields not implemented")
 	for _, tt := range badPathTestsStdlib {
 		err := Unmarshal([]byte(pathTestStringStdlib), tt.v)
 		if !reflect.DeepEqual(err, tt.e) {
