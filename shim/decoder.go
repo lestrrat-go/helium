@@ -45,28 +45,46 @@ type Decoder struct {
 	// DefaultSpace sets the default namespace for elements without an explicit namespace.
 	DefaultSpace string
 
-	tokenReader TokenReader
-	events      chan tokenEvent
-	ctx         context.Context
-	cancel      context.CancelFunc
-	lastToken   Token
-	savedErr    error
-	offset      int64
-	line        int
-	column      int
+	tokenReader  TokenReader
+	events       chan tokenEvent
+	ctx          context.Context
+	cancel       context.CancelFunc
+	lastToken    Token
+	savedErr     error
+	offset       int64
+	line         int
+	column       int
+	prologTokens []Token // pre-scanned prolog tokens (Directive, ProcInst, Comment, CharData)
+	prologIdx    int     // next prolog token to emit
+	prologOnly   bool    // true if entire input is prolog (no root element)
 }
 
 func newDecoderFromReader(r io.Reader) (*Decoder, error) {
+	// Pre-scan the prolog to extract Directive, ProcInst, Comment, and
+	// CharData tokens. The SAX parser does not emit these for the prolog,
+	// so we handle them ourselves. The combined reader replays the full
+	// input (including the prolog) for the SAX parser.
+	prologTokens, combined, prologOnly, err := scanProlog(r)
+	if err != nil {
+		return nil, err
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &Decoder{
-		Strict: true,
-		events: make(chan tokenEvent, 64),
-		ctx:    ctx,
-		cancel: cancel,
-		line:   1,
-		column: 1,
+		Strict:       true,
+		events:       make(chan tokenEvent, 64),
+		ctx:          ctx,
+		cancel:       cancel,
+		line:         1,
+		column:       1,
+		prologTokens: prologTokens,
+		prologOnly:   prologOnly,
 	}
-	d.startSAXEmitter(r)
+	if !prologOnly {
+		d.startSAXEmitter(combined)
+	} else {
+		close(d.events)
+	}
 	return d, nil
 }
 
@@ -304,6 +322,23 @@ func (d *Decoder) RawToken() (Token, error) {
 }
 
 func (d *Decoder) readToken(raw bool) (Token, error) {
+	// Drain pre-scanned prolog tokens first.
+	if d.prologIdx < len(d.prologTokens) {
+		tok := stdxml.CopyToken(d.prologTokens[d.prologIdx])
+		d.prologIdx++
+		d.lastToken = tok
+		d.advancePosition(tok)
+
+		// Check encoding attribute in XML declaration
+		if pi, ok := tok.(ProcInst); ok && pi.Target == "xml" {
+			if err := d.checkProcInstEncoding(string(pi.Inst)); err != nil {
+				return nil, err
+			}
+		}
+
+		return tok, nil
+	}
+
 	var tok Token
 
 	if d.tokenReader != nil {

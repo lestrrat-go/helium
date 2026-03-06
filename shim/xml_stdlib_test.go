@@ -465,7 +465,6 @@ var nestedDirectivesTokensStdlib = []Token{
 }
 
 func TestNestedDirectivesStdlib(t *testing.T) {
-	t.Skip("shim: DOCTYPE/Directive tokens not emitted by SAX parser")
 	d := NewDecoder(strings.NewReader(nestedDirectivesInputStdlib))
 
 	for i, want := range nestedDirectivesTokensStdlib {
@@ -860,7 +859,6 @@ var directivesWithCommentsTokensStdlib = []Token{
 }
 
 func TestDirectivesWithCommentsStdlib(t *testing.T) {
-	t.Skip("shim: DOCTYPE/Directive tokens not emitted by SAX parser")
 	d := NewDecoder(strings.NewReader(directivesWithCommentsInputStdlib))
 
 	for i, want := range directivesWithCommentsTokensStdlib {

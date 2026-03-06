@@ -1,6 +1,6 @@
 # Missing Features for stdlib encoding/xml Compatibility
 
-Current status: 379 pass, 53 skip, 0 fail.
+Current status: 381 pass, 49 skip, 0 fail.
 
 Each section below is a self-contained feature description. They are ordered by
 estimated impact (tests unlocked) and feasibility. Each includes: what the
@@ -573,57 +573,25 @@ Note: TestRawTokenAltEncodingStdlib also uses `testRawTokenStdlib` which checks
 
 ---
 
-## 9. Directive / DOCTYPE Token Emission
+## 9. Directive / DOCTYPE Token Emission ✅ DONE
 
-**Tests unlocked**: 2 (TestDirectivesStdlib, TestDirectivesWithCommentsStdlib) + partial for TestRawTokenStdlib and TestRoundTripStdlib
-**Difficulty**: High
-**Files**: `shim/decoder.go`
+**Tests unlocked**: 2 (TestNestedDirectivesStdlib, TestDirectivesWithCommentsStdlib)
+**Files**: `shim/directive.go` (new), `shim/decoder.go`
 
-### Problem
+### Solution
 
-The SAX parser (libxml2-based) silently consumes DOCTYPE declarations and
-internal DTD subsets. It never emits them as events. Stdlib's tokenizer emits
-`Directive` tokens for these.
+Implemented a prolog pre-scanner (`scanProlog` in `directive.go`) that tokenizes
+the entire XML prolog before handing input to the SAX parser. The SAX parser does
+not emit any prolog tokens (ProcInst, CharData whitespace, Directive), so the
+pre-scanner handles them all. The full input is replayed to SAX for semantic
+processing (entity resolution, default attributes, etc.).
 
-### Current behavior
+The directive scanning algorithm mirrors stdlib's `rawToken` method:
+- Tracks quote state, nested `<! >` depth, and `[...]` internal subsets
+- Handles `<!-- -->` comments inside directives (replaced with spaces)
+- Uses a `goto handleB`-equivalent pattern for failed comment checks
 
-Input: `<!DOCTYPE html PUBLIC "..." "...">`
-- stdlib: emits `Directive("DOCTYPE html PUBLIC ...")`
-- shim: emits nothing (SAX parser handles it internally)
-
-### Implementation guidance
-
-libxml2's SAX2 API does fire `OnInternalSubset` and `OnExternalSubset`
-callbacks, but the shim stubs them out (decoder.go:207-208). These callbacks
-receive the doctype name, external ID, and system ID, but NOT the raw text of
-the directive. Reconstructing the exact `Directive` token content from these
-decomposed values is imprecise.
-
-**Option A**: Implement `OnInternalSubset` / `OnExternalSubset` to reconstruct
-a `Directive` token from the decomposed fields. This works for simple cases but
-won't handle embedded entity declarations (`<!ENTITY ... >`) or comment-
-containing directives.
-
-**Option B**: Pre-scan the input bytes before passing to the SAX parser. When a
-`<!DOCTYPE` or `<!` sequence is found at the top level, extract the raw bytes
-and emit a `Directive` token, then strip it before passing to SAX. This is more
-accurate but complex (must handle nested brackets, quoted strings, etc.).
-
-**Option C**: Use helium's non-SAX tokenizer if one exists, or add a raw-byte
-pre-parser that just extracts directives.
-
-For nested directives test (`TestNestedDirectivesStdlib`), the content includes
-`<!ENTITY ... >` inside `<!DOCTYPE [...]>`. The raw extraction must handle:
-- Nested `<! >` pairs
-- Quoted strings containing `<` and `>` (both single and double quotes)
-
-### Test verification
-
-```sh
-go test -run 'TestDirectivesStdlib' -v
-go test -run 'TestDirectivesWithCommentsStdlib' -v
-go test -run 'TestNestedDirectivesStdlib' -v
-```
+For prolog-only inputs (no root element), the SAX parser is not started.
 
 ---
 
@@ -840,7 +808,7 @@ implemented.
 | 6 | Cooked Token xmlns | 1 | Medium effort (same as #5) |
 | 7 | Empty NS Override | 1 | Medium effort |
 | 8 | CharsetReader | 2 | Medium effort |
-| 9 | Directive Tokens | 2+ | High effort |
+| 9 | Directive Tokens | 2 | ✅ Done |
 | 10 | Error Messages | ~5 | Medium effort (tedious) |
 | 11 | InputPos Tracking | 1 | Medium effort |
 | 12 | InnerXML Format | 2 | Hard (needs core changes) |
