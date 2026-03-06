@@ -1,6 +1,6 @@
 # Stdlib encoding/xml Test Compatibility Status
 
-321 pass, 112 skip, 0 fail. Skipped tests are grouped by feature gap below.
+331 pass, 102 skip, 0 fail. Skipped tests are grouped by feature gap below.
 
 Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
 
@@ -8,40 +8,30 @@ Difficulty: **L** = low (isolated change, <30 min), **M** = medium (multiple tou
 
 ---
 
-## XML Declaration Handling [L]
+## ~~XML Declaration Handling~~ ✅
 
-The shim errors on `<?xml ...?>` ProcInst at document start instead of skipping it. Fix: skip/ignore the ProcInst token when it appears as the first token in the stream.
-
-- [ ] `TestUnmarshalFeedStdlib` — full Atom feed with XML declaration at start fails with "XML declaration in middle of document"
-- [ ] `TestUnmarshalWithoutNameTypeStdlib` — same XML declaration tolerance issue
+- [x] `TestUnmarshalFeedStdlib` — full Atom feed with XML declaration at start fails with "XML declaration in middle of document"
+- [x] `TestUnmarshalWithoutNameTypeStdlib` — same XML declaration tolerance issue
 
 ## ~~uintptr Unmarshal~~ ✅
 
 - [x] `TestAllScalarsStdlib` — unmarshaling into `uintptr` field not supported
 
-## NewTokenDecoder Idempotency [L]
+## ~~NewTokenDecoder Idempotency~~ ✅
 
-`NewTokenDecoder(d)` wraps an existing `*Decoder` again instead of returning it as-is. Fix: add a type assertion to return the existing `*Decoder` directly.
+- [x] `TestNewTokenDecoderIdempotentStdlib` — `NewTokenDecoder` does not detect underlying `*Decoder`
 
-- [ ] `TestNewTokenDecoderStdlib` — `NewTokenDecoder` does not detect underlying `*Decoder`
+## ~~ProcInst Target Validation~~ ✅
 
-## ProcInst Target Validation [L]
+- [x] `TestProcInstEncodeTokenStdlib` — ProcInst `xml` target allowed after other tokens
 
-`EncodeToken(ProcInst{"xml", ...})` should only succeed as the first token. Fix: track whether any non-ProcInst token has been emitted; reject `xml` target after that.
+## ~~EncodeToken Pointer Type Rejection~~ ✅
 
-- [ ] `TestProcInstEncodeTokenStdlib` — ProcInst `xml` target allowed after other tokens
+- [x] `TestSimpleUseOfEncodeTokenStdlib` — pointer types not rejected by `EncodeToken`
 
-## EncodeToken Pointer Type Rejection [L]
+## ~~Invalid InnerXML Type Handling~~ ✅
 
-`EncodeToken` accepts `*StartElement` and `*EndElement`; stdlib rejects them. Fix: add type switch cases that return an error for pointer-to-token types.
-
-- [ ] `TestSimpleUseOfEncodeTokenStdlib` — pointer types not rejected by `EncodeToken`
-
-## Invalid InnerXML Type Handling [L]
-
-When `,innerxml` is used on an unsupported type (e.g. `[]string`), the shim errors instead of silently skipping. Fix: change the handler to skip unsupported innerxml field types.
-
-- [ ] `TestInvalidInnerXMLTypeStdlib` — error message for invalid innerxml type differs
+- [x] `TestInvalidInnerXMLTypeStdlib` — error message for invalid innerxml type differs
 
 ## ~~[]byte / Array Marshaling~~ ✅
 
@@ -84,17 +74,13 @@ SAX parser produces different error messages for malformed names like `<a:te:st>
 
 - [ ] `TestIssue20396Stdlib` — error messages for invalid element names differ
 
-## Invalid XML Name Validation (marshal) [L-M]
+## ~~Invalid XML Name Validation (marshal)~~ ✅
 
-Marshaling a struct with `XMLName` used as an attribute does not validate that the name is syntactically valid. Fix: add XML name validation in the attribute marshal path.
+- [x] `TestInvalidXMLNameStdlib` — invalid XML name validation not implemented
 
-- [ ] `TestInvalidXMLNameStdlib` — invalid XML name validation not implemented
+## ~~Encoder Close State~~ ✅
 
-## Encoder Close State [L-M]
-
-`enc.Close()` does not check for unclosed elements or prevent subsequent `EncodeToken` calls. Fix: track open element stack; `Close()` errors if stack is non-empty and sets a closed flag.
-
-- [ ] `TestCloseStdlib` — encoder state after `Close` not fully implemented
+- [x] `TestCloseStdlib` — encoder state after `Close` not fully implemented
 
 ## ~~Bad Comment Type Error~~ ✅
 
@@ -175,17 +161,13 @@ The shim's innerxml capture serializes empty elements as self-closed (`<T1/>`) w
 
 - [x] **Marshal**: interface value defaultStart produces empty element name (#23)
 
-## Struct Pointer Marshal in any Slice [M]
+## ~~Struct Pointer Marshal in any Slice~~ ✅
 
-Marshaling `*Struct` inside `[]any` where the struct has `XMLName Name` fails to use the XMLName value. Fix: unwrap pointer and inspect XMLName when marshaling any-typed values.
+- [x] `TestStructPointerMarshalStdlib` — struct pointer marshal formatting
 
-- [ ] `TestStructPointerMarshalStdlib` — struct pointer marshal formatting
+## ~~Marshal Error Handling~~ ✅
 
-## Marshal Error Handling [M]
-
-Three missing checks: `chan`/`map` types should return `*UnsupportedTypeError`; `X>Y,attr` combo should error; comment containing `--` should error. Fix: add type guards and tag validation.
-
-- [ ] `TestMarshalErrorsStdlib` — chan type, comment `--`, attr path errors
+- [x] `TestMarshalErrorsStdlib` — chan type, comment `--`, attr path errors
 
 ## Write Error Propagation [M]
 
