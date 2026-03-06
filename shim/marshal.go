@@ -219,22 +219,37 @@ func (enc *Encoder) marshalField(b fieldBinding, field reflect.Value) error {
 	// For slices of non-byte elements, marshal each element
 	if field.Kind() == reflect.Slice && field.Type().Elem().Kind() != reflect.Uint8 {
 		for i := 0; i < field.Len(); i++ {
-			elemStart := StartElement{Name: Name{Local: name}}
-			if b.hasNameSpace {
-				elemStart.Name.Space = b.nameSpace
-			}
-			if err := enc.marshalReflectValue(field.Index(i), &elemStart); err != nil {
+			elem := field.Index(i)
+			start := enc.fieldStartOrNil(b, name, elem)
+			if err := enc.marshalReflectValue(elem, start); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
 
-	elemStart := StartElement{Name: Name{Local: name}}
-	if b.hasNameSpace {
-		elemStart.Name.Space = b.nameSpace
+	start := enc.fieldStartOrNil(b, name, field)
+	return enc.marshalReflectValue(field, start)
+}
+
+// fieldStartOrNil returns a StartElement for the field name, or nil if the
+// underlying value is a struct with its own XMLName (letting the struct decide).
+func (enc *Encoder) fieldStartOrNil(b fieldBinding, name string, field reflect.Value) *StartElement {
+	v := field
+	for v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			break
+		}
+		v = v.Elem()
 	}
-	return enc.marshalReflectValue(field, &elemStart)
+	if v.Kind() == reflect.Struct && hasOwnXMLName(v) {
+		return nil
+	}
+	s := StartElement{Name: Name{Local: name}}
+	if b.hasNameSpace {
+		s.Name.Space = b.nameSpace
+	}
+	return &s
 }
 
 // marshalPathField encodes a field with a path tag (e.g., "a>b>c").

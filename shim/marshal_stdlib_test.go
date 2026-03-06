@@ -2025,7 +2025,6 @@ func BenchmarkUnmarshalStdlib(b *testing.B) {
 
 // golang.org/issue/6556
 func TestStructPointerMarshalStdlib(t *testing.T) {
-	t.Skip("shim: struct pointer marshal formatting differs from stdlib")
 	type A struct {
 		XMLName string `xml:"a"`
 		B       []any
