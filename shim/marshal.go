@@ -134,6 +134,15 @@ func (enc *Encoder) marshalStruct(val reflect.Value, start *StartElement) error 
 		if !ok {
 			continue
 		}
+
+		// Handle []xml.Attr with any,attr tag
+		if b.isAny && field.Type() == attrSliceType {
+			for i := 0; i < field.Len(); i++ {
+				se.Attr = append(se.Attr, field.Index(i).Interface().(Attr))
+			}
+			continue
+		}
+
 		attr, err := enc.marshalAttr(b, field)
 		if err != nil {
 			return err

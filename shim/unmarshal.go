@@ -179,20 +179,12 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 			}
 			setXMLName(field, elem)
 		case binding.isAttr:
-			field, ok := fieldByIndexAlloc(target, binding.index)
-			if !ok {
+			// Defer any,attr bindings to after specific attrs are consumed
+			if binding.isAny {
 				continue
 			}
-			if binding.isAny {
-				for i, attr := range elem.Attributes() {
-					if consumedAttr[i] {
-						continue
-					}
-					consumedAttr[i] = true
-					if err := assignFromAttr(field, attr); err != nil {
-						return err
-					}
-				}
+			field, ok := fieldByIndexAlloc(target, binding.index)
+			if !ok {
 				continue
 			}
 
@@ -351,6 +343,40 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 		for idx, anyElem := firstUnconsumed(children, consumed); anyElem != nil; idx, anyElem = firstUnconsumed(children, consumed) {
 			consumed[idx] = true
 			if err := assignFromElement(field, anyElem); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Third pass: process any,attr bindings on remaining unconsumed attributes
+	for _, binding := range bindings {
+		if !binding.isAttr || !binding.isAny || binding.omit || !binding.fieldExport {
+			continue
+		}
+		field, ok := fieldByIndexAlloc(target, binding.index)
+		if !ok {
+			continue
+		}
+		// Handle []xml.Attr field
+		if field.Type() == attrSliceType {
+			for i, attr := range elem.Attributes() {
+				if consumedAttr[i] {
+					continue
+				}
+				a := Attr{
+					Name:  Name{Space: attr.URI(), Local: localName(attr.Name())},
+					Value: attr.Value(),
+				}
+				field.Set(reflect.Append(field, reflect.ValueOf(a)))
+			}
+			continue
+		}
+		for i, attr := range elem.Attributes() {
+			if consumedAttr[i] {
+				continue
+			}
+			consumedAttr[i] = true
+			if err := assignFromAttr(field, attr); err != nil {
 				return err
 			}
 		}
@@ -1241,6 +1267,7 @@ func setXMLName(field reflect.Value, elem *helium.Element) {
 }
 
 var xmlNameType = reflect.TypeOf(stdxml.Name{})
+var attrSliceType = reflect.TypeOf([]stdxml.Attr{})
 
 func isXMLNameType(t reflect.Type) bool {
 	return t == xmlNameType

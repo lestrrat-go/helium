@@ -1686,9 +1686,6 @@ func TestMarshalStdlib(t *testing.T) {
 		62:  "shim: namespace in path tags not implemented",
 		63:  "shim: namespace in path tags not implemented",
 		64:  "shim: path field merging not implemented (EmbedB contains FieldA>A1 and FieldA>A2)",
-		75:  "shim: []xml.Attr any,attr not supported in marshal",
-		76:  "shim: []xml.Attr any,attr not supported in marshal",
-		77:  "shim: []xml.Attr any,attr not supported in marshal",
 		103: "shim: empty path wrapper element not emitted for nil/empty slices",
 	}
 
@@ -1819,7 +1816,6 @@ func TestUnmarshalStdlib(t *testing.T) {
 		61:  "shim: namespace-aware path field unmarshal not implemented",
 		62:  "shim: namespace-aware path field unmarshal not implemented",
 		64:  "shim: path field merging not implemented (FieldA>A1 and FieldA>A2 share parent)",
-		76:  "shim: []xml.Attr any,attr captures all attrs instead of unmatched only",
 		110: "shim: nested path slice (A>B) only captures one element",
 		111: "shim: nested path slice (A>B) only captures one element",
 		112: "shim: nested path slice (A>B) only captures one element",

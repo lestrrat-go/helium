@@ -1,6 +1,6 @@
 # Stdlib encoding/xml Test Compatibility Status
 
-384 pass, 58 skip, 0 fail. Skipped tests are grouped by feature gap below.
+388 pass, 54 skip, 0 fail. Skipped tests are grouped by feature gap below.
 
 Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
 
@@ -100,12 +100,10 @@ SAX parser produces different error messages for malformed names like `<a:te:st>
 - [x] **Marshal**: any-tagged interface field uses empty element name (#179)
 - [x] **Unmarshal**: direct any field not populated (#183, #191)
 
-## `[]xml.Attr` any,attr Support [M]
+## ~~`[]xml.Attr` any,attr Support~~ ✅
 
-Fields of type `[]xml.Attr` with tag `",any,attr"` should collect unmatched attributes on unmarshal and emit extra attributes on marshal. Fix: add any-attr handling in both marshal (emit Attr slice entries) and unmarshal (collect unmatched attrs).
-
-- [ ] **Marshal**: `[]xml.Attr` with `any,attr` tag not supported (#75-77)
-- [ ] **Unmarshal**: `any,attr` captures all attrs instead of only unmatched ones (#76)
+- [x] **Marshal**: `[]xml.Attr` with `any,attr` tag not supported (#75-77)
+- [x] **Unmarshal**: `any,attr` captures all attrs instead of only unmatched ones (#76)
 
 ## ~~xml.Name Field as Element Content~~ ✅
 
