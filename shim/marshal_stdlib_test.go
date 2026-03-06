@@ -1818,7 +1818,6 @@ func TestMarshalErrorsStdlib(t *testing.T) {
 // Do invertibility testing on the various structures that we test
 func TestUnmarshalStdlib(t *testing.T) {
 	unmarshalSkipSet := map[int]string{
-		37:  "shim: []byte field initialized as empty slice instead of nil",
 		52:  "shim: path field unmarshal (Items>item) not implemented",
 		53:  "shim: path field unmarshal (Items>item) not implemented",
 		54:  "shim: path field unmarshal (parent>c, parent>b, parent>a) not implemented",

@@ -173,8 +173,11 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 				return err
 			}
 		case binding.isComment:
-			if err := assignFromText(field, elementComment(elem)); err != nil {
-				return err
+			commentText := elementComment(elem)
+			if commentText != "" || (field.Kind() != reflect.Slice || field.Type().Elem().Kind() != reflect.Uint8) {
+				if err := assignFromText(field, commentText); err != nil {
+					return err
+				}
 			}
 		case binding.isAny:
 			if field.Kind() == reflect.Slice && field.Type().Elem().Kind() != reflect.Uint8 {
