@@ -620,7 +620,6 @@ const testScalarsInputStdlib = `<allscalars>
 </allscalars>`
 
 func TestAllScalarsStdlib(t *testing.T) {
-	t.Skip("shim: uintptr type not supported in unmarshal")
 	var a allScalarsStdlib
 	err := Unmarshal([]byte(testScalarsInputStdlib), &a)
 

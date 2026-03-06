@@ -330,7 +330,7 @@ func assignFromText(field reflect.Value, value string) error {
 		}
 		field.SetInt(i)
 		return nil
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		u, err := strconv.ParseUint(strings.TrimSpace(value), 10, field.Type().Bits())
 		if err != nil {
 			return err
