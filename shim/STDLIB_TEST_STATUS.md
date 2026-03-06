@@ -1,6 +1,6 @@
 # Stdlib encoding/xml Test Compatibility Status
 
-388 pass, 54 skip, 0 fail. Skipped tests are grouped by feature gap below.
+379 pass, 53 skip, 0 fail. Skipped tests are grouped by feature gap below.
 
 Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
 
@@ -56,11 +56,9 @@ Difficulty: **L** = low (isolated change, <30 min), **M** = medium (multiple tou
 
 - [x] **Marshal**: CDATA `]]>` splitting not implemented (#99-102)
 
-## Empty Path Wrapper Element [L-M]
+## ~~Empty Path Wrapper Element~~ ✅
 
-When a path-tagged slice field (e.g. `xml:"A>B,omitempty"`) is nil/empty, stdlib still emits the empty wrapper `<A></A>`. Fix: emit wrapper elements for path fields even when the leaf is omitempty-empty.
-
-- [ ] **Marshal**: empty path wrapper element not emitted for nil/empty slices (#103)
+- [x] **Marshal**: empty path wrapper element not emitted for nil/empty slices (#103)
 
 ## ~~XML Declaration Encoding Validation~~ ✅
 

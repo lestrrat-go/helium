@@ -1686,7 +1686,6 @@ func TestMarshalStdlib(t *testing.T) {
 		62:  "shim: namespace in path tags not implemented",
 		63:  "shim: namespace in path tags not implemented",
 		64:  "shim: path field merging not implemented (EmbedB contains FieldA>A1 and FieldA>A2)",
-		103: "shim: empty path wrapper element not emitted for nil/empty slices",
 	}
 
 	for idx, test := range marshalTestsStdlib {

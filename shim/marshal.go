@@ -167,6 +167,20 @@ func (enc *Encoder) marshalStruct(val reflect.Value, start *StartElement) error 
 		}
 
 		if b.omitEmpty && isEmptyValue(field) {
+			// For path fields, stdlib still emits the wrapper element(s)
+			// even when the leaf is omitted due to omitempty.
+			if len(b.path) > 0 {
+				for _, name := range b.path[:len(b.path)-1] {
+					if err := enc.EncodeToken(StartElement{Name: Name{Local: name}}); err != nil {
+						return err
+					}
+				}
+				for i := len(b.path) - 2; i >= 0; i-- {
+					if err := enc.EncodeToken(EndElement{Name: Name{Local: b.path[i]}}); err != nil {
+						return err
+					}
+				}
+			}
 			continue
 		}
 
