@@ -1838,12 +1838,6 @@ func TestUnmarshalStdlib(t *testing.T) {
 		112: "shim: nested path slice (A>B) only captures one element",
 		154: "shim: innerxml captures self-closed tags instead of empty-element form",
 		156: "shim: innerxml captures self-closed tags instead of empty-element form",
-		176: "shim: indirect any pointer value differs",
-		178: "shim: indirect any pointer allocated when no content",
-		183: "shim: direct any field not populated in unmarshal",
-		185: "shim: indirect any (renamed) pointer value differs",
-		187: "shim: indirect any (renamed) pointer allocated when no content",
-		191: "shim: direct any (renamed) field not populated in unmarshal",
 	}
 
 	for i, test := range marshalTestsStdlib {

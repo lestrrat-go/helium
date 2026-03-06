@@ -1,6 +1,6 @@
 # Stdlib encoding/xml Test Compatibility Status
 
-364 pass, 78 skip, 0 fail. Skipped tests are grouped by feature gap below.
+370 pass, 72 skip, 0 fail. Skipped tests are grouped by feature gap below.
 
 Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
 
@@ -96,11 +96,11 @@ SAX parser produces different error messages for malformed names like `<a:te:st>
 - [ ] **Marshal**: nil interface in path field not omitted (#55)
 - [ ] **Marshal**: nil pointer/interface omission with path merging (#57-60)
 
-## ~~`any`-Tagged Field Element Naming~~ ✅ (marshal)
+## ~~`any`-Tagged Field Element Naming~~ ✅
 
 - [x] **Marshal**: any-tagged field uses type name instead of field name (#176-177, #183-184)
 - [x] **Marshal**: any-tagged interface field uses empty element name (#179)
-- [ ] **Unmarshal**: direct any field not populated (#183, #191)
+- [x] **Unmarshal**: direct any field not populated (#183, #191)
 
 ## `[]xml.Attr` any,attr Support [M]
 
@@ -135,13 +135,11 @@ Embedded field shadowing (path-tagged field vs plain field) and nil embedded poi
 - [ ] **Unmarshal**: embedded field path conflict resolution (#64)
 - [ ] **Unmarshal**: embedded struct pointer allocated when should remain nil (#65)
 
-## Indirect Pointer Handling (unmarshal) [M] (partially done)
-
-`*string` fields for comment/innerxml/any get allocated (non-nil) even when the element has no matching content. Fix: only allocate and set the pointer when content is actually found.
+## ~~Indirect Pointer Handling (unmarshal)~~ ✅
 
 - [x] **Unmarshal**: indirect comment pointer allocated when no comment present (#115-116)
 - [x] **Unmarshal**: indirect innerxml pointer allocated when no content (#147-148)
-- [ ] **Unmarshal**: indirect any pointer allocated when no content (#176, #178, #185, #187)
+- [x] **Unmarshal**: indirect any pointer allocated when no content (#176, #178, #185, #187)
 
 ## InnerXML Serialization Format [M]
 
@@ -193,7 +191,7 @@ Stdlib leaves `interface{}` fields nil for comment/innerxml/element/omitempty/an
 - [x] **Unmarshal**: interface{} element fields (#161)
 - [x] **Unmarshal**: interface{} omitempty fields (#171)
 - [x] **Unmarshal**: interface{} any fields (#180-182, #188-190)
-- [ ] `TestUnmarshalIntoInterfaceStdlib` — unmarshal into pre-populated `interface{}` field
+- [x] `TestUnmarshalIntoInterfaceStdlib` — unmarshal into pre-populated `interface{}` field
 
 ## CharsetReader Support [M]
 

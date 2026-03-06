@@ -154,8 +154,15 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 	consumed := make(map[int]bool)
 	consumedAttr := make(map[int]bool)
 
+	// Process bindings in two passes: non-any first (to consume specific elements),
+	// then any bindings (to pick up remaining unconsumed elements).
+	var anyBindings []fieldBinding
 	for _, binding := range bindings {
 		if binding.omit || !binding.fieldExport {
+			continue
+		}
+		if binding.isAny && !binding.isAttr {
+			anyBindings = append(anyBindings, binding)
 			continue
 		}
 
@@ -226,28 +233,6 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 					return err
 				}
 			}
-		case binding.isAny:
-			if field.Kind() == reflect.Interface {
-				continue
-			}
-			if field.Kind() == reflect.Slice && field.Type().Elem().Kind() != reflect.Uint8 {
-				for idx, anyElem := firstUnconsumed(children, consumed); anyElem != nil; idx, anyElem = firstUnconsumed(children, consumed) {
-					consumed[idx] = true
-					item := reflect.New(field.Type().Elem()).Elem()
-					if err := assignFromElement(item, anyElem); err != nil {
-						return err
-					}
-					field.Set(reflect.Append(field, item))
-				}
-				continue
-			}
-
-			for idx, anyElem := firstUnconsumed(children, consumed); anyElem != nil; idx, anyElem = firstUnconsumed(children, consumed) {
-				consumed[idx] = true
-				if err := assignFromElement(field, anyElem); err != nil {
-					return err
-				}
-			}
 		default:
 			if field.Kind() == reflect.Interface {
 				if field.IsNil() {
@@ -283,6 +268,35 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 			}
 			consumed[idx] = true
 			if err := assignFromElement(field, matched); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Second pass: process any-tagged bindings on remaining unconsumed elements
+	for _, binding := range anyBindings {
+		field, ok := fieldByIndexAlloc(target, binding.index)
+		if !ok {
+			continue
+		}
+		if field.Kind() == reflect.Interface {
+			continue
+		}
+		if field.Kind() == reflect.Slice && field.Type().Elem().Kind() != reflect.Uint8 {
+			for idx, anyElem := firstUnconsumed(children, consumed); anyElem != nil; idx, anyElem = firstUnconsumed(children, consumed) {
+				consumed[idx] = true
+				item := reflect.New(field.Type().Elem()).Elem()
+				if err := assignFromElement(item, anyElem); err != nil {
+					return err
+				}
+				field.Set(reflect.Append(field, item))
+			}
+			continue
+		}
+
+		for idx, anyElem := firstUnconsumed(children, consumed); anyElem != nil; idx, anyElem = firstUnconsumed(children, consumed) {
+			consumed[idx] = true
+			if err := assignFromElement(field, anyElem); err != nil {
 				return err
 			}
 		}
