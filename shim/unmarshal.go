@@ -169,8 +169,21 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 				return err
 			}
 		case binding.isInnerXML:
-			if err := assignFromText(field, innerXML(elem)); err != nil {
-				return err
+			ft := field.Type()
+			for ft.Kind() == reflect.Pointer {
+				ft = ft.Elem()
+			}
+			switch ft.Kind() {
+			case reflect.String:
+				if err := assignFromText(field, innerXML(elem)); err != nil {
+					return err
+				}
+			case reflect.Slice:
+				if ft.Elem().Kind() == reflect.Uint8 {
+					if err := assignFromText(field, innerXML(elem)); err != nil {
+						return err
+					}
+				}
 			}
 		case binding.isComment:
 			commentText := elementComment(elem)

@@ -750,7 +750,6 @@ type IXField struct {
 
 // Issue 15600. ",innerxml" on a field that can't hold it.
 func TestInvalidInnerXMLTypeStdlib(t *testing.T) {
-	t.Skip("shim: error message for invalid innerxml type differs from stdlib")
 	v := new(IXField)
 	if err := Unmarshal([]byte(`<tag><five>5</five><innertag/></tag>`), v); err != nil {
 		t.Errorf("Unmarshal failed: got %v", err)
