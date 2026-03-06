@@ -31,6 +31,7 @@ type fieldBinding struct {
 	isAny        bool
 	isXMLName    bool
 	omit         bool
+	omitEmpty    bool
 	fieldType    reflect.Type
 	fieldIsPtr   bool
 	fieldExport  bool
@@ -46,13 +47,13 @@ func Unmarshal(data []byte, v any) error {
 	if rv.IsNil() {
 		return fmt.Errorf("nil pointer passed to Unmarshal")
 	}
-	if len(bytes.TrimSpace(data)) == 0 {
+	if len(trimSpace(data)) == 0 {
 		return io.EOF
 	}
 
 	doc, err := helium.Parse(context.Background(), data)
 	if err != nil {
-		return err
+		return convertParseError(err)
 	}
 	root := doc.DocumentElement()
 	if root == nil {
@@ -60,6 +61,26 @@ func Unmarshal(data []byte, v any) error {
 	}
 
 	return decodeElementInto(rv.Elem(), root)
+}
+
+func trimSpace(data []byte) []byte {
+	start := 0
+	for start < len(data) {
+		c := data[start]
+		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
+			break
+		}
+		start++
+	}
+	end := len(data)
+	for end > start {
+		c := data[end-1]
+		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
+			break
+		}
+		end--
+	}
+	return data[start:end]
 }
 
 func decodeElementInto(target reflect.Value, elem *helium.Element) error {
@@ -387,18 +408,14 @@ func tryUnmarshalXMLAttrHook(field reflect.Value, attr *helium.Attribute) (bool,
 }
 
 func tryUnmarshalXMLHook(field reflect.Value, elem *helium.Element) (bool, error) {
-	xmlBytes, err := outerXML(elem)
-	if err != nil {
-		return false, err
-	}
-
 	for _, candidate := range interfaceCandidates(field) {
 		hook, ok := candidate.(Unmarshaler)
 		if !ok {
 			continue
 		}
 
-		dec := stdxml.NewDecoder(bytes.NewReader(xmlBytes))
+		tr := &elementTokenReader{elem: elem}
+		dec := stdxml.NewTokenDecoder(tr)
 		tok, err := dec.Token()
 		if err != nil {
 			return true, err
@@ -414,6 +431,64 @@ func tryUnmarshalXMLHook(field reflect.Value, elem *helium.Element) (bool, error
 	}
 
 	return false, nil
+}
+
+// elementTokenReader walks a helium DOM subtree and emits stdxml.Token values.
+type elementTokenReader struct {
+	elem    *helium.Element
+	tokens  []stdxml.Token
+	pos     int
+	built   bool
+}
+
+func (r *elementTokenReader) Token() (stdxml.Token, error) {
+	if !r.built {
+		r.buildTokens()
+		r.built = true
+	}
+	if r.pos >= len(r.tokens) {
+		return nil, io.EOF
+	}
+	tok := r.tokens[r.pos]
+	r.pos++
+	return tok, nil
+}
+
+func (r *elementTokenReader) buildTokens() {
+	r.tokens = make([]stdxml.Token, 0, 8)
+	r.emitElement(r.elem)
+}
+
+func (r *elementTokenReader) emitElement(elem *helium.Element) {
+	se := stdxml.StartElement{
+		Name: stdxml.Name{Space: elem.URI(), Local: localName(elem.Name())},
+	}
+	for _, attr := range elem.Attributes() {
+		se.Attr = append(se.Attr, toStdAttr(attr))
+	}
+	r.tokens = append(r.tokens, se)
+
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		switch v := child.(type) {
+		case *helium.Element:
+			r.emitElement(v)
+		case *helium.Text:
+			r.tokens = append(r.tokens, stdxml.CharData(v.Content()))
+		case *helium.CDATASection:
+			r.tokens = append(r.tokens, stdxml.CharData(v.Content()))
+		case *helium.Comment:
+			r.tokens = append(r.tokens, stdxml.Comment(v.Content()))
+		case *helium.ProcessingInstruction:
+			r.tokens = append(r.tokens, stdxml.ProcInst{
+				Target: v.Name(),
+				Inst:   v.Content(),
+			})
+		}
+	}
+
+	r.tokens = append(r.tokens, stdxml.EndElement{
+		Name: stdxml.Name{Space: elem.URI(), Local: localName(elem.Name())},
+	})
 }
 
 func buildFieldBindings(t reflect.Type) ([]fieldBinding, error) {
@@ -660,7 +735,7 @@ func parseFieldBinding(f reflect.StructField) fieldBinding {
 		fieldExport: f.PkgPath == "",
 	}
 
-	if f.Name == "XMLName" && isXMLNameType(derefType(f.Type)) {
+	if f.Name == "XMLName" {
 		b.isXMLName = true
 	}
 
@@ -704,6 +779,8 @@ func parseFieldBinding(f reflect.StructField) fieldBinding {
 			b.isComment = true
 		case "any":
 			b.isAny = true
+		case "omitempty":
+			b.omitEmpty = true
 		}
 	}
 
@@ -749,18 +826,6 @@ func elementComment(elem *helium.Element) string {
 		}
 	}
 	return b.String()
-}
-
-func outerXML(elem *helium.Element) ([]byte, error) {
-	if elem == nil {
-		return nil, nil
-	}
-	var b bytes.Buffer
-	w := helium.NewWriter(helium.WithNoDecl())
-	if err := w.WriteNode(&b, elem); err != nil {
-		return nil, err
-	}
-	return b.Bytes(), nil
 }
 
 func childElements(elem *helium.Element) []*helium.Element {
@@ -909,13 +974,10 @@ func setXMLName(field reflect.Value, elem *helium.Element) {
 	}
 }
 
+var xmlNameType = reflect.TypeOf(stdxml.Name{})
+
 func isXMLNameType(t reflect.Type) bool {
-	if t.Kind() != reflect.Struct {
-		return false
-	}
-	_, okLocal := t.FieldByName("Local")
-	_, okSpace := t.FieldByName("Space")
-	return okLocal && okSpace
+	return t == xmlNameType
 }
 
 func derefType(t reflect.Type) reflect.Type {

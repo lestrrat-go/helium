@@ -1,6 +1,7 @@
 package shim
 
 import (
+	"bytes"
 	stdxml "encoding/xml"
 	"io"
 )
@@ -10,27 +11,40 @@ const Header = stdxml.Header
 var HTMLEntity = stdxml.HTMLEntity
 
 func Marshal(v any) ([]byte, error) {
-	return stdxml.Marshal(v)
+	var buf bytes.Buffer
+	enc := NewEncoder(&buf)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	if err := enc.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 func MarshalIndent(v any, prefix, indent string) ([]byte, error) {
-	return stdxml.MarshalIndent(v, prefix, indent)
+	var buf bytes.Buffer
+	enc := NewEncoder(&buf)
+	enc.Indent(prefix, indent)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	if err := enc.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 func NewDecoder(r io.Reader) *Decoder {
 	dec, err := newDecoderFromReader(r)
 	if err != nil {
-		return &Decoder{line: 1, column: 1}
+		return &Decoder{Strict: true, line: 1, column: 1}
 	}
 	return dec
 }
 
 func NewTokenDecoder(t TokenReader) *Decoder {
 	return newDecoderFromTokenReader(t)
-}
-
-func NewEncoder(w io.Writer) *Encoder {
-	return stdxml.NewEncoder(w)
 }
 
 func EscapeText(w io.Writer, s []byte) error {

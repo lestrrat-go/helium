@@ -331,19 +331,17 @@ func TestUnmarshalInvalidTargetErrorsMatchStdlib(t *testing.T) {
 	var stdNonPtr string
 	stdNonPtrErr := stdxml.Unmarshal(input, stdNonPtr)
 	shimNonPtrErr := shim.Unmarshal(input, stdNonPtr)
-	require.Equal(t, stdNonPtrErr == nil, shimNonPtrErr == nil)
-	if stdNonPtrErr != nil && shimNonPtrErr != nil {
-		require.Equal(t, stdNonPtrErr.Error(), shimNonPtrErr.Error())
-	}
+	require.Error(t, stdNonPtrErr)
+	require.Error(t, shimNonPtrErr)
+	require.Equal(t, stdNonPtrErr.Error(), shimNonPtrErr.Error())
 
 	var stdNilPtr *string
 	var shimNilPtr *string
 	stdNilPtrErr := stdxml.Unmarshal(input, stdNilPtr)
 	shimNilPtrErr := shim.Unmarshal(input, shimNilPtr)
-	require.Equal(t, stdNilPtrErr == nil, shimNilPtrErr == nil)
-	if stdNilPtrErr != nil && shimNilPtrErr != nil {
-		require.Equal(t, stdNilPtrErr.Error(), shimNilPtrErr.Error())
-	}
+	require.Error(t, stdNilPtrErr)
+	require.Error(t, shimNilPtrErr)
+	require.Equal(t, stdNilPtrErr.Error(), shimNilPtrErr.Error())
 }
 
 func TestUnmarshalTopLevelUnsupportedTypeMatchStdlib(t *testing.T) {
@@ -355,10 +353,43 @@ func TestUnmarshalTopLevelUnsupportedTypeMatchStdlib(t *testing.T) {
 	stdErr := stdxml.Unmarshal(input, &stdOut)
 	shimErr := shim.Unmarshal(input, &shimOut)
 
-	require.Equal(t, stdErr == nil, shimErr == nil)
-	if stdErr != nil && shimErr != nil {
-		require.Equal(t, stdErr.Error(), shimErr.Error())
-	}
+	require.Error(t, stdErr)
+	require.Error(t, shimErr)
+	require.Equal(t, stdErr.Error(), shimErr.Error())
+}
+
+func TestUnmarshalTopLevelUnsupportedPointerTypeMatchStdlib(t *testing.T) {
+	input := []byte(`<root>v</root>`)
+
+	var stdOut *map[string]string
+	var shimOut *map[string]string
+
+	stdErr := stdxml.Unmarshal(input, &stdOut)
+	shimErr := shim.Unmarshal(input, &shimOut)
+
+	require.Error(t, stdErr)
+	require.Error(t, shimErr)
+	require.Equal(t, stdErr.Error(), shimErr.Error())
+}
+
+func TestUnmarshalMalformedXMLMatchStdlib(t *testing.T) {
+	input := []byte(`<root><a></root>`)
+
+	var stdOut struct{}
+	var shimOut struct{}
+
+	stdErr := stdxml.Unmarshal(input, &stdOut)
+	shimErr := shim.Unmarshal(input, &shimOut)
+
+	require.Error(t, stdErr)
+	require.Error(t, shimErr)
+
+	// Both should return *xml.SyntaxError type
+	var stdSynErr *stdxml.SyntaxError
+	var shimSynErr *stdxml.SyntaxError
+	require.ErrorAs(t, stdErr, &stdSynErr, "stdlib should return SyntaxError")
+	require.ErrorAs(t, shimErr, &shimSynErr, "shim should return SyntaxError")
+	require.Equal(t, stdSynErr.Line, shimSynErr.Line, "SyntaxError line mismatch")
 }
 
 func TestUnmarshalEmptyInputMatchStdlib(t *testing.T) {
@@ -370,10 +401,8 @@ func TestUnmarshalEmptyInputMatchStdlib(t *testing.T) {
 	stdErr := stdxml.Unmarshal(input, &stdOut)
 	shimErr := shim.Unmarshal(input, &shimOut)
 
-	require.Equal(t, stdErr == nil, shimErr == nil)
-	if stdErr != nil && shimErr != nil {
-		require.Equal(t, stdErr.Error(), shimErr.Error())
-	}
+	require.ErrorIs(t, stdErr, io.EOF)
+	require.ErrorIs(t, shimErr, io.EOF)
 }
 
 func TestUnmarshalWhitespaceOnlyInputMatchStdlib(t *testing.T) {
@@ -385,10 +414,8 @@ func TestUnmarshalWhitespaceOnlyInputMatchStdlib(t *testing.T) {
 	stdErr := stdxml.Unmarshal(input, &stdOut)
 	shimErr := shim.Unmarshal(input, &shimOut)
 
-	require.Equal(t, stdErr == nil, shimErr == nil)
-	if stdErr != nil && shimErr != nil {
-		require.Equal(t, stdErr.Error(), shimErr.Error())
-	}
+	require.ErrorIs(t, stdErr, io.EOF)
+	require.ErrorIs(t, shimErr, io.EOF)
 }
 
 func TestUnmarshalTopLevelStringMatchStdlib(t *testing.T) {
@@ -400,12 +427,10 @@ func TestUnmarshalTopLevelStringMatchStdlib(t *testing.T) {
 	stdErr := stdxml.Unmarshal(input, &stdOut)
 	shimErr := shim.Unmarshal(input, &shimOut)
 
-	require.Equal(t, stdErr == nil, shimErr == nil)
-	if stdErr != nil && shimErr != nil {
-		require.Equal(t, stdErr.Error(), shimErr.Error())
-	} else {
-		require.Equal(t, stdOut, shimOut)
-	}
+	require.NoError(t, stdErr)
+	require.NoError(t, shimErr)
+	require.Equal(t, "value", stdOut)
+	require.Equal(t, stdOut, shimOut)
 }
 
 func TestUnmarshalTopLevelBytesMatchStdlib(t *testing.T) {
@@ -417,12 +442,10 @@ func TestUnmarshalTopLevelBytesMatchStdlib(t *testing.T) {
 	stdErr := stdxml.Unmarshal(input, &stdOut)
 	shimErr := shim.Unmarshal(input, &shimOut)
 
-	require.Equal(t, stdErr == nil, shimErr == nil)
-	if stdErr != nil && shimErr != nil {
-		require.Equal(t, stdErr.Error(), shimErr.Error())
-	} else {
-		require.Equal(t, stdOut, shimOut)
-	}
+	require.NoError(t, stdErr)
+	require.NoError(t, shimErr)
+	require.Equal(t, []byte("value"), stdOut)
+	require.Equal(t, stdOut, shimOut)
 }
 
 func TestUnmarshalTopLevelBoolMatchStdlib(t *testing.T) {
@@ -434,12 +457,10 @@ func TestUnmarshalTopLevelBoolMatchStdlib(t *testing.T) {
 	stdErr := stdxml.Unmarshal(input, &stdOut)
 	shimErr := shim.Unmarshal(input, &shimOut)
 
-	require.Equal(t, stdErr == nil, shimErr == nil)
-	if stdErr != nil && shimErr != nil {
-		require.Equal(t, stdErr.Error(), shimErr.Error())
-	} else {
-		require.Equal(t, stdOut, shimOut)
-	}
+	require.NoError(t, stdErr)
+	require.NoError(t, shimErr)
+	require.True(t, stdOut)
+	require.Equal(t, stdOut, shimOut)
 }
 
 func TestUnmarshalNamespaceTagsMatchStdlib(t *testing.T) {

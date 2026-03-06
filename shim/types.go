@@ -22,8 +22,6 @@ type Directive = stdxml.Directive
 
 type ProcInst = stdxml.ProcInst
 
-type Encoder = stdxml.Encoder
-
 type Marshaler = stdxml.Marshaler
 
 type MarshalerAttr = stdxml.MarshalerAttr

@@ -1,11 +1,11 @@
 package shim
 
 import (
-	"bytes"
 	"context"
 	stdxml "encoding/xml"
 	"errors"
 	"io"
+	"reflect"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
@@ -13,14 +13,36 @@ import (
 )
 
 type tokenEvent struct {
-	tok Token
-	err error
+	tok    Token
+	rawTok Token // raw variant (prefix:local instead of namespace URI)
+	line   int
+	col    int
+	err    error
 }
 
+// Decoder reads XML tokens from a stream. It is a drop-in replacement for
+// encoding/xml.Decoder backed by helium's SAX parser.
 type Decoder struct {
+	// Strict mode. When true (default), the parser requires strict XML conformance.
+	Strict bool
+
+	// AutoClose lists element names that should be auto-closed.
+	AutoClose []string
+
+	// Entity maps entity names to replacement text.
+	Entity map[string]string
+
+	// CharsetReader, if non-nil, defines a function to generate charset-conversion
+	// readers, converting from the provided charset into UTF-8.
+	CharsetReader func(charset string, input io.Reader) (io.Reader, error)
+
+	// DefaultSpace sets the default namespace for elements without an explicit namespace.
+	DefaultSpace string
+
 	tokenReader TokenReader
 	events      chan tokenEvent
-	initErr     error
+	ctx         context.Context
+	cancel      context.CancelFunc
 	lastToken   Token
 	offset      int64
 	line        int
@@ -28,8 +50,12 @@ type Decoder struct {
 }
 
 func newDecoderFromReader(r io.Reader) (*Decoder, error) {
+	ctx, cancel := context.WithCancel(context.Background())
 	d := &Decoder{
+		Strict: true,
 		events: make(chan tokenEvent, 64),
+		ctx:    ctx,
+		cancel: cancel,
 		line:   1,
 		column: 1,
 	}
@@ -39,6 +65,7 @@ func newDecoderFromReader(r io.Reader) (*Decoder, error) {
 
 func newDecoderFromTokenReader(tr TokenReader) *Decoder {
 	return &Decoder{
+		Strict:      true,
 		tokenReader: tr,
 		line:        1,
 		column:      1,
@@ -46,24 +73,49 @@ func newDecoderFromTokenReader(tr TokenReader) *Decoder {
 }
 
 func (d *Decoder) startSAXEmitter(r io.Reader) {
-	push := func(tok Token) error {
-		d.events <- tokenEvent{tok: stdxml.CopyToken(tok)}
-		return nil
+	var locator sax.DocumentLocator
+
+	push := func(tok, rawTok Token, line, col int) error {
+		select {
+		case d.events <- tokenEvent{tok: stdxml.CopyToken(tok), rawTok: stdxml.CopyToken(rawTok), line: line, col: col}:
+			return nil
+		case <-d.ctx.Done():
+			return d.ctx.Err()
+		}
 	}
 
 	h := sax.New()
 	h.OnStartDocument = sax.StartDocumentFunc(func(_ sax.Context) error { return nil })
 	h.OnEndDocument = sax.EndDocumentFunc(func(_ sax.Context) error { return nil })
-	h.OnSetDocumentLocator = sax.SetDocumentLocatorFunc(func(_ sax.Context, _ sax.DocumentLocator) error { return nil })
-	h.OnStartElementNS = sax.StartElementNSFunc(func(_ sax.Context, localname, _ string, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	h.OnSetDocumentLocator = sax.SetDocumentLocatorFunc(func(_ sax.Context, loc2 sax.DocumentLocator) error {
+		locator = loc2
+		return nil
+	})
+	h.OnStartElementNS = sax.StartElementNSFunc(func(_ sax.Context, localname, prefix string, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+		line, col := 0, 0
+		if locator != nil {
+			line = locator.LineNumber()
+			col = locator.ColumnNumber()
+		}
+
+		// Build namespace map for attribute URI resolution
 		attrNS := make(map[string]string, len(namespaces))
 		for _, ns := range namespaces {
 			attrNS[ns.Prefix()] = ns.URI()
 		}
 
+		// Resolved token (for Token())
 		se := StartElement{Name: Name{Space: uri, Local: localname}}
+		// Raw token (for RawToken()) — uses "prefix:local" form
+		rawLocal := localname
+		if prefix != "" {
+			rawLocal = prefix + ":" + localname
+		}
+		rawSE := StartElement{Name: Name{Local: rawLocal}}
+
 		if len(attrs) > 0 {
 			se.Attr = make([]Attr, 0, len(attrs))
+			rawSE.Attr = make([]Attr, 0, len(attrs))
 			for _, attr := range attrs {
 				space := ""
 				if p := attr.Prefix(); p != "" {
@@ -73,28 +125,79 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 					Name:  Name{Space: space, Local: attr.LocalName()},
 					Value: attr.Value(),
 				})
+				rawAttrLocal := attr.LocalName()
+				if p := attr.Prefix(); p != "" {
+					rawAttrLocal = p + ":" + attr.LocalName()
+				}
+				rawSE.Attr = append(rawSE.Attr, Attr{
+					Name:  Name{Local: rawAttrLocal},
+					Value: attr.Value(),
+				})
 			}
 		}
-		return push(se)
+		return push(se, rawSE, line, col)
 	})
-	h.OnEndElementNS = sax.EndElementNSFunc(func(_ sax.Context, localname, _ string, uri string) error {
-		return push(EndElement{Name: Name{Space: uri, Local: localname}})
+	h.OnEndElementNS = sax.EndElementNSFunc(func(_ sax.Context, localname, prefix string, uri string) error {
+		line, col := 0, 0
+		if locator != nil {
+			line = locator.LineNumber()
+			col = locator.ColumnNumber()
+		}
+		rawLocal := localname
+		if prefix != "" {
+			rawLocal = prefix + ":" + localname
+		}
+		ee := EndElement{Name: Name{Space: uri, Local: localname}}
+		rawEE := EndElement{Name: Name{Local: rawLocal}}
+		return push(ee, rawEE, line, col)
 	})
 	h.OnCharacters = sax.CharactersFunc(func(_ sax.Context, ch []byte) error {
-		return push(CharData(append([]byte(nil), ch...)))
+		line, col := 0, 0
+		if locator != nil {
+			line = locator.LineNumber()
+			col = locator.ColumnNumber()
+		}
+		cd := CharData(append([]byte(nil), ch...))
+		return push(cd, cd, line, col)
 	})
 	h.OnIgnorableWhitespace = sax.IgnorableWhitespaceFunc(func(_ sax.Context, ch []byte) error {
-		return push(CharData(append([]byte(nil), ch...)))
+		line, col := 0, 0
+		if locator != nil {
+			line = locator.LineNumber()
+			col = locator.ColumnNumber()
+		}
+		cd := CharData(append([]byte(nil), ch...))
+		return push(cd, cd, line, col)
 	})
 	h.OnCDataBlock = sax.CDataBlockFunc(func(_ sax.Context, value []byte) error {
-		return push(CharData(append([]byte(nil), value...)))
+		line, col := 0, 0
+		if locator != nil {
+			line = locator.LineNumber()
+			col = locator.ColumnNumber()
+		}
+		cd := CharData(append([]byte(nil), value...))
+		return push(cd, cd, line, col)
 	})
 	h.OnComment = sax.CommentFunc(func(_ sax.Context, value []byte) error {
-		return push(Comment(append([]byte(nil), value...)))
+		line, col := 0, 0
+		if locator != nil {
+			line = locator.LineNumber()
+			col = locator.ColumnNumber()
+		}
+		c := Comment(append([]byte(nil), value...))
+		return push(c, c, line, col)
 	})
 	h.OnProcessingInstruction = sax.ProcessingInstructionFunc(func(_ sax.Context, target, data string) error {
-		return push(ProcInst{Target: target, Inst: []byte(data)})
+		line, col := 0, 0
+		if locator != nil {
+			line = locator.LineNumber()
+			col = locator.ColumnNumber()
+		}
+		pi := ProcInst{Target: target, Inst: []byte(data)}
+		return push(pi, pi, line, col)
 	})
+
+	// Stubs for callbacks we don't use
 	h.OnInternalSubset = sax.InternalSubsetFunc(func(_ sax.Context, _ string, _ string, _ string) error { return nil })
 	h.OnExternalSubset = sax.ExternalSubsetFunc(func(_ sax.Context, _ string, _ string, _ string) error { return nil })
 	h.OnReference = sax.ReferenceFunc(func(_ sax.Context, _ string) error { return nil })
@@ -118,45 +221,78 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 		defer close(d.events)
 		p := helium.NewParser()
 		p.SetSAXHandler(h)
-		_, err := p.ParseReader(context.Background(), r)
+		_, err := p.ParseReader(d.ctx, r)
 		if err != nil {
-			d.events <- tokenEvent{err: err}
+			select {
+			case d.events <- tokenEvent{err: err}:
+			case <-d.ctx.Done():
+			}
 		}
 	}()
 }
 
+// Close cancels the SAX goroutine and releases resources.
+func (d *Decoder) Close() {
+	if d.cancel != nil {
+		d.cancel()
+	}
+}
+
 func (d *Decoder) advancePosition(tok Token) {
-	b, err := tokenBytes(tok)
-	if err != nil {
-		return
-	}
-	d.offset += int64(len(b))
-	for _, ch := range b {
-		if ch == '\n' {
-			d.line++
-			d.column = 1
-			continue
+	// Estimate byte size from token for InputOffset tracking.
+	n := tokenSize(tok)
+	d.offset += int64(n)
+}
+
+// tokenSize returns an estimated byte size of the serialized token,
+// matching encoding/xml's offset accounting.
+func tokenSize(tok Token) int {
+	switch v := tok.(type) {
+	case StartElement:
+		// <name attr="val">
+		n := 1 + len(v.Name.Local) + 1 // < name >
+		if v.Name.Space != "" {
+			// This is an approximation since we don't have the prefix
 		}
-		d.column++
+		for _, a := range v.Attr {
+			n += 1 + len(a.Name.Local) + 2 + len(a.Value) + 1 // space name="val"
+		}
+		return n
+	case EndElement:
+		return 2 + len(v.Name.Local) + 1 // </name>
+	case CharData:
+		return len(v)
+	case Comment:
+		return 7 + len(v) // <!--...-->
+	case ProcInst:
+		return 4 + len(v.Target) + 1 + len(v.Inst) + 2 // <?target data?>
+	case Directive:
+		return 3 + len(v) + 1 // <!...>
 	}
+	return 0
 }
 
-func tokenBytes(tok Token) ([]byte, error) {
-	var buf bytes.Buffer
-	enc := stdxml.NewEncoder(&buf)
-	if err := enc.EncodeToken(stdxml.CopyToken(tok)); err != nil {
-		return nil, err
-	}
-	if err := enc.Flush(); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
+// Token returns the next XML token in the input stream.
+// Namespace URIs are resolved in the Name.Space field.
 func (d *Decoder) Token() (Token, error) {
-	var (
-		tok Token
-	)
+	tok, err := d.readToken(false)
+	if err != nil {
+		return nil, err
+	}
+	if d.DefaultSpace != "" {
+		tok = applyDefaultSpace(tok, d.DefaultSpace)
+	}
+	return tok, nil
+}
+
+// RawToken returns the next XML token without namespace resolution.
+// Element names use prefix:local form instead of resolved namespace URIs.
+func (d *Decoder) RawToken() (Token, error) {
+	return d.readToken(true)
+}
+
+func (d *Decoder) readToken(raw bool) (Token, error) {
+	var tok Token
 
 	if d.tokenReader != nil {
 		nextTok, err := d.tokenReader.Token()
@@ -170,9 +306,17 @@ func (d *Decoder) Token() (Token, error) {
 			return nil, io.EOF
 		}
 		if event.err != nil {
-			return nil, event.err
+			return nil, convertParseError(event.err)
 		}
-		tok = event.tok
+		if event.line > 0 {
+			d.line = event.line
+			d.column = event.col
+		}
+		if raw {
+			tok = event.rawTok
+		} else {
+			tok = event.tok
+		}
 	}
 
 	tok = stdxml.CopyToken(tok)
@@ -181,8 +325,20 @@ func (d *Decoder) Token() (Token, error) {
 	return tok, nil
 }
 
-func (d *Decoder) RawToken() (Token, error) {
-	return d.Token()
+func applyDefaultSpace(tok Token, space string) Token {
+	switch v := tok.(type) {
+	case StartElement:
+		if v.Name.Space == "" {
+			v.Name.Space = space
+			return v
+		}
+	case EndElement:
+		if v.Name.Space == "" {
+			v.Name.Space = space
+			return v
+		}
+	}
+	return tok
 }
 
 func (d *Decoder) Skip() error {
@@ -239,45 +395,108 @@ func (d *Decoder) DecodeElement(v any, start *StartElement) error {
 		return d.Decode(v)
 	}
 
-	elemBytes, err := d.captureElementBytes(*start)
+	elem, err := d.buildElementFromTokens(*start)
 	if err != nil {
 		return err
 	}
-	return Unmarshal(elemBytes, v)
+	return decodeElementInto(reflectValueOf(v), elem)
 }
 
-func (d *Decoder) captureElementBytes(start stdxml.StartElement) ([]byte, error) {
-	tokens := []stdxml.Token{stdxml.CopyToken(start)}
-	depth := 1
-
-	for depth > 0 {
-		tok, err := d.Token()
-		if err != nil {
-			if err == io.EOF {
-				return nil, io.ErrUnexpectedEOF
-			}
-			return nil, err
-		}
-		tokens = append(tokens, stdxml.CopyToken(tok))
-
-		switch tok.(type) {
-		case stdxml.StartElement:
-			depth++
-		case stdxml.EndElement:
-			depth--
-		}
+func reflectValueOf(v any) reflect.Value {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Pointer {
+		return rv.Elem()
 	}
+	return rv
+}
 
-	var buf bytes.Buffer
-	enc := stdxml.NewEncoder(&buf)
-	for _, tok := range tokens {
-		if err := enc.EncodeToken(tok); err != nil {
-			return nil, err
-		}
-	}
-	if err := enc.Flush(); err != nil {
+// buildElementFromTokens reads tokens from the decoder and builds
+// a helium Element subtree. This avoids the previous approach of
+// serializing tokens to bytes and re-parsing.
+func (d *Decoder) buildElementFromTokens(start stdxml.StartElement) (*helium.Element, error) {
+	doc := helium.NewDefaultDocument()
+
+	root, err := doc.CreateElement(start.Name.Local)
+	if err != nil {
 		return nil, err
 	}
 
-	return buf.Bytes(), nil
+	// Set namespace if present
+	if start.Name.Space != "" {
+		ns, nsErr := doc.CreateNamespace("", start.Name.Space)
+		if nsErr == nil {
+			root.SetAttributeNS(root.Name(), root.Name(), ns)
+		}
+	}
+
+	// Set attributes
+	for _, attr := range start.Attr {
+		root.SetAttribute(attr.Name.Local, attr.Value)
+	}
+
+	if err := doc.SetDocumentElement(root); err != nil {
+		return nil, err
+	}
+
+	// Read children
+	if err := d.populateElement(doc, root); err != nil {
+		return nil, err
+	}
+
+	return root, nil
+}
+
+func (d *Decoder) populateElement(doc *helium.Document, parent *helium.Element) error {
+	for {
+		tok, err := d.Token()
+		if err != nil {
+			if err == io.EOF {
+				return io.ErrUnexpectedEOF
+			}
+			return err
+		}
+
+		switch v := tok.(type) {
+		case StartElement:
+			child, cErr := doc.CreateElement(v.Name.Local)
+			if cErr != nil {
+				return cErr
+			}
+			for _, attr := range v.Attr {
+				child.SetAttribute(attr.Name.Local, attr.Value)
+			}
+			if err := parent.AddChild(child); err != nil {
+				return err
+			}
+			if err := d.populateElement(doc, child); err != nil {
+				return err
+			}
+		case EndElement:
+			return nil
+		case CharData:
+			text, tErr := doc.CreateText([]byte(v))
+			if tErr != nil {
+				return tErr
+			}
+			if err := parent.AddChild(text); err != nil {
+				return err
+			}
+		case Comment:
+			comment, cErr := doc.CreateComment([]byte(v))
+			if cErr != nil {
+				return cErr
+			}
+			if err := parent.AddChild(comment); err != nil {
+				return err
+			}
+		case ProcInst:
+			pi, pErr := doc.CreatePI(v.Target, string(v.Inst))
+			if pErr != nil {
+				return pErr
+			}
+			if err := parent.AddChild(pi); err != nil {
+				return err
+			}
+		}
+	}
 }
