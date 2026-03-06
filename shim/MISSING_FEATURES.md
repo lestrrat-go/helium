@@ -797,54 +797,10 @@ go test -run 'TestDecodeIntrinsicStdlib' -v -timeout 10s
 
 ---
 
-## 14. Parser Depth Limit
+## 14. ~~Parser Depth Limit~~ (DONE)
 
-**Tests unlocked**: 1 (TestCVE202230633Stdlib)
-**Difficulty**: High
-**Files**: helium core parser (outside shim)
-
-### Problem
-
-17 million nested `<a>` tags cause a fatal stack overflow in the helium SAX
-parser. Stdlib limits nesting depth to prevent this (CVE-2022-30633).
-
-### Current behavior
-
-The test creates a ~50MB input of deeply nested elements. The helium parser
-crashes with a stack overflow because it uses recursive descent parsing with
-no depth limit.
-
-### Implementation guidance
-
-This requires changes to the helium core parser (`parserctx.go`), not just
-the shim. Add a depth counter that increments on element open and decrements
-on element close. If depth exceeds a limit (stdlib uses ~10,000,000 but
-you should use a lower reasonable limit like 100,000), return an error.
-
-Alternatively, the shim can set a SAX callback that tracks depth:
-```go
-depth := 0
-h.OnStartElementNS = ... {
-    depth++
-    if depth > maxDepth {
-        return errors.New("xml: exceeded max nesting depth")
-    }
-    // ... existing callback
-}
-h.OnEndElementNS = ... {
-    depth--
-    // ... existing callback
-}
-```
-
-The `Unmarshal` path uses `helium.Parse` directly (not SAX), so it would
-need a parse option or a separate depth check.
-
-### Test verification
-
-```sh
-go test -run 'TestCVE202230633Stdlib' -v -timeout 30s
-```
+**Status**: Implemented. `Parser.SetMaxDepth()` added to core parser;
+shim sets `maxParseDepth = 100_000`. TestCVE202230633Stdlib passes.
 
 ---
 
@@ -889,6 +845,6 @@ implemented.
 | 11 | InputPos Tracking | 1 | Medium effort |
 | 12 | InnerXML Format | 2 | Hard (needs core changes) |
 | 13 | TokenReader Depth | 1 | Low effort |
-| 14 | Parser Depth Limit | 1 | Medium (core change) |
+| 14 | ~~Parser Depth Limit~~ | ~~1~~ | **DONE** |
 | 15 | Non-Strict Mode | 4 | Not planned |
 | 16 | Round-Trip | 1 | Blocked on #9, #15 |
