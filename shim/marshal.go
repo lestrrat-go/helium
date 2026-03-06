@@ -216,6 +216,23 @@ func (enc *Encoder) marshalField(b fieldBinding, field reflect.Value) error {
 		name = b.fieldName
 	}
 
+	// xml.Name fields are self-naming empty elements.
+	// The element name comes from the field value or the tag.
+	ft := field.Type()
+	for ft.Kind() == reflect.Pointer {
+		ft = ft.Elem()
+	}
+	if isXMLNameType(ft) {
+		se := StartElement{Name: Name{Local: name}}
+		if b.hasNameSpace {
+			se.Name.Space = b.nameSpace
+		}
+		if err := enc.EncodeToken(se); err != nil {
+			return err
+		}
+		return enc.EncodeToken(se.End())
+	}
+
 	// For slices of non-byte elements, marshal each element
 	if field.Kind() == reflect.Slice && field.Type().Elem().Kind() != reflect.Uint8 {
 		for i := 0; i < field.Len(); i++ {

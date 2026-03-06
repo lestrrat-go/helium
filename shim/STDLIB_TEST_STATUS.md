@@ -1,6 +1,6 @@
 # Stdlib encoding/xml Test Compatibility Status
 
-380 pass, 62 skip, 0 fail. Skipped tests are grouped by feature gap below.
+384 pass, 58 skip, 0 fail. Skipped tests are grouped by feature gap below.
 
 Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
 
@@ -107,12 +107,10 @@ Fields of type `[]xml.Attr` with tag `",any,attr"` should collect unmatched attr
 - [ ] **Marshal**: `[]xml.Attr` with `any,attr` tag not supported (#75-77)
 - [ ] **Unmarshal**: `any,attr` captures all attrs instead of only unmatched ones (#76)
 
-## xml.Name Field as Element Content [M]
+## ~~xml.Name Field as Element Content~~ ✅
 
-A struct field of type `xml.Name` (not named `XMLName`) should marshal/unmarshal as an element whose name comes from the `Name` value (or falls back to the field's tag). Fix: detect `xml.Name`-typed fields and use their value for element naming.
-
-- [ ] **Marshal**: xml.Name field as element content not handled (#70, #72)
-- [ ] **Unmarshal**: xml.Name field as element content not handled (#70-71)
+- [x] **Marshal**: xml.Name field as element content not handled (#70, #72)
+- [x] **Unmarshal**: xml.Name field as element content not handled (#70-71)
 
 ## ~~XMLName Precedence~~ ✅
 

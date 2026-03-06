@@ -276,6 +276,22 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 			if !ok {
 				continue
 			}
+
+			// xml.Name fields: populate from the matched element's name
+			ft := field.Type()
+			for ft.Kind() == reflect.Pointer {
+				ft = ft.Elem()
+			}
+			if isXMLNameType(ft) {
+				idx, m := findPath(children, consumed, path)
+				if m == nil {
+					continue
+				}
+				consumed[idx] = true
+				setXMLName(field, m)
+				continue
+			}
+
 			if field.Kind() == reflect.Interface {
 				if field.IsNil() {
 					continue
