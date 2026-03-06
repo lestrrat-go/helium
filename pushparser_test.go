@@ -2,11 +2,11 @@ package helium_test
 
 import (
 	"bytes"
-	helim "github.com/lestrrat-go/helium"
 	"io"
 	"os"
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,10 +17,10 @@ const testXML = `<?xml version="1.0"?>
   <ns:item xmlns:ns="urn:test">world</ns:item>
 </root>`
 
-func dumpDoc(t *testing.T, doc *helim.Document) string {
+func dumpDoc(t *testing.T, doc *helium.Document) string {
 	t.Helper()
 	var buf bytes.Buffer
-	d := helim.NewWriter()
+	d := helium.NewWriter()
 	require.NoError(t, d.WriteDoc(&buf, doc))
 	return buf.String()
 }
@@ -28,10 +28,10 @@ func dumpDoc(t *testing.T, doc *helim.Document) string {
 func TestPushParserSingleChunk(t *testing.T) {
 	input := []byte(testXML)
 
-	want, err := helim.Parse(t.Context(), input)
+	want, err := helium.Parse(t.Context(), input)
 	require.NoError(t, err)
 
-	p := helim.NewParser()
+	p := helium.NewParser()
 	pp := p.NewPushParser(t.Context())
 	require.NoError(t, pp.Push(input))
 	got, err := pp.Close()
@@ -42,12 +42,12 @@ func TestPushParserSingleChunk(t *testing.T) {
 func TestPushParserMultiChunk(t *testing.T) {
 	input := []byte(testXML)
 
-	want, err := helim.Parse(t.Context(), input)
+	want, err := helium.Parse(t.Context(), input)
 	require.NoError(t, err)
 
 	// Split at various positions: mid-tag, mid-attribute, mid-text
 	splits := []int{5, 15, 30, 50, 80}
-	p := helim.NewParser()
+	p := helium.NewParser()
 	pp := p.NewPushParser(t.Context())
 
 	prev := 0
@@ -70,10 +70,10 @@ func TestPushParserMultiChunk(t *testing.T) {
 func TestPushParserByteAtATime(t *testing.T) {
 	input := []byte(testXML)
 
-	want, err := helim.Parse(t.Context(), input)
+	want, err := helium.Parse(t.Context(), input)
 	require.NoError(t, err)
 
-	p := helim.NewParser()
+	p := helium.NewParser()
 	pp := p.NewPushParser(t.Context())
 	for i := 0; i < len(input); i++ {
 		require.NoError(t, pp.Push(input[i:i+1]))
@@ -90,7 +90,7 @@ func TestPushParserSAXEvents(t *testing.T) {
 	// Capture SAX events from regular parse
 	var wantBuf bytes.Buffer
 	wantHandler := newEventEmitter(&wantBuf)
-	p1 := helim.NewParser()
+	p1 := helium.NewParser()
 	p1.SetSAXHandler(wantHandler)
 	_, err := p1.Parse(t.Context(), input)
 	require.NoError(t, err)
@@ -98,7 +98,7 @@ func TestPushParserSAXEvents(t *testing.T) {
 	// Capture SAX events from push parse
 	var gotBuf bytes.Buffer
 	gotHandler := newEventEmitter(&gotBuf)
-	p2 := helim.NewParser()
+	p2 := helium.NewParser()
 	p2.SetSAXHandler(gotHandler)
 	pp := p2.NewPushParser(t.Context())
 	require.NoError(t, pp.Push(input))
@@ -111,7 +111,7 @@ func TestPushParserSAXEvents(t *testing.T) {
 func TestPushParserMalformedXML(t *testing.T) {
 	input := []byte(`<?xml version="1.0"?><root><child>text</chld></root>`)
 
-	p := helim.NewParser()
+	p := helium.NewParser()
 	pp := p.NewPushParser(t.Context())
 	require.NoError(t, pp.Push(input))
 	_, err := pp.Close()
@@ -121,7 +121,7 @@ func TestPushParserMalformedXML(t *testing.T) {
 func TestPushParserPushAfterError(t *testing.T) {
 	malformed := []byte(`<?xml version="1.0"?><root><bad`)
 
-	p := helim.NewParser()
+	p := helium.NewParser()
 	pp := p.NewPushParser(t.Context())
 	require.NoError(t, pp.Push(malformed))
 
@@ -134,7 +134,7 @@ func TestPushParserPushAfterError(t *testing.T) {
 }
 
 func TestPushParserEmptyInput(t *testing.T) {
-	p := helim.NewParser()
+	p := helium.NewParser()
 	pp := p.NewPushParser(t.Context())
 	_, err := pp.Close()
 	require.Error(t, err, "empty input should produce an error")
@@ -143,10 +143,10 @@ func TestPushParserEmptyInput(t *testing.T) {
 func TestPushParserIOCopy(t *testing.T) {
 	input := []byte(testXML)
 
-	want, err := helim.Parse(t.Context(), input)
+	want, err := helium.Parse(t.Context(), input)
 	require.NoError(t, err)
 
-	p := helim.NewParser()
+	p := helium.NewParser()
 	pp := p.NewPushParser(t.Context())
 	n, err := io.Copy(pp, bytes.NewReader(input))
 	require.NoError(t, err)
@@ -160,7 +160,7 @@ func TestPushParserIOCopy(t *testing.T) {
 func TestPushParserCloseIdempotent(t *testing.T) {
 	input := []byte(testXML)
 
-	p := helim.NewParser()
+	p := helium.NewParser()
 	pp := p.NewPushParser(t.Context())
 	require.NoError(t, pp.Push(input))
 
@@ -179,10 +179,10 @@ func TestPushParserWithDTD(t *testing.T) {
 ]>
 <doc><child>hello</child></doc>`)
 
-	want, err := helim.Parse(t.Context(), input)
+	want, err := helium.Parse(t.Context(), input)
 	require.NoError(t, err)
 
-	p := helim.NewParser()
+	p := helium.NewParser()
 	pp := p.NewPushParser(t.Context())
 	require.NoError(t, pp.Push(input))
 
@@ -197,10 +197,10 @@ func TestPushParserWithNamespaces(t *testing.T) {
   <x:child x:attr="val">text</x:child>
 </root>`)
 
-	want, err := helim.Parse(t.Context(), input)
+	want, err := helium.Parse(t.Context(), input)
 	require.NoError(t, err)
 
-	p := helim.NewParser()
+	p := helium.NewParser()
 	pp := p.NewPushParser(t.Context())
 	require.NoError(t, pp.Push(input))
 
@@ -216,11 +216,11 @@ func TestPushParserRealFile(t *testing.T) {
 		t.Skipf("test file not available: %v", err)
 	}
 
-	want, err := helim.Parse(t.Context(), input)
+	want, err := helium.Parse(t.Context(), input)
 	require.NoError(t, err)
 
 	// Push in 64-byte chunks
-	p := helim.NewParser()
+	p := helium.NewParser()
 	pp := p.NewPushParser(t.Context())
 	for i := 0; i < len(input); i += 64 {
 		end := i + 64

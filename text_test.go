@@ -1,9 +1,9 @@
 package helium_test
 
 import (
-	helim "github.com/lestrrat-go/helium"
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,9 +25,9 @@ func TestTextAddChild(t *testing.T) {
 
 func TestTextAddChildInvalidNode(t *testing.T) {
 	n1 := newText([]byte("Hello "))
-	n2 := &helim.ProcessingInstruction{}
+	n2 := &helium.ProcessingInstruction{}
 
-	require.Equal(t, helim.ErrInvalidOperation, n1.AddChild(n2), "AddChild fails")
+	require.Equal(t, helium.ErrInvalidOperation, n1.AddChild(n2), "AddChild fails")
 
 	require.Equal(t, []byte("Hello "), n1.Content(), "Content matches")
 }

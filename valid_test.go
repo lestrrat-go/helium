@@ -1,9 +1,9 @@
 package helium_test
 
 import (
-	helim "github.com/lestrrat-go/helium"
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
 )
@@ -12,46 +12,46 @@ import (
 // The intSubset declares element "root" with ANY content.
 // The extSubset declares element "child" with EMPTY content, an entity "extEnt",
 // and a REQUIRED attribute "role" on element "child".
-func buildTestDoc(standalone helim.DocumentStandaloneType) *helim.Document {
-	doc := helim.NewDocument("1.0", "utf-8", standalone)
+func buildTestDoc(standalone helium.DocumentStandaloneType) *helium.Document {
+	doc := helium.NewDocument("1.0", "utf-8", standalone)
 
 	// Internal subset: declares "root" element with ANY content.
 	intDTD := newDTD()
 	setField(intDTD, "doc", doc)
-	setField(intDTD, "etype", helim.DTDNode)
+	setField(intDTD, "etype", helium.DTDNode)
 	setField(doc, "intSubset", intDTD)
 
 	rootDecl := newElementDecl()
 	setField(rootDecl, "name", "root")
 	setField(rootDecl, "decltype", enum.AnyElementType)
 	setField(rootDecl, "doc", doc)
-	setField(intDTD, "elements", map[string]*helim.ElementDecl{
+	setField(intDTD, "elements", map[string]*helium.ElementDecl{
 		"root:": rootDecl,
 	})
-	setField(intDTD, "entities", map[string]*helim.Entity{})
-	setField(intDTD, "pentities", map[string]*helim.Entity{})
-	setField(intDTD, "attributes", map[string]*helim.AttributeDecl{})
+	setField(intDTD, "entities", map[string]*helium.Entity{})
+	setField(intDTD, "pentities", map[string]*helium.Entity{})
+	setField(intDTD, "attributes", map[string]*helium.AttributeDecl{})
 
 	// External subset: declares "child" element, entity, and attribute.
 	extDTD := newDTD()
 	setField(extDTD, "doc", doc)
-	setField(extDTD, "etype", helim.DTDNode)
+	setField(extDTD, "etype", helium.DTDNode)
 	setField(doc, "extSubset", extDTD)
 
 	childDecl := newElementDecl()
 	setField(childDecl, "name", "child")
 	setField(childDecl, "decltype", enum.EmptyElementType)
 	setField(childDecl, "doc", doc)
-	setField(extDTD, "elements", map[string]*helim.ElementDecl{
+	setField(extDTD, "elements", map[string]*helium.ElementDecl{
 		"child:": childDecl,
 	})
 
 	extEnt := newEntity("extEnt", enum.InternalGeneralEntity, "", "", "hello", "")
 	setField(extEnt, "doc", doc)
-	setField(extDTD, "entities", map[string]*helim.Entity{
+	setField(extDTD, "entities", map[string]*helium.Entity{
 		"extEnt": extEnt,
 	})
-	setField(extDTD, "pentities", map[string]*helim.Entity{})
+	setField(extDTD, "pentities", map[string]*helium.Entity{})
 
 	attrDecl := newAttributeDecl()
 	setField(attrDecl, "name", "role")
@@ -59,7 +59,7 @@ func buildTestDoc(standalone helim.DocumentStandaloneType) *helim.Document {
 	setField(attrDecl, "atype", enum.AttrCDATA)
 	setField(attrDecl, "def", enum.AttrDefaultRequired)
 	setField(attrDecl, "doc", doc)
-	setField(extDTD, "attributes", map[string]*helim.AttributeDecl{
+	setField(extDTD, "attributes", map[string]*helium.AttributeDecl{
 		"role::child": attrDecl,
 	})
 
@@ -67,7 +67,7 @@ func buildTestDoc(standalone helim.DocumentStandaloneType) *helim.Document {
 }
 
 func TestExtSubsetLookup_ElementInExtSubset(t *testing.T) {
-	doc := buildTestDoc(helim.StandaloneImplicitNo)
+	doc := buildTestDoc(helium.StandaloneImplicitNo)
 
 	root := newElement("root")
 	setField(root, "doc", doc)
@@ -82,7 +82,7 @@ func TestExtSubsetLookup_ElementInExtSubset(t *testing.T) {
 }
 
 func TestExtSubsetLookup_EntityInExtSubset(t *testing.T) {
-	doc := buildTestDoc(helim.StandaloneImplicitNo)
+	doc := buildTestDoc(helium.StandaloneImplicitNo)
 
 	ent, found := doc.GetEntity("extEnt")
 	require.True(t, found, "entity in extSubset should be found")
@@ -90,7 +90,7 @@ func TestExtSubsetLookup_EntityInExtSubset(t *testing.T) {
 }
 
 func TestExtSubsetLookup_AttributeInExtSubset(t *testing.T) {
-	doc := buildTestDoc(helim.StandaloneImplicitNo)
+	doc := buildTestDoc(helium.StandaloneImplicitNo)
 
 	root := newElement("root")
 	setField(root, "doc", doc)
@@ -106,7 +106,7 @@ func TestExtSubsetLookup_AttributeInExtSubset(t *testing.T) {
 }
 
 func TestExtSubsetLookup_StandaloneYesPreventsExtSubset(t *testing.T) {
-	doc := buildTestDoc(helim.StandaloneExplicitYes)
+	doc := buildTestDoc(helium.StandaloneExplicitYes)
 
 	// Entity lookup should NOT fall through to extSubset
 	_, found := doc.GetEntity("extEnt")
@@ -134,9 +134,9 @@ func TestEnumerationAttributeValidation(t *testing.T) {
   <!ATTLIST root color (red|green|blue) #REQUIRED>
 ]>
 <root color="green"/>`
-		p := helim.NewParser()
-		p.SetOption(helim.ParseDTDValid)
-		p.SetOption(helim.ParseDTDAttr)
+		p := helium.NewParser()
+		p.SetOption(helium.ParseDTDValid)
+		p.SetOption(helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
@@ -148,9 +148,9 @@ func TestEnumerationAttributeValidation(t *testing.T) {
   <!ATTLIST root color (red|green|blue) #REQUIRED>
 ]>
 <root color="yellow"/>`
-		p := helim.NewParser()
-		p.SetOption(helim.ParseDTDValid)
-		p.SetOption(helim.ParseDTDAttr)
+		p := helium.NewParser()
+		p.SetOption(helium.ParseDTDValid)
+		p.SetOption(helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not among the enumerated set")
@@ -163,9 +163,9 @@ func TestEnumerationAttributeValidation(t *testing.T) {
   <!ATTLIST root color (red|green|blue) "red">
 ]>
 <root/>`
-		p := helim.NewParser()
-		p.SetOption(helim.ParseDTDValid)
-		p.SetOption(helim.ParseDTDAttr)
+		p := helium.NewParser()
+		p.SetOption(helium.ParseDTDValid)
+		p.SetOption(helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
@@ -173,35 +173,35 @@ func TestEnumerationAttributeValidation(t *testing.T) {
 
 // Helper functions for building ElementContent trees in tests.
 
-func ecElem(name string) *helim.ElementContent {
-	return newElementContent(helim.ElementContentElement, helim.ElementContentOnce, name)
+func ecElem(name string) *helium.ElementContent {
+	return newElementContent(helium.ElementContentElement, helium.ElementContentOnce, name)
 }
 
-func ecElemOpt(name string) *helim.ElementContent {
-	return newElementContent(helim.ElementContentElement, helim.ElementContentOpt, name)
+func ecElemOpt(name string) *helium.ElementContent {
+	return newElementContent(helium.ElementContentElement, helium.ElementContentOpt, name)
 }
 
-func ecElemStar(name string) *helim.ElementContent {
-	return newElementContent(helim.ElementContentElement, helim.ElementContentMult, name)
+func ecElemStar(name string) *helium.ElementContent {
+	return newElementContent(helium.ElementContentElement, helium.ElementContentMult, name)
 }
 
-func ecElemPlus(name string) *helim.ElementContent {
-	return newElementContent(helim.ElementContentElement, helim.ElementContentPlus, name)
+func ecElemPlus(name string) *helium.ElementContent {
+	return newElementContent(helium.ElementContentElement, helium.ElementContentPlus, name)
 }
 
 // ecSeq builds a sequence node with the given occur from a list of parts.
 // Parts are linked as a right-nested c1/c2 chain.
-func ecSeq(occur helim.ElementContentOccur, parts ...*helim.ElementContent) *helim.ElementContent {
+func ecSeq(occur helium.ElementContentOccur, parts ...*helium.ElementContent) *helium.ElementContent {
 	if len(parts) == 0 {
-		return newElementContent(helim.ElementContentSeq, occur, "")
+		return newElementContent(helium.ElementContentSeq, occur, "")
 	}
 	if len(parts) == 1 {
-		return newElementContentWithC1(helim.ElementContentSeq, occur, parts[0])
+		return newElementContentWithC1(helium.ElementContentSeq, occur, parts[0])
 	}
-	root := newElementContentWithC1(helim.ElementContentSeq, occur, parts[0])
+	root := newElementContentWithC1(helium.ElementContentSeq, occur, parts[0])
 	cur := root
 	for i := 1; i < len(parts)-1; i++ {
-		next := newElementContentWithC1(helim.ElementContentSeq, helim.ElementContentOnce, parts[i])
+		next := newElementContentWithC1(helium.ElementContentSeq, helium.ElementContentOnce, parts[i])
 		setElementContentC2(cur, next)
 		cur = next
 	}
@@ -211,17 +211,17 @@ func ecSeq(occur helim.ElementContentOccur, parts ...*helim.ElementContent) *hel
 
 // ecOr builds a choice node with the given occur from a list of alternatives.
 // Alternatives are linked as a right-nested c1/c2 chain.
-func ecOr(occur helim.ElementContentOccur, alts ...*helim.ElementContent) *helim.ElementContent {
+func ecOr(occur helium.ElementContentOccur, alts ...*helium.ElementContent) *helium.ElementContent {
 	if len(alts) == 0 {
-		return newElementContent(helim.ElementContentOr, occur, "")
+		return newElementContent(helium.ElementContentOr, occur, "")
 	}
 	if len(alts) == 1 {
-		return newElementContentWithC1(helim.ElementContentOr, occur, alts[0])
+		return newElementContentWithC1(helium.ElementContentOr, occur, alts[0])
 	}
-	root := newElementContentWithC1(helim.ElementContentOr, occur, alts[0])
+	root := newElementContentWithC1(helium.ElementContentOr, occur, alts[0])
 	cur := root
 	for i := 1; i < len(alts)-1; i++ {
-		next := newElementContentWithC1(helim.ElementContentOr, helim.ElementContentOnce, alts[i])
+		next := newElementContentWithC1(helium.ElementContentOr, helium.ElementContentOnce, alts[i])
 		setElementContentC2(cur, next)
 		cur = next
 	}
@@ -232,32 +232,32 @@ func ecOr(occur helim.ElementContentOccur, alts ...*helim.ElementContent) *helim
 func TestMatchContentModel(t *testing.T) {
 	tests := []struct {
 		name     string
-		content  *helim.ElementContent
+		content  *helium.ElementContent
 		children []string
 		want     bool
 	}{
 		// Simple sequence: (a, b, c)
 		{
 			name:     "seq/exact match",
-			content:  ecSeq(helim.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
+			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
 			children: []string{"a", "b", "c"},
 			want:     true,
 		},
 		{
 			name:     "seq/wrong order",
-			content:  ecSeq(helim.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
+			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
 			children: []string{"a", "c", "b"},
 			want:     false,
 		},
 		{
 			name:     "seq/missing element",
-			content:  ecSeq(helim.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
+			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
 			children: []string{"a", "b"},
 			want:     false,
 		},
 		{
 			name:     "seq/extra element rejected",
-			content:  ecSeq(helim.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
+			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
 			children: []string{"a", "b", "c", "d"},
 			want:     false,
 		},
@@ -265,31 +265,31 @@ func TestMatchContentModel(t *testing.T) {
 		// Choice: (a | b | c)
 		{
 			name:     "choice/first alt",
-			content:  ecOr(helim.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
+			content:  ecOr(helium.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
 			children: []string{"a"},
 			want:     true,
 		},
 		{
 			name:     "choice/second alt",
-			content:  ecOr(helim.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
+			content:  ecOr(helium.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
 			children: []string{"b"},
 			want:     true,
 		},
 		{
 			name:     "choice/third alt",
-			content:  ecOr(helim.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
+			content:  ecOr(helium.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
 			children: []string{"c"},
 			want:     true,
 		},
 		{
 			name:     "choice/no match",
-			content:  ecOr(helim.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
+			content:  ecOr(helium.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
 			children: []string{"d"},
 			want:     false,
 		},
 		{
 			name:     "choice/extra unconsumed rejected",
-			content:  ecOr(helim.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
+			content:  ecOr(helium.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
 			children: []string{"a", "b"},
 			want:     false,
 		},
@@ -297,13 +297,13 @@ func TestMatchContentModel(t *testing.T) {
 		// Optional element: (a, b?, c)
 		{
 			name:     "optional/with optional present",
-			content:  ecSeq(helim.ElementContentOnce, ecElem("a"), ecElemOpt("b"), ecElem("c")),
+			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElemOpt("b"), ecElem("c")),
 			children: []string{"a", "b", "c"},
 			want:     true,
 		},
 		{
 			name:     "optional/with optional absent",
-			content:  ecSeq(helim.ElementContentOnce, ecElem("a"), ecElemOpt("b"), ecElem("c")),
+			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElemOpt("b"), ecElem("c")),
 			children: []string{"a", "c"},
 			want:     true,
 		},
@@ -311,19 +311,19 @@ func TestMatchContentModel(t *testing.T) {
 		// Star repetition: (a, b*, c)
 		{
 			name:     "star/zero occurrences",
-			content:  ecSeq(helim.ElementContentOnce, ecElem("a"), ecElemStar("b"), ecElem("c")),
+			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElemStar("b"), ecElem("c")),
 			children: []string{"a", "c"},
 			want:     true,
 		},
 		{
 			name:     "star/one occurrence",
-			content:  ecSeq(helim.ElementContentOnce, ecElem("a"), ecElemStar("b"), ecElem("c")),
+			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElemStar("b"), ecElem("c")),
 			children: []string{"a", "b", "c"},
 			want:     true,
 		},
 		{
 			name:     "star/multiple occurrences",
-			content:  ecSeq(helim.ElementContentOnce, ecElem("a"), ecElemStar("b"), ecElem("c")),
+			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElemStar("b"), ecElem("c")),
 			children: []string{"a", "b", "b", "b", "c"},
 			want:     true,
 		},
@@ -331,19 +331,19 @@ func TestMatchContentModel(t *testing.T) {
 		// Plus repetition: (a, b+, c)
 		{
 			name:     "plus/zero occurrences fails",
-			content:  ecSeq(helim.ElementContentOnce, ecElem("a"), ecElemPlus("b"), ecElem("c")),
+			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElemPlus("b"), ecElem("c")),
 			children: []string{"a", "c"},
 			want:     false,
 		},
 		{
 			name:     "plus/one occurrence",
-			content:  ecSeq(helim.ElementContentOnce, ecElem("a"), ecElemPlus("b"), ecElem("c")),
+			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElemPlus("b"), ecElem("c")),
 			children: []string{"a", "b", "c"},
 			want:     true,
 		},
 		{
 			name:     "plus/multiple occurrences",
-			content:  ecSeq(helim.ElementContentOnce, ecElem("a"), ecElemPlus("b"), ecElem("c")),
+			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElemPlus("b"), ecElem("c")),
 			children: []string{"a", "b", "b", "c"},
 			want:     true,
 		},
@@ -351,8 +351,8 @@ func TestMatchContentModel(t *testing.T) {
 		// Nested sequence: ((a, b), c)
 		{
 			name: "nested seq/match",
-			content: ecSeq(helim.ElementContentOnce,
-				ecSeq(helim.ElementContentOnce, ecElem("a"), ecElem("b")),
+			content: ecSeq(helium.ElementContentOnce,
+				ecSeq(helium.ElementContentOnce, ecElem("a"), ecElem("b")),
 				ecElem("c"),
 			),
 			children: []string{"a", "b", "c"},
@@ -360,8 +360,8 @@ func TestMatchContentModel(t *testing.T) {
 		},
 		{
 			name: "nested seq/missing inner",
-			content: ecSeq(helim.ElementContentOnce,
-				ecSeq(helim.ElementContentOnce, ecElem("a"), ecElem("b")),
+			content: ecSeq(helium.ElementContentOnce,
+				ecSeq(helium.ElementContentOnce, ecElem("a"), ecElem("b")),
 				ecElem("c"),
 			),
 			children: []string{"a", "c"},
@@ -371,9 +371,9 @@ func TestMatchContentModel(t *testing.T) {
 		// Nested choice: (a, (b | c), d)
 		{
 			name: "nested choice/first alt",
-			content: ecSeq(helim.ElementContentOnce,
+			content: ecSeq(helium.ElementContentOnce,
 				ecElem("a"),
-				ecOr(helim.ElementContentOnce, ecElem("b"), ecElem("c")),
+				ecOr(helium.ElementContentOnce, ecElem("b"), ecElem("c")),
 				ecElem("d"),
 			),
 			children: []string{"a", "b", "d"},
@@ -381,9 +381,9 @@ func TestMatchContentModel(t *testing.T) {
 		},
 		{
 			name: "nested choice/second alt",
-			content: ecSeq(helim.ElementContentOnce,
+			content: ecSeq(helium.ElementContentOnce,
 				ecElem("a"),
-				ecOr(helim.ElementContentOnce, ecElem("b"), ecElem("c")),
+				ecOr(helium.ElementContentOnce, ecElem("b"), ecElem("c")),
 				ecElem("d"),
 			),
 			children: []string{"a", "c", "d"},
@@ -391,9 +391,9 @@ func TestMatchContentModel(t *testing.T) {
 		},
 		{
 			name: "nested choice/no match",
-			content: ecSeq(helim.ElementContentOnce,
+			content: ecSeq(helium.ElementContentOnce,
 				ecElem("a"),
-				ecOr(helim.ElementContentOnce, ecElem("b"), ecElem("c")),
+				ecOr(helium.ElementContentOnce, ecElem("b"), ecElem("c")),
 				ecElem("d"),
 			),
 			children: []string{"a", "x", "d"},
@@ -403,19 +403,19 @@ func TestMatchContentModel(t *testing.T) {
 		// Repeated sequence: (a, b)+
 		{
 			name:     "seq plus/one rep",
-			content:  ecSeq(helim.ElementContentPlus, ecElem("a"), ecElem("b")),
+			content:  ecSeq(helium.ElementContentPlus, ecElem("a"), ecElem("b")),
 			children: []string{"a", "b"},
 			want:     true,
 		},
 		{
 			name:     "seq plus/two reps",
-			content:  ecSeq(helim.ElementContentPlus, ecElem("a"), ecElem("b")),
+			content:  ecSeq(helium.ElementContentPlus, ecElem("a"), ecElem("b")),
 			children: []string{"a", "b", "a", "b"},
 			want:     true,
 		},
 		{
 			name:     "seq plus/zero reps fails",
-			content:  ecSeq(helim.ElementContentPlus, ecElem("a"), ecElem("b")),
+			content:  ecSeq(helium.ElementContentPlus, ecElem("a"), ecElem("b")),
 			children: nil,
 			want:     false,
 		},
@@ -423,19 +423,19 @@ func TestMatchContentModel(t *testing.T) {
 		// Repeated choice: (a | b)+
 		{
 			name:     "choice plus/single",
-			content:  ecOr(helim.ElementContentPlus, ecElem("a"), ecElem("b")),
+			content:  ecOr(helium.ElementContentPlus, ecElem("a"), ecElem("b")),
 			children: []string{"a"},
 			want:     true,
 		},
 		{
 			name:     "choice plus/multiple mixed",
-			content:  ecOr(helim.ElementContentPlus, ecElem("a"), ecElem("b")),
+			content:  ecOr(helium.ElementContentPlus, ecElem("a"), ecElem("b")),
 			children: []string{"a", "b", "a"},
 			want:     true,
 		},
 		{
 			name:     "choice plus/zero fails",
-			content:  ecOr(helim.ElementContentPlus, ecElem("a"), ecElem("b")),
+			content:  ecOr(helium.ElementContentPlus, ecElem("a"), ecElem("b")),
 			children: nil,
 			want:     false,
 		},
@@ -443,13 +443,13 @@ func TestMatchContentModel(t *testing.T) {
 		// Repeated choice star: (a | b)*
 		{
 			name:     "choice star/zero ok",
-			content:  ecOr(helim.ElementContentMult, ecElem("a"), ecElem("b")),
+			content:  ecOr(helium.ElementContentMult, ecElem("a"), ecElem("b")),
 			children: nil,
 			want:     true,
 		},
 		{
 			name:     "choice star/multiple",
-			content:  ecOr(helim.ElementContentMult, ecElem("a"), ecElem("b")),
+			content:  ecOr(helium.ElementContentMult, ecElem("a"), ecElem("b")),
 			children: []string{"b", "a", "b"},
 			want:     true,
 		},
@@ -457,13 +457,13 @@ func TestMatchContentModel(t *testing.T) {
 		// Empty children against required content
 		{
 			name:     "empty children/required seq fails",
-			content:  ecSeq(helim.ElementContentOnce, ecElem("a")),
+			content:  ecSeq(helium.ElementContentOnce, ecElem("a")),
 			children: nil,
 			want:     false,
 		},
 		{
 			name:     "empty children/optional seq ok",
-			content:  ecSeq(helim.ElementContentOpt, ecElem("a")),
+			content:  ecSeq(helium.ElementContentOpt, ecElem("a")),
 			children: nil,
 			want:     true,
 		},
@@ -635,36 +635,36 @@ func TestIsValidName(t *testing.T) {
 
 func TestStandaloneWhitespaceCheck(t *testing.T) {
 	t.Run("whitespace in element-only content from ext subset", func(t *testing.T) {
-		doc := helim.NewDocument("1.0", "utf-8", helim.StandaloneExplicitYes)
+		doc := helium.NewDocument("1.0", "utf-8", helium.StandaloneExplicitYes)
 
 		// Internal subset: declares "root" with ANY content
 		intDTD := newDTD()
 		setField(intDTD, "doc", doc)
-		setField(intDTD, "etype", helim.DTDNode)
+		setField(intDTD, "etype", helium.DTDNode)
 		setField(doc, "intSubset", intDTD)
 		rootDecl := newElementDecl()
 		setField(rootDecl, "name", "root")
 		setField(rootDecl, "decltype", enum.AnyElementType)
 		setField(rootDecl, "doc", doc)
-		setField(intDTD, "elements", map[string]*helim.ElementDecl{"root:": rootDecl})
-		setField(intDTD, "entities", map[string]*helim.Entity{})
-		setField(intDTD, "pentities", map[string]*helim.Entity{})
-		setField(intDTD, "attributes", map[string]*helim.AttributeDecl{})
+		setField(intDTD, "elements", map[string]*helium.ElementDecl{"root:": rootDecl})
+		setField(intDTD, "entities", map[string]*helium.Entity{})
+		setField(intDTD, "pentities", map[string]*helium.Entity{})
+		setField(intDTD, "attributes", map[string]*helium.AttributeDecl{})
 
 		// External subset: declares "container" with element-only content (child)+
 		extDTD := newDTD()
 		setField(extDTD, "doc", doc)
-		setField(extDTD, "etype", helim.DTDNode)
+		setField(extDTD, "etype", helium.DTDNode)
 		setField(doc, "extSubset", extDTD)
 		containerDecl := newElementDecl()
 		setField(containerDecl, "name", "container")
 		setField(containerDecl, "decltype", enum.ElementElementType)
-		setField(containerDecl, "content", newElementContent(helim.ElementContentElement, helim.ElementContentPlus, "child"))
+		setField(containerDecl, "content", newElementContent(helium.ElementContentElement, helium.ElementContentPlus, "child"))
 		setField(containerDecl, "doc", doc)
-		setField(extDTD, "elements", map[string]*helim.ElementDecl{"container:": containerDecl})
-		setField(extDTD, "entities", map[string]*helim.Entity{})
-		setField(extDTD, "pentities", map[string]*helim.Entity{})
-		setField(extDTD, "attributes", map[string]*helim.AttributeDecl{})
+		setField(extDTD, "elements", map[string]*helium.ElementDecl{"container:": containerDecl})
+		setField(extDTD, "entities", map[string]*helium.Entity{})
+		setField(extDTD, "pentities", map[string]*helium.Entity{})
+		setField(extDTD, "attributes", map[string]*helium.AttributeDecl{})
 
 		// Build DOM: <root><container> <child/> </container></root>
 		root := newElement("root")
@@ -686,34 +686,34 @@ func TestStandaloneWhitespaceCheck(t *testing.T) {
 	})
 
 	t.Run("no whitespace no error", func(t *testing.T) {
-		doc := helim.NewDocument("1.0", "utf-8", helim.StandaloneExplicitYes)
+		doc := helium.NewDocument("1.0", "utf-8", helium.StandaloneExplicitYes)
 
 		intDTD := newDTD()
 		setField(intDTD, "doc", doc)
-		setField(intDTD, "etype", helim.DTDNode)
+		setField(intDTD, "etype", helium.DTDNode)
 		setField(doc, "intSubset", intDTD)
 		rootDecl := newElementDecl()
 		setField(rootDecl, "name", "root")
 		setField(rootDecl, "decltype", enum.AnyElementType)
 		setField(rootDecl, "doc", doc)
-		setField(intDTD, "elements", map[string]*helim.ElementDecl{"root:": rootDecl})
-		setField(intDTD, "entities", map[string]*helim.Entity{})
-		setField(intDTD, "pentities", map[string]*helim.Entity{})
-		setField(intDTD, "attributes", map[string]*helim.AttributeDecl{})
+		setField(intDTD, "elements", map[string]*helium.ElementDecl{"root:": rootDecl})
+		setField(intDTD, "entities", map[string]*helium.Entity{})
+		setField(intDTD, "pentities", map[string]*helium.Entity{})
+		setField(intDTD, "attributes", map[string]*helium.AttributeDecl{})
 
 		extDTD := newDTD()
 		setField(extDTD, "doc", doc)
-		setField(extDTD, "etype", helim.DTDNode)
+		setField(extDTD, "etype", helium.DTDNode)
 		setField(doc, "extSubset", extDTD)
 		containerDecl := newElementDecl()
 		setField(containerDecl, "name", "container")
 		setField(containerDecl, "decltype", enum.ElementElementType)
-		setField(containerDecl, "content", newElementContent(helim.ElementContentElement, helim.ElementContentPlus, "child"))
+		setField(containerDecl, "content", newElementContent(helium.ElementContentElement, helium.ElementContentPlus, "child"))
 		setField(containerDecl, "doc", doc)
-		setField(extDTD, "elements", map[string]*helim.ElementDecl{"container:": containerDecl})
-		setField(extDTD, "entities", map[string]*helim.Entity{})
-		setField(extDTD, "pentities", map[string]*helim.Entity{})
-		setField(extDTD, "attributes", map[string]*helim.AttributeDecl{})
+		setField(extDTD, "elements", map[string]*helium.ElementDecl{"container:": containerDecl})
+		setField(extDTD, "entities", map[string]*helium.Entity{})
+		setField(extDTD, "pentities", map[string]*helium.Entity{})
+		setField(extDTD, "attributes", map[string]*helium.AttributeDecl{})
 
 		// Build DOM: <root><container><child/></container></root> (no whitespace)
 		root := newElement("root")
@@ -735,34 +735,34 @@ func TestStandaloneWhitespaceCheck(t *testing.T) {
 	})
 
 	t.Run("not standalone no whitespace error", func(t *testing.T) {
-		doc := helim.NewDocument("1.0", "utf-8", helim.StandaloneImplicitNo)
+		doc := helium.NewDocument("1.0", "utf-8", helium.StandaloneImplicitNo)
 
 		intDTD := newDTD()
 		setField(intDTD, "doc", doc)
-		setField(intDTD, "etype", helim.DTDNode)
+		setField(intDTD, "etype", helium.DTDNode)
 		setField(doc, "intSubset", intDTD)
 		rootDecl := newElementDecl()
 		setField(rootDecl, "name", "root")
 		setField(rootDecl, "decltype", enum.AnyElementType)
 		setField(rootDecl, "doc", doc)
-		setField(intDTD, "elements", map[string]*helim.ElementDecl{"root:": rootDecl})
-		setField(intDTD, "entities", map[string]*helim.Entity{})
-		setField(intDTD, "pentities", map[string]*helim.Entity{})
-		setField(intDTD, "attributes", map[string]*helim.AttributeDecl{})
+		setField(intDTD, "elements", map[string]*helium.ElementDecl{"root:": rootDecl})
+		setField(intDTD, "entities", map[string]*helium.Entity{})
+		setField(intDTD, "pentities", map[string]*helium.Entity{})
+		setField(intDTD, "attributes", map[string]*helium.AttributeDecl{})
 
 		extDTD := newDTD()
 		setField(extDTD, "doc", doc)
-		setField(extDTD, "etype", helim.DTDNode)
+		setField(extDTD, "etype", helium.DTDNode)
 		setField(doc, "extSubset", extDTD)
 		containerDecl := newElementDecl()
 		setField(containerDecl, "name", "container")
 		setField(containerDecl, "decltype", enum.ElementElementType)
-		setField(containerDecl, "content", newElementContent(helim.ElementContentElement, helim.ElementContentPlus, "child"))
+		setField(containerDecl, "content", newElementContent(helium.ElementContentElement, helium.ElementContentPlus, "child"))
 		setField(containerDecl, "doc", doc)
-		setField(extDTD, "elements", map[string]*helim.ElementDecl{"container:": containerDecl})
-		setField(extDTD, "entities", map[string]*helim.Entity{})
-		setField(extDTD, "pentities", map[string]*helim.Entity{})
-		setField(extDTD, "attributes", map[string]*helim.AttributeDecl{})
+		setField(extDTD, "elements", map[string]*helium.ElementDecl{"container:": containerDecl})
+		setField(extDTD, "entities", map[string]*helium.Entity{})
+		setField(extDTD, "pentities", map[string]*helium.Entity{})
+		setField(extDTD, "attributes", map[string]*helium.AttributeDecl{})
 
 		// Build DOM: <root><container> <child/> </container></root>
 		root := newElement("root")
@@ -788,29 +788,29 @@ func TestStandaloneWhitespaceCheck(t *testing.T) {
 	})
 
 	t.Run("element in internal subset not flagged", func(t *testing.T) {
-		doc := helim.NewDocument("1.0", "utf-8", helim.StandaloneExplicitYes)
+		doc := helium.NewDocument("1.0", "utf-8", helium.StandaloneExplicitYes)
 
 		intDTD := newDTD()
 		setField(intDTD, "doc", doc)
-		setField(intDTD, "etype", helim.DTDNode)
+		setField(intDTD, "etype", helium.DTDNode)
 		setField(doc, "intSubset", intDTD)
 		// "root" declared in internal subset with element-only content
 		rootDecl := newElementDecl()
 		setField(rootDecl, "name", "root")
 		setField(rootDecl, "decltype", enum.ElementElementType)
-		setField(rootDecl, "content", newElementContent(helim.ElementContentElement, helim.ElementContentPlus, "child"))
+		setField(rootDecl, "content", newElementContent(helium.ElementContentElement, helium.ElementContentPlus, "child"))
 		setField(rootDecl, "doc", doc)
 		childDecl := newElementDecl()
 		setField(childDecl, "name", "child")
 		setField(childDecl, "decltype", enum.EmptyElementType)
 		setField(childDecl, "doc", doc)
-		setField(intDTD, "elements", map[string]*helim.ElementDecl{
+		setField(intDTD, "elements", map[string]*helium.ElementDecl{
 			"root:":  rootDecl,
 			"child:": childDecl,
 		})
-		setField(intDTD, "entities", map[string]*helim.Entity{})
-		setField(intDTD, "pentities", map[string]*helim.Entity{})
-		setField(intDTD, "attributes", map[string]*helim.AttributeDecl{})
+		setField(intDTD, "entities", map[string]*helium.Entity{})
+		setField(intDTD, "pentities", map[string]*helium.Entity{})
+		setField(intDTD, "attributes", map[string]*helium.AttributeDecl{})
 
 		// Build DOM: <root> <child/> </root> (whitespace around child)
 		root := newElement("root")
@@ -834,13 +834,13 @@ func TestStandaloneWhitespaceCheck(t *testing.T) {
 }
 
 func TestExtSubsetLookup_ParameterEntityInExtSubset(t *testing.T) {
-	doc := buildTestDoc(helim.StandaloneImplicitNo)
+	doc := buildTestDoc(helium.StandaloneImplicitNo)
 
 	// Add a parameter entity to extSubset
 	pent := newEntity("pEnt", enum.InternalParameterEntity, "", "", "param-value", "")
 	setField(pent, "doc", doc)
-	extSubset := getField[*helim.DTD](doc, "extSubset")
-	pentities := getField[map[string]*helim.Entity](extSubset, "pentities")
+	extSubset := getField[*helium.DTD](doc, "extSubset")
+	pentities := getField[map[string]*helium.Entity](extSubset, "pentities")
 	pentities["pEnt"] = pent
 
 	ent, found := doc.GetParameterEntity("pEnt")
@@ -848,7 +848,7 @@ func TestExtSubsetLookup_ParameterEntityInExtSubset(t *testing.T) {
 	require.Equal(t, "param-value", string(ent.Content()))
 
 	// standalone=yes should block it
-	setField(doc, "standalone", helim.StandaloneExplicitYes)
+	setField(doc, "standalone", helium.StandaloneExplicitYes)
 	_, found = doc.GetParameterEntity("pEnt")
 	require.False(t, found, "standalone=yes should prevent extSubset parameter entity lookup")
 }
@@ -863,9 +863,9 @@ func TestEntityAttributeValidation(t *testing.T) {
   <!ATTLIST root img ENTITY #REQUIRED>
 ]>
 <root img="logo"/>`
-		p := helim.NewParser()
-		p.SetOption(helim.ParseDTDValid)
-		p.SetOption(helim.ParseDTDAttr)
+		p := helium.NewParser()
+		p.SetOption(helium.ParseDTDValid)
+		p.SetOption(helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
@@ -877,9 +877,9 @@ func TestEntityAttributeValidation(t *testing.T) {
   <!ATTLIST root img ENTITY #REQUIRED>
 ]>
 <root img="noSuchEntity"/>`
-		p := helim.NewParser()
-		p.SetOption(helim.ParseDTDValid)
-		p.SetOption(helim.ParseDTDAttr)
+		p := helium.NewParser()
+		p.SetOption(helium.ParseDTDValid)
+		p.SetOption(helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "undeclared entity")
@@ -893,9 +893,9 @@ func TestEntityAttributeValidation(t *testing.T) {
   <!ATTLIST root img ENTITY #REQUIRED>
 ]>
 <root img="internalEnt"/>`
-		p := helim.NewParser()
-		p.SetOption(helim.ParseDTDValid)
-		p.SetOption(helim.ParseDTDAttr)
+		p := helium.NewParser()
+		p.SetOption(helium.ParseDTDValid)
+		p.SetOption(helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not unparsed")
@@ -913,9 +913,9 @@ func TestEntitiesAttributeValidation(t *testing.T) {
   <!ATTLIST root imgs ENTITIES #REQUIRED>
 ]>
 <root imgs="logo1 logo2"/>`
-		p := helim.NewParser()
-		p.SetOption(helim.ParseDTDValid)
-		p.SetOption(helim.ParseDTDAttr)
+		p := helium.NewParser()
+		p.SetOption(helium.ParseDTDValid)
+		p.SetOption(helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
@@ -929,9 +929,9 @@ func TestEntitiesAttributeValidation(t *testing.T) {
   <!ATTLIST root imgs ENTITIES #REQUIRED>
 ]>
 <root imgs="logo1 noSuchEntity"/>`
-		p := helim.NewParser()
-		p.SetOption(helim.ParseDTDValid)
-		p.SetOption(helim.ParseDTDAttr)
+		p := helium.NewParser()
+		p.SetOption(helium.ParseDTDValid)
+		p.SetOption(helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "undeclared entity")
@@ -948,9 +948,9 @@ func TestNotationAttributeValidation(t *testing.T) {
   <!ATTLIST root fmt NOTATION (gif|png) #REQUIRED>
 ]>
 <root fmt="gif"/>`
-		p := helim.NewParser()
-		p.SetOption(helim.ParseDTDValid)
-		p.SetOption(helim.ParseDTDAttr)
+		p := helium.NewParser()
+		p.SetOption(helium.ParseDTDValid)
+		p.SetOption(helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
@@ -963,9 +963,9 @@ func TestNotationAttributeValidation(t *testing.T) {
   <!ATTLIST root fmt NOTATION (gif|png) #REQUIRED>
 ]>
 <root fmt="png"/>`
-		p := helim.NewParser()
-		p.SetOption(helim.ParseDTDValid)
-		p.SetOption(helim.ParseDTDAttr)
+		p := helium.NewParser()
+		p.SetOption(helium.ParseDTDValid)
+		p.SetOption(helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "undeclared notation")

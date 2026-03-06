@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	helim "github.com/lestrrat-go/helium"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
@@ -18,7 +18,7 @@ import (
 )
 
 func newEventEmitter(out io.Writer) sax.SAX2Handler {
-	entities := map[string]*helim.Entity{}
+	entities := map[string]*helium.Entity{}
 	s := sax.New()
 	s.OnSetDocumentLocator = sax.SetDocumentLocatorFunc(func(_ sax.Context, loc sax.DocumentLocator) error {
 		_, _ = fmt.Fprintf(out, "SAX.SetDocumentLocator()\n")
@@ -202,7 +202,7 @@ func TestDocumentLocatorIDs(t *testing.T) {
 	s.OnEndElementNS = sax.EndElementNSFunc(func(_ sax.Context, _, _, _ string) error { return nil })
 	s.OnCharacters = sax.CharactersFunc(func(_ sax.Context, _ []byte) error { return nil })
 
-	p := helim.NewParser()
+	p := helium.NewParser()
 	p.SetSAXHandler(s)
 	p.SetBaseURI(baseURI)
 
@@ -248,7 +248,7 @@ func TestSAXEvents(t *testing.T) {
 		require.NoError(t, err, "os.ReadFile should succeed")
 
 		out := bytes.Buffer{}
-		p := helim.NewParser()
+		p := helium.NewParser()
 		p.SetSAXHandler(newEventEmitter(&out))
 
 		_, err = p.Parse(t.Context(), in)
