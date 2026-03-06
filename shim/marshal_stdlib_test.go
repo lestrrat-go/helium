@@ -1693,7 +1693,6 @@ func TestMarshalStdlib(t *testing.T) {
 		75:  "shim: []xml.Attr any,attr not supported in marshal",
 		76:  "shim: []xml.Attr any,attr not supported in marshal",
 		77:  "shim: []xml.Attr any,attr not supported in marshal",
-		94:  "shim: newline in chardata not escaped to &#xA;",
 		99:  "shim: CDATA ]]> splitting not implemented",
 		100: "shim: CDATA ]]> splitting not implemented",
 		101: "shim: CDATA ]]> splitting not implemented",
