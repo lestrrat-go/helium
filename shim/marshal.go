@@ -474,6 +474,25 @@ func textValue(field reflect.Value) string {
 		}
 		field = field.Elem()
 	}
+
+	// Check TextMarshaler interface
+	if field.CanInterface() {
+		if m, ok := field.Interface().(encoding.TextMarshaler); ok {
+			text, err := m.MarshalText()
+			if err == nil {
+				return string(text)
+			}
+		}
+	}
+	if field.CanAddr() {
+		if m, ok := field.Addr().Interface().(encoding.TextMarshaler); ok {
+			text, err := m.MarshalText()
+			if err == nil {
+				return string(text)
+			}
+		}
+	}
+
 	switch field.Kind() {
 	case reflect.String:
 		return field.String()
