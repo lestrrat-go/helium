@@ -1,6 +1,6 @@
 # Stdlib encoding/xml Test Compatibility Status
 
-352 pass, 84 skip, 0 fail. Skipped tests are grouped by feature gap below.
+360 pass, 82 skip, 0 fail. Skipped tests are grouped by feature gap below.
 
 Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
 
@@ -202,17 +202,13 @@ Stdlib leaves `interface{}` fields nil for comment/innerxml/element/omitempty/an
 - [ ] `TestRawTokenAltEncodingStdlib` — CharsetReader callback
 - [ ] `TestRawTokenAltEncodingNoConverterStdlib` — error when no CharsetReader and non-UTF-8 encoding
 
-## Decoder Nil Token Handling [M]
+## ~~Decoder Nil Token Handling~~ ✅
 
-A `TokenReader` returning `(nil, nil)` should be retried; subsequent structural errors should surface as `*SyntaxError`. Fix: add nil-token retry guard and ensure error typing.
+- [x] `TestDecodeNilTokenStdlib` — error type for nil token reader
 
-- [ ] `TestDecodeNilTokenStdlib` — error type for nil token reader
+## ~~Decoder EarlyEOF Handling~~ ✅
 
-## Decoder EarlyEOF Handling [M]
-
-A `TokenReader` returning `(tok, io.EOF)` simultaneously should process the token and then report EOF. Fix: handle the combined (tok, err) pair in the token-reader dispatch loop.
-
-- [ ] `TestDecodeEOFStdlib` — earlyEOF / error type handling
+- [x] `TestDecodeEOFStdlib` — earlyEOF / error type handling
 
 ## SyntaxError Line Number [M]
 

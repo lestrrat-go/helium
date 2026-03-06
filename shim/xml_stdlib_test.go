@@ -37,7 +37,6 @@ func (t *toksStdlib) Token() (Token, error) {
 }
 
 func TestDecodeEOFStdlib(t *testing.T) {
-	t.Skip("shim: Decoder earlyEOF / error type handling differs from stdlib")
 	start := StartElement{Name: Name{Local: "test"}}
 	tests := []struct {
 		name   string
@@ -105,7 +104,6 @@ func (t *toksNilStdlib) Token() (Token, error) {
 }
 
 func TestDecodeNilTokenStdlib(t *testing.T) {
-	t.Skip("shim: Decoder error type for nil token reader differs from stdlib")
 	for _, strict := range []bool{true, false} {
 		name := fmt.Sprintf("Strict=%v", strict)
 		t.Run(name, func(t *testing.T) {

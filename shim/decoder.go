@@ -44,6 +44,7 @@ type Decoder struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	lastToken   Token
+	savedErr    error
 	offset      int64
 	line        int
 	column      int
@@ -298,11 +299,27 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 	var tok Token
 
 	if d.tokenReader != nil {
-		nextTok, err := d.tokenReader.Token()
-		if err != nil {
+		if d.savedErr != nil {
+			err := d.savedErr
+			d.savedErr = nil
 			return nil, err
 		}
-		tok = nextTok
+		for {
+			nextTok, err := d.tokenReader.Token()
+			if nextTok == nil && err == nil {
+				continue
+			}
+			if err != nil {
+				if nextTok != nil {
+					d.savedErr = err
+					tok = nextTok
+					break
+				}
+				return nil, err
+			}
+			tok = nextTok
+			break
+		}
 	} else {
 		event, ok := <-d.events
 		if !ok {
@@ -442,14 +459,14 @@ func (d *Decoder) buildElementFromTokens(start stdxml.StartElement) (*helium.Ele
 	}
 
 	// Read children
-	if err := d.populateElement(doc, root); err != nil {
+	if err := d.populateElement(doc, root, start.Name); err != nil {
 		return nil, err
 	}
 
 	return root, nil
 }
 
-func (d *Decoder) populateElement(doc *helium.Document, parent *helium.Element) error {
+func (d *Decoder) populateElement(doc *helium.Document, parent *helium.Element, name Name) error {
 	for {
 		tok, err := d.Token()
 		if err != nil {
@@ -471,10 +488,16 @@ func (d *Decoder) populateElement(doc *helium.Document, parent *helium.Element) 
 			if err := parent.AddChild(child); err != nil {
 				return err
 			}
-			if err := d.populateElement(doc, child); err != nil {
+			if err := d.populateElement(doc, child, v.Name); err != nil {
 				return err
 			}
 		case EndElement:
+			if v.Name.Local != name.Local || v.Name.Space != name.Space {
+				return &SyntaxError{
+					Msg:  "element <" + name.Local + "> closed by </" + v.Name.Local + ">",
+					Line: d.line,
+				}
+			}
 			return nil
 		case CharData:
 			text, tErr := doc.CreateText([]byte(v))
