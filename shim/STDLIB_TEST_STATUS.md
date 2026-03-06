@@ -1,6 +1,6 @@
 # Stdlib encoding/xml Test Compatibility Status
 
-370 pass, 72 skip, 0 fail. Skipped tests are grouped by feature gap below.
+372 pass, 70 skip, 0 fail. Skipped tests are grouped by feature gap below.
 
 Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
 
@@ -126,14 +126,14 @@ Stdlib's priority: 1) outer override, 2) XMLName field value, 3) XMLName field t
 - [ ] **Unmarshal**: embedded struct XMLName populated when should remain zero (#106, #108-109)
 - [ ] **Unmarshal**: outer element name mismatch for named embedded struct (#107)
 
-## Embedded Struct Edge Cases [M]
+## Embedded Struct Edge Cases (partially done)
 
-Embedded field shadowing (path-tagged field vs plain field) and nil embedded pointer preservation differ from stdlib. Fix: align `resolveBindingConflicts` with stdlib's shadowing rules; don't allocate nil embedded pointers when their fields aren't present.
+Embedded field shadowing (path-tagged field vs plain field) and nil embedded pointer preservation differ from stdlib. Cross-depth shadowing and nil pointer preservation are now fixed. Remaining issue: path merging (#64 depends on Path Field Merging).
 
-- [ ] **Marshal**: embedded field path conflict resolution differs (#64)
-- [ ] **Marshal**: embedded struct omitempty handling differs (#65)
-- [ ] **Unmarshal**: embedded field path conflict resolution (#64)
-- [ ] **Unmarshal**: embedded struct pointer allocated when should remain nil (#65)
+- [ ] **Marshal**: embedded field path conflict resolution differs (#64) — needs path merging
+- [x] **Marshal**: embedded struct omitempty handling differs (#65)
+- [ ] **Unmarshal**: embedded field path conflict resolution (#64) — needs path merging
+- [x] **Unmarshal**: embedded struct pointer allocated when should remain nil (#65)
 
 ## ~~Indirect Pointer Handling (unmarshal)~~ ✅
 

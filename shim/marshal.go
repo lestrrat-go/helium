@@ -130,7 +130,7 @@ func (enc *Encoder) marshalStruct(val reflect.Value, start *StartElement) error 
 		if len(b.path) > 0 {
 			return fmt.Errorf("xml: %s chain not valid with attr flag", b.rawName)
 		}
-		field, ok := fieldByIndexAlloc(val, b.index)
+		field, ok := fieldByIndexNoAlloc(val, b.index)
 		if !ok {
 			continue
 		}
@@ -152,7 +152,7 @@ func (enc *Encoder) marshalStruct(val reflect.Value, start *StartElement) error 
 		if b.omit || !b.fieldExport || b.isAttr || b.isXMLName {
 			continue
 		}
-		field, ok := fieldByIndexAlloc(val, b.index)
+		field, ok := fieldByIndexNoAlloc(val, b.index)
 		if !ok {
 			continue
 		}
@@ -388,7 +388,7 @@ func (enc *Encoder) buildStructStart(val reflect.Value, bindings []fieldBinding,
 		if !b.isXMLName {
 			continue
 		}
-		field, ok := fieldByIndexAlloc(val, b.index)
+		field, ok := fieldByIndexNoAlloc(val, b.index)
 		if !ok {
 			continue
 		}

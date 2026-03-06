@@ -166,15 +166,18 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 			continue
 		}
 
-		field, ok := fieldByIndexAlloc(target, binding.index)
-		if !ok {
-			continue
-		}
-
 		switch {
 		case binding.isXMLName:
+			field, ok := fieldByIndexAlloc(target, binding.index)
+			if !ok {
+				continue
+			}
 			setXMLName(field, elem)
 		case binding.isAttr:
+			field, ok := fieldByIndexAlloc(target, binding.index)
+			if !ok {
+				continue
+			}
 			if binding.isAny {
 				for i, attr := range elem.Attributes() {
 					if consumedAttr[i] {
@@ -196,14 +199,26 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 				}
 			}
 		case binding.isCharData:
+			field, ok := fieldByIndexAlloc(target, binding.index)
+			if !ok {
+				continue
+			}
 			if err := assignFromText(field, elementText(elem)); err != nil {
 				return err
 			}
 		case binding.isCData:
+			field, ok := fieldByIndexAlloc(target, binding.index)
+			if !ok {
+				continue
+			}
 			if err := assignFromText(field, elementText(elem)); err != nil {
 				return err
 			}
 		case binding.isInnerXML:
+			field, ok := fieldByIndexNoAlloc(target, binding.index)
+			if !ok {
+				continue
+			}
 			if field.Kind() == reflect.Interface || field.Kind() == reflect.Pointer {
 				continue
 			}
@@ -224,6 +239,10 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 				}
 			}
 		case binding.isComment:
+			field, ok := fieldByIndexNoAlloc(target, binding.index)
+			if !ok {
+				continue
+			}
 			if field.Kind() == reflect.Interface || field.Kind() == reflect.Pointer {
 				continue
 			}
@@ -234,15 +253,29 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 				}
 			}
 		default:
+			// Element binding: use non-allocating accessor first to check if
+			// matching children exist, to avoid allocating nil embedded pointers
+			// when no data is present.
+			path := binding.path
+			if len(path) == 0 {
+				path = []string{binding.rawName}
+			}
+
+			// Check if any matching children exist before allocating
+			_, matched := findPath(children, consumed, path)
+			if matched == nil {
+				continue
+			}
+
+			field, ok := fieldByIndexAlloc(target, binding.index)
+			if !ok {
+				continue
+			}
 			if field.Kind() == reflect.Interface {
 				if field.IsNil() {
 					continue
 				}
 				field = field.Elem()
-			}
-			path := binding.path
-			if len(path) == 0 {
-				path = []string{binding.rawName}
 			}
 
 			if field.Kind() == reflect.Slice && field.Type().Elem().Kind() != reflect.Uint8 {
@@ -262,12 +295,12 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 				continue
 			}
 
-			idx, matched := findPath(children, consumed, path)
-			if matched == nil {
+			idx, matched2 := findPath(children, consumed, path)
+			if matched2 == nil {
 				continue
 			}
 			consumed[idx] = true
-			if err := assignFromElement(field, matched); err != nil {
+			if err := assignFromElement(field, matched2); err != nil {
 				return err
 			}
 		}
@@ -691,6 +724,58 @@ func resolveBindingConflicts(bindings []fieldBinding) []fieldBinding {
 		kept = append(kept, binding)
 	}
 
+	// Second pass: resolve cross-depth shadowing for element bindings.
+	// A plain field "FieldA" at depth 1 shadows path fields "FieldA>A1" at depth 2
+	// because they share the same top-level XML element name.
+	type elemInfo struct {
+		topName string
+		depth   int
+		keptIdx int
+	}
+	var elems []elemInfo
+	for i, b := range kept {
+		if b.omit || !b.fieldExport || b.isAttr || b.isCharData || b.isCData || b.isInnerXML || b.isComment || b.isAny || b.isXMLName {
+			continue
+		}
+		topName := b.rawName
+		if len(b.path) > 0 {
+			topName = b.path[0]
+		}
+		elems = append(elems, elemInfo{topName: topName, depth: len(b.index), keptIdx: i})
+	}
+
+	shadowed := make(map[int]bool)
+	for i, a := range elems {
+		if shadowed[a.keptIdx] {
+			continue
+		}
+		for j, b := range elems {
+			if i == j || shadowed[b.keptIdx] {
+				continue
+			}
+			if a.topName != b.topName {
+				continue
+			}
+			// Same top-level name at different depths: shallower wins
+			if a.depth < b.depth {
+				shadowed[b.keptIdx] = true
+			} else if b.depth < a.depth {
+				shadowed[a.keptIdx] = true
+				break
+			}
+		}
+	}
+
+	if len(shadowed) > 0 {
+		filtered := make([]fieldBinding, 0, len(kept))
+		for i, b := range kept {
+			if !shadowed[i] {
+				filtered = append(filtered, b)
+			}
+		}
+		kept = filtered
+	}
+
 	return kept
 }
 
@@ -783,9 +868,6 @@ func shouldFlattenEmbeddedField(f reflect.StructField) bool {
 	if !f.Anonymous {
 		return false
 	}
-	if f.PkgPath != "" {
-		return false
-	}
 	tag := f.Tag.Get("xml")
 	if tag == "-" {
 		return false
@@ -812,6 +894,28 @@ func fieldByIndexAlloc(v reflect.Value, index []int) (reflect.Value, bool) {
 					return reflect.Value{}, false
 				}
 				cur.Set(reflect.New(cur.Type().Elem()))
+			}
+			cur = cur.Elem()
+		}
+		if cur.Kind() != reflect.Struct {
+			return reflect.Value{}, false
+		}
+		cur = cur.Field(i)
+	}
+	if !cur.IsValid() {
+		return reflect.Value{}, false
+	}
+	return cur, true
+}
+
+// fieldByIndexNoAlloc traverses the struct field index chain without
+// allocating nil pointers. Returns false if a nil pointer is encountered.
+func fieldByIndexNoAlloc(v reflect.Value, index []int) (reflect.Value, bool) {
+	cur := v
+	for _, i := range index {
+		if cur.Kind() == reflect.Pointer {
+			if cur.IsNil() {
+				return reflect.Value{}, false
 			}
 			cur = cur.Elem()
 		}
