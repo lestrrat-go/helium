@@ -47,11 +47,16 @@ func Unmarshal(data []byte, v any) error {
 	if rv.IsNil() {
 		return fmt.Errorf("nil pointer passed to Unmarshal")
 	}
-	if len(trimSpace(data)) == 0 {
+	trimmed := trimLeadingSpace(data)
+	if len(trimmed) == 0 {
 		return io.EOF
 	}
 
-	doc, err := helium.Parse(context.Background(), data)
+	// Strip XML declaration — helium's parser is stricter than stdlib about
+	// malformed declarations (e.g. charset= instead of encoding=).
+	trimmed = stripXMLDecl(trimmed)
+
+	doc, err := helium.Parse(context.Background(), trimmed)
 	if err != nil {
 		return convertParseError(err)
 	}
@@ -61,6 +66,28 @@ func Unmarshal(data []byte, v any) error {
 	}
 
 	return decodeElementInto(rv.Elem(), root)
+}
+
+func trimLeadingSpace(data []byte) []byte {
+	for len(data) > 0 {
+		c := data[0]
+		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
+			break
+		}
+		data = data[1:]
+	}
+	return data
+}
+
+func stripXMLDecl(data []byte) []byte {
+	if len(data) < 5 || string(data[:5]) != "<?xml" {
+		return data
+	}
+	end := bytes.Index(data, []byte("?>"))
+	if end < 0 {
+		return data
+	}
+	return trimLeadingSpace(data[end+2:])
 }
 
 func trimSpace(data []byte) []byte {

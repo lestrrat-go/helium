@@ -16,7 +16,6 @@ import (
 // Stripped down Atom feed data structures.
 
 func TestUnmarshalFeedStdlib(t *testing.T) {
-	t.Skip("shim: XML declaration in middle of document not supported")
 	var f Feed
 	if err := Unmarshal([]byte(atomFeedStringStdlib), &f); err != nil {
 		t.Fatalf("Unmarshal: %s", err)
@@ -353,7 +352,6 @@ type TestThree struct {
 }
 
 func TestUnmarshalWithoutNameTypeStdlib(t *testing.T) {
-	t.Skip("shim: XML declaration in middle of document not supported")
 	var x TestThree
 	if err := Unmarshal([]byte(withoutNameTypeDataStdlib), &x); err != nil {
 		t.Fatalf("Unmarshal: %s", err)

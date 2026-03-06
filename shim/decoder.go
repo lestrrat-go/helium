@@ -188,6 +188,9 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 		return push(c, c, line, col)
 	})
 	h.OnProcessingInstruction = sax.ProcessingInstructionFunc(func(_ sax.Context, target, data string) error {
+		if target == "xml" {
+			return nil // skip XML declaration
+		}
 		line, col := 0, 0
 		if locator != nil {
 			line = locator.LineNumber()
