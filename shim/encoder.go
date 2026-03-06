@@ -207,6 +207,9 @@ func (enc *Encoder) writeComment(c Comment) error {
 	}
 	enc.w.WriteString("<!--")
 	enc.w.Write([]byte(c))
+	if len(c) > 0 && c[len(c)-1] == '-' {
+		enc.w.WriteByte(' ')
+	}
 	enc.w.WriteString("-->")
 	enc.lastWasStart = false
 	enc.lastWasText = false

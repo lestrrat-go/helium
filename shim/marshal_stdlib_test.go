@@ -1676,7 +1676,6 @@ func TestMarshalStdlib(t *testing.T) {
 		21:  "shim: Plain []int slice not marshaled as separate elements",
 		22:  "shim: Plain [N]int array not marshaled as separate elements",
 		23:  "shim: interface value defaultStart produces empty element name",
-		36:  "shim: comment ending with - not padded with space",
 		45:  "shim: time.Time TextMarshaler not invoked (uses fmt.Sprint instead)",
 		47:  "shim: generic type name includes brackets",
 		49:  "shim: path field merging not implemented (Items>item shares parent with Items)",
