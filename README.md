@@ -518,6 +518,40 @@ cat xmlfile | heliumlint
 * The codebase includes broad compatibility tests and examples, and active parity work against libxml2 behavior.
 * Some edge cases and parity gaps are still being iterated on; contributions and issue reports are welcome.
 
+# encoding/xml Compatibility
+
+The `shim` package provides a drop-in replacement for Go's standard `encoding/xml` package, backed by helium's parser. It exposes the same types and API surface — `Marshal`, `Unmarshal`, `NewEncoder`, `NewDecoder`, `Token`, `EncodeToken`, and all the familiar struct tags (`xml:"name,attr"`, `,chardata`, `,innerxml`, `,omitempty`, etc.).
+
+```go
+import "github.com/lestrrat-go/helium/shim"
+
+type Person struct {
+    XMLName shim.Name `xml:"person"`
+    Name    string    `xml:"name"`
+    Age     int       `xml:"age"`
+}
+
+// Marshal
+data, err := shim.Marshal(Person{Name: "Alice", Age: 30})
+
+// Unmarshal
+var p Person
+err = shim.Unmarshal(data, &p)
+
+// Streaming decode
+dec := shim.NewDecoder(reader)
+err = dec.Decode(&p)
+
+// Streaming encode
+enc := shim.NewEncoder(writer)
+enc.Indent("", "  ")
+err = enc.Encode(p)
+```
+
+To migrate existing code, change the import path from `"encoding/xml"` to `"github.com/lestrrat-go/helium/shim"`. Type aliases (`Name`, `Attr`, `StartElement`, `CharData`, etc.) ensure that existing type references continue to work without modification.
+
+> **Note:** This feature is under active development. Some edge cases may not yet match `encoding/xml` behavior exactly.
+
 # Contributing
 
 ## Issues
