@@ -1,0 +1,349 @@
+# Stdlib encoding/xml Test Compatibility Status
+
+305 pass, 128 skip, 0 fail. Skipped tests are grouped by feature gap below.
+
+Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
+
+Difficulty: **L** = low (isolated change, <30 min), **M** = medium (multiple touch-points, ~1-3 hrs), **H** = hard (new subsystem or architectural change, >3 hrs)
+
+---
+
+## XML Declaration Handling [L]
+
+The shim errors on `<?xml ...?>` ProcInst at document start instead of skipping it. Fix: skip/ignore the ProcInst token when it appears as the first token in the stream.
+
+- [ ] `TestUnmarshalFeedStdlib` — full Atom feed with XML declaration at start fails with "XML declaration in middle of document"
+- [ ] `TestUnmarshalWithoutNameTypeStdlib` — same XML declaration tolerance issue
+
+## ~~uintptr Unmarshal~~ ✅
+
+- [x] `TestAllScalarsStdlib` — unmarshaling into `uintptr` field not supported
+
+## NewTokenDecoder Idempotency [L]
+
+`NewTokenDecoder(d)` wraps an existing `*Decoder` again instead of returning it as-is. Fix: add a type assertion to return the existing `*Decoder` directly.
+
+- [ ] `TestNewTokenDecoderStdlib` — `NewTokenDecoder` does not detect underlying `*Decoder`
+
+## ProcInst Target Validation [L]
+
+`EncodeToken(ProcInst{"xml", ...})` should only succeed as the first token. Fix: track whether any non-ProcInst token has been emitted; reject `xml` target after that.
+
+- [ ] `TestProcInstEncodeTokenStdlib` — ProcInst `xml` target allowed after other tokens
+
+## EncodeToken Pointer Type Rejection [L]
+
+`EncodeToken` accepts `*StartElement` and `*EndElement`; stdlib rejects them. Fix: add type switch cases that return an error for pointer-to-token types.
+
+- [ ] `TestSimpleUseOfEncodeTokenStdlib` — pointer types not rejected by `EncodeToken`
+
+## Invalid InnerXML Type Handling [L]
+
+When `,innerxml` is used on an unsupported type (e.g. `[]string`), the shim errors instead of silently skipping. Fix: change the handler to skip unsupported innerxml field types.
+
+- [ ] `TestInvalidInnerXMLTypeStdlib` — error message for invalid innerxml type differs
+
+## ~~[]byte / Array Marshaling~~ ✅
+
+- [x] **Marshal**: `[]byte` field via fmt instead of string (#16, #18)
+- [x] **Marshal**: `[N]byte` array via fmt (#19)
+- [x] **Marshal**: `[]int` slice not expanded to separate elements (#21)
+- [x] **Marshal**: `[N]int` array not expanded (#22)
+
+## []byte Nil vs Empty Slice (unmarshal) [L]
+
+After unmarshaling, `[]byte` chardata fields are initialized as `[]byte{}` instead of `[]byte(nil)` when the element has content. Fix: preserve nil when the source slice hasn't been written to.
+
+- [ ] **Unmarshal**: `[]byte` field initialized as empty slice instead of nil (#37)
+
+## ~~Comment Trailing Dash Padding~~ ✅
+
+- [x] **Marshal**: comment ending with `-` not padded with space (#36)
+
+## ~~CharData Control Character Escaping~~ ✅
+
+- [x] **Marshal**: newline in chardata not escaped to `&#xA;` (#94)
+
+## ~~CDATA `]]>` Splitting~~ ✅
+
+- [x] **Marshal**: CDATA `]]>` splitting not implemented (#99-102)
+
+## Empty Path Wrapper Element [L-M]
+
+When a path-tagged slice field (e.g. `xml:"A>B,omitempty"`) is nil/empty, stdlib still emits the empty wrapper `<A></A>`. Fix: emit wrapper elements for path fields even when the leaf is omitempty-empty.
+
+- [ ] **Marshal**: empty path wrapper element not emitted for nil/empty slices (#103)
+
+## XML Declaration Encoding Validation [L-M]
+
+The shim does not parse the `encoding` attribute from `<?xml ...?>` and reject non-UTF-8 charsets. Fix: parse ProcInst data for encoding, compare against known UTF-8 aliases, error otherwise.
+
+- [ ] `TestIssue12417Stdlib` — XML declaration encoding attribute parsing
+
+## Invalid Element Name Error Messages [L-M]
+
+SAX parser produces different error messages for malformed names like `<a:te:st>`. Fix: map SAX error strings to stdlib's exact phrasing or add pre-validation.
+
+- [ ] `TestIssue20396Stdlib` — error messages for invalid element names differ
+
+## Invalid XML Name Validation (marshal) [L-M]
+
+Marshaling a struct with `XMLName` used as an attribute does not validate that the name is syntactically valid. Fix: add XML name validation in the attribute marshal path.
+
+- [ ] `TestInvalidXMLNameStdlib` — invalid XML name validation not implemented
+
+## Encoder Close State [L-M]
+
+`enc.Close()` does not check for unclosed elements or prevent subsequent `EncodeToken` calls. Fix: track open element stack; `Close()` errors if stack is non-empty and sets a closed flag.
+
+- [ ] `TestCloseStdlib` — encoder state after `Close` not fully implemented
+
+## ~~Bad Comment Type Error~~ ✅
+
+- [x] **Marshal**: bad comment type error not returned (#115, #119)
+
+## Nil Interface Omission in Special Fields [M] (partially done)
+
+- [x] **Marshal**: nil interface chardata not omitted (#130)
+- [x] **Marshal**: nil interface cdata not omitted (#141)
+- [x] **Marshal**: nil interface innerxml not omitted (#151)
+- [x] **Marshal**: nil interface element not omitted (#162)
+- [ ] **Marshal**: nil interface in any field not omitted (#181)
+- [ ] **Marshal**: nil interface in path field not omitted (#55)
+- [ ] **Marshal**: nil pointer/interface omission with path merging (#57-60)
+
+## `any`-Tagged Field Element Naming [M]
+
+When marshaling a field tagged `,any`, the element name should be the struct field name, not the dynamic type name. Nil interface in any-tagged fields should produce no output. Fix: use field name from binding when available; add nil-interface check.
+
+- [ ] **Marshal**: any-tagged field uses type name instead of field name (#176-177, #183-184)
+- [ ] **Marshal**: any-tagged interface field uses empty element name (#179)
+- [ ] **Unmarshal**: direct any field not populated (#183, #191)
+
+## `[]xml.Attr` any,attr Support [M]
+
+Fields of type `[]xml.Attr` with tag `",any,attr"` should collect unmatched attributes on unmarshal and emit extra attributes on marshal. Fix: add any-attr handling in both marshal (emit Attr slice entries) and unmarshal (collect unmatched attrs).
+
+- [ ] **Marshal**: `[]xml.Attr` with `any,attr` tag not supported (#75-77)
+- [ ] **Unmarshal**: `any,attr` captures all attrs instead of only unmatched ones (#76)
+
+## xml.Name Field as Element Content [M]
+
+A struct field of type `xml.Name` (not named `XMLName`) should marshal/unmarshal as an element whose name comes from the `Name` value (or falls back to the field's tag). Fix: detect `xml.Name`-typed fields and use their value for element naming.
+
+- [ ] **Marshal**: xml.Name field as element content not handled (#70, #72)
+- [ ] **Unmarshal**: xml.Name field as element content not handled (#70-71)
+
+## XMLName Precedence [M]
+
+Stdlib's priority: 1) outer override, 2) XMLName field value, 3) XMLName field tag, 4) type name. The shim gets (2) vs (3) wrong, and embedded struct XMLName overrides outer. Fix: reorder precedence logic in `buildStructStart` and `buildFieldBindings`.
+
+- [ ] **Marshal**: XMLName precedence (value vs tag) differs (#68)
+- [ ] **Marshal**: embedded XMLName precedence differs (inner overrides outer) (#107)
+- [ ] **Unmarshal**: XMLName tag precedence differs (#69)
+- [ ] **Unmarshal**: embedded struct XMLName populated when should remain zero (#106, #108-109)
+- [ ] **Unmarshal**: outer element name mismatch for named embedded struct (#107)
+
+## Embedded Struct Edge Cases [M]
+
+Embedded field shadowing (path-tagged field vs plain field) and nil embedded pointer preservation differ from stdlib. Fix: align `resolveBindingConflicts` with stdlib's shadowing rules; don't allocate nil embedded pointers when their fields aren't present.
+
+- [ ] **Marshal**: embedded field path conflict resolution differs (#64)
+- [ ] **Marshal**: embedded struct omitempty handling differs (#65)
+- [ ] **Unmarshal**: embedded field path conflict resolution (#64)
+- [ ] **Unmarshal**: embedded struct pointer allocated when should remain nil (#65)
+
+## Indirect Pointer Handling (unmarshal) [M]
+
+`*string` fields for comment/innerxml/any get allocated (non-nil) even when the element has no matching content. Fix: only allocate and set the pointer when content is actually found.
+
+- [ ] **Unmarshal**: indirect comment pointer allocated when no comment present (#115-116)
+- [ ] **Unmarshal**: indirect innerxml pointer allocated when no content (#147-148)
+- [ ] **Unmarshal**: indirect any pointer allocated when no content (#176, #178, #185, #187)
+
+## InnerXML Serialization Format [M]
+
+The shim's innerxml capture serializes empty elements as self-closed (`<T1/>`) while stdlib preserves the original `<T1></T1>` form. Fix: adjust the innerxml capture to preserve the original serialization of empty elements.
+
+- [ ] **Unmarshal**: innerxml captures self-closed tags instead of empty-element form (#154, #156)
+
+## ~~TextMarshaler for time.Time~~ ✅
+
+- [x] **Marshal**: time.Time TextMarshaler not invoked (#45)
+
+## ~~Generic Type Name Brackets~~ ✅
+
+- [x] **Marshal**: generic type name includes brackets (#47)
+
+## ~~Interface Value Element Naming~~ ✅
+
+- [x] **Marshal**: interface value defaultStart produces empty element name (#23)
+
+## Struct Pointer Marshal in any Slice [M]
+
+Marshaling `*Struct` inside `[]any` where the struct has `XMLName Name` fails to use the XMLName value. Fix: unwrap pointer and inspect XMLName when marshaling any-typed values.
+
+- [ ] `TestStructPointerMarshalStdlib` — struct pointer marshal formatting
+
+## Marshal Error Handling [M]
+
+Three missing checks: `chan`/`map` types should return `*UnsupportedTypeError`; `X>Y,attr` combo should error; comment containing `--` should error. Fix: add type guards and tag validation.
+
+- [ ] `TestMarshalErrorsStdlib` — chan type, comment `--`, attr path errors
+
+## Write Error Propagation [M]
+
+IO errors from the underlying `io.Writer` are swallowed instead of being propagated from `Encode`/`EncodeToken`. Fix: surface errors from the buffered writer on each `Encode` call.
+
+- [ ] `TestMarshalWriteErrorsStdlib` — write error propagation
+- [ ] `TestMarshalWriteIOErrorsStdlib` — IO error propagation
+
+## Empty Element Value for Numeric Types [M]
+
+Unmarshaling `<I></I>` into numeric types errors on `strconv.Parse("")` instead of treating it as zero. Fix: add empty-string checks before each scalar parse call.
+
+- [ ] `TestUnmarshalEmptyValuesStdlib` — empty element value parsing for numeric types
+
+## Tag Path Conflict Detection [M]
+
+Stdlib detects conflicting struct tag paths (e.g. `xml:"items>item1"` vs `xml:"items"`) and returns `*TagPathError`. Fix: add pre-flight path analysis when building field bindings.
+
+- [ ] `TestUnmarshalBadPathsStdlib` — tag path conflict detection
+
+## interface{} Field Support (unmarshal) [M]
+
+Unmarshaling into `interface{}` typed fields fails with "unknown type interface {}". Stdlib populates them with `string` for chardata or creates nested structures. Fix: when the target field is `interface{}`, allocate a `string` (for chardata/cdata) or `[]byte` (for innerxml) and set it.
+
+- [ ] **Unmarshal**: interface{} comment fields (#118-120)
+- [ ] **Unmarshal**: interface{} chardata fields (#127-130)
+- [ ] **Unmarshal**: interface{} cdata fields (#138-141)
+- [ ] **Unmarshal**: interface{} innerxml fields (#150-152)
+- [ ] **Unmarshal**: interface{} element fields (#161)
+- [ ] **Unmarshal**: interface{} omitempty fields (#171)
+- [ ] **Unmarshal**: interface{} any fields (#180-182, #188-190)
+- [ ] `TestUnmarshalIntoInterfaceStdlib` — unmarshal into pre-populated `interface{}` field
+
+## CharsetReader Support [M]
+
+`Decoder.CharsetReader` callback is not wired up. Fix: intercept XML declaration encoding attribute, call `CharsetReader` to wrap the byte stream.
+
+- [ ] `TestRawTokenAltEncodingStdlib` — CharsetReader callback
+- [ ] `TestRawTokenAltEncodingNoConverterStdlib` — error when no CharsetReader and non-UTF-8 encoding
+
+## Decoder Nil Token Handling [M]
+
+A `TokenReader` returning `(nil, nil)` should be retried; subsequent structural errors should surface as `*SyntaxError`. Fix: add nil-token retry guard and ensure error typing.
+
+- [ ] `TestDecodeNilTokenStdlib` — error type for nil token reader
+
+## Decoder EarlyEOF Handling [M]
+
+A `TokenReader` returning `(tok, io.EOF)` simultaneously should process the token and then report EOF. Fix: handle the combined (tok, err) pair in the token-reader dispatch loop.
+
+- [ ] `TestDecodeEOFStdlib` — earlyEOF / error type handling
+
+## SyntaxError Line Number [M]
+
+`SyntaxError.Line` reports the wrong line number. The SAX parser reports line positions differently from stdlib. Fix: reconcile SAX error positions with stdlib semantics.
+
+- [ ] `TestSyntaxErrorLineNumStdlib` — SyntaxError line tracking
+
+## Disallowed Character Detection [M]
+
+The SAX parser produces different error messages for illegal XML characters (control codes, surrogates, invalid entity refs). Fix: map SAX error strings to stdlib's exact wording for each class of violation.
+
+- [ ] `TestDisallowedCharactersStdlib` — disallowed character detection
+
+## TokenReader Infinite Recursion Guard [M]
+
+A `TokenReader` that always returns `StartElement` causes infinite recursion in `populateElement`. Fix: add a depth/repetition limit in the token-consumption loop.
+
+- [ ] `TestDecodeIntrinsicStdlib` — `TokenReader` always returning `StartElement` causes infinite recursion
+
+## Namespace Prefix Allocation (marshal) [M]
+
+The shim's prefix assignment for namespaced attributes uses different naming conventions than stdlib (which derives prefix from the last URI path segment, deduplicates with `_1` suffixes). Fix: align the prefix allocation algorithm.
+
+- [ ] `TestMarshalNSAttrStdlib` — namespace prefix allocation
+
+## Empty Namespace Override [M-H]
+
+`xmlns=""` (explicitly clearing the default namespace) is not fully propagated through unmarshal/re-marshal. Fix: both the SAX namespace stack and marshal namespace-emission logic need to handle the empty-namespace case.
+
+- [ ] `TestIssue7113Stdlib` — empty namespace override (`xmlns=""`)
+
+## Parse Error Messages [M-H]
+
+Specific malformed inputs produce error messages that don't match stdlib's exact substrings (e.g. `"unexpected end element </foo>"`, `"unsupported version \"1.1\""`). Fix: map SAX errors to stdlib phrasing; add specific pre-processing hooks for version check and UTF-8 errors.
+
+- [ ] `TestParseErrorsStdlib` — parse error messages and detection
+
+## InputPos Line/Column Tracking [M-H]
+
+`dec.InputPos()` does not return the same `(line, col)` as stdlib after each token. The SAX parser provides positions but with different granularity (end-of-token vs start-of-next-token). Fix: accurate per-token byte-position bookkeeping mapping back to line/column.
+
+- [ ] `TestInputPosStdlib` — InputPos line/column tracking
+
+## Path Field Merging (marshal + unmarshal) [H]
+
+Stdlib merges fields sharing a path prefix (e.g. `xml:"Items>item"` and `xml:"Items>item1"` share the `<Items>` wrapper). The shim emits/parses each path independently. Fix: during marshal, group path fields by shared ancestor and emit a single wrapper; during unmarshal, maintain a path-descent state machine that buffers descendant elements.
+
+- [ ] **Marshal**: path field merging (#49-60, #103)
+- [ ] **Marshal**: namespace in path tags (#61-63)
+- [ ] **Unmarshal**: path field matching (#52-54, #56)
+- [ ] **Unmarshal**: namespace-aware path fields (#61-62)
+- [ ] **Unmarshal**: nested path slice only captures one element (#110-112)
+- [ ] `TestUnmarshalPathsStdlib` — full path-based field matching
+
+## EncodeToken Validation + NS Prefix Allocation [H]
+
+Comprehensive `EncodeToken` test covering namespace prefix allocation, error detection (no name, mismatched tags, invalid directives), and prefix collision resolution. Fix: align the entire prefix-allocation algorithm and all error-checking paths with stdlib.
+
+- [ ] `TestEncodeTokenStdlib` — EncodeToken validation and namespace prefix allocation
+
+## Namespace-Aware Element/Attribute Matching (unmarshal) [H]
+
+Struct fields tagged with namespace URIs (e.g. `xml:"http://www.w3.org/TR/html4/ table"`) must match against the resolved namespace of incoming elements/attributes. Fix: carry namespace context from the token stream and match the space portion of field tags.
+
+- [ ] `TestUnmarshalNSStdlib` — namespace-aware element matching
+- [ ] `TestUnmarshalNSAttrStdlib` — namespace-aware attribute matching
+
+## RawToken Namespace Preservation [H]
+
+`RawToken()` should preserve `xmlns:*` and `xmlns` attributes on `StartElement.Attr` with prefix in `Name.Space`. The SAX parser resolves namespaces before the shim can intercept them. Fix: intercept SAX callbacks at a lower level or run a parallel raw-byte parser.
+
+- [ ] `TestRawTokenStdlib` — RawToken namespace handling
+
+## Cooked Token xmlns Attribute Preservation [H]
+
+`Token()` (namespace-aware) should still include `xmlns:*` and bare `xmlns` attributes in `StartElement.Attr`. Same SAX root cause as RawToken. Fix: capture namespace declaration events from SAX and reinsert them as attributes.
+
+- [ ] `TestTokenUnmarshalStdlib` — cooked token namespace handling
+
+## Directive / DOCTYPE Token Emission [H]
+
+The SAX parser never emits `Directive` tokens for DOCTYPE/entity declarations. The internal DTD subset is consumed silently by libxml2. Fix: would require custom pre-parsing or a different event hook; libxml2's SAX does not expose these as accessible events.
+
+- [ ] `TestDirectivesStdlib` — Directive tokens not emitted
+- [ ] `TestDirectivesWithCommentsStdlib` — Directive tokens with embedded comments not emitted
+
+## Round-Trip with Non-Strict Tokens [H]
+
+Depends on both non-strict mode (trailing colon in attr name) and Directive token support. Fix: requires both features implemented.
+
+- [ ] `TestRoundTripStdlib` — round-trip with trailing colon and directives
+
+## Parser Depth Limit [H]
+
+The helium SAX parser has no recursion depth limit. 17M nested `<a>` tags cause a fatal stack overflow. Fix: add a depth counter to the SAX parser or shim callbacks; requires changes to the underlying helium parser.
+
+- [ ] `TestCVE202230633Stdlib` — stack overflow on deeply nested input
+
+## Non-Strict / AutoClose Mode [H]
+
+Not planned — the shim targets strict XML only. Would require replacing the SAX parser with a lenient tokenizer.
+
+- [ ] `TestNonStrictRawTokenStdlib` — `Strict = false`
+- [ ] `TestUnquotedAttrsStdlib` — `Strict = false`, unquoted attribute values
+- [ ] `TestValuelessAttrsStdlib` — `Strict = false`, HTML-style valueless attributes
+- [ ] `TestHTMLAutoCloseStdlib` — `AutoClose = HTMLAutoClose`, synthesized end elements
