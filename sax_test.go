@@ -69,7 +69,21 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.UnparsedEntityDecl(%s, %d, %s, %s, %s)\n",
 			name, typ, publicID, systemID, notation)
 
-		entities[name] = newEntity(name, typ, publicID, systemID, notation, "")
+		doc := helium.NewDefaultDocument()
+		dtd, err := doc.CreateInternalSubset("root", "", "")
+		if err != nil {
+			return err
+		}
+		if typ == enum.ExternalGeneralUnparsedEntity {
+			if _, err := dtd.AddNotation(notation, "", ""); err != nil {
+				return err
+			}
+		}
+		ent, err := dtd.AddEntity(name, typ, publicID, systemID, notation)
+		if err != nil {
+			return err
+		}
+		entities[name] = ent
 		if pdebug.Enabled {
 			pdebug.Printf("registered entity '%s' (entity type = '%s', publicID = '%s', systemID = '%s', notation = '%s')", name, typ, publicID, systemID, notation)
 		}

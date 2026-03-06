@@ -153,7 +153,20 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 		}
 		_, _ = fmt.Fprintf(out, "SAX.entityDecl(%s, %d, %s, %s, %s)\n",
 			name, typ, nullOrString(publicID), nullOrString(systemID), contentStr)
-		ent := newEntity(name, typ, publicID, systemID, content, "")
+		doc := helium.NewDefaultDocument()
+		dtd, err := doc.CreateInternalSubset("root", "", "")
+		if err != nil {
+			return err
+		}
+		if typ == enum.ExternalGeneralUnparsedEntity {
+			if _, err := dtd.AddNotation(content, "", ""); err != nil {
+				return err
+			}
+		}
+		ent, err := dtd.AddEntity(name, typ, publicID, systemID, content)
+		if err != nil {
+			return err
+		}
 		if typ == enum.InternalParameterEntity || typ == enum.ExternalParameterEntity {
 			peEntities[name] = ent
 		} else {

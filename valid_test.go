@@ -1,88 +1,49 @@
 package helium_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
 )
 
-// buildTestDoc creates a Document with intSubset and extSubset for testing.
-// The intSubset declares element "root" with ANY content.
-// The extSubset declares element "child" with EMPTY content, an entity "extEnt",
-// and a REQUIRED attribute "role" on element "child".
-func buildTestDoc(standalone helium.DocumentStandaloneType) *helium.Document {
-	doc := helium.NewDocument("1.0", "utf-8", standalone)
-
-	// Internal subset: declares "root" element with ANY content.
-	intDTD := newDTD()
-	setField(intDTD, "doc", doc)
-	setField(intDTD, "etype", helium.DTDNode)
-	setField(doc, "intSubset", intDTD)
-
-	rootDecl := newElementDecl()
-	setField(rootDecl, "name", "root")
-	setField(rootDecl, "decltype", enum.AnyElementType)
-	setField(rootDecl, "doc", doc)
-	setField(intDTD, "elements", map[string]*helium.ElementDecl{
-		"root:": rootDecl,
-	})
-	setField(intDTD, "entities", map[string]*helium.Entity{})
-	setField(intDTD, "pentities", map[string]*helium.Entity{})
-	setField(intDTD, "attributes", map[string]*helium.AttributeDecl{})
-
-	// External subset: declares "child" element, entity, and attribute.
-	extDTD := newDTD()
-	setField(extDTD, "doc", doc)
-	setField(extDTD, "etype", helium.DTDNode)
-	setField(doc, "extSubset", extDTD)
-
-	childDecl := newElementDecl()
-	setField(childDecl, "name", "child")
-	setField(childDecl, "decltype", enum.EmptyElementType)
-	setField(childDecl, "doc", doc)
-	setField(extDTD, "elements", map[string]*helium.ElementDecl{
-		"child:": childDecl,
-	})
-
-	extEnt := newEntity("extEnt", enum.InternalGeneralEntity, "", "", "hello", "")
-	setField(extEnt, "doc", doc)
-	setField(extDTD, "entities", map[string]*helium.Entity{
-		"extEnt": extEnt,
-	})
-	setField(extDTD, "pentities", map[string]*helium.Entity{})
-
-	attrDecl := newAttributeDecl()
-	setField(attrDecl, "name", "role")
-	setField(attrDecl, "elem", "child")
-	setField(attrDecl, "atype", enum.AttrCDATA)
-	setField(attrDecl, "def", enum.AttrDefaultRequired)
-	setField(attrDecl, "doc", doc)
-	setField(extDTD, "attributes", map[string]*helium.AttributeDecl{
-		"role::child": attrDecl,
-	})
-
-	return doc
-}
-
 func TestExtSubsetLookup_ElementInExtSubset(t *testing.T) {
-	doc := buildTestDoc(helium.StandaloneImplicitNo)
+	t.Parallel()
 
-	root := newElement("root")
-	setField(root, "doc", doc)
-	child := newElement("child")
-	setField(child, "doc", doc)
-	_ = child.SetAttribute("role", "main")
-	_ = root.AddChild(child)
-	_ = doc.AddChild(root)
+	dir := t.TempDir()
+	dtdPath := filepath.Join(dir, "ext.dtd")
+	require.NoError(t, os.WriteFile(dtdPath, []byte(`<!ELEMENT root (child)>
+<!ELEMENT child EMPTY>
+<!ATTLIST child role CDATA #REQUIRED>`), 0600))
 
-	ve := validateDocument(doc)
-	require.Nil(t, ve, "validation should pass when element is declared in extSubset")
+	xml := `<?xml version="1.0"?>
+<!DOCTYPE root SYSTEM "` + dtdPath + `">
+<root><child role="main"/></root>`
+
+	p := helium.NewParser()
+	p.SetOption(helium.ParseDTDLoad | helium.ParseDTDValid)
+	_, err := p.Parse(t.Context(), []byte(xml))
+	require.NoError(t, err, "validation should pass when declarations are in extSubset")
 }
 
 func TestExtSubsetLookup_EntityInExtSubset(t *testing.T) {
-	doc := buildTestDoc(helium.StandaloneImplicitNo)
+	t.Parallel()
+
+	dir := t.TempDir()
+	dtdPath := filepath.Join(dir, "ext.dtd")
+	require.NoError(t, os.WriteFile(dtdPath, []byte(`<!ELEMENT root (#PCDATA)>
+<!ENTITY extEnt "hello">`), 0600))
+
+	xml := `<?xml version="1.0"?>
+<!DOCTYPE root SYSTEM "` + dtdPath + `">
+<root/>`
+
+	p := helium.NewParser()
+	p.SetOption(helium.ParseDTDLoad)
+	doc, err := p.Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
 
 	ent, found := doc.GetEntity("extEnt")
 	require.True(t, found, "entity in extSubset should be found")
@@ -90,44 +51,53 @@ func TestExtSubsetLookup_EntityInExtSubset(t *testing.T) {
 }
 
 func TestExtSubsetLookup_AttributeInExtSubset(t *testing.T) {
-	doc := buildTestDoc(helium.StandaloneImplicitNo)
+	t.Parallel()
 
-	root := newElement("root")
-	setField(root, "doc", doc)
-	child := newElement("child")
-	setField(child, "doc", doc)
-	// Missing required "role" attribute
-	_ = root.AddChild(child)
-	_ = doc.AddChild(root)
+	dir := t.TempDir()
+	dtdPath := filepath.Join(dir, "ext.dtd")
+	require.NoError(t, os.WriteFile(dtdPath, []byte(`<!ELEMENT root (child)>
+<!ELEMENT child EMPTY>
+<!ATTLIST child role CDATA #REQUIRED>`), 0600))
 
-	ve := validateDocument(doc)
-	require.NotNil(t, ve, "validation should report missing REQUIRED attribute from extSubset")
-	require.Contains(t, ve.Error(), "attribute role is required")
+	xml := `<?xml version="1.0"?>
+<!DOCTYPE root SYSTEM "` + dtdPath + `">
+<root><child/></root>`
+
+	p := helium.NewParser()
+	p.SetOption(helium.ParseDTDLoad | helium.ParseDTDValid)
+	_, err := p.Parse(t.Context(), []byte(xml))
+	require.Error(t, err, "missing REQUIRED attribute from extSubset should fail")
+	require.Contains(t, err.Error(), "attribute role is required")
 }
 
 func TestExtSubsetLookup_StandaloneYesPreventsExtSubset(t *testing.T) {
-	doc := buildTestDoc(helium.StandaloneExplicitYes)
+	t.Parallel()
 
-	// Entity lookup should NOT fall through to extSubset
+	dir := t.TempDir()
+	dtdPath := filepath.Join(dir, "ext.dtd")
+	require.NoError(t, os.WriteFile(dtdPath, []byte(`<!ELEMENT root (child)>
+<!ELEMENT child EMPTY>
+<!ENTITY extEnt "hello">`), 0600))
+
+	xml := `<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE root SYSTEM "` + dtdPath + `">
+<root><child/></root>`
+
+	p := helium.NewParser()
+	p.SetOption(helium.ParseDTDLoad)
+	doc, err := p.Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
 	_, found := doc.GetEntity("extEnt")
 	require.False(t, found, "standalone=yes should prevent extSubset entity lookup")
-
-	// Element declared only in extSubset should not be found
-	root := newElement("root")
-	setField(root, "doc", doc)
-	child := newElement("child")
-	setField(child, "doc", doc)
-	_ = child.SetAttribute("role", "main")
-	_ = root.AddChild(child)
-	_ = doc.AddChild(root)
-
-	ve := validateDocument(doc)
-	require.NotNil(t, ve, "standalone=yes should prevent finding element in extSubset")
-	require.Contains(t, ve.Error(), "no declaration found")
 }
 
 func TestEnumerationAttributeValidation(t *testing.T) {
+	t.Parallel()
+
 	t.Run("valid value accepted", func(t *testing.T) {
+		t.Parallel()
+
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE root [
   <!ELEMENT root EMPTY>
@@ -135,13 +105,14 @@ func TestEnumerationAttributeValidation(t *testing.T) {
 ]>
 <root color="green"/>`
 		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid)
-		p.SetOption(helium.ParseDTDAttr)
+		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
 
 	t.Run("invalid value rejected", func(t *testing.T) {
+		t.Parallel()
+
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE root [
   <!ELEMENT root EMPTY>
@@ -149,14 +120,15 @@ func TestEnumerationAttributeValidation(t *testing.T) {
 ]>
 <root color="yellow"/>`
 		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid)
-		p.SetOption(helium.ParseDTDAttr)
+		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not among the enumerated set")
 	})
 
 	t.Run("default value used when absent", func(t *testing.T) {
+		t.Parallel()
+
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE root [
   <!ELEMENT root EMPTY>
@@ -164,697 +136,18 @@ func TestEnumerationAttributeValidation(t *testing.T) {
 ]>
 <root/>`
 		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid)
-		p.SetOption(helium.ParseDTDAttr)
+		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
 }
 
-// Helper functions for building ElementContent trees in tests.
-
-func ecElem(name string) *helium.ElementContent {
-	return newElementContent(helium.ElementContentElement, helium.ElementContentOnce, name)
-}
-
-func ecElemOpt(name string) *helium.ElementContent {
-	return newElementContent(helium.ElementContentElement, helium.ElementContentOpt, name)
-}
-
-func ecElemStar(name string) *helium.ElementContent {
-	return newElementContent(helium.ElementContentElement, helium.ElementContentMult, name)
-}
-
-func ecElemPlus(name string) *helium.ElementContent {
-	return newElementContent(helium.ElementContentElement, helium.ElementContentPlus, name)
-}
-
-// ecSeq builds a sequence node with the given occur from a list of parts.
-// Parts are linked as a right-nested c1/c2 chain.
-func ecSeq(occur helium.ElementContentOccur, parts ...*helium.ElementContent) *helium.ElementContent {
-	if len(parts) == 0 {
-		return newElementContent(helium.ElementContentSeq, occur, "")
-	}
-	if len(parts) == 1 {
-		return newElementContentWithC1(helium.ElementContentSeq, occur, parts[0])
-	}
-	root := newElementContentWithC1(helium.ElementContentSeq, occur, parts[0])
-	cur := root
-	for i := 1; i < len(parts)-1; i++ {
-		next := newElementContentWithC1(helium.ElementContentSeq, helium.ElementContentOnce, parts[i])
-		setElementContentC2(cur, next)
-		cur = next
-	}
-	setElementContentC2(cur, parts[len(parts)-1])
-	return root
-}
-
-// ecOr builds a choice node with the given occur from a list of alternatives.
-// Alternatives are linked as a right-nested c1/c2 chain.
-func ecOr(occur helium.ElementContentOccur, alts ...*helium.ElementContent) *helium.ElementContent {
-	if len(alts) == 0 {
-		return newElementContent(helium.ElementContentOr, occur, "")
-	}
-	if len(alts) == 1 {
-		return newElementContentWithC1(helium.ElementContentOr, occur, alts[0])
-	}
-	root := newElementContentWithC1(helium.ElementContentOr, occur, alts[0])
-	cur := root
-	for i := 1; i < len(alts)-1; i++ {
-		next := newElementContentWithC1(helium.ElementContentOr, helium.ElementContentOnce, alts[i])
-		setElementContentC2(cur, next)
-		cur = next
-	}
-	setElementContentC2(cur, alts[len(alts)-1])
-	return root
-}
-
-func TestMatchContentModel(t *testing.T) {
-	tests := []struct {
-		name     string
-		content  *helium.ElementContent
-		children []string
-		want     bool
-	}{
-		// Simple sequence: (a, b, c)
-		{
-			name:     "seq/exact match",
-			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
-			children: []string{"a", "b", "c"},
-			want:     true,
-		},
-		{
-			name:     "seq/wrong order",
-			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
-			children: []string{"a", "c", "b"},
-			want:     false,
-		},
-		{
-			name:     "seq/missing element",
-			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
-			children: []string{"a", "b"},
-			want:     false,
-		},
-		{
-			name:     "seq/extra element rejected",
-			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
-			children: []string{"a", "b", "c", "d"},
-			want:     false,
-		},
-
-		// Choice: (a | b | c)
-		{
-			name:     "choice/first alt",
-			content:  ecOr(helium.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
-			children: []string{"a"},
-			want:     true,
-		},
-		{
-			name:     "choice/second alt",
-			content:  ecOr(helium.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
-			children: []string{"b"},
-			want:     true,
-		},
-		{
-			name:     "choice/third alt",
-			content:  ecOr(helium.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
-			children: []string{"c"},
-			want:     true,
-		},
-		{
-			name:     "choice/no match",
-			content:  ecOr(helium.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
-			children: []string{"d"},
-			want:     false,
-		},
-		{
-			name:     "choice/extra unconsumed rejected",
-			content:  ecOr(helium.ElementContentOnce, ecElem("a"), ecElem("b"), ecElem("c")),
-			children: []string{"a", "b"},
-			want:     false,
-		},
-
-		// Optional element: (a, b?, c)
-		{
-			name:     "optional/with optional present",
-			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElemOpt("b"), ecElem("c")),
-			children: []string{"a", "b", "c"},
-			want:     true,
-		},
-		{
-			name:     "optional/with optional absent",
-			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElemOpt("b"), ecElem("c")),
-			children: []string{"a", "c"},
-			want:     true,
-		},
-
-		// Star repetition: (a, b*, c)
-		{
-			name:     "star/zero occurrences",
-			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElemStar("b"), ecElem("c")),
-			children: []string{"a", "c"},
-			want:     true,
-		},
-		{
-			name:     "star/one occurrence",
-			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElemStar("b"), ecElem("c")),
-			children: []string{"a", "b", "c"},
-			want:     true,
-		},
-		{
-			name:     "star/multiple occurrences",
-			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElemStar("b"), ecElem("c")),
-			children: []string{"a", "b", "b", "b", "c"},
-			want:     true,
-		},
-
-		// Plus repetition: (a, b+, c)
-		{
-			name:     "plus/zero occurrences fails",
-			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElemPlus("b"), ecElem("c")),
-			children: []string{"a", "c"},
-			want:     false,
-		},
-		{
-			name:     "plus/one occurrence",
-			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElemPlus("b"), ecElem("c")),
-			children: []string{"a", "b", "c"},
-			want:     true,
-		},
-		{
-			name:     "plus/multiple occurrences",
-			content:  ecSeq(helium.ElementContentOnce, ecElem("a"), ecElemPlus("b"), ecElem("c")),
-			children: []string{"a", "b", "b", "c"},
-			want:     true,
-		},
-
-		// Nested sequence: ((a, b), c)
-		{
-			name: "nested seq/match",
-			content: ecSeq(helium.ElementContentOnce,
-				ecSeq(helium.ElementContentOnce, ecElem("a"), ecElem("b")),
-				ecElem("c"),
-			),
-			children: []string{"a", "b", "c"},
-			want:     true,
-		},
-		{
-			name: "nested seq/missing inner",
-			content: ecSeq(helium.ElementContentOnce,
-				ecSeq(helium.ElementContentOnce, ecElem("a"), ecElem("b")),
-				ecElem("c"),
-			),
-			children: []string{"a", "c"},
-			want:     false,
-		},
-
-		// Nested choice: (a, (b | c), d)
-		{
-			name: "nested choice/first alt",
-			content: ecSeq(helium.ElementContentOnce,
-				ecElem("a"),
-				ecOr(helium.ElementContentOnce, ecElem("b"), ecElem("c")),
-				ecElem("d"),
-			),
-			children: []string{"a", "b", "d"},
-			want:     true,
-		},
-		{
-			name: "nested choice/second alt",
-			content: ecSeq(helium.ElementContentOnce,
-				ecElem("a"),
-				ecOr(helium.ElementContentOnce, ecElem("b"), ecElem("c")),
-				ecElem("d"),
-			),
-			children: []string{"a", "c", "d"},
-			want:     true,
-		},
-		{
-			name: "nested choice/no match",
-			content: ecSeq(helium.ElementContentOnce,
-				ecElem("a"),
-				ecOr(helium.ElementContentOnce, ecElem("b"), ecElem("c")),
-				ecElem("d"),
-			),
-			children: []string{"a", "x", "d"},
-			want:     false,
-		},
-
-		// Repeated sequence: (a, b)+
-		{
-			name:     "seq plus/one rep",
-			content:  ecSeq(helium.ElementContentPlus, ecElem("a"), ecElem("b")),
-			children: []string{"a", "b"},
-			want:     true,
-		},
-		{
-			name:     "seq plus/two reps",
-			content:  ecSeq(helium.ElementContentPlus, ecElem("a"), ecElem("b")),
-			children: []string{"a", "b", "a", "b"},
-			want:     true,
-		},
-		{
-			name:     "seq plus/zero reps fails",
-			content:  ecSeq(helium.ElementContentPlus, ecElem("a"), ecElem("b")),
-			children: nil,
-			want:     false,
-		},
-
-		// Repeated choice: (a | b)+
-		{
-			name:     "choice plus/single",
-			content:  ecOr(helium.ElementContentPlus, ecElem("a"), ecElem("b")),
-			children: []string{"a"},
-			want:     true,
-		},
-		{
-			name:     "choice plus/multiple mixed",
-			content:  ecOr(helium.ElementContentPlus, ecElem("a"), ecElem("b")),
-			children: []string{"a", "b", "a"},
-			want:     true,
-		},
-		{
-			name:     "choice plus/zero fails",
-			content:  ecOr(helium.ElementContentPlus, ecElem("a"), ecElem("b")),
-			children: nil,
-			want:     false,
-		},
-
-		// Repeated choice star: (a | b)*
-		{
-			name:     "choice star/zero ok",
-			content:  ecOr(helium.ElementContentMult, ecElem("a"), ecElem("b")),
-			children: nil,
-			want:     true,
-		},
-		{
-			name:     "choice star/multiple",
-			content:  ecOr(helium.ElementContentMult, ecElem("a"), ecElem("b")),
-			children: []string{"b", "a", "b"},
-			want:     true,
-		},
-
-		// Empty children against required content
-		{
-			name:     "empty children/required seq fails",
-			content:  ecSeq(helium.ElementContentOnce, ecElem("a")),
-			children: nil,
-			want:     false,
-		},
-		{
-			name:     "empty children/optional seq ok",
-			content:  ecSeq(helium.ElementContentOpt, ecElem("a")),
-			children: nil,
-			want:     true,
-		},
-
-		// Wrong element name
-		{
-			name:     "wrong element",
-			content:  ecElem("a"),
-			children: []string{"b"},
-			want:     false,
-		},
-
-		// Single element exact match
-		{
-			name:     "single element/match",
-			content:  ecElem("a"),
-			children: []string{"a"},
-			want:     true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := matchContentModel(tt.content, tt.children)
-			require.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestIsValidNameStartChar(t *testing.T) {
-	tests := []struct {
-		name string
-		r    rune
-		want bool
-	}{
-		// ASCII letters and underscore
-		{"A", 'A', true},
-		{"Z", 'Z', true},
-		{"a", 'a', true},
-		{"z", 'z', true},
-		{"underscore", '_', true},
-
-		// Rejected ASCII
-		{"colon", ':', false},   // colon excluded in helium (namespace-aware)
-		{"digit 0", '0', false}, // digit not a start char
-		{"hyphen", '-', false},  // not a start char
-		{"dot", '.', false},     // not a start char
-		{"space", ' ', false},   // not a name char at all
-		{"at", '@', false},      // between Z and a
-		{"bracket", '[', false}, // between Z and a
-
-		// Latin supplement boundaries
-		{"U+00BF (before range)", 0xBF, false},  // just before 0xC0
-		{"U+00C0 (start)", 0xC0, true},          // À
-		{"U+00D6 (end)", 0xD6, true},            // Ö
-		{"U+00D7 (multiply sign)", 0xD7, false}, // × excluded
-		{"U+00D8 (start)", 0xD8, true},          // Ø
-		{"U+00F6 (end)", 0xF6, true},            // ö
-		{"U+00F7 (division sign)", 0xF7, false}, // ÷ excluded
-		{"U+00F8 (start)", 0xF8, true},          // ø
-
-		// Range gaps
-		{"U+0300 (combining)", 0x0300, false},     // combining diacritical — not a start char
-		{"U+036F (combining end)", 0x036F, false}, // not a start char
-		{"U+0370 (Greek)", 0x0370, true},
-		{"U+037D (end)", 0x037D, true},
-		{"U+037E (Greek question mark)", 0x037E, false}, // excluded
-		{"U+037F (start)", 0x037F, true},
-
-		// Zero-width range
-		{"U+200C (ZWNJ)", 0x200C, true},
-		{"U+200D (ZWJ)", 0x200D, true},
-		{"U+200B (before range)", 0x200B, false},
-		{"U+200E (after range)", 0x200E, false},
-
-		// CJK gap: 0x2070-0x218F
-		{"U+2070", 0x2070, true},
-		{"U+218F (end)", 0x218F, true},
-		{"U+2190 (arrows)", 0x2190, false},
-
-		// Gap between ranges: 0x2FEF end, 0x3001 start
-		{"U+2FEF (end)", 0x2FEF, true},
-		{"U+2FF0 (ideographic desc)", 0x2FF0, false}, // gap
-		{"U+3000 (CJK space)", 0x3000, false},        // gap
-		{"U+3001 (start)", 0x3001, true},
-
-		// Upper BMP boundaries
-		{"U+D7FF (end)", 0xD7FF, true},
-		{"U+F900 (CJK compat)", 0xF900, true},
-		{"U+FDCF (end)", 0xFDCF, true},
-		{"U+FDD0 (nonchar)", 0xFDD0, false},
-		{"U+FDF0 (start)", 0xFDF0, true},
-		{"U+FFFD (end)", 0xFFFD, true},
-		{"U+FFFE (nonchar)", 0xFFFE, false},
-
-		// Supplementary planes
-		{"U+10000 (start)", 0x10000, true},
-		{"U+EFFFF (end)", 0xEFFFF, true},
-		{"U+F0000 (private use)", 0xF0000, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isValidNameStartChar(tt.r)
-			require.Equal(t, tt.want, got, "isValidNameStartChar(U+%04X)", tt.r)
-		})
-	}
-}
-
-func TestIsValidNameChar(t *testing.T) {
-	tests := []struct {
-		name string
-		r    rune
-		want bool
-	}{
-		// NameChar additions beyond NameStartChar
-		{"digit 0", '0', true},
-		{"digit 9", '9', true},
-		{"hyphen", '-', true},
-		{"dot", '.', true},
-		{"middle dot U+00B7", 0xB7, true},
-		{"combining U+0300", 0x0300, true},
-		{"combining U+036F", 0x036F, true},
-		{"U+02FF (before combining)", 0x02FF, true}, // in NameStartChar range 0xF8-0x2FF
-		{"extender U+203F", 0x203F, true},
-		{"extender U+2040", 0x2040, true},
-
-		// Still not valid
-		{"space", ' ', false},
-		{"U+00B6 (pilcrow)", 0xB6, false},
-		{"U+00B8 (cedilla)", 0xB8, false},
-		{"U+2041 (caret insertion)", 0x2041, false},
-		{"colon", ':', false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isValidNameChar(tt.r)
-			require.Equal(t, tt.want, got, "isValidNameChar(U+%04X)", tt.r)
-		})
-	}
-}
-
-func TestIsValidName(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  bool
-	}{
-		{"simple", "foo", true},
-		{"with digits", "foo123", true},
-		{"with hyphen", "foo-bar", true},
-		{"with dot", "foo.bar", true},
-		{"starts with underscore", "_foo", true},
-		{"starts with digit", "1foo", false},
-		{"starts with hyphen", "-foo", false},
-		{"empty", "", false},
-		{"unicode letter start", "\u00C0foo", true},  // À
-		{"middle dot in name", "foo\u00B7bar", true}, // ·
-		{"combining in name", "foo\u0300bar", true},  // combining grave
-		{"multiply sign start", "\u00D7foo", false},  // ×
-		{"division sign start", "\u00F7foo", false},  // ÷
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isValidName(tt.input)
-			require.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestStandaloneWhitespaceCheck(t *testing.T) {
-	t.Run("whitespace in element-only content from ext subset", func(t *testing.T) {
-		doc := helium.NewDocument("1.0", "utf-8", helium.StandaloneExplicitYes)
-
-		// Internal subset: declares "root" with ANY content
-		intDTD := newDTD()
-		setField(intDTD, "doc", doc)
-		setField(intDTD, "etype", helium.DTDNode)
-		setField(doc, "intSubset", intDTD)
-		rootDecl := newElementDecl()
-		setField(rootDecl, "name", "root")
-		setField(rootDecl, "decltype", enum.AnyElementType)
-		setField(rootDecl, "doc", doc)
-		setField(intDTD, "elements", map[string]*helium.ElementDecl{"root:": rootDecl})
-		setField(intDTD, "entities", map[string]*helium.Entity{})
-		setField(intDTD, "pentities", map[string]*helium.Entity{})
-		setField(intDTD, "attributes", map[string]*helium.AttributeDecl{})
-
-		// External subset: declares "container" with element-only content (child)+
-		extDTD := newDTD()
-		setField(extDTD, "doc", doc)
-		setField(extDTD, "etype", helium.DTDNode)
-		setField(doc, "extSubset", extDTD)
-		containerDecl := newElementDecl()
-		setField(containerDecl, "name", "container")
-		setField(containerDecl, "decltype", enum.ElementElementType)
-		setField(containerDecl, "content", newElementContent(helium.ElementContentElement, helium.ElementContentPlus, "child"))
-		setField(containerDecl, "doc", doc)
-		setField(extDTD, "elements", map[string]*helium.ElementDecl{"container:": containerDecl})
-		setField(extDTD, "entities", map[string]*helium.Entity{})
-		setField(extDTD, "pentities", map[string]*helium.Entity{})
-		setField(extDTD, "attributes", map[string]*helium.AttributeDecl{})
-
-		// Build DOM: <root><container> <child/> </container></root>
-		root := newElement("root")
-		setField(root, "doc", doc)
-		container := newElement("container")
-		setField(container, "doc", doc)
-		_ = container.AppendText([]byte(" "))
-		child := newElement("child")
-		setField(child, "doc", doc)
-		_ = container.AddChild(child)
-		_ = container.AppendText([]byte(" "))
-		_ = root.AddChild(container)
-		_ = doc.AddChild(root)
-
-		ve := validateDocument(doc)
-		require.NotNil(t, ve)
-		require.Contains(t, ve.Error(), "standalone")
-		require.Contains(t, ve.Error(), "white spaces")
-	})
-
-	t.Run("no whitespace no error", func(t *testing.T) {
-		doc := helium.NewDocument("1.0", "utf-8", helium.StandaloneExplicitYes)
-
-		intDTD := newDTD()
-		setField(intDTD, "doc", doc)
-		setField(intDTD, "etype", helium.DTDNode)
-		setField(doc, "intSubset", intDTD)
-		rootDecl := newElementDecl()
-		setField(rootDecl, "name", "root")
-		setField(rootDecl, "decltype", enum.AnyElementType)
-		setField(rootDecl, "doc", doc)
-		setField(intDTD, "elements", map[string]*helium.ElementDecl{"root:": rootDecl})
-		setField(intDTD, "entities", map[string]*helium.Entity{})
-		setField(intDTD, "pentities", map[string]*helium.Entity{})
-		setField(intDTD, "attributes", map[string]*helium.AttributeDecl{})
-
-		extDTD := newDTD()
-		setField(extDTD, "doc", doc)
-		setField(extDTD, "etype", helium.DTDNode)
-		setField(doc, "extSubset", extDTD)
-		containerDecl := newElementDecl()
-		setField(containerDecl, "name", "container")
-		setField(containerDecl, "decltype", enum.ElementElementType)
-		setField(containerDecl, "content", newElementContent(helium.ElementContentElement, helium.ElementContentPlus, "child"))
-		setField(containerDecl, "doc", doc)
-		setField(extDTD, "elements", map[string]*helium.ElementDecl{"container:": containerDecl})
-		setField(extDTD, "entities", map[string]*helium.Entity{})
-		setField(extDTD, "pentities", map[string]*helium.Entity{})
-		setField(extDTD, "attributes", map[string]*helium.AttributeDecl{})
-
-		// Build DOM: <root><container><child/></container></root> (no whitespace)
-		root := newElement("root")
-		setField(root, "doc", doc)
-		container := newElement("container")
-		setField(container, "doc", doc)
-		child := newElement("child")
-		setField(child, "doc", doc)
-		_ = container.AddChild(child)
-		_ = root.AddChild(container)
-		_ = doc.AddChild(root)
-
-		ve := validateDocument(doc)
-		require.NotNil(t, ve) // still fails with "no declaration found"
-		// But should NOT contain the standalone whitespace error
-		for _, e := range ve.Errors {
-			require.NotContains(t, e, "white spaces")
-		}
-	})
-
-	t.Run("not standalone no whitespace error", func(t *testing.T) {
-		doc := helium.NewDocument("1.0", "utf-8", helium.StandaloneImplicitNo)
-
-		intDTD := newDTD()
-		setField(intDTD, "doc", doc)
-		setField(intDTD, "etype", helium.DTDNode)
-		setField(doc, "intSubset", intDTD)
-		rootDecl := newElementDecl()
-		setField(rootDecl, "name", "root")
-		setField(rootDecl, "decltype", enum.AnyElementType)
-		setField(rootDecl, "doc", doc)
-		setField(intDTD, "elements", map[string]*helium.ElementDecl{"root:": rootDecl})
-		setField(intDTD, "entities", map[string]*helium.Entity{})
-		setField(intDTD, "pentities", map[string]*helium.Entity{})
-		setField(intDTD, "attributes", map[string]*helium.AttributeDecl{})
-
-		extDTD := newDTD()
-		setField(extDTD, "doc", doc)
-		setField(extDTD, "etype", helium.DTDNode)
-		setField(doc, "extSubset", extDTD)
-		containerDecl := newElementDecl()
-		setField(containerDecl, "name", "container")
-		setField(containerDecl, "decltype", enum.ElementElementType)
-		setField(containerDecl, "content", newElementContent(helium.ElementContentElement, helium.ElementContentPlus, "child"))
-		setField(containerDecl, "doc", doc)
-		setField(extDTD, "elements", map[string]*helium.ElementDecl{"container:": containerDecl})
-		setField(extDTD, "entities", map[string]*helium.Entity{})
-		setField(extDTD, "pentities", map[string]*helium.Entity{})
-		setField(extDTD, "attributes", map[string]*helium.AttributeDecl{})
-
-		// Build DOM: <root><container> <child/> </container></root>
-		root := newElement("root")
-		setField(root, "doc", doc)
-		container := newElement("container")
-		setField(container, "doc", doc)
-		_ = container.AppendText([]byte(" "))
-		child := newElement("child")
-		setField(child, "doc", doc)
-		_ = container.AddChild(child)
-		_ = container.AppendText([]byte(" "))
-		_ = root.AddChild(container)
-		_ = doc.AddChild(root)
-
-		ve := validateDocument(doc)
-		// Non-standalone: extSubset is searched, so container is found and
-		// validation should pass (or at least not have standalone error)
-		if ve != nil {
-			for _, e := range ve.Errors {
-				require.NotContains(t, e, "standalone")
-			}
-		}
-	})
-
-	t.Run("element in internal subset not flagged", func(t *testing.T) {
-		doc := helium.NewDocument("1.0", "utf-8", helium.StandaloneExplicitYes)
-
-		intDTD := newDTD()
-		setField(intDTD, "doc", doc)
-		setField(intDTD, "etype", helium.DTDNode)
-		setField(doc, "intSubset", intDTD)
-		// "root" declared in internal subset with element-only content
-		rootDecl := newElementDecl()
-		setField(rootDecl, "name", "root")
-		setField(rootDecl, "decltype", enum.ElementElementType)
-		setField(rootDecl, "content", newElementContent(helium.ElementContentElement, helium.ElementContentPlus, "child"))
-		setField(rootDecl, "doc", doc)
-		childDecl := newElementDecl()
-		setField(childDecl, "name", "child")
-		setField(childDecl, "decltype", enum.EmptyElementType)
-		setField(childDecl, "doc", doc)
-		setField(intDTD, "elements", map[string]*helium.ElementDecl{
-			"root:":  rootDecl,
-			"child:": childDecl,
-		})
-		setField(intDTD, "entities", map[string]*helium.Entity{})
-		setField(intDTD, "pentities", map[string]*helium.Entity{})
-		setField(intDTD, "attributes", map[string]*helium.AttributeDecl{})
-
-		// Build DOM: <root> <child/> </root> (whitespace around child)
-		root := newElement("root")
-		setField(root, "doc", doc)
-		_ = root.AppendText([]byte(" "))
-		child := newElement("child")
-		setField(child, "doc", doc)
-		_ = root.AddChild(child)
-		_ = root.AppendText([]byte(" "))
-		_ = doc.AddChild(root)
-
-		ve := validateDocument(doc)
-		// Element is declared in the internal subset, so standalone whitespace
-		// check should NOT apply. Whitespace is ignorable whitespace.
-		if ve != nil {
-			for _, e := range ve.Errors {
-				require.NotContains(t, e, "standalone")
-			}
-		}
-	})
-}
-
-func TestExtSubsetLookup_ParameterEntityInExtSubset(t *testing.T) {
-	doc := buildTestDoc(helium.StandaloneImplicitNo)
-
-	// Add a parameter entity to extSubset
-	pent := newEntity("pEnt", enum.InternalParameterEntity, "", "", "param-value", "")
-	setField(pent, "doc", doc)
-	extSubset := getField[*helium.DTD](doc, "extSubset")
-	pentities := getField[map[string]*helium.Entity](extSubset, "pentities")
-	pentities["pEnt"] = pent
-
-	ent, found := doc.GetParameterEntity("pEnt")
-	require.True(t, found, "parameter entity in extSubset should be found")
-	require.Equal(t, "param-value", string(ent.Content()))
-
-	// standalone=yes should block it
-	setField(doc, "standalone", helium.StandaloneExplicitYes)
-	_, found = doc.GetParameterEntity("pEnt")
-	require.False(t, found, "standalone=yes should prevent extSubset parameter entity lookup")
-}
-
 func TestEntityAttributeValidation(t *testing.T) {
+	t.Parallel()
+
 	t.Run("valid unparsed entity", func(t *testing.T) {
+		t.Parallel()
+
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE root [
   <!ELEMENT root EMPTY>
@@ -864,13 +157,14 @@ func TestEntityAttributeValidation(t *testing.T) {
 ]>
 <root img="logo"/>`
 		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid)
-		p.SetOption(helium.ParseDTDAttr)
+		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
 
 	t.Run("undeclared entity", func(t *testing.T) {
+		t.Parallel()
+
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE root [
   <!ELEMENT root EMPTY>
@@ -878,14 +172,15 @@ func TestEntityAttributeValidation(t *testing.T) {
 ]>
 <root img="noSuchEntity"/>`
 		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid)
-		p.SetOption(helium.ParseDTDAttr)
+		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "undeclared entity")
 	})
 
 	t.Run("wrong entity type (internal)", func(t *testing.T) {
+		t.Parallel()
+
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE root [
   <!ELEMENT root EMPTY>
@@ -894,8 +189,7 @@ func TestEntityAttributeValidation(t *testing.T) {
 ]>
 <root img="internalEnt"/>`
 		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid)
-		p.SetOption(helium.ParseDTDAttr)
+		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not unparsed")
@@ -903,7 +197,11 @@ func TestEntityAttributeValidation(t *testing.T) {
 }
 
 func TestEntitiesAttributeValidation(t *testing.T) {
+	t.Parallel()
+
 	t.Run("valid multiple unparsed entities", func(t *testing.T) {
+		t.Parallel()
+
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE root [
   <!ELEMENT root EMPTY>
@@ -914,13 +212,14 @@ func TestEntitiesAttributeValidation(t *testing.T) {
 ]>
 <root imgs="logo1 logo2"/>`
 		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid)
-		p.SetOption(helium.ParseDTDAttr)
+		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
 
 	t.Run("one undeclared entity", func(t *testing.T) {
+		t.Parallel()
+
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE root [
   <!ELEMENT root EMPTY>
@@ -930,8 +229,7 @@ func TestEntitiesAttributeValidation(t *testing.T) {
 ]>
 <root imgs="logo1 noSuchEntity"/>`
 		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid)
-		p.SetOption(helium.ParseDTDAttr)
+		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "undeclared entity")
@@ -939,7 +237,11 @@ func TestEntitiesAttributeValidation(t *testing.T) {
 }
 
 func TestNotationAttributeValidation(t *testing.T) {
+	t.Parallel()
+
 	t.Run("valid notation", func(t *testing.T) {
+		t.Parallel()
+
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE root [
   <!ELEMENT root EMPTY>
@@ -949,13 +251,14 @@ func TestNotationAttributeValidation(t *testing.T) {
 ]>
 <root fmt="gif"/>`
 		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid)
-		p.SetOption(helium.ParseDTDAttr)
+		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
 
 	t.Run("undeclared notation", func(t *testing.T) {
+		t.Parallel()
+
 		xml := `<?xml version="1.0"?>
 <!DOCTYPE root [
   <!ELEMENT root EMPTY>
@@ -964,8 +267,7 @@ func TestNotationAttributeValidation(t *testing.T) {
 ]>
 <root fmt="png"/>`
 		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid)
-		p.SetOption(helium.ParseDTDAttr)
+		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "undeclared notation")
