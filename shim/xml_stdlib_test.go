@@ -1025,7 +1025,6 @@ func TestIssue11405Stdlib(t *testing.T) {
 }
 
 func TestIssue12417Stdlib(t *testing.T) {
-	t.Skip("shim: SAX parser rejects encoding-before-version in XML declaration")
 	testCases := []struct {
 		s  string
 		ok bool

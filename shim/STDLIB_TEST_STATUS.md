@@ -1,6 +1,6 @@
 # Stdlib encoding/xml Test Compatibility Status
 
-379 pass, 63 skip, 0 fail. Skipped tests are grouped by feature gap below.
+380 pass, 62 skip, 0 fail. Skipped tests are grouped by feature gap below.
 
 Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
 
@@ -62,11 +62,9 @@ When a path-tagged slice field (e.g. `xml:"A>B,omitempty"`) is nil/empty, stdlib
 
 - [ ] **Marshal**: empty path wrapper element not emitted for nil/empty slices (#103)
 
-## XML Declaration Encoding Validation [M-H]
+## ~~XML Declaration Encoding Validation~~ ✅
 
-Encoding validation added to shim, but test uses `encoding` before `version` in XML declaration (non-standard order) which SAX parser rejects. Fix requires SAX parser changes.
-
-- [ ] `TestIssue12417Stdlib` — SAX parser rejects encoding-before-version in XML declaration
+- [x] `TestIssue12417Stdlib` — XML declaration encoding attribute parsing
 
 ## Invalid Element Name Error Messages [L-M]
 
