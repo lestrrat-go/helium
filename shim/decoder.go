@@ -11,7 +11,6 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
-	"github.com/lestrrat-go/helium/internal/parseopts"
 	"github.com/lestrrat-go/helium/sax"
 )
 
@@ -227,7 +226,7 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 	go func() {
 		defer close(d.events)
 		p := helium.NewParser()
-		p.SetInternalOption(parseopts.LenientXMLDecl)
+		p.SetOption(helium.ParseLenientXMLDecl)
 		p.SetSAXHandler(h)
 		_, err := p.ParseReader(d.ctx, r)
 		if err != nil {

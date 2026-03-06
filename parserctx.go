@@ -15,7 +15,6 @@ import (
 
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/internal/encoding"
-	"github.com/lestrrat-go/helium/internal/parseopts"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/pdebug"
@@ -62,9 +61,8 @@ const (
 )
 
 type parserCtx struct {
-	goCtx        context.Context
-	options      ParseOption
-	internalOpts parseopts.Option
+	goCtx   context.Context
+	options ParseOption
 	// ctx.encoding contains the explicit encoding. ctx.detectedEncoding
 	// contains the encoding as detected by inspecting BOM, etc.
 	// It is important to differentiate between the two, otherwise
@@ -367,7 +365,6 @@ func (ctx *parserCtx) init(p *Parser, in io.Reader) error {
 		ctx.sax = p.sax
 		ctx.charBufferSize = p.charBufferSize
 		ctx.options = p.options
-		ctx.internalOpts = p.internalOpts
 		ctx.catalog = p.catalog
 		if ctx.options.IsSet(ParseNoBlanks) {
 			ctx.keepBlanks = false
@@ -1698,7 +1695,7 @@ func (ctx *parserCtx) parseXMLDecl() error {
 		return errors.New("blank needed after '<?xml'")
 	}
 
-	if ctx.internalOpts.IsSet(parseopts.LenientXMLDecl) {
+	if ctx.options.IsSet(ParseLenientXMLDecl) {
 		return ctx.parseXMLDeclLenient()
 	}
 
@@ -1804,7 +1801,7 @@ func (ctx *parserCtx) parseXMLDeclFromCursor() error {
 		return errors.New("blank needed after '<?xml'")
 	}
 
-	if ctx.internalOpts.IsSet(parseopts.LenientXMLDecl) {
+	if ctx.options.IsSet(ParseLenientXMLDecl) {
 		return ctx.parseXMLDeclFromCursorLenient()
 	}
 
