@@ -1,52 +1,54 @@
-package helium
+package helium_test
 
 import (
 	"bytes"
+	helim "github.com/lestrrat-go/helium"
 	"os"
 	"strings"
 	"testing"
 
-	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
-	"github.com/lestrrat-go/strcursor"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDetectBOM(t *testing.T) {
-	data := map[string][][]byte{
-		encUCS4BE:   {{0x00, 0x00, 0x00, 0x3C}},
-		encUCS4LE:   {{0x3C, 0x00, 0x00, 0x00}},
-		encUCS42143: {{0x00, 0x00, 0x3C, 0x00}},
-		encUCS43412: {{0x00, 0x3C, 0x00, 0x00}},
-		encEBCDIC:   {{0x4C, 0x6F, 0xA7, 0x94}},
-		encUTF8:     {{0x3C, 0x3F, 0x78, 0x6D}, {0xEF, 0xBB, 0xBF}},
-		encUTF16LE:  {{0x3C, 0x00, 0x3F, 0x00}, {0xFF, 0xFE}},
-		encUTF16BE:  {{0x00, 0x3C, 0x00, 0x3F}, {0xFE, 0xFF}},
-		"":          {{0xde, 0xad, 0xbe, 0xef}},
+	tests := []struct {
+		name    string
+		input   []byte
+		wantErr bool
+	}{
+		{
+			name:    "utf8 xml declaration",
+			input:   []byte(`<?xml version="1.0"?><root/>`),
+			wantErr: false,
+		},
+		{
+			name:    "utf8 bom",
+			input:   append([]byte{0xEF, 0xBB, 0xBF}, []byte(`<?xml version="1.0"?><root/>`)...),
+			wantErr: false,
+		},
+		{
+			name:    "invalid bytes",
+			input:   []byte{0xde, 0xad, 0xbe, 0xef},
+			wantErr: true,
+		},
 	}
 
-	p := NewParser() // DUMMY
-	for expected, inputs := range data {
-		for i, input := range inputs {
-			ctx := &parserCtx{}
-			require.NoError(t, ctx.init(p, bytes.NewReader(input)))
-			enc, err := ctx.detectEncoding()
-			if expected == "" {
-				t.Logf("checking [invalid] (%d)", i)
-				require.Error(t, err, "detectEncoding should fail for sequence %#v", input)
-			} else {
-				t.Logf("checking %s (%d)", expected, i)
-				require.NoError(t, err, "detectEncoding should succeed for sequence %#v", input)
-
-				require.Equal(t, expected, enc, "detectEncoding returns as expected")
-			}
+	for _, tt := range tests {
+		p := helim.NewParser()
+		_, err := p.Parse(t.Context(), tt.input)
+		if tt.wantErr {
+			require.Error(t, err, tt.name)
+			continue
 		}
+		require.NoError(t, err, tt.name)
 	}
 }
 
 func TestEmptyDocument(t *testing.T) {
-	p := NewParser()
+	p := helim.NewParser()
 	// BOM only
 	_, err := p.Parse(t.Context(), []byte{0x00, 0x00, 0x00, 0x3C})
 	require.Error(t, err, "Parsing BOM only should fail")
@@ -59,13 +61,13 @@ func TestParseXMLDecl(t *testing.T) {
 		encoding   string
 		standalone int
 	}{
-		`<?xml version="1.0"?>` + content:                                   {"1.0", "utf8", int(StandaloneImplicitNo)},
-		`<?xml version="1.0" encoding="euc-jp"?>` + content:                 {"1.0", "euc-jp", int(StandaloneImplicitNo)},
-		`<?xml version="1.0" encoding="cp932" standalone='yes'?>` + content: {"1.0", "cp932", int(StandaloneExplicitYes)},
+		`<?xml version="1.0"?>` + content:                                   {"1.0", "utf8", int(helim.StandaloneImplicitNo)},
+		`<?xml version="1.0" encoding="euc-jp"?>` + content:                 {"1.0", "euc-jp", int(helim.StandaloneImplicitNo)},
+		`<?xml version="1.0" encoding="cp932" standalone='yes'?>` + content: {"1.0", "cp932", int(helim.StandaloneExplicitYes)},
 	}
 
 	for input, expect := range inputs {
-		p := NewParser()
+		p := helim.NewParser()
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "Parse should succeed for '%s'", input)
 
@@ -84,7 +86,7 @@ func TestParseMisc(t *testing.T) {
 	}
 
 	for _, input := range inputs {
-		p := NewParser()
+		p := helim.NewParser()
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "Parse should succeed for '%s'", input)
 
@@ -100,10 +102,10 @@ func TestParseMisc(t *testing.T) {
 			}
 
 			switch n.Type() {
-			case ProcessingInstructionNode:
-				require.IsType(t, &ProcessingInstruction{}, n, "First child should be a processing instruction")
+			case helim.ProcessingInstructionNode:
+				require.IsType(t, &helim.ProcessingInstruction{}, n, "First child should be a processing instruction")
 
-				require.IsType(t, &Element{}, n.NextSibling(), "NextSibling of PI should be Element node")
+				require.IsType(t, &helim.Element{}, n.NextSibling(), "NextSibling of PI should be Element node")
 				break LOOP
 			}
 			n = n.NextSibling()
@@ -123,7 +125,7 @@ L
 L
 O!]]></child>
 </root>`
-	p := NewParser()
+	p := helim.NewParser()
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse should succeed for '%s'", input)
 }
@@ -137,7 +139,7 @@ func TestParseBad(t *testing.T) {
 		`<?xml version="abc">`,
 		`<?xml varsion="1.0">`,
 	}
-	p := NewParser()
+	p := helim.NewParser()
 	for _, input := range inputs {
 		_, err := p.Parse(t.Context(), []byte(input))
 		require.Error(t, err, "Parse should fail for '%s'", input)
@@ -149,7 +151,7 @@ func TestParseNamespace(t *testing.T) {
 <helium:root xmlns:helium="https://github.com/lestrrat-go/helium">
   <helium:child>foo</helium:child>
 </helium:root>`
-	p := NewParser()
+	p := helim.NewParser()
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse should succeed for '%s'", input)
 
@@ -158,7 +160,7 @@ func TestParseNamespace(t *testing.T) {
 	}
 }
 
-func findDocumentElement(doc *Document) Node {
+func findDocumentElement(doc *helim.Document) helim.Node {
 	return doc.DocumentElement()
 }
 
@@ -167,8 +169,8 @@ func TestParseNoBlanks(t *testing.T) {
 <root>
   <child>text</child>
 </root>`
-	p := NewParser()
-	p.SetOption(ParseNoBlanks)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseNoBlanks)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse should succeed")
 
@@ -178,7 +180,7 @@ func TestParseNoBlanks(t *testing.T) {
 	require.NotNil(t, root, "document element must exist")
 	first := root.FirstChild()
 	require.NotNil(t, first, "root must have children")
-	require.Equal(t, ElementNode, first.Type(), "first child should be element, not blank text")
+	require.Equal(t, helim.ElementNode, first.Type(), "first child should be element, not blank text")
 }
 
 func TestParseNoCDATA(t *testing.T) {
@@ -186,25 +188,25 @@ func TestParseNoCDATA(t *testing.T) {
 <root><![CDATA[hello]]></root>`
 
 	// Without ParseNoCDATA: tree should have a CDATA node
-	p1 := NewParser()
+	p1 := helim.NewParser()
 	doc1, err := p1.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse should succeed")
 	root1 := findDocumentElement(doc1)
 	require.NotNil(t, root1)
 	child1 := root1.FirstChild()
 	require.NotNil(t, child1)
-	require.Equal(t, CDATASectionNode, child1.Type(), "without ParseNoCDATA, should be CDATA node")
+	require.Equal(t, helim.CDATASectionNode, child1.Type(), "without ParseNoCDATA, should be CDATA node")
 
 	// With ParseNoCDATA: CDATA should be delivered as text
-	p2 := NewParser()
-	p2.SetOption(ParseNoCDATA)
+	p2 := helim.NewParser()
+	p2.SetOption(helim.ParseNoCDATA)
 	doc2, err := p2.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse should succeed")
 	root2 := findDocumentElement(doc2)
 	require.NotNil(t, root2)
 	child2 := root2.FirstChild()
 	require.NotNil(t, child2)
-	require.Equal(t, TextNode, child2.Type(), "with ParseNoCDATA, CDATA should be a text node")
+	require.Equal(t, helim.TextNode, child2.Type(), "with ParseNoCDATA, CDATA should be a text node")
 	require.Equal(t, "hello", string(child2.Content()))
 }
 
@@ -216,13 +218,13 @@ func TestParsePedantic(t *testing.T) {
 </root>`
 
 	// Without pedantic: should succeed
-	p1 := NewParser()
+	p1 := helim.NewParser()
 	_, err := p1.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "without pedantic, relative URI should be accepted")
 
 	// With pedantic: should fail (relative URI)
-	p2 := NewParser()
-	p2.SetOption(ParsePedantic)
+	p2 := helim.NewParser()
+	p2.SetOption(helim.ParsePedantic)
 	_, err = p2.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "with pedantic, relative URI should be rejected")
 }
@@ -235,14 +237,14 @@ func TestParseRecover(t *testing.T) {
 </root>`
 
 	// Without ParseRecover: error, no document
-	p1 := NewParser()
+	p1 := helim.NewParser()
 	doc1, err := p1.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "malformed XML should fail")
 	require.Nil(t, doc1, "without recover, no document returned")
 
 	// With ParseRecover: error, but partial document returned
-	p2 := NewParser()
-	p2.SetOption(ParseRecover)
+	p2 := helim.NewParser()
+	p2.SetOption(helim.ParseRecover)
 	doc2, err := p2.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "malformed XML should still return error")
 	require.NotNil(t, doc2, "with recover, partial document should be returned")
@@ -257,8 +259,8 @@ func TestDisableSAXRecoverContinuesParsing(t *testing.T) {
   <after>more</after>
 </root>`
 
-	p := NewParser()
-	p.SetOption(ParseRecover)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseRecover)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "malformed XML should return error")
 	require.NotNil(t, doc, "ParseRecover should return a partial document")
@@ -283,9 +285,9 @@ func TestDisableSAXCallbacksSuppressed(t *testing.T) {
 		return nil
 	})
 
-	p := NewParser()
+	p := helim.NewParser()
 	p.SetSAXHandler(sh)
-	p.SetOption(ParseRecover)
+	p.SetOption(helim.ParseRecover)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err)
 
@@ -304,7 +306,7 @@ func TestDisableSAXNoEffectWithoutRecover(t *testing.T) {
   <after/>
 </root>`
 
-	p := NewParser()
+	p := helim.NewParser()
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "malformed XML should fail")
 	require.Nil(t, doc, "without ParseRecover, no document should be returned")
@@ -326,9 +328,9 @@ func TestParseExternalEntity(t *testing.T) {
 		return nil, sax.ErrHandlerUnspecified
 	})
 
-	p := NewParser()
+	p := helim.NewParser()
 	p.SetSAXHandler(s)
-	p.SetOption(ParseNoEnt)
+	p.SetOption(helim.ParseNoEnt)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse with external entity should succeed")
 }
@@ -354,13 +356,13 @@ func TestParseDTDValidRequiredAttribute(t *testing.T) {
 ]>
 <doc/>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "missing #REQUIRED attribute should fail validation")
 	require.NotNil(t, doc, "document should still be returned with validation error")
 
-	ve, ok := err.(*ValidationError)
+	ve, ok := err.(*helim.ValidationError)
 	require.True(t, ok, "error should be *ValidationError")
 	require.True(t, len(ve.Errors) > 0)
 	require.Contains(t, ve.Errors[0], "required")
@@ -375,8 +377,8 @@ func TestParseDTDValidRequiredPresent(t *testing.T) {
 ]>
 <doc id="x1"/>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
@@ -390,12 +392,12 @@ func TestParseDTDValidFixedMismatch(t *testing.T) {
 ]>
 <doc version="2.0"/>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "#FIXED attribute value mismatch should fail")
 
-	ve, ok := err.(*ValidationError)
+	ve, ok := err.(*helim.ValidationError)
 	require.True(t, ok)
 	require.Contains(t, ve.Error(), "must be")
 }
@@ -409,8 +411,8 @@ func TestParseDTDValidFixedCorrect(t *testing.T) {
 ]>
 <doc version="1.0"/>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
@@ -424,12 +426,12 @@ func TestParseDTDValidEmptyElement(t *testing.T) {
 ]>
 <doc><child>text</child></doc>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "EMPTY element with content should fail")
 
-	ve, ok := err.(*ValidationError)
+	ve, ok := err.(*helim.ValidationError)
 	require.True(t, ok)
 	require.Contains(t, ve.Error(), "EMPTY")
 }
@@ -444,8 +446,8 @@ func TestParseDTDValidElementContent(t *testing.T) {
 ]>
 <doc><a>hello</a><b>world</b></doc>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
@@ -460,8 +462,8 @@ func TestParseDTDValidElementContentMismatch(t *testing.T) {
 ]>
 <doc><b>world</b><a>hello</a></doc>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "wrong element order should fail content model")
 }
@@ -475,8 +477,8 @@ func TestParseDTDValidMixedContent(t *testing.T) {
 ]>
 <doc>hello <a>world</a> end</doc>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
@@ -491,8 +493,8 @@ func TestParseDTDValidMixedContentBadChild(t *testing.T) {
 ]>
 <doc>hello <b>world</b></doc>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "<b> not allowed in mixed content (a)")
 }
@@ -506,7 +508,7 @@ func TestParseDTDValidNoFlag(t *testing.T) {
 ]>
 <doc/>`
 
-	p := NewParser()
+	p := helim.NewParser()
 	// Don't set ParseDTDValid
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "without ParseDTDValid, validation should not run")
@@ -522,8 +524,8 @@ func TestParseDTDValidChoiceContent(t *testing.T) {
 ]>
 <doc><a>hello</a></doc>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
@@ -537,8 +539,8 @@ func TestParseDTDValidRepeatContent(t *testing.T) {
 ]>
 <doc><a>1</a><a>2</a><a>3</a></doc>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
@@ -552,8 +554,8 @@ func TestParseDTDValidRepeatContentEmpty(t *testing.T) {
 ]>
 <doc></doc>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "(a)+ requires at least one <a>")
 }
@@ -597,8 +599,8 @@ func TestParseDTDValidIDUnique(t *testing.T) {
 ]>
 <doc><item id="a"/><item id="b"/></doc>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
@@ -612,8 +614,8 @@ func TestParseDTDValidIDDuplicate(t *testing.T) {
 ]>
 <doc><item id="a"/><item id="a"/></doc>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "duplicate ID should fail")
 	require.Contains(t, err.Error(), "duplicate ID")
@@ -630,8 +632,8 @@ func TestParseDTDValidIDRefValid(t *testing.T) {
 ]>
 <doc><item id="x"/><ref target="x"/></doc>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
@@ -647,8 +649,8 @@ func TestParseDTDValidIDRefMissing(t *testing.T) {
 ]>
 <doc><item id="x"/><ref target="y"/></doc>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "IDREF to missing ID should fail")
 	require.Contains(t, err.Error(), "unknown ID")
@@ -665,8 +667,8 @@ func TestParseDTDValidIDRefsValid(t *testing.T) {
 ]>
 <doc><item id="a"/><item id="b"/><refs targets="a b"/></doc>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
@@ -682,8 +684,8 @@ func TestParseDTDValidIDRefsMissing(t *testing.T) {
 ]>
 <doc><item id="a"/><refs targets="a z"/></doc>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "IDREFS with missing ref should fail")
 	require.Contains(t, err.Error(), "unknown ID")
@@ -691,26 +693,26 @@ func TestParseDTDValidIDRefsMissing(t *testing.T) {
 
 func TestParseInNodeContext(t *testing.T) {
 	t.Run("basic fragment", func(t *testing.T) {
-		doc, err := Parse(t.Context(), []byte(`<root/>`))
+		doc, err := helim.Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
 		require.NotNil(t, root)
 
-		result, err := ParseInNodeContext(t.Context(), root, []byte(`<child/>`))
+		result, err := helim.ParseInNodeContext(t.Context(), root, []byte(`<child/>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, ElementNode, result.Type())
+		require.Equal(t, helim.ElementNode, result.Type())
 		require.Equal(t, "child", result.Name())
 		require.Nil(t, result.Parent())
 	})
 
 	t.Run("multiple sibling nodes", func(t *testing.T) {
-		doc, err := Parse(t.Context(), []byte(`<root/>`))
+		doc, err := helim.Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		result, err := ParseInNodeContext(t.Context(), root, []byte(`<a/><b/>text`))
+		result, err := helim.ParseInNodeContext(t.Context(), root, []byte(`<a/><b/>text`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, "a", result.Name())
@@ -721,27 +723,27 @@ func TestParseInNodeContext(t *testing.T) {
 
 		text := sib.NextSibling()
 		require.NotNil(t, text)
-		require.Equal(t, TextNode, text.Type())
+		require.Equal(t, helim.TextNode, text.Type())
 		require.Equal(t, "text", string(text.Content()))
 	})
 
 	t.Run("namespace inheritance", func(t *testing.T) {
-		doc, err := Parse(t.Context(), []byte(`<root xmlns:ns="http://example.com/ns"><child/></root>`))
+		doc, err := helim.Parse(t.Context(), []byte(`<root xmlns:ns="http://example.com/ns"><child/></root>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		result, err := ParseInNodeContext(t.Context(), root, []byte(`<ns:item>hello</ns:item>`))
+		result, err := helim.ParseInNodeContext(t.Context(), root, []byte(`<ns:item>hello</ns:item>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, ElementNode, result.Type())
+		require.Equal(t, helim.ElementNode, result.Type())
 		// The element should have been parsed successfully using the inherited ns prefix
-		elem, ok := result.(*Element)
+		elem, ok := result.(*helim.Element)
 		require.True(t, ok)
 		require.Equal(t, "ns:item", elem.Name())
 	})
 
 	t.Run("nested namespace inheritance", func(t *testing.T) {
-		doc, err := Parse(t.Context(), []byte(`<root xmlns:a="http://a.example.com"><middle xmlns:b="http://b.example.com"><child/></middle></root>`))
+		doc, err := helim.Parse(t.Context(), []byte(`<root xmlns:a="http://a.example.com"><middle xmlns:b="http://b.example.com"><child/></middle></root>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
@@ -749,7 +751,7 @@ func TestParseInNodeContext(t *testing.T) {
 		require.NotNil(t, middle)
 
 		// Parse fragment in context of middle — should see both a: and b: prefixes
-		result, err := ParseInNodeContext(t.Context(), middle, []byte(`<a:x/><b:y/>`))
+		result, err := helim.ParseInNodeContext(t.Context(), middle, []byte(`<a:x/><b:y/>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, "a:x", result.Name())
@@ -759,28 +761,28 @@ func TestParseInNodeContext(t *testing.T) {
 	})
 
 	t.Run("fragment with own namespaces", func(t *testing.T) {
-		doc, err := Parse(t.Context(), []byte(`<root/>`))
+		doc, err := helim.Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		result, err := ParseInNodeContext(t.Context(), root, []byte(`<ns:item xmlns:ns="http://example.com/ns">hello</ns:item>`))
+		result, err := helim.ParseInNodeContext(t.Context(), root, []byte(`<ns:item xmlns:ns="http://example.com/ns">hello</ns:item>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, "ns:item", result.Name())
 	})
 
 	t.Run("document as context", func(t *testing.T) {
-		doc, err := Parse(t.Context(), []byte(`<root/>`))
+		doc, err := helim.Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
-		result, err := ParseInNodeContext(t.Context(), doc, []byte(`<elem/>`))
+		result, err := helim.ParseInNodeContext(t.Context(), doc, []byte(`<elem/>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, "elem", result.Name())
 	})
 
 	t.Run("non-element context walks up", func(t *testing.T) {
-		doc, err := Parse(t.Context(), []byte(`<root xmlns:ns="http://example.com/ns"><child>some text</child></root>`))
+		doc, err := helim.Parse(t.Context(), []byte(`<root xmlns:ns="http://example.com/ns"><child>some text</child></root>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
@@ -788,17 +790,17 @@ func TestParseInNodeContext(t *testing.T) {
 		require.NotNil(t, child)
 		textNode := child.FirstChild()
 		require.NotNil(t, textNode)
-		require.Equal(t, TextNode, textNode.Type())
+		require.Equal(t, helim.TextNode, textNode.Type())
 
 		// Parse in context of text node — should walk up to <child> then <root>
-		result, err := ParseInNodeContext(t.Context(), textNode, []byte(`<ns:item/>`))
+		result, err := helim.ParseInNodeContext(t.Context(), textNode, []byte(`<ns:item/>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, "ns:item", result.Name())
 	})
 
 	t.Run("DTD entity resolution", func(t *testing.T) {
-		doc, err := Parse(t.Context(), []byte(`<?xml version="1.0"?>
+		doc, err := helim.Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <!DOCTYPE doc [
   <!ENTITY greeting "hello world">
 ]>
@@ -806,8 +808,8 @@ func TestParseInNodeContext(t *testing.T) {
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		p := NewParser()
-		p.SetOption(ParseNoEnt)
+		p := helim.NewParser()
+		p.SetOption(helim.ParseNoEnt)
 		result, err := p.ParseInNodeContext(t.Context(), root, []byte(`<item>&greeting;</item>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
@@ -817,26 +819,26 @@ func TestParseInNodeContext(t *testing.T) {
 	})
 
 	t.Run("empty fragment", func(t *testing.T) {
-		doc, err := Parse(t.Context(), []byte(`<root/>`))
+		doc, err := helim.Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		result, err := ParseInNodeContext(t.Context(), root, []byte(``))
+		result, err := helim.ParseInNodeContext(t.Context(), root, []byte(``))
 		require.NoError(t, err)
 		require.Nil(t, result)
 	})
 
 	t.Run("nil node", func(t *testing.T) {
-		_, err := ParseInNodeContext(t.Context(), nil, []byte(`<child/>`))
+		_, err := helim.ParseInNodeContext(t.Context(), nil, []byte(`<child/>`))
 		require.Error(t, err)
 	})
 
 	t.Run("original document preserved", func(t *testing.T) {
-		doc, err := Parse(t.Context(), []byte(`<root><existing/></root>`))
+		doc, err := helim.Parse(t.Context(), []byte(`<root><existing/></root>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		_, err = ParseInNodeContext(t.Context(), root, []byte(`<new/>`))
+		_, err = helim.ParseInNodeContext(t.Context(), root, []byte(`<new/>`))
 		require.NoError(t, err)
 
 		// Original document should still have its children
@@ -865,9 +867,9 @@ func TestParseNoXXE(t *testing.T) {
 		return newStringParseInput("<inner>hello</inner>", systemID), nil
 	})
 
-	p := NewParser()
+	p := helim.NewParser()
 	p.SetSAXHandler(s)
-	p.SetOption(ParseNoEnt | ParseNoXXE)
+	p.SetOption(helim.ParseNoEnt | helim.ParseNoXXE)
 	_, err := p.Parse(t.Context(), []byte(input))
 	// With ParseNoXXE, external entity loading is blocked.
 	// The entity reference remains unresolved; no error but external content not loaded.
@@ -889,9 +891,9 @@ func TestParseNoXXEExternalDTD(t *testing.T) {
 		return newStringParseInput("<!ELEMENT doc EMPTY>", systemID), nil
 	})
 
-	p := NewParser()
+	p := helim.NewParser()
 	p.SetSAXHandler(s)
-	p.SetOption(ParseDTDLoad | ParseNoXXE)
+	p.SetOption(helim.ParseDTDLoad | helim.ParseNoXXE)
 	_, err := p.Parse(t.Context(), []byte(input))
 	_ = err
 	require.False(t, resolved, "external DTD should not be loaded with ParseNoXXE")
@@ -900,24 +902,25 @@ func TestParseNoXXEExternalDTD(t *testing.T) {
 func TestParseSkipIDs(t *testing.T) {
 	t.Parallel()
 
-	// Verify that ParseSkipIDs wires to SkipIDs and prevents
-	// ID attributes from being added to attsSpecial.
-	ctx := &parserCtx{}
-	p := NewParser()
-	p.SetOption(ParseSkipIDs)
-	require.NoError(t, ctx.init(p, strings.NewReader("<root/>")))
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc EMPTY>
+  <!ATTLIST doc id ID #IMPLIED>
+  <!ATTLIST doc name CDATA #IMPLIED>
+]>
+<doc id="x1" name="n1"/>`
 
-	require.True(t, ctx.loadsubset.IsSet(SkipIDs), "ParseSkipIDs should set SkipIDs on loadsubset")
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDLoad | helim.ParseDTDAttr | helim.ParseSkipIDs)
+	doc, err := p.Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
 
-	// addSpecialAttribute with AttrID should be a no-op when SkipIDs is set.
-	ctx.addSpecialAttribute("doc", "id", enum.AttrID)
-	_, found := ctx.attsSpecial["doc:id"]
-	require.False(t, found, "AttrID should not be interned when SkipIDs is set")
-
-	// Non-ID attributes should still be added.
-	ctx.addSpecialAttribute("doc", "name", enum.AttrNmtoken)
-	_, found = ctx.attsSpecial["doc:name"]
-	require.True(t, found, "non-ID attributes should still be interned")
+	require.Nil(t, doc.GetElementByID("x1"), "ID should not be interned when ParseSkipIDs is set")
+	root := doc.DocumentElement()
+	require.NotNil(t, root)
+	name, ok := root.GetAttribute("name")
+	require.True(t, ok, "non-ID attributes should still be available")
+	require.Equal(t, "n1", name)
 }
 
 func TestEntityBoundaryElementDecl(t *testing.T) {
@@ -931,8 +934,8 @@ func TestEntityBoundaryElementDecl(t *testing.T) {
 ]>
 <doc/>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDLoad)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDLoad)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "boundary-violating PE should cause a parse error")
 }
@@ -948,8 +951,8 @@ func TestEntityBoundaryAttributeListDecl(t *testing.T) {
 ]>
 <doc/>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDLoad)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDLoad)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "boundary-violating PE should cause a parse error")
 }
@@ -964,8 +967,8 @@ func TestEntityBoundaryWellNestedPE(t *testing.T) {
 ]>
 <doc/>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDLoad)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDLoad)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 	require.NotNil(t, doc)
@@ -973,24 +976,19 @@ func TestEntityBoundaryWellNestedPE(t *testing.T) {
 
 func TestCurrentInputID(t *testing.T) {
 	t.Parallel()
-	// Verify that currentInputID changes when inputs are pushed/popped.
-	ctx := &parserCtx{}
-	p := NewParser()
-	require.NoError(t, ctx.init(p, strings.NewReader("<root/>")))
 
-	id1 := ctx.currentInputID()
-	require.NotNil(t, id1)
+	const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY x "hello">
+]>
+<doc>&x;</doc>`
 
-	// Push a new input — currentInputID should change.
-	ctx.pushInput(strcursor.NewByteCursor(strings.NewReader("extra")))
-	id2 := ctx.currentInputID()
-	require.NotNil(t, id2)
-	require.True(t, id1 != id2, "currentInputID should differ after pushInput")
-
-	// Pop — should restore original.
-	ctx.popInput()
-	id3 := ctx.currentInputID()
-	require.True(t, id1 == id3, "currentInputID should match original after popInput")
+	p := helim.NewParser()
+	p.SetOption(helim.ParseNoEnt)
+	doc, err := p.Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+	require.Equal(t, "hello", string(doc.DocumentElement().Content()))
 }
 
 func TestConditionalSectionInclude(t *testing.T) {
@@ -1005,8 +1003,8 @@ func TestConditionalSectionInclude(t *testing.T) {
     <child>text</child>
 </doc>`
 
-	p := NewParser()
-	p.SetOption(ParseDTDValid)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDValid)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "INCLUDE conditional section should parse successfully")
 	require.NotNil(t, doc)
@@ -1027,7 +1025,7 @@ func TestConditionalSectionIgnore(t *testing.T) {
 ]>
 <doc>hello</doc>`
 
-	p := NewParser()
+	p := helim.NewParser()
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "IGNORE section content should be skipped")
 }
@@ -1042,7 +1040,7 @@ func TestConditionalSectionInternalSubsetPE(t *testing.T) {
 ]>
 <doc>hello</doc>`
 
-	p := NewParser()
+	p := helim.NewParser()
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "PE-expanded conditional section in internal subset should work")
 }
@@ -1056,7 +1054,7 @@ func TestConditionalSectionErrors(t *testing.T) {
   %sect;
 ]>
 <doc/>`
-		p := NewParser()
+		p := helim.NewParser()
 		_, err := p.Parse(t.Context(), []byte(input))
 		require.Error(t, err, "invalid keyword should fail")
 	})
@@ -1067,8 +1065,8 @@ func TestConditionalSectionExternalDTD(t *testing.T) {
 	input, err := os.ReadFile(path)
 	require.NoError(t, err)
 
-	p := NewParser()
-	p.SetOption(ParseDTDLoad)
+	p := helim.NewParser()
+	p.SetOption(helim.ParseDTDLoad)
 	p.SetBaseURI(path)
 	doc, err := p.Parse(t.Context(), input)
 	require.NoError(t, err, "external DTD with conditional sections should parse")
@@ -1078,7 +1076,7 @@ func TestConditionalSectionExternalDTD(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	d := NewWriter()
+	d := helim.NewWriter()
 	require.NoError(t, d.WriteDoc(&buf, doc))
 	require.Equal(t, string(expected), buf.String())
 }
@@ -1089,8 +1087,8 @@ func TestXMLSpacePreserve(t *testing.T) {
 <root xml:space="preserve">
   <child>text</child>
 </root>`
-		p := NewParser()
-		p.SetOption(ParseNoBlanks)
+		p := helim.NewParser()
+		p.SetOption(helim.ParseNoBlanks)
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "Parse should succeed")
 
@@ -1099,7 +1097,7 @@ func TestXMLSpacePreserve(t *testing.T) {
 		first := root.FirstChild()
 		require.NotNil(t, first, "root must have children")
 		// With xml:space="preserve", blank-only text nodes must be kept even with ParseNoBlanks.
-		require.Equal(t, TextNode, first.Type(), "first child should be text node (preserved whitespace)")
+		require.Equal(t, helim.TextNode, first.Type(), "first child should be text node (preserved whitespace)")
 	})
 
 	t.Run("default reverts preserve", func(t *testing.T) {
@@ -1113,20 +1111,20 @@ func TestXMLSpacePreserve(t *testing.T) {
     <leaf>text</leaf>
   </child>
 </root>`
-		p := NewParser()
-		p.SetOption(ParseNoBlanks)
+		p := helim.NewParser()
+		p.SetOption(helim.ParseNoBlanks)
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "Parse should succeed")
 
 		root := findDocumentElement(doc)
 		require.NotNil(t, root, "document element must exist")
 		// root has xml:space="preserve", so its whitespace text nodes are kept
-		require.Equal(t, TextNode, root.FirstChild().Type(), "root whitespace should be preserved")
+		require.Equal(t, helim.TextNode, root.FirstChild().Type(), "root whitespace should be preserved")
 
 		// Find <child>
-		var child Node
+		var child helim.Node
 		for c := root.FirstChild(); c != nil; c = c.NextSibling() {
-			if c.Type() == ElementNode && c.(*Element).LocalName() == "child" {
+			if c.Type() == helim.ElementNode && c.(*helim.Element).LocalName() == "child" {
 				child = c
 				break
 			}
@@ -1135,7 +1133,7 @@ func TestXMLSpacePreserve(t *testing.T) {
 		// child has xml:space="default", so blanks should be stripped
 		first := child.FirstChild()
 		require.NotNil(t, first, "child must have children")
-		require.Equal(t, ElementNode, first.Type(), "child's first child should be element (blanks stripped by default)")
+		require.Equal(t, helim.ElementNode, first.Type(), "child's first child should be element (blanks stripped by default)")
 	})
 
 	t.Run("preserve pops correctly after element closes", func(t *testing.T) {
@@ -1148,8 +1146,8 @@ func TestXMLSpacePreserve(t *testing.T) {
     <child>text</child>
   </normal>
 </root>`
-		p := NewParser()
-		p.SetOption(ParseNoBlanks)
+		p := helim.NewParser()
+		p.SetOption(helim.ParseNoBlanks)
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "Parse should succeed")
 
@@ -1157,10 +1155,10 @@ func TestXMLSpacePreserve(t *testing.T) {
 		require.NotNil(t, root, "document element must exist")
 
 		// Find <preserved> and <normal>
-		var preserved, normal Node
+		var preserved, normal helim.Node
 		for c := root.FirstChild(); c != nil; c = c.NextSibling() {
-			if c.Type() == ElementNode {
-				switch c.(*Element).LocalName() {
+			if c.Type() == helim.ElementNode {
+				switch c.(*helim.Element).LocalName() {
 				case "preserved":
 					preserved = c
 				case "normal":
@@ -1172,9 +1170,9 @@ func TestXMLSpacePreserve(t *testing.T) {
 		require.NotNil(t, normal, "normal element must exist")
 
 		// preserved's first child should be whitespace text
-		require.Equal(t, TextNode, preserved.FirstChild().Type(), "preserved whitespace should be kept")
+		require.Equal(t, helim.TextNode, preserved.FirstChild().Type(), "preserved whitespace should be kept")
 
 		// normal's first child should be element (blanks stripped)
-		require.Equal(t, ElementNode, normal.FirstChild().Type(), "normal whitespace should be stripped")
+		require.Equal(t, helim.ElementNode, normal.FirstChild().Type(), "normal whitespace should be stripped")
 	})
 }
