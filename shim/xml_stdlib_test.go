@@ -1054,7 +1054,6 @@ func TestIssue12417Stdlib(t *testing.T) {
 }
 
 func TestIssue7113Stdlib(t *testing.T) {
-	t.Skip("shim: empty namespace override (xmlns=\"\") not fully implemented")
 	type C struct {
 		XMLName Name `xml:""` // Sets empty namespace
 	}

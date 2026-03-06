@@ -1065,13 +1065,19 @@ func parseFieldBinding(f reflect.StructField) fieldBinding {
 		b.isXMLName = true
 	}
 
-	tag := f.Tag.Get("xml")
+	tag, hasTag := f.Tag.Lookup("xml")
 	if tag == "-" {
 		b.omit = true
 		return b
 	}
 
 	if tag == "" {
+		if hasTag && b.isXMLName {
+			// Explicit xml:"" on XMLName — empty namespace and name
+			b.name = ""
+			b.rawName = ""
+			return b
+		}
 		// If the field type is a struct with an XMLName tag, use that tag
 		// name for element matching (stdlib precedence: XMLName tag > field name).
 		if xmlNameTag := structXMLNameTag(derefType(f.Type)); xmlNameTag != "" {

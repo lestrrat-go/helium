@@ -27,8 +27,9 @@ func isInCharacterRange(r rune) bool {
 }
 
 // escapeText writes b to w with XML escaping for text content.
+// Newlines are NOT escaped, matching stdlib EncodeToken(CharData) behavior.
 func escapeText(w io.Writer, b []byte) error {
-	return doEscape(w, b, true)
+	return doEscape(w, b, false)
 }
 
 // escapeAttrVal writes s to w with XML escaping for attribute values.
@@ -38,8 +39,9 @@ func escapeAttrVal(w io.Writer, s string) error {
 }
 
 // escapeString writes s to w with XML escaping for text content.
+// Newlines ARE escaped, matching stdlib's p.EscapeString behavior for marshaling.
 func escapeString(w io.Writer, s string) error {
-	return doEscape(w, []byte(s), false)
+	return doEscape(w, []byte(s), true)
 }
 
 func doEscape(w io.Writer, s []byte, escapeNewline bool) error {

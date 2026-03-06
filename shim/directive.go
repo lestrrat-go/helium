@@ -23,14 +23,28 @@ func scanProlog(r io.Reader) ([]Token, io.Reader, bool, error) {
 	if err != nil && err != io.EOF {
 		return nil, nil, false, err
 	}
+
+	// If the prolog contained an XML declaration, blank it out in the
+	// replay buffer so the SAX parser doesn't reject it as a misplaced
+	// PI (the parser errors on <?xml?> when preceded by whitespace).
+	// Replacing with spaces preserves byte offsets for InputOffset().
+	if s.xmlDeclEnd > s.xmlDeclStart {
+		buf := s.buf.Bytes()
+		for i := s.xmlDeclStart; i < s.xmlDeclEnd && i < len(buf); i++ {
+			buf[i] = ' '
+		}
+	}
+
 	combined := io.MultiReader(bytes.NewReader(s.buf.Bytes()), r)
 	return tokens, combined, prologOnly, nil
 }
 
 type prologScanner struct {
-	r    io.Reader
-	buf  bytes.Buffer // all bytes read from r, for replay
-	peek []byte       // ungotten bytes
+	r            io.Reader
+	buf          bytes.Buffer // all bytes read from r, for replay
+	peek         []byte       // ungotten bytes
+	xmlDeclStart int          // byte offset of '<' in <?xml ...?>
+	xmlDeclEnd   int          // byte offset after '>' in <?xml ...?>
 }
 
 func (s *prologScanner) readByte() (byte, error) {
@@ -98,9 +112,16 @@ func (s *prologScanner) scan() ([]Token, error) {
 		case b2 == '?':
 			// Processing instruction <?...?>
 			flushWS()
+			// Record position before scanning PI body. The '<' and '?'
+			// are already in buf, so the PI starts 2 bytes back.
+			piStart := s.buf.Len() - 2
 			tok, err := s.scanPI()
 			if err != nil {
 				return tokens, err
+			}
+			if pi, ok := tok.(ProcInst); ok && pi.Target == "xml" {
+				s.xmlDeclStart = piStart
+				s.xmlDeclEnd = s.buf.Len()
 			}
 			tokens = append(tokens, tok)
 

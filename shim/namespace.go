@@ -1,6 +1,7 @@
 package shim
 
 import (
+	"bufio"
 	"strconv"
 	"strings"
 	"unicode"
@@ -9,68 +10,44 @@ import (
 
 const xmlNSURI = "http://www.w3.org/XML/1998/namespace"
 
-// nsEntry represents a single namespace binding in scope.
-type nsEntry struct {
-	prefix string
-	uri    string
-}
-
-// nsScope represents one level of namespace bindings (one element's worth).
-type nsScope struct {
-	bindings []nsEntry
-}
-
-// nsStack tracks namespace bindings for the encoder, matching
-// encoding/xml behavior where each StartElement pushes a new scope.
+// nsStack tracks namespace prefix bindings for the encoder, matching
+// stdlib encoding/xml's createAttrPrefix/popPrefix behavior.
 type nsStack struct {
-	scopes []nsScope
-	// attrNS maps prefix → URI for allocated attribute prefixes.
-	attrNS map[string]string
-	// attrPrefix maps URI → prefix for allocated attribute prefixes.
-	attrPrefix map[string]string
-	seq        int // collision suffix counter
+	attrPrefix map[string]string // URI → prefix
+	attrNS     map[string]string // prefix → URI
+	prefixes   []string          // stack; "" = scope marker
+	seq        int               // collision suffix counter
 }
 
 func (s *nsStack) push() {
-	s.scopes = append(s.scopes, nsScope{})
+	s.prefixes = append(s.prefixes, "") // scope marker
 }
 
 func (s *nsStack) pop() {
-	if len(s.scopes) > 0 {
-		s.scopes = s.scopes[:len(s.scopes)-1]
-	}
-}
-
-func (s *nsStack) addBinding(prefix, uri string) {
-	if len(s.scopes) == 0 {
-		s.scopes = append(s.scopes, nsScope{})
-	}
-	top := &s.scopes[len(s.scopes)-1]
-	top.bindings = append(top.bindings, nsEntry{prefix: prefix, uri: uri})
-}
-
-// resolve returns the prefix bound to the given URI, or "" if unbound.
-func (s *nsStack) resolve(uri string) (string, bool) {
-	for i := len(s.scopes) - 1; i >= 0; i-- {
-		for _, b := range s.scopes[i].bindings {
-			if b.uri == uri {
-				return b.prefix, true
-			}
+	for len(s.prefixes) > 0 {
+		p := s.prefixes[len(s.prefixes)-1]
+		s.prefixes = s.prefixes[:len(s.prefixes)-1]
+		if p == "" {
+			break
+		}
+		if uri, ok := s.attrNS[p]; ok {
+			delete(s.attrPrefix, uri)
+			delete(s.attrNS, p)
 		}
 	}
-	return "", false
 }
 
-// allocPrefix derives a prefix for the given namespace URI, matching
-// encoding/xml's createAttrPrefix algorithm. It returns the prefix
-// and whether an xmlns declaration needs to be emitted.
-func (s *nsStack) allocPrefix(uri string) (string, bool) {
-	if p, ok := s.attrPrefix[uri]; ok {
-		return p, false
+// createAttrPrefix finds or creates a prefixed namespace binding for url.
+// It writes the xmlns:prefix="url" declaration to w as a side effect.
+func (s *nsStack) createAttrPrefix(w *bufio.Writer, url string) string {
+	if s.attrPrefix != nil {
+		if prefix := s.attrPrefix[url]; prefix != "" {
+			return prefix
+		}
 	}
 
-	if uri == xmlNSURI {
-		return "xml", false
+	if url == xmlNSURI {
+		return "xml"
 	}
 
 	if s.attrPrefix == nil {
@@ -79,7 +56,7 @@ func (s *nsStack) allocPrefix(uri string) (string, bool) {
 	}
 
 	// Derive candidate from URI: last path segment
-	candidate := strings.TrimRight(uri, "/")
+	candidate := strings.TrimRight(url, "/")
 	if i := strings.LastIndex(candidate, "/"); i >= 0 {
 		candidate = candidate[i+1:]
 	}
@@ -104,10 +81,17 @@ func (s *nsStack) allocPrefix(uri string) (string, bool) {
 		}
 	}
 
-	s.attrPrefix[uri] = prefix
-	s.attrNS[prefix] = uri
+	s.attrPrefix[url] = prefix
+	s.attrNS[prefix] = url
 
-	return prefix, true
+	w.WriteString(`xmlns:`)
+	w.WriteString(prefix)
+	w.WriteString(`="`)
+	escapeAttrVal(w, url)
+	w.WriteString(`" `)
+
+	s.prefixes = append(s.prefixes, prefix)
+	return prefix
 }
 
 // isXMLName checks whether s is a valid XML Name, matching the behavior
@@ -138,7 +122,6 @@ func isXMLName(s string) bool {
 
 // xmlFirst and xmlSecond are the Unicode range tables for XML name
 // characters, matching encoding/xml's internal "first" and "second" tables.
-// xmlFirst covers NameStartChar, xmlSecond covers the additional NameChar.
 var xmlFirst = &unicode.RangeTable{
 	R16: []unicode.Range16{
 		{0x003A, 0x003A, 1}, // :

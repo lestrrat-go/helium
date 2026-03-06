@@ -45,18 +45,21 @@ type Decoder struct {
 	// DefaultSpace sets the default namespace for elements without an explicit namespace.
 	DefaultSpace string
 
-	tokenReader  TokenReader
-	events       chan tokenEvent
-	ctx          context.Context
-	cancel       context.CancelFunc
-	lastToken    Token
-	savedErr     error
-	offset       int64
-	line         int
-	column       int
-	prologTokens []Token // pre-scanned prolog tokens (Directive, ProcInst, Comment, CharData)
-	prologIdx    int     // next prolog token to emit
-	prologOnly   bool    // true if entire input is prolog (no root element)
+	tokenReader    TokenReader
+	events         chan tokenEvent
+	ctx            context.Context
+	cancel         context.CancelFunc
+	lastToken      Token
+	savedErr       error
+	offset         int64
+	line           int
+	column         int
+	nestDepth      int      // tracks populateElement recursion depth
+	prologTokens   []Token  // pre-scanned prolog tokens (Directive, ProcInst, Comment, CharData)
+	prologIdx      int      // next prolog token to emit
+	prologOnly     bool     // true if entire input is prolog (no root element)
+	combinedReader io.Reader // buffered reader for lazy SAX startup
+	saxStarted     bool     // true once SAX goroutine has been started
 }
 
 func newDecoderFromReader(r io.Reader) (*Decoder, error) {
@@ -71,19 +74,14 @@ func newDecoderFromReader(r io.Reader) (*Decoder, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &Decoder{
-		Strict:       true,
-		events:       make(chan tokenEvent, 64),
-		ctx:          ctx,
-		cancel:       cancel,
-		line:         1,
-		column:       1,
-		prologTokens: prologTokens,
-		prologOnly:   prologOnly,
-	}
-	if !prologOnly {
-		d.startSAXEmitter(combined)
-	} else {
-		close(d.events)
+		Strict:         true,
+		ctx:            ctx,
+		cancel:         cancel,
+		line:           1,
+		column:         1,
+		prologTokens:   prologTokens,
+		prologOnly:     prologOnly,
+		combinedReader: combined,
 	}
 	return d, nil
 }
@@ -283,7 +281,29 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 	})
 	h.OnNotationDecl = sax.NotationDeclFunc(func(_ sax.Context, _ string, _ string, _ string) error { return nil })
 	h.OnUnparsedEntityDecl = sax.UnparsedEntityDeclFunc(func(_ sax.Context, _ string, _ string, _ string, _ string) error { return nil })
-	h.OnGetEntity = sax.GetEntityFunc(func(_ sax.Context, _ string) (sax.Entity, error) { return nil, nil })
+	// Pre-build helium entities from d.Entity so the parser can type-assert
+	// them to *helium.Entity (the parser hard-casts in parseEntityRef).
+	var entityLookup map[string]*helium.Entity
+	if len(d.Entity) > 0 {
+		entDoc := helium.NewDefaultDocument()
+		if _, err := entDoc.CreateInternalSubset("_", "", ""); err == nil {
+			entityLookup = make(map[string]*helium.Entity, len(d.Entity))
+			for name, val := range d.Entity {
+				ent, err := entDoc.AddEntity(name, enum.InternalGeneralEntity, "", "", val)
+				if err == nil {
+					entityLookup[name] = ent
+				}
+			}
+		}
+	}
+	h.OnGetEntity = sax.GetEntityFunc(func(_ sax.Context, name string) (sax.Entity, error) {
+		if entityLookup != nil {
+			if ent, ok := entityLookup[name]; ok {
+				return ent, nil
+			}
+		}
+		return nil, nil
+	})
 	h.OnGetParameterEntity = sax.GetParameterEntityFunc(func(_ sax.Context, _ string) (sax.Entity, error) { return nil, nil })
 	h.OnResolveEntity = sax.ResolveEntityFunc(func(_ sax.Context, _ string, _ string) (sax.ParseInput, error) { return nil, nil })
 	h.OnHasExternalSubset = sax.HasExternalSubsetFunc(func(_ sax.Context) (bool, error) { return false, nil })
@@ -384,6 +404,20 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 		}
 
 		return tok, nil
+	}
+
+	// Lazy-start the SAX emitter on first non-prolog read. This allows
+	// callers to set Entity, CharsetReader, etc. after NewDecoder returns.
+	if !d.saxStarted && d.tokenReader == nil {
+		d.saxStarted = true
+		if d.prologOnly {
+			d.events = make(chan tokenEvent)
+			close(d.events)
+		} else {
+			d.events = make(chan tokenEvent, 64)
+			d.startSAXEmitter(d.combinedReader)
+		}
+		d.combinedReader = nil // release reference
 	}
 
 	var tok Token
@@ -605,7 +639,16 @@ func (d *Decoder) buildElementFromTokens(start stdxml.StartElement) (*helium.Ele
 	return root, nil
 }
 
+// maxNestingDepth limits how deeply populateElement can recurse,
+// protecting against malicious TokenReaders that never return EndElement.
+const maxNestingDepth = 10000
+
 func (d *Decoder) populateElement(doc *helium.Document, parent *helium.Element, name Name) error {
+	d.nestDepth++
+	if d.nestDepth > maxNestingDepth {
+		return errors.New("xml: exceeded max depth")
+	}
+	defer func() { d.nestDepth-- }()
 	for {
 		tok, err := d.Token()
 		if err != nil {
@@ -689,3 +732,4 @@ func setElementAttrs(doc *helium.Document, elem *helium.Element, attrs []stdxml.
 	}
 	return nil
 }
+

@@ -2340,7 +2340,6 @@ var encodeTokenTestsStdlib = []struct {
 }}
 
 func TestEncodeTokenStdlib(t *testing.T) {
-	t.Skip("shim: EncodeToken validation and namespace prefix allocation differ from stdlib")
 loop:
 	for i, tt := range encodeTokenTestsStdlib {
 		var buf strings.Builder

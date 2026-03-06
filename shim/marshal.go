@@ -11,6 +11,8 @@ import (
 	"strings"
 )
 
+var ddBytes = []byte("--")
+
 // marshalValue is the main marshal dispatch. It encodes val as XML,
 // optionally using the provided start element for the outer tag.
 func (enc *Encoder) marshalValue(v any, start *StartElement) error {
@@ -107,9 +109,7 @@ func (enc *Encoder) marshalTextMarshaler(m encoding.TextMarshaler, val reflect.V
 	if err := enc.EncodeToken(se); err != nil {
 		return err
 	}
-	if err := enc.EncodeToken(CharData(text)); err != nil {
-		return err
-	}
+	enc.marshalEscapedText(string(text))
 	return enc.EncodeToken(se.End())
 }
 
@@ -152,6 +152,22 @@ func (enc *Encoder) marshalStruct(val reflect.Value, start *StartElement) error 
 		}
 	}
 
+	// If the struct has an XMLName field with an empty tag (xml:"") and the
+	// element has no namespace but the parent does, add xmlns="" to clear
+	// the default namespace. This matches stdlib behavior.
+	if se.Name.Space == "" && len(enc.tags) > 0 && enc.tags[len(enc.tags)-1].Space != "" {
+		hasEmptyXMLNameTag := false
+		for _, b := range bindings {
+			if b.isXMLName && !b.hasNameSpace && b.name == "" {
+				hasEmptyXMLNameTag = true
+				break
+			}
+		}
+		if hasEmptyXMLNameTag {
+			se.Attr = append(se.Attr, Attr{Name: Name{Local: "xmlns"}, Value: ""})
+		}
+	}
+
 	if err := enc.EncodeToken(se); err != nil {
 		return err
 	}
@@ -185,9 +201,7 @@ func (enc *Encoder) marshalStruct(val reflect.Value, start *StartElement) error 
 			}
 			text := textValue(field)
 			if text != "" {
-				if err := enc.EncodeToken(CharData([]byte(text))); err != nil {
-					return err
-				}
+				enc.marshalEscapedText(text)
 			}
 		case b.isCData:
 			if err := s.trim(parents); err != nil {
@@ -372,9 +386,7 @@ func (enc *Encoder) marshalSimpleValue(val reflect.Value, start *StartElement) e
 		return err
 	}
 	if text != "" {
-		if err := enc.EncodeToken(CharData([]byte(text))); err != nil {
-			return err
-		}
+		enc.marshalEscapedText(text)
 	}
 	return enc.EncodeToken(se.End())
 }
@@ -456,11 +468,22 @@ func (enc *Encoder) buildStructStart(val reflect.Value, bindings []fieldBinding,
 		return *override
 	}
 
-	// Check XMLName field value — only top-level (not embedded struct XMLName)
+	// Check XMLName — only top-level (not embedded struct XMLName).
+	// Priority: tag name > field value (matching stdlib).
 	for _, b := range bindings {
 		if !b.isXMLName || len(b.index) > 1 {
 			continue
 		}
+		// If the tag provides a non-empty name, use it.
+		// rawName != "XMLName" distinguishes "name from tag" vs "name from field".
+		if b.rawName != "" && b.rawName != "XMLName" && b.name != "" {
+			name := Name{Local: b.name}
+			if b.hasNameSpace {
+				name.Space = b.nameSpace
+			}
+			return StartElement{Name: name}
+		}
+		// Otherwise, use the XMLName field value.
 		field, ok := fieldByIndexNoAlloc(val, b.index)
 		if !ok {
 			continue
@@ -481,14 +504,6 @@ func (enc *Encoder) buildStructStart(val reflect.Value, bindings []fieldBinding,
 				}
 				return StartElement{Name: name}
 			}
-		}
-		// Check tag on XMLName
-		if b.rawName != "" && b.rawName != "XMLName" && b.name != "" {
-			name := Name{Local: b.name}
-			if b.hasNameSpace {
-				name.Space = b.nameSpace
-			}
-			return StartElement{Name: name}
 		}
 	}
 
@@ -698,15 +713,42 @@ func hasOwnXMLName(v reflect.Value) bool {
 	return false
 }
 
+// marshalEscapedText writes text content with newline escaping,
+// matching stdlib's p.EscapeString behavior for marshaled text.
+func (enc *Encoder) marshalEscapedText(text string) {
+	escapeString(enc.w, text)
+	enc.hasTokens = true
+	enc.lastWasStart = false
+	enc.lastWasText = true
+}
+
 func (enc *Encoder) marshalComment(structVal, field reflect.Value) error {
 	// Nil pointer or nil interface → bad type error (matches stdlib)
 	if (field.Kind() == reflect.Pointer || field.Kind() == reflect.Interface) && field.IsNil() {
 		return fmt.Errorf("xml: bad type for comment field of %s", structVal.Type())
 	}
 	text := textValue(field)
-	if text != "" {
-		return enc.EncodeToken(Comment([]byte(text)))
+	if text == "" {
+		return nil
 	}
+	b := []byte(text)
+	if bytes.Contains(b, ddBytes) {
+		return fmt.Errorf(`xml: comments must not contain "--"`)
+	}
+	if enc.indent != "" || enc.prefix != "" {
+		if enc.depth > 0 && !enc.lastWasStart {
+			enc.writeIndent(enc.depth)
+		}
+	}
+	enc.w.WriteString("<!--")
+	enc.w.Write(b)
+	if b[len(b)-1] == '-' {
+		enc.w.WriteByte(' ')
+	}
+	enc.w.WriteString("-->")
+	enc.hasTokens = true
+	enc.lastWasStart = false
+	enc.lastWasText = false
 	return nil
 }
 

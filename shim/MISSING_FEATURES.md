@@ -414,51 +414,28 @@ go test -run 'TestTokenStdlib' -v
 
 ---
 
-## 7. Empty Namespace Override
+## 7. Empty Namespace Override — DONE
 
 **Tests unlocked**: 1 (TestIssue7113Stdlib)
 **Difficulty**: Medium-High
 **Files**: `shim/unmarshal.go`, `shim/marshal.go`
 
-### Problem
+### Solution
 
-`xmlns=""` explicitly clears the default namespace. When unmarshaling:
-```xml
-<A xmlns="b"><C xmlns=""></C><d></d></A>
-```
-- `A.XMLName.Space` should be `"b"`
-- `C.XMLName.Space` should be `""` (cleared by `xmlns=""`)
-- `d` (no xmlns override) should inherit `"b"`
+Three changes matching stdlib behavior:
 
-When re-marshaling, the output must preserve `xmlns=""` on `C`.
+1. **`parseFieldBinding`** (`unmarshal.go`): Use `f.Tag.Lookup("xml")` to
+   distinguish "no tag" from `xml:""`. When XMLName has an explicit empty tag,
+   set `b.name=""` and `b.rawName=""`.
 
-### Current behavior
+2. **`marshalStruct`** (`marshal.go`): Before calling `EncodeToken`, check if
+   the struct has an XMLName with empty tag (`b.name==""` + `!b.hasNameSpace`),
+   the element has Space="", and the parent has non-empty Space. If so, append
+   `Attr{Name{"","xmlns"}, ""}` to emit `xmlns=""`.
 
-The helium DOM from `helium.Parse` handles `xmlns=""` correctly at the DOM level
-(elements inside `xmlns=""` get empty URI). The issue is in the marshal path:
-when `XMLName.Space` is empty but the parent has a namespace, the encoder must
-emit `xmlns=""` to explicitly clear the default namespace.
-
-### Implementation guidance
-
-**Unmarshal**: Likely works already via helium DOM. Test by removing the skip
-and checking if unmarshal passes independently.
-
-**Marshal** (`shim/encoder.go`):
-
-In `writeStartElement` (line 81), after determining the element's namespace:
-1. If the element's namespace is `""` but the parent scope has a default
-   namespace binding, emit `xmlns=""` to clear it.
-2. Track the current default namespace in the nsStack. The `resolve` method
-   currently only resolves URI→prefix; add a `defaultURI()` method that
-   returns the URI bound to prefix `""`.
-
-### Test verification
-
-```sh
-# Remove t.Skip from TestIssue7113Stdlib
-go test -run 'TestIssue7113Stdlib' -v
-```
+3. **`buildStructStart`** (`marshal.go`): Tag name takes priority over XMLName
+   field value (matching stdlib). Only use tag when `rawName != "XMLName"`
+   (distinguishes tag-provided name from field-name fallback).
 
 ---
 
@@ -773,7 +750,7 @@ implemented.
 | 4 | EncodeToken Validation | 1 | High effort |
 | 5 | ~~RawToken NS Preservation~~ | ~~1~~ | **DONE** (test blocked on #9, #11) |
 | 6 | ~~Cooked Token xmlns~~ | ~~1~~ | **DONE** (test blocked on #9, #11) |
-| 7 | Empty NS Override | 1 | Medium effort |
+| 7 | Empty NS Override | 1 | DONE |
 | 8 | CharsetReader | 2 | Medium effort |
 | 9 | Directive Tokens | 2 | ✅ Done |
 | 10 | Error Messages | ~5 | Medium effort (tedious) |
