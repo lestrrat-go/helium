@@ -1,8 +1,9 @@
-package helium
+package helium_test
 
 import (
 	"bytes"
 	"fmt"
+	helim "github.com/lestrrat-go/helium"
 	"io"
 	"os"
 	"path/filepath"
@@ -92,12 +93,12 @@ func TestLibxml2Compat(t *testing.T) {
 			expected, err := os.ReadFile(expectedPath)
 			require.NoError(t, err, "reading expected file")
 
-			p := NewParser()
+			p := helim.NewParser()
 			doc, err := p.Parse(t.Context(), input)
 			require.NoError(t, err, "parsing %s", name)
 
 			var buf bytes.Buffer
-			d := NewWriter()
+			d := helim.NewWriter()
 			require.NoError(t, d.WriteDoc(&buf, doc), "dumping %s", name)
 
 			actual := buf.String()
@@ -120,8 +121,8 @@ func nullOrString(s string) string {
 }
 
 func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
-	entities := map[string]*Entity{}
-	peEntities := map[string]*Entity{}
+	entities := map[string]*helim.Entity{}
+	peEntities := map[string]*helim.Entity{}
 	s := sax.New()
 
 	s.OnSetDocumentLocator = sax.SetDocumentLocatorFunc(func(_ sax.Context, _ sax.DocumentLocator) error {
@@ -309,7 +310,7 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 	})
 	s.OnWarning = sax.WarningFunc(func(_ sax.Context, err error) error {
 		msg := err.Error()
-		if e, ok := err.(ErrParseError); ok {
+		if e, ok := err.(helim.ErrParseError); ok {
 			msg = e.Err.Error()
 		}
 		_, _ = fmt.Fprintf(out, "SAX.warning: %s\n", msg)
@@ -482,7 +483,7 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 			require.NoError(t, err, "reading expected SAX2 file")
 
 			var buf bytes.Buffer
-			p := NewParser()
+			p := helim.NewParser()
 			p.SetSAXHandler(newLibxml2EventEmitter(&buf))
 
 			_, err = p.Parse(t.Context(), input)

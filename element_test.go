@@ -1,6 +1,7 @@
-package helium
+package helium_test
 
 import (
+	helim "github.com/lestrrat-go/helium"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -33,7 +34,7 @@ func TestElementTree(t *testing.T) {
 	require.NoError(t, e2.AppendText([]byte("e2")), "e2.AppendText succeeds")
 	require.Equal(t, []byte("e2"), e2.Content(), "e2.Content matches")
 
-	for _, e := range []Node{e2, e3, e4} {
+	for _, e := range []helim.Node{e2, e3, e4} {
 		require.Equal(t, e1, e.Parent(), "%s.Parent is e1", e.Name())
 	}
 
@@ -63,7 +64,7 @@ func TestElementContent(t *testing.T) {
 }
 
 func TestGetAttribute(t *testing.T) {
-	doc := NewDefaultDocument()
+	doc := helim.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 	require.NoError(t, e.SetAttribute("id", "123"))
@@ -82,7 +83,7 @@ func TestGetAttribute(t *testing.T) {
 }
 
 func TestHasAttribute(t *testing.T) {
-	doc := NewDefaultDocument()
+	doc := helim.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 	require.NoError(t, e.SetAttribute("id", "123"))
@@ -92,11 +93,11 @@ func TestHasAttribute(t *testing.T) {
 }
 
 func TestGetAttributeNS(t *testing.T) {
-	doc := NewDefaultDocument()
+	doc := helim.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 
-	ns := NewNamespace("x", "http://example.com")
+	ns := helim.NewNamespace("x", "http://example.com")
 	require.NoError(t, e.SetAttributeNS("attr", "val", ns))
 
 	val, ok := e.GetAttributeNS("attr", "http://example.com")
@@ -111,11 +112,11 @@ func TestGetAttributeNS(t *testing.T) {
 }
 
 func TestGetAttributeNodeNS(t *testing.T) {
-	doc := NewDefaultDocument()
+	doc := helim.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 
-	ns := NewNamespace("x", "http://example.com")
+	ns := helim.NewNamespace("x", "http://example.com")
 	require.NoError(t, e.SetAttributeNS("attr", "val", ns))
 
 	attr := e.GetAttributeNodeNS("attr", "http://example.com")
@@ -132,7 +133,7 @@ func TestGetAttributeNodeNS(t *testing.T) {
 }
 
 func TestRemoveAttribute(t *testing.T) {
-	doc := NewDefaultDocument()
+	doc := helim.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 	require.NoError(t, e.SetAttribute("a", "1"))
@@ -163,11 +164,11 @@ func TestRemoveAttribute(t *testing.T) {
 }
 
 func TestRemoveAttributeNS(t *testing.T) {
-	doc := NewDefaultDocument()
+	doc := helim.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 
-	ns := NewNamespace("x", "http://example.com")
+	ns := helim.NewNamespace("x", "http://example.com")
 	require.NoError(t, e.SetAttributeNS("attr", "val", ns))
 
 	ok := e.RemoveAttributeNS("attr", "http://example.com")

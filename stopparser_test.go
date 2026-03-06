@@ -1,7 +1,8 @@
-package helium
+package helium_test
 
 import (
 	"bytes"
+	helim "github.com/lestrrat-go/helium"
 	"testing"
 
 	"github.com/lestrrat-go/helium/sax"
@@ -18,12 +19,12 @@ func TestStopParserInCharacters(t *testing.T) {
 	s := sax.New()
 	s.OnCharacters = sax.CharactersFunc(func(ctx sax.Context, ch []byte) error {
 		if string(ch) == "hello" {
-			StopParser(ctx)
+			helim.StopParser(ctx)
 		}
 		return nil
 	})
 
-	p := NewParser()
+	p := helim.NewParser()
 	p.SetSAXHandler(s)
 
 	_, err := p.Parse(t.Context(), []byte(input))
@@ -43,12 +44,12 @@ func TestStopParserInStartElementNS(t *testing.T) {
 	s.OnStartElementNS = sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		seen = append(seen, localname)
 		if localname == "target" {
-			StopParser(ctx)
+			helim.StopParser(ctx)
 		}
 		return nil
 	})
 
-	p := NewParser()
+	p := helim.NewParser()
 	p.SetSAXHandler(s)
 
 	_, err := p.Parse(t.Context(), []byte(input))
@@ -69,12 +70,12 @@ func TestStopParserViaPushParser(t *testing.T) {
 	s := sax.New()
 	s.OnStartElementNS = sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		if localname == "b" {
-			StopParser(ctx)
+			helim.StopParser(ctx)
 		}
 		return nil
 	})
 
-	p := NewParser()
+	p := helim.NewParser()
 	p.SetSAXHandler(s)
 	pp := p.NewPushParser(t.Context())
 	require.NoError(t, pp.Push([]byte(input)))
@@ -87,11 +88,11 @@ func TestStopParserInStartDocument(t *testing.T) {
 
 	s := sax.New()
 	s.OnStartDocument = sax.StartDocumentFunc(func(ctx sax.Context) error {
-		StopParser(ctx)
+		helim.StopParser(ctx)
 		return nil
 	})
 
-	p := NewParser()
+	p := helim.NewParser()
 	p.SetSAXHandler(s)
 
 	_, err := p.Parse(t.Context(), []byte(input))
@@ -107,7 +108,7 @@ func TestStopParserReturnsPartialDoc(t *testing.T) {
 </root>`
 
 	// Use a tree builder as base, add stop logic on top
-	tb := NewTreeBuilder()
+	tb := helim.NewTreeBuilder()
 
 	// Wrap the tree builder so it builds the tree, but stop at <b>
 	wrapper := sax.New()
@@ -122,7 +123,7 @@ func TestStopParserReturnsPartialDoc(t *testing.T) {
 	})
 	wrapper.OnStartElementNS = sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		if localname == "b" {
-			StopParser(ctx)
+			helim.StopParser(ctx)
 			return nil
 		}
 		return tb.StartElementNS(ctx, localname, prefix, uri, namespaces, attrs)
@@ -149,7 +150,7 @@ func TestStopParserReturnsPartialDoc(t *testing.T) {
 		return tb.Reference(ctx, name)
 	})
 
-	p := NewParser()
+	p := helim.NewParser()
 	p.SetSAXHandler(wrapper)
 
 	doc, err := p.Parse(t.Context(), []byte(input))
@@ -158,7 +159,7 @@ func TestStopParserReturnsPartialDoc(t *testing.T) {
 
 	// The partial doc should have <root> with <a> but not <b> or <c>
 	var buf bytes.Buffer
-	d := NewWriter()
+	d := helim.NewWriter()
 	require.NoError(t, d.WriteDoc(&buf, doc))
 	out := buf.String()
 	require.Contains(t, out, "<a>")
@@ -169,8 +170,8 @@ func TestStopParserReturnsPartialDoc(t *testing.T) {
 
 func TestStopParserWithNilContext(t *testing.T) {
 	// StopParser with a non-ParserStopper context should be a no-op
-	StopParser(nil)
-	StopParser("not a parser stopper")
+	helim.StopParser(nil)
+	helim.StopParser("not a parser stopper")
 }
 
 func TestStopParserViaParseReader(t *testing.T) {
@@ -183,12 +184,12 @@ func TestStopParserViaParseReader(t *testing.T) {
 	s := sax.New()
 	s.OnStartElementNS = sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		if localname == "b" {
-			StopParser(ctx)
+			helim.StopParser(ctx)
 		}
 		return nil
 	})
 
-	p := NewParser()
+	p := helim.NewParser()
 	p.SetSAXHandler(s)
 
 	_, err := p.ParseReader(t.Context(), bytes.NewReader([]byte(input)))

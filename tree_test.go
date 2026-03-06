@@ -1,6 +1,7 @@
-package helium
+package helium_test
 
 import (
+	helim "github.com/lestrrat-go/helium"
 	"testing"
 
 	"github.com/lestrrat-go/helium/enum"
@@ -9,7 +10,7 @@ import (
 
 func TestDocumentElement(t *testing.T) {
 	t.Run("with element", func(t *testing.T) {
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		e, err := doc.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(e))
@@ -19,13 +20,13 @@ func TestDocumentElement(t *testing.T) {
 	})
 
 	t.Run("without element", func(t *testing.T) {
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		got := doc.DocumentElement()
 		require.Nil(t, got)
 	})
 
 	t.Run("PI before element", func(t *testing.T) {
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		pi, err := doc.CreatePI("target", "data")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(pi))
@@ -49,7 +50,7 @@ func TestUnlinkNode(t *testing.T) {
 		require.NoError(t, parent.AddChild(b))
 		require.NoError(t, parent.AddChild(c))
 
-		UnlinkNode(b)
+		helim.UnlinkNode(b)
 
 		require.Nil(t, b.Parent())
 		require.Nil(t, b.PrevSibling())
@@ -65,9 +66,9 @@ func TestUnlinkNode(t *testing.T) {
 		require.NoError(t, parent.AddChild(a))
 		require.NoError(t, parent.AddChild(b))
 
-		UnlinkNode(a)
+		helim.UnlinkNode(a)
 
-		require.Equal(t, Node(b), parent.FirstChild())
+		require.Equal(t, helim.Node(b), parent.FirstChild())
 		require.Nil(t, b.PrevSibling())
 		require.Nil(t, a.Parent())
 	})
@@ -79,9 +80,9 @@ func TestUnlinkNode(t *testing.T) {
 		require.NoError(t, parent.AddChild(a))
 		require.NoError(t, parent.AddChild(b))
 
-		UnlinkNode(b)
+		helim.UnlinkNode(b)
 
-		require.Equal(t, Node(a), parent.LastChild())
+		require.Equal(t, helim.Node(a), parent.LastChild())
 		require.Nil(t, a.NextSibling())
 		require.Nil(t, b.Parent())
 	})
@@ -91,7 +92,7 @@ func TestUnlinkNode(t *testing.T) {
 		a := newElement("a")
 		require.NoError(t, parent.AddChild(a))
 
-		UnlinkNode(a)
+		helim.UnlinkNode(a)
 
 		require.Nil(t, parent.FirstChild())
 		require.Nil(t, parent.LastChild())
@@ -99,24 +100,24 @@ func TestUnlinkNode(t *testing.T) {
 	})
 
 	t.Run("unlink nil is no-op", func(t *testing.T) {
-		UnlinkNode(nil) // should not panic
+		helim.UnlinkNode(nil) // should not panic
 	})
 }
 
 func TestLookupNSByHref(t *testing.T) {
 	t.Run("found on element", func(t *testing.T) {
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		e, err := doc.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, e.DeclareNamespace("x", "http://example.com"))
 
-		ns := LookupNSByHref(e, "http://example.com")
+		ns := helim.LookupNSByHref(e, "http://example.com")
 		require.NotNil(t, ns)
 		require.Equal(t, "x", ns.Prefix())
 	})
 
 	t.Run("found on ancestor", func(t *testing.T) {
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		parent, err := doc.CreateElement("parent")
 		require.NoError(t, err)
 		require.NoError(t, parent.DeclareNamespace("x", "http://example.com"))
@@ -125,97 +126,97 @@ func TestLookupNSByHref(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, parent.AddChild(child))
 
-		ns := LookupNSByHref(child, "http://example.com")
+		ns := helim.LookupNSByHref(child, "http://example.com")
 		require.NotNil(t, ns)
 		require.Equal(t, "x", ns.Prefix())
 	})
 
 	t.Run("xml namespace", func(t *testing.T) {
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		e, err := doc.CreateElement("root")
 		require.NoError(t, err)
 
-		ns := LookupNSByHref(e, XMLNamespace)
+		ns := helim.LookupNSByHref(e, helim.XMLNamespace)
 		require.NotNil(t, ns)
 		require.Equal(t, "xml", ns.Prefix())
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		e, err := doc.CreateElement("root")
 		require.NoError(t, err)
 
-		ns := LookupNSByHref(e, "http://not.found.com")
+		ns := helim.LookupNSByHref(e, "http://not.found.com")
 		require.Nil(t, ns)
 	})
 }
 
 func TestLookupNSByPrefix(t *testing.T) {
-	doc := NewDefaultDocument()
+	doc := helim.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 	require.NoError(t, e.DeclareNamespace("x", "http://example.com"))
 
-	ns := LookupNSByPrefix(e, "x")
+	ns := helim.LookupNSByPrefix(e, "x")
 	require.NotNil(t, ns)
 	require.Equal(t, "http://example.com", ns.URI())
 
-	ns = LookupNSByPrefix(e, "xml")
+	ns = helim.LookupNSByPrefix(e, "xml")
 	require.NotNil(t, ns)
-	require.Equal(t, XMLNamespace, ns.URI())
+	require.Equal(t, helim.XMLNamespace, ns.URI())
 
-	ns = LookupNSByPrefix(e, "missing")
+	ns = helim.LookupNSByPrefix(e, "missing")
 	require.Nil(t, ns)
 }
 
 func TestNodeGetBase(t *testing.T) {
 	t.Run("no base", func(t *testing.T) {
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		e, err := doc.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(e))
 
-		base := NodeGetBase(doc, e)
+		base := helim.NodeGetBase(doc, e)
 		require.Equal(t, "", base)
 	})
 
 	t.Run("direct xml:base", func(t *testing.T) {
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		e, err := doc.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(e))
 
-		xmlNS := NewNamespace("xml", XMLNamespace)
+		xmlNS := helim.NewNamespace("xml", helim.XMLNamespace)
 		require.NoError(t, e.SetAttributeNS("base", "http://example.com/", xmlNS))
 
-		base := NodeGetBase(doc, e)
+		base := helim.NodeGetBase(doc, e)
 		require.Equal(t, "http://example.com/", base)
 	})
 
 	t.Run("inherited xml:base", func(t *testing.T) {
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		parent, err := doc.CreateElement("parent")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(parent))
 
-		xmlNS := NewNamespace("xml", XMLNamespace)
+		xmlNS := helim.NewNamespace("xml", helim.XMLNamespace)
 		require.NoError(t, parent.SetAttributeNS("base", "http://example.com/dir/", xmlNS))
 
 		child, err := doc.CreateElement("child")
 		require.NoError(t, err)
 		require.NoError(t, parent.AddChild(child))
 
-		base := NodeGetBase(doc, child)
+		base := helim.NodeGetBase(doc, child)
 		require.Equal(t, "http://example.com/dir/", base)
 	})
 
 	t.Run("relative resolution", func(t *testing.T) {
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		parent, err := doc.CreateElement("parent")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(parent))
 
-		xmlNS := NewNamespace("xml", XMLNamespace)
+		xmlNS := helim.NewNamespace("xml", helim.XMLNamespace)
 		require.NoError(t, parent.SetAttributeNS("base", "http://example.com/a/b/", xmlNS))
 
 		child, err := doc.CreateElement("child")
@@ -223,14 +224,14 @@ func TestNodeGetBase(t *testing.T) {
 		require.NoError(t, parent.AddChild(child))
 		require.NoError(t, child.SetAttributeNS("base", "c/d/", xmlNS))
 
-		base := NodeGetBase(doc, child)
+		base := helim.NodeGetBase(doc, child)
 		require.Equal(t, "http://example.com/a/b/c/d/", base)
 	})
 }
 
 func TestDocumentURL(t *testing.T) {
 	t.Run("set and get URL", func(t *testing.T) {
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		require.Equal(t, "", doc.URL())
 
 		doc.SetURL("http://example.com/doc.xml")
@@ -238,35 +239,35 @@ func TestDocumentURL(t *testing.T) {
 	})
 
 	t.Run("URL used as base in NodeGetBase", func(t *testing.T) {
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		doc.SetURL("http://example.com/dir/doc.xml")
 
 		root, err := doc.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(root))
 
-		base := NodeGetBase(doc, root)
+		base := helim.NodeGetBase(doc, root)
 		require.Equal(t, "http://example.com/dir/doc.xml", base)
 	})
 
 	t.Run("URL with relative xml:base", func(t *testing.T) {
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		doc.SetURL("http://example.com/dir/doc.xml")
 
 		root, err := doc.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(root))
 
-		xmlNS := NewNamespace("xml", XMLNamespace)
+		xmlNS := helim.NewNamespace("xml", helim.XMLNamespace)
 		require.NoError(t, root.SetAttributeNS("base", "sub/", xmlNS))
 
-		base := NodeGetBase(doc, root)
+		base := helim.NodeGetBase(doc, root)
 		require.Equal(t, "http://example.com/dir/sub/", base)
 	})
 
 	t.Run("URL set during parsing", func(t *testing.T) {
 		const input = `<?xml version="1.0"?><root/>`
-		p := NewParser()
+		p := helim.NewParser()
 		p.SetBaseURI("/some/path/doc.xml")
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
@@ -276,7 +277,7 @@ func TestDocumentURL(t *testing.T) {
 
 func TestCopyNode(t *testing.T) {
 	t.Run("element with children and attrs", func(t *testing.T) {
-		src := NewDefaultDocument()
+		src := helim.NewDefaultDocument()
 		root, err := src.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, root.SetAttribute("id", "1"))
@@ -287,11 +288,11 @@ func TestCopyNode(t *testing.T) {
 		require.NoError(t, root.AddChild(child))
 		require.NoError(t, child.AppendText([]byte("hello")))
 
-		dst := NewDefaultDocument()
-		copied, err := CopyNode(root, dst)
+		dst := helim.NewDefaultDocument()
+		copied, err := helim.CopyNode(root, dst)
 		require.NoError(t, err)
 
-		elem := copied.(*Element)
+		elem := copied.(*helim.Element)
 		require.Equal(t, "root", elem.LocalName())
 		val, ok := elem.GetAttribute("id")
 		require.True(t, ok)
@@ -302,78 +303,78 @@ func TestCopyNode(t *testing.T) {
 	})
 
 	t.Run("text node", func(t *testing.T) {
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		txt, err := doc.CreateText([]byte("hello"))
 		require.NoError(t, err)
 
-		dst := NewDefaultDocument()
-		copied, err := CopyNode(txt, dst)
+		dst := helim.NewDefaultDocument()
+		copied, err := helim.CopyNode(txt, dst)
 		require.NoError(t, err)
-		require.Equal(t, TextNode, copied.Type())
+		require.Equal(t, helim.TextNode, copied.Type())
 		require.Equal(t, "hello", string(copied.Content()))
 	})
 
 	t.Run("comment node", func(t *testing.T) {
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		c, err := doc.CreateComment([]byte("a comment"))
 		require.NoError(t, err)
 
-		dst := NewDefaultDocument()
-		copied, err := CopyNode(c, dst)
+		dst := helim.NewDefaultDocument()
+		copied, err := helim.CopyNode(c, dst)
 		require.NoError(t, err)
-		require.Equal(t, CommentNode, copied.Type())
+		require.Equal(t, helim.CommentNode, copied.Type())
 		require.Equal(t, "a comment", string(copied.Content()))
 	})
 
 	t.Run("CDATA node", func(t *testing.T) {
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		cd, err := doc.CreateCDATASection([]byte("cdata content"))
 		require.NoError(t, err)
 
-		dst := NewDefaultDocument()
-		copied, err := CopyNode(cd, dst)
+		dst := helim.NewDefaultDocument()
+		copied, err := helim.CopyNode(cd, dst)
 		require.NoError(t, err)
-		require.Equal(t, CDATASectionNode, copied.Type())
+		require.Equal(t, helim.CDATASectionNode, copied.Type())
 		require.Equal(t, "cdata content", string(copied.Content()))
 	})
 
 	t.Run("PI node", func(t *testing.T) {
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		pi, err := doc.CreatePI("target", "data")
 		require.NoError(t, err)
 
-		dst := NewDefaultDocument()
-		copied, err := CopyNode(pi, dst)
+		dst := helim.NewDefaultDocument()
+		copied, err := helim.CopyNode(pi, dst)
 		require.NoError(t, err)
-		require.Equal(t, ProcessingInstructionNode, copied.Type())
+		require.Equal(t, helim.ProcessingInstructionNode, copied.Type())
 	})
 
 	t.Run("element with namespaces", func(t *testing.T) {
-		src := NewDefaultDocument()
+		src := helim.NewDefaultDocument()
 		root, err := src.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, root.DeclareNamespace("x", "http://example.com"))
 		require.NoError(t, root.SetActiveNamespace("x", "http://example.com"))
 		require.NoError(t, src.AddChild(root))
 
-		dst := NewDefaultDocument()
-		copied, err := CopyNode(root, dst)
+		dst := helim.NewDefaultDocument()
+		copied, err := helim.CopyNode(root, dst)
 		require.NoError(t, err)
 
-		elem := copied.(*Element)
+		elem := copied.(*helim.Element)
 		require.Equal(t, "http://example.com", elem.URI())
 	})
 }
 
 func TestCopyDoc(t *testing.T) {
 	t.Run("document with children", func(t *testing.T) {
-		src := NewDefaultDocument()
+		src := helim.NewDefaultDocument()
 		root, err := src.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, src.AddChild(root))
 		require.NoError(t, root.AppendText([]byte("hello")))
 
-		dst, err := CopyDoc(src)
+		dst, err := helim.CopyDoc(src)
 		require.NoError(t, err)
 		require.NotNil(t, dst)
 		require.Equal(t, src.Version(), dst.Version())
@@ -385,7 +386,7 @@ func TestCopyDoc(t *testing.T) {
 	})
 
 	t.Run("document with DTD", func(t *testing.T) {
-		src := NewDefaultDocument()
+		src := helim.NewDefaultDocument()
 		_, err := src.CreateInternalSubset("root", "", "root.dtd")
 		require.NoError(t, err)
 
@@ -393,14 +394,14 @@ func TestCopyDoc(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, src.AddChild(root))
 
-		dst, err := CopyDoc(src)
+		dst, err := helim.CopyDoc(src)
 		require.NoError(t, err)
 		require.NotNil(t, dst.IntSubset())
 		require.Equal(t, "root", dst.IntSubset().Name())
 	})
 
 	t.Run("DTD entities copied", func(t *testing.T) {
-		src := NewDefaultDocument()
+		src := helim.NewDefaultDocument()
 		dtd, err := src.CreateInternalSubset("root", "", "")
 		require.NoError(t, err)
 
@@ -413,7 +414,7 @@ func TestCopyDoc(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, src.AddChild(root))
 
-		dst, err := CopyDoc(src)
+		dst, err := helim.CopyDoc(src)
 		require.NoError(t, err)
 
 		dstDTD := dst.IntSubset()
@@ -440,11 +441,11 @@ func TestCopyDoc(t *testing.T) {
 ]>
 <root><child>text</child></root>`
 
-		p := NewParser()
+		p := helim.NewParser()
 		src, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 
-		dst, err := CopyDoc(src)
+		dst, err := helim.CopyDoc(src)
 		require.NoError(t, err)
 
 		dstDTD := dst.IntSubset()
@@ -452,11 +453,11 @@ func TestCopyDoc(t *testing.T) {
 
 		edecl, ok := dstDTD.LookupElement("root", "")
 		require.True(t, ok)
-		require.Equal(t, enum.ElementElementType, edecl.decltype)
+		require.Equal(t, enum.ElementElementType, getField[enum.ElementType](edecl, "decltype"))
 
 		edecl, ok = dstDTD.LookupElement("child", "")
 		require.True(t, ok)
-		require.Equal(t, enum.MixedElementType, edecl.decltype)
+		require.Equal(t, enum.MixedElementType, getField[enum.ElementType](edecl, "decltype"))
 	})
 
 	t.Run("DTD attribute declarations copied", func(t *testing.T) {
@@ -468,11 +469,11 @@ func TestCopyDoc(t *testing.T) {
 ]>
 <root id="x"/>`
 
-		p := NewParser()
+		p := helim.NewParser()
 		src, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 
-		dst, err := CopyDoc(src)
+		dst, err := helim.CopyDoc(src)
 		require.NoError(t, err)
 
 		dstDTD := dst.IntSubset()
@@ -485,11 +486,11 @@ func TestCopyDoc(t *testing.T) {
 		adecl, ok = dstDTD.LookupAttribute("class", "", "root")
 		require.True(t, ok)
 		require.Equal(t, enum.AttrCDATA, adecl.AType())
-		require.Equal(t, "default", adecl.defvalue)
+		require.Equal(t, "default", getField[string](adecl, "defvalue"))
 	})
 
 	t.Run("DTD notations copied", func(t *testing.T) {
-		src := NewDefaultDocument()
+		src := helim.NewDefaultDocument()
 		dtd, err := src.CreateInternalSubset("root", "", "")
 		require.NoError(t, err)
 
@@ -500,20 +501,20 @@ func TestCopyDoc(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, src.AddChild(root))
 
-		dst, err := CopyDoc(src)
+		dst, err := helim.CopyDoc(src)
 		require.NoError(t, err)
 
 		dstDTD := dst.IntSubset()
 		require.NotNil(t, dstDTD)
 
-		nota, ok := dstDTD.notations["gif"]
+		nota, ok := dstDTD.LookupNotation("gif")
 		require.True(t, ok)
 		require.Equal(t, "gif", nota.Name())
-		require.Equal(t, "image/gif", nota.publicID)
+		require.Equal(t, "image/gif", getField[string](nota, "publicID"))
 	})
 
 	t.Run("DTD parameter entities copied", func(t *testing.T) {
-		src := NewDefaultDocument()
+		src := helim.NewDefaultDocument()
 		dtd, err := src.CreateInternalSubset("root", "", "")
 		require.NoError(t, err)
 
@@ -524,7 +525,7 @@ func TestCopyDoc(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, src.AddChild(root))
 
-		dst, err := CopyDoc(src)
+		dst, err := helim.CopyDoc(src)
 		require.NoError(t, err)
 
 		dstDTD := dst.IntSubset()
@@ -545,14 +546,14 @@ func TestCopyDoc(t *testing.T) {
 ]>
 <root id="x"><child>text</child></root>`
 
-		p := NewParser()
+		p := helim.NewParser()
 		src, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 
 		srcXML, err := src.XMLString()
 		require.NoError(t, err)
 
-		dst, err := CopyDoc(src)
+		dst, err := helim.CopyDoc(src)
 		require.NoError(t, err)
 
 		dstXML, err := dst.XMLString()
@@ -562,7 +563,7 @@ func TestCopyDoc(t *testing.T) {
 	})
 
 	t.Run("nil document", func(t *testing.T) {
-		_, err := CopyDoc(nil)
+		_, err := helim.CopyDoc(nil)
 		require.Error(t, err)
 	})
 }

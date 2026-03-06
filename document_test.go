@@ -1,6 +1,7 @@
-package helium
+package helium_test
 
 import (
+	helim "github.com/lestrrat-go/helium"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -16,7 +17,7 @@ func TestGetElementByID(t *testing.T) {
   <a xml:id="first">one</a>
   <b xml:id="second">two</b>
 </root>`
-		p := NewParser()
+		p := helim.NewParser()
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 
@@ -46,8 +47,8 @@ func TestGetElementByID(t *testing.T) {
   <item eid="x1">alpha</item>
   <item eid="x2">beta</item>
 </root>`
-		p := NewParser()
-		p.SetOption(ParseDTDLoad | ParseDTDAttr)
+		p := helim.NewParser()
+		p.SetOption(helim.ParseDTDLoad | helim.ParseDTDAttr)
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 
@@ -64,14 +65,14 @@ func TestGetElementByID(t *testing.T) {
 		t.Parallel()
 		// Documents built without parsing have no ID table,
 		// so GetElementByID falls back to O(n) tree walk.
-		doc := NewDefaultDocument()
+		doc := helim.NewDefaultDocument()
 		root, err := doc.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(root))
 
 		child, err := doc.CreateElement("child")
 		require.NoError(t, err)
-		ns := NewNamespace("xml", XMLNamespace)
+		ns := helim.NewNamespace("xml", helim.XMLNamespace)
 		require.NoError(t, child.SetAttributeNS("id", "myid", ns))
 		require.NoError(t, root.AddChild(child))
 
@@ -89,13 +90,12 @@ func TestGetElementByID(t *testing.T) {
 <root xml:id="r">
   <child xml:id="c"/>
 </root>`
-		p := NewParser()
+		p := helim.NewParser()
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 
-		// Verify the ID table exists and is populated
-		require.NotNil(t, doc.ids)
-		require.Len(t, doc.ids, 2)
+		require.NotNil(t, doc.GetElementByID("r"))
+		require.NotNil(t, doc.GetElementByID("c"))
 	})
 }
 
@@ -104,18 +104,18 @@ func TestDocProperties(t *testing.T) {
 
 	t.Run("new default document is user-built", func(t *testing.T) {
 		t.Parallel()
-		doc := NewDefaultDocument()
-		require.True(t, doc.HasProperty(DocUserBuilt))
+		doc := helim.NewDefaultDocument()
+		require.True(t, doc.HasProperty(helim.DocUserBuilt))
 	})
 
 	t.Run("HasProperty requires all requested bits", func(t *testing.T) {
 		t.Parallel()
-		doc := NewDocument("1.0", "", StandaloneImplicitNo)
-		doc.SetProperties(DocWellFormed | DocXInclude)
+		doc := helim.NewDocument("1.0", "", helim.StandaloneImplicitNo)
+		doc.SetProperties(helim.DocWellFormed | helim.DocXInclude)
 
-		require.True(t, doc.HasProperty(DocWellFormed))
-		require.True(t, doc.HasProperty(DocXInclude))
-		require.True(t, doc.HasProperty(DocWellFormed|DocXInclude))
-		require.False(t, doc.HasProperty(DocWellFormed|DocDTDValid))
+		require.True(t, doc.HasProperty(helim.DocWellFormed))
+		require.True(t, doc.HasProperty(helim.DocXInclude))
+		require.True(t, doc.HasProperty(helim.DocWellFormed|helim.DocXInclude))
+		require.False(t, doc.HasProperty(helim.DocWellFormed|helim.DocDTDValid))
 	})
 }
