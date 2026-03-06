@@ -1,6 +1,6 @@
 # Stdlib encoding/xml Test Compatibility Status
 
-331 pass, 102 skip, 0 fail. Skipped tests are grouped by feature gap below.
+348 pass, 88 skip, 0 fail. Skipped tests are grouped by feature gap below.
 
 Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
 
@@ -186,17 +186,17 @@ Stdlib detects conflicting struct tag paths (e.g. `xml:"items>item1"` vs `xml:"i
 
 - [ ] `TestUnmarshalBadPathsStdlib` — tag path conflict detection
 
-## interface{} Field Support (unmarshal) [M]
+## ~~interface{} Field Support (unmarshal)~~ ✅ (partial)
 
-Unmarshaling into `interface{}` typed fields fails with "unknown type interface {}". Stdlib populates them with `string` for chardata or creates nested structures. Fix: when the target field is `interface{}`, allocate a `string` (for chardata/cdata) or `[]byte` (for innerxml) and set it.
+Stdlib leaves `interface{}` fields nil for comment/innerxml/element/omitempty/any bindings and returns "cannot unmarshal into interface {}" for chardata/cdata bindings. The shim now matches this behavior.
 
-- [ ] **Unmarshal**: interface{} comment fields (#118-120)
-- [ ] **Unmarshal**: interface{} chardata fields (#127-130)
-- [ ] **Unmarshal**: interface{} cdata fields (#138-141)
-- [ ] **Unmarshal**: interface{} innerxml fields (#150-152)
-- [ ] **Unmarshal**: interface{} element fields (#161)
-- [ ] **Unmarshal**: interface{} omitempty fields (#171)
-- [ ] **Unmarshal**: interface{} any fields (#180-182, #188-190)
+- [x] **Unmarshal**: interface{} comment fields (#118-120)
+- [x] **Unmarshal**: interface{} chardata fields (#127-130)
+- [x] **Unmarshal**: interface{} cdata fields (#138-141)
+- [x] **Unmarshal**: interface{} innerxml fields (#150-152)
+- [x] **Unmarshal**: interface{} element fields (#161)
+- [x] **Unmarshal**: interface{} omitempty fields (#171)
+- [x] **Unmarshal**: interface{} any fields (#180-182, #188-190)
 - [ ] `TestUnmarshalIntoInterfaceStdlib` — unmarshal into pre-populated `interface{}` field
 
 ## CharsetReader Support [M]

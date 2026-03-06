@@ -196,6 +196,9 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 				return err
 			}
 		case binding.isInnerXML:
+			if field.Kind() == reflect.Interface {
+				continue
+			}
 			ft := field.Type()
 			for ft.Kind() == reflect.Pointer {
 				ft = ft.Elem()
@@ -213,6 +216,9 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 				}
 			}
 		case binding.isComment:
+			if field.Kind() == reflect.Interface {
+				continue
+			}
 			commentText := elementComment(elem)
 			if commentText != "" || (field.Kind() != reflect.Slice || field.Type().Elem().Kind() != reflect.Uint8) {
 				if err := assignFromText(field, commentText); err != nil {
@@ -220,6 +226,9 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 				}
 			}
 		case binding.isAny:
+			if field.Kind() == reflect.Interface {
+				continue
+			}
 			if field.Kind() == reflect.Slice && field.Type().Elem().Kind() != reflect.Uint8 {
 				for idx, anyElem := firstUnconsumed(children, consumed); anyElem != nil; idx, anyElem = firstUnconsumed(children, consumed) {
 					consumed[idx] = true
@@ -239,6 +248,9 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 				}
 			}
 		default:
+			if field.Kind() == reflect.Interface {
+				continue
+			}
 			path := binding.path
 			if len(path) == 0 {
 				path = []string{binding.rawName}
