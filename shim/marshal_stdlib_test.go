@@ -1797,7 +1797,6 @@ var marshalIndentTestsStdlib = []struct {
 }
 
 func TestMarshalErrorsStdlib(t *testing.T) {
-	t.Skip("shim: marshal error handling differs from stdlib (chan type, comment --, attr path)")
 	for idx, test := range marshalErrorTestsStdlib {
 		data, err := Marshal(test.Value)
 		if err == nil {

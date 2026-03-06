@@ -127,6 +127,9 @@ func (enc *Encoder) marshalStruct(val reflect.Value, start *StartElement) error 
 		if !b.isAttr || b.omit || !b.fieldExport {
 			continue
 		}
+		if len(b.path) > 0 {
+			return fmt.Errorf("xml: %s chain not valid with attr flag", b.rawName)
+		}
 		field, ok := fieldByIndexAlloc(val, b.index)
 		if !ok {
 			continue
@@ -466,6 +469,8 @@ func simpleText(val reflect.Value) (string, error) {
 		}
 		return "", &UnsupportedTypeError{Type: val.Type()}
 	case reflect.Map:
+		return "", &UnsupportedTypeError{Type: val.Type()}
+	case reflect.Chan, reflect.Func:
 		return "", &UnsupportedTypeError{Type: val.Type()}
 	}
 
