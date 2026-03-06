@@ -44,6 +44,9 @@ func NewDecoder(r io.Reader) *Decoder {
 }
 
 func NewTokenDecoder(t TokenReader) *Decoder {
+	if d, ok := t.(*Decoder); ok {
+		return d
+	}
 	return newDecoderFromTokenReader(t)
 }
 

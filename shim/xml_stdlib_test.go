@@ -1208,7 +1208,6 @@ func (m mapperStdlib) Token() (Token, error) {
 }
 
 func TestNewTokenDecoderIdempotentStdlib(t *testing.T) {
-	t.Skip("shim: NewTokenDecoder does not detect underlying Decoder")
 	d := NewDecoder(strings.NewReader(`<br>`))
 	d2 := NewTokenDecoder(d)
 	if d != d2 {
