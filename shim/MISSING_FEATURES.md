@@ -116,11 +116,17 @@ go test -run 'TestUnmarshalPathsStdlib' -v
 
 ---
 
-## 2. Namespace-Aware Element/Attribute Matching (unmarshal)
+## 2. ~~Namespace-Aware Element/Attribute Matching (unmarshal)~~ (DONE)
 
-**Tests unlocked**: 2 (TestUnmarshalNSStdlib, TestUnmarshalNSAttrStdlib)
-**Difficulty**: Medium-High
-**Files**: `shim/unmarshal.go`, `shim/decoder.go`
+**Status**: Implemented. `buildElementFromTokens`/`populateElement` now
+propagate namespace URIs to elements (via `SetActiveNamespace`) and attributes
+(via `SetAttributeNS`). SAX emitter tracks in-scope namespace bindings for
+resolving prefixed attributes from ancestor declarations.
+TestUnmarshalNSStdlib and TestUnmarshalNSAttrStdlib pass.
+
+~~**Tests unlocked**: 2 (TestUnmarshalNSStdlib, TestUnmarshalNSAttrStdlib)~~
+~~**Difficulty**: Medium-High~~
+**Files**: `shim/decoder.go`
 
 ### Problem
 
@@ -801,7 +807,7 @@ implemented.
 | # | Feature | Tests | Feasibility |
 |---|---------|-------|-------------|
 | 1 | Path Field Merging | ~27 | High effort, high impact |
-| 2 | NS Element/Attr Matching | 2 | Medium effort |
+| 2 | ~~NS Element/Attr Matching~~ | ~~2~~ | **DONE** |
 | 3 | NS Prefix Allocation | 1 | Medium effort |
 | 4 | EncodeToken Validation | 1 | High effort |
 | 5 | RawToken NS Preservation | 1 | Medium effort (but needs #9 too) |

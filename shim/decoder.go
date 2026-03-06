@@ -109,6 +109,22 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 		}
 	}
 
+	// nsScope tracks in-scope namespace prefix→URI bindings across
+	// nested elements so that prefixed attributes can be resolved even
+	// when the namespace declaration is on an ancestor element.
+	nsScope := map[string]string{}
+	// nsScopeCounts tracks how many namespace declarations were pushed
+	// per element level so they can be popped on EndElement.
+	var nsScopeCounts []int
+	// nsScopePrev tracks previous values for overridden prefixes so they
+	// can be restored on EndElement.
+	type nsPrev struct {
+		prefix string
+		uri    string
+		had    bool
+	}
+	var nsScopePrevStack [][]nsPrev
+
 	h := sax.New()
 	h.OnStartDocument = sax.StartDocumentFunc(func(_ sax.Context) error { return nil })
 	h.OnEndDocument = sax.EndDocumentFunc(func(_ sax.Context) error { return nil })
@@ -123,11 +139,16 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 			col = locator.ColumnNumber()
 		}
 
-		// Build namespace map for attribute URI resolution
-		attrNS := make(map[string]string, len(namespaces))
+		// Push newly declared namespaces into the in-scope map
+		var prevs []nsPrev
 		for _, ns := range namespaces {
-			attrNS[ns.Prefix()] = ns.URI()
+			p := ns.Prefix()
+			old, had := nsScope[p]
+			prevs = append(prevs, nsPrev{prefix: p, uri: old, had: had})
+			nsScope[p] = ns.URI()
 		}
+		nsScopeCounts = append(nsScopeCounts, len(namespaces))
+		nsScopePrevStack = append(nsScopePrevStack, prevs)
 
 		// Resolved token (for Token())
 		se := StartElement{Name: Name{Space: uri, Local: localname}}
@@ -144,7 +165,7 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 			for _, attr := range attrs {
 				space := ""
 				if p := attr.Prefix(); p != "" {
-					space = attrNS[p]
+					space = nsScope[p]
 				}
 				se.Attr = append(se.Attr, Attr{
 					Name:  Name{Space: space, Local: attr.LocalName()},
@@ -168,6 +189,22 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 			line = locator.LineNumber()
 			col = locator.ColumnNumber()
 		}
+
+		// Pop namespace declarations for this element
+		if len(nsScopePrevStack) > 0 {
+			prevs := nsScopePrevStack[len(nsScopePrevStack)-1]
+			nsScopePrevStack = nsScopePrevStack[:len(nsScopePrevStack)-1]
+			nsScopeCounts = nsScopeCounts[:len(nsScopeCounts)-1]
+			for i := len(prevs) - 1; i >= 0; i-- {
+				p := prevs[i]
+				if p.had {
+					nsScope[p.prefix] = p.uri
+				} else {
+					delete(nsScope, p.prefix)
+				}
+			}
+		}
+
 		rawLocal := localname
 		if prefix != "" {
 			rawLocal = prefix + ":" + localname
@@ -536,15 +573,14 @@ func (d *Decoder) buildElementFromTokens(start stdxml.StartElement) (*helium.Ele
 
 	// Set namespace if present
 	if start.Name.Space != "" {
-		ns, nsErr := doc.CreateNamespace("", start.Name.Space)
-		if nsErr == nil {
-			root.SetAttributeNS(root.Name(), root.Name(), ns)
+		if err := root.SetActiveNamespace("", start.Name.Space); err != nil {
+			return nil, err
 		}
 	}
 
 	// Set attributes
-	for _, attr := range start.Attr {
-		root.SetAttribute(attr.Name.Local, attr.Value)
+	if err := setElementAttrs(doc, root, start.Attr); err != nil {
+		return nil, err
 	}
 
 	if err := doc.SetDocumentElement(root); err != nil {
@@ -575,8 +611,13 @@ func (d *Decoder) populateElement(doc *helium.Document, parent *helium.Element, 
 			if cErr != nil {
 				return cErr
 			}
-			for _, attr := range v.Attr {
-				child.SetAttribute(attr.Name.Local, attr.Value)
+			if v.Name.Space != "" {
+				if err := child.SetActiveNamespace("", v.Name.Space); err != nil {
+					return err
+				}
+			}
+			if err := setElementAttrs(doc, child, v.Attr); err != nil {
+				return err
 			}
 			if err := parent.AddChild(child); err != nil {
 				return err
@@ -618,4 +659,23 @@ func (d *Decoder) populateElement(doc *helium.Document, parent *helium.Element, 
 			}
 		}
 	}
+}
+
+// setElementAttrs sets attributes on an element, preserving namespace URIs
+// so that lookupAttr can match namespace-qualified attribute bindings.
+func setElementAttrs(doc *helium.Document, elem *helium.Element, attrs []stdxml.Attr) error {
+	for _, attr := range attrs {
+		if attr.Name.Space != "" {
+			ns, err := doc.CreateNamespace("_", attr.Name.Space)
+			if err != nil {
+				return err
+			}
+			if err := elem.SetAttributeNS(attr.Name.Local, attr.Value, ns); err != nil {
+				return err
+			}
+		} else {
+			elem.SetAttribute(attr.Name.Local, attr.Value)
+		}
+	}
+	return nil
 }

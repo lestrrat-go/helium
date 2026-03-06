@@ -465,7 +465,6 @@ var tablesStdlib = []struct {
 }
 
 func TestUnmarshalNSStdlib(t *testing.T) {
-	t.Skip("shim: namespace-aware element matching not fully implemented")
 	for i, tt := range tablesStdlib {
 		var dst Tables
 		var err error
@@ -583,7 +582,6 @@ var tableAttrsStdlib = []struct {
 }
 
 func TestUnmarshalNSAttrStdlib(t *testing.T) {
-	t.Skip("shim: namespace-aware attribute matching not fully implemented")
 	for i, tt := range tableAttrsStdlib {
 		var dst TableAttrs
 		var err error
