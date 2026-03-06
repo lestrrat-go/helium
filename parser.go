@@ -7,6 +7,7 @@ import (
 	"io"
 
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
+	"github.com/lestrrat-go/helium/internal/parseopts"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 )
@@ -32,6 +33,7 @@ type Parser struct {
 	sax            sax.SAX2Handler
 	charBufferSize int
 	options        ParseOption
+	internalOpts   parseopts.Option
 	baseURI        string
 	catalog        icatalog.Resolver
 }
@@ -152,6 +154,12 @@ func (p *Parser) SetOption(opt ParseOption) {
 // always respecting UTF-8 character boundaries.
 func (p *Parser) SetCharBufferSize(size int) {
 	p.charBufferSize = size
+}
+
+// SetInternalOption sets an internal parser option. This is not part of the
+// public API but is accessible within the module.
+func (p *Parser) SetInternalOption(opt parseopts.Option) {
+	p.internalOpts.Set(opt)
 }
 
 // SetBaseURI sets the document's base URI, used for resolving relative

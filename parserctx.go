@@ -15,6 +15,7 @@ import (
 
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/internal/encoding"
+	"github.com/lestrrat-go/helium/internal/parseopts"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/pdebug"
@@ -61,8 +62,9 @@ const (
 )
 
 type parserCtx struct {
-	goCtx   context.Context
-	options ParseOption
+	goCtx        context.Context
+	options      ParseOption
+	internalOpts parseopts.Option
 	// ctx.encoding contains the explicit encoding. ctx.detectedEncoding
 	// contains the encoding as detected by inspecting BOM, etc.
 	// It is important to differentiate between the two, otherwise
@@ -365,6 +367,7 @@ func (ctx *parserCtx) init(p *Parser, in io.Reader) error {
 		ctx.sax = p.sax
 		ctx.charBufferSize = p.charBufferSize
 		ctx.options = p.options
+		ctx.internalOpts = p.internalOpts
 		ctx.catalog = p.catalog
 		if ctx.options.IsSet(ParseNoBlanks) {
 			ctx.keepBlanks = false
@@ -1695,6 +1698,10 @@ func (ctx *parserCtx) parseXMLDecl() error {
 		return errors.New("blank needed after '<?xml'")
 	}
 
+	if ctx.internalOpts.IsSet(parseopts.LenientXMLDecl) {
+		return ctx.parseXMLDeclLenient()
+	}
+
 	v, err := ctx.parseVersionInfo()
 	if err != nil {
 		return ctx.error(err)
@@ -1745,6 +1752,41 @@ func (ctx *parserCtx) parseXMLDecl() error {
 	return ctx.error(errors.New("XML declaration not closed"))
 }
 
+// parseXMLDeclLenient parses the XML declaration pseudo-attributes in any order.
+// Called when parseopts.LenientXMLDecl is set.
+func (ctx *parserCtx) parseXMLDeclLenient() error {
+	cur := ctx.getByteCursor()
+
+	for {
+		ctx.skipBlankBytes(cur)
+		if cur.Peek() == '?' && cur.PeekN(2) == '>' {
+			if err := cur.Advance(2); err != nil {
+				return err
+			}
+			return nil
+		}
+
+		if v, err := ctx.parseVersionInfo(); err == nil {
+			ctx.version = v
+			continue
+		}
+
+		if v, err := ctx.parseEncodingDecl(); err == nil {
+			if !ctx.options.IsSet(ParseIgnoreEnc) {
+				ctx.encoding = v
+			}
+			continue
+		}
+
+		if vb, err := ctx.parseStandaloneDecl(); err == nil {
+			ctx.standalone = vb
+			continue
+		}
+
+		return ctx.error(errors.New("XML declaration not closed"))
+	}
+}
+
 // parseXMLDeclFromCursor parses the XML declaration from a rune cursor.
 // This is used for UTF-16 documents where the encoding has already been
 // switched before parsing the XML declaration.
@@ -1760,6 +1802,10 @@ func (ctx *parserCtx) parseXMLDeclFromCursor() error {
 
 	if !ctx.skipBlanks() {
 		return errors.New("blank needed after '<?xml'")
+	}
+
+	if ctx.internalOpts.IsSet(parseopts.LenientXMLDecl) {
+		return ctx.parseXMLDeclFromCursorLenient()
 	}
 
 	// version
@@ -1824,6 +1870,47 @@ func (ctx *parserCtx) parseXMLDeclFromCursor() error {
 		}
 	}
 	return ctx.error(errors.New("XML declaration not closed"))
+}
+
+// parseXMLDeclFromCursorLenient parses the XML declaration pseudo-attributes
+// in any order using the rune cursor. Called when parseopts.LenientXMLDecl is set.
+func (ctx *parserCtx) parseXMLDeclFromCursorLenient() error {
+	cur := ctx.getCursor()
+
+	for {
+		ctx.skipBlanks()
+		if cur.Peek() == '?' {
+			if err := cur.Advance(1); err != nil {
+				return err
+			}
+			if cur.Peek() == '>' {
+				if err := cur.Advance(1); err != nil {
+					return err
+				}
+				return nil
+			}
+			return ctx.error(errors.New("XML declaration not closed"))
+		}
+
+		if v, err := ctx.parseVersionInfoFromCursor(); err == nil {
+			ctx.version = v
+			continue
+		}
+
+		if ev, err := ctx.parseEncodingDeclFromCursor(); err == nil {
+			if !ctx.options.IsSet(ParseIgnoreEnc) {
+				ctx.encoding = ev
+			}
+			continue
+		}
+
+		if sv, err := ctx.parseStandaloneDeclFromCursor(); err == nil {
+			ctx.standalone = sv
+			continue
+		}
+
+		return ctx.error(errors.New("XML declaration not closed"))
+	}
 }
 
 func (ctx *parserCtx) parseVersionInfoFromCursor() (string, error) {
