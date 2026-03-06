@@ -1,6 +1,6 @@
 # Stdlib encoding/xml Test Compatibility Status
 
-379 pass, 53 skip, 0 fail. Skipped tests are grouped by feature gap below.
+424 pass, 18 skip, 0 fail. Skipped tests are grouped by feature gap below.
 
 Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
 
@@ -216,11 +216,9 @@ A `TokenReader` that always returns `StartElement` causes infinite recursion in 
 
 - [ ] `TestDecodeIntrinsicStdlib` — `TokenReader` always returning `StartElement` causes infinite recursion
 
-## Namespace Prefix Allocation (marshal) [M]
+## ~~Namespace Prefix Allocation (marshal)~~ ✅
 
-The shim's prefix assignment for namespaced attributes uses different naming conventions than stdlib (which derives prefix from the last URI path segment, deduplicates with `_1` suffixes). Fix: align the prefix allocation algorithm.
-
-- [ ] `TestMarshalNSAttrStdlib` — namespace prefix allocation
+- [x] `TestMarshalNSAttrStdlib` — namespace prefix allocation
 
 ## Empty Namespace Override [M-H]
 
@@ -251,11 +249,9 @@ Stdlib merges fields sharing a path prefix (e.g. `xml:"Items>item"` and `xml:"It
 - [ ] **Unmarshal**: nested path slice only captures one element (#110-112)
 - [ ] `TestUnmarshalPathsStdlib` — full path-based field matching
 
-## EncodeToken Validation + NS Prefix Allocation [H]
+## ~~EncodeToken Validation + NS Prefix Allocation~~ ✅
 
-Comprehensive `EncodeToken` test covering namespace prefix allocation, error detection (no name, mismatched tags, invalid directives), and prefix collision resolution. Fix: align the entire prefix-allocation algorithm and all error-checking paths with stdlib.
-
-- [ ] `TestEncodeTokenStdlib` — EncodeToken validation and namespace prefix allocation
+- [x] `TestEncodeTokenStdlib` — EncodeToken validation and namespace prefix allocation
 
 ## Namespace-Aware Element/Attribute Matching (unmarshal) [H]
 
