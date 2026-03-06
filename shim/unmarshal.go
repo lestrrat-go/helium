@@ -197,7 +197,7 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 				return err
 			}
 		case binding.isInnerXML:
-			if field.Kind() == reflect.Interface {
+			if field.Kind() == reflect.Interface || field.Kind() == reflect.Pointer {
 				continue
 			}
 			ft := field.Type()
@@ -217,7 +217,7 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 				}
 			}
 		case binding.isComment:
-			if field.Kind() == reflect.Interface {
+			if field.Kind() == reflect.Interface || field.Kind() == reflect.Pointer {
 				continue
 			}
 			commentText := elementComment(elem)

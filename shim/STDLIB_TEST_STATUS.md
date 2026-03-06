@@ -1,6 +1,6 @@
 # Stdlib encoding/xml Test Compatibility Status
 
-360 pass, 82 skip, 0 fail. Skipped tests are grouped by feature gap below.
+364 pass, 78 skip, 0 fail. Skipped tests are grouped by feature gap below.
 
 Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
 
@@ -135,12 +135,12 @@ Embedded field shadowing (path-tagged field vs plain field) and nil embedded poi
 - [ ] **Unmarshal**: embedded field path conflict resolution (#64)
 - [ ] **Unmarshal**: embedded struct pointer allocated when should remain nil (#65)
 
-## Indirect Pointer Handling (unmarshal) [M]
+## Indirect Pointer Handling (unmarshal) [M] (partially done)
 
 `*string` fields for comment/innerxml/any get allocated (non-nil) even when the element has no matching content. Fix: only allocate and set the pointer when content is actually found.
 
-- [ ] **Unmarshal**: indirect comment pointer allocated when no comment present (#115-116)
-- [ ] **Unmarshal**: indirect innerxml pointer allocated when no content (#147-148)
+- [x] **Unmarshal**: indirect comment pointer allocated when no comment present (#115-116)
+- [x] **Unmarshal**: indirect innerxml pointer allocated when no content (#147-148)
 - [ ] **Unmarshal**: indirect any pointer allocated when no content (#176, #178, #185, #187)
 
 ## InnerXML Serialization Format [M]
