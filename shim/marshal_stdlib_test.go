@@ -1670,22 +1670,7 @@ var marshalTestsStdlib = []struct {
 func TestMarshalStdlib(t *testing.T) {
 	// Skip subtests with known shim behavioral differences.
 	marshalSkipSet := map[int]string{
-		49:  "shim: path field merging not implemented (Items>item shares parent with Items)",
-		50:  "shim: path field merging not implemented",
-		51:  "shim: path field merging not implemented",
-		52:  "shim: path field merging not implemented",
-		53:  "shim: path field merging not implemented",
-		54:  "shim: path field merging not implemented",
-		55:  "shim: nil interface in path field not omitted; path merging not implemented",
-		56:  "shim: path field merging not implemented",
-		57:  "shim: nil pointer/interface omission and path merging not implemented",
-		58:  "shim: nil pointer/interface omission and path merging not implemented",
-		59:  "shim: nil pointer/interface omission and path merging not implemented",
-		60:  "shim: nil pointer/interface omission and path merging not implemented",
-		61:  "shim: namespace in path tags not implemented",
-		62:  "shim: namespace in path tags not implemented",
-		63:  "shim: namespace in path tags not implemented",
-		64:  "shim: path field merging not implemented (EmbedB contains FieldA>A1 and FieldA>A2)",
+		61: "shim: inherited namespace not re-emitted on leaf element",
 	}
 
 	for idx, test := range marshalTestsStdlib {
@@ -1808,16 +1793,6 @@ func TestMarshalErrorsStdlib(t *testing.T) {
 // Do invertibility testing on the various structures that we test
 func TestUnmarshalStdlib(t *testing.T) {
 	unmarshalSkipSet := map[int]string{
-		52:  "shim: path field unmarshal (Items>item) not implemented",
-		53:  "shim: path field unmarshal (Items>item) not implemented",
-		54:  "shim: path field unmarshal (parent>c, parent>b, parent>a) not implemented",
-		56:  "shim: path field unmarshal (mixed nested paths) not implemented",
-		61:  "shim: namespace-aware path field unmarshal not implemented",
-		62:  "shim: namespace-aware path field unmarshal not implemented",
-		64:  "shim: path field merging not implemented (FieldA>A1 and FieldA>A2 share parent)",
-		110: "shim: nested path slice (A>B) only captures one element",
-		111: "shim: nested path slice (A>B) only captures one element",
-		112: "shim: nested path slice (A>B) only captures one element",
 		154: "shim: innerxml captures self-closed tags instead of empty-element form",
 		156: "shim: innerxml captures self-closed tags instead of empty-element form",
 	}

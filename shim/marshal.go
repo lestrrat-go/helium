@@ -156,7 +156,8 @@ func (enc *Encoder) marshalStruct(val reflect.Value, start *StartElement) error 
 		return err
 	}
 
-	// Encode content fields
+	// Encode content fields using a parentStack to merge shared path wrappers.
+	s := parentStack{enc: enc}
 	for _, b := range bindings {
 		if b.omit || !b.fieldExport || b.isAttr || b.isXMLName {
 			continue
@@ -166,26 +167,22 @@ func (enc *Encoder) marshalStruct(val reflect.Value, start *StartElement) error 
 			continue
 		}
 
-		if b.omitEmpty && isEmptyValue(field) {
-			// For path fields, stdlib still emits the wrapper element(s)
-			// even when the leaf is omitted due to omitempty.
-			if len(b.path) > 0 {
-				for _, name := range b.path[:len(b.path)-1] {
-					if err := enc.EncodeToken(StartElement{Name: Name{Local: name}}); err != nil {
-						return err
-					}
-				}
-				for i := len(b.path) - 2; i >= 0; i-- {
-					if err := enc.EncodeToken(EndElement{Name: Name{Local: b.path[i]}}); err != nil {
-						return err
-					}
-				}
-			}
+		// Compute parents (all path segments except the leaf).
+		var parents []string
+		if len(b.path) > 1 {
+			parents = b.path[:len(b.path)-1]
+		}
+
+		// For non-element fields (chardata, cdata, etc.), omitEmpty skips entirely.
+		if b.omitEmpty && isEmptyValue(field) && (b.isCharData || b.isCData || b.isInnerXML || b.isComment) {
 			continue
 		}
 
 		switch {
 		case b.isCharData:
+			if err := s.trim(parents); err != nil {
+				return err
+			}
 			text := textValue(field)
 			if text != "" {
 				if err := enc.EncodeToken(CharData([]byte(text))); err != nil {
@@ -193,6 +190,9 @@ func (enc *Encoder) marshalStruct(val reflect.Value, start *StartElement) error 
 				}
 			}
 		case b.isCData:
+			if err := s.trim(parents); err != nil {
+				return err
+			}
 			text := textValue(field)
 			if text != "" {
 				writeCDATA(enc.w, text)
@@ -200,40 +200,71 @@ func (enc *Encoder) marshalStruct(val reflect.Value, start *StartElement) error 
 				enc.lastWasText = true
 			}
 		case b.isInnerXML:
+			if err := s.trim(parents); err != nil {
+				return err
+			}
 			raw := textValue(field)
 			if raw != "" {
-				// Write raw XML — bypass escaping
 				enc.w.WriteString(raw)
 				enc.lastWasStart = false
 				enc.lastWasText = false
 			}
 		case b.isComment:
+			if err := s.trim(parents); err != nil {
+				return err
+			}
 			if err := enc.marshalComment(val, field); err != nil {
 				return err
 			}
 		case b.isAny:
+			if err := s.trim(parents); err != nil {
+				return err
+			}
+			if len(parents) > len(s.stack) {
+				if field.Kind() != reflect.Pointer && field.Kind() != reflect.Interface || !field.IsNil() {
+					if err := s.push(parents[len(s.stack):]); err != nil {
+						return err
+					}
+				}
+			}
+			if b.omitEmpty && isEmptyValue(field) {
+				continue
+			}
 			if err := enc.marshalAnyField(b, field); err != nil {
 				return err
 			}
 		default:
-			// Element field
+			// Element field: trim/push wrappers first (stdlib behavior),
+			// then check omitEmpty to decide whether to emit the leaf.
+			if err := s.trim(parents); err != nil {
+				return err
+			}
+			if len(parents) > len(s.stack) {
+				if field.Kind() != reflect.Pointer && field.Kind() != reflect.Interface || !field.IsNil() {
+					if err := s.push(parents[len(s.stack):]); err != nil {
+						return err
+					}
+				}
+			}
+			if b.omitEmpty && isEmptyValue(field) {
+				continue
+			}
 			if err := enc.marshalField(b, field); err != nil {
 				return err
 			}
 		}
+	}
+	if err := s.trim(nil); err != nil {
+		return err
 	}
 
 	return enc.EncodeToken(se.End())
 }
 
 // marshalField encodes a struct field as a child element.
+// When the field has a path tag, the parentStack in marshalStruct has
+// already opened the wrapper elements; marshalField only emits the leaf.
 func (enc *Encoder) marshalField(b fieldBinding, field reflect.Value) error {
-	// Handle path tags (a>b>c)
-	path := b.path
-	if len(path) > 0 {
-		return enc.marshalPathField(path, field)
-	}
-
 	name := b.name
 	if name == "" {
 		name = b.fieldName
@@ -292,38 +323,40 @@ func (enc *Encoder) fieldStartOrNil(b fieldBinding, name string, field reflect.V
 	return &s
 }
 
-// marshalPathField encodes a field with a path tag (e.g., "a>b>c").
-func (enc *Encoder) marshalPathField(path []string, field reflect.Value) error {
-	// Open nested elements
-	for _, name := range path[:len(path)-1] {
-		if err := enc.EncodeToken(StartElement{Name: Name{Local: name}}); err != nil {
+// parentStack tracks open wrapper elements for path field merging,
+// mirroring encoding/xml's parentStack. Consecutive fields sharing a
+// common path prefix are grouped under a single set of wrapper elements.
+type parentStack struct {
+	enc   *Encoder
+	stack []string
+}
+
+// trim closes wrapper elements until the stack matches the longest common
+// prefix with parents. Passing nil closes all open wrappers.
+func (s *parentStack) trim(parents []string) error {
+	split := 0
+	for ; split < len(parents) && split < len(s.stack); split++ {
+		if parents[split] != s.stack[split] {
+			break
+		}
+	}
+	for i := len(s.stack) - 1; i >= split; i-- {
+		if err := s.enc.EncodeToken(EndElement{Name: Name{Local: s.stack[i]}}); err != nil {
 			return err
 		}
 	}
+	s.stack = s.stack[:split]
+	return nil
+}
 
-	// Marshal the leaf
-	leafName := path[len(path)-1]
-	leafStart := StartElement{Name: Name{Local: leafName}}
-
-	if field.Kind() == reflect.Slice && field.Type().Elem().Kind() != reflect.Uint8 {
-		for i := 0; i < field.Len(); i++ {
-			if err := enc.marshalReflectValue(field.Index(i), &leafStart); err != nil {
-				return err
-			}
-		}
-	} else {
-		if err := enc.marshalReflectValue(field, &leafStart); err != nil {
+// push opens wrapper elements and adds them to the stack.
+func (s *parentStack) push(parents []string) error {
+	for _, p := range parents {
+		if err := s.enc.EncodeToken(StartElement{Name: Name{Local: p}}); err != nil {
 			return err
 		}
 	}
-
-	// Close nested elements in reverse
-	for i := len(path) - 2; i >= 0; i-- {
-		if err := enc.EncodeToken(EndElement{Name: Name{Local: path[i]}}); err != nil {
-			return err
-		}
-	}
-
+	s.stack = append(s.stack, parents...)
 	return nil
 }
 

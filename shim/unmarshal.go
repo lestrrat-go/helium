@@ -154,6 +154,7 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 	}
 	children := childElements(elem)
 	consumed := make(map[int]bool)
+	consumedLeaves := make(map[*helium.Element]bool)
 	consumedAttr := make(map[int]bool)
 
 	// Process bindings in two passes: non-any first (to consume specific elements),
@@ -255,68 +256,126 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 			// Element binding: use non-allocating accessor first to check if
 			// matching children exist, to avoid allocating nil embedded pointers
 			// when no data is present.
-			path := binding.path
-			if len(path) == 0 {
-				path = []string{binding.rawName}
-			}
+			isPath := len(binding.path) > 1
 
-			// Check if any matching children exist before allocating
-			_, matched := findPath(children, consumed, path)
-			if matched == nil {
-				continue
-			}
-
-			field, ok := fieldByIndexAlloc(target, binding.index)
-			if !ok {
-				continue
-			}
-
-			// xml.Name fields: populate from the matched element's name
-			ft := field.Type()
-			for ft.Kind() == reflect.Pointer {
-				ft = ft.Elem()
-			}
-			if isXMLNameType(ft) {
-				idx, m := findPath(children, consumed, path)
-				if m == nil {
+			if isPath {
+				// Multi-segment path (e.g., "A>B"): find leaves without
+				// consuming wrapper elements so multiple bindings can share
+				// the same wrapper. Also mark wrappers in consumed so the
+				// any-field pass skips them.
+				wrapperIdx, leaf := findPathLeaf(children, binding.path, binding.nameSpace, binding.hasNameSpace, consumedLeaves)
+				if leaf == nil {
 					continue
 				}
-				consumed[idx] = true
-				setXMLName(field, m)
-				continue
-			}
 
-			if field.Kind() == reflect.Interface {
-				if field.IsNil() {
+				field, ok := fieldByIndexAlloc(target, binding.index)
+				if !ok {
 					continue
 				}
-				field = field.Elem()
-			}
 
-			if field.Kind() == reflect.Slice && field.Type().Elem().Kind() != reflect.Uint8 {
+				ft := field.Type()
+				for ft.Kind() == reflect.Pointer {
+					ft = ft.Elem()
+				}
+				if isXMLNameType(ft) {
+					consumedLeaves[leaf] = true
+					consumed[wrapperIdx] = true
+					setXMLName(field, leaf)
+					continue
+				}
+
+				if field.Kind() == reflect.Interface {
+					if field.IsNil() {
+						continue
+					}
+					field = field.Elem()
+				}
+
+				if field.Kind() == reflect.Slice && field.Type().Elem().Kind() != reflect.Uint8 {
+					for wi, leaf := findPathLeaf(children, binding.path, binding.nameSpace, binding.hasNameSpace, consumedLeaves); leaf != nil; wi, leaf = findPathLeaf(children, binding.path, binding.nameSpace, binding.hasNameSpace, consumedLeaves) {
+						consumedLeaves[leaf] = true
+						consumed[wi] = true
+						item := reflect.New(field.Type().Elem()).Elem()
+						if err := assignFromElement(item, leaf); err != nil {
+							return err
+						}
+						field.Set(reflect.Append(field, item))
+					}
+					continue
+				}
+
+				// Scalar field: consume all matches, last one wins (stdlib behavior).
+				for wi, leaf := findPathLeaf(children, binding.path, binding.nameSpace, binding.hasNameSpace, consumedLeaves); leaf != nil; wi, leaf = findPathLeaf(children, binding.path, binding.nameSpace, binding.hasNameSpace, consumedLeaves) {
+					consumedLeaves[leaf] = true
+					consumed[wi] = true
+					if err := assignFromElement(field, leaf); err != nil {
+						return err
+					}
+				}
+			} else {
+				// Single-segment (direct child match): use consumed set on children.
+				// Use rawName to preserve namespace info for matchElementByTag.
+				path := []string{binding.rawName}
+
+				_, matched := findPath(children, consumed, path)
+				if matched == nil {
+					continue
+				}
+
+				field, ok := fieldByIndexAlloc(target, binding.index)
+				if !ok {
+					continue
+				}
+
+				ft := field.Type()
+				for ft.Kind() == reflect.Pointer {
+					ft = ft.Elem()
+				}
+				if isXMLNameType(ft) {
+					idx, m := findPath(children, consumed, path)
+					if m == nil {
+						continue
+					}
+					consumed[idx] = true
+					setXMLName(field, m)
+					continue
+				}
+
+				if field.Kind() == reflect.Interface {
+					if field.IsNil() {
+						continue
+					}
+					field = field.Elem()
+				}
+
+				if field.Kind() == reflect.Slice && field.Type().Elem().Kind() != reflect.Uint8 {
+					for {
+						idx, matched := findPath(children, consumed, path)
+						if matched == nil {
+							break
+						}
+						consumed[idx] = true
+
+						item := reflect.New(field.Type().Elem()).Elem()
+						if err := assignFromElement(item, matched); err != nil {
+							return err
+						}
+						field.Set(reflect.Append(field, item))
+					}
+					continue
+				}
+
+				// Scalar field: consume all matches, last one wins (stdlib behavior).
 				for {
-					idx, matched := findPath(children, consumed, path)
-					if matched == nil {
+					idx, matched2 := findPath(children, consumed, path)
+					if matched2 == nil {
 						break
 					}
 					consumed[idx] = true
-
-					item := reflect.New(field.Type().Elem()).Elem()
-					if err := assignFromElement(item, matched); err != nil {
+					if err := assignFromElement(field, matched2); err != nil {
 						return err
 					}
-					field.Set(reflect.Append(field, item))
 				}
-				continue
-			}
-
-			idx, matched2 := findPath(children, consumed, path)
-			if matched2 == nil {
-				continue
-			}
-			consumed[idx] = true
-			if err := assignFromElement(field, matched2); err != nil {
-				return err
 			}
 		}
 	}
@@ -715,6 +774,10 @@ func validateTagPathConflicts(t reflect.Type, bindings []fieldBinding) error {
 			if len(prev.index) != len(binding.index) {
 				continue
 			}
+			// Different namespaces never conflict (matches stdlib addFieldInfo).
+			if prev.hasNameSpace && binding.hasNameSpace && prev.nameSpace != binding.nameSpace {
+				continue
+			}
 			if pathConflicts(prevPath, path) {
 				return &TagPathError{
 					Struct: t,
@@ -880,6 +943,11 @@ func bindingKey(binding fieldBinding) string {
 		name = strings.Join(binding.path, ">")
 	}
 
+	// Include namespace to distinguish fields with same local path
+	// but different namespaces (e.g., "space x>b" vs "space1 x>b").
+	if binding.hasNameSpace {
+		return kind + "|" + binding.nameSpace + " " + name
+	}
 	return kind + "|" + name
 }
 
@@ -1020,14 +1088,21 @@ func parseFieldBinding(f reflect.StructField) fieldBinding {
 	if name != "" {
 		b.rawName = name
 		b.tagPath = name
-		b.nameSpace, b.name, b.hasNameSpace = parseTagNameSpec(name)
-	}
 
-	if strings.Contains(b.rawName, ">") {
-		segments := strings.Split(b.rawName, ">")
-		b.path = make([]string, 0, len(segments))
-		for _, segment := range segments {
-			b.path = append(b.path, strings.TrimSpace(segment))
+		// Extract namespace first (e.g., "space x>b" → ns="space", local="x>b")
+		var localPart string
+		b.nameSpace, localPart, b.hasNameSpace = parseTagNameSpec(name)
+
+		// Split by ">" for path tags (e.g., "A>B>C" or ">item" shorthand)
+		if strings.Contains(localPart, ">") {
+			segments := strings.Split(localPart, ">")
+			if segments[0] == "" {
+				segments[0] = f.Name // ">item" shorthand: wrapper = field name
+			}
+			b.path = segments
+			b.name = segments[len(segments)-1]
+		} else {
+			b.name = localPart
 		}
 	}
 
@@ -1141,6 +1216,73 @@ func firstUnconsumed(children []*helium.Element, consumed map[int]bool) (int, *h
 			return i, child
 		}
 	}
+	return -1, nil
+}
+
+// findPathLeaf walks a multi-segment path (e.g., ["A","B","C"]) through the
+// children without consuming wrapper elements. It returns the first unconsumed
+// leaf element matching the full path and the index of the direct child (wrapper)
+// that was traversed. Returns (-1, nil) if no match found.
+// The ns/hasNS parameters apply to the leaf element only (matching stdlib behavior).
+func findPathLeaf(children []*helium.Element, path []string, ns string, hasNS bool, consumedLeaves map[*helium.Element]bool) (int, *helium.Element) {
+	if len(path) == 0 {
+		return -1, nil
+	}
+
+	wrapperName := path[0]
+	for i, child := range children {
+		if localName(child.Name()) != wrapperName {
+			continue
+		}
+		if len(path) == 1 {
+			// This is the leaf level
+			if consumedLeaves[child] {
+				continue
+			}
+			if hasNS && child.URI() != ns {
+				continue
+			}
+			return i, child
+		}
+		// Descend into wrapper — find leaf in grandchildren
+		grandchildren := childElements(child)
+		_, leaf := findPathLeafInner(grandchildren, path[1:], ns, hasNS, consumedLeaves)
+		if leaf != nil {
+			return i, leaf
+		}
+	}
+
+	return -1, nil
+}
+
+// findPathLeafInner is the recursive helper for findPathLeaf.
+// It doesn't need to track the wrapper index (only the top level does).
+func findPathLeafInner(children []*helium.Element, path []string, ns string, hasNS bool, consumedLeaves map[*helium.Element]bool) (int, *helium.Element) {
+	if len(path) == 0 {
+		return -1, nil
+	}
+
+	name := path[0]
+	for i, child := range children {
+		if localName(child.Name()) != name {
+			continue
+		}
+		if len(path) == 1 {
+			if consumedLeaves[child] {
+				continue
+			}
+			if hasNS && child.URI() != ns {
+				continue
+			}
+			return i, child
+		}
+		grandchildren := childElements(child)
+		_, leaf := findPathLeafInner(grandchildren, path[1:], ns, hasNS, consumedLeaves)
+		if leaf != nil {
+			return i, leaf
+		}
+	}
+
 	return -1, nil
 }
 
