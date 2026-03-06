@@ -2626,7 +2626,6 @@ var closeTestsStdlib = []struct {
 }}
 
 func TestCloseStdlib(t *testing.T) {
-	t.Skip("shim: encoder state after Close not fully implemented")
 	for _, tt := range closeTestsStdlib {
 		tt := tt
 		t.Run(tt.desc, func(t *testing.T) {

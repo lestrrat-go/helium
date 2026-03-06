@@ -44,6 +44,9 @@ func (enc *Encoder) EncodeToken(t Token) error {
 	if enc.err != nil {
 		return enc.err
 	}
+	if enc.closed {
+		return fmt.Errorf("xml: EncodeToken called after Close")
+	}
 
 	switch v := t.(type) {
 	case StartElement:
@@ -272,11 +275,12 @@ func (enc *Encoder) Close() error {
 		return nil
 	}
 	enc.closed = true
+	enc.w.Flush()
 	if enc.depth > 0 {
 		tag := enc.tags[len(enc.tags)-1]
 		return fmt.Errorf("unclosed tag <%s>", tag.Local)
 	}
-	return enc.Flush()
+	return nil
 }
 
 // Encode writes the XML encoding of v to the stream.
