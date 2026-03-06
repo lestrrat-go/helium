@@ -695,44 +695,12 @@ go test -run 'TestSyntaxStdlib' -v
 
 ---
 
-## 11. InputPos Line/Column Tracking
+## 11. ~~InputPos Line/Column Tracking~~ ✅ DONE
 
-**Tests unlocked**: 1 (TestInputLinePosStdlib)
-**Difficulty**: Medium-High
-**Files**: `shim/decoder.go`
-
-### Problem
-
-`dec.InputPos()` does not return the same `(line, col)` as stdlib after each
-token. The SAX parser's `DocumentLocator` reports positions with different
-granularity (end-of-token vs start-of-next-token).
-
-### Expected behavior
-
-After reading each token, `InputPos()` should return the line and column of the
-END of that token (start of the next token). The test in
-`xml_stdlib_test.go:511` provides exact expected positions for each token in a
-multi-line XML document.
-
-### Implementation guidance
-
-The shim stores `event.line` and `event.col` from the SAX locator
-(decoder.go:334-337). These values come from `locator.LineNumber()` and
-`locator.ColumnNumber()` called at the time of the SAX event.
-
-Options:
-1. Check if the SAX locator positions can be adjusted (they may report the
-   position at callback time, which could be end-of-token or start-of-next).
-2. If SAX positions are off by one token, buffer the position from the
-   NEXT event and report it for the CURRENT token.
-3. Add a byte-counting wrapper around the reader to track line/column
-   independently of the SAX parser.
-
-### Test verification
-
-```sh
-go test -run 'TestInputLinePosStdlib' -v
-```
+**Status**: Fixed. The CDATA SAX callback was firing before consuming the
+`]]>` delimiter, causing the document locator to report the wrong position.
+Refactored `parseCDSect()` to consume `]]>` before the SAX callback, matching
+libxml2 behavior. `TestInputLinePosStdlib` now passes.
 
 ---
 
