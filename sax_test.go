@@ -1,4 +1,4 @@
-package helium
+package helium_test
 
 import (
 	"bytes"
@@ -10,14 +10,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lestrrat-go/helium/sax"
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 	"github.com/stretchr/testify/require"
 )
 
 func newEventEmitter(out io.Writer) sax.SAX2Handler {
-	entities := map[string]*Entity{}
+	entities := map[string]*helium.Entity{}
 	s := sax.New()
 	s.OnSetDocumentLocator = sax.SetDocumentLocatorFunc(func(_ sax.Context, loc sax.DocumentLocator) error {
 		_, _ = fmt.Fprintf(out, "SAX.SetDocumentLocator()\n")
@@ -68,7 +69,21 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.UnparsedEntityDecl(%s, %d, %s, %s, %s)\n",
 			name, typ, publicID, systemID, notation)
 
-		entities[name] = newEntity(name, typ, publicID, systemID, notation, "")
+		doc := helium.NewDefaultDocument()
+		dtd, err := doc.CreateInternalSubset("root", "", "")
+		if err != nil {
+			return err
+		}
+		if typ == enum.ExternalGeneralUnparsedEntity {
+			if _, err := dtd.AddNotation(notation, "", ""); err != nil {
+				return err
+			}
+		}
+		ent, err := dtd.AddEntity(name, typ, publicID, systemID, notation)
+		if err != nil {
+			return err
+		}
+		entities[name] = ent
 		if pdebug.Enabled {
 			pdebug.Printf("registered entity '%s' (entity type = '%s', publicID = '%s', systemID = '%s', notation = '%s')", name, typ, publicID, systemID, notation)
 		}
@@ -201,7 +216,7 @@ func TestDocumentLocatorIDs(t *testing.T) {
 	s.OnEndElementNS = sax.EndElementNSFunc(func(_ sax.Context, _, _, _ string) error { return nil })
 	s.OnCharacters = sax.CharactersFunc(func(_ sax.Context, _ []byte) error { return nil })
 
-	p := NewParser()
+	p := helium.NewParser()
 	p.SetSAXHandler(s)
 	p.SetBaseURI(baseURI)
 
@@ -247,7 +262,7 @@ func TestSAXEvents(t *testing.T) {
 		require.NoError(t, err, "os.ReadFile should succeed")
 
 		out := bytes.Buffer{}
-		p := NewParser()
+		p := helium.NewParser()
 		p.SetSAXHandler(newEventEmitter(&out))
 
 		_, err = p.Parse(t.Context(), in)

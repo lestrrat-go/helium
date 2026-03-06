@@ -1,4 +1,4 @@
-package helium
+package helium_test
 
 import (
 	"bytes"
@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/stretchr/testify/require"
@@ -92,12 +93,12 @@ func TestLibxml2Compat(t *testing.T) {
 			expected, err := os.ReadFile(expectedPath)
 			require.NoError(t, err, "reading expected file")
 
-			p := NewParser()
+			p := helium.NewParser()
 			doc, err := p.Parse(t.Context(), input)
 			require.NoError(t, err, "parsing %s", name)
 
 			var buf bytes.Buffer
-			d := NewWriter()
+			d := helium.NewWriter()
 			require.NoError(t, d.WriteDoc(&buf, doc), "dumping %s", name)
 
 			actual := buf.String()
@@ -120,8 +121,8 @@ func nullOrString(s string) string {
 }
 
 func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
-	entities := map[string]*Entity{}
-	peEntities := map[string]*Entity{}
+	entities := map[string]*helium.Entity{}
+	peEntities := map[string]*helium.Entity{}
 	s := sax.New()
 
 	s.OnSetDocumentLocator = sax.SetDocumentLocatorFunc(func(_ sax.Context, _ sax.DocumentLocator) error {
@@ -152,7 +153,20 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 		}
 		_, _ = fmt.Fprintf(out, "SAX.entityDecl(%s, %d, %s, %s, %s)\n",
 			name, typ, nullOrString(publicID), nullOrString(systemID), contentStr)
-		ent := newEntity(name, typ, publicID, systemID, content, "")
+		doc := helium.NewDefaultDocument()
+		dtd, err := doc.CreateInternalSubset("root", "", "")
+		if err != nil {
+			return err
+		}
+		if typ == enum.ExternalGeneralUnparsedEntity {
+			if _, err := dtd.AddNotation(content, "", ""); err != nil {
+				return err
+			}
+		}
+		ent, err := dtd.AddEntity(name, typ, publicID, systemID, content)
+		if err != nil {
+			return err
+		}
 		if typ == enum.InternalParameterEntity || typ == enum.ExternalParameterEntity {
 			peEntities[name] = ent
 		} else {
@@ -309,7 +323,7 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 	})
 	s.OnWarning = sax.WarningFunc(func(_ sax.Context, err error) error {
 		msg := err.Error()
-		if e, ok := err.(ErrParseError); ok {
+		if e, ok := err.(helium.ErrParseError); ok {
 			msg = e.Err.Error()
 		}
 		_, _ = fmt.Fprintf(out, "SAX.warning: %s\n", msg)
@@ -482,7 +496,7 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 			require.NoError(t, err, "reading expected SAX2 file")
 
 			var buf bytes.Buffer
-			p := NewParser()
+			p := helium.NewParser()
 			p.SetSAXHandler(newLibxml2EventEmitter(&buf))
 
 			_, err = p.Parse(t.Context(), input)

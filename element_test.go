@@ -1,16 +1,32 @@
-package helium
+package helium_test
 
 import (
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/stretchr/testify/require"
 )
 
+func mustCreateElement(t *testing.T, doc *helium.Document, name string) *helium.Element {
+	t.Helper()
+	e, err := doc.CreateElement(name)
+	require.NoError(t, err)
+	return e
+}
+
+func mustCreateText(t *testing.T, doc *helium.Document, text []byte) *helium.Text {
+	t.Helper()
+	n, err := doc.CreateText(text)
+	require.NoError(t, err)
+	return n
+}
+
 func TestElementTree(t *testing.T) {
-	e1 := newElement("root")
-	e2 := newElement("e2")
-	e3 := newElement("e3")
-	e4 := newElement("e4")
+	doc := helium.NewDefaultDocument()
+	e1 := mustCreateElement(t, doc, "root")
+	e2 := mustCreateElement(t, doc, "e2")
+	e3 := mustCreateElement(t, doc, "e3")
+	e4 := mustCreateElement(t, doc, "e4")
 	require.NoError(t, e2.SetAttribute("id", "e2"))
 	require.NoError(t, e3.SetAttribute("id", "e3"))
 	require.NoError(t, e4.SetAttribute("id", "e4"))
@@ -33,7 +49,7 @@ func TestElementTree(t *testing.T) {
 	require.NoError(t, e2.AppendText([]byte("e2")), "e2.AppendText succeeds")
 	require.Equal(t, []byte("e2"), e2.Content(), "e2.Content matches")
 
-	for _, e := range []Node{e2, e3, e4} {
+	for _, e := range []helium.Node{e2, e3, e4} {
 		require.Equal(t, e1, e.Parent(), "%s.Parent is e1", e.Name())
 	}
 
@@ -43,27 +59,28 @@ func TestElementTree(t *testing.T) {
 }
 
 func TestElementContent(t *testing.T) {
-	e := newElement("root")
+	doc := helium.NewDefaultDocument()
+	e := mustCreateElement(t, doc, "root")
 	for _, chunk := range [][]byte{[]byte("Hello "), []byte("World!")} {
 		require.NoError(t, e.AppendText(chunk), "AppendText succeeds")
 	}
 
-	require.IsType(t, newText(nil), e.LastChild(), "LastChild is a Text node")
+	require.IsType(t, &helium.Text{}, e.LastChild(), "LastChild is a Text node")
 
 	require.Equal(t, []byte("Hello World!"), e.Content())
 
-	e = newElement("root")
+	e = mustCreateElement(t, doc, "root")
 	for _, chunk := range [][]byte{[]byte("Hello "), []byte("World!")} {
-		require.NoError(t, e.AddChild(newText(chunk)), "AddChild succeeds")
+		require.NoError(t, e.AddChild(mustCreateText(t, doc, chunk)), "AddChild succeeds")
 	}
 
-	require.IsType(t, newText(nil), e.LastChild(), "LastChild is a Text node")
+	require.IsType(t, &helium.Text{}, e.LastChild(), "LastChild is a Text node")
 
 	require.Equal(t, []byte("Hello World!"), e.Content())
 }
 
 func TestGetAttribute(t *testing.T) {
-	doc := NewDefaultDocument()
+	doc := helium.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 	require.NoError(t, e.SetAttribute("id", "123"))
@@ -82,7 +99,7 @@ func TestGetAttribute(t *testing.T) {
 }
 
 func TestHasAttribute(t *testing.T) {
-	doc := NewDefaultDocument()
+	doc := helium.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 	require.NoError(t, e.SetAttribute("id", "123"))
@@ -92,11 +109,11 @@ func TestHasAttribute(t *testing.T) {
 }
 
 func TestGetAttributeNS(t *testing.T) {
-	doc := NewDefaultDocument()
+	doc := helium.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 
-	ns := NewNamespace("x", "http://example.com")
+	ns := helium.NewNamespace("x", "http://example.com")
 	require.NoError(t, e.SetAttributeNS("attr", "val", ns))
 
 	val, ok := e.GetAttributeNS("attr", "http://example.com")
@@ -111,11 +128,11 @@ func TestGetAttributeNS(t *testing.T) {
 }
 
 func TestGetAttributeNodeNS(t *testing.T) {
-	doc := NewDefaultDocument()
+	doc := helium.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 
-	ns := NewNamespace("x", "http://example.com")
+	ns := helium.NewNamespace("x", "http://example.com")
 	require.NoError(t, e.SetAttributeNS("attr", "val", ns))
 
 	attr := e.GetAttributeNodeNS("attr", "http://example.com")
@@ -132,7 +149,7 @@ func TestGetAttributeNodeNS(t *testing.T) {
 }
 
 func TestRemoveAttribute(t *testing.T) {
-	doc := NewDefaultDocument()
+	doc := helium.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 	require.NoError(t, e.SetAttribute("a", "1"))
@@ -163,11 +180,11 @@ func TestRemoveAttribute(t *testing.T) {
 }
 
 func TestRemoveAttributeNS(t *testing.T) {
-	doc := NewDefaultDocument()
+	doc := helium.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 
-	ns := NewNamespace("x", "http://example.com")
+	ns := helium.NewNamespace("x", "http://example.com")
 	require.NoError(t, e.SetAttributeNS("attr", "val", ns))
 
 	ok := e.RemoveAttributeNS("attr", "http://example.com")

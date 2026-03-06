@@ -1,21 +1,27 @@
-package helium
+package helium_test
 
 import (
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/stretchr/testify/require"
 )
 
 func TestTextAppendText(t *testing.T) {
-	n := newText([]byte("Hello "))
+	doc := helium.NewDefaultDocument()
+	n, err := doc.CreateText([]byte("Hello "))
+	require.NoError(t, err)
 	require.NoError(t, n.AppendText([]byte("World!")), "AppendText succeeds")
 
 	require.Equal(t, []byte("Hello World!"), n.Content(), "Content matches")
 }
 
 func TestTextAddChild(t *testing.T) {
-	n1 := newText([]byte("Hello "))
-	n2 := newText([]byte("World!"))
+	doc := helium.NewDefaultDocument()
+	n1, err := doc.CreateText([]byte("Hello "))
+	require.NoError(t, err)
+	n2, err := doc.CreateText([]byte("World!"))
+	require.NoError(t, err)
 
 	require.NoError(t, n1.AddChild(n2), "AddChild succeeds")
 
@@ -23,12 +29,12 @@ func TestTextAddChild(t *testing.T) {
 }
 
 func TestTextAddChildInvalidNode(t *testing.T) {
-	n1 := newText([]byte("Hello "))
-	n2 := &ProcessingInstruction{}
+	doc := helium.NewDefaultDocument()
+	n1, err := doc.CreateText([]byte("Hello "))
+	require.NoError(t, err)
+	n2 := &helium.ProcessingInstruction{}
 
-	require.Equal(t, ErrInvalidOperation, n1.AddChild(n2), "AddChild fails")
+	require.Equal(t, helium.ErrInvalidOperation, n1.AddChild(n2), "AddChild fails")
 
 	require.Equal(t, []byte("Hello "), n1.Content(), "Content matches")
 }
-
-
