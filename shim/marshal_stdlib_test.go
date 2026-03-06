@@ -2450,7 +2450,6 @@ loop:
 }
 
 func TestProcInstEncodeTokenStdlib(t *testing.T) {
-	t.Skip("shim: ProcInst xml target validation not implemented")
 	var buf bytes.Buffer
 	enc := NewEncoder(&buf)
 

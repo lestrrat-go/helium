@@ -21,6 +21,7 @@ type Encoder struct {
 	closed       bool
 	lastWasStart bool
 	lastWasText  bool
+	hasTokens    bool
 }
 
 // NewEncoder returns a new encoder that writes to w.
@@ -158,6 +159,7 @@ func (enc *Encoder) writeStartElement(se StartElement) error {
 
 	enc.tags = append(enc.tags, se.Name)
 	enc.depth++
+	enc.hasTokens = true
 	enc.lastWasStart = true
 	enc.lastWasText = false
 	return nil
@@ -197,6 +199,7 @@ func (enc *Encoder) writeEndElement(ee EndElement) error {
 
 func (enc *Encoder) writeCharData(cd CharData) error {
 	escapeText(enc.w, []byte(cd))
+	enc.hasTokens = true
 	enc.lastWasStart = false
 	enc.lastWasText = true
 	return nil
@@ -217,12 +220,16 @@ func (enc *Encoder) writeComment(c Comment) error {
 		enc.w.WriteByte(' ')
 	}
 	enc.w.WriteString("-->")
+	enc.hasTokens = true
 	enc.lastWasStart = false
 	enc.lastWasText = false
 	return nil
 }
 
 func (enc *Encoder) writeProcInst(pi ProcInst) error {
+	if pi.Target == "xml" && enc.hasTokens {
+		return fmt.Errorf("xml: EncodeToken of ProcInst xml target only valid for first token")
+	}
 	if enc.indent != "" || enc.prefix != "" {
 		if enc.depth > 0 && !enc.lastWasStart {
 			enc.writeIndent(enc.depth)
@@ -235,6 +242,7 @@ func (enc *Encoder) writeProcInst(pi ProcInst) error {
 		enc.w.Write(pi.Inst)
 	}
 	enc.w.WriteString("?>")
+	enc.hasTokens = true
 	enc.lastWasStart = false
 	enc.lastWasText = false
 	return nil
@@ -244,6 +252,7 @@ func (enc *Encoder) writeDirective(d Directive) error {
 	enc.w.WriteString("<!")
 	enc.w.Write([]byte(d))
 	enc.w.WriteByte('>')
+	enc.hasTokens = true
 	enc.lastWasStart = false
 	enc.lastWasText = false
 	return nil
