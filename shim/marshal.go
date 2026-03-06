@@ -186,7 +186,7 @@ func (enc *Encoder) marshalStruct(val reflect.Value, start *StartElement) error 
 				return err
 			}
 		case b.isAny:
-			if err := enc.marshalReflectValue(field, nil); err != nil {
+			if err := enc.marshalAnyField(b, field); err != nil {
 				return err
 			}
 		default:
@@ -507,6 +507,88 @@ func textValue(field reflect.Value) string {
 		}
 	}
 	return fmt.Sprintf("%v", field.Interface())
+}
+
+// marshalAnyField marshals a field tagged with ",any". If the value is a struct
+// with its own XMLName, that name takes precedence; otherwise the field name is used.
+func (enc *Encoder) marshalAnyField(b fieldBinding, field reflect.Value) error {
+	// Unwrap pointer/interface to check the concrete value
+	v := field
+	for v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return nil
+		}
+		v = v.Elem()
+	}
+
+	// For slices, marshal each element individually with any logic
+	if v.Kind() == reflect.Slice && v.Type().Elem().Kind() != reflect.Uint8 {
+		for i := 0; i < v.Len(); i++ {
+			if err := enc.marshalAnySingleValue(b, v.Index(i)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	return enc.marshalAnySingleValue(b, field)
+}
+
+func (enc *Encoder) marshalAnySingleValue(b fieldBinding, field reflect.Value) error {
+	v := field
+	for v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return nil
+		}
+		v = v.Elem()
+	}
+	if v.Kind() == reflect.Struct {
+		if hasOwnXMLName(v) {
+			return enc.marshalReflectValue(field, nil)
+		}
+	}
+	anyStart := &StartElement{Name: Name{Local: b.fieldName}}
+	return enc.marshalReflectValue(field, anyStart)
+}
+
+func hasOwnXMLName(v reflect.Value) bool {
+	t := v.Type()
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if f.Name != "XMLName" {
+			continue
+		}
+		if !isXMLNameType(derefType(f.Type)) {
+			continue
+		}
+		fv := v.Field(i)
+		for fv.Kind() == reflect.Pointer {
+			if fv.IsNil() {
+				break
+			}
+			fv = fv.Elem()
+		}
+		if fv.Kind() == reflect.Struct {
+			local := fv.FieldByName("Local")
+			if local.IsValid() && local.String() != "" {
+				return true
+			}
+		}
+		// Also check if the tag has a name
+		tag := f.Tag.Get("xml")
+		if tag != "" && tag != "-" {
+			parts := strings.Split(tag, ",")
+			name := strings.TrimSpace(parts[0])
+			if name != "" && name != "XMLName" {
+				_, local, _ := parseTagNameSpec(name)
+				if local != "" {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return false
 }
 
 func (enc *Encoder) marshalComment(structVal, field reflect.Value) error {
