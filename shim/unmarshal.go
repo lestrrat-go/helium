@@ -539,6 +539,11 @@ func buildFieldBindings(t reflect.Type) ([]fieldBinding, error) {
 
 	bindings := make([]fieldBinding, 0, t.NumField())
 	collectFieldBindings(t, nil, &bindings, map[reflect.Type]bool{})
+	for _, b := range bindings {
+		if b.isXMLName && b.isAttr {
+			return nil, fmt.Errorf("xml: invalid tag in field %s of type %s: \"xml:%s\"", b.fieldName, t, b.rawName+",attr")
+		}
+	}
 	if err := validateTagPathConflicts(t, bindings); err != nil {
 		return nil, err
 	}

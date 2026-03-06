@@ -2550,7 +2550,6 @@ type InvalidXMLName struct {
 }
 
 func TestInvalidXMLNameStdlib(t *testing.T) {
-	t.Skip("shim: invalid XML name validation not implemented")
 	var buf bytes.Buffer
 	enc := NewEncoder(&buf)
 	if err := enc.Encode(InvalidXMLName{}); err == nil {
