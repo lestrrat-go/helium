@@ -189,70 +189,21 @@ go test -run 'TestUnmarshalNSAttrStdlib' -v
 
 ---
 
-## 3. Namespace Prefix Allocation (marshal)
+## 3. Namespace Prefix Allocation (marshal) ✅ DONE
 
 **Tests unlocked**: 1 (TestMarshalNSAttrStdlib)
-**Difficulty**: Medium
 **Files**: `shim/namespace.go`, `shim/encoder.go`
 
-### Problem
+### Solution
 
-When marshaling attributes with namespace URIs, the encoder must auto-generate
-prefixes. Stdlib derives the prefix from the last path segment of the namespace
-URI and deduplicates with `_1`, `_2` suffixes. The shim uses sequential `ns1`,
-`ns2`, etc.
+Rewrote `nsStack.allocPrefix` to derive prefixes from namespace URIs matching
+stdlib's `createAttrPrefix` algorithm: last path segment, xml-prefix guard,
+collision resolution with `_N` suffixes. The XML namespace
+(`http://www.w3.org/XML/1998/namespace`) returns `"xml"` with no declaration.
 
-### Current behavior
-
-```go
-// For URI "http://www.w3schools.com/furniture", attribute "table"
-// shim produces:    xmlns:ns1="http://www.w3schools.com/furniture" ns1:table="world"
-// stdlib produces:  xmlns:furniture="http://www.w3schools.com/furniture" furniture:table="world"
-```
-
-### Expected prefix derivation algorithm (from stdlib source)
-
-1. Parse the URI: take the last path segment after the final `/`
-2. Remove non-alphanumeric characters
-3. If the result starts with a digit or is empty, prepend `_`
-4. If the prefix collides with an existing binding, append `_1`, `_2`, etc.
-5. Special case: `http://www.w3.org/XML/1998/namespace` → prefix `xml`
-
-Examples from the test:
-- `http://www.w3.org/TR/html4/` → `html4`
-- `http://www.w3schools.com/furniture` → `furniture`
-- `http://golang.org/xml/` → `_xml` (starts with reserved prefix, gets `_`)
-- `http://golang.org/xmlfoo/` → `_xmlfoo`
-- `http://golang.org/json/` → `json`
-- `http://golang.org/2/json/` → `json_1` (collision with `json`)
-
-### Implementation guidance
-
-Replace `nsStack.allocPrefix()` in `shim/namespace.go` (line 52):
-
-```go
-func (s *nsStack) allocPrefix() string {
-    // Current: s.nextID++; return "ns" + itoa(s.nextID)
-    // Replace with URI-derived prefix logic
-}
-```
-
-The method needs to receive the URI to derive the prefix from it. Change the
-signature to `allocPrefix(uri string) string`. Update the single call site in
-`encoder.go:129`.
-
-Also, the encoder must handle the `xml:lang` attribute specially — the `xml`
-prefix is predefined for `http://www.w3.org/XML/1998/namespace` and must not
-get a `xmlns:xml` declaration. In `writeStartElement` (encoder.go:81), when
-resolving an attribute's namespace, check if it's the XML namespace and use
-the predeclared `xml` prefix without emitting a declaration.
-
-### Test verification
-
-```sh
-# Remove t.Skip from TestMarshalNSAttrStdlib
-go test -run 'TestMarshalNSAttrStdlib' -v
-```
+Changed the encoder to interleave `xmlns:` declarations with attributes
+(each declaration immediately before the first attribute that uses it),
+matching stdlib's output ordering.
 
 ---
 
@@ -808,7 +759,7 @@ implemented.
 |---|---------|-------|-------------|
 | 1 | Path Field Merging | ~27 | High effort, high impact |
 | 2 | ~~NS Element/Attr Matching~~ | ~~2~~ | **DONE** |
-| 3 | NS Prefix Allocation | 1 | Medium effort |
+| 3 | NS Prefix Allocation | 1 | ✅ Done |
 | 4 | EncodeToken Validation | 1 | High effort |
 | 5 | RawToken NS Preservation | 1 | Medium effort (but needs #9 too) |
 | 6 | Cooked Token xmlns | 1 | Medium effort (same as #5) |

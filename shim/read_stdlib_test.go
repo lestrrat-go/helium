@@ -280,7 +280,6 @@ var pathTestsStdlib = []any{
 }
 
 func TestUnmarshalPathsStdlib(t *testing.T) {
-	t.Skip("shim: unmarshal path-based field matching not fully implemented")
 	for _, pt := range pathTestsStdlib {
 		v := reflect.New(reflect.TypeOf(pt).Elem()).Interface()
 		if err := Unmarshal([]byte(pathTestStringStdlib), v); err != nil {
@@ -604,7 +603,6 @@ func TestUnmarshalNSAttrStdlib(t *testing.T) {
 }
 
 func TestMarshalNSAttrStdlib(t *testing.T) {
-	t.Skip("shim: namespace prefix allocation differs from stdlib")
 	src := TableAttrs{TAttr{"hello", "world", "en_US", "other1", "other2", "other3", "other4"}}
 	data, err := Marshal(&src)
 	if err != nil {

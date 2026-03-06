@@ -115,42 +115,31 @@ func (enc *Encoder) writeStartElement(se StartElement) error {
 		enc.w.WriteByte('"')
 	}
 
-	// Collect xmlns attrs from Attr list and attr namespace bindings
-	attrNSDecls := map[string]string{} // prefix → URI for attrs
+	// Write attributes, interleaving xmlns declarations as needed.
+	// Each xmlns declaration appears immediately before the first
+	// attribute that uses it, matching stdlib behavior.
 	for _, attr := range se.Attr {
-		if attr.Name.Space == "" {
-			continue
-		}
-		if attr.Name.Space == "xmlns" {
-			continue
-		}
-		if _, found := enc.nsStack.resolve(attr.Name.Space); !found {
-			if _, already := attrNSDecls[attr.Name.Space]; !already {
-				p := enc.nsStack.allocPrefix()
-				enc.nsStack.addBinding(p, attr.Name.Space)
-				attrNSDecls[attr.Name.Space] = p
-			}
-		}
-	}
-
-	// Write xmlns declarations for attribute namespaces
-	for uri, p := range attrNSDecls {
-		enc.w.WriteString(` xmlns:`)
-		enc.w.WriteString(p)
-		enc.w.WriteString(`="`)
-		escapeAttrVal(enc.w, uri)
-		enc.w.WriteByte('"')
-	}
-
-	// Write attributes
-	for _, attr := range se.Attr {
-		enc.w.WriteByte(' ')
 		if attr.Name.Space != "" && attr.Name.Space != "xmlns" {
-			p, _ := enc.nsStack.resolve(attr.Name.Space)
+			p, found := enc.nsStack.resolve(attr.Name.Space)
+			if !found {
+				var needsDecl bool
+				p, needsDecl = enc.nsStack.allocPrefix(attr.Name.Space)
+				if needsDecl {
+					enc.nsStack.addBinding(p, attr.Name.Space)
+					enc.w.WriteString(` xmlns:`)
+					enc.w.WriteString(p)
+					enc.w.WriteString(`="`)
+					escapeAttrVal(enc.w, attr.Name.Space)
+					enc.w.WriteByte('"')
+				}
+			}
+			enc.w.WriteByte(' ')
 			if p != "" {
 				enc.w.WriteString(p)
 				enc.w.WriteByte(':')
 			}
+		} else {
+			enc.w.WriteByte(' ')
 		}
 		enc.w.WriteString(attr.Name.Local)
 		enc.w.WriteString(`="`)
