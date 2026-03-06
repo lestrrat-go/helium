@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 // marshalValue is the main marshal dispatch. It encodes val as XML,
@@ -410,7 +411,7 @@ func (enc *Encoder) buildStructStart(val reflect.Value, bindings []fieldBinding,
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
-	return StartElement{Name: Name{Local: t.Name()}}
+	return StartElement{Name: Name{Local: typeName(t)}}
 }
 
 // defaultStart returns the start element to use for a non-struct value.
@@ -422,7 +423,16 @@ func (enc *Encoder) defaultStart(val reflect.Value, start *StartElement) StartEl
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
-	return StartElement{Name: Name{Local: t.Name()}}
+	return StartElement{Name: Name{Local: typeName(t)}}
+}
+
+// typeName returns the type name with generic type parameters stripped.
+func typeName(t reflect.Type) string {
+	name := t.Name()
+	if i := strings.IndexByte(name, '['); i >= 0 {
+		return name[:i]
+	}
+	return name
 }
 
 func simpleText(val reflect.Value) (string, error) {

@@ -1670,7 +1670,6 @@ var marshalTestsStdlib = []struct {
 func TestMarshalStdlib(t *testing.T) {
 	// Skip subtests with known shim behavioral differences.
 	marshalSkipSet := map[int]string{
-		47:  "shim: generic type name includes brackets",
 		49:  "shim: path field merging not implemented (Items>item shares parent with Items)",
 		50:  "shim: path field merging not implemented",
 		51:  "shim: path field merging not implemented",
