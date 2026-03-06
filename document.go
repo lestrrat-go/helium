@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/bitset"
 	"github.com/lestrrat-go/pdebug"
 )
 
@@ -37,6 +38,14 @@ const (
 	DocHTML                                 // parsed or built as HTML
 )
 
+func (p *DocProperties) Set(n DocProperties) {
+	bitset.Set(p, n)
+}
+
+func (p DocProperties) IsSet(n DocProperties) bool {
+	return bitset.IsSetAll(p, n)
+}
+
 // Document represents an XML document (libxml2: xmlDoc).
 type Document struct {
 	docnode
@@ -55,7 +64,7 @@ type Document struct {
 // no encoding, and implicit-no standalone (libxml2: xmlNewDoc).
 func NewDefaultDocument() *Document {
 	doc := NewDocument("1.0", "", StandaloneImplicitNo)
-	doc.properties |= DocUserBuilt
+	doc.properties.Set(DocUserBuilt)
 	return doc
 }
 
@@ -155,7 +164,7 @@ func (d *Document) SetProperties(p DocProperties) {
 
 // HasProperty reports whether all bits in p are set.
 func (d *Document) HasProperty(p DocProperties) bool {
-	return d.properties&p == p
+	return d.properties.IsSet(p)
 }
 
 func (d *Document) IntSubset() *DTD {

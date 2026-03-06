@@ -8,6 +8,8 @@ import (
 )
 
 func TestBuiltinTypeValidation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		typeName string
 		valid    []string
@@ -201,6 +203,8 @@ func TestBuiltinTypeValidation(t *testing.T) {
 }
 
 func TestCompareValues(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		typ  string
 		a, b string

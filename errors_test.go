@@ -46,6 +46,8 @@ func TestErrParseErrorAs(t *testing.T) {
 }
 
 func TestErrParseErrorErrorString(t *testing.T) {
+	t.Parallel()
+
 	t.Run("without file", func(t *testing.T) {
 		t.Parallel()
 		pe := helium.ErrParseError{
@@ -127,6 +129,8 @@ func TestErrorLevelConstants(t *testing.T) {
 }
 
 func TestParseNoError(t *testing.T) {
+	t.Parallel()
+
 	// Malformed XML triggers SAX Error callback
 	const input = `<?xml version="1.0"?><root><child>text</chld></root>`
 
@@ -164,6 +168,8 @@ func TestParseNoError(t *testing.T) {
 }
 
 func TestWarningLocationInfo(t *testing.T) {
+	t.Parallel()
+
 	// XML with external subset makes undeclared entity references a warning
 	// rather than an error.
 	const input = "<!DOCTYPE doc SYSTEM \"foo\">\n<doc>&undeclared;</doc>"
@@ -222,6 +228,8 @@ func TestWarningLocationInfo(t *testing.T) {
 }
 
 func TestFormatError(t *testing.T) {
+	t.Parallel()
+
 	t.Run("parser error with file", func(t *testing.T) {
 		t.Parallel()
 		pe := helium.ErrParseError{

@@ -66,6 +66,8 @@ func TestParseArgsDefaults(t *testing.T) {
 }
 
 func TestParseArgsSimpleCases(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		args       []string
@@ -269,6 +271,8 @@ func TestParseArgsC14nModes(t *testing.T) {
 }
 
 func TestParseArgsInvalidCases(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		args []string
@@ -385,6 +389,8 @@ func TestRecover(t *testing.T) {
 // --- Output control ---
 
 func TestOutputControlModes(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		xml             string
@@ -467,6 +473,8 @@ func TestOutputFile(t *testing.T) {
 // --- C14N ---
 
 func TestC14NModes(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		xml          string
@@ -529,6 +537,8 @@ func TestC14NFile(t *testing.T) {
 // --- XPath ---
 
 func TestXPathExpressions(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		xml             string
@@ -668,6 +678,8 @@ func TestXIncludeTextInclusion(t *testing.T) {
 // --- Schema validation ---
 
 func TestSchemaValidation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		xsdType   string
@@ -865,6 +877,8 @@ func TestFormatNestedElements(t *testing.T) {
 }
 
 func TestFormatAdditionalCases(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		xml          string

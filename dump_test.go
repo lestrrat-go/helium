@@ -311,6 +311,8 @@ func TestNoEmpty(t *testing.T) {
 }
 
 func TestDumpQuotingViaPublicAPI(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		inputXML string

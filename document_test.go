@@ -7,6 +7,8 @@ import (
 )
 
 func TestGetElementByID(t *testing.T) {
+	t.Parallel()
+
 	t.Run("xml:id via parser", func(t *testing.T) {
 		t.Parallel()
 		const input = `<?xml version="1.0"?>
@@ -94,5 +96,26 @@ func TestGetElementByID(t *testing.T) {
 		// Verify the ID table exists and is populated
 		require.NotNil(t, doc.ids)
 		require.Len(t, doc.ids, 2)
+	})
+}
+
+func TestDocProperties(t *testing.T) {
+	t.Parallel()
+
+	t.Run("new default document is user-built", func(t *testing.T) {
+		t.Parallel()
+		doc := NewDefaultDocument()
+		require.True(t, doc.HasProperty(DocUserBuilt))
+	})
+
+	t.Run("HasProperty requires all requested bits", func(t *testing.T) {
+		t.Parallel()
+		doc := NewDocument("1.0", "", StandaloneImplicitNo)
+		doc.SetProperties(DocWellFormed | DocXInclude)
+
+		require.True(t, doc.HasProperty(DocWellFormed))
+		require.True(t, doc.HasProperty(DocXInclude))
+		require.True(t, doc.HasProperty(DocWellFormed|DocXInclude))
+		require.False(t, doc.HasProperty(DocWellFormed|DocDTDValid))
 	})
 }

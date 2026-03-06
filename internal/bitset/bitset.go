@@ -11,3 +11,7 @@ func Set[T Field](p *T, n T) {
 func IsSet[T Field](p T, n T) bool {
 	return p&n != 0
 }
+
+func IsSetAll[T Field](p T, n T) bool {
+	return p&n == n
+}

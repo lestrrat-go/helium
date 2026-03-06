@@ -9,6 +9,8 @@ import (
 )
 
 func TestAbstractTypeValidation(t *testing.T) {
+	t.Parallel()
+
 	t.Run("abstract complex type rejected", func(t *testing.T) {
 		t.Parallel()
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">

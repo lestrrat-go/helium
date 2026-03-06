@@ -10,6 +10,8 @@ import (
 )
 
 func TestAttributeAType(t *testing.T) {
+	t.Parallel()
+
 	t.Run("explicit attributes carry atype", func(t *testing.T) {
 		t.Parallel()
 		xml := `<?xml version="1.0"?>
