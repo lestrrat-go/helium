@@ -1695,8 +1695,6 @@ func TestMarshalStdlib(t *testing.T) {
 		77:  "shim: []xml.Attr any,attr not supported in marshal",
 		103: "shim: empty path wrapper element not emitted for nil/empty slices",
 		107: "shim: embedded XMLName precedence differs (inner overrides outer)",
-		115: "shim: bad comment type error not returned",
-		119: "shim: bad comment type error for interface field not returned",
 		176: "shim: any-tagged field uses type name instead of field name for element",
 		177: "shim: any-tagged field uses type name instead of field name for element",
 		179: "shim: any-tagged interface field uses empty element name",

@@ -182,11 +182,8 @@ func (enc *Encoder) marshalStruct(val reflect.Value, start *StartElement) error 
 				enc.lastWasText = false
 			}
 		case b.isComment:
-			text := textValue(field)
-			if text != "" {
-				if err := enc.EncodeToken(Comment([]byte(text))); err != nil {
-					return err
-				}
+			if err := enc.marshalComment(val, field); err != nil {
+				return err
 			}
 		case b.isAny:
 			if err := enc.marshalReflectValue(field, nil); err != nil {
@@ -510,6 +507,18 @@ func textValue(field reflect.Value) string {
 		}
 	}
 	return fmt.Sprintf("%v", field.Interface())
+}
+
+func (enc *Encoder) marshalComment(structVal, field reflect.Value) error {
+	// Nil pointer or nil interface → bad type error (matches stdlib)
+	if (field.Kind() == reflect.Pointer || field.Kind() == reflect.Interface) && field.IsNil() {
+		return fmt.Errorf("xml: bad type for comment field of %s", structVal.Type())
+	}
+	text := textValue(field)
+	if text != "" {
+		return enc.EncodeToken(Comment([]byte(text)))
+	}
+	return nil
 }
 
 // writeCDATA writes a CDATA section, splitting on ]]> as required by the XML spec.

@@ -2,9 +2,12 @@ package shim
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 )
+
+var ddBytes = []byte("--")
 
 // Encoder writes XML tokens to an output stream.
 type Encoder struct {
@@ -200,6 +203,9 @@ func (enc *Encoder) writeCharData(cd CharData) error {
 }
 
 func (enc *Encoder) writeComment(c Comment) error {
+	if bytes.Contains([]byte(c), ddBytes) {
+		return fmt.Errorf("xml: comments must not contain \"--\"")
+	}
 	if enc.indent != "" || enc.prefix != "" {
 		if enc.depth > 0 && !enc.lastWasStart {
 			enc.writeIndent(enc.depth)
