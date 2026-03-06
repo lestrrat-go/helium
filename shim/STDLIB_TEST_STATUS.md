@@ -1,6 +1,6 @@
 # Stdlib encoding/xml Test Compatibility Status
 
-372 pass, 70 skip, 0 fail. Skipped tests are grouped by feature gap below.
+373 pass, 69 skip, 0 fail. Skipped tests are grouped by feature gap below.
 
 Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
 
@@ -62,11 +62,11 @@ When a path-tagged slice field (e.g. `xml:"A>B,omitempty"`) is nil/empty, stdlib
 
 - [ ] **Marshal**: empty path wrapper element not emitted for nil/empty slices (#103)
 
-## XML Declaration Encoding Validation [L-M]
+## XML Declaration Encoding Validation [M-H]
 
-The shim does not parse the `encoding` attribute from `<?xml ...?>` and reject non-UTF-8 charsets. Fix: parse ProcInst data for encoding, compare against known UTF-8 aliases, error otherwise.
+Encoding validation added to shim, but test uses `encoding` before `version` in XML declaration (non-standard order) which SAX parser rejects. Fix requires SAX parser changes.
 
-- [ ] `TestIssue12417Stdlib` — XML declaration encoding attribute parsing
+- [ ] `TestIssue12417Stdlib` — SAX parser rejects encoding-before-version in XML declaration
 
 ## Invalid Element Name Error Messages [L-M]
 
@@ -120,7 +120,7 @@ A struct field of type `xml.Name` (not named `XMLName`) should marshal/unmarshal
 
 Stdlib's priority: 1) outer override, 2) XMLName field value, 3) XMLName field tag, 4) type name. The shim gets (2) vs (3) wrong, and embedded struct XMLName overrides outer. Fix: reorder precedence logic in `buildStructStart` and `buildFieldBindings`.
 
-- [ ] **Marshal**: XMLName precedence (value vs tag) differs (#68)
+- [x] **Marshal**: XMLName precedence (value vs tag) differs (#68)
 - [ ] **Marshal**: embedded XMLName precedence differs (inner overrides outer) (#107)
 - [ ] **Unmarshal**: XMLName tag precedence differs (#69)
 - [ ] **Unmarshal**: embedded struct XMLName populated when should remain zero (#106, #108-109)

@@ -4,8 +4,10 @@ import (
 	"context"
 	stdxml "encoding/xml"
 	"errors"
+	"fmt"
 	"io"
 	"reflect"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
@@ -340,9 +342,59 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 	}
 
 	tok = stdxml.CopyToken(tok)
+
+	// Check encoding attribute in XML declaration
+	if pi, ok := tok.(ProcInst); ok && pi.Target == "xml" {
+		if err := d.checkProcInstEncoding(string(pi.Inst)); err != nil {
+			return nil, err
+		}
+	}
+
 	d.lastToken = tok
 	d.advancePosition(tok)
 	return tok, nil
+}
+
+// checkProcInstEncoding validates the encoding attribute in an XML declaration.
+// UTF-8 (case-insensitive) is always accepted. Non-UTF-8 requires CharsetReader.
+func (d *Decoder) checkProcInstEncoding(data string) error {
+	enc := procInstValue(data, "encoding")
+	if enc == "" {
+		return nil
+	}
+	if strings.EqualFold(enc, "utf-8") {
+		return nil
+	}
+	if d.CharsetReader == nil {
+		return fmt.Errorf("xml: encoding %q declared but Decoder.CharsetReader is nil", enc)
+	}
+	return nil
+}
+
+// procInstValue extracts the value of an attribute from a processing instruction's data.
+func procInstValue(data, param string) string {
+	idx := strings.Index(data, param)
+	if idx < 0 {
+		return ""
+	}
+	s := data[idx+len(param):]
+	s = strings.TrimSpace(s)
+	if s == "" || s[0] != '=' {
+		return ""
+	}
+	s = strings.TrimSpace(s[1:])
+	if s == "" {
+		return ""
+	}
+	q := s[0]
+	if q != '\'' && q != '"' {
+		return ""
+	}
+	end := strings.IndexByte(s[1:], q)
+	if end < 0 {
+		return ""
+	}
+	return s[1 : end+1]
 }
 
 func applyDefaultSpace(tok Token, space string) Token {
