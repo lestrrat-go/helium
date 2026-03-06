@@ -14,6 +14,10 @@ import (
 	"github.com/lestrrat-go/helium/sax"
 )
 
+// maxParseDepth is the maximum element nesting depth allowed by the shim.
+// This guards against stack overflow from pathological input (CVE-2022-30633).
+const maxParseDepth = 100_000
+
 type tokenEvent struct {
 	tok    Token
 	rawTok Token // raw variant (prefix:local instead of namespace URI)
@@ -227,6 +231,7 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 		defer close(d.events)
 		p := helium.NewParser()
 		p.SetOption(helium.ParseLenientXMLDecl)
+		p.SetMaxDepth(maxParseDepth)
 		p.SetSAXHandler(h)
 		_, err := p.ParseReader(d.ctx, r)
 		if err != nil {

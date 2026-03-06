@@ -509,7 +509,6 @@ func TestSyntaxStdlib(t *testing.T) {
 }
 
 func TestInputLinePosStdlib(t *testing.T) {
-	t.Skip("shim: InputPos line/column tracking differs from stdlib")
 	testInput := `<root>
 <?pi
  ?>  <elt

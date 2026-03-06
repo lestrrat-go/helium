@@ -238,7 +238,7 @@ Specific malformed inputs produce error messages that don't match stdlib's exact
 
 `dec.InputPos()` does not return the same `(line, col)` as stdlib after each token. The SAX parser provides positions but with different granularity (end-of-token vs start-of-next-token). Fix: accurate per-token byte-position bookkeeping mapping back to line/column.
 
-- [ ] `TestInputPosStdlib` — InputPos line/column tracking
+- [x] `TestInputPosStdlib` — InputPos line/column tracking
 
 ## Path Field Merging (marshal + unmarshal) [H]
 

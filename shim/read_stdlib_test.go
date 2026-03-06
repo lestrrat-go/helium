@@ -1098,7 +1098,6 @@ func TestUnmarshalIntoNilStdlib(t *testing.T) {
 }
 
 func TestCVE202230633Stdlib(t *testing.T) {
-	t.Skip("shim: helium parser has no depth limit; causes stack overflow")
 	if testing.Short() || runtime.GOARCH == "wasm" {
 		t.Skip("test requires significant memory")
 	}

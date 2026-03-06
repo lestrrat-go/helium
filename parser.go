@@ -34,6 +34,7 @@ type Parser struct {
 	options        ParseOption
 	baseURI        string
 	catalog        icatalog.Resolver
+	maxDepth       int
 }
 
 // Parse parses XML from a byte slice and returns the resulting Document
@@ -158,6 +159,14 @@ func (p *Parser) SetCharBufferSize(size int) {
 // references such as external DTD system identifiers.
 func (p *Parser) SetBaseURI(uri string) {
 	p.baseURI = uri
+}
+
+// SetMaxDepth sets the maximum element nesting depth allowed during parsing.
+// When depth is greater than zero, the parser returns an error if the input
+// document contains elements nested deeper than this limit. A value of zero
+// (the default) means no limit is enforced.
+func (p *Parser) SetMaxDepth(depth int) {
+	p.maxDepth = depth
 }
 
 // SetCatalog sets an XML Catalog for resolving external entity identifiers

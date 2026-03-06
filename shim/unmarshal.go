@@ -57,7 +57,9 @@ func Unmarshal(data []byte, v any) error {
 	// malformed declarations (e.g. charset= instead of encoding=).
 	trimmed = stripXMLDecl(trimmed)
 
-	doc, err := helium.Parse(context.Background(), trimmed)
+	p := helium.NewParser()
+	p.SetMaxDepth(maxParseDepth)
+	doc, err := p.Parse(context.Background(), trimmed)
 	if err != nil {
 		return convertParseError(err)
 	}
