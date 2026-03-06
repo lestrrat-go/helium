@@ -476,7 +476,7 @@ func simpleText(val reflect.Value) (string, error) {
 }
 
 func textValue(field reflect.Value) string {
-	for field.Kind() == reflect.Pointer {
+	for field.Kind() == reflect.Pointer || field.Kind() == reflect.Interface {
 		if field.IsNil() {
 			return ""
 		}
