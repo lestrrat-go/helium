@@ -2,6 +2,7 @@ package helium_test
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -560,34 +561,86 @@ func TestParseDTDValidRepeatContentEmpty(t *testing.T) {
 	require.Error(t, err, "(a)+ requires at least one <a>")
 }
 
+func parseWithDTDAttributeType(t *testing.T, typ enum.AttributeType, value string) error {
+	t.Helper()
+
+	var docDecl string
+	var extraDecl string
+	var body string
+	var typeName string
+
+	switch typ {
+	case enum.AttrID:
+		docDecl = "<!ELEMENT doc EMPTY>"
+		body = fmt.Sprintf(`<doc attr=%q/>`, value)
+		typeName = "ID"
+	case enum.AttrNmtoken:
+		docDecl = "<!ELEMENT doc EMPTY>"
+		body = fmt.Sprintf(`<doc attr=%q/>`, value)
+		typeName = "NMTOKEN"
+	case enum.AttrNmtokens:
+		docDecl = "<!ELEMENT doc EMPTY>"
+		body = fmt.Sprintf(`<doc attr=%q/>`, value)
+		typeName = "NMTOKENS"
+	case enum.AttrIDRefs:
+		docDecl = "<!ELEMENT doc (item*)>"
+		extraDecl = "<!ELEMENT item EMPTY>\n  <!ATTLIST item id ID #IMPLIED>"
+		body = fmt.Sprintf(`<doc attr=%q><item id="id1"/><item id="id2"/></doc>`, value)
+		typeName = "IDREFS"
+	case enum.AttrCDATA:
+		docDecl = "<!ELEMENT doc EMPTY>"
+		body = fmt.Sprintf(`<doc attr=%q/>`, value)
+		typeName = "CDATA"
+	default:
+		t.Fatalf("unsupported attr type: %v", typ)
+	}
+
+	input := fmt.Sprintf(`<?xml version="1.0"?>
+<!DOCTYPE doc [
+  %s
+  %s
+  <!ATTLIST doc attr %s #IMPLIED>
+]>
+%s`, docDecl, extraDecl, typeName, body)
+
+	p := helium.NewParser()
+	p.SetOption(helium.ParseDTDValid)
+	_, err := p.Parse(t.Context(), []byte(input))
+	return err
+}
+
 func TestValidateAttributeValueInternal(t *testing.T) {
-	t.Run("ID valid", func(t *testing.T) {
-		require.NoError(t, validateAttributeValueInternal(nil, enum.AttrID, "myid"))
-	})
-	t.Run("ID invalid", func(t *testing.T) {
-		require.Error(t, validateAttributeValueInternal(nil, enum.AttrID, "123"))
-	})
-	t.Run("NMTOKEN valid", func(t *testing.T) {
-		require.NoError(t, validateAttributeValueInternal(nil, enum.AttrNmtoken, "hello-world"))
-	})
-	t.Run("NMTOKEN valid digits", func(t *testing.T) {
-		require.NoError(t, validateAttributeValueInternal(nil, enum.AttrNmtoken, "123"))
-	})
-	t.Run("NMTOKEN invalid", func(t *testing.T) {
-		require.Error(t, validateAttributeValueInternal(nil, enum.AttrNmtoken, "hello world"))
-	})
-	t.Run("NMTOKENS valid", func(t *testing.T) {
-		require.NoError(t, validateAttributeValueInternal(nil, enum.AttrNmtokens, "hello world"))
-	})
-	t.Run("IDREFS valid", func(t *testing.T) {
-		require.NoError(t, validateAttributeValueInternal(nil, enum.AttrIDRefs, "id1 id2"))
-	})
-	t.Run("IDREFS invalid", func(t *testing.T) {
-		require.Error(t, validateAttributeValueInternal(nil, enum.AttrIDRefs, "id1 123"))
-	})
-	t.Run("CDATA anything", func(t *testing.T) {
-		require.NoError(t, validateAttributeValueInternal(nil, enum.AttrCDATA, "anything goes here!"))
-	})
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		typ     enum.AttributeType
+		value   string
+		wantErr bool
+	}{
+		{name: "ID valid", typ: enum.AttrID, value: "myid"},
+		{name: "ID invalid", typ: enum.AttrID, value: "123", wantErr: true},
+		{name: "NMTOKEN valid", typ: enum.AttrNmtoken, value: "hello-world"},
+		{name: "NMTOKEN valid digits", typ: enum.AttrNmtoken, value: "123"},
+		{name: "NMTOKEN invalid", typ: enum.AttrNmtoken, value: "hello world", wantErr: true},
+		{name: "NMTOKENS valid", typ: enum.AttrNmtokens, value: "hello world"},
+		{name: "IDREFS valid", typ: enum.AttrIDRefs, value: "id1 id2"},
+		{name: "IDREFS invalid", typ: enum.AttrIDRefs, value: "id1 123", wantErr: true},
+		{name: "CDATA anything", typ: enum.AttrCDATA, value: "anything goes here!"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := parseWithDTDAttributeType(t, tc.typ, tc.value)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestParseDTDValidIDUnique(t *testing.T) {
