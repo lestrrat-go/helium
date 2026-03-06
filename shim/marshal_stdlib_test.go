@@ -1692,7 +1692,6 @@ func TestMarshalStdlib(t *testing.T) {
 		76:  "shim: []xml.Attr any,attr not supported in marshal",
 		77:  "shim: []xml.Attr any,attr not supported in marshal",
 		103: "shim: empty path wrapper element not emitted for nil/empty slices",
-		107: "shim: embedded XMLName precedence differs (inner overrides outer)",
 	}
 
 	for idx, test := range marshalTestsStdlib {
@@ -1825,10 +1824,6 @@ func TestUnmarshalStdlib(t *testing.T) {
 		70:  "shim: xml.Name field as element content not handled in unmarshal",
 		71:  "shim: xml.Name field as element content not handled in unmarshal",
 		76:  "shim: []xml.Attr any,attr captures all attrs instead of unmatched only",
-		106: "shim: embedded struct XMLName populated when should remain zero",
-		107: "shim: outer element name mismatch for named embedded struct",
-		108: "shim: embedded struct XMLName populated when should remain zero",
-		109: "shim: double-embedded struct XMLName populated when should remain zero",
 		110: "shim: nested path slice (A>B) only captures one element",
 		111: "shim: nested path slice (A>B) only captures one element",
 		112: "shim: nested path slice (A>B) only captures one element",

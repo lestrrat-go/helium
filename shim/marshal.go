@@ -383,9 +383,9 @@ func (enc *Encoder) buildStructStart(val reflect.Value, bindings []fieldBinding,
 		return *override
 	}
 
-	// Check XMLName field value
+	// Check XMLName field value — only top-level (not embedded struct XMLName)
 	for _, b := range bindings {
-		if !b.isXMLName {
+		if !b.isXMLName || len(b.index) > 1 {
 			continue
 		}
 		field, ok := fieldByIndexNoAlloc(val, b.index)
@@ -410,6 +410,20 @@ func (enc *Encoder) buildStructStart(val reflect.Value, bindings []fieldBinding,
 			}
 		}
 		// Check tag on XMLName
+		if b.rawName != "" && b.rawName != "XMLName" && b.name != "" {
+			name := Name{Local: b.name}
+			if b.hasNameSpace {
+				name.Space = b.nameSpace
+			}
+			return StartElement{Name: name}
+		}
+	}
+
+	// Fall back to embedded XMLName tag
+	for _, b := range bindings {
+		if !b.isXMLName || len(b.index) <= 1 {
+			continue
+		}
 		if b.rawName != "" && b.rawName != "XMLName" && b.name != "" {
 			name := Name{Local: b.name}
 			if b.hasNameSpace {

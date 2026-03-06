@@ -1,6 +1,6 @@
 # Stdlib encoding/xml Test Compatibility Status
 
-374 pass, 68 skip, 0 fail. Skipped tests are grouped by feature gap below.
+379 pass, 63 skip, 0 fail. Skipped tests are grouped by feature gap below.
 
 Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
 
@@ -116,15 +116,13 @@ A struct field of type `xml.Name` (not named `XMLName`) should marshal/unmarshal
 - [ ] **Marshal**: xml.Name field as element content not handled (#70, #72)
 - [ ] **Unmarshal**: xml.Name field as element content not handled (#70-71)
 
-## XMLName Precedence [M]
-
-Stdlib's priority: 1) outer override, 2) XMLName field value, 3) XMLName field tag, 4) type name. The shim gets (2) vs (3) wrong, and embedded struct XMLName overrides outer. Fix: reorder precedence logic in `buildStructStart` and `buildFieldBindings`.
+## ~~XMLName Precedence~~ ✅
 
 - [x] **Marshal**: XMLName precedence (value vs tag) differs (#68)
-- [ ] **Marshal**: embedded XMLName precedence differs (inner overrides outer) (#107)
+- [x] **Marshal**: embedded XMLName precedence differs (inner overrides outer) (#107)
 - [x] **Unmarshal**: XMLName tag precedence differs (#69)
-- [ ] **Unmarshal**: embedded struct XMLName populated when should remain zero (#106, #108-109)
-- [ ] **Unmarshal**: outer element name mismatch for named embedded struct (#107)
+- [x] **Unmarshal**: embedded struct XMLName populated when should remain zero (#106, #108-109)
+- [x] **Unmarshal**: outer element name mismatch for named embedded struct (#107)
 
 ## Embedded Struct Edge Cases (partially done)
 

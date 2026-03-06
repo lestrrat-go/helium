@@ -168,6 +168,11 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 
 		switch {
 		case binding.isXMLName:
+			// Only set XMLName for the top-level struct's own field.
+			// Embedded struct XMLName fields should remain zero.
+			if len(binding.index) > 1 {
+				continue
+			}
 			field, ok := fieldByIndexAlloc(target, binding.index)
 			if !ok {
 				continue
@@ -782,6 +787,10 @@ func resolveBindingConflicts(bindings []fieldBinding) []fieldBinding {
 func validateXMLNameExpectation(bindings []fieldBinding, elem *helium.Element) error {
 	for _, binding := range bindings {
 		if !binding.isXMLName || binding.omit {
+			continue
+		}
+		// Only validate against top-level XMLName, not embedded structs' XMLName.
+		if len(binding.index) > 1 {
 			continue
 		}
 
