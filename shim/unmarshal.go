@@ -951,7 +951,14 @@ func parseFieldBinding(f reflect.StructField) fieldBinding {
 	}
 
 	if tag == "" {
-		b.name = f.Name
+		// If the field type is a struct with an XMLName tag, use that tag
+		// name for element matching (stdlib precedence: XMLName tag > field name).
+		if xmlNameTag := structXMLNameTag(derefType(f.Type)); xmlNameTag != "" {
+			b.rawName = xmlNameTag
+			b.nameSpace, b.name, b.hasNameSpace = parseTagNameSpec(xmlNameTag)
+		} else {
+			b.name = f.Name
+		}
 		return b
 	}
 
@@ -991,6 +998,34 @@ func parseFieldBinding(f reflect.StructField) fieldBinding {
 	}
 
 	return b
+}
+
+// structXMLNameTag returns the XMLName field's tag name for a struct type,
+// or "" if the type is not a struct or has no XMLName tag.
+func structXMLNameTag(t reflect.Type) string {
+	if t.Kind() != reflect.Struct {
+		return ""
+	}
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if f.Name != "XMLName" {
+			continue
+		}
+		if !isXMLNameType(derefType(f.Type)) {
+			continue
+		}
+		tag := f.Tag.Get("xml")
+		if tag == "" || tag == "-" {
+			return ""
+		}
+		parts := strings.Split(tag, ",")
+		name := strings.TrimSpace(parts[0])
+		if name != "" && name != "XMLName" {
+			return name
+		}
+		return ""
+	}
+	return ""
 }
 
 func elementText(elem *helium.Element) string {

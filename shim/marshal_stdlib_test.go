@@ -1822,7 +1822,6 @@ func TestUnmarshalStdlib(t *testing.T) {
 		61:  "shim: namespace-aware path field unmarshal not implemented",
 		62:  "shim: namespace-aware path field unmarshal not implemented",
 		64:  "shim: path field merging not implemented (FieldA>A1 and FieldA>A2 share parent)",
-		69:  "shim: XMLName tag precedence differs on unmarshal (InXMLNameTag not matched)",
 		70:  "shim: xml.Name field as element content not handled in unmarshal",
 		71:  "shim: xml.Name field as element content not handled in unmarshal",
 		76:  "shim: []xml.Attr any,attr captures all attrs instead of unmatched only",

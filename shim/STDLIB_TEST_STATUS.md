@@ -1,6 +1,6 @@
 # Stdlib encoding/xml Test Compatibility Status
 
-373 pass, 69 skip, 0 fail. Skipped tests are grouped by feature gap below.
+374 pass, 68 skip, 0 fail. Skipped tests are grouped by feature gap below.
 
 Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
 
@@ -122,7 +122,7 @@ Stdlib's priority: 1) outer override, 2) XMLName field value, 3) XMLName field t
 
 - [x] **Marshal**: XMLName precedence (value vs tag) differs (#68)
 - [ ] **Marshal**: embedded XMLName precedence differs (inner overrides outer) (#107)
-- [ ] **Unmarshal**: XMLName tag precedence differs (#69)
+- [x] **Unmarshal**: XMLName tag precedence differs (#69)
 - [ ] **Unmarshal**: embedded struct XMLName populated when should remain zero (#106, #108-109)
 - [ ] **Unmarshal**: outer element name mismatch for named embedded struct (#107)
 
