@@ -1,6 +1,6 @@
 # Stdlib encoding/xml Test Compatibility Status
 
-305 pass, 128 skip, 0 fail. Skipped tests are grouped by feature gap below.
+321 pass, 112 skip, 0 fail. Skipped tests are grouped by feature gap below.
 
 Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
 
@@ -50,11 +50,9 @@ When `,innerxml` is used on an unsupported type (e.g. `[]string`), the shim erro
 - [x] **Marshal**: `[]int` slice not expanded to separate elements (#21)
 - [x] **Marshal**: `[N]int` array not expanded (#22)
 
-## []byte Nil vs Empty Slice (unmarshal) [L]
+## ~~[]byte Nil vs Empty Slice (unmarshal)~~ ✅
 
-After unmarshaling, `[]byte` chardata fields are initialized as `[]byte{}` instead of `[]byte(nil)` when the element has content. Fix: preserve nil when the source slice hasn't been written to.
-
-- [ ] **Unmarshal**: `[]byte` field initialized as empty slice instead of nil (#37)
+- [x] **Unmarshal**: `[]byte` field initialized as empty slice instead of nil (#37)
 
 ## ~~Comment Trailing Dash Padding~~ ✅
 
@@ -108,16 +106,14 @@ Marshaling a struct with `XMLName` used as an attribute does not validate that t
 - [x] **Marshal**: nil interface cdata not omitted (#141)
 - [x] **Marshal**: nil interface innerxml not omitted (#151)
 - [x] **Marshal**: nil interface element not omitted (#162)
-- [ ] **Marshal**: nil interface in any field not omitted (#181)
+- [x] **Marshal**: nil interface in any field not omitted (#181)
 - [ ] **Marshal**: nil interface in path field not omitted (#55)
 - [ ] **Marshal**: nil pointer/interface omission with path merging (#57-60)
 
-## `any`-Tagged Field Element Naming [M]
+## ~~`any`-Tagged Field Element Naming~~ ✅ (marshal)
 
-When marshaling a field tagged `,any`, the element name should be the struct field name, not the dynamic type name. Nil interface in any-tagged fields should produce no output. Fix: use field name from binding when available; add nil-interface check.
-
-- [ ] **Marshal**: any-tagged field uses type name instead of field name (#176-177, #183-184)
-- [ ] **Marshal**: any-tagged interface field uses empty element name (#179)
+- [x] **Marshal**: any-tagged field uses type name instead of field name (#176-177, #183-184)
+- [x] **Marshal**: any-tagged interface field uses empty element name (#179)
 - [ ] **Unmarshal**: direct any field not populated (#183, #191)
 
 ## `[]xml.Attr` any,attr Support [M]
@@ -198,11 +194,9 @@ IO errors from the underlying `io.Writer` are swallowed instead of being propaga
 - [ ] `TestMarshalWriteErrorsStdlib` — write error propagation
 - [ ] `TestMarshalWriteIOErrorsStdlib` — IO error propagation
 
-## Empty Element Value for Numeric Types [M]
+## ~~Empty Element Value for Numeric Types~~ ✅
 
-Unmarshaling `<I></I>` into numeric types errors on `strconv.Parse("")` instead of treating it as zero. Fix: add empty-string checks before each scalar parse call.
-
-- [ ] `TestUnmarshalEmptyValuesStdlib` — empty element value parsing for numeric types
+- [x] `TestUnmarshalEmptyValuesStdlib` — empty element value parsing for numeric types
 
 ## Tag Path Conflict Detection [M]
 
