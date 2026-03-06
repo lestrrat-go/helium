@@ -276,9 +276,15 @@ errors/output.
 
 ---
 
-## 5. RawToken Namespace Preservation
+## 5. ~~RawToken Namespace Preservation~~ (DONE)
 
-**Tests unlocked**: 1 (TestRawTokenStdlib)
+**Status**: Implemented. xmlns/xmlns:* declarations are now emitted as
+attributes on both raw and cooked StartElement tokens, prepended before
+regular attributes. Raw attr names use `Name{Space: prefix, Local: local}`
+format. TestRawTokenStdlib still skipped — blocked on Directive token
+emission (item #9) and InputOffset alignment (item #11).
+
+~~**Tests unlocked**: 1 (TestRawTokenStdlib)~~
 **Difficulty**: High
 **Files**: `shim/decoder.go`
 
@@ -355,10 +361,14 @@ go test -run 'TestRawTokenStdlib' -v
 
 ---
 
-## 6. Cooked Token xmlns Attribute Preservation
+## 6. ~~Cooked Token xmlns Attribute Preservation~~ (DONE)
 
-**Tests unlocked**: 1 (TestTokenUnmarshalerStdlib)
-**Difficulty**: High (same root cause as #5)
+**Status**: Implemented together with item #5. Cooked tokens now include
+xmlns declarations as attributes. TestTokenStdlib still skipped — blocked
+on Directive token emission (item #9) and InputOffset alignment (item #11).
+
+~~**Tests unlocked**: 1 (TestTokenUnmarshalerStdlib)~~
+~~**Difficulty**: High (same root cause as #5)~~
 **Files**: `shim/decoder.go`
 
 ### Problem
@@ -761,8 +771,8 @@ implemented.
 | 2 | ~~NS Element/Attr Matching~~ | ~~2~~ | **DONE** |
 | 3 | NS Prefix Allocation | 1 | ✅ Done |
 | 4 | EncodeToken Validation | 1 | High effort |
-| 5 | RawToken NS Preservation | 1 | Medium effort (but needs #9 too) |
-| 6 | Cooked Token xmlns | 1 | Medium effort (same as #5) |
+| 5 | ~~RawToken NS Preservation~~ | ~~1~~ | **DONE** (test blocked on #9, #11) |
+| 6 | ~~Cooked Token xmlns~~ | ~~1~~ | **DONE** (test blocked on #9, #11) |
 | 7 | Empty NS Override | 1 | Medium effort |
 | 8 | CharsetReader | 2 | Medium effort |
 | 9 | Directive Tokens | 2 | ✅ Done |

@@ -159,9 +159,23 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 		}
 		rawSE := StartElement{Name: Name{Local: rawLocal}}
 
-		if len(attrs) > 0 {
-			se.Attr = make([]Attr, 0, len(attrs))
-			rawSE.Attr = make([]Attr, 0, len(attrs))
+		// Prepend namespace declarations as attributes (xmlns:* and xmlns)
+		// before regular attributes, matching stdlib ordering.
+		nAttr := len(namespaces) + len(attrs)
+		if nAttr > 0 {
+			se.Attr = make([]Attr, 0, nAttr)
+			rawSE.Attr = make([]Attr, 0, nAttr)
+			for _, ns := range namespaces {
+				if ns.Prefix() == "" {
+					a := Attr{Name: Name{Local: "xmlns"}, Value: ns.URI()}
+					se.Attr = append(se.Attr, a)
+					rawSE.Attr = append(rawSE.Attr, a)
+				} else {
+					a := Attr{Name: Name{Space: "xmlns", Local: ns.Prefix()}, Value: ns.URI()}
+					se.Attr = append(se.Attr, a)
+					rawSE.Attr = append(rawSE.Attr, a)
+				}
+			}
 			for _, attr := range attrs {
 				space := ""
 				if p := attr.Prefix(); p != "" {
@@ -171,12 +185,8 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 					Name:  Name{Space: space, Local: attr.LocalName()},
 					Value: attr.Value(),
 				})
-				rawAttrLocal := attr.LocalName()
-				if p := attr.Prefix(); p != "" {
-					rawAttrLocal = p + ":" + attr.LocalName()
-				}
 				rawSE.Attr = append(rawSE.Attr, Attr{
-					Name:  Name{Local: rawAttrLocal},
+					Name:  Name{Space: attr.Prefix(), Local: attr.LocalName()},
 					Value: attr.Value(),
 				})
 			}

@@ -276,7 +276,7 @@ var xmlInputStdlib = []string{
 }
 
 func TestRawTokenStdlib(t *testing.T) {
-	t.Skip("shim: RawToken namespace handling differs from stdlib")
+	t.Skip("shim: blocked on Directive token emission (item #9) and InputOffset alignment")
 	d := NewDecoder(strings.NewReader(testInputStdlib))
 	d.Entity = testEntityStdlib
 	testRawTokenStdlib(t, d, testInputStdlib, rawTokensStdlib)
@@ -479,7 +479,7 @@ func TestNestedDirectivesStdlib(t *testing.T) {
 }
 
 func TestTokenStdlib(t *testing.T) {
-	t.Skip("shim: cooked token namespace handling differs from stdlib (xmlns attrs not preserved)")
+	t.Skip("shim: blocked on Directive token emission (item #9) and InputOffset alignment")
 	d := NewDecoder(strings.NewReader(testInputStdlib))
 	d.Entity = testEntityStdlib
 
