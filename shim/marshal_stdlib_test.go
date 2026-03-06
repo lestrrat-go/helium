@@ -1934,7 +1934,6 @@ func (lw *limitedBytesWriter) Write(p []byte) (n int, err error) {
 }
 
 func TestMarshalWriteErrorsStdlib(t *testing.T) {
-	t.Skip("shim: write error propagation not implemented")
 	var buf bytes.Buffer
 	const writeCap = 1024
 	w := &limitedBytesWriter{&buf, writeCap}
@@ -1963,7 +1962,6 @@ func TestMarshalWriteErrorsStdlib(t *testing.T) {
 }
 
 func TestMarshalWriteIOErrorsStdlib(t *testing.T) {
-	t.Skip("shim: IO error propagation not implemented")
 	enc := NewEncoder(errWriterMarshal{})
 
 	expectErr := "unwritable"

@@ -1,6 +1,6 @@
 # Stdlib encoding/xml Test Compatibility Status
 
-348 pass, 88 skip, 0 fail. Skipped tests are grouped by feature gap below.
+350 pass, 86 skip, 0 fail. Skipped tests are grouped by feature gap below.
 
 Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
 
@@ -169,12 +169,10 @@ The shim's innerxml capture serializes empty elements as self-closed (`<T1/>`) w
 
 - [x] `TestMarshalErrorsStdlib` — chan type, comment `--`, attr path errors
 
-## Write Error Propagation [M]
+## ~~Write Error Propagation~~ ✅
 
-IO errors from the underlying `io.Writer` are swallowed instead of being propagated from `Encode`/`EncodeToken`. Fix: surface errors from the buffered writer on each `Encode` call.
-
-- [ ] `TestMarshalWriteErrorsStdlib` — write error propagation
-- [ ] `TestMarshalWriteIOErrorsStdlib` — IO error propagation
+- [x] `TestMarshalWriteErrorsStdlib` — write error propagation
+- [x] `TestMarshalWriteIOErrorsStdlib` — IO error propagation
 
 ## ~~Empty Element Value for Numeric Types~~ ✅
 

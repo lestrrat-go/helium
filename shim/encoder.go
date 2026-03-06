@@ -266,7 +266,11 @@ func (enc *Encoder) Flush() error {
 	if enc.err != nil {
 		return enc.err
 	}
-	return enc.w.Flush()
+	if err := enc.w.Flush(); err != nil {
+		enc.err = err
+		return err
+	}
+	return nil
 }
 
 // Close flushes the encoder and returns an error if there are unclosed tags.
@@ -285,11 +289,19 @@ func (enc *Encoder) Close() error {
 
 // Encode writes the XML encoding of v to the stream.
 func (enc *Encoder) Encode(v any) error {
-	return enc.marshalValue(v, nil)
+	err := enc.marshalValue(v, nil)
+	if err != nil {
+		return err
+	}
+	return enc.Flush()
 }
 
 // EncodeElement writes the XML encoding of v to the stream,
 // using start as the element tag.
 func (enc *Encoder) EncodeElement(v any, start StartElement) error {
-	return enc.marshalValue(v, &start)
+	err := enc.marshalValue(v, &start)
+	if err != nil {
+		return err
+	}
+	return enc.Flush()
 }
