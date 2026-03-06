@@ -702,7 +702,6 @@ type Pod struct {
 
 // https://golang.org/issue/6836
 func TestUnmarshalIntoInterfaceStdlib(t *testing.T) {
-	t.Skip("shim: unmarshal into interface{} fields not supported")
 	pod := new(Pod)
 	pod.Pea = new(Pea)
 	xml := `<Pod><Pea><Cotelydon>Green stuff</Cotelydon></Pea></Pod>`

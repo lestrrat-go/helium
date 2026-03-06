@@ -249,7 +249,10 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 			}
 		default:
 			if field.Kind() == reflect.Interface {
-				continue
+				if field.IsNil() {
+					continue
+				}
+				field = field.Elem()
 			}
 			path := binding.path
 			if len(path) == 0 {
@@ -288,14 +291,14 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 }
 
 func assignFromElement(field reflect.Value, elem *helium.Element) error {
-	if !field.CanSet() {
-		return nil
-	}
-
 	if field.Kind() == reflect.Pointer {
-		if field.IsNil() {
-			field.Set(reflect.New(field.Type().Elem()))
+		if !field.IsNil() {
+			return assignFromElement(field.Elem(), elem)
 		}
+		if !field.CanSet() {
+			return nil
+		}
+		field.Set(reflect.New(field.Type().Elem()))
 		return assignFromElement(field.Elem(), elem)
 	}
 
