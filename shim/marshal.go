@@ -1,6 +1,7 @@
 package shim
 
 import (
+	"bufio"
 	"bytes"
 	"encoding"
 	stdxml "encoding/xml"
@@ -168,10 +169,7 @@ func (enc *Encoder) marshalStruct(val reflect.Value, start *StartElement) error 
 		case b.isCData:
 			text := textValue(field)
 			if text != "" {
-				// Write raw CDATA — bypass EncodeToken
-				enc.w.WriteString("<![CDATA[")
-				enc.w.WriteString(text)
-				enc.w.WriteString("]]>")
+				writeCDATA(enc.w, text)
 				enc.lastWasStart = false
 				enc.lastWasText = true
 			}
@@ -512,6 +510,23 @@ func textValue(field reflect.Value) string {
 		}
 	}
 	return fmt.Sprintf("%v", field.Interface())
+}
+
+// writeCDATA writes a CDATA section, splitting on ]]> as required by the XML spec.
+func writeCDATA(w *bufio.Writer, text string) {
+	for {
+		i := strings.Index(text, "]]>")
+		if i < 0 {
+			w.WriteString("<![CDATA[")
+			w.WriteString(text)
+			w.WriteString("]]>")
+			return
+		}
+		w.WriteString("<![CDATA[")
+		w.WriteString(text[:i+2]) // include ]]
+		w.WriteString("]]>")
+		text = text[i+2:] // continue from >
+	}
 }
 
 func isEmptyValue(v reflect.Value) bool {
