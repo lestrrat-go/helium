@@ -1670,12 +1670,6 @@ var marshalTestsStdlib = []struct {
 func TestMarshalStdlib(t *testing.T) {
 	// Skip subtests with known shim behavioral differences.
 	marshalSkipSet := map[int]string{
-		16:  "shim: Plain []byte field marshaled via fmt instead of string conversion",
-		18:  "shim: Plain []byte field marshaled via fmt instead of string conversion",
-		19:  "shim: Plain [N]byte array marshaled via fmt instead of string conversion",
-		21:  "shim: Plain []int slice not marshaled as separate elements",
-		22:  "shim: Plain [N]int array not marshaled as separate elements",
-		23:  "shim: interface value defaultStart produces empty element name",
 		45:  "shim: time.Time TextMarshaler not invoked (uses fmt.Sprint instead)",
 		47:  "shim: generic type name includes brackets",
 		49:  "shim: path field merging not implemented (Items>item shares parent with Items)",

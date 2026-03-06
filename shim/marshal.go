@@ -21,8 +21,8 @@ func (enc *Encoder) marshalReflectValue(val reflect.Value, start *StartElement) 
 		return nil
 	}
 
-	// Dereference pointers
-	for val.Kind() == reflect.Pointer {
+	// Dereference pointers and interfaces
+	for val.Kind() == reflect.Pointer || val.Kind() == reflect.Interface {
 		if val.IsNil() {
 			return nil
 		}
@@ -56,12 +56,12 @@ func (enc *Encoder) marshalReflectValue(val reflect.Value, start *StartElement) 
 	switch val.Kind() {
 	case reflect.Struct:
 		return enc.marshalStruct(val, start)
-	case reflect.Slice:
+	case reflect.Slice, reflect.Array:
 		if val.Type().Elem().Kind() == reflect.Uint8 {
-			// []byte — marshal as text
+			// []byte / [N]byte — marshal as text
 			return enc.marshalSimpleValue(val, start)
 		}
-		// Slice of elements
+		// Slice/array of elements
 		for i := 0; i < val.Len(); i++ {
 			if err := enc.marshalReflectValue(val.Index(i), start); err != nil {
 				return err
@@ -449,6 +449,15 @@ func simpleText(val reflect.Value) (string, error) {
 	case reflect.Slice:
 		if val.Type().Elem().Kind() == reflect.Uint8 {
 			return string(val.Bytes()), nil
+		}
+		return "", &UnsupportedTypeError{Type: val.Type()}
+	case reflect.Array:
+		if val.Type().Elem().Kind() == reflect.Uint8 {
+			b := make([]byte, val.Len())
+			for i := range b {
+				b[i] = byte(val.Index(i).Uint())
+			}
+			return string(b), nil
 		}
 		return "", &UnsupportedTypeError{Type: val.Type()}
 	case reflect.Map:
