@@ -1158,6 +1158,42 @@ func TestEncoderIndentMatchesStdlib(t *testing.T) {
 	require.Equal(t, stdBuf.Bytes(), shimBuf.Bytes(), "Indent output mismatch")
 }
 
+func TestUnmarshalXMLDeclValidationMatchStdlib(t *testing.T) {
+	type item struct {
+		Value string `xml:"value"`
+	}
+
+	cases := []struct {
+		name string
+		xml  string
+	}{
+		{"version 1.1", `<?xml version="1.1" encoding="UTF-8"?><item><value>hello</value></item>`},
+		{"non-UTF-8 encoding", `<?xml version="1.0" encoding="ISO-8859-1"?><item><value>hello</value></item>`},
+		{"malformed charset=", `<?xml version="1.0" charset="UTF-8"?><item><value>hello</value></item>`},
+		{"valid UTF-8", `<?xml version="1.0" encoding="UTF-8"?><item><value>hello</value></item>`},
+		{"valid utf-8 lowercase", `<?xml version="1.0" encoding="utf-8"?><item><value>hello</value></item>`},
+		{"no declaration", `<item><value>hello</value></item>`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdOut item
+			stdErr := stdxml.Unmarshal([]byte(tc.xml), &stdOut)
+
+			var shimOut item
+			shimErr := shim.Unmarshal([]byte(tc.xml), &shimOut)
+
+			if stdErr != nil {
+				require.Error(t, shimErr, "shim should error when stdlib errors")
+				require.Equal(t, stdErr.Error(), shimErr.Error(), "error message mismatch")
+			} else {
+				require.NoError(t, shimErr, "shim should succeed when stdlib succeeds")
+				require.Equal(t, stdOut.Value, shimOut.Value, "value mismatch")
+			}
+		})
+	}
+}
+
 func tokenRepr(tok stdxml.Token) string {
 	switch v := tok.(type) {
 	case stdxml.StartElement:

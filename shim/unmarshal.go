@@ -53,9 +53,14 @@ func Unmarshal(data []byte, v any) error {
 		return io.EOF
 	}
 
-	// Strip XML declaration — helium's parser is stricter than stdlib about
-	// malformed declarations (e.g. charset= instead of encoding=).
-	trimmed = stripXMLDecl(trimmed)
+	// Validate and strip XML declaration. We validate version/encoding to
+	// match stdlib error behavior, then strip the declaration because
+	// helium's parser is stricter than stdlib about malformed declarations
+	// (e.g. charset= instead of encoding=).
+	trimmed, err := validateAndStripXMLDecl(trimmed)
+	if err != nil {
+		return err
+	}
 
 	p := helium.NewParser()
 	p.SetMaxDepth(maxParseDepth)
@@ -82,15 +87,27 @@ func trimLeadingSpace(data []byte) []byte {
 	return data
 }
 
-func stripXMLDecl(data []byte) []byte {
+// validateAndStripXMLDecl checks version/encoding pseudo-attributes in the XML
+// declaration (matching stdlib error behavior), then strips the declaration so
+// helium's parser does not reject malformed but harmless declarations.
+func validateAndStripXMLDecl(data []byte) ([]byte, error) {
 	if len(data) < 5 || string(data[:5]) != "<?xml" {
-		return data
+		return data, nil
 	}
 	end := bytes.Index(data, []byte("?>"))
 	if end < 0 {
-		return data
+		return data, nil
 	}
-	return trimLeadingSpace(data[end+2:])
+	content := string(data[5:end])
+
+	if ver := procInstValue(content, "version"); ver != "" && ver != "1.0" {
+		return nil, fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", ver)
+	}
+	if enc := procInstValue(content, "encoding"); enc != "" && !strings.EqualFold(enc, "utf-8") {
+		return nil, fmt.Errorf("xml: encoding %q declared but Decoder.CharsetReader is nil", enc)
+	}
+
+	return trimLeadingSpace(data[end+2:]), nil
 }
 
 
