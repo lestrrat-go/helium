@@ -1017,8 +1017,8 @@ func TestDecoderDecodeInvalidTargetMatchStdlib(t *testing.T) {
 
 	// non-pointer
 	nonPtr := any("hello")
-	stdErr := stdxml.NewDecoder(bytes.NewReader(input)).Decode(nonPtr)
-	shimErr := shim.NewDecoder(bytes.NewReader(input)).Decode(nonPtr)
+	stdErr := stdxml.NewDecoder(bytes.NewReader(input)).Decode(nonPtr)  //nolint:staticcheck // intentional non-pointer to test error behavior
+	shimErr := shim.NewDecoder(bytes.NewReader(input)).Decode(nonPtr) //nolint:staticcheck // intentional non-pointer to test error behavior
 	require.Error(t, stdErr)
 	require.Error(t, shimErr)
 	require.Equal(t, stdErr.Error(), shimErr.Error())
@@ -1040,12 +1040,12 @@ func TestDecoderDecodeElementInvalidTargetMatchStdlib(t *testing.T) {
 	stdDec := stdxml.NewDecoder(bytes.NewReader(input))
 	stdTok, _ := stdDec.Token()
 	stdStart := stdTok.(stdxml.StartElement)
-	stdErr := stdDec.DecodeElement(nonPtr, &stdStart)
+	stdErr := stdDec.DecodeElement(nonPtr, &stdStart) //nolint:staticcheck // intentional non-pointer to test error behavior
 
 	shimDec := shim.NewDecoder(bytes.NewReader(input))
 	shimTok, _ := shimDec.Token()
 	shimStart := shimTok.(stdxml.StartElement)
-	shimErr := shimDec.DecodeElement(nonPtr, &shimStart)
+	shimErr := shimDec.DecodeElement(nonPtr, &shimStart) //nolint:staticcheck // intentional non-pointer to test error behavior
 
 	require.Error(t, stdErr)
 	require.Error(t, shimErr)
