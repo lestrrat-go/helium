@@ -25,6 +25,7 @@ type tokenEvent struct {
 	line   int
 	col    int
 	err    error
+	cdata  bool // true if this CharData came from a CDATA section
 }
 
 // Decoder reads XML tokens from a stream. It is a drop-in replacement for
@@ -62,7 +63,8 @@ type Decoder struct {
 	prologErr      error    // syntax error detected during prolog scanning
 	combinedReader  io.Reader // buffered reader for lazy SAX startup
 	saxStarted      bool      // true once SAX goroutine has been started
-	detectedCharset string    // non-UTF-8 encoding from XML declaration
+	detectedCharset string       // non-UTF-8 encoding from XML declaration
+	pendingEvent    *tokenEvent  // lookahead event saved during CharData merging
 }
 
 func newDecoderFromReader(r io.Reader) (*Decoder, error) {
@@ -152,12 +154,8 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 
 		// Resolved token (for Token())
 		se := StartElement{Name: Name{Space: uri, Local: localname}}
-		// Raw token (for RawToken()) — uses "prefix:local" form
-		rawLocal := localname
-		if prefix != "" {
-			rawLocal = prefix + ":" + localname
-		}
-		rawSE := StartElement{Name: Name{Local: rawLocal}}
+		// Raw token (for RawToken()) — prefix goes in Name.Space
+		rawSE := StartElement{Name: Name{Space: prefix, Local: localname}}
 
 		// Prepend namespace declarations as attributes (xmlns:* and xmlns)
 		// before regular attributes, matching stdlib ordering.
@@ -215,12 +213,8 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 			}
 		}
 
-		rawLocal := localname
-		if prefix != "" {
-			rawLocal = prefix + ":" + localname
-		}
 		ee := EndElement{Name: Name{Space: uri, Local: localname}}
-		rawEE := EndElement{Name: Name{Local: rawLocal}}
+		rawEE := EndElement{Name: Name{Space: prefix, Local: localname}}
 		return push(ee, rawEE, line, col)
 	})
 	h.OnCharacters = sax.CharactersFunc(func(_ sax.Context, ch []byte) error {
@@ -248,7 +242,12 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 			col = locator.ColumnNumber()
 		}
 		cd := CharData(append([]byte(nil), value...))
-		return push(cd, cd, line, col)
+		select {
+		case d.events <- tokenEvent{tok: cd, rawTok: cd, line: line, col: col, cdata: true}:
+			return nil
+		case <-d.ctx.Done():
+			return d.ctx.Err()
+		}
 	})
 	h.OnComment = sax.CommentFunc(func(_ sax.Context, value []byte) error {
 		line, col := 0, 0
@@ -470,7 +469,7 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 			break
 		}
 	} else {
-		event, ok := <-d.events
+		event, ok := d.nextEvent()
 		if !ok {
 			return nil, io.EOF
 		}
@@ -481,6 +480,14 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 			d.line = event.line
 			d.column = event.col
 		}
+
+		// Merge consecutive CharData events into a single token.
+		// The SAX parser fires separate callbacks for each entity/character
+		// reference expansion, but stdlib returns one merged CharData.
+		if _, isCD := event.tok.(CharData); isCD {
+			event = d.mergeCharData(event, raw)
+		}
+
 		if raw {
 			tok = event.rawTok
 		} else {
@@ -572,6 +579,50 @@ func applyDefaultSpace(tok Token, space string) Token {
 		}
 	}
 	return tok
+}
+
+// nextEvent returns the next event, consuming the pending lookahead if available.
+func (d *Decoder) nextEvent() (tokenEvent, bool) {
+	if d.pendingEvent != nil {
+		ev := *d.pendingEvent
+		d.pendingEvent = nil
+		return ev, true
+	}
+	ev, ok := <-d.events
+	return ev, ok
+}
+
+// mergeCharData coalesces consecutive non-CDATA CharData events into one.
+// CDATA sections are kept as separate tokens to match stdlib behavior.
+// It reads ahead from the event channel until a non-mergeable event is found
+// (which is saved as pendingEvent for the next call).
+func (d *Decoder) mergeCharData(first tokenEvent, raw bool) tokenEvent {
+	if first.cdata {
+		return first
+	}
+	merged := first
+	cookedBuf := []byte(merged.tok.(CharData))
+	rawBuf := []byte(merged.rawTok.(CharData))
+	for {
+		next, ok := <-d.events
+		if !ok {
+			break
+		}
+		if next.err != nil {
+			d.pendingEvent = &next
+			break
+		}
+		nextCD, isCD := next.tok.(CharData)
+		if !isCD || next.cdata {
+			d.pendingEvent = &next
+			break
+		}
+		cookedBuf = append(cookedBuf, nextCD...)
+		rawBuf = append(rawBuf, next.rawTok.(CharData)...)
+	}
+	merged.tok = CharData(cookedBuf)
+	merged.rawTok = CharData(rawBuf)
+	return merged
 }
 
 func (d *Decoder) Skip() error {

@@ -276,7 +276,7 @@ var xmlInputStdlib = []string{
 }
 
 func TestRawTokenStdlib(t *testing.T) {
-	t.Skip("shim: blocked on helium core issues (CharData splitting per entity ref, namespace prefix redeclaration rejection, InputOffset alignment)")
+	t.Skip("shim: blocked on SAX attr vs xmlns ordering (source order not preserved) and InputOffset alignment")
 	d := NewDecoder(strings.NewReader(testInputStdlib))
 	d.Entity = testEntityStdlib
 	testRawTokenStdlib(t, d, testInputStdlib, rawTokensStdlib)
@@ -478,7 +478,7 @@ func TestNestedDirectivesStdlib(t *testing.T) {
 }
 
 func TestTokenStdlib(t *testing.T) {
-	t.Skip("shim: blocked on helium core issues (CharData splitting per entity ref, namespace prefix redeclaration rejection)")
+	t.Skip("shim: blocked on SAX attr vs xmlns ordering (source order not preserved)")
 	d := NewDecoder(strings.NewReader(testInputStdlib))
 	d.Entity = testEntityStdlib
 
