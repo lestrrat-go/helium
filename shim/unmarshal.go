@@ -53,20 +53,26 @@ func Unmarshal(data []byte, v any) error {
 		return io.EOF
 	}
 
-	// Validate and strip XML declaration. We validate version/encoding to
-	// match stdlib error behavior, then strip the declaration because
-	// helium's parser is stricter than stdlib about malformed declarations
-	// (e.g. charset= instead of encoding=).
-	trimmed, err := validateAndStripXMLDecl(trimmed)
-	if err != nil {
-		return err
-	}
-
 	p := helium.NewParser()
+	p.SetOption(helium.ParseLenientXMLDecl)
 	p.SetMaxDepth(maxParseDepth)
 	doc, err := p.Parse(context.Background(), trimmed)
 	if err != nil {
-		return convertParseError(err)
+		// helium's lenient mode is still stricter than stdlib for some
+		// malformed declarations (e.g. charset=, empty version/encoding).
+		// Strip the declaration and retry.
+		if stripped, ok := stripXMLDecl(trimmed); ok {
+			doc, err = p.Parse(context.Background(), stripped)
+		}
+		if err != nil {
+			return convertParseError(err)
+		}
+	}
+
+	// Validate version/encoding from the parsed document to match
+	// stdlib error behavior.
+	if err := validateXMLDeclFields(doc); err != nil {
+		return err
 	}
 	root := doc.DocumentElement()
 	if root == nil {
@@ -87,27 +93,31 @@ func trimLeadingSpace(data []byte) []byte {
 	return data
 }
 
-// validateAndStripXMLDecl checks version/encoding pseudo-attributes in the XML
-// declaration (matching stdlib error behavior), then strips the declaration so
-// helium's parser does not reject malformed but harmless declarations.
-func validateAndStripXMLDecl(data []byte) ([]byte, error) {
+// stripXMLDecl removes an XML declaration from data if present, returning
+// the remaining data and true. Returns the original data and false if no
+// declaration is found.
+func stripXMLDecl(data []byte) ([]byte, bool) {
 	if len(data) < 5 || string(data[:5]) != "<?xml" {
-		return data, nil
+		return data, false
 	}
 	end := bytes.Index(data, []byte("?>"))
 	if end < 0 {
-		return data, nil
+		return data, false
 	}
-	content := string(data[5:end])
+	return trimLeadingSpace(data[end+2:]), true
+}
 
-	if ver := procInstValue(content, "version"); ver != "" && ver != "1.0" {
-		return nil, fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", ver)
+// validateXMLDeclFields checks the parsed document's version and encoding
+// to match stdlib error behavior (reject non-1.0 versions and non-UTF-8
+// encodings when no CharsetReader is available).
+func validateXMLDeclFields(doc *helium.Document) error {
+	if ver := doc.Version(); ver != "" && ver != "1.0" {
+		return fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", ver)
 	}
-	if enc := procInstValue(content, "encoding"); enc != "" && !strings.EqualFold(enc, "utf-8") {
-		return nil, fmt.Errorf("xml: encoding %q declared but Decoder.CharsetReader is nil", enc)
+	if enc := doc.Encoding(); enc != "" && enc != "utf8" && !strings.EqualFold(enc, "utf-8") {
+		return fmt.Errorf("xml: encoding %q declared but Decoder.CharsetReader is nil", enc)
 	}
-
-	return trimLeadingSpace(data[end+2:]), nil
+	return nil
 }
 
 
