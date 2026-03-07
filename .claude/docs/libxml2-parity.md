@@ -55,7 +55,7 @@ These affect multiple packages (especially C14N test skips):
 | encoding/xml shim | Marshal, Unmarshal, Encoder, Decoder, Token, struct tags | Strict-only, xmlns before regular attrs, InputOffset approximate, undeclared prefixes rejected |
 | XSD numeric comparison | decimal/integer via big.Rat | No float/double/date/time/duration comparison |
 | XSD validation mode | DOM-only | No SAX/streaming validation, no subtree validation |
-| Push parser | Buffers all data then parses | Not true incremental |
+| Push parser | Incremental parsing in background goroutine from blocking push stream | Blocking on chunk boundaries; semantics differ from libxml2 push APIs |
 
 ### Not Implemented
 
