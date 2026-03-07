@@ -135,8 +135,6 @@ func validateXMLDeclFields(doc *helium.Document) error {
 	return nil
 }
 
-
-
 func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 	if !target.IsValid() {
 		return nil
