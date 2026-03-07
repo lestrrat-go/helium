@@ -17,5 +17,24 @@
 //     original serialization form of empty elements.
 //   - Non-strict mode (Decoder.Strict = false) is not supported. The shim
 //     always parses in strict XML mode.
-//   - HTMLAutoClose is not supported.
+//   - The [HTMLAutoClose] variable and the Decoder.AutoClose field are not
+//     supported. The HTMLAutoClose variable is omitted entirely. The
+//     AutoClose field is present for signature compatibility but is a no-op.
+//   - The deprecated [encoding/xml.Escape] function is omitted. Use
+//     [EscapeText] instead.
+//   - Namespace strictness: undeclared namespace prefixes are rejected.
+//     [encoding/xml] silently accepts undeclared prefixes and places the
+//     raw prefix string in Name.Space.
+//   - Attribute ordering: xmlns namespace declarations are emitted before
+//     regular attributes. Source-document attribute order is not preserved
+//     because the SAX parser delivers namespaces and attributes as
+//     separate slices.
+//   - [Decoder.InputOffset] returns an approximate byte offset estimated
+//     from the serialized size of each token, not an exact count of bytes
+//     consumed from the input. It may diverge from [encoding/xml] for
+//     namespace-prefixed names, entity references, CDATA sections, and
+//     self-closing elements.
+//   - [Decoder.InputPos] is based on a SAX locator snapshot taken at event
+//     time. Column numbers may differ from [encoding/xml]. During prolog
+//     token emission the reported position is (1, 1).
 package shim

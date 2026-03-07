@@ -527,6 +527,19 @@ The `shim` package provides a drop-in replacement for Go's standard `encoding/xm
 
 To migrate existing code, change the import path from `"encoding/xml"` to `"github.com/lestrrat-go/helium/shim"`. Type aliases (`Name`, `Attr`, `StartElement`, `CharData`, etc.) ensure that existing type references continue to work without modification.
 
+## Known Differences
+
+The following behaviors differ from `encoding/xml` and are not expected to change:
+
+* **Non-strict mode** — `Decoder.Strict = false` is not supported. The shim always parses in strict XML mode.
+* **`HTMLAutoClose` / `AutoClose`** — The `HTMLAutoClose` variable is omitted. The `AutoClose` field exists for signature compatibility but is a no-op.
+* **`Escape` function** — The deprecated `Escape` function is omitted. Use `EscapeText` instead.
+* **Namespace strictness** — Undeclared namespace prefixes are rejected. `encoding/xml` silently accepts them and places the raw prefix string in `Name.Space`.
+* **Attribute ordering** — `xmlns` namespace declarations are emitted before regular attributes. Source-document attribute order is not preserved because the SAX parser delivers namespaces and attributes as separate slices.
+* **`InputOffset`** — Returns an approximate byte offset estimated from the serialized size of each token, not an exact count of bytes consumed. It may diverge for namespace-prefixed names, entity references, CDATA sections, and self-closing elements.
+* **`InputPos`** — Based on a SAX locator snapshot taken at event time. Column numbers may differ from `encoding/xml`. During prolog token emission the reported position is (1, 1).
+* **InnerXML self-closing** — When unmarshaling a field tagged with `,innerxml`, empty elements such as `<T1></T1>` are serialized as self-closed `<T1/>`. The helium DOM does not preserve the original serialization form of empty elements.
+
 > **Note:** This feature is under active development. Some edge cases may not yet match `encoding/xml` behavior exactly.
 
 # Contributing
