@@ -112,7 +112,10 @@ func stripXMLDecl(data []byte) ([]byte, bool) {
 // encodings when no CharsetReader is available).
 func validateXMLDeclFields(doc *helium.Document) error {
 	if ver := doc.Version(); ver != "" && ver != "1.0" {
-		return fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", ver)
+		return &stdxml.SyntaxError{
+			Msg:  fmt.Sprintf("unsupported version %q; only version 1.0 is supported", ver),
+			Line: 1,
+		}
 	}
 	if enc := doc.Encoding(); enc != "" && enc != "utf8" && !strings.EqualFold(enc, "utf-8") {
 		return fmt.Errorf("xml: encoding %q declared but Decoder.CharsetReader is nil", enc)
