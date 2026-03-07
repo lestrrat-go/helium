@@ -523,6 +523,36 @@ cat xmlfile | heliumlint
 The `shim` package provides a drop-in replacement for Go's standard `encoding/xml` package, backed by helium's parser. It exposes the same types and API surface — `Marshal`, `Unmarshal`, `NewEncoder`, `NewDecoder`, `Token`, `EncodeToken`, and all the familiar struct tags (`xml:"name,attr"`, `,chardata`, `,innerxml`, `,omitempty`, etc.).
 
 <!-- INCLUDE(examples/shim_marshal_example_test.go) -->
+```go
+package examples_test
+
+import (
+  "fmt"
+
+  "github.com/lestrrat-go/helium/shim"
+)
+
+func Example_shim_marshal() {
+  // shim.Marshal works like encoding/xml.Marshal: it serializes a Go
+  // struct into XML bytes using struct tags.
+  type Person struct {
+    XMLName shim.Name `xml:"person"`
+    Name    string    `xml:"name"`
+    Age     int       `xml:"age"`
+  }
+
+  p := Person{Name: "Alice", Age: 30}
+  data, err := shim.Marshal(p)
+  if err != nil {
+    fmt.Printf("error: %s\n", err)
+    return
+  }
+  fmt.Println(string(data))
+  // Output:
+  // <person><name>Alice</name><age>30</age></person>
+}
+```
+source: [examples/shim_marshal_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/shim_marshal_example_test.go)
 <!-- END INCLUDE -->
 
 To migrate existing code, change the import path from `"encoding/xml"` to `"github.com/lestrrat-go/helium/shim"`. Type aliases (`Name`, `Attr`, `StartElement`, `CharData`, etc.) ensure that existing type references continue to work without modification.
