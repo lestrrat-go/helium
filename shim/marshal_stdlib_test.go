@@ -1669,9 +1669,7 @@ var marshalTestsStdlib = []struct {
 
 func TestMarshalStdlib(t *testing.T) {
 	// Skip subtests with known shim behavioral differences.
-	marshalSkipSet := map[int]string{
-		61: "shim: inherited namespace not re-emitted on leaf element",
-	}
+	marshalSkipSet := map[int]string{}
 
 	for idx, test := range marshalTestsStdlib {
 		if test.UnmarshalOnly {
