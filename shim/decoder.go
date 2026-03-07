@@ -59,6 +59,7 @@ type Decoder struct {
 	prologTokens   []Token  // pre-scanned prolog tokens (Directive, ProcInst, Comment, CharData)
 	prologIdx      int      // next prolog token to emit
 	prologOnly     bool     // true if entire input is prolog (no root element)
+	prologErr      error    // syntax error detected during prolog scanning
 	combinedReader  io.Reader // buffered reader for lazy SAX startup
 	saxStarted      bool      // true once SAX goroutine has been started
 	detectedCharset string    // non-UTF-8 encoding from XML declaration
@@ -69,10 +70,7 @@ func newDecoderFromReader(r io.Reader) (*Decoder, error) {
 	// CharData tokens. The SAX parser does not emit these for the prolog,
 	// so we handle them ourselves. The combined reader replays the full
 	// input (including the prolog) for the SAX parser.
-	prologTokens, combined, prologOnly, err := scanProlog(r)
-	if err != nil {
-		return nil, err
-	}
+	prologTokens, combined, prologOnly, prologErr := scanProlog(r)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &Decoder{
@@ -82,9 +80,11 @@ func newDecoderFromReader(r io.Reader) (*Decoder, error) {
 		line:           1,
 		column:         1,
 		prologTokens:   prologTokens,
-		prologOnly:     prologOnly,
+		prologOnly:     prologOnly || prologErr != nil,
+		prologErr:      prologErr,
 		combinedReader: combined,
 	}
+	// Error is always nil; kept in signature for compatibility.
 	return d, nil
 }
 
@@ -400,12 +400,23 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 
 		// Check encoding attribute in XML declaration
 		if pi, ok := tok.(ProcInst); ok && pi.Target == "xml" {
+			if err := d.checkProcInstVersion(string(pi.Inst)); err != nil {
+				return nil, err
+			}
 			if err := d.checkProcInstEncoding(string(pi.Inst)); err != nil {
 				return nil, err
 			}
 		}
 
 		return tok, nil
+	}
+
+	// If the prolog scanner detected a syntax error, return it after
+	// draining any prolog tokens that were successfully parsed.
+	if d.prologErr != nil {
+		err := d.prologErr
+		d.prologErr = nil
+		return nil, err
 	}
 
 	// Lazy-start the SAX emitter on first non-prolog read. This allows
@@ -489,6 +500,19 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 	d.lastToken = tok
 	d.advancePosition(tok)
 	return tok, nil
+}
+
+// checkProcInstVersion validates the version attribute in an XML declaration.
+// Only version 1.0 is supported.
+func (d *Decoder) checkProcInstVersion(data string) error {
+	ver := procInstValue(data, "version")
+	if ver == "" || ver == "1.0" {
+		return nil
+	}
+	return &stdxml.SyntaxError{
+		Msg:  fmt.Sprintf("unsupported version %q; only version 1.0 is supported", ver),
+		Line: d.line,
+	}
 }
 
 // checkProcInstEncoding validates the encoding attribute in an XML declaration.

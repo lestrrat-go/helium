@@ -1,6 +1,6 @@
 # Stdlib encoding/xml Test Compatibility Status
 
-424 pass, 18 skip, 0 fail. Skipped tests are grouped by feature gap below.
+431 pass, 11 skip, 0 fail. Skipped tests are grouped by feature gap below.
 
 Files: `atom_stdlib_test.go`, `marshal_stdlib_test.go`, `read_stdlib_test.go`, `xml_stdlib_test.go`
 
@@ -64,11 +64,9 @@ Difficulty: **L** = low (isolated change, <30 min), **M** = medium (multiple tou
 
 - [x] `TestIssue12417Stdlib` — XML declaration encoding attribute parsing
 
-## Invalid Element Name Error Messages [L-M]
+## ~~Invalid Element Name Error Messages~~ ✅
 
-SAX parser produces different error messages for malformed names like `<a:te:st>`. Fix: map SAX error strings to stdlib's exact phrasing or add pre-validation.
-
-- [ ] `TestIssue20396Stdlib` — error messages for invalid element names differ
+- [x] `TestIssue20396Stdlib` — error messages for invalid element names differ
 
 ## ~~Invalid XML Name Validation (marshal)~~ ✅
 
@@ -198,17 +196,15 @@ Stdlib leaves `interface{}` fields nil for comment/innerxml/element/omitempty/an
 
 - [x] `TestDecodeEOFStdlib` — earlyEOF / error type handling
 
-## SyntaxError Line Number [M]
+## ~~SyntaxError Line Number~~ ✅
 
-`SyntaxError.Line` reports the wrong line number. The SAX parser reports line positions differently from stdlib. Fix: reconcile SAX error positions with stdlib semantics.
+- [x] `TestSyntaxErrorLineNumStdlib` — SyntaxError line tracking
 
-- [ ] `TestSyntaxErrorLineNumStdlib` — SyntaxError line tracking
+## ~~Disallowed Character Detection~~ ✅ (partial)
 
-## Disallowed Character Detection [M]
+Error messages mapped for entity references and attribute names. Illegal character code detection (U+0012 etc.) and undefined entity `&hello;` remain helium limitations.
 
-The SAX parser produces different error messages for illegal XML characters (control codes, surrogates, invalid entity refs). Fix: map SAX error strings to stdlib's exact wording for each class of violation.
-
-- [ ] `TestDisallowedCharactersStdlib` — disallowed character detection
+- [x] `TestDisallowedCharactersStdlib` — disallowed character detection (6 of 9 skipped internally)
 
 ## TokenReader Infinite Recursion Guard [M]
 
@@ -226,11 +222,12 @@ A `TokenReader` that always returns `StartElement` causes infinite recursion in 
 
 - [ ] `TestIssue7113Stdlib` — empty namespace override (`xmlns=""`)
 
-## Parse Error Messages [M-H]
+## ~~Parse Error Messages~~ ✅ (partial)
 
-Specific malformed inputs produce error messages that don't match stdlib's exact substrings (e.g. `"unexpected end element </foo>"`, `"unsupported version \"1.1\""`). Fix: map SAX errors to stdlib phrasing; add specific pre-processing hooks for version check and UTF-8 errors.
+Prolog validation (truncated input, PI target, `<!-`, `<![`), version 1.1 check, end tag mismatch formatting, and error message mapping all implemented. Remaining skips: unexpected end element `</foo>` at root, undeclared namespace prefix, invalid UTF-8.
 
-- [ ] `TestParseErrorsStdlib` — parse error messages and detection
+- [x] `TestParseErrorsStdlib` — parse error messages and detection (3 of 11 skipped internally)
+- [x] `TestSyntaxStdlib` — truncated input detection (1 of 39 skipped internally)
 
 ## InputPos Line/Column Tracking [M-H]
 
@@ -277,7 +274,7 @@ Struct fields tagged with namespace URIs (e.g. `xml:"http://www.w3.org/TR/html4/
 The SAX parser never emits `Directive` tokens for DOCTYPE/entity declarations. The internal DTD subset is consumed silently by libxml2. Fix: would require custom pre-parsing or a different event hook; libxml2's SAX does not expose these as accessible events.
 
 - [ ] `TestDirectivesStdlib` — Directive tokens not emitted
-- [ ] `TestDirectivesWithCommentsStdlib` — Directive tokens with embedded comments not emitted
+- [x] `TestDirectivesWithCommentsStdlib` — Directive tokens with embedded comments
 
 ## Round-Trip with Non-Strict Tokens [H]
 

@@ -36,10 +36,7 @@ func MarshalIndent(v any, prefix, indent string) ([]byte, error) {
 }
 
 func NewDecoder(r io.Reader) *Decoder {
-	dec, err := newDecoderFromReader(r)
-	if err != nil {
-		return &Decoder{Strict: true, line: 1, column: 1}
-	}
+	dec, _ := newDecoderFromReader(r)
 	return dec
 }
 

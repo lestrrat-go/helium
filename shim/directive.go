@@ -2,6 +2,7 @@ package shim
 
 import (
 	"bytes"
+	stdxml "encoding/xml"
 	"io"
 )
 
@@ -19,10 +20,13 @@ import (
 func scanProlog(r io.Reader) ([]Token, io.Reader, bool, error) {
 	s := &prologScanner{r: r}
 	tokens, err := s.scan()
-	prologOnly := (err == io.EOF)
+
 	if err != nil && err != io.EOF {
+		// Syntax error from prolog validation
 		return nil, nil, false, err
 	}
+
+	prologOnly := (err == io.EOF)
 
 	// If the prolog contained an XML declaration, blank it out in the
 	// replay buffer so the SAX parser doesn't reject it as a misplaced
@@ -69,6 +73,8 @@ func (s *prologScanner) unreadByte(b byte) {
 	s.peek = append(s.peek, b)
 }
 
+var errUnexpectedEOF = &stdxml.SyntaxError{Msg: "unexpected EOF"}
+
 func (s *prologScanner) scan() ([]Token, error) {
 	var tokens []Token
 	var wsAccum bytes.Buffer
@@ -84,7 +90,7 @@ func (s *prologScanner) scan() ([]Token, error) {
 		b, err := s.readByte()
 		if err != nil {
 			flushWS()
-			return tokens, err
+			return tokens, err // clean EOF at top level
 		}
 
 		if isWhitespace(b) {
@@ -103,9 +109,9 @@ func (s *prologScanner) scan() ([]Token, error) {
 		// We have '<'. Peek at next byte.
 		b2, err := s.readByte()
 		if err != nil {
-			// Incomplete — flush what we have
+			// Incomplete '<' at EOF
 			flushWS()
-			return tokens, err
+			return tokens, errUnexpectedEOF
 		}
 
 		switch {
@@ -117,9 +123,19 @@ func (s *prologScanner) scan() ([]Token, error) {
 			piStart := s.buf.Len() - 2
 			tok, err := s.scanPI()
 			if err != nil {
-				return tokens, err
+				return tokens, errUnexpectedEOF
 			}
-			if pi, ok := tok.(ProcInst); ok && pi.Target == "xml" {
+			pi := tok.(ProcInst)
+
+			// Validate PI target
+			if pi.Target == "" {
+				return tokens, &stdxml.SyntaxError{Msg: "expected target name after <?"}
+			}
+			if !isXMLName(pi.Target) {
+				return tokens, &stdxml.SyntaxError{Msg: "expected target name after <?"}
+			}
+
+			if pi.Target == "xml" {
 				s.xmlDeclStart = piStart
 				s.xmlDeclEnd = s.buf.Len()
 			}
@@ -130,48 +146,39 @@ func (s *prologScanner) scan() ([]Token, error) {
 			b3, err := s.readByte()
 			if err != nil {
 				flushWS()
-				return tokens, err
+				return tokens, errUnexpectedEOF
 			}
 
 			if b3 == '-' {
 				b4, err := s.readByte()
 				if err != nil {
 					flushWS()
-					return tokens, err
+					return tokens, errUnexpectedEOF
 				}
 				if b4 == '-' {
 					// Comment <!--...-->
 					flushWS()
 					tok, err := s.scanComment()
 					if err != nil {
-						return tokens, err
+						return tokens, errUnexpectedEOF
 					}
 					tokens = append(tokens, tok)
 				} else {
-					// <!-X — treat as directive start
-					s.unreadByte(b4)
-					s.unreadByte(b3)
-					flushWS()
-					tok, err := s.scanDirective()
-					if err != nil {
-						return tokens, err
+					// <!-X where X != '-' → invalid
+					return tokens, &stdxml.SyntaxError{
+						Msg: "invalid sequence <!- not part of <!--",
 					}
-					tokens = append(tokens, tok)
 				}
 			} else if b3 == '[' {
-				// <![CDATA[ — shouldn't be in prolog. Put back and let SAX handle.
-				s.unreadByte(b3)
-				s.unreadByte(b2)
-				s.unreadByte(b)
-				flushWS()
-				return tokens, nil
+				// <![ in prolog is invalid
+				return tokens, &stdxml.SyntaxError{Msg: "invalid <![ sequence"}
 			} else {
 				// Directive: <!DOCTYPE ...>, etc. Put b3 back so scanDirective sees it.
 				s.unreadByte(b3)
 				flushWS()
 				tok, err := s.scanDirective()
 				if err != nil {
-					return tokens, err
+					return tokens, errUnexpectedEOF
 				}
 				tokens = append(tokens, tok)
 			}

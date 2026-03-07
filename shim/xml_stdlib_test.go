@@ -494,14 +494,16 @@ func TestTokenStdlib(t *testing.T) {
 }
 
 func TestSyntaxStdlib(t *testing.T) {
-	t.Skip("shim: not all stdlib syntax errors are detected by SAX parser")
 	for i := range xmlInputStdlib {
+		if xmlInputStdlib[i] == "<t>&nbspc;</t>" {
+			continue // helium silently drops undefined entity references
+		}
 		d := NewDecoder(strings.NewReader(xmlInputStdlib[i]))
 		var err error
 		for _, err = d.Token(); err == nil; _, err = d.Token() {
 		}
 		if _, ok := err.(*SyntaxError); !ok {
-			t.Fatalf(`xmlInput "%s": expected SyntaxError not received`, xmlInputStdlib[i])
+			t.Fatalf(`xmlInput[%d] "%s": expected SyntaxError, got %T: %v`, i, xmlInputStdlib[i], err, err)
 		}
 	}
 }
@@ -756,7 +758,6 @@ func TestCopyTokenCommentStdlib(t *testing.T) {
 }
 
 func TestSyntaxErrorLineNumStdlib(t *testing.T) {
-	t.Skip("shim: SyntaxError line tracking differs from stdlib")
 	testInput := "<P>Foo<P>\n\n<P>Bar</>\n"
 	d := NewDecoder(strings.NewReader(testInput))
 	var err error
@@ -820,8 +821,15 @@ var characterTestsStdlib = []struct {
 }
 
 func TestDisallowedCharactersStdlib(t *testing.T) {
-	t.Skip("shim: disallowed character detection differs from stdlib")
+	// Cases that helium cannot match:
+	// 0-3: helium reports different errors for illegal char codes
+	// 7: helium strips bad char from entity context
+	// 8: helium silently drops undefined entity references
+	skip := map[int]bool{0: true, 1: true, 2: true, 3: true, 7: true, 8: true}
 	for i, tt := range characterTestsStdlib {
+		if skip[i] {
+			continue
+		}
 		d := NewDecoder(strings.NewReader(tt.in))
 		var err error
 
@@ -1108,7 +1116,6 @@ func TestIssue7113Stdlib(t *testing.T) {
 }
 
 func TestIssue20396Stdlib(t *testing.T) {
-	t.Skip("shim: error messages for invalid element names differ from stdlib")
 
 	var attrError = UnmarshalError("XML syntax error on line 1: expected attribute name in element")
 
@@ -1321,33 +1328,36 @@ func TestRoundTripStdlib(t *testing.T) {
 }
 
 func TestParseErrorsStdlib(t *testing.T) {
-	t.Skip("shim: parse error messages and detection differ from stdlib")
 	withDefaultHeader := func(s string) string {
 		return `<?xml version="1.0" encoding="UTF-8"?>` + s
 	}
 	tests := []struct {
-		src string
-		err string
+		src  string
+		err  string
+		skip string // reason to skip, empty means run
 	}{
-		{withDefaultHeader(`</foo>`), `unexpected end element </foo>`},
-		{withDefaultHeader(`<x:foo></y:foo>`), `element <foo> in space x closed by </foo> in space y`},
-		{withDefaultHeader(`<? not ok ?>`), `expected target name after <?`},
-		{withDefaultHeader(`<!- not ok -->`), `invalid sequence <!- not part of <!--`},
-		{withDefaultHeader(`<!-? not ok -->`), `invalid sequence <!- not part of <!--`},
-		{withDefaultHeader(`<![not ok]>`), `invalid <![ sequence`},
+		{withDefaultHeader(`</foo>`), `unexpected end element </foo>`, "helium treats </foo> as invalid name start char"},
+		{withDefaultHeader(`<x:foo></y:foo>`), `element <foo> in space x closed by </foo> in space y`, "helium rejects undeclared namespace prefix immediately"},
+		{withDefaultHeader(`<? not ok ?>`), `expected target name after <?`, ""},
+		{withDefaultHeader(`<!- not ok -->`), `invalid sequence <!- not part of <!--`, ""},
+		{withDefaultHeader(`<!-? not ok -->`), `invalid sequence <!- not part of <!--`, ""},
+		{withDefaultHeader(`<![not ok]>`), `invalid <![ sequence`, ""},
 		{withDefaultHeader(`<zzz:foo xmlns:zzz="http://example.com"><bar>baz</bar></foo>`),
-			`element <foo> in space zzz closed by </foo> in space ""`},
-		{withDefaultHeader("\xf1"), `invalid UTF-8`},
+			`element <foo> in space zzz closed by </foo> in space ""`, ""},
+		{withDefaultHeader("\xf1"), `invalid UTF-8`, "helium reports different error for invalid UTF-8"},
 
 		// Header-related errors.
-		{`<?xml version="1.1" encoding="UTF-8"?>`, `unsupported version "1.1"; only version 1.0 is supported`},
+		{`<?xml version="1.1" encoding="UTF-8"?>`, `unsupported version "1.1"; only version 1.0 is supported`, ""},
 
 		// Cases below are for "no errors".
-		{withDefaultHeader(`<?ok?>`), ``},
-		{withDefaultHeader(`<?ok version="ok"?>`), ``},
+		{withDefaultHeader(`<?ok?>`), ``, ""},
+		{withDefaultHeader(`<?ok version="ok"?>`), ``, ""},
 	}
 
 	for _, test := range tests {
+		if test.skip != "" {
+			continue
+		}
 		d := NewDecoder(strings.NewReader(test.src))
 		var err error
 		for {
