@@ -39,6 +39,7 @@ func TestParseOptionBitPositions(t *testing.T) {
 	require.Equal(t, helium.ParseOption(33554432), helium.ParseNoSysCatalog)
 	require.Equal(t, helium.ParseOption(67108864), helium.ParseCatalogPI)
 	require.Equal(t, helium.ParseOption(134217728), helium.ParseSkipIDs)
+	require.Equal(t, helium.ParseOption(268435456), helium.ParseLenientXMLDecl)
 }
 
 func TestParseOptionFlagsAreUnique(t *testing.T) {
@@ -70,6 +71,7 @@ func TestParseOptionFlagsAreUnique(t *testing.T) {
 		helium.ParseNoSysCatalog,
 		helium.ParseCatalogPI,
 		helium.ParseSkipIDs,
+		helium.ParseLenientXMLDecl,
 	})
 }
 

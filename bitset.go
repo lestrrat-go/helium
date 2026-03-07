@@ -47,6 +47,17 @@ const (
 	ParseNoSysCatalog   ParseOption = 1 << (iota + 3) /* no-op: helium has no global system catalog */
 	ParseCatalogPI      ParseOption = 1 << (iota + 3) /* no-op: catalog PIs not yet supported */
 	ParseSkipIDs        ParseOption = 1 << (iota + 3) /* skip ID attribute interning */
+
+	// Helium extensions — not present in libxml2.
+	// These flags occupy bits above the libxml2 range.
+
+	// ParseLenientXMLDecl relaxes XML declaration parsing so that the
+	// version, encoding, and standalone pseudo-attributes may appear in
+	// any order. Per the XML spec (§2.8) the order MUST be
+	// version → encoding → standalone, but some real-world producers
+	// emit them differently. Use this only when you need to consume
+	// non-conformant documents.
+	ParseLenientXMLDecl ParseOption = 1 << (iota + 3)
 )
 
 func (p *ParseOption) Set(n ParseOption) {

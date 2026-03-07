@@ -111,9 +111,11 @@ type parserCtx struct {
 	maxAmpl     int   // max amplification factor (default 5, 0 = disabled via ParseHuge)
 	// nbentities int
 	inputTab   inputStack
-	stopped    bool
-	disableSAX bool  // suppress SAX callbacks after fatal error in recover mode
-	recoverErr error // first fatal error saved during recovery
+	stopped      bool
+	disableSAX   bool  // suppress SAX callbacks after fatal error in recover mode
+	recoverErr   error // first fatal error saved during recovery
+	elemDepth    int   // current element nesting depth
+	maxElemDepth int   // max allowed element nesting depth (0 = unlimited)
 }
 
 type SubstitutionType int
@@ -387,6 +389,7 @@ func (ctx *parserCtx) init(p *Parser, in io.Reader) error {
 		if ctx.options.IsSet(ParseSkipIDs) {
 			ctx.loadsubset.Set(SkipIDs)
 		}
+		ctx.maxElemDepth = p.maxDepth
 	}
 	return nil
 }
@@ -972,9 +975,21 @@ func (ctx *parserCtx) skipToRecoverPoint() {
  * [14] CharData ::= [^<&]* - ([^<&]* ']]>' [^<&]*)
  */
 func (ctx *parserCtx) parseCharData(cdata bool) error {
+	if cdata {
+		_, err := ctx.parseCDataContent()
+		return err
+	}
+	return ctx.parseCharDataContent()
+}
+
+// parseCDataContent reads the text inside a CDATA section (up to but not
+// including the closing ]]>) and returns it. The caller is responsible for
+// consuming ]]> and firing the SAX callback afterward, matching libxml2's
+// behavior of reporting the position after the closing delimiter.
+func (ctx *parserCtx) parseCDataContent() (string, error) {
 	if pdebug.Enabled {
-		g := pdebug.IPrintf("START parseCharData")
-		defer g.IRelease("END parseCharData")
+		g := pdebug.IPrintf("START parseCDataContent")
+		defer g.IRelease("END parseCDataContent")
 	}
 
 	buf := bufferPool.Get().(*bytes.Buffer)
@@ -987,17 +1002,45 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 
 	i := 0
 	for c := cur.PeekN(i + 1); c != 0x0; c = cur.PeekN(i + 1) {
-		if !cdata {
-			if c == '<' || c == '&' || !isChar(c) {
-				break
-			}
+		if c == ']' && cur.PeekN(i+2) == ']' && cur.PeekN(i+3) == '>' {
+			break
+		}
+		_, _ = buf.WriteRune(c)
+		i++
+	}
+
+	if err := cur.Advance(i); err != nil {
+		return "", err
+	}
+	str := buf.String()
+
+	// XML §2.11 End-of-Line Handling: normalize \r\n to \n, then lone \r to \n.
+	str = strings.ReplaceAll(str, "\r\n", "\n")
+	str = strings.ReplaceAll(str, "\r", "\n")
+	return str, nil
+}
+
+func (ctx *parserCtx) parseCharDataContent() error {
+	if pdebug.Enabled {
+		g := pdebug.IPrintf("START parseCharDataContent")
+		defer g.IRelease("END parseCharDataContent")
+	}
+
+	buf := bufferPool.Get().(*bytes.Buffer)
+	defer releaseBuffer(buf)
+
+	cur := ctx.getCursor()
+	if cur == nil {
+		panic("did not get rune cursor")
+	}
+
+	i := 0
+	for c := cur.PeekN(i + 1); c != 0x0; c = cur.PeekN(i + 1) {
+		if c == '<' || c == '&' || !isChar(c) {
+			break
 		}
 
 		if c == ']' && cur.PeekN(i+2) == ']' && cur.PeekN(i+3) == '>' {
-			if cdata {
-				break
-			}
-
 			return ctx.error(ErrMisplacedCDATAEnd)
 		}
 
@@ -1005,7 +1048,7 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 		i++
 	}
 
-	if i <= 0 && !cdata {
+	if i <= 0 {
 		pdebug.Dump(cur)
 		return errors.New("invalid char data")
 	}
@@ -1018,23 +1061,7 @@ func (ctx *parserCtx) parseCharData(cdata bool) error {
 	// XML §2.11 End-of-Line Handling: normalize \r\n to \n, then lone \r to \n.
 	str = strings.ReplaceAll(str, "\r\n", "\n")
 	str = strings.ReplaceAll(str, "\r", "\n")
-	if ctx.instate == psCDATA {
-		if s := ctx.sax; s != nil && !ctx.disableSAX {
-			if ctx.options.IsSet(ParseNoCDATA) {
-				// ParseNoCDATA: deliver CDATA content as Characters instead of CDataBlock
-				if err := ctx.deliverCharacters(s.Characters, []byte(str)); err != nil {
-					return err
-				}
-			} else {
-				switch err := s.CDataBlock(ctx.userData, []byte(str)); err {
-				case nil, sax.ErrHandlerUnspecified:
-					// no op
-				default:
-					return ctx.error(err)
-				}
-			}
-		}
-	} else if ctx.areBlanks(str, false) {
+	if ctx.areBlanks(str, false) {
 		if s := ctx.sax; s != nil && !ctx.disableSAX {
 			if err := ctx.deliverCharacters(s.IgnorableWhitespace, []byte(str)); err != nil {
 				return err
@@ -1057,6 +1084,13 @@ func (ctx *parserCtx) parseElement() error {
 		i := ctx.elemidx
 		g := pdebug.IPrintf("START parseElement (%d)", i)
 		defer g.IRelease("END parseElement (%d)", i)
+	}
+
+	ctx.elemDepth++
+	defer func() { ctx.elemDepth-- }()
+
+	if ctx.maxElemDepth > 0 && ctx.elemDepth > ctx.maxElemDepth {
+		return ctx.error(fmt.Errorf("xml: exceeded max depth"))
 	}
 
 	// parseStartTag only parses up to the attributes.
@@ -1193,13 +1227,20 @@ func (ctx *parserCtx) parseStartTag() error {
 				return ctx.namespaceError(fmt.Errorf("xmlns:%s: URI %s is not absolute", attname, attvalue))
 			}
 
-			existingURI = ctx.nsTab.Lookup(attname)
+			// Check only the current element's bindings (top nbNs entries)
+			// to detect true duplicates. A prefix bound in an ancestor
+			// element is valid shadowing, not a duplicate.
+			existingURI = ctx.nsTab.LookupInTopN(attname, nbNs)
 			if existingURI != "" {
-				// ParseNsClean: skip redundant namespace declarations
 				if ctx.options.IsSet(ParseNsClean) && existingURI == attvalue {
 					goto SkipNS
 				}
 				return ctx.error(errors.New("duplicate attribute is not allowed"))
+			}
+			// ParseNsClean: skip if an ancestor already binds this prefix
+			// to the same URI (redundant redeclaration).
+			if ctx.options.IsSet(ParseNsClean) && ctx.nsTab.Lookup(attname) == attvalue {
+				goto SkipNS
 			}
 			ctx.pushNS(attname, attvalue)
 			nbNs++
@@ -1695,6 +1736,10 @@ func (ctx *parserCtx) parseXMLDecl() error {
 		return errors.New("blank needed after '<?xml'")
 	}
 
+	if ctx.options.IsSet(ParseLenientXMLDecl) {
+		return ctx.parseXMLDeclLenient()
+	}
+
 	v, err := ctx.parseVersionInfo()
 	if err != nil {
 		return ctx.error(err)
@@ -1745,6 +1790,41 @@ func (ctx *parserCtx) parseXMLDecl() error {
 	return ctx.error(errors.New("XML declaration not closed"))
 }
 
+// parseXMLDeclLenient parses the XML declaration pseudo-attributes in any order.
+// Called when parseopts.LenientXMLDecl is set.
+func (ctx *parserCtx) parseXMLDeclLenient() error {
+	cur := ctx.getByteCursor()
+
+	for {
+		ctx.skipBlankBytes(cur)
+		if cur.Peek() == '?' && cur.PeekN(2) == '>' {
+			if err := cur.Advance(2); err != nil {
+				return err
+			}
+			return nil
+		}
+
+		if v, err := ctx.parseVersionInfo(); err == nil {
+			ctx.version = v
+			continue
+		}
+
+		if v, err := ctx.parseEncodingDecl(); err == nil {
+			if !ctx.options.IsSet(ParseIgnoreEnc) {
+				ctx.encoding = v
+			}
+			continue
+		}
+
+		if vb, err := ctx.parseStandaloneDecl(); err == nil {
+			ctx.standalone = vb
+			continue
+		}
+
+		return ctx.error(errors.New("XML declaration not closed"))
+	}
+}
+
 // parseXMLDeclFromCursor parses the XML declaration from a rune cursor.
 // This is used for UTF-16 documents where the encoding has already been
 // switched before parsing the XML declaration.
@@ -1760,6 +1840,10 @@ func (ctx *parserCtx) parseXMLDeclFromCursor() error {
 
 	if !ctx.skipBlanks() {
 		return errors.New("blank needed after '<?xml'")
+	}
+
+	if ctx.options.IsSet(ParseLenientXMLDecl) {
+		return ctx.parseXMLDeclFromCursorLenient()
 	}
 
 	// version
@@ -1824,6 +1908,47 @@ func (ctx *parserCtx) parseXMLDeclFromCursor() error {
 		}
 	}
 	return ctx.error(errors.New("XML declaration not closed"))
+}
+
+// parseXMLDeclFromCursorLenient parses the XML declaration pseudo-attributes
+// in any order using the rune cursor. Called when parseopts.LenientXMLDecl is set.
+func (ctx *parserCtx) parseXMLDeclFromCursorLenient() error {
+	cur := ctx.getCursor()
+
+	for {
+		ctx.skipBlanks()
+		if cur.Peek() == '?' {
+			if err := cur.Advance(1); err != nil {
+				return err
+			}
+			if cur.Peek() == '>' {
+				if err := cur.Advance(1); err != nil {
+					return err
+				}
+				return nil
+			}
+			return ctx.error(errors.New("XML declaration not closed"))
+		}
+
+		if v, err := ctx.parseVersionInfoFromCursor(); err == nil {
+			ctx.version = v
+			continue
+		}
+
+		if ev, err := ctx.parseEncodingDeclFromCursor(); err == nil {
+			if !ctx.options.IsSet(ParseIgnoreEnc) {
+				ctx.encoding = ev
+			}
+			continue
+		}
+
+		if sv, err := ctx.parseStandaloneDeclFromCursor(); err == nil {
+			ctx.standalone = sv
+			continue
+		}
+
+		return ctx.error(errors.New("XML declaration not closed"))
+	}
 }
 
 func (ctx *parserCtx) parseVersionInfoFromCursor() (string, error) {
@@ -2709,12 +2834,31 @@ func (ctx *parserCtx) parseCDSect() error {
 	ctx.instate = psCDATA
 	defer func() { ctx.instate = psContent }()
 
-	if err := ctx.parseCharData(true); err != nil {
+	str, err := ctx.parseCDataContent()
+	if err != nil {
 		return ctx.error(err)
 	}
 
+	// Consume ]]> BEFORE firing the SAX callback, matching libxml2's
+	// behavior so that the document locator reports the position after
+	// the closing delimiter.
 	if !cur.ConsumeString("]]>") {
 		return ctx.error(ErrCDATANotFinished)
+	}
+
+	if s := ctx.sax; s != nil && !ctx.disableSAX {
+		if ctx.options.IsSet(ParseNoCDATA) {
+			if err := ctx.deliverCharacters(s.Characters, []byte(str)); err != nil {
+				return err
+			}
+		} else {
+			switch err := s.CDataBlock(ctx.userData, []byte(str)); err {
+			case nil, sax.ErrHandlerUnspecified:
+				// no op
+			default:
+				return ctx.error(err)
+			}
+		}
 	}
 	return nil
 }
@@ -4224,7 +4368,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 			}
 		}
 		if curent != nil {
-			if ent, ok := curent.(*Entity); ok && ent.orig == "" {
+			if ent, ok := curent.(*Entity); ok && ent != nil && ent.orig == "" {
 				ent.SetOrig(literal)
 			}
 		}
