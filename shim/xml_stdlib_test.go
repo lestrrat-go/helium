@@ -276,7 +276,7 @@ var xmlInputStdlib = []string{
 }
 
 func TestRawTokenStdlib(t *testing.T) {
-	t.Skip("shim: blocked on Directive token emission (item #9) and InputOffset alignment")
+	t.Skip("shim: blocked on helium core issues (CharData splitting per entity ref, namespace prefix redeclaration rejection, InputOffset alignment)")
 	d := NewDecoder(strings.NewReader(testInputStdlib))
 	d.Entity = testEntityStdlib
 	testRawTokenStdlib(t, d, testInputStdlib, rawTokensStdlib)
@@ -479,7 +479,7 @@ func TestNestedDirectivesStdlib(t *testing.T) {
 }
 
 func TestTokenStdlib(t *testing.T) {
-	t.Skip("shim: blocked on Directive token emission (item #9) and InputOffset alignment")
+	t.Skip("shim: blocked on helium core issues (CharData splitting per entity ref, namespace prefix redeclaration rejection)")
 	d := NewDecoder(strings.NewReader(testInputStdlib))
 	d.Entity = testEntityStdlib
 
@@ -1255,7 +1255,6 @@ func (FailureStdlib) UnmarshalXML(*stdxml.Decoder, StartElement) error {
 }
 
 func TestTokenUnmarshalerStdlib(t *testing.T) {
-	t.Skip("shim: tokReader always returning StartElement causes infinite recursion in populateElement")
 	defer func() {
 		if r := recover(); r != nil {
 			t.Error("Unexpected panic using custom token unmarshaler")
