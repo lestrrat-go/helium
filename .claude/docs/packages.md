@@ -6,10 +6,10 @@ Go implementation of libxml2. Module: `github.com/lestrrat-go/helium`
 
 XML parsing, DOM tree, serialization. Entry point for all XML processing.
 
-- **Parse(ctx, []byte) → *Document** / **ParseReader(ctx, io.Reader) → *Document** — main parse entry points
+- **Parse(ctx, []byte) → (*Document, error)** / **ParseReader(ctx, io.Reader) → (*Document, error)** — main parse entry points
 - **NewParser()** — configurable parser with SetOption(), SetSAXHandler(), SetCatalog(), SetBaseURI(), SetMaxDepth()
 - **NewWriter(opts) → *Writer** — XML serializer; Writer.WriteDoc(io.Writer, *Document), Writer.WriteNode(io.Writer, Node)
-- **ParseInNodeContext(ctx, Node, []byte) → Node** — parse fragment in existing node context
+- **ParseInNodeContext(ctx, Node, []byte) → (Node, error)** — parse fragment in existing node context
 - Key types: `Document`, `Element`, `Attribute`, `Namespace`, `DTD`, `Entity`, `Text`, `CDATASection`, `Comment`, `PI`
 - `Node` interface — common for all node types; use ElementType enum to distinguish
 - `ParseOption` bitmask — ParseNoEnt, ParseDTDLoad, ParseDTDAttr, ParseDTDValid, ParseNoBlanks, ParseXInclude, ParseNoXXE, ParseRecover, ParseLenientXMLDecl, etc.

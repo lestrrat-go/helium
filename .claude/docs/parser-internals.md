@@ -4,10 +4,10 @@
 
 - **`Parse(ctx, []byte)`** / **`ParseReader(ctx, io.Reader)`** — main entry points
 - **`NewParser()`** — configurable parser; set options, SAX handler, catalog, baseURI, maxDepth
-- **`NewPushParser(ctx)`** — background push parser (buffers then parses)
+- **`p := helium.NewParser(); pp := p.NewPushParser(ctx)`** — background push parser (parses incrementally as data arrives)
 - **`ParseInNodeContext(ctx, node, []byte)`** — parse fragment in element context
 
-Key files: `parser.go` (API), `parserctx.go` (state machine), `treebuilder.go` (SAX→DOM)
+Key files: `parser.go` (API), `parserctx.go` (state machine), `tree.go` (SAX→DOM)
 
 ## Parse Pipeline
 
@@ -153,9 +153,9 @@ pushStream:
   Close()         — mark closed, signal waiters
 ```
 
-Usage: `pp := parser.NewPushParser(ctx)` → `pp.Push(chunk)` → `doc, err := pp.Close()`
+Usage: `p := helium.NewParser(); pp := p.NewPushParser(ctx)` → `pp.Push(chunk)` → `doc, err := pp.Close()`
 
-Parser runs in background, reading from pushStream. Not true incremental — buffers all data then parses.
+Parser runs in background goroutine, reading from pushStream via `ParseReader`. Processes tokens incrementally as data is pushed — the stream's `Read` blocks until bytes are available, so the parser advances as each chunk arrives.
 
 ## Character Buffering
 
