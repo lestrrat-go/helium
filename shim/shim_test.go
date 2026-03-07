@@ -1168,11 +1168,21 @@ func TestUnmarshalXMLDeclValidationMatchStdlib(t *testing.T) {
 		xml  string
 	}{
 		{"version 1.1", `<?xml version="1.1" encoding="UTF-8"?><item><value>hello</value></item>`},
+		{"version 2.0", `<?xml version="2.0"?><item><value>hello</value></item>`},
 		{"non-UTF-8 encoding", `<?xml version="1.0" encoding="ISO-8859-1"?><item><value>hello</value></item>`},
 		{"malformed charset=", `<?xml version="1.0" charset="UTF-8"?><item><value>hello</value></item>`},
 		{"valid UTF-8", `<?xml version="1.0" encoding="UTF-8"?><item><value>hello</value></item>`},
 		{"valid utf-8 lowercase", `<?xml version="1.0" encoding="utf-8"?><item><value>hello</value></item>`},
 		{"no declaration", `<item><value>hello</value></item>`},
+		{"no encoding", `<?xml version="1.0"?><item><value>hello</value></item>`},
+		{"empty decl", `<?xml?><item><value>hello</value></item>`},
+		{"no version", `<?xml encoding="UTF-8"?><item><value>hello</value></item>`},
+		{"standalone yes", `<?xml version="1.0" standalone="yes"?><item><value>hello</value></item>`},
+		{"single quotes", `<?xml version='1.0' encoding='UTF-8'?><item><value>hello</value></item>`},
+		{"version empty string", `<?xml version=""?><item><value>hello</value></item>`},
+		{"encoding empty string", `<?xml version="1.0" encoding=""?><item><value>hello</value></item>`},
+		{"extra whitespace", `<?xml  version="1.0"  ?><item><value>hello</value></item>`},
+		{"encoding with spaces", `<?xml version="1.0" encoding = "UTF-8" ?><item><value>hello</value></item>`},
 	}
 
 	for _, tc := range cases {
