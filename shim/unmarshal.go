@@ -117,7 +117,7 @@ func validateXMLDeclFields(doc *helium.Document) error {
 			Line: 1,
 		}
 	}
-	if enc := doc.Encoding(); enc != "" && enc != "utf8" && !strings.EqualFold(enc, "utf-8") {
+	if enc := doc.Encoding(); enc != "" && !strings.EqualFold(enc, "utf-8") {
 		return fmt.Errorf("xml: encoding %q declared but Decoder.CharsetReader is nil", enc)
 	}
 	return nil
