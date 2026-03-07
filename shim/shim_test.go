@@ -1012,6 +1012,62 @@ func TestDecoderDecodeElementMatchesStdlib(t *testing.T) {
 	require.Equal(t, stdChild, shimChild, "DecodeElement first child mismatch")
 }
 
+func TestDecoderDecodeInvalidTargetMatchStdlib(t *testing.T) {
+	input := []byte(`<root>value</root>`)
+
+	// non-pointer
+	nonPtr := any("hello")
+	stdErr := stdxml.NewDecoder(bytes.NewReader(input)).Decode(nonPtr)
+	shimErr := shim.NewDecoder(bytes.NewReader(input)).Decode(nonPtr)
+	require.Error(t, stdErr)
+	require.Error(t, shimErr)
+	require.Equal(t, stdErr.Error(), shimErr.Error())
+
+	// nil pointer
+	var nilPtr *string
+	stdErr = stdxml.NewDecoder(bytes.NewReader(input)).Decode(nilPtr)
+	shimErr = shim.NewDecoder(bytes.NewReader(input)).Decode(nilPtr)
+	require.Error(t, stdErr)
+	require.Error(t, shimErr)
+	require.Equal(t, stdErr.Error(), shimErr.Error())
+}
+
+func TestDecoderDecodeElementInvalidTargetMatchStdlib(t *testing.T) {
+	input := []byte(`<root>value</root>`)
+
+	// non-pointer with DecodeElement
+	nonPtr := any("hello")
+	stdDec := stdxml.NewDecoder(bytes.NewReader(input))
+	stdTok, _ := stdDec.Token()
+	stdStart := stdTok.(stdxml.StartElement)
+	stdErr := stdDec.DecodeElement(nonPtr, &stdStart)
+
+	shimDec := shim.NewDecoder(bytes.NewReader(input))
+	shimTok, _ := shimDec.Token()
+	shimStart := shimTok.(stdxml.StartElement)
+	shimErr := shimDec.DecodeElement(nonPtr, &shimStart)
+
+	require.Error(t, stdErr)
+	require.Error(t, shimErr)
+	require.Equal(t, stdErr.Error(), shimErr.Error())
+
+	// nil pointer with DecodeElement
+	var nilPtr *string
+	stdDec2 := stdxml.NewDecoder(bytes.NewReader(input))
+	stdTok2, _ := stdDec2.Token()
+	stdStart2 := stdTok2.(stdxml.StartElement)
+	stdErr = stdDec2.DecodeElement(nilPtr, &stdStart2)
+
+	shimDec2 := shim.NewDecoder(bytes.NewReader(input))
+	shimTok2, _ := shimDec2.Token()
+	shimStart2 := shimTok2.(stdxml.StartElement)
+	shimErr = shimDec2.DecodeElement(nilPtr, &shimStart2)
+
+	require.Error(t, stdErr)
+	require.Error(t, shimErr)
+	require.Equal(t, stdErr.Error(), shimErr.Error())
+}
+
 func TestAPICompilesWithInterfaces(t *testing.T) {
 	var _ io.Reader = bytes.NewReader(nil)
 	_ = shim.NewDecoder(bytes.NewReader(nil))

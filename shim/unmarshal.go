@@ -40,13 +40,23 @@ type fieldBinding struct {
 
 var fieldBindingCache sync.Map
 
-func Unmarshal(data []byte, v any) error {
+// validateUnmarshalTarget checks that v is a non-nil pointer, matching
+// encoding/xml's Unmarshal/Decode/DecodeElement error behavior.
+func validateUnmarshalTarget(v any) (reflect.Value, error) {
 	rv := reflect.ValueOf(v)
 	if !rv.IsValid() || rv.Kind() != reflect.Pointer {
-		return fmt.Errorf("non-pointer passed to Unmarshal")
+		return reflect.Value{}, fmt.Errorf("non-pointer passed to Unmarshal")
 	}
 	if rv.IsNil() {
-		return fmt.Errorf("nil pointer passed to Unmarshal")
+		return reflect.Value{}, fmt.Errorf("nil pointer passed to Unmarshal")
+	}
+	return rv.Elem(), nil
+}
+
+func Unmarshal(data []byte, v any) error {
+	rv, err := validateUnmarshalTarget(v)
+	if err != nil {
+		return err
 	}
 	trimmed := trimLeadingSpace(data)
 	if len(trimmed) == 0 {
@@ -79,7 +89,7 @@ func Unmarshal(data []byte, v any) error {
 		return fmt.Errorf("shim: no document element")
 	}
 
-	return decodeElementInto(rv.Elem(), root)
+	return decodeElementInto(rv, root)
 }
 
 func trimLeadingSpace(data []byte) []byte {
