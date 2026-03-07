@@ -1,6 +1,6 @@
 # Missing Features for stdlib encoding/xml Compatibility
 
-Current status: 381 pass, 49 skip, 0 fail.
+Current status: 425 pass, 17 skip, 0 fail.
 
 Each section below is a self-contained feature description. They are ordered by
 estimated impact (tests unlocked) and feasibility. Each includes: what the
@@ -281,8 +281,9 @@ errors/output.
 **Status**: Implemented. xmlns/xmlns:* declarations are now emitted as
 attributes on both raw and cooked StartElement tokens, prepended before
 regular attributes. Raw attr names use `Name{Space: prefix, Local: local}`
-format. TestRawTokenStdlib still skipped — blocked on Directive token
-emission (item #9) and InputOffset alignment (item #11).
+format. TestRawTokenStdlib still skipped — blocked on helium core issues
+(CharData splitting per entity ref, namespace prefix redeclaration
+rejection, InputOffset alignment).
 
 ~~**Tests unlocked**: 1 (TestRawTokenStdlib)~~
 **Difficulty**: High
@@ -364,8 +365,9 @@ go test -run 'TestRawTokenStdlib' -v
 ## 6. ~~Cooked Token xmlns Attribute Preservation~~ (DONE)
 
 **Status**: Implemented together with item #5. Cooked tokens now include
-xmlns declarations as attributes. TestTokenStdlib still skipped — blocked
-on Directive token emission (item #9) and InputOffset alignment (item #11).
+xmlns declarations as attributes. TestTokenUnmarshalerStdlib now passes.
+TestTokenStdlib still skipped — blocked on helium core issues (CharData
+splitting per entity ref, namespace prefix redeclaration rejection).
 
 ~~**Tests unlocked**: 1 (TestTokenUnmarshalerStdlib)~~
 ~~**Difficulty**: High (same root cause as #5)~~
@@ -667,45 +669,11 @@ go test -run 'TestUnmarshalStdlib/15[46]$' -v
 
 ---
 
-## 13. TokenReader Infinite Recursion Guard
+## 13. ~~TokenReader Infinite Recursion Guard~~ (DONE)
 
-**Tests unlocked**: 1 (TestDecodeIntrinsicStdlib — not yet in test files, needs to be added)
-**Difficulty**: Medium
-**Files**: `shim/decoder.go`
-
-### Problem
-
-A `TokenReader` that always returns `StartElement` without returning
-`EndElement` causes infinite recursion in `populateElement` (decoder.go:522).
-Stdlib has a depth limit to prevent stack overflow.
-
-### Implementation guidance
-
-Add a depth counter to `populateElement`:
-
-```go
-const maxNestingDepth = 10000 // match stdlib's limit
-
-func (d *Decoder) populateElement(doc *helium.Document, parent *helium.Element, name Name) error {
-    d.depth++
-    if d.depth > maxNestingDepth {
-        return errors.New("xml: exceeded max depth")
-    }
-    defer func() { d.depth-- }()
-    // ... existing code
-}
-```
-
-Note: the `depth` field on the Encoder struct tracks open tags for the
-encoder. Add a separate `nestDepth` field to Decoder for this purpose.
-
-### Test verification
-
-Add `TestDecodeIntrinsicStdlib` to `xml_stdlib_test.go` (copy from stdlib's
-`xml_test.go` TestDecodeIntrinsic). Then:
-```sh
-go test -run 'TestDecodeIntrinsicStdlib' -v -timeout 10s
-```
+**Status**: Implemented. `populateElement` now has a `nestDepth` counter
+with `maxNestingDepth = 10000`. TestTokenUnmarshalerStdlib passes (covers
+the depth guard via a malicious TokenReader that always returns StartElement).
 
 ---
 
@@ -748,15 +716,15 @@ implemented.
 | 2 | ~~NS Element/Attr Matching~~ | ~~2~~ | **DONE** |
 | 3 | NS Prefix Allocation | 1 | ✅ Done |
 | 4 | EncodeToken Validation | 1 | High effort |
-| 5 | ~~RawToken NS Preservation~~ | ~~1~~ | **DONE** (test blocked on #9, #11) |
-| 6 | ~~Cooked Token xmlns~~ | ~~1~~ | **DONE** (test blocked on #9, #11) |
+| 5 | ~~RawToken NS Preservation~~ | ~~1~~ | **DONE** (test blocked on core issues) |
+| 6 | ~~Cooked Token xmlns~~ | ~~1~~ | **DONE** (TestTokenUnmarshalerStdlib passes) |
 | 7 | Empty NS Override | 1 | DONE |
 | 8 | CharsetReader | 2 | Medium effort |
 | 9 | Directive Tokens | 2 | ✅ Done |
 | 10 | Error Messages | ~5 | Medium effort (tedious) |
-| 11 | InputPos Tracking | 1 | Medium effort |
+| 11 | ~~InputPos Tracking~~ | ~~1~~ | **DONE** |
 | 12 | InnerXML Format | 2 | Hard (needs core changes) |
-| 13 | TokenReader Depth | 1 | Low effort |
+| 13 | ~~TokenReader Depth~~ | ~~1~~ | **DONE** |
 | 14 | ~~Parser Depth Limit~~ | ~~1~~ | **DONE** |
 | 15 | Non-Strict Mode | 4 | Not planned |
 | 16 | Round-Trip | 1 | Blocked on #9, #15 |
