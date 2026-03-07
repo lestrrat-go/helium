@@ -18,6 +18,9 @@ func FuzzCompile(f *testing.F) {
 	f.Add(`][invalid`)
 
 	f.Fuzz(func(_ *testing.T, expr string) {
+		if len(expr) > 4096 {
+			return
+		}
 		_, _ = xpath.Compile(expr)
 	})
 }

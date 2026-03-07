@@ -17,6 +17,9 @@ func FuzzParse(f *testing.F) {
 	f.Add([]byte(`not html at all`))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > 1<<20 {
+			return
+		}
 		_, _ = html.Parse(t.Context(), data)
 	})
 }

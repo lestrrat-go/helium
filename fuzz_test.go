@@ -17,6 +17,9 @@ func FuzzParse(f *testing.F) {
 	f.Add([]byte(`not xml`))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > 1<<20 {
+			return
+		}
 		_, _ = helium.Parse(t.Context(), data)
 	})
 }
@@ -27,6 +30,9 @@ func FuzzParseRoundtrip(f *testing.F) {
 	f.Add([]byte(`<?xml version="1.0"?><root><a><b><c>deep</c></b></a></root>`))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > 1<<20 {
+			return
+		}
 		doc, err := helium.Parse(t.Context(), data)
 		if err != nil {
 			return

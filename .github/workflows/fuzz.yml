@@ -9,6 +9,9 @@ on:
         required: false
         default: '5m'
 
+permissions:
+  contents: read
+
 jobs:
   fuzz:
     runs-on: ubuntu-latest
@@ -30,9 +33,9 @@ jobs:
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: ~/.cache/go-build/fuzz
-          key: fuzz-${{ matrix.package }}-${{ github.run_id }}
+          key: fuzz-go1.25-${{ matrix.package }}-${{ github.ref }}
           restore-keys: |
-            fuzz-${{ matrix.package }}-
+            fuzz-go1.25-${{ matrix.package }}-
       - name: Run fuzz tests
         run: |
           FUZZTIME="${{ github.event.inputs.fuzz-time || '5m' }}"

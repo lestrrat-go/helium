@@ -15,10 +15,13 @@ func FuzzCompile(f *testing.F) {
 	f.Add([]byte(`not a schema`))
 
 	// Compile may attempt os.ReadFile for xs:include/xs:import/xs:redefine schemaLocation
-	// in fuzz-generated schemas, but this is a read-only operation in a sandboxed CI
-	// environment and random paths will almost certainly fail (returning an error that
-	// is silently ignored).
+	// in fuzz-generated schemas. This is read-only and random paths will almost always
+	// fail with an error. Injecting a stub loader would require API changes; accepted
+	// risk for fuzz testing.
 	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > 1<<20 {
+			return
+		}
 		doc, err := helium.Parse(t.Context(), data)
 		if err != nil {
 			return
@@ -38,6 +41,9 @@ func FuzzValidate(f *testing.F) {
 	)
 
 	f.Fuzz(func(t *testing.T, schemaData, instanceData []byte) {
+		if len(schemaData) > 1<<20 || len(instanceData) > 1<<20 {
+			return
+		}
 		ctx := t.Context()
 		schemaDom, err := helium.Parse(ctx, schemaData)
 		if err != nil {

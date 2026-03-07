@@ -15,6 +15,9 @@ func FuzzCanonicalize(f *testing.F) {
 	f.Add([]byte(`<e xmlns:a="http://a" xmlns:b="http://b"><a:x/><b:y/></e>`), uint8(1), false)
 
 	f.Fuzz(func(t *testing.T, data []byte, modeVal uint8, withComments bool) {
+		if len(data) > 1<<20 {
+			return
+		}
 		doc, err := helium.Parse(t.Context(), data)
 		if err != nil {
 			return
