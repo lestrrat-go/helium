@@ -4368,7 +4368,7 @@ func (ctx *parserCtx) parseEntityDecl() error {
 			}
 		}
 		if curent != nil {
-			if ent, ok := curent.(*Entity); ok && ent.orig == "" {
+			if ent, ok := curent.(*Entity); ok && ent != nil && ent.orig == "" {
 				ent.SetOrig(literal)
 			}
 		}
