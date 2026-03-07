@@ -1012,6 +1012,62 @@ func TestDecoderDecodeElementMatchesStdlib(t *testing.T) {
 	require.Equal(t, stdChild, shimChild, "DecodeElement first child mismatch")
 }
 
+func TestDecoderDecodeInvalidTargetMatchStdlib(t *testing.T) {
+	input := []byte(`<root>value</root>`)
+
+	// non-pointer
+	nonPtr := any("hello")
+	stdErr := stdxml.NewDecoder(bytes.NewReader(input)).Decode(nonPtr)  //nolint:staticcheck // intentional non-pointer to test error behavior
+	shimErr := shim.NewDecoder(bytes.NewReader(input)).Decode(nonPtr) //nolint:staticcheck // intentional non-pointer to test error behavior
+	require.Error(t, stdErr)
+	require.Error(t, shimErr)
+	require.Equal(t, stdErr.Error(), shimErr.Error())
+
+	// nil pointer
+	var nilPtr *string
+	stdErr = stdxml.NewDecoder(bytes.NewReader(input)).Decode(nilPtr)
+	shimErr = shim.NewDecoder(bytes.NewReader(input)).Decode(nilPtr)
+	require.Error(t, stdErr)
+	require.Error(t, shimErr)
+	require.Equal(t, stdErr.Error(), shimErr.Error())
+}
+
+func TestDecoderDecodeElementInvalidTargetMatchStdlib(t *testing.T) {
+	input := []byte(`<root>value</root>`)
+
+	// non-pointer with DecodeElement
+	nonPtr := any("hello")
+	stdDec := stdxml.NewDecoder(bytes.NewReader(input))
+	stdTok, _ := stdDec.Token()
+	stdStart := stdTok.(stdxml.StartElement)
+	stdErr := stdDec.DecodeElement(nonPtr, &stdStart) //nolint:staticcheck // intentional non-pointer to test error behavior
+
+	shimDec := shim.NewDecoder(bytes.NewReader(input))
+	shimTok, _ := shimDec.Token()
+	shimStart := shimTok.(stdxml.StartElement)
+	shimErr := shimDec.DecodeElement(nonPtr, &shimStart) //nolint:staticcheck // intentional non-pointer to test error behavior
+
+	require.Error(t, stdErr)
+	require.Error(t, shimErr)
+	require.Equal(t, stdErr.Error(), shimErr.Error())
+
+	// nil pointer with DecodeElement
+	var nilPtr *string
+	stdDec2 := stdxml.NewDecoder(bytes.NewReader(input))
+	stdTok2, _ := stdDec2.Token()
+	stdStart2 := stdTok2.(stdxml.StartElement)
+	stdErr = stdDec2.DecodeElement(nilPtr, &stdStart2)
+
+	shimDec2 := shim.NewDecoder(bytes.NewReader(input))
+	shimTok2, _ := shimDec2.Token()
+	shimStart2 := shimTok2.(stdxml.StartElement)
+	shimErr = shimDec2.DecodeElement(nilPtr, &shimStart2)
+
+	require.Error(t, stdErr)
+	require.Error(t, shimErr)
+	require.Equal(t, stdErr.Error(), shimErr.Error())
+}
+
 func TestAPICompilesWithInterfaces(t *testing.T) {
 	var _ io.Reader = bytes.NewReader(nil)
 	_ = shim.NewDecoder(bytes.NewReader(nil))
@@ -1156,6 +1212,52 @@ func TestEncoderIndentMatchesStdlib(t *testing.T) {
 	require.NoError(t, shimEnc.Flush())
 
 	require.Equal(t, stdBuf.Bytes(), shimBuf.Bytes(), "Indent output mismatch")
+}
+
+func TestUnmarshalXMLDeclValidationMatchStdlib(t *testing.T) {
+	type item struct {
+		Value string `xml:"value"`
+	}
+
+	cases := []struct {
+		name string
+		xml  string
+	}{
+		{"version 1.1", `<?xml version="1.1" encoding="UTF-8"?><item><value>hello</value></item>`},
+		{"version 2.0", `<?xml version="2.0"?><item><value>hello</value></item>`},
+		{"non-UTF-8 encoding", `<?xml version="1.0" encoding="ISO-8859-1"?><item><value>hello</value></item>`},
+		{"malformed charset=", `<?xml version="1.0" charset="UTF-8"?><item><value>hello</value></item>`},
+		{"valid UTF-8", `<?xml version="1.0" encoding="UTF-8"?><item><value>hello</value></item>`},
+		{"valid utf-8 lowercase", `<?xml version="1.0" encoding="utf-8"?><item><value>hello</value></item>`},
+		{"no declaration", `<item><value>hello</value></item>`},
+		{"no encoding", `<?xml version="1.0"?><item><value>hello</value></item>`},
+		{"empty decl", `<?xml?><item><value>hello</value></item>`},
+		{"no version", `<?xml encoding="UTF-8"?><item><value>hello</value></item>`},
+		{"standalone yes", `<?xml version="1.0" standalone="yes"?><item><value>hello</value></item>`},
+		{"single quotes", `<?xml version='1.0' encoding='UTF-8'?><item><value>hello</value></item>`},
+		{"version empty string", `<?xml version=""?><item><value>hello</value></item>`},
+		{"encoding empty string", `<?xml version="1.0" encoding=""?><item><value>hello</value></item>`},
+		{"extra whitespace", `<?xml  version="1.0"  ?><item><value>hello</value></item>`},
+		{"encoding with spaces", `<?xml version="1.0" encoding = "UTF-8" ?><item><value>hello</value></item>`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdOut item
+			stdErr := stdxml.Unmarshal([]byte(tc.xml), &stdOut)
+
+			var shimOut item
+			shimErr := shim.Unmarshal([]byte(tc.xml), &shimOut)
+
+			if stdErr != nil {
+				require.Error(t, shimErr, "shim should error when stdlib errors")
+				require.Equal(t, stdErr.Error(), shimErr.Error(), "error message mismatch")
+			} else {
+				require.NoError(t, shimErr, "shim should succeed when stdlib succeeds")
+				require.Equal(t, stdOut.Value, shimOut.Value, "value mismatch")
+			}
+		})
+	}
 }
 
 func tokenRepr(tok stdxml.Token) string {

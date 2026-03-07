@@ -40,35 +40,56 @@ type fieldBinding struct {
 
 var fieldBindingCache sync.Map
 
-func Unmarshal(data []byte, v any) error {
+// validateUnmarshalTarget checks that v is a non-nil pointer, matching
+// encoding/xml's Unmarshal/Decode/DecodeElement error behavior.
+func validateUnmarshalTarget(v any) (reflect.Value, error) {
 	rv := reflect.ValueOf(v)
 	if !rv.IsValid() || rv.Kind() != reflect.Pointer {
-		return fmt.Errorf("non-pointer passed to Unmarshal")
+		return reflect.Value{}, fmt.Errorf("non-pointer passed to Unmarshal")
 	}
 	if rv.IsNil() {
-		return fmt.Errorf("nil pointer passed to Unmarshal")
+		return reflect.Value{}, fmt.Errorf("nil pointer passed to Unmarshal")
+	}
+	return rv.Elem(), nil
+}
+
+func Unmarshal(data []byte, v any) error {
+	rv, err := validateUnmarshalTarget(v)
+	if err != nil {
+		return err
 	}
 	trimmed := trimLeadingSpace(data)
 	if len(trimmed) == 0 {
 		return io.EOF
 	}
 
-	// Strip XML declaration — helium's parser is stricter than stdlib about
-	// malformed declarations (e.g. charset= instead of encoding=).
-	trimmed = stripXMLDecl(trimmed)
-
 	p := helium.NewParser()
+	p.SetOption(helium.ParseLenientXMLDecl)
 	p.SetMaxDepth(maxParseDepth)
 	doc, err := p.Parse(context.Background(), trimmed)
 	if err != nil {
-		return convertParseError(err)
+		// helium's lenient mode is still stricter than stdlib for some
+		// malformed declarations (e.g. charset=, empty version/encoding).
+		// Strip the declaration and retry.
+		if stripped, ok := stripXMLDecl(trimmed); ok {
+			doc, err = p.Parse(context.Background(), stripped)
+		}
+		if err != nil {
+			return convertParseError(err)
+		}
+	}
+
+	// Validate version/encoding from the parsed document to match
+	// stdlib error behavior.
+	if err := validateXMLDeclFields(doc); err != nil {
+		return err
 	}
 	root := doc.DocumentElement()
 	if root == nil {
 		return fmt.Errorf("shim: no document element")
 	}
 
-	return decodeElementInto(rv.Elem(), root)
+	return decodeElementInto(rv, root)
 }
 
 func trimLeadingSpace(data []byte) []byte {
@@ -82,18 +103,37 @@ func trimLeadingSpace(data []byte) []byte {
 	return data
 }
 
-func stripXMLDecl(data []byte) []byte {
+// stripXMLDecl removes an XML declaration from data if present, returning
+// the remaining data and true. Returns the original data and false if no
+// declaration is found.
+func stripXMLDecl(data []byte) ([]byte, bool) {
 	if len(data) < 5 || string(data[:5]) != "<?xml" {
-		return data
+		return data, false
 	}
 	end := bytes.Index(data, []byte("?>"))
 	if end < 0 {
-		return data
+		return data, false
 	}
-	return trimLeadingSpace(data[end+2:])
+	return trimLeadingSpace(data[end+2:]), true
 }
 
-
+// validateXMLDeclFields checks the parsed document's version and encoding
+// to match stdlib error behavior (reject non-1.0 versions and non-UTF-8
+// encodings when no CharsetReader is available).
+func validateXMLDeclFields(doc *helium.Document) error {
+	if ver := doc.Version(); ver != "" && ver != "1.0" {
+		// stdlib uses fmt.Errorf here (not xml.SyntaxError), so we
+		// match that to produce identical Error() strings.
+		return fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", ver)
+	}
+	// doc.Encoding() returns "utf8" (no hyphen) as a default when no
+	// encoding pseudo-attribute was declared. That sentinel must be
+	// excluded so we only reject explicitly declared non-UTF-8 encodings.
+	if enc := doc.Encoding(); enc != "" && enc != "utf8" && !strings.EqualFold(enc, "utf-8") {
+		return fmt.Errorf("xml: encoding %q declared but Decoder.CharsetReader is nil", enc)
+	}
+	return nil
+}
 
 func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 	if !target.IsValid() {

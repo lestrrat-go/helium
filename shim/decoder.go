@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"reflect"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -660,6 +659,9 @@ func (d *Decoder) InputPos() (line, column int) {
 }
 
 func (d *Decoder) Decode(v any) error {
+	if _, err := validateUnmarshalTarget(v); err != nil {
+		return err
+	}
 	for {
 		tok, err := d.Token()
 		if err != nil {
@@ -674,6 +676,10 @@ func (d *Decoder) Decode(v any) error {
 }
 
 func (d *Decoder) DecodeElement(v any, start *StartElement) error {
+	rv, err := validateUnmarshalTarget(v)
+	if err != nil {
+		return err
+	}
 	if start == nil {
 		return d.Decode(v)
 	}
@@ -682,15 +688,7 @@ func (d *Decoder) DecodeElement(v any, start *StartElement) error {
 	if err != nil {
 		return err
 	}
-	return decodeElementInto(reflectValueOf(v), elem)
-}
-
-func reflectValueOf(v any) reflect.Value {
-	rv := reflect.ValueOf(v)
-	if rv.Kind() == reflect.Pointer {
-		return rv.Elem()
-	}
-	return rv
+	return decodeElementInto(rv, elem)
 }
 
 // buildElementFromTokens reads tokens from the decoder and builds
