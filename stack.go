@@ -48,6 +48,20 @@ func (s *nsStack) Lookup(prefix string) string {
 	return item.href
 }
 
+// LookupInTopN searches only the top n entries of the stack for prefix.
+// This is used to detect duplicate namespace declarations on the same
+// element without being confused by ancestor bindings (which are valid
+// prefix shadowing, not duplicates).
+func (s *nsStack) LookupInTopN(prefix string, n int) string {
+	entries := s.KeyedStack.Peek(n)
+	for i := len(entries) - 1; i >= 0; i-- {
+		if entries[i].prefix == prefix {
+			return entries[i].href
+		}
+	}
+	return ""
+}
+
 func (s *nodeStack) Push(e *Element) {
 	s.Stack.Push(e)
 }

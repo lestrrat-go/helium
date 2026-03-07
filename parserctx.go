@@ -1227,13 +1227,20 @@ func (ctx *parserCtx) parseStartTag() error {
 				return ctx.namespaceError(fmt.Errorf("xmlns:%s: URI %s is not absolute", attname, attvalue))
 			}
 
-			existingURI = ctx.nsTab.Lookup(attname)
+			// Check only the current element's bindings (top nbNs entries)
+			// to detect true duplicates. A prefix bound in an ancestor
+			// element is valid shadowing, not a duplicate.
+			existingURI = ctx.nsTab.LookupInTopN(attname, nbNs)
 			if existingURI != "" {
-				// ParseNsClean: skip redundant namespace declarations
 				if ctx.options.IsSet(ParseNsClean) && existingURI == attvalue {
 					goto SkipNS
 				}
 				return ctx.error(errors.New("duplicate attribute is not allowed"))
+			}
+			// ParseNsClean: skip if an ancestor already binds this prefix
+			// to the same URI (redundant redeclaration).
+			if ctx.options.IsSet(ParseNsClean) && ctx.nsTab.Lookup(attname) == attvalue {
+				goto SkipNS
 			}
 			ctx.pushNS(attname, attvalue)
 			nbNs++
