@@ -2,7 +2,6 @@ package helium_test
 
 import (
 	"bytes"
-	"context"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -17,8 +16,8 @@ func FuzzParse(f *testing.F) {
 	f.Add([]byte(``))
 	f.Add([]byte(`not xml`))
 
-	f.Fuzz(func(_ *testing.T, data []byte) {
-		_, _ = helium.Parse(context.Background(), data)
+	f.Fuzz(func(t *testing.T, data []byte) {
+		_, _ = helium.Parse(t.Context(), data)
 	})
 }
 
@@ -28,7 +27,7 @@ func FuzzParseRoundtrip(f *testing.F) {
 	f.Add([]byte(`<?xml version="1.0"?><root><a><b><c>deep</c></b></a></root>`))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
-		doc, err := helium.Parse(context.Background(), data)
+		doc, err := helium.Parse(t.Context(), data)
 		if err != nil {
 			return
 		}
@@ -38,7 +37,7 @@ func FuzzParseRoundtrip(f *testing.F) {
 		err = w.WriteDoc(&buf, doc)
 		require.NoError(t, err)
 
-		_, err = helium.Parse(context.Background(), buf.Bytes())
+		_, err = helium.Parse(t.Context(), buf.Bytes())
 		require.NoError(t, err)
 	})
 }

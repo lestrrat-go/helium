@@ -2,7 +2,6 @@ package c14n_test
 
 import (
 	"bytes"
-	"context"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -15,8 +14,8 @@ func FuzzCanonicalize(f *testing.F) {
 	f.Add([]byte(`<doc><!-- comment --><a b="1" a="2"/></doc>`), uint8(2), false)
 	f.Add([]byte(`<e xmlns:a="http://a" xmlns:b="http://b"><a:x/><b:y/></e>`), uint8(1), false)
 
-	f.Fuzz(func(_ *testing.T, data []byte, modeVal uint8, withComments bool) {
-		doc, err := helium.Parse(context.Background(), data)
+	f.Fuzz(func(t *testing.T, data []byte, modeVal uint8, withComments bool) {
+		doc, err := helium.Parse(t.Context(), data)
 		if err != nil {
 			return
 		}

@@ -1,7 +1,6 @@
 package html_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/lestrrat-go/helium/html"
@@ -17,7 +16,7 @@ func FuzzParse(f *testing.F) {
 	f.Add([]byte(``))
 	f.Add([]byte(`not html at all`))
 
-	f.Fuzz(func(_ *testing.T, data []byte) {
-		_, _ = html.Parse(context.Background(), data)
+	f.Fuzz(func(t *testing.T, data []byte) {
+		_, _ = html.Parse(t.Context(), data)
 	})
 }

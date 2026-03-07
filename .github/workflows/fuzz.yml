@@ -36,7 +36,7 @@ jobs:
       - name: Run fuzz tests
         run: |
           FUZZTIME="${{ github.event.inputs.fuzz-time || '5m' }}"
-          for target in $(go test ./${{ matrix.package }}/ -list 'Fuzz.*' -run '^$' 2>/dev/null | grep '^Fuzz'); do
+          for target in $(go test ./${{ matrix.package }}/ -list 'Fuzz.*' -run '^$' | grep '^Fuzz' || true); do
             echo "::group::${target}"
             go test ./${{ matrix.package }}/ -run '^$' -fuzz "^${target}\$" -fuzztime "${FUZZTIME}"
             echo "::endgroup::"

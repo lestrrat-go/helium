@@ -1,7 +1,6 @@
 package relaxng_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -15,8 +14,11 @@ func FuzzCompile(f *testing.F) {
 	f.Add([]byte(``))
 	f.Add([]byte(`not a schema`))
 
-	f.Fuzz(func(_ *testing.T, data []byte) {
-		doc, err := helium.Parse(context.Background(), data)
+	// Compile may attempt os.ReadFile for include/externalRef hrefs in fuzz-generated
+	// schemas, but this is a read-only operation in a sandboxed CI environment and
+	// random paths will almost certainly fail (returning an error that is silently ignored).
+	f.Fuzz(func(t *testing.T, data []byte) {
+		doc, err := helium.Parse(t.Context(), data)
 		if err != nil {
 			return
 		}
@@ -34,8 +36,9 @@ func FuzzValidate(f *testing.F) {
 		[]byte(`<?xml version="1.0"?><doc><p>paragraph</p></doc>`),
 	)
 
-	f.Fuzz(func(_ *testing.T, schemaData, instanceData []byte) {
-		schemaDom, err := helium.Parse(context.Background(), schemaData)
+	f.Fuzz(func(t *testing.T, schemaData, instanceData []byte) {
+		ctx := t.Context()
+		schemaDom, err := helium.Parse(ctx, schemaData)
 		if err != nil {
 			return
 		}
@@ -45,7 +48,7 @@ func FuzzValidate(f *testing.F) {
 			return
 		}
 
-		instanceDom, err := helium.Parse(context.Background(), instanceData)
+		instanceDom, err := helium.Parse(ctx, instanceData)
 		if err != nil {
 			return
 		}
