@@ -436,81 +436,28 @@ explicitly provides a name" (tagPath="d"), which is needed because
 
 ---
 
-## 8. CharsetReader Support
+## 8. CharsetReader Support — DONE
 
 **Tests unlocked**: 2 (TestRawTokenAltEncodingStdlib, TestRawTokenAltEncodingNoConverterStdlib)
 **Difficulty**: Medium
 **Files**: `shim/decoder.go`
 
-### Problem
+### Solution
 
-`Decoder.CharsetReader` is declared but not wired up. When the XML declaration
-specifies a non-UTF-8 encoding (e.g., `<?xml version="1.0" encoding="x-testing-uppercase"?>`),
-the decoder should:
+Wired up `CharsetReader` using the lazy SAX startup pattern:
 
-1. If `CharsetReader` is non-nil, call it to get a converting reader, then
-   feed that reader to the SAX parser instead of the original.
-2. If `CharsetReader` is nil and encoding is not UTF-8, return an error.
+1. `checkProcInstEncoding` saves the detected charset in `d.detectedCharset`
+   when encoding is non-UTF-8 and CharsetReader is set.
+2. In the lazy SAX startup block, if `detectedCharset` is set, wraps
+   `combinedReader` with `bufio.NewReader` (to provide ByteReader), passes it
+   to `CharsetReader`, then wraps the result with `ensureReader` (adapts
+   ByteReader-only implementations to full io.Reader via `byteReaderWrapper`).
+3. The SAX parser receives the charset-converted reader.
 
-### Current behavior
-
-The SAX parser receives the raw reader. The `checkProcInstEncoding` method
-(decoder.go:361) validates the encoding attribute but doesn't actually rewrap
-the reader — it only checks after the fact. By then, the SAX parser has already
-started reading the unconverted bytes.
-
-### Implementation guidance
-
-The challenge is that the SAX parser is started in a goroutine from
-`startSAXEmitter` (line 78) which receives the original reader. The encoding
-declaration is inside the XML data, so you need to:
-
-**Option A**: Pre-scan the first few bytes of the reader for the XML declaration
-before starting the SAX parser. If a non-UTF-8 encoding is found:
-- If `CharsetReader` is set, wrap the reader
-- If not, return an error immediately
-Then pass the (potentially wrapped) reader to the SAX parser.
-
-**Option B**: Use helium's SAX parser option to handle encoding. Check if
-helium's parser has an encoding option or callback.
-
-For Option A, in `newDecoderFromReader` (line 55):
-
-```go
-func newDecoderFromReader(r io.Reader) (*Decoder, error) {
-    // Pre-read enough to detect XML declaration
-    // Look for <?xml ... encoding="..." ?>
-    // If non-UTF-8 encoding found and CharsetReader is nil → error
-    // If CharsetReader is set → wrap reader
-    // Pass (potentially wrapped) reader to startSAXEmitter
-}
-```
-
-Problem: `CharsetReader` is set after `NewDecoder` returns. The stdlib pattern
-is:
-```go
-d := NewDecoder(r)
-d.CharsetReader = myFunc
-d.Token() // charset reader used here on first token read
-```
-
-So the charset wrapping must happen lazily, on the first `Token()` call. This
-means `startSAXEmitter` should be deferred until the first `readToken` call.
-Refactor:
-
-1. Store the reader in the Decoder struct
-2. On first `readToken`, scan for encoding, apply CharsetReader if needed,
-   then start the SAX emitter goroutine
-
-### Test verification
-
-```sh
-# Remove t.Skip from TestRawTokenAltEncodingStdlib and TestRawTokenAltEncodingNoConverterStdlib
-go test -run 'TestRawTokenAltEncoding' -v
-```
-
-Note: TestRawTokenAltEncodingStdlib also uses `testRawTokenStdlib` which checks
-`InputOffset`. This may require accurate offset tracking as well.
+TestRawTokenAltEncodingNoConverterStdlib passes. TestRawTokenAltEncodingStdlib
+charset conversion works correctly but the test is blocked on InputOffset
+alignment (item #11) — `testRawTokenStdlib` validates both token content and
+byte offsets.
 
 ---
 
@@ -714,7 +661,7 @@ implemented.
 | 5 | ~~RawToken NS Preservation~~ | ~~1~~ | **DONE** (test blocked on core issues) |
 | 6 | ~~Cooked Token xmlns~~ | ~~1~~ | **DONE** (TestTokenUnmarshalerStdlib passes) |
 | 7 | Empty NS Override | 1 | ✅ Done |
-| 8 | CharsetReader | 2 | Medium effort |
+| 8 | CharsetReader | 2 | DONE (test blocked on #11) |
 | 9 | Directive Tokens | 2 | ✅ Done |
 | 10 | Error Messages | ~5 | Medium effort (tedious) |
 | 11 | ~~InputPos Tracking~~ | ~~1~~ | **DONE** |

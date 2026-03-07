@@ -1,6 +1,7 @@
 package shim
 
 import (
+	"bufio"
 	"context"
 	stdxml "encoding/xml"
 	"errors"
@@ -58,8 +59,9 @@ type Decoder struct {
 	prologTokens   []Token  // pre-scanned prolog tokens (Directive, ProcInst, Comment, CharData)
 	prologIdx      int      // next prolog token to emit
 	prologOnly     bool     // true if entire input is prolog (no root element)
-	combinedReader io.Reader // buffered reader for lazy SAX startup
-	saxStarted     bool     // true once SAX goroutine has been started
+	combinedReader  io.Reader // buffered reader for lazy SAX startup
+	saxStarted      bool      // true once SAX goroutine has been started
+	detectedCharset string    // non-UTF-8 encoding from XML declaration
 }
 
 func newDecoderFromReader(r io.Reader) (*Decoder, error) {
@@ -414,8 +416,20 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 			d.events = make(chan tokenEvent)
 			close(d.events)
 		} else {
+			reader := d.combinedReader
+			if d.detectedCharset != "" && d.CharsetReader != nil {
+				newr, err := d.CharsetReader(d.detectedCharset, bufio.NewReader(reader))
+				if err != nil {
+					d.combinedReader = nil
+					return nil, fmt.Errorf("xml: opening charset %q: %w", d.detectedCharset, err)
+				}
+				if newr == nil {
+					panic("CharsetReader returned a nil Reader for charset " + d.detectedCharset)
+				}
+				reader = ensureReader(newr)
+			}
 			d.events = make(chan tokenEvent, 64)
-			d.startSAXEmitter(d.combinedReader)
+			d.startSAXEmitter(reader)
 		}
 		d.combinedReader = nil // release reference
 	}
@@ -490,6 +504,7 @@ func (d *Decoder) checkProcInstEncoding(data string) error {
 	if d.CharsetReader == nil {
 		return fmt.Errorf("xml: encoding %q declared but Decoder.CharsetReader is nil", enc)
 	}
+	d.detectedCharset = enc
 	return nil
 }
 
@@ -716,6 +731,31 @@ func (d *Decoder) populateElement(doc *helium.Document, parent *helium.Element, 
 
 // setElementAttrs sets attributes on an element, preserving namespace URIs
 // so that lookupAttr can match namespace-qualified attribute bindings.
+// ensureReader wraps r so it works with io.Read even if r only
+// implements io.ByteReader (e.g., CharsetReader returns that pattern).
+func ensureReader(r io.Reader) io.Reader {
+	if br, ok := r.(io.ByteReader); ok {
+		return &byteReaderWrapper{br: br}
+	}
+	return r
+}
+
+// byteReaderWrapper adapts an io.ByteReader into a full io.Reader.
+type byteReaderWrapper struct {
+	br io.ByteReader
+}
+
+func (w *byteReaderWrapper) Read(p []byte) (int, error) {
+	for i := range p {
+		b, err := w.br.ReadByte()
+		if err != nil {
+			return i, err
+		}
+		p[i] = b
+	}
+	return len(p), nil
+}
+
 func setElementAttrs(doc *helium.Document, elem *helium.Element, attrs []stdxml.Attr) error {
 	for _, attr := range attrs {
 		if attr.Name.Space != "" {

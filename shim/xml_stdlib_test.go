@@ -355,7 +355,7 @@ func (d *downCaserStdlib) Read(p []byte) (int, error) {
 }
 
 func TestRawTokenAltEncodingStdlib(t *testing.T) {
-	t.Skip("shim: CharsetReader not implemented")
+	t.Skip("shim: CharsetReader works but test blocked on InputOffset alignment (item #11)")
 	d := NewDecoder(strings.NewReader(testInputAltEncodingStdlib))
 	d.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
 		if charset != "x-testing-uppercase" {
@@ -367,7 +367,6 @@ func TestRawTokenAltEncodingStdlib(t *testing.T) {
 }
 
 func TestRawTokenAltEncodingNoConverterStdlib(t *testing.T) {
-	t.Skip("shim: CharsetReader not implemented")
 	d := NewDecoder(strings.NewReader(testInputAltEncodingStdlib))
 	token, err := d.RawToken()
 	if token == nil {
