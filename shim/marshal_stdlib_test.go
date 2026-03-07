@@ -1793,8 +1793,8 @@ func TestMarshalErrorsStdlib(t *testing.T) {
 // Do invertibility testing on the various structures that we test
 func TestUnmarshalStdlib(t *testing.T) {
 	unmarshalSkipSet := map[int]string{
-		154: "shim: innerxml captures self-closed tags instead of empty-element form",
-		156: "shim: innerxml captures self-closed tags instead of empty-element form",
+		154: "shim: known limitation — innerxml serializes empty elements as self-closed (see package doc)",
+		156: "shim: known limitation — innerxml serializes empty elements as self-closed (see package doc)",
 	}
 
 	for i, test := range marshalTestsStdlib {
