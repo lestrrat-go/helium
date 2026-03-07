@@ -114,8 +114,8 @@ func (s *prologScanner) scan() ([]Token, error) {
 			return tokens, errUnexpectedEOF
 		}
 
-		switch {
-		case b2 == '?':
+		switch b2 {
+		case '?':
 			// Processing instruction <?...?>
 			flushWS()
 			// Record position before scanning PI body. The '<' and '?'
@@ -141,7 +141,7 @@ func (s *prologScanner) scan() ([]Token, error) {
 			}
 			tokens = append(tokens, tok)
 
-		case b2 == '!':
+		case '!':
 			// Could be comment or directive. Peek more.
 			b3, err := s.readByte()
 			if err != nil {
@@ -149,7 +149,8 @@ func (s *prologScanner) scan() ([]Token, error) {
 				return tokens, errUnexpectedEOF
 			}
 
-			if b3 == '-' {
+			switch b3 {
+			case '-':
 				b4, err := s.readByte()
 				if err != nil {
 					flushWS()
@@ -169,10 +170,10 @@ func (s *prologScanner) scan() ([]Token, error) {
 						Msg: "invalid sequence <!- not part of <!--",
 					}
 				}
-			} else if b3 == '[' {
+			case '[':
 				// <![ in prolog is invalid
 				return tokens, &stdxml.SyntaxError{Msg: "invalid <![ sequence"}
-			} else {
+			default:
 				// Directive: <!DOCTYPE ...>, etc. Put b3 back so scanDirective sees it.
 				s.unreadByte(b3)
 				flushWS()

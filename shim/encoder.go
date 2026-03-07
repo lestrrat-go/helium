@@ -69,17 +69,24 @@ func (enc *Encoder) EncodeToken(t Token) error {
 	return fmt.Errorf("xml: EncodeToken of invalid token type")
 }
 
-func (enc *Encoder) writeIndent(depth int) {
+func (enc *Encoder) writeIndent(depth int) error {
 	if enc.indent == "" && enc.prefix == "" {
-		return
+		return nil
 	}
-	enc.w.WriteByte('\n')
+	if err := enc.w.WriteByte('\n'); err != nil {
+		return err
+	}
 	if enc.prefix != "" {
-		enc.w.WriteString(enc.prefix)
+		if _, err := enc.w.WriteString(enc.prefix); err != nil {
+			return err
+		}
 	}
 	for i := 0; i < depth; i++ {
-		enc.w.WriteString(enc.indent)
+		if _, err := enc.w.WriteString(enc.indent); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func (enc *Encoder) writeStartElement(se StartElement) error {
@@ -89,20 +96,32 @@ func (enc *Encoder) writeStartElement(se StartElement) error {
 
 	if enc.indent != "" || enc.prefix != "" {
 		if enc.depth > 0 {
-			enc.writeIndent(enc.depth)
+			if err := enc.writeIndent(enc.depth); err != nil {
+				return err
+			}
 		}
 	}
 
 	enc.tags = append(enc.tags, se.Name)
 	enc.nsStack.push()
 
-	enc.w.WriteByte('<')
-	enc.w.WriteString(se.Name.Local)
+	if err := enc.w.WriteByte('<'); err != nil {
+		return err
+	}
+	if _, err := enc.w.WriteString(se.Name.Local); err != nil {
+		return err
+	}
 
 	if se.Name.Space != "" {
-		enc.w.WriteString(` xmlns="`)
-		escapeAttrVal(enc.w, se.Name.Space)
-		enc.w.WriteByte('"')
+		if _, err := enc.w.WriteString(` xmlns="`); err != nil {
+			return err
+		}
+		if err := escapeAttrVal(enc.w, se.Name.Space); err != nil {
+			return err
+		}
+		if err := enc.w.WriteByte('"'); err != nil {
+			return err
+		}
 	}
 
 	// Write attributes, interleaving xmlns declarations as needed.
@@ -111,19 +130,35 @@ func (enc *Encoder) writeStartElement(se StartElement) error {
 		if name.Local == "" {
 			continue
 		}
-		enc.w.WriteByte(' ')
+		if err := enc.w.WriteByte(' '); err != nil {
+			return err
+		}
 		if name.Space != "" {
 			p := enc.nsStack.createAttrPrefix(enc.w, name.Space)
-			enc.w.WriteString(p)
-			enc.w.WriteByte(':')
+			if _, err := enc.w.WriteString(p); err != nil {
+				return err
+			}
+			if err := enc.w.WriteByte(':'); err != nil {
+				return err
+			}
 		}
-		enc.w.WriteString(name.Local)
-		enc.w.WriteString(`="`)
-		escapeAttrVal(enc.w, attr.Value)
-		enc.w.WriteByte('"')
+		if _, err := enc.w.WriteString(name.Local); err != nil {
+			return err
+		}
+		if _, err := enc.w.WriteString(`="`); err != nil {
+			return err
+		}
+		if err := escapeAttrVal(enc.w, attr.Value); err != nil {
+			return err
+		}
+		if err := enc.w.WriteByte('"'); err != nil {
+			return err
+		}
 	}
 
-	enc.w.WriteByte('>')
+	if err := enc.w.WriteByte('>'); err != nil {
+		return err
+	}
 
 	enc.depth++
 	enc.hasTokens = true
@@ -150,12 +185,20 @@ func (enc *Encoder) writeEndElement(ee EndElement) error {
 	enc.depth--
 
 	if (enc.indent != "" || enc.prefix != "") && !enc.lastWasStart && !enc.lastWasText {
-		enc.writeIndent(enc.depth)
+		if err := enc.writeIndent(enc.depth); err != nil {
+			return err
+		}
 	}
 
-	enc.w.WriteString("</")
-	enc.w.WriteString(ee.Name.Local)
-	enc.w.WriteByte('>')
+	if _, err := enc.w.WriteString("</"); err != nil {
+		return err
+	}
+	if _, err := enc.w.WriteString(ee.Name.Local); err != nil {
+		return err
+	}
+	if err := enc.w.WriteByte('>'); err != nil {
+		return err
+	}
 
 	enc.nsStack.pop()
 
@@ -165,7 +208,9 @@ func (enc *Encoder) writeEndElement(ee EndElement) error {
 }
 
 func (enc *Encoder) writeCharData(cd CharData) error {
-	escapeText(enc.w, []byte(cd))
+	if err := escapeText(enc.w, []byte(cd)); err != nil {
+		return err
+	}
 	enc.hasTokens = true
 	enc.lastWasStart = false
 	enc.lastWasText = true
@@ -178,12 +223,20 @@ func (enc *Encoder) writeComment(c Comment) error {
 	}
 	if enc.indent != "" || enc.prefix != "" {
 		if enc.depth > 0 && !enc.lastWasStart {
-			enc.writeIndent(enc.depth)
+			if err := enc.writeIndent(enc.depth); err != nil {
+				return err
+			}
 		}
 	}
-	enc.w.WriteString("<!--")
-	enc.w.Write([]byte(c))
-	enc.w.WriteString("-->")
+	if _, err := enc.w.WriteString("<!--"); err != nil {
+		return err
+	}
+	if _, err := enc.w.Write([]byte(c)); err != nil {
+		return err
+	}
+	if _, err := enc.w.WriteString("-->"); err != nil {
+		return err
+	}
 	enc.hasTokens = true
 	enc.lastWasStart = false
 	enc.lastWasText = false
@@ -202,16 +255,28 @@ func (enc *Encoder) writeProcInst(pi ProcInst) error {
 	}
 	if enc.indent != "" || enc.prefix != "" {
 		if enc.depth > 0 && !enc.lastWasStart {
-			enc.writeIndent(enc.depth)
+			if err := enc.writeIndent(enc.depth); err != nil {
+				return err
+			}
 		}
 	}
-	enc.w.WriteString("<?")
-	enc.w.WriteString(pi.Target)
-	if len(pi.Inst) > 0 {
-		enc.w.WriteByte(' ')
-		enc.w.Write(pi.Inst)
+	if _, err := enc.w.WriteString("<?"); err != nil {
+		return err
 	}
-	enc.w.WriteString("?>")
+	if _, err := enc.w.WriteString(pi.Target); err != nil {
+		return err
+	}
+	if len(pi.Inst) > 0 {
+		if err := enc.w.WriteByte(' '); err != nil {
+			return err
+		}
+		if _, err := enc.w.Write(pi.Inst); err != nil {
+			return err
+		}
+	}
+	if _, err := enc.w.WriteString("?>"); err != nil {
+		return err
+	}
 	enc.hasTokens = true
 	enc.lastWasStart = false
 	enc.lastWasText = false
@@ -222,9 +287,15 @@ func (enc *Encoder) writeDirective(d Directive) error {
 	if !isValidDirective(d) {
 		return fmt.Errorf("xml: EncodeToken of Directive containing wrong < or > markers")
 	}
-	enc.w.WriteString("<!")
-	enc.w.Write([]byte(d))
-	enc.w.WriteByte('>')
+	if _, err := enc.w.WriteString("<!"); err != nil {
+		return err
+	}
+	if _, err := enc.w.Write([]byte(d)); err != nil {
+		return err
+	}
+	if err := enc.w.WriteByte('>'); err != nil {
+		return err
+	}
 	enc.hasTokens = true
 	enc.lastWasStart = false
 	enc.lastWasText = false
@@ -287,7 +358,9 @@ func (enc *Encoder) Close() error {
 		return nil
 	}
 	enc.closed = true
-	enc.w.Flush()
+	if err := enc.w.Flush(); err != nil {
+		return err
+	}
 	if enc.depth > 0 {
 		tag := enc.tags[len(enc.tags)-1]
 		return fmt.Errorf("unclosed tag <%s>", tag.Local)

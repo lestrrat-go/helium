@@ -329,7 +329,7 @@ func TestUnmarshalInvalidTargetErrorsMatchStdlib(t *testing.T) {
 	input := []byte(`<root>value</root>`)
 
 	var stdNonPtr string
-	stdNonPtrErr := stdxml.Unmarshal(input, stdNonPtr)
+	stdNonPtrErr := stdxml.Unmarshal(input, stdNonPtr) //nolint:govet,staticcheck // intentional non-pointer to test error behavior
 	shimNonPtrErr := shim.Unmarshal(input, stdNonPtr)
 	require.Error(t, stdNonPtrErr)
 	require.Error(t, shimNonPtrErr)
@@ -820,7 +820,7 @@ func TestUnmarshalXMLNameNamespaceMismatchMatchStdlib(t *testing.T) {
 func TestUnmarshalTagPathConflictMatchStdlib(t *testing.T) {
 	type payload struct {
 		A string `xml:"a>b"`
-		B string `xml:"a>b"`
+		B string `xml:"a>b"` //nolint:govet // intentional duplicate tag to test conflict detection
 	}
 
 	input := []byte(`<root><a><b>x</b></a></root>`)

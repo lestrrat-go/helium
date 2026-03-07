@@ -220,7 +220,9 @@ func (enc *Encoder) marshalStruct(val reflect.Value, start *StartElement) error 
 			}
 			raw := textValue(field)
 			if raw != "" {
-				enc.w.WriteString(raw)
+				if _, err := enc.w.WriteString(raw); err != nil {
+					return err
+				}
 				enc.lastWasStart = false
 				enc.lastWasText = false
 			}
@@ -717,7 +719,7 @@ func hasOwnXMLName(v reflect.Value) bool {
 // marshalEscapedText writes text content with newline escaping,
 // matching stdlib's p.EscapeString behavior for marshaled text.
 func (enc *Encoder) marshalEscapedText(text string) {
-	escapeString(enc.w, text)
+	_ = escapeString(enc.w, text)
 	enc.hasTokens = true
 	enc.lastWasStart = false
 	enc.lastWasText = true
@@ -738,15 +740,25 @@ func (enc *Encoder) marshalComment(structVal, field reflect.Value) error {
 	}
 	if enc.indent != "" || enc.prefix != "" {
 		if enc.depth > 0 && !enc.lastWasStart {
-			enc.writeIndent(enc.depth)
+			if err := enc.writeIndent(enc.depth); err != nil {
+				return err
+			}
 		}
 	}
-	enc.w.WriteString("<!--")
-	enc.w.Write(b)
-	if b[len(b)-1] == '-' {
-		enc.w.WriteByte(' ')
+	if _, err := enc.w.WriteString("<!--"); err != nil {
+		return err
 	}
-	enc.w.WriteString("-->")
+	if _, err := enc.w.Write(b); err != nil {
+		return err
+	}
+	if b[len(b)-1] == '-' {
+		if err := enc.w.WriteByte(' '); err != nil {
+			return err
+		}
+	}
+	if _, err := enc.w.WriteString("-->"); err != nil {
+		return err
+	}
 	enc.hasTokens = true
 	enc.lastWasStart = false
 	enc.lastWasText = false
@@ -754,18 +766,20 @@ func (enc *Encoder) marshalComment(structVal, field reflect.Value) error {
 }
 
 // writeCDATA writes a CDATA section, splitting on ]]> as required by the XML spec.
+// Errors from the writer are silently accumulated; callers should check the writer
+// for errors after the call (e.g. via Flush).
 func writeCDATA(w *bufio.Writer, text string) {
 	for {
 		i := strings.Index(text, "]]>")
 		if i < 0 {
-			w.WriteString("<![CDATA[")
-			w.WriteString(text)
-			w.WriteString("]]>")
+			_, _ = w.WriteString("<![CDATA[")
+			_, _ = w.WriteString(text)
+			_, _ = w.WriteString("]]>")
 			return
 		}
-		w.WriteString("<![CDATA[")
-		w.WriteString(text[:i+2]) // include ]]
-		w.WriteString("]]>")
+		_, _ = w.WriteString("<![CDATA[")
+		_, _ = w.WriteString(text[:i+2]) // include ]]
+		_, _ = w.WriteString("]]>")
 		text = text[i+2:] // continue from >
 	}
 }

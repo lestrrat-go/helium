@@ -7,7 +7,7 @@ import (
 )
 
 var atomValueStdlib = &Feed{
-	XMLName: Name{"http://www.w3.org/2005/Atom", "feed"},
+	XMLName: Name{Space: "http://www.w3.org/2005/Atom", Local: "feed"},
 	Title:   "Example Feed",
 	Link:    []Link{{Href: "http://example.org/"}},
 	Updated: ParseTimeStdlib("2003-12-13T18:30:02Z"),

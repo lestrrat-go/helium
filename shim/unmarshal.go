@@ -93,25 +93,7 @@ func stripXMLDecl(data []byte) []byte {
 	return trimLeadingSpace(data[end+2:])
 }
 
-func trimSpace(data []byte) []byte {
-	start := 0
-	for start < len(data) {
-		c := data[start]
-		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
-			break
-		}
-		start++
-	}
-	end := len(data)
-	for end > start {
-		c := data[end-1]
-		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
-			break
-		}
-		end--
-	}
-	return data[start:end]
-}
+
 
 func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 	if !target.IsValid() {

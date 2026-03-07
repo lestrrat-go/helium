@@ -349,9 +349,7 @@ func tokenSize(tok Token) int {
 	case StartElement:
 		// <name attr="val">
 		n := 1 + len(v.Name.Local) + 1 // < name >
-		if v.Name.Space != "" {
-			// This is an approximation since we don't have the prefix
-		}
+		// v.Name.Space is not used here (approximation; we don't have the prefix)
 		for _, a := range v.Attr {
 			n += 1 + len(a.Name.Local) + 2 + len(a.Value) + 1 // space name="val"
 		}
@@ -842,7 +840,9 @@ func setElementAttrs(doc *helium.Document, elem *helium.Element, attrs []stdxml.
 				return err
 			}
 		} else {
-			elem.SetAttribute(attr.Name.Local, attr.Value)
+			if err := elem.SetAttribute(attr.Name.Local, attr.Value); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

@@ -84,11 +84,11 @@ func (s *nsStack) createAttrPrefix(w *bufio.Writer, url string) string {
 	s.attrPrefix[url] = prefix
 	s.attrNS[prefix] = url
 
-	w.WriteString(`xmlns:`)
-	w.WriteString(prefix)
-	w.WriteString(`="`)
-	escapeAttrVal(w, url)
-	w.WriteString(`" `)
+	_, _ = w.WriteString(`xmlns:`)
+	_, _ = w.WriteString(prefix)
+	_, _ = w.WriteString(`="`)
+	_ = escapeAttrVal(w, url)
+	_, _ = w.WriteString(`" `)
 
 	s.prefixes = append(s.prefixes, prefix)
 	return prefix

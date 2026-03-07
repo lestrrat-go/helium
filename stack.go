@@ -53,7 +53,7 @@ func (s *nsStack) Lookup(prefix string) string {
 // element without being confused by ancestor bindings (which are valid
 // prefix shadowing, not duplicates).
 func (s *nsStack) LookupInTopN(prefix string, n int) string {
-	entries := s.KeyedStack.Peek(n)
+	entries := s.Peek(n)
 	for i := len(entries) - 1; i >= 0; i-- {
 		if entries[i].prefix == prefix {
 			return entries[i].href

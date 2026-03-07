@@ -118,7 +118,7 @@ type Text struct {
 }
 
 var atomFeedStdlib = Feed{
-	XMLName: Name{"http://www.w3.org/2005/Atom", "feed"},
+	XMLName: Name{Space: "http://www.w3.org/2005/Atom", Local: "feed"},
 	Title:   "Code Review - My issues",
 	Link: []Link{
 		{Rel: "alternate", Href: "http://codereview.appspot.com/"},
@@ -324,10 +324,10 @@ type BadPathEmbeddedB struct {
 var badPathTestsStdlib = []struct {
 	v, e any
 }{
-	{&BadPathTestA{}, &TagPathError{reflect.TypeFor[BadPathTestA](), "First", "items>item1", "Second", "items"}},
-	{&BadPathTestB{}, &TagPathError{reflect.TypeFor[BadPathTestB](), "First", "items>item1", "Second", "items>item1>value"}},
-	{&BadPathTestC{}, &TagPathError{reflect.TypeFor[BadPathTestC](), "First", "", "Second", "First"}},
-	{&BadPathTestD{}, &TagPathError{reflect.TypeFor[BadPathTestD](), "First", "", "Second", "First"}},
+	{&BadPathTestA{}, &TagPathError{Struct: reflect.TypeFor[BadPathTestA](), Field1: "First", Tag1: "items>item1", Field2: "Second", Tag2: "items"}},
+	{&BadPathTestB{}, &TagPathError{Struct: reflect.TypeFor[BadPathTestB](), Field1: "First", Tag1: "items>item1", Field2: "Second", Tag2: "items>item1>value"}},
+	{&BadPathTestC{}, &TagPathError{Struct: reflect.TypeFor[BadPathTestC](), Field1: "First", Tag1: "", Field2: "Second", Tag2: "First"}},
+	{&BadPathTestD{}, &TagPathError{Struct: reflect.TypeFor[BadPathTestD](), Field1: "First", Tag1: "", Field2: "Second", Tag2: "First"}},
 }
 
 func TestUnmarshalBadPathsStdlib(t *testing.T) {
@@ -628,7 +628,7 @@ type MyCharData struct {
 	body string
 }
 
-func (m *MyCharData) UnmarshalXML(d *stdxml.Decoder, start StartElement) error {
+func (m *MyCharData) UnmarshalXML(d *stdxml.Decoder, start stdxml.StartElement) error {
 	for {
 		t, err := d.Token()
 		if err == io.EOF { // found end of element
@@ -1106,5 +1106,5 @@ func TestCVE202230633Stdlib(t *testing.T) {
 	var example struct {
 		Things []string
 	}
-	Unmarshal(bytes.Repeat([]byte("<a>"), 17_000_000), &example)
+	_ = Unmarshal(bytes.Repeat([]byte("<a>"), 17_000_000), &example)
 }
