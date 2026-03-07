@@ -25,8 +25,8 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
 
 W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
 
-- **Canonicalize(io.Writer, *Document, Mode, ...Option)** — write canonical form
-- **CanonicalizeTo(*Document, Mode, ...Option) → []byte** — return canonical form
+- **Canonicalize(io.Writer, *Document, Mode, ...Option) → error** — write canonical form
+- **CanonicalizeTo(*Document, Mode, ...Option) → ([]byte, error)** — return canonical form
 - Options: WithComments(), WithNodeSet([]Node), WithInclusiveNamespaces([]string), WithBaseURI(string)
 - Files: `c14n.go` (API), `canonicalizer.go` (engine), `nsstack.go`, `sort.go`, `escape.go`
 - Imports: helium
@@ -35,14 +35,14 @@ W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
 
 XPath 1.0 expression parsing and evaluation.
 
-- **Compile(string) → *Expression** / **MustCompile(string) → *Expression** — parse XPath
-- **Expression.Evaluate(Node) → *Result** / **EvaluateWith(Node, *Context) → *Result**
-- **Find(Node, string) → []Node** — convenience: compile+evaluate→node-set
-- **Evaluate(Node, string) → *Result** — convenience: compile+evaluate
+- **Compile(string) → (*Expression, error)** / **MustCompile(string) → *Expression** — parse XPath
+- **Expression.Evaluate(Node) → (*Result, error)** / **EvaluateWith(Node, *Context) → (*Result, error)**
+- **Find(Node, string) → ([]Node, error)** — convenience: compile+evaluate→node-set
+- **Evaluate(Node, string) → (*Result, error)** — convenience: compile+evaluate
 - `Result` types: NodeSetResult, BooleanResult, NumberResult, StringResult
 - `Context` — namespace bindings, variables, custom functions, op limits
 - `NewContext(opts)` with WithNamespaces(), WithVariables(), WithOpLimit()
-- `Context.RegisterFunction(name, fn)` / `RegisterFunctionNS(uri, name, fn)` — custom functions (rejects built-in override)
+- `Context.RegisterFunction(name, fn)` / `RegisterFunctionNS(uri, name, fn)` — custom functions (unqualified names cannot override built-ins)
 - Limits: recursion 5000, node-set 10M, configurable op limit
 - Files: `xpath.go` (API), `parser.go`, `eval.go`, `axes.go`, `token.go`, `number.go`
 - Imports: helium
@@ -51,7 +51,7 @@ XPath 1.0 expression parsing and evaluation.
 
 XML Schema (XSD) 1.0 compilation and validation.
 
-- **Compile(*Document, ...CompileOption) → *Schema** / **CompileFile(path, ...CompileOption) → *Schema**
+- **Compile(*Document, ...CompileOption) → (*Schema, error)** / **CompileFile(path, ...CompileOption) → (*Schema, error)**
 - **Validate(*Document, *Schema, ...ValidateOption) → error**
 - `Schema.LookupElement(local, ns)`, `Schema.LookupType(local, ns)`, `Schema.TargetNamespace()`
 - Supports: complex/simple types, sequences, choices, all, groups, attribute groups, substitution groups, import/include, IDC (xs:unique/key/keyref)
@@ -64,7 +64,7 @@ XML Schema (XSD) 1.0 compilation and validation.
 
 RELAX NG schema compilation and validation.
 
-- **Compile(*Document, ...CompileOption) → *Grammar** / **CompileFile(path, ...CompileOption) → *Grammar**
+- **Compile(*Document, ...CompileOption) → (*Grammar, error)** / **CompileFile(path, ...CompileOption) → (*Grammar, error)**
 - **Validate(*Document, *Grammar, ...ValidateOption) → error**
 - Pattern-based: element, attribute, group, choice, interleave, optional, zeroOrMore, oneOrMore, ref, data, value, list, mixed, notAllowed
 - Supports: include with override, externalRef, parentRef, anyName/nsName/ncName, data types
@@ -78,8 +78,8 @@ RELAX NG schema compilation and validation.
 
 HTML 4.01 parser producing helium DOM or SAX events.
 
-- **Parse(ctx, []byte, ...ParseOption) → *Document**
-- **ParseFile(ctx, path, ...ParseOption) → *Document**
+- **Parse(ctx, []byte, ...ParseOption) → (*Document, error)**
+- **ParseFile(ctx, path, ...ParseOption) → (*Document, error)**
 - **ParseWithSAX(ctx, []byte, SAXHandler, ...ParseOption) → error**
 - Auto-closing, void elements, implicit html/head/body insertion
 - Encoding: prescan charset=utf-8 → U+FFFD for invalid bytes; otherwise Latin-1/Win-1252→UTF-8
@@ -113,7 +113,7 @@ XPointer expression evaluation with scheme cascading.
 
 Schematron schema compilation and validation.
 
-- **Compile(*Document, ...CompileOption) → *Schema** / **CompileFile(path, ...CompileOption) → *Schema**
+- **Compile(*Document, ...CompileOption) → (*Schema, error)** / **CompileFile(path, ...CompileOption) → (*Schema, error)**
 - **Validate(*Document, *Schema, ...ValidateOption) → error**
 - Supports: schema, pattern, rule, assert, report, let, name, value-of
 - Variable bindings via `<let>` and `<param>`
