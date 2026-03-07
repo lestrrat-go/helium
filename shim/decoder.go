@@ -17,7 +17,8 @@ import (
 
 // maxParseDepth is the maximum element nesting depth allowed by the shim.
 // This guards against stack overflow from pathological input (CVE-2022-30633).
-const maxParseDepth = 100_000
+// Matches encoding/xml's maxUnmarshalDepth (10 000).
+const maxParseDepth = 10_000
 
 type tokenEvent struct {
 	tok    Token
