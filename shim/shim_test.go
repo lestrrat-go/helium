@@ -332,7 +332,7 @@ func TestUnmarshalInvalidTargetErrorsMatchStdlib(t *testing.T) {
 	// Use any() to hide the non-pointer from go vet's static analysis.
 	// This is intentional: we're testing that both decoders reject non-pointer targets.
 	nonPtr := any("hello")
-	stdNonPtrErr := stdxml.Unmarshal(input, nonPtr)
+	stdNonPtrErr := stdxml.Unmarshal(input, nonPtr) //nolint:staticcheck // intentional non-pointer to test error behavior
 	shimNonPtrErr := shim.Unmarshal(input, nonPtr)
 	require.Error(t, stdNonPtrErr)
 	require.Error(t, shimNonPtrErr)
