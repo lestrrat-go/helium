@@ -122,12 +122,14 @@ func stripXMLDecl(data []byte) ([]byte, bool) {
 // encodings when no CharsetReader is available).
 func validateXMLDeclFields(doc *helium.Document) error {
 	if ver := doc.Version(); ver != "" && ver != "1.0" {
-		return &stdxml.SyntaxError{
-			Msg:  fmt.Sprintf("unsupported version %q; only version 1.0 is supported", ver),
-			Line: 1,
-		}
+		// stdlib uses fmt.Errorf here (not xml.SyntaxError), so we
+		// match that to produce identical Error() strings.
+		return fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", ver)
 	}
-	if enc := doc.Encoding(); enc != "" && !strings.EqualFold(enc, "utf-8") {
+	// doc.Encoding() returns "utf8" (no hyphen) as a default when no
+	// encoding pseudo-attribute was declared. That sentinel must be
+	// excluded so we only reject explicitly declared non-UTF-8 encodings.
+	if enc := doc.Encoding(); enc != "" && enc != "utf8" && !strings.EqualFold(enc, "utf-8") {
 		return fmt.Errorf("xml: encoding %q declared but Decoder.CharsetReader is nil", enc)
 	}
 	return nil
