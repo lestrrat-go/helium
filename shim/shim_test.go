@@ -5,6 +5,7 @@ import (
 	stdxml "encoding/xml"
 	"fmt"
 	"io"
+	"reflect"
 	"sync"
 	"testing"
 
@@ -328,9 +329,11 @@ func TestUnmarshalFieldTextStructHookMatchStdlib(t *testing.T) {
 func TestUnmarshalInvalidTargetErrorsMatchStdlib(t *testing.T) {
 	input := []byte(`<root>value</root>`)
 
-	var stdNonPtr string
-	stdNonPtrErr := stdxml.Unmarshal(input, stdNonPtr) //nolint:govet,staticcheck // intentional non-pointer to test error behavior
-	shimNonPtrErr := shim.Unmarshal(input, stdNonPtr)
+	// Use any() to hide the non-pointer from go vet's static analysis.
+	// This is intentional: we're testing that both decoders reject non-pointer targets.
+	nonPtr := any("hello")
+	stdNonPtrErr := stdxml.Unmarshal(input, nonPtr)
+	shimNonPtrErr := shim.Unmarshal(input, nonPtr)
 	require.Error(t, stdNonPtrErr)
 	require.Error(t, shimNonPtrErr)
 	require.Equal(t, stdNonPtrErr.Error(), shimNonPtrErr.Error())
@@ -818,18 +821,20 @@ func TestUnmarshalXMLNameNamespaceMismatchMatchStdlib(t *testing.T) {
 }
 
 func TestUnmarshalTagPathConflictMatchStdlib(t *testing.T) {
-	type payload struct {
-		A string `xml:"a>b"`
-		B string `xml:"a>b"` //nolint:govet // intentional duplicate tag to test conflict detection
-	}
+	// Build a struct type with duplicate xml:"a>b" tags at runtime
+	// to avoid go vet's static duplicate-tag check.
+	typ := reflect.StructOf([]reflect.StructField{
+		{Name: "A", Type: reflect.TypeOf(""), Tag: `xml:"a>b"`},
+		{Name: "B", Type: reflect.TypeOf(""), Tag: `xml:"a>b"`},
+	})
 
 	input := []byte(`<root><a><b>x</b></a></root>`)
 
-	var stdOut payload
-	stdErr := stdxml.Unmarshal(input, &stdOut)
+	stdOut := reflect.New(typ).Interface()
+	stdErr := stdxml.Unmarshal(input, stdOut)
 
-	var shimOut payload
-	shimErr := shim.Unmarshal(input, &shimOut)
+	shimOut := reflect.New(typ).Interface()
+	shimErr := shim.Unmarshal(input, shimOut)
 
 	require.Equal(t, stdErr == nil, shimErr == nil)
 	if stdErr != nil && shimErr != nil {
