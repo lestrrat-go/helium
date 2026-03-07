@@ -514,7 +514,7 @@ cat xmlfile | heliumlint
 
 # Current status
 
-* Core functionality is implemented: XML/HTML parsing, DOM building, SAX2, XPath, XInclude, C14N, RelaxNG, Schematron, and XSD.
+* Core functionality is implemented: XML/HTML parsing, DOM building, SAX2, XPath, XInclude, C14N, RelaxNG, Schematron, XSD, and `encoding/xml` compatibility (`shim` package).
 * The codebase includes broad compatibility tests and examples, and active parity work against libxml2 behavior.
 * Some edge cases and parity gaps are still being iterated on; contributions and issue reports are welcome.
 
