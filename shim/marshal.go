@@ -152,13 +152,14 @@ func (enc *Encoder) marshalStruct(val reflect.Value, start *StartElement) error 
 		}
 	}
 
-	// If the struct has an XMLName field with an empty tag (xml:"") and the
-	// element has no namespace but the parent does, add xmlns="" to clear
-	// the default namespace. This matches stdlib behavior.
+	// If the struct has an XMLName field whose tag provides no name or
+	// namespace (e.g., `xml:""` or no tag at all) and the element has no
+	// namespace but the parent does, add xmlns="" to clear the default
+	// namespace. This matches stdlib behavior.
 	if se.Name.Space == "" && len(enc.tags) > 0 && enc.tags[len(enc.tags)-1].Space != "" {
 		hasEmptyXMLNameTag := false
 		for _, b := range bindings {
-			if b.isXMLName && !b.hasNameSpace && b.name == "" {
+			if b.isXMLName && !b.hasNameSpace && b.tagPath == "" {
 				hasEmptyXMLNameTag = true
 				break
 			}

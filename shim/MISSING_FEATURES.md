@@ -416,28 +416,23 @@ go test -run 'TestTokenStdlib' -v
 
 ---
 
-## 7. Empty Namespace Override — DONE
+## 7. Empty Namespace Override ✅ DONE
 
 **Tests unlocked**: 1 (TestIssue7113Stdlib)
-**Difficulty**: Medium-High
-**Files**: `shim/unmarshal.go`, `shim/marshal.go`
+**Files**: `shim/marshal.go`
 
 ### Solution
 
-Three changes matching stdlib behavior:
+Fixed the xmlns="" emission condition in `marshalStruct`. When a struct has an
+XMLName field whose tag provides no name or namespace (empty tag or absent tag,
+detected via `b.tagPath == ""`), the element has no namespace, and the parent
+element has a non-empty namespace, append `Attr{Name{Local:"xmlns"}, ""}` to
+the start element to emit `xmlns=""`.
 
-1. **`parseFieldBinding`** (`unmarshal.go`): Use `f.Tag.Lookup("xml")` to
-   distinguish "no tag" from `xml:""`. When XMLName has an explicit empty tag,
-   set `b.name=""` and `b.rawName=""`.
-
-2. **`marshalStruct`** (`marshal.go`): Before calling `EncodeToken`, check if
-   the struct has an XMLName with empty tag (`b.name==""` + `!b.hasNameSpace`),
-   the element has Space="", and the parent has non-empty Space. If so, append
-   `Attr{Name{"","xmlns"}, ""}` to emit `xmlns=""`.
-
-3. **`buildStructStart`** (`marshal.go`): Tag name takes priority over XMLName
-   field value (matching stdlib). Only use tag when `rawName != "XMLName"`
-   (distinguishes tag-provided name from field-name fallback).
+This matches stdlib's logic (`tinfo.xmlname.xmlns == "" && tinfo.xmlname.name == ""`).
+The `tagPath` field distinguishes "tag was empty/absent" (tagPath="") from "tag
+explicitly provides a name" (tagPath="d"), which is needed because
+`parseFieldBinding` defaults rawName to the field name "XMLName" in both cases.
 
 ---
 
@@ -718,7 +713,7 @@ implemented.
 | 4 | EncodeToken Validation | 1 | High effort |
 | 5 | ~~RawToken NS Preservation~~ | ~~1~~ | **DONE** (test blocked on core issues) |
 | 6 | ~~Cooked Token xmlns~~ | ~~1~~ | **DONE** (TestTokenUnmarshalerStdlib passes) |
-| 7 | Empty NS Override | 1 | DONE |
+| 7 | Empty NS Override | 1 | ✅ Done |
 | 8 | CharsetReader | 2 | Medium effort |
 | 9 | Directive Tokens | 2 | ✅ Done |
 | 10 | Error Messages | ~5 | Medium effort (tedious) |
