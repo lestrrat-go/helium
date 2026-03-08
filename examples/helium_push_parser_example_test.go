@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath"
+	"github.com/lestrrat-go/helium/xpath1"
 )
 
 func Example_helium_push_parser() {
@@ -28,7 +28,7 @@ func Example_helium_push_parser() {
 		return
 	}
 
-	nodes, err := xpath.Find(context.Background(), doc, `/root/item`)
+	nodes, err := xpath1.Find(context.Background(), doc, `/root/item`)
 	if err != nil {
 		fmt.Printf("xpath failed: %s\n", err)
 		return

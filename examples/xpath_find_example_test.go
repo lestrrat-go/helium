@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath"
+	"github.com/lestrrat-go/helium/xpath1"
 )
 
 func Example_xpath_find() {
@@ -15,12 +15,12 @@ func Example_xpath_find() {
 		return
 	}
 
-	// xpath.Find is a convenience function that evaluates an XPath expression
+	// xpath1.Find is a convenience function that evaluates an XPath expression
 	// and returns the resulting node set directly. It is a shorthand for
 	// calling Evaluate and accessing the NodeSet field of the result.
 	// The expression "//book" selects all <book> elements anywhere in the
 	// document tree.
-	nodes, err := xpath.Find(context.Background(), doc, "//book")
+	nodes, err := xpath1.Find(context.Background(), doc, "//book")
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
 		return

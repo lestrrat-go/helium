@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath"
+	"github.com/lestrrat-go/helium/xpath1"
 )
 
 func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema, cfg *validateConfig) (string, bool) {
@@ -15,8 +15,8 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 	var out strings.Builder
 	valid := true
 
-	xctx := xpath.NewContext(ctx,
-		xpath.WithNamespaces(schema.namespaces),
+	xctx := xpath1.NewContext(ctx,
+		xpath1.WithNamespaces(schema.namespaces),
 	)
 
 	for _, pat := range schema.patterns {
@@ -25,7 +25,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 			if err != nil {
 				continue
 			}
-			if result.Type != xpath.NodeSetResult {
+			if result.Type != xpath1.NodeSetResult {
 				continue
 			}
 
@@ -40,16 +40,16 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 				// libxml2's xmlSchematronRegisterVariables behavior.
 				ruleCtx := xctx
 				if len(r.lets) > 0 {
-					parentXCtx := xpath.GetContext(xctx)
+					parentXCtx := xpath1.GetContext(xctx)
 					vars := make(map[string]any)
 					if parentXCtx != nil {
 						for k, v := range parentXCtx.Variables() {
 							vars[k] = v
 						}
 					}
-					ruleCtx = xpath.NewContext(ctx,
-						xpath.WithNamespaces(schema.namespaces),
-						xpath.WithVariables(vars),
+					ruleCtx = xpath1.NewContext(ctx,
+						xpath1.WithNamespaces(schema.namespaces),
+						xpath1.WithVariables(vars),
 					)
 					for _, lb := range r.lets {
 						letResult, err := lb.expr.Evaluate(ruleCtx, node)
@@ -182,36 +182,36 @@ func formatXPathError(err error) string {
 }
 
 // xpathResultToBool converts an XPath result to a boolean.
-func xpathResultToBool(r *xpath.Result) bool {
+func xpathResultToBool(r *xpath1.Result) bool {
 	switch r.Type {
-	case xpath.BooleanResult:
+	case xpath1.BooleanResult:
 		return r.Bool
-	case xpath.NumberResult:
+	case xpath1.NumberResult:
 		return r.Number != 0 && !math.IsNaN(r.Number)
-	case xpath.StringResult:
+	case xpath1.StringResult:
 		return r.String != ""
-	case xpath.NodeSetResult:
+	case xpath1.NodeSetResult:
 		return len(r.NodeSet) > 0
 	}
 	return false
 }
 
 // xpathResultToString converts an XPath result to a string.
-func xpathResultToString(r *xpath.Result) string {
+func xpathResultToString(r *xpath1.Result) string {
 	switch r.Type {
-	case xpath.StringResult:
+	case xpath1.StringResult:
 		return r.String
-	case xpath.NumberResult:
+	case xpath1.NumberResult:
 		if r.Number == math.Trunc(r.Number) && !math.IsInf(r.Number, 0) && !math.IsNaN(r.Number) {
 			return fmt.Sprintf("%g", r.Number)
 		}
 		return fmt.Sprintf("%g", r.Number)
-	case xpath.BooleanResult:
+	case xpath1.BooleanResult:
 		if r.Bool {
 			return "True"
 		}
 		return "False"
-	case xpath.NodeSetResult:
+	case xpath1.NodeSetResult:
 		if len(r.NodeSet) == 0 {
 			return ""
 		}
@@ -229,8 +229,8 @@ func xpathResultToString(r *xpath.Result) string {
 
 // xpathResultToName extracts a node name from an XPath result.
 // Only returns a name for element and attribute nodes (matching libxml2 behavior).
-func xpathResultToName(r *xpath.Result) string {
-	if r.Type == xpath.NodeSetResult && len(r.NodeSet) > 0 {
+func xpathResultToName(r *xpath1.Result) string {
+	if r.Type == xpath1.NodeSetResult && len(r.NodeSet) > 0 {
 		n := r.NodeSet[0]
 		if n.Type() == helium.ElementNode {
 			return n.Name()
@@ -244,15 +244,15 @@ func xpathResultToName(r *xpath.Result) string {
 }
 
 // xpathResultToValue converts an XPath result to a value suitable for variable binding.
-func xpathResultToValue(r *xpath.Result) any {
+func xpathResultToValue(r *xpath1.Result) any {
 	switch r.Type {
-	case xpath.NodeSetResult:
+	case xpath1.NodeSetResult:
 		return r.NodeSet
-	case xpath.StringResult:
+	case xpath1.StringResult:
 		return r.String
-	case xpath.NumberResult:
+	case xpath1.NumberResult:
 		return r.Number
-	case xpath.BooleanResult:
+	case xpath1.BooleanResult:
 		return r.Bool
 	}
 	return nil

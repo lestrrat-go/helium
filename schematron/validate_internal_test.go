@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath"
+	"github.com/lestrrat-go/helium/xpath1"
 	"github.com/stretchr/testify/require"
 )
 
@@ -113,8 +113,8 @@ func TestXpathResultToNameNamespace(t *testing.T) {
 		require.NoError(t, e.DeclareNamespace("ns", "http://example.com"))
 		require.NoError(t, e.SetActiveNamespace("ns", "http://example.com"))
 
-		r := &xpath.Result{
-			Type:    xpath.NodeSetResult,
+		r := &xpath1.Result{
+			Type:    xpath1.NodeSetResult,
 			NodeSet: []helium.Node{e},
 		}
 		require.Equal(t, "ns:item", xpathResultToName(r))
@@ -126,8 +126,8 @@ func TestXpathResultToNameNamespace(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(e))
 
-		r := &xpath.Result{
-			Type:    xpath.NodeSetResult,
+		r := &xpath1.Result{
+			Type:    xpath1.NodeSetResult,
 			NodeSet: []helium.Node{e},
 		}
 		require.Equal(t, "item", xpathResultToName(r))
@@ -151,8 +151,8 @@ func TestXpathResultToNameNamespace(t *testing.T) {
 		}
 		require.NotNil(t, attr)
 
-		r := &xpath.Result{
-			Type:    xpath.NodeSetResult,
+		r := &xpath1.Result{
+			Type:    xpath1.NodeSetResult,
 			NodeSet: []helium.Node{attr},
 		}
 		require.Equal(t, "foo:bar", xpathResultToName(r))
@@ -174,8 +174,8 @@ func TestXpathResultToNameNamespace(t *testing.T) {
 		}
 		require.NotNil(t, attr)
 
-		r := &xpath.Result{
-			Type:    xpath.NodeSetResult,
+		r := &xpath1.Result{
+			Type:    xpath1.NodeSetResult,
 			NodeSet: []helium.Node{attr},
 		}
 		require.Equal(t, "baz", xpathResultToName(r))
@@ -280,11 +280,11 @@ func TestLetVariableChainedDependency(t *testing.T) {
 }
 func TestXpathResultToStringBoolean(t *testing.T) {
 	t.Run("true", func(t *testing.T) {
-		r := &xpath.Result{Type: xpath.BooleanResult, Bool: true}
+		r := &xpath1.Result{Type: xpath1.BooleanResult, Bool: true}
 		require.Equal(t, "True", xpathResultToString(r))
 	})
 	t.Run("false", func(t *testing.T) {
-		r := &xpath.Result{Type: xpath.BooleanResult, Bool: false}
+		r := &xpath1.Result{Type: xpath1.BooleanResult, Bool: false}
 		require.Equal(t, "False", xpathResultToString(r))
 	})
 }
@@ -306,15 +306,15 @@ func TestXpathResultToStringNodeSet(t *testing.T) {
 	require.Len(t, children, 3)
 
 	t.Run("empty", func(t *testing.T) {
-		r := &xpath.Result{Type: xpath.NodeSetResult, NodeSet: nil}
+		r := &xpath1.Result{Type: xpath1.NodeSetResult, NodeSet: nil}
 		require.Equal(t, "", xpathResultToString(r))
 	})
 	t.Run("single node", func(t *testing.T) {
-		r := &xpath.Result{Type: xpath.NodeSetResult, NodeSet: children[:1]}
+		r := &xpath1.Result{Type: xpath1.NodeSetResult, NodeSet: children[:1]}
 		require.Equal(t, "a", xpathResultToString(r))
 	})
 	t.Run("multiple nodes", func(t *testing.T) {
-		r := &xpath.Result{Type: xpath.NodeSetResult, NodeSet: children}
+		r := &xpath1.Result{Type: xpath1.NodeSetResult, NodeSet: children}
 		require.Equal(t, "a b c", xpathResultToString(r))
 	})
 }

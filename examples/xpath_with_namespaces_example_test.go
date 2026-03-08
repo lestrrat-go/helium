@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath"
+	"github.com/lestrrat-go/helium/xpath1"
 )
 
 func Example_xpath_with_namespaces() {
@@ -26,14 +26,14 @@ func Example_xpath_with_namespaces() {
 	//
 	// This decoupling is important because XPath matches by namespace URI,
 	// not by prefix — documents may use any prefix for a given namespace.
-	ctx := xpath.NewContext(context.Background(),
-		xpath.WithNamespaces(map[string]string{
+	ctx := xpath1.NewContext(context.Background(),
+		xpath1.WithNamespaces(map[string]string{
 			"x": "http://example.com/ns",
 		}),
 	)
 
 	// Evaluate with explicit namespace bindings via context.Context.
-	r, err := xpath.Evaluate(ctx, doc, "//x:item")
+	r, err := xpath1.Evaluate(ctx, doc, "//x:item")
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
 		return

@@ -3,15 +3,15 @@
 Arrows show "imports" direction. Indented items are transitive.
 
 ```
-cmd/heliumlint → helium, c14n, xsd, xinclude, xpath, catalog, internal/cliutil
+cmd/heliumlint → helium, c14n, xsd, xinclude, xpath1, catalog, internal/cliutil
 shim           → helium, stream, internal/encoding
 xinclude       → helium, xpointer
-                  → xpath (via xpointer)
+                  → xpath1 (via xpointer)
                   → internal/encoding
-xsd            → helium, xpath
+xsd            → helium, xpath1
 relaxng        → helium
-schematron     → helium, xpath
-xpointer       → helium, xpath
+schematron     → helium, xpath1
+xpointer       → helium, xpath1
 c14n           → helium
 html           → helium, sax
 catalog        → helium, internal/catalog
@@ -30,10 +30,10 @@ sink, enum, internal/bitset, internal/stack, internal/cliutil
 helium (root) → sax, enum, internal/*
 
 ## Processing layer (depends on root)
-c14n, xpath, html, catalog, relaxng, stream
+c14n, xpath1, html, catalog, relaxng, stream
 
 ## Composition layer (depends on processing)
-xsd (root + xpath), xpointer (root + xpath), schematron (root + xpath), xinclude (root + xpointer), shim (root + stream)
+xsd (root + xpath1), xpointer (root + xpath1), schematron (root + xpath1), xinclude (root + xpointer), shim (root + stream)
 
 ## Application layer
 cmd/heliumlint (uses most packages)

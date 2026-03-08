@@ -6,7 +6,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/html"
-	"github.com/lestrrat-go/helium/xpath"
+	"github.com/lestrrat-go/helium/xpath1"
 )
 
 func Example_html_parse() {
@@ -22,7 +22,7 @@ func Example_html_parse() {
 	fmt.Println(doc.Type() == helium.HTMLDocumentNode)
 
 	// Parsed HTML can be queried with regular XPath helpers.
-	nodes, err := xpath.Find(context.Background(), doc, `//div`)
+	nodes, err := xpath1.Find(context.Background(), doc, `//div`)
 	if err != nil {
 		fmt.Printf("xpath failed: %s\n", err)
 		return

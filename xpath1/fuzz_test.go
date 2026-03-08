@@ -1,9 +1,9 @@
-package xpath_test
+package xpath1_test
 
 import (
 	"testing"
 
-	"github.com/lestrrat-go/helium/xpath"
+	"github.com/lestrrat-go/helium/xpath1"
 )
 
 func FuzzCompile(f *testing.F) {
@@ -21,6 +21,6 @@ func FuzzCompile(f *testing.F) {
 		if len(expr) > 4096 {
 			return
 		}
-		_, _ = xpath.Compile(expr)
+		_, _ = xpath1.Compile(expr)
 	})
 }

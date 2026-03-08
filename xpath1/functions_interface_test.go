@@ -1,4 +1,4 @@
-package xpath
+package xpath1
 
 import (
 	"context"

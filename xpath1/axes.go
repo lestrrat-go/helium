@@ -1,6 +1,4 @@
-// Package xpath implements XPath 1.0 expression parsing and evaluation
-// against helium XML document trees.
-package xpath
+package xpath1
 
 import (
 	helium "github.com/lestrrat-go/helium"

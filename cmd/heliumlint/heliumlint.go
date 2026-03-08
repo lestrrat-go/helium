@@ -15,7 +15,7 @@ import (
 	"github.com/lestrrat-go/helium/catalog"
 	"github.com/lestrrat-go/helium/internal/cliutil"
 	"github.com/lestrrat-go/helium/xinclude"
-	"github.com/lestrrat-go/helium/xpath"
+	"github.com/lestrrat-go/helium/xpath1"
 	"github.com/lestrrat-go/helium/xsd"
 )
 
@@ -520,7 +520,7 @@ func processInput(ctx context.Context, cfg *config, input namedInput, cat *catal
 }
 
 func evalXPath(ctx context.Context, cfg *config, doc *helium.Document, out io.Writer) int {
-	result, err := xpath.Evaluate(ctx, doc, cfg.xpathExpr)
+	result, err := xpath1.Evaluate(ctx, doc, cfg.xpathExpr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "XPath error: %s\n", err)
 		return exitXPath
@@ -529,7 +529,7 @@ func evalXPath(ctx context.Context, cfg *config, doc *helium.Document, out io.Wr
 	d := helium.NewWriter()
 
 	switch result.Type {
-	case xpath.NodeSetResult:
+	case xpath1.NodeSetResult:
 		for _, node := range result.NodeSet {
 			switch node.Type() {
 			case helium.AttributeNode:
@@ -550,7 +550,7 @@ func evalXPath(ctx context.Context, cfg *config, doc *helium.Document, out io.Wr
 				}
 			}
 		}
-	case xpath.BooleanResult:
+	case xpath1.BooleanResult:
 		if result.Bool {
 			if _, wErr := fmt.Fprintln(out, "true"); wErr != nil {
 				return exitXPath
@@ -560,11 +560,11 @@ func evalXPath(ctx context.Context, cfg *config, doc *helium.Document, out io.Wr
 				return exitXPath
 			}
 		}
-	case xpath.NumberResult:
+	case xpath1.NumberResult:
 		if _, wErr := fmt.Fprintln(out, result.Number); wErr != nil { //nolint:gosec // numeric output to writer
 			return exitXPath
 		}
-	case xpath.StringResult:
+	case xpath1.StringResult:
 		if _, wErr := fmt.Fprintln(out, result.String); wErr != nil { //nolint:gosec // string output to writer
 			return exitXPath
 		}

@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath"
+	"github.com/lestrrat-go/helium/xpath1"
 )
 
 // errUnknownScheme is returned by evaluatePart for unrecognized XPointer
@@ -88,7 +88,7 @@ func evaluatePart(ctx context.Context, doc *helium.Document, p xptrPart, nsMap m
 		if len(nsMap) > 0 {
 			return findWithContext(ctx, doc, p.body, nsMap)
 		}
-		nodes, findErr := xpath.Find(ctx, doc, p.body)
+		nodes, findErr := xpath1.Find(ctx, doc, p.body)
 		if findErr != nil {
 			return nil, fmt.Errorf("xpointer: XPath evaluation failed: %w", findErr)
 		}
@@ -114,13 +114,13 @@ func evaluatePart(ctx context.Context, doc *helium.Document, p xptrPart, nsMap m
 // findWithContext compiles an XPath expression and evaluates it with
 // namespace bindings, returning a node-set.
 func findWithContext(ctx context.Context, node helium.Node, expr string, nsMap map[string]string) ([]helium.Node, error) {
-	xctx := xpath.NewContext(ctx, xpath.WithNamespaces(nsMap))
-	r, err := xpath.Evaluate(xctx, node, expr)
+	xctx := xpath1.NewContext(ctx, xpath1.WithNamespaces(nsMap))
+	r, err := xpath1.Evaluate(xctx, node, expr)
 	if err != nil {
 		return nil, fmt.Errorf("xpointer: XPath evaluation failed: %w", err)
 	}
-	if r.Type != xpath.NodeSetResult {
-		return nil, xpath.ErrNotNodeSet
+	if r.Type != xpath1.NodeSetResult {
+		return nil, xpath1.ErrNotNodeSet
 	}
 	return r.NodeSet, nil
 }
