@@ -112,7 +112,7 @@ func main() {
 	repoRoot := findRepoRoot()
 	sourceDir := filepath.Join(repoRoot, "testdata", "qt3ts", "source")
 	outputFile := filepath.Join(repoRoot, "xpath3", "qt3_generated_test.go")
-	docsDir := filepath.Join(repoRoot, "testdata", "qt3ts", "docs")
+	docsDir := filepath.Join(repoRoot, "testdata", "qt3ts", "testdata")
 
 	if _, err := os.Stat(filepath.Join(sourceDir, "catalog.xml")); os.IsNotExist(err) {
 		log.Fatal("QT3 source not found. Run: bash testdata/qt3ts/fetch.sh")

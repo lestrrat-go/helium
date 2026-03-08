@@ -80,7 +80,7 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 
 func qt3DocsDir() string {
 	_, f, _, _ := runtime.Caller(0)
-	return filepath.Join(filepath.Dir(f), "..", "testdata", "qt3ts", "docs")
+	return filepath.Join(filepath.Dir(f), "..", "testdata", "qt3ts", "testdata")
 }
 
 func qt3ParseDoc(t *testing.T, path string) helium.Node {
