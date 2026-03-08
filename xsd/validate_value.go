@@ -1434,36 +1434,36 @@ func floatCmp(a, b float64) int {
 	return 0
 }
 
-// checkMinInclusive compares value >= min using type-aware comparison.
-func checkMinInclusive(value, min, builtinLocal string) bool {
-	cmp, ok := compareValues(value, min, builtinLocal)
+// checkMinInclusive compares value >= bound using type-aware comparison.
+func checkMinInclusive(value, bound, builtinLocal string) bool {
+	cmp, ok := compareValues(value, bound, builtinLocal)
 	if !ok {
 		return true // can't compare, don't error
 	}
 	return cmp >= 0
 }
 
-// checkMaxInclusive compares value <= max using type-aware comparison.
-func checkMaxInclusive(value, max, builtinLocal string) bool {
-	cmp, ok := compareValues(value, max, builtinLocal)
+// checkMaxInclusive compares value <= bound using type-aware comparison.
+func checkMaxInclusive(value, bound, builtinLocal string) bool {
+	cmp, ok := compareValues(value, bound, builtinLocal)
 	if !ok {
 		return true
 	}
 	return cmp <= 0
 }
 
-// checkMinExclusive compares value > min using type-aware comparison.
-func checkMinExclusive(value, min, builtinLocal string) bool {
-	cmp, ok := compareValues(value, min, builtinLocal)
+// checkMinExclusive compares value > bound using type-aware comparison.
+func checkMinExclusive(value, bound, builtinLocal string) bool {
+	cmp, ok := compareValues(value, bound, builtinLocal)
 	if !ok {
 		return true // can't compare, don't error
 	}
 	return cmp > 0
 }
 
-// checkMaxExclusive compares value < max using type-aware comparison.
-func checkMaxExclusive(value, max, builtinLocal string) bool {
-	cmp, ok := compareValues(value, max, builtinLocal)
+// checkMaxExclusive compares value < bound using type-aware comparison.
+func checkMaxExclusive(value, bound, builtinLocal string) bool {
+	cmp, ok := compareValues(value, bound, builtinLocal)
 	if !ok {
 		return true
 	}

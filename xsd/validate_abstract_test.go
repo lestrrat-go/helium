@@ -31,7 +31,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 		require.NoError(t, err)
 
-		err = xsd.Validate(doc, schema)
+		err = xsd.Validate(t.Context(), doc, schema)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "The type definition is abstract.")
 	})
@@ -70,7 +70,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 		require.NoError(t, err)
 
-		err = xsd.Validate(doc, schema)
+		err = xsd.Validate(t.Context(), doc, schema)
 		require.NoError(t, err)
 	})
 
@@ -102,7 +102,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 		require.NoError(t, err)
 
-		err = xsd.Validate(doc, schema)
+		err = xsd.Validate(t.Context(), doc, schema)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "is not validly derived from")
 	})
@@ -130,7 +130,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 		require.NoError(t, err)
 
-		err = xsd.Validate(doc, schema)
+		err = xsd.Validate(t.Context(), doc, schema)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "does not resolve to a type definition")
 	})
@@ -158,7 +158,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 		require.NoError(t, err)
 
-		err = xsd.Validate(doc, schema)
+		err = xsd.Validate(t.Context(), doc, schema)
 		require.NoError(t, err)
 	})
 
@@ -194,7 +194,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 		require.NoError(t, err)
 
-		err = xsd.Validate(doc, schema)
+		err = xsd.Validate(t.Context(), doc, schema)
 		require.NoError(t, err)
 	})
 
@@ -220,7 +220,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 		require.NoError(t, err)
 
-		err = xsd.Validate(doc, schema)
+		err = xsd.Validate(t.Context(), doc, schema)
 		require.NoError(t, err)
 	})
 }

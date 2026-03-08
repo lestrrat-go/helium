@@ -524,7 +524,7 @@ func matchWildcardParticle(parent *helium.Element, p *Particle, wc *Wildcard, ch
 }
 
 // tryMatchWildcardParticle is the try version (no error reporting).
-func tryMatchWildcardParticle(p *Particle, wc *Wildcard, children []childElem, pos int, schema *Schema) (int, error) {
+func tryMatchWildcardParticle(p *Particle, wc *Wildcard, children []childElem, pos int, _ *Schema) (int, error) {
 	count := 0
 	for pos+count < len(children) {
 		child := children[pos+count]

@@ -630,7 +630,8 @@ type firstSetEntry struct {
 func particleFirstSet(p *Particle, schema *Schema) []firstSetEntry {
 	switch term := p.Term.(type) {
 	case *ElementDecl:
-		entries := []firstSetEntry{{qname: term.Name}}
+		entries := make([]firstSetEntry, 1, 1+len(schema.substGroups[term.Name]))
+		entries[0] = firstSetEntry{qname: term.Name}
 		for _, member := range schema.substGroups[term.Name] {
 			entries = append(entries, firstSetEntry{qname: member.Name})
 		}
@@ -647,7 +648,8 @@ func particleFirstSet(p *Particle, schema *Schema) []firstSetEntry {
 func particleLastSet(p *Particle, schema *Schema) []firstSetEntry {
 	switch term := p.Term.(type) {
 	case *ElementDecl:
-		entries := []firstSetEntry{{qname: term.Name}}
+		entries := make([]firstSetEntry, 1, 1+len(schema.substGroups[term.Name]))
+		entries[0] = firstSetEntry{qname: term.Name}
 		for _, member := range schema.substGroups[term.Name] {
 			entries = append(entries, firstSetEntry{qname: member.Name})
 		}

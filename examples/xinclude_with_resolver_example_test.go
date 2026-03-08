@@ -51,7 +51,7 @@ func Example_xinclude_with_resolver() {
 	// WithNoXIncludeMarkers removes the xi:include marker nodes
 	//   from the output after processing.
 	// WithNoBaseFixup prevents adding xml:base attributes to included content.
-	n, err := xinclude.Process(doc,
+	n, err := xinclude.Process(context.Background(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),

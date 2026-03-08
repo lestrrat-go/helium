@@ -154,7 +154,7 @@ func TestGoldenFiles(t *testing.T) {
 				require.NoError(t, err, "XML parse failed for %s", tc.xmlPath)
 
 				filename := "./test/schematron/" + tc.xmlBase
-				err = schematron.Validate(doc, schema, schematron.WithFilename(filename))
+				err = schematron.Validate(t.Context(), doc, schema, schematron.WithFilename(filename))
 				if err != nil {
 					got = compileWarnings + err.Error()
 				} else {
@@ -194,7 +194,7 @@ func compileAndValidate(t *testing.T, schemaXML, instanceXML string, opts ...sch
 	require.NoError(t, err)
 	doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 	require.NoError(t, err)
-	return schematron.Validate(doc, schema, opts...)
+	return schematron.Validate(t.Context(), doc, schema, opts...) //nolint:wrapcheck // test helper: caller uses require.NoError
 }
 
 func TestWithQuiet(t *testing.T) {

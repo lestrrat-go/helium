@@ -61,7 +61,7 @@ func TestXIncludeBasicXML(t *testing.T) {
 		},
 	}
 
-	count, err := xinclude.Process(doc,
+	count, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -96,7 +96,7 @@ func TestXIncludeText(t *testing.T) {
 		},
 	}
 
-	count, err := xinclude.Process(doc,
+	count, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -119,7 +119,7 @@ func TestXIncludeFallback(t *testing.T) {
 		files: map[string]string{},
 	}
 
-	count, err := xinclude.Process(doc,
+	count, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -148,7 +148,7 @@ func TestXIncludeMissingNoFallback(t *testing.T) {
 		files: map[string]string{},
 	}
 
-	_, err := xinclude.Process(doc,
+	_, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 	)
@@ -167,7 +167,7 @@ func TestXIncludeCircularDetection(t *testing.T) {
 		},
 	}
 
-	_, err := xinclude.Process(doc,
+	_, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -187,7 +187,7 @@ func TestXIncludeMarkerNodes(t *testing.T) {
 		},
 	}
 
-	count, err := xinclude.Process(doc,
+	count, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoBaseFixup(),
 	)
@@ -227,7 +227,7 @@ func TestXIncludeMultiple(t *testing.T) {
 		},
 	}
 
-	count, err := xinclude.Process(doc,
+	count, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -252,7 +252,7 @@ func TestXIncludeNoHref(t *testing.T) {
 
 	resolver := &stringResolver{files: map[string]string{}}
 
-	_, err := xinclude.Process(doc,
+	_, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 	)
@@ -271,7 +271,7 @@ func TestXIncludeBaseFixup(t *testing.T) {
 		},
 	}
 
-	count, err := xinclude.Process(doc,
+	count, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 	)
@@ -309,7 +309,7 @@ func TestXIncludeNested(t *testing.T) {
 		},
 	}
 
-	count, err := xinclude.Process(doc,
+	count, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -343,7 +343,7 @@ func TestXIncludeNested(t *testing.T) {
 func TestXIncludeNoIncludes(t *testing.T) {
 	doc := parseXML(t, `<root><a/><b/></root>`)
 
-	count, err := xinclude.Process(doc, xinclude.WithNoXIncludeMarkers())
+	count, err := xinclude.Process(t.Context(), doc, xinclude.WithNoXIncludeMarkers())
 	require.NoError(t, err)
 	require.Equal(t, 0, count)
 }
@@ -362,7 +362,7 @@ func TestXIncludeNewNamespace(t *testing.T) {
 		},
 	}
 
-	count, err := xinclude.Process(doc,
+	count, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -393,7 +393,7 @@ func TestXIncludeNewNamespaceFallback(t *testing.T) {
 
 	resolver := &stringResolver{files: map[string]string{}}
 
-	count, err := xinclude.Process(doc,
+	count, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -427,7 +427,7 @@ func TestXIncludeDepthLimit(t *testing.T) {
 		<xi:include href="level0.xml"/>
 	</root>`)
 
-	_, err := xinclude.Process(doc,
+	_, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -449,7 +449,7 @@ func TestXIncludeSameURLTwice(t *testing.T) {
 		},
 	}
 
-	count, err := xinclude.Process(doc,
+	count, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -482,7 +482,7 @@ func TestXIncludeTextEncoding(t *testing.T) {
 		<xi:include href="latin.txt" parse="text" encoding="ISO-8859-1"/>
 	</root>`)
 
-	count, err := xinclude.Process(doc,
+	count, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -509,7 +509,7 @@ func TestXIncludeProcessTree(t *testing.T) {
 	}
 
 	// Process from the document (same as Process)
-	count, err := xinclude.ProcessTree(doc,
+	count, err := xinclude.ProcessTree(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -531,7 +531,7 @@ func TestXIncludeParseFlags(t *testing.T) {
 
 	flags := helium.ParseNoXIncNode | helium.ParseNoBaseFix
 
-	count, err := xinclude.Process(doc,
+	count, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithParseFlags(flags),
 	)
@@ -618,13 +618,13 @@ func TestLibxml2XIncludeGolden(t *testing.T) {
 
 		t.Run(name, func(t *testing.T) {
 			docPath := filepath.Join(docsDir, name)
-			data, err := os.ReadFile(docPath)
+			data, err := os.ReadFile(docPath) //nolint:gosec // reading test data file from testdata directory
 			require.NoError(t, err)
 
 			doc, err := helium.Parse(t.Context(), data)
 			require.NoError(t, err, "parsing %s", name)
 
-			_, procErr := xinclude.Process(doc,
+			_, procErr := xinclude.Process(t.Context(), doc,
 				xinclude.WithNoXIncludeMarkers(),
 				xinclude.WithBaseURI(docPath),
 			)
@@ -636,7 +636,7 @@ func TestLibxml2XIncludeGolden(t *testing.T) {
 				got, err := doc.XMLString()
 				require.NoError(t, err)
 
-				expected, err := os.ReadFile(resultFile)
+				expected, err := os.ReadFile(resultFile) //nolint:gosec // reading test expected result from testdata directory
 				require.NoError(t, err)
 
 				require.Equal(t, string(expected), got, "output mismatch for %s", name)
@@ -669,13 +669,13 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 	for _, name := range successTests {
 		t.Run(name, func(t *testing.T) {
 			docPath := filepath.Join(wrDir, name)
-			data, err := os.ReadFile(docPath)
+			data, err := os.ReadFile(docPath) //nolint:gosec // reading test data file from testdata directory
 			require.NoError(t, err)
 
 			doc, err := helium.Parse(t.Context(), data)
 			require.NoError(t, err, "parsing %s", name)
 
-			_, err = xinclude.Process(doc,
+			_, err = xinclude.Process(t.Context(), doc,
 				xinclude.WithNoXIncludeMarkers(),
 				xinclude.WithBaseURI(docPath),
 			)
@@ -685,7 +685,7 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 			require.NoError(t, err)
 
 			resultFile := filepath.Join(resultDir, name)
-			expected, err := os.ReadFile(resultFile)
+				expected, err := os.ReadFile(resultFile) //nolint:gosec // reading test expected result
 			require.NoError(t, err)
 
 			require.Equal(t, string(expected), got, "output mismatch for %s", name)
@@ -704,13 +704,13 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 	for _, tc := range errorTests {
 		t.Run(tc.name, func(t *testing.T) {
 			docPath := filepath.Join(wrDir, tc.name)
-			data, err := os.ReadFile(docPath)
+			data, err := os.ReadFile(docPath) //nolint:gosec // reading test data file
 			require.NoError(t, err)
 
 			doc, err := helium.Parse(t.Context(), data)
 			require.NoError(t, err, "parsing %s", tc.name)
 
-			_, err = xinclude.Process(doc,
+			_, err = xinclude.Process(t.Context(), doc,
 				xinclude.WithNoXIncludeMarkers(),
 				xinclude.WithBaseURI(docPath),
 			)
@@ -737,7 +737,7 @@ func TestXIncludeIncludeInInclude(t *testing.T) {
 		},
 	}
 
-	_, err := xinclude.Process(doc,
+	_, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -756,7 +756,7 @@ func TestXIncludeMultipleFallback(t *testing.T) {
 
 	resolver := &stringResolver{files: map[string]string{}}
 
-	_, err := xinclude.Process(doc,
+	_, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -770,7 +770,7 @@ func TestXIncludeFallbackOutsideInclude(t *testing.T) {
 		<xi:fallback><a/></xi:fallback>
 	</root>`)
 
-	_, err := xinclude.Process(doc,
+	_, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
 	)
@@ -786,7 +786,7 @@ func TestXIncludeURITooLong(t *testing.T) {
 
 	resolver := &stringResolver{files: map[string]string{}}
 
-	_, err := xinclude.Process(doc,
+	_, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -807,7 +807,7 @@ func TestXIncludeNamespacedAttr(t *testing.T) {
 		},
 	}
 
-	count, err := xinclude.Process(doc,
+	count, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -844,7 +844,7 @@ func TestXIncludeParseNoEntWithXPointer(t *testing.T) {
 		<xi:include href="entities.xml" xpointer="xpointer(/root/item)"/>
 	</root>`)
 
-	count, err := xinclude.Process(doc,
+	count, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -897,7 +897,7 @@ func TestXIncludeDocCacheAvoidsReResolve(t *testing.T) {
 		},
 	}
 
-	count, err := xinclude.Process(doc,
+	count, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -937,7 +937,7 @@ func TestXIncludeEntityMerge(t *testing.T) {
 		},
 	}
 
-	count, err := xinclude.Process(doc,
+	count, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -983,7 +983,7 @@ func TestXIncludeEntityMergeConflict(t *testing.T) {
 	}
 
 	var warnings []string
-	count, err := xinclude.Process(doc,
+	count, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),
@@ -1024,7 +1024,7 @@ func TestXIncludeEntityMergeNoTargetDTD(t *testing.T) {
 		},
 	}
 
-	count, err := xinclude.Process(doc,
+	count, err := xinclude.Process(t.Context(), doc,
 		xinclude.WithResolver(resolver),
 		xinclude.WithNoXIncludeMarkers(),
 		xinclude.WithNoBaseFixup(),

@@ -200,7 +200,7 @@ func TestGoldenFiles(t *testing.T) {
 
 				// Validate. Prepend any compile warnings to the output.
 				filename := "./test/schemas/" + tc.xmlBase
-				err = xsd.Validate(doc, schema, xsd.WithFilename(filename))
+				err = xsd.Validate(t.Context(), doc, schema, xsd.WithFilename(filename))
 				if err != nil {
 					got = compileWarnings + err.Error()
 				} else {
@@ -254,7 +254,7 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		err = xsd.Validate(doc, schema)
+		err = xsd.Validate(t.Context(), doc, schema)
 		require.NoError(t, err)
 	})
 
@@ -265,7 +265,7 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		err = xsd.Validate(doc, schema)
+		err = xsd.Validate(t.Context(), doc, schema)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not nillable")
 	})
@@ -277,7 +277,7 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		err = xsd.Validate(doc, schema)
+		err = xsd.Validate(t.Context(), doc, schema)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "nilled")
 	})
@@ -289,7 +289,7 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		err = xsd.Validate(doc, schema)
+		err = xsd.Validate(t.Context(), doc, schema)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "nilled")
 	})
@@ -301,7 +301,7 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		err = xsd.Validate(doc, schema)
+		err = xsd.Validate(t.Context(), doc, schema)
 		require.NoError(t, err)
 	})
 
@@ -312,7 +312,7 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		err = xsd.Validate(doc, schema)
+		err = xsd.Validate(t.Context(), doc, schema)
 		require.NoError(t, err)
 	})
 
@@ -323,7 +323,7 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		err = xsd.Validate(doc, schema)
+		err = xsd.Validate(t.Context(), doc, schema)
 		require.NoError(t, err)
 	})
 
@@ -334,7 +334,7 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		err = xsd.Validate(doc, schema)
+		err = xsd.Validate(t.Context(), doc, schema)
 		require.NoError(t, err)
 	})
 }
@@ -365,7 +365,7 @@ func TestDefaultFixedValidation(t *testing.T) {
 
 		xmlDoc, err := helium.Parse(t.Context(), []byte(xmlStr))
 		require.NoError(t, err, "XML parse failed")
-		return xsd.Validate(xmlDoc, schema, xsd.WithFilename("test.xml"))
+		return xsd.Validate(t.Context(), xmlDoc, schema, xsd.WithFilename("test.xml"))
 	}
 
 	t.Run("element_fixed_correct_value", func(t *testing.T) {
@@ -447,7 +447,7 @@ func TestMultipleAttributeErrors(t *testing.T) {
 
 		xmlDoc, err := helium.Parse(t.Context(), []byte(xmlStr))
 		require.NoError(t, err, "XML parse failed")
-		return xsd.Validate(xmlDoc, schema, xsd.WithFilename("test.xml"))
+		return xsd.Validate(t.Context(), xmlDoc, schema, xsd.WithFilename("test.xml"))
 	}
 
 	t.Run("multiple unknown attributes", func(t *testing.T) {
@@ -495,7 +495,7 @@ func TestMultipleAttributeErrors(t *testing.T) {
 
 func TestRedefine(t *testing.T) {
 	tmpDir := filepath.Join("..", ".tmp", "redefine-test")
-	require.NoError(t, os.MkdirAll(tmpDir, 0o755))
+	require.NoError(t, os.MkdirAll(tmpDir, 0o750)) //nolint:gosec // test temp directory
 	t.Cleanup(func() {
 		if err := os.RemoveAll(tmpDir); err != nil {
 			t.Logf("failed to remove temp dir %s: %v", tmpDir, err)
@@ -505,7 +505,7 @@ func TestRedefine(t *testing.T) {
 	writeFile := func(t *testing.T, name, content string) string {
 		t.Helper()
 		p := filepath.Join(tmpDir, name)
-		require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
+		require.NoError(t, os.WriteFile(p, []byte(content), 0o600)) //nolint:gosec // test helper writing temp files
 		return p
 	}
 
@@ -520,7 +520,7 @@ func TestRedefine(t *testing.T) {
 
 		xmlDoc, err := helium.Parse(t.Context(), []byte(xmlStr))
 		require.NoError(t, err, "XML parse failed")
-		return xsd.Validate(xmlDoc, schema)
+		return xsd.Validate(t.Context(), xmlDoc, schema)
 	}
 
 	t.Run("complexType_extension", func(t *testing.T) {

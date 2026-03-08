@@ -39,7 +39,7 @@ func Example_xsd_compile_from_document() {
 	}
 
 	// Validate the document against the compiled schema.
-	if err := xsd.Validate(doc, schema); err != nil {
+	if err := xsd.Validate(context.Background(), doc, schema); err != nil {
 		fmt.Println(err)
 	}
 	// Output:

@@ -10,12 +10,12 @@ import (
 	"github.com/lestrrat-go/helium/xpath"
 )
 
-func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig) (string, bool) {
+func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema, cfg *validateConfig) (string, bool) {
 	filename := cfg.filename
 	var out strings.Builder
 	valid := true
 
-	xctx := xpath.NewContext(context.Background(),
+	xctx := xpath.NewContext(ctx,
 		xpath.WithNamespaces(schema.namespaces),
 	)
 
@@ -47,7 +47,7 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 							vars[k] = v
 						}
 					}
-					ruleCtx = xpath.NewContext(context.Background(),
+					ruleCtx = xpath.NewContext(ctx,
 						xpath.WithNamespaces(schema.namespaces),
 						xpath.WithVariables(vars),
 					)
@@ -79,7 +79,7 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 					if fire {
 						valid = false
 						if cfg.errorHandler != nil {
-							msg := formatMessage(t.message, node, ruleCtx, &out)
+							msg := formatMessage(ruleCtx, t.message, node, &out)
 							cfg.errorHandler.HandleError(ValidationError{
 								Filename: filename,
 								Line:     node.Line(),
@@ -88,7 +88,7 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 								Message:  msg,
 							})
 						} else if !cfg.quiet {
-							msg := formatMessage(t.message, node, ruleCtx, &out)
+							msg := formatMessage(ruleCtx, t.message, node, &out)
 							nodePath := getNodePath(node)
 							out.WriteString(schematronError(filename, node.Line(), node.Name(), nodePath, msg))
 						}
@@ -114,7 +114,7 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 // after each segment (text, name, value-of), if the accumulated buffer
 // ends with whitespace, all trailing whitespace is replaced with a
 // single space. Internal whitespace within segments is preserved.
-func formatMessage(parts []messagePart, node helium.Node, xctx context.Context, out *strings.Builder) string {
+func formatMessage(xctx context.Context, parts []messagePart, node helium.Node, out *strings.Builder) string {
 	var buf []byte
 	for _, part := range parts {
 		switch p := part.(type) {

@@ -77,7 +77,7 @@ func Example_xinclude_process() {
 		return
 	}
 
-	n, err := xinclude.Process(doc,
+	n, err := xinclude.Process(context.Background(), doc,
 		xinclude.WithBaseURI(mainPath),
 		xinclude.WithNoBaseFixup(),
 	)
@@ -105,7 +105,7 @@ func Example_xinclude_process() {
 		return
 	}
 
-	n, err = xinclude.Process(doc,
+	n, err = xinclude.Process(context.Background(), doc,
 		xinclude.WithBaseURI(mainPath),
 		xinclude.WithNoBaseFixup(),
 		xinclude.WithNoXIncludeMarkers(),

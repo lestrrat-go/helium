@@ -46,7 +46,7 @@ func Example_xsd_validate() {
 
 	// Validate checks the document against the compiled schema.
 	// It returns nil if the document is valid, or a *ValidateError with details.
-	if err := xsd.Validate(doc, schema); err != nil {
+	if err := xsd.Validate(context.Background(), doc, schema); err != nil {
 		fmt.Println(err)
 	}
 	// Output:

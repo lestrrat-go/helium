@@ -34,7 +34,7 @@ type xptrPart struct {
 // Multiple scheme parts are evaluated left-to-right with cascading fallback:
 // the first part that produces a non-empty result wins. xmlns() parts
 // accumulate namespace bindings for all subsequent parts.
-func Evaluate(doc *helium.Document, expr string) ([]helium.Node, error) {
+func Evaluate(ctx context.Context, doc *helium.Document, expr string) ([]helium.Node, error) {
 	parts, err := parseParts(expr)
 	if err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func Evaluate(doc *helium.Document, expr string) ([]helium.Node, error) {
 			continue
 		}
 
-		nodes, err := evaluatePart(doc, p, nsMap)
+		nodes, err := evaluatePart(ctx, doc, p, nsMap)
 		if err != nil {
 			// Unknown schemes allow cascade to continue (try next part).
 			// Syntax errors from known schemes abort immediately.
@@ -82,13 +82,17 @@ func Evaluate(doc *helium.Document, expr string) ([]helium.Node, error) {
 }
 
 // evaluatePart evaluates a single non-xmlns XPointer part.
-func evaluatePart(doc *helium.Document, p xptrPart, nsMap map[string]string) ([]helium.Node, error) {
+func evaluatePart(ctx context.Context, doc *helium.Document, p xptrPart, nsMap map[string]string) ([]helium.Node, error) {
 	switch p.scheme {
 	case "xpointer", "xpath1":
 		if len(nsMap) > 0 {
-			return findWithContext(doc, p.body, nsMap)
+			return findWithContext(ctx, doc, p.body, nsMap)
 		}
-		return xpath.Find(context.Background(), doc, p.body)
+		nodes, findErr := xpath.Find(ctx, doc, p.body)
+		if findErr != nil {
+			return nil, fmt.Errorf("xpointer: XPath evaluation failed: %w", findErr)
+		}
+		return nodes, nil
 	case "element":
 		return evaluateElement(doc, p.body)
 	case "": // shorthand pointer or bare child sequence
@@ -109,11 +113,11 @@ func evaluatePart(doc *helium.Document, p xptrPart, nsMap map[string]string) ([]
 
 // findWithContext compiles an XPath expression and evaluates it with
 // namespace bindings, returning a node-set.
-func findWithContext(node helium.Node, expr string, nsMap map[string]string) ([]helium.Node, error) {
-	ctx := xpath.NewContext(context.Background(), xpath.WithNamespaces(nsMap))
-	r, err := xpath.Evaluate(ctx, node, expr)
+func findWithContext(ctx context.Context, node helium.Node, expr string, nsMap map[string]string) ([]helium.Node, error) {
+	xctx := xpath.NewContext(ctx, xpath.WithNamespaces(nsMap))
+	r, err := xpath.Evaluate(xctx, node, expr)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("xpointer: XPath evaluation failed: %w", err)
 	}
 	if r.Type != xpath.NodeSetResult {
 		return nil, xpath.ErrNotNodeSet

@@ -23,7 +23,7 @@ func Example_xpointer_evaluate() {
 	//
 	// Child indices in element() are 1-based and only count element nodes
 	// (text nodes, comments, etc. are skipped).
-	nodes, err := xpointer.Evaluate(doc, "element(/1/2/1)")
+	nodes, err := xpointer.Evaluate(context.Background(), doc, "element(/1/2/1)")
 	if err != nil {
 		fmt.Printf("xpointer error: %s\n", err)
 		return
