@@ -428,16 +428,18 @@ func (p *parser) parseSimpleMapExpr() (Expr, error) {
 // parseUnaryExpr parses → ('-' | '+')* PathExpr.
 func (p *parser) parseUnaryExpr() (Expr, error) {
 	negate := 0
+loop:
 	for {
 		tok := p.lexer.Peek()
-		if tok.Type == TokenMinus {
+		switch tok.Type {
+		case TokenMinus:
 			p.lexer.Next()
 			negate++
-		} else if tok.Type == TokenPlus {
+		case TokenPlus:
 			p.lexer.Next()
 			// unary + is a no-op
-		} else {
-			break
+		default:
+			break loop
 		}
 	}
 	expr, err := p.parsePathExpr()
@@ -571,9 +573,17 @@ func (p *parser) parsePrimaryExpr() (Expr, error) {
 		return p.parseFunctionKeyword()
 
 	case TokenMap:
+		// map:func(...) is a namespace-prefixed function call, not a constructor
+		if p.lexer.PeekAt(1).Type == TokenColon {
+			return p.parseNamePrimary()
+		}
 		return p.parseMapConstructor()
 
 	case TokenArray:
+		// array:func(...) is a namespace-prefixed function call, not a constructor
+		if p.lexer.PeekAt(1).Type == TokenColon {
+			return p.parseNamePrimary()
+		}
 		return p.parseArrayCurlyConstructor()
 
 	case TokenLBracket:
