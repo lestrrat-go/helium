@@ -23,7 +23,7 @@ type qt3Check func(seq xpath3.Sequence) bool
 type qt3Test struct {
 	Name        string
 	XPath       string
-	DocPath     string // relative to qt3DocsDir(); empty = no context document
+	DocPath     string // relative to qt3TestDataDir(); empty = no context document
 	Namespaces  map[string]string
 	Skip        string
 	ExpectError bool
@@ -47,7 +47,7 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 			}
 			var doc helium.Node
 			if tc.DocPath != "" {
-				doc = qt3ParseDoc(t, filepath.Join(qt3DocsDir(), tc.DocPath))
+				doc = qt3ParseDoc(t, filepath.Join(qt3TestDataDir(), tc.DocPath))
 			}
 			compiled, err := xpath3.Compile(tc.XPath)
 			if err != nil {
@@ -78,7 +78,7 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 // Path helpers
 // ──────────────────────────────────────────────────────────────────────
 
-func qt3DocsDir() string {
+func qt3TestDataDir() string {
 	_, f, _, _ := runtime.Caller(0)
 	return filepath.Join(filepath.Dir(f), "..", "testdata", "qt3ts", "testdata")
 }
