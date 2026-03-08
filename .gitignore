@@ -34,6 +34,9 @@ testdata/libxml2/source/
 # Saxon-HE source clone (dev-time only, not committed)
 testdata/saxon/source/
 
+# QT3 test suite clone (dev-time only, not committed)
+testdata/qt3ts/source/
+
 # Scratch/design markdown files in root (keep only README.md)
 /*.md
 !README.md
