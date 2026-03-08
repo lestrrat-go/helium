@@ -1,5 +1,5 @@
 // Command qt3gen parses the W3C QT3 (XPath/XQuery Test Suite 3) catalog
-// and generates standalone Go test files for the xpath3 package.
+// and generates a table-driven Go test file for the xpath3 package.
 //
 // Usage:
 //
@@ -11,8 +11,8 @@
 //
 // Output:
 //
-//	xpath3/qt3_generated_test.go   (one file with all XPath-applicable tests)
-//	testdata/qt3ts/docs/           (context documents copied from QT3 source)
+//	xpath3/qt3_generated_test.go   (table-driven tests)
+//	testdata/qt3ts/docs/           (context documents needed by tests)
 package main
 
 import (
@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"golang.org/x/net/html/charset"
@@ -87,21 +88,19 @@ type testCase struct {
 }
 
 type dependency struct {
-	Type     string `xml:"type,attr"`
-	Value    string `xml:"value,attr"`
+	Type      string `xml:"type,attr"`
+	Value     string `xml:"value,attr"`
 	Satisfied string `xml:"satisfied,attr"`
 }
 
-// resultSpec uses raw XML so we can handle the nested assertion structure.
 type resultSpec struct {
 	XMLName xml.Name
 	Inner   []byte `xml:",innerxml"`
 }
 
-// assertion is a parsed assertion from a <result> element.
 type assertion struct {
-	Type     string // "assert-eq", "assert-true", "error", "all-of", "any-of", etc.
-	Value    string // text content (for assert-eq, assert-string-value, error code, etc.)
+	Type     string
+	Value    string
 	Children []assertion
 }
 
@@ -119,25 +118,21 @@ func main() {
 		log.Fatal("QT3 source not found. Run: bash testdata/qt3ts/fetch.sh")
 	}
 
-	// Parse catalog
 	cat := parseCatalog(filepath.Join(sourceDir, "catalog.xml"))
 
-	// Build global environment map
 	globalEnvs := make(map[string]*environment)
 	for i := range cat.Environments {
 		globalEnvs[cat.Environments[i].Name] = &cat.Environments[i]
 	}
 
-	// Collect all applicable test cases
 	var allTests []generatedTest
-	docFiles := make(map[string]bool) // source-relative paths of docs to copy
+	docFiles := make(map[string]bool)
 
 	for _, tsRef := range cat.TestSets {
 		tsFile := filepath.Join(sourceDir, tsRef.File)
 		ts := parseTestSet(tsFile)
-		tsDir := filepath.Dir(tsRef.File) // e.g. "fn", "prod"
+		tsDir := filepath.Dir(tsRef.File)
 
-		// Build local environment map
 		localEnvs := make(map[string]*environment)
 		for i := range ts.Environments {
 			localEnvs[ts.Environments[i].Name] = &ts.Environments[i]
@@ -149,11 +144,8 @@ func main() {
 			}
 
 			skipReason := getSkipReason(tc.Dependencies)
-
-			// Resolve environment
 			env, envIsGlobal := resolveEnvironment(tc.Environment, localEnvs, globalEnvs)
 
-			// Check for unsupported environment features
 			if env != nil {
 				if envSkip := checkEnvironmentSupport(env); envSkip != "" {
 					if skipReason == "" {
@@ -162,29 +154,23 @@ func main() {
 				}
 			}
 
-			// Track context documents
 			var contextDocPath string
 			if env != nil {
 				for _, src := range env.Sources {
 					if src.Role == "." && src.File != "" {
-						var srcPath string
 						if envIsGlobal {
-							// Global environments have paths relative to catalog root
-							srcPath = src.File
+							contextDocPath = src.File
 						} else {
-							// Local environments have paths relative to test-set dir
-							srcPath = filepath.Join(tsDir, src.File)
+							contextDocPath = filepath.Join(tsDir, src.File)
 						}
-						docFiles[srcPath] = true
-						contextDocPath = srcPath
+						docFiles[contextDocPath] = true
 					}
 				}
 			}
 
-			// Parse assertions
 			assertions := parseResultAssertions(tc)
 
-			gt := generatedTest{
+			allTests = append(allTests, generatedTest{
 				SetName:        tsRef.Name,
 				CaseName:       tc.Name,
 				XPath:          strings.TrimSpace(tc.Test),
@@ -192,20 +178,15 @@ func main() {
 				Namespaces:     collectNamespaces(env),
 				Assertions:     assertions,
 				SkipReason:     skipReason,
-			}
-			allTests = append(allTests, gt)
+			})
 		}
 	}
 
-	// Copy context documents
-	if err := os.MkdirAll(docsDir, 0o755); err != nil {
-		log.Fatalf("creating docs dir: %v", err)
-	}
-
+	// Copy context documents (preserving directory structure)
 	copied := 0
 	for docPath := range docFiles {
 		srcFull := filepath.Join(sourceDir, docPath)
-		dstFull := filepath.Join(docsDir, filepath.Base(docPath))
+		dstFull := filepath.Join(docsDir, docPath)
 		if err := copyFile(srcFull, dstFull); err != nil {
 			log.Printf("warning: copying %s: %v", docPath, err)
 			continue
@@ -217,7 +198,6 @@ func main() {
 	code := generateTestFile(allTests)
 	formatted, err := format.Source([]byte(code))
 	if err != nil {
-		// Write unformatted for debugging
 		if writeErr := os.WriteFile(outputFile, []byte(code), 0o644); writeErr != nil {
 			log.Fatalf("writing unformatted output: %v", writeErr)
 		}
@@ -230,7 +210,6 @@ func main() {
 	fmt.Printf("Generated %d XPath tests in %s\n", len(allTests), outputFile)
 	fmt.Printf("Copied %d context documents to %s\n", copied, docsDir)
 
-	// Count skips
 	skipped := 0
 	for _, t := range allTests {
 		if t.SkipReason != "" {
@@ -250,7 +229,6 @@ func parseCatalog(path string) *catalog {
 		log.Fatalf("opening catalog: %v", err)
 	}
 	defer f.Close()
-
 	var c catalog
 	dec := xml.NewDecoder(f)
 	dec.CharsetReader = charset.NewReaderLabel
@@ -266,7 +244,6 @@ func parseTestSet(path string) *testSetFile {
 		log.Fatalf("opening test set %s: %v", path, err)
 	}
 	defer f.Close()
-
 	var ts testSetFile
 	dec := xml.NewDecoder(f)
 	dec.CharsetReader = charset.NewReaderLabel
@@ -280,8 +257,6 @@ func parseTestSet(path string) *testSetFile {
 // Spec filtering
 // ──────────────────────────────────────────────────────────────────────
 
-// isXPathApplicable returns true if the test case is applicable to XPath
-// (not XQuery-only). A test with no spec dependency is considered applicable.
 func isXPathApplicable(deps []dependency) bool {
 	hasSpecDep := false
 	for _, d := range deps {
@@ -289,60 +264,45 @@ func isXPathApplicable(deps []dependency) bool {
 			continue
 		}
 		hasSpecDep = true
-		// Check if any value token includes XPath
 		for _, v := range strings.Fields(d.Value) {
-			if isXPathSpec(v) {
+			if strings.HasPrefix(v, "XP") {
 				if d.Satisfied == "false" {
-					// "spec not satisfied" means this test should NOT run for this spec
 					continue
 				}
 				return true
 			}
 		}
 	}
-	// No spec dependency → applicable to all
 	return !hasSpecDep
 }
 
-func isXPathSpec(v string) bool {
-	// XP20, XP20+, XP30, XP30+, XP31, XP31+
-	return strings.HasPrefix(v, "XP")
-}
-
-// getSkipReason returns a skip reason if the test requires unsupported features.
 func getSkipReason(deps []dependency) string {
 	for _, d := range deps {
-		if d.Type == "feature" {
-			satisfied := d.Satisfied != "false"
-			if satisfied {
-				switch d.Value {
-				case "schemaImport", "schemaValidation", "schemaAware":
-					return "requires XML Schema support"
-				case "serialization":
-					return "requires serialization"
-				case "namespace-axis":
-					return "requires namespace axis"
-				case "moduleImport":
-					return "requires XQuery module import"
-				case "collection-stability":
-					return "requires collection stability"
-				case "directory-as-collection-uri":
-					return "requires directory as collection URI"
-				case "fn-transform-XSLT":
-					return "requires XSLT transform"
-				case "fn-transform-XSLT30":
-					return "requires XSLT 3.0 transform"
-				case "fn-format-integer-CLDR":
-					return "requires CLDR format-integer"
-				case "non_unicode_codepoint_collation":
-					return "requires non-Unicode codepoint collation"
-				case "non_empty_sequence_collection":
-					return "requires non-empty sequence collection"
-				}
+		if d.Type == "feature" && d.Satisfied != "false" {
+			switch d.Value {
+			case "schemaImport", "schemaValidation", "schemaAware":
+				return "requires XML Schema support"
+			case "serialization":
+				return "requires serialization"
+			case "namespace-axis":
+				return "requires namespace axis"
+			case "moduleImport":
+				return "requires XQuery module import"
+			case "collection-stability":
+				return "requires collection stability"
+			case "directory-as-collection-uri":
+				return "requires directory as collection URI"
+			case "fn-transform-XSLT", "fn-transform-XSLT30":
+				return "requires XSLT transform"
+			case "fn-format-integer-CLDR":
+				return "requires CLDR format-integer"
+			case "non_unicode_codepoint_collation":
+				return "requires non-Unicode codepoint collation"
+			case "non_empty_sequence_collection":
+				return "requires non-empty sequence collection"
 			}
 		}
 		if d.Type == "spec" {
-			// If it requires XP20 only (without +), skip if we're XP31
 			for _, v := range strings.Fields(d.Value) {
 				if v == "XP20" && d.Satisfied != "false" {
 					return "requires XPath 2.0 only behavior"
@@ -360,7 +320,6 @@ func getSkipReason(deps []dependency) string {
 // Environment resolution
 // ──────────────────────────────────────────────────────────────────────
 
-// resolveEnvironment returns the resolved environment and whether it is global.
 func resolveEnvironment(tcEnv *environment, local, global map[string]*environment) (*environment, bool) {
 	if tcEnv == nil {
 		return nil, false
@@ -372,7 +331,7 @@ func resolveEnvironment(tcEnv *environment, local, global map[string]*environmen
 		if e, ok := global[tcEnv.Ref]; ok {
 			return e, true
 		}
-		return nil, false // unresolved ref
+		return nil, false
 	}
 	return tcEnv, false
 }
@@ -383,7 +342,6 @@ func checkEnvironmentSupport(env *environment) string {
 			return "requires schema-validated source"
 		}
 		if src.Role != "." && src.Role != "" {
-			// Variable-bound sources like $works, $staff
 			return "requires variable-bound source documents"
 		}
 	}
@@ -394,10 +352,7 @@ func checkEnvironmentSupport(env *environment) string {
 }
 
 func collectNamespaces(env *environment) map[string]string {
-	if env == nil {
-		return nil
-	}
-	if len(env.Namespaces) == 0 {
+	if env == nil || len(env.Namespaces) == 0 {
 		return nil
 	}
 	ns := make(map[string]string)
@@ -412,11 +367,6 @@ func collectNamespaces(env *environment) map[string]string {
 // ──────────────────────────────────────────────────────────────────────
 
 func parseResultAssertions(tc testCase) []assertion {
-	// The result field has the outermost assertion element.
-	// We need to re-parse the inner XML to extract assertions.
-	// The result XML is captured as raw inner XML under the <result> element.
-
-	// Build synthetic XML wrapping the result content
 	resultXML := "<result xmlns=\"" + qt3NS + "\">" + string(tc.Result.Inner) + "</result>"
 	return parseAssertionXML(resultXML)
 }
@@ -459,14 +409,14 @@ func convertAssertion(xa xmlAssertion) assertion {
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Code generation
+// Code generation (table-driven)
 // ──────────────────────────────────────────────────────────────────────
 
 type generatedTest struct {
 	SetName        string
 	CaseName       string
 	XPath          string
-	ContextDocPath string // relative to testdata/qt3ts/source/, empty = no context
+	ContextDocPath string
 	Namespaces     map[string]string
 	Assertions     []assertion
 	SkipReason     string
@@ -475,98 +425,11 @@ type generatedTest struct {
 func generateTestFile(tests []generatedTest) string {
 	var b strings.Builder
 
-	b.WriteString(`// Code generated by tools/qt3gen; DO NOT EDIT.
+	b.WriteString("// Code generated by tools/qt3gen; DO NOT EDIT.\n\n")
+	b.WriteString("package xpath3_test\n\n")
+	b.WriteString("import \"testing\"\n\n")
 
-package xpath3_test
-
-import (
-	"context"
-	"fmt"
-	"math"
-	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"testing"
-
-	helium "github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath3"
-	"github.com/stretchr/testify/require"
-)
-
-// qt3DocsDir returns the path to the QT3 context documents directory.
-func qt3DocsDir() string {
-	_, thisFile, _, _ := runtime.Caller(0)
-	return filepath.Join(filepath.Dir(thisFile), "..", "testdata", "qt3ts", "docs")
-}
-
-// qt3SourceDir returns the path to the QT3 source directory.
-func qt3SourceDir() string {
-	_, thisFile, _, _ := runtime.Caller(0)
-	return filepath.Join(filepath.Dir(thisFile), "..", "testdata", "qt3ts", "source")
-}
-
-// qt3ParseDoc parses an XML file and returns the document root.
-func qt3ParseDoc(t *testing.T, path string) helium.Node {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	require.NoError(t, err, "reading %s", path)
-	doc, err := helium.Parse(t.Context(), data)
-	require.NoError(t, err, "parsing %s", path)
-	return doc
-}
-
-// qt3StringValue returns the string value of an XPath result sequence.
-func qt3StringValue(seq xpath3.Sequence) string {
-	var parts []string
-	for _, item := range seq {
-		av, err := xpath3.AtomizeItem(item)
-		if err != nil {
-			parts = append(parts, fmt.Sprintf("%v", item))
-		} else {
-			parts = append(parts, fmt.Sprintf("%v", av.Value))
-		}
-	}
-	return strings.Join(parts, " ")
-}
-
-// qt3EffectiveBooleanValue returns the effective boolean value of a sequence.
-func qt3EffectiveBooleanValue(seq xpath3.Sequence) (bool, error) {
-	if len(seq) == 0 {
-		return false, nil
-	}
-	first := seq[0]
-	if _, ok := first.(xpath3.NodeItem); ok {
-		return true, nil // non-empty node sequence is true
-	}
-	if len(seq) == 1 {
-		av, err := xpath3.AtomizeItem(first)
-		if err != nil {
-			return false, err
-		}
-		switch v := av.Value.(type) {
-		case bool:
-			return v, nil
-		case string:
-			return v != "", nil
-		case float64:
-			return v != 0 && !math.IsNaN(v), nil
-		case int64:
-			return v != 0, nil
-		}
-	}
-	return false, fmt.Errorf("cannot compute EBV for sequence of length %d", len(seq))
-}
-
-var _ = qt3DocsDir
-var _ = qt3SourceDir
-var _ = qt3ParseDoc
-var _ = qt3StringValue
-var _ = qt3EffectiveBooleanValue
-
-`)
-
-	// Group tests by test-set name
+	// Group by test-set
 	type setGroup struct {
 		name  string
 		tests []generatedTest
@@ -589,71 +452,46 @@ var _ = qt3EffectiveBooleanValue
 		funcName := "TestQT3_" + goIdentifier(setName)
 
 		fmt.Fprintf(&b, "func %s(t *testing.T) {\n", funcName)
+		fmt.Fprintf(&b, "\tqt3RunTests(t, []qt3Test{\n")
 
 		for _, tc := range g.tests {
-			caseName := goTestName(tc.CaseName)
-			fmt.Fprintf(&b, "\tt.Run(%q, func(t *testing.T) {\n", caseName)
+			b.WriteString("\t\t{")
+			fmt.Fprintf(&b, "Name: %q, ", tc.CaseName)
+			fmt.Fprintf(&b, "XPath: %s", goStringLiteral(tc.XPath))
 
-			if tc.SkipReason != "" {
-				fmt.Fprintf(&b, "\t\tt.Skip(%q)\n", tc.SkipReason)
-			}
-
-			// Set up context
-			if tc.ContextDocPath != "" || len(tc.Namespaces) > 0 {
-				b.WriteString("\t\tctx := context.Background()\n")
-			} else {
-				b.WriteString("\t\tctx := context.Background()\n")
-			}
-
-			// Namespace bindings
-			if len(tc.Namespaces) > 0 {
-				b.WriteString("\t\tctx = xpath3.NewContext(ctx, xpath3.WithNamespaces(map[string]string{\n")
-				keys := make([]string, 0, len(tc.Namespaces))
-				for k := range tc.Namespaces {
-					keys = append(keys, k)
-				}
-				sort.Strings(keys)
-				for _, k := range keys {
-					fmt.Fprintf(&b, "\t\t\t%q: %q,\n", k, tc.Namespaces[k])
-				}
-				b.WriteString("\t\t}))\n")
-			}
-
-			// Context document
 			if tc.ContextDocPath != "" {
-				fmt.Fprintf(&b, "\t\tdoc := qt3ParseDoc(t, filepath.Join(qt3SourceDir(), %q))\n", tc.ContextDocPath)
-			} else {
-				b.WriteString("\t\tvar doc helium.Node // no context document\n")
+				fmt.Fprintf(&b, ", DocPath: %q", tc.ContextDocPath)
 			}
-
-			// Compile & evaluate
-			xpathStr := tc.XPath
-			fmt.Fprintf(&b, "\t\texpr := %s\n", goStringLiteral(xpathStr))
-
-			// Check if assertions expect an error
+			if len(tc.Namespaces) > 0 {
+				b.WriteString(", Namespaces: map[string]string{")
+				keys := sortedKeys(tc.Namespaces)
+				for i, k := range keys {
+					if i > 0 {
+						b.WriteString(", ")
+					}
+					fmt.Fprintf(&b, "%q: %q", k, tc.Namespaces[k])
+				}
+				b.WriteString("}")
+			}
+			if tc.SkipReason != "" {
+				fmt.Fprintf(&b, ", Skip: %q", tc.SkipReason)
+			}
 			if assertionsExpectError(tc.Assertions) {
-				b.WriteString("\t\tcompiled, compileErr := xpath3.Compile(expr)\n")
-				b.WriteString("\t\tif compileErr != nil {\n")
-				generateErrorAssertions(&b, tc.Assertions, "compileErr", "\t\t\t")
-				b.WriteString("\t\t\treturn\n")
-				b.WriteString("\t\t}\n")
-				b.WriteString("\t\t_, evalErr := compiled.Evaluate(ctx, doc)\n")
-				b.WriteString("\t\trequire.Error(t, evalErr, \"expected error for: %s\", expr)\n")
-				generateErrorAssertions(&b, tc.Assertions, "evalErr", "\t\t")
+				b.WriteString(", ExpectError: true")
 			} else {
-				b.WriteString("\t\tcompiled, err := xpath3.Compile(expr)\n")
-				b.WriteString("\t\trequire.NoError(t, err, \"compile: %s\", expr)\n")
-				b.WriteString("\t\tresult, err := compiled.Evaluate(ctx, doc)\n")
-				b.WriteString("\t\trequire.NoError(t, err, \"eval: %s\", expr)\n")
-				b.WriteString("\t\tseq := result.Sequence()\n")
-				b.WriteString("\t\t_ = seq\n")
-				generateAssertions(&b, tc.Assertions, "\t\t")
+				assertExprs := emitAssertions(tc.Assertions)
+				if len(assertExprs) > 0 {
+					b.WriteString(", Assertions: []qt3Assertion{")
+					b.WriteString(strings.Join(assertExprs, ", "))
+					b.WriteString("}")
+				}
 			}
 
-			b.WriteString("\t})\n")
+			b.WriteString("},\n")
 		}
 
-		b.WriteString("}\n\n")
+		fmt.Fprintf(&b, "\t})\n")
+		fmt.Fprintf(&b, "}\n\n")
 	}
 
 	return b.String()
@@ -675,126 +513,80 @@ func assertionsExpectError(assertions []assertion) bool {
 	return false
 }
 
-func generateAssertions(b *strings.Builder, assertions []assertion, indent string) {
+// emitAssertions returns Go expressions for assertion values.
+func emitAssertions(assertions []assertion) []string {
+	var out []string
 	for _, a := range assertions {
-		generateSingleAssertion(b, a, indent)
+		out = append(out, emitAssertion(a)...)
 	}
+	return out
 }
 
-func generateSingleAssertion(b *strings.Builder, a assertion, indent string) {
+// emitAssertion returns one or more Go expressions (all-of expands to multiple).
+func emitAssertion(a assertion) []string {
 	switch a.Type {
-	case "assert-true":
-		fmt.Fprintf(b, "%sebv, ebvErr := qt3EffectiveBooleanValue(seq)\n", indent)
-		fmt.Fprintf(b, "%srequire.NoError(t, ebvErr)\n", indent)
-		fmt.Fprintf(b, "%srequire.True(t, ebv, \"expected true, got: %%v\", seq)\n", indent)
-
-	case "assert-false":
-		fmt.Fprintf(b, "%sebv, ebvErr := qt3EffectiveBooleanValue(seq)\n", indent)
-		fmt.Fprintf(b, "%srequire.NoError(t, ebvErr)\n", indent)
-		fmt.Fprintf(b, "%srequire.False(t, ebv, \"expected false, got: %%v\", seq)\n", indent)
-
-	case "assert-string-value":
-		fmt.Fprintf(b, "%srequire.Equal(t, %s, qt3StringValue(seq))\n", indent, goStringLiteral(a.Value))
-
 	case "assert-eq":
-		fmt.Fprintf(b, "%srequire.Equal(t, %s, qt3StringValue(seq))\n", indent, goStringLiteral(a.Value))
-
+		return []string{fmt.Sprintf("qt3AssertEq(%s)", goStringLiteral(a.Value))}
+	case "assert-string-value":
+		return []string{fmt.Sprintf("qt3AssertStringValue(%s)", goStringLiteral(a.Value))}
+	case "assert-true":
+		return []string{"qt3AssertTrue()"}
+	case "assert-false":
+		return []string{"qt3AssertFalse()"}
 	case "assert-empty":
-		fmt.Fprintf(b, "%srequire.Empty(t, seq, \"expected empty sequence\")\n", indent)
-
+		return []string{"qt3AssertEmpty()"}
 	case "assert-count":
-		fmt.Fprintf(b, "%srequire.Len(t, seq, %s)\n", indent, a.Value)
-
+		n, _ := strconv.Atoi(a.Value)
+		return []string{fmt.Sprintf("qt3AssertCount(%d)", n)}
 	case "assert-type":
-		// Type assertions are informational for now; skip detailed checks
-		fmt.Fprintf(b, "%s_ = seq // assert-type: %s\n", indent, a.Value)
-
+		return []string{fmt.Sprintf("qt3AssertType(%q)", a.Value)}
 	case "assert-deep-eq":
-		fmt.Fprintf(b, "%srequire.Equal(t, %s, qt3StringValue(seq), \"deep-eq\")\n", indent, goStringLiteral(a.Value))
-
-	case "assert-xml":
-		fmt.Fprintf(b, "%s_ = seq // assert-xml (not checked)\n", indent)
-
-	case "assert-permutation":
-		fmt.Fprintf(b, "%s_ = seq // assert-permutation (not checked)\n", indent)
-
-	case "assert-serialization-error", "assert-serialization":
-		fmt.Fprintf(b, "%s_ = seq // %s (not checked)\n", indent, a.Type)
-
+		return []string{fmt.Sprintf("qt3AssertDeepEq(%s)", goStringLiteral(a.Value))}
+	case "assert-xml", "assert-permutation", "assert-serialization-error", "assert-serialization":
+		return []string{"qt3AssertSkip()"}
 	case "all-of":
-		for _, child := range a.Children {
-			generateSingleAssertion(b, child, indent)
-		}
-
+		return emitAssertions(a.Children)
 	case "any-of":
-		// For any-of, we try each assertion and pass if any succeeds.
-		// Use a helper approach with a bool flag.
-		fmt.Fprintf(b, "%s// any-of: at least one assertion must pass\n", indent)
-		fmt.Fprintf(b, "%sanyPassed := false\n", indent)
-		for i, child := range a.Children {
+		var checks []string
+		for _, child := range a.Children {
 			if child.Type == "error" {
-				// Already handled by assertionsExpectError
-				continue
+				continue // handled by assertionsExpectError
 			}
-			varName := fmt.Sprintf("anyOfOk%d", i)
-			fmt.Fprintf(b, "%sfunc() { defer func() { if r := recover(); r != nil { /* assertion failed, try next */ } }()\n", indent)
-			generateSingleAssertionForAnyOf(b, child, indent+"\t")
-			fmt.Fprintf(b, "%s\t%s := true\n", indent, varName)
-			fmt.Fprintf(b, "%s\t_ = %s\n", indent, varName)
-			fmt.Fprintf(b, "%s\tanyPassed = true\n", indent)
-			fmt.Fprintf(b, "%s}()\n", indent)
+			checks = append(checks, emitCheck(child))
 		}
-		fmt.Fprintf(b, "%srequire.True(t, anyPassed, \"none of the any-of assertions passed for: %%v\", seq)\n", indent)
-
+		if len(checks) == 0 {
+			return nil
+		}
+		return []string{fmt.Sprintf("qt3AnyOf(%s)", strings.Join(checks, ", "))}
 	case "error":
-		// Should have been caught by assertionsExpectError; if we get here, skip
-		fmt.Fprintf(b, "%st.Skip(\"expected error %s\")\n", indent, a.Value)
-
+		return nil // handled separately
 	default:
-		safeVal := strings.ReplaceAll(a.Value, "\n", " ")
-		fmt.Fprintf(b, "%s// TODO: unhandled assertion type %q: %s\n", indent, a.Type, safeVal)
+		return []string{"qt3AssertSkip()"}
 	}
 }
 
-func generateSingleAssertionForAnyOf(b *strings.Builder, a assertion, indent string) {
+// emitCheck returns a Go expression for a qt3Check value (used in any-of).
+func emitCheck(a assertion) string {
 	switch a.Type {
-	case "assert-true":
-		fmt.Fprintf(b, "%sebv, _ := qt3EffectiveBooleanValue(seq)\n", indent)
-		fmt.Fprintf(b, "%sif !ebv { panic(\"not true\") }\n", indent)
-	case "assert-false":
-		fmt.Fprintf(b, "%sebv, _ := qt3EffectiveBooleanValue(seq)\n", indent)
-		fmt.Fprintf(b, "%sif ebv { panic(\"not false\") }\n", indent)
-	case "assert-string-value":
-		fmt.Fprintf(b, "%sif qt3StringValue(seq) != %s { panic(\"no match\") }\n", indent, goStringLiteral(a.Value))
 	case "assert-eq":
-		fmt.Fprintf(b, "%sif qt3StringValue(seq) != %s { panic(\"no match\") }\n", indent, goStringLiteral(a.Value))
+		return fmt.Sprintf("qt3CheckEq(%s)", goStringLiteral(a.Value))
+	case "assert-string-value":
+		return fmt.Sprintf("qt3CheckStringValue(%s)", goStringLiteral(a.Value))
+	case "assert-true":
+		return "qt3CheckTrue()"
+	case "assert-false":
+		return "qt3CheckFalse()"
 	case "assert-empty":
-		fmt.Fprintf(b, "%sif len(seq) != 0 { panic(\"not empty\") }\n", indent)
+		return "qt3CheckEmpty()"
 	case "assert-count":
-		fmt.Fprintf(b, "%sif len(seq) != %s { panic(\"wrong count\") }\n", indent, a.Value)
+		n, _ := strconv.Atoi(a.Value)
+		return fmt.Sprintf("qt3CheckCount(%d)", n)
 	case "assert-type":
-		fmt.Fprintf(b, "%s_ = seq // assert-type in any-of\n", indent)
+		return fmt.Sprintf("qt3CheckType(%q)", a.Value)
+	case "assert-deep-eq":
+		return fmt.Sprintf("qt3CheckDeepEq(%s)", goStringLiteral(a.Value))
 	default:
-		fmt.Fprintf(b, "%s_ = seq // any-of child: %s\n", indent, a.Type)
-	}
-}
-
-func generateErrorAssertions(b *strings.Builder, assertions []assertion, errVar, indent string) {
-	for _, a := range assertions {
-		if a.Type == "error" {
-			fmt.Fprintf(b, "%s// expected error code: %s\n", indent, a.Value)
-			fmt.Fprintf(b, "%s_ = %s\n", indent, errVar)
-			return
-		}
-		if a.Type == "any-of" {
-			for _, child := range a.Children {
-				if child.Type == "error" {
-					fmt.Fprintf(b, "%s// expected error code (any-of): %s\n", indent, child.Value)
-					fmt.Fprintf(b, "%s_ = %s\n", indent, errVar)
-					return
-				}
-			}
-		}
+		return "qt3CheckSkip()"
 	}
 }
 
@@ -810,12 +602,6 @@ func goIdentifier(s string) string {
 	return nonIdentRE.ReplaceAllString(s, "_")
 }
 
-func goTestName(s string) string {
-	return s // test names can be anything for t.Run
-}
-
-// goStringLiteral returns a Go string literal for s, using backticks if s
-// contains newlines and no backticks, otherwise using %q.
 func goStringLiteral(s string) string {
 	if strings.Contains(s, "\n") && !strings.Contains(s, "`") {
 		return "`" + s + "`"
@@ -823,8 +609,16 @@ func goStringLiteral(s string) string {
 	return fmt.Sprintf("%q", s)
 }
 
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 func findRepoRoot() string {
-	// Walk up from the executable or CWD to find go.mod
 	dir, err := os.Getwd()
 	if err != nil {
 		log.Fatal(err)
@@ -847,17 +641,14 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	defer in.Close()
-
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-
 	out, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
-
 	_, err = io.Copy(out, in)
 	return err
 }
