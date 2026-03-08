@@ -14,18 +14,18 @@ func Example_html_parse_with_sax() {
 	var sawTitle bool
 
 	handler := &html.SAXCallbacks{}
-	handler.OnStartElement = html.StartElementFunc(func(name string, _ []html.Attribute) error {
+	handler.SetOnStartElement(html.StartElementFunc(func(name string, _ []html.Attribute) error {
 		if strings.EqualFold(name, "h1") {
 			sawH1 = true
 		}
 		return nil
-	})
-	handler.OnCharacters = html.CharactersFunc(func(ch []byte) error {
+	}))
+	handler.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
 		if strings.TrimSpace(string(ch)) == "Title" {
 			sawTitle = true
 		}
 		return nil
-	})
+	}))
 
 	if err := html.ParseWithSAX(context.Background(), []byte(`<h1>Title</h1>`), handler); err != nil {
 		fmt.Printf("failed to parse with SAX: %s\n", err)

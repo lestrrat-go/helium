@@ -154,112 +154,176 @@ type SAXHandler interface {
 }
 
 // SAXCallbacks is a callback-based SAXHandler implementation.
-// Each field accepts either a Func adapter or any type implementing
-// the corresponding single-method Handler interface.
-// The zero value is ready to use; nil handler fields are silently
-// skipped (no-op).
+// Use the SetOnXxx methods to register handlers.
+// The zero value is ready to use; unset handlers return
+// ErrHandlerUnspecified.
 type SAXCallbacks struct {
-	OnSetDocumentLocator    SetDocumentLocatorHandler
-	OnStartDocument         StartDocumentHandler
-	OnEndDocument           EndDocumentHandler
-	OnStartElement          StartElementHandler
-	OnEndElement            EndElementHandler
-	OnCharacters            CharactersHandler
-	OnCDataBlock            CDataBlockHandler
-	OnComment               CommentHandler
-	OnInternalSubset        InternalSubsetHandler
-	OnProcessingInstruction ProcessingInstructionHandler
-	OnIgnorableWhitespace   IgnorableWhitespaceHandler
-	OnError                 ErrorHandler
-	OnWarning               WarningHandler
+	onSetDocumentLocator    SetDocumentLocatorHandler
+	onStartDocument         StartDocumentHandler
+	onEndDocument           EndDocumentHandler
+	onStartElement          StartElementHandler
+	onEndElement            EndElementHandler
+	onCharacters            CharactersHandler
+	onCDataBlock            CDataBlockHandler
+	onComment               CommentHandler
+	onInternalSubset        InternalSubsetHandler
+	onProcessingInstruction ProcessingInstructionHandler
+	onIgnorableWhitespace   IgnorableWhitespaceHandler
+	onError                 ErrorHandler
+	onWarning               WarningHandler
+}
+
+// SetOnSetDocumentLocator sets the handler for the SetDocumentLocator event.
+func (s *SAXCallbacks) SetOnSetDocumentLocator(h SetDocumentLocatorHandler) {
+	s.onSetDocumentLocator = h
+}
+
+// SetOnStartDocument sets the handler for the StartDocument event.
+func (s *SAXCallbacks) SetOnStartDocument(h StartDocumentHandler) {
+	s.onStartDocument = h
+}
+
+// SetOnEndDocument sets the handler for the EndDocument event.
+func (s *SAXCallbacks) SetOnEndDocument(h EndDocumentHandler) {
+	s.onEndDocument = h
+}
+
+// SetOnStartElement sets the handler for the StartElement event.
+func (s *SAXCallbacks) SetOnStartElement(h StartElementHandler) {
+	s.onStartElement = h
+}
+
+// SetOnEndElement sets the handler for the EndElement event.
+func (s *SAXCallbacks) SetOnEndElement(h EndElementHandler) {
+	s.onEndElement = h
+}
+
+// SetOnCharacters sets the handler for the Characters event.
+func (s *SAXCallbacks) SetOnCharacters(h CharactersHandler) {
+	s.onCharacters = h
+}
+
+// SetOnCDataBlock sets the handler for the CDataBlock event.
+func (s *SAXCallbacks) SetOnCDataBlock(h CDataBlockHandler) {
+	s.onCDataBlock = h
+}
+
+// SetOnComment sets the handler for the Comment event.
+func (s *SAXCallbacks) SetOnComment(h CommentHandler) {
+	s.onComment = h
+}
+
+// SetOnInternalSubset sets the handler for the InternalSubset event.
+func (s *SAXCallbacks) SetOnInternalSubset(h InternalSubsetHandler) {
+	s.onInternalSubset = h
+}
+
+// SetOnProcessingInstruction sets the handler for the ProcessingInstruction event.
+func (s *SAXCallbacks) SetOnProcessingInstruction(h ProcessingInstructionHandler) {
+	s.onProcessingInstruction = h
+}
+
+// SetOnIgnorableWhitespace sets the handler for the IgnorableWhitespace event.
+func (s *SAXCallbacks) SetOnIgnorableWhitespace(h IgnorableWhitespaceHandler) {
+	s.onIgnorableWhitespace = h
+}
+
+// SetOnError sets the handler for the Error event.
+func (s *SAXCallbacks) SetOnError(h ErrorHandler) {
+	s.onError = h
+}
+
+// SetOnWarning sets the handler for the Warning event.
+func (s *SAXCallbacks) SetOnWarning(h WarningHandler) {
+	s.onWarning = h
 }
 
 func (s *SAXCallbacks) SetDocumentLocator(loc DocumentLocator) error {
-	if h := s.OnSetDocumentLocator; h != nil {
+	if h := s.onSetDocumentLocator; h != nil {
 		return h.SetDocumentLocator(loc)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) StartDocument() error {
-	if h := s.OnStartDocument; h != nil {
+	if h := s.onStartDocument; h != nil {
 		return h.StartDocument()
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) EndDocument() error {
-	if h := s.OnEndDocument; h != nil {
+	if h := s.onEndDocument; h != nil {
 		return h.EndDocument()
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) StartElement(name string, attrs []Attribute) error {
-	if h := s.OnStartElement; h != nil {
+	if h := s.onStartElement; h != nil {
 		return h.StartElement(name, attrs)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) EndElement(name string) error {
-	if h := s.OnEndElement; h != nil {
+	if h := s.onEndElement; h != nil {
 		return h.EndElement(name)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) Characters(ch []byte) error {
-	if h := s.OnCharacters; h != nil {
+	if h := s.onCharacters; h != nil {
 		return h.Characters(ch)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) CDataBlock(value []byte) error {
-	if h := s.OnCDataBlock; h != nil {
+	if h := s.onCDataBlock; h != nil {
 		return h.CDataBlock(value)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) Comment(value []byte) error {
-	if h := s.OnComment; h != nil {
+	if h := s.onComment; h != nil {
 		return h.Comment(value)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) InternalSubset(name, externalID, systemID string) error {
-	if h := s.OnInternalSubset; h != nil {
+	if h := s.onInternalSubset; h != nil {
 		return h.InternalSubset(name, externalID, systemID)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) ProcessingInstruction(target, data string) error {
-	if h := s.OnProcessingInstruction; h != nil {
+	if h := s.onProcessingInstruction; h != nil {
 		return h.ProcessingInstruction(target, data)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) IgnorableWhitespace(ch []byte) error {
-	if h := s.OnIgnorableWhitespace; h != nil {
+	if h := s.onIgnorableWhitespace; h != nil {
 		return h.IgnorableWhitespace(ch)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) Error(err error) error {
-	if h := s.OnError; h != nil {
+	if h := s.onError; h != nil {
 		return h.Error(err)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAXCallbacks) Warning(err error) error {
-	if h := s.OnWarning; h != nil {
+	if h := s.onWarning; h != nil {
 		return h.Warning(err)
 	}
 	return ErrHandlerUnspecified

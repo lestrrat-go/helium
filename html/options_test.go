@@ -117,12 +117,11 @@ func TestOptionsNoBlanks(t *testing.T) {
 
 func TestOptionsNoError(t *testing.T) {
 	var errorCalled bool
-	sax := &html.SAXCallbacks{
-		OnError: html.ErrorFunc(func(err error) error {
-			errorCalled = true
-			return nil
-		}),
-	}
+	sax := &html.SAXCallbacks{}
+	sax.SetOnError(html.ErrorFunc(func(err error) error {
+		errorCalled = true
+		return nil
+	}))
 
 	// Parse malformed HTML that would normally trigger errors
 	// (e.g., unexpected end tag)
@@ -134,12 +133,11 @@ func TestOptionsNoError(t *testing.T) {
 
 func TestOptionsNoErrorDefault(t *testing.T) {
 	var errorCalled bool
-	sax := &html.SAXCallbacks{
-		OnError: html.ErrorFunc(func(err error) error {
-			errorCalled = true
-			return nil
-		}),
-	}
+	sax := &html.SAXCallbacks{}
+	sax.SetOnError(html.ErrorFunc(func(err error) error {
+		errorCalled = true
+		return nil
+	}))
 
 	// Without NoError, the error handler should be called
 	input := `<html><body></nonexistent></body></html>`
@@ -150,12 +148,11 @@ func TestOptionsNoErrorDefault(t *testing.T) {
 
 func TestOptionsNoWarning(t *testing.T) {
 	var warningCalled bool
-	sax := &html.SAXCallbacks{
-		OnWarning: html.WarningFunc(func(err error) error {
-			warningCalled = true
-			return nil
-		}),
-	}
+	sax := &html.SAXCallbacks{}
+	sax.SetOnWarning(html.WarningFunc(func(err error) error {
+		warningCalled = true
+		return nil
+	}))
 
 	// Parse valid HTML with WithNoWarning
 	input := `<html><body><p>hello</p></body></html>`

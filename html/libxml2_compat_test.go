@@ -164,23 +164,23 @@ func htmlEncodeEntitiesAttr(data string) string {
 func newHTMLSAXEventEmitter(out *bytes.Buffer) html.SAXHandler {
 	s := &html.SAXCallbacks{}
 
-	s.OnSetDocumentLocator = html.SetDocumentLocatorFunc(func(_ html.DocumentLocator) error {
+	s.SetOnSetDocumentLocator(html.SetDocumentLocatorFunc(func(_ html.DocumentLocator) error {
 		fmt.Fprintf(out, "SAX.setDocumentLocator()\n")
 		return nil
-	})
-	s.OnStartDocument = html.StartDocumentFunc(func() error {
+	}))
+	s.SetOnStartDocument(html.StartDocumentFunc(func() error {
 		fmt.Fprintf(out, "SAX.startDocument()\n")
 		return nil
-	})
-	s.OnEndDocument = html.EndDocumentFunc(func() error {
+	}))
+	s.SetOnEndDocument(html.EndDocumentFunc(func() error {
 		fmt.Fprintf(out, "SAX.endDocument()\n")
 		return nil
-	})
-	s.OnInternalSubset = html.InternalSubsetFunc(func(name, externalID, systemID string) error {
+	}))
+	s.SetOnInternalSubset(html.InternalSubsetFunc(func(name, externalID, systemID string) error {
 		fmt.Fprintf(out, "SAX.internalSubset(%s, %s, %s)\n", name, externalID, systemID)
 		return nil
-	})
-	s.OnStartElement = html.StartElementFunc(func(name string, attrs []html.Attribute) error {
+	}))
+	s.SetOnStartElement(html.StartElementFunc(func(name string, attrs []html.Attribute) error {
 		if len(attrs) == 0 {
 			fmt.Fprintf(out, "SAX.startElement(%s)\n", name)
 		} else {
@@ -196,42 +196,42 @@ func newHTMLSAXEventEmitter(out *bytes.Buffer) html.SAXHandler {
 			fmt.Fprintf(out, "SAX.startElement(%s, %s)\n", name, strings.Join(parts, ", "))
 		}
 		return nil
-	})
-	s.OnEndElement = html.EndElementFunc(func(name string) error {
+	}))
+	s.SetOnEndElement(html.EndElementFunc(func(name string) error {
 		fmt.Fprintf(out, "SAX.endElement(%s)\n", name)
 		return nil
-	})
-	s.OnCharacters = html.CharactersFunc(func(ch []byte) error {
+	}))
+	s.SetOnCharacters(html.CharactersFunc(func(ch []byte) error {
 		display := htmlEncodeEntities(ch, 30, 0)
 		fmt.Fprintf(out, "SAX.characters(%s, %d)\n", display, len(ch))
 		return nil
-	})
-	s.OnCDataBlock = html.CDataBlockFunc(func(value []byte) error {
+	}))
+	s.SetOnCDataBlock(html.CDataBlockFunc(func(value []byte) error {
 		display := htmlEncodeEntities(value, 30, 0)
 		fmt.Fprintf(out, "SAX.cdata(%s, %d)\n", display, len(value))
 		return nil
-	})
-	s.OnComment = html.CommentFunc(func(value []byte) error {
+	}))
+	s.SetOnComment(html.CommentFunc(func(value []byte) error {
 		fmt.Fprintf(out, "SAX.comment(%s)\n", string(value))
 		return nil
-	})
-	s.OnProcessingInstruction = html.ProcessingInstructionFunc(func(target, data string) error {
+	}))
+	s.SetOnProcessingInstruction(html.ProcessingInstructionFunc(func(target, data string) error {
 		fmt.Fprintf(out, "SAX.processingInstruction(%s, %s)\n", target, data)
 		return nil
-	})
-	s.OnIgnorableWhitespace = html.IgnorableWhitespaceFunc(func(ch []byte) error {
+	}))
+	s.SetOnIgnorableWhitespace(html.IgnorableWhitespaceFunc(func(ch []byte) error {
 		display := htmlEncodeEntities(ch, 30, 0)
 		fmt.Fprintf(out, "SAX.characters(%s, %d)\n", display, len(ch))
 		return nil
-	})
-	s.OnWarning = html.WarningFunc(func(err error) error {
+	}))
+	s.SetOnWarning(html.WarningFunc(func(err error) error {
 		fmt.Fprintf(out, "SAX.warning: %s\n", err.Error())
 		return nil
-	})
-	s.OnError = html.ErrorFunc(func(err error) error {
+	}))
+	s.SetOnError(html.ErrorFunc(func(err error) error {
 		fmt.Fprintf(out, "SAX.error: %s\n", err.Error())
 		return nil
-	})
+	}))
 	return s
 }
 
@@ -513,18 +513,18 @@ func newHTMLErrorCollector() (html.SAXHandler, *[]htmlError) {
 	var loc html.DocumentLocator
 
 	s := &html.SAXCallbacks{}
-	s.OnSetDocumentLocator = html.SetDocumentLocatorFunc(func(l html.DocumentLocator) error {
+	s.SetOnSetDocumentLocator(html.SetDocumentLocatorFunc(func(l html.DocumentLocator) error {
 		loc = l
 		return nil
-	})
-	s.OnError = html.ErrorFunc(func(err error) error {
+	}))
+	s.SetOnError(html.ErrorFunc(func(err error) error {
 		errors = append(errors, htmlError{
 			line: loc.LineNumber(),
 			col:  loc.ColumnNumber(),
 			msg:  err.Error(),
 		})
 		return nil
-	})
+	}))
 	return s, &errors
 }
 

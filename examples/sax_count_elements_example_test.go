@@ -22,10 +22,10 @@ func Example_sax_count_elements() {
 	// character callbacks for simple counting.
 	// Wrap the function with sax.StartElementNSFunc to satisfy the
 	// sax.StartElementNS interface expected by the handler field.
-	handler.OnStartElementNS = sax.StartElementNSFunc(func(_ sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	handler.SetOnStartElementNS(sax.StartElementNSFunc(func(_ sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		counts[localname]++
 		return nil
-	})
+	}))
 
 	p := helium.NewParser()
 	p.SetSAXHandler(handler)

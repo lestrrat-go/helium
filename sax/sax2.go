@@ -282,32 +282,32 @@ func (f WarningFunc) Handle(ctx Context, err error) error {
 // SAX2 is a callback-based SAX2 handler.
 // (libxml2: xmlSAXHandler with function pointers)
 type SAX2 struct {
-	OnAttributeDecl AttributeDecl
-	OnCDataBlock CDataBlock
-	OnCharacters Characters
-	OnComment Comment
-	OnElementDecl ElementDecl
-	OnEndDocument EndDocument
-	OnEndElementNS EndElementNS
-	OnEntityDecl EntityDecl
-	OnError Error
-	OnExternalSubset ExternalSubset
-	OnGetEntity GetEntity
-	OnGetParameterEntity GetParameterEntity
-	OnHasExternalSubset HasExternalSubset
-	OnHasInternalSubset HasInternalSubset
-	OnIgnorableWhitespace IgnorableWhitespace
-	OnInternalSubset InternalSubset
-	OnIsStandalone IsStandalone
-	OnNotationDecl NotationDecl
-	OnProcessingInstruction ProcessingInstruction
-	OnReference Reference
-	OnResolveEntity ResolveEntity
-	OnSetDocumentLocator SetDocumentLocator
-	OnStartDocument StartDocument
-	OnStartElementNS StartElementNS
-	OnUnparsedEntityDecl UnparsedEntityDecl
-	OnWarning Warning
+	onAttributeDecl AttributeDecl
+	onCDataBlock CDataBlock
+	onCharacters Characters
+	onComment Comment
+	onElementDecl ElementDecl
+	onEndDocument EndDocument
+	onEndElementNS EndElementNS
+	onEntityDecl EntityDecl
+	onError Error
+	onExternalSubset ExternalSubset
+	onGetEntity GetEntity
+	onGetParameterEntity GetParameterEntity
+	onHasExternalSubset HasExternalSubset
+	onHasInternalSubset HasInternalSubset
+	onIgnorableWhitespace IgnorableWhitespace
+	onInternalSubset InternalSubset
+	onIsStandalone IsStandalone
+	onNotationDecl NotationDecl
+	onProcessingInstruction ProcessingInstruction
+	onReference Reference
+	onResolveEntity ResolveEntity
+	onSetDocumentLocator SetDocumentLocator
+	onStartDocument StartDocument
+	onStartElementNS StartElementNS
+	onUnparsedEntityDecl UnparsedEntityDecl
+	onWarning Warning
 }
 
 // New creates a new instance of SAX2. All callbacks are
@@ -316,183 +316,313 @@ func New() *SAX2 {
 	return &SAX2{}
 }
 
+// SetOnAttributeDecl sets the handler for the AttributeDecl event.
+func (s *SAX2) SetOnAttributeDecl(h AttributeDecl) {
+	s.onAttributeDecl = h
+}
+
+// SetOnCDataBlock sets the handler for the CDataBlock event.
+func (s *SAX2) SetOnCDataBlock(h CDataBlock) {
+	s.onCDataBlock = h
+}
+
+// SetOnCharacters sets the handler for the Characters event.
+func (s *SAX2) SetOnCharacters(h Characters) {
+	s.onCharacters = h
+}
+
+// SetOnComment sets the handler for the Comment event.
+func (s *SAX2) SetOnComment(h Comment) {
+	s.onComment = h
+}
+
+// SetOnElementDecl sets the handler for the ElementDecl event.
+func (s *SAX2) SetOnElementDecl(h ElementDecl) {
+	s.onElementDecl = h
+}
+
+// SetOnEndDocument sets the handler for the EndDocument event.
+func (s *SAX2) SetOnEndDocument(h EndDocument) {
+	s.onEndDocument = h
+}
+
+// SetOnEndElementNS sets the handler for the EndElementNS event.
+func (s *SAX2) SetOnEndElementNS(h EndElementNS) {
+	s.onEndElementNS = h
+}
+
+// SetOnEntityDecl sets the handler for the EntityDecl event.
+func (s *SAX2) SetOnEntityDecl(h EntityDecl) {
+	s.onEntityDecl = h
+}
+
+// SetOnError sets the handler for the Error event.
+func (s *SAX2) SetOnError(h Error) {
+	s.onError = h
+}
+
+// SetOnExternalSubset sets the handler for the ExternalSubset event.
+func (s *SAX2) SetOnExternalSubset(h ExternalSubset) {
+	s.onExternalSubset = h
+}
+
+// SetOnGetEntity sets the handler for the GetEntity event.
+func (s *SAX2) SetOnGetEntity(h GetEntity) {
+	s.onGetEntity = h
+}
+
+// SetOnGetParameterEntity sets the handler for the GetParameterEntity event.
+func (s *SAX2) SetOnGetParameterEntity(h GetParameterEntity) {
+	s.onGetParameterEntity = h
+}
+
+// SetOnHasExternalSubset sets the handler for the HasExternalSubset event.
+func (s *SAX2) SetOnHasExternalSubset(h HasExternalSubset) {
+	s.onHasExternalSubset = h
+}
+
+// SetOnHasInternalSubset sets the handler for the HasInternalSubset event.
+func (s *SAX2) SetOnHasInternalSubset(h HasInternalSubset) {
+	s.onHasInternalSubset = h
+}
+
+// SetOnIgnorableWhitespace sets the handler for the IgnorableWhitespace event.
+func (s *SAX2) SetOnIgnorableWhitespace(h IgnorableWhitespace) {
+	s.onIgnorableWhitespace = h
+}
+
+// SetOnInternalSubset sets the handler for the InternalSubset event.
+func (s *SAX2) SetOnInternalSubset(h InternalSubset) {
+	s.onInternalSubset = h
+}
+
+// SetOnIsStandalone sets the handler for the IsStandalone event.
+func (s *SAX2) SetOnIsStandalone(h IsStandalone) {
+	s.onIsStandalone = h
+}
+
+// SetOnNotationDecl sets the handler for the NotationDecl event.
+func (s *SAX2) SetOnNotationDecl(h NotationDecl) {
+	s.onNotationDecl = h
+}
+
+// SetOnProcessingInstruction sets the handler for the ProcessingInstruction event.
+func (s *SAX2) SetOnProcessingInstruction(h ProcessingInstruction) {
+	s.onProcessingInstruction = h
+}
+
+// SetOnReference sets the handler for the Reference event.
+func (s *SAX2) SetOnReference(h Reference) {
+	s.onReference = h
+}
+
+// SetOnResolveEntity sets the handler for the ResolveEntity event.
+func (s *SAX2) SetOnResolveEntity(h ResolveEntity) {
+	s.onResolveEntity = h
+}
+
+// SetOnSetDocumentLocator sets the handler for the SetDocumentLocator event.
+func (s *SAX2) SetOnSetDocumentLocator(h SetDocumentLocator) {
+	s.onSetDocumentLocator = h
+}
+
+// SetOnStartDocument sets the handler for the StartDocument event.
+func (s *SAX2) SetOnStartDocument(h StartDocument) {
+	s.onStartDocument = h
+}
+
+// SetOnStartElementNS sets the handler for the StartElementNS event.
+func (s *SAX2) SetOnStartElementNS(h StartElementNS) {
+	s.onStartElementNS = h
+}
+
+// SetOnUnparsedEntityDecl sets the handler for the UnparsedEntityDecl event.
+func (s *SAX2) SetOnUnparsedEntityDecl(h UnparsedEntityDecl) {
+	s.onUnparsedEntityDecl = h
+}
+
+// SetOnWarning sets the handler for the Warning event.
+func (s *SAX2) SetOnWarning(h Warning) {
+	s.onWarning = h
+}
+
 func (s *SAX2) AttributeDecl(ctx Context, elem string, fullname string, typ enum.AttributeType, def enum.AttributeDefault, defaultValue string, tree Enumeration) error {
-	if h := s.OnAttributeDecl; h != nil {
+	if h := s.onAttributeDecl; h != nil {
 		return h.Handle(ctx, elem, fullname, typ, def, defaultValue, tree)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) CDataBlock(ctx Context, value []byte) error {
-	if h := s.OnCDataBlock; h != nil {
+	if h := s.onCDataBlock; h != nil {
 		return h.Handle(ctx, value)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) Characters(ctx Context, ch []byte) error {
-	if h := s.OnCharacters; h != nil {
+	if h := s.onCharacters; h != nil {
 		return h.Handle(ctx, ch)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) Comment(ctx Context, value []byte) error {
-	if h := s.OnComment; h != nil {
+	if h := s.onComment; h != nil {
 		return h.Handle(ctx, value)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) ElementDecl(ctx Context, name string, typ enum.ElementType, content ElementContent) error {
-	if h := s.OnElementDecl; h != nil {
+	if h := s.onElementDecl; h != nil {
 		return h.Handle(ctx, name, typ, content)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) EndDocument(ctx Context) error {
-	if h := s.OnEndDocument; h != nil {
+	if h := s.onEndDocument; h != nil {
 		return h.Handle(ctx)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) EndElementNS(ctx Context, localname string, prefix string, uri string) error {
-	if h := s.OnEndElementNS; h != nil {
+	if h := s.onEndElementNS; h != nil {
 		return h.Handle(ctx, localname, prefix, uri)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) EntityDecl(ctx Context, name string, typ enum.EntityType, publicID string, systemID string, content string) error {
-	if h := s.OnEntityDecl; h != nil {
+	if h := s.onEntityDecl; h != nil {
 		return h.Handle(ctx, name, typ, publicID, systemID, content)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) Error(ctx Context, err error) error {
-	if h := s.OnError; h != nil {
+	if h := s.onError; h != nil {
 		return h.Handle(ctx, err)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) ExternalSubset(ctx Context, name string, externalID string, systemID string) error {
-	if h := s.OnExternalSubset; h != nil {
+	if h := s.onExternalSubset; h != nil {
 		return h.Handle(ctx, name, externalID, systemID)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) GetEntity(ctx Context, name string) (Entity, error) {
-	if h := s.OnGetEntity; h != nil {
+	if h := s.onGetEntity; h != nil {
 		return h.Handle(ctx, name)
 	}
 	return nil, ErrHandlerUnspecified
 }
 
 func (s *SAX2) GetParameterEntity(ctx Context, name string) (Entity, error) {
-	if h := s.OnGetParameterEntity; h != nil {
+	if h := s.onGetParameterEntity; h != nil {
 		return h.Handle(ctx, name)
 	}
 	return nil, ErrHandlerUnspecified
 }
 
 func (s *SAX2) HasExternalSubset(ctx Context) (bool, error) {
-	if h := s.OnHasExternalSubset; h != nil {
+	if h := s.onHasExternalSubset; h != nil {
 		return h.Handle(ctx)
 	}
 	return false, ErrHandlerUnspecified
 }
 
 func (s *SAX2) HasInternalSubset(ctx Context) (bool, error) {
-	if h := s.OnHasInternalSubset; h != nil {
+	if h := s.onHasInternalSubset; h != nil {
 		return h.Handle(ctx)
 	}
 	return false, ErrHandlerUnspecified
 }
 
 func (s *SAX2) IgnorableWhitespace(ctx Context, ch []byte) error {
-	if h := s.OnIgnorableWhitespace; h != nil {
+	if h := s.onIgnorableWhitespace; h != nil {
 		return h.Handle(ctx, ch)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) InternalSubset(ctx Context, name string, externalID string, systemID string) error {
-	if h := s.OnInternalSubset; h != nil {
+	if h := s.onInternalSubset; h != nil {
 		return h.Handle(ctx, name, externalID, systemID)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) IsStandalone(ctx Context) (bool, error) {
-	if h := s.OnIsStandalone; h != nil {
+	if h := s.onIsStandalone; h != nil {
 		return h.Handle(ctx)
 	}
 	return false, ErrHandlerUnspecified
 }
 
 func (s *SAX2) NotationDecl(ctx Context, name string, publicID string, systemID string) error {
-	if h := s.OnNotationDecl; h != nil {
+	if h := s.onNotationDecl; h != nil {
 		return h.Handle(ctx, name, publicID, systemID)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) ProcessingInstruction(ctx Context, target string, data string) error {
-	if h := s.OnProcessingInstruction; h != nil {
+	if h := s.onProcessingInstruction; h != nil {
 		return h.Handle(ctx, target, data)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) Reference(ctx Context, name string) error {
-	if h := s.OnReference; h != nil {
+	if h := s.onReference; h != nil {
 		return h.Handle(ctx, name)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) ResolveEntity(ctx Context, publicID string, systemID string) (ParseInput, error) {
-	if h := s.OnResolveEntity; h != nil {
+	if h := s.onResolveEntity; h != nil {
 		return h.Handle(ctx, publicID, systemID)
 	}
 	return nil, ErrHandlerUnspecified
 }
 
 func (s *SAX2) SetDocumentLocator(ctx Context, locator DocumentLocator) error {
-	if h := s.OnSetDocumentLocator; h != nil {
+	if h := s.onSetDocumentLocator; h != nil {
 		return h.Handle(ctx, locator)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) StartDocument(ctx Context) error {
-	if h := s.OnStartDocument; h != nil {
+	if h := s.onStartDocument; h != nil {
 		return h.Handle(ctx)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) StartElementNS(ctx Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error {
-	if h := s.OnStartElementNS; h != nil {
+	if h := s.onStartElementNS; h != nil {
 		return h.Handle(ctx, localname, prefix, uri, namespaces, attrs)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) UnparsedEntityDecl(ctx Context, name string, publicID string, systemID string, notationName string) error {
-	if h := s.OnUnparsedEntityDecl; h != nil {
+	if h := s.onUnparsedEntityDecl; h != nil {
 		return h.Handle(ctx, name, publicID, systemID, notationName)
 	}
 	return ErrHandlerUnspecified
 }
 
 func (s *SAX2) Warning(ctx Context, err error) error {
-	if h := s.OnWarning; h != nil {
+	if h := s.onWarning; h != nil {
 		return h.Handle(ctx, err)
 	}
 	return ErrHandlerUnspecified

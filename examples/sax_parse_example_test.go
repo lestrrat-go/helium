@@ -21,26 +21,26 @@ func Example_sax_parse() {
 	//
 	// The handler field expects a sax.StartElementNS interface, so we wrap
 	// the function literal with sax.StartElementNSFunc to satisfy it.
-	handler.OnStartElementNS = sax.StartElementNSFunc(func(_ sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	handler.SetOnStartElementNS(sax.StartElementNSFunc(func(_ sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		fmt.Printf("<%s", localname)
 		for _, a := range attrs {
 			fmt.Printf(" %s=%q", a.Name(), a.Value())
 		}
 		fmt.Print(">")
 		return nil
-	})
+	}))
 
 	// OnEndElementNS is called when a closing tag is encountered.
-	handler.OnEndElementNS = sax.EndElementNSFunc(func(_ sax.Context, localname, prefix, uri string) error {
+	handler.SetOnEndElementNS(sax.EndElementNSFunc(func(_ sax.Context, localname, prefix, uri string) error {
 		fmt.Printf("</%s>\n", localname)
 		return nil
-	})
+	}))
 
 	// OnCharacters is called for text content between tags.
-	handler.OnCharacters = sax.CharactersFunc(func(_ sax.Context, ch []byte) error {
+	handler.SetOnCharacters(sax.CharactersFunc(func(_ sax.Context, ch []byte) error {
 		fmt.Print(string(ch))
 		return nil
-	})
+	}))
 
 	// Attach the SAX handler to a parser. When a SAX handler is set,
 	// the parser fires events instead of building a full DOM tree.

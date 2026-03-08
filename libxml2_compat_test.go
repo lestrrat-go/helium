@@ -125,27 +125,27 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 	peEntities := map[string]*helium.Entity{}
 	s := sax.New()
 
-	s.OnSetDocumentLocator = sax.SetDocumentLocatorFunc(func(_ sax.Context, _ sax.DocumentLocator) error {
+	s.SetOnSetDocumentLocator(sax.SetDocumentLocatorFunc(func(_ sax.Context, _ sax.DocumentLocator) error {
 		_, _ = fmt.Fprintf(out, "SAX.setDocumentLocator()\n")
 		return nil
-	})
-	s.OnStartDocument = sax.StartDocumentFunc(func(_ sax.Context) error {
+	}))
+	s.SetOnStartDocument(sax.StartDocumentFunc(func(_ sax.Context) error {
 		_, _ = fmt.Fprintf(out, "SAX.startDocument()\n")
 		return nil
-	})
-	s.OnEndDocument = sax.EndDocumentFunc(func(_ sax.Context) error {
+	}))
+	s.SetOnEndDocument(sax.EndDocumentFunc(func(_ sax.Context) error {
 		_, _ = fmt.Fprintf(out, "SAX.endDocument()\n")
 		return nil
-	})
-	s.OnInternalSubset = sax.InternalSubsetFunc(func(_ sax.Context, name, externalID, systemID string) error {
+	}))
+	s.SetOnInternalSubset(sax.InternalSubsetFunc(func(_ sax.Context, name, externalID, systemID string) error {
 		_, _ = fmt.Fprintf(out, "SAX.internalSubset(%s, %s, %s)\n", name, externalID, systemID)
 		return nil
-	})
-	s.OnExternalSubset = sax.ExternalSubsetFunc(func(_ sax.Context, name, externalID, systemID string) error {
+	}))
+	s.SetOnExternalSubset(sax.ExternalSubsetFunc(func(_ sax.Context, name, externalID, systemID string) error {
 		_, _ = fmt.Fprintf(out, "SAX.externalSubset(%s, %s, %s)\n", name, externalID, systemID)
 		return nil
-	})
-	s.OnEntityDecl = sax.EntityDeclFunc(func(_ sax.Context, name string, typ enum.EntityType, publicID string, systemID string, content string) error {
+	}))
+	s.SetOnEntityDecl(sax.EntityDeclFunc(func(_ sax.Context, name string, typ enum.EntityType, publicID string, systemID string, content string) error {
 		// External entities (types 2, 3, 5) have no content — libxml2 prints (null).
 		contentStr := content
 		if content == "" && (typ == enum.ExternalGeneralParsedEntity || typ == enum.ExternalGeneralUnparsedEntity || typ == enum.ExternalParameterEntity) {
@@ -173,63 +173,63 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 			entities[name] = ent
 		}
 		return nil
-	})
-	s.OnUnparsedEntityDecl = sax.UnparsedEntityDeclFunc(func(_ sax.Context, name string, publicID string, systemID string, notationName string) error {
+	}))
+	s.SetOnUnparsedEntityDecl(sax.UnparsedEntityDeclFunc(func(_ sax.Context, name string, publicID string, systemID string, notationName string) error {
 		_, _ = fmt.Fprintf(out, "SAX.unparsedEntityDecl(%s, %s, %s, %s)\n",
 			name, nullOrString(publicID), systemID, notationName)
 		return nil
-	})
-	s.OnNotationDecl = sax.NotationDeclFunc(func(_ sax.Context, name string, publicID string, systemID string) error {
+	}))
+	s.SetOnNotationDecl(sax.NotationDeclFunc(func(_ sax.Context, name string, publicID string, systemID string) error {
 		_, _ = fmt.Fprintf(out, "SAX.notationDecl(%s, %s, %s)\n", name, nullOrString(publicID), nullOrString(systemID))
 		return nil
-	})
-	s.OnAttributeDecl = sax.AttributeDeclFunc(func(_ sax.Context, elemName string, attrName string, typ enum.AttributeType, deftype enum.AttributeDefault, defvalue string, _ sax.Enumeration) error {
+	}))
+	s.SetOnAttributeDecl(sax.AttributeDeclFunc(func(_ sax.Context, elemName string, attrName string, typ enum.AttributeType, deftype enum.AttributeDefault, defvalue string, _ sax.Enumeration) error {
 		if defvalue == "" {
 			defvalue = "NULL"
 		}
 		_, _ = fmt.Fprintf(out, "SAX.attributeDecl(%s, %s, %d, %d, %s, ...)\n", elemName, attrName, typ, deftype, defvalue)
 		return nil
-	})
-	s.OnElementDecl = sax.ElementDeclFunc(func(_ sax.Context, name string, typ enum.ElementType, _ sax.ElementContent) error {
+	}))
+	s.SetOnElementDecl(sax.ElementDeclFunc(func(_ sax.Context, name string, typ enum.ElementType, _ sax.ElementContent) error {
 		_, _ = fmt.Fprintf(out, "SAX.elementDecl(%s, %d, ...)\n", name, typ)
 		return nil
-	})
-	s.OnGetEntity = sax.GetEntityFunc(func(_ sax.Context, name string) (sax.Entity, error) {
+	}))
+	s.SetOnGetEntity(sax.GetEntityFunc(func(_ sax.Context, name string) (sax.Entity, error) {
 		_, _ = fmt.Fprintf(out, "SAX.getEntity(%s)\n", name)
 		ent, ok := entities[name]
 		if !ok {
 			return nil, nil
 		}
 		return ent, nil
-	})
-	s.OnGetParameterEntity = sax.GetParameterEntityFunc(func(_ sax.Context, name string) (sax.Entity, error) {
+	}))
+	s.SetOnGetParameterEntity(sax.GetParameterEntityFunc(func(_ sax.Context, name string) (sax.Entity, error) {
 		_, _ = fmt.Fprintf(out, "SAX.getParameterEntity(%s)\n", name)
 		ent, ok := peEntities[name]
 		if !ok {
 			return nil, nil
 		}
 		return ent, nil
-	})
-	s.OnReference = sax.ReferenceFunc(func(_ sax.Context, name string) error {
+	}))
+	s.SetOnReference(sax.ReferenceFunc(func(_ sax.Context, name string) error {
 		_, _ = fmt.Fprintf(out, "SAX.reference(%s)\n", name)
 		return nil
-	})
-	s.OnComment = sax.CommentFunc(func(_ sax.Context, data []byte) error {
+	}))
+	s.SetOnComment(sax.CommentFunc(func(_ sax.Context, data []byte) error {
 		_, _ = fmt.Fprintf(out, "SAX.comment(%s)\n", data)
 		return nil
-	})
-	s.OnProcessingInstruction = sax.ProcessingInstructionFunc(func(_ sax.Context, target string, data string) error {
+	}))
+	s.SetOnProcessingInstruction(sax.ProcessingInstructionFunc(func(_ sax.Context, target string, data string) error {
 		_, _ = fmt.Fprintf(out, "SAX.processingInstruction(%s, %s)\n", target, data)
 		return nil
-	})
-	s.OnCDataBlock = sax.CDataBlockFunc(func(_ sax.Context, data []byte) error {
+	}))
+	s.SetOnCDataBlock(sax.CDataBlockFunc(func(_ sax.Context, data []byte) error {
 		output := string(data)
 		if len(output) > 20 {
 			output = output[:20]
 		}
 		_, _ = fmt.Fprintf(out, "SAX.pcdata(%s, %d)\n", output, len(data))
 		return nil
-	})
+	}))
 	charHandler := func(name string, _ sax.Context, data []byte) error {
 		output := string(data)
 		if len(output) > 30 {
@@ -238,15 +238,15 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.%s(%s, %d)\n", name, output, len(data))
 		return nil
 	}
-	s.OnCharacters = sax.CharactersFunc(func(ctx sax.Context, data []byte) error {
+	s.SetOnCharacters(sax.CharactersFunc(func(ctx sax.Context, data []byte) error {
 		return charHandler("characters", ctx, data)
-	})
+	}))
 	// libxml2 in non-validating mode always emits characters(), never
 	// ignorableWhitespace(). Map accordingly.
-	s.OnIgnorableWhitespace = sax.IgnorableWhitespaceFunc(func(ctx sax.Context, data []byte) error {
+	s.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(func(ctx sax.Context, data []byte) error {
 		return charHandler("characters", ctx, data)
-	})
-	s.OnStartElementNS = sax.StartElementNSFunc(func(_ sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	}))
+	s.SetOnStartElementNS(sax.StartElementNSFunc(func(_ sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		_, _ = fmt.Fprintf(out, "SAX.startElementNs(%s, ", localname)
 
 		if prefix != "" {
@@ -304,8 +304,8 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 
 		_, _ = fmt.Fprintln(out, ")")
 		return nil
-	})
-	s.OnEndElementNS = sax.EndElementNSFunc(func(_ sax.Context, localname, prefix, uri string) error {
+	}))
+	s.SetOnEndElementNS(sax.EndElementNSFunc(func(_ sax.Context, localname, prefix, uri string) error {
 		_, _ = fmt.Fprintf(out, "SAX.endElementNs(%s, ", localname)
 
 		if prefix != "" {
@@ -320,15 +320,15 @@ func newLibxml2EventEmitter(out io.Writer) sax.SAX2Handler {
 			_, _ = fmt.Fprintf(out, "NULL)\n")
 		}
 		return nil
-	})
-	s.OnWarning = sax.WarningFunc(func(_ sax.Context, err error) error {
+	}))
+	s.SetOnWarning(sax.WarningFunc(func(_ sax.Context, err error) error {
 		msg := err.Error()
 		if e, ok := err.(helium.ErrParseError); ok {
 			msg = e.Err.Error()
 		}
 		_, _ = fmt.Fprintf(out, "SAX.warning: %s\n", msg)
 		return nil
-	})
+	}))
 	return s
 }
 

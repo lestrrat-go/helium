@@ -35,6 +35,11 @@ sub bare_args {
     } split /\s*,\s*/, $args;
 }
 
+sub lcfirst_name {
+    my ($name) = @_;
+    return lcfirst($name);
+}
+
 open my $out, '>', 'sax2.go' or die;
 
 my $klass = "SAX2";
@@ -90,7 +95,7 @@ func (f ${func}Func) Handle($args) $ret {
 EOM
 }
 
-# Generate SAX2 struct
+# Generate SAX2 struct with unexported fields
 print $out <<EOM;
 // $klass is a callback-based SAX2 handler.
 // (libxml2: xmlSAXHandler with function pointers)
@@ -98,7 +103,8 @@ type $klass struct {
 EOM
 
 foreach my $func (@handler_funcs) {
-    print $out "\tOn${func} ${func}\n";
+    my $field = lcfirst_name("on${func}");
+    print $out "\t${field} ${func}\n";
 }
 
 print $out <<EOM;
@@ -112,6 +118,18 @@ func New() *${klass} {
 
 EOM
 
+# Generate setter methods
+foreach my $func (@handler_funcs) {
+    my $field = lcfirst_name("on${func}");
+    print $out <<EOM
+// SetOn${func} sets the handler for the ${func} event.
+func (s *$klass) SetOn${func}(h ${func}) {
+\ts.${field} = h
+}
+
+EOM
+}
+
 # Generate delegation methods
 foreach my $func (@handler_funcs) {
     my $args = $handler_args{$func};
@@ -121,9 +139,10 @@ foreach my $func (@handler_funcs) {
             map { $_ eq "error" ? "ErrHandlerUnspecified" : $_ eq "bool" ? "false" : "nil" }
             split /\s*,\s*/, $ret =~ s{\(([^\)]+)\)}{$1}r;
     my $ba = bare_args($args);
+    my $field = lcfirst_name("on${func}");
     print $out <<EOM
 func (s *$klass) $func($args) $ret {
-\tif h := s.On${func}; h != nil {
+\tif h := s.${field}; h != nil {
 \t\treturn h.Handle($ba)
 \t}
 \treturn $no_handler_ret
