@@ -19,6 +19,15 @@ Read the linked doc BEFORE working in that area. No exceptions.
 | DOM node hierarchy, struct fields, namespace/attr storage | `.claude/docs/node-types.md` |
 | XSD/RELAX NG/Schematron compile→validate flow | `.claude/docs/validation-pipeline.md` |
 | heliumlint CLI flags, pipeline, exit codes | `.claude/docs/heliumlint.md` |
+| XPath 3.1 design overview, constraints, sub-doc index | `.claude/docs/xpath3-design.md` |
+| XPath 3.1 architecture, file layout, internal/xpath | `.claude/docs/xpath3-architecture.md` |
+| XPath 3.1 public API, Context, Result, errors | `.claude/docs/xpath3-api.md` |
+| XPath 3.1 Item/Sequence/Map/Array type system | `.claude/docs/xpath3-types.md` |
+| XPath 3.1 lexer, parser, AST nodes | `.claude/docs/xpath3-parser.md` |
+| XPath 3.1 evaluator, comparison, casting | `.claude/docs/xpath3-eval.md` |
+| XPath 3.1 function system, built-in categories | `.claude/docs/xpath3-functions.md` |
+| XPath 3.1 phased tasks, dependencies, risks | `.claude/docs/xpath3-tasks.md` |
+| Saxon-HE source layout (reference) | `.claude/docs/saxon-layout.md` |
 
 ## Cache Maintenance
 

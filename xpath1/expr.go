@@ -1,62 +1,38 @@
 package xpath1
 
+import (
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
+)
+
 // Expr is the interface implemented by all XPath AST nodes.
 type Expr interface {
 	exprNode()
 }
 
 // AxisType identifies one of the 13 XPath axes.
-type AxisType int
+type AxisType = ixpath.AxisType
 
 // AxisChild and the other AxisType constants identify the thirteen XPath axes.
 const (
-	AxisChild AxisType = iota
-	AxisDescendant
-	AxisParent
-	AxisAncestor
-	AxisFollowingSibling
-	AxisPrecedingSibling
-	AxisFollowing
-	AxisPreceding
-	AxisAttribute
-	AxisNamespace
-	AxisSelf
-	AxisDescendantOrSelf
-	AxisAncestorOrSelf
+	AxisChild            = ixpath.AxisChild
+	AxisDescendant       = ixpath.AxisDescendant
+	AxisParent           = ixpath.AxisParent
+	AxisAncestor         = ixpath.AxisAncestor
+	AxisFollowingSibling = ixpath.AxisFollowingSibling
+	AxisPrecedingSibling = ixpath.AxisPrecedingSibling
+	AxisFollowing        = ixpath.AxisFollowing
+	AxisPreceding        = ixpath.AxisPreceding
+	AxisAttribute        = ixpath.AxisAttribute
+	AxisNamespace        = ixpath.AxisNamespace
+	AxisSelf             = ixpath.AxisSelf
+	AxisDescendantOrSelf = ixpath.AxisDescendantOrSelf
+	AxisAncestorOrSelf   = ixpath.AxisAncestorOrSelf
 )
-
-var axisNames = map[AxisType]string{
-	AxisChild:            "child",
-	AxisDescendant:       "descendant",
-	AxisParent:           "parent",
-	AxisAncestor:         "ancestor",
-	AxisFollowingSibling: "following-sibling",
-	AxisPrecedingSibling: "preceding-sibling",
-	AxisFollowing:        "following",
-	AxisPreceding:        "preceding",
-	AxisAttribute:        "attribute",
-	AxisNamespace:        "namespace",
-	AxisSelf:             "self",
-	AxisDescendantOrSelf: "descendant-or-self",
-	AxisAncestorOrSelf:   "ancestor-or-self",
-}
-
-func (a AxisType) String() string {
-	if s, ok := axisNames[a]; ok {
-		return s
-	}
-	return "unknown-axis"
-}
 
 // axisFromName maps an axis name string to its AxisType.
 // Returns the axis and true if recognized, or AxisChild and false otherwise.
 func axisFromName(name string) (AxisType, bool) {
-	for k, v := range axisNames {
-		if v == name {
-			return k, true
-		}
-	}
-	return AxisChild, false
+	return ixpath.AxisFromName(name)
 }
 
 // NodeTest filters nodes selected by an axis.
@@ -69,10 +45,10 @@ type NodeTestType int
 
 // NodeTestNode and the other NodeTestType constants identify built-in XPath node test functions.
 const (
-	NodeTestNode NodeTestType = iota // node()
-	NodeTestText                     // text()
-	NodeTestComment                  // comment()
-	NodeTestProcessingInstruction    // processing-instruction()
+	NodeTestNode                  NodeTestType = iota // node()
+	NodeTestText                                      // text()
+	NodeTestComment                                   // comment()
+	NodeTestProcessingInstruction                     // processing-instruction()
 )
 
 // NameTest matches by qualified name. Local=="*" is a wildcard.

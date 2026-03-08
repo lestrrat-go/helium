@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	helium "github.com/lestrrat-go/helium"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
 // ErrNotNodeSet is returned when an expression result is not a node-set.
@@ -23,7 +24,7 @@ var ErrOpLimit = errors.New("xpath: operation limit exceeded")
 
 // ErrNodeSetLimit is returned when a node-set exceeds the maximum length
 // (10,000,000), matching libxml2's XPATH_MAX_NODESET_LENGTH.
-var ErrNodeSetLimit = errors.New("xpath: node-set length limit exceeded")
+var ErrNodeSetLimit = ixpath.ErrNodeSetLimit
 
 // ErrUnknownFunction is returned when a function call references an
 // unregistered function name.
