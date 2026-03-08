@@ -145,7 +145,7 @@ func Example_html_parse() {
   fmt.Println(doc.Type() == helium.HTMLDocumentNode)
 
   // Parsed HTML can be queried with regular XPath helpers.
-  nodes, err := xpath.Find(doc, `//div`)
+  nodes, err := xpath.Find(context.Background(), doc, `//div`)
   if err != nil {
     fmt.Printf("xpath failed: %s\n", err)
     return
@@ -187,7 +187,7 @@ func Example_xpath_find() {
   // calling Evaluate and accessing the NodeSet field of the result.
   // The expression "//book" selects all <book> elements anywhere in the
   // document tree.
-  nodes, err := xpath.Find(doc, "//book")
+  nodes, err := xpath.Find(context.Background(), doc, "//book")
   if err != nil {
     fmt.Printf("xpath error: %s\n", err)
     return
@@ -291,7 +291,7 @@ func Example_xinclude_process() {
     return
   }
 
-  n, err := xinclude.Process(doc,
+  n, err := xinclude.Process(context.Background(), doc,
     xinclude.WithBaseURI(mainPath),
     xinclude.WithNoBaseFixup(),
   )
@@ -319,7 +319,7 @@ func Example_xinclude_process() {
     return
   }
 
-  n, err = xinclude.Process(doc,
+  n, err = xinclude.Process(context.Background(), doc,
     xinclude.WithBaseURI(mainPath),
     xinclude.WithNoBaseFixup(),
     xinclude.WithNoXIncludeMarkers(),
@@ -493,7 +493,7 @@ func Example_schematron_validate() {
     return
   }
 
-  if err := schematron.Validate(doc, schema, schematron.WithFilename("doc.xml")); err != nil {
+  if err := schematron.Validate(context.Background(), doc, schema, schematron.WithFilename("doc.xml")); err != nil {
     fmt.Println(err)
   }
   // Output:
