@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium/html"
-	"github.com/lestrrat-go/helium/xpath"
+	"github.com/lestrrat-go/helium/xpath1"
 )
 
 func Example_html_write_node() {
@@ -17,7 +17,7 @@ func Example_html_write_node() {
 		return
 	}
 
-	nodes, err := xpath.Find(context.Background(), doc, `//p`)
+	nodes, err := xpath1.Find(context.Background(), doc, `//p`)
 	if err != nil {
 		fmt.Printf("xpath failed: %s\n", err)
 		return

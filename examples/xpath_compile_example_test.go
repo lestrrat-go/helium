@@ -5,14 +5,14 @@ import (
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath"
+	"github.com/lestrrat-go/helium/xpath1"
 )
 
 func Example_xpath_compile() {
-	// xpath.Compile pre-compiles an XPath expression so it can be
+	// xpath1.Compile pre-compiles an XPath expression so it can be
 	// evaluated multiple times without re-parsing. This is useful
 	// when the same expression needs to be applied to many nodes.
-	expr, err := xpath.Compile("count(child::*)")
+	expr, err := xpath1.Compile("count(child::*)")
 	if err != nil {
 		fmt.Printf("compile error: %s\n", err)
 		return

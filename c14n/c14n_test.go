@@ -8,7 +8,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/c14n"
-	"github.com/lestrrat-go/helium/xpath"
+	"github.com/lestrrat-go/helium/xpath1"
 	"github.com/stretchr/testify/require"
 )
 
@@ -121,13 +121,13 @@ func parseNSFile(t *testing.T, path string) []string {
 func evaluateNodeSet(t *testing.T, doc *helium.Document, expr string, nss map[string]string) []helium.Node {
 	t.Helper()
 
-	ctx := xpath.NewContext(t.Context(),
-		xpath.WithNamespaces(nss),
+	ctx := xpath1.NewContext(t.Context(),
+		xpath1.WithNamespaces(nss),
 	)
 
-	result, err := xpath.Evaluate(ctx, doc, expr)
+	result, err := xpath1.Evaluate(ctx, doc, expr)
 	require.NoError(t, err, "evaluating xpath: %s", expr)
-	require.Equal(t, xpath.NodeSetResult, result.Type, "xpath result is not a node set")
+	require.Equal(t, xpath1.NodeSetResult, result.Type, "xpath result is not a node set")
 	return result.NodeSet
 }
 

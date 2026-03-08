@@ -31,17 +31,18 @@ W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
 - Files: `c14n.go` (API), `canonicalizer.go` (engine), `nsstack.go`, `sort.go`, `escape.go`
 - Imports: helium
 
-## xpath/
+## xpath1/
 
 XPath 1.0 expression parsing and evaluation.
 
 - **Compile(string) → (*Expression, error)** / **MustCompile(string) → *Expression** — parse XPath
-- **Expression.Evaluate(Node) → (*Result, error)** / **EvaluateWith(Node, *Context) → (*Result, error)**
-- **Find(Node, string) → ([]Node, error)** — convenience: compile+evaluate→node-set
-- **Evaluate(Node, string) → (*Result, error)** — convenience: compile+evaluate
+- **Expression.Evaluate(ctx, Node) → (*Result, error)**
+- **Find(ctx, Node, string) → ([]Node, error)** — convenience: compile+evaluate→node-set
+- **Evaluate(ctx, Node, string) → (*Result, error)** — convenience: compile+evaluate
+- **NewContext(ctx, ...ContextOption) → context.Context** — embed xpath config in context.Context
 - `Result` types: NodeSetResult, BooleanResult, NumberResult, StringResult
 - `Context` — namespace bindings, variables, custom functions, op limits
-- `NewContext(opts)` with WithNamespaces(), WithVariables(), WithOpLimit()
+- `NewContext(ctx, opts)` with WithNamespaces(), WithVariables(), WithOpLimit()
 - `Context.RegisterFunction(name, fn)` / `RegisterFunctionNS(uri, name, fn)` — custom functions (unqualified names cannot override built-ins)
 - Limits: recursion 5000, node-set 10M, configurable op limit
 - Files: `xpath.go` (API), `parser.go`, `eval.go`, `axes.go`, `token.go`, `number.go`
@@ -57,7 +58,7 @@ XML Schema (XSD) 1.0 compilation and validation.
 - Supports: complex/simple types, sequences, choices, all, groups, attribute groups, substitution groups, import/include, IDC (xs:unique/key/keyref)
 - `ValidateError.Output` — libxml2-compatible error string
 - Files: `xsd.go` (API), `schema.go` (data model), `parse.go` (compiler), `parse_check.go` (UPA/constraints), `validate.go`, `validate_elem.go`, `validate_value.go`, `validate_idc.go`, `errors.go`
-- Imports: helium, xpath/
+- Imports: helium, xpath1/
 - Status: 225/226 golden tests passing
 
 ## relaxng/
@@ -107,7 +108,7 @@ XPointer expression evaluation with scheme cascading.
 - Schemes: xpointer(), xpath1() → XPath; element(/1/2/3) → child-sequence; xmlns() → ns binding; shorthand → ID lookup
 - Multiple scheme parts left-to-right; first non-empty result wins
 - Files: `xpointer.go`
-- Imports: helium, xpath/
+- Imports: helium, xpath1/
 
 ## schematron/
 
@@ -118,7 +119,7 @@ Schematron schema compilation and validation.
 - Supports: schema, pattern, rule, assert, report, let, name, value-of
 - Variable bindings via `<let>` and `<param>`
 - Files: `schematron.go` (API), `schema.go`, `parse.go`, `validate.go`, `errors.go`
-- Imports: helium, xpath/
+- Imports: helium, xpath1/
 
 ## catalog/
 
@@ -231,4 +232,4 @@ CLI tool for parsing, validating, processing XML with libxml2-compatible flags.
 
 - Flags: --recover, --noent, --loaddtd, --valid, --noblanks, --noout, --format, --c14n, --c14n11, --exc-c14n, --xinclude, --schema, --xpath, --catalogs, etc.
 - Files: `heliumlint.go`
-- Imports: helium, c14n/, xsd/, xinclude/, xpath/, catalog/, internal/cliutil/
+- Imports: helium, c14n/, xsd/, xinclude/, xpath1/, catalog/, internal/cliutil/

@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath"
+	"github.com/lestrrat-go/helium/xpath1"
 )
 
 // idcTable holds key-sequences collected during IDC evaluation for a single constraint.
@@ -36,7 +36,7 @@ func validateIDConstraints(ctx context.Context, elem *helium.Element, edecl *Ele
 
 	for _, idc := range edecl.IDCs {
 		// Use the schema's namespace context for XPath evaluation.
-		nsCtx := xpath.NewContext(ctx, xpath.WithNamespaces(idc.Namespaces))
+		nsCtx := xpath1.NewContext(ctx, xpath1.WithNamespaces(idc.Namespaces))
 		table, err := evaluateIDC(nsCtx, elem, idc)
 		if err != nil {
 			continue
@@ -83,11 +83,11 @@ func validateIDConstraints(ctx context.Context, elem *helium.Element, edecl *Ele
 // evaluateIDC evaluates the selector and field XPaths for a single IDC.
 func evaluateIDC(nsCtx context.Context, elem *helium.Element, idc *IDConstraint) (*idcTable, error) {
 	// Evaluate selector XPath.
-	selectorResult, err := xpath.Evaluate(nsCtx, elem, idc.Selector)
+	selectorResult, err := xpath1.Evaluate(nsCtx, elem, idc.Selector)
 	if err != nil {
 		return nil, fmt.Errorf("xsd: IDC selector XPath failed: %w", err)
 	}
-	if selectorResult.Type != xpath.NodeSetResult {
+	if selectorResult.Type != xpath1.NodeSetResult {
 		return nil, fmt.Errorf("selector did not return a node-set")
 	}
 
@@ -104,7 +104,7 @@ func evaluateIDC(nsCtx context.Context, elem *helium.Element, idc *IDConstraint)
 		// Evaluate each field XPath relative to the selected node.
 		allPresent := true
 		for _, fieldXPath := range idc.Fields {
-			fieldResult, err := xpath.Evaluate(nsCtx, node, fieldXPath)
+			fieldResult, err := xpath1.Evaluate(nsCtx, node, fieldXPath)
 			if err != nil {
 				allPresent = false
 				break
@@ -112,13 +112,13 @@ func evaluateIDC(nsCtx context.Context, elem *helium.Element, idc *IDConstraint)
 
 			var value string
 			switch fieldResult.Type {
-			case xpath.NodeSetResult:
+			case xpath1.NodeSetResult:
 				if len(fieldResult.NodeSet) == 0 {
 					allPresent = false
 				} else {
 					value = nodeStringValue(fieldResult.NodeSet[0])
 				}
-			case xpath.StringResult:
+			case xpath1.StringResult:
 				value = fieldResult.String
 			default:
 				value = fmt.Sprintf("%v", fieldResult.Number)

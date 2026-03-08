@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath"
+	"github.com/lestrrat-go/helium/xpath1"
 )
 
 const (
@@ -114,7 +114,7 @@ func compileRule(elem *helium.Element, schNS string, eh helium.ErrorHandler) *ru
 
 	xpathExpr := contextToXPath(ctx)
 
-	compiled, err := xpath.Compile(xpathExpr)
+	compiled, err := xpath1.Compile(xpathExpr)
 	if err != nil {
 		eh.Handle(context.TODO(), helium.NewLeveledError(fmt.Sprintf("element rule: Failed to compile context expression '%s': %s\n", ctx, err), helium.ErrorLevelFatal))
 		return nil
@@ -174,7 +174,7 @@ func compileLet(elem *helium.Element) (*letBinding, error) {
 		return nil, nil
 	}
 
-	compiled, err := xpath.Compile(value)
+	compiled, err := xpath1.Compile(value)
 	if err != nil {
 		return nil, fmt.Errorf("schematron: compile let expression: %w", err)
 	}
@@ -191,7 +191,7 @@ func compileTest(elem *helium.Element, typ testType, schNS string, eh helium.Err
 		return nil
 	}
 
-	compiled, err := xpath.Compile(testExpr)
+	compiled, err := xpath1.Compile(testExpr)
 	if err != nil {
 		eh.Handle(context.TODO(), helium.NewLeveledError(fmt.Sprintf("element %s: Failed to compile test expression '%s': %s\n", testTypeName(typ), testExpr, err), helium.ErrorLevelFatal))
 		return nil
@@ -236,7 +236,7 @@ func parseMessageElement(childElem *helium.Element, parts []messagePart, eh heli
 		if path == "" {
 			path = "."
 		}
-		compiled, err := xpath.Compile(path)
+		compiled, err := xpath1.Compile(path)
 		if err != nil {
 			eh.Handle(context.TODO(), helium.NewLeveledError(fmt.Sprintf("element name: Failed to compile path '%s': %s\n", path, err), helium.ErrorLevelFatal))
 			return append(parts, namePart{path: path})
@@ -248,7 +248,7 @@ func parseMessageElement(childElem *helium.Element, parts []messagePart, eh heli
 			eh.Handle(context.TODO(), helium.NewLeveledError("value-of has no select attribute\n", helium.ErrorLevelFatal))
 			return parts
 		}
-		compiled, err := xpath.Compile(sel)
+		compiled, err := xpath1.Compile(sel)
 		if err != nil {
 			// XPath compile error — record in handler but still add the part
 			// so validation can emit the error at runtime

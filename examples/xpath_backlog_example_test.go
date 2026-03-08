@@ -5,11 +5,11 @@ import (
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath"
+	"github.com/lestrrat-go/helium/xpath1"
 )
 
 func Example_xpath_must_compile() {
-	expr := xpath.MustCompile("count(child::*)")
+	expr := xpath1.MustCompile("count(child::*)")
 
 	doc, err := helium.Parse(context.Background(), []byte(`<root><a/><b/></root>`))
 	if err != nil {

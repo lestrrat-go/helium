@@ -1,4 +1,4 @@
-package xpath
+package xpath1
 
 // Expr is the interface implemented by all XPath AST nodes.
 type Expr interface {
