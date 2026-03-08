@@ -45,7 +45,7 @@ XPath 1.0 expression parsing and evaluation.
 - `NewContext(ctx, opts)` with WithNamespaces(), WithVariables(), WithOpLimit()
 - `Context.RegisterFunction(name, fn)` / `RegisterFunctionNS(uri, name, fn)` — custom functions (unqualified names cannot override built-ins)
 - Limits: recursion 5000, node-set 10M, configurable op limit
-- Files: `xpath.go` (API), `parser.go`, `eval.go`, `axes.go`, `token.go`, `number.go`
+- Files: `xpath.go` (API), `parser.go`, `lexer.go`, `eval.go`, `expr.go`, `axes.go`, `functions.go`, `token.go`
 - Imports: helium
 
 ## xsd/
