@@ -120,7 +120,9 @@ func (a AtomicValue) ToFloat64() float64 {
 		// v1: decimal stored as string, parse to float64 for arithmetic
 		s := a.Value.(string)
 		var f float64
-		fmt.Sscanf(s, "%f", &f)
+		if _, err := fmt.Sscanf(s, "%f", &f); err != nil {
+			return math.NaN()
+		}
 		return f
 	}
 	return math.NaN()
