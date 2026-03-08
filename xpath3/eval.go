@@ -17,19 +17,20 @@ const (
 
 // evalContext holds the evaluation state for an XPath 3.1 expression.
 type evalContext struct {
-	goCtx      context.Context
-	node       helium.Node
-	position   int
-	size       int
-	vars       map[string]Sequence
-	namespaces map[string]string
-	functions  map[string]Function
-	fnsNS      map[QualifiedName]Function
-	depth      int
-	opCount    *int
-	opLimit    int
-	docOrder   *ixpath.DocOrderCache
-	maxNodes   int
+	goCtx       context.Context
+	node        helium.Node
+	contextItem Item // non-nil when context item is not a node (simple map over atomics)
+	position    int
+	size        int
+	vars        map[string]Sequence
+	namespaces  map[string]string
+	functions   map[string]Function
+	fnsNS       map[QualifiedName]Function
+	depth       int
+	opCount     *int
+	opLimit     int
+	docOrder    *ixpath.DocOrderCache
+	maxNodes    int
 }
 
 func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
@@ -72,21 +73,22 @@ func (ec *evalContext) withNode(n helium.Node, pos, size int) *evalContext {
 }
 
 // withContextItem sets a non-node context item (for simple map, etc.)
-func (ec *evalContext) withContextItem(pos, size int) *evalContext {
+func (ec *evalContext) withContextItem(item Item, pos, size int) *evalContext {
 	return &evalContext{
-		goCtx:      ec.goCtx,
-		node:       ec.node,
-		position:   pos,
-		size:       size,
-		vars:       ec.vars,
-		namespaces: ec.namespaces,
-		functions:  ec.functions,
-		fnsNS:      ec.fnsNS,
-		depth:      ec.depth,
-		opCount:    ec.opCount,
-		opLimit:    ec.opLimit,
-		docOrder:   ec.docOrder,
-		maxNodes:   ec.maxNodes,
+		goCtx:       ec.goCtx,
+		node:        ec.node,
+		contextItem: item,
+		position:    pos,
+		size:        size,
+		vars:        ec.vars,
+		namespaces:  ec.namespaces,
+		functions:   ec.functions,
+		fnsNS:       ec.fnsNS,
+		depth:       ec.depth,
+		opCount:     ec.opCount,
+		opLimit:     ec.opLimit,
+		docOrder:    ec.docOrder,
+		maxNodes:    ec.maxNodes,
 	}
 }
 
@@ -126,6 +128,9 @@ func eval(ec *evalContext, expr Expr) (Sequence, error) {
 	case VariableExpr:
 		return evalVariable(ec, e)
 	case ContextItemExpr:
+		if ec.contextItem != nil {
+			return Sequence{ec.contextItem}, nil
+		}
 		if ec.node == nil {
 			return nil, &XPathError{Code: "XPDY0002", Message: "context item is absent"}
 		}
@@ -619,7 +624,7 @@ func evalSimpleMapExpr(ec *evalContext, e SimpleMapExpr) (Sequence, error) {
 		if ni, ok := item.(NodeItem); ok {
 			subCtx = ec.withNode(ni.Node, i+1, size)
 		} else {
-			subCtx = ec.withContextItem(i+1, size)
+			subCtx = ec.withContextItem(item, i+1, size)
 		}
 		r, err := eval(subCtx, e.Right)
 		if err != nil {

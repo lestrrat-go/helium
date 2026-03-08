@@ -1713,7 +1713,7 @@ func (p *parser) expectToken(expected TokenType) error {
 func (p *parser) looksLikeStep() bool {
 	tok := p.lexer.Peek()
 	switch tok.Type {
-	case TokenDot, TokenDotDot, TokenAt, TokenStar:
+	case TokenDotDot, TokenAt, TokenStar:
 		return true
 	case TokenName:
 		p.lexer.Next()

@@ -48,6 +48,26 @@ XPath 1.0 expression parsing and evaluation.
 - Files: `xpath.go` (API), `parser.go`, `lexer.go`, `eval.go`, `expr.go`, `axes.go`, `functions.go`, `token.go`
 - Imports: helium
 
+## xpath3/
+
+XPath 3.1 expression parsing and evaluation.
+
+- **Compile(string) → (*Expression, error)** / **MustCompile(string) → *Expression** — parse XPath 3.1
+- **Expression.Evaluate(ctx, Node) → (*Result, error)**
+- **Find(ctx, Node, string) → ([]Node, error)** — convenience: compile+evaluate→node-set
+- **Evaluate(ctx, Node, string) → (*Result, error)** — convenience: compile+evaluate
+- **NewContext(ctx, ...ContextOption) → context.Context** — embed xpath3 config in context.Context
+- `Result` — wraps `Sequence`; methods: `Nodes()`, `IsBoolean()`, `IsNumber()`, `IsString()`, `IsAtomic()`, `Atomics()`, `Sequence()`
+- `Context` — namespace bindings, variables (Sequence), custom functions, op limits
+- `WithNamespaces()`, `WithVariables()`, `WithOpLimit()`, `WithFunctions()`, `WithFunctionsNS()`
+- XPath 3.1 features: FLWOR, quantified, if-then-else, try-catch, maps, arrays, inline functions, HOFs, arrow operator, simple map, string concat, value/general/node comparisons
+- Built-in functions: 100+ across fn:, math:, map:, array: namespaces
+- Type system: Sequence ([]Item), AtomicValue, NodeItem, MapItem, ArrayItem, FunctionItem
+- Structured errors: XPathError with W3C error codes (XPTY0004, FOER0000, etc.)
+- Limits: recursion 5000, node-set 10M, configurable op limit
+- Files: `xpath3.go` (API), `parser.go`, `lexer.go`, `eval.go`, `compare.go`, `cast.go`, `types.go`, `sequence.go`, `context.go`, `errors.go`, `functions*.go` (15 files), `expr.go`, `token.go`
+- Imports: helium, internal/xpath
+
 ## xsd/
 
 XML Schema (XSD) 1.0 compilation and validation.
