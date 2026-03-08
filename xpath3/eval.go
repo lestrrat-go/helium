@@ -573,7 +573,7 @@ func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	}
 
 	// Preserve integer type when both inputs are integer
-	if la.TypeName == TypeInteger && ra.TypeName == TypeInteger && e.Op != TokenDiv {
+	if isIntegerDerived(la.TypeName) && isIntegerDerived(ra.TypeName) && e.Op != TokenDiv {
 		return SingleInteger(int64(result)), nil
 	}
 	return SingleDouble(result), nil
@@ -592,7 +592,7 @@ func evalUnaryExpr(ec *evalContext, e UnaryExpr) (Sequence, error) {
 		return nil, err
 	}
 	n := promoteToDouble(a)
-	if a.TypeName == TypeInteger {
+	if isIntegerDerived(a.TypeName) {
 		return SingleInteger(-int64(n)), nil
 	}
 	return SingleDouble(-n), nil
@@ -1463,11 +1463,12 @@ func evalArrayConstructorExpr(ec *evalContext, e ArrayConstructorExpr) (Sequence
 // --- Helpers ---
 
 func promoteToDouble(a AtomicValue) float64 {
+	if isIntegerDerived(a.TypeName) {
+		return float64(a.Value.(int64))
+	}
 	switch a.TypeName {
 	case TypeDouble, TypeFloat:
 		return a.Value.(float64)
-	case TypeInteger:
-		return float64(a.Value.(int64))
 	case TypeDecimal:
 		var f float64
 		if _, err := fmt.Sscanf(a.Value.(string), "%f", &f); err != nil {

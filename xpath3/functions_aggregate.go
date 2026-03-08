@@ -89,7 +89,7 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		if a.TypeName != TypeInteger {
+		if !isIntegerDerived(a.TypeName) {
 			allInt = false
 		}
 		sum += promoteToDouble(a)

@@ -108,13 +108,14 @@ func ebvSingle(item Item) (bool, error) {
 }
 
 func ebvAtomic(v AtomicValue) (bool, error) {
+	if isIntegerDerived(v.TypeName) {
+		return v.IntegerVal() != 0, nil
+	}
 	switch v.TypeName {
 	case TypeBoolean:
 		return v.BooleanVal(), nil
 	case TypeString, TypeAnyURI, TypeUntypedAtomic:
 		return v.StringVal() != "", nil
-	case TypeInteger:
-		return v.IntegerVal() != 0, nil
 	case TypeDouble, TypeFloat:
 		f := v.DoubleVal()
 		return f != 0 && !math.IsNaN(f), nil

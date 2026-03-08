@@ -23,7 +23,7 @@ func fnAbs(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	if a.TypeName == TypeInteger {
+	if isIntegerDerived(a.TypeName) {
 		v := a.IntegerVal()
 		if v < 0 {
 			v = -v
@@ -41,7 +41,7 @@ func fnCeiling(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	if a.TypeName == TypeInteger {
+	if isIntegerDerived(a.TypeName) {
 		return SingleInteger(a.IntegerVal()), nil
 	}
 	return SingleDouble(math.Ceil(promoteToDouble(a))), nil
@@ -55,7 +55,7 @@ func fnFloor(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	if a.TypeName == TypeInteger {
+	if isIntegerDerived(a.TypeName) {
 		return SingleInteger(a.IntegerVal()), nil
 	}
 	return SingleDouble(math.Floor(promoteToDouble(a))), nil
@@ -69,7 +69,7 @@ func fnRound(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	if a.TypeName == TypeInteger {
+	if isIntegerDerived(a.TypeName) {
 		return SingleInteger(a.IntegerVal()), nil
 	}
 	n := promoteToDouble(a)

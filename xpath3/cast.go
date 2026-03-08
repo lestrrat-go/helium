@@ -10,11 +10,29 @@ import (
 	"time"
 )
 
+// isIntegerDerived returns true if the type is xs:integer or one of its derived types.
+func isIntegerDerived(typeName string) bool {
+	switch typeName {
+	case TypeInteger,
+		TypeLong, TypeInt, TypeShort, TypeByte,
+		TypeUnsignedLong, TypeUnsignedInt, TypeUnsignedShort, TypeUnsignedByte,
+		TypeNonNegativeInteger, TypeNonPositiveInteger,
+		TypePositiveInteger, TypeNegativeInteger:
+		return true
+	}
+	return false
+}
+
 // CastAtomic casts an AtomicValue to the target type.
 // Returns an error if the cast is not supported or the value is invalid.
 func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 	if v.TypeName == targetType {
 		return v, nil
+	}
+
+	// Normalize derived integer types to xs:integer for casting purposes
+	if isIntegerDerived(v.TypeName) && v.TypeName != TypeInteger {
+		v = AtomicValue{TypeName: TypeInteger, Value: v.Value}
 	}
 
 	// xs:untypedAtomic → any type goes through string-based casting
@@ -220,9 +238,16 @@ func castToString(v AtomicValue) (AtomicValue, error) {
 // atomicToString returns the canonical string representation of an atomic value.
 func atomicToString(v AtomicValue) (string, error) {
 	switch v.TypeName {
-	case TypeString, TypeAnyURI, TypeUntypedAtomic:
+	case TypeString, TypeAnyURI, TypeUntypedAtomic,
+		TypeNormalizedString, TypeToken, TypeLanguage, TypeName, TypeNCName,
+		TypeNMTOKEN, TypeNMTOKENS, TypeENTITY, TypeID, TypeIDREF, TypeIDREFS,
+		TypeGDay, TypeGMonth, TypeGMonthDay, TypeGYear, TypeGYearMonth:
 		return v.Value.(string), nil
-	case TypeInteger:
+	case TypeInteger,
+		TypeLong, TypeInt, TypeShort, TypeByte,
+		TypeUnsignedLong, TypeUnsignedInt, TypeUnsignedShort, TypeUnsignedByte,
+		TypeNonNegativeInteger, TypeNonPositiveInteger,
+		TypePositiveInteger, TypeNegativeInteger:
 		return strconv.FormatInt(v.Value.(int64), 10), nil
 	case TypeDecimal:
 		return v.Value.(string), nil

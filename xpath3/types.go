@@ -50,6 +50,45 @@ const (
 	TypeHexBinary          = "xs:hexBinary"
 	TypeUntypedAtomic      = "xs:untypedAtomic"
 	TypeAnyAtomicType      = "xs:anyAtomicType"
+
+	// Derived integer types
+	TypeLong               = "xs:long"
+	TypeInt                = "xs:int"
+	TypeShort              = "xs:short"
+	TypeByte               = "xs:byte"
+	TypeUnsignedLong       = "xs:unsignedLong"
+	TypeUnsignedInt        = "xs:unsignedInt"
+	TypeUnsignedShort      = "xs:unsignedShort"
+	TypeUnsignedByte       = "xs:unsignedByte"
+	TypeNonNegativeInteger = "xs:nonNegativeInteger"
+	TypeNonPositiveInteger = "xs:nonPositiveInteger"
+	TypePositiveInteger    = "xs:positiveInteger"
+	TypeNegativeInteger    = "xs:negativeInteger"
+
+	// Derived string types
+	TypeNormalizedString = "xs:normalizedString"
+	TypeToken            = "xs:token"
+	TypeLanguage         = "xs:language"
+	TypeName             = "xs:Name"
+	TypeNCName           = "xs:NCName"
+	TypeNMTOKEN          = "xs:NMTOKEN"
+	TypeNMTOKENS         = "xs:NMTOKENS"
+	TypeENTITY           = "xs:ENTITY"
+	TypeID               = "xs:ID"
+	TypeIDREF            = "xs:IDREF"
+	TypeIDREFS           = "xs:IDREFS"
+
+	// Gregorian date part types
+	TypeGDay       = "xs:gDay"
+	TypeGMonth     = "xs:gMonth"
+	TypeGMonthDay  = "xs:gMonthDay"
+	TypeGYear      = "xs:gYear"
+	TypeGYearMonth = "xs:gYearMonth"
+
+	// Other derived types
+	TypeDateTimeStamp = "xs:dateTimeStamp"
+	TypeError         = "xs:error"
+	TypeNumeric       = "xs:numeric"
 )
 
 // AtomicValue represents an XSD atomic value with its type name.
@@ -100,10 +139,13 @@ func (a AtomicValue) QNameVal() QNameValue {
 	return a.Value.(QNameValue)
 }
 
-// IsNumeric returns true if the type is xs:integer, xs:decimal, xs:double, or xs:float.
+// IsNumeric returns true if the type is xs:integer (or derived), xs:decimal, xs:double, or xs:float.
 func (a AtomicValue) IsNumeric() bool {
+	if isIntegerDerived(a.TypeName) {
+		return true
+	}
 	switch a.TypeName {
-	case TypeInteger, TypeDecimal, TypeDouble, TypeFloat:
+	case TypeDecimal, TypeDouble, TypeFloat:
 		return true
 	}
 	return false
@@ -111,11 +153,12 @@ func (a AtomicValue) IsNumeric() bool {
 
 // ToFloat64 converts any numeric atomic value to float64.
 func (a AtomicValue) ToFloat64() float64 {
+	if isIntegerDerived(a.TypeName) {
+		return float64(a.Value.(int64))
+	}
 	switch a.TypeName {
 	case TypeDouble, TypeFloat:
 		return a.Value.(float64)
-	case TypeInteger:
-		return float64(a.Value.(int64))
 	case TypeDecimal:
 		// v1: decimal stored as string, parse to float64 for arithmetic
 		s := a.Value.(string)
