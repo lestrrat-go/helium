@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -24,7 +25,7 @@ type idcEntry struct {
 // validateIDConstraints evaluates identity constraints declared on the given element.
 // It collects key-sequences from selector/field XPath expressions and checks
 // uniqueness (unique/key) and referential integrity (keyref).
-func validateIDConstraints(elem *helium.Element, edecl *ElementDecl, schema *Schema, filename string, out *strings.Builder) error {
+func validateIDConstraints(ctx context.Context, elem *helium.Element, edecl *ElementDecl, schema *Schema, filename string, out *strings.Builder) error {
 	if len(edecl.IDCs) == 0 {
 		return nil
 	}
@@ -35,8 +36,8 @@ func validateIDConstraints(elem *helium.Element, edecl *ElementDecl, schema *Sch
 
 	for _, idc := range edecl.IDCs {
 		// Use the schema's namespace context for XPath evaluation.
-		nsCtx := xpath.NewContext(xpath.WithNamespaces(idc.Namespaces))
-		table, err := evaluateIDC(elem, idc, nsCtx)
+		nsCtx := xpath.NewContext(ctx, xpath.WithNamespaces(idc.Namespaces))
+		table, err := evaluateIDC(nsCtx, elem, idc)
 		if err != nil {
 			continue
 		}
@@ -80,11 +81,11 @@ func validateIDConstraints(elem *helium.Element, edecl *ElementDecl, schema *Sch
 }
 
 // evaluateIDC evaluates the selector and field XPaths for a single IDC.
-func evaluateIDC(elem *helium.Element, idc *IDConstraint, nsCtx *xpath.Context) (*idcTable, error) {
+func evaluateIDC(nsCtx context.Context, elem *helium.Element, idc *IDConstraint) (*idcTable, error) {
 	// Evaluate selector XPath.
-	selectorResult, err := xpath.EvaluateWith(elem, idc.Selector, nsCtx)
+	selectorResult, err := xpath.Evaluate(nsCtx, elem, idc.Selector)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("xsd: IDC selector XPath failed: %w", err)
 	}
 	if selectorResult.Type != xpath.NodeSetResult {
 		return nil, fmt.Errorf("selector did not return a node-set")
@@ -103,7 +104,7 @@ func evaluateIDC(elem *helium.Element, idc *IDConstraint, nsCtx *xpath.Context) 
 		// Evaluate each field XPath relative to the selected node.
 		allPresent := true
 		for _, fieldXPath := range idc.Fields {
-			fieldResult, err := xpath.EvaluateWith(node, fieldXPath, nsCtx)
+			fieldResult, err := xpath.Evaluate(nsCtx, node, fieldXPath)
 			if err != nil {
 				allPresent = false
 				break

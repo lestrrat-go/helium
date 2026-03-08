@@ -26,7 +26,7 @@ func compileAndValidate(t *testing.T, schemaXML, instanceXML string) error {
 	require.Empty(t, errs, "unexpected compile errors")
 	doc, err := helium.Parse(t.Context(), []byte(instanceXML))
 	require.NoError(t, err)
-	return xsd.Validate(doc, schema, xsd.WithFilename("test.xml"))
+	return xsd.Validate(t.Context(), doc, schema, xsd.WithFilename("test.xml")) //nolint:wrapcheck // test helper: caller uses require.NoError
 }
 
 func TestBlockDefault(t *testing.T) {

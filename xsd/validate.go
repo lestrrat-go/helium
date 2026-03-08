@@ -1,13 +1,14 @@
 package xsd
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 )
 
-func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig) (string, bool) {
+func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema, cfg *validateConfig) (string, bool) {
 	filename := cfg.filename
 	var out strings.Builder
 	valid := true
@@ -38,7 +39,7 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 		elem := n.(*helium.Element)
 		edecl := lookupElemDecl(elem, schema)
 		if edecl != nil && len(edecl.IDCs) > 0 {
-			if err := validateIDConstraints(elem, edecl, schema, filename, &out); err != nil {
+			if err := validateIDConstraints(ctx, elem, edecl, schema, filename, &out); err != nil {
 				valid = false
 			}
 		}

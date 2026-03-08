@@ -17,7 +17,7 @@ func Example_xpath_must_compile() {
 		return
 	}
 
-	r, err := expr.Evaluate(doc.DocumentElement())
+	r, err := expr.Evaluate(context.Background(), doc.DocumentElement())
 	if err != nil {
 		fmt.Printf("evaluate failed: %s\n", err)
 		return

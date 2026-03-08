@@ -1,6 +1,7 @@
 package xpath
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -89,7 +90,7 @@ const (
 type Result struct {
 	Type    ResultType
 	NodeSet []helium.Node
-	Bool bool
+	Bool    bool
 	Number  float64
 	String  string
 }
@@ -103,15 +104,17 @@ type QualifiedName struct {
 
 // Function is the interface for an XPath function implementation.
 // Arguments are pre-evaluated before Eval is called.
+// The context.Context carries both the FunctionContext (retrievable via
+// GetFunctionContext) and any caller-provided values.
 type Function interface {
-	Eval(ctx FunctionContext, args []*Result) (*Result, error)
+	Eval(ctx context.Context, args []*Result) (*Result, error)
 }
 
 // FunctionFunc adapts a function to the Function interface.
-type FunctionFunc func(ctx FunctionContext, args []*Result) (*Result, error)
+type FunctionFunc func(ctx context.Context, args []*Result) (*Result, error)
 
 // Eval calls f(ctx, args).
-func (f FunctionFunc) Eval(ctx FunctionContext, args []*Result) (*Result, error) {
+func (f FunctionFunc) Eval(ctx context.Context, args []*Result) (*Result, error) {
 	return f(ctx, args)
 }
 
@@ -124,12 +127,44 @@ type FunctionContext interface {
 	Variable(name string) (any, bool)
 }
 
+type contextKey struct{}
+type functionContextKey struct{}
+
+// NewContext stores an xpath.Context inside a context.Context and returns it.
+// ctx must not be nil, following Go's standard context.Context convention.
+func NewContext(ctx context.Context, opts ...ContextOption) context.Context {
+	c := &Context{}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return context.WithValue(ctx, contextKey{}, c)
+}
+
+// GetContext retrieves the xpath.Context from a context.Context.
+// Returns nil if none is set.
+func GetContext(ctx context.Context) *Context {
+	c, _ := ctx.Value(contextKey{}).(*Context)
+	return c
+}
+
+// WithFunctionContext stores a FunctionContext in a context.Context.
+func WithFunctionContext(ctx context.Context, fctx FunctionContext) context.Context {
+	return context.WithValue(ctx, functionContextKey{}, fctx)
+}
+
+// GetFunctionContext retrieves the FunctionContext from a context.Context.
+// Returns nil if none is set.
+func GetFunctionContext(ctx context.Context) FunctionContext {
+	fctx, _ := ctx.Value(functionContextKey{}).(FunctionContext)
+	return fctx
+}
+
 // Context carries namespace bindings, variable bindings, and custom function
 // registrations for expression evaluation.
 // (libxml2: xmlXPathContext)
 type Context struct {
-	namespaces  map[string]string          // prefix → URI
-	variables   map[string]any             // name → value ([]helium.Node, string, float64, bool)
+	namespaces  map[string]string          // prefix -> URI
+	variables   map[string]any             // name -> value ([]helium.Node, string, float64, bool)
 	opLimit     int                        // 0 = unlimited (default); matches libxml2's opLimit
 	functions   map[string]Function        // unqualified custom functions
 	functionsNS map[QualifiedName]Function // namespace-qualified custom functions
@@ -138,14 +173,14 @@ type Context struct {
 // ContextOption configures a Context during construction.
 type ContextOption func(*Context)
 
-// WithNamespaces sets namespace prefix→URI bindings on the context.
+// WithNamespaces sets namespace prefix->URI bindings on the context.
 func WithNamespaces(ns map[string]string) ContextOption {
 	return func(c *Context) {
 		c.namespaces = ns
 	}
 }
 
-// WithVariables sets variable name→value bindings on the context.
+// WithVariables sets variable name->value bindings on the context.
 func WithVariables(vars map[string]any) ContextOption {
 	return func(c *Context) {
 		c.variables = vars
@@ -173,23 +208,24 @@ func WithFunctionsNS(fns map[QualifiedName]Function) ContextOption {
 	}
 }
 
-// NewContext creates a new Context with the given options.
-func NewContext(opts ...ContextOption) *Context {
-	c := &Context{}
-	for _, opt := range opts {
-		opt(c)
-	}
-	return c
-}
-
-// Namespaces returns the namespace prefix→URI bindings.
+// Namespaces returns the namespace prefix->URI bindings.
 func (c *Context) Namespaces() map[string]string {
 	return c.namespaces
 }
 
-// Variables returns the variable name→value bindings.
+// Variables returns the variable name->value bindings.
 func (c *Context) Variables() map[string]any {
 	return c.variables
+}
+
+// Functions returns the unqualified custom function registrations.
+func (c *Context) Functions() map[string]Function {
+	return c.functions
+}
+
+// FunctionsNS returns the namespace-qualified custom function registrations.
+func (c *Context) FunctionsNS() map[QualifiedName]Function {
+	return c.functionsNS
 }
 
 // RegisterFunction registers an unqualified custom XPath function.
@@ -239,23 +275,12 @@ func MustCompile(expr string) *Expression {
 }
 
 // Evaluate evaluates the compiled expression against the given context node.
+// The context.Context may carry an xpath.Context (created via NewContext)
+// with namespace bindings, variable bindings, and custom functions.
 // (libxml2: xmlXPathCompiledEval)
-func (e *Expression) Evaluate(node helium.Node) (*Result, error) {
-	ctx := newEvalContext(node)
-	return eval(ctx, e.ast)
-}
-
-// EvaluateWith evaluates with explicit namespace/variable bindings.
-func (e *Expression) EvaluateWith(node helium.Node, xctx *Context) (*Result, error) {
-	ctx := newEvalContext(node)
-	if xctx != nil {
-		ctx.namespaces = xctx.namespaces
-		ctx.variables = xctx.variables
-		ctx.opLimit = xctx.opLimit
-		ctx.functions = xctx.functions
-		ctx.functionsNS = xctx.functionsNS
-	}
-	return eval(ctx, e.ast)
+func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, error) {
+	ectx := newEvalContext(ctx, node)
+	return eval(ectx, e.ast)
 }
 
 // String returns the original XPath expression string.
@@ -265,12 +290,12 @@ func (e *Expression) String() string {
 
 // Find is a convenience function: compile + evaluate, returning a node-set.
 // Returns an error if the expression does not evaluate to a node-set.
-func Find(node helium.Node, expr string) ([]helium.Node, error) {
+func Find(ctx context.Context, node helium.Node, expr string) ([]helium.Node, error) {
 	compiled, err := Compile(expr)
 	if err != nil {
 		return nil, err
 	}
-	r, err := compiled.Evaluate(node)
+	r, err := compiled.Evaluate(ctx, node)
 	if err != nil {
 		return nil, err
 	}
@@ -282,19 +307,10 @@ func Find(node helium.Node, expr string) ([]helium.Node, error) {
 
 // Evaluate is a convenience function: compile + evaluate in one call.
 // (libxml2: xmlXPathCompiledEval)
-func Evaluate(node helium.Node, expr string) (*Result, error) {
+func Evaluate(ctx context.Context, node helium.Node, expr string) (*Result, error) {
 	compiled, err := Compile(expr)
 	if err != nil {
 		return nil, err
 	}
-	return compiled.Evaluate(node)
-}
-
-// EvaluateWith evaluates with explicit namespace/variable bindings.
-func EvaluateWith(node helium.Node, expr string, xctx *Context) (*Result, error) {
-	compiled, err := Compile(expr)
-	if err != nil {
-		return nil, err
-	}
-	return compiled.EvaluateWith(node, xctx)
+	return compiled.Evaluate(ctx, node)
 }

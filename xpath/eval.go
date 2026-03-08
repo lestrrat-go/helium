@@ -1,6 +1,7 @@
 package xpath
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"sort"
@@ -66,6 +67,7 @@ func (c *docOrderCache) indexWalk(cur helium.Node, pos *int) {
 
 // evalContext holds the evaluation state for an XPath expression.
 type evalContext struct {
+	goCtx       context.Context
 	node        helium.Node
 	position    int
 	size        int
@@ -79,19 +81,30 @@ type evalContext struct {
 	docOrder    *docOrderCache
 }
 
-func newEvalContext(node helium.Node) *evalContext {
+func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 	opCount := 0
-	return &evalContext{
+	ectx := &evalContext{
+		goCtx:    ctx,
 		node:     node,
 		position: 1,
 		size:     1,
 		opCount:  &opCount,
 		docOrder: &docOrderCache{},
 	}
+	// Pull config from context.Context if present.
+	if xctx := GetContext(ctx); xctx != nil {
+		ectx.namespaces = xctx.namespaces
+		ectx.variables = xctx.variables
+		ectx.opLimit = xctx.opLimit
+		ectx.functions = xctx.functions
+		ectx.functionsNS = xctx.functionsNS
+	}
+	return ectx
 }
 
 func (ctx *evalContext) withNode(n helium.Node, pos, size int) *evalContext {
 	return &evalContext{
+		goCtx:       ctx.goCtx,
 		node:        n,
 		position:    pos,
 		size:        size,

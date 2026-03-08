@@ -35,7 +35,7 @@ func CompileFile(path string, opts ...CompileOption) (*Schema, error) {
 	for _, o := range opts {
 		o(cfg)
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is caller-supplied schema file
 	if err != nil {
 		return nil, fmt.Errorf("schematron: read file: %w", err)
 	}
@@ -64,12 +64,12 @@ func (e *ValidateError) Error() string {
 // Validate validates a document against a compiled schema.
 // It returns nil if the document is valid, or a *ValidateError with details.
 // (libxml2: xmlSchematronValidateDoc)
-func Validate(doc *helium.Document, schema *Schema, opts ...ValidateOption) error {
+func Validate(ctx context.Context, doc *helium.Document, schema *Schema, opts ...ValidateOption) error {
 	cfg := &validateConfig{}
 	for _, o := range opts {
 		o(cfg)
 	}
-	output, valid := validateDocument(doc, schema, cfg)
+	output, valid := validateDocument(ctx, doc, schema, cfg)
 	if valid {
 		return nil
 	}

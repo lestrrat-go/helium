@@ -25,7 +25,7 @@ func Example_html_new_push_parser() {
 		return
 	}
 
-	nodes, err := xpath.Find(doc, `//h1`)
+	nodes, err := xpath.Find(context.Background(), doc, `//h1`)
 	if err != nil {
 		fmt.Printf("xpath failed: %s\n", err)
 		return

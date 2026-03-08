@@ -12,7 +12,7 @@ func TestEvaluateXPath1(t *testing.T) {
 	doc, err := helium.Parse(t.Context(), []byte("<root><child>text</child></root>"))
 	require.NoError(t, err)
 
-	nodes, err := xpointer.Evaluate(doc, "xpath1(/root/child)")
+	nodes, err := xpointer.Evaluate(t.Context(), doc, "xpath1(/root/child)")
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
 	require.Equal(t, "child", nodes[0].Name())
@@ -46,7 +46,7 @@ func TestXmlnsScheme(t *testing.T) {
 </rootB>`))
 		require.NoError(t, err)
 
-		nodes, err := xpointer.Evaluate(doc, `xmlns(b=abc://d/e:f) xpath1(/b:rootB)`)
+		nodes, err := xpointer.Evaluate(t.Context(), doc, `xmlns(b=abc://d/e:f) xpath1(/b:rootB)`)
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 		require.Equal(t, "rootB", nodes[0].Name())
@@ -57,7 +57,7 @@ func TestXmlnsScheme(t *testing.T) {
 <root xmlns:ns="urn:test"><ns:child>hello</ns:child></root>`))
 		require.NoError(t, err)
 
-		nodes, err := xpointer.Evaluate(doc, `xmlns(n=urn:test) xpointer(/root/n:child)`)
+		nodes, err := xpointer.Evaluate(t.Context(), doc, `xmlns(n=urn:test) xpointer(/root/n:child)`)
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 		require.Equal(t, "child", nodes[0].(*helium.Element).LocalName())
@@ -68,7 +68,7 @@ func TestXmlnsScheme(t *testing.T) {
 <root xmlns:a="urn:a" xmlns:b="urn:b"><a:x/><b:y/></root>`))
 		require.NoError(t, err)
 
-		nodes, err := xpointer.Evaluate(doc, `xmlns(p=urn:a) xmlns(q=urn:b) xpointer(/root/q:y)`)
+		nodes, err := xpointer.Evaluate(t.Context(), doc, `xmlns(p=urn:a) xmlns(q=urn:b) xpointer(/root/q:y)`)
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 		require.Equal(t, "y", nodes[0].(*helium.Element).LocalName())
@@ -78,7 +78,7 @@ func TestXmlnsScheme(t *testing.T) {
 		doc, err := helium.Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
-		_, err = xpointer.Evaluate(doc, `xmlns(noequalssign) xpointer(/root)`)
+		_, err = xpointer.Evaluate(t.Context(), doc, `xmlns(noequalssign) xpointer(/root)`)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid xmlns()")
 	})
@@ -105,7 +105,7 @@ func TestXPointerEscaping(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			nodes, err := xpointer.Evaluate(doc, tt.expr)
+			nodes, err := xpointer.Evaluate(t.Context(), doc, tt.expr)
 			if tt.wantErr {
 				require.Error(t, err)
 				return
@@ -156,7 +156,7 @@ func TestCascadingParts(t *testing.T) {
 
 	t.Run("first part fails, second succeeds", func(t *testing.T) {
 		// element(foo) fails (no ID "foo"), element(/1/1/1) succeeds
-		nodes, err := xpointer.Evaluate(doc, "element(foo)element(/1/1/1)")
+		nodes, err := xpointer.Evaluate(t.Context(), doc, "element(foo)element(/1/1/1)")
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 		require.Equal(t, "image", nodes[0].(*helium.Element).LocalName())
@@ -164,7 +164,7 @@ func TestCascadingParts(t *testing.T) {
 
 	t.Run("first part succeeds, second ignored", func(t *testing.T) {
 		// element(/1/1/1) succeeds immediately, element(foo) never tried
-		nodes, err := xpointer.Evaluate(doc, "element(/1/1/1)element(foo)")
+		nodes, err := xpointer.Evaluate(t.Context(), doc, "element(/1/1/1)element(foo)")
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 		require.Equal(t, "image", nodes[0].(*helium.Element).LocalName())
@@ -172,14 +172,14 @@ func TestCascadingParts(t *testing.T) {
 
 	t.Run("all parts fail", func(t *testing.T) {
 		// Both element(foo) and element(bar) fail
-		nodes, err := xpointer.Evaluate(doc, "element(foo)element(bar)")
+		nodes, err := xpointer.Evaluate(t.Context(), doc, "element(foo)element(bar)")
 		require.NoError(t, err)
 		require.Nil(t, nodes)
 	})
 
 	t.Run("xpath1 cascade", func(t *testing.T) {
 		// First XPath returns empty, second finds the element
-		nodes, err := xpointer.Evaluate(doc, "xpath1(//nonexistent)xpath1(//image)")
+		nodes, err := xpointer.Evaluate(t.Context(), doc, "xpath1(//nonexistent)xpath1(//image)")
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 		require.Equal(t, "image", nodes[0].(*helium.Element).LocalName())
@@ -187,13 +187,13 @@ func TestCascadingParts(t *testing.T) {
 
 	t.Run("syntax error aborts cascade", func(t *testing.T) {
 		// xpointer with invalid XPath is a syntax error — cascade aborts
-		_, err := xpointer.Evaluate(doc, "xpointer(:::invalid)element(/1/1/1)")
+		_, err := xpointer.Evaluate(t.Context(), doc, "xpointer(:::invalid)element(/1/1/1)")
 		require.Error(t, err)
 	})
 
 	t.Run("unknown scheme continues cascade", func(t *testing.T) {
 		// unknown scheme allows fallback to next part
-		nodes, err := xpointer.Evaluate(doc, "bogus(data)element(/1/1/1)")
+		nodes, err := xpointer.Evaluate(t.Context(), doc, "bogus(data)element(/1/1/1)")
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 		require.Equal(t, "image", nodes[0].(*helium.Element).LocalName())
@@ -209,21 +209,21 @@ func TestBareNameChildSequence(t *testing.T) {
 
 	t.Run("name/1/1 navigates from ID", func(t *testing.T) {
 		// "r/1/1" = look up ID "r", then 1st child (a), then 1st child (b)
-		nodes, err := xpointer.Evaluate(doc, "r/1/1")
+		nodes, err := xpointer.Evaluate(t.Context(), doc, "r/1/1")
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 		require.Equal(t, "b", nodes[0].(*helium.Element).LocalName())
 	})
 
 	t.Run("name/1 navigates one level", func(t *testing.T) {
-		nodes, err := xpointer.Evaluate(doc, "r/1")
+		nodes, err := xpointer.Evaluate(t.Context(), doc, "r/1")
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 		require.Equal(t, "a", nodes[0].(*helium.Element).LocalName())
 	})
 
 	t.Run("unknown ID returns nil", func(t *testing.T) {
-		nodes, err := xpointer.Evaluate(doc, "nosuchid/1")
+		nodes, err := xpointer.Evaluate(t.Context(), doc, "nosuchid/1")
 		require.NoError(t, err)
 		require.Nil(t, nodes)
 	})
@@ -286,7 +286,7 @@ func TestMultiSchemeExpressionsTable(t *testing.T) {
 			doc, err := helium.Parse(t.Context(), []byte(tt.xml))
 			require.NoError(t, err)
 
-			nodes, err := xpointer.Evaluate(doc, tt.expr)
+			nodes, err := xpointer.Evaluate(t.Context(), doc, tt.expr)
 			if tt.wantErr {
 				require.Error(t, err)
 				return

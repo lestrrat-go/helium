@@ -28,7 +28,7 @@ func Example_helium_push_parser() {
 		return
 	}
 
-	nodes, err := xpath.Find(doc, `/root/item`)
+	nodes, err := xpath.Find(context.Background(), doc, `/root/item`)
 	if err != nil {
 		fmt.Printf("xpath failed: %s\n", err)
 		return

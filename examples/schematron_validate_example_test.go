@@ -35,7 +35,7 @@ func Example_schematron_validate() {
 		return
 	}
 
-	if err := schematron.Validate(doc, schema, schematron.WithFilename("doc.xml")); err != nil {
+	if err := schematron.Validate(context.Background(), doc, schema, schematron.WithFilename("doc.xml")); err != nil {
 		fmt.Println(err)
 	}
 	// Output:

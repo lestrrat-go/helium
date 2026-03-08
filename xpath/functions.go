@@ -1,6 +1,7 @@
 package xpath
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -45,10 +46,11 @@ type builtinFunction struct {
 	callback func(ctx *evalContext, args []*Result) (*Result, error)
 }
 
-func (f builtinFunction) Eval(ctx FunctionContext, args []*Result) (*Result, error) {
-	c, ok := ctx.(*evalContext)
+func (f builtinFunction) Eval(ctx context.Context, args []*Result) (*Result, error) {
+	fctx := GetFunctionContext(ctx)
+	c, ok := fctx.(*evalContext)
 	if !ok || c == nil {
-		return nil, fmt.Errorf("%w: %T", ErrInvalidFunctionContext, ctx)
+		return nil, fmt.Errorf("%w: %T", ErrInvalidFunctionContext, fctx)
 	}
 	return f.callback(c, args)
 }
@@ -125,7 +127,10 @@ func evalFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, error) {
 		args[i] = r
 	}
 
-	return fn.Eval(ctx, args) //nolint:wrapcheck
+	// Stash the evalContext as FunctionContext in the context.Context
+	// so functions can retrieve it via GetFunctionContext.
+	fctx := WithFunctionContext(ctx.goCtx, ctx)
+	return fn.Eval(fctx, args) //nolint:wrapcheck
 }
 
 func evalNamespacedFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, error) {
@@ -154,7 +159,10 @@ func evalNamespacedFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, err
 		args[i] = r
 	}
 
-	return fn.Eval(ctx, args) //nolint:wrapcheck
+	// Stash the evalContext as FunctionContext in the context.Context
+	// so functions can retrieve it via GetFunctionContext.
+	fctx := WithFunctionContext(ctx.goCtx, ctx)
+	return fn.Eval(fctx, args) //nolint:wrapcheck
 }
 
 // --- Node-set functions ---

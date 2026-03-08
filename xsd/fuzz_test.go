@@ -60,6 +60,6 @@ func FuzzValidate(f *testing.F) {
 			return
 		}
 
-		_ = xsd.Validate(instanceDom, schema)
+		_ = xsd.Validate(t.Context(), instanceDom, schema)
 	})
 }

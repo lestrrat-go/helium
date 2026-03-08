@@ -96,8 +96,8 @@ type processor struct {
 
 // Process performs XInclude processing on the document.
 // Returns the number of substitutions made, or an error.
-func Process(doc *helium.Document, opts ...Option) (int, error) {
-	count, err := ProcessTree(doc, opts...)
+func Process(ctx context.Context, doc *helium.Document, opts ...Option) (int, error) {
+	count, err := ProcessTree(ctx, doc, opts...)
 	if count > 0 {
 		doc.SetProperties(doc.Properties() | helium.DocXInclude)
 	}
@@ -107,7 +107,7 @@ func Process(doc *helium.Document, opts ...Option) (int, error) {
 // ProcessTree performs XInclude processing starting from any node in the tree.
 // When called with a *Document, it processes the entire document.
 // Returns the number of substitutions made, or an error.
-func ProcessTree(node helium.Node, opts ...Option) (int, error) {
+func ProcessTree(ctx context.Context, node helium.Node, opts ...Option) (int, error) {
 	p := &processor{
 		expanding: make(map[string]bool),
 		docCache:  make(map[string]docCacheEntry),
@@ -120,13 +120,13 @@ func ProcessTree(node helium.Node, opts ...Option) (int, error) {
 		p.resolver = &fileResolver{}
 	}
 
-	if err := p.processNode(node); err != nil {
+	if err := p.processNode(ctx, node); err != nil {
 		return p.count, err
 	}
 	return p.count, nil
 }
 
-func (p *processor) processNode(n helium.Node) error {
+func (p *processor) processNode(ctx context.Context, n helium.Node) error {
 	if p.depth > maxDepth {
 		return fmt.Errorf("xi:include: maximum recursion depth (%d) exceeded", maxDepth)
 	}
@@ -145,7 +145,7 @@ func (p *processor) processNode(n helium.Node) error {
 			break
 		}
 		for _, inc := range includes {
-			if err := p.processInclude(inc); err != nil {
+			if err := p.processInclude(ctx, inc); err != nil {
 				return err
 			}
 		}
@@ -157,7 +157,7 @@ func (p *processor) processNode(n helium.Node) error {
 			if isFallback(c) {
 				return fmt.Errorf("xi:fallback is not the child of an 'include'")
 			}
-			if err := p.processNode(c); err != nil {
+			if err := p.processNode(ctx, c); err != nil {
 				return err
 			}
 		}
@@ -165,7 +165,7 @@ func (p *processor) processNode(n helium.Node) error {
 	return nil
 }
 
-func (p *processor) processInclude(inc *helium.Element) error {
+func (p *processor) processInclude(ctx context.Context, inc *helium.Element) error {
 	if err := validateIncludeChildren(inc); err != nil {
 		return err
 	}
@@ -239,9 +239,9 @@ func (p *processor) processInclude(inc *helium.Element) error {
 	switch parse {
 	case "xml":
 		if xptrExpr != "" {
-			err = p.includeXMLWithXPointer(inc, resolved, xptrExpr, incBase)
+			err = p.includeXMLWithXPointer(ctx, inc, resolved, xptrExpr, incBase)
 		} else {
-			err = p.includeXML(inc, resolved, incBase)
+			err = p.includeXML(ctx, inc, resolved, incBase)
 		}
 	case "text":
 		if resolved == "" {
@@ -259,7 +259,7 @@ func (p *processor) processInclude(inc *helium.Element) error {
 	return nil
 }
 
-func (p *processor) includeXML(inc *helium.Element, uri string, incBase string) error {
+func (p *processor) includeXML(ctx context.Context, inc *helium.Element, uri string, _ string) error {
 	doc, err := p.loadXMLDoc(uri, false)
 	if err != nil {
 		return err
@@ -308,7 +308,7 @@ func (p *processor) includeXML(inc *helium.Element, uri string, incBase string) 
 	p.depth++
 	for _, n := range nodes {
 		if n.Type() == helium.ElementNode {
-			if err := p.processNode(n); err != nil {
+			if err := p.processNode(ctx, n); err != nil {
 				p.depth--
 				delete(p.expanding, uri)
 				p.baseURI = savedBase
@@ -323,7 +323,7 @@ func (p *processor) includeXML(inc *helium.Element, uri string, incBase string) 
 	return nil
 }
 
-func (p *processor) includeXMLWithXPointer(inc *helium.Element, uri string, xptrExpr string, incBase string) error {
+func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Element, uri string, xptrExpr string, _ string) error {
 	var doc *helium.Document
 	var err error
 
@@ -349,7 +349,7 @@ func (p *processor) includeXMLWithXPointer(inc *helium.Element, uri string, xptr
 	p.mergeEntities(doc, inc.OwnerDocument())
 
 	// Evaluate XPointer expression against the document
-	nodes, err := xpointer.Evaluate(doc, xptrExpr)
+	nodes, err := xpointer.Evaluate(ctx, doc, xptrExpr)
 	if err != nil {
 		return fmt.Errorf("xi:include: XPointer evaluation failed: %w", err)
 	}
@@ -414,7 +414,7 @@ func (p *processor) includeXMLWithXPointer(inc *helium.Element, uri string, xptr
 	p.depth++
 	for _, n := range copies {
 		if n.Type() == helium.ElementNode {
-			if err := p.processNode(n); err != nil {
+			if err := p.processNode(ctx, n); err != nil {
 				p.depth--
 				delete(p.expanding, circularKey)
 				p.baseURI = savedBase
@@ -511,8 +511,9 @@ func (p *processor) loadXMLDoc(uri string, substituteEntities bool) (*helium.Doc
 
 	rc, err := p.resolver.Resolve(uri, p.baseURI)
 	if err != nil {
-		p.docCache[cacheKey] = docCacheEntry{err: err}
-		return nil, err
+		wrapErr := fmt.Errorf("xi:include: failed to resolve %q: %w", uri, err)
+		p.docCache[cacheKey] = docCacheEntry{err: wrapErr}
+		return nil, wrapErr
 	}
 	defer func() { _ = rc.Close() }()
 
@@ -591,8 +592,9 @@ func (p *processor) loadText(uri string) ([]byte, error) {
 
 	rc, err := p.resolver.Resolve(uri, p.baseURI)
 	if err != nil {
-		p.txtCache[uri] = txtCacheEntry{err: err}
-		return nil, err
+		wrapErr := fmt.Errorf("xi:include: failed to resolve %q: %w", uri, err)
+		p.txtCache[uri] = txtCacheEntry{err: wrapErr}
+		return nil, wrapErr
 	}
 	defer func() { _ = rc.Close() }()
 
@@ -826,7 +828,7 @@ func getAttr(elem *helium.Element, name string) string {
 func resolveURI(href, base string) (string, error) {
 	hrefURL, err := url.Parse(href)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("xi:include: invalid href %q: %w", href, err)
 	}
 
 	if hrefURL.IsAbs() {
@@ -840,9 +842,10 @@ func resolveURI(href, base string) (string, error) {
 	// For file-like paths (no scheme), use filepath-based resolution
 	// to avoid Go's url.ResolveReference quirk that adds leading '/'
 	// to purely relative paths.
-	baseURL, err := url.Parse(base)
-	if err != nil {
-		return href, nil
+	// If base fails to parse as a URL, fall back to returning href unresolved.
+	baseURL, parseErr := url.Parse(base)
+	if parseErr != nil {
+		return href, nil //nolint:nilerr // intentional fallback: unparseable base is treated as absent
 	}
 	if baseURL.Scheme == "" || baseURL.Scheme == "file" {
 		basePath := baseURL.Path
@@ -1167,5 +1170,5 @@ func (r *fileResolver) Resolve(href, base string) (io.ReadCloser, error) {
 			path = filepath.Join(filepath.Dir(basePath), href)
 		}
 	}
-	return os.Open(path)
+	return os.Open(path) //nolint:gosec,wrapcheck // path is constructed from caller-supplied href/base; file access is the intended behavior
 }

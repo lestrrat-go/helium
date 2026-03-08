@@ -14,7 +14,7 @@ import (
 func writeFile(t *testing.T, dir, name, content string) string {
 	t.Helper()
 	p := filepath.Join(dir, name)
-	require.NoError(t, os.WriteFile(p, []byte(content), 0644))
+	require.NoError(t, os.WriteFile(p, []byte(content), 0o600)) //nolint:gosec // test helper writing temp files
 	return p
 }
 
@@ -23,7 +23,9 @@ func writeFile(t *testing.T, dir, name, content string) string {
 func runWithFile(t *testing.T, xmlPath string, args ...string) (string, int) {
 	t.Helper()
 
-	allArgs := append(args, xmlPath)
+	allArgs := make([]string, len(args)+1)
+	copy(allArgs, args)
+	allArgs[len(args)] = xmlPath
 	cfg, files := parseArgs(allArgs)
 	require.NotNil(t, cfg, "parseArgs returned nil config for args: %v", allArgs)
 	require.NotEmpty(t, files, "no files collected from args: %v", allArgs)
@@ -34,7 +36,7 @@ func runWithFile(t *testing.T, xmlPath string, args ...string) (string, int) {
 
 	var out strings.Builder
 	input := namedInput{name: files[0]}
-	code := processInput(cfg, input, nil, nil, &out)
+	code := processInput(t.Context(), cfg, input, nil, nil, &out)
 	return out.String(), code
 }
 
@@ -326,7 +328,7 @@ func TestMultipleFiles(t *testing.T) {
 
 	var out strings.Builder
 	for _, fn := range files {
-		processInput(cfg, namedInput{name: fn}, nil, nil, &out)
+		processInput(t.Context(), cfg, namedInput{name: fn}, nil, nil, &out)
 	}
 	result := out.String()
 	require.Contains(t, result, `<a/>`)
@@ -338,7 +340,7 @@ func TestFileNotFound(t *testing.T) {
 	require.NotNil(t, cfg)
 
 	var out strings.Builder
-	code := processInput(cfg, namedInput{name: "/nonexistent/file.xml"}, nil, nil, &out)
+	code := processInput(t.Context(), cfg, namedInput{name: "/nonexistent/file.xml"}, nil, nil, &out)
 	require.Equal(t, exitReadFile, code)
 }
 
@@ -455,11 +457,11 @@ func TestOutputFile(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = f.Close() }()
 
-	code := processInput(cfg, namedInput{name: files[0]}, nil, nil, f)
+	code := processInput(t.Context(), cfg, namedInput{name: files[0]}, nil, nil, f)
 	require.Equal(t, 0, code)
 	require.NoError(t, f.Close())
 
-	data, err := os.ReadFile(outFile)
+	data, err := os.ReadFile(outFile) //nolint:gosec // reading test output file
 	require.NoError(t, err)
 	require.Contains(t, string(data), `<root/>`)
 }
@@ -708,7 +710,7 @@ func TestSchemaValidation(t *testing.T) {
 			require.NoError(t, err)
 
 			var out strings.Builder
-			code := processInput(cfg, namedInput{name: files[0]}, nil, schema, &out)
+			code := processInput(t.Context(), cfg, namedInput{name: files[0]}, nil, schema, &out)
 			require.Equal(t, tc.wantCode, code)
 			if tc.wantEmpty {
 				require.Empty(t, out.String())
@@ -774,11 +776,11 @@ func TestC14NWithOutput(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = f.Close() }()
 
-	code := processInput(cfg, namedInput{name: files[0]}, nil, nil, f)
+	code := processInput(t.Context(), cfg, namedInput{name: files[0]}, nil, nil, f)
 	require.Equal(t, 0, code)
 	require.NoError(t, f.Close())
 
-	data, err := os.ReadFile(outFile)
+	data, err := os.ReadFile(outFile) //nolint:gosec // reading test output file
 	require.NoError(t, err)
 	require.Contains(t, string(data), `<b a="1"></b>`)
 }
@@ -808,7 +810,7 @@ func TestSchemaValidQuiet(t *testing.T) {
 	require.NoError(t, err)
 
 	var out strings.Builder
-	code := processInput(cfg, namedInput{name: files[0]}, nil, schema, &out)
+	code := processInput(t.Context(), cfg, namedInput{name: files[0]}, nil, schema, &out)
 	require.Equal(t, exitOK, code)
 }
 
@@ -843,7 +845,7 @@ func TestCatalogLoading(t *testing.T) {
 	require.NotNil(t, cat)
 
 	var out strings.Builder
-	code := processInput(cfg, namedInput{name: files[0]}, cat, nil, &out)
+	code := processInput(t.Context(), cfg, namedInput{name: files[0]}, cat, nil, &out)
 	require.Equal(t, exitOK, code)
 }
 

@@ -290,7 +290,7 @@ func (c *compiler) loadInclude(location string, includeElem *helium.Element) err
 		path = filepath.Join(c.baseDir, location)
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is constructed from schema baseDir + user-supplied location
 	if err != nil {
 		return fmt.Errorf("xsd: failed to load include %q: %w", location, err)
 	}
@@ -371,7 +371,7 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 		path = filepath.Join(c.baseDir, location)
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is constructed from schema baseDir + user-supplied location
 	if err != nil {
 		return fmt.Errorf("xsd: failed to load redefine %q: %w", location, err)
 	}
@@ -573,14 +573,14 @@ func (c *compiler) loadImport(location, _ string) error {
 		path = filepath.Join(c.baseDir, location)
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is constructed from schema baseDir + import location
 	if err != nil {
-		return err
+		return fmt.Errorf("xsd: failed to load import %q: %w", location, err)
 	}
 
 	doc, err := helium.Parse(context.Background(), data)
 	if err != nil {
-		return err
+		return fmt.Errorf("xsd: failed to parse import %q: %w", location, err)
 	}
 
 	impRoot := findDocumentElement(doc)
@@ -760,7 +760,7 @@ func (c *compiler) parseGlobalElement(elem *helium.Element) error {
 		decl.Final = parseElemFinalFlags(getAttr(elem, "final"))
 		decl.FinalSet = true
 	} else {
-		decl.Final = FinalFlags(c.schema.finalDefault) & (FinalExtension | FinalRestriction)
+		decl.Final = c.schema.finalDefault & (FinalExtension | FinalRestriction)
 	}
 
 	typeRef := getAttr(elem, "type")
@@ -833,7 +833,7 @@ func (c *compiler) parseNamedComplexType(elem *helium.Element) error {
 		td.Final = parseElemFinalFlags(getAttr(elem, "final"))
 		td.FinalSet = true
 	} else {
-		td.Final = FinalFlags(c.schema.finalDefault) & (FinalExtension | FinalRestriction)
+		td.Final = c.schema.finalDefault & (FinalExtension | FinalRestriction)
 	}
 
 	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: false}
@@ -858,7 +858,7 @@ func (c *compiler) parseNamedSimpleType(elem *helium.Element) error {
 		td.Final = parseFinalFlags(getAttr(elem, "final"))
 		td.FinalSet = true
 	} else {
-		td.Final = FinalFlags(c.schema.finalDefault) & (FinalRestriction | FinalList | FinalUnion)
+		td.Final = c.schema.finalDefault & (FinalRestriction | FinalList | FinalUnion)
 	}
 
 	c.typeDefSources[td] = typeDefSource{line: elem.Line(), isLocal: false}

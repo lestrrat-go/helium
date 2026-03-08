@@ -17,7 +17,7 @@ func Example_html_write_node() {
 		return
 	}
 
-	nodes, err := xpath.Find(doc, `//p`)
+	nodes, err := xpath.Find(context.Background(), doc, `//p`)
 	if err != nil {
 		fmt.Printf("xpath failed: %s\n", err)
 		return

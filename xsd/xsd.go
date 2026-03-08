@@ -5,6 +5,7 @@ package xsd
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -34,13 +35,13 @@ func CompileFile(path string, opts ...CompileOption) (*Schema, error) {
 	for _, o := range opts {
 		o(cfg)
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is caller-supplied schema file
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("xsd: failed to read %q: %w", path, err)
 	}
 	doc, err := helium.Parse(context.Background(), data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("xsd: failed to parse %q: %w", path, err)
 	}
 	baseDir := filepath.Dir(path)
 	schema, compileErr := compileSchema(doc, baseDir, cfg)
@@ -64,12 +65,12 @@ func (e *ValidateError) Error() string {
 // Validate validates a document against a compiled schema.
 // It returns nil if the document is valid, or a *ValidateError with details.
 // (libxml2: xmlSchemaValidateDoc)
-func Validate(doc *helium.Document, schema *Schema, opts ...ValidateOption) error {
+func Validate(ctx context.Context, doc *helium.Document, schema *Schema, opts ...ValidateOption) error {
 	cfg := &validateConfig{}
 	for _, o := range opts {
 		o(cfg)
 	}
-	output, valid := validateDocument(doc, schema, cfg)
+	output, valid := validateDocument(ctx, doc, schema, cfg)
 	if valid {
 		return nil
 	}

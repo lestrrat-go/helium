@@ -47,7 +47,7 @@ func Example_xsd_validate_errors() {
 
 	// Validate returns an error when the document is invalid.
 	// The error message contains "fails to validate" along with details.
-	if err := xsd.Validate(doc, schema); err != nil {
+	if err := xsd.Validate(context.Background(), doc, schema); err != nil {
 		fmt.Println(strings.Contains(err.Error(), "fails to validate"))
 	}
 	// Output:
