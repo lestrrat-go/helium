@@ -65,24 +65,23 @@ func TestHTMLPushParserSAXMode(t *testing.T) {
 	input := []byte(testHTML)
 
 	var elements []string
-	handler := &html.SAXCallbacks{
-		OnStartDocument: html.StartDocumentFunc(func() error { return nil }),
-		OnEndDocument:   html.EndDocumentFunc(func() error { return nil }),
-		OnStartElement: html.StartElementFunc(func(name string, attrs []html.Attribute) error {
-			elements = append(elements, name)
-			return nil
-		}),
-		OnEndElement:            html.EndElementFunc(func(name string) error { return nil }),
-		OnCharacters:            html.CharactersFunc(func(ch []byte) error { return nil }),
-		OnComment:               html.CommentFunc(func(value []byte) error { return nil }),
-		OnCDataBlock:            html.CDataBlockFunc(func(value []byte) error { return nil }),
-		OnInternalSubset:        html.InternalSubsetFunc(func(name, eid, sid string) error { return nil }),
-		OnProcessingInstruction: html.ProcessingInstructionFunc(func(t, d string) error { return nil }),
-		OnIgnorableWhitespace:   html.IgnorableWhitespaceFunc(func(ch []byte) error { return nil }),
-		OnError:                 html.ErrorFunc(func(err error) error { return nil }),
-		OnWarning:               html.WarningFunc(func(err error) error { return nil }),
-		OnSetDocumentLocator:    html.SetDocumentLocatorFunc(func(loc html.DocumentLocator) error { return nil }),
-	}
+	handler := &html.SAXCallbacks{}
+	handler.SetOnStartDocument(html.StartDocumentFunc(func() error { return nil }))
+	handler.SetOnEndDocument(html.EndDocumentFunc(func() error { return nil }))
+	handler.SetOnStartElement(html.StartElementFunc(func(name string, attrs []html.Attribute) error {
+		elements = append(elements, name)
+		return nil
+	}))
+	handler.SetOnEndElement(html.EndElementFunc(func(name string) error { return nil }))
+	handler.SetOnCharacters(html.CharactersFunc(func(ch []byte) error { return nil }))
+	handler.SetOnComment(html.CommentFunc(func(value []byte) error { return nil }))
+	handler.SetOnCDataBlock(html.CDataBlockFunc(func(value []byte) error { return nil }))
+	handler.SetOnInternalSubset(html.InternalSubsetFunc(func(name, eid, sid string) error { return nil }))
+	handler.SetOnProcessingInstruction(html.ProcessingInstructionFunc(func(t, d string) error { return nil }))
+	handler.SetOnIgnorableWhitespace(html.IgnorableWhitespaceFunc(func(ch []byte) error { return nil }))
+	handler.SetOnError(html.ErrorFunc(func(err error) error { return nil }))
+	handler.SetOnWarning(html.WarningFunc(func(err error) error { return nil }))
+	handler.SetOnSetDocumentLocator(html.SetDocumentLocatorFunc(func(loc html.DocumentLocator) error { return nil }))
 
 	pp := html.NewSAXPushParser(t.Context(), handler)
 	require.NoError(t, pp.Push(input))

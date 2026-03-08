@@ -95,9 +95,9 @@ func TestErrParseErrorWarningLevel(t *testing.T) {
 <root>&undefined;</root>`
 
 	s := sax.New()
-	s.OnWarning = sax.WarningFunc(func(_ sax.Context, err error) error {
+	s.SetOnWarning(sax.WarningFunc(func(_ sax.Context, err error) error {
 		return errors.New("warning escalated")
-	})
+	}))
 
 	p := helium.NewParser()
 	p.SetSAXHandler(s)
@@ -134,10 +134,10 @@ func TestParseNoError(t *testing.T) {
 		t.Parallel()
 		var called atomic.Int32
 		s := sax.New()
-		s.OnError = sax.ErrorFunc(func(_ sax.Context, err error) error {
+		s.SetOnError(sax.ErrorFunc(func(_ sax.Context, err error) error {
 			called.Add(1)
 			return nil
-		})
+		}))
 
 		p := helium.NewParser()
 		p.SetSAXHandler(s)
@@ -149,10 +149,10 @@ func TestParseNoError(t *testing.T) {
 		t.Parallel()
 		var called atomic.Int32
 		s := sax.New()
-		s.OnError = sax.ErrorFunc(func(_ sax.Context, err error) error {
+		s.SetOnError(sax.ErrorFunc(func(_ sax.Context, err error) error {
 			called.Add(1)
 			return nil
-		})
+		}))
 
 		p := helium.NewParser()
 		p.SetSAXHandler(s)
@@ -172,9 +172,9 @@ func TestWarningLocationInfo(t *testing.T) {
 		t.Parallel()
 		handlerErr := fmt.Errorf("warning escalated")
 		s := sax.New()
-		s.OnWarning = sax.WarningFunc(func(_ sax.Context, err error) error {
+		s.SetOnWarning(sax.WarningFunc(func(_ sax.Context, err error) error {
 			return handlerErr
-		})
+		}))
 
 		p := helium.NewParser()
 		p.SetSAXHandler(s)
@@ -191,10 +191,10 @@ func TestWarningLocationInfo(t *testing.T) {
 		t.Parallel()
 		var warnings []string
 		s := sax.New()
-		s.OnWarning = sax.WarningFunc(func(_ sax.Context, err error) error {
+		s.SetOnWarning(sax.WarningFunc(func(_ sax.Context, err error) error {
 			warnings = append(warnings, err.Error())
 			return nil
-		})
+		}))
 
 		p := helium.NewParser()
 		p.SetSAXHandler(s)
@@ -208,10 +208,10 @@ func TestWarningLocationInfo(t *testing.T) {
 		t.Parallel()
 		var called atomic.Int32
 		s := sax.New()
-		s.OnWarning = sax.WarningFunc(func(_ sax.Context, err error) error {
+		s.SetOnWarning(sax.WarningFunc(func(_ sax.Context, err error) error {
 			called.Add(1)
 			return nil
-		})
+		}))
 
 		p := helium.NewParser()
 		p.SetSAXHandler(s)
