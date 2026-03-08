@@ -3,6 +3,7 @@
 package xpointer
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -87,7 +88,7 @@ func evaluatePart(doc *helium.Document, p xptrPart, nsMap map[string]string) ([]
 		if len(nsMap) > 0 {
 			return findWithContext(doc, p.body, nsMap)
 		}
-		return xpath.Find(doc, p.body)
+		return xpath.Find(context.Background(), doc, p.body)
 	case "element":
 		return evaluateElement(doc, p.body)
 	case "": // shorthand pointer or bare child sequence
@@ -109,8 +110,8 @@ func evaluatePart(doc *helium.Document, p xptrPart, nsMap map[string]string) ([]
 // findWithContext compiles an XPath expression and evaluates it with
 // namespace bindings, returning a node-set.
 func findWithContext(node helium.Node, expr string, nsMap map[string]string) ([]helium.Node, error) {
-	xctx := xpath.NewContext(xpath.WithNamespaces(nsMap))
-	r, err := xpath.EvaluateWith(node, expr, xctx)
+	ctx := xpath.NewContext(context.Background(), xpath.WithNamespaces(nsMap))
+	r, err := xpath.Evaluate(ctx, node, expr)
 	if err != nil {
 		return nil, err
 	}

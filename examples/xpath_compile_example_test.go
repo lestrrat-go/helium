@@ -31,7 +31,7 @@ func Example_xpath_compile() {
 	// "count(child::*)" counts the direct child elements of the context node.
 	// <a> has 2 children (x, y) and <b> has 1 child (z).
 	for child := doc.FirstChild().FirstChild(); child != nil; child = child.NextSibling() {
-		r, err := expr.Evaluate(child)
+		r, err := expr.Evaluate(context.Background(), child)
 		if err != nil {
 			fmt.Printf("eval error: %s\n", err)
 			return

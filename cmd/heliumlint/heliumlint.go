@@ -513,7 +513,7 @@ func processInput(cfg *config, input namedInput, cat *catalog.Catalog, schema *x
 }
 
 func evalXPath(cfg *config, doc *helium.Document, out io.Writer) int {
-	result, err := xpath.Evaluate(doc, cfg.xpathExpr)
+	result, err := xpath.Evaluate(context.Background(), doc, cfg.xpathExpr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "XPath error: %s\n", err)
 		return exitXPath

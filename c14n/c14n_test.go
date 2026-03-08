@@ -121,11 +121,11 @@ func parseNSFile(t *testing.T, path string) []string {
 func evaluateNodeSet(t *testing.T, doc *helium.Document, expr string, nss map[string]string) []helium.Node {
 	t.Helper()
 
-	ctx := xpath.NewContext(
+	ctx := xpath.NewContext(t.Context(),
 		xpath.WithNamespaces(nss),
 	)
 
-	result, err := xpath.EvaluateWith(doc, expr, ctx)
+	result, err := xpath.Evaluate(ctx, doc, expr)
 	require.NoError(t, err, "evaluating xpath: %s", expr)
 	require.Equal(t, xpath.NodeSetResult, result.Type, "xpath result is not a node set")
 	return result.NodeSet

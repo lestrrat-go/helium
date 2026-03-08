@@ -1,6 +1,7 @@
 package xpath
 
 import (
+	"context"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -27,13 +28,13 @@ func docRoot(t *testing.T, doc *helium.Document) helium.Node {
 
 func TestFunctionFuncImplementsFunction(t *testing.T) {
 	var called bool
-	f := FunctionFunc(func(_ FunctionContext, _ []*Result) (*Result, error) {
+	f := FunctionFunc(func(_ context.Context, _ []*Result) (*Result, error) {
 		called = true
 		return &Result{Type: StringResult, String: "ok"}, nil
 	})
 
 	var fn Function = f
-	r, err := fn.Eval(nil, nil)
+	r, err := fn.Eval(context.Background(), nil)
 	require.NoError(t, err)
 	require.True(t, called)
 	require.Equal(t, StringResult, r.Type)
@@ -43,7 +44,7 @@ func TestFunctionFuncImplementsFunction(t *testing.T) {
 func TestFunctionContextAccessors(t *testing.T) {
 	doc := parseDoc(t, `<root><item/></root>`)
 	root := docRoot(t, doc)
-	ctx := newEvalContext(root)
+	ctx := newEvalContext(context.Background(), root)
 	ctx.position = 2
 	ctx.size = 3
 	ctx.namespaces = map[string]string{"ext": "urn:test"}
@@ -82,7 +83,7 @@ func TestFunctionReceivesPreEvaluatedArgs(t *testing.T) {
 
 	// Evaluate string(.) which should pre-evaluate the context node to "hello"
 	// and pass it through concat which receives []*Result
-	result, err := Evaluate(root, `concat(string(.), " world")`)
+	result, err := Evaluate(context.Background(), root, `concat(string(.), " world")`)
 	require.NoError(t, err)
 	require.Equal(t, "hello world", result.String)
 }

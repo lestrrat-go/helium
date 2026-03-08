@@ -21,7 +21,7 @@ func Example_xpath_evaluate() {
 
 	// string() XPath function converts a node's text content to a string.
 	// The result is available in the String field.
-	r, err := xpath.Evaluate(doc, "string(//item[1])")
+	r, err := xpath.Evaluate(context.Background(), doc,"string(//item[1])")
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
 		return
@@ -30,7 +30,7 @@ func Example_xpath_evaluate() {
 
 	// sum() XPath function adds up the numeric values of all nodes
 	// in the node set. The result is available in the Number field.
-	r, err = xpath.Evaluate(doc, "sum(//item)")
+	r, err = xpath.Evaluate(context.Background(), doc,"sum(//item)")
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
 		return
@@ -39,7 +39,7 @@ func Example_xpath_evaluate() {
 
 	// Comparison expressions return a boolean result, available
 	// in the Bool field.
-	r, err = xpath.Evaluate(doc, "count(//item) > 2")
+	r, err = xpath.Evaluate(context.Background(), doc,"count(//item) > 2")
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
 		return

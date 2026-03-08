@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -35,7 +36,7 @@ func validateIDConstraints(elem *helium.Element, edecl *ElementDecl, schema *Sch
 
 	for _, idc := range edecl.IDCs {
 		// Use the schema's namespace context for XPath evaluation.
-		nsCtx := xpath.NewContext(xpath.WithNamespaces(idc.Namespaces))
+		nsCtx := xpath.NewContext(context.Background(), xpath.WithNamespaces(idc.Namespaces))
 		table, err := evaluateIDC(elem, idc, nsCtx)
 		if err != nil {
 			continue
@@ -80,9 +81,9 @@ func validateIDConstraints(elem *helium.Element, edecl *ElementDecl, schema *Sch
 }
 
 // evaluateIDC evaluates the selector and field XPaths for a single IDC.
-func evaluateIDC(elem *helium.Element, idc *IDConstraint, nsCtx *xpath.Context) (*idcTable, error) {
+func evaluateIDC(elem *helium.Element, idc *IDConstraint, nsCtx context.Context) (*idcTable, error) {
 	// Evaluate selector XPath.
-	selectorResult, err := xpath.EvaluateWith(elem, idc.Selector, nsCtx)
+	selectorResult, err := xpath.Evaluate(nsCtx, elem, idc.Selector)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +104,7 @@ func evaluateIDC(elem *helium.Element, idc *IDConstraint, nsCtx *xpath.Context) 
 		// Evaluate each field XPath relative to the selected node.
 		allPresent := true
 		for _, fieldXPath := range idc.Fields {
-			fieldResult, err := xpath.EvaluateWith(node, fieldXPath, nsCtx)
+			fieldResult, err := xpath.Evaluate(nsCtx, node, fieldXPath)
 			if err != nil {
 				allPresent = false
 				break

@@ -1,6 +1,7 @@
 package xpath_test
 
 import (
+	"context"
 	"errors"
 	"math"
 	"strings"
@@ -36,7 +37,7 @@ func docElement(doc *helium.Document) helium.Node {
 
 func TestEvalRootPath(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "/")
+	r, err := xpath.Evaluate(t.Context(), doc, "/")
 	require.NoError(t, err)
 	require.Equal(t, xpath.NodeSetResult, r.Type)
 	require.Len(t, r.NodeSet, 1)
@@ -45,7 +46,7 @@ func TestEvalRootPath(t *testing.T) {
 
 func TestEvalAbsoluteChild(t *testing.T) {
 	doc := parseXML(t, `<root><a/><b/></root>`)
-	r, err := xpath.Evaluate(doc, "/root/a")
+	r, err := xpath.Evaluate(t.Context(), doc, "/root/a")
 	require.NoError(t, err)
 	require.Equal(t, xpath.NodeSetResult, r.Type)
 	require.Len(t, r.NodeSet, 1)
@@ -55,7 +56,7 @@ func TestEvalAbsoluteChild(t *testing.T) {
 func TestEvalRelativeChild(t *testing.T) {
 	doc := parseXML(t, `<root><a><b/></a></root>`)
 	root := docElement(doc)
-	r, err := xpath.Evaluate(root, "a/b")
+	r, err := xpath.Evaluate(t.Context(), root, "a/b")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 1)
 	require.Equal(t, "b", r.NodeSet[0].Name())
@@ -63,7 +64,7 @@ func TestEvalRelativeChild(t *testing.T) {
 
 func TestEvalDoubleSlash(t *testing.T) {
 	doc := parseXML(t, `<root><a><b/></a><b/></root>`)
-	r, err := xpath.Evaluate(doc, "//b")
+	r, err := xpath.Evaluate(t.Context(), doc, "//b")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 2)
 }
@@ -71,7 +72,7 @@ func TestEvalDoubleSlash(t *testing.T) {
 func TestEvalDot(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
 	root := docElement(doc)
-	r, err := xpath.Evaluate(root, ".")
+	r, err := xpath.Evaluate(t.Context(), root, ".")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 1)
 	require.Equal(t, root, r.NodeSet[0])
@@ -81,7 +82,7 @@ func TestEvalDotDot(t *testing.T) {
 	doc := parseXML(t, `<root><a/></root>`)
 	root := docElement(doc)
 	a := root.FirstChild()
-	r, err := xpath.Evaluate(a, "..")
+	r, err := xpath.Evaluate(t.Context(), a, "..")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 1)
 	require.Equal(t, root, r.NodeSet[0])
@@ -90,7 +91,7 @@ func TestEvalDotDot(t *testing.T) {
 func TestEvalWildcard(t *testing.T) {
 	doc := parseXML(t, `<root><a/><b/><c/></root>`)
 	root := docElement(doc)
-	r, err := xpath.Evaluate(root, "*")
+	r, err := xpath.Evaluate(t.Context(), root, "*")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 3)
 }
@@ -98,7 +99,7 @@ func TestEvalWildcard(t *testing.T) {
 func TestEvalAttribute(t *testing.T) {
 	doc := parseXML(t, `<root id="123"/>`)
 	root := docElement(doc)
-	r, err := xpath.Evaluate(root, "@id")
+	r, err := xpath.Evaluate(t.Context(), root, "@id")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 1)
 	attr, ok := r.NodeSet[0].(*helium.Attribute)
@@ -108,7 +109,7 @@ func TestEvalAttribute(t *testing.T) {
 
 func TestEvalDescendant(t *testing.T) {
 	doc := parseXML(t, `<root><a><b><c/></b></a></root>`)
-	r, err := xpath.Evaluate(doc, "/root/descendant::c")
+	r, err := xpath.Evaluate(t.Context(), doc, "/root/descendant::c")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 1)
 	require.Equal(t, "c", r.NodeSet[0].Name())
@@ -116,11 +117,11 @@ func TestEvalDescendant(t *testing.T) {
 
 func TestEvalAncestor(t *testing.T) {
 	doc := parseXML(t, `<root><a><b/></a></root>`)
-	nodes, err := xpath.Find(doc, "//b")
+	nodes, err := xpath.Find(t.Context(), doc, "//b")
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
 	b := nodes[0]
-	r, err := xpath.Evaluate(b, "ancestor::root")
+	r, err := xpath.Evaluate(t.Context(), b, "ancestor::root")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 1)
 	require.Equal(t, "root", r.NodeSet[0].Name())
@@ -128,9 +129,9 @@ func TestEvalAncestor(t *testing.T) {
 
 func TestEvalFollowingSibling(t *testing.T) {
 	doc := parseXML(t, `<root><a/><b/><c/></root>`)
-	nodes, err := xpath.Find(doc, "/root/a")
+	nodes, err := xpath.Find(t.Context(), doc, "/root/a")
 	require.NoError(t, err)
-	r, err := xpath.Evaluate(nodes[0], "following-sibling::*")
+	r, err := xpath.Evaluate(t.Context(), nodes[0], "following-sibling::*")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 2)
 	require.Equal(t, "b", r.NodeSet[0].Name())
@@ -139,9 +140,9 @@ func TestEvalFollowingSibling(t *testing.T) {
 
 func TestEvalPrecedingSibling(t *testing.T) {
 	doc := parseXML(t, `<root><a/><b/><c/></root>`)
-	nodes, err := xpath.Find(doc, "/root/c")
+	nodes, err := xpath.Find(t.Context(), doc, "/root/c")
 	require.NoError(t, err)
-	r, err := xpath.Evaluate(nodes[0], "preceding-sibling::*")
+	r, err := xpath.Evaluate(t.Context(), nodes[0], "preceding-sibling::*")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 2)
 }
@@ -150,21 +151,21 @@ func TestEvalPrecedingSibling(t *testing.T) {
 
 func TestEvalPositionPredicate(t *testing.T) {
 	doc := parseXML(t, `<root><a/><a/><a/></root>`)
-	r, err := xpath.Evaluate(doc, "/root/a[2]")
+	r, err := xpath.Evaluate(t.Context(), doc, "/root/a[2]")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 1)
 }
 
 func TestEvalLastPredicate(t *testing.T) {
 	doc := parseXML(t, `<root><a/><a/><a/></root>`)
-	r, err := xpath.Evaluate(doc, "/root/a[last()]")
+	r, err := xpath.Evaluate(t.Context(), doc, "/root/a[last()]")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 1)
 }
 
 func TestEvalBooleanPredicate(t *testing.T) {
 	doc := parseXML(t, `<root><a x="1"/><a/><a x="2"/></root>`)
-	r, err := xpath.Evaluate(doc, "/root/a[@x]")
+	r, err := xpath.Evaluate(t.Context(), doc, "/root/a[@x]")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 2)
 }
@@ -173,7 +174,7 @@ func TestEvalBooleanPredicate(t *testing.T) {
 
 func TestEvalEquals(t *testing.T) {
 	doc := parseXML(t, `<root><a>hello</a></root>`)
-	r, err := xpath.Evaluate(doc, "/root/a = 'hello'")
+	r, err := xpath.Evaluate(t.Context(), doc, "/root/a = 'hello'")
 	require.NoError(t, err)
 	require.Equal(t, xpath.BooleanResult, r.Type)
 	require.True(t, r.Bool)
@@ -181,14 +182,14 @@ func TestEvalEquals(t *testing.T) {
 
 func TestEvalNotEquals(t *testing.T) {
 	doc := parseXML(t, `<root><a>hello</a></root>`)
-	r, err := xpath.Evaluate(doc, "/root/a != 'world'")
+	r, err := xpath.Evaluate(t.Context(), doc, "/root/a != 'world'")
 	require.NoError(t, err)
 	require.True(t, r.Bool)
 }
 
 func TestEvalNumericComparison(t *testing.T) {
 	doc := parseXML(t, `<root><price>35</price></root>`)
-	r, err := xpath.Evaluate(doc, "/root/price > 30")
+	r, err := xpath.Evaluate(t.Context(), doc, "/root/price > 30")
 	require.NoError(t, err)
 	require.True(t, r.Bool)
 }
@@ -197,7 +198,7 @@ func TestEvalNumericComparison(t *testing.T) {
 
 func TestEvalArithmetic(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "1 + 2")
+	r, err := xpath.Evaluate(t.Context(), doc, "1 + 2")
 	require.NoError(t, err)
 	require.Equal(t, xpath.NumberResult, r.Type)
 	require.Equal(t, 3.0, r.Number)
@@ -205,28 +206,28 @@ func TestEvalArithmetic(t *testing.T) {
 
 func TestEvalMultiplication(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "3 * 4")
+	r, err := xpath.Evaluate(t.Context(), doc, "3 * 4")
 	require.NoError(t, err)
 	require.Equal(t, 12.0, r.Number)
 }
 
 func TestEvalDivision(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "10 div 3")
+	r, err := xpath.Evaluate(t.Context(), doc, "10 div 3")
 	require.NoError(t, err)
 	require.InDelta(t, 3.333, r.Number, 0.01)
 }
 
 func TestEvalMod(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "10 mod 3")
+	r, err := xpath.Evaluate(t.Context(), doc, "10 mod 3")
 	require.NoError(t, err)
 	require.Equal(t, 1.0, r.Number)
 }
 
 func TestEvalNegation(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "-5")
+	r, err := xpath.Evaluate(t.Context(), doc, "-5")
 	require.NoError(t, err)
 	require.Equal(t, -5.0, r.Number)
 }
@@ -235,14 +236,14 @@ func TestEvalNegation(t *testing.T) {
 
 func TestEvalOr(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "true() or false()")
+	r, err := xpath.Evaluate(t.Context(), doc, "true() or false()")
 	require.NoError(t, err)
 	require.True(t, r.Bool)
 }
 
 func TestEvalAnd(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "true() and false()")
+	r, err := xpath.Evaluate(t.Context(), doc, "true() and false()")
 	require.NoError(t, err)
 	require.False(t, r.Bool)
 }
@@ -251,7 +252,7 @@ func TestEvalAnd(t *testing.T) {
 
 func TestEvalUnion(t *testing.T) {
 	doc := parseXML(t, `<root><a/><b/></root>`)
-	r, err := xpath.Evaluate(doc, "/root/a | /root/b")
+	r, err := xpath.Evaluate(t.Context(), doc, "/root/a | /root/b")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 2)
 }
@@ -260,42 +261,42 @@ func TestEvalUnion(t *testing.T) {
 
 func TestEvalStringValue(t *testing.T) {
 	doc := parseXML(t, `<root>hello</root>`)
-	r, err := xpath.Evaluate(doc, "string(/root)")
+	r, err := xpath.Evaluate(t.Context(), doc, "string(/root)")
 	require.NoError(t, err)
 	require.Equal(t, "hello", r.String)
 }
 
 func TestEvalConcat(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "concat('a', 'b', 'c')")
+	r, err := xpath.Evaluate(t.Context(), doc, "concat('a', 'b', 'c')")
 	require.NoError(t, err)
 	require.Equal(t, "abc", r.String)
 }
 
 func TestEvalStartsWith(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "starts-with('hello', 'hel')")
+	r, err := xpath.Evaluate(t.Context(), doc, "starts-with('hello', 'hel')")
 	require.NoError(t, err)
 	require.True(t, r.Bool)
 }
 
 func TestEvalContains(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "contains('hello world', 'world')")
+	r, err := xpath.Evaluate(t.Context(), doc, "contains('hello world', 'world')")
 	require.NoError(t, err)
 	require.True(t, r.Bool)
 }
 
 func TestEvalSubstringBefore(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "substring-before('1999/04/01', '/')")
+	r, err := xpath.Evaluate(t.Context(), doc, "substring-before('1999/04/01', '/')")
 	require.NoError(t, err)
 	require.Equal(t, "1999", r.String)
 }
 
 func TestEvalSubstringAfter(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "substring-after('1999/04/01', '/')")
+	r, err := xpath.Evaluate(t.Context(), doc, "substring-after('1999/04/01', '/')")
 	require.NoError(t, err)
 	require.Equal(t, "04/01", r.String)
 }
@@ -303,32 +304,32 @@ func TestEvalSubstringAfter(t *testing.T) {
 func TestEvalSubstring(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
 
-	r, err := xpath.Evaluate(doc, "substring('12345', 2, 3)")
+	r, err := xpath.Evaluate(t.Context(), doc, "substring('12345', 2, 3)")
 	require.NoError(t, err)
 	require.Equal(t, "234", r.String)
 
-	r, err = xpath.Evaluate(doc, "substring('12345', 2)")
+	r, err = xpath.Evaluate(t.Context(), doc, "substring('12345', 2)")
 	require.NoError(t, err)
 	require.Equal(t, "2345", r.String)
 }
 
 func TestEvalStringLength(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "string-length('hello')")
+	r, err := xpath.Evaluate(t.Context(), doc, "string-length('hello')")
 	require.NoError(t, err)
 	require.Equal(t, 5.0, r.Number)
 }
 
 func TestEvalNormalizeSpace(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "normalize-space('  hello   world  ')")
+	r, err := xpath.Evaluate(t.Context(), doc, "normalize-space('  hello   world  ')")
 	require.NoError(t, err)
 	require.Equal(t, "hello world", r.String)
 }
 
 func TestEvalTranslate(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "translate('bar', 'abc', 'ABC')")
+	r, err := xpath.Evaluate(t.Context(), doc, "translate('bar', 'abc', 'ABC')")
 	require.NoError(t, err)
 	require.Equal(t, "BAr", r.String)
 }
@@ -337,18 +338,18 @@ func TestEvalTranslate(t *testing.T) {
 
 func TestEvalNot(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "not(false())")
+	r, err := xpath.Evaluate(t.Context(), doc, "not(false())")
 	require.NoError(t, err)
 	require.True(t, r.Bool)
 }
 
 func TestEvalBoolean(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "boolean(1)")
+	r, err := xpath.Evaluate(t.Context(), doc, "boolean(1)")
 	require.NoError(t, err)
 	require.True(t, r.Bool)
 
-	r, err = xpath.Evaluate(doc, "boolean(0)")
+	r, err = xpath.Evaluate(t.Context(), doc, "boolean(0)")
 	require.NoError(t, err)
 	require.False(t, r.Bool)
 }
@@ -357,53 +358,53 @@ func TestEvalBoolean(t *testing.T) {
 
 func TestEvalCount(t *testing.T) {
 	doc := parseXML(t, `<root><a/><a/><a/></root>`)
-	r, err := xpath.Evaluate(doc, "count(/root/a)")
+	r, err := xpath.Evaluate(t.Context(), doc, "count(/root/a)")
 	require.NoError(t, err)
 	require.Equal(t, 3.0, r.Number)
 }
 
 func TestEvalSum(t *testing.T) {
 	doc := parseXML(t, `<root><n>1</n><n>2</n><n>3</n></root>`)
-	r, err := xpath.Evaluate(doc, "sum(/root/n)")
+	r, err := xpath.Evaluate(t.Context(), doc, "sum(/root/n)")
 	require.NoError(t, err)
 	require.Equal(t, 6.0, r.Number)
 }
 
 func TestEvalFloor(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "floor(2.7)")
+	r, err := xpath.Evaluate(t.Context(), doc, "floor(2.7)")
 	require.NoError(t, err)
 	require.Equal(t, 2.0, r.Number)
 }
 
 func TestEvalCeiling(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "ceiling(2.3)")
+	r, err := xpath.Evaluate(t.Context(), doc, "ceiling(2.3)")
 	require.NoError(t, err)
 	require.Equal(t, 3.0, r.Number)
 }
 
 func TestEvalRound(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "round(2.5)")
+	r, err := xpath.Evaluate(t.Context(), doc, "round(2.5)")
 	require.NoError(t, err)
 	require.Equal(t, 3.0, r.Number)
 
-	r, err = xpath.Evaluate(doc, "round(2.4)")
+	r, err = xpath.Evaluate(t.Context(), doc, "round(2.4)")
 	require.NoError(t, err)
 	require.Equal(t, 2.0, r.Number)
 }
 
 func TestEvalNumber(t *testing.T) {
 	doc := parseXML(t, `<root>42</root>`)
-	r, err := xpath.Evaluate(doc, "number(/root)")
+	r, err := xpath.Evaluate(t.Context(), doc, "number(/root)")
 	require.NoError(t, err)
 	require.Equal(t, 42.0, r.Number)
 }
 
 func TestEvalNumberNaN(t *testing.T) {
 	doc := parseXML(t, `<root>abc</root>`)
-	r, err := xpath.Evaluate(doc, "number(/root)")
+	r, err := xpath.Evaluate(t.Context(), doc, "number(/root)")
 	require.NoError(t, err)
 	require.True(t, math.IsNaN(r.Number))
 }
@@ -412,14 +413,14 @@ func TestEvalNumberNaN(t *testing.T) {
 
 func TestEvalLocalName(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "local-name(/root)")
+	r, err := xpath.Evaluate(t.Context(), doc, "local-name(/root)")
 	require.NoError(t, err)
 	require.Equal(t, "root", r.String)
 }
 
 func TestEvalName(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "name(/root)")
+	r, err := xpath.Evaluate(t.Context(), doc, "name(/root)")
 	require.NoError(t, err)
 	require.Equal(t, "root", r.String)
 }
@@ -430,11 +431,12 @@ func TestEvalVariable(t *testing.T) {
 	doc := parseXML(t, `<root><a/><b/></root>`)
 	expr, err := xpath.Compile("$x + 1")
 	require.NoError(t, err)
-	r, err := expr.EvaluateWith(doc, xpath.NewContext(
+	ctx := xpath.NewContext(t.Context(),
 		xpath.WithVariables(map[string]any{
 			"x": float64(41),
 		}),
-	))
+	)
+	r, err := expr.Evaluate(ctx, doc)
 	require.NoError(t, err)
 	require.Equal(t, 42.0, r.Number)
 }
@@ -448,7 +450,7 @@ func TestEvalBookstoreExample(t *testing.T) {
 		<book><title>C</title><price>25</price></book>
 	</bookstore>`)
 
-	r, err := xpath.Evaluate(doc, "/bookstore/book[price>35]/title")
+	r, err := xpath.Evaluate(t.Context(), doc, "/bookstore/book[price>35]/title")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 1)
 	require.Equal(t, "title", r.NodeSet[0].Name())
@@ -457,7 +459,7 @@ func TestEvalBookstoreExample(t *testing.T) {
 
 func TestEvalCountWithPredicate(t *testing.T) {
 	doc := parseXML(t, `<root><a x="1"/><a/><a x="2"/></root>`)
-	r, err := xpath.Evaluate(doc, "count(/root/a[@x])")
+	r, err := xpath.Evaluate(t.Context(), doc, "count(/root/a[@x])")
 	require.NoError(t, err)
 	require.Equal(t, 2.0, r.Number)
 }
@@ -479,14 +481,14 @@ func TestMustCompilePanics(t *testing.T) {
 
 func TestFind(t *testing.T) {
 	doc := parseXML(t, `<root><a/><b/></root>`)
-	nodes, err := xpath.Find(doc, "/root/*")
+	nodes, err := xpath.Find(t.Context(), doc, "/root/*")
 	require.NoError(t, err)
 	require.Len(t, nodes, 2)
 }
 
 func TestFindNotNodeSet(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	_, err := xpath.Find(doc, "1 + 2")
+	_, err := xpath.Find(t.Context(), doc, "1 + 2")
 	require.Error(t, err)
 }
 
@@ -494,7 +496,7 @@ func TestFindNotNodeSet(t *testing.T) {
 
 func TestEvalTextNode(t *testing.T) {
 	doc := parseXML(t, `<root>hello</root>`)
-	r, err := xpath.Evaluate(doc, "/root/text()")
+	r, err := xpath.Evaluate(t.Context(), doc, "/root/text()")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 1)
 	require.Equal(t, helium.TextNode, r.NodeSet[0].Type())
@@ -503,7 +505,7 @@ func TestEvalTextNode(t *testing.T) {
 
 func TestEvalCommentNode(t *testing.T) {
 	doc := parseXML(t, `<root><!-- a comment --></root>`)
-	r, err := xpath.Evaluate(doc, "/root/comment()")
+	r, err := xpath.Evaluate(t.Context(), doc, "/root/comment()")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 1)
 	require.Equal(t, helium.CommentNode, r.NodeSet[0].Type())
@@ -511,7 +513,7 @@ func TestEvalCommentNode(t *testing.T) {
 
 func TestEvalNodeTest(t *testing.T) {
 	doc := parseXML(t, `<root><a/>text<!-- c --></root>`)
-	r, err := xpath.Evaluate(doc, "/root/node()")
+	r, err := xpath.Evaluate(t.Context(), doc, "/root/node()")
 	require.NoError(t, err)
 	// Should include element, text, and comment
 	require.GreaterOrEqual(t, len(r.NodeSet), 3)
@@ -522,7 +524,7 @@ func TestEvalNodeTest(t *testing.T) {
 func TestEvalSelfAxis(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
 	root := docElement(doc)
-	r, err := xpath.Evaluate(root, "self::root")
+	r, err := xpath.Evaluate(t.Context(), root, "self::root")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 1)
 	require.Equal(t, root, r.NodeSet[0])
@@ -531,7 +533,7 @@ func TestEvalSelfAxis(t *testing.T) {
 func TestEvalSelfAxisNoMatch(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
 	root := docElement(doc)
-	r, err := xpath.Evaluate(root, "self::other")
+	r, err := xpath.Evaluate(t.Context(), root, "self::other")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 0)
 }
@@ -540,7 +542,7 @@ func TestEvalSelfAxisNoMatch(t *testing.T) {
 
 func TestEvalDescendantOrSelf(t *testing.T) {
 	doc := parseXML(t, `<root><a><b/></a></root>`)
-	r, err := xpath.Evaluate(doc, "/root/descendant-or-self::*")
+	r, err := xpath.Evaluate(t.Context(), doc, "/root/descendant-or-self::*")
 	require.NoError(t, err)
 	// root, a, b
 	require.Len(t, r.NodeSet, 3)
@@ -550,9 +552,9 @@ func TestEvalDescendantOrSelf(t *testing.T) {
 
 func TestEvalAncestorOrSelf(t *testing.T) {
 	doc := parseXML(t, `<root><a><b/></a></root>`)
-	nodes, err := xpath.Find(doc, "//b")
+	nodes, err := xpath.Find(t.Context(), doc, "//b")
 	require.NoError(t, err)
-	r, err := xpath.Evaluate(nodes[0], "ancestor-or-self::*")
+	r, err := xpath.Evaluate(t.Context(), nodes[0], "ancestor-or-self::*")
 	require.NoError(t, err)
 	// b, a, root
 	require.Len(t, r.NodeSet, 3)
@@ -562,7 +564,7 @@ func TestEvalAncestorOrSelf(t *testing.T) {
 
 func TestEvalStringLiteral(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
-	r, err := xpath.Evaluate(doc, "'hello'")
+	r, err := xpath.Evaluate(t.Context(), doc, "'hello'")
 	require.NoError(t, err)
 	require.Equal(t, xpath.StringResult, r.Type)
 	require.Equal(t, "hello", r.String)
@@ -584,7 +586,7 @@ func TestRecursionLimit(t *testing.T) {
 	expr := b.String()
 
 	doc := parseXML(t, `<root/>`)
-	_, err := xpath.Evaluate(doc, expr)
+	_, err := xpath.Evaluate(t.Context(), doc, expr)
 	require.Error(t, err)
 	require.True(t, errors.Is(err, xpath.ErrRecursionLimit))
 }
@@ -595,23 +597,23 @@ func TestOpLimit(t *testing.T) {
 	require.NoError(t, err)
 
 	// With a very small op limit, evaluation should fail
-	_, err = compiled.EvaluateWith(doc, xpath.NewContext(
+	_, err = compiled.Evaluate(xpath.NewContext(t.Context(),
 		xpath.WithOpLimit(1),
-	))
+	), doc)
 	require.Error(t, err)
 	require.True(t, errors.Is(err, xpath.ErrOpLimit))
 
 	// With a generous limit, it should succeed
-	r, err := compiled.EvaluateWith(doc, xpath.NewContext(
+	r, err := compiled.Evaluate(xpath.NewContext(t.Context(),
 		xpath.WithOpLimit(10000),
-	))
+	), doc)
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 5)
 
 	// Without limit (zero), it should succeed
-	r, err = compiled.EvaluateWith(doc, xpath.NewContext(
+	r, err = compiled.Evaluate(xpath.NewContext(t.Context(),
 		xpath.WithOpLimit(0),
-	))
+	), doc)
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 5)
 }
@@ -622,12 +624,12 @@ func TestOpLimitFunctionCalls(t *testing.T) {
 	require.NoError(t, err)
 
 	// concat counts as 1 function-call op; limit of 0 means unlimited
-	r, err := compiled.EvaluateWith(doc, xpath.NewContext(xpath.WithOpLimit(0)))
+	r, err := compiled.Evaluate(xpath.NewContext(t.Context(), xpath.WithOpLimit(0)), doc)
 	require.NoError(t, err)
 	require.Equal(t, "abc", r.String)
 
 	// With limit too low for the function call
-	_, err = compiled.EvaluateWith(doc, xpath.NewContext(xpath.WithOpLimit(0)))
+	_, err = compiled.Evaluate(xpath.NewContext(t.Context(), xpath.WithOpLimit(0)), doc)
 	require.NoError(t, err) // 0 = unlimited
 }
 
@@ -656,7 +658,7 @@ func TestLimitsNormalExpressionsUnaffected(t *testing.T) {
 		<book><title>B</title><price>40</price></book>
 	</bookstore>`)
 
-	r, err := xpath.Evaluate(doc, "/bookstore/book[price>35]/title")
+	r, err := xpath.Evaluate(t.Context(), doc, "/bookstore/book[price>35]/title")
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 1)
 	require.Equal(t, "B", string(r.NodeSet[0].Content()))
@@ -669,9 +671,9 @@ func TestCustomFunctionUnqualified(t *testing.T) {
 	compiled, err := xpath.Compile("double(number(/root/n))")
 	require.NoError(t, err)
 
-	ctx := xpath.NewContext(
+	ctx := xpath.NewContext(t.Context(),
 		xpath.WithFunctions(map[string]xpath.Function{
-			"double": xpath.FunctionFunc(func(_ xpath.FunctionContext, args []*xpath.Result) (*xpath.Result, error) {
+			"double": xpath.FunctionFunc(func(_ context.Context, args []*xpath.Result) (*xpath.Result, error) {
 				if len(args) != 1 {
 					return nil, errDoubleOneArg
 				}
@@ -680,7 +682,7 @@ func TestCustomFunctionUnqualified(t *testing.T) {
 		}),
 	)
 
-	r, err := compiled.EvaluateWith(doc, ctx)
+	r, err := compiled.Evaluate(ctx, doc)
 	require.NoError(t, err)
 	require.Equal(t, xpath.NumberResult, r.Type)
 	require.Equal(t, 10.0, r.Number)
@@ -691,12 +693,12 @@ func TestCustomFunctionNamespaced(t *testing.T) {
 	compiled, err := xpath.Compile("ext:hello('world')")
 	require.NoError(t, err)
 
-	ctx := xpath.NewContext(
+	ctx := xpath.NewContext(t.Context(),
 		xpath.WithNamespaces(map[string]string{
 			"ext": "urn:test:ext",
 		}),
 		xpath.WithFunctionsNS(map[xpath.QualifiedName]xpath.Function{
-			{URI: "urn:test:ext", Name: "hello"}: xpath.FunctionFunc(func(_ xpath.FunctionContext, args []*xpath.Result) (*xpath.Result, error) {
+			{URI: "urn:test:ext", Name: "hello"}: xpath.FunctionFunc(func(_ context.Context, args []*xpath.Result) (*xpath.Result, error) {
 				if len(args) != 1 {
 					return nil, errHelloOneArg
 				}
@@ -705,7 +707,7 @@ func TestCustomFunctionNamespaced(t *testing.T) {
 		}),
 	)
 
-	r, err := compiled.EvaluateWith(doc, ctx)
+	r, err := compiled.Evaluate(ctx, doc)
 	require.NoError(t, err)
 	require.Equal(t, xpath.StringResult, r.Type)
 	require.Equal(t, "Hello, world!", r.String)
@@ -716,7 +718,7 @@ func TestCustomFunctionUnknown(t *testing.T) {
 	compiled, err := xpath.Compile("myfunc()")
 	require.NoError(t, err)
 
-	_, err = compiled.Evaluate(doc)
+	_, err = compiled.Evaluate(t.Context(), doc)
 	require.Error(t, err)
 	require.True(t, errors.Is(err, xpath.ErrUnknownFunction))
 }
@@ -727,7 +729,7 @@ func TestCustomFunctionNamespacedUnresolvedPrefix(t *testing.T) {
 	require.NoError(t, err)
 
 	// No namespace binding for "ext"
-	_, err = compiled.EvaluateWith(doc, xpath.NewContext())
+	_, err = compiled.Evaluate(xpath.NewContext(t.Context()), doc)
 	require.Error(t, err)
 	require.True(t, errors.Is(err, xpath.ErrUnknownFunctionNamespace))
 }
@@ -738,12 +740,12 @@ func TestCustomFunctionNamespacedNotFound(t *testing.T) {
 	require.NoError(t, err)
 
 	// Namespace is bound but no function registered
-	ctx := xpath.NewContext(
+	ctx := xpath.NewContext(t.Context(),
 		xpath.WithNamespaces(map[string]string{
 			"ext": "urn:test:ext",
 		}),
 	)
-	_, err = compiled.EvaluateWith(doc, ctx)
+	_, err = compiled.Evaluate(ctx, doc)
 	require.Error(t, err)
 	require.True(t, errors.Is(err, xpath.ErrUnknownFunction))
 }
@@ -753,16 +755,16 @@ func TestCustomFunctionBuiltinNotOverridden(t *testing.T) {
 	compiled, err := xpath.Compile("count(/root/a)")
 	require.NoError(t, err)
 
-	// Register a custom "count" that returns 999 — should not override built-in
-	ctx := xpath.NewContext(
+	// Register a custom "count" that returns 999 -- should not override built-in
+	ctx := xpath.NewContext(t.Context(),
 		xpath.WithFunctions(map[string]xpath.Function{
-			"count": xpath.FunctionFunc(func(_ xpath.FunctionContext, _ []*xpath.Result) (*xpath.Result, error) {
+			"count": xpath.FunctionFunc(func(_ context.Context, _ []*xpath.Result) (*xpath.Result, error) {
 				return &xpath.Result{Type: xpath.NumberResult, Number: 999}, nil
 			}),
 		}),
 	)
 
-	r, err := compiled.EvaluateWith(doc, ctx)
+	r, err := compiled.Evaluate(ctx, doc)
 	require.NoError(t, err)
 	require.Equal(t, 3.0, r.Number) // built-in wins
 }
@@ -772,29 +774,30 @@ func TestCustomFunctionContextValues(t *testing.T) {
 	compiled, err := xpath.Compile("/root/*[mypos()]")
 	require.NoError(t, err)
 
-	ctx := xpath.NewContext(
+	ctx := xpath.NewContext(t.Context(),
 		xpath.WithFunctions(map[string]xpath.Function{
-			"mypos": xpath.FunctionFunc(func(fctx xpath.FunctionContext, _ []*xpath.Result) (*xpath.Result, error) {
+			"mypos": xpath.FunctionFunc(func(ctx context.Context, _ []*xpath.Result) (*xpath.Result, error) {
+				fctx := xpath.GetFunctionContext(ctx)
 				// Return true only for position 2
 				return &xpath.Result{
-					Type:    xpath.BooleanResult,
+					Type: xpath.BooleanResult,
 					Bool: fctx.Position() == 2,
 				}, nil
 			}),
 		}),
 	)
 
-	r, err := compiled.EvaluateWith(doc, ctx)
+	r, err := compiled.Evaluate(ctx, doc)
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 1)
 	require.Equal(t, "b", r.NodeSet[0].Name())
 }
 
 func TestRegisterFunctionHelper(t *testing.T) {
-	ctx := xpath.NewContext()
+	xctx := &xpath.Context{}
 
 	// Registering a new function should succeed
-	err := ctx.RegisterFunction("myfunc", xpath.FunctionFunc(func(_ xpath.FunctionContext, _ []*xpath.Result) (*xpath.Result, error) {
+	err := xctx.RegisterFunction("myfunc", xpath.FunctionFunc(func(_ context.Context, _ []*xpath.Result) (*xpath.Result, error) {
 		return &xpath.Result{Type: xpath.BooleanResult, Bool: true}, nil
 	}))
 	require.NoError(t, err)
@@ -803,24 +806,23 @@ func TestRegisterFunctionHelper(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
 	compiled, cErr := xpath.Compile("myfunc()")
 	require.NoError(t, cErr)
-	r, rErr := compiled.EvaluateWith(doc, ctx)
+	ctx := xpath.NewContext(t.Context(),
+		xpath.WithFunctions(xctx.Functions()),
+	)
+	r, rErr := compiled.Evaluate(ctx, doc)
 	require.NoError(t, rErr)
 	require.True(t, r.Bool)
 
 	// Registering a built-in name should fail
-	err = ctx.RegisterFunction("count", xpath.FunctionFunc(func(_ xpath.FunctionContext, _ []*xpath.Result) (*xpath.Result, error) {
+	err = xctx.RegisterFunction("count", xpath.FunctionFunc(func(_ context.Context, _ []*xpath.Result) (*xpath.Result, error) {
 		return nil, nil
 	}))
 	require.Error(t, err)
 }
 
 func TestRegisterFunctionNSHelper(t *testing.T) {
-	ctx := xpath.NewContext(
-		xpath.WithNamespaces(map[string]string{
-			"t": "urn:test",
-		}),
-	)
-	ctx.RegisterFunctionNS("urn:test", "myfunc", xpath.FunctionFunc(func(_ xpath.FunctionContext, _ []*xpath.Result) (*xpath.Result, error) {
+	xctx := &xpath.Context{}
+	xctx.RegisterFunctionNS("urn:test", "myfunc", xpath.FunctionFunc(func(_ context.Context, _ []*xpath.Result) (*xpath.Result, error) {
 		return &xpath.Result{Type: xpath.BooleanResult, Bool: true}, nil
 	}))
 
@@ -828,7 +830,13 @@ func TestRegisterFunctionNSHelper(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
 	compiled, cErr := xpath.Compile("t:myfunc()")
 	require.NoError(t, cErr)
-	r, rErr := compiled.EvaluateWith(doc, ctx)
+	ctx := xpath.NewContext(t.Context(),
+		xpath.WithNamespaces(map[string]string{
+			"t": "urn:test",
+		}),
+		xpath.WithFunctionsNS(xctx.FunctionsNS()),
+	)
+	r, rErr := compiled.Evaluate(ctx, doc)
 	require.NoError(t, rErr)
 	require.True(t, r.Bool)
 }
@@ -839,18 +847,18 @@ func TestCustomFunctionWithPathExpr(t *testing.T) {
 	compiled, err := xpath.Compile("ext:identity(/root/a)/b")
 	require.NoError(t, err)
 
-	ctx := xpath.NewContext(
+	ctx := xpath.NewContext(t.Context(),
 		xpath.WithNamespaces(map[string]string{
 			"ext": "urn:test:ext",
 		}),
 		xpath.WithFunctionsNS(map[xpath.QualifiedName]xpath.Function{
-			{URI: "urn:test:ext", Name: "identity"}: xpath.FunctionFunc(func(_ xpath.FunctionContext, args []*xpath.Result) (*xpath.Result, error) {
+			{URI: "urn:test:ext", Name: "identity"}: xpath.FunctionFunc(func(_ context.Context, args []*xpath.Result) (*xpath.Result, error) {
 				return args[0], nil
 			}),
 		}),
 	)
 
-	r, err := compiled.EvaluateWith(doc, ctx)
+	r, err := compiled.Evaluate(ctx, doc)
 	require.NoError(t, err)
 	require.Equal(t, xpath.NodeSetResult, r.Type)
 	require.Len(t, r.NodeSet, 1)
@@ -861,7 +869,7 @@ func TestLangNamespaceAware(t *testing.T) {
 	t.Run("xml:lang matches", func(t *testing.T) {
 		doc := parseXML(t, `<root xml:lang="en"><child/></root>`)
 		child := docElement(doc).(*helium.Element).FirstChild()
-		r, err := xpath.Evaluate(child, `lang("en")`)
+		r, err := xpath.Evaluate(t.Context(), child, `lang("en")`)
 		require.NoError(t, err)
 		require.Equal(t, xpath.BooleanResult, r.Type)
 		require.True(t, r.Bool)
@@ -871,17 +879,17 @@ func TestLangNamespaceAware(t *testing.T) {
 		// A "lang" attribute in a non-XML namespace must NOT be treated as xml:lang
 		doc := parseXML(t, `<root xmlns:x="urn:other" x:lang="en"><child/></root>`)
 		child := docElement(doc).(*helium.Element).FirstChild()
-		r, err := xpath.Evaluate(child, `lang("en")`)
+		r, err := xpath.Evaluate(t.Context(), child, `lang("en")`)
 		require.NoError(t, err)
 		require.Equal(t, xpath.BooleanResult, r.Type)
 		require.False(t, r.Bool)
 	})
 
 	t.Run("unprefixed lang ignored", func(t *testing.T) {
-		// An unprefixed "lang" attribute has no namespace — not xml:lang
+		// An unprefixed "lang" attribute has no namespace -- not xml:lang
 		doc := parseXML(t, `<root lang="en"><child/></root>`)
 		child := docElement(doc).(*helium.Element).FirstChild()
-		r, err := xpath.Evaluate(child, `lang("en")`)
+		r, err := xpath.Evaluate(t.Context(), child, `lang("en")`)
 		require.NoError(t, err)
 		require.Equal(t, xpath.BooleanResult, r.Type)
 		require.False(t, r.Bool)
@@ -895,7 +903,7 @@ func TestEvalIDWithXmlID(t *testing.T) {
 	doc := parseXML(t, `<root><a xml:id="foo">A</a><b xml:id="bar">B</b></root>`)
 
 	t.Run("single id", func(t *testing.T) {
-		r, err := xpath.Evaluate(doc, `id("foo")`)
+		r, err := xpath.Evaluate(t.Context(), doc, `id("foo")`)
 		require.NoError(t, err)
 		require.Equal(t, xpath.NodeSetResult, r.Type)
 		require.Len(t, r.NodeSet, 1)
@@ -903,14 +911,14 @@ func TestEvalIDWithXmlID(t *testing.T) {
 	})
 
 	t.Run("multiple ids space-separated", func(t *testing.T) {
-		r, err := xpath.Evaluate(doc, `id("foo bar")`)
+		r, err := xpath.Evaluate(t.Context(), doc, `id("foo bar")`)
 		require.NoError(t, err)
 		require.Equal(t, xpath.NodeSetResult, r.Type)
 		require.Len(t, r.NodeSet, 2)
 	})
 
 	t.Run("nonexistent id", func(t *testing.T) {
-		r, err := xpath.Evaluate(doc, `id("nonexistent")`)
+		r, err := xpath.Evaluate(t.Context(), doc, `id("nonexistent")`)
 		require.NoError(t, err)
 		require.Equal(t, xpath.NodeSetResult, r.Type)
 		require.Len(t, r.NodeSet, 0)
@@ -926,7 +934,7 @@ func TestEvalIDWithDTD(t *testing.T) {
 	]>
 	<root><item myid="x1">first</item><item myid="x2">second</item></root>`)
 
-	r, err := xpath.Evaluate(doc, `id("x1")`)
+	r, err := xpath.Evaluate(t.Context(), doc, `id("x1")`)
 	require.NoError(t, err)
 	require.Equal(t, xpath.NodeSetResult, r.Type)
 	require.Len(t, r.NodeSet, 1)
@@ -936,7 +944,7 @@ func TestEvalIDWithDTD(t *testing.T) {
 func TestEvalIDDeduplicates(t *testing.T) {
 	// Same ID repeated should not produce duplicate nodes
 	doc := parseXML(t, `<root><a xml:id="foo">A</a></root>`)
-	r, err := xpath.Evaluate(doc, `id("foo foo")`)
+	r, err := xpath.Evaluate(t.Context(), doc, `id("foo foo")`)
 	require.NoError(t, err)
 	require.Equal(t, xpath.NodeSetResult, r.Type)
 	require.Len(t, r.NodeSet, 1)

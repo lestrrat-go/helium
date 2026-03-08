@@ -1,6 +1,7 @@
 package schematron
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strings"
@@ -14,13 +15,13 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 	var out strings.Builder
 	valid := true
 
-	xctx := xpath.NewContext(
+	xctx := xpath.NewContext(context.Background(),
 		xpath.WithNamespaces(schema.namespaces),
 	)
 
 	for _, pat := range schema.patterns {
 		for _, r := range pat.rules {
-			result, err := r.contextExpr.EvaluateWith(doc, xctx)
+			result, err := r.contextExpr.Evaluate(xctx, doc)
 			if err != nil {
 				continue
 			}
@@ -39,16 +40,19 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 				// libxml2's xmlSchematronRegisterVariables behavior.
 				ruleCtx := xctx
 				if len(r.lets) > 0 {
+					parentXCtx := xpath.GetContext(xctx)
 					vars := make(map[string]any)
-					for k, v := range xctx.Variables() {
-						vars[k] = v
+					if parentXCtx != nil {
+						for k, v := range parentXCtx.Variables() {
+							vars[k] = v
+						}
 					}
-					ruleCtx = xpath.NewContext(
-						xpath.WithNamespaces(xctx.Namespaces()),
+					ruleCtx = xpath.NewContext(context.Background(),
+						xpath.WithNamespaces(schema.namespaces),
 						xpath.WithVariables(vars),
 					)
 					for _, lb := range r.lets {
-						letResult, err := lb.expr.EvaluateWith(node, ruleCtx)
+						letResult, err := lb.expr.Evaluate(ruleCtx, node)
 						if err == nil {
 							vars[lb.name] = xpathResultToValue(letResult)
 						}
@@ -56,7 +60,7 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 				}
 
 				for _, t := range r.tests {
-					testResult, err := t.compiled.EvaluateWith(node, ruleCtx)
+					testResult, err := t.compiled.Evaluate(ruleCtx, node)
 					if err != nil {
 						continue
 					}
@@ -110,7 +114,7 @@ func validateDocument(doc *helium.Document, schema *Schema, cfg *validateConfig)
 // after each segment (text, name, value-of), if the accumulated buffer
 // ends with whitespace, all trailing whitespace is replaced with a
 // single space. Internal whitespace within segments is preserved.
-func formatMessage(parts []messagePart, node helium.Node, xctx *xpath.Context, out *strings.Builder) string {
+func formatMessage(parts []messagePart, node helium.Node, xctx context.Context, out *strings.Builder) string {
 	var buf []byte
 	for _, part := range parts {
 		switch p := part.(type) {
@@ -118,19 +122,19 @@ func formatMessage(parts []messagePart, node helium.Node, xctx *xpath.Context, o
 			buf = append(buf, p.text...)
 		case namePart:
 			if p.expr != nil {
-				result, err := p.expr.EvaluateWith(node, xctx)
+				result, err := p.expr.Evaluate(xctx, node)
 				if err == nil {
 					buf = append(buf, xpathResultToName(result)...)
 				}
 			}
 		case valueOfPart:
 			if p.expr == nil {
-				// Compile-time error — should not happen (caught during compilation).
+				// Compile-time error -- should not happen (caught during compilation).
 				return string(buf)
 			}
-			result, err := p.expr.EvaluateWith(node, xctx)
+			result, err := p.expr.Evaluate(xctx, node)
 			if err != nil {
-				// Runtime XPath error — emit error line and stop processing.
+				// Runtime XPath error -- emit error line and stop processing.
 				fmt.Fprintf(out, "XPath error : %s\n", formatXPathError(err))
 				return string(buf)
 			}
@@ -318,4 +322,3 @@ func siblingPosition(n helium.Node) int {
 	}
 	return 0
 }
-
