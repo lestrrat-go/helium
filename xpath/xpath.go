@@ -131,6 +131,7 @@ type contextKey struct{}
 type functionContextKey struct{}
 
 // NewContext stores an xpath.Context inside a context.Context and returns it.
+// ctx must not be nil, following Go's standard context.Context convention.
 func NewContext(ctx context.Context, opts ...ContextOption) context.Context {
 	c := &Context{}
 	for _, opt := range opts {

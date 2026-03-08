@@ -685,7 +685,7 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 			require.NoError(t, err)
 
 			resultFile := filepath.Join(resultDir, name)
-				expected, err := os.ReadFile(resultFile) //nolint:gosec // reading test expected result
+			expected, err := os.ReadFile(resultFile) //nolint:gosec // reading test expected result
 			require.NoError(t, err)
 
 			require.Equal(t, string(expected), got, "output mismatch for %s", name)
