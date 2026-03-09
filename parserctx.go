@@ -259,9 +259,8 @@ func (ctx *parserCtx) release() error {
 	return nil
 }
 
-// StopParser signals the parser to stop at the next opportunity.
-// It implements the ParserStopper interface.
-func (ctx *parserCtx) StopParser() {
+// stop signals the parser to stop at the next opportunity.
+func (ctx *parserCtx) stop() {
 	ctx.stopped = true
 	ctx.instate = psEOF
 }
@@ -680,10 +679,10 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 
 	// Store pctx in the context so SAX callbacks (e.g. TreeBuilder) can
 	// retrieve it via getParserCtx. Also store the document locator and
-	// parser stopper so SAX helpers like sax.StopParser work.
+	// stop function so helium.StopParser works.
 	ctx = withParserCtx(ctx, pctx)
 	ctx = sax.SetDocumentLocatorValue(ctx, pctx)
-	ctx = sax.NewContext(ctx, sax.WithParserStopper(pctx))
+	ctx = context.WithValue(ctx, stopFuncKey{}, pctx.stop)
 
 	if s := pctx.sax; s != nil {
 		switch err := s.SetDocumentLocator(ctx, pctx); err {

@@ -11,17 +11,15 @@ import (
 	"github.com/lestrrat-go/pdebug"
 )
 
-// ParserStopper is implemented by the parser context. SAX handlers can
-// call helium.StopParser(ctx) to abort parsing early without error.
-type ParserStopper interface {
-	StopParser()
-}
+type stopFuncKey struct{}
 
 // StopParser tells the parser to stop at the next opportunity. Call this
 // from any SAX callback to abort parsing early. The parse functions will
 // return the partial document built so far with a nil error.
 func StopParser(ctx context.Context) {
-	sax.StopParser(ctx)
+	if fn, _ := ctx.Value(stopFuncKey{}).(func()); fn != nil {
+		fn()
+	}
 }
 
 // Parser holds configuration for XML parsing (libxml2: xmlParserCtxt).
