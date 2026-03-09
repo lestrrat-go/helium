@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	helium "github.com/lestrrat-go/helium"
@@ -1267,21 +1268,92 @@ func evalTryCatchExpr(ec *evalContext, e TryCatchExpr) (Sequence, error) {
 		return nil, err // non-XPath errors propagate through
 	}
 	for _, catch := range e.Catches {
-		if len(catch.Codes) == 0 {
-			// Wildcard catch
-			catchCtx := ec.withVar("err:code", SingleString(xpErr.Code))
-			catchCtx = catchCtx.withVar("err:description", SingleString(xpErr.Message))
-			return eval(catchCtx, catch.Expr)
-		}
-		for _, code := range catch.Codes {
-			if code == xpErr.Code {
-				catchCtx := ec.withVar("err:code", SingleString(xpErr.Code))
-				catchCtx = catchCtx.withVar("err:description", SingleString(xpErr.Message))
-				return eval(catchCtx, catch.Expr)
-			}
+		if catchMatchesError(catch, xpErr) {
+			return eval(buildCatchContext(ec, xpErr), catch.Expr)
 		}
 	}
 	return nil, err // no matching catch
+}
+
+// catchMatchesError checks if a catch clause matches an error.
+func catchMatchesError(catch CatchClause, xpErr *XPathError) bool {
+	if len(catch.Codes) == 0 {
+		return true // wildcard catch (*)
+	}
+	for _, code := range catch.Codes {
+		if catchCodeMatches(code, xpErr.Code) {
+			return true
+		}
+	}
+	return false
+}
+
+// catchCodeMatches compares a catch clause code against an XPath error code.
+// The catch code may be:
+//   - "*" — matches anything
+//   - "err:FOAR0002" or "FOAR0002" — matches specific error code
+//   - "err:*" — matches any code in the err namespace (all XPath errors)
+//   - "*:FOAR0002" — matches any namespace with that local name
+//   - "Q{http://...}FOAR0002" — matches by URI + local name
+//   - "Q{http://...}*" — matches any code in that namespace
+func catchCodeMatches(catchCode, errCode string) bool {
+	if catchCode == "*" {
+		return true
+	}
+
+	// Handle Q{uri}local and Q{uri}*
+	if strings.HasPrefix(catchCode, "Q{") {
+		if idx := strings.Index(catchCode, "}"); idx >= 0 {
+			uri := catchCode[2:idx]
+			local := catchCode[idx+1:]
+			if local == "*" {
+				return uri == NSErr // Q{err-ns}* matches all XPath errors
+			}
+			// Q{err-ns}CODE matches if the URI is the error namespace and local matches
+			if uri == NSErr {
+				return local == errCode
+			}
+			return false
+		}
+	}
+
+	// Extract local part from catch code (strip prefix)
+	catchLocal := catchCode
+	catchPrefix := ""
+	if idx := strings.IndexByte(catchCode, ':'); idx >= 0 {
+		catchPrefix = catchCode[:idx]
+		catchLocal = catchCode[idx+1:]
+	}
+
+	// Wildcard forms
+	if catchLocal == "*" {
+		// prefix:* — for err:*, matches all XPath errors
+		return catchPrefix == "" || catchPrefix == "err"
+	}
+	if catchPrefix == "*" {
+		return catchLocal == errCode // *:CODE matches the bare code
+	}
+
+	// Compare the local part of the catch code against the error code
+	return catchLocal == errCode
+}
+
+// buildCatchContext creates an eval context with standard $err:* variables.
+func buildCatchContext(ec *evalContext, xpErr *XPathError) *evalContext {
+	// $err:code should be a QName, but for practical purposes store as string
+	// with the err: prefix to match test expectations
+	errQN := SingleAtomic(AtomicValue{
+		TypeName: TypeQName,
+		Value:    QNameValue{Prefix: "err", URI: NSErr, Local: xpErr.Code},
+	})
+	ctx := ec.withVar("err:code", errQN)
+	ctx = ctx.withVar("err:description", SingleString(xpErr.Message))
+	ctx = ctx.withVar("err:value", nil)
+	ctx = ctx.withVar("err:module", nil)
+	ctx = ctx.withVar("err:line-number", nil)
+	ctx = ctx.withVar("err:column-number", nil)
+	ctx = ctx.withVar("err:additional", nil)
+	return ctx
 }
 
 // --- 3.5: Type expressions ---

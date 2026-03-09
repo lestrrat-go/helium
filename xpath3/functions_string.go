@@ -350,7 +350,13 @@ func fnAnalyzeString(_ context.Context, _ []Sequence) (Sequence, error) {
 
 // compileXPathRegex compiles an XPath regex pattern with flags.
 // Maps XPath flags (i,m,s,x) to Go regexp equivalents.
+// Translates XPath/XML Schema regex features to Go-compatible patterns.
 func compileXPathRegex(pattern, flags string) (*regexp.Regexp, error) {
+	// Reject Perl-specific constructs first
+	if err := rejectPerlSpecific(pattern); err != nil {
+		return nil, err
+	}
+
 	var prefix strings.Builder
 	prefix.WriteString("(?")
 	for _, f := range flags {
@@ -364,10 +370,27 @@ func compileXPathRegex(pattern, flags string) (*regexp.Regexp, error) {
 		case 'x':
 			// Free-spacing mode: strip unescaped whitespace and #-comments
 			pattern = stripFreeSpacing(pattern)
+		case 'q':
+			// Literal mode: quote the entire pattern
+			pattern = regexp.QuoteMeta(pattern)
+			// No need for further translation
+			re, err := regexp.Compile(pattern)
+			if err != nil {
+				return nil, &XPathError{Code: "FORX0002", Message: fmt.Sprintf("invalid regular expression: %s", err)}
+			}
+			return re, nil
 		default:
 			return nil, &XPathError{Code: "FORX0001", Message: fmt.Sprintf("invalid regex flag: %c", f)}
 		}
 	}
+
+	// Translate XPath/XML Schema regex features to Go-compatible patterns
+	translated, err := translateXPathRegex(pattern)
+	if err != nil {
+		return nil, err
+	}
+	pattern = translated
+
 	if prefix.Len() > 2 {
 		prefix.WriteRune(')')
 		pattern = prefix.String() + pattern

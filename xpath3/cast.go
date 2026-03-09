@@ -149,6 +149,26 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		if v.TypeName == TypeDayTimeDuration || v.TypeName == TypeYearMonthDuration {
 			return AtomicValue{TypeName: TypeDuration, Value: v.DurationVal()}, nil
 		}
+	case TypeGDay:
+		return castToGType(v, targetType, func(t time.Time) string {
+			return fmt.Sprintf("---%02d%s", t.Day(), formatXSDTimezone(t))
+		})
+	case TypeGMonth:
+		return castToGType(v, targetType, func(t time.Time) string {
+			return fmt.Sprintf("--%02d%s", t.Month(), formatXSDTimezone(t))
+		})
+	case TypeGMonthDay:
+		return castToGType(v, targetType, func(t time.Time) string {
+			return fmt.Sprintf("--%02d-%02d%s", t.Month(), t.Day(), formatXSDTimezone(t))
+		})
+	case TypeGYear:
+		return castToGType(v, targetType, func(t time.Time) string {
+			return fmt.Sprintf("%04d%s", t.Year(), formatXSDTimezone(t))
+		})
+	case TypeGYearMonth:
+		return castToGType(v, targetType, func(t time.Time) string {
+			return fmt.Sprintf("%04d-%02d%s", t.Year(), t.Month(), formatXSDTimezone(t))
+		})
 	}
 
 	return AtomicValue{}, &XPathError{
@@ -256,6 +276,31 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 			return AtomicValue{}, castError(s, targetType)
 		}
 		return AtomicValue{TypeName: TypeHexBinary, Value: b}, nil
+	case TypeGDay:
+		if !reGDay.MatchString(s) {
+			return AtomicValue{}, castError(s, targetType)
+		}
+		return AtomicValue{TypeName: TypeGDay, Value: s}, nil
+	case TypeGMonth:
+		if !reGMonth.MatchString(s) {
+			return AtomicValue{}, castError(s, targetType)
+		}
+		return AtomicValue{TypeName: TypeGMonth, Value: s}, nil
+	case TypeGMonthDay:
+		if !reGMonthDay.MatchString(s) {
+			return AtomicValue{}, castError(s, targetType)
+		}
+		return AtomicValue{TypeName: TypeGMonthDay, Value: s}, nil
+	case TypeGYear:
+		if !reGYear.MatchString(s) || !validateGregorianValue(TypeGYear, s) {
+			return AtomicValue{}, castError(s, targetType)
+		}
+		return AtomicValue{TypeName: TypeGYear, Value: s}, nil
+	case TypeGYearMonth:
+		if !reGYearMonth.MatchString(s) || !validateGregorianValue(TypeGYearMonth, s) {
+			return AtomicValue{}, castError(s, targetType)
+		}
+		return AtomicValue{TypeName: TypeGYearMonth, Value: s}, nil
 	}
 	return AtomicValue{}, &XPathError{
 		Code:    "XPTY0004",
@@ -330,6 +375,38 @@ func castError(value string, targetType string) *XPathError {
 	}
 }
 
+// castToGType casts a date/dateTime value to a Gregorian partial type.
+func castToGType(v AtomicValue, targetType string, format func(time.Time) string) (AtomicValue, error) {
+	switch v.TypeName {
+	case TypeDateTime, TypeDate:
+		return AtomicValue{TypeName: targetType, Value: format(v.TimeVal())}, nil
+	case TypeString, TypeUntypedAtomic:
+		return CastFromString(v.StringVal(), targetType)
+	}
+	return AtomicValue{}, &XPathError{
+		Code:    "XPTY0004",
+		Message: fmt.Sprintf("cannot cast %s to %s", v.TypeName, targetType),
+	}
+}
+
+// formatXSDTimezone returns the timezone suffix for an XSD date/time value.
+// Returns "" if the value has no explicit timezone (Location == time.UTC).
+func formatXSDTimezone(t time.Time) string {
+	if t.Location() == time.UTC {
+		return "" // no timezone
+	}
+	_, offset := t.Zone()
+	if offset == 0 {
+		return "Z"
+	}
+	h := offset / 3600
+	m := (offset % 3600) / 60
+	if m < 0 {
+		m = -m
+	}
+	return fmt.Sprintf("%+03d:%02d", h, m)
+}
+
 func castToString(v AtomicValue) (AtomicValue, error) {
 	s, err := atomicToString(v)
 	if err != nil {
@@ -378,11 +455,24 @@ func atomicToString(v AtomicValue) (string, error) {
 		}
 		return "false", nil
 	case TypeDate:
-		return v.Value.(time.Time).Format("2006-01-02"), nil
+		t := v.Value.(time.Time)
+		return fmt.Sprintf("%04d-%02d-%02d%s", t.Year(), t.Month(), t.Day(), formatXSDTimezone(t)), nil
 	case TypeDateTime:
-		return v.Value.(time.Time).Format("2006-01-02T15:04:05"), nil
+		t := v.Value.(time.Time)
+		s := fmt.Sprintf("%04d-%02d-%02dT%02d:%02d:%02d", t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
+		if ns := t.Nanosecond(); ns > 0 {
+			frac := fmt.Sprintf(".%09d", ns)
+			s += strings.TrimRight(frac, "0")
+		}
+		return s + formatXSDTimezone(t), nil
 	case TypeTime:
-		return v.Value.(time.Time).Format("15:04:05"), nil
+		t := v.Value.(time.Time)
+		s := fmt.Sprintf("%02d:%02d:%02d", t.Hour(), t.Minute(), t.Second())
+		if ns := t.Nanosecond(); ns > 0 {
+			frac := fmt.Sprintf(".%09d", ns)
+			s += strings.TrimRight(frac, "0")
+		}
+		return s + formatXSDTimezone(t), nil
 	case TypeDuration, TypeDayTimeDuration, TypeYearMonthDuration:
 		return formatDuration(v.Value.(Duration)), nil
 	case TypeBase64Binary:
@@ -432,6 +522,8 @@ func castToFloat(v AtomicValue) (AtomicValue, error) {
 
 func castToInteger(v AtomicValue) (AtomicValue, error) {
 	switch v.TypeName {
+	case TypeInteger:
+		return v, nil
 	case TypeDouble, TypeFloat:
 		f := v.DoubleVal()
 		if math.IsNaN(f) || math.IsInf(f, 0) {

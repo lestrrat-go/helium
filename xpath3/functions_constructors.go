@@ -238,7 +238,7 @@ func makeXSGregorian(typeName string, re *regexp.Regexp) func(context.Context, [
 			return nil, err
 		}
 		s = strings.TrimSpace(s)
-		if !re.MatchString(s) {
+		if !re.MatchString(s) || !validateGregorianValue(typeName, s) {
 			return nil, &XPathError{
 				Code:    "FORG0001",
 				Message: fmt.Sprintf("cannot cast %q to %s", s, typeName),
@@ -246,6 +246,57 @@ func makeXSGregorian(typeName string, re *regexp.Regexp) func(context.Context, [
 		}
 		return SingleAtomic(AtomicValue{TypeName: typeName, Value: s}), nil
 	}
+}
+
+// validateGregorianValue performs additional validation beyond regex matching.
+func validateGregorianValue(typeName, s string) bool {
+	switch typeName {
+	case TypeGYear:
+		// xs:gYear: reject 0000 and -0000 (year zero is invalid)
+		y := extractYearDigits(s)
+		if isAllZero(y) {
+			return false
+		}
+		if len(y) > 9 {
+			return false
+		}
+	case TypeGYearMonth:
+		// xs:gYearMonth: reject 0000 but allow -0000 (represents 1 BCE)
+		neg := strings.HasPrefix(s, "-")
+		y := extractYearDigits(s)
+		if !neg && isAllZero(y) {
+			return false
+		}
+		if len(y) > 9 {
+			return false
+		}
+	}
+	return true
+}
+
+func extractYearDigits(s string) string {
+	y := s
+	if strings.HasPrefix(y, "-") {
+		y = y[1:]
+	}
+	for i, c := range y {
+		if c == '-' || c == 'Z' || c == '+' {
+			return y[:i]
+		}
+	}
+	return y
+}
+
+func isAllZero(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		if c != '0' {
+			return false
+		}
+	}
+	return true
 }
 
 var reDateTimeStampTZ = regexp.MustCompile(`[+-]\d{2}:\d{2}$`)

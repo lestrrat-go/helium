@@ -1488,15 +1488,15 @@ func (p *parser) parseTryCatchExpr() (Expr, error) {
 	var catches []CatchClause
 	for p.lexer.Peek().Type == TokenCatch {
 		p.lexer.Next()
-		// Parse error codes (QName | * separated by |)
+		// Parse error codes (NameTest ("|" NameTest)*)
+		// NameTest ::= EQName | Wildcard
+		// Wildcard ::= "*" | NCName ":*" | "*:" NCName | "BracedURILiteral" "*"
 		var codes []string
 		for {
-			if p.lexer.Peek().Type == TokenStar {
-				p.lexer.Next()
-				codes = nil // * means catch all
-				break
+			code, err := p.parseCatchCode()
+			if err != nil {
+				return nil, err
 			}
-			code := p.scanQName()
 			codes = append(codes, code)
 			if p.lexer.Peek().Type != TokenPipe {
 				break
@@ -1521,6 +1521,66 @@ func (p *parser) parseTryCatchExpr() (Expr, error) {
 		return nil, fmt.Errorf("%w: at least one 'catch' clause", ErrExpectedToken)
 	}
 	return TryCatchExpr{Try: tryExpr, Catches: catches}, nil
+}
+
+// parseCatchCode parses a single catch error code.
+// Supports: "*", "prefix:local", "prefix:*", "*:local", "Q{uri}local", "Q{uri}*"
+func (p *parser) parseCatchCode() (string, error) {
+	tok := p.lexer.Peek()
+
+	// * or *:local
+	if tok.Type == TokenStar {
+		p.lexer.Next()
+		if p.lexer.Peek().Type == TokenColon {
+			p.lexer.Next()
+			localTok := p.lexer.Peek()
+			if localTok.Type == TokenName {
+				p.lexer.Next()
+				return "*:" + localTok.Value, nil
+			}
+			p.lexer.Backup() // put ':' back
+		}
+		return "*", nil
+	}
+
+	// Q{uri}local or Q{uri}* (already scanned as single TokenName by lexer)
+	if tok.Type == TokenName && len(tok.Value) > 2 && tok.Value[0] == 'Q' && tok.Value[1] == '{' {
+		p.lexer.Next()
+		// Check if next token is * for Q{uri}*
+		if p.lexer.Peek().Type == TokenStar {
+			p.lexer.Next()
+			return tok.Value + "*", nil
+		}
+		return tok.Value, nil
+	}
+
+	// NCName or NCName:NCName or NCName:*
+	if tok.Type == TokenName {
+		p.lexer.Next()
+		name := tok.Value
+		if p.lexer.Peek().Type == TokenColon {
+			p.lexer.Next()
+			next := p.lexer.Peek()
+			if next.Type == TokenStar {
+				p.lexer.Next()
+				return name + ":*", nil
+			}
+			if next.Type == TokenName {
+				p.lexer.Next()
+				return name + ":" + next.Value, nil
+			}
+			p.lexer.Backup() // put ':' back
+		}
+		return name, nil
+	}
+
+	// "catch" keyword may appear as a name in some contexts
+	if tok.Type == TokenCatch {
+		p.lexer.Next()
+		return tok.Value, nil
+	}
+
+	return "", fmt.Errorf("%w: error code in catch clause but got %s", ErrExpectedToken, tok)
 }
 
 // --- Constructor Parsing ---
