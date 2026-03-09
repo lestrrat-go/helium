@@ -128,13 +128,13 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 	var nsScopePrevStack [][]nsPrev
 
 	h := sax.New()
-	h.SetOnStartDocument(sax.StartDocumentFunc(func(_ sax.Context) error { return nil }))
-	h.SetOnEndDocument(sax.EndDocumentFunc(func(_ sax.Context) error { return nil }))
-	h.SetOnSetDocumentLocator(sax.SetDocumentLocatorFunc(func(_ sax.Context, loc2 sax.DocumentLocator) error {
+	h.SetOnStartDocument(sax.StartDocumentFunc(func(_ context.Context) error { return nil }))
+	h.SetOnEndDocument(sax.EndDocumentFunc(func(_ context.Context) error { return nil }))
+	h.SetOnSetDocumentLocator(sax.SetDocumentLocatorFunc(func(_ context.Context, loc2 sax.DocumentLocator) error {
 		locator = loc2
 		return nil
 	}))
-	h.SetOnStartElementNS(sax.StartElementNSFunc(func(_ sax.Context, localname, prefix string, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	h.SetOnStartElementNS(sax.StartElementNSFunc(func(_ context.Context, localname, prefix string, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		line, col := 0, 0
 		if locator != nil {
 			line = locator.LineNumber()
@@ -191,7 +191,7 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 		}
 		return push(se, rawSE, line, col)
 	}))
-	h.SetOnEndElementNS(sax.EndElementNSFunc(func(_ sax.Context, localname, prefix string, uri string) error {
+	h.SetOnEndElementNS(sax.EndElementNSFunc(func(_ context.Context, localname, prefix string, uri string) error {
 		line, col := 0, 0
 		if locator != nil {
 			line = locator.LineNumber()
@@ -217,7 +217,7 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 		rawEE := EndElement{Name: Name{Space: prefix, Local: localname}}
 		return push(ee, rawEE, line, col)
 	}))
-	h.SetOnCharacters(sax.CharactersFunc(func(_ sax.Context, ch []byte) error {
+	h.SetOnCharacters(sax.CharactersFunc(func(_ context.Context, ch []byte) error {
 		line, col := 0, 0
 		if locator != nil {
 			line = locator.LineNumber()
@@ -226,7 +226,7 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 		cd := CharData(append([]byte(nil), ch...))
 		return push(cd, cd, line, col)
 	}))
-	h.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(func(_ sax.Context, ch []byte) error {
+	h.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(func(_ context.Context, ch []byte) error {
 		line, col := 0, 0
 		if locator != nil {
 			line = locator.LineNumber()
@@ -235,7 +235,7 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 		cd := CharData(append([]byte(nil), ch...))
 		return push(cd, cd, line, col)
 	}))
-	h.SetOnCDataBlock(sax.CDataBlockFunc(func(_ sax.Context, value []byte) error {
+	h.SetOnCDataBlock(sax.CDataBlockFunc(func(_ context.Context, value []byte) error {
 		line, col := 0, 0
 		if locator != nil {
 			line = locator.LineNumber()
@@ -249,7 +249,7 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 			return d.ctx.Err()
 		}
 	}))
-	h.SetOnComment(sax.CommentFunc(func(_ sax.Context, value []byte) error {
+	h.SetOnComment(sax.CommentFunc(func(_ context.Context, value []byte) error {
 		line, col := 0, 0
 		if locator != nil {
 			line = locator.LineNumber()
@@ -258,7 +258,7 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 		c := Comment(append([]byte(nil), value...))
 		return push(c, c, line, col)
 	}))
-	h.SetOnProcessingInstruction(sax.ProcessingInstructionFunc(func(_ sax.Context, target, data string) error {
+	h.SetOnProcessingInstruction(sax.ProcessingInstructionFunc(func(_ context.Context, target, data string) error {
 		if target == "xml" {
 			return nil // skip XML declaration
 		}
@@ -272,16 +272,16 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 	}))
 
 	// Stubs for callbacks we don't use
-	h.SetOnInternalSubset(sax.InternalSubsetFunc(func(_ sax.Context, _ string, _ string, _ string) error { return nil }))
-	h.SetOnExternalSubset(sax.ExternalSubsetFunc(func(_ sax.Context, _ string, _ string, _ string) error { return nil }))
-	h.SetOnReference(sax.ReferenceFunc(func(_ sax.Context, _ string) error { return nil }))
-	h.SetOnEntityDecl(sax.EntityDeclFunc(func(_ sax.Context, _ string, _ enum.EntityType, _ string, _ string, _ string) error { return nil }))
-	h.SetOnElementDecl(sax.ElementDeclFunc(func(_ sax.Context, _ string, _ enum.ElementType, _ sax.ElementContent) error { return nil }))
-	h.SetOnAttributeDecl(sax.AttributeDeclFunc(func(_ sax.Context, _ string, _ string, _ enum.AttributeType, _ enum.AttributeDefault, _ string, _ sax.Enumeration) error {
+	h.SetOnInternalSubset(sax.InternalSubsetFunc(func(_ context.Context, _ string, _ string, _ string) error { return nil }))
+	h.SetOnExternalSubset(sax.ExternalSubsetFunc(func(_ context.Context, _ string, _ string, _ string) error { return nil }))
+	h.SetOnReference(sax.ReferenceFunc(func(_ context.Context, _ string) error { return nil }))
+	h.SetOnEntityDecl(sax.EntityDeclFunc(func(_ context.Context, _ string, _ enum.EntityType, _ string, _ string, _ string) error { return nil }))
+	h.SetOnElementDecl(sax.ElementDeclFunc(func(_ context.Context, _ string, _ enum.ElementType, _ sax.ElementContent) error { return nil }))
+	h.SetOnAttributeDecl(sax.AttributeDeclFunc(func(_ context.Context, _ string, _ string, _ enum.AttributeType, _ enum.AttributeDefault, _ string, _ sax.Enumeration) error {
 		return nil
 	}))
-	h.SetOnNotationDecl(sax.NotationDeclFunc(func(_ sax.Context, _ string, _ string, _ string) error { return nil }))
-	h.SetOnUnparsedEntityDecl(sax.UnparsedEntityDeclFunc(func(_ sax.Context, _ string, _ string, _ string, _ string) error { return nil }))
+	h.SetOnNotationDecl(sax.NotationDeclFunc(func(_ context.Context, _ string, _ string, _ string) error { return nil }))
+	h.SetOnUnparsedEntityDecl(sax.UnparsedEntityDeclFunc(func(_ context.Context, _ string, _ string, _ string, _ string) error { return nil }))
 	// Pre-build helium entities from d.Entity so the parser can type-assert
 	// them to *helium.Entity (the parser hard-casts in parseEntityRef).
 	var entityLookup map[string]*helium.Entity
@@ -297,7 +297,7 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 			}
 		}
 	}
-	h.SetOnGetEntity(sax.GetEntityFunc(func(_ sax.Context, name string) (sax.Entity, error) {
+	h.SetOnGetEntity(sax.GetEntityFunc(func(_ context.Context, name string) (sax.Entity, error) {
 		if entityLookup != nil {
 			if ent, ok := entityLookup[name]; ok {
 				return ent, nil
@@ -305,13 +305,13 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 		}
 		return nil, nil
 	}))
-	h.SetOnGetParameterEntity(sax.GetParameterEntityFunc(func(_ sax.Context, _ string) (sax.Entity, error) { return nil, nil }))
-	h.SetOnResolveEntity(sax.ResolveEntityFunc(func(_ sax.Context, _ string, _ string) (sax.ParseInput, error) { return nil, nil }))
-	h.SetOnHasExternalSubset(sax.HasExternalSubsetFunc(func(_ sax.Context) (bool, error) { return false, nil }))
-	h.SetOnHasInternalSubset(sax.HasInternalSubsetFunc(func(_ sax.Context) (bool, error) { return false, nil }))
-	h.SetOnIsStandalone(sax.IsStandaloneFunc(func(_ sax.Context) (bool, error) { return false, nil }))
-	h.SetOnError(sax.ErrorFunc(func(_ sax.Context, err error) error { return err }))
-	h.SetOnWarning(sax.WarningFunc(func(_ sax.Context, _ error) error { return nil }))
+	h.SetOnGetParameterEntity(sax.GetParameterEntityFunc(func(_ context.Context, _ string) (sax.Entity, error) { return nil, nil }))
+	h.SetOnResolveEntity(sax.ResolveEntityFunc(func(_ context.Context, _ string, _ string) (sax.ParseInput, error) { return nil, nil }))
+	h.SetOnHasExternalSubset(sax.HasExternalSubsetFunc(func(_ context.Context) (bool, error) { return false, nil }))
+	h.SetOnHasInternalSubset(sax.HasInternalSubsetFunc(func(_ context.Context) (bool, error) { return false, nil }))
+	h.SetOnIsStandalone(sax.IsStandaloneFunc(func(_ context.Context) (bool, error) { return false, nil }))
+	h.SetOnError(sax.ErrorFunc(func(_ context.Context, err error) error { return err }))
+	h.SetOnWarning(sax.WarningFunc(func(_ context.Context, _ error) error { return nil }))
 
 	go func() {
 		defer close(d.events)

@@ -11,7 +11,7 @@ import (
 func Example_helium_stop_parser() {
 	var seen int
 	s := sax.New()
-	s.SetOnStartElementNS(sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	s.SetOnStartElementNS(sax.StartElementNSFunc(func(ctx context.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		seen++
 		if localname == "stop" {
 			helium.StopParser(ctx)

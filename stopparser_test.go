@@ -2,6 +2,7 @@ package helium_test
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -17,7 +18,7 @@ func TestStopParserInCharacters(t *testing.T) {
 </root>`
 
 	s := sax.New()
-	s.SetOnCharacters(sax.CharactersFunc(func(ctx sax.Context, ch []byte) error {
+	s.SetOnCharacters(sax.CharactersFunc(func(ctx context.Context, ch []byte) error {
 		if string(ch) == "hello" {
 			helium.StopParser(ctx)
 		}
@@ -41,7 +42,7 @@ func TestStopParserInStartElementNS(t *testing.T) {
 
 	var seen []string
 	s := sax.New()
-	s.SetOnStartElementNS(sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	s.SetOnStartElementNS(sax.StartElementNSFunc(func(ctx context.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		seen = append(seen, localname)
 		if localname == "target" {
 			helium.StopParser(ctx)
@@ -68,7 +69,7 @@ func TestStopParserViaPushParser(t *testing.T) {
 </root>`
 
 	s := sax.New()
-	s.SetOnStartElementNS(sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	s.SetOnStartElementNS(sax.StartElementNSFunc(func(ctx context.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		if localname == "b" {
 			helium.StopParser(ctx)
 		}
@@ -87,7 +88,7 @@ func TestStopParserInStartDocument(t *testing.T) {
 	const input = `<?xml version="1.0"?><root><child/></root>`
 
 	s := sax.New()
-	s.SetOnStartDocument(sax.StartDocumentFunc(func(ctx sax.Context) error {
+	s.SetOnStartDocument(sax.StartDocumentFunc(func(ctx context.Context) error {
 		helium.StopParser(ctx)
 		return nil
 	}))
@@ -112,41 +113,41 @@ func TestStopParserReturnsPartialDoc(t *testing.T) {
 
 	// Wrap the tree builder so it builds the tree, but stop at <b>
 	wrapper := sax.New()
-	wrapper.SetOnSetDocumentLocator(sax.SetDocumentLocatorFunc(func(ctx sax.Context, loc sax.DocumentLocator) error {
+	wrapper.SetOnSetDocumentLocator(sax.SetDocumentLocatorFunc(func(ctx context.Context, loc sax.DocumentLocator) error {
 		return tb.SetDocumentLocator(ctx, loc)
 	}))
-	wrapper.SetOnStartDocument(sax.StartDocumentFunc(func(ctx sax.Context) error {
+	wrapper.SetOnStartDocument(sax.StartDocumentFunc(func(ctx context.Context) error {
 		return tb.StartDocument(ctx)
 	}))
-	wrapper.SetOnEndDocument(sax.EndDocumentFunc(func(ctx sax.Context) error {
+	wrapper.SetOnEndDocument(sax.EndDocumentFunc(func(ctx context.Context) error {
 		return tb.EndDocument(ctx)
 	}))
-	wrapper.SetOnStartElementNS(sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	wrapper.SetOnStartElementNS(sax.StartElementNSFunc(func(ctx context.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		if localname == "b" {
 			helium.StopParser(ctx)
 			return nil
 		}
 		return tb.StartElementNS(ctx, localname, prefix, uri, namespaces, attrs)
 	}))
-	wrapper.SetOnEndElementNS(sax.EndElementNSFunc(func(ctx sax.Context, localname, prefix, uri string) error {
+	wrapper.SetOnEndElementNS(sax.EndElementNSFunc(func(ctx context.Context, localname, prefix, uri string) error {
 		return tb.EndElementNS(ctx, localname, prefix, uri)
 	}))
-	wrapper.SetOnCharacters(sax.CharactersFunc(func(ctx sax.Context, ch []byte) error {
+	wrapper.SetOnCharacters(sax.CharactersFunc(func(ctx context.Context, ch []byte) error {
 		return tb.Characters(ctx, ch)
 	}))
-	wrapper.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(func(ctx sax.Context, ch []byte) error {
+	wrapper.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(func(ctx context.Context, ch []byte) error {
 		return tb.IgnorableWhitespace(ctx, ch)
 	}))
-	wrapper.SetOnComment(sax.CommentFunc(func(ctx sax.Context, value []byte) error {
+	wrapper.SetOnComment(sax.CommentFunc(func(ctx context.Context, value []byte) error {
 		return tb.Comment(ctx, value)
 	}))
-	wrapper.SetOnProcessingInstruction(sax.ProcessingInstructionFunc(func(ctx sax.Context, target, data string) error {
+	wrapper.SetOnProcessingInstruction(sax.ProcessingInstructionFunc(func(ctx context.Context, target, data string) error {
 		return tb.ProcessingInstruction(ctx, target, data)
 	}))
-	wrapper.SetOnCDataBlock(sax.CDataBlockFunc(func(ctx sax.Context, value []byte) error {
+	wrapper.SetOnCDataBlock(sax.CDataBlockFunc(func(ctx context.Context, value []byte) error {
 		return tb.CDataBlock(ctx, value)
 	}))
-	wrapper.SetOnReference(sax.ReferenceFunc(func(ctx sax.Context, name string) error {
+	wrapper.SetOnReference(sax.ReferenceFunc(func(ctx context.Context, name string) error {
 		return tb.Reference(ctx, name)
 	}))
 
@@ -169,9 +170,8 @@ func TestStopParserReturnsPartialDoc(t *testing.T) {
 }
 
 func TestStopParserWithNilContext(t *testing.T) {
-	// StopParser with a non-ParserStopper context should be a no-op
-	helium.StopParser(nil)
-	helium.StopParser("not a parser stopper")
+	// StopParser with a context that has no stopper should be a no-op
+	helium.StopParser(context.Background())
 }
 
 func TestStopParserViaParseReader(t *testing.T) {
@@ -182,7 +182,7 @@ func TestStopParserViaParseReader(t *testing.T) {
 </root>`
 
 	s := sax.New()
-	s.SetOnStartElementNS(sax.StartElementNSFunc(func(ctx sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	s.SetOnStartElementNS(sax.StartElementNSFunc(func(ctx context.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		if localname == "b" {
 			helium.StopParser(ctx)
 		}

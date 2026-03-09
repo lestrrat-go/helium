@@ -11,9 +11,8 @@ import (
 	"github.com/lestrrat-go/pdebug"
 )
 
-// ParserStopper is implemented by the parser context passed as sax.Context
-// to SAX callbacks. SAX handlers can type-assert the context to this
-// interface and call StopParser to abort parsing early without error.
+// ParserStopper is implemented by the parser context. SAX handlers can
+// call helium.StopParser(ctx) to abort parsing early without error.
 type ParserStopper interface {
 	StopParser()
 }
@@ -21,10 +20,8 @@ type ParserStopper interface {
 // StopParser tells the parser to stop at the next opportunity. Call this
 // from any SAX callback to abort parsing early. The parse functions will
 // return the partial document built so far with a nil error.
-func StopParser(ctx sax.Context) {
-	if s, ok := ctx.(ParserStopper); ok {
-		s.StopParser()
-	}
+func StopParser(ctx context.Context) {
+	sax.StopParser(ctx)
 }
 
 // Parser holds configuration for XML parsing (libxml2: xmlParserCtxt).
@@ -56,7 +53,7 @@ func (p *Parser) Parse(ctx context.Context, b []byte) (*Document, error) {
 		defer g.IRelease("=== END Parser.Parse ===")
 	}
 
-	pctx := &parserCtx{goCtx: ctx, rawInput: b, baseURI: p.baseURI}
+	pctx := &parserCtx{rawInput: b, baseURI: p.baseURI}
 	if err := pctx.init(p, bytes.NewReader(b)); err != nil {
 		return nil, err
 	}
@@ -69,7 +66,7 @@ func (p *Parser) Parse(ctx context.Context, b []byte) (*Document, error) {
 		}
 	}()
 
-	if err := pctx.parseDocument(); err != nil {
+	if err := pctx.parseDocument(ctx); err != nil {
 		if errors.Is(err, errParserStopped) {
 			return pctx.doc, nil
 		}
@@ -107,7 +104,7 @@ func (p *Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error
 		defer g.IRelease("=== END Parser.ParseReader ===")
 	}
 
-	pctx := &parserCtx{goCtx: ctx, baseURI: p.baseURI}
+	pctx := &parserCtx{baseURI: p.baseURI}
 	if err := pctx.init(p, r); err != nil {
 		return nil, err
 	}
@@ -119,7 +116,7 @@ func (p *Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error
 		}
 	}()
 
-	if err := pctx.parseDocument(); err != nil {
+	if err := pctx.parseDocument(ctx); err != nil {
 		if errors.Is(err, errParserStopped) {
 			return pctx.doc, nil
 		}
@@ -223,7 +220,7 @@ found:
 		doc = NewDocument("1.0", "", StandaloneImplicitNo)
 	}
 
-	newctx := &parserCtx{goCtx: ctx}
+	newctx := &parserCtx{}
 	if err := newctx.init(p, bytes.NewReader(data)); err != nil {
 		return nil, err
 	}
@@ -270,7 +267,8 @@ found:
 	if err := newctx.switchEncoding(); err != nil {
 		return nil, err
 	}
-	if err := newctx.parseContent(); err != nil {
+	innerCtx := withParserCtx(ctx, newctx)
+	if err := newctx.parseContent(innerCtx); err != nil {
 		return nil, err
 	}
 
