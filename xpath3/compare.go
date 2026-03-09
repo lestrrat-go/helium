@@ -1,8 +1,11 @@
 package xpath3
 
 import (
+	"bytes"
 	"fmt"
+	"math"
 	"strings"
+	"time"
 
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
@@ -122,7 +125,10 @@ func GeneralCompare(op TokenType, left, right Sequence) (bool, error) {
 	}
 	for _, la := range leftAtoms {
 		for _, ra := range rightAtoms {
-			pa, pb := promoteForComparison(la, ra)
+			pa, pb, err := promoteForGeneralComparison(la, ra)
+			if err != nil {
+				return false, err
+			}
 			match, err := compareAtomic(op, pa, pb)
 			if err != nil {
 				return false, err
@@ -137,45 +143,161 @@ func GeneralCompare(op TokenType, left, right Sequence) (bool, error) {
 
 // ValueCompare performs a value comparison between two atomic values.
 func ValueCompare(op TokenType, a, b AtomicValue) (bool, error) {
-	pa, pb := promoteForComparison(a, b)
+	pa, pb := promoteForValueComparison(a, b)
 	return compareAtomic(op, pa, pb)
 }
 
-// promoteForComparison applies type promotion rules per XPath 3.1 Section 3.7.
-func promoteForComparison(a, b AtomicValue) (AtomicValue, AtomicValue) {
+// comparisonFamily returns a type family string for comparison compatibility checking.
+func comparisonFamily(typeName string) string {
+	if isIntegerDerived(typeName) {
+		return "numeric"
+	}
+	switch typeName {
+	case TypeDecimal, TypeDouble, TypeFloat:
+		return "numeric"
+	case TypeString, TypeAnyURI:
+		return "string"
+	case TypeBoolean:
+		return "boolean"
+	case TypeDate:
+		return "date"
+	case TypeDateTime:
+		return "dateTime"
+	case TypeTime:
+		return "time"
+	case TypeDuration:
+		return "duration"
+	case TypeYearMonthDuration:
+		return "duration:YM"
+	case TypeDayTimeDuration:
+		return "duration:DT"
+	case TypeBase64Binary:
+		return "base64Binary"
+	case TypeHexBinary:
+		return "hexBinary"
+	case TypeQName:
+		return "QName"
+	case TypeGDay:
+		return "gDay"
+	case TypeGMonth:
+		return "gMonth"
+	case TypeGMonthDay:
+		return "gMonthDay"
+	case TypeGYear:
+		return "gYear"
+	case TypeGYearMonth:
+		return "gYearMonth"
+	}
+	return ""
+}
+
+// areTypesComparable returns true if two type families can be compared.
+func areTypesComparable(famA, famB string) bool {
+	if famA == famB {
+		return true
+	}
+	// numeric types are comparable with each other
+	if famA == "numeric" && famB == "numeric" {
+		return true
+	}
+	// string and anyURI are compatible (both in "string" family)
+	// duration subtypes are comparable for eq/ne
+	if (famA == "duration" || famA == "duration:YM" || famA == "duration:DT") &&
+		(famB == "duration" || famB == "duration:YM" || famB == "duration:DT") {
+		return true
+	}
+	return false
+}
+
+// promoteForValueComparison applies type promotion rules for value comparison (eq/ne/lt/gt/le/ge).
+// Per XPath 3.1 Section 3.7.2.
+func promoteForValueComparison(a, b AtomicValue) (AtomicValue, AtomicValue) {
 	// untypedAtomic vs untypedAtomic → compare as string
 	if a.TypeName == TypeUntypedAtomic && b.TypeName == TypeUntypedAtomic {
 		return AtomicValue{TypeName: TypeString, Value: stringFromAtomic(a)},
 			AtomicValue{TypeName: TypeString, Value: stringFromAtomic(b)}
 	}
-
-	// untypedAtomic vs numeric → cast to double
-	if a.TypeName == TypeUntypedAtomic && b.IsNumeric() {
-		return AtomicValue{TypeName: TypeDouble, Value: promoteToDouble(a)}, b
-	}
-	if b.TypeName == TypeUntypedAtomic && a.IsNumeric() {
-		return a, AtomicValue{TypeName: TypeDouble, Value: promoteToDouble(b)}
-	}
-
-	// untypedAtomic vs string → compare as string
-	if a.TypeName == TypeUntypedAtomic && b.TypeName == TypeString {
-		return AtomicValue{TypeName: TypeString, Value: stringFromAtomic(a)}, b
-	}
-	if b.TypeName == TypeUntypedAtomic && a.TypeName == TypeString {
-		return a, AtomicValue{TypeName: TypeString, Value: stringFromAtomic(b)}
-	}
-
-	// untypedAtomic vs other → cast to other's type
+	// untypedAtomic vs typed → cast untypedAtomic to the other's type
 	if a.TypeName == TypeUntypedAtomic {
-		return AtomicValue{TypeName: TypeString, Value: stringFromAtomic(a)},
-			AtomicValue{TypeName: TypeString, Value: stringFromAtomic(b)}
+		return castUntypedForComparison(a, b)
 	}
 	if b.TypeName == TypeUntypedAtomic {
-		return AtomicValue{TypeName: TypeString, Value: stringFromAtomic(a)},
-			AtomicValue{TypeName: TypeString, Value: stringFromAtomic(b)}
+		cb, ca := castUntypedForComparison(b, a)
+		return ca, cb
 	}
-
 	return a, b
+}
+
+// promoteForGeneralComparison applies type promotion rules for general comparison (= != < > <= >=).
+// Per XPath 3.1 Section 3.7.1 — untypedAtomic is cast to the type of the other operand.
+func promoteForGeneralComparison(a, b AtomicValue) (AtomicValue, AtomicValue, error) {
+	// untypedAtomic vs untypedAtomic → compare as string
+	if a.TypeName == TypeUntypedAtomic && b.TypeName == TypeUntypedAtomic {
+		return AtomicValue{TypeName: TypeString, Value: stringFromAtomic(a)},
+			AtomicValue{TypeName: TypeString, Value: stringFromAtomic(b)}, nil
+	}
+	// untypedAtomic vs typed → cast untypedAtomic to the other's type
+	if a.TypeName == TypeUntypedAtomic {
+		castA, err := castUntypedToType(a, b.TypeName)
+		if err != nil {
+			return AtomicValue{}, AtomicValue{}, err
+		}
+		return castA, b, nil
+	}
+	if b.TypeName == TypeUntypedAtomic {
+		castB, err := castUntypedToType(b, a.TypeName)
+		if err != nil {
+			return AtomicValue{}, AtomicValue{}, err
+		}
+		return a, castB, nil
+	}
+	return a, b, nil
+}
+
+// castUntypedForComparison casts an untypedAtomic value for value comparison.
+// Returns (castValue, otherValue). On cast failure, returns values that will
+// produce a type error in compareAtomic.
+func castUntypedForComparison(untyped, other AtomicValue) (AtomicValue, AtomicValue) {
+	targetType := other.TypeName
+	// For numeric types, cast to double
+	if other.IsNumeric() {
+		targetType = TypeDouble
+	}
+	// String-derived types: cast to string for comparison
+	if isStringDerived(targetType) {
+		targetType = TypeString
+	}
+	result, err := CastFromString(stringFromAtomic(untyped), targetType)
+	if err != nil {
+		// Cast failed — return the raw untypedAtomic; compareAtomic will reject mismatched types
+		return AtomicValue{TypeName: TypeString, Value: stringFromAtomic(untyped)}, other
+	}
+	return result, other
+}
+
+// castUntypedToType casts an untypedAtomic value to the given target type.
+// For general comparison, cast failures are errors (not silently ignored).
+func castUntypedToType(untyped AtomicValue, targetType string) (AtomicValue, error) {
+	// For numeric types, cast to double per spec
+	if isIntegerDerived(targetType) || targetType == TypeDecimal || targetType == TypeFloat {
+		targetType = TypeDouble
+	}
+	// String-derived types: cast to string for comparison
+	if isStringDerived(targetType) {
+		targetType = TypeString
+	}
+	return CastFromString(stringFromAtomic(untyped), targetType)
+}
+
+// isStringDerived returns true if the type derives from xs:string in the type hierarchy.
+func isStringDerived(typeName string) bool {
+	for typeName != "" && typeName != TypeAnyAtomicType {
+		if typeName == TypeString {
+			return true
+		}
+		typeName = xsdTypeParent[typeName]
+	}
+	return false
 }
 
 // stringFromAtomic extracts a string from an atomic value.
@@ -188,23 +310,24 @@ func stringFromAtomic(a AtomicValue) string {
 }
 
 // compareAtomic compares two (already promoted) atomic values.
+// Returns XPTY0004 if types are not comparable.
 func compareAtomic(op TokenType, a, b AtomicValue) (bool, error) {
 	// Map general comparison operators to value comparison operators
 	op = normalizeCompareOp(op)
 
-	// String comparison
-	if a.TypeName == TypeString && b.TypeName == TypeString {
-		sa := a.Value.(string)
-		sb := b.Value.(string)
+	// String comparison (includes string-derived types and anyURI)
+	aStr := isStringDerived(a.TypeName) || a.TypeName == TypeAnyURI
+	bStr := isStringDerived(b.TypeName) || b.TypeName == TypeAnyURI
+	if aStr && bStr {
+		sa := stringFromAtomic(a)
+		sb := stringFromAtomic(b)
 		cmp := strings.Compare(sa, sb)
 		return applyCompare(op, cmp), nil
 	}
 
 	// Boolean comparison
 	if a.TypeName == TypeBoolean && b.TypeName == TypeBoolean {
-		ba := a.Value.(bool)
-		bb := b.Value.(bool)
-		return compareBooleans(op, ba, bb), nil
+		return compareBooleans(op, a.Value.(bool), b.Value.(bool)), nil
 	}
 
 	// Numeric comparison
@@ -214,18 +337,172 @@ func compareAtomic(op TokenType, a, b AtomicValue) (bool, error) {
 		return compareFloats(op, fa, fb), nil
 	}
 
-	// Mixed numeric/string — promote to double
-	if a.IsNumeric() || b.IsNumeric() {
-		fa := promoteToDouble(a)
-		fb := promoteToDouble(b)
-		return compareFloats(op, fa, fb), nil
+	// Date/time comparisons (same type only)
+	if a.TypeName == b.TypeName {
+		switch a.TypeName {
+		case TypeDate:
+			ta := a.Value.(time.Time)
+			tb := b.Value.(time.Time)
+			return compareDate(op, ta, tb), nil
+		case TypeDateTime:
+			ta := a.Value.(time.Time)
+			tb := b.Value.(time.Time)
+			return compareTime(op, ta, tb), nil
+		case TypeTime:
+			ta := a.Value.(time.Time)
+			tb := b.Value.(time.Time)
+			return compareTimeOfDay(op, ta, tb), nil
+		case TypeYearMonthDuration, TypeDayTimeDuration, TypeDuration:
+			return compareDuration(op, a.DurationVal(), b.DurationVal())
+		case TypeBase64Binary:
+			return compareBinary(op, a.Value.([]byte), b.Value.([]byte))
+		case TypeHexBinary:
+			return compareBinary(op, a.Value.([]byte), b.Value.([]byte))
+		case TypeQName:
+			return compareQName(op, a.Value.(QNameValue), b.Value.(QNameValue))
+		case TypeGDay, TypeGMonth, TypeGMonthDay, TypeGYear, TypeGYearMonth:
+			sa := stringFromAtomic(a)
+			sb := stringFromAtomic(b)
+			cmp := strings.Compare(sa, sb)
+			return applyCompare(op, cmp), nil
+		}
 	}
 
-	// Fallback: string comparison
-	sa, _ := atomicToString(a)
-	sb, _ := atomicToString(b)
-	cmp := strings.Compare(sa, sb)
+	// Duration cross-subtype comparison (eq/ne only)
+	famA := comparisonFamily(a.TypeName)
+	famB := comparisonFamily(b.TypeName)
+	if strings.HasPrefix(famA, "duration") && strings.HasPrefix(famB, "duration") {
+		return compareDuration(op, a.DurationVal(), b.DurationVal())
+	}
+
+	// Types are not comparable
+	return false, &XPathError{
+		Code:    "XPTY0004",
+		Message: fmt.Sprintf("cannot compare %s with %s", a.TypeName, b.TypeName),
+	}
+}
+
+// compareDate compares xs:date values by their UTC instants.
+// Applies implicit timezone for values without explicit timezone.
+func compareDate(op TokenType, a, b time.Time) bool {
+	return compareTime(op, applyImplicitTZ(a), applyImplicitTZ(b))
+}
+
+// compareTimeOfDay compares xs:time values per XPath F&O 3.0 §10.4.4:
+// https://www.w3.org/TR/xpath-functions-30/#func-time-equal
+// Times are converted to xs:dateTime using the reference date 1972-12-31,
+// then compared as UTC instants. This correctly handles date-wrap from timezone offsets.
+// When a time has no explicit timezone (Location == time.UTC), the implicit
+// timezone is applied per spec.
+func compareTimeOfDay(op TokenType, a, b time.Time) bool {
+	ra := timeToReferenceDateTime(applyImplicitTZ(a))
+	rb := timeToReferenceDateTime(applyImplicitTZ(b))
+	return compareTime(op, ra, rb)
+}
+
+// timeToReferenceDateTime converts an xs:time to an xs:dateTime using the
+// XPath reference date 1972-12-31, preserving the timezone offset.
+func timeToReferenceDateTime(t time.Time) time.Time {
+	_, offset := t.Zone()
+	loc := time.FixedZone("", offset)
+	return time.Date(1972, 12, 31, t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)
+}
+
+// applyImplicitTZ applies the system's implicit timezone to a time that has
+// no explicit timezone (Location == time.UTC). Times with explicit timezones
+// (Location is a FixedZone) are returned as-is.
+func applyImplicitTZ(t time.Time) time.Time {
+	if t.Location() != time.UTC {
+		return t // has explicit timezone
+	}
+	// No timezone — apply implicit timezone (system local)
+	_, offset := time.Now().Zone()
+	loc := time.FixedZone("", offset)
+	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)
+}
+
+func compareTime(op TokenType, a, b time.Time) bool {
+	switch op {
+	case TokenEq:
+		return a.Equal(b)
+	case TokenNe:
+		return !a.Equal(b)
+	case TokenLt:
+		return a.Before(b)
+	case TokenLe:
+		return a.Before(b) || a.Equal(b)
+	case TokenGt:
+		return a.After(b)
+	case TokenGe:
+		return a.After(b) || a.Equal(b)
+	}
+	return false
+}
+
+func compareDuration(op TokenType, a, b Duration) (bool, error) {
+	// Normalize: convert negative to signed months/seconds
+	aMonths, aSecs := a.Months, a.Seconds
+	if a.Negative {
+		aMonths, aSecs = -aMonths, -aSecs
+	}
+	bMonths, bSecs := b.Months, b.Seconds
+	if b.Negative {
+		bMonths, bSecs = -bMonths, -bSecs
+	}
+
+	eq := aMonths == bMonths && aSecs == bSecs
+
+	switch op {
+	case TokenEq:
+		return eq, nil
+	case TokenNe:
+		return !eq, nil
+	case TokenLt, TokenLe, TokenGt, TokenGe:
+		// Ordering is only defined for yearMonthDuration and dayTimeDuration (not mixed)
+		if aMonths != 0 && aSecs != 0 {
+			return false, &XPathError{Code: "XPTY0004", Message: "xs:duration values are not orderable"}
+		}
+		if bMonths != 0 && bSecs != 0 {
+			return false, &XPathError{Code: "XPTY0004", Message: "xs:duration values are not orderable"}
+		}
+		// Compare months-only or seconds-only
+		if aMonths != 0 || bMonths != 0 {
+			cmp := aMonths - bMonths
+			return applyCompareInt(op, cmp), nil
+		}
+		return compareFloats(op, aSecs, bSecs), nil
+	}
+	return false, nil
+}
+
+func compareBinary(op TokenType, a, b []byte) (bool, error) {
+	cmp := bytes.Compare(a, b)
 	return applyCompare(op, cmp), nil
+}
+
+func compareQName(op TokenType, a, b QNameValue) (bool, error) {
+	switch op {
+	case TokenEq:
+		return a.URI == b.URI && a.Local == b.Local, nil
+	case TokenNe:
+		return a.URI != b.URI || a.Local != b.Local, nil
+	default:
+		return false, &XPathError{Code: "XPTY0004", Message: "QName values only support eq/ne"}
+	}
+}
+
+func applyCompareInt(op TokenType, cmp int) bool {
+	switch op {
+	case TokenLt:
+		return cmp < 0
+	case TokenLe:
+		return cmp <= 0
+	case TokenGt:
+		return cmp > 0
+	case TokenGe:
+		return cmp >= 0
+	}
+	return false
 }
 
 // normalizeCompareOp maps general comparison operators to value comparison operators.
@@ -270,6 +547,10 @@ func compareFloats(op TokenType, a, b float64) bool {
 	case TokenEq:
 		return a == b
 	case TokenNe:
+		// NaN != NaN is true per IEEE 754
+		if math.IsNaN(a) || math.IsNaN(b) {
+			return true
+		}
 		return a != b
 	case TokenLt:
 		return a < b

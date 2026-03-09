@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"time"
 
 	helium "github.com/lestrrat-go/helium"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
@@ -31,18 +32,21 @@ type evalContext struct {
 	opLimit     int
 	docOrder    *ixpath.DocOrderCache
 	maxNodes    int
+	currentTime *time.Time // cached current time for stable fn:current-*
 }
 
 func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 	opCount := 0
+	now := time.Now()
 	ec := &evalContext{
-		goCtx:    ctx,
-		node:     node,
-		position: 1,
-		size:     1,
-		opCount:  &opCount,
-		docOrder: &ixpath.DocOrderCache{},
-		maxNodes: maxNodeSetLength,
+		goCtx:       ctx,
+		node:        node,
+		position:    1,
+		size:        1,
+		opCount:     &opCount,
+		docOrder:    &ixpath.DocOrderCache{},
+		maxNodes:    maxNodeSetLength,
+		currentTime: &now,
 	}
 	if xctx := GetContext(ctx); xctx != nil {
 		ec.namespaces = xctx.namespaces
@@ -56,19 +60,20 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 
 func (ec *evalContext) withNode(n helium.Node, pos, size int) *evalContext {
 	return &evalContext{
-		goCtx:      ec.goCtx,
-		node:       n,
-		position:   pos,
-		size:       size,
-		vars:       ec.vars,
-		namespaces: ec.namespaces,
-		functions:  ec.functions,
-		fnsNS:      ec.fnsNS,
-		depth:      ec.depth,
-		opCount:    ec.opCount,
-		opLimit:    ec.opLimit,
-		docOrder:   ec.docOrder,
-		maxNodes:   ec.maxNodes,
+		goCtx:       ec.goCtx,
+		node:        n,
+		position:    pos,
+		size:        size,
+		vars:        ec.vars,
+		namespaces:  ec.namespaces,
+		functions:   ec.functions,
+		fnsNS:       ec.fnsNS,
+		depth:       ec.depth,
+		opCount:     ec.opCount,
+		opLimit:     ec.opLimit,
+		docOrder:    ec.docOrder,
+		maxNodes:    ec.maxNodes,
+		currentTime: ec.currentTime,
 	}
 }
 
@@ -89,7 +94,18 @@ func (ec *evalContext) withContextItem(item Item, pos, size int) *evalContext {
 		opLimit:     ec.opLimit,
 		docOrder:    ec.docOrder,
 		maxNodes:    ec.maxNodes,
+		currentTime: ec.currentTime,
 	}
+}
+
+// getCurrentTime returns the cached current time for this evaluation,
+// lazily initializing it on first access.
+func (ec *evalContext) getCurrentTime() time.Time {
+	if ec.currentTime == nil {
+		now := time.Now()
+		ec.currentTime = &now
+	}
+	return *ec.currentTime
 }
 
 func (ec *evalContext) withVar(name string, val Sequence) *evalContext {
@@ -563,6 +579,12 @@ func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Duration/date/time arithmetic — handle before numeric promotion
+	if result, handled, err := evalDateTimeArithmetic(e.Op, la, ra); handled {
+		return result, err
+	}
+
 	ln := promoteToDouble(la)
 	rn := promoteToDouble(ra)
 
@@ -966,7 +988,7 @@ func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 					size: ec.size, vars: tup.vars, namespaces: ec.namespaces,
 					functions: ec.functions, fnsNS: ec.fnsNS, depth: ec.depth,
 					opCount: ec.opCount, opLimit: ec.opLimit, docOrder: ec.docOrder,
-					maxNodes: ec.maxNodes,
+					maxNodes: ec.maxNodes, currentTime: ec.currentTime,
 				}
 				domain, err := eval(subCtx, c.Expr)
 				if err != nil {
@@ -989,7 +1011,7 @@ func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 					size: ec.size, vars: tuples[i].vars, namespaces: ec.namespaces,
 					functions: ec.functions, fnsNS: ec.fnsNS, depth: ec.depth,
 					opCount: ec.opCount, opLimit: ec.opLimit, docOrder: ec.docOrder,
-					maxNodes: ec.maxNodes,
+					maxNodes: ec.maxNodes, currentTime: ec.currentTime,
 				}
 				val, err := eval(subCtx, c.Expr)
 				if err != nil {
@@ -1006,7 +1028,7 @@ func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 					size: ec.size, vars: tup.vars, namespaces: ec.namespaces,
 					functions: ec.functions, fnsNS: ec.fnsNS, depth: ec.depth,
 					opCount: ec.opCount, opLimit: ec.opLimit, docOrder: ec.docOrder,
-					maxNodes: ec.maxNodes,
+					maxNodes: ec.maxNodes, currentTime: ec.currentTime,
 				}
 				r, err := eval(subCtx, c.Predicate)
 				if err != nil {
@@ -1038,7 +1060,7 @@ func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 			size: ec.size, vars: tup.vars, namespaces: ec.namespaces,
 			functions: ec.functions, fnsNS: ec.fnsNS, depth: ec.depth,
 			opCount: ec.opCount, opLimit: ec.opLimit, docOrder: ec.docOrder,
-			maxNodes: ec.maxNodes,
+			maxNodes: ec.maxNodes, currentTime: ec.currentTime,
 		}
 		r, err := eval(retCtx, e.Return)
 		if err != nil {
@@ -1066,7 +1088,7 @@ func sortTuples(ec *evalContext, tuples []flworTuple, ob OrderByClause) ([]flwor
 				size: ec.size, vars: tup.vars, namespaces: ec.namespaces,
 				functions: ec.functions, fnsNS: ec.fnsNS, depth: ec.depth,
 				opCount: ec.opCount, opLimit: ec.opLimit, docOrder: ec.docOrder,
-				maxNodes: ec.maxNodes,
+				maxNodes: ec.maxNodes, currentTime: ec.currentTime,
 			}
 			r, err := eval(subCtx, spec.Expr)
 			if err != nil {

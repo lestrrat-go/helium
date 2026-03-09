@@ -121,7 +121,10 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		}
 		if v.TypeName == TypeDateTime {
 			t := v.TimeVal()
-			return AtomicValue{TypeName: TypeTime, Value: time.Date(0, 1, 1, t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), t.Location())}, nil
+			// Use FixedZone with current offset to avoid historical timezone issues
+			_, offset := t.Zone()
+			loc := time.FixedZone("", offset)
+			return AtomicValue{TypeName: TypeTime, Value: time.Date(0, 1, 1, t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)}, nil
 		}
 	case TypeDayTimeDuration:
 		if v.TypeName == TypeString {
@@ -538,7 +541,7 @@ func parseXSDDate(s string) (time.Time, error) {
 		"2006-01-02",
 	} {
 		if t, err := time.Parse(layout, s); err == nil {
-			return t, nil
+			return ensureExplicitTZ(t, s), nil
 		}
 	}
 	return time.Time{}, fmt.Errorf("invalid xs:date: %q", s)
@@ -552,7 +555,7 @@ func parseXSDDateTime(s string) (time.Time, error) {
 		"2006-01-02T15:04:05",
 	} {
 		if t, err := time.Parse(layout, s); err == nil {
-			return t, nil
+			return ensureExplicitTZ(t, s), nil
 		}
 	}
 	return time.Time{}, fmt.Errorf("invalid xs:dateTime: %q", s)
@@ -566,10 +569,50 @@ func parseXSDTime(s string) (time.Time, error) {
 		"15:04:05",
 	} {
 		if t, err := time.Parse(layout, s); err == nil {
-			return t, nil
+			return ensureExplicitTZ(t, s), nil
 		}
 	}
 	return time.Time{}, fmt.Errorf("invalid xs:time: %q", s)
+}
+
+// ensureExplicitTZ ensures that when the input string has an explicit timezone
+// (Z, +HH:MM, -HH:MM), the result uses FixedZone instead of time.UTC.
+// This lets us distinguish "no timezone" (Location == time.UTC) from
+// "explicit UTC" (Location is FixedZone("", 0)) for XPath comparison semantics.
+func ensureExplicitTZ(t time.Time, s string) time.Time {
+	if t.Location() != time.UTC {
+		return t // already a FixedZone (e.g. +05:00)
+	}
+	if hasExplicitTimezone(s) {
+		// Explicit Z or +00:00 — use FixedZone so Location != time.UTC
+		return t.In(time.FixedZone("", 0))
+	}
+	return t // no timezone in input — keep time.UTC
+}
+
+// hasExplicitTimezone checks if the input string ends with a timezone indicator
+// (Z, +HH:MM, or -HH:MM). The timezone suffix must match the pattern where
+// the last 6 characters are [+-]HH:MM with digits and colon in the right places.
+func hasExplicitTimezone(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	if s[len(s)-1] == 'Z' {
+		return true
+	}
+	// Check for +HH:MM or -HH:MM at the end
+	if len(s) >= 6 {
+		tail := s[len(s)-6:]
+		if (tail[0] == '+' || tail[0] == '-') &&
+			tail[1] >= '0' && tail[1] <= '9' &&
+			tail[2] >= '0' && tail[2] <= '9' &&
+			tail[3] == ':' &&
+			tail[4] >= '0' && tail[4] <= '9' &&
+			tail[5] >= '0' && tail[5] <= '9' {
+			return true
+		}
+	}
+	return false
 }
 
 // parseXSDDuration parses an XSD duration string like "P1Y2M3DT4H5M6S".

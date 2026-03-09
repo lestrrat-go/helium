@@ -55,18 +55,27 @@ func fnEnvironmentVariable(_ context.Context, args []Sequence) (Sequence, error)
 	return SingleString(val), nil
 }
 
-func fnCurrentDateTime(_ context.Context, _ []Sequence) (Sequence, error) {
-	return SingleAtomic(AtomicValue{TypeName: TypeDateTime, Value: time.Now()}), nil
+func fnCurrentDateTime(ctx context.Context, _ []Sequence) (Sequence, error) {
+	now := currentTimeFromCtx(ctx)
+	return SingleAtomic(AtomicValue{TypeName: TypeDateTime, Value: now}), nil
 }
 
-func fnCurrentDate(_ context.Context, _ []Sequence) (Sequence, error) {
-	now := time.Now()
+func fnCurrentDate(ctx context.Context, _ []Sequence) (Sequence, error) {
+	now := currentTimeFromCtx(ctx)
 	date := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	return SingleAtomic(AtomicValue{TypeName: TypeDate, Value: date}), nil
 }
 
-func fnCurrentTime(_ context.Context, _ []Sequence) (Sequence, error) {
-	return SingleAtomic(AtomicValue{TypeName: TypeTime, Value: time.Now()}), nil
+func fnCurrentTime(ctx context.Context, _ []Sequence) (Sequence, error) {
+	now := currentTimeFromCtx(ctx)
+	return SingleAtomic(AtomicValue{TypeName: TypeTime, Value: now}), nil
+}
+
+func currentTimeFromCtx(ctx context.Context) time.Time {
+	if ec := GetFnContext(ctx); ec != nil {
+		return ec.getCurrentTime()
+	}
+	return time.Now()
 }
 
 func fnImplicitTimezone(_ context.Context, _ []Sequence) (Sequence, error) {

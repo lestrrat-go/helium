@@ -96,7 +96,30 @@ func fnDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 	if !ok {
 		return nil, &XPathError{Code: "XPTY0004", Message: "second arg must be xs:time"}
 	}
-	combined := time.Date(d.Year(), d.Month(), d.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), d.Location())
+
+	// Per XPath F&O 3.0 §5.2.1: determine timezone from arguments.
+	// If both have timezones, they must be equal. If one has a timezone, use it.
+	// If neither has a timezone, the result has none.
+	dateHasTZ := d.Location() != time.UTC
+	timeHasTZ := t.Location() != time.UTC
+	var loc *time.Location
+	switch {
+	case dateHasTZ && timeHasTZ:
+		_, doff := d.Zone()
+		_, toff := t.Zone()
+		if doff != toff {
+			return nil, &XPathError{Code: "FORG0008", Message: "date and time timezone values are not equal"}
+		}
+		loc = d.Location()
+	case dateHasTZ:
+		loc = d.Location()
+	case timeHasTZ:
+		loc = t.Location()
+	default:
+		loc = time.UTC // no timezone
+	}
+
+	combined := time.Date(d.Year(), d.Month(), d.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)
 	return SingleAtomic(AtomicValue{TypeName: TypeDateTime, Value: combined}), nil
 }
 
@@ -318,6 +341,7 @@ func fnAdjustDateToTimezone(_ context.Context, args []Sequence) (Sequence, error
 		return nil, nil
 	}
 	if len(args) > 1 && len(args[1]) == 0 {
+		// Remove timezone: keep local date
 		t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 		return SingleAtomic(AtomicValue{TypeName: TypeDate, Value: t}), nil
 	}
@@ -326,8 +350,25 @@ func fnAdjustDateToTimezone(_ context.Context, args []Sequence) (Sequence, error
 		if !ok {
 			return nil, &XPathError{Code: "XPTY0004", Message: "expected dayTimeDuration"}
 		}
-		loc := time.FixedZone("", int(d.Seconds))
-		t = t.In(loc)
+		loc := durationToLocation(d)
+		if t.Location() == time.UTC {
+			// No timezone — just attach the new timezone
+			t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc)
+		} else {
+			// Has timezone — convert via dateTime (T00:00:00), then extract date
+			// Per XPath F&O §10.7.2
+			dt := t.In(loc)
+			t = time.Date(dt.Year(), dt.Month(), dt.Day(), 0, 0, 0, 0, loc)
+		}
+	} else {
+		// No second arg — adjust to implicit timezone
+		loc := time.Now().Location()
+		if t.Location() == time.UTC {
+			t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc)
+		} else {
+			dt := t.In(loc)
+			t = time.Date(dt.Year(), dt.Month(), dt.Day(), 0, 0, 0, 0, loc)
+		}
 	}
 	return SingleAtomic(AtomicValue{TypeName: TypeDate, Value: t}), nil
 }
@@ -338,6 +379,8 @@ func fnAdjustTimeToTimezone(_ context.Context, args []Sequence) (Sequence, error
 		return nil, nil
 	}
 	if len(args) > 1 && len(args[1]) == 0 {
+		// Remove timezone: keep local time components
+		t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.UTC)
 		return SingleAtomic(AtomicValue{TypeName: TypeTime, Value: t}), nil
 	}
 	if len(args) > 1 {
@@ -345,10 +388,18 @@ func fnAdjustTimeToTimezone(_ context.Context, args []Sequence) (Sequence, error
 		if !ok {
 			return nil, &XPathError{Code: "XPTY0004", Message: "expected dayTimeDuration"}
 		}
-		loc := time.FixedZone("", int(d.Seconds))
+		loc := durationToLocation(d)
 		t = t.In(loc)
 	}
 	return SingleAtomic(AtomicValue{TypeName: TypeTime, Value: t}), nil
+}
+
+func durationToLocation(d Duration) *time.Location {
+	offset := int(d.Seconds)
+	if d.Negative {
+		offset = -offset
+	}
+	return time.FixedZone("", offset)
 }
 
 // --- formatting stubs ---
