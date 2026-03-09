@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -54,6 +55,15 @@ var builtinFunctions3 = map[QualifiedName]Function{}
 //  3. Built-in functions by QualifiedName (builtinFunctions3)
 //  4. Default fn: namespace (no prefix = fn:)
 func resolveFunction(ec *evalContext, prefix, name string, arity int) (Function, error) {
+	// Handle Q{uri}local URIQualifiedName syntax from the lexer
+	if prefix == "" && strings.HasPrefix(name, "Q{") {
+		if idx := strings.Index(name, "}"); idx >= 0 {
+			uri := name[2:idx]
+			local := name[idx+1:]
+			return resolveFunctionByURI(ec, uri, local, arity)
+		}
+	}
+
 	// 1. User functions by local name (prefix-less or matching)
 	if prefix == "" && ec.functions != nil {
 		if fn, ok := ec.functions[name]; ok {
@@ -67,7 +77,11 @@ func resolveFunction(ec *evalContext, prefix, name string, arity int) (Function,
 	// Resolve prefix to namespace URI
 	uri := resolvePrefix(ec, prefix)
 
-	// 2. User functions by qualified name
+	return resolveFunctionByURI(ec, uri, name, arity)
+}
+
+func resolveFunctionByURI(ec *evalContext, uri, name string, arity int) (Function, error) {
+	// User functions by qualified name
 	if ec.fnsNS != nil {
 		qn := QualifiedName{URI: uri, Name: name}
 		if fn, ok := ec.fnsNS[qn]; ok {
@@ -78,7 +92,7 @@ func resolveFunction(ec *evalContext, prefix, name string, arity int) (Function,
 		}
 	}
 
-	// 3. Built-in functions
+	// Built-in functions
 	qn := QualifiedName{URI: uri, Name: name}
 	if fn, ok := builtinFunctions3[qn]; ok {
 		if err := checkArity(fn, name, arity); err != nil {
@@ -87,8 +101,8 @@ func resolveFunction(ec *evalContext, prefix, name string, arity int) (Function,
 		return fn, nil
 	}
 
-	// 4. If no prefix, try fn: namespace
-	if prefix == "" && uri != NSFn {
+	// If no explicit URI matched, try fn: namespace as default
+	if uri != NSFn {
 		qn = QualifiedName{URI: NSFn, Name: name}
 		if fn, ok := builtinFunctions3[qn]; ok {
 			if err := checkArity(fn, name, arity); err != nil {
@@ -98,9 +112,6 @@ func resolveFunction(ec *evalContext, prefix, name string, arity int) (Function,
 		}
 	}
 
-	if prefix != "" {
-		return nil, fmt.Errorf("%w: %s:%s#%d", ErrUnknownFunction, prefix, name, arity)
-	}
 	return nil, fmt.Errorf("%w: %s#%d", ErrUnknownFunction, name, arity)
 }
 
