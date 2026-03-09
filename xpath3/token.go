@@ -104,6 +104,11 @@ const (
 	TokenFunction // function
 	TokenMap      // map
 	TokenArray    // array
+
+	// Node comparison
+	TokenIs       // is
+	TokenNodePre  // << (node precedes)
+	TokenNodeFol  // >> (node follows)
 )
 
 var tokenNames = map[TokenType]string{
@@ -183,6 +188,9 @@ var tokenNames = map[TokenType]string{
 	TokenFunction:    "function",
 	TokenMap:         "map",
 	TokenArray:       "array",
+	TokenIs:          "is",
+	TokenNodePre:     "<<",
+	TokenNodeFol:     ">>",
 }
 
 func (t TokenType) String() string {

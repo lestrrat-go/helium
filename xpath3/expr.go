@@ -312,10 +312,11 @@ type FLWORClause interface {
 	flworClause()
 }
 
-// ForClause represents "for $var in expr".
+// ForClause represents "for $var in expr" or "for $var at $pos in expr".
 type ForClause struct {
-	Var  string
-	Expr Expr
+	Var    string
+	PosVar string // positional variable from "at $pos" (empty if none)
+	Expr   Expr
 }
 
 func (ForClause) flworClause() {}
@@ -354,10 +355,15 @@ type OrderSpec struct {
 // --- Control Flow ---
 
 // QuantifiedExpr represents "some/every $var in domain satisfies test".
+// QuantifiedBinding is a single "$var in expr" binding in a quantified expression.
+type QuantifiedBinding struct {
+	Var    string
+	Domain Expr
+}
+
 type QuantifiedExpr struct {
-	Some     bool // true = some, false = every
-	Var      string
-	Domain   Expr
+	Some      bool // true = some, false = every
+	Bindings  []QuantifiedBinding
 	Satisfies Expr
 }
 

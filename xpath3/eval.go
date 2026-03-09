@@ -477,6 +477,8 @@ func evalBinaryExpr(ec *evalContext, e BinaryExpr) (Sequence, error) {
 		return evalGeneralComparison(ec, e)
 	case TokenEq, TokenNe, TokenLt, TokenLe, TokenGt, TokenGe:
 		return evalValueComparison(ec, e)
+	case TokenIs, TokenNodePre, TokenNodeFol:
+		return evalNodeComparison(ec, e)
 	case TokenPlus, TokenMinus, TokenStar, TokenDiv, TokenIdiv, TokenMod:
 		return evalArithmetic(ec, e)
 	}
@@ -735,19 +737,67 @@ func evalFilterExpr(ec *evalContext, e FilterExpr) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	nodes, ok := NodesFrom(base)
-	if !ok {
-		return nil, ErrFilterNotNodeSet
+
+	// Try node-set path (optimized for node predicates)
+	if nodes, ok := NodesFrom(base); ok {
+		for _, pred := range e.Predicates {
+			nodes, err = applyPredicate(ec, nodes, pred)
+			if err != nil {
+				return nil, err
+			}
+		}
+		result := make(Sequence, len(nodes))
+		for i, n := range nodes {
+			result[i] = NodeItem{Node: n}
+		}
+		return result, nil
 	}
+
+	// General sequence filtering (XPath 3.1)
+	seq := base
 	for _, pred := range e.Predicates {
-		nodes, err = applyPredicate(ec, nodes, pred)
+		seq, err = applySequencePredicate(ec, seq, pred)
 		if err != nil {
 			return nil, err
 		}
 	}
-	result := make(Sequence, len(nodes))
-	for i, n := range nodes {
-		result[i] = NodeItem{Node: n}
+	return seq, nil
+}
+
+// applySequencePredicate filters a sequence by a predicate expression.
+// Each item becomes the context item; numeric predicates select by position.
+func applySequencePredicate(ec *evalContext, seq Sequence, pred Expr) (Sequence, error) {
+	var result Sequence
+	size := len(seq)
+	for i, item := range seq {
+		var subCtx *evalContext
+		if ni, ok := item.(NodeItem); ok {
+			subCtx = ec.withNode(ni.Node, i+1, size)
+		} else {
+			subCtx = ec.withContextItem(item, i+1, size)
+		}
+		r, err := eval(subCtx, pred)
+		if err != nil {
+			return nil, err
+		}
+		// Numeric predicate: position match
+		if len(r) == 1 {
+			if a, ok := r[0].(AtomicValue); ok && a.IsNumeric() {
+				f := a.ToFloat64()
+				if f == float64(i+1) {
+					result = append(result, item)
+				}
+				continue
+			}
+		}
+		// Boolean predicate
+		b, err := EBV(r)
+		if err != nil {
+			return nil, err
+		}
+		if b {
+			result = append(result, item)
+		}
 	}
 	return result, nil
 }
@@ -884,9 +934,12 @@ func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 				if err != nil {
 					return nil, err
 				}
-				for _, item := range domain {
+				for i, item := range domain {
 					newVars := copyVars(tup.vars)
 					newVars[c.Var] = Sequence{item}
+					if c.PosVar != "" {
+						newVars[c.PosVar] = Sequence{AtomicValue{TypeName: TypeInteger, Value: int64(i + 1)}}
+					}
 					newTuples = append(newTuples, flworTuple{vars: newVars})
 				}
 			}
@@ -1030,17 +1083,34 @@ func copyVars(m map[string]Sequence) map[string]Sequence {
 }
 
 func evalQuantifiedExpr(ec *evalContext, e QuantifiedExpr) (Sequence, error) {
-	domain, err := eval(ec, e.Domain)
-	if err != nil {
-		return nil, err
-	}
-	for _, item := range domain {
-		subCtx := ec.withVar(e.Var, Sequence{item})
-		r, err := eval(subCtx, e.Satisfies)
+	return evalQuantifiedBindings(ec, e, 0)
+}
+
+func evalQuantifiedBindings(ec *evalContext, e QuantifiedExpr, idx int) (Sequence, error) {
+	if idx >= len(e.Bindings) {
+		// All bindings bound — evaluate satisfies
+		r, err := eval(ec, e.Satisfies)
 		if err != nil {
 			return nil, err
 		}
 		b, err := EBV(r)
+		if err != nil {
+			return nil, err
+		}
+		return SingleBoolean(b), nil
+	}
+	binding := e.Bindings[idx]
+	domain, err := eval(ec, binding.Domain)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range domain {
+		subCtx := ec.withVar(binding.Var, Sequence{item})
+		result, err := evalQuantifiedBindings(subCtx, e, idx+1)
+		if err != nil {
+			return nil, err
+		}
+		b, err := EBV(result)
 		if err != nil {
 			return nil, err
 		}
@@ -1333,10 +1403,14 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 	if err != nil {
 		return nil, err
 	}
+	minArity := fn.MinArity()
 	fi := FunctionItem{
 		Arity: e.Arity,
 		Name:  e.Name,
 		Invoke: func(ctx context.Context, args []Sequence) (Sequence, error) {
+			if len(args) < minArity {
+				return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("fn:%s requires at least %d arguments, got %d", e.Name, minArity, len(args))}
+			}
 			return fn.Call(ctx, args)
 		},
 	}

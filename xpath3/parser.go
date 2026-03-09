@@ -125,7 +125,7 @@ func (p *parser) parseComparisonExpr() (Expr, error) {
 		return nil, err
 	}
 	tok := p.lexer.Peek()
-	if isGeneralComp(tok.Type) || isValueComp(tok.Type) {
+	if isGeneralComp(tok.Type) || isValueComp(tok.Type) || isNodeComp(tok.Type) {
 		p.lexer.Next()
 		right, err := p.parseConcatExpr()
 		if err != nil {
@@ -390,7 +390,7 @@ func (p *parser) parseArrowTarget() (Expr, string, string, error) {
 		}
 		return expr, "", "", nil
 	}
-	if tok.Type == TokenName {
+	if tok.Type == TokenName || tok.Type == TokenMap || tok.Type == TokenArray {
 		p.lexer.Next()
 		prefix := ""
 		name := tok.Value
@@ -458,12 +458,22 @@ func (p *parser) parsePathExpr() (Expr, error) {
 
 	// Absolute location path starts with / or //
 	if tok.Type == TokenSlash || tok.Type == TokenSlashSlash {
-		return p.parseLocationPath()
+		expr, err := p.parseLocationPath()
+		if err != nil {
+			return nil, err
+		}
+		// Apply postfix operations (dynamic calls, predicates, lookups)
+		// e.g., /root/function-lookup(...)() or /a/b[pred]
+		return p.parsePostfixOps(expr)
 	}
 
 	// Check if this looks like a step (axis, name test, ., .., @)
 	if p.looksLikeStep() {
-		return p.parseLocationPath()
+		expr, err := p.parseLocationPath()
+		if err != nil {
+			return nil, err
+		}
+		return p.parsePostfixOps(expr)
 	}
 
 	// Otherwise it's a postfix expression (primary expr with predicates/lookups)
@@ -1181,6 +1191,15 @@ func (p *parser) parseForBindings() ([]FLWORClause, error) {
 			return nil, fmt.Errorf("%w: variable after 'for' but got %s", ErrExpectedToken, p.lexer.Peek())
 		}
 		varName := p.lexer.Next().Value
+		// Optional positional variable: "at $pos"
+		var posVar string
+		if tok := p.lexer.Peek(); tok.Type == TokenName && tok.Value == "at" {
+			p.lexer.Next()
+			if p.lexer.Peek().Type != TokenVariableRef {
+				return nil, fmt.Errorf("%w: variable after 'at' but got %s", ErrExpectedToken, p.lexer.Peek())
+			}
+			posVar = p.lexer.Next().Value
+		}
 		if p.lexer.Peek().Type != TokenIn {
 			return nil, fmt.Errorf("%w: 'in' after variable but got %s", ErrExpectedToken, p.lexer.Peek())
 		}
@@ -1189,7 +1208,7 @@ func (p *parser) parseForBindings() ([]FLWORClause, error) {
 		if err != nil {
 			return nil, err
 		}
-		clauses = append(clauses, ForClause{Var: varName, Expr: expr})
+		clauses = append(clauses, ForClause{Var: varName, PosVar: posVar, Expr: expr})
 		if p.lexer.Peek().Type != TokenComma {
 			break
 		}
@@ -1255,17 +1274,25 @@ func (p *parser) parseOrderSpecs() ([]OrderSpec, error) {
 // parseQuantifiedExpr parses "some/every $var in domain satisfies test".
 func (p *parser) parseQuantifiedExpr(some bool) (Expr, error) {
 	p.lexer.Next() // consume 'some' or 'every'
-	if p.lexer.Peek().Type != TokenVariableRef {
-		return nil, fmt.Errorf("%w: variable after 'some'/'every' but got %s", ErrExpectedToken, p.lexer.Peek())
-	}
-	varName := p.lexer.Next().Value
-	if p.lexer.Peek().Type != TokenIn {
-		return nil, fmt.Errorf("%w: 'in' after variable but got %s", ErrExpectedToken, p.lexer.Peek())
-	}
-	p.lexer.Next()
-	domain, err := p.parseExprSingle()
-	if err != nil {
-		return nil, err
+	var bindings []QuantifiedBinding
+	for {
+		if p.lexer.Peek().Type != TokenVariableRef {
+			return nil, fmt.Errorf("%w: variable after 'some'/'every' but got %s", ErrExpectedToken, p.lexer.Peek())
+		}
+		varName := p.lexer.Next().Value
+		if p.lexer.Peek().Type != TokenIn {
+			return nil, fmt.Errorf("%w: 'in' after variable but got %s", ErrExpectedToken, p.lexer.Peek())
+		}
+		p.lexer.Next()
+		domain, err := p.parseExprSingle()
+		if err != nil {
+			return nil, err
+		}
+		bindings = append(bindings, QuantifiedBinding{Var: varName, Domain: domain})
+		if p.lexer.Peek().Type != TokenComma {
+			break
+		}
+		p.lexer.Next()
 	}
 	if p.lexer.Peek().Type != TokenSatisfies {
 		return nil, fmt.Errorf("%w: 'satisfies' but got %s", ErrExpectedToken, p.lexer.Peek())
@@ -1275,7 +1302,7 @@ func (p *parser) parseQuantifiedExpr(some bool) (Expr, error) {
 	if err != nil {
 		return nil, err
 	}
-	return QuantifiedExpr{Some: some, Var: varName, Domain: domain, Satisfies: satisfies}, nil
+	return QuantifiedExpr{Some: some, Bindings: bindings, Satisfies: satisfies}, nil
 }
 
 // parseIfExpr parses "if (cond) then thenExpr else elseExpr".
@@ -1596,15 +1623,14 @@ func (p *parser) parseItemType() (NodeTest, error) {
 			return nil, fmt.Errorf("%w: '(' after 'function' but got %s", ErrExpectedToken, p.lexer.Peek())
 		}
 		p.lexer.Next()
-		if p.lexer.Peek().Type == TokenStar {
+		// Consume balanced content: function(*), function(), or function(params) as ReturnType
+		p.skipBalancedParens()
+		// Check for "as ReturnType" after the closing paren
+		if p.lexer.Peek().Type == TokenAs {
 			p.lexer.Next()
-			if err := p.expectToken(TokenRParen); err != nil {
-				return nil, fmt.Errorf("expected ')' after function(*")
+			if _, err := p.parseSequenceType(); err != nil {
+				return nil, err
 			}
-			return FunctionTest{}, nil
-		}
-		if err := p.expectToken(TokenRParen); err != nil {
-			return nil, fmt.Errorf("expected ')' after function(")
 		}
 		return FunctionTest{}, nil
 	}
@@ -1615,12 +1641,7 @@ func (p *parser) parseItemType() (NodeTest, error) {
 			return nil, fmt.Errorf("%w: '(' after 'map' but got %s", ErrExpectedToken, p.lexer.Peek())
 		}
 		p.lexer.Next()
-		if p.lexer.Peek().Type == TokenStar {
-			p.lexer.Next()
-		}
-		if err := p.expectToken(TokenRParen); err != nil {
-			return nil, fmt.Errorf("expected ')' after map(")
-		}
+		p.skipBalancedParens()
 		return MapTest{}, nil
 	}
 
@@ -1630,12 +1651,7 @@ func (p *parser) parseItemType() (NodeTest, error) {
 			return nil, fmt.Errorf("%w: '(' after 'array' but got %s", ErrExpectedToken, p.lexer.Peek())
 		}
 		p.lexer.Next()
-		if p.lexer.Peek().Type == TokenStar {
-			p.lexer.Next()
-		}
-		if err := p.expectToken(TokenRParen); err != nil {
-			return nil, fmt.Errorf("expected ')' after array(")
-		}
+		p.skipBalancedParens()
 		return ArrayTest{}, nil
 	}
 
@@ -1709,6 +1725,23 @@ func (p *parser) expectToken(expected TokenType) error {
 	return nil
 }
 
+// skipBalancedParens consumes tokens until the matching ')' is found,
+// handling nested parentheses. The opening '(' must already be consumed.
+func (p *parser) skipBalancedParens() {
+	depth := 1
+	for depth > 0 {
+		tok := p.lexer.Next()
+		switch tok.Type {
+		case TokenLParen:
+			depth++
+		case TokenRParen:
+			depth--
+		case TokenEOF:
+			return
+		}
+	}
+}
+
 // looksLikeStep returns true if the next token(s) look like the start of a location step.
 func (p *parser) looksLikeStep() bool {
 	tok := p.lexer.Peek()
@@ -1759,6 +1792,9 @@ func (p *parser) looksLikeStep() bool {
 			p.lexer.Backup() // prefix
 			return true
 		}
+		if next.Type == TokenHash {
+			return false // named function ref: name#arity
+		}
 		return true // plain name test
 	}
 	return false
@@ -1774,4 +1810,8 @@ func isValueComp(t TokenType) bool {
 	return t == TokenEq || t == TokenNe ||
 		t == TokenLt || t == TokenLe ||
 		t == TokenGt || t == TokenGe
+}
+
+func isNodeComp(t TokenType) bool {
+	return t == TokenIs || t == TokenNodePre || t == TokenNodeFol
 }

@@ -1,7 +1,10 @@
 package xpath3
 
 import (
+	"fmt"
 	"strings"
+
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
 // evalGeneralComparison implements general comparison (= != < <= > >=).
@@ -54,6 +57,55 @@ func evalValueComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
 		return nil, err
 	}
 	return SingleBoolean(result), nil
+}
+
+func evalNodeComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
+	left, err := eval(ec, e.Left)
+	if err != nil {
+		return nil, err
+	}
+	right, err := eval(ec, e.Right)
+	if err != nil {
+		return nil, err
+	}
+	// Empty sequence yields empty sequence
+	if len(left) == 0 || len(right) == 0 {
+		return nil, nil
+	}
+	if len(left) > 1 || len(right) > 1 {
+		return nil, &XPathError{Code: "XPTY0004", Message: "node comparison requires singletons"}
+	}
+	ln, ok := left[0].(NodeItem)
+	if !ok {
+		return nil, &XPathError{Code: "XPTY0004", Message: "node comparison requires node operands"}
+	}
+	rn, ok := right[0].(NodeItem)
+	if !ok {
+		return nil, &XPathError{Code: "XPTY0004", Message: "node comparison requires node operands"}
+	}
+	switch e.Op {
+	case TokenIs:
+		return SingleBoolean(ln.Node == rn.Node), nil
+	case TokenNodePre:
+		lp := ec.docOrder.Position(ln.Node)
+		rp := ec.docOrder.Position(rn.Node)
+		if lp < 0 || rp < 0 {
+			ec.docOrder.BuildFrom(ixpath.DocumentRoot(ln.Node))
+			lp = ec.docOrder.Position(ln.Node)
+			rp = ec.docOrder.Position(rn.Node)
+		}
+		return SingleBoolean(lp < rp), nil
+	case TokenNodeFol:
+		lp := ec.docOrder.Position(ln.Node)
+		rp := ec.docOrder.Position(rn.Node)
+		if lp < 0 || rp < 0 {
+			ec.docOrder.BuildFrom(ixpath.DocumentRoot(ln.Node))
+			lp = ec.docOrder.Position(ln.Node)
+			rp = ec.docOrder.Position(rn.Node)
+		}
+		return SingleBoolean(lp > rp), nil
+	}
+	return nil, fmt.Errorf("%w: %s", ErrUnsupportedBinaryOp, e.Op)
 }
 
 // GeneralCompare performs a general comparison between two sequences.

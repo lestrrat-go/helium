@@ -97,6 +97,7 @@ var operatorKeywords = map[string]TokenType{
 	"descending": TokenDescending,
 	"stable":     TokenStable,
 	"of":         TokenOf,
+	"is":         TokenIs,
 }
 
 // alwaysKeywords are recognized regardless of context because they appear
@@ -184,10 +185,7 @@ func (l *lexer) tokenize() error {
 		case r == '<':
 			l.advanceRune(r)
 			if l.pos < len(l.input) && l.input[l.pos] == '<' {
-				l.emit(TokenLess, "<")
-				// << is node comparison — emit two separate tokens
-				// for now, parser handles node comparison at a higher level
-				l.emit(TokenLess, "<")
+				l.emit(TokenNodePre, "<<")
 				l.pos++
 			} else if l.pos < len(l.input) && l.input[l.pos] == '=' {
 				l.emit(TokenLessEq, "<=")
@@ -198,8 +196,7 @@ func (l *lexer) tokenize() error {
 		case r == '>':
 			l.advanceRune(r)
 			if l.pos < len(l.input) && l.input[l.pos] == '>' {
-				l.emit(TokenGreater, ">")
-				l.emit(TokenGreater, ">")
+				l.emit(TokenNodeFol, ">>")
 				l.pos++
 			} else if l.pos < len(l.input) && l.input[l.pos] == '=' {
 				l.emit(TokenGreaterEq, ">=")
@@ -358,6 +355,25 @@ func (l *lexer) scanNumber() {
 // Colon handling is done in the main tokenize loop, not here.
 func (l *lexer) scanNameOrKeyword() {
 	name := l.scanNCName()
+
+	// URIQualifiedName: Q{uri}local
+	if name == "Q" && l.pos < len(l.input) && l.input[l.pos] == '{' {
+		l.pos++ // consume '{'
+		braceStart := l.pos
+		for l.pos < len(l.input) && l.input[l.pos] != '}' {
+			l.pos++
+		}
+		if l.pos >= len(l.input) {
+			// Unterminated — emit what we have; parser will error
+			l.emit(TokenName, name)
+			return
+		}
+		uri := l.input[braceStart:l.pos]
+		l.pos++ // consume '}'
+		local := l.scanNCName()
+		l.emit(TokenName, "Q{"+uri+"}"+local)
+		return
+	}
 
 	// Disambiguate operator keywords from names.
 	// Per XPath spec: keywords are operators ONLY when preceded by
