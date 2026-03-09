@@ -549,6 +549,12 @@ func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	if len(left) == 0 || len(right) == 0 {
 		return nil, nil // empty sequence
 	}
+	if len(left) > 1 {
+		return nil, &XPathError{Code: "XPTY0004", Message: "arithmetic operand must be a single item"}
+	}
+	if len(right) > 1 {
+		return nil, &XPathError{Code: "XPTY0004", Message: "arithmetic operand must be a single item"}
+	}
 	la, err := AtomizeItem(left[0])
 	if err != nil {
 		return nil, err
