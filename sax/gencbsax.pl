@@ -48,6 +48,7 @@ print $out <<EOM;
 package sax
 
 import (
+\t"context"
 \t"errors"
 
 \t"github.com/lestrrat-go/helium/enum"

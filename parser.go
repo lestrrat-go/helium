@@ -11,19 +11,17 @@ import (
 	"github.com/lestrrat-go/pdebug"
 )
 
-// ParserStopper is implemented by the parser context passed as sax.Context
-// to SAX callbacks. SAX handlers can type-assert the context to this
-// interface and call StopParser to abort parsing early without error.
-type ParserStopper interface {
-	StopParser()
-}
+type stopFuncKey struct{}
 
 // StopParser tells the parser to stop at the next opportunity. Call this
 // from any SAX callback to abort parsing early. The parse functions will
 // return the partial document built so far with a nil error.
-func StopParser(ctx sax.Context) {
-	if s, ok := ctx.(ParserStopper); ok {
-		s.StopParser()
+func StopParser(ctx context.Context) {
+	if ctx == nil {
+		return
+	}
+	if fn, _ := ctx.Value(stopFuncKey{}).(func()); fn != nil {
+		fn()
 	}
 }
 
@@ -51,12 +49,15 @@ func NewParser() *Parser {
 }
 
 func (p *Parser) Parse(ctx context.Context, b []byte) (*Document, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("=== START Parser.Parse ===")
 		defer g.IRelease("=== END Parser.Parse ===")
 	}
 
-	pctx := &parserCtx{goCtx: ctx, rawInput: b, baseURI: p.baseURI}
+	pctx := &parserCtx{rawInput: b, baseURI: p.baseURI}
 	if err := pctx.init(p, bytes.NewReader(b)); err != nil {
 		return nil, err
 	}
@@ -69,7 +70,7 @@ func (p *Parser) Parse(ctx context.Context, b []byte) (*Document, error) {
 		}
 	}()
 
-	if err := pctx.parseDocument(); err != nil {
+	if err := pctx.parseDocument(ctx); err != nil {
 		if errors.Is(err, errParserStopped) {
 			return pctx.doc, nil
 		}
@@ -102,12 +103,15 @@ func ParseReader(ctx context.Context, r io.Reader) (*Document, error) {
 // This is identical to Parse but reads from a stream instead of a byte slice.
 // EBCDIC encoding detection is not supported when parsing from a reader.
 func (p *Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("=== START Parser.ParseReader ===")
 		defer g.IRelease("=== END Parser.ParseReader ===")
 	}
 
-	pctx := &parserCtx{goCtx: ctx, baseURI: p.baseURI}
+	pctx := &parserCtx{baseURI: p.baseURI}
 	if err := pctx.init(p, r); err != nil {
 		return nil, err
 	}
@@ -119,7 +123,7 @@ func (p *Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error
 		}
 	}()
 
-	if err := pctx.parseDocument(); err != nil {
+	if err := pctx.parseDocument(ctx); err != nil {
 		if errors.Is(err, errParserStopped) {
 			return pctx.doc, nil
 		}
@@ -191,6 +195,9 @@ func ParseInNodeContext(ctx context.Context, node Node, data []byte) (Node, erro
 // (siblings linked via NextSibling). The returned nodes are not attached
 // to any parent.
 func (p *Parser) ParseInNodeContext(ctx context.Context, node Node, data []byte) (Node, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("=== START Parser.ParseInNodeContext ===")
 		defer g.IRelease("=== END Parser.ParseInNodeContext ===")
@@ -223,7 +230,7 @@ found:
 		doc = NewDocument("1.0", "", StandaloneImplicitNo)
 	}
 
-	newctx := &parserCtx{goCtx: ctx}
+	newctx := &parserCtx{}
 	if err := newctx.init(p, bytes.NewReader(data)); err != nil {
 		return nil, err
 	}
@@ -270,8 +277,13 @@ found:
 	if err := newctx.switchEncoding(); err != nil {
 		return nil, err
 	}
-	if err := newctx.parseContent(); err != nil {
-		return nil, err
+	innerCtx := withParserCtx(ctx, newctx)
+	innerCtx = sax.SetDocumentLocatorValue(innerCtx, newctx)
+	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
+	if err := newctx.parseContent(innerCtx); err != nil {
+		if !errors.Is(err, errParserStopped) {
+			return nil, err
+		}
 	}
 
 	// Extract children from pseudoroot.

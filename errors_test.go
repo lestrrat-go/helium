@@ -1,6 +1,7 @@
 package helium_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -95,7 +96,7 @@ func TestErrParseErrorWarningLevel(t *testing.T) {
 <root>&undefined;</root>`
 
 	s := sax.New()
-	s.SetOnWarning(sax.WarningFunc(func(_ sax.Context, err error) error {
+	s.SetOnWarning(sax.WarningFunc(func(_ context.Context, err error) error {
 		return errors.New("warning escalated")
 	}))
 
@@ -134,7 +135,7 @@ func TestParseNoError(t *testing.T) {
 		t.Parallel()
 		var called atomic.Int32
 		s := sax.New()
-		s.SetOnError(sax.ErrorFunc(func(_ sax.Context, err error) error {
+		s.SetOnError(sax.ErrorFunc(func(_ context.Context, err error) error {
 			called.Add(1)
 			return nil
 		}))
@@ -149,7 +150,7 @@ func TestParseNoError(t *testing.T) {
 		t.Parallel()
 		var called atomic.Int32
 		s := sax.New()
-		s.SetOnError(sax.ErrorFunc(func(_ sax.Context, err error) error {
+		s.SetOnError(sax.ErrorFunc(func(_ context.Context, err error) error {
 			called.Add(1)
 			return nil
 		}))
@@ -172,7 +173,7 @@ func TestWarningLocationInfo(t *testing.T) {
 		t.Parallel()
 		handlerErr := fmt.Errorf("warning escalated")
 		s := sax.New()
-		s.SetOnWarning(sax.WarningFunc(func(_ sax.Context, err error) error {
+		s.SetOnWarning(sax.WarningFunc(func(_ context.Context, err error) error {
 			return handlerErr
 		}))
 
@@ -191,7 +192,7 @@ func TestWarningLocationInfo(t *testing.T) {
 		t.Parallel()
 		var warnings []string
 		s := sax.New()
-		s.SetOnWarning(sax.WarningFunc(func(_ sax.Context, err error) error {
+		s.SetOnWarning(sax.WarningFunc(func(_ context.Context, err error) error {
 			warnings = append(warnings, err.Error())
 			return nil
 		}))
@@ -208,7 +209,7 @@ func TestWarningLocationInfo(t *testing.T) {
 		t.Parallel()
 		var called atomic.Int32
 		s := sax.New()
-		s.SetOnWarning(sax.WarningFunc(func(_ sax.Context, err error) error {
+		s.SetOnWarning(sax.WarningFunc(func(_ context.Context, err error) error {
 			called.Add(1)
 			return nil
 		}))

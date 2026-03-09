@@ -2,6 +2,7 @@ package helium_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -20,11 +21,11 @@ import (
 func newEventEmitter(out io.Writer) sax.SAX2Handler {
 	entities := map[string]*helium.Entity{}
 	s := sax.New()
-	s.SetOnSetDocumentLocator(sax.SetDocumentLocatorFunc(func(_ sax.Context, loc sax.DocumentLocator) error {
+	s.SetOnSetDocumentLocator(sax.SetDocumentLocatorFunc(func(_ context.Context, loc sax.DocumentLocator) error {
 		_, _ = fmt.Fprintf(out, "SAX.SetDocumentLocator()\n")
 		return nil
 	}))
-	s.SetOnAttributeDecl(sax.AttributeDeclFunc(func(_ sax.Context, elemName string, attrName string, typ enum.AttributeType, deftype enum.AttributeDefault, defvalue string, enum sax.Enumeration) error {
+	s.SetOnAttributeDecl(sax.AttributeDeclFunc(func(_ context.Context, elemName string, attrName string, typ enum.AttributeType, deftype enum.AttributeDefault, defvalue string, enum sax.Enumeration) error {
 		// eek, defvalue is an interface, and interface == nil is only true
 		// if the interface has no value AND not type, so.. hmmm.
 		if defvalue == "" {
@@ -33,15 +34,15 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.AttributeDecl(%s, %s, %d, %d, %s, ...)\n", elemName, attrName, typ, deftype, defvalue)
 		return nil
 	}))
-	s.SetOnInternalSubset(sax.InternalSubsetFunc(func(_ sax.Context, name, externalID, systemID string) error {
+	s.SetOnInternalSubset(sax.InternalSubsetFunc(func(_ context.Context, name, externalID, systemID string) error {
 		_, _ = fmt.Fprintf(out, "SAX.InternalSubset(%s, %s, %s)\n", name, externalID, systemID)
 		return nil
 	}))
-	s.SetOnReference(sax.ReferenceFunc(func(_ sax.Context, name string) error {
+	s.SetOnReference(sax.ReferenceFunc(func(_ context.Context, name string) error {
 		_, _ = fmt.Fprintf(out, "SAX.Reference(%s)\n", name)
 		return nil
 	}))
-	s.SetOnGetEntity(sax.GetEntityFunc(func(_ sax.Context, name string) (sax.Entity, error) {
+	s.SetOnGetEntity(sax.GetEntityFunc(func(_ context.Context, name string) (sax.Entity, error) {
 		_, _ = fmt.Fprintf(out, "SAX.ResolveEntity(%s)\n", name)
 
 		ent, ok := entities[name]
@@ -51,7 +52,7 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		return ent, nil
 	}))
 
-	s.SetOnGetParameterEntity(sax.GetParameterEntityFunc(func(_ sax.Context, name string) (sax.Entity, error) {
+	s.SetOnGetParameterEntity(sax.GetParameterEntityFunc(func(_ context.Context, name string) (sax.Entity, error) {
 		_, _ = fmt.Fprintf(out, "SAX.ResolveEntity(%s)\n", name)
 
 		ent, ok := entities[name]
@@ -61,7 +62,7 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		return ent, nil
 	}))
 
-	s.SetOnEntityDecl(sax.EntityDeclFunc(func(ctxif sax.Context, name string, typ enum.EntityType, publicID string, systemID string, notation string) error {
+	s.SetOnEntityDecl(sax.EntityDeclFunc(func(ctxif context.Context, name string, typ enum.EntityType, publicID string, systemID string, notation string) error {
 		if pdebug.Enabled {
 			g := pdebug.Marker("EntityDecl handler for sax_test.go")
 			defer g.End()
@@ -89,27 +90,27 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		}
 		return nil
 	}))
-	s.SetOnExternalSubset(sax.ExternalSubsetFunc(func(_ sax.Context, name, externalID, systemID string) error {
+	s.SetOnExternalSubset(sax.ExternalSubsetFunc(func(_ context.Context, name, externalID, systemID string) error {
 		_, _ = fmt.Fprintf(out, "SAX.ExternalSubset(%s, %s, %s)\n", name, externalID, systemID)
 		return nil
 	}))
-	s.SetOnElementDecl(sax.ElementDeclFunc(func(_ sax.Context, name string, typ enum.ElementType, content sax.ElementContent) error {
+	s.SetOnElementDecl(sax.ElementDeclFunc(func(_ context.Context, name string, typ enum.ElementType, content sax.ElementContent) error {
 		_, _ = fmt.Fprintf(out, "SAX.ElementDecl(%s, %d, ...)\n", name, typ)
 		return nil
 	}))
-	s.SetOnStartDocument(sax.StartDocumentFunc(func(_ sax.Context) error {
+	s.SetOnStartDocument(sax.StartDocumentFunc(func(_ context.Context) error {
 		_, _ = fmt.Fprintf(out, "SAX.StartDocument()\n")
 		return nil
 	}))
-	s.SetOnEndDocument(sax.EndDocumentFunc(func(_ sax.Context) error {
+	s.SetOnEndDocument(sax.EndDocumentFunc(func(_ context.Context) error {
 		_, _ = fmt.Fprintf(out, "SAX.EndDocument()\n")
 		return nil
 	}))
-	s.SetOnComment(sax.CommentFunc(func(_ sax.Context, data []byte) error {
+	s.SetOnComment(sax.CommentFunc(func(_ context.Context, data []byte) error {
 		_, _ = fmt.Fprintf(out, "SAX.Comment(%s)\n", data)
 		return nil
 	}))
-	charHandler := func(name string, _ sax.Context, data []byte) error {
+	charHandler := func(name string, _ context.Context, data []byte) error {
 		var output string
 		if len(data) > 30 {
 			output = string(data[:30])
@@ -120,13 +121,13 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 		_, _ = fmt.Fprintf(out, "SAX.%s(%s, %d)\n", name, output, len(data))
 		return nil
 	}
-	s.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(func(ctx sax.Context, data []byte) error {
+	s.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(func(ctx context.Context, data []byte) error {
 		return charHandler("IgnorableWhitespace", ctx, data)
 	}))
-	s.SetOnCharacters(sax.CharactersFunc(func(ctx sax.Context, data []byte) error {
+	s.SetOnCharacters(sax.CharactersFunc(func(ctx context.Context, data []byte) error {
 		return charHandler("Characters", ctx, data)
 	}))
-	s.SetOnStartElementNS(sax.StartElementNSFunc(func(_ sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	s.SetOnStartElementNS(sax.StartElementNSFunc(func(_ context.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		_, _ = fmt.Fprintf(out, "SAX.StartElementNS(%s, ", localname)
 
 		if prefix != "" {
@@ -178,7 +179,7 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 
 		return nil
 	}))
-	s.SetOnEndElementNS(sax.EndElementNSFunc(func(_ sax.Context, localname, prefix, uri string) error {
+	s.SetOnEndElementNS(sax.EndElementNSFunc(func(_ context.Context, localname, prefix, uri string) error {
 		_, _ = fmt.Fprintf(out, "SAX.EndElementNS(%s, ", localname)
 
 		if prefix != "" {
@@ -203,18 +204,18 @@ func TestDocumentLocatorIDs(t *testing.T) {
 	var gotPublicID, gotSystemID string
 
 	s := sax.New()
-	s.SetOnSetDocumentLocator(sax.SetDocumentLocatorFunc(func(_ sax.Context, loc sax.DocumentLocator) error {
+	s.SetOnSetDocumentLocator(sax.SetDocumentLocatorFunc(func(_ context.Context, loc sax.DocumentLocator) error {
 		gotPublicID = loc.GetPublicID()
 		gotSystemID = loc.GetSystemID()
 		return nil
 	}))
-	s.SetOnStartDocument(sax.StartDocumentFunc(func(_ sax.Context) error { return nil }))
-	s.SetOnEndDocument(sax.EndDocumentFunc(func(_ sax.Context) error { return nil }))
-	s.SetOnStartElementNS(sax.StartElementNSFunc(func(_ sax.Context, _, _, _ string, _ []sax.Namespace, _ []sax.Attribute) error {
+	s.SetOnStartDocument(sax.StartDocumentFunc(func(_ context.Context) error { return nil }))
+	s.SetOnEndDocument(sax.EndDocumentFunc(func(_ context.Context) error { return nil }))
+	s.SetOnStartElementNS(sax.StartElementNSFunc(func(_ context.Context, _, _, _ string, _ []sax.Namespace, _ []sax.Attribute) error {
 		return nil
 	}))
-	s.SetOnEndElementNS(sax.EndElementNSFunc(func(_ sax.Context, _, _, _ string) error { return nil }))
-	s.SetOnCharacters(sax.CharactersFunc(func(_ sax.Context, _ []byte) error { return nil }))
+	s.SetOnEndElementNS(sax.EndElementNSFunc(func(_ context.Context, _, _, _ string) error { return nil }))
+	s.SetOnCharacters(sax.CharactersFunc(func(_ context.Context, _ []byte) error { return nil }))
 
 	p := helium.NewParser()
 	p.SetSAXHandler(s)

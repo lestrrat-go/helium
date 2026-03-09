@@ -2,6 +2,7 @@
 package sax
 
 import (
+	"context"
 	"errors"
 
 	"github.com/lestrrat-go/helium/enum"
@@ -17,265 +18,265 @@ var ErrHandlerUnspecified = errors.New("handler unspecified")
 // helium's expected SAX2 API.
 // (libxml2: xmlSAXHandler / xmlSAXHandlerPtr)
 type SAX2Handler interface {
-	AttributeDecl(ctx Context, elem string, fullname string, typ enum.AttributeType, def enum.AttributeDefault, defaultValue string, tree Enumeration) error
-	CDataBlock(ctx Context, value []byte) error
-	Characters(ctx Context, ch []byte) error
-	Comment(ctx Context, value []byte) error
-	ElementDecl(ctx Context, name string, typ enum.ElementType, content ElementContent) error
-	EndDocument(ctx Context) error
-	EndElementNS(ctx Context, localname string, prefix string, uri string) error
-	EntityDecl(ctx Context, name string, typ enum.EntityType, publicID string, systemID string, content string) error
-	Error(ctx Context, err error) error
-	ExternalSubset(ctx Context, name string, externalID string, systemID string) error
-	GetEntity(ctx Context, name string) (Entity, error)
-	GetParameterEntity(ctx Context, name string) (Entity, error)
-	HasExternalSubset(ctx Context) (bool, error)
-	HasInternalSubset(ctx Context) (bool, error)
-	IgnorableWhitespace(ctx Context, ch []byte) error
-	InternalSubset(ctx Context, name string, externalID string, systemID string) error
-	IsStandalone(ctx Context) (bool, error)
-	NotationDecl(ctx Context, name string, publicID string, systemID string) error
-	ProcessingInstruction(ctx Context, target string, data string) error
-	Reference(ctx Context, name string) error
-	ResolveEntity(ctx Context, publicID string, systemID string) (ParseInput, error)
-	SetDocumentLocator(ctx Context, locator DocumentLocator) error
-	StartDocument(ctx Context) error
-	StartElementNS(ctx Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error
-	UnparsedEntityDecl(ctx Context, name string, publicID string, systemID string, notationName string) error
-	Warning(ctx Context, err error) error
+	AttributeDecl(ctx context.Context, elem string, fullname string, typ enum.AttributeType, def enum.AttributeDefault, defaultValue string, tree Enumeration) error
+	CDataBlock(ctx context.Context, value []byte) error
+	Characters(ctx context.Context, ch []byte) error
+	Comment(ctx context.Context, value []byte) error
+	ElementDecl(ctx context.Context, name string, typ enum.ElementType, content ElementContent) error
+	EndDocument(ctx context.Context) error
+	EndElementNS(ctx context.Context, localname string, prefix string, uri string) error
+	EntityDecl(ctx context.Context, name string, typ enum.EntityType, publicID string, systemID string, content string) error
+	Error(ctx context.Context, err error) error
+	ExternalSubset(ctx context.Context, name string, externalID string, systemID string) error
+	GetEntity(ctx context.Context, name string) (Entity, error)
+	GetParameterEntity(ctx context.Context, name string) (Entity, error)
+	HasExternalSubset(ctx context.Context) (bool, error)
+	HasInternalSubset(ctx context.Context) (bool, error)
+	IgnorableWhitespace(ctx context.Context, ch []byte) error
+	InternalSubset(ctx context.Context, name string, externalID string, systemID string) error
+	IsStandalone(ctx context.Context) (bool, error)
+	NotationDecl(ctx context.Context, name string, publicID string, systemID string) error
+	ProcessingInstruction(ctx context.Context, target string, data string) error
+	Reference(ctx context.Context, name string) error
+	ResolveEntity(ctx context.Context, publicID string, systemID string) (ParseInput, error)
+	SetDocumentLocator(ctx context.Context, locator DocumentLocator) error
+	StartDocument(ctx context.Context) error
+	StartElementNS(ctx context.Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error
+	UnparsedEntityDecl(ctx context.Context, name string, publicID string, systemID string, notationName string) error
+	Warning(ctx context.Context, err error) error
 }
 
 // AttributeDecl is the interface for the AttributeDecl handler.
 type AttributeDecl interface {
-	Handle(ctx Context, elem string, fullname string, typ enum.AttributeType, def enum.AttributeDefault, defaultValue string, tree Enumeration) error
+	Handle(ctx context.Context, elem string, fullname string, typ enum.AttributeType, def enum.AttributeDefault, defaultValue string, tree Enumeration) error
 }
 
-func (f AttributeDeclFunc) Handle(ctx Context, elem string, fullname string, typ enum.AttributeType, def enum.AttributeDefault, defaultValue string, tree Enumeration) error {
+func (f AttributeDeclFunc) Handle(ctx context.Context, elem string, fullname string, typ enum.AttributeType, def enum.AttributeDefault, defaultValue string, tree Enumeration) error {
 	return f(ctx, elem, fullname, typ, def, defaultValue, tree)
 }
 
 // CDataBlock is the interface for the CDataBlock handler.
 type CDataBlock interface {
-	Handle(ctx Context, value []byte) error
+	Handle(ctx context.Context, value []byte) error
 }
 
-func (f CDataBlockFunc) Handle(ctx Context, value []byte) error {
+func (f CDataBlockFunc) Handle(ctx context.Context, value []byte) error {
 	return f(ctx, value)
 }
 
 // Characters is the interface for the Characters handler.
 type Characters interface {
-	Handle(ctx Context, ch []byte) error
+	Handle(ctx context.Context, ch []byte) error
 }
 
-func (f CharactersFunc) Handle(ctx Context, ch []byte) error {
+func (f CharactersFunc) Handle(ctx context.Context, ch []byte) error {
 	return f(ctx, ch)
 }
 
 // Comment is the interface for the Comment handler.
 type Comment interface {
-	Handle(ctx Context, value []byte) error
+	Handle(ctx context.Context, value []byte) error
 }
 
-func (f CommentFunc) Handle(ctx Context, value []byte) error {
+func (f CommentFunc) Handle(ctx context.Context, value []byte) error {
 	return f(ctx, value)
 }
 
 // ElementDecl is the interface for the ElementDecl handler.
 type ElementDecl interface {
-	Handle(ctx Context, name string, typ enum.ElementType, content ElementContent) error
+	Handle(ctx context.Context, name string, typ enum.ElementType, content ElementContent) error
 }
 
-func (f ElementDeclFunc) Handle(ctx Context, name string, typ enum.ElementType, content ElementContent) error {
+func (f ElementDeclFunc) Handle(ctx context.Context, name string, typ enum.ElementType, content ElementContent) error {
 	return f(ctx, name, typ, content)
 }
 
 // EndDocument is the interface for the EndDocument handler.
 type EndDocument interface {
-	Handle(ctx Context) error
+	Handle(ctx context.Context) error
 }
 
-func (f EndDocumentFunc) Handle(ctx Context) error {
+func (f EndDocumentFunc) Handle(ctx context.Context) error {
 	return f(ctx)
 }
 
 // EndElementNS is the interface for the EndElementNS handler.
 type EndElementNS interface {
-	Handle(ctx Context, localname string, prefix string, uri string) error
+	Handle(ctx context.Context, localname string, prefix string, uri string) error
 }
 
-func (f EndElementNSFunc) Handle(ctx Context, localname string, prefix string, uri string) error {
+func (f EndElementNSFunc) Handle(ctx context.Context, localname string, prefix string, uri string) error {
 	return f(ctx, localname, prefix, uri)
 }
 
 // EntityDecl is the interface for the EntityDecl handler.
 type EntityDecl interface {
-	Handle(ctx Context, name string, typ enum.EntityType, publicID string, systemID string, content string) error
+	Handle(ctx context.Context, name string, typ enum.EntityType, publicID string, systemID string, content string) error
 }
 
-func (f EntityDeclFunc) Handle(ctx Context, name string, typ enum.EntityType, publicID string, systemID string, content string) error {
+func (f EntityDeclFunc) Handle(ctx context.Context, name string, typ enum.EntityType, publicID string, systemID string, content string) error {
 	return f(ctx, name, typ, publicID, systemID, content)
 }
 
 // Error is the interface for the Error handler.
 type Error interface {
-	Handle(ctx Context, err error) error
+	Handle(ctx context.Context, err error) error
 }
 
-func (f ErrorFunc) Handle(ctx Context, err error) error {
+func (f ErrorFunc) Handle(ctx context.Context, err error) error {
 	return f(ctx, err)
 }
 
 // ExternalSubset is the interface for the ExternalSubset handler.
 type ExternalSubset interface {
-	Handle(ctx Context, name string, externalID string, systemID string) error
+	Handle(ctx context.Context, name string, externalID string, systemID string) error
 }
 
-func (f ExternalSubsetFunc) Handle(ctx Context, name string, externalID string, systemID string) error {
+func (f ExternalSubsetFunc) Handle(ctx context.Context, name string, externalID string, systemID string) error {
 	return f(ctx, name, externalID, systemID)
 }
 
 // GetEntity is the interface for the GetEntity handler.
 type GetEntity interface {
-	Handle(ctx Context, name string) (Entity, error)
+	Handle(ctx context.Context, name string) (Entity, error)
 }
 
-func (f GetEntityFunc) Handle(ctx Context, name string) (Entity, error) {
+func (f GetEntityFunc) Handle(ctx context.Context, name string) (Entity, error) {
 	return f(ctx, name)
 }
 
 // GetParameterEntity is the interface for the GetParameterEntity handler.
 type GetParameterEntity interface {
-	Handle(ctx Context, name string) (Entity, error)
+	Handle(ctx context.Context, name string) (Entity, error)
 }
 
-func (f GetParameterEntityFunc) Handle(ctx Context, name string) (Entity, error) {
+func (f GetParameterEntityFunc) Handle(ctx context.Context, name string) (Entity, error) {
 	return f(ctx, name)
 }
 
 // HasExternalSubset is the interface for the HasExternalSubset handler.
 type HasExternalSubset interface {
-	Handle(ctx Context) (bool, error)
+	Handle(ctx context.Context) (bool, error)
 }
 
-func (f HasExternalSubsetFunc) Handle(ctx Context) (bool, error) {
+func (f HasExternalSubsetFunc) Handle(ctx context.Context) (bool, error) {
 	return f(ctx)
 }
 
 // HasInternalSubset is the interface for the HasInternalSubset handler.
 type HasInternalSubset interface {
-	Handle(ctx Context) (bool, error)
+	Handle(ctx context.Context) (bool, error)
 }
 
-func (f HasInternalSubsetFunc) Handle(ctx Context) (bool, error) {
+func (f HasInternalSubsetFunc) Handle(ctx context.Context) (bool, error) {
 	return f(ctx)
 }
 
 // IgnorableWhitespace is the interface for the IgnorableWhitespace handler.
 type IgnorableWhitespace interface {
-	Handle(ctx Context, ch []byte) error
+	Handle(ctx context.Context, ch []byte) error
 }
 
-func (f IgnorableWhitespaceFunc) Handle(ctx Context, ch []byte) error {
+func (f IgnorableWhitespaceFunc) Handle(ctx context.Context, ch []byte) error {
 	return f(ctx, ch)
 }
 
 // InternalSubset is the interface for the InternalSubset handler.
 type InternalSubset interface {
-	Handle(ctx Context, name string, externalID string, systemID string) error
+	Handle(ctx context.Context, name string, externalID string, systemID string) error
 }
 
-func (f InternalSubsetFunc) Handle(ctx Context, name string, externalID string, systemID string) error {
+func (f InternalSubsetFunc) Handle(ctx context.Context, name string, externalID string, systemID string) error {
 	return f(ctx, name, externalID, systemID)
 }
 
 // IsStandalone is the interface for the IsStandalone handler.
 type IsStandalone interface {
-	Handle(ctx Context) (bool, error)
+	Handle(ctx context.Context) (bool, error)
 }
 
-func (f IsStandaloneFunc) Handle(ctx Context) (bool, error) {
+func (f IsStandaloneFunc) Handle(ctx context.Context) (bool, error) {
 	return f(ctx)
 }
 
 // NotationDecl is the interface for the NotationDecl handler.
 type NotationDecl interface {
-	Handle(ctx Context, name string, publicID string, systemID string) error
+	Handle(ctx context.Context, name string, publicID string, systemID string) error
 }
 
-func (f NotationDeclFunc) Handle(ctx Context, name string, publicID string, systemID string) error {
+func (f NotationDeclFunc) Handle(ctx context.Context, name string, publicID string, systemID string) error {
 	return f(ctx, name, publicID, systemID)
 }
 
 // ProcessingInstruction is the interface for the ProcessingInstruction handler.
 type ProcessingInstruction interface {
-	Handle(ctx Context, target string, data string) error
+	Handle(ctx context.Context, target string, data string) error
 }
 
-func (f ProcessingInstructionFunc) Handle(ctx Context, target string, data string) error {
+func (f ProcessingInstructionFunc) Handle(ctx context.Context, target string, data string) error {
 	return f(ctx, target, data)
 }
 
 // Reference is the interface for the Reference handler.
 type Reference interface {
-	Handle(ctx Context, name string) error
+	Handle(ctx context.Context, name string) error
 }
 
-func (f ReferenceFunc) Handle(ctx Context, name string) error {
+func (f ReferenceFunc) Handle(ctx context.Context, name string) error {
 	return f(ctx, name)
 }
 
 // ResolveEntity is the interface for the ResolveEntity handler.
 type ResolveEntity interface {
-	Handle(ctx Context, publicID string, systemID string) (ParseInput, error)
+	Handle(ctx context.Context, publicID string, systemID string) (ParseInput, error)
 }
 
-func (f ResolveEntityFunc) Handle(ctx Context, publicID string, systemID string) (ParseInput, error) {
+func (f ResolveEntityFunc) Handle(ctx context.Context, publicID string, systemID string) (ParseInput, error) {
 	return f(ctx, publicID, systemID)
 }
 
 // SetDocumentLocator is the interface for the SetDocumentLocator handler.
 type SetDocumentLocator interface {
-	Handle(ctx Context, locator DocumentLocator) error
+	Handle(ctx context.Context, locator DocumentLocator) error
 }
 
-func (f SetDocumentLocatorFunc) Handle(ctx Context, locator DocumentLocator) error {
+func (f SetDocumentLocatorFunc) Handle(ctx context.Context, locator DocumentLocator) error {
 	return f(ctx, locator)
 }
 
 // StartDocument is the interface for the StartDocument handler.
 type StartDocument interface {
-	Handle(ctx Context) error
+	Handle(ctx context.Context) error
 }
 
-func (f StartDocumentFunc) Handle(ctx Context) error {
+func (f StartDocumentFunc) Handle(ctx context.Context) error {
 	return f(ctx)
 }
 
 // StartElementNS is the interface for the StartElementNS handler.
 type StartElementNS interface {
-	Handle(ctx Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error
+	Handle(ctx context.Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error
 }
 
-func (f StartElementNSFunc) Handle(ctx Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error {
+func (f StartElementNSFunc) Handle(ctx context.Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error {
 	return f(ctx, localname, prefix, uri, namespaces, attrs)
 }
 
 // UnparsedEntityDecl is the interface for the UnparsedEntityDecl handler.
 type UnparsedEntityDecl interface {
-	Handle(ctx Context, name string, publicID string, systemID string, notationName string) error
+	Handle(ctx context.Context, name string, publicID string, systemID string, notationName string) error
 }
 
-func (f UnparsedEntityDeclFunc) Handle(ctx Context, name string, publicID string, systemID string, notationName string) error {
+func (f UnparsedEntityDeclFunc) Handle(ctx context.Context, name string, publicID string, systemID string, notationName string) error {
 	return f(ctx, name, publicID, systemID, notationName)
 }
 
 // Warning is the interface for the Warning handler.
 type Warning interface {
-	Handle(ctx Context, err error) error
+	Handle(ctx context.Context, err error) error
 }
 
-func (f WarningFunc) Handle(ctx Context, err error) error {
+func (f WarningFunc) Handle(ctx context.Context, err error) error {
 	return f(ctx, err)
 }
 
@@ -446,182 +447,182 @@ func (s *SAX2) SetOnWarning(h Warning) {
 	s.onWarning = h
 }
 
-func (s *SAX2) AttributeDecl(ctx Context, elem string, fullname string, typ enum.AttributeType, def enum.AttributeDefault, defaultValue string, tree Enumeration) error {
+func (s *SAX2) AttributeDecl(ctx context.Context, elem string, fullname string, typ enum.AttributeType, def enum.AttributeDefault, defaultValue string, tree Enumeration) error {
 	if h := s.onAttributeDecl; h != nil {
 		return h.Handle(ctx, elem, fullname, typ, def, defaultValue, tree)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) CDataBlock(ctx Context, value []byte) error {
+func (s *SAX2) CDataBlock(ctx context.Context, value []byte) error {
 	if h := s.onCDataBlock; h != nil {
 		return h.Handle(ctx, value)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) Characters(ctx Context, ch []byte) error {
+func (s *SAX2) Characters(ctx context.Context, ch []byte) error {
 	if h := s.onCharacters; h != nil {
 		return h.Handle(ctx, ch)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) Comment(ctx Context, value []byte) error {
+func (s *SAX2) Comment(ctx context.Context, value []byte) error {
 	if h := s.onComment; h != nil {
 		return h.Handle(ctx, value)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) ElementDecl(ctx Context, name string, typ enum.ElementType, content ElementContent) error {
+func (s *SAX2) ElementDecl(ctx context.Context, name string, typ enum.ElementType, content ElementContent) error {
 	if h := s.onElementDecl; h != nil {
 		return h.Handle(ctx, name, typ, content)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) EndDocument(ctx Context) error {
+func (s *SAX2) EndDocument(ctx context.Context) error {
 	if h := s.onEndDocument; h != nil {
 		return h.Handle(ctx)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) EndElementNS(ctx Context, localname string, prefix string, uri string) error {
+func (s *SAX2) EndElementNS(ctx context.Context, localname string, prefix string, uri string) error {
 	if h := s.onEndElementNS; h != nil {
 		return h.Handle(ctx, localname, prefix, uri)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) EntityDecl(ctx Context, name string, typ enum.EntityType, publicID string, systemID string, content string) error {
+func (s *SAX2) EntityDecl(ctx context.Context, name string, typ enum.EntityType, publicID string, systemID string, content string) error {
 	if h := s.onEntityDecl; h != nil {
 		return h.Handle(ctx, name, typ, publicID, systemID, content)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) Error(ctx Context, err error) error {
+func (s *SAX2) Error(ctx context.Context, err error) error {
 	if h := s.onError; h != nil {
 		return h.Handle(ctx, err)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) ExternalSubset(ctx Context, name string, externalID string, systemID string) error {
+func (s *SAX2) ExternalSubset(ctx context.Context, name string, externalID string, systemID string) error {
 	if h := s.onExternalSubset; h != nil {
 		return h.Handle(ctx, name, externalID, systemID)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) GetEntity(ctx Context, name string) (Entity, error) {
+func (s *SAX2) GetEntity(ctx context.Context, name string) (Entity, error) {
 	if h := s.onGetEntity; h != nil {
 		return h.Handle(ctx, name)
 	}
 	return nil, ErrHandlerUnspecified
 }
 
-func (s *SAX2) GetParameterEntity(ctx Context, name string) (Entity, error) {
+func (s *SAX2) GetParameterEntity(ctx context.Context, name string) (Entity, error) {
 	if h := s.onGetParameterEntity; h != nil {
 		return h.Handle(ctx, name)
 	}
 	return nil, ErrHandlerUnspecified
 }
 
-func (s *SAX2) HasExternalSubset(ctx Context) (bool, error) {
+func (s *SAX2) HasExternalSubset(ctx context.Context) (bool, error) {
 	if h := s.onHasExternalSubset; h != nil {
 		return h.Handle(ctx)
 	}
 	return false, ErrHandlerUnspecified
 }
 
-func (s *SAX2) HasInternalSubset(ctx Context) (bool, error) {
+func (s *SAX2) HasInternalSubset(ctx context.Context) (bool, error) {
 	if h := s.onHasInternalSubset; h != nil {
 		return h.Handle(ctx)
 	}
 	return false, ErrHandlerUnspecified
 }
 
-func (s *SAX2) IgnorableWhitespace(ctx Context, ch []byte) error {
+func (s *SAX2) IgnorableWhitespace(ctx context.Context, ch []byte) error {
 	if h := s.onIgnorableWhitespace; h != nil {
 		return h.Handle(ctx, ch)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) InternalSubset(ctx Context, name string, externalID string, systemID string) error {
+func (s *SAX2) InternalSubset(ctx context.Context, name string, externalID string, systemID string) error {
 	if h := s.onInternalSubset; h != nil {
 		return h.Handle(ctx, name, externalID, systemID)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) IsStandalone(ctx Context) (bool, error) {
+func (s *SAX2) IsStandalone(ctx context.Context) (bool, error) {
 	if h := s.onIsStandalone; h != nil {
 		return h.Handle(ctx)
 	}
 	return false, ErrHandlerUnspecified
 }
 
-func (s *SAX2) NotationDecl(ctx Context, name string, publicID string, systemID string) error {
+func (s *SAX2) NotationDecl(ctx context.Context, name string, publicID string, systemID string) error {
 	if h := s.onNotationDecl; h != nil {
 		return h.Handle(ctx, name, publicID, systemID)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) ProcessingInstruction(ctx Context, target string, data string) error {
+func (s *SAX2) ProcessingInstruction(ctx context.Context, target string, data string) error {
 	if h := s.onProcessingInstruction; h != nil {
 		return h.Handle(ctx, target, data)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) Reference(ctx Context, name string) error {
+func (s *SAX2) Reference(ctx context.Context, name string) error {
 	if h := s.onReference; h != nil {
 		return h.Handle(ctx, name)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) ResolveEntity(ctx Context, publicID string, systemID string) (ParseInput, error) {
+func (s *SAX2) ResolveEntity(ctx context.Context, publicID string, systemID string) (ParseInput, error) {
 	if h := s.onResolveEntity; h != nil {
 		return h.Handle(ctx, publicID, systemID)
 	}
 	return nil, ErrHandlerUnspecified
 }
 
-func (s *SAX2) SetDocumentLocator(ctx Context, locator DocumentLocator) error {
+func (s *SAX2) SetDocumentLocator(ctx context.Context, locator DocumentLocator) error {
 	if h := s.onSetDocumentLocator; h != nil {
 		return h.Handle(ctx, locator)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) StartDocument(ctx Context) error {
+func (s *SAX2) StartDocument(ctx context.Context) error {
 	if h := s.onStartDocument; h != nil {
 		return h.Handle(ctx)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) StartElementNS(ctx Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error {
+func (s *SAX2) StartElementNS(ctx context.Context, localname string, prefix string, uri string, namespaces []Namespace, attrs []Attribute) error {
 	if h := s.onStartElementNS; h != nil {
 		return h.Handle(ctx, localname, prefix, uri, namespaces, attrs)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) UnparsedEntityDecl(ctx Context, name string, publicID string, systemID string, notationName string) error {
+func (s *SAX2) UnparsedEntityDecl(ctx context.Context, name string, publicID string, systemID string, notationName string) error {
 	if h := s.onUnparsedEntityDecl; h != nil {
 		return h.Handle(ctx, name, publicID, systemID, notationName)
 	}
 	return ErrHandlerUnspecified
 }
 
-func (s *SAX2) Warning(ctx Context, err error) error {
+func (s *SAX2) Warning(ctx context.Context, err error) error {
 	if h := s.onWarning; h != nil {
 		return h.Handle(ctx, err)
 	}

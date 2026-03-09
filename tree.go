@@ -2,6 +2,7 @@ package helium
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"net/url"
@@ -9,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 	"github.com/lestrrat-go/strcursor"
 )
@@ -73,7 +74,7 @@ func NewTreeBuilder() *TreeBuilder {
 	return &TreeBuilder{}
 }
 
-func (t *TreeBuilder) SetDocumentLocator(ctxif sax.Context, loc sax.DocumentLocator) error {
+func (t *TreeBuilder) SetDocumentLocator(ctxif context.Context, loc sax.DocumentLocator) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.SetDocumentLocator")
 		defer g.IRelease("END tree.SetDocumentLocator")
@@ -82,26 +83,26 @@ func (t *TreeBuilder) SetDocumentLocator(ctxif sax.Context, loc sax.DocumentLoca
 	return nil
 }
 
-func (t *TreeBuilder) StartDocument(ctxif sax.Context) error {
+func (t *TreeBuilder) StartDocument(ctxif context.Context) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.StartDocument")
 		defer g.IRelease("END tree.StartDocument")
 	}
 
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 	ctx.doc = NewDocument(ctx.version, ctx.encoding, ctx.standalone)
 	ctx.doc.ids = make(map[string]*Element)
 	ctx.doc.url = ctx.baseURI
 	return nil
 }
 
-func (t *TreeBuilder) EndDocument(ctxif sax.Context) error {
+func (t *TreeBuilder) EndDocument(ctxif context.Context) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.EndDocument")
 		defer g.IRelease("END tree.EndDocument")
 	}
 
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 	if ctx.doc != nil && ctx.wellFormed {
 		ctx.doc.properties |= DocWellFormed
 		if ctx.valid {
@@ -111,12 +112,12 @@ func (t *TreeBuilder) EndDocument(ctxif sax.Context) error {
 	return nil
 }
 
-func (t *TreeBuilder) ProcessingInstruction(ctxif sax.Context, target, data string) error {
+func (t *TreeBuilder) ProcessingInstruction(ctxif context.Context, target, data string) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.ProcessingInstruction")
 		defer g.IRelease("END tree.ProcessingInstruction")
 	}
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 	doc := ctx.doc
 	pi, err := doc.CreatePI(target, data)
 	if err != nil {
@@ -216,8 +217,8 @@ func lookupAttributeDecl(doc *Document, name, prefix, elem string) *AttributeDec
 	return nil
 }
 
-func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
-	//	ctx := ctxif.(*parserCtx)
+func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+	//	ctx := getParserCtx(ctxif)
 	if pdebug.Enabled {
 		var name string
 		if prefix != "" {
@@ -229,7 +230,7 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 		defer g.IRelease("END tree.StartElement")
 	}
 
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 	doc := ctx.doc
 
 	e, err := doc.CreateElement(localname)
@@ -322,7 +323,7 @@ func (t *TreeBuilder) StartElementNS(ctxif sax.Context, localname, prefix, uri s
 	return nil
 }
 
-func (t *TreeBuilder) EndElementNS(ctxif sax.Context, localname, prefix, uri string) error {
+func (t *TreeBuilder) EndElementNS(ctxif context.Context, localname, prefix, uri string) error {
 	if pdebug.Enabled {
 		if prefix != "" {
 			pdebug.Printf("tree.EndElement: %s:%s", prefix, localname)
@@ -331,7 +332,7 @@ func (t *TreeBuilder) EndElementNS(ctxif sax.Context, localname, prefix, uri str
 		}
 	}
 
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 	cur := ctx.elem
 	if cur == nil {
 		return errors.New("no context node to end")
@@ -346,13 +347,13 @@ func (t *TreeBuilder) EndElementNS(ctxif sax.Context, localname, prefix, uri str
 	return nil
 }
 
-func (t *TreeBuilder) Characters(ctxif sax.Context, data []byte) error {
+func (t *TreeBuilder) Characters(ctxif context.Context, data []byte) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.Characters: '%s' (%v)", data, data)
 		defer g.IRelease("END tree.Characters")
 	}
 
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 	n := ctx.elem
 	if n == nil {
 		return errors.New("text content placed in wrong location")
@@ -368,13 +369,13 @@ func (t *TreeBuilder) Characters(ctxif sax.Context, data []byte) error {
 // CDataBlock mirrors xmlSAX2Text(ctxt, value, len, XML_CDATA_SECTION_NODE)
 // in libxml2's SAX2.c. Unlike text nodes, adjacent CDATA sections are NOT
 // merged — each callback creates a new CDATASection node.
-func (t *TreeBuilder) CDataBlock(ctxif sax.Context, data []byte) error {
+func (t *TreeBuilder) CDataBlock(ctxif context.Context, data []byte) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.CDATABlock")
 		defer g.IRelease("END tree.CDATABlock")
 	}
 
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 	parent := ctx.elem
 	if parent == nil {
 		return nil
@@ -392,13 +393,13 @@ func (t *TreeBuilder) CDataBlock(ctxif sax.Context, data []byte) error {
 // Comment mirrors xmlSAX2Comment in libxml2's SAX2.c, which delegates
 // parent selection to xmlSAX2AppendChild. When inside a DTD subset the
 // comment is added to the DTD, not the document.
-func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
+func (t *TreeBuilder) Comment(ctxif context.Context, data []byte) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.Comment: %s", data)
 		defer g.IRelease("END tree.Comment")
 	}
 
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 	doc := ctx.doc
 	if doc == nil {
 		return errors.New("comment placed in wrong location")
@@ -434,13 +435,13 @@ func (t *TreeBuilder) Comment(ctxif sax.Context, data []byte) error {
 	return nil
 }
 
-func (t *TreeBuilder) InternalSubset(ctxif sax.Context, name, eid, uri string) error {
+func (t *TreeBuilder) InternalSubset(ctxif context.Context, name, eid, uri string) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.InternalSubset %s,%s,%s", name, eid, uri)
 		defer g.IRelease("END tree.InternalSubset")
 	}
 
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 	doc := ctx.doc
 
 	dtd, err := doc.InternalSubset()
@@ -458,13 +459,13 @@ func (t *TreeBuilder) InternalSubset(ctxif sax.Context, name, eid, uri string) e
 	return nil
 }
 
-func (t *TreeBuilder) ExternalSubset(ctxif sax.Context, name, eid, uri string) error {
+func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri string) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.ExternalSubset %s,%s,%s", name, eid, uri)
 		defer g.IRelease("END tree.ExternalSubset")
 	}
 
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 
 	if ctx.options.IsSet(ParseNoXXE) {
 		return nil
@@ -521,7 +522,7 @@ func (t *TreeBuilder) ExternalSubset(ctxif sax.Context, name, eid, uri string) e
 			break
 		}
 
-		ctx.skipBlanks()
+		ctx.skipBlanks(ctxif)
 
 		if ctx.inputTab.Len() <= baseLen {
 			break
@@ -533,13 +534,13 @@ func (t *TreeBuilder) ExternalSubset(ctxif sax.Context, name, eid, uri string) e
 
 		cur := ctx.getCursor()
 		if cur != nil && cur.Peek() == '<' && cur.PeekN(2) == '!' && cur.PeekN(3) == '[' {
-			if err := ctx.parseConditionalSections(); err != nil {
+			if err := ctx.parseConditionalSections(ctxif); err != nil {
 				break
 			}
 			continue
 		}
 
-		if err := ctx.parseMarkupDecl(); err != nil {
+		if err := ctx.parseMarkupDecl(ctxif); err != nil {
 			break
 		}
 	}
@@ -554,19 +555,19 @@ func (t *TreeBuilder) ExternalSubset(ctxif sax.Context, name, eid, uri string) e
 	return nil
 }
 
-func (t *TreeBuilder) HasInternalSubset(ctxif sax.Context) (bool, error) {
+func (t *TreeBuilder) HasInternalSubset(ctxif context.Context) (bool, error) {
 	return false, sax.ErrHandlerUnspecified
 }
 
-func (t *TreeBuilder) HasExternalSubset(ctxif sax.Context) (bool, error) {
+func (t *TreeBuilder) HasExternalSubset(ctxif context.Context) (bool, error) {
 	return false, sax.ErrHandlerUnspecified
 }
 
-func (t *TreeBuilder) IsStandalone(ctxif sax.Context) (bool, error) {
+func (t *TreeBuilder) IsStandalone(ctxif context.Context) (bool, error) {
 	return false, sax.ErrHandlerUnspecified
 }
 
-func (t *TreeBuilder) GetEntity(ctxif sax.Context, name string) (ent sax.Entity, err error) {
+func (t *TreeBuilder) GetEntity(ctxif context.Context, name string) (ent sax.Entity, err error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.GetEntity '%s'", name)
 		defer func() {
@@ -574,7 +575,7 @@ func (t *TreeBuilder) GetEntity(ctxif sax.Context, name string) (ent sax.Entity,
 		}()
 	}
 
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 	doc := ctx.doc
 	x, ok := doc.GetEntity(name)
 	if !ok {
@@ -585,7 +586,7 @@ func (t *TreeBuilder) GetEntity(ctxif sax.Context, name string) (ent sax.Entity,
 	return
 }
 
-func (t *TreeBuilder) GetParameterEntity(ctxif sax.Context, name string) (sax.Entity, error) {
+func (t *TreeBuilder) GetParameterEntity(ctxif context.Context, name string) (sax.Entity, error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.GetParameterEntity '%s'", name)
 		defer g.IRelease("END tree.GetParameterEntity")
@@ -595,7 +596,7 @@ func (t *TreeBuilder) GetParameterEntity(ctxif sax.Context, name string) (sax.En
 		return nil, ErrInvalidParserCtx
 	}
 
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 	doc := ctx.doc
 	if doc == nil {
 		return nil, ErrInvalidDocument
@@ -608,13 +609,13 @@ func (t *TreeBuilder) GetParameterEntity(ctxif sax.Context, name string) (sax.En
 	return nil, ErrEntityNotFound
 }
 
-func (t *TreeBuilder) AttributeDecl(ctxif sax.Context, eName string, aName string, typ enum.AttributeType, deftype enum.AttributeDefault, value string, enumif sax.Enumeration) error {
+func (t *TreeBuilder) AttributeDecl(ctxif context.Context, eName string, aName string, typ enum.AttributeType, deftype enum.AttributeDefault, value string, enumif sax.Enumeration) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.AttributeDecl name = '%s', elem = '%s'", aName, eName)
 		defer g.IRelease("END tree.AttributeDecl")
 	}
 
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 
 	if aName == "xml:id" && typ != enum.AttrID {
 		// libxml2 says "raise the error but keep the validity flag"
@@ -660,13 +661,13 @@ func (t *TreeBuilder) AttributeDecl(ctxif sax.Context, eName string, aName strin
 	return nil
 }
 
-func (t *TreeBuilder) ElementDecl(ctxif sax.Context, name string, typ enum.ElementType, content sax.ElementContent) error {
+func (t *TreeBuilder) ElementDecl(ctxif context.Context, name string, typ enum.ElementType, content sax.ElementContent) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.ElementDecl")
 		defer g.IRelease("END tree.ElementDecl")
 	}
 
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 	doc := ctx.doc
 	var dtd *DTD
 	switch ctx.inSubset {
@@ -686,7 +687,7 @@ func (t *TreeBuilder) ElementDecl(ctxif sax.Context, name string, typ enum.Eleme
 	return nil
 }
 
-func (t *TreeBuilder) EndDTD(ctxif sax.Context) error {
+func (t *TreeBuilder) EndDTD(ctxif context.Context) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.EndDTD")
 		defer g.IRelease("END tree.EndDTD")
@@ -695,7 +696,7 @@ func (t *TreeBuilder) EndDTD(ctxif sax.Context) error {
 	return nil
 }
 
-func (t *TreeBuilder) EndEntity(ctxif sax.Context, name string) error {
+func (t *TreeBuilder) EndEntity(ctxif context.Context, name string) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.EndEntity")
 		defer g.IRelease("END tree.EndEntity")
@@ -703,7 +704,7 @@ func (t *TreeBuilder) EndEntity(ctxif sax.Context, name string) error {
 
 	return nil
 }
-func (t *TreeBuilder) ExternalEntityDecl(ctxif sax.Context, name string, publicID string, systemID string) error {
+func (t *TreeBuilder) ExternalEntityDecl(ctxif context.Context, name string, publicID string, systemID string) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.ExternalEntityDecl")
 		defer g.IRelease("END tree.ExternalEntityDecl")
@@ -712,7 +713,7 @@ func (t *TreeBuilder) ExternalEntityDecl(ctxif sax.Context, name string, publicI
 	return nil
 }
 
-func (t *TreeBuilder) GetExternalSubset(ctxif sax.Context, name string, baseURI string) error {
+func (t *TreeBuilder) GetExternalSubset(ctxif context.Context, name string, baseURI string) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.GetExternalSubset")
 		defer g.IRelease("END tree.GetExternalSubset")
@@ -721,21 +722,21 @@ func (t *TreeBuilder) GetExternalSubset(ctxif sax.Context, name string, baseURI 
 	return nil
 }
 
-func (t *TreeBuilder) IgnorableWhitespace(ctxif sax.Context, content []byte) error {
+func (t *TreeBuilder) IgnorableWhitespace(ctxif context.Context, content []byte) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.IgnorableWhitespace (%v)", content)
 		defer g.IRelease("END tree.IgnorableWhitespace")
 	}
 
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 	if ctx.keepBlanks {
-		return t.Characters(ctx, content)
+		return t.Characters(ctxif, content)
 	}
 
 	return nil
 }
 
-func (t *TreeBuilder) InternalEntityDecl(ctxif sax.Context, name string, value string) error {
+func (t *TreeBuilder) InternalEntityDecl(ctxif context.Context, name string, value string) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.InternalEntityDecl")
 		defer g.IRelease("END tree.InternalEntityDecl")
@@ -744,13 +745,13 @@ func (t *TreeBuilder) InternalEntityDecl(ctxif sax.Context, name string, value s
 	return nil
 }
 
-func (t *TreeBuilder) NotationDecl(ctxif sax.Context, name string, publicID string, systemID string) error {
+func (t *TreeBuilder) NotationDecl(ctxif context.Context, name string, publicID string, systemID string) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.NotationDecl")
 		defer g.IRelease("END tree.NotationDecl")
 	}
 
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 	dtd := ctx.doc.intSubset
 	if dtd == nil {
 		return nil
@@ -759,13 +760,13 @@ func (t *TreeBuilder) NotationDecl(ctxif sax.Context, name string, publicID stri
 	return err
 }
 
-func (t *TreeBuilder) Reference(ctxif sax.Context, name string) error {
+func (t *TreeBuilder) Reference(ctxif context.Context, name string) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.Reference '%s'", name)
 		defer g.IRelease("END tree.Reference")
 	}
 
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 	doc := ctx.doc
 	var n Node
 	var err error
@@ -783,13 +784,13 @@ func (t *TreeBuilder) Reference(ctxif sax.Context, name string) error {
 	return parent.AddChild(n)
 }
 
-func (t *TreeBuilder) ResolveEntity(ctxif sax.Context, publicID string, systemID string) (sax.ParseInput, error) {
+func (t *TreeBuilder) ResolveEntity(ctxif context.Context, publicID string, systemID string) (sax.ParseInput, error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.ResolveEntity '%s' '%s'", publicID, systemID)
 		defer g.IRelease("END tree.ResolveEntity")
 	}
 
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 	if ctx.catalog != nil {
 		if resolved := ctx.catalog.Resolve(publicID, systemID); resolved != "" {
 			f, err := os.Open(resolved)
@@ -812,7 +813,7 @@ func (t *TreeBuilder) ResolveEntity(ctxif sax.Context, publicID string, systemID
 	return nil, sax.ErrHandlerUnspecified
 }
 
-func (t *TreeBuilder) SkippedEntity(ctxif sax.Context, name string) error {
+func (t *TreeBuilder) SkippedEntity(ctxif context.Context, name string) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.SkippedEntity '%s'", name)
 		defer g.IRelease("END tree.SkippedEntity")
@@ -821,7 +822,7 @@ func (t *TreeBuilder) SkippedEntity(ctxif sax.Context, name string) error {
 	return nil
 }
 
-func (t *TreeBuilder) StartDTD(ctxif sax.Context, name string, publicID string, systemID string) error {
+func (t *TreeBuilder) StartDTD(ctxif context.Context, name string, publicID string, systemID string) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.StartDTD")
 		defer g.IRelease("END tree.StartDTD")
@@ -830,7 +831,7 @@ func (t *TreeBuilder) StartDTD(ctxif sax.Context, name string, publicID string, 
 	return nil
 }
 
-func (t *TreeBuilder) StartEntity(ctxif sax.Context, name string) error {
+func (t *TreeBuilder) StartEntity(ctxif context.Context, name string) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.StartEntity")
 		defer g.IRelease("END tree.StartEntity")
@@ -839,13 +840,13 @@ func (t *TreeBuilder) StartEntity(ctxif sax.Context, name string) error {
 	return nil
 }
 
-func (t *TreeBuilder) EntityDecl(ctxif sax.Context, name string, typ enum.EntityType, publicID string, systemID string, notation string) error {
+func (t *TreeBuilder) EntityDecl(ctxif context.Context, name string, typ enum.EntityType, publicID string, systemID string, notation string) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.EntityDecl '%s' -> '%s'", name, notation)
 		defer g.IRelease("END tree.EntityDecl")
 	}
 
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 	doc := ctx.doc
 	var dtd *DTD
 	switch ctx.inSubset {
@@ -880,14 +881,14 @@ func (t *TreeBuilder) EntityDecl(ctxif sax.Context, name string, typ enum.Entity
 	return nil
 }
 
-func (t *TreeBuilder) UnparsedEntityDecl(ctxif sax.Context, name string, publicID string, systemID string, notation string) error {
+func (t *TreeBuilder) UnparsedEntityDecl(ctxif context.Context, name string, publicID string, systemID string, notation string) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START tree.UnparsedEntityDecl '%s'", name)
 		defer g.IRelease("END tree.UnparsedEntityDecl")
 	}
 
 	// Mirror xmlSAX2UnparsedEntityDecl: register the NDATA entity in the DTD.
-	ctx := ctxif.(*parserCtx)
+	ctx := getParserCtx(ctxif)
 	doc := ctx.doc
 	var dtd *DTD
 	switch ctx.inSubset {
@@ -903,10 +904,10 @@ func (t *TreeBuilder) UnparsedEntityDecl(ctxif sax.Context, name string, publicI
 	return nil
 }
 
-func (t *TreeBuilder) Error(ctxif sax.Context, err error) error {
+func (t *TreeBuilder) Error(ctxif context.Context, err error) error {
 	return nil
 }
 
-func (t *TreeBuilder) Warning(ctxif sax.Context, err error) error {
+func (t *TreeBuilder) Warning(ctxif context.Context, err error) error {
 	return nil
 }
