@@ -289,7 +289,7 @@ func TestSequenceOperations(t *testing.T) {
 		require.Len(t, seq, 3)
 		av, ok := seq[0].(xpath3.AtomicValue)
 		require.True(t, ok)
-		require.Equal(t, 3.0, av.Value)
+		require.Equal(t, int64(3), av.Value)
 	})
 
 	t.Run("distinct-values", func(t *testing.T) {
@@ -398,7 +398,7 @@ func TestFLWOR(t *testing.T) {
 		require.Len(t, seq, 3)
 		av, ok := seq[2].(xpath3.AtomicValue)
 		require.True(t, ok)
-		require.Equal(t, 6.0, av.Value)
+		require.Equal(t, int64(6), av.Value)
 	})
 
 	t.Run("let", func(t *testing.T) {
@@ -519,7 +519,7 @@ func TestHOFFunctions(t *testing.T) {
 		require.Len(t, seq, 3)
 		av, ok := seq[0].(xpath3.AtomicValue)
 		require.True(t, ok)
-		require.Equal(t, 10.0, av.Value)
+		require.Equal(t, int64(10), av.Value)
 	})
 
 	t.Run("filter", func(t *testing.T) {
@@ -547,7 +547,7 @@ func TestSimpleMapOperator(t *testing.T) {
 	require.Len(t, seq, 3)
 	av, ok := seq[1].(xpath3.AtomicValue)
 	require.True(t, ok)
-	require.Equal(t, 4.0, av.Value)
+	require.Equal(t, int64(4), av.Value)
 }
 
 // --- Try-catch ---

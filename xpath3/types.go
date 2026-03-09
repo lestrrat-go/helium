@@ -91,6 +91,85 @@ const (
 	TypeNumeric       = "xs:numeric"
 )
 
+// isSubtypeOf returns true if actualType is the same as or a subtype of targetType
+// per the XSD type hierarchy.
+func isSubtypeOf(actualType, targetType string) bool {
+	if actualType == targetType {
+		return true
+	}
+	// xs:numeric is a union of xs:integer, xs:decimal, xs:float, xs:double
+	if targetType == TypeNumeric {
+		return isSubtypeOf(actualType, TypeDecimal) ||
+			actualType == TypeFloat || actualType == TypeDouble
+	}
+	// Walk up the type hierarchy
+	cur := actualType
+	for {
+		parent, ok := xsdTypeParent[cur]
+		if !ok {
+			return false
+		}
+		if parent == targetType {
+			return true
+		}
+		cur = parent
+	}
+}
+
+// xsdTypeParent maps each derived XSD type to its parent (base) type.
+var xsdTypeParent = map[string]string{
+	// Numeric hierarchy
+	TypeByte:               TypeShort,
+	TypeShort:              TypeInt,
+	TypeInt:                TypeLong,
+	TypeLong:               TypeInteger,
+	TypeUnsignedByte:       TypeUnsignedShort,
+	TypeUnsignedShort:      TypeUnsignedInt,
+	TypeUnsignedInt:        TypeUnsignedLong,
+	TypeUnsignedLong:       TypeNonNegativeInteger,
+	TypePositiveInteger:    TypeNonNegativeInteger,
+	TypeNonNegativeInteger: TypeInteger,
+	TypeNegativeInteger:    TypeNonPositiveInteger,
+	TypeNonPositiveInteger: TypeInteger,
+	TypeInteger:            TypeDecimal,
+	TypeDecimal:            TypeAnyAtomicType,
+	TypeFloat:              TypeAnyAtomicType,
+	TypeDouble:             TypeAnyAtomicType,
+	// Duration hierarchy
+	TypeDayTimeDuration:   TypeDuration,
+	TypeYearMonthDuration: TypeDuration,
+	TypeDuration:          TypeAnyAtomicType,
+	// Date/time hierarchy
+	TypeDateTimeStamp: TypeDateTime,
+	TypeDateTime:      TypeAnyAtomicType,
+	TypeDate:          TypeAnyAtomicType,
+	TypeTime:          TypeAnyAtomicType,
+	// String hierarchy
+	TypeNormalizedString: TypeString,
+	TypeToken:            TypeNormalizedString,
+	TypeLanguage:         TypeToken,
+	TypeNMTOKEN:          TypeToken,
+	TypeName:             TypeToken,
+	TypeNCName:           TypeName,
+	TypeID:               TypeNCName,
+	TypeIDREF:            TypeNCName,
+	TypeENTITY:           TypeNCName,
+	TypeString:           TypeAnyAtomicType,
+	// Other types
+	TypeBoolean:       TypeAnyAtomicType,
+	TypeAnyURI:        TypeAnyAtomicType,
+	TypeQName:         TypeAnyAtomicType,
+	TypeBase64Binary:  TypeAnyAtomicType,
+	TypeHexBinary:     TypeAnyAtomicType,
+	TypeUntypedAtomic: TypeAnyAtomicType,
+	// Gregorian types
+	TypeGDay:       TypeAnyAtomicType,
+	TypeGMonth:     TypeAnyAtomicType,
+	TypeGMonthDay:  TypeAnyAtomicType,
+	TypeGYear:      TypeAnyAtomicType,
+	TypeGYearMonth: TypeAnyAtomicType,
+}
+
 // AtomicValue represents an XSD atomic value with its type name.
 type AtomicValue struct {
 	TypeName string // e.g. "xs:string", "xs:integer"
@@ -474,6 +553,24 @@ func AtomizeItem(item Item) (AtomicValue, error) {
 			TypeName: TypeUntypedAtomic,
 			Value:    ixpath.StringValue(v.Node),
 		}, nil
+	case ArrayItem:
+		// XPath 3.1: atomizing an array atomizes each member and concatenates
+		if v.Size() == 0 {
+			return AtomicValue{}, &XPathError{
+				Code:    "FOTY0013",
+				Message: "cannot atomize empty array to single atomic value",
+			}
+		}
+		if v.Size() == 1 {
+			member, _ := v.Get(1)
+			if len(member) == 1 {
+				return AtomizeItem(member[0])
+			}
+		}
+		return AtomicValue{}, &XPathError{
+			Code:    "FOTY0013",
+			Message: "cannot atomize array with multiple members to single atomic value",
+		}
 	default:
 		return AtomicValue{}, &XPathError{
 			Code:    "FOTY0013",

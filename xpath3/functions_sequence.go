@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"fmt"
+	"sort"
 )
 
 func init() {
@@ -22,6 +23,7 @@ func init() {
 	registerFn("index-of", 2, 3, fnIndexOf)
 	registerFn("last", 0, 0, fnLast)
 	registerFn("position", 0, 0, fnPosition)
+	registerFn("sort", 1, 3, fnSort)
 }
 
 func fnEmpty(_ context.Context, args []Sequence) (Sequence, error) {
@@ -218,4 +220,87 @@ func fnPosition(ctx context.Context, _ []Sequence) (Sequence, error) {
 		return SingleInteger(0), nil
 	}
 	return SingleInteger(int64(fc.position)), nil
+}
+
+// fnSort implements fn:sort($input [, $collation [, $key]])
+func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
+	input := args[0]
+	if len(input) <= 1 {
+		return input, nil
+	}
+
+	// Optional key function (3rd argument)
+	var keyFn *FunctionItem
+	if len(args) >= 3 && len(args[2]) > 0 {
+		fi, err := extractFunctionItem(args[2])
+		if err != nil {
+			return nil, err
+		}
+		keyFn = &fi
+	}
+
+	// Compute sort keys
+	type sortPair struct {
+		item Item
+		key  Sequence
+	}
+	pairs := make([]sortPair, len(input))
+	for i, item := range input {
+		if keyFn != nil {
+			k, err := keyFn.Invoke(ctx, []Sequence{{item}})
+			if err != nil {
+				return nil, err
+			}
+			pairs[i] = sortPair{item: item, key: k}
+		} else {
+			// Default key: atomize the item
+			a, err := AtomizeItem(item)
+			if err != nil {
+				pairs[i] = sortPair{item: item, key: nil}
+			} else {
+				pairs[i] = sortPair{item: item, key: Sequence{a}}
+			}
+		}
+	}
+
+	// Stable sort using comparison
+	var sortErr error
+	sort.SliceStable(pairs, func(i, j int) bool {
+		if sortErr != nil {
+			return false
+		}
+		ki := pairs[i].key
+		kj := pairs[j].key
+		if len(ki) == 0 && len(kj) == 0 {
+			return false
+		}
+		if len(ki) == 0 {
+			return true // empty < non-empty
+		}
+		if len(kj) == 0 {
+			return false
+		}
+		ai, err1 := AtomizeItem(ki[0])
+		aj, err2 := AtomizeItem(kj[0])
+		if err1 != nil || err2 != nil {
+			return false
+		}
+		less, err := ValueCompare(TokenLt, ai, aj)
+		if err != nil {
+			// Fall back to string comparison
+			si, _ := atomicToString(ai)
+			sj, _ := atomicToString(aj)
+			return si < sj
+		}
+		return less
+	})
+	if sortErr != nil {
+		return nil, sortErr
+	}
+
+	result := make(Sequence, len(pairs))
+	for i, p := range pairs {
+		result[i] = p.item
+	}
+	return result, nil
 }

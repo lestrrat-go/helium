@@ -55,7 +55,8 @@ func TestEvalLiteral(t *testing.T) {
 		seq := evalExpr(t, doc, "42")
 		require.Len(t, seq, 1)
 		av := seq[0].(xpath3.AtomicValue)
-		require.Equal(t, 42.0, av.DoubleVal())
+		require.Equal(t, int64(42), av.IntegerVal())
+		require.Equal(t, xpath3.TypeInteger, av.TypeName)
 	})
 }
 
@@ -323,7 +324,7 @@ func TestEvalFLWOR(t *testing.T) {
 		seq := evalExprCtx(t, ctx, doc, `let $x := 42 return $x`)
 		require.Len(t, seq, 1)
 		av := seq[0].(xpath3.AtomicValue)
-		require.Equal(t, 42.0, av.DoubleVal())
+		require.Equal(t, int64(42), av.IntegerVal())
 	})
 }
 
@@ -388,7 +389,9 @@ func TestEvalInstanceOf(t *testing.T) {
 		expr   string
 		expect bool
 	}{
-		{`42 instance of xs:double`, true},
+		{`42 instance of xs:integer`, true},
+		{`42 instance of xs:decimal`, true},
+		{`42 instance of xs:double`, false},
 		{`"hello" instance of xs:string`, true},
 		{`"hello" instance of xs:integer`, false},
 	}
@@ -447,7 +450,7 @@ func TestEvalInlineFunction(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result, 1)
 	av := result[0].(xpath3.AtomicValue)
-	require.Equal(t, 42.0, av.DoubleVal())
+	require.Equal(t, int64(42), av.IntegerVal())
 }
 
 func TestEvalMapConstructor(t *testing.T) {
@@ -478,7 +481,7 @@ func TestEvalMapLookup(t *testing.T) {
 	seq := evalExpr(t, doc, `map { "x": 42 }?x`)
 	require.Len(t, seq, 1)
 	av := seq[0].(xpath3.AtomicValue)
-	require.Equal(t, 42.0, av.DoubleVal())
+	require.Equal(t, int64(42), av.IntegerVal())
 }
 
 func TestEvalArrayLookup(t *testing.T) {
@@ -487,7 +490,7 @@ func TestEvalArrayLookup(t *testing.T) {
 	seq := evalExpr(t, doc, `[10, 20, 30]?2`)
 	require.Len(t, seq, 1)
 	av := seq[0].(xpath3.AtomicValue)
-	require.Equal(t, 20.0, av.DoubleVal())
+	require.Equal(t, int64(20), av.IntegerVal())
 }
 
 // --- TryCatch ---
@@ -499,7 +502,7 @@ func TestEvalTryCatch(t *testing.T) {
 		seq := evalExpr(t, doc, `try { 42 } catch * { "error" }`)
 		require.Len(t, seq, 1)
 		av := seq[0].(xpath3.AtomicValue)
-		require.Equal(t, 42.0, av.DoubleVal())
+		require.Equal(t, int64(42), av.IntegerVal())
 	})
 }
 

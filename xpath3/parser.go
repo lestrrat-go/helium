@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
@@ -697,7 +698,25 @@ func (p *parser) parseParenExpr() (Expr, error) {
 }
 
 // parseNumberLiteral converts a numeric token value to a LiteralExpr.
+// Per XPath 3.1: no dot and no e/E → xs:integer (int64),
+// dot but no e/E → xs:decimal (stored as float64 but tagged),
+// e/E → xs:double (float64).
 func parseNumberLiteral(s string) (LiteralExpr, error) {
+	hasE := strings.ContainsAny(s, "eE")
+	hasDot := strings.Contains(s, ".")
+	if !hasDot && !hasE {
+		// Integer literal
+		v, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			// Overflow — fall back to float
+			f, ferr := strconv.ParseFloat(s, 64)
+			if ferr != nil {
+				return LiteralExpr{}, fmt.Errorf("invalid number %q: %w", s, err)
+			}
+			return LiteralExpr{Value: f}, nil
+		}
+		return LiteralExpr{Value: v}, nil
+	}
 	v, err := strconv.ParseFloat(s, 64)
 	if err != nil && !errors.Is(err, strconv.ErrRange) {
 		return LiteralExpr{}, fmt.Errorf("invalid number %q: %w", s, err)
@@ -917,9 +936,18 @@ func (p *parser) parseStep() (Step, error) {
 func (p *parser) parseNodeTest(_ AxisType) (NodeTest, error) {
 	tok := p.lexer.Peek()
 
-	// * wildcard
+	// * wildcard or *:local
 	if tok.Type == TokenStar {
 		p.lexer.Next()
+		if p.lexer.Peek().Type == TokenColon {
+			p.lexer.Next() // consume ':'
+			local := p.lexer.Peek()
+			if local.Type == TokenName {
+				p.lexer.Next()
+				return NameTest{Prefix: "*", Local: local.Value}, nil
+			}
+			return nil, fmt.Errorf("expected local name after *:")
+		}
 		return NameTest{Local: "*"}, nil
 	}
 

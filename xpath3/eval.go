@@ -205,6 +205,8 @@ func evalLiteral(e LiteralExpr) (Sequence, error) {
 	switch v := e.Value.(type) {
 	case string:
 		return SingleString(v), nil
+	case int64:
+		return SingleInteger(v), nil
 	case float64:
 		return SingleDouble(v), nil
 	}
@@ -405,6 +407,10 @@ func matchNameTest(test NameTest, n helium.Node, axis AxisType, ec *evalContext)
 		return false
 	}
 
+	if test.Prefix == "*" {
+		// *:local matches any namespace
+		return true
+	}
 	if test.Prefix != "" {
 		return matchPrefix(test.Prefix, n, ec)
 	}
@@ -1325,7 +1331,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		if targetType == TypeAnyAtomicType {
 			return true
 		}
-		return av.TypeName == targetType
+		return isSubtypeOf(av.TypeName, targetType)
 	case FunctionTest:
 		_, ok := item.(FunctionItem)
 		return ok
@@ -1380,10 +1386,7 @@ func evalDynamicFunctionCall(ec *evalContext, e DynamicFunctionCall) (Sequence, 
 	if len(funcSeq) != 1 {
 		return nil, &XPathError{Code: "XPTY0004", Message: "dynamic function call requires single function item"}
 	}
-	fi, ok := funcSeq[0].(FunctionItem)
-	if !ok {
-		return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("dynamic function call requires function item, got %T", funcSeq[0])}
-	}
+	// Evaluate arguments first (needed for all call types)
 	args := make([]Sequence, len(e.Args))
 	for i, argExpr := range e.Args {
 		a, err := eval(ec, argExpr)
@@ -1392,10 +1395,41 @@ func evalDynamicFunctionCall(ec *evalContext, e DynamicFunctionCall) (Sequence, 
 		}
 		args[i] = a
 	}
-	if fi.Arity >= 0 && len(args) != fi.Arity {
-		return nil, fmt.Errorf("%w: expected %d arguments, got %d", ErrArityMismatch, fi.Arity, len(args))
+
+	switch v := funcSeq[0].(type) {
+	case FunctionItem:
+		if v.Arity >= 0 && len(args) != v.Arity {
+			return nil, fmt.Errorf("%w: expected %d arguments, got %d", ErrArityMismatch, v.Arity, len(args))
+		}
+		return v.Invoke(ec.goCtx, args)
+	case MapItem:
+		// Maps are functions: $map($key) → value
+		if len(args) != 1 || len(args[0]) != 1 {
+			return nil, &XPathError{Code: "XPTY0004", Message: "map lookup requires exactly one argument"}
+		}
+		key, err := AtomizeItem(args[0][0])
+		if err != nil {
+			return nil, err
+		}
+		val, ok := v.Get(key)
+		if !ok {
+			return nil, nil
+		}
+		return val, nil
+	case ArrayItem:
+		// Arrays are functions: $array($index) → member
+		if len(args) != 1 || len(args[0]) != 1 {
+			return nil, &XPathError{Code: "XPTY0004", Message: "array lookup requires exactly one argument"}
+		}
+		key, err := AtomizeItem(args[0][0])
+		if err != nil {
+			return nil, err
+		}
+		idx := int(promoteToDouble(key))
+		return v.Get(idx)
+	default:
+		return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("dynamic function call requires function item, got %T", funcSeq[0])}
 	}
-	return fi.Invoke(ec.goCtx, args)
 }
 
 func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error) {

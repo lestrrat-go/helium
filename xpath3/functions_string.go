@@ -36,6 +36,7 @@ func init() {
 	registerFn("replace", 3, 4, fnReplace)
 	registerFn("tokenize", 1, 3, fnTokenize)
 	registerFn("analyze-string", 2, 3, fnAnalyzeString)
+	registerFn("contains-token", 2, 3, fnContainsToken)
 }
 
 func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -396,4 +397,28 @@ func stripFreeSpacing(pattern string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+// fnContainsToken implements fn:contains-token($input, $token [, $collation])
+// Returns true if any string in $input, after tokenizing on whitespace,
+// matches $token (compared case-insensitively if collation is default).
+func fnContainsToken(_ context.Context, args []Sequence) (Sequence, error) {
+	token := seqToString(args[1])
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return SingleBoolean(false), nil
+	}
+	for _, item := range args[0] {
+		a, err := AtomizeItem(item)
+		if err != nil {
+			return nil, err
+		}
+		s, _ := atomicToString(a)
+		for _, tok := range strings.Fields(s) {
+			if tok == token {
+				return SingleBoolean(true), nil
+			}
+		}
+	}
+	return SingleBoolean(false), nil
 }

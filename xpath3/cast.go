@@ -298,13 +298,15 @@ func atomicToString(v AtomicValue) (string, error) {
 
 func castToDouble(v AtomicValue) (AtomicValue, error) {
 	switch v.TypeName {
+	case TypeDouble:
+		return v, nil
+	case TypeFloat:
+		return AtomicValue{TypeName: TypeDouble, Value: v.DoubleVal()}, nil
 	case TypeInteger:
 		return AtomicValue{TypeName: TypeDouble, Value: float64(v.IntegerVal())}, nil
 	case TypeDecimal:
 		f, _ := strconv.ParseFloat(v.StringVal(), 64)
 		return AtomicValue{TypeName: TypeDouble, Value: f}, nil
-	case TypeFloat:
-		return AtomicValue{TypeName: TypeDouble, Value: v.DoubleVal()}, nil
 	case TypeBoolean:
 		if v.BooleanVal() {
 			return AtomicValue{TypeName: TypeDouble, Value: float64(1)}, nil

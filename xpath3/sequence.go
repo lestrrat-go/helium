@@ -63,6 +63,18 @@ func NodesFrom(seq Sequence) ([]helium.Node, bool) {
 func AtomizeSequence(seq Sequence) ([]AtomicValue, error) {
 	result := make([]AtomicValue, 0, len(seq))
 	for _, item := range seq {
+		// XPath 3.1: atomizing an array flattens its members
+		if arr, ok := item.(ArrayItem); ok {
+			for i := 1; i <= arr.Size(); i++ {
+				member, _ := arr.Get(i)
+				atoms, err := AtomizeSequence(member)
+				if err != nil {
+					return nil, err
+				}
+				result = append(result, atoms...)
+			}
+			continue
+		}
 		av, err := AtomizeItem(item)
 		if err != nil {
 			return nil, err

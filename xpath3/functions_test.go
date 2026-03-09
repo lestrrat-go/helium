@@ -152,21 +152,21 @@ func TestFnAggregate(t *testing.T) {
 		seq := evalExpr(t, doc, `avg((2, 4, 6))`)
 		require.Len(t, seq, 1)
 		av := seq[0].(xpath3.AtomicValue)
-		require.InDelta(t, 4.0, av.DoubleVal(), 0.001)
+		require.InDelta(t, 4.0, av.ToFloat64(), 0.001)
 	})
 
 	t.Run("min", func(t *testing.T) {
 		seq := evalExpr(t, doc, `min((3, 1, 2))`)
 		require.Len(t, seq, 1)
 		av := seq[0].(xpath3.AtomicValue)
-		require.InDelta(t, 1.0, av.DoubleVal(), 0.001)
+		require.InDelta(t, 1.0, av.ToFloat64(), 0.001)
 	})
 
 	t.Run("max", func(t *testing.T) {
 		seq := evalExpr(t, doc, `max((3, 1, 2))`)
 		require.Len(t, seq, 1)
 		av := seq[0].(xpath3.AtomicValue)
-		require.InDelta(t, 3.0, av.DoubleVal(), 0.001)
+		require.InDelta(t, 3.0, av.ToFloat64(), 0.001)
 	})
 }
 
@@ -191,7 +191,7 @@ func TestFnSequence(t *testing.T) {
 		seq := evalExpr(t, doc, `head((1, 2, 3))`)
 		require.Len(t, seq, 1)
 		av := seq[0].(xpath3.AtomicValue)
-		require.Equal(t, 1.0, av.DoubleVal())
+		require.Equal(t, int64(1), av.IntegerVal())
 	})
 
 	t.Run("tail", func(t *testing.T) {
@@ -203,7 +203,7 @@ func TestFnSequence(t *testing.T) {
 		seq := evalExpr(t, doc, `reverse((1, 2, 3))`)
 		require.Len(t, seq, 3)
 		av := seq[0].(xpath3.AtomicValue)
-		require.Equal(t, 3.0, av.DoubleVal())
+		require.Equal(t, int64(3), av.IntegerVal())
 	})
 
 	t.Run("subsequence", func(t *testing.T) {
