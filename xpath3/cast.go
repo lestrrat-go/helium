@@ -368,6 +368,64 @@ func isValidDecimalString(s string) bool {
 	return hasDigit && i == len(s)
 }
 
+// formatXPathDouble formats a float64 using XPath canonical representation.
+// Per XML Schema Part 2 §3.2.5:
+//   - NaN, INF, -INF as literals
+//   - 0 → "0", -0 → "-0"
+//   - If |v| >= 0.000001 and |v| < 1000000, use decimal notation
+//   - Otherwise use scientific notation: [-]d.d...dEd...d
+func formatXPathDouble(f float64) string {
+	if math.IsNaN(f) {
+		return "NaN"
+	}
+	if math.IsInf(f, 1) {
+		return "INF"
+	}
+	if math.IsInf(f, -1) {
+		return "-INF"
+	}
+	if f == 0 {
+		if math.Signbit(f) {
+			return "-0"
+		}
+		return "0"
+	}
+
+	abs := math.Abs(f)
+	if abs >= 0.000001 && abs < 1000000 {
+		// Use decimal notation
+		s := strconv.FormatFloat(f, 'f', -1, 64)
+		return s
+	}
+
+	// Use scientific notation: [-]d.d...dE[-]d...d
+	s := strconv.FormatFloat(f, 'E', -1, 64)
+	// Go produces "1.23E+07", XPath wants "1.23E7" (no + sign, no leading zeros)
+	if idx := strings.Index(s, "E"); idx >= 0 {
+		mantissa := s[:idx]
+		expPart := s[idx+1:]
+		// Strip + sign from exponent
+		if strings.HasPrefix(expPart, "+") {
+			expPart = expPart[1:]
+		}
+		// Strip leading zeros from exponent (but keep at least one digit)
+		if strings.HasPrefix(expPart, "-") {
+			inner := strings.TrimLeft(expPart[1:], "0")
+			if inner == "" {
+				inner = "0"
+			}
+			expPart = "-" + inner
+		} else {
+			expPart = strings.TrimLeft(expPart, "0")
+			if expPart == "" {
+				expPart = "0"
+			}
+		}
+		s = mantissa + "E" + expPart
+	}
+	return s
+}
+
 func castError(value string, targetType string) *XPathError {
 	return &XPathError{
 		Code:    "FORG0001",
@@ -415,6 +473,11 @@ func castToString(v AtomicValue) (AtomicValue, error) {
 	return AtomicValue{TypeName: TypeString, Value: s}, nil
 }
 
+// AtomicToString returns the canonical string representation of an atomic value.
+func AtomicToString(v AtomicValue) (string, error) {
+	return atomicToString(v)
+}
+
 // atomicToString returns the canonical string representation of an atomic value.
 func atomicToString(v AtomicValue) (string, error) {
 	switch v.TypeName {
@@ -432,23 +495,7 @@ func atomicToString(v AtomicValue) (string, error) {
 	case TypeDecimal:
 		return v.Value.(string), nil
 	case TypeDouble, TypeFloat:
-		f := v.Value.(float64)
-		if math.IsNaN(f) {
-			return "NaN", nil
-		}
-		if math.IsInf(f, 1) {
-			return "INF", nil
-		}
-		if math.IsInf(f, -1) {
-			return "-INF", nil
-		}
-		if f == 0 {
-			if math.Signbit(f) {
-				return "-0", nil
-			}
-			return "0", nil
-		}
-		return strconv.FormatFloat(f, 'G', -1, 64), nil
+		return formatXPathDouble(v.Value.(float64)), nil
 	case TypeBoolean:
 		if v.Value.(bool) {
 			return "true", nil

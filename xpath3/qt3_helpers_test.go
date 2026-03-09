@@ -103,7 +103,12 @@ func qt3StringValue(seq xpath3.Sequence) string {
 		if err != nil {
 			parts = append(parts, fmt.Sprintf("%v", item))
 		} else {
-			parts = append(parts, fmt.Sprintf("%v", av.Value))
+			s, serr := xpath3.AtomicToString(av)
+			if serr != nil {
+				parts = append(parts, fmt.Sprintf("%v", av.Value))
+			} else {
+				parts = append(parts, s)
+			}
 		}
 	}
 	return strings.Join(parts, " ")
