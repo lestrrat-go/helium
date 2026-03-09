@@ -434,9 +434,20 @@ func castToInteger(v AtomicValue) (AtomicValue, error) {
 		if math.IsNaN(f) || math.IsInf(f, 0) {
 			return AtomicValue{}, &XPathError{Code: "FOCA0002", Message: "cannot cast NaN/INF to xs:integer"}
 		}
+		f = math.Trunc(f)
+		if f > math.MaxInt64 || f < math.MinInt64 {
+			return AtomicValue{}, &XPathError{Code: "FOCA0003", Message: "integer overflow in cast"}
+		}
 		return AtomicValue{TypeName: TypeInteger, Value: int64(f)}, nil
 	case TypeDecimal:
 		f, _ := strconv.ParseFloat(v.StringVal(), 64)
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			return AtomicValue{}, &XPathError{Code: "FOCA0003", Message: "decimal overflow in cast to integer"}
+		}
+		f = math.Trunc(f)
+		if f > math.MaxInt64 || f < math.MinInt64 {
+			return AtomicValue{}, &XPathError{Code: "FOCA0003", Message: "integer overflow in cast"}
+		}
 		return AtomicValue{TypeName: TypeInteger, Value: int64(f)}, nil
 	case TypeBoolean:
 		if v.BooleanVal() {
