@@ -123,6 +123,9 @@ func withParserCtx(ctx context.Context, pctx *parserCtx) context.Context {
 }
 
 func getParserCtx(ctx context.Context) *parserCtx {
+	if ctx == nil {
+		return nil
+	}
 	pctx, _ := ctx.Value(parserCtxKey{}).(*parserCtx)
 	return pctx
 }

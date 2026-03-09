@@ -49,6 +49,9 @@ func NewParser() *Parser {
 }
 
 func (p *Parser) Parse(ctx context.Context, b []byte) (*Document, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("=== START Parser.Parse ===")
 		defer g.IRelease("=== END Parser.Parse ===")
@@ -100,6 +103,9 @@ func ParseReader(ctx context.Context, r io.Reader) (*Document, error) {
 // This is identical to Parse but reads from a stream instead of a byte slice.
 // EBCDIC encoding detection is not supported when parsing from a reader.
 func (p *Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("=== START Parser.ParseReader ===")
 		defer g.IRelease("=== END Parser.ParseReader ===")
@@ -189,6 +195,9 @@ func ParseInNodeContext(ctx context.Context, node Node, data []byte) (Node, erro
 // (siblings linked via NextSibling). The returned nodes are not attached
 // to any parent.
 func (p *Parser) ParseInNodeContext(ctx context.Context, node Node, data []byte) (Node, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("=== START Parser.ParseInNodeContext ===")
 		defer g.IRelease("=== END Parser.ParseInNodeContext ===")
