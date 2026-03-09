@@ -560,6 +560,8 @@ func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	ln := promoteToDouble(la)
 	rn := promoteToDouble(ra)
 
+	bothInteger := isIntegerDerived(la.TypeName) && isIntegerDerived(ra.TypeName)
+
 	var result float64
 	switch e.Op {
 	case TokenPlus:
@@ -569,19 +571,43 @@ func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	case TokenStar:
 		result = ln * rn
 	case TokenDiv:
+		// Integer div by zero raises FOAR0002; float div by zero produces ±Inf or NaN per IEEE 754
+		if bothInteger && rn == 0 {
+			return nil, &XPathError{Code: "FOAR0002", Message: "division by zero"}
+		}
 		result = ln / rn
 	case TokenIdiv:
+		// NaN in either operand → FOAR0002
+		if math.IsNaN(ln) || math.IsNaN(rn) {
+			return nil, &XPathError{Code: "FOAR0002", Message: "idiv with NaN"}
+		}
+		// INF dividend → FOAR0002
+		if math.IsInf(ln, 0) {
+			return nil, &XPathError{Code: "FOAR0002", Message: "idiv with infinite dividend"}
+		}
 		if rn == 0 {
 			return nil, &XPathError{Code: "FOAR0002", Message: "integer division by zero"}
 		}
-		result = math.Trunc(ln / rn)
-		return SingleInteger(int64(result)), nil
+		// Finite dividend, INF divisor → 0
+		truncated := math.Trunc(ln / rn)
+		if truncated > math.MaxInt64 || truncated < math.MinInt64 {
+			return nil, &XPathError{Code: "FOAR0002", Message: "idiv result overflow"}
+		}
+		return SingleInteger(int64(truncated)), nil
 	case TokenMod:
+		// Integer mod by zero raises FOAR0002
+		if bothInteger && rn == 0 {
+			return nil, &XPathError{Code: "FOAR0002", Message: "modulo by zero"}
+		}
 		result = math.Mod(ln, rn)
 	}
 
 	// Preserve integer type when both inputs are integer
-	if isIntegerDerived(la.TypeName) && isIntegerDerived(ra.TypeName) && e.Op != TokenDiv {
+	if bothInteger && e.Op != TokenDiv {
+		// Check for overflow
+		if result > math.MaxInt64 || result < math.MinInt64 || math.IsNaN(result) || math.IsInf(result, 0) {
+			return nil, &XPathError{Code: "FOAR0002", Message: "integer arithmetic overflow"}
+		}
 		return SingleInteger(int64(result)), nil
 	}
 	return SingleDouble(result), nil
