@@ -178,6 +178,8 @@ func eval(ec *evalContext, expr Expr) (Sequence, error) {
 		return evalFilterExpr(ec, e)
 	case PathExpr:
 		return evalPathExpr(ec, e)
+	case PathStepExpr:
+		return evalPathStepExpr(ec, e)
 	case LookupExpr:
 		return evalLookupExpr(ec, e)
 	case UnaryLookupExpr:
@@ -892,6 +894,59 @@ func evalPathExpr(ec *evalContext, e PathExpr) (Sequence, error) {
 		seq[i] = NodeItem{Node: n}
 	}
 	return seq, nil
+}
+
+// evalPathStepExpr evaluates E1/E2 where E2 is a non-axis expression.
+// Per XPath 3.1: E1 must produce a node sequence; E2 is evaluated for each node
+// with that node as context. If all results are nodes, they are sorted in
+// document order and deduplicated.
+func evalPathStepExpr(ec *evalContext, e PathStepExpr) (Sequence, error) {
+	base, err := eval(ec, e.Left)
+	if err != nil {
+		return nil, err
+	}
+	baseNodes, ok := NodesFrom(base)
+	if !ok {
+		return nil, ErrPathNotNodeSet
+	}
+	var allNodes []helium.Node
+	var allItems Sequence
+	isNodeResult := true
+
+	for i, n := range baseNodes {
+		subCtx := ec.withNode(n, i+1, len(baseNodes))
+		r, err := eval(subCtx, e.Right)
+		if err != nil {
+			return nil, err
+		}
+		if isNodeResult {
+			rNodes, nok := NodesFrom(r)
+			if nok {
+				allNodes, err = ixpath.MergeNodeSets(allNodes, rNodes, ec.docOrder, ec.maxNodes)
+				if err != nil {
+					return nil, err
+				}
+				continue
+			}
+			// First non-node result — switch to item mode
+			isNodeResult = false
+			// Convert previously collected nodes to items
+			for _, pn := range allNodes {
+				allItems = append(allItems, NodeItem{Node: pn})
+			}
+			allNodes = nil
+		}
+		allItems = append(allItems, r...)
+	}
+
+	if isNodeResult {
+		seq := make(Sequence, len(allNodes))
+		for i, n := range allNodes {
+			seq[i] = NodeItem{Node: n}
+		}
+		return seq, nil
+	}
+	return allItems, nil
 }
 
 // --- Lookup ---

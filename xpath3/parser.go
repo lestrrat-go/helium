@@ -457,52 +457,146 @@ loop:
 func (p *parser) parsePathExpr() (Expr, error) {
 	tok := p.lexer.Peek()
 
+	var expr Expr
+
 	// Absolute location path starts with / or //
 	if tok.Type == TokenSlash || tok.Type == TokenSlashSlash {
-		expr, err := p.parseLocationPath()
-		if err != nil {
-			return nil, err
-		}
-		// Apply postfix operations (dynamic calls, predicates, lookups)
-		// e.g., /root/function-lookup(...)() or /a/b[pred]
-		return p.parsePostfixOps(expr)
-	}
-
-	// Check if this looks like a step (axis, name test, ., .., @)
-	if p.looksLikeStep() {
-		expr, err := p.parseLocationPath()
-		if err != nil {
-			return nil, err
-		}
-		return p.parsePostfixOps(expr)
-	}
-
-	// Otherwise it's a postfix expression (primary expr with predicates/lookups)
-	postfix, err := p.parsePostfixExpr()
-	if err != nil {
-		return nil, err
-	}
-
-	// Optional trailing location path
-	tok = p.lexer.Peek()
-	if tok.Type == TokenSlash || tok.Type == TokenSlashSlash {
-		p.lexer.Next()
-		path := &LocationPath{Absolute: false}
-		if tok.Type == TokenSlashSlash {
-			path.Steps = append(path.Steps, Step{
+		if tok.Type == TokenSlash {
+			p.lexer.Next()
+			if p.looksLikeStep() {
+				steps, err := p.parseRelativeLocationPath()
+				if err != nil {
+					return nil, err
+				}
+				expr = &LocationPath{Absolute: true, Steps: steps}
+			} else if p.canStartPostfixExpr() {
+				// /functionCall(...) — root then non-step expression
+				root := &LocationPath{Absolute: true}
+				right, err := p.parsePostfixExpr()
+				if err != nil {
+					return nil, err
+				}
+				expr = PathStepExpr{Left: root, Right: right}
+			} else {
+				// Bare "/" selects document root
+				expr = &LocationPath{Absolute: true}
+			}
+		} else {
+			// //
+			p.lexer.Next()
+			descStep := Step{
 				Axis:     AxisDescendantOrSelf,
 				NodeTest: TypeTest{Kind: NodeKindNode},
-			})
+			}
+			if p.looksLikeStep() {
+				steps, err := p.parseRelativeLocationPath()
+				if err != nil {
+					return nil, err
+				}
+				allSteps := append([]Step{descStep}, steps...)
+				expr = &LocationPath{Absolute: true, Steps: allSteps}
+			} else {
+				// //functionCall(...)
+				root := &LocationPath{Absolute: true, Steps: []Step{descStep}}
+				right, err := p.parsePostfixExpr()
+				if err != nil {
+					return nil, err
+				}
+				expr = PathStepExpr{Left: root, Right: right}
+			}
 		}
+	} else if p.looksLikeStep() {
+		// Relative location path
 		steps, err := p.parseRelativeLocationPath()
 		if err != nil {
 			return nil, err
 		}
-		path.Steps = append(path.Steps, steps...)
-		return PathExpr{Filter: postfix, Path: path}, nil
+		expr = &LocationPath{Steps: steps}
+	} else {
+		// Primary/postfix expression
+		postfix, err := p.parsePostfixExpr()
+		if err != nil {
+			return nil, err
+		}
+		expr = postfix
 	}
 
-	return postfix, nil
+	// Apply postfix operations
+	var err error
+	expr, err = p.parsePostfixOps(expr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Handle path continuation: / or // followed by more steps or expressions
+	return p.parsePathContinuation(expr)
+}
+
+// parsePathContinuation handles trailing / or // after the initial part of a path.
+// It chains additional axis steps (via PathExpr) or non-step expressions (via PathStepExpr).
+func (p *parser) parsePathContinuation(expr Expr) (Expr, error) {
+	for {
+		tok := p.lexer.Peek()
+		if tok.Type != TokenSlash && tok.Type != TokenSlashSlash {
+			return expr, nil
+		}
+		descOrSelf := tok.Type == TokenSlashSlash
+		p.lexer.Next()
+
+		if p.looksLikeStep() {
+			// Collect consecutive axis steps into a LocationPath
+			path := &LocationPath{}
+			if descOrSelf {
+				path.Steps = append(path.Steps, Step{
+					Axis:     AxisDescendantOrSelf,
+					NodeTest: TypeTest{Kind: NodeKindNode},
+				})
+			}
+			steps, err := p.parseRelativeLocationPath()
+			if err != nil {
+				return nil, err
+			}
+			path.Steps = append(path.Steps, steps...)
+			expr = PathExpr{Filter: expr, Path: path}
+		} else {
+			// Non-step expression: function call, variable, etc.
+			if descOrSelf {
+				// E1 // nonStep → E1 / descendant-or-self::node() / nonStep
+				expr = PathExpr{
+					Filter: expr,
+					Path: &LocationPath{Steps: []Step{{
+						Axis:     AxisDescendantOrSelf,
+						NodeTest: TypeTest{Kind: NodeKindNode},
+					}}},
+				}
+			}
+			right, err := p.parsePostfixExpr()
+			if err != nil {
+				return nil, err
+			}
+			expr = PathStepExpr{Left: expr, Right: right}
+		}
+
+		// Apply postfix operations on the result (predicates, lookups)
+		var err error
+		expr, err = p.parsePostfixOps(expr)
+		if err != nil {
+			return nil, err
+		}
+	}
+}
+
+// canStartPostfixExpr returns true if the next token can begin a postfix expression.
+func (p *parser) canStartPostfixExpr() bool {
+	tok := p.lexer.Peek()
+	switch tok.Type {
+	case TokenVariableRef, TokenLParen, TokenString, TokenNumber,
+		TokenDot, TokenQMark, TokenLBracket:
+		return true
+	case TokenName, TokenFunction, TokenMap, TokenArray:
+		return true
+	}
+	return false
 }
 
 // parsePostfixExpr parses → PrimaryExpr (Predicate | ArgumentList | Lookup)*.
@@ -846,6 +940,10 @@ loop:
 		switch tok.Type {
 		case TokenSlash:
 			p.lexer.Next()
+			if !p.looksLikeStep() {
+				p.lexer.Backup() // put / back — caller handles non-step continuation
+				break loop
+			}
 			s, err := p.parseStep()
 			if err != nil {
 				return nil, err
@@ -853,6 +951,10 @@ loop:
 			steps = append(steps, s)
 		case TokenSlashSlash:
 			p.lexer.Next()
+			if !p.looksLikeStep() {
+				p.lexer.Backup() // put // back — caller handles non-step continuation
+				break loop
+			}
 			steps = append(steps, Step{
 				Axis:     AxisDescendantOrSelf,
 				NodeTest: TypeTest{Kind: NodeKindNode},

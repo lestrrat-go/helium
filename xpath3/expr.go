@@ -278,6 +278,18 @@ type PathExpr struct {
 
 func (PathExpr) exprNode() {}
 
+// PathStepExpr represents E1/E2 or E1//E2 where E2 is a non-axis expression
+// (function call, variable ref, etc.) used as a step in a path expression.
+// Per XPath 3.1, StepExpr := PostfixExpr | AxisStep.
+// Evaluation: for each node in E1, evaluate E2 with that node as context.
+type PathStepExpr struct {
+	Left       Expr
+	Right      Expr
+	DescOrSelf bool // true for //, inserts descendant-or-self::node() before Right
+}
+
+func (PathStepExpr) exprNode() {}
+
 // --- Lookup ---
 
 // LookupExpr represents postfix lookup: expr ? key.
