@@ -17,6 +17,9 @@ type stopFuncKey struct{}
 // from any SAX callback to abort parsing early. The parse functions will
 // return the partial document built so far with a nil error.
 func StopParser(ctx context.Context) {
+	if ctx == nil {
+		return
+	}
 	if fn, _ := ctx.Value(stopFuncKey{}).(func()); fn != nil {
 		fn()
 	}
@@ -266,8 +269,11 @@ found:
 		return nil, err
 	}
 	innerCtx := withParserCtx(ctx, newctx)
+	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
 	if err := newctx.parseContent(innerCtx); err != nil {
-		return nil, err
+		if !errors.Is(err, errParserStopped) {
+			return nil, err
+		}
 	}
 
 	// Extract children from pseudoroot.

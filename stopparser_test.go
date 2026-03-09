@@ -170,7 +170,9 @@ func TestStopParserReturnsPartialDoc(t *testing.T) {
 }
 
 func TestStopParserWithNilContext(t *testing.T) {
-	// StopParser with a context that has no stopper should be a no-op
+	// StopParser with a nil context should be a no-op and must not panic.
+	helium.StopParser(nil)
+	// StopParser with a context that has no stopper should be a no-op.
 	helium.StopParser(context.Background())
 }
 
