@@ -1212,6 +1212,14 @@ func evalCastExpr(ec *evalContext, e CastExpr) (Sequence, error) {
 }
 
 func evalCastableExpr(ec *evalContext, e CastableExpr) (Sequence, error) {
+	targetType := resolveAtomicTypeName(e.Type, ec)
+	// Abstract types raise a static error even for castable (XPST0080)
+	if isAbstractCastTarget(targetType) {
+		return nil, &XPathError{
+			Code:    "XPST0080",
+			Message: fmt.Sprintf("cannot use abstract type %s as castable target", targetType),
+		}
+	}
 	seq, err := eval(ec, e.Expr)
 	if err != nil {
 		return nil, err
@@ -1226,7 +1234,6 @@ func evalCastableExpr(ec *evalContext, e CastableExpr) (Sequence, error) {
 	if err != nil {
 		return SingleBoolean(false), nil
 	}
-	targetType := resolveAtomicTypeName(e.Type, ec)
 	_, castErr := CastAtomic(av, targetType)
 	return SingleBoolean(castErr == nil), nil
 }

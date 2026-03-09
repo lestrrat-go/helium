@@ -23,11 +23,43 @@ func isIntegerDerived(typeName string) bool {
 	return false
 }
 
+// isAbstractCastTarget returns true if the type cannot be used as a cast/castable target.
+// Per XPath 3.1 §3.12.3, xs:NOTATION and xs:anyAtomicType are abstract and raise XPST0080.
+func isAbstractCastTarget(typeName string) bool {
+	return typeName == "xs:NOTATION" || typeName == TypeAnyAtomicType ||
+		typeName == "xs:anySimpleType" || typeName == "xs:anyType"
+}
+
 // CastAtomic casts an AtomicValue to the target type.
 // Returns an error if the cast is not supported or the value is invalid.
 func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
+	// Abstract types cannot be cast targets (XPST0080)
+	if isAbstractCastTarget(targetType) {
+		return AtomicValue{}, &XPathError{
+			Code:    "XPST0080",
+			Message: fmt.Sprintf("cannot cast to abstract type %s", targetType),
+		}
+	}
+
 	if v.TypeName == targetType {
 		return v, nil
+	}
+
+	// Derived integer target types — cast to integer first, then validate range
+	if isIntegerDerived(targetType) && targetType != TypeInteger {
+		iv, err := CastAtomic(v, TypeInteger)
+		if err != nil {
+			return AtomicValue{}, err
+		}
+		n := iv.IntegerVal()
+		min, max, ok := integerTypeRange(targetType)
+		if ok && (n < min || n > max) {
+			return AtomicValue{}, &XPathError{
+				Code:    "FORG0001",
+				Message: fmt.Sprintf("value %d out of range for %s", n, targetType),
+			}
+		}
+		return AtomicValue{TypeName: targetType, Value: n}, nil
 	}
 
 	// Normalize derived integer types to xs:integer for casting purposes
@@ -137,8 +169,8 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 		}
 		return AtomicValue{TypeName: TypeInteger, Value: n}, nil
 	case TypeDecimal:
-		// Validate it looks like a decimal
-		if _, err := strconv.ParseFloat(s, 64); err != nil {
+		// xs:decimal does not allow INF, NaN, or exponential notation
+		if !isValidDecimalString(s) {
 			return AtomicValue{}, castError(s, targetType)
 		}
 		return AtomicValue{TypeName: TypeDecimal, Value: s}, nil
@@ -194,10 +226,18 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 		if err != nil {
 			return AtomicValue{}, castError(s, targetType)
 		}
+		// xs:dayTimeDuration must not have year/month components
+		if d.Months != 0 {
+			return AtomicValue{}, castError(s, targetType)
+		}
 		return AtomicValue{TypeName: TypeDayTimeDuration, Value: Duration{Seconds: d.Seconds, Negative: d.Negative}}, nil
 	case TypeYearMonthDuration:
 		d, err := parseXSDDuration(s)
 		if err != nil {
+			return AtomicValue{}, castError(s, targetType)
+		}
+		// xs:yearMonthDuration must not have day/time components
+		if d.Seconds != 0 {
 			return AtomicValue{}, castError(s, targetType)
 		}
 		return AtomicValue{TypeName: TypeYearMonthDuration, Value: Duration{Months: d.Months, Negative: d.Negative}}, nil
@@ -218,6 +258,66 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 		Code:    "XPTY0004",
 		Message: fmt.Sprintf("cannot cast string to %s", targetType),
 	}
+}
+
+// integerTypeRange returns the min/max bounds for a derived integer type.
+func integerTypeRange(typeName string) (int64, int64, bool) {
+	switch typeName {
+	case TypeLong:
+		return math.MinInt64, math.MaxInt64, true
+	case TypeInt:
+		return -2147483648, 2147483647, true
+	case TypeShort:
+		return -32768, 32767, true
+	case TypeByte:
+		return -128, 127, true
+	case TypeUnsignedLong:
+		return 0, math.MaxInt64, true // XSD max is 2^64-1 but we use int64
+	case TypeUnsignedInt:
+		return 0, 4294967295, true
+	case TypeUnsignedShort:
+		return 0, 65535, true
+	case TypeUnsignedByte:
+		return 0, 255, true
+	case TypeNonNegativeInteger:
+		return 0, math.MaxInt64, true
+	case TypeNonPositiveInteger:
+		return math.MinInt64, 0, true
+	case TypePositiveInteger:
+		return 1, math.MaxInt64, true
+	case TypeNegativeInteger:
+		return math.MinInt64, -1, true
+	}
+	return 0, 0, false
+}
+
+// isValidDecimalString checks if a string is a valid xs:decimal literal.
+// xs:decimal allows optional sign, digits, optional decimal point with digits.
+// It does NOT allow INF, NaN, or exponential notation (e/E).
+func isValidDecimalString(s string) bool {
+	if s == "" {
+		return false
+	}
+	i := 0
+	if s[i] == '+' || s[i] == '-' {
+		i++
+	}
+	if i >= len(s) {
+		return false
+	}
+	hasDigit := false
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		hasDigit = true
+		i++
+	}
+	if i < len(s) && s[i] == '.' {
+		i++
+		for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+			hasDigit = true
+			i++
+		}
+	}
+	return hasDigit && i == len(s)
 }
 
 func castError(value string, targetType string) *XPathError {
