@@ -96,13 +96,8 @@ func (ec *evalContext) withContextItem(item Item, pos, size int) *evalContext {
 	}
 }
 
-// getCurrentTime returns the cached current time for this evaluation,
-// lazily initializing it on first access.
+// getCurrentTime returns the cached current time for this evaluation.
 func (ec *evalContext) getCurrentTime() time.Time {
-	if ec.currentTime == nil {
-		now := time.Now()
-		ec.currentTime = &now
-	}
 	return *ec.currentTime
 }
 

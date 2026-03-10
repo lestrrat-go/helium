@@ -104,7 +104,9 @@ func formatXPathDouble(f float64) string {
 	}
 
 	abs := math.Abs(f)
-	if abs >= 0.000001 && abs < 1000000 {
+	// XPath spec: use plain decimal for [1e-6, 1e6), scientific notation otherwise.
+	// 1e6 itself (1000000) is excluded and uses scientific notation.
+	if abs >= 0.000001 && abs < 1_000_000 {
 		s := strconv.FormatFloat(f, 'f', -1, 64)
 		return s
 	}

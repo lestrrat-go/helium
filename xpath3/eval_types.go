@@ -157,7 +157,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 			return false
 		}
 		targetType := "xs:" + t.Name
-		if t.Prefix != "" {
+		if t.Prefix != "" && t.Prefix != "xs" && t.Prefix != "xsd" {
 			targetType = t.Prefix + ":" + t.Name
 		}
 		if targetType == TypeAnyAtomicType {

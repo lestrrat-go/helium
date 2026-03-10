@@ -83,6 +83,9 @@ func evalDynamicFunctionCall(ec *evalContext, e DynamicFunctionCall) (Sequence, 
 		if err != nil {
 			return nil, err
 		}
+		if !isIntegerDerived(key.TypeName) {
+			return nil, &XPathError{Code: "XPTY0004", Message: "array lookup requires xs:integer index"}
+		}
 		idx := int(key.ToFloat64())
 		return v.Get(idx)
 	default:
@@ -115,6 +118,9 @@ func evalInlineFunctionExpr(ec *evalContext, e InlineFunctionExpr) (Sequence, er
 	fi := FunctionItem{
 		Arity: len(e.Params),
 		Invoke: func(ctx context.Context, args []Sequence) (Sequence, error) {
+			if len(args) != len(e.Params) {
+				return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("inline function requires %d arguments, got %d", len(e.Params), len(args))}
+			}
 			innerCtx := &evalContext{
 				goCtx:      ctx,
 				node:       ec.node,
@@ -130,9 +136,7 @@ func evalInlineFunctionExpr(ec *evalContext, e InlineFunctionExpr) (Sequence, er
 				maxNodes:   ec.maxNodes,
 			}
 			for i, param := range e.Params {
-				if i < len(args) {
-					innerCtx.vars[param.Name] = args[i]
-				}
+				innerCtx.vars[param.Name] = args[i]
 			}
 			return eval(innerCtx, e.Body)
 		},
