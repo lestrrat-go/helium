@@ -30,8 +30,8 @@ type evalContext struct {
 	opLimit          int
 	docOrder         *ixpath.DocOrderCache
 	maxNodes         int
-	currentTime      *time.Time     // current time, set once at construction for stable fn:current-*
-	implicitTimezone *time.Location // implicit timezone for fn:adjust-*-to-timezone (1-arg form)
+	currentTime      *time.Time     // set once at construction for stable fn:current-*
+	implicitTimezone *time.Location // for fn:adjust-*-to-timezone (1-arg form)
 }
 
 func newEvalContext(ctx context.Context, node helium.Node) *evalContext {

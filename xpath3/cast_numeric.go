@@ -34,6 +34,8 @@ func castToFloat(v AtomicValue) (AtomicValue, error) {
 	if err != nil {
 		return AtomicValue{}, err
 	}
+	// Narrow to single-precision semantics before changing the type
+	result.Value = float64(float32(result.DoubleVal()))
 	result.TypeName = TypeFloat
 	return result, nil
 }

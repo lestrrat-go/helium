@@ -8,6 +8,6 @@ import (
 // traverseAxis returns the nodes along the given axis from the context node,
 // in the order defined by the XPath spec.
 func traverseAxis(axis AxisType, node helium.Node) ([]helium.Node, error) {
-	return ixpath.TraverseAxis(ixpath.AxisType(axis), node, maxNodeSetLength)
+	return ixpath.TraverseAxis(axis, node, maxNodeSetLength)
 }
 
