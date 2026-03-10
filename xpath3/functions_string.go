@@ -344,8 +344,14 @@ func fnSubstringBefore(_ context.Context, args []Sequence) (Sequence, error) {
 			return nil, err
 		}
 	}
-	s := seqToString(args[0])
-	sep := seqToString(args[1])
+	s, err := coerceArgToString(args[0])
+	if err != nil {
+		return nil, err
+	}
+	sep, err := coerceArgToString(args[1])
+	if err != nil {
+		return nil, err
+	}
 	idx := strings.Index(s, sep)
 	if idx < 0 {
 		return SingleString(""), nil

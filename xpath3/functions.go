@@ -186,6 +186,31 @@ func seqToStringErr(seq Sequence) (string, error) {
 	return atomicToString(a)
 }
 
+// coerceArgToString applies XPath 3.1 function coercion rules for xs:string? params.
+// Accepts: empty sequence → "", xs:string/xs:anyURI → as-is, xs:untypedAtomic → cast.
+// Rejects all other types with XPTY0004.
+func coerceArgToString(seq Sequence) (string, error) {
+	if len(seq) == 0 {
+		return "", nil
+	}
+	a, err := AtomizeItem(seq[0])
+	if err != nil {
+		return "", err
+	}
+	switch a.TypeName {
+	case TypeString, TypeAnyURI, TypeUntypedAtomic,
+		TypeNormalizedString, TypeToken, TypeLanguage, TypeName, TypeNCName,
+		TypeNMTOKEN, TypeNMTOKENS, TypeENTITY, TypeID, TypeIDREF, TypeIDREFS:
+		s, ok := a.Value.(string)
+		if !ok {
+			return "", fmt.Errorf("xpath3: internal error: expected string for %s", a.TypeName)
+		}
+		return s, nil
+	default:
+		return "", &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("expected xs:string?, got %s", a.TypeName)}
+	}
+}
+
 // seqToDouble atomizes the first item to a float64.
 func seqToDouble(seq Sequence) float64 {
 	if len(seq) == 0 {
