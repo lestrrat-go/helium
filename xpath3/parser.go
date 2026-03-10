@@ -869,9 +869,6 @@ func (p *parser) parseLookupKey() (Expr, bool, error) {
 			return nil, false, fmt.Errorf("invalid lookup index %q: %w", tok.Value, err)
 		}
 		return LiteralExpr{Value: v}, false, nil
-	case TokenName:
-		p.lexer.Next()
-		return LiteralExpr{Value: tok.Value}, false, nil
 	case TokenLParen:
 		expr, err := p.parseParenExpr()
 		if err != nil {
@@ -879,8 +876,88 @@ func (p *parser) parseLookupKey() (Expr, bool, error) {
 		}
 		return expr, false, nil
 	default:
+		// Accept any keyword or name token as an NCName key
+		if name := tokenAsNCName(tok); name != "" {
+			p.lexer.Next()
+			return LiteralExpr{Value: name}, false, nil
+		}
 		return nil, false, fmt.Errorf("%w: lookup key but got %s", ErrExpectedToken, tok)
 	}
+}
+
+// tokenAsNCName returns the NCName string for a token that can be used as an
+// NCName in lookup keys and other non-keyword contexts. Returns "" if the
+// token is not a valid NCName.
+func tokenAsNCName(tok Token) string {
+	switch tok.Type {
+	case TokenName:
+		return tok.Value
+	case TokenDiv:
+		return "div"
+	case TokenMod:
+		return "mod"
+	case TokenAnd:
+		return "and"
+	case TokenOr:
+		return "or"
+	case TokenReturn:
+		return "return"
+	case TokenElse:
+		return "else"
+	case TokenEq:
+		return "eq"
+	case TokenNe:
+		return "ne"
+	case TokenLt:
+		return "lt"
+	case TokenLe:
+		return "le"
+	case TokenGt:
+		return "gt"
+	case TokenGe:
+		return "ge"
+	case TokenIdiv:
+		return "idiv"
+	case TokenIf:
+		return "if"
+	case TokenThen:
+		return "then"
+	case TokenFor:
+		return "for"
+	case TokenLet:
+		return "let"
+	case TokenIn:
+		return "in"
+	case TokenSome:
+		return "some"
+	case TokenEvery:
+		return "every"
+	case TokenSatisfies:
+		return "satisfies"
+	case TokenIs:
+		return "is"
+	case TokenTo:
+		return "to"
+	case TokenUnion:
+		return "union"
+	case TokenIntersect:
+		return "intersect"
+	case TokenExcept:
+		return "except"
+	case TokenInstanceOf:
+		return "instance"
+	case TokenTreatAs:
+		return "treat"
+	case TokenCastableAs:
+		return "castable"
+	case TokenCastAs:
+		return "cast"
+	case TokenAs:
+		return "as"
+	case TokenOf:
+		return "of"
+	}
+	return ""
 }
 
 // --- Location Path Parsing ---

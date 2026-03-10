@@ -4,6 +4,8 @@ import (
 	"context"
 	"math"
 	"math/big"
+
+	"github.com/lestrrat-go/helium/internal/icu"
 )
 
 func init() {
@@ -118,7 +120,7 @@ func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
 		return SingleIntegerBig(roundIntegerHalfToEven(a.BigInt(), -precision)), nil
 	}
 	if a.TypeName == TypeDecimal {
-		return SingleDecimal(ratRoundHalfToEven(a.BigRat(), precision)), nil
+		return SingleDecimal(icu.RatRoundHalfToEven(a.BigRat(), precision)), nil
 	}
 	n := a.ToFloat64()
 	if math.IsNaN(n) || math.IsInf(n, 0) || n == 0 {
@@ -128,9 +130,6 @@ func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: math.RoundToEven(n*scale) / scale}), nil
 }
 
-func fnFormatInteger(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, &XPathError{Code: "FOER0000", Message: "format-integer not yet implemented"}
-}
 
 func fnFormatNumber(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
@@ -188,97 +187,6 @@ func ratRound(r *big.Rat) *big.Rat {
 	half := new(big.Rat).SetFrac64(1, 2)
 	shifted := new(big.Rat).Add(r, half)
 	return ratFloor(shifted)
-}
-
-// ratRoundHalfToEven rounds a *big.Rat to the given precision using half-to-even.
-func ratRoundHalfToEven(r *big.Rat, precision int) *big.Rat {
-	if precision < 0 {
-		// Guard against absurdly large negative precision
-		if -precision > 1000 {
-			return new(big.Rat) // rounds to zero
-		}
-		// Round to 10^(-precision) — convert to integer, round, convert back
-		scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(-precision)), nil)
-		scaleRat := new(big.Rat).SetInt(scale)
-		divided := new(big.Rat).Quo(r, scaleRat)
-		rounded := ratRoundHalfToEvenInt(divided)
-		return new(big.Rat).Mul(new(big.Rat).SetInt(rounded), scaleRat)
-	}
-	// If precision is very large and already exceeds the denominator's decimal
-	// digits, the value is already exact — return as-is. This avoids computing
-	// astronomically large powers of 10 (e.g. 10^4294967296).
-	if precision > 1000 || ratDecimalDigits(r) <= precision {
-		return new(big.Rat).Set(r)
-	}
-	// Multiply by 10^precision, round to integer, divide back
-	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(precision)), nil)
-	scaleRat := new(big.Rat).SetInt(scale)
-	shifted := new(big.Rat).Mul(r, scaleRat)
-	rounded := ratRoundHalfToEvenInt(shifted)
-	return new(big.Rat).SetFrac(rounded, new(big.Int).Set(scale))
-}
-
-// ratDecimalDigits returns the number of decimal digits needed to represent
-// the fractional part of r exactly. Returns 0 for integers.
-func ratDecimalDigits(r *big.Rat) int {
-	if r.IsInt() {
-		return 0
-	}
-	// Factor out 2s and 5s from denominator; count max
-	d := new(big.Int).Set(r.Denom())
-	twos, fives := 0, 0
-	for d.Bit(0) == 0 {
-		d.Rsh(d, 1)
-		twos++
-	}
-	five := big.NewInt(5)
-	mod := new(big.Int)
-	for {
-		d.QuoRem(d, five, mod)
-		if mod.Sign() != 0 {
-			break
-		}
-		fives++
-	}
-	if twos > fives {
-		return twos
-	}
-	return fives
-}
-
-// ratRoundHalfToEvenInt rounds a *big.Rat to the nearest integer, half-to-even.
-func ratRoundHalfToEvenInt(r *big.Rat) *big.Int {
-	if r.IsInt() {
-		return new(big.Int).Set(r.Num())
-	}
-	// Get integer part (truncated toward zero)
-	intPart := new(big.Int).Quo(r.Num(), r.Denom())
-	// Fractional remainder
-	rem := new(big.Rat).Sub(r, new(big.Rat).SetInt(intPart))
-	rem.Abs(rem)
-
-	half := new(big.Rat).SetFrac64(1, 2)
-	cmp := rem.Cmp(half)
-
-	if cmp < 0 {
-		// Closer to floor
-		return intPart
-	}
-	if cmp > 0 {
-		// Closer to ceil
-		if r.Sign() > 0 {
-			return intPart.Add(intPart, big.NewInt(1))
-		}
-		return intPart.Sub(intPart, big.NewInt(1))
-	}
-	// Exactly half — round to even
-	if new(big.Int).And(intPart, big.NewInt(1)).Sign() == 0 {
-		return intPart // already even
-	}
-	if r.Sign() > 0 {
-		return intPart.Add(intPart, big.NewInt(1))
-	}
-	return intPart.Sub(intPart, big.NewInt(1))
 }
 
 // roundIntegerHalfToEven rounds a *big.Int to 10^scale using half-to-even.

@@ -111,7 +111,7 @@ type assertion struct {
 func main() {
 	repoRoot := findRepoRoot()
 	sourceDir := filepath.Join(repoRoot, "testdata", "qt3ts", "source")
-	outputFile := filepath.Join(repoRoot, "xpath3", "qt3_generated_test.go")
+	outputDir := filepath.Join(repoRoot, "xpath3")
 	docsDir := filepath.Join(repoRoot, "testdata", "qt3ts", "testdata")
 
 	if _, err := os.Stat(filepath.Join(sourceDir, "catalog.xml")); os.IsNotExist(err) {
@@ -194,29 +194,46 @@ func main() {
 		copied++
 	}
 
-	// Generate Go test file
-	code := generateTestFile(allTests)
-	formatted, err := format.Source([]byte(code))
-	if err != nil {
-		if writeErr := os.WriteFile(outputFile, []byte(code), 0o644); writeErr != nil {
-			log.Fatalf("writing unformatted output: %v", writeErr)
+	// Remove old generated files
+	removeOldGeneratedFiles(outputDir)
+
+	// Group tests by category and generate per-category files
+	categories := groupByCategory(allTests)
+	catNames := sortedCategoryNames(categories)
+
+	totalTests := 0
+	totalSkipped := 0
+	for _, cat := range catNames {
+		tests := categories[cat]
+		filename := fmt.Sprintf("qt3_%s_gen_test.go", cat)
+		outputPath := filepath.Join(outputDir, filename)
+
+		code := generateTestFile(tests)
+		formatted, err := format.Source([]byte(code))
+		if err != nil {
+			if writeErr := os.WriteFile(outputPath, []byte(code), 0o644); writeErr != nil {
+				log.Fatalf("writing unformatted output: %v", writeErr)
+			}
+			log.Fatalf("gofmt failed for %s (raw file written): %v", filename, err)
 		}
-		log.Fatalf("gofmt failed (raw file written): %v", err)
-	}
-	if err := os.WriteFile(outputFile, formatted, 0o644); err != nil {
-		log.Fatalf("writing %s: %v", outputFile, err)
+		if err := os.WriteFile(outputPath, formatted, 0o644); err != nil {
+			log.Fatalf("writing %s: %v", outputPath, err)
+		}
+
+		skipped := 0
+		for _, t := range tests {
+			if t.SkipReason != "" {
+				skipped++
+			}
+		}
+		totalTests += len(tests)
+		totalSkipped += skipped
+		fmt.Printf("  %s: %d tests (%d run, %d skip)\n", filename, len(tests), len(tests)-skipped, skipped)
 	}
 
-	fmt.Printf("Generated %d XPath tests in %s\n", len(allTests), outputFile)
+	fmt.Printf("Generated %d XPath tests across %d files in %s\n", totalTests, len(catNames), outputDir)
 	fmt.Printf("Copied %d context documents to %s\n", copied, docsDir)
-
-	skipped := 0
-	for _, t := range allTests {
-		if t.SkipReason != "" {
-			skipped++
-		}
-	}
-	fmt.Printf("  %d will run, %d will skip\n", len(allTests)-skipped, skipped)
+	fmt.Printf("  %d will run, %d will skip\n", totalTests-totalSkipped, totalSkipped)
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -633,6 +650,44 @@ func findRepoRoot() string {
 			log.Fatal("could not find repo root (go.mod)")
 		}
 		dir = parent
+	}
+}
+
+// categoryOf extracts the grouping prefix from a test set name.
+// e.g. "fn-abs" → "fn", "op-numeric-add" → "op", "prod-AxisStep" → "prod"
+func categoryOf(setName string) string {
+	if idx := strings.IndexByte(setName, '-'); idx > 0 {
+		return setName[:idx]
+	}
+	return setName
+}
+
+func groupByCategory(tests []generatedTest) map[string][]generatedTest {
+	cats := make(map[string][]generatedTest)
+	for _, t := range tests {
+		cat := categoryOf(t.SetName)
+		cats[cat] = append(cats[cat], t)
+	}
+	return cats
+}
+
+func sortedCategoryNames(cats map[string][]generatedTest) []string {
+	names := make([]string, 0, len(cats))
+	for name := range cats {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func removeOldGeneratedFiles(dir string) {
+	// Remove old single-file output
+	os.Remove(filepath.Join(dir, "qt3_generated_test.go"))
+
+	// Remove old per-category files
+	matches, _ := filepath.Glob(filepath.Join(dir, "qt3_*_gen_test.go"))
+	for _, m := range matches {
+		os.Remove(m)
 	}
 }
 

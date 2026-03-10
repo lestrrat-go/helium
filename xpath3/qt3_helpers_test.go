@@ -153,7 +153,7 @@ func qt3EBV(seq xpath3.Sequence) (bool, error) {
 func qt3AssertEq(expected string) qt3Assertion {
 	return func(t *testing.T, seq xpath3.Sequence) {
 		t.Helper()
-		// assert-eq: expected is an XPath expression; evaluate it and compare string values
+		// assert-eq: expected is an XPath expression; evaluate it and compare using eq operator
 		compiled, err := xpath3.Compile(expected)
 		if err != nil {
 			// Not a valid XPath expr — compare as literal string
@@ -165,7 +165,22 @@ func qt3AssertEq(expected string) qt3Assertion {
 			require.Equal(t, expected, qt3StringValue(seq))
 			return
 		}
-		require.Equal(t, qt3StringValue(result.Sequence()), qt3StringValue(seq))
+		// Try value comparison using eq operator for singleton atomic values
+		expSeq := result.Sequence()
+		if len(seq) == 1 && len(expSeq) == 1 {
+			av, aErr := xpath3.AtomizeItem(seq[0])
+			bv, bErr := xpath3.AtomizeItem(expSeq[0])
+			if aErr == nil && bErr == nil {
+				eq, cmpErr := xpath3.ValueCompare(xpath3.TokenEq, av, bv)
+				if cmpErr == nil {
+					if eq {
+						return // values are equal via eq
+					}
+					// Fall through to string comparison for better error message
+				}
+			}
+		}
+		require.Equal(t, qt3StringValue(expSeq), qt3StringValue(seq))
 	}
 }
 

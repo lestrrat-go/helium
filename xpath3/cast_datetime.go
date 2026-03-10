@@ -52,31 +52,77 @@ func parseXSDDate(s string) (time.Time, error) {
 }
 
 func parseXSDDateTime(s string) (time.Time, error) {
+	// Handle 24:00:00 (end-of-day midnight) — XSD allows this
+	normalized, isMidnight24 := normalizeMidnight24DateTime(s)
+	target := s
+	if isMidnight24 {
+		target = normalized
+	}
 	for _, layout := range []string{
 		"2006-01-02T15:04:05.999999999Z07:00",
 		"2006-01-02T15:04:05Z07:00",
 		"2006-01-02T15:04:05.999999999",
 		"2006-01-02T15:04:05",
 	} {
-		if t, err := time.Parse(layout, s); err == nil {
-			return ensureExplicitTZ(t, s), nil
+		if t, err := time.Parse(layout, target); err == nil {
+			t = ensureExplicitTZ(t, s)
+			if isMidnight24 {
+				t = t.AddDate(0, 0, 1) // advance to next day
+			}
+			return t, nil
 		}
 	}
 	return time.Time{}, fmt.Errorf("invalid xs:dateTime: %q", s)
 }
 
 func parseXSDTime(s string) (time.Time, error) {
+	// Handle 24:00:00 — XSD allows this as equivalent to 00:00:00
+	normalized, isMidnight24 := normalizeMidnight24Time(s)
+	target := s
+	if isMidnight24 {
+		target = normalized
+	}
 	for _, layout := range []string{
 		"15:04:05.999999999Z07:00",
 		"15:04:05Z07:00",
 		"15:04:05.999999999",
 		"15:04:05",
 	} {
-		if t, err := time.Parse(layout, s); err == nil {
+		if t, err := time.Parse(layout, target); err == nil {
 			return ensureExplicitTZ(t, s), nil
 		}
 	}
 	return time.Time{}, fmt.Errorf("invalid xs:time: %q", s)
+}
+
+// normalizeMidnight24DateTime checks if a dateTime string has T24:00:00 and
+// replaces it with T00:00:00. Returns the normalized string and true if it was
+// a midnight-24 value. The caller must advance the date by one day.
+// 24:00:00.xxx (with fractional seconds) is NOT valid per XSD.
+func normalizeMidnight24DateTime(s string) (string, bool) {
+	idx := strings.Index(s, "T24:00:00")
+	if idx < 0 {
+		return s, false
+	}
+	// Check that minutes and seconds are exactly 00:00 (no fractional seconds allowed with hour 24)
+	rest := s[idx+len("T24:00:00"):]
+	if len(rest) > 0 && rest[0] == '.' {
+		return s, false // 24:00:00.xxx is invalid
+	}
+	return s[:idx] + "T00:00:00" + rest, true
+}
+
+// normalizeMidnight24Time checks if a time string starts with 24:00:00 and
+// replaces it with 00:00:00. For xs:time, 24:00:00 equals 00:00:00 (no date rollover).
+func normalizeMidnight24Time(s string) (string, bool) {
+	if !strings.HasPrefix(s, "24:00:00") {
+		return s, false
+	}
+	rest := s[len("24:00:00"):]
+	if len(rest) > 0 && rest[0] == '.' {
+		return s, false // 24:00:00.xxx is invalid
+	}
+	return "00:00:00" + rest, true
 }
 
 func ensureExplicitTZ(t time.Time, s string) time.Time {

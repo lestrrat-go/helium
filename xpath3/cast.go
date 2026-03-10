@@ -165,6 +165,13 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		return castToGType(v, targetType, func(t time.Time) string {
 			return fmt.Sprintf("%04d-%02d%s", t.Year(), t.Month(), formatXSDTimezone(t))
 		})
+	case TypeNormalizedString, TypeToken, TypeLanguage, TypeName, TypeNCName,
+		TypeNMTOKEN, TypeNMTOKENS, TypeENTITY, TypeID, TypeIDREF, TypeIDREFS:
+		s, err := atomicToString(v)
+		if err != nil {
+			return AtomicValue{}, err
+		}
+		return AtomicValue{TypeName: targetType, Value: s}, nil
 	}
 
 	return AtomicValue{}, &XPathError{
@@ -298,6 +305,10 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 			return AtomicValue{}, castError(s, targetType)
 		}
 		return AtomicValue{TypeName: TypeGYearMonth, Value: s}, nil
+	case TypeNormalizedString, TypeToken, TypeLanguage, TypeName, TypeNCName,
+		TypeNMTOKEN, TypeNMTOKENS, TypeENTITY, TypeID, TypeIDREF, TypeIDREFS:
+		// String-derived types: accept the string value directly
+		return AtomicValue{TypeName: targetType, Value: s}, nil
 	}
 	return AtomicValue{}, &XPathError{
 		Code:    "XPTY0004",

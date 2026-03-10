@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
+
+	"github.com/lestrrat-go/helium"
 )
 
 func init() {
@@ -163,24 +165,233 @@ func fnExactlyOne(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnDeepEqual(_ context.Context, args []Sequence) (Sequence, error) {
-	a := args[0]
-	b := args[1]
+	eq, err := deepEqualSequence(args[0], args[1])
+	if err != nil {
+		return nil, err
+	}
+	return SingleBoolean(eq), nil
+}
+
+func deepEqualSequence(a, b Sequence) (bool, error) {
 	if len(a) != len(b) {
-		return SingleBoolean(false), nil
+		return false, nil
 	}
 	for i := range a {
-		aa, err1 := AtomizeItem(a[i])
-		ba, err2 := AtomizeItem(b[i])
-		if err1 != nil || err2 != nil {
-			return SingleBoolean(false), nil
+		eq, err := deepEqualItem(a[i], b[i])
+		if err != nil {
+			return false, err
 		}
-		sa, _ := atomicToString(aa)
-		sb, _ := atomicToString(ba)
-		if sa != sb {
-			return SingleBoolean(false), nil
+		if !eq {
+			return false, nil
 		}
 	}
-	return SingleBoolean(true), nil
+	return true, nil
+}
+
+func deepEqualItem(a, b Item) (bool, error) {
+	switch av := a.(type) {
+	case AtomicValue:
+		bv, ok := b.(AtomicValue)
+		if !ok {
+			return false, nil
+		}
+		return deepEqualAtomic(av, bv)
+	case NodeItem:
+		bv, ok := b.(NodeItem)
+		if !ok {
+			return false, nil
+		}
+		return deepEqualNode(av.Node, bv.Node), nil
+	case MapItem:
+		bv, ok := b.(MapItem)
+		if !ok {
+			return false, nil
+		}
+		return deepEqualMap(av, bv)
+	case ArrayItem:
+		bv, ok := b.(ArrayItem)
+		if !ok {
+			return false, nil
+		}
+		return deepEqualArray(av, bv)
+	case FunctionItem:
+		if _, ok := b.(FunctionItem); ok {
+			return false, &XPathError{Code: "FOTY0015", Message: "deep-equal: cannot compare function items"}
+		}
+		return false, nil
+	default:
+		return false, nil
+	}
+}
+
+func deepEqualAtomic(a, b AtomicValue) (bool, error) {
+	// NaN equals NaN for deep-equal purposes
+	if a.TypeName == TypeDouble || a.TypeName == TypeFloat {
+		af := a.ToFloat64()
+		if b.TypeName == TypeDouble || b.TypeName == TypeFloat {
+			bf := b.ToFloat64()
+			if af != af && bf != bf { // both NaN
+				return true, nil
+			}
+		}
+	}
+	eq, err := ValueCompare(TokenEq, a, b)
+	if err != nil {
+		// Incomparable types are not deep-equal
+		return false, nil
+	}
+	return eq, nil
+}
+
+func deepEqualNode(a, b helium.Node) bool {
+	if a.Type() != b.Type() {
+		return false
+	}
+	switch a.Type() {
+	case helium.DocumentNode:
+		return deepEqualChildren(a, b)
+	case helium.ElementNode:
+		ae, aOK := a.(*helium.Element)
+		be, bOK := b.(*helium.Element)
+		if !aOK || !bOK {
+			return false
+		}
+		// Compare expanded name (local name + namespace URI)
+		if ae.LocalName() != be.LocalName() || ae.URI() != be.URI() {
+			return false
+		}
+		// Compare attributes (order-independent)
+		aAttrs := ae.Attributes()
+		bAttrs := be.Attributes()
+		if len(aAttrs) != len(bAttrs) {
+			return false
+		}
+		for _, aa := range aAttrs {
+			found := false
+			for _, ba := range bAttrs {
+				if aa.LocalName() == ba.LocalName() && aa.URI() == ba.URI() {
+					if aa.Value() != ba.Value() {
+						return false
+					}
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false
+			}
+		}
+		// Compare children
+		return deepEqualChildren(a, b)
+	case helium.AttributeNode:
+		aa, aOK := a.(*helium.Attribute)
+		ba, bOK := b.(*helium.Attribute)
+		if !aOK || !bOK {
+			return false
+		}
+		return aa.LocalName() == ba.LocalName() && aa.URI() == ba.URI() && aa.Value() == ba.Value()
+	case helium.TextNode, helium.CDATASectionNode:
+		return string(a.Content()) == string(b.Content())
+	case helium.CommentNode:
+		return string(a.Content()) == string(b.Content())
+	case helium.ProcessingInstructionNode:
+		return a.Name() == b.Name() && string(a.Content()) == string(b.Content())
+	default:
+		return false
+	}
+}
+
+func deepEqualChildren(a, b helium.Node) bool {
+	// Collect significant children (skip whitespace-only text between elements? No — deep-equal compares all children)
+	ac := a.FirstChild()
+	bc := b.FirstChild()
+	for ac != nil && bc != nil {
+		if !deepEqualNode(ac, bc) {
+			return false
+		}
+		ac = ac.NextSibling()
+		bc = bc.NextSibling()
+	}
+	return ac == nil && bc == nil
+}
+
+func deepEqualMap(a, b MapItem) (bool, error) {
+	if a.Size() != b.Size() {
+		return false, nil
+	}
+	// For each key in a, find a matching key in b using deep-equal comparison
+	// (handles cross-type numeric keys like xs:integer(1) == xs:double(1.0))
+	aKeys := a.Keys()
+	bKeys := b.Keys()
+	bUsed := make([]bool, len(bKeys))
+	for _, ak := range aKeys {
+		found := false
+		// Try exact lookup first (fast path)
+		if bVal, ok := b.Get(ak); ok {
+			aVal, _ := a.Get(ak)
+			eq, err := deepEqualSequence(aVal, bVal)
+			if err != nil {
+				return false, err
+			}
+			if eq {
+				// Mark the matching b key as used
+				for j, bk := range bKeys {
+					if !bUsed[j] {
+						if keyEq, _ := deepEqualAtomic(ak, bk); keyEq {
+							bUsed[j] = true
+							break
+						}
+					}
+				}
+				found = true
+			}
+		}
+		if !found {
+			// Slow path: compare keys by value (cross-type)
+			aVal, _ := a.Get(ak)
+			for j, bk := range bKeys {
+				if bUsed[j] {
+					continue
+				}
+				keyEq, _ := deepEqualAtomic(ak, bk)
+				if !keyEq {
+					continue
+				}
+				bVal, _ := b.Get(bk)
+				eq, err := deepEqualSequence(aVal, bVal)
+				if err != nil {
+					return false, err
+				}
+				if eq {
+					bUsed[j] = true
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func deepEqualArray(a, b ArrayItem) (bool, error) {
+	if a.Size() != b.Size() {
+		return false, nil
+	}
+	for i := 0; i < a.Size(); i++ {
+		am, _ := a.Get(i + 1)
+		bm, _ := b.Get(i + 1)
+		eq, err := deepEqualSequence(am, bm)
+		if err != nil {
+			return false, err
+		}
+		if !eq {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func fnIndexOf(_ context.Context, args []Sequence) (Sequence, error) {

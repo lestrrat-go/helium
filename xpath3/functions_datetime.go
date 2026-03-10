@@ -402,16 +402,3 @@ func durationToLocation(d Duration) *time.Location {
 	return time.FixedZone("", offset)
 }
 
-// --- formatting stubs ---
-
-func fnFormatDateTime(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, &XPathError{Code: "FOER0000", Message: "format-dateTime not yet implemented"}
-}
-
-func fnFormatDate(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, &XPathError{Code: "FOER0000", Message: "format-date not yet implemented"}
-}
-
-func fnFormatTime(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, &XPathError{Code: "FOER0000", Message: "format-time not yet implemented"}
-}
