@@ -38,6 +38,12 @@ func MustCompile(expr string) *Expression {
 // with namespace bindings, variable bindings, and custom functions.
 func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, error) {
 	ec := newEvalContext(ctx, node)
+
+	// Static analysis: validate all namespace prefixes in the AST
+	if err := checkPrefixes(e.ast, ec.namespaces); err != nil {
+		return nil, err
+	}
+
 	seq, err := eval(ec, e.ast)
 	if err != nil {
 		return nil, err
