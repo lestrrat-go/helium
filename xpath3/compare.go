@@ -333,8 +333,12 @@ func compareAtomic(op TokenType, a, b AtomicValue) (bool, error) {
 			ta := a.Value.(time.Time)
 			tb := b.Value.(time.Time)
 			return compareTimeOfDay(op, ta, tb), nil
-		case TypeYearMonthDuration, TypeDayTimeDuration, TypeDuration:
+		case TypeYearMonthDuration, TypeDayTimeDuration:
 			return compareDuration(op, a.DurationVal(), b.DurationVal())
+		case TypeDuration:
+			// xs:duration values cannot be compared (XPTY0004).
+			// Only xs:yearMonthDuration and xs:dayTimeDuration are comparable.
+			return false, &XPathError{Code: "XPTY0004", Message: "xs:duration values are not comparable"}
 		case TypeBase64Binary:
 			return compareBinary(op, a.Value.([]byte), b.Value.([]byte))
 		case TypeHexBinary:
@@ -349,10 +353,14 @@ func compareAtomic(op TokenType, a, b AtomicValue) (bool, error) {
 		}
 	}
 
-	// Duration cross-subtype comparison (eq/ne only)
+	// Duration cross-subtype comparison (eq/ne only between YM and DT)
 	famA := comparisonFamily(a.TypeName)
 	famB := comparisonFamily(b.TypeName)
 	if strings.HasPrefix(famA, "duration") && strings.HasPrefix(famB, "duration") {
+		// If either operand is plain xs:duration (not YM or DT subtype), error
+		if a.TypeName == TypeDuration || b.TypeName == TypeDuration {
+			return false, &XPathError{Code: "XPTY0004", Message: "xs:duration values are not comparable"}
+		}
 		return compareDuration(op, a.DurationVal(), b.DurationVal())
 	}
 

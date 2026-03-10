@@ -228,11 +228,22 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 		if err != nil {
 			return AtomicValue{}, castError(s, targetType)
 		}
+		// Reject string values that overflow to infinity (but allow "INF"/"-INF" literals)
+		if math.IsInf(f, 0) && s != "INF" && s != "-INF" {
+			return AtomicValue{}, castError(s, targetType)
+		}
 		return AtomicValue{TypeName: TypeDouble, Value: f}, nil
 	case TypeFloat:
 		f, err := parseXPathDouble(s)
 		if err != nil {
 			return AtomicValue{}, castError(s, targetType)
+		}
+		// Reject finite values that overflow float32 range
+		if !math.IsNaN(f) && !math.IsInf(f, 0) {
+			f32 := float32(f)
+			if math.IsInf(float64(f32), 0) {
+				return AtomicValue{}, castError(s, targetType)
+			}
 		}
 		return AtomicValue{TypeName: TypeFloat, Value: f}, nil
 	case TypeBoolean:
@@ -301,17 +312,17 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 		}
 		return AtomicValue{TypeName: TypeHexBinary, Value: b}, nil
 	case TypeGDay:
-		if !reGDay.MatchString(s) {
+		if !reGDay.MatchString(s) || !validateGregorianValue(TypeGDay, s) {
 			return AtomicValue{}, castError(s, targetType)
 		}
 		return AtomicValue{TypeName: TypeGDay, Value: s}, nil
 	case TypeGMonth:
-		if !reGMonth.MatchString(s) {
+		if !reGMonth.MatchString(s) || !validateGregorianValue(TypeGMonth, s) {
 			return AtomicValue{}, castError(s, targetType)
 		}
 		return AtomicValue{TypeName: TypeGMonth, Value: s}, nil
 	case TypeGMonthDay:
-		if !reGMonthDay.MatchString(s) {
+		if !reGMonthDay.MatchString(s) || !validateGregorianValue(TypeGMonthDay, s) {
 			return AtomicValue{}, castError(s, targetType)
 		}
 		return AtomicValue{TypeName: TypeGMonthDay, Value: s}, nil

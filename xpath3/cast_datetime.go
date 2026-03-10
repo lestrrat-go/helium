@@ -93,11 +93,17 @@ func parseXSDDate(s string) (time.Time, error) {
 	if err != nil {
 		return time.Time{}, fmt.Errorf("invalid xs:date: %q", s)
 	}
+	if err := validateTimezoneInString(s); err != nil {
+		return time.Time{}, fmt.Errorf("invalid xs:date: %q: %w", s, err)
+	}
 	layouts := []string{
 		"2006-01-02Z07:00",
 		"2006-01-02",
 	}
 	if t, ok := buildTimeFromParts(year, rest, layouts, s); ok {
+		if err := validateDateComponents(int(t.Month()), t.Day(), year); err != nil {
+			return time.Time{}, fmt.Errorf("invalid xs:date: %q: %w", s, err)
+		}
 		return t, nil
 	}
 	return time.Time{}, fmt.Errorf("invalid xs:date: %q", s)
@@ -110,6 +116,9 @@ func parseXSDDateTime(s string) (time.Time, error) {
 	if isMidnight24 {
 		target = normalized
 	}
+	if err := validateTimezoneInString(s); err != nil {
+		return time.Time{}, fmt.Errorf("invalid xs:dateTime: %q: %w", s, err)
+	}
 	year, rest, err := splitXSDYear(target)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("invalid xs:dateTime: %q", s)
@@ -121,6 +130,14 @@ func parseXSDDateTime(s string) (time.Time, error) {
 		"2006-01-02T15:04:05",
 	}
 	if t, ok := buildTimeFromParts(year, rest, layouts, s); ok {
+		if err := validateDateComponents(int(t.Month()), t.Day(), year); err != nil {
+			return time.Time{}, fmt.Errorf("invalid xs:dateTime: %q: %w", s, err)
+		}
+		if !isMidnight24 {
+			if err := validateTimeComponents(t.Hour(), t.Minute(), t.Second(), t.Nanosecond()); err != nil {
+				return time.Time{}, fmt.Errorf("invalid xs:dateTime: %q: %w", s, err)
+			}
+		}
 		if isMidnight24 {
 			t = t.AddDate(0, 0, 1) // advance to next day
 		}
@@ -130,6 +147,9 @@ func parseXSDDateTime(s string) (time.Time, error) {
 }
 
 func parseXSDTime(s string) (time.Time, error) {
+	if err := validateTimezoneInString(s); err != nil {
+		return time.Time{}, fmt.Errorf("invalid xs:time: %q: %w", s, err)
+	}
 	// Handle 24:00:00 — XSD allows this as equivalent to 00:00:00
 	normalized, isMidnight24 := normalizeMidnight24Time(s)
 	target := s
@@ -143,6 +163,11 @@ func parseXSDTime(s string) (time.Time, error) {
 		"15:04:05",
 	} {
 		if t, err := time.Parse(layout, target); err == nil {
+			if !isMidnight24 {
+				if err := validateTimeComponents(t.Hour(), t.Minute(), t.Second(), t.Nanosecond()); err != nil {
+					return time.Time{}, fmt.Errorf("invalid xs:time: %q: %w", s, err)
+				}
+			}
 			return ensureExplicitTZ(t, s), nil
 		}
 	}
@@ -208,6 +233,66 @@ func hasExplicitTimezone(s string) bool {
 		}
 	}
 	return false
+}
+
+// validateDateComponents checks that month and day are in valid ranges.
+// year 0 is invalid in XSD (there is no year zero).
+func validateDateComponents(month, day, year int) error {
+	if year == 0 {
+		return fmt.Errorf("year 0000 is not valid in XSD")
+	}
+	if month < 1 || month > 12 {
+		return fmt.Errorf("month %d out of range 1-12", month)
+	}
+	maxDay := daysInMonth(year, month)
+	if day < 1 || day > maxDay {
+		return fmt.Errorf("day %d out of range for month %d (max %d)", day, month, maxDay)
+	}
+	return nil
+}
+
+// validateTimeComponents checks that hours, minutes, seconds are in valid ranges.
+// Note: hour 24 is handled separately (normalizeMidnight24*) before this is called.
+func validateTimeComponents(hour, minute, second, nanosecond int) error {
+	if hour < 0 || hour > 23 {
+		return fmt.Errorf("hour %d out of range 0-23", hour)
+	}
+	if minute < 0 || minute > 59 {
+		return fmt.Errorf("minute %d out of range 0-59", minute)
+	}
+	if second < 0 || second > 59 {
+		return fmt.Errorf("second %d out of range 0-59", second)
+	}
+	_ = nanosecond // fractional seconds are always valid if parsed
+	return nil
+}
+
+// validateTimezoneInString checks that any timezone offset in the string is
+// within the valid XSD range of -14:00 to +14:00.
+func validateTimezoneInString(s string) error {
+	if len(s) == 0 {
+		return nil
+	}
+	if s[len(s)-1] == 'Z' {
+		return nil // Z is always valid
+	}
+	if len(s) < 6 {
+		return nil // no timezone present
+	}
+	tail := s[len(s)-6:]
+	if (tail[0] != '+' && tail[0] != '-') ||
+		tail[3] != ':' {
+		return nil // no timezone suffix
+	}
+	hh := (int(tail[1]-'0') * 10) + int(tail[2]-'0')
+	mm := (int(tail[4]-'0') * 10) + int(tail[5]-'0')
+	if hh > 14 || (hh == 14 && mm != 0) {
+		return fmt.Errorf("timezone offset %s out of range (-14:00 to +14:00)", tail)
+	}
+	if mm > 59 {
+		return fmt.Errorf("timezone offset minutes %d out of range 0-59", mm)
+	}
+	return nil
 }
 
 // parseXSDDuration parses an XSD duration string like "P1Y2M3DT4H5M6S".

@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/big"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -320,7 +321,29 @@ func makeXSGregorian(typeName string, re *regexp.Regexp) func(context.Context, [
 
 // validateGregorianValue performs additional validation beyond regex matching.
 func validateGregorianValue(typeName, s string) bool {
+	// Validate timezone if present
+	if validateTimezoneInString(s) != nil {
+		return false
+	}
 	switch typeName {
+	case TypeGDay:
+		// ---DD format: day must be 01-31
+		day := extractGDayValue(s)
+		return day >= 1 && day <= 31
+	case TypeGMonth:
+		// --MM format: month must be 01-12
+		month := extractGMonthValue(s)
+		return month >= 1 && month <= 12
+	case TypeGMonthDay:
+		// --MM-DD format: month 01-12, day valid for month
+		month, day := extractGMonthDayValues(s)
+		if month < 1 || month > 12 {
+			return false
+		}
+		// Use a leap year for gMonthDay since no year is specified;
+		// February allows up to 29 because gMonthDay must accommodate leap years.
+		maxDay := daysInMonth(4, month) // year 4 is a leap year
+		return day >= 1 && day <= maxDay
 	case TypeGYear:
 		// xs:gYear: reject 0000 and -0000 (year zero is invalid)
 		y := extractYearDigits(s)
@@ -331,7 +354,7 @@ func validateGregorianValue(typeName, s string) bool {
 			return false
 		}
 	case TypeGYearMonth:
-		// xs:gYearMonth: reject 0000 but allow -0000 (represents 1 BCE)
+		// xs:gYearMonth: reject 0000, validate month 01-12
 		neg := strings.HasPrefix(s, "-")
 		y := extractYearDigits(s)
 		if !neg && isAllZero(y) {
@@ -340,8 +363,80 @@ func validateGregorianValue(typeName, s string) bool {
 		if len(y) > 9 {
 			return false
 		}
+		month := extractGYearMonthMonth(s)
+		return month >= 1 && month <= 12
 	}
 	return true
+}
+
+// extractGDayValue extracts the day from a ---DD[tz] string.
+func extractGDayValue(s string) int {
+	// format: ---DD...
+	if len(s) < 5 {
+		return 0
+	}
+	d, err := strconv.Atoi(s[3:5])
+	if err != nil {
+		return 0
+	}
+	return d
+}
+
+// extractGMonthValue extracts the month from a --MM[tz] string.
+func extractGMonthValue(s string) int {
+	// format: --MM...
+	if len(s) < 4 {
+		return 0
+	}
+	m, err := strconv.Atoi(s[2:4])
+	if err != nil {
+		return 0
+	}
+	return m
+}
+
+// extractGMonthDayValues extracts month and day from a --MM-DD[tz] string.
+func extractGMonthDayValues(s string) (int, int) {
+	// format: --MM-DD...
+	if len(s) < 7 {
+		return 0, 0
+	}
+	m, err := strconv.Atoi(s[2:4])
+	if err != nil {
+		return 0, 0
+	}
+	d, err := strconv.Atoi(s[5:7])
+	if err != nil {
+		return 0, 0
+	}
+	return m, d
+}
+
+// extractGYearMonthMonth extracts the month from a [-]YYYY-MM[tz] string.
+func extractGYearMonthMonth(s string) int {
+	// Find the last '-' before any timezone
+	// The month is right after the year portion: skip optional leading '-', then digits, then '-'
+	work := s
+	if strings.HasPrefix(work, "-") {
+		work = work[1:]
+	}
+	// Skip year digits
+	i := 0
+	for i < len(work) && work[i] >= '0' && work[i] <= '9' {
+		i++
+	}
+	if i >= len(work) || work[i] != '-' {
+		return 0
+	}
+	// work[i] == '-', month starts at i+1
+	if i+3 > len(work) {
+		return 0
+	}
+	m, err := strconv.Atoi(work[i+1 : i+3])
+	if err != nil {
+		return 0
+	}
+	return m
 }
 
 func extractYearDigits(s string) string {
