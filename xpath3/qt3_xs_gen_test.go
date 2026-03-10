@@ -87,8 +87,8 @@ func TestQT3_xs_double(t *testing.T) {
 		{Name: "xs-double-001", XPath: "fn:string(xs:double(\"-0\"))", Assertions: []qt3Assertion{qt3AssertEq("fn:string(\"-0\")")}},
 		{Name: "xs-double-002", XPath: "1 div xs:double(\"-0\") ne 1 div xs:double(\"0\")", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "xs-double-003", XPath: "exists(xs:double(\"+INF\"))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "xs-double-004", XPath: "exists(xs:double(\"+INF\"))", ExpectError: true},
-		{Name: "xs-double-005", XPath: "xs:double(\"2.2250738585072012e-308\")", Assertions: []qt3Assertion{qt3AssertType("xs:double")}},
+		{Name: "xs-double-004", XPath: "exists(xs:double(\"+INF\"))", Skip: "requires XSD 1.0", ExpectError: true},
+		{Name: "xs-double-005", XPath: "xs:double(\"2.2250738585072012e-308\")", Skip: "requires XSD 1.0", Assertions: []qt3Assertion{qt3AssertType("xs:double")}},
 	})
 }
 
@@ -143,7 +143,7 @@ func TestQT3_xs_float(t *testing.T) {
 		{Name: "xs-float-001", XPath: "fn:string(xs:float(\"-0\"))", Assertions: []qt3Assertion{qt3AssertEq("fn:string(\"-0\")")}},
 		{Name: "xs-float-002", XPath: "1 div xs:float(\"-0\") ne 1 div xs:float(\"0\")", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "xs-float-003", XPath: "exists(xs:float(\"+INF\"))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "xs-float-004", XPath: "exists(xs:float(\"+INF\"))", ExpectError: true},
+		{Name: "xs-float-004", XPath: "exists(xs:float(\"+INF\"))", Skip: "requires XSD 1.0", ExpectError: true},
 		{Name: "cbcl-float-001", XPath: "count(xs:float(()))", Assertions: []qt3Assertion{qt3AssertEq("0")}},
 		{Name: "cbcl-float-002", XPath: "xs:float(xs:double('-INF')),xs:float(xs:double('INF'))", Assertions: []qt3Assertion{qt3AssertStringValue("-INF INF")}},
 	})

@@ -384,6 +384,9 @@ func getSkipReason(deps []dependency) string {
 		if d.Type == "xml-version" && d.Value == "1.1" {
 			return "requires XML 1.1"
 		}
+		if d.Type == "xsd-version" && d.Value == "1.0" && d.Satisfied != "false" {
+			return "requires XSD 1.0"
+		}
 	}
 	return ""
 }

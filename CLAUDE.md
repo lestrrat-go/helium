@@ -4,6 +4,10 @@
 
 Go libxml2 implementation.
 
+## XPath 3.1 — XSD Version
+
+The xpath3 package targets **XSD 1.1 only**. This means `+INF` is a valid lexical form for xs:double and xs:float, and xs:dateTimeStamp is a recognized type. QT3 tests with `dependency type="xsd-version" value="1.0"` are skipped.
+
 ## Pre-Read Rules
 
 Read the linked doc BEFORE working in that area. No exceptions.

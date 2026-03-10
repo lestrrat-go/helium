@@ -53,7 +53,7 @@ func castToFloat(v AtomicValue) (AtomicValue, error) {
 // numeric literals that fit in float32 range.
 func castStringToFloat(s string) (AtomicValue, error) {
 	switch s {
-	case "INF":
+	case "INF", "+INF":
 		return AtomicValue{TypeName: TypeFloat, Value: NewFloat(math.Inf(1))}, nil
 	case "-INF":
 		return AtomicValue{TypeName: TypeFloat, Value: NewFloat(math.Inf(-1))}, nil

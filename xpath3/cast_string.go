@@ -274,7 +274,7 @@ func formatXSDYear(year int) string {
 // Valid special values: "INF", "-INF", "NaN" — "+INF" is NOT valid.
 func parseXPathDouble(s string) (float64, error) {
 	switch s {
-	case "INF":
+	case "INF", "+INF":
 		return math.Inf(1), nil
 	case "-INF":
 		return math.Inf(-1), nil
@@ -285,7 +285,7 @@ func parseXPathDouble(s string) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	// Reject infinity from ParseFloat — only whitelisted "INF"/"-INF" above are valid
+	// Reject infinity from ParseFloat — only whitelisted forms above are valid
 	if math.IsInf(f, 0) {
 		return 0, fmt.Errorf("invalid xs:double value: %s", s)
 	}
