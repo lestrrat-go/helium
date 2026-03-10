@@ -1627,6 +1627,15 @@ func (p *parser) parseFunctionKeyword() (Expr, error) {
 		return nil, fmt.Errorf("expected ')' in inline function parameters")
 	}
 
+	// Check for duplicate parameter names (XQST0039)
+	seen := make(map[string]bool, len(params))
+	for _, param := range params {
+		if seen[param.Name] {
+			return nil, fmt.Errorf("XQST0039: duplicate parameter name $%s in inline function", param.Name)
+		}
+		seen[param.Name] = true
+	}
+
 	var returnType *SequenceType
 	if p.lexer.Peek().Type == TokenAs {
 		p.lexer.Next()
