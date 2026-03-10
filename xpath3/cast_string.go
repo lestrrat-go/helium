@@ -143,14 +143,9 @@ func formatXPathDouble(f float64) string {
 	}
 
 	abs := math.Abs(f)
-	// XSD 1.1 §3.3.5: plain decimal for abs in [1e-6, 1e6), scientific notation
-	// for abs >= 1e6 or abs < 1e-6. The strict < excludes 1e6 intentionally.
-	if abs > 0.000001 && abs < 1_000_000 {
-		s := strconv.FormatFloat(f, 'f', -1, 64)
-		if !strings.Contains(s, ".") {
-			s += ".0"
-		}
-		return s
+	// XPath F&O: plain decimal for abs in [1e-6, 1e6), scientific notation otherwise.
+	if abs >= 0.000001 && abs < 1_000_000 {
+		return strconv.FormatFloat(f, 'f', -1, 64)
 	}
 
 	s := strconv.FormatFloat(f, 'E', -1, 64)
@@ -199,12 +194,8 @@ func formatXPathFloat(f float64) string {
 	}
 
 	abs := math.Abs(float64(f32))
-	if abs > 0.000001 && abs < 1_000_000 {
-		s := strconv.FormatFloat(float64(f32), 'f', -1, 32)
-		if !strings.Contains(s, ".") {
-			s += ".0"
-		}
-		return s
+	if abs >= 0.000001 && abs < 1_000_000 {
+		return strconv.FormatFloat(float64(f32), 'f', -1, 32)
 	}
 
 	s := strconv.FormatFloat(float64(f32), 'E', -1, 32)
@@ -318,6 +309,12 @@ func parseXPathDouble(s string) (float64, error) {
 		return math.Inf(-1), nil
 	case "NaN":
 		return math.NaN(), nil
+	}
+	// Reject case-insensitive nan/inf variants that strconv.ParseFloat accepts
+	// but XSD 1.1 does not (only exact "NaN", "INF", "+INF", "-INF" are valid).
+	lower := strings.ToLower(s)
+	if lower == "nan" || lower == "inf" || lower == "+inf" || lower == "-inf" {
+		return 0, fmt.Errorf("invalid xs:double value: %s", s)
 	}
 	f, err := strconv.ParseFloat(s, 64)
 	if err != nil {
