@@ -24,6 +24,9 @@ func evalLookupExpr(ec *evalContext, e LookupExpr) (Sequence, error) {
 }
 
 func evalUnaryLookupExpr(ec *evalContext, e UnaryLookupExpr) (Sequence, error) {
+	if ec.contextItem != nil {
+		return lookupItem(ec, ec.contextItem, e.Key, e.All)
+	}
 	if ec.node == nil {
 		return nil, &XPathError{Code: "XPDY0002", Message: "context item is absent"}
 	}
@@ -92,13 +95,7 @@ func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 		case ForClause:
 			var newTuples []flworTuple
 			for _, tup := range tuples {
-				subCtx := &evalContext{
-					goCtx: ec.goCtx, node: ec.node, position: ec.position,
-					size: ec.size, vars: tup.vars, namespaces: ec.namespaces,
-					functions: ec.functions, fnsNS: ec.fnsNS, depth: ec.depth,
-					opCount: ec.opCount, opLimit: ec.opLimit, docOrder: ec.docOrder,
-					maxNodes: ec.maxNodes, currentTime: ec.currentTime,
-				}
+				subCtx := ec.withVars(tup.vars)
 				domain, err := eval(subCtx, c.Expr)
 				if err != nil {
 					return nil, err
@@ -115,13 +112,7 @@ func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 			tuples = newTuples
 		case LetClause:
 			for i := range tuples {
-				subCtx := &evalContext{
-					goCtx: ec.goCtx, node: ec.node, position: ec.position,
-					size: ec.size, vars: tuples[i].vars, namespaces: ec.namespaces,
-					functions: ec.functions, fnsNS: ec.fnsNS, depth: ec.depth,
-					opCount: ec.opCount, opLimit: ec.opLimit, docOrder: ec.docOrder,
-					maxNodes: ec.maxNodes, currentTime: ec.currentTime,
-				}
+				subCtx := ec.withVars(tuples[i].vars)
 				val, err := eval(subCtx, c.Expr)
 				if err != nil {
 					return nil, err
@@ -132,13 +123,7 @@ func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 		case WhereClause:
 			var filtered []flworTuple
 			for _, tup := range tuples {
-				subCtx := &evalContext{
-					goCtx: ec.goCtx, node: ec.node, position: ec.position,
-					size: ec.size, vars: tup.vars, namespaces: ec.namespaces,
-					functions: ec.functions, fnsNS: ec.fnsNS, depth: ec.depth,
-					opCount: ec.opCount, opLimit: ec.opLimit, docOrder: ec.docOrder,
-					maxNodes: ec.maxNodes, currentTime: ec.currentTime,
-				}
+				subCtx := ec.withVars(tup.vars)
 				r, err := eval(subCtx, c.Predicate)
 				if err != nil {
 					return nil, err
@@ -164,13 +149,7 @@ func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 	// Evaluate return expression for each tuple
 	var result Sequence
 	for _, tup := range tuples {
-		retCtx := &evalContext{
-			goCtx: ec.goCtx, node: ec.node, position: ec.position,
-			size: ec.size, vars: tup.vars, namespaces: ec.namespaces,
-			functions: ec.functions, fnsNS: ec.fnsNS, depth: ec.depth,
-			opCount: ec.opCount, opLimit: ec.opLimit, docOrder: ec.docOrder,
-			maxNodes: ec.maxNodes, currentTime: ec.currentTime,
-		}
+		retCtx := ec.withVars(tup.vars)
 		r, err := eval(retCtx, e.Return)
 		if err != nil {
 			return nil, err
@@ -232,6 +211,20 @@ func sortTuples(ec *evalContext, tuples []flworTuple, ob OrderByClause) ([]flwor
 }
 
 func compareAtomicOrder(a, b AtomicValue) int {
+	// String types: compare lexicographically
+	sa, saOK := a.Value.(string)
+	sb, sbOK := b.Value.(string)
+	if saOK && sbOK {
+		if sa < sb {
+			return -1
+		}
+		if sa > sb {
+			return 1
+		}
+		return 0
+	}
+
+	// Numeric types: compare as float64
 	af := a.ToFloat64()
 	bf := b.ToFloat64()
 	if af < bf {

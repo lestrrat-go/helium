@@ -95,6 +95,15 @@ func arithmeticDurationDuration(op TokenType, la, ra AtomicValue) (Sequence, boo
 		resSecs = ls - rs
 	}
 
+	// Normalize sign: both components must agree in sign
+	if resMonths > 0 && resSecs < 0 {
+		resMonths--
+		resSecs += 86400 * 30 // approximate month in seconds
+	} else if resMonths < 0 && resSecs > 0 {
+		resMonths++
+		resSecs -= 86400 * 30
+	}
+
 	negative := resMonths < 0 || (resMonths == 0 && resSecs < 0)
 	if negative {
 		resMonths = -resMonths

@@ -49,8 +49,14 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 			return AtomicValue{}, err
 		}
 		n := iv.BigInt()
-		min, max, ok := integerTypeRange(targetType)
-		if ok && (n.Cmp(min) < 0 || n.Cmp(max) > 0) {
+		min, max := integerTypeRange(targetType)
+		if min != nil && n.Cmp(min) < 0 {
+			return AtomicValue{}, &XPathError{
+				Code:    "FORG0001",
+				Message: fmt.Sprintf("value %s out of range for %s", n.String(), targetType),
+			}
+		}
+		if max != nil && n.Cmp(max) > 0 {
 			return AtomicValue{}, &XPathError{
 				Code:    "FORG0001",
 				Message: fmt.Sprintf("value %s out of range for %s", n.String(), targetType),
@@ -317,35 +323,34 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 }
 
 // integerTypeRange returns the min/max bounds for a derived integer type.
-func integerTypeRange(typeName string) (*big.Int, *big.Int, bool) {
+func integerTypeRange(typeName string) (min *big.Int, max *big.Int) {
 	switch typeName {
 	case TypeLong:
-		return big.NewInt(math.MinInt64), big.NewInt(math.MaxInt64), true
+		return big.NewInt(math.MinInt64), big.NewInt(math.MaxInt64)
 	case TypeInt:
-		return big.NewInt(-2147483648), big.NewInt(2147483647), true
+		return big.NewInt(-2147483648), big.NewInt(2147483647)
 	case TypeShort:
-		return big.NewInt(-32768), big.NewInt(32767), true
+		return big.NewInt(-32768), big.NewInt(32767)
 	case TypeByte:
-		return big.NewInt(-128), big.NewInt(127), true
+		return big.NewInt(-128), big.NewInt(127)
 	case TypeUnsignedLong:
-		max := new(big.Int).SetUint64(math.MaxUint64)
-		return big.NewInt(0), max, true
+		return big.NewInt(0), new(big.Int).SetUint64(math.MaxUint64)
 	case TypeUnsignedInt:
-		return big.NewInt(0), big.NewInt(4294967295), true
+		return big.NewInt(0), big.NewInt(4294967295)
 	case TypeUnsignedShort:
-		return big.NewInt(0), big.NewInt(65535), true
+		return big.NewInt(0), big.NewInt(65535)
 	case TypeUnsignedByte:
-		return big.NewInt(0), big.NewInt(255), true
+		return big.NewInt(0), big.NewInt(255)
 	case TypeNonNegativeInteger:
-		return big.NewInt(0), nil, false
+		return big.NewInt(0), nil
 	case TypeNonPositiveInteger:
-		return nil, big.NewInt(0), false
+		return nil, big.NewInt(0)
 	case TypePositiveInteger:
-		return big.NewInt(1), nil, false
+		return big.NewInt(1), nil
 	case TypeNegativeInteger:
-		return nil, big.NewInt(-1), false
+		return nil, big.NewInt(-1)
 	}
-	return nil, nil, false
+	return nil, nil
 }
 
 func castError(value string, targetType string) *XPathError {

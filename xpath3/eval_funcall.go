@@ -122,18 +122,19 @@ func evalInlineFunctionExpr(ec *evalContext, e InlineFunctionExpr) (Sequence, er
 				return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("inline function requires %d arguments, got %d", len(e.Params), len(args))}
 			}
 			innerCtx := &evalContext{
-				goCtx:      ctx,
-				node:       ec.node,
-				position:   ec.position,
-				size:       ec.size,
-				vars:       copyVars(closedVars),
-				namespaces: ec.namespaces,
-				functions:  ec.functions,
-				fnsNS:      ec.fnsNS,
-				opCount:    ec.opCount,
-				opLimit:    ec.opLimit,
-				docOrder:   ec.docOrder,
-				maxNodes:   ec.maxNodes,
+				goCtx:       ctx,
+				node:        ec.node,
+				position:    ec.position,
+				size:        ec.size,
+				vars:        copyVars(closedVars),
+				namespaces:  ec.namespaces,
+				functions:   ec.functions,
+				fnsNS:       ec.fnsNS,
+				opCount:     ec.opCount,
+				opLimit:     ec.opLimit,
+				docOrder:    ec.docOrder,
+				maxNodes:    ec.maxNodes,
+				currentTime: ec.currentTime,
 			}
 			for i, param := range e.Params {
 				innerCtx.vars[param.Name] = args[i]

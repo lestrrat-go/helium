@@ -451,6 +451,5 @@ func isNCNameStart(r rune) bool {
 // isNCNameChar returns true if r is a valid NCName continuation character.
 func isNCNameChar(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) ||
-		r == '.' || r == '-' || r == '_' ||
-		unicode.In(r, unicode.Extender)
+		r == '.' || r == '-' || r == '_'
 }

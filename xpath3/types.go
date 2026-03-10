@@ -269,8 +269,8 @@ func DecimalToString(r *big.Rat) string {
 		return r.Num().String()
 	}
 	// Use enough precision for exact representation, then trim trailing zeros
-	_, prec := r.FloatPrec()
-	if !prec {
+	n, exact := r.FloatPrec()
+	if !exact {
 		// Not exactly representable in decimal; use high precision
 		s := r.FloatString(20)
 		s = strings.TrimRight(s, "0")
@@ -279,8 +279,6 @@ func DecimalToString(r *big.Rat) string {
 		}
 		return s
 	}
-	// FloatPrec returns the number of digits needed
-	n, _ := r.FloatPrec()
 	s := r.FloatString(n)
 	s = strings.TrimRight(s, "0")
 	if strings.HasSuffix(s, ".") {
@@ -346,17 +344,30 @@ type mapKey struct {
 }
 
 func normalizeMapKey(key AtomicValue) mapKey {
+	// Normalize type names so that equivalent numeric types use the same key.
+	// Per XPath 3.1 spec, map keys use value-based equality: xs:float(1.0)
+	// and xs:double(1.0) should be the same key.
+	tn := key.TypeName
+	if isIntegerDerived(tn) {
+		tn = TypeInteger
+	} else if tn == TypeFloat {
+		tn = TypeDouble
+	}
+
 	switch v := key.Value.(type) {
 	case *big.Int:
-		return mapKey{typeName: key.TypeName, value: v.String()}
+		return mapKey{typeName: tn, value: v.String()}
 	case *big.Rat:
-		return mapKey{typeName: key.TypeName, value: v.RatString()}
+		return mapKey{typeName: tn, value: v.RatString()}
+	case float64:
+		// Normalize float to double for consistent map keys
+		return mapKey{typeName: tn, value: v}
 	case time.Time:
-		return mapKey{typeName: key.TypeName, value: v.UTC().Format(time.RFC3339Nano)}
+		return mapKey{typeName: tn, value: v.UTC().Format(time.RFC3339Nano)}
 	case []byte:
-		return mapKey{typeName: key.TypeName, value: hex.EncodeToString(v)}
+		return mapKey{typeName: tn, value: hex.EncodeToString(v)}
 	default:
-		return mapKey{typeName: key.TypeName, value: key.Value}
+		return mapKey{typeName: tn, value: key.Value}
 	}
 }
 

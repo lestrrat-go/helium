@@ -112,6 +112,13 @@ func (ec *evalContext) withVar(name string, val Sequence) *evalContext {
 	return &cp
 }
 
+// withVars returns a shallow copy using the given vars map.
+func (ec *evalContext) withVars(vars map[string]Sequence) *evalContext {
+	cp := *ec
+	cp.vars = vars
+	return &cp
+}
+
 func (ec *evalContext) countOps(n int) error {
 	if ec.opLimit <= 0 {
 		return nil

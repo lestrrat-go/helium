@@ -228,27 +228,29 @@ func translateUnicodeProperty(name string, neg bool) (string, error) {
 	return "", &XPathError{Code: "FORX0002", Message: fmt.Sprintf("unknown Unicode property: %s", name)}
 }
 
+// goSupportedScripts lists script names supported by Go's regexp engine.
+var goSupportedScripts = map[string]struct{}{
+	"Arabic": {}, "Armenian": {}, "Bengali": {}, "Bopomofo": {},
+	"Braille": {}, "Buhid": {}, "Canadian_Aboriginal": {}, "Cherokee": {},
+	"Common": {}, "Cyrillic": {}, "Devanagari": {}, "Ethiopic": {},
+	"Georgian": {}, "Greek": {}, "Gujarati": {}, "Gurmukhi": {},
+	"Han": {}, "Hangul": {}, "Hanunoo": {}, "Hebrew": {},
+	"Hiragana": {}, "Inherited": {}, "Kannada": {}, "Katakana": {},
+	"Khmer": {}, "Lao": {}, "Latin": {}, "Limbu": {},
+	"Malayalam": {}, "Mongolian": {}, "Myanmar": {}, "Ogham": {},
+	"Oriya": {}, "Runic": {}, "Sinhala": {}, "Syriac": {},
+	"Tagalog": {}, "Tagbanwa": {}, "Tamil": {}, "Telugu": {},
+	"Thaana": {}, "Thai": {}, "Tibetan": {}, "Yi": {},
+}
+
 // isGoSupportedProperty checks if a property name is supported by Go's regexp.
 func isGoSupportedProperty(name string) bool {
 	// Single-letter categories
 	if len(name) == 1 || len(name) == 2 {
 		return true // L, Lu, Ll, M, Mn, N, Nd, P, S, Z, C, etc.
 	}
-	// Go-supported script names (commonly used ones)
-	goScripts := map[string]bool{
-		"Arabic": true, "Armenian": true, "Bengali": true, "Bopomofo": true,
-		"Braille": true, "Buhid": true, "Canadian_Aboriginal": true, "Cherokee": true,
-		"Common": true, "Cyrillic": true, "Devanagari": true, "Ethiopic": true,
-		"Georgian": true, "Greek": true, "Gujarati": true, "Gurmukhi": true,
-		"Han": true, "Hangul": true, "Hanunoo": true, "Hebrew": true,
-		"Hiragana": true, "Inherited": true, "Kannada": true, "Katakana": true,
-		"Khmer": true, "Lao": true, "Latin": true, "Limbu": true,
-		"Malayalam": true, "Mongolian": true, "Myanmar": true, "Ogham": true,
-		"Oriya": true, "Runic": true, "Sinhala": true, "Syriac": true,
-		"Tagalog": true, "Tagbanwa": true, "Tamil": true, "Telugu": true,
-		"Thaana": true, "Thai": true, "Tibetan": true, "Yi": true,
-	}
-	return goScripts[name]
+	_, ok := goSupportedScripts[name]
+	return ok
 }
 
 // XML NameStartChar as a character class (for use outside [])

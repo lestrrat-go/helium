@@ -161,7 +161,7 @@ type SequenceType struct {
 
 // LiteralExpr represents a string or numeric literal.
 type LiteralExpr struct {
-	Value any // string or float64
+	Value any // string, float64, *big.Int, or *big.Rat
 }
 
 func (LiteralExpr) exprNode() {}

@@ -396,10 +396,9 @@ func applyImplicitTZ(t time.Time) time.Time {
 	if t.Location() != time.UTC {
 		return t // has explicit timezone
 	}
-	// No timezone — apply implicit timezone (system local)
-	_, offset := time.Now().Zone()
-	loc := time.FixedZone("", offset)
-	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)
+	// No timezone — apply implicit timezone (system local).
+	// Use time.Local directly rather than time.Now().Zone() for consistency.
+	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.Local)
 }
 
 func compareTime(op TokenType, a, b time.Time) bool {

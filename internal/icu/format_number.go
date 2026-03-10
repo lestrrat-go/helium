@@ -304,15 +304,17 @@ func FormatFloat(f float64, pp ParsedPicture, df DecimalFormat) string {
 		f = math.Round(f*scale) / scale
 	}
 
-	// Split into integer and fractional parts
-	intVal := int64(f)
-	frac := f - float64(intVal)
+	// Split into integer and fractional parts.
+	// Use math.Trunc to avoid int64 overflow for large floats.
+	trunc := math.Trunc(f)
+	frac := f - trunc
 	if frac < 0 {
 		frac = -frac
 	}
 
 	// Format integer part
-	intStr := FormatBigInt(new(big.Int).SetInt64(intVal), pp.MinIntDigits, pp.GroupingSizes, df)
+	bigTrunc, _ := new(big.Float).SetFloat64(trunc).Int(nil)
+	intStr := FormatBigInt(bigTrunc, pp.MinIntDigits, pp.GroupingSizes, df)
 
 	if !pp.HasDecimalPoint && pp.MaxFracDigits == 0 {
 		if intStr == "" {
