@@ -2,7 +2,9 @@ package xpath3
 
 import (
 	"context"
+	"math/rand"
 	"os"
+	"sort"
 	"time"
 )
 
@@ -15,6 +17,8 @@ func init() {
 	registerFn("current-date", 0, 0, fnCurrentDate)
 	registerFn("current-time", 0, 0, fnCurrentTime)
 	registerFn("implicit-timezone", 0, 0, fnImplicitTimezone)
+	registerFn("default-language", 0, 0, fnDefaultLanguage)
+	registerFn("random-number-generator", 0, 1, fnRandomNumberGenerator)
 }
 
 func fnStaticBaseURI(_ context.Context, _ []Sequence) (Sequence, error) {
@@ -76,6 +80,63 @@ func currentTimeFromCtx(ctx context.Context) time.Time {
 		return ec.getCurrentTime()
 	}
 	return time.Now()
+}
+
+func fnRandomNumberGenerator(_ context.Context, args []Sequence) (Sequence, error) {
+	var seed int64
+	if len(args) > 0 && len(args[0]) > 0 {
+		a, err := AtomizeItem(args[0][0])
+		if err != nil {
+			return nil, err
+		}
+		s, _ := atomicToString(a)
+		// Use string hash as seed for reproducibility
+		for _, c := range s {
+			seed = seed*31 + int64(c)
+		}
+	} else {
+		seed = time.Now().UnixNano()
+	}
+	return Sequence{makeRNGMap(seed)}, nil
+}
+
+func makeRNGMap(seed int64) MapItem {
+	rng := rand.New(rand.NewSource(seed))
+	number := rng.Float64()
+
+	nextFn := FunctionItem{
+		Arity: 0,
+		Name:  "next",
+		Invoke: func(_ context.Context, _ []Sequence) (Sequence, error) {
+			nextSeed := rng.Int63()
+			return Sequence{makeRNGMap(nextSeed)}, nil
+		},
+	}
+
+	permuteFn := FunctionItem{
+		Arity: 1,
+		Name:  "permute",
+		Invoke: func(_ context.Context, callArgs []Sequence) (Sequence, error) {
+			seq := callArgs[0]
+			perm := make(Sequence, len(seq))
+			copy(perm, seq)
+			localRng := rand.New(rand.NewSource(seed))
+			sort.SliceStable(perm, func(i, j int) bool {
+				return localRng.Intn(2) == 0
+			})
+			return perm, nil
+		},
+	}
+
+	return NewMap([]MapEntry{
+		{Key: AtomicValue{TypeName: TypeString, Value: "number"}, Value: Sequence{AtomicValue{TypeName: TypeDouble, Value: number}}},
+		{Key: AtomicValue{TypeName: TypeString, Value: "next"}, Value: Sequence{nextFn}},
+		{Key: AtomicValue{TypeName: TypeString, Value: "permute"}, Value: Sequence{permuteFn}},
+	})
+}
+
+func fnDefaultLanguage(_ context.Context, _ []Sequence) (Sequence, error) {
+	return SingleString("en"), nil
 }
 
 func fnImplicitTimezone(_ context.Context, _ []Sequence) (Sequence, error) {

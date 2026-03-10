@@ -38,6 +38,7 @@ func init() {
 	registerFn("tokenize", 1, 3, fnTokenize)
 	registerFn("analyze-string", 2, 3, fnAnalyzeString)
 	registerFn("contains-token", 2, 3, fnContainsToken)
+	registerFn("collation-key", 1, 2, fnCollationKey)
 }
 
 func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -295,6 +296,12 @@ func fnMatches(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	return SingleBoolean(re.MatchString(s)), nil
+}
+
+func fnCollationKey(_ context.Context, args []Sequence) (Sequence, error) {
+	s := seqToString(args[0])
+	// Only codepoint collation is supported; return string bytes as base64Binary
+	return SingleAtomic(AtomicValue{TypeName: TypeBase64Binary, Value: []byte(s)}), nil
 }
 
 func fnReplace(_ context.Context, args []Sequence) (Sequence, error) {

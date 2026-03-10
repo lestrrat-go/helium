@@ -14,6 +14,7 @@ func init() {
 	registerFn("namespace-uri-from-QName", 1, 1, fnNamespaceURIFromQName)
 	registerFn("namespace-uri-for-prefix", 2, 2, fnNamespaceURIForPrefix)
 	registerFn("in-scope-prefixes", 1, 1, fnInScopePrefixes)
+	registerFn("resolve-QName", 2, 2, fnResolveQName)
 }
 
 func fnQName(_ context.Context, args []Sequence) (Sequence, error) {
@@ -94,6 +95,51 @@ func fnNamespaceURIForPrefix(_ context.Context, args []Sequence) (Sequence, erro
 		return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: ns.URI()}), nil
 	}
 	return nil, nil
+}
+
+func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
+	if len(args[0]) == 0 {
+		return nil, nil
+	}
+	qnameStr := seqToString(args[0])
+	if len(args[1]) == 0 {
+		return nil, &XPathError{Code: "XPTY0004", Message: "resolve-QName: element argument is empty"}
+	}
+	ni, ok := args[1][0].(NodeItem)
+	if !ok {
+		return nil, &XPathError{Code: "XPTY0004", Message: "resolve-QName: expected element node"}
+	}
+	elem, ok := ni.Node.(*helium.Element)
+	if !ok {
+		return nil, &XPathError{Code: "XPTY0004", Message: "resolve-QName: expected element node"}
+	}
+
+	prefix := ""
+	local := qnameStr
+	if idx := strings.IndexByte(qnameStr, ':'); idx >= 0 {
+		prefix = qnameStr[:idx]
+		local = qnameStr[idx+1:]
+	}
+
+	uri := ""
+	if prefix != "" {
+		ns := helium.LookupNSByPrefix(elem, prefix)
+		if ns == nil {
+			return nil, &XPathError{Code: "FONS0004", Message: "resolve-QName: no namespace binding for prefix " + prefix}
+		}
+		uri = ns.URI()
+	} else {
+		// Default namespace
+		ns := helium.LookupNSByPrefix(elem, "")
+		if ns != nil {
+			uri = ns.URI()
+		}
+	}
+
+	return SingleAtomic(AtomicValue{
+		TypeName: TypeQName,
+		Value:    QNameValue{Prefix: prefix, Local: local, URI: uri},
+	}), nil
 }
 
 func fnInScopePrefixes(_ context.Context, args []Sequence) (Sequence, error) {

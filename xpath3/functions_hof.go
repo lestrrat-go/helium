@@ -10,6 +10,7 @@ func init() {
 	registerFn("filter", 2, 2, fnFilter)
 	registerFn("fold-left", 3, 3, fnFoldLeft)
 	registerFn("fold-right", 3, 3, fnFoldRight)
+	registerFn("for-each-pair", 3, 3, fnForEachPair)
 	registerFn("apply", 2, 2, fnApply)
 	registerFn("function-lookup", 2, 2, fnFunctionLookup)
 	registerFn("function-arity", 1, 1, fnFunctionArity)
@@ -86,6 +87,28 @@ func fnFoldRight(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 	return acc, nil
+}
+
+func fnForEachPair(ctx context.Context, args []Sequence) (Sequence, error) {
+	seq1 := args[0]
+	seq2 := args[1]
+	fi, err := extractFunctionItem(args[2])
+	if err != nil {
+		return nil, err
+	}
+	size := len(seq1)
+	if len(seq2) < size {
+		size = len(seq2)
+	}
+	var result Sequence
+	for i := 0; i < size; i++ {
+		r, err := fi.Invoke(ctx, []Sequence{{seq1[i]}, {seq2[i]}})
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, r...)
+	}
+	return result, nil
 }
 
 func fnApply(ctx context.Context, args []Sequence) (Sequence, error) {

@@ -25,6 +25,7 @@ func init() {
 	registerFn("last", 0, 0, fnLast)
 	registerFn("position", 0, 0, fnPosition)
 	registerFn("sort", 1, 3, fnSort)
+	registerFn("flatten", 1, 1, fnFlatten)
 }
 
 func fnEmpty(_ context.Context, args []Sequence) (Sequence, error) {
@@ -304,4 +305,22 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 		result[i] = p.item
 	}
 	return result, nil
+}
+
+func fnFlatten(_ context.Context, args []Sequence) (Sequence, error) {
+	var result Sequence
+	flattenItems(args[0], &result)
+	return result, nil
+}
+
+func flattenItems(seq Sequence, result *Sequence) {
+	for _, item := range seq {
+		if arr, ok := item.(ArrayItem); ok {
+			for _, m := range arr.Members() {
+				flattenItems(m, result)
+			}
+		} else {
+			*result = append(*result, item)
+		}
+	}
 }

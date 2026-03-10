@@ -81,6 +81,7 @@ func init() {
 	// List types — split by whitespace, validate each token
 	registerNS(NSXS, "NMTOKENS", 1, 1, makeXSTokenList(TypeNMTOKENS, reNMTOKEN))
 	registerNS(NSXS, "IDREFS", 1, 1, makeXSTokenList(TypeIDREFS, reNCName))
+	registerNS(NSXS, "ENTITIES", 1, 1, makeXSTokenList(TypeENTITIES, reNCName))
 
 	// Gregorian date part types
 	for _, entry := range []struct {

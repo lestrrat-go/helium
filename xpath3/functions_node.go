@@ -27,6 +27,18 @@ func init() {
 	registerFn("namespace-uri", 0, 1, fnNamespaceURI)
 	registerFn("number", 0, 1, fnNumber)
 	registerFn("generate-id", 0, 1, fnGenerateID)
+	registerFn("parse-xml", 1, 1, fnParseXML)
+	registerFn("parse-xml-fragment", 1, 1, fnParseXMLFragment)
+	registerFn("doc", 1, 1, fnDoc)
+	registerFn("doc-available", 1, 1, fnDocAvailable)
+	registerFn("id", 1, 2, fnID)
+	registerFn("idref", 1, 2, fnIDRef)
+	registerFn("element-with-id", 1, 2, fnElementWithID)
+	registerFn("unparsed-text", 1, 2, fnUnparsedText)
+	registerFn("unparsed-text-available", 1, 2, fnUnparsedTextAvailable)
+	registerFn("unparsed-text-lines", 1, 2, fnUnparsedTextLines)
+	registerFn("collection", 0, 1, fnCollection)
+	registerFn("uri-collection", 0, 1, fnURICollection)
 }
 
 func fnNodeName(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -392,6 +404,73 @@ func fnGenerateID(ctx context.Context, args []Sequence) (Sequence, error) {
 		return SingleString(""), nil
 	}
 	return SingleString(fmt.Sprintf("id%p", n)), nil
+}
+
+func fnParseXML(_ context.Context, args []Sequence) (Sequence, error) {
+	if len(args[0]) == 0 {
+		return nil, nil
+	}
+	s := seqToString(args[0])
+	doc, err := helium.Parse(context.Background(), []byte(s))
+	if err != nil {
+		return nil, &XPathError{Code: "FODC0006", Message: fmt.Sprintf("parse-xml: %v", err)}
+	}
+	return Sequence{NodeItem{Node: doc}}, nil
+}
+
+func fnParseXMLFragment(_ context.Context, args []Sequence) (Sequence, error) {
+	if len(args[0]) == 0 {
+		return nil, nil
+	}
+	s := seqToString(args[0])
+	// Wrap in a root element to parse as fragment
+	wrapped := "<_fragment_>" + s + "</_fragment_>"
+	doc, err := helium.Parse(context.Background(), []byte(wrapped))
+	if err != nil {
+		return nil, &XPathError{Code: "FODC0006", Message: fmt.Sprintf("parse-xml-fragment: %v", err)}
+	}
+	return Sequence{NodeItem{Node: doc}}, nil
+}
+
+func fnID(_ context.Context, _ []Sequence) (Sequence, error) {
+	// Requires DTD/schema info for ID attribute detection
+	return nil, nil
+}
+
+func fnIDRef(_ context.Context, _ []Sequence) (Sequence, error) {
+	return nil, nil
+}
+
+func fnElementWithID(_ context.Context, _ []Sequence) (Sequence, error) {
+	return nil, nil
+}
+
+func fnUnparsedText(_ context.Context, _ []Sequence) (Sequence, error) {
+	return nil, &XPathError{Code: "FOUT1170", Message: "fn:unparsed-text: URI resolution not supported"}
+}
+
+func fnUnparsedTextAvailable(_ context.Context, _ []Sequence) (Sequence, error) {
+	return SingleBoolean(false), nil
+}
+
+func fnUnparsedTextLines(_ context.Context, _ []Sequence) (Sequence, error) {
+	return nil, &XPathError{Code: "FOUT1170", Message: "fn:unparsed-text-lines: URI resolution not supported"}
+}
+
+func fnCollection(_ context.Context, _ []Sequence) (Sequence, error) {
+	return nil, &XPathError{Code: "FODC0002", Message: "fn:collection: not supported"}
+}
+
+func fnURICollection(_ context.Context, _ []Sequence) (Sequence, error) {
+	return nil, &XPathError{Code: "FODC0002", Message: "fn:uri-collection: not supported"}
+}
+
+func fnDoc(_ context.Context, _ []Sequence) (Sequence, error) {
+	return nil, &XPathError{Code: "FODC0002", Message: "fn:doc: URI resolution not supported"}
+}
+
+func fnDocAvailable(_ context.Context, _ []Sequence) (Sequence, error) {
+	return SingleBoolean(false), nil
 }
 
 // nodeArgOrCtx extracts a node from the first argument or falls back to the context node.

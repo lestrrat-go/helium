@@ -78,6 +78,7 @@ const (
 	TypeID               = "xs:ID"
 	TypeIDREF            = "xs:IDREF"
 	TypeIDREFS           = "xs:IDREFS"
+	TypeENTITIES         = "xs:ENTITIES"
 
 	// Gregorian date part types
 	TypeGDay       = "xs:gDay"
