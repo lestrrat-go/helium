@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"math"
+	"math/big"
+	"strings"
 	"time"
 
 	helium "github.com/lestrrat-go/helium"
@@ -183,9 +184,19 @@ func (a AtomicValue) StringVal() string {
 	return a.Value.(string)
 }
 
-// IntegerVal returns the backing int64 value.
+// IntegerVal returns the backing int64 value. Panics if the value exceeds int64 range.
 func (a AtomicValue) IntegerVal() int64 {
-	return a.Value.(int64)
+	return a.Value.(*big.Int).Int64()
+}
+
+// BigInt returns the backing *big.Int value.
+func (a AtomicValue) BigInt() *big.Int {
+	return a.Value.(*big.Int)
+}
+
+// BigRat returns the backing *big.Rat value.
+func (a AtomicValue) BigRat() *big.Rat {
+	return a.Value.(*big.Rat)
 }
 
 // DoubleVal returns the backing float64 value.
@@ -233,26 +244,48 @@ func (a AtomicValue) IsNumeric() bool {
 // ToFloat64 converts any numeric atomic value to float64.
 func (a AtomicValue) ToFloat64() float64 {
 	if isIntegerDerived(a.TypeName) {
-		return float64(a.Value.(int64))
+		f, _ := new(big.Float).SetInt(a.Value.(*big.Int)).Float64()
+		return f
 	}
 	switch a.TypeName {
 	case TypeDouble, TypeFloat:
 		return a.Value.(float64)
 	case TypeDecimal:
-		// v1: decimal stored as string, parse to float64 for arithmetic
-		s := a.Value.(string)
-		var f float64
-		if _, err := fmt.Sscanf(s, "%f", &f); err != nil {
-			return math.NaN()
-		}
+		f, _ := a.Value.(*big.Rat).Float64()
 		return f
 	}
-	return math.NaN()
+	return 0
 }
 
 // String returns a human-readable representation.
 func (a AtomicValue) String() string {
 	return fmt.Sprintf("%s(%v)", a.TypeName, a.Value)
+}
+
+// DecimalToString returns the canonical XSD decimal string for a *big.Rat.
+func DecimalToString(r *big.Rat) string {
+	if r.IsInt() {
+		return r.Num().String()
+	}
+	// Use enough precision for exact representation, then trim trailing zeros
+	_, prec := r.FloatPrec()
+	if !prec {
+		// Not exactly representable in decimal; use high precision
+		s := r.FloatString(20)
+		s = strings.TrimRight(s, "0")
+		if strings.HasSuffix(s, ".") {
+			s += "0"
+		}
+		return s
+	}
+	// FloatPrec returns the number of digits needed
+	n, _ := r.FloatPrec()
+	s := r.FloatString(n)
+	s = strings.TrimRight(s, "0")
+	if strings.HasSuffix(s, ".") {
+		s += "0"
+	}
+	return s
 }
 
 // --- Supporting Types ---
@@ -313,6 +346,10 @@ type mapKey struct {
 
 func normalizeMapKey(key AtomicValue) mapKey {
 	switch v := key.Value.(type) {
+	case *big.Int:
+		return mapKey{typeName: key.TypeName, value: v.String()}
+	case *big.Rat:
+		return mapKey{typeName: key.TypeName, value: v.RatString()}
 	case time.Time:
 		return mapKey{typeName: key.TypeName, value: v.UTC().Format(time.RFC3339Nano)}
 	case []byte:

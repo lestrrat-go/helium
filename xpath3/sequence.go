@@ -3,6 +3,7 @@ package xpath3
 import (
 	"fmt"
 	"math"
+	"math/big"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -22,9 +23,19 @@ func SingleBoolean(b bool) Sequence {
 	return Sequence{AtomicValue{TypeName: TypeBoolean, Value: b}}
 }
 
-// SingleInteger creates a Sequence containing a single xs:integer.
+// SingleInteger creates a Sequence containing a single xs:integer from int64.
 func SingleInteger(n int64) Sequence {
+	return Sequence{AtomicValue{TypeName: TypeInteger, Value: big.NewInt(n)}}
+}
+
+// SingleIntegerBig creates a Sequence containing a single xs:integer from *big.Int.
+func SingleIntegerBig(n *big.Int) Sequence {
 	return Sequence{AtomicValue{TypeName: TypeInteger, Value: n}}
+}
+
+// SingleDecimal creates a Sequence containing a single xs:decimal from *big.Rat.
+func SingleDecimal(r *big.Rat) Sequence {
+	return Sequence{AtomicValue{TypeName: TypeDecimal, Value: r}}
 }
 
 // SingleDouble creates a Sequence containing a single xs:double.
@@ -120,24 +131,21 @@ func ebvSingle(item Item) (bool, error) {
 }
 
 func ebvAtomic(v AtomicValue) (bool, error) {
-	if isIntegerDerived(v.TypeName) {
-		return v.IntegerVal() != 0, nil
+	// Check backing type first to avoid panics from mismatched TypeName/Value
+	switch val := v.Value.(type) {
+	case *big.Int:
+		return val.Sign() != 0, nil
+	case *big.Rat:
+		return val.Sign() != 0, nil
+	case float64:
+		return val != 0 && !math.IsNaN(val), nil
+	case bool:
+		return val, nil
+	case string:
+		return val != "", nil
 	}
-	switch v.TypeName {
-	case TypeBoolean:
-		return v.BooleanVal(), nil
-	case TypeString, TypeAnyURI, TypeUntypedAtomic:
-		return v.StringVal() != "", nil
-	case TypeDouble, TypeFloat:
-		f := v.DoubleVal()
-		return f != 0 && !math.IsNaN(f), nil
-	case TypeDecimal:
-		s := v.StringVal()
-		return s != "" && s != "0" && s != "0.0", nil
-	default:
-		return false, &XPathError{
-			Code:    "FORG0006",
-			Message: fmt.Sprintf("effective boolean value not defined for %s", v.TypeName),
-		}
+	return false, &XPathError{
+		Code:    "FORG0006",
+		Message: fmt.Sprintf("effective boolean value not defined for %s", v.TypeName),
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"math/big"
 	"strings"
 	"time"
 
@@ -330,11 +331,9 @@ func compareAtomic(op TokenType, a, b AtomicValue) (bool, error) {
 		return compareBooleans(op, a.Value.(bool), b.Value.(bool)), nil
 	}
 
-	// Numeric comparison
+	// Numeric comparison — type-preserving
 	if a.IsNumeric() && b.IsNumeric() {
-		fa := promoteToDouble(a)
-		fb := promoteToDouble(b)
-		return compareFloats(op, fa, fb), nil
+		return compareNumeric(op, a, b)
 	}
 
 	// Date/time comparisons (same type only)
@@ -540,6 +539,35 @@ func applyCompare(op TokenType, cmp int) bool {
 		return cmp >= 0
 	}
 	return false
+}
+
+// compareNumeric performs type-preserving numeric comparison.
+// Both integer → big.Int.Cmp; either decimal → big.Rat.Cmp; otherwise → float64.
+func compareNumeric(op TokenType, a, b AtomicValue) (bool, error) {
+	// Both integer → big.Int comparison
+	if isIntegerDerived(a.TypeName) && isIntegerDerived(b.TypeName) {
+		cmp := a.BigInt().Cmp(b.BigInt())
+		return applyCompare(op, cmp), nil
+	}
+	// Either decimal (and other is integer or decimal) → big.Rat comparison
+	aDecOrInt := a.TypeName == TypeDecimal || isIntegerDerived(a.TypeName)
+	bDecOrInt := b.TypeName == TypeDecimal || isIntegerDerived(b.TypeName)
+	if aDecOrInt && bDecOrInt {
+		ar := toRatForCompare(a)
+		br := toRatForCompare(b)
+		cmp := ar.Cmp(br)
+		return applyCompare(op, cmp), nil
+	}
+	// Otherwise → float64 (handles double, float, NaN, ±Inf)
+	return compareFloats(op, a.ToFloat64(), b.ToFloat64()), nil
+}
+
+// toRatForCompare converts integer or decimal AtomicValue to *big.Rat for comparison.
+func toRatForCompare(a AtomicValue) *big.Rat {
+	if isIntegerDerived(a.TypeName) {
+		return new(big.Rat).SetInt(a.BigInt())
+	}
+	return a.BigRat()
 }
 
 func compareFloats(op TokenType, a, b float64) bool {

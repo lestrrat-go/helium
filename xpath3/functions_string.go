@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/big"
 	"regexp"
 	"strings"
 	"unicode"
@@ -65,7 +66,7 @@ func fnCodepointsToString(_ context.Context, args []Sequence) (Sequence, error) 
 		if err != nil {
 			return nil, err
 		}
-		cp := int(promoteToDouble(a))
+		cp := int(a.ToFloat64())
 		if !utf8.ValidRune(rune(cp)) {
 			return nil, &XPathError{Code: "FOCH0001", Message: fmt.Sprintf("invalid codepoint: %d", cp)}
 		}
@@ -82,7 +83,7 @@ func fnStringToCodepoints(_ context.Context, args []Sequence) (Sequence, error) 
 	runes := []rune(s)
 	result := make(Sequence, len(runes))
 	for i, r := range runes {
-		result[i] = AtomicValue{TypeName: TypeInteger, Value: int64(r)}
+		result[i] = AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(r))}
 	}
 	return result, nil
 }

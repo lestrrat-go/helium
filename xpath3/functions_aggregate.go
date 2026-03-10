@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/big"
 )
 
 func init() {
@@ -20,8 +21,6 @@ func fnCount(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 // aggregateTypeFamily classifies an atomic type for aggregate type checking.
-// Returns "numeric", "string", "duration:YM", "duration:DT", "duration",
-// "date", "dateTime", "time", or "" for unsupported types.
 func aggregateTypeFamily(typeName string) string {
 	if isIntegerDerived(typeName) {
 		return "numeric"
@@ -51,7 +50,6 @@ func aggregateTypeFamily(typeName string) string {
 	return ""
 }
 
-// checkAggregateType returns FORG0006 if the type is not valid for avg/sum.
 func checkSumAvgType(a AtomicValue) error {
 	family := aggregateTypeFamily(a.TypeName)
 	switch family {
@@ -64,8 +62,6 @@ func checkSumAvgType(a AtomicValue) error {
 	}
 }
 
-// checkAggregateHomogeneity checks that all values are in the same type family
-// for avg/sum. Returns the common family or error.
 func checkAggregateHomogeneity(family, newFamily string) (string, error) {
 	if family == "" {
 		return newFamily, nil
@@ -73,7 +69,6 @@ func checkAggregateHomogeneity(family, newFamily string) (string, error) {
 	if family == newFamily {
 		return family, nil
 	}
-	// numeric types are compatible with each other
 	if family == "numeric" && newFamily == "numeric" {
 		return "numeric", nil
 	}
@@ -88,7 +83,13 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, nil
 	}
 	var family string
-	var sum float64
+	// Track whether all values are integer/decimal for type-preserving avg
+	allInt := true
+	allDecOrInt := true
+	sumInt := new(big.Int)
+	sumRat := new(big.Rat)
+	var sumFloat float64
+
 	for _, item := range args[0] {
 		a, err := AtomizeItem(item)
 		if err != nil {
@@ -102,13 +103,34 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		sum += promoteToDouble(a)
+		if isIntegerDerived(a.TypeName) {
+			sumInt.Add(sumInt, a.BigInt())
+			sumRat.Add(sumRat, new(big.Rat).SetInt(a.BigInt()))
+		} else if a.TypeName == TypeDecimal {
+			allInt = false
+			sumRat.Add(sumRat, a.BigRat())
+		} else {
+			allInt = false
+			allDecOrInt = false
+			sumFloat += a.ToFloat64()
+		}
 	}
 	if family == "duration:YM" || family == "duration:DT" {
-		// Duration avg: sum the durations, divide by count
 		return avgDurations(args[0], family)
 	}
-	return SingleDouble(sum / float64(len(args[0]))), nil
+	count := len(args[0])
+	if allDecOrInt {
+		// avg returns decimal for integer/decimal inputs
+		countRat := new(big.Rat).SetInt64(int64(count))
+		return SingleDecimal(new(big.Rat).Quo(sumRat, countRat)), nil
+	}
+	_ = allInt
+	// Float/double path
+	if allInt {
+		f, _ := new(big.Float).SetInt(sumInt).Float64()
+		sumFloat = f
+	}
+	return SingleDouble(sumFloat / float64(count)), nil
 }
 
 func avgDurations(seq Sequence, family string) (Sequence, error) {
@@ -146,17 +168,66 @@ func avgDurations(seq Sequence, family string) (Sequence, error) {
 	}), nil
 }
 
+// promoteForAggregate promotes an atomic value for aggregate operations.
+func promoteForAggregate(a AtomicValue) AtomicValue {
+	if a.TypeName == TypeUntypedAtomic {
+		f, err := castToDouble(a)
+		if err != nil {
+			return AtomicValue{TypeName: TypeDouble, Value: math.NaN()}
+		}
+		return f
+	}
+	if isIntegerDerived(a.TypeName) && a.TypeName != TypeInteger {
+		return AtomicValue{TypeName: TypeInteger, Value: a.BigInt()}
+	}
+	return a
+}
+
+// promoteResult promotes the result of fn:max/fn:min to the widest numeric type.
+func promoteResult(best AtomicValue, widest string) AtomicValue {
+	if best.TypeName == widest {
+		return best
+	}
+	switch widest {
+	case TypeDouble:
+		return AtomicValue{TypeName: TypeDouble, Value: best.ToFloat64()}
+	case TypeFloat:
+		return AtomicValue{TypeName: TypeFloat, Value: best.ToFloat64()}
+	case TypeDecimal:
+		if isIntegerDerived(best.TypeName) {
+			return AtomicValue{TypeName: TypeDecimal, Value: new(big.Rat).SetInt(best.BigInt())}
+		}
+	}
+	return best
+}
+
+func numericTypeWidth(typeName string) int {
+	switch typeName {
+	case TypeDouble:
+		return 4
+	case TypeFloat:
+		return 3
+	case TypeDecimal:
+		return 2
+	default:
+		return 1
+	}
+}
+
 func fnMax(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
 	var family string
-	max := math.Inf(-1)
+	var best AtomicValue
+	widest := TypeInteger
+	first := true
 	for _, item := range args[0] {
 		a, err := AtomizeItem(item)
 		if err != nil {
 			return nil, err
 		}
+		a = promoteForAggregate(a)
 		newFamily := aggregateTypeFamily(a.TypeName)
 		if newFamily == "" {
 			return nil, &XPathError{
@@ -172,15 +243,29 @@ func fnMax(_ context.Context, args []Sequence) (Sequence, error) {
 				Message: fmt.Sprintf("incompatible types in fn:max: %s and %s", family, newFamily),
 			}
 		}
-		v := promoteToDouble(a)
-		if math.IsNaN(v) {
-			return SingleDouble(math.NaN()), nil
+		if family == "numeric" && numericTypeWidth(a.TypeName) > numericTypeWidth(widest) {
+			widest = a.TypeName
 		}
-		if v > max {
-			max = v
+		if (a.TypeName == TypeDouble || a.TypeName == TypeFloat) && math.IsNaN(a.Value.(float64)) {
+			return SingleAtomic(AtomicValue{TypeName: TypeDouble, Value: math.NaN()}), nil
+		}
+		if first {
+			best = a
+			first = false
+			continue
+		}
+		gt, err := ValueCompare(TokenGt, a, best)
+		if err != nil {
+			return nil, err
+		}
+		if gt {
+			best = a
 		}
 	}
-	return SingleDouble(max), nil
+	if family == "numeric" {
+		best = promoteResult(best, widest)
+	}
+	return SingleAtomic(best), nil
 }
 
 func fnMin(_ context.Context, args []Sequence) (Sequence, error) {
@@ -188,12 +273,15 @@ func fnMin(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, nil
 	}
 	var family string
-	min := math.Inf(1)
+	var best AtomicValue
+	widest := TypeInteger
+	first := true
 	for _, item := range args[0] {
 		a, err := AtomizeItem(item)
 		if err != nil {
 			return nil, err
 		}
+		a = promoteForAggregate(a)
 		newFamily := aggregateTypeFamily(a.TypeName)
 		if newFamily == "" {
 			return nil, &XPathError{
@@ -209,15 +297,29 @@ func fnMin(_ context.Context, args []Sequence) (Sequence, error) {
 				Message: fmt.Sprintf("incompatible types in fn:min: %s and %s", family, newFamily),
 			}
 		}
-		v := promoteToDouble(a)
-		if math.IsNaN(v) {
-			return SingleDouble(math.NaN()), nil
+		if family == "numeric" && numericTypeWidth(a.TypeName) > numericTypeWidth(widest) {
+			widest = a.TypeName
 		}
-		if v < min {
-			min = v
+		if (a.TypeName == TypeDouble || a.TypeName == TypeFloat) && math.IsNaN(a.Value.(float64)) {
+			return SingleAtomic(AtomicValue{TypeName: TypeDouble, Value: math.NaN()}), nil
+		}
+		if first {
+			best = a
+			first = false
+			continue
+		}
+		lt, err := ValueCompare(TokenLt, a, best)
+		if err != nil {
+			return nil, err
+		}
+		if lt {
+			best = a
 		}
 	}
-	return SingleDouble(min), nil
+	if family == "numeric" {
+		best = promoteResult(best, widest)
+	}
+	return SingleAtomic(best), nil
 }
 
 func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
@@ -228,13 +330,19 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 		return SingleInteger(0), nil
 	}
 	var family string
-	var sum float64
 	allInt := true
+	allDecOrInt := true
+	sumInt := new(big.Int)
+	sumRat := new(big.Rat)
+	var sumFloat float64
+	widest := TypeInteger
+
 	for _, item := range args[0] {
 		a, err := AtomizeItem(item)
 		if err != nil {
 			return nil, err
 		}
+		a = promoteForAggregate(a)
 		if err := checkSumAvgType(a); err != nil {
 			return nil, err
 		}
@@ -243,18 +351,31 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !isIntegerDerived(a.TypeName) {
-			allInt = false
+		if numericTypeWidth(a.TypeName) > numericTypeWidth(widest) {
+			widest = a.TypeName
 		}
-		sum += promoteToDouble(a)
+		if isIntegerDerived(a.TypeName) {
+			sumInt.Add(sumInt, a.BigInt())
+			sumRat.Add(sumRat, new(big.Rat).SetInt(a.BigInt()))
+		} else if a.TypeName == TypeDecimal {
+			allInt = false
+			sumRat.Add(sumRat, a.BigRat())
+		} else {
+			allInt = false
+			allDecOrInt = false
+			sumFloat += a.ToFloat64()
+		}
 	}
 	if family == "duration:YM" || family == "duration:DT" {
 		return sumDurations(args[0], family)
 	}
 	if allInt {
-		return SingleInteger(int64(sum)), nil
+		return SingleIntegerBig(sumInt), nil
 	}
-	return SingleDouble(sum), nil
+	if allDecOrInt {
+		return SingleDecimal(sumRat), nil
+	}
+	return SingleDouble(sumFloat), nil
 }
 
 func sumDurations(seq Sequence, family string) (Sequence, error) {

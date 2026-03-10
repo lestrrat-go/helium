@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"sort"
 )
 
@@ -57,7 +58,7 @@ func fnInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	pos := int(promoteToDouble(a))
+	pos := int(a.ToFloat64())
 	inserts := args[2]
 
 	if pos < 1 {
@@ -83,7 +84,7 @@ func fnRemove(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	pos := int(promoteToDouble(a))
+	pos := int(a.ToFloat64())
 
 	if pos < 1 || pos > len(target) {
 		return target, nil
@@ -110,7 +111,7 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	start := int(promoteToDouble(a))
+	start := int(a.ToFloat64())
 	if start < 1 {
 		start = 1
 	}
@@ -121,7 +122,7 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		length = int(promoteToDouble(la))
+		length = int(la.ToFloat64())
 	}
 
 	if start > len(seq) || length <= 0 {
@@ -200,7 +201,7 @@ func fnIndexOf(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 		as, _ := atomicToString(a)
 		if as == ss && a.TypeName == search.TypeName {
-			result = append(result, AtomicValue{TypeName: TypeInteger, Value: int64(i + 1)})
+			result = append(result, AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(i + 1))})
 		}
 	}
 	return result, nil

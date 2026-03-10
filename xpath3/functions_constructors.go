@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/big"
 	"regexp"
 	"strings"
 )
@@ -126,6 +127,8 @@ func makeXSConstructor(targetType string) func(context.Context, []Sequence) (Seq
 
 // makeXSIntegerRange returns a constructor for a derived integer type with range validation.
 func makeXSIntegerRange(typeName string, minVal, maxVal int64) func(context.Context, []Sequence) (Sequence, error) {
+	minBig := big.NewInt(minVal)
+	maxBig := big.NewInt(maxVal)
 	return func(_ context.Context, args []Sequence) (Sequence, error) {
 		if len(args[0]) == 0 {
 			return nil, nil
@@ -138,11 +141,11 @@ func makeXSIntegerRange(typeName string, minVal, maxVal int64) func(context.Cont
 		if err != nil {
 			return nil, err
 		}
-		n := iv.IntegerVal()
-		if n < minVal || n > maxVal {
+		n := iv.BigInt()
+		if n.Cmp(minBig) < 0 || n.Cmp(maxBig) > 0 {
 			return nil, &XPathError{
 				Code:    "FORG0001",
-				Message: fmt.Sprintf("value %d out of range for %s", n, typeName),
+				Message: fmt.Sprintf("value %s out of range for %s", n.String(), typeName),
 			}
 		}
 		return SingleAtomic(AtomicValue{TypeName: typeName, Value: n}), nil

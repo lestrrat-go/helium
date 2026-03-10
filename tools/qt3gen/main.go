@@ -452,6 +452,7 @@ func generateTestFile(tests []generatedTest) string {
 		funcName := "TestQT3_" + goIdentifier(setName)
 
 		fmt.Fprintf(&b, "func %s(t *testing.T) {\n", funcName)
+		fmt.Fprintf(&b, "\tt.Parallel()\n")
 		fmt.Fprintf(&b, "\tqt3RunTests(t, []qt3Test{\n")
 
 		for _, tc := range g.tests {

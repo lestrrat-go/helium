@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/big"
 	"sort"
 	"strings"
 	"time"
@@ -224,8 +225,10 @@ func evalLiteral(e LiteralExpr) (Sequence, error) {
 	switch v := e.Value.(type) {
 	case string:
 		return SingleString(v), nil
-	case int64:
-		return SingleInteger(v), nil
+	case *big.Int:
+		return SingleIntegerBig(v), nil
+	case *big.Rat:
+		return SingleDecimal(v), nil
 	case float64:
 		return SingleDouble(v), nil
 	}
@@ -588,13 +591,114 @@ func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
 		return result, err
 	}
 
-	ln := promoteToDouble(la)
-	rn := promoteToDouble(ra)
+	// Promote xs:untypedAtomic to xs:double for arithmetic
+	if la.TypeName == TypeUntypedAtomic {
+		castVal, err := CastAtomic(la, TypeDouble)
+		if err != nil {
+			return nil, err
+		}
+		la = castVal
+	}
+	if ra.TypeName == TypeUntypedAtomic {
+		castVal, err := CastAtomic(ra, TypeDouble)
+		if err != nil {
+			return nil, err
+		}
+		ra = castVal
+	}
 
-	bothInteger := isIntegerDerived(la.TypeName) && isIntegerDerived(ra.TypeName)
+	// Tier 1: both integer → big.Int arithmetic
+	if isIntegerDerived(la.TypeName) && isIntegerDerived(ra.TypeName) {
+		return integerArith(e.Op, la.BigInt(), ra.BigInt())
+	}
+	// Tier 2: either decimal (or integer promoted) → big.Rat arithmetic
+	if needsDecimalArith(la.TypeName, ra.TypeName) {
+		return decimalArith(e.Op, toRat(la), toRat(ra))
+	}
+	// Tier 3: float/double → float64 arithmetic
+	return floatArith(e.Op, la, ra)
+}
+
+func integerArith(op TokenType, a, b *big.Int) (Sequence, error) {
+	result := new(big.Int)
+	switch op {
+	case TokenPlus:
+		result.Add(a, b)
+	case TokenMinus:
+		result.Sub(a, b)
+	case TokenStar:
+		result.Mul(a, b)
+	case TokenDiv:
+		// integer / integer → decimal
+		if b.Sign() == 0 {
+			return nil, &XPathError{Code: "FOAR0002", Message: "division by zero"}
+		}
+		r := new(big.Rat).SetFrac(new(big.Int).Set(a), new(big.Int).Set(b))
+		return SingleDecimal(r), nil
+	case TokenIdiv:
+		if b.Sign() == 0 {
+			return nil, &XPathError{Code: "FOAR0002", Message: "integer division by zero"}
+		}
+		result.Quo(a, b) // truncates toward zero
+	case TokenMod:
+		if b.Sign() == 0 {
+			return nil, &XPathError{Code: "FOAR0002", Message: "modulo by zero"}
+		}
+		result.Rem(a, b)
+	}
+	return SingleIntegerBig(result), nil
+}
+
+func decimalArith(op TokenType, a, b *big.Rat) (Sequence, error) {
+	result := new(big.Rat)
+	switch op {
+	case TokenPlus:
+		result.Add(a, b)
+	case TokenMinus:
+		result.Sub(a, b)
+	case TokenStar:
+		result.Mul(a, b)
+	case TokenDiv:
+		if b.Sign() == 0 {
+			return nil, &XPathError{Code: "FOAR0002", Message: "division by zero"}
+		}
+		result.Quo(a, b)
+	case TokenIdiv:
+		if b.Sign() == 0 {
+			return nil, &XPathError{Code: "FOAR0002", Message: "integer division by zero"}
+		}
+		// Truncate quotient toward zero
+		q := new(big.Rat).Quo(a, b)
+		// Extract integer part
+		num := q.Num()
+		den := q.Denom()
+		intPart := new(big.Int).Quo(num, den)
+		return SingleIntegerBig(intPart), nil
+	case TokenMod:
+		if b.Sign() == 0 {
+			return nil, &XPathError{Code: "FOAR0002", Message: "modulo by zero"}
+		}
+		// a mod b = a - (a idiv b) * b
+		q := new(big.Rat).Quo(a, b)
+		intPart := new(big.Int).Quo(q.Num(), q.Denom())
+		qr := new(big.Rat).SetInt(intPart)
+		result.Sub(a, new(big.Rat).Mul(qr, b))
+	}
+	return SingleDecimal(result), nil
+}
+
+func floatArith(op TokenType, la, ra AtomicValue) (Sequence, error) {
+	ln := la.ToFloat64()
+	rn := ra.ToFloat64()
+	resultType := TypeDouble
+	if la.TypeName == TypeFloat || ra.TypeName == TypeFloat {
+		if la.TypeName != TypeDouble && ra.TypeName != TypeDouble {
+			resultType = TypeFloat
+		}
+	}
 
 	var result float64
-	switch e.Op {
+	switch op {
 	case TokenPlus:
 		result = ln + rn
 	case TokenMinus:
@@ -602,46 +706,25 @@ func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	case TokenStar:
 		result = ln * rn
 	case TokenDiv:
-		// Integer div by zero raises FOAR0002; float div by zero produces ±Inf or NaN per IEEE 754
-		if bothInteger && rn == 0 {
-			return nil, &XPathError{Code: "FOAR0002", Message: "division by zero"}
-		}
 		result = ln / rn
 	case TokenIdiv:
-		// NaN in either operand → FOAR0002
 		if math.IsNaN(ln) || math.IsNaN(rn) {
 			return nil, &XPathError{Code: "FOAR0002", Message: "idiv with NaN"}
 		}
-		// INF dividend → FOAR0002
 		if math.IsInf(ln, 0) {
 			return nil, &XPathError{Code: "FOAR0002", Message: "idiv with infinite dividend"}
 		}
 		if rn == 0 {
 			return nil, &XPathError{Code: "FOAR0002", Message: "integer division by zero"}
 		}
-		// Finite dividend, INF divisor → 0
 		truncated := math.Trunc(ln / rn)
-		if truncated > math.MaxInt64 || truncated < math.MinInt64 {
-			return nil, &XPathError{Code: "FOAR0002", Message: "idiv result overflow"}
-		}
-		return SingleInteger(int64(truncated)), nil
+		bi, _ := new(big.Float).SetFloat64(truncated).Int(nil)
+		return SingleIntegerBig(bi), nil
 	case TokenMod:
-		// Integer mod by zero raises FOAR0002
-		if bothInteger && rn == 0 {
-			return nil, &XPathError{Code: "FOAR0002", Message: "modulo by zero"}
-		}
 		result = math.Mod(ln, rn)
 	}
 
-	// Preserve integer type when both inputs are integer
-	if bothInteger && e.Op != TokenDiv {
-		// Check for overflow
-		if result > math.MaxInt64 || result < math.MinInt64 || math.IsNaN(result) || math.IsInf(result, 0) {
-			return nil, &XPathError{Code: "FOAR0002", Message: "integer arithmetic overflow"}
-		}
-		return SingleInteger(int64(result)), nil
-	}
-	return SingleDouble(result), nil
+	return SingleAtomic(AtomicValue{TypeName: resultType, Value: result}), nil
 }
 
 func evalUnaryExpr(ec *evalContext, e UnaryExpr) (Sequence, error) {
@@ -656,9 +739,15 @@ func evalUnaryExpr(ec *evalContext, e UnaryExpr) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	n := promoteToDouble(a)
 	if isIntegerDerived(a.TypeName) {
-		return SingleInteger(-int64(n)), nil
+		return SingleIntegerBig(new(big.Int).Neg(a.BigInt())), nil
+	}
+	if a.TypeName == TypeDecimal {
+		return SingleDecimal(new(big.Rat).Neg(a.BigRat())), nil
+	}
+	n := a.ToFloat64()
+	if a.TypeName == TypeFloat {
+		return SingleAtomic(AtomicValue{TypeName: TypeFloat, Value: -n}), nil
 	}
 	return SingleDouble(-n), nil
 }
@@ -720,8 +809,17 @@ func evalRangeExpr(ec *evalContext, e RangeExpr) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	start := int64(promoteToDouble(sa))
-	end := int64(promoteToDouble(ea))
+	// Cast operands to xs:integer per spec (rejects NaN, Inf, non-numeric)
+	saInt, castErr := CastAtomic(sa, TypeInteger)
+	if castErr != nil {
+		return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("range operand: %v", castErr)}
+	}
+	eaInt, castErr := CastAtomic(ea, TypeInteger)
+	if castErr != nil {
+		return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("range operand: %v", castErr)}
+	}
+	start := saInt.BigInt().Int64()
+	end := eaInt.BigInt().Int64()
 	if start > end {
 		return nil, nil
 	}
@@ -731,7 +829,7 @@ func evalRangeExpr(ec *evalContext, e RangeExpr) (Sequence, error) {
 	}
 	result := make(Sequence, 0, count)
 	for i := start; i <= end; i++ {
-		result = append(result, AtomicValue{TypeName: TypeInteger, Value: i})
+		result = append(result, AtomicValue{TypeName: TypeInteger, Value: big.NewInt(i)})
 	}
 	return result, nil
 }
@@ -1021,7 +1119,7 @@ func lookupItem(ec *evalContext, item Item, keyExpr Expr, all bool) (Sequence, e
 		if err != nil {
 			return nil, err
 		}
-		idx := int(promoteToDouble(ka))
+		idx := int(ka.ToFloat64())
 		return v.Get(idx)
 	default:
 		return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("lookup requires map or array, got %T", item)}
@@ -1054,7 +1152,7 @@ func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 					newVars := copyVars(tup.vars)
 					newVars[c.Var] = Sequence{item}
 					if c.PosVar != "" {
-						newVars[c.PosVar] = Sequence{AtomicValue{TypeName: TypeInteger, Value: int64(i + 1)}}
+						newVars[c.PosVar] = Sequence{AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(i + 1))}}
 					}
 					newTuples = append(newTuples, flworTuple{vars: newVars})
 				}
@@ -1179,8 +1277,8 @@ func sortTuples(ec *evalContext, tuples []flworTuple, ob OrderByClause) ([]flwor
 }
 
 func compareAtomicOrder(a, b AtomicValue) int {
-	af := promoteToDouble(a)
-	bf := promoteToDouble(b)
+	af := a.ToFloat64()
+	bf := b.ToFloat64()
 	if af < bf {
 		return -1
 	}
@@ -1613,7 +1711,7 @@ func evalDynamicFunctionCall(ec *evalContext, e DynamicFunctionCall) (Sequence, 
 		if err != nil {
 			return nil, err
 		}
-		idx := int(promoteToDouble(key))
+		idx := int(key.ToFloat64())
 		return v.Get(idx)
 	default:
 		return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("dynamic function call requires function item, got %T", funcSeq[0])}
@@ -1758,33 +1856,23 @@ func evalArrayConstructorExpr(ec *evalContext, e ArrayConstructorExpr) (Sequence
 
 // --- Helpers ---
 
-func promoteToDouble(a AtomicValue) float64 {
+// needsDecimalArith returns true if arithmetic should use big.Rat (decimal tier).
+func needsDecimalArith(lt, rt string) bool {
+	lDec := lt == TypeDecimal || isIntegerDerived(lt)
+	rDec := rt == TypeDecimal || isIntegerDerived(rt)
+	if !lDec || !rDec {
+		return false
+	}
+	// At least one must be decimal (not both integer — that's tier 1)
+	return lt == TypeDecimal || rt == TypeDecimal
+}
+
+// toRat converts an AtomicValue (integer or decimal) to *big.Rat.
+func toRat(a AtomicValue) *big.Rat {
 	if isIntegerDerived(a.TypeName) {
-		return float64(a.Value.(int64))
+		return new(big.Rat).SetInt(a.BigInt())
 	}
-	switch a.TypeName {
-	case TypeDouble, TypeFloat:
-		return a.Value.(float64)
-	case TypeDecimal:
-		var f float64
-		if _, err := fmt.Sscanf(a.Value.(string), "%f", &f); err != nil {
-			return math.NaN()
-		}
-		return f
-	case TypeUntypedAtomic, TypeString:
-		s := a.Value.(string)
-		var f float64
-		if _, err := fmt.Sscanf(s, "%f", &f); err != nil {
-			return math.NaN()
-		}
-		return f
-	case TypeBoolean:
-		if a.Value.(bool) {
-			return 1
-		}
-		return 0
-	}
-	return math.NaN()
+	return a.BigRat()
 }
 
 func atomizeToString(seq Sequence) string {

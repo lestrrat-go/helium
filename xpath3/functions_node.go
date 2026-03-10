@@ -380,7 +380,7 @@ func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return SingleDouble(math.NaN()), nil
 	}
-	return SingleDouble(promoteToDouble(a)), nil
+	return SingleDouble(a.ToFloat64()), nil
 }
 
 func fnGenerateID(ctx context.Context, args []Sequence) (Sequence, error) {

@@ -1,6 +1,7 @@
 package xpath3_test
 
 import (
+	"math/big"
 	"testing"
 
 	"github.com/lestrrat-go/helium/xpath3"
@@ -237,7 +238,7 @@ func TestParseAST(t *testing.T) {
 		require.True(t, ok, "expected RangeExpr, got %T", expr)
 		start, ok := re.Start.(xpath3.LiteralExpr)
 		require.True(t, ok)
-		require.Equal(t, int64(1), start.Value)
+		require.Equal(t, big.NewInt(1), start.Value)
 	})
 
 	t.Run("if expr structure", func(t *testing.T) {

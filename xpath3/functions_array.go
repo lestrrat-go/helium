@@ -105,7 +105,7 @@ func fnArrayRemove(_ context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		positions[int(promoteToDouble(av))] = true
+		positions[int(av.ToFloat64())] = true
 	}
 	members := a.Members()
 	var result []Sequence
@@ -361,7 +361,7 @@ func fnArraySort(ctx context.Context, args []Sequence) (Sequence, error) {
 			if len(r) > 0 {
 				av, err := AtomizeItem(r[0])
 				if err == nil {
-					entries[i].key = promoteToDouble(av)
+					entries[i].key = av.ToFloat64()
 					s, _ := atomicToString(av)
 					entries[i].strKey = s
 				}
@@ -369,7 +369,7 @@ func fnArraySort(ctx context.Context, args []Sequence) (Sequence, error) {
 		} else if len(m) > 0 {
 			av, err := AtomizeItem(m[0])
 			if err == nil {
-				entries[i].key = promoteToDouble(av)
+				entries[i].key = av.ToFloat64()
 				s, _ := atomicToString(av)
 				entries[i].strKey = s
 			}

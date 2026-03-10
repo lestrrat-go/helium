@@ -1,8 +1,8 @@
 package xpath3
 
 import (
-	"errors"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 
@@ -792,27 +792,31 @@ func (p *parser) parseParenExpr() (Expr, error) {
 }
 
 // parseNumberLiteral converts a numeric token value to a LiteralExpr.
-// Per XPath 3.1: no dot and no e/E → xs:integer (int64),
-// dot but no e/E → xs:decimal (stored as float64 but tagged),
+// Per XPath 3.1: no dot and no e/E → xs:integer (*big.Int),
+// dot but no e/E → xs:decimal (*big.Rat),
 // e/E → xs:double (float64).
 func parseNumberLiteral(s string) (LiteralExpr, error) {
 	hasE := strings.ContainsAny(s, "eE")
 	hasDot := strings.Contains(s, ".")
 	if !hasDot && !hasE {
-		// Integer literal
-		v, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			// Overflow — fall back to float
-			f, ferr := strconv.ParseFloat(s, 64)
-			if ferr != nil {
-				return LiteralExpr{}, fmt.Errorf("invalid number %q: %w", s, err)
-			}
-			return LiteralExpr{Value: f}, nil
+		// Integer literal → *big.Int (arbitrary precision)
+		v, ok := new(big.Int).SetString(s, 10)
+		if !ok {
+			return LiteralExpr{}, fmt.Errorf("invalid integer %q", s)
 		}
 		return LiteralExpr{Value: v}, nil
 	}
+	if !hasE {
+		// Decimal literal → *big.Rat (exact rational)
+		v, ok := new(big.Rat).SetString(s)
+		if !ok {
+			return LiteralExpr{}, fmt.Errorf("invalid decimal %q", s)
+		}
+		return LiteralExpr{Value: v}, nil
+	}
+	// Double literal → float64
 	v, err := strconv.ParseFloat(s, 64)
-	if err != nil && !errors.Is(err, strconv.ErrRange) {
+	if err != nil {
 		return LiteralExpr{}, fmt.Errorf("invalid number %q: %w", s, err)
 	}
 	return LiteralExpr{Value: v}, nil

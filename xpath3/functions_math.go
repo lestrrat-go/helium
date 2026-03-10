@@ -34,7 +34,7 @@ func mathUnary(args []Sequence, fn func(float64) float64) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	return SingleDouble(fn(promoteToDouble(a))), nil
+	return SingleDouble(fn(a.ToFloat64())), nil
 }
 
 func fnMathExp(_ context.Context, args []Sequence) (Sequence, error) {
@@ -65,7 +65,7 @@ func fnMathPow(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	return SingleDouble(math.Pow(promoteToDouble(a), promoteToDouble(b))), nil
+	return SingleDouble(math.Pow(a.ToFloat64(), b.ToFloat64())), nil
 }
 
 func fnMathSqrt(_ context.Context, args []Sequence) (Sequence, error) {
@@ -108,5 +108,5 @@ func fnMathAtan2(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	return SingleDouble(math.Atan2(promoteToDouble(a), promoteToDouble(b))), nil
+	return SingleDouble(math.Atan2(a.ToFloat64(), b.ToFloat64())), nil
 }

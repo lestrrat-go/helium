@@ -2,6 +2,7 @@ package xpath3_test
 
 import (
 	"context"
+	"math/big"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -308,9 +309,9 @@ func TestEvalFLWOR(t *testing.T) {
 	ctx := xpath3.NewContext(t.Context(),
 		xpath3.WithVariables(map[string]xpath3.Sequence{
 			"items": {
-				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(1)},
-				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(2)},
-				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(3)},
+				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(1)},
+				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)},
+				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(3)},
 			},
 		}),
 	)
@@ -333,9 +334,9 @@ func TestEvalQuantified(t *testing.T) {
 	ctx := xpath3.NewContext(t.Context(),
 		xpath3.WithVariables(map[string]xpath3.Sequence{
 			"nums": {
-				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(1)},
-				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(2)},
-				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(3)},
+				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(1)},
+				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)},
+				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(3)},
 			},
 		}),
 	)

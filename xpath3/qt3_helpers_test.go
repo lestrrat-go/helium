@@ -1,8 +1,10 @@
 package xpath3_test
 
 import (
+	"context"
 	"fmt"
 	"math"
+	"math/big"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -38,6 +40,7 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 	t.Helper()
 	for _, tc := range tests {
 		t.Run(tc.Name, func(t *testing.T) {
+			t.Parallel()
 			if tc.Skip != "" {
 				t.Skip(tc.Skip)
 			}
@@ -134,8 +137,10 @@ func qt3EBV(seq xpath3.Sequence) (bool, error) {
 			return v != "", nil
 		case float64:
 			return v != 0 && !math.IsNaN(v), nil
-		case int64:
-			return v != 0, nil
+		case *big.Int:
+			return v.Sign() != 0, nil
+		case *big.Rat:
+			return v.Sign() != 0, nil
 		}
 	}
 	return false, fmt.Errorf("cannot compute EBV for sequence of length %d", len(seq))
@@ -200,7 +205,21 @@ func qt3AssertType(_ string) qt3Assertion {
 func qt3AssertDeepEq(expected string) qt3Assertion {
 	return func(t *testing.T, seq xpath3.Sequence) {
 		t.Helper()
-		require.Equal(t, expected, qt3StringValue(seq), "deep-eq")
+		compiled, err := xpath3.Compile(expected)
+		if err != nil {
+			// Fall back to string comparison if the expected value doesn't compile
+			require.Equal(t, expected, qt3StringValue(seq), "deep-eq")
+			return
+		}
+		result, err := compiled.Evaluate(t.Context(), nil)
+		if err != nil {
+			require.Equal(t, expected, qt3StringValue(seq), "deep-eq")
+			return
+		}
+		expectedSeq := result.Sequence()
+		if !qt3DeepEqualSeq(seq, expectedSeq) {
+			require.Equal(t, qt3FormatSeq(expectedSeq), qt3FormatSeq(seq), "deep-eq")
+		}
 	}
 }
 
@@ -259,7 +278,15 @@ func qt3CheckType(_ string) qt3Check {
 
 func qt3CheckDeepEq(expected string) qt3Check {
 	return func(seq xpath3.Sequence) bool {
-		return qt3StringValue(seq) == expected
+		compiled, err := xpath3.Compile(expected)
+		if err != nil {
+			return qt3StringValue(seq) == expected
+		}
+		result, err := compiled.Evaluate(context.Background(), nil)
+		if err != nil {
+			return qt3StringValue(seq) == expected
+		}
+		return qt3DeepEqualSeq(seq, result.Sequence())
 	}
 }
 
@@ -279,5 +306,148 @@ func qt3AnyOf(checks ...qt3Check) qt3Assertion {
 			}
 		}
 		require.Fail(t, "none of the any-of assertions passed", "got: %s", qt3StringValue(seq))
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Deep-equal helpers for structural comparison (arrays, maps, atomics)
+// ──────────────────────────────────────────────────────────────────────
+
+// qt3DeepEqualSeq compares two sequences structurally.
+func qt3DeepEqualSeq(a, b xpath3.Sequence) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !qt3DeepEqualItem(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func qt3DeepEqualItem(a, b xpath3.Item) bool {
+	switch av := a.(type) {
+	case xpath3.AtomicValue:
+		bv, ok := b.(xpath3.AtomicValue)
+		if !ok {
+			return false
+		}
+		return qt3DeepEqualAtomic(av, bv)
+	case xpath3.ArrayItem:
+		bArr, ok := b.(xpath3.ArrayItem)
+		if !ok {
+			return false
+		}
+		if av.Size() != bArr.Size() {
+			return false
+		}
+		for i := 1; i <= av.Size(); i++ {
+			am, _ := av.Get(i)
+			bm, _ := bArr.Get(i)
+			if !qt3DeepEqualSeq(am, bm) {
+				return false
+			}
+		}
+		return true
+	case xpath3.MapItem:
+		bMap, ok := b.(xpath3.MapItem)
+		if !ok {
+			return false
+		}
+		if av.Size() != bMap.Size() {
+			return false
+		}
+		keys := av.Keys()
+		for _, k := range keys {
+			aVal, _ := av.Get(k)
+			bVal, found := bMap.Get(k)
+			if !found {
+				return false
+			}
+			if !qt3DeepEqualSeq(aVal, bVal) {
+				return false
+			}
+		}
+		return true
+	case xpath3.NodeItem:
+		bn, ok := b.(xpath3.NodeItem)
+		if !ok {
+			return false
+		}
+		// Compare node string values
+		aStr, _ := xpath3.AtomizeItem(av)
+		bStr, _ := xpath3.AtomizeItem(bn)
+		return qt3DeepEqualAtomic(aStr, bStr)
+	default:
+		return false
+	}
+}
+
+func qt3DeepEqualAtomic(a, b xpath3.AtomicValue) bool {
+	// Numeric comparison with promotion
+	if a.IsNumeric() && b.IsNumeric() {
+		return a.ToFloat64() == b.ToFloat64()
+	}
+	// String-based comparison for same types
+	sa, err1 := xpath3.AtomicToString(a)
+	sb, err2 := xpath3.AtomicToString(b)
+	if err1 != nil || err2 != nil {
+		return fmt.Sprintf("%v", a.Value) == fmt.Sprintf("%v", b.Value)
+	}
+	return sa == sb
+}
+
+// qt3FormatSeq returns a human-readable representation of a sequence for error messages.
+func qt3FormatSeq(seq xpath3.Sequence) string {
+	if len(seq) == 0 {
+		return "()"
+	}
+	parts := make([]string, len(seq))
+	for i, item := range seq {
+		parts[i] = qt3FormatItem(item)
+	}
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	return strings.Join(parts, ", ")
+}
+
+func qt3FormatItem(item xpath3.Item) string {
+	switch v := item.(type) {
+	case xpath3.AtomicValue:
+		s, err := xpath3.AtomicToString(v)
+		if err != nil {
+			return fmt.Sprintf("%v", v.Value)
+		}
+		if v.TypeName == xpath3.TypeString {
+			return fmt.Sprintf("%q", s)
+		}
+		return s
+	case xpath3.ArrayItem:
+		parts := make([]string, v.Size())
+		for i := 1; i <= v.Size(); i++ {
+			m, _ := v.Get(i)
+			parts[i-1] = qt3FormatSeq(m)
+		}
+		return "[" + strings.Join(parts, ", ") + "]"
+	case xpath3.MapItem:
+		var parts []string
+		keys := v.Keys()
+		for _, k := range keys {
+			val, _ := v.Get(k)
+			ks, _ := xpath3.AtomicToString(k)
+			parts = append(parts, fmt.Sprintf("%s: %s", ks, qt3FormatSeq(val)))
+		}
+		return "map{" + strings.Join(parts, ", ") + "}"
+	case xpath3.NodeItem:
+		a, err := xpath3.AtomizeItem(v)
+		if err != nil {
+			return "<node>"
+		}
+		s, _ := xpath3.AtomicToString(a)
+		return s
+	default:
+		return fmt.Sprintf("%v", item)
 	}
 }

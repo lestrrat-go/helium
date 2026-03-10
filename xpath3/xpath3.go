@@ -134,7 +134,7 @@ func (r *Result) IsNumber() (float64, bool) {
 	if !ok {
 		return 0, false
 	}
-	return promoteToDouble(av), av.TypeName == TypeDouble || isIntegerDerived(av.TypeName) || av.TypeName == TypeDecimal || av.TypeName == TypeFloat
+	return av.ToFloat64(), av.TypeName == TypeDouble || isIntegerDerived(av.TypeName) || av.TypeName == TypeDecimal || av.TypeName == TypeFloat
 }
 
 // IsString returns the string value and true if the result is a single string.

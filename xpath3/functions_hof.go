@@ -124,7 +124,7 @@ func fnFunctionLookup(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	arity := int(promoteToDouble(arityA))
+	arity := int(arityA.ToFloat64())
 
 	qn := QualifiedName{URI: qv.URI, Name: qv.Local}
 	fn, ok := builtinFunctions3[qn]

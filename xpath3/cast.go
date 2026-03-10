@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
-	"strconv"
+	"math/big"
 	"strings"
 	"time"
 )
@@ -24,16 +24,13 @@ func isIntegerDerived(typeName string) bool {
 }
 
 // isAbstractCastTarget returns true if the type cannot be used as a cast/castable target.
-// Per XPath 3.1 §3.12.3, xs:NOTATION and xs:anyAtomicType are abstract and raise XPST0080.
 func isAbstractCastTarget(typeName string) bool {
 	return typeName == "xs:NOTATION" || typeName == TypeAnyAtomicType ||
 		typeName == "xs:anySimpleType" || typeName == "xs:anyType"
 }
 
 // CastAtomic casts an AtomicValue to the target type.
-// Returns an error if the cast is not supported or the value is invalid.
 func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
-	// Abstract types cannot be cast targets (XPST0080)
 	if isAbstractCastTarget(targetType) {
 		return AtomicValue{}, &XPathError{
 			Code:    "XPST0080",
@@ -51,12 +48,12 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		if err != nil {
 			return AtomicValue{}, err
 		}
-		n := iv.IntegerVal()
+		n := iv.BigInt()
 		min, max, ok := integerTypeRange(targetType)
-		if ok && (n < min || n > max) {
+		if ok && (n.Cmp(min) < 0 || n.Cmp(max) > 0) {
 			return AtomicValue{}, &XPathError{
 				Code:    "FORG0001",
-				Message: fmt.Sprintf("value %d out of range for %s", n, targetType),
+				Message: fmt.Sprintf("value %s out of range for %s", n.String(), targetType),
 			}
 		}
 		return AtomicValue{TypeName: targetType, Value: n}, nil
@@ -121,7 +118,6 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		}
 		if v.TypeName == TypeDateTime {
 			t := v.TimeVal()
-			// Use FixedZone with current offset to avoid historical timezone issues
 			_, offset := t.Zone()
 			loc := time.FixedZone("", offset)
 			return AtomicValue{TypeName: TypeTime, Value: time.Date(0, 1, 1, t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)}, nil
@@ -186,17 +182,20 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 	case TypeUntypedAtomic:
 		return AtomicValue{TypeName: TypeUntypedAtomic, Value: s}, nil
 	case TypeInteger:
-		n, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
+		n, ok := new(big.Int).SetString(s, 10)
+		if !ok {
 			return AtomicValue{}, castError(s, targetType)
 		}
 		return AtomicValue{TypeName: TypeInteger, Value: n}, nil
 	case TypeDecimal:
-		// xs:decimal does not allow INF, NaN, or exponential notation
 		if !isValidDecimalString(s) {
 			return AtomicValue{}, castError(s, targetType)
 		}
-		return AtomicValue{TypeName: TypeDecimal, Value: s}, nil
+		r, ok := new(big.Rat).SetString(s)
+		if !ok {
+			return AtomicValue{}, castError(s, targetType)
+		}
+		return AtomicValue{TypeName: TypeDecimal, Value: r}, nil
 	case TypeDouble:
 		f, err := parseXPathDouble(s)
 		if err != nil {
@@ -249,7 +248,6 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 		if err != nil {
 			return AtomicValue{}, castError(s, targetType)
 		}
-		// xs:dayTimeDuration must not have year/month components
 		if d.Months != 0 {
 			return AtomicValue{}, castError(s, targetType)
 		}
@@ -259,7 +257,6 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 		if err != nil {
 			return AtomicValue{}, castError(s, targetType)
 		}
-		// xs:yearMonthDuration must not have day/time components
 		if d.Seconds != 0 {
 			return AtomicValue{}, castError(s, targetType)
 		}
@@ -309,121 +306,35 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 }
 
 // integerTypeRange returns the min/max bounds for a derived integer type.
-func integerTypeRange(typeName string) (int64, int64, bool) {
+func integerTypeRange(typeName string) (*big.Int, *big.Int, bool) {
 	switch typeName {
 	case TypeLong:
-		return math.MinInt64, math.MaxInt64, true
+		return big.NewInt(math.MinInt64), big.NewInt(math.MaxInt64), true
 	case TypeInt:
-		return -2147483648, 2147483647, true
+		return big.NewInt(-2147483648), big.NewInt(2147483647), true
 	case TypeShort:
-		return -32768, 32767, true
+		return big.NewInt(-32768), big.NewInt(32767), true
 	case TypeByte:
-		return -128, 127, true
+		return big.NewInt(-128), big.NewInt(127), true
 	case TypeUnsignedLong:
-		return 0, math.MaxInt64, true // XSD max is 2^64-1 but we use int64
+		max := new(big.Int).SetUint64(math.MaxUint64)
+		return big.NewInt(0), max, true
 	case TypeUnsignedInt:
-		return 0, 4294967295, true
+		return big.NewInt(0), big.NewInt(4294967295), true
 	case TypeUnsignedShort:
-		return 0, 65535, true
+		return big.NewInt(0), big.NewInt(65535), true
 	case TypeUnsignedByte:
-		return 0, 255, true
+		return big.NewInt(0), big.NewInt(255), true
 	case TypeNonNegativeInteger:
-		return 0, math.MaxInt64, true
+		return big.NewInt(0), nil, false
 	case TypeNonPositiveInteger:
-		return math.MinInt64, 0, true
+		return nil, big.NewInt(0), false
 	case TypePositiveInteger:
-		return 1, math.MaxInt64, true
+		return big.NewInt(1), nil, false
 	case TypeNegativeInteger:
-		return math.MinInt64, -1, true
+		return nil, big.NewInt(-1), false
 	}
-	return 0, 0, false
-}
-
-// isValidDecimalString checks if a string is a valid xs:decimal literal.
-// xs:decimal allows optional sign, digits, optional decimal point with digits.
-// It does NOT allow INF, NaN, or exponential notation (e/E).
-func isValidDecimalString(s string) bool {
-	if s == "" {
-		return false
-	}
-	i := 0
-	if s[i] == '+' || s[i] == '-' {
-		i++
-	}
-	if i >= len(s) {
-		return false
-	}
-	hasDigit := false
-	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
-		hasDigit = true
-		i++
-	}
-	if i < len(s) && s[i] == '.' {
-		i++
-		for i < len(s) && s[i] >= '0' && s[i] <= '9' {
-			hasDigit = true
-			i++
-		}
-	}
-	return hasDigit && i == len(s)
-}
-
-// formatXPathDouble formats a float64 using XPath canonical representation.
-// Per XML Schema Part 2 §3.2.5:
-//   - NaN, INF, -INF as literals
-//   - 0 → "0", -0 → "-0"
-//   - If |v| >= 0.000001 and |v| < 1000000, use decimal notation
-//   - Otherwise use scientific notation: [-]d.d...dEd...d
-func formatXPathDouble(f float64) string {
-	if math.IsNaN(f) {
-		return "NaN"
-	}
-	if math.IsInf(f, 1) {
-		return "INF"
-	}
-	if math.IsInf(f, -1) {
-		return "-INF"
-	}
-	if f == 0 {
-		if math.Signbit(f) {
-			return "-0"
-		}
-		return "0"
-	}
-
-	abs := math.Abs(f)
-	if abs >= 0.000001 && abs < 1000000 {
-		// Use decimal notation
-		s := strconv.FormatFloat(f, 'f', -1, 64)
-		return s
-	}
-
-	// Use scientific notation: [-]d.d...dE[-]d...d
-	s := strconv.FormatFloat(f, 'E', -1, 64)
-	// Go produces "1.23E+07", XPath wants "1.23E7" (no + sign, no leading zeros)
-	if idx := strings.Index(s, "E"); idx >= 0 {
-		mantissa := s[:idx]
-		expPart := s[idx+1:]
-		// Strip + sign from exponent
-		if strings.HasPrefix(expPart, "+") {
-			expPart = expPart[1:]
-		}
-		// Strip leading zeros from exponent (but keep at least one digit)
-		if strings.HasPrefix(expPart, "-") {
-			inner := strings.TrimLeft(expPart[1:], "0")
-			if inner == "" {
-				inner = "0"
-			}
-			expPart = "-" + inner
-		} else {
-			expPart = strings.TrimLeft(expPart, "0")
-			if expPart == "" {
-				expPart = "0"
-			}
-		}
-		s = mantissa + "E" + expPart
-	}
-	return s
+	return nil, nil, false
 }
 
 func castError(value string, targetType string) *XPathError {
@@ -431,454 +342,4 @@ func castError(value string, targetType string) *XPathError {
 		Code:    "FORG0001",
 		Message: fmt.Sprintf("cannot cast %q to %s", value, targetType),
 	}
-}
-
-// castToGType casts a date/dateTime value to a Gregorian partial type.
-func castToGType(v AtomicValue, targetType string, format func(time.Time) string) (AtomicValue, error) {
-	switch v.TypeName {
-	case TypeDateTime, TypeDate:
-		return AtomicValue{TypeName: targetType, Value: format(v.TimeVal())}, nil
-	case TypeString, TypeUntypedAtomic:
-		return CastFromString(v.StringVal(), targetType)
-	}
-	return AtomicValue{}, &XPathError{
-		Code:    "XPTY0004",
-		Message: fmt.Sprintf("cannot cast %s to %s", v.TypeName, targetType),
-	}
-}
-
-// formatXSDTimezone returns the timezone suffix for an XSD date/time value.
-// Returns "" if the value has no explicit timezone (Location == time.UTC).
-func formatXSDTimezone(t time.Time) string {
-	if t.Location() == time.UTC {
-		return "" // no timezone
-	}
-	_, offset := t.Zone()
-	if offset == 0 {
-		return "Z"
-	}
-	h := offset / 3600
-	m := (offset % 3600) / 60
-	if m < 0 {
-		m = -m
-	}
-	return fmt.Sprintf("%+03d:%02d", h, m)
-}
-
-func castToString(v AtomicValue) (AtomicValue, error) {
-	s, err := atomicToString(v)
-	if err != nil {
-		return AtomicValue{}, err
-	}
-	return AtomicValue{TypeName: TypeString, Value: s}, nil
-}
-
-// AtomicToString returns the canonical string representation of an atomic value.
-func AtomicToString(v AtomicValue) (string, error) {
-	return atomicToString(v)
-}
-
-// atomicToString returns the canonical string representation of an atomic value.
-func atomicToString(v AtomicValue) (string, error) {
-	switch v.TypeName {
-	case TypeString, TypeAnyURI, TypeUntypedAtomic,
-		TypeNormalizedString, TypeToken, TypeLanguage, TypeName, TypeNCName,
-		TypeNMTOKEN, TypeNMTOKENS, TypeENTITY, TypeID, TypeIDREF, TypeIDREFS,
-		TypeGDay, TypeGMonth, TypeGMonthDay, TypeGYear, TypeGYearMonth:
-		return v.Value.(string), nil
-	case TypeInteger,
-		TypeLong, TypeInt, TypeShort, TypeByte,
-		TypeUnsignedLong, TypeUnsignedInt, TypeUnsignedShort, TypeUnsignedByte,
-		TypeNonNegativeInteger, TypeNonPositiveInteger,
-		TypePositiveInteger, TypeNegativeInteger:
-		return strconv.FormatInt(v.Value.(int64), 10), nil
-	case TypeDecimal:
-		return v.Value.(string), nil
-	case TypeDouble, TypeFloat:
-		return formatXPathDouble(v.Value.(float64)), nil
-	case TypeBoolean:
-		if v.Value.(bool) {
-			return "true", nil
-		}
-		return "false", nil
-	case TypeDate:
-		t := v.Value.(time.Time)
-		return fmt.Sprintf("%04d-%02d-%02d%s", t.Year(), t.Month(), t.Day(), formatXSDTimezone(t)), nil
-	case TypeDateTime:
-		t := v.Value.(time.Time)
-		s := fmt.Sprintf("%04d-%02d-%02dT%02d:%02d:%02d", t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
-		if ns := t.Nanosecond(); ns > 0 {
-			frac := fmt.Sprintf(".%09d", ns)
-			s += strings.TrimRight(frac, "0")
-		}
-		return s + formatXSDTimezone(t), nil
-	case TypeTime:
-		t := v.Value.(time.Time)
-		s := fmt.Sprintf("%02d:%02d:%02d", t.Hour(), t.Minute(), t.Second())
-		if ns := t.Nanosecond(); ns > 0 {
-			frac := fmt.Sprintf(".%09d", ns)
-			s += strings.TrimRight(frac, "0")
-		}
-		return s + formatXSDTimezone(t), nil
-	case TypeDuration, TypeDayTimeDuration, TypeYearMonthDuration:
-		return formatDuration(v.Value.(Duration)), nil
-	case TypeBase64Binary:
-		return base64.StdEncoding.EncodeToString(v.Value.([]byte)), nil
-	case TypeHexBinary:
-		return strings.ToUpper(hex.EncodeToString(v.Value.([]byte))), nil
-	case TypeQName:
-		q := v.Value.(QNameValue)
-		if q.Prefix != "" {
-			return q.Prefix + ":" + q.Local, nil
-		}
-		return q.Local, nil
-	}
-	return fmt.Sprintf("%v", v.Value), nil
-}
-
-func castToDouble(v AtomicValue) (AtomicValue, error) {
-	switch v.TypeName {
-	case TypeDouble:
-		return v, nil
-	case TypeFloat:
-		return AtomicValue{TypeName: TypeDouble, Value: v.DoubleVal()}, nil
-	case TypeInteger:
-		return AtomicValue{TypeName: TypeDouble, Value: float64(v.IntegerVal())}, nil
-	case TypeDecimal:
-		f, _ := strconv.ParseFloat(v.StringVal(), 64)
-		return AtomicValue{TypeName: TypeDouble, Value: f}, nil
-	case TypeBoolean:
-		if v.BooleanVal() {
-			return AtomicValue{TypeName: TypeDouble, Value: float64(1)}, nil
-		}
-		return AtomicValue{TypeName: TypeDouble, Value: float64(0)}, nil
-	case TypeString, TypeUntypedAtomic:
-		return CastFromString(v.StringVal(), TypeDouble)
-	}
-	return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("cannot cast %s to xs:double", v.TypeName)}
-}
-
-func castToFloat(v AtomicValue) (AtomicValue, error) {
-	result, err := castToDouble(v)
-	if err != nil {
-		return AtomicValue{}, err
-	}
-	result.TypeName = TypeFloat
-	return result, nil
-}
-
-func castToInteger(v AtomicValue) (AtomicValue, error) {
-	switch v.TypeName {
-	case TypeInteger:
-		return v, nil
-	case TypeDouble, TypeFloat:
-		f := v.DoubleVal()
-		if math.IsNaN(f) || math.IsInf(f, 0) {
-			return AtomicValue{}, &XPathError{Code: "FOCA0002", Message: "cannot cast NaN/INF to xs:integer"}
-		}
-		f = math.Trunc(f)
-		if f > math.MaxInt64 || f < math.MinInt64 {
-			return AtomicValue{}, &XPathError{Code: "FOCA0003", Message: "integer overflow in cast"}
-		}
-		return AtomicValue{TypeName: TypeInteger, Value: int64(f)}, nil
-	case TypeDecimal:
-		f, _ := strconv.ParseFloat(v.StringVal(), 64)
-		if math.IsNaN(f) || math.IsInf(f, 0) {
-			return AtomicValue{}, &XPathError{Code: "FOCA0003", Message: "decimal overflow in cast to integer"}
-		}
-		f = math.Trunc(f)
-		if f > math.MaxInt64 || f < math.MinInt64 {
-			return AtomicValue{}, &XPathError{Code: "FOCA0003", Message: "integer overflow in cast"}
-		}
-		return AtomicValue{TypeName: TypeInteger, Value: int64(f)}, nil
-	case TypeBoolean:
-		if v.BooleanVal() {
-			return AtomicValue{TypeName: TypeInteger, Value: int64(1)}, nil
-		}
-		return AtomicValue{TypeName: TypeInteger, Value: int64(0)}, nil
-	case TypeString, TypeUntypedAtomic:
-		return CastFromString(v.StringVal(), TypeInteger)
-	}
-	return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("cannot cast %s to xs:integer", v.TypeName)}
-}
-
-func castToDecimal(v AtomicValue) (AtomicValue, error) {
-	switch v.TypeName {
-	case TypeInteger:
-		return AtomicValue{TypeName: TypeDecimal, Value: strconv.FormatInt(v.IntegerVal(), 10)}, nil
-	case TypeDouble, TypeFloat:
-		f := v.DoubleVal()
-		if math.IsNaN(f) || math.IsInf(f, 0) {
-			return AtomicValue{}, &XPathError{Code: "FOCA0002", Message: "cannot cast NaN/INF to xs:decimal"}
-		}
-		return AtomicValue{TypeName: TypeDecimal, Value: strconv.FormatFloat(f, 'f', -1, 64)}, nil
-	case TypeBoolean:
-		if v.BooleanVal() {
-			return AtomicValue{TypeName: TypeDecimal, Value: "1"}, nil
-		}
-		return AtomicValue{TypeName: TypeDecimal, Value: "0"}, nil
-	case TypeString, TypeUntypedAtomic:
-		return CastFromString(v.StringVal(), TypeDecimal)
-	}
-	return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("cannot cast %s to xs:decimal", v.TypeName)}
-}
-
-func castToBoolean(v AtomicValue) (AtomicValue, error) {
-	switch v.TypeName {
-	case TypeInteger:
-		return AtomicValue{TypeName: TypeBoolean, Value: v.IntegerVal() != 0}, nil
-	case TypeDouble, TypeFloat:
-		f := v.DoubleVal()
-		return AtomicValue{TypeName: TypeBoolean, Value: f != 0 && !math.IsNaN(f)}, nil
-	case TypeDecimal:
-		s := v.StringVal()
-		return AtomicValue{TypeName: TypeBoolean, Value: s != "0" && s != "0.0"}, nil
-	case TypeString, TypeUntypedAtomic:
-		return CastFromString(v.StringVal(), TypeBoolean)
-	}
-	return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("cannot cast %s to xs:boolean", v.TypeName)}
-}
-
-func castToBase64Binary(v AtomicValue) (AtomicValue, error) {
-	switch v.TypeName {
-	case TypeHexBinary:
-		return AtomicValue{TypeName: TypeBase64Binary, Value: v.BytesVal()}, nil
-	case TypeString, TypeUntypedAtomic:
-		return CastFromString(v.StringVal(), TypeBase64Binary)
-	}
-	return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("cannot cast %s to xs:base64Binary", v.TypeName)}
-}
-
-func castToHexBinary(v AtomicValue) (AtomicValue, error) {
-	switch v.TypeName {
-	case TypeBase64Binary:
-		return AtomicValue{TypeName: TypeHexBinary, Value: v.BytesVal()}, nil
-	case TypeString, TypeUntypedAtomic:
-		return CastFromString(v.StringVal(), TypeHexBinary)
-	}
-	return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("cannot cast %s to xs:hexBinary", v.TypeName)}
-}
-
-// --- XSD Parsing Helpers ---
-
-func parseXPathDouble(s string) (float64, error) {
-	switch s {
-	case "INF":
-		return math.Inf(1), nil
-	case "-INF":
-		return math.Inf(-1), nil
-	case "NaN":
-		return math.NaN(), nil
-	}
-	return strconv.ParseFloat(s, 64)
-}
-
-func parseXSDDate(s string) (time.Time, error) {
-	// Try with timezone first, then without
-	for _, layout := range []string{
-		"2006-01-02Z07:00",
-		"2006-01-02",
-	} {
-		if t, err := time.Parse(layout, s); err == nil {
-			return ensureExplicitTZ(t, s), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("invalid xs:date: %q", s)
-}
-
-func parseXSDDateTime(s string) (time.Time, error) {
-	for _, layout := range []string{
-		"2006-01-02T15:04:05.999999999Z07:00",
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02T15:04:05.999999999",
-		"2006-01-02T15:04:05",
-	} {
-		if t, err := time.Parse(layout, s); err == nil {
-			return ensureExplicitTZ(t, s), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("invalid xs:dateTime: %q", s)
-}
-
-func parseXSDTime(s string) (time.Time, error) {
-	for _, layout := range []string{
-		"15:04:05.999999999Z07:00",
-		"15:04:05Z07:00",
-		"15:04:05.999999999",
-		"15:04:05",
-	} {
-		if t, err := time.Parse(layout, s); err == nil {
-			return ensureExplicitTZ(t, s), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("invalid xs:time: %q", s)
-}
-
-// ensureExplicitTZ ensures that when the input string has an explicit timezone
-// (Z, +HH:MM, -HH:MM), the result uses FixedZone instead of time.UTC.
-// This lets us distinguish "no timezone" (Location == time.UTC) from
-// "explicit UTC" (Location is FixedZone("", 0)) for XPath comparison semantics.
-func ensureExplicitTZ(t time.Time, s string) time.Time {
-	if t.Location() != time.UTC {
-		return t // already a FixedZone (e.g. +05:00)
-	}
-	if hasExplicitTimezone(s) {
-		// Explicit Z or +00:00 — use FixedZone so Location != time.UTC
-		return t.In(time.FixedZone("", 0))
-	}
-	return t // no timezone in input — keep time.UTC
-}
-
-// hasExplicitTimezone checks if the input string ends with a timezone indicator
-// (Z, +HH:MM, or -HH:MM). The timezone suffix must match the pattern where
-// the last 6 characters are [+-]HH:MM with digits and colon in the right places.
-func hasExplicitTimezone(s string) bool {
-	if len(s) == 0 {
-		return false
-	}
-	if s[len(s)-1] == 'Z' {
-		return true
-	}
-	// Check for +HH:MM or -HH:MM at the end
-	if len(s) >= 6 {
-		tail := s[len(s)-6:]
-		if (tail[0] == '+' || tail[0] == '-') &&
-			tail[1] >= '0' && tail[1] <= '9' &&
-			tail[2] >= '0' && tail[2] <= '9' &&
-			tail[3] == ':' &&
-			tail[4] >= '0' && tail[4] <= '9' &&
-			tail[5] >= '0' && tail[5] <= '9' {
-			return true
-		}
-	}
-	return false
-}
-
-// parseXSDDuration parses an XSD duration string like "P1Y2M3DT4H5M6S".
-func parseXSDDuration(s string) (Duration, error) {
-	if len(s) == 0 {
-		return Duration{}, fmt.Errorf("empty duration")
-	}
-
-	d := Duration{}
-	i := 0
-
-	if s[i] == '-' {
-		d.Negative = true
-		i++
-	}
-
-	if i >= len(s) || s[i] != 'P' {
-		return Duration{}, fmt.Errorf("invalid duration: %q", s)
-	}
-	i++
-
-	inTime := false
-	for i < len(s) {
-		if s[i] == 'T' {
-			inTime = true
-			i++
-			continue
-		}
-
-		// Parse number (may be decimal)
-		numStart := i
-		for i < len(s) && (s[i] >= '0' && s[i] <= '9' || s[i] == '.') {
-			i++
-		}
-		if i == numStart || i >= len(s) {
-			return Duration{}, fmt.Errorf("invalid duration: %q", s)
-		}
-
-		numStr := s[numStart:i]
-		designator := s[i]
-		i++
-
-		if !inTime {
-			n, err := strconv.Atoi(numStr)
-			if err != nil {
-				return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
-			}
-			switch designator {
-			case 'Y':
-				d.Months += n * 12
-			case 'M':
-				d.Months += n
-			case 'D':
-				d.Seconds += float64(n) * 86400
-			default:
-				return Duration{}, fmt.Errorf("invalid duration designator: %c", designator)
-			}
-		} else {
-			f, err := strconv.ParseFloat(numStr, 64)
-			if err != nil {
-				return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
-			}
-			switch designator {
-			case 'H':
-				d.Seconds += f * 3600
-			case 'M':
-				d.Seconds += f * 60
-			case 'S':
-				d.Seconds += f
-			default:
-				return Duration{}, fmt.Errorf("invalid duration designator: %c", designator)
-			}
-		}
-	}
-
-	return d, nil
-}
-
-// formatDuration formats a Duration as an XSD duration string.
-func formatDuration(d Duration) string {
-	var b strings.Builder
-	if d.Negative {
-		b.WriteByte('-')
-	}
-	b.WriteByte('P')
-
-	years := d.Months / 12
-	months := d.Months % 12
-	if years != 0 {
-		fmt.Fprintf(&b, "%dY", years)
-	}
-	if months != 0 {
-		fmt.Fprintf(&b, "%dM", months)
-	}
-
-	secs := d.Seconds
-	days := int(secs / 86400)
-	secs -= float64(days) * 86400
-	hours := int(secs / 3600)
-	secs -= float64(hours) * 3600
-	mins := int(secs / 60)
-	secs -= float64(mins) * 60
-
-	if days != 0 {
-		fmt.Fprintf(&b, "%dD", days)
-	}
-	if hours != 0 || mins != 0 || secs != 0 {
-		b.WriteByte('T')
-		if hours != 0 {
-			fmt.Fprintf(&b, "%dH", hours)
-		}
-		if mins != 0 {
-			fmt.Fprintf(&b, "%dM", mins)
-		}
-		if secs != 0 {
-			if secs == float64(int(secs)) {
-				fmt.Fprintf(&b, "%dS", int(secs))
-			} else {
-				fmt.Fprintf(&b, "%gS", secs)
-			}
-		}
-	}
-
-	// Ensure at least "P0D" or "PT0S" for zero duration
-	if b.Len() == 1 || (d.Negative && b.Len() == 2) {
-		b.WriteString("T0S")
-	}
-
-	return b.String()
 }

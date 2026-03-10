@@ -1,6 +1,7 @@
 package xpath3_test
 
 import (
+	"math/big"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ func TestAtomicValueAccessors(t *testing.T) {
 	})
 
 	t.Run("integer", func(t *testing.T) {
-		v := xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(42)}
+		v := xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(42)}
 		require.Equal(t, int64(42), v.IntegerVal())
 		require.True(t, v.IsNumeric())
 		require.Equal(t, float64(42), v.ToFloat64())
@@ -291,7 +292,7 @@ func TestEBV(t *testing.T) {
 func TestAtomizeSequence(t *testing.T) {
 	seq := xpath3.Sequence{
 		xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "hello"},
-		xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(42)},
+		xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(42)},
 	}
 	atoms, err := xpath3.AtomizeSequence(seq)
 	require.NoError(t, err)

@@ -2,7 +2,7 @@ package xpath3
 
 import (
 	"math"
-	"strconv"
+	"math/big"
 	"time"
 )
 
@@ -117,7 +117,7 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 	}
 
 	d := dur.DurationVal()
-	n := promoteToDouble(num)
+	n := num.ToFloat64()
 
 	if math.IsNaN(n) {
 		return nil, true, &XPathError{Code: "FOCA0005", Message: "NaN in duration arithmetic"}
@@ -255,10 +255,8 @@ func arithmeticDurationDivDuration(la, ra AtomicValue) (Sequence, bool, error) {
 		return nil, true, &XPathError{Code: "FOAR0002", Message: "division of duration by zero duration"}
 	}
 
-	return SingleAtomic(AtomicValue{
-		TypeName: TypeDecimal,
-		Value:    strconv.FormatFloat(lVal/rVal, 'f', -1, 64),
-	}), true, nil
+	r := new(big.Rat).SetFloat64(lVal / rVal)
+	return SingleDecimal(r), true, nil
 }
 
 // resultDurationType determines the result type for duration ± duration.

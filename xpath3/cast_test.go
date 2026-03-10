@@ -2,6 +2,7 @@ package xpath3_test
 
 import (
 	"math"
+	"math/big"
 	"testing"
 
 	"github.com/lestrrat-go/helium/xpath3"
@@ -181,7 +182,7 @@ func TestCastFromStringErrors(t *testing.T) {
 
 func TestCastAtomic(t *testing.T) {
 	t.Run("integer to double", func(t *testing.T) {
-		v := xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(42)}
+		v := xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(42)}
 		result, err := xpath3.CastAtomic(v, xpath3.TypeDouble)
 		require.NoError(t, err)
 		require.Equal(t, xpath3.TypeDouble, result.TypeName)
@@ -196,7 +197,7 @@ func TestCastAtomic(t *testing.T) {
 	})
 
 	t.Run("integer to string", func(t *testing.T) {
-		v := xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(42)}
+		v := xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(42)}
 		result, err := xpath3.CastAtomic(v, xpath3.TypeString)
 		require.NoError(t, err)
 		require.Equal(t, "42", result.StringVal())
@@ -231,7 +232,7 @@ func TestCastAtomic(t *testing.T) {
 	})
 
 	t.Run("integer to boolean", func(t *testing.T) {
-		v := xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(0)}
+		v := xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(0)}
 		result, err := xpath3.CastAtomic(v, xpath3.TypeBoolean)
 		require.NoError(t, err)
 		require.False(t, result.BooleanVal())
@@ -278,7 +279,7 @@ func TestAtomicToString(t *testing.T) {
 		input  xpath3.AtomicValue
 		expect string
 	}{
-		{"integer", xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(42)}, "42"},
+		{"integer", xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(42)}, "42"},
 		{"double", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: 3.14}, "3.14"},
 		{"double zero", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: 0.0}, "0"},
 		{"double INF", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: math.Inf(1)}, "INF"},
