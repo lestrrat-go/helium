@@ -372,10 +372,13 @@ func fnNamespaceURI(ctx context.Context, args []Sequence) (Sequence, error) {
 func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
-		if fc == nil || fc.node == nil {
+		if fc == nil {
 			return SingleDouble(math.NaN()), nil
 		}
-		s := ixpath.StringValue(fc.node)
+		s, ok := fc.contextStringValue()
+		if !ok {
+			return SingleDouble(math.NaN()), nil
+		}
 		a, err := CastFromString(s, TypeDouble)
 		if err != nil {
 			return SingleDouble(math.NaN()), nil

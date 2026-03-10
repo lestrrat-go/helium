@@ -83,9 +83,31 @@ func (ec *evalContext) withNode(n helium.Node, pos, size int) *evalContext {
 func (ec *evalContext) withContextItem(item Item, pos, size int) *evalContext {
 	cp := *ec
 	cp.contextItem = item
+	cp.node = nil // clear node so functions don't accidentally use an outer node
 	cp.position = pos
 	cp.size = size
 	return &cp
+}
+
+// contextStringValue returns the string value of the current context item.
+// For node context items, it returns the XPath string value of the node.
+// For atomic context items, it returns the string representation.
+// Returns ("", false) if no context item is set.
+func (ec *evalContext) contextStringValue() (string, bool) {
+	if ec.contextItem != nil {
+		if av, ok := ec.contextItem.(AtomicValue); ok {
+			s, _ := atomicToString(av)
+			return s, true
+		}
+		if ni, ok := ec.contextItem.(NodeItem); ok {
+			return ixpath.StringValue(ni.Node), true
+		}
+		return "", false
+	}
+	if ec.node != nil {
+		return ixpath.StringValue(ec.node), true
+	}
+	return "", false
 }
 
 // getCurrentTime returns the cached current time for this evaluation.

@@ -10,7 +10,6 @@ import (
 	"unicode"
 
 	"github.com/lestrrat-go/helium"
-	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -45,10 +44,14 @@ func init() {
 func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
-		if fc == nil || fc.node == nil {
+		if fc == nil {
 			return SingleString(""), nil
 		}
-		return SingleString(ixpath.StringValue(fc.node)), nil
+		s, ok := fc.contextStringValue()
+		if !ok {
+			return SingleString(""), nil
+		}
+		return SingleString(s), nil
 	}
 	if len(args[0]) == 0 {
 		return SingleString(""), nil
@@ -192,10 +195,8 @@ func fnStringLength(ctx context.Context, args []Sequence) (Sequence, error) {
 	var s string
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
-		if fc == nil || fc.node == nil {
-			s = ""
-		} else {
-			s = ixpath.StringValue(fc.node)
+		if fc != nil {
+			s, _ = fc.contextStringValue()
 		}
 	} else {
 		if len(args[0]) > 1 {
@@ -210,10 +211,8 @@ func fnNormalizeSpace(ctx context.Context, args []Sequence) (Sequence, error) {
 	var s string
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
-		if fc == nil || fc.node == nil {
-			s = ""
-		} else {
-			s = ixpath.StringValue(fc.node)
+		if fc != nil {
+			s, _ = fc.contextStringValue()
 		}
 	} else {
 		s = seqToString(args[0])
