@@ -420,7 +420,7 @@ func fnIndexOf(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnLast(ctx context.Context, _ []Sequence) (Sequence, error) {
-	fc := GetFnContext(ctx)
+	fc := getFnContext(ctx)
 	if fc == nil {
 		return SingleInteger(0), nil
 	}
@@ -428,7 +428,7 @@ func fnLast(ctx context.Context, _ []Sequence) (Sequence, error) {
 }
 
 func fnPosition(ctx context.Context, _ []Sequence) (Sequence, error) {
-	fc := GetFnContext(ctx)
+	fc := getFnContext(ctx)
 	if fc == nil {
 		return SingleInteger(0), nil
 	}

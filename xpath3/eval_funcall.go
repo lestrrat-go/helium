@@ -86,7 +86,7 @@ func evalDynamicFunctionCall(ec *evalContext, e DynamicFunctionCall) (Sequence, 
 		if !isIntegerDerived(key.TypeName) {
 			return nil, &XPathError{Code: "XPTY0004", Message: "array lookup requires xs:integer index"}
 		}
-		idx := int(key.ToFloat64())
+		idx := int(key.BigInt().Int64())
 		return v.Get(idx)
 	default:
 		return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("dynamic function call requires function item, got %T", funcSeq[0])}

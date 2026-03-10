@@ -134,6 +134,8 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		}
 		return matchTypeTest(t, ni.Node)
 	case NameTest:
+		// XPath 3.1: bare NameTest in SequenceType context matches elements only,
+		// so AxisChild is correct (matchNameTest default branch requires ElementNode).
 		ni, ok := item.(NodeItem)
 		if !ok {
 			return false

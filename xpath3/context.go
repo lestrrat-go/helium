@@ -81,9 +81,9 @@ func withFnContext(ctx context.Context, ec *evalContext) context.Context {
 	return context.WithValue(ctx, fnContextKey{}, ec)
 }
 
-// GetFnContext retrieves the evalContext stashed by the evaluator.
+// getFnContext retrieves the evalContext stashed by the evaluator.
 // Returns nil if not in an evaluation.
-func GetFnContext(ctx context.Context) *evalContext {
+func getFnContext(ctx context.Context) *evalContext {
 	ec, _ := ctx.Value(fnContextKey{}).(*evalContext)
 	return ec
 }

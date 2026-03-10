@@ -33,7 +33,7 @@ func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	}
 
 	// Duration/date/time arithmetic — handle before numeric promotion
-	if result, handled, err := evalDateTimeArithmetic(e.Op, la, ra); handled {
+	if result, handled, err := evalDateTimeArithmetic(e.Op, la, ra); err != nil || handled {
 		return result, err
 	}
 

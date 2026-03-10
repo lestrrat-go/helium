@@ -310,7 +310,7 @@ func fnLang(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		n = nodes[0]
 	} else {
-		fc := GetFnContext(ctx)
+		fc := getFnContext(ctx)
 		if fc == nil || fc.node == nil {
 			return SingleBoolean(false), nil
 		}
@@ -374,7 +374,7 @@ func fnNamespaceURI(ctx context.Context, args []Sequence) (Sequence, error) {
 
 func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
-		fc := GetFnContext(ctx)
+		fc := getFnContext(ctx)
 		if fc == nil || fc.node == nil {
 			return SingleDouble(0), nil
 		}
@@ -476,7 +476,7 @@ func fnDocAvailable(_ context.Context, _ []Sequence) (Sequence, error) {
 // nodeArgOrCtx extracts a node from the first argument or falls back to the context node.
 func nodeArgOrCtx(ctx context.Context, args []Sequence) (helium.Node, error) {
 	if len(args) == 0 {
-		fc := GetFnContext(ctx)
+		fc := getFnContext(ctx)
 		if fc == nil || fc.node == nil {
 			return nil, nil
 		}

@@ -32,7 +32,7 @@ var (
 
 // XPathError is a structured error with an XPath error code.
 type XPathError struct {
-	Code    string   // e.g. "err:FOER0000", "err:XPTY0004"
+	Code    string   // e.g. "FOER0000", "XPTY0004"
 	Message string
 }
 

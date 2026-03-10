@@ -44,7 +44,7 @@ func init() {
 
 func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
-		fc := GetFnContext(ctx)
+		fc := getFnContext(ctx)
 		if fc == nil || fc.node == nil {
 			return SingleString(""), nil
 		}
@@ -168,7 +168,7 @@ func fnSubstring(_ context.Context, args []Sequence) (Sequence, error) {
 func fnStringLength(ctx context.Context, args []Sequence) (Sequence, error) {
 	var s string
 	if len(args) == 0 {
-		fc := GetFnContext(ctx)
+		fc := getFnContext(ctx)
 		if fc == nil || fc.node == nil {
 			s = ""
 		} else {
@@ -183,7 +183,7 @@ func fnStringLength(ctx context.Context, args []Sequence) (Sequence, error) {
 func fnNormalizeSpace(ctx context.Context, args []Sequence) (Sequence, error) {
 	var s string
 	if len(args) == 0 {
-		fc := GetFnContext(ctx)
+		fc := getFnContext(ctx)
 		if fc == nil || fc.node == nil {
 			s = ""
 		} else {
