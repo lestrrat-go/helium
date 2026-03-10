@@ -103,9 +103,11 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 		return nil, err
 	}
 	minArity := fn.MinArity()
+	ns := resolvePrefix(ec, e.Prefix)
 	fi := FunctionItem{
-		Arity: e.Arity,
-		Name:  e.Name,
+		Arity:     e.Arity,
+		Name:      e.Name,
+		Namespace: ns,
 		Invoke: func(ctx context.Context, args []Sequence) (Sequence, error) {
 			if len(args) < minArity {
 				return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("fn:%s requires at least %d arguments, got %d", e.Name, minArity, len(args))}

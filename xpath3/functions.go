@@ -33,6 +33,16 @@ var defaultPrefixNS = map[string]string{
 	"xs":    NSXS,
 }
 
+// namespacePrefixFor returns the conventional prefix for a known namespace URI.
+func namespacePrefixFor(uri string) string {
+	for prefix, ns := range defaultPrefixNS {
+		if ns == uri {
+			return prefix
+		}
+	}
+	return ""
+}
+
 // builtinFunctions3 is the package-level registry of built-in functions.
 // Populated in Phase 4 init() calls. Keyed by QualifiedName{URI, Name}.
 var builtinFunctions3 = map[QualifiedName]Function{}

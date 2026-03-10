@@ -338,6 +338,7 @@ type Duration struct {
 type FunctionItem struct {
 	Arity      int
 	Name       string // empty for anonymous
+	Namespace  string // namespace URI (empty for anonymous or default)
 	Invoke     func(ctx context.Context, args []Sequence) (Sequence, error)
 	ParamTypes []SequenceType // parameter type annotations (nil if untyped)
 	ReturnType *SequenceType  // return type annotation (nil if untyped)

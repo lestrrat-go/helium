@@ -200,9 +200,14 @@ func fnFunctionName(_ context.Context, args []Sequence) (Sequence, error) {
 	if fi.Name == "" {
 		return nil, nil
 	}
+	ns := fi.Namespace
+	if ns == "" {
+		ns = NSFn
+	}
+	prefix := namespacePrefixFor(ns)
 	return SingleAtomic(AtomicValue{
 		TypeName: TypeQName,
-		Value:    QNameValue{Local: fi.Name, URI: NSFn},
+		Value:    QNameValue{Prefix: prefix, Local: fi.Name, URI: ns},
 	}), nil
 }
 

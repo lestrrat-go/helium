@@ -160,17 +160,22 @@ func makeXSQNameConstructor() func(context.Context, []Sequence) (Sequence, error
 		uri := ""
 		if prefix != "" {
 			// Look up the prefix in the evaluation context's namespace bindings
+			resolved := false
 			ec := getFnContext(ctx)
 			if ec != nil && ec.namespaces != nil {
 				if ns, ok := ec.namespaces[prefix]; ok {
 					uri = ns
-				} else {
-					return nil, &XPathError{
-						Code:    "FONS0004",
-						Message: fmt.Sprintf("no namespace binding for prefix %q", prefix),
-					}
+					resolved = true
 				}
-			} else {
+			}
+			if !resolved {
+				// Fall back to default prefix mappings
+				if ns, ok := defaultPrefixNS[prefix]; ok {
+					uri = ns
+					resolved = true
+				}
+			}
+			if !resolved {
 				return nil, &XPathError{
 					Code:    "FONS0004",
 					Message: fmt.Sprintf("no namespace binding for prefix %q", prefix),

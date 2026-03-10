@@ -595,16 +595,21 @@ func castToQName(v AtomicValue, ec *evalContext) (AtomicValue, error) {
 
 	uri := ""
 	if prefix != "" {
+		resolved := false
 		if ec != nil && ec.namespaces != nil {
 			if ns, ok := ec.namespaces[prefix]; ok {
 				uri = ns
-			} else {
-				return AtomicValue{}, &XPathError{
-					Code:    "FONS0004",
-					Message: fmt.Sprintf("no namespace binding for prefix %q", prefix),
-				}
+				resolved = true
 			}
-		} else {
+		}
+		if !resolved {
+			// Fall back to default prefix mappings (fn, xs, math, map, array, err)
+			if ns, ok := defaultPrefixNS[prefix]; ok {
+				uri = ns
+				resolved = true
+			}
+		}
+		if !resolved {
 			return AtomicValue{}, &XPathError{
 				Code:    "FONS0004",
 				Message: fmt.Sprintf("no namespace binding for prefix %q", prefix),
