@@ -98,7 +98,7 @@ func atomicToString(v AtomicValue) (string, error) {
 		if !ok {
 			return "", fmt.Errorf("xpath3: internal error: expected Duration value for %s", v.TypeName)
 		}
-		return formatDuration(d), nil
+		return formatDuration(d, v.TypeName), nil
 	case TypeBase64Binary:
 		b, ok := v.Value.([]byte)
 		if !ok {
@@ -270,14 +270,24 @@ func formatXSDYear(year int) string {
 	return fmt.Sprintf("%04d", year)
 }
 
+// parseXPathDouble parses s as an xs:double using XSD 1.0 lexical rules.
+// Valid special values: "INF", "-INF", "NaN" — "+INF" is NOT valid.
 func parseXPathDouble(s string) (float64, error) {
 	switch s {
-	case "INF", "+INF":
+	case "INF":
 		return math.Inf(1), nil
 	case "-INF":
 		return math.Inf(-1), nil
 	case "NaN":
 		return math.NaN(), nil
 	}
-	return strconv.ParseFloat(s, 64)
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, err
+	}
+	// Reject infinity from ParseFloat — only whitelisted "INF"/"-INF" above are valid
+	if math.IsInf(f, 0) {
+		return 0, fmt.Errorf("invalid xs:double value: %s", s)
+	}
+	return f, nil
 }

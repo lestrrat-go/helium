@@ -160,8 +160,9 @@ func qt3EBV(seq xpath3.Sequence) (bool, error) {
 			return v, nil
 		case string:
 			return v != "", nil
-		case float64:
-			return v != 0 && !math.IsNaN(v), nil
+		case *xpath3.FloatValue:
+			f := v.Float64()
+			return f != 0 && !math.IsNaN(f), nil
 		case *big.Int:
 			return v.Sign() != 0, nil
 		case *big.Rat:

@@ -438,7 +438,9 @@ func compareDuration(op TokenType, a, b Duration) (bool, error) {
 		bMonths, bSecs = -bMonths, -bSecs
 	}
 
-	eq := aMonths == bMonths && aSecs == bSecs
+	// Use epsilon comparison for seconds to handle floating-point arithmetic drift
+	const secEps = 1e-9
+	eq := aMonths == bMonths && math.Abs(aSecs-bSecs) < secEps
 
 	switch op {
 	case TokenEq:

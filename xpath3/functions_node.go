@@ -389,7 +389,11 @@ func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return SingleDouble(math.NaN()), nil
 	}
-	return SingleDouble(a.ToFloat64()), nil
+	dbl, err := CastAtomic(a, TypeDouble)
+	if err != nil {
+		return SingleDouble(math.NaN()), nil
+	}
+	return SingleDouble(dbl.DoubleVal()), nil
 }
 
 func fnGenerateID(ctx context.Context, args []Sequence) (Sequence, error) {

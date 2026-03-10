@@ -51,6 +51,11 @@ func evalDateTimeArithmetic(op TokenType, la, ra AtomicValue) (Sequence, bool, e
 		return arithmeticDateTimeDuration(op, la, ra)
 	}
 
+	// duration + date/dateTime/time → date/dateTime/time (commutative addition only)
+	if lDur && rDT && op == TokenPlus {
+		return arithmeticDateTimeDuration(op, ra, la)
+	}
+
 	// date - date → dayTimeDuration
 	// dateTime - dateTime → dayTimeDuration
 	// time - time → dayTimeDuration
@@ -195,6 +200,11 @@ func arithmeticDateTimeDuration(op TokenType, dt, dur AtomicValue) (Sequence, bo
 	// Add seconds (as time.Duration)
 	if secs != 0 {
 		t = t.Add(time.Duration(secs * float64(time.Second)))
+	}
+
+	// For xs:date results, strip the time component to keep only the date
+	if dt.TypeName == TypeDate {
+		t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 	}
 
 	return SingleAtomic(AtomicValue{

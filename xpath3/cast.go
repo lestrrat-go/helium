@@ -1,7 +1,6 @@
 package xpath3
 
 import (
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -228,24 +227,11 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 		if err != nil {
 			return AtomicValue{}, castError(s, targetType)
 		}
-		// Reject string values that overflow to infinity (but allow "INF"/"+INF"/"-INF" literals)
-		if math.IsInf(f, 0) && s != "INF" && s != "+INF" && s != "-INF" {
-			return AtomicValue{}, castError(s, targetType)
-		}
+		// parseXPathDouble already rejects invalid infinity forms (e.g. "+INF")
+		// and overflow to infinity from numeric strings
 		return AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}, nil
 	case TypeFloat:
-		f, err := parseXPathDouble(s)
-		if err != nil {
-			return AtomicValue{}, castError(s, targetType)
-		}
-		// Reject finite values that overflow float32 range
-		if !math.IsNaN(f) && !math.IsInf(f, 0) {
-			f32 := float32(f)
-			if math.IsInf(float64(f32), 0) {
-				return AtomicValue{}, castError(s, targetType)
-			}
-		}
-		return AtomicValue{TypeName: TypeFloat, Value: NewFloat(f)}, nil
+		return castStringToFloat(s)
 	case TypeBoolean:
 		switch s {
 		case "true", "1":
@@ -300,7 +286,7 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 		}
 		return AtomicValue{TypeName: TypeYearMonthDuration, Value: Duration{Months: d.Months, Negative: d.Negative}}, nil
 	case TypeBase64Binary:
-		b, err := base64.StdEncoding.DecodeString(s)
+		b, err := decodeXSDBase64(s)
 		if err != nil {
 			return AtomicValue{}, castError(s, targetType)
 		}

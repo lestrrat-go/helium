@@ -371,7 +371,9 @@ func parseXSDDuration(s string) (Duration, error) {
 }
 
 // formatDuration formats a Duration as an XSD duration string.
-func formatDuration(d Duration) string {
+// typeName is used to select the correct zero representation:
+// yearMonthDuration → "P0M", dayTimeDuration → "PT0S", duration → "PT0S".
+func formatDuration(d Duration, typeName string) string {
 	var b strings.Builder
 	if d.Negative {
 		b.WriteByte('-')
@@ -432,7 +434,12 @@ func formatDuration(d Duration) string {
 	}
 
 	if b.Len() == 1 || (d.Negative && b.Len() == 2) {
-		b.WriteString("T0S")
+		// Zero duration: yearMonthDuration → "P0M", all others → "PT0S"
+		if typeName == TypeYearMonthDuration {
+			b.WriteString("0M")
+		} else {
+			b.WriteString("T0S")
+		}
 	}
 
 	return b.String()

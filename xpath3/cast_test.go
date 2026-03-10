@@ -188,6 +188,7 @@ func TestCastFromStringErrors(t *testing.T) {
 		{"bad time", "not-a-time", xpath3.TypeTime},
 		{"bad duration", "bad", xpath3.TypeDuration},
 		{"bad hexBinary", "GG", xpath3.TypeHexBinary},
+		{"+INF to float", "+INF", xpath3.TypeFloat},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
