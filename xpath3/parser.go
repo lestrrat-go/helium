@@ -1282,74 +1282,37 @@ func (p *parser) parsePredicate() (Expr, error) {
 
 // --- XPath 3.1 Expression Extensions ---
 
-// parseFLWOR parses for/let/where/order-by/return expressions.
+// parseFLWOR parses for/let expressions (XPath 3.1 simple for/let only).
+// XPath 3.1 does not support full FLWOR — only a single for or let clause
+// (with comma-separated bindings) followed by "return".
 func (p *parser) parseFLWOR() (Expr, error) {
 	var clauses []FLWORClause
-	for {
-		tok := p.lexer.Peek()
-		switch tok.Type {
-		case TokenFor:
-			p.lexer.Next()
-			fc, err := p.parseForBindings()
-			if err != nil {
-				return nil, err
-			}
-			clauses = append(clauses, fc...)
-		case TokenLet:
-			p.lexer.Next()
-			lc, err := p.parseLetBindings()
-			if err != nil {
-				return nil, err
-			}
-			clauses = append(clauses, lc...)
-		case TokenWhere:
-			p.lexer.Next()
-			pred, err := p.parseExprSingle()
-			if err != nil {
-				return nil, err
-			}
-			clauses = append(clauses, WhereClause{Predicate: pred})
-		case TokenStable:
-			p.lexer.Next()
-			if p.lexer.Peek().Type != TokenName || p.lexer.Peek().Value != "order" {
-				return nil, fmt.Errorf("%w: 'order' after 'stable' but got %s", ErrExpectedToken, p.lexer.Peek())
-			}
-			// The lexer emits "order" as Name here (not in operator context)
-			p.lexer.Next() // consume 'order'
-			if p.lexer.Peek().Type != TokenBy {
-				return nil, fmt.Errorf("%w: 'by' after 'order' but got %s", ErrExpectedToken, p.lexer.Peek())
-			}
-			p.lexer.Next()
-			specs, err := p.parseOrderSpecs()
-			if err != nil {
-				return nil, err
-			}
-			clauses = append(clauses, OrderByClause{Specs: specs, Stable: true})
-		case TokenReturn:
-			p.lexer.Next()
-			ret, err := p.parseExprSingle()
-			if err != nil {
-				return nil, err
-			}
-			return FLWORExpr{Clauses: clauses, Return: ret}, nil
-		default:
-			// Check for "order by" when "order" appears as a Name token
-			if tok.Type == TokenName && tok.Value == "order" {
-				p.lexer.Next()
-				if p.lexer.Peek().Type != TokenBy {
-					return nil, fmt.Errorf("%w: 'by' after 'order' but got %s", ErrExpectedToken, p.lexer.Peek())
-				}
-				p.lexer.Next()
-				specs, err := p.parseOrderSpecs()
-				if err != nil {
-					return nil, err
-				}
-				clauses = append(clauses, OrderByClause{Specs: specs, Stable: false})
-				continue
-			}
-			return nil, fmt.Errorf("%w: FLWOR clause or 'return' but got %s", ErrExpectedToken, tok)
+	tok := p.lexer.Peek()
+	switch tok.Type {
+	case TokenFor:
+		p.lexer.Next()
+		fc, err := p.parseForBindings()
+		if err != nil {
+			return nil, err
 		}
+		clauses = append(clauses, fc...)
+	case TokenLet:
+		p.lexer.Next()
+		lc, err := p.parseLetBindings()
+		if err != nil {
+			return nil, err
+		}
+		clauses = append(clauses, lc...)
 	}
+	if p.lexer.Peek().Type != TokenReturn {
+		return nil, fmt.Errorf("%w: 'return' but got %s", ErrExpectedToken, p.lexer.Peek())
+	}
+	p.lexer.Next()
+	ret, err := p.parseExprSingle()
+	if err != nil {
+		return nil, err
+	}
+	return FLWORExpr{Clauses: clauses, Return: ret}, nil
 }
 
 // parseForBindings parses "for $var in expr (, $var in expr)*".
@@ -1414,30 +1377,6 @@ func (p *parser) parseLetBindings() ([]FLWORClause, error) {
 		p.lexer.Next()
 	}
 	return clauses, nil
-}
-
-// parseOrderSpecs parses order-by specifications.
-func (p *parser) parseOrderSpecs() ([]OrderSpec, error) {
-	var specs []OrderSpec
-	for {
-		expr, err := p.parseExprSingle()
-		if err != nil {
-			return nil, err
-		}
-		spec := OrderSpec{Expr: expr}
-		if p.lexer.Peek().Type == TokenAscending {
-			p.lexer.Next()
-		} else if p.lexer.Peek().Type == TokenDescending {
-			p.lexer.Next()
-			spec.Descending = true
-		}
-		specs = append(specs, spec)
-		if p.lexer.Peek().Type != TokenComma {
-			break
-		}
-		p.lexer.Next()
-	}
-	return specs, nil
 }
 
 // parseQuantifiedExpr parses "some/every $var in domain satisfies test".

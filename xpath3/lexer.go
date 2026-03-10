@@ -438,14 +438,26 @@ func (l *lexer) scanNameOrKeyword() {
 	}
 
 	// Always-keywords: for, let, some, every, if, try, catch, function, map, array
-	// These start sub-expressions, so they are recognized regardless of context.
-	// However, if followed by '(' they might be function calls — parser handles this.
+	// These start sub-expressions, so they are recognized regardless of context —
+	// EXCEPT after '/' or '//' where they must be treated as element name tests.
 	if tokType, ok := alwaysKeywords[name]; ok {
-		l.emit(tokType, name)
-		return
+		if !l.isAfterSlash() {
+			l.emit(tokType, name)
+			return
+		}
 	}
 
 	l.emit(TokenName, name)
+}
+
+// isAfterSlash returns true if the previous token is '/' or '//'.
+// In this context, keywords must be treated as element name tests.
+func (l *lexer) isAfterSlash() bool {
+	if len(l.tokens) == 0 {
+		return false
+	}
+	prev := l.tokens[len(l.tokens)-1]
+	return prev.Type == TokenSlash || prev.Type == TokenSlashSlash
 }
 
 // isOperatorContext returns true if an operator keyword is expected at

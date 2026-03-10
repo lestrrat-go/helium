@@ -3,7 +3,6 @@ package xpath3
 import (
 	"fmt"
 	"math/big"
-	"sort"
 	"strings"
 )
 
@@ -120,29 +119,6 @@ func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 				tuples[i].vars = copyVars(tuples[i].vars)
 				tuples[i].vars[c.Var] = val
 			}
-		case WhereClause:
-			var filtered []flworTuple
-			for _, tup := range tuples {
-				subCtx := ec.withVars(tup.vars)
-				r, err := eval(subCtx, c.Predicate)
-				if err != nil {
-					return nil, err
-				}
-				b, err := EBV(r)
-				if err != nil {
-					return nil, err
-				}
-				if b {
-					filtered = append(filtered, tup)
-				}
-			}
-			tuples = filtered
-		case OrderByClause:
-			sorted, sortErr := sortTuples(ec, tuples, c)
-			if sortErr != nil {
-				return nil, sortErr
-			}
-			tuples = sorted
 		}
 	}
 
@@ -161,73 +137,6 @@ func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 
 type flworTuple struct {
 	vars map[string]Sequence
-}
-
-func sortTuples(ec *evalContext, tuples []flworTuple, ob OrderByClause) ([]flworTuple, error) {
-	type sortKey struct {
-		values []AtomicValue
-	}
-	keys := make([]sortKey, len(tuples))
-	for i, tup := range tuples {
-		var vals []AtomicValue
-		for _, spec := range ob.Specs {
-			subCtx := ec.withVars(tup.vars)
-			r, err := eval(subCtx, spec.Expr)
-			if err != nil {
-				return nil, err
-			}
-			if len(r) > 0 {
-				a, err := AtomizeItem(r[0])
-				if err != nil {
-					return nil, err
-				}
-				vals = append(vals, a)
-			} else {
-				vals = append(vals, AtomicValue{})
-			}
-		}
-		keys[i] = sortKey{values: vals}
-	}
-	sort.SliceStable(tuples, func(i, j int) bool {
-		for k, spec := range ob.Specs {
-			cmp := compareAtomicOrder(keys[i].values[k], keys[j].values[k])
-			if cmp == 0 {
-				continue
-			}
-			if spec.Descending {
-				return cmp > 0
-			}
-			return cmp < 0
-		}
-		return false
-	})
-	return tuples, nil
-}
-
-func compareAtomicOrder(a, b AtomicValue) int {
-	// String types: compare lexicographically
-	sa, saOK := a.Value.(string)
-	sb, sbOK := b.Value.(string)
-	if saOK && sbOK {
-		if sa < sb {
-			return -1
-		}
-		if sa > sb {
-			return 1
-		}
-		return 0
-	}
-
-	// Numeric types: compare as float64
-	af := a.ToFloat64()
-	bf := b.ToFloat64()
-	if af < bf {
-		return -1
-	}
-	if af > bf {
-		return 1
-	}
-	return 0
 }
 
 func copyVars(m map[string]Sequence) map[string]Sequence {

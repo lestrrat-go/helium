@@ -121,9 +121,9 @@ func (FunctionTest) nodeTest() {}
 
 // MapTest matches map(*) or map(KeyType, ValueType).
 type MapTest struct {
-	AnyType  bool         // true for map(*)
-	KeyType  NodeTest     // key type (e.g. AtomicOrUnionType for xs:string)
-	ValType  SequenceType // value sequence type
+	AnyType bool         // true for map(*)
+	KeyType NodeTest     // key type (e.g. AtomicOrUnionType for xs:string)
+	ValType SequenceType // value sequence type
 }
 
 func (MapTest) nodeTest() {}
@@ -330,7 +330,7 @@ type FLWORExpr struct {
 
 func (FLWORExpr) exprNode() {}
 
-// FLWORClause is implemented by ForClause, LetClause, WhereClause, OrderByClause.
+// FLWORClause is implemented by ForClause and LetClause.
 type FLWORClause interface {
 	flworClause()
 }
@@ -351,29 +351,6 @@ type LetClause struct {
 }
 
 func (LetClause) flworClause() {}
-
-// WhereClause represents "where predicate".
-type WhereClause struct {
-	Predicate Expr
-}
-
-func (WhereClause) flworClause() {}
-
-// OrderByClause represents "order by spec1, spec2, ...".
-type OrderByClause struct {
-	Specs  []OrderSpec
-	Stable bool
-}
-
-func (OrderByClause) flworClause() {}
-
-// OrderSpec is one ordering specification within an order-by clause.
-type OrderSpec struct {
-	Expr          Expr
-	Descending    bool
-	EmptyGreatest bool
-	Collation     string
-}
 
 // --- Control Flow ---
 

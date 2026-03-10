@@ -270,14 +270,6 @@ func checkPrefixesInFLWORClause(clause FLWORClause, namespaces map[string]string
 			return err
 		}
 		return checkPrefixes(c.Expr, namespaces)
-	case WhereClause:
-		return checkPrefixes(c.Predicate, namespaces)
-	case OrderByClause:
-		for _, spec := range c.Specs {
-			if err := checkPrefixes(spec.Expr, namespaces); err != nil {
-				return err
-			}
-		}
 	}
 	return nil
 }
