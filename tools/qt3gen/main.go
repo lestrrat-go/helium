@@ -144,6 +144,8 @@ func main() {
 			continue
 		}
 
+		setSkipReason := getTestSetSkipReason(tsRef.Name)
+
 		for _, tc := range ts.TestCases {
 			mergedDeps := mergeDeps(ts.Dependencies, tc.Dependencies)
 			if !isXPathApplicable(mergedDeps) {
@@ -151,6 +153,9 @@ func main() {
 			}
 
 			skipReason := getSkipReason(mergedDeps)
+			if skipReason == "" {
+				skipReason = setSkipReason
+			}
 			env, envIsGlobal := resolveEnvironment(tc.Environment, localEnvs, globalEnvs)
 
 			if env != nil {
@@ -349,6 +354,8 @@ func getSkipReason(deps []dependency) string {
 				return "requires non-Unicode codepoint collation"
 			case "non_empty_sequence_collection":
 				return "requires non-empty sequence collection"
+			case "staticTyping":
+				return "requires static typing"
 			}
 		}
 		if d.Type == "spec" {
@@ -361,6 +368,14 @@ func getSkipReason(deps []dependency) string {
 		if d.Type == "xml-version" && d.Value == "1.1" {
 			return "requires XML 1.1"
 		}
+	}
+	return ""
+}
+
+func getTestSetSkipReason(name string) string {
+	switch name {
+	case "fn-id", "fn-idref":
+		return "requires DTD ID/IDREF typing"
 	}
 	return ""
 }

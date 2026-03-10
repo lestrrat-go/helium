@@ -560,21 +560,21 @@ func TestQT3_prod_AxisStep_preceding_sibling(t *testing.T) {
 func TestQT3_prod_AxisStep_static_typing(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
-		{Name: "ST-Axes001", XPath: "fn:count(//center/self::nowhere)", DocPath: "prod/AxisStep/TreeCompass.xml", ExpectError: true},
-		{Name: "ST-Axes002", XPath: "fn:count(//center/@center-attr-2/self::*)", DocPath: "prod/AxisStep/TreeCompass.xml", ExpectError: true},
-		{Name: "ST-Axes003", XPath: "fn:count(//center/@center-attr-3/self::center-attr-3)", DocPath: "prod/AxisStep/TreeCompass.xml", ExpectError: true},
-		{Name: "ST-Axes004", XPath: "fn:count(//center/@center-attr-1/self::nowhere)", DocPath: "prod/AxisStep/TreeCompass.xml", ExpectError: true},
-		{Name: "ST-Axes005", XPath: "fn:count(//center/text()/self::*)", DocPath: "prod/AxisStep/TreeCompass.xml", ExpectError: true},
-		{Name: "ST-Axes006", XPath: "fn:count(//center/text()/self::center)", DocPath: "prod/AxisStep/TreeCompass.xml", ExpectError: true},
-		{Name: "ST-Axes007", XPath: "fn:count(//center/@center-attr-1/descendant-or-self::*)", DocPath: "prod/AxisStep/TreeCompass.xml", ExpectError: true},
-		{Name: "ST-Axes008", XPath: "fn:count(//center/@center-attr-2/descendant-or-self::far-south)", DocPath: "prod/AxisStep/TreeCompass.xml", ExpectError: true},
-		{Name: "ST-Axes009", XPath: "fn:count(//center/@center-attr-2/descendant-or-self::center-attr-2)", DocPath: "prod/AxisStep/TreeCompass.xml", ExpectError: true},
-		{Name: "ST-Axes010", XPath: "fn:count(//center/text()/descendant-or-self::*)", DocPath: "prod/AxisStep/Tree1Text.xml", ExpectError: true},
-		{Name: "ST-Axes011", XPath: "fn:count(/attribute::*)", DocPath: "prod/AxisStep/TreeCompass.xml", ExpectError: true},
-		{Name: "ST-Axes012", XPath: "fn:count(/@*)", DocPath: "prod/AxisStep/TreeCompass.xml", ExpectError: true},
-		{Name: "ST-Axes013", XPath: "fn:count(/parent::*)", DocPath: "prod/AxisStep/TreeCompass.xml", ExpectError: true},
-		{Name: "ST-Axes014", XPath: "fn:count(/..)", DocPath: "prod/AxisStep/TreeCompass.xml", ExpectError: true},
-		{Name: "ST-Axes015", XPath: "fn:count(/self::*)", DocPath: "prod/AxisStep/TopMany.xml", ExpectError: true},
+		{Name: "ST-Axes001", XPath: "fn:count(//center/self::nowhere)", DocPath: "prod/AxisStep/TreeCompass.xml", Skip: "requires static typing", ExpectError: true},
+		{Name: "ST-Axes002", XPath: "fn:count(//center/@center-attr-2/self::*)", DocPath: "prod/AxisStep/TreeCompass.xml", Skip: "requires static typing", ExpectError: true},
+		{Name: "ST-Axes003", XPath: "fn:count(//center/@center-attr-3/self::center-attr-3)", DocPath: "prod/AxisStep/TreeCompass.xml", Skip: "requires static typing", ExpectError: true},
+		{Name: "ST-Axes004", XPath: "fn:count(//center/@center-attr-1/self::nowhere)", DocPath: "prod/AxisStep/TreeCompass.xml", Skip: "requires static typing", ExpectError: true},
+		{Name: "ST-Axes005", XPath: "fn:count(//center/text()/self::*)", DocPath: "prod/AxisStep/TreeCompass.xml", Skip: "requires static typing", ExpectError: true},
+		{Name: "ST-Axes006", XPath: "fn:count(//center/text()/self::center)", DocPath: "prod/AxisStep/TreeCompass.xml", Skip: "requires static typing", ExpectError: true},
+		{Name: "ST-Axes007", XPath: "fn:count(//center/@center-attr-1/descendant-or-self::*)", DocPath: "prod/AxisStep/TreeCompass.xml", Skip: "requires static typing", ExpectError: true},
+		{Name: "ST-Axes008", XPath: "fn:count(//center/@center-attr-2/descendant-or-self::far-south)", DocPath: "prod/AxisStep/TreeCompass.xml", Skip: "requires static typing", ExpectError: true},
+		{Name: "ST-Axes009", XPath: "fn:count(//center/@center-attr-2/descendant-or-self::center-attr-2)", DocPath: "prod/AxisStep/TreeCompass.xml", Skip: "requires static typing", ExpectError: true},
+		{Name: "ST-Axes010", XPath: "fn:count(//center/text()/descendant-or-self::*)", DocPath: "prod/AxisStep/Tree1Text.xml", Skip: "requires static typing", ExpectError: true},
+		{Name: "ST-Axes011", XPath: "fn:count(/attribute::*)", DocPath: "prod/AxisStep/TreeCompass.xml", Skip: "requires static typing", ExpectError: true},
+		{Name: "ST-Axes012", XPath: "fn:count(/@*)", DocPath: "prod/AxisStep/TreeCompass.xml", Skip: "requires static typing", ExpectError: true},
+		{Name: "ST-Axes013", XPath: "fn:count(/parent::*)", DocPath: "prod/AxisStep/TreeCompass.xml", Skip: "requires static typing", ExpectError: true},
+		{Name: "ST-Axes014", XPath: "fn:count(/..)", DocPath: "prod/AxisStep/TreeCompass.xml", Skip: "requires static typing", ExpectError: true},
+		{Name: "ST-Axes015", XPath: "fn:count(/self::*)", DocPath: "prod/AxisStep/TopMany.xml", Skip: "requires static typing", ExpectError: true},
 	})
 }
 

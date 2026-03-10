@@ -325,6 +325,9 @@ func fnAdjustDateTimeToTimezone(ctx context.Context, args []Sequence) (Sequence,
 		if !ok {
 			return nil, &XPathError{Code: "XPTY0004", Message: "expected dayTimeDuration"}
 		}
+		if err := validateTimezoneOffset(d); err != nil {
+			return nil, err
+		}
 		loc := durationToLocation(d)
 		t = t.In(loc)
 	} else {
@@ -352,6 +355,9 @@ func fnAdjustDateToTimezone(ctx context.Context, args []Sequence) (Sequence, err
 		d, ok := extractDuration(args[1])
 		if !ok {
 			return nil, &XPathError{Code: "XPTY0004", Message: "expected dayTimeDuration"}
+		}
+		if err := validateTimezoneOffset(d); err != nil {
+			return nil, err
 		}
 		loc := durationToLocation(d)
 		if t.Location() == time.UTC {
@@ -394,6 +400,9 @@ func fnAdjustTimeToTimezone(ctx context.Context, args []Sequence) (Sequence, err
 		if !ok {
 			return nil, &XPathError{Code: "XPTY0004", Message: "expected dayTimeDuration"}
 		}
+		if err := validateTimezoneOffset(d); err != nil {
+			return nil, err
+		}
 		loc := durationToLocation(d)
 		t = t.In(loc)
 	} else {
@@ -405,6 +414,23 @@ func fnAdjustTimeToTimezone(ctx context.Context, args []Sequence) (Sequence, err
 		t = t.In(loc)
 	}
 	return SingleAtomic(AtomicValue{TypeName: TypeTime, Value: t}), nil
+}
+
+// validateTimezoneOffset checks that a duration used as a timezone offset is
+// within the allowed range (-PT14H to PT14H) and represents whole minutes.
+// Returns FODT0003 if the constraints are violated.
+func validateTimezoneOffset(d Duration) error {
+	secs := d.Seconds
+	if secs < 0 {
+		secs = -secs
+	}
+	if secs > 50400 { // 14 * 3600
+		return &XPathError{Code: "FODT0003", Message: "timezone offset out of range (-PT14H to PT14H)"}
+	}
+	if math.Mod(secs, 60) != 0 {
+		return &XPathError{Code: "FODT0003", Message: "timezone offset must be a whole number of minutes"}
+	}
+	return nil
 }
 
 func durationToLocation(d Duration) *time.Location {
