@@ -106,9 +106,9 @@ func WithURIResolver(r URIResolver) ContextOption {
 // WithHTTPClient sets the HTTP client used for fetching http:// and https://
 // resources in fn:unparsed-text and similar functions. If not set, HTTP URIs
 // are not supported (unless a URIResolver handles them).
-func WithHTTPClient(c *http.Client) ContextOption {
-	return func(ctx *Context) {
-		ctx.httpClient = c
+func WithHTTPClient(client *http.Client) ContextOption {
+	return func(c *Context) {
+		c.httpClient = client
 	}
 }
 

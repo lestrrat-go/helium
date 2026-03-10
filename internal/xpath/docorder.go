@@ -91,6 +91,9 @@ func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) (
 	if len(result) > maxNodes {
 		return nil, ErrNodeSetLimit
 	}
+	// All nodes belong to the same document within a single evaluation.
+	// Multi-document scenarios (fn:doc) are not yet supported; when added,
+	// the cache must be partitioned per document.
 	cache.BuildFrom(DocumentRoot(result[0]))
 	sort.SliceStable(result, func(i, j int) bool {
 		return cache.Position(result[i]) < cache.Position(result[j])

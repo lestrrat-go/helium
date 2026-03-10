@@ -35,7 +35,12 @@ type evalContext struct {
 	implicitTimezone *time.Location // for fn:adjust-*-to-timezone (1-arg form)
 	baseURI          string         // static base URI for resolving relative URIs
 	uriResolver      URIResolver    // custom URI resolver for fn:unparsed-text, fn:doc, etc.
-	httpClient       *http.Client   // HTTP client for http/https URI resolution
+	// httpClient is intentionally stored here (not only in Context) so that
+	// built-in functions can access it through getFnContext without an extra
+	// indirection. It is pointer-sized and nil when unused, so copies via
+	// withNode/withContextItem are negligible. The net/http dependency is
+	// already transitively required by golang.org/x/text.
+	httpClient *http.Client
 }
 
 func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
