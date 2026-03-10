@@ -72,6 +72,10 @@ func evalDynamicFunctionCall(ec *evalContext, e DynamicFunctionCall) (Sequence, 
 		if !ok {
 			return nil, &XPathError{Code: "XPTY0004", Message: "partial application requires function item"}
 		}
+		// Check that the number of supplied arguments matches the function's arity
+		if fi.Arity >= 0 && len(e.Args) != fi.Arity {
+			return nil, fmt.Errorf("%w: expected %d arguments, got %d", ErrArityMismatch, fi.Arity, len(e.Args))
+		}
 		var placeholderIndices []int
 		for i, argExpr := range e.Args {
 			if _, ok := argExpr.(PlaceholderExpr); ok {
@@ -162,6 +166,11 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 			}
 			return fn.Call(ctx, args)
 		},
+	}
+	// Populate type signature from built-in registry
+	if sig := lookupFunctionSignature(ns, e.Name, e.Arity); sig != nil {
+		fi.ParamTypes = sig.ParamTypes
+		fi.ReturnType = sig.ReturnType
 	}
 	return Sequence{fi}, nil
 }
