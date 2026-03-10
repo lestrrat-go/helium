@@ -174,6 +174,18 @@ func seqToString(seq Sequence) string {
 	return s
 }
 
+// seqToStringErr atomizes the first item to a string, propagating errors.
+func seqToStringErr(seq Sequence) (string, error) {
+	if len(seq) == 0 {
+		return "", nil
+	}
+	a, err := AtomizeItem(seq[0])
+	if err != nil {
+		return "", err
+	}
+	return atomicToString(a)
+}
+
 // seqToDouble atomizes the first item to a float64.
 func seqToDouble(seq Sequence) float64 {
 	if len(seq) == 0 {

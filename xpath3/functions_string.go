@@ -210,7 +210,11 @@ func fnStringLength(ctx context.Context, args []Sequence) (Sequence, error) {
 		if len(args[0]) > 1 {
 			return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("string-length: expected single item, got sequence of length %d", len(args[0]))}
 		}
-		s = seqToString(args[0])
+		var err error
+		s, err = seqToStringErr(args[0])
+		if err != nil {
+			return nil, err
+		}
 	}
 	return SingleInteger(int64(len([]rune(s)))), nil
 }
