@@ -386,17 +386,30 @@ func normalizeMapKey(key AtomicValue) mapKey {
 		return mapKey{typeName: TypeString, value: key.Value}
 	}
 
-	// Normalize all numeric types to a common representation.
-	// Convert to float64 for comparison (like eq does), but handle integer values
-	// that can be exactly represented as float64 specially to avoid precision loss.
+	// Normalize all numeric types to a common representation using exact
+	// rational arithmetic so that precision is not lost across types.
 	if key.IsNumeric() {
 		f := key.ToFloat64()
 		if math.IsNaN(f) {
-			// NaN = NaN for map key purposes (all NaN values are the same key)
 			return mapKey{typeName: "numeric", value: "NaN"}
 		}
-		// Use float64 value as key so that 1 (integer) == 1.0 (double) == 1.0 (decimal)
-		return mapKey{typeName: "numeric", value: f}
+		if math.IsInf(f, 1) {
+			return mapKey{typeName: "numeric", value: "+Inf"}
+		}
+		if math.IsInf(f, -1) {
+			return mapKey{typeName: "numeric", value: "-Inf"}
+		}
+		// Convert to big.Rat for exact comparison across numeric types
+		var r *big.Rat
+		switch key.TypeName {
+		case TypeDecimal:
+			r = new(big.Rat).Set(key.BigRat())
+		case TypeInteger:
+			r = new(big.Rat).SetInt(key.BigInt())
+		default: // float, double
+			r = new(big.Rat).SetFloat64(f)
+		}
+		return mapKey{typeName: "numeric", value: r.RatString()}
 	}
 
 	// Normalize duration types: xs:duration, xs:yearMonthDuration, xs:dayTimeDuration
