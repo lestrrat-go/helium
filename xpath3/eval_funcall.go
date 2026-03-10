@@ -153,13 +153,16 @@ func evalInlineFunctionExpr(ec *evalContext, e InlineFunctionExpr) (Sequence, er
 				currentTime: ec.currentTime,
 			}
 			for i, param := range e.Params {
-				// Check parameter type if specified
+				arg := args[i]
+				// Apply function coercion rules if type specified
 				if param.TypeHint != nil {
-					if !matchesSequenceType(args[i], *param.TypeHint, innerCtx) {
+					coerced, ok := coerceToSequenceType(arg, *param.TypeHint, innerCtx)
+					if !ok {
 						return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("inline function parameter $%s: value does not match required type %v", param.Name, *param.TypeHint)}
 					}
+					arg = coerced
 				}
-				innerCtx.vars[param.Name] = args[i]
+				innerCtx.vars[param.Name] = arg
 			}
 			result, err := eval(innerCtx, e.Body)
 			if err != nil {

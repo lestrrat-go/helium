@@ -131,6 +131,79 @@ func resolveAtomicTypeName(tn AtomicTypeName, ec *evalContext) string {
 	return tn.Prefix + ":" + tn.Name
 }
 
+// coerceToSequenceType applies XPath 3.1 function coercion rules (§3.1.5.2):
+// atomization, numeric promotion (integer→float/double, float→double),
+// and URI-to-string promotion. Returns the coerced sequence and true if
+// coercion succeeded, or the original sequence and false if it did not.
+func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Sequence, bool) {
+	if matchesSequenceType(seq, st, ec) {
+		return seq, true
+	}
+	// Try to coerce each item
+	var targetType string
+	switch t := st.ItemTest.(type) {
+	case AtomicOrUnionType:
+		targetType = resolveAtomicTypeName(AtomicTypeName(t), ec)
+	default:
+		return seq, false
+	}
+	result := make(Sequence, len(seq))
+	for i, item := range seq {
+		av, ok := item.(AtomicValue)
+		if !ok {
+			// Try atomization
+			atomized, err := AtomizeItem(item)
+			if err != nil {
+				return seq, false
+			}
+			av = atomized
+		}
+		// Numeric promotion
+		switch targetType {
+		case TypeDouble:
+			if av.TypeName == TypeInteger || av.TypeName == TypeDecimal || av.TypeName == TypeFloat ||
+				isSubtypeOf(av.TypeName, TypeInteger) {
+				promoted, err := castToDouble(av)
+				if err != nil {
+					return seq, false
+				}
+				result[i] = promoted
+				continue
+			}
+		case TypeFloat:
+			if av.TypeName == TypeInteger || av.TypeName == TypeDecimal ||
+				isSubtypeOf(av.TypeName, TypeInteger) {
+				promoted, err := castToFloat(av)
+				if err != nil {
+					return seq, false
+				}
+				result[i] = promoted
+				continue
+			}
+		case TypeString:
+			if av.TypeName == TypeAnyURI {
+				result[i] = AtomicValue{TypeName: TypeString, Value: av.Value}
+				continue
+			}
+		}
+		// Untypedatomic → target type
+		if av.TypeName == TypeUntypedAtomic {
+			cast, err := CastAtomic(av, targetType)
+			if err != nil {
+				return seq, false
+			}
+			result[i] = cast
+			continue
+		}
+		if isSubtypeOf(av.TypeName, targetType) {
+			result[i] = av
+			continue
+		}
+		return seq, false
+	}
+	return result, true
+}
+
 func matchesSequenceType(seq Sequence, st SequenceType, ec *evalContext) bool {
 	if st.Void {
 		return len(seq) == 0
@@ -401,6 +474,46 @@ func isItemTypeSubtype(a, b NodeTest, ec *evalContext) bool {
 			return false
 		}
 		return isSequenceSubtype(at.MemberType, bt.MemberType, ec)
+	case TypeTest:
+		// node() and its kind specializations
+		at, ok := a.(TypeTest)
+		if !ok {
+			return false
+		}
+		// node() is supertype of all node kinds
+		if bt.Kind == NodeKindNode {
+			return true
+		}
+		// Same kind or at is more specific
+		return at.Kind == bt.Kind
+	case NameTest:
+		// element/attribute name tests — A must be the same or more specific name
+		at, ok := a.(NameTest)
+		if !ok {
+			return false
+		}
+		if bt.Local == "*" {
+			return true
+		}
+		return at.Local == bt.Local && at.Prefix == bt.Prefix
+	case ElementTest:
+		at, ok := a.(ElementTest)
+		if !ok {
+			return false
+		}
+		if bt.Name == "" {
+			return true // element() matches any element
+		}
+		return at.Name == bt.Name
+	case AttributeTest:
+		at, ok := a.(AttributeTest)
+		if !ok {
+			return false
+		}
+		if bt.Name == "" {
+			return true
+		}
+		return at.Name == bt.Name
 	case FunctionTest:
 		// MapTest and ArrayTest are subtypes of FunctionTest
 		if bt.AnyFunction {
