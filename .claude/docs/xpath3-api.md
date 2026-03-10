@@ -72,7 +72,7 @@ var (
     ErrRecursionLimit     // recursion limit exceeded
     ErrOpLimit            // operation limit exceeded
     ErrUnknownFunction    // unknown function
-    ErrUnknownFunctionNS  // unknown function namespace prefix
+    ErrUnknownFunctionNamespace // unknown function namespace prefix
     ErrUnsupportedExpr    // unsupported expression type
     ErrUndefinedVariable  // undefined variable
     ErrTypeMismatch       // type mismatch

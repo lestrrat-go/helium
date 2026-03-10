@@ -85,7 +85,6 @@ func castToInteger(v AtomicValue) (AtomicValue, error) {
 		if math.IsNaN(f) || math.IsInf(f, 0) {
 			return AtomicValue{}, &XPathError{Code: "FOCA0002", Message: "cannot cast NaN/INF to xs:integer"}
 		}
-		f = math.Trunc(f)
 		bi, _ := new(big.Float).SetFloat64(f).Int(nil)
 		return AtomicValue{TypeName: TypeInteger, Value: bi}, nil
 	case TypeDecimal:

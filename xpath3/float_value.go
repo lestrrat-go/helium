@@ -70,8 +70,7 @@ func (fv *FloatValue) Float64() float64 {
 	case floatNegZero:
 		return math.Copysign(0, -1)
 	}
-	f, _ := fv.bf.Float64()
-	return f
+	panic("unreachable")
 }
 
 // Precision returns the mantissa bit precision.
@@ -117,7 +116,7 @@ func (fv *FloatValue) Signbit() bool {
 	case floatNaN, floatPosInf:
 		return false
 	}
-	return fv.bf.Signbit()
+	panic("unreachable")
 }
 
 // IsSpecial returns true for NaN, ±Inf, or -0.
@@ -143,10 +142,7 @@ func (fv *FloatValue) Neg() *FloatValue {
 	case floatNegZero:
 		return &FloatValue{bf: new(big.Float).SetPrec(prec)}
 	}
-	if fv.bf.Sign() == 0 {
-		return &FloatValue{special: floatNegZero, bf: new(big.Float).SetPrec(prec)}
-	}
-	return &FloatValue{bf: new(big.Float).SetPrec(prec).Neg(fv.bf)}
+	panic("unreachable")
 }
 
 // WithPrecision returns a new FloatValue with the given precision.
