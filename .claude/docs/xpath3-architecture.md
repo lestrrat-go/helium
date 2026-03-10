@@ -70,10 +70,16 @@ func NodePrefix(n helium.Node) string
 | `token.go` | `TokenType` constants (60+) |
 | `lexer.go` | One-pass tokenizer |
 | `parser.go` | Recursive descent parser |
-| `eval.go` | `evalContext`, main eval dispatch, location paths, FLWOR, control flow |
+| `eval.go` | `evalContext`, main `eval()` dispatch switch |
+| `eval_path.go` | Location paths, node tests, predicates, literal/variable/sequence eval |
+| `eval_operators.go` | Binary/unary logic ops, concat, simple map, range, union, intersect/except, filter, path steps |
+| `eval_arithmetic.go` | Integer/decimal/float arithmetic, unary negation, type promotion helpers |
+| `eval_control.go` | FLWOR, quantified, if/else, try/catch, lookup expressions |
+| `eval_types.go` | instanceof, cast, castable, treat-as, sequence type matching |
+| `eval_funcall.go` | Function calls, dynamic calls, inline functions, partial application, map/array constructors |
 | `compare.go` | `GeneralCompare`, `ValueCompare`, `NodeCompare`, type promotion |
 | `cast.go` | `CastAtomic`, `CastFromString` |
-| `functions.go` | `Function` interface, `FunctionContext`, registry, partial application |
+| `functions.go` | `Function` interface, `FunctionContext`, registry, `builtinFunc`, `registerFn`/`registerNS` helpers |
 | `functions_node.go` | node-name, local-name, namespace-uri, name, root, path, id, lang, etc. |
 | `functions_string.go` | string ops, regex (matches, replace, tokenize), upper/lower-case |
 | `functions_numeric.go` | abs, ceiling, floor, round, round-half-to-even, format-integer, format-number |

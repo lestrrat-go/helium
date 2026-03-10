@@ -47,3 +47,12 @@ These docs cache repository state. Still read source before modifying code.
 | `node-types.md` | Node type, struct field, or tree operation changes |
 | `validation-pipeline.md` | Compile/validate phase, data model, or backtracking changes |
 | `heliumlint.md` | CLI flag, pipeline, or exit code changes |
+| `xpath3-design.md` | Design constraints, sub-doc structure changes |
+| `xpath3-architecture.md` | Package layout, file additions/removals, import graph changes |
+| `xpath3-api.md` | Public API, Context, Result, error type changes |
+| `xpath3-types.md` | Item/Sequence/AtomicValue/Map/Array type changes |
+| `xpath3-parser.md` | Lexer, parser, AST node, token type changes |
+| `xpath3-eval.md` | Evaluator, comparison, casting logic changes |
+| `xpath3-functions.md` | Function registry, built-in function additions/changes |
+| `xpath3-tasks.md` | Task completion, dependency, or risk changes |
+| `saxon-layout.md` | Reference layout updates |
