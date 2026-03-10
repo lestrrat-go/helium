@@ -416,10 +416,7 @@ func extractGMonthDayValues(s string) (int, int) {
 func extractGYearMonthMonth(s string) int {
 	// Find the last '-' before any timezone
 	// The month is right after the year portion: skip optional leading '-', then digits, then '-'
-	work := s
-	if strings.HasPrefix(work, "-") {
-		work = work[1:]
-	}
+	work := strings.TrimPrefix(s, "-")
 	// Skip year digits
 	i := 0
 	for i < len(work) && work[i] >= '0' && work[i] <= '9' {
