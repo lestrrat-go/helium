@@ -10,6 +10,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	helium "github.com/lestrrat-go/helium"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -417,8 +418,85 @@ func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
 	return result, nil
 }
 
-func fnAnalyzeString(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, &XPathError{Code: "FOER0000", Message: "analyze-string not yet implemented"}
+func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
+	s := seqToString(args[0])
+	pattern := seqToString(args[1])
+	flags := ""
+	if len(args) > 2 {
+		flags = seqToString(args[2])
+	}
+	re, err := compileXPathRegex(pattern, flags)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build XML result
+	var b strings.Builder
+	b.WriteString(`<fn:analyze-string-result xmlns:fn="http://www.w3.org/2005/xpath-functions">`)
+
+	pos := 0
+	matches := re.FindAllStringSubmatchIndex(s, -1)
+	for _, m := range matches {
+		start, end := m[0], m[1]
+		if start > pos {
+			b.WriteString("<fn:non-match>")
+			writeXMLEscaped(&b, s[pos:start])
+			b.WriteString("</fn:non-match>")
+		}
+		b.WriteString("<fn:match>")
+		// Check for groups
+		if len(m) > 2 {
+			groupPos := start
+			for g := 1; g < len(m)/2; g++ {
+				gs, ge := m[2*g], m[2*g+1]
+				if gs < 0 {
+					continue
+				}
+				if gs > groupPos {
+					writeXMLEscaped(&b, s[groupPos:gs])
+				}
+				b.WriteString(fmt.Sprintf(`<fn:group nr="%d">`, g))
+				writeXMLEscaped(&b, s[gs:ge])
+				b.WriteString("</fn:group>")
+				groupPos = ge
+			}
+			if groupPos < end {
+				writeXMLEscaped(&b, s[groupPos:end])
+			}
+		} else {
+			writeXMLEscaped(&b, s[start:end])
+		}
+		b.WriteString("</fn:match>")
+		pos = end
+	}
+	if pos < len(s) {
+		b.WriteString("<fn:non-match>")
+		writeXMLEscaped(&b, s[pos:])
+		b.WriteString("</fn:non-match>")
+	}
+	b.WriteString("</fn:analyze-string-result>")
+
+	// Parse the result XML into a document node
+	doc, parseErr := helium.Parse(context.Background(), []byte(b.String()))
+	if parseErr != nil {
+		return nil, &XPathError{Code: "FOER0000", Message: fmt.Sprintf("analyze-string: failed to build result: %v", parseErr)}
+	}
+	return Sequence{NodeItem{Node: doc}}, nil
+}
+
+func writeXMLEscaped(b *strings.Builder, s string) {
+	for _, r := range s {
+		switch r {
+		case '&':
+			b.WriteString("&amp;")
+		case '<':
+			b.WriteString("&lt;")
+		case '>':
+			b.WriteString("&gt;")
+		default:
+			b.WriteRune(r)
+		}
+	}
 }
 
 // compileXPathRegex compiles an XPath regex pattern with flags.

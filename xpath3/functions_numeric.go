@@ -132,8 +132,24 @@ func fnFormatInteger(_ context.Context, _ []Sequence) (Sequence, error) {
 	return nil, &XPathError{Code: "FOER0000", Message: "format-integer not yet implemented"}
 }
 
-func fnFormatNumber(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, &XPathError{Code: "FOER0000", Message: "format-number not yet implemented"}
+func fnFormatNumber(_ context.Context, args []Sequence) (Sequence, error) {
+	if len(args[0]) == 0 {
+		return nil, nil
+	}
+	a, err := AtomizeItem(args[0][0])
+	if err != nil {
+		return nil, err
+	}
+	picture := seqToString(args[1])
+
+	// Default decimal format
+	df := defaultDecimalFormat()
+
+	result, err := formatNumber(a, picture, df)
+	if err != nil {
+		return nil, err
+	}
+	return SingleString(result), nil
 }
 
 // --- Rat rounding helpers ---
