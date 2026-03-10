@@ -259,7 +259,11 @@ func applyPredicate(ec *evalContext, nodes []helium.Node, pred Expr) ([]helium.N
 		if err != nil {
 			return nil, err
 		}
-		if predicateTrue(r, i+1) {
+		match, err := predicateTrue(r, i+1)
+		if err != nil {
+			return nil, err
+		}
+		if match {
 			result = append(result, n)
 		}
 	}
@@ -268,12 +272,11 @@ func applyPredicate(ec *evalContext, nodes []helium.Node, pred Expr) ([]helium.N
 
 // predicateTrue evaluates a predicate result per XPath spec:
 // numeric → compare to position, otherwise → EBV.
-func predicateTrue(r Sequence, position int) bool {
+func predicateTrue(r Sequence, position int) (bool, error) {
 	if len(r) == 1 {
 		if av, ok := r[0].(AtomicValue); ok && av.IsNumeric() {
-			return av.ToFloat64() == float64(position)
+			return av.ToFloat64() == float64(position), nil
 		}
 	}
-	b, _ := EBV(r)
-	return b
+	return EBV(r)
 }

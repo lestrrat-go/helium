@@ -35,7 +35,7 @@ func castToDouble(v AtomicValue) (AtomicValue, error) {
 
 func castToFloat(v AtomicValue) (AtomicValue, error) {
 	// When casting from string, use the xs:float lexical rules directly
-	// (XSD 1.0 accepts "INF", "-INF", "NaN" but NOT "+INF")
+	// (XSD 1.1 accepts "INF", "-INF", "+INF", "NaN")
 	if v.TypeName == TypeString || v.TypeName == TypeUntypedAtomic {
 		return castStringToFloat(strings.TrimSpace(v.StringVal()))
 	}
@@ -48,8 +48,8 @@ func castToFloat(v AtomicValue) (AtomicValue, error) {
 	return AtomicValue{TypeName: TypeFloat, Value: NewFloat(f)}, nil
 }
 
-// castStringToFloat parses s as an xs:float using XSD 1.0 lexical rules.
-// Valid special values: "INF", "-INF", "NaN". All other values must be
+// castStringToFloat parses s as an xs:float using XSD 1.1 lexical rules.
+// Valid special values: "INF", "+INF", "-INF", "NaN". All other values must be
 // numeric literals that fit in float32 range.
 func castStringToFloat(s string) (AtomicValue, error) {
 	switch s {
