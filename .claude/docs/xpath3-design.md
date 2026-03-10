@@ -20,7 +20,7 @@ Read ONLY the file relevant to your current task.
 
 - `xpath3` MUST NOT import `xpath1`. Both import `internal/xpath`.
 - `xpath3` MUST NOT import `xsd`. XSD atomic types inline in `xpath3/types.go`.
-- No external deps beyond helium module.
+- Avoid gratuitous external deps. Standard-adjacent packages (e.g., `golang.org/x/text`) are fine when justified.
 - `xpath1` public API unchanged after refactor.
 - Eager sequences (`[]Item`). No lazy iterators in v1.
 - No static type checking in v1. Type errors at runtime.

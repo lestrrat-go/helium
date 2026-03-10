@@ -10,6 +10,8 @@ import (
 	"unicode"
 
 	"github.com/lestrrat-go/helium"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -268,12 +270,20 @@ func fnNormalizeUnicode(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleString(nf.String(s)), nil
 }
 
+// xpathUpperCaser and xpathLowerCaser use golang.org/x/text/cases with
+// language.Und for locale-independent full Unicode case mapping (handles
+// multi-character expansions like ß→SS, İ→i̇).
+var (
+	xpathUpperCaser = cases.Upper(language.Und)
+	xpathLowerCaser = cases.Lower(language.Und)
+)
+
 func fnUpperCase(_ context.Context, args []Sequence) (Sequence, error) {
-	return SingleString(strings.ToUpper(seqToString(args[0]))), nil
+	return SingleString(xpathUpperCaser.String(seqToString(args[0]))), nil
 }
 
 func fnLowerCase(_ context.Context, args []Sequence) (Sequence, error) {
-	return SingleString(strings.ToLower(seqToString(args[0]))), nil
+	return SingleString(xpathLowerCaser.String(seqToString(args[0]))), nil
 }
 
 func fnTranslate(_ context.Context, args []Sequence) (Sequence, error) {
