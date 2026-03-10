@@ -97,7 +97,6 @@ All sentinel errors prefixed `xpath3:`. Wrap with `fmt.Errorf("%w: detail", ErrS
 type XPathError struct {
     Code    string    // e.g. "XPTY0004", "FOER0000" (without err: prefix)
     Message string
-    Value   Sequence  // optional attached value
 }
 func (e *XPathError) Error() string
 func (e *XPathError) Is(target error) bool

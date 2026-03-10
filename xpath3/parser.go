@@ -838,8 +838,19 @@ func (p *parser) parseArgumentList() ([]Expr, error) {
 	if p.lexer.Peek().Type != TokenRParen {
 		for {
 			if p.lexer.Peek().Type == TokenQMark {
-				p.lexer.Next()
-				args = append(args, PlaceholderExpr{})
+				// Disambiguate: ? followed by a key specifier (NCName, integer, *, '(')
+				// is a unary lookup expression, not a placeholder.
+				next := p.lexer.PeekAt(1).Type
+				if next == TokenName || next == TokenNumber || next == TokenStar || next == TokenLParen {
+					arg, err := p.parseExprSingle()
+					if err != nil {
+						return nil, err
+					}
+					args = append(args, arg)
+				} else {
+					p.lexer.Next()
+					args = append(args, PlaceholderExpr{})
+				}
 			} else {
 				arg, err := p.parseExprSingle()
 				if err != nil {
@@ -868,6 +879,10 @@ func (p *parser) parseLookupKey() (Expr, bool, error) {
 		p.lexer.Next()
 		return nil, true, nil
 	case TokenNumber:
+		// Only integer literals are valid lookup keys (no dot, no exponent)
+		if strings.ContainsAny(tok.Value, ".eE") {
+			return nil, false, fmt.Errorf("%w: integer lookup key but got %s", ErrExpectedToken, tok)
+		}
 		p.lexer.Next()
 		v, err := strconv.ParseFloat(tok.Value, 64)
 		if err != nil {
@@ -875,7 +890,7 @@ func (p *parser) parseLookupKey() (Expr, bool, error) {
 		}
 		return LiteralExpr{Value: v}, false, nil
 	case TokenLParen:
-		expr, err := p.parseParenExpr()
+		expr, err := p.parseParenExprOrEmpty()
 		if err != nil {
 			return nil, false, err
 		}

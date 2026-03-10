@@ -54,11 +54,11 @@ func (c *DocOrderCache) BuildFrom(root helium.Node) {
 
 func (c *DocOrderCache) indexWalk(cur helium.Node, pos *int) {
 	c.positions[cur] = *pos
-	*pos++
+	(*pos)++
 	if elem, ok := cur.(*helium.Element); ok {
 		for _, attr := range elem.Attributes() {
 			c.positions[helium.Node(attr)] = *pos
-			*pos++
+			(*pos)++
 		}
 	}
 	for child := cur.FirstChild(); child != nil; child = child.NextSibling() {
