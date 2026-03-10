@@ -38,13 +38,13 @@ jobs:
           go mod tidy
           git diff --exit-code go.mod go.sum
 
-      - name: Run tests with debug tags
+      - name: Run tests
         run: |
-          go test -v -race -tags debug ./...
+          go test -race ./...
 
       - name: Build heliumlint command
         run: |
-          go build -v ./cmd/heliumlint
+          go build ./cmd/heliumlint
           rm heliumlint
 
       - name: Check for uncommitted changes
