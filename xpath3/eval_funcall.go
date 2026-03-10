@@ -44,14 +44,62 @@ func evalDynamicFunctionCall(ec *evalContext, e DynamicFunctionCall) (Sequence, 
 	if len(funcSeq) != 1 {
 		return nil, &XPathError{Code: "XPTY0004", Message: "dynamic function call requires single function item"}
 	}
-	// Evaluate arguments first (needed for all call types)
+
+	// Check for placeholder arguments (partial application)
+	hasPlaceholders := false
+	for _, argExpr := range e.Args {
+		if _, ok := argExpr.(PlaceholderExpr); ok {
+			hasPlaceholders = true
+			break
+		}
+	}
+
+	// Evaluate non-placeholder arguments
 	args := make([]Sequence, len(e.Args))
 	for i, argExpr := range e.Args {
+		if _, ok := argExpr.(PlaceholderExpr); ok {
+			continue
+		}
 		a, err := eval(ec, argExpr)
 		if err != nil {
 			return nil, err
 		}
 		args[i] = a
+	}
+
+	if hasPlaceholders {
+		fi, ok := funcSeq[0].(FunctionItem)
+		if !ok {
+			return nil, &XPathError{Code: "XPTY0004", Message: "partial application requires function item"}
+		}
+		var placeholderIndices []int
+		for i, argExpr := range e.Args {
+			if _, ok := argExpr.(PlaceholderExpr); ok {
+				placeholderIndices = append(placeholderIndices, i)
+			}
+		}
+		fixedArgs := make([]Sequence, len(args))
+		copy(fixedArgs, args)
+		result := FunctionItem{
+			Arity:     len(placeholderIndices),
+			Name:      fi.Name,
+			Namespace: fi.Namespace,
+			Invoke: func(ctx context.Context, partialArgs []Sequence) (Sequence, error) {
+				if len(partialArgs) != len(placeholderIndices) {
+					return nil, &XPathError{
+						Code:    "XPTY0004",
+						Message: fmt.Sprintf("arity mismatch: expected %d arguments, got %d", len(placeholderIndices), len(partialArgs)),
+					}
+				}
+				fullArgs := make([]Sequence, len(e.Args))
+				copy(fullArgs, fixedArgs)
+				for pi, idx := range placeholderIndices {
+					fullArgs[idx] = partialArgs[pi]
+				}
+				return fi.Invoke(ctx, fullArgs)
+			},
+		}
+		return Sequence{result}, nil
 	}
 
 	switch v := funcSeq[0].(type) {
