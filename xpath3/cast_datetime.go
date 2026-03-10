@@ -293,8 +293,19 @@ func formatDuration(d Duration) string {
 	}
 	b.WriteByte('P')
 
-	years := d.Months / 12
-	months := d.Months % 12
+	totalMonths := d.Months
+	totalSeconds := d.Seconds
+	if d.Negative {
+		if totalMonths < 0 {
+			totalMonths = -totalMonths
+		}
+		if totalSeconds < 0 {
+			totalSeconds = -totalSeconds
+		}
+	}
+
+	years := totalMonths / 12
+	months := totalMonths % 12
 	if years != 0 {
 		fmt.Fprintf(&b, "%dY", years)
 	}
@@ -302,7 +313,7 @@ func formatDuration(d Duration) string {
 		fmt.Fprintf(&b, "%dM", months)
 	}
 
-	totalMicro := int64(math.Round(d.Seconds * 1e6))
+	totalMicro := int64(math.Round(totalSeconds * 1e6))
 	days := totalMicro / (86400 * 1e6)
 	totalMicro -= days * 86400 * 1e6
 	hours := totalMicro / (3600 * 1e6)

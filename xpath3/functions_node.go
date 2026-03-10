@@ -376,7 +376,7 @@ func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil || fc.node == nil {
-			return SingleDouble(0), nil
+			return SingleDouble(math.NaN()), nil
 		}
 		s := ixpath.StringValue(fc.node)
 		a, err := CastFromString(s, TypeDouble)

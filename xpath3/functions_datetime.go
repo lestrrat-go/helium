@@ -325,8 +325,7 @@ func fnAdjustDateTimeToTimezone(ctx context.Context, args []Sequence) (Sequence,
 		if !ok {
 			return nil, &XPathError{Code: "XPTY0004", Message: "expected dayTimeDuration"}
 		}
-		offset := int(d.Seconds)
-		loc := time.FixedZone("", offset)
+		loc := durationToLocation(d)
 		t = t.In(loc)
 	} else {
 		// Adjust to implicit timezone from the dynamic context

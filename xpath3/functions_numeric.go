@@ -33,6 +33,9 @@ func fnAbs(_ context.Context, args []Sequence) (Sequence, error) {
 		return SingleDecimal(new(big.Rat).Abs(a.BigRat())), nil
 	}
 	f := a.ToFloat64()
+	if math.IsNaN(f) || math.IsInf(f, 0) || f == 0 {
+		return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: f}), nil
+	}
 	return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: math.Abs(f)}), nil
 }
 
@@ -50,7 +53,11 @@ func fnCeiling(_ context.Context, args []Sequence) (Sequence, error) {
 	if a.TypeName == TypeDecimal {
 		return SingleDecimal(ratCeiling(a.BigRat())), nil
 	}
-	return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: math.Ceil(a.ToFloat64())}), nil
+	f := a.ToFloat64()
+	if math.IsNaN(f) || math.IsInf(f, 0) || f == 0 {
+		return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: f}), nil
+	}
+	return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: math.Ceil(f)}), nil
 }
 
 func fnFloor(_ context.Context, args []Sequence) (Sequence, error) {
@@ -67,7 +74,11 @@ func fnFloor(_ context.Context, args []Sequence) (Sequence, error) {
 	if a.TypeName == TypeDecimal {
 		return SingleDecimal(ratFloor(a.BigRat())), nil
 	}
-	return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: math.Floor(a.ToFloat64())}), nil
+	f := a.ToFloat64()
+	if math.IsNaN(f) || math.IsInf(f, 0) || f == 0 {
+		return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: f}), nil
+	}
+	return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: math.Floor(f)}), nil
 }
 
 func fnRound(_ context.Context, args []Sequence) (Sequence, error) {

@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"strings"
 )
@@ -15,7 +16,30 @@ func init() {
 
 func fnEncodeForURI(_ context.Context, args []Sequence) (Sequence, error) {
 	s := seqToString(args[0])
-	return SingleString(url.PathEscape(s)), nil
+	return SingleString(encodeForURI(s)), nil
+}
+
+// encodeForURI percent-encodes all characters except unreserved characters
+// as defined by RFC 3986: A-Z a-z 0-9 - _ . ~
+func encodeForURI(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if isUnreservedChar(c) {
+			b.WriteByte(c)
+		} else {
+			fmt.Fprintf(&b, "%%%02X", c)
+		}
+	}
+	return b.String()
+}
+
+// isUnreservedChar returns true if the byte is an unreserved character per RFC 3986.
+func isUnreservedChar(c byte) bool {
+	return (c >= 'A' && c <= 'Z') ||
+		(c >= 'a' && c <= 'z') ||
+		(c >= '0' && c <= '9') ||
+		c == '-' || c == '_' || c == '.' || c == '~'
 }
 
 func fnIRIToURI(_ context.Context, args []Sequence) (Sequence, error) {
