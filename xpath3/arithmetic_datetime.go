@@ -77,6 +77,18 @@ func arithmeticDurationDuration(op TokenType, la, ra AtomicValue) (Sequence, boo
 		return nil, true, &XPathError{Code: "XPTY0004", Message: "invalid operator for duration arithmetic"}
 	}
 
+	// Only same-kind durations can be added/subtracted:
+	// xs:yearMonthDuration ± xs:yearMonthDuration → OK
+	// xs:dayTimeDuration ± xs:dayTimeDuration → OK
+	// xs:duration ± anything → XPTY0004 (xs:duration is not directly arithmetic)
+	// mixing YMD and DTD → XPTY0004
+	if la.TypeName == TypeDuration || ra.TypeName == TypeDuration {
+		return nil, true, &XPathError{Code: "XPTY0004", Message: "xs:duration cannot be used in arithmetic"}
+	}
+	if la.TypeName != ra.TypeName {
+		return nil, true, &XPathError{Code: "XPTY0004", Message: "cannot mix xs:yearMonthDuration and xs:dayTimeDuration in arithmetic"}
+	}
+
 	ld := la.DurationVal()
 	rd := ra.DurationVal()
 
