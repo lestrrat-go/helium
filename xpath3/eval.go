@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -30,7 +30,8 @@ type evalContext struct {
 	opLimit     int
 	docOrder    *ixpath.DocOrderCache
 	maxNodes    int
-	currentTime *time.Time // cached current time for stable fn:current-*
+	currentTime      *time.Time     // current time, set once at construction for stable fn:current-*
+	implicitTimezone *time.Location // implicit timezone for fn:adjust-*-to-timezone (1-arg form)
 }
 
 func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
@@ -52,53 +53,65 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 		ec.opLimit = xctx.opLimit
 		ec.functions = xctx.functions
 		ec.fnsNS = xctx.functionsNS
+		ec.implicitTimezone = xctx.implicitTimezone
 	}
 	return ec
 }
 
 func (ec *evalContext) withNode(n helium.Node, pos, size int) *evalContext {
 	return &evalContext{
-		goCtx:       ec.goCtx,
-		node:        n,
-		position:    pos,
-		size:        size,
-		vars:        ec.vars,
-		namespaces:  ec.namespaces,
-		functions:   ec.functions,
-		fnsNS:       ec.fnsNS,
-		depth:       ec.depth,
-		opCount:     ec.opCount,
-		opLimit:     ec.opLimit,
-		docOrder:    ec.docOrder,
-		maxNodes:    ec.maxNodes,
-		currentTime: ec.currentTime,
+		goCtx:            ec.goCtx,
+		node:             n,
+		position:         pos,
+		size:             size,
+		vars:             ec.vars,
+		namespaces:       ec.namespaces,
+		functions:        ec.functions,
+		fnsNS:            ec.fnsNS,
+		depth:            ec.depth,
+		opCount:          ec.opCount,
+		opLimit:          ec.opLimit,
+		docOrder:         ec.docOrder,
+		maxNodes:         ec.maxNodes,
+		currentTime:      ec.currentTime,
+		implicitTimezone: ec.implicitTimezone,
 	}
 }
 
 // withContextItem sets a non-node context item (for simple map, etc.)
 func (ec *evalContext) withContextItem(item Item, pos, size int) *evalContext {
 	return &evalContext{
-		goCtx:       ec.goCtx,
-		node:        ec.node,
-		contextItem: item,
-		position:    pos,
-		size:        size,
-		vars:        ec.vars,
-		namespaces:  ec.namespaces,
-		functions:   ec.functions,
-		fnsNS:       ec.fnsNS,
-		depth:       ec.depth,
-		opCount:     ec.opCount,
-		opLimit:     ec.opLimit,
-		docOrder:    ec.docOrder,
-		maxNodes:    ec.maxNodes,
-		currentTime: ec.currentTime,
+		goCtx:            ec.goCtx,
+		node:             ec.node,
+		contextItem:      item,
+		position:         pos,
+		size:             size,
+		vars:             ec.vars,
+		namespaces:       ec.namespaces,
+		functions:        ec.functions,
+		fnsNS:            ec.fnsNS,
+		depth:            ec.depth,
+		opCount:          ec.opCount,
+		opLimit:          ec.opLimit,
+		docOrder:         ec.docOrder,
+		maxNodes:         ec.maxNodes,
+		currentTime:      ec.currentTime,
+		implicitTimezone: ec.implicitTimezone,
 	}
 }
 
 // getCurrentTime returns the cached current time for this evaluation.
 func (ec *evalContext) getCurrentTime() time.Time {
 	return *ec.currentTime
+}
+
+// getImplicitTimezone returns the implicit timezone for the dynamic context.
+// If not explicitly set, it falls back to the system local timezone.
+func (ec *evalContext) getImplicitTimezone() *time.Location {
+	if ec.implicitTimezone != nil {
+		return ec.implicitTimezone
+	}
+	return time.Now().Location()
 }
 
 func (ec *evalContext) withVar(name string, val Sequence) *evalContext {
@@ -131,6 +144,8 @@ func (ec *evalContext) countOps(n int) error {
 }
 
 // eval dispatches to the appropriate evaluator for each AST node type.
+// Depth tracking: withNode/withContextItem copy the parent's depth into the
+// new context, so each nested eval chain inherits and increments correctly.
 func eval(ec *evalContext, expr Expr) (Sequence, error) {
 	ec.depth++
 	if ec.depth > maxRecursionDepth {

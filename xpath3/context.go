@@ -1,8 +1,15 @@
 package xpath3
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type contextKey struct{}
+
+// fnContextKey is used exclusively by the unexported withFnContext/getFnContext
+// pair to pass evalContext to built-in function implementations. It is never
+// exposed to external callers.
 type fnContextKey struct{}
 
 // QualifiedName identifies a function in a specific namespace.
@@ -13,11 +20,12 @@ type QualifiedName struct {
 
 // Context holds XPath evaluation settings provided by the caller.
 type Context struct {
-	namespaces  map[string]string
-	variables   map[string]Sequence
-	functions   map[string]Function
-	functionsNS map[QualifiedName]Function
-	opLimit     int
+	namespaces       map[string]string
+	variables        map[string]Sequence
+	functions        map[string]Function
+	functionsNS      map[QualifiedName]Function
+	opLimit          int
+	implicitTimezone *time.Location
 }
 
 // ContextOption configures a Context.
@@ -57,6 +65,15 @@ func WithFunctions(fns map[string]Function) ContextOption {
 func WithFunctionsNS(fns map[QualifiedName]Function) ContextOption {
 	return func(c *Context) {
 		c.functionsNS = fns
+	}
+}
+
+// WithImplicitTimezone sets the implicit timezone for the dynamic context.
+// This is used by functions like fn:adjust-dateTime-to-timezone when called
+// with a single argument. If not set, the system local timezone is used.
+func WithImplicitTimezone(loc *time.Location) ContextOption {
+	return func(c *Context) {
+		c.implicitTimezone = loc
 	}
 }
 

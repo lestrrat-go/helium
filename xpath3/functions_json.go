@@ -34,7 +34,7 @@ func fnParseJSON(_ context.Context, args []Sequence) (Sequence, error) {
 			}
 		}
 	}
-	_ = liberal
+	_ = liberal // TODO: liberal mode is parsed but not yet implemented
 
 	var raw interface{}
 	dec := json.NewDecoder(strings.NewReader(s))
@@ -129,7 +129,7 @@ func jsonToXDM(v interface{}) (Item, error) {
 				return nil, err
 			}
 			if item == nil {
-				members[i] = Sequence{NewMap(nil)} // JSON null → empty map
+				members[i] = nil // JSON null → empty sequence
 			} else {
 				members[i] = Sequence{item}
 			}

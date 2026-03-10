@@ -43,8 +43,7 @@ func atomicToString(v AtomicValue) (string, error) {
 	case TypeDouble:
 		return formatXPathDouble(v.Value.(float64)), nil
 	case TypeFloat:
-		f32 := float32(v.Value.(float64))
-		return formatXPathDouble(float64(f32)), nil
+		return formatXPathFloat(v.Value.(float64)), nil
 	case TypeBoolean:
 		if v.Value.(bool) {
 			return "true", nil
@@ -104,14 +103,71 @@ func formatXPathDouble(f float64) string {
 	}
 
 	abs := math.Abs(f)
-	// XPath spec: use plain decimal for [1e-6, 1e6), scientific notation otherwise.
-	// 1e6 itself (1000000) is excluded and uses scientific notation.
+	// XSD 1.1 §3.3.5: plain decimal for abs in [1e-6, 1e6), scientific notation
+	// for abs >= 1e6 or abs < 1e-6. The strict < excludes 1e6 intentionally.
 	if abs >= 0.000001 && abs < 1_000_000 {
 		s := strconv.FormatFloat(f, 'f', -1, 64)
+		if !strings.Contains(s, ".") {
+			s += ".0"
+		}
 		return s
 	}
 
 	s := strconv.FormatFloat(f, 'E', -1, 64)
+	if idx := strings.Index(s, "E"); idx >= 0 {
+		mantissa := s[:idx]
+		expPart := s[idx+1:]
+		if !strings.Contains(mantissa, ".") {
+			mantissa += ".0"
+		}
+		expPart = strings.TrimPrefix(expPart, "+")
+		if strings.HasPrefix(expPart, "-") {
+			inner := strings.TrimLeft(expPart[1:], "0")
+			if inner == "" {
+				inner = "0"
+			}
+			expPart = "-" + inner
+		} else {
+			expPart = strings.TrimLeft(expPart, "0")
+			if expPart == "" {
+				expPart = "0"
+			}
+		}
+		s = mantissa + "E" + expPart
+	}
+	return s
+}
+
+// formatXPathFloat formats a float64 (representing an xs:float) using
+// single-precision XPath canonical representation with 32-bit precision.
+func formatXPathFloat(f float64) string {
+	f32 := float32(f)
+	if math.IsNaN(float64(f32)) {
+		return "NaN"
+	}
+	if math.IsInf(float64(f32), 1) {
+		return "INF"
+	}
+	if math.IsInf(float64(f32), -1) {
+		return "-INF"
+	}
+	if f32 == 0 {
+		if math.Signbit(float64(f32)) {
+			return "-0"
+		}
+		return "0"
+	}
+
+	abs := math.Abs(float64(f32))
+	if abs >= 0.000001 && abs < 1_000_000 {
+		s := strconv.FormatFloat(float64(f32), 'f', -1, 32)
+		if !strings.Contains(s, ".") {
+			s += ".0"
+		}
+		return s
+	}
+
+	s := strconv.FormatFloat(float64(f32), 'E', -1, 32)
 	if idx := strings.Index(s, "E"); idx >= 0 {
 		mantissa := s[:idx]
 		expPart := s[idx+1:]

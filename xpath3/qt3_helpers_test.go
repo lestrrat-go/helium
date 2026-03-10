@@ -6,12 +6,13 @@ import (
 	"math"
 	"math/big"
 	"os"
+	"time"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
-	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -45,9 +46,15 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 				t.Skip(tc.Skip)
 			}
 			ctx := t.Context()
-			if len(tc.Namespaces) > 0 {
-				ctx = xpath3.NewContext(ctx, xpath3.WithNamespaces(tc.Namespaces))
+			// QT3 test suite expects implicit timezone of -05:00 (PT5H).
+			qt3ImplicitTZ := time.FixedZone("", -5*3600)
+			opts := []xpath3.ContextOption{
+				xpath3.WithImplicitTimezone(qt3ImplicitTZ),
 			}
+			if len(tc.Namespaces) > 0 {
+				opts = append(opts, xpath3.WithNamespaces(tc.Namespaces))
+			}
+			ctx = xpath3.NewContext(ctx, opts...)
 			var doc helium.Node
 			if tc.DocPath != "" {
 				doc = qt3ParseDoc(t, filepath.Join(qt3TestDataDir(), tc.DocPath))

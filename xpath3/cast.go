@@ -23,6 +23,11 @@ func isIntegerDerived(typeName string) bool {
 	return false
 }
 
+// isFloatOrDouble returns true if the type is xs:float or xs:double.
+func isFloatOrDouble(typeName string) bool {
+	return typeName == TypeFloat || typeName == TypeDouble
+}
+
 // isAbstractCastTarget returns true if the type cannot be used as a cast/castable target.
 func isAbstractCastTarget(typeName string) bool {
 	return typeName == "xs:NOTATION" || typeName == TypeAnyAtomicType ||

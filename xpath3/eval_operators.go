@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/big"
 
-	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -81,8 +81,8 @@ func evalConcatExpr(ec *evalContext, e ConcatExpr) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	ls := atomizeToString(left)
-	rs := atomizeToString(right)
+	ls := seqToString(left)
+	rs := seqToString(right)
 	return SingleString(ls + rs), nil
 }
 
@@ -370,16 +370,4 @@ func evalPathStepExpr(ec *evalContext, e PathStepExpr) (Sequence, error) {
 		return seq, nil
 	}
 	return allItems, nil
-}
-
-func atomizeToString(seq Sequence) string {
-	if len(seq) == 0 {
-		return ""
-	}
-	a, err := AtomizeItem(seq[0])
-	if err != nil {
-		return ""
-	}
-	s, _ := atomicToString(a)
-	return s
 }

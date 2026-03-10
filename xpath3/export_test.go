@@ -3,7 +3,7 @@ package xpath3
 import (
 	"context"
 
-	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium"
 )
 
 // NewLexerForTesting exposes the internal lexer for tests.

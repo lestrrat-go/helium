@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-
-	helium "github.com/lestrrat-go/helium"
 )
 
 // Function is the interface for XPath 3.1 functions, both built-in and user-defined.
@@ -13,15 +11,6 @@ type Function interface {
 	MinArity() int
 	MaxArity() int // -1 = variadic
 	Call(ctx context.Context, args []Sequence) (Sequence, error)
-}
-
-// FunctionContext provides evaluation context to functions that need it.
-type FunctionContext interface {
-	Node() helium.Node
-	Position() int
-	Size() int
-	Namespace(prefix string) (string, bool)
-	Variable(name string) (Sequence, bool)
 }
 
 // Namespace URIs for standard XPath 3.1 function namespaces.

@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium"
 )
 
 // Expression is a compiled XPath 3.1 expression, reusable across evaluations.

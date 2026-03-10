@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/big"
 
-	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 

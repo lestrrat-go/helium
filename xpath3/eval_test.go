@@ -5,7 +5,7 @@ import (
 	"math/big"
 	"testing"
 
-	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )

@@ -131,7 +131,6 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 		countRat := new(big.Rat).SetInt64(int64(count))
 		return SingleDecimal(new(big.Rat).Quo(sumRat, countRat)), nil
 	}
-	_ = allInt
 	// Float/double path
 	if allInt {
 		f, _ := new(big.Float).SetInt(sumInt).Float64()
@@ -143,7 +142,6 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 func avgDurations(seq Sequence, family string) (Sequence, error) {
 	var totalMonths int
 	var totalSeconds float64
-	var anyNegative bool
 	for _, item := range seq {
 		a, _ := AtomizeItem(item)
 		d := a.DurationVal()
@@ -154,7 +152,6 @@ func avgDurations(seq Sequence, family string) (Sequence, error) {
 			totalMonths += d.Months
 			totalSeconds += d.Seconds
 		}
-		anyNegative = anyNegative || d.Negative
 	}
 	count := len(seq)
 	avgMonths := totalMonths / count
@@ -164,7 +161,6 @@ func avgDurations(seq Sequence, family string) (Sequence, error) {
 		avgMonths = -avgMonths
 		avgSeconds = -avgSeconds
 	}
-	_ = anyNegative
 	typeName := TypeYearMonthDuration
 	if family == "duration:DT" {
 		typeName = TypeDayTimeDuration

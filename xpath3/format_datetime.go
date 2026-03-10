@@ -420,7 +420,7 @@ func applyDateGrouping(s string, formatRunes []rune, zeroDigit rune) string {
 }
 
 func formatNamedValue(value int64, comp byte, format, lang string) string {
-	_ = lang
+	_ = lang // TODO: only English names are supported; lang parameter is accepted but ignored
 	var name string
 
 	switch comp {

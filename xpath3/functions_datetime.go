@@ -310,7 +310,7 @@ func fnSecondsFromDuration(_ context.Context, args []Sequence) (Sequence, error)
 
 // --- timezone adjustment ---
 
-func fnAdjustDateTimeToTimezone(_ context.Context, args []Sequence) (Sequence, error) {
+func fnAdjustDateTimeToTimezone(ctx context.Context, args []Sequence) (Sequence, error) {
 	t, ok := extractTime(args[0])
 	if !ok {
 		return nil, nil
@@ -329,13 +329,17 @@ func fnAdjustDateTimeToTimezone(_ context.Context, args []Sequence) (Sequence, e
 		loc := time.FixedZone("", offset)
 		t = t.In(loc)
 	} else {
-		// Adjust to implicit timezone
-		t = t.In(time.Now().Location())
+		// Adjust to implicit timezone from the dynamic context
+		loc := time.Local
+		if ec := getFnContext(ctx); ec != nil {
+			loc = ec.getImplicitTimezone()
+		}
+		t = t.In(loc)
 	}
 	return SingleAtomic(AtomicValue{TypeName: TypeDateTime, Value: t}), nil
 }
 
-func fnAdjustDateToTimezone(_ context.Context, args []Sequence) (Sequence, error) {
+func fnAdjustDateToTimezone(ctx context.Context, args []Sequence) (Sequence, error) {
 	t, ok := extractTime(args[0])
 	if !ok {
 		return nil, nil
@@ -361,8 +365,11 @@ func fnAdjustDateToTimezone(_ context.Context, args []Sequence) (Sequence, error
 			t = time.Date(dt.Year(), dt.Month(), dt.Day(), 0, 0, 0, 0, loc)
 		}
 	} else {
-		// No second arg — adjust to implicit timezone
-		loc := time.Now().Location()
+		// No second arg — adjust to implicit timezone from dynamic context
+		loc := time.Local
+		if ec := getFnContext(ctx); ec != nil {
+			loc = ec.getImplicitTimezone()
+		}
 		if t.Location() == time.UTC {
 			t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc)
 		} else {
@@ -373,7 +380,7 @@ func fnAdjustDateToTimezone(_ context.Context, args []Sequence) (Sequence, error
 	return SingleAtomic(AtomicValue{TypeName: TypeDate, Value: t}), nil
 }
 
-func fnAdjustTimeToTimezone(_ context.Context, args []Sequence) (Sequence, error) {
+func fnAdjustTimeToTimezone(ctx context.Context, args []Sequence) (Sequence, error) {
 	t, ok := extractTime(args[0])
 	if !ok {
 		return nil, nil
@@ -389,6 +396,13 @@ func fnAdjustTimeToTimezone(_ context.Context, args []Sequence) (Sequence, error
 			return nil, &XPathError{Code: "XPTY0004", Message: "expected dayTimeDuration"}
 		}
 		loc := durationToLocation(d)
+		t = t.In(loc)
+	} else {
+		// Adjust to implicit timezone from the dynamic context
+		loc := time.Local
+		if ec := getFnContext(ctx); ec != nil {
+			loc = ec.getImplicitTimezone()
+		}
 		t = t.In(loc)
 	}
 	return SingleAtomic(AtomicValue{TypeName: TypeTime, Value: t}), nil

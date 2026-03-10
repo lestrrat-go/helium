@@ -126,8 +126,15 @@ func (l *lexer) tokenize() error {
 
 		switch {
 		case r == '(':
-			l.emit(TokenLParen, "(")
-			l.advanceRune(r)
+			// Check for XPath comment (: ... :)
+			if l.pos+1 < len(l.input) && l.input[l.pos+1] == ':' {
+				if err := l.skipComment(); err != nil {
+					return err
+				}
+			} else {
+				l.emit(TokenLParen, "(")
+				l.advanceRune(r)
+			}
 		case r == ')':
 			l.emit(TokenRParen, ")")
 			l.advanceRune(r)
@@ -295,6 +302,29 @@ func (l *lexer) skipWhitespace() {
 	}
 }
 
+// skipComment skips an XPath comment delimited by (: and :).
+// The lexer position must be at the opening '('. Nested comments are supported.
+func (l *lexer) skipComment() error {
+	start := l.pos
+	l.pos += 2 // skip "(:"
+	depth := 1
+	for l.pos < len(l.input) && depth > 0 {
+		if l.pos+1 < len(l.input) && l.input[l.pos] == '(' && l.input[l.pos+1] == ':' {
+			depth++
+			l.pos += 2
+		} else if l.pos+1 < len(l.input) && l.input[l.pos] == ':' && l.input[l.pos+1] == ')' {
+			depth--
+			l.pos += 2
+		} else {
+			l.pos++
+		}
+	}
+	if depth > 0 {
+		return fmt.Errorf("%w: unterminated comment starting at position %d", ErrUnexpectedToken, start)
+	}
+	return nil
+}
+
 func (l *lexer) scanNCName() string {
 	start := l.pos
 	for l.pos < len(l.input) {
@@ -377,7 +407,7 @@ func (l *lexer) scanNameOrKeyword() {
 			l.emit(TokenName, name)
 			return
 		}
-		uri := l.input[braceStart:l.pos]
+		uri := strings.TrimSpace(l.input[braceStart:l.pos])
 		l.pos++ // consume '}'
 		local := l.scanNCName()
 		l.emit(TokenName, "Q{"+uri+"}"+local)

@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium"
 )
 
 func init() {

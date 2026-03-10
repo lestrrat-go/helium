@@ -4961,7 +4961,7 @@ string')`, Assertions: []qt3Assertion{qt3AssertStringValue("normalized string")}
           let $var-values := ($vars(QName($module-ns, "var1")), $vars(QName($module-ns, "var2"))),
            $fns-values := ($fns(QName($module-ns, "func1"))(0)(), $fns(QName($module-ns, "func2"))(0)())
           return
-            ($var-values, $fns-values)`, Assertions: []qt3Assertion{qt3AssertDeepEq("(\"var1\", \"var2\", \"func1\", \"func2\")")}},
+            ($var-values, $fns-values)`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertDeepEq("(\"var1\", \"var2\", \"func1\", \"func2\")")}},
 		{Name: "fn-function-lookup-761", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'load-xquery-module'), 1)( 0 )", ExpectError: true},
 		{Name: "fn-function-lookup-762", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'load-xquery-module'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-764", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'load-xquery-module'), 2)( \"\", map{} )", ExpectError: true},
@@ -6009,26 +6009,26 @@ func TestQT3_fn_last(t *testing.T) {
 func TestQT3_fn_load_xquery_module(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
-		{Name: "fn-load-xquery-module-001", XPath: "fn:load-xquery-module(\"\")", ExpectError: true},
-		{Name: "fn-load-xquery-module-002", XPath: "fn:load-xquery-module(\"\", map{})", ExpectError: true},
-		{Name: "fn-load-xquery-module-003", XPath: "fn:load-xquery-module(\"http://nonexistent/module\")", ExpectError: true},
-		{Name: "fn-load-xquery-module-004", XPath: "fn:load-xquery-module(\"http://nonexistent/module\", map{})", ExpectError: true},
-		{Name: "fn-load-xquery-module-005", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/invalid/module\")", ExpectError: true},
-		{Name: "fn-load-xquery-module-006", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/invalid/module\", map{})", ExpectError: true},
+		{Name: "fn-load-xquery-module-001", XPath: "fn:load-xquery-module(\"\")", Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-002", XPath: "fn:load-xquery-module(\"\", map{})", Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-003", XPath: "fn:load-xquery-module(\"http://nonexistent/module\")", Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-004", XPath: "fn:load-xquery-module(\"http://nonexistent/module\", map{})", Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-005", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/invalid/module\")", Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-006", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/invalid/module\", map{})", Skip: "requires XQuery load-xquery-module", ExpectError: true},
 		{Name: "fn-load-xquery-module-007", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/external-var/module",
               $module := fn:load-xquery-module($module-ns)
-          return $module("variables")(QName($module-ns,'var1'))`, ExpectError: true},
+          return $module("variables")(QName($module-ns,'var1'))`, Skip: "requires XQuery load-xquery-module", ExpectError: true},
 		{Name: "fn-load-xquery-module-008", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/external-var/module",
               $module := fn:load-xquery-module($module-ns, map{})
-          return $module("variables")(QName($module-ns,'var1'))`, ExpectError: true},
+          return $module("variables")(QName($module-ns,'var1'))`, Skip: "requires XQuery load-xquery-module", ExpectError: true},
 		{Name: "fn-load-xquery-module-009", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/context-item/module", $module := fn:load-xquery-module($module-ns)
-          return $module("variables")(QName($module-ns,'context'))`, ExpectError: true},
+          return $module("variables")(QName($module-ns,'context'))`, Skip: "requires XQuery load-xquery-module", ExpectError: true},
 		{Name: "fn-load-xquery-module-010", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/context-item/module", $module := fn:load-xquery-module($module-ns, map{})
-          return $module("variables")(QName($module-ns,'context'))`, ExpectError: true},
-		{Name: "fn-load-xquery-module-011", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/external-var/module\", map {\"variables\" : map { QName(\"http://www.w3.org/fots/fn/load-xquery-module/external-var/module\", \"var1\") : 1234 }})", ExpectError: true},
+          return $module("variables")(QName($module-ns,'context'))`, Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-011", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/external-var/module\", map {\"variables\" : map { QName(\"http://www.w3.org/fots/fn/load-xquery-module/external-var/module\", \"var1\") : 1234 }})", Skip: "requires XQuery load-xquery-module", ExpectError: true},
 		{Name: "fn-load-xquery-module-012", XPath: `let $module-ns :="http://www.w3.org/fots/fn/load-xquery-module/dynamic-error/module", $module := fn:load-xquery-module($module-ns)
-      return $module('variables')(QName($module-ns, "cause-dynamic-error"))`, ExpectError: true},
-		{Name: "fn-load-xquery-module-013", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/dynamic-error/module\", map{})", ExpectError: true},
+      return $module('variables')(QName($module-ns, "cause-dynamic-error"))`, Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-013", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/dynamic-error/module\", map{})", Skip: "requires XQuery load-xquery-module", ExpectError: true},
 		{Name: "fn-load-xquery-module-014", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/valid/module",
        $module := fn:load-xquery-module($module-ns)
       return
@@ -6038,13 +6038,13 @@ func TestQT3_fn_load_xquery_module(t *testing.T) {
           let $var-values := ($vars(QName($module-ns, "var1")), $vars(QName($module-ns, "var2"))),
            $fns-values := ($fns(QName($module-ns, "func1"))(0)(), $fns(QName($module-ns, "func2"))(0)())
           return
-            ($var-values, $fns-values)`, Assertions: []qt3Assertion{qt3AssertDeepEq("(\"var1\", \"var2\", \"func1\", \"func2\")")}},
+            ($var-values, $fns-values)`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertDeepEq("(\"var1\", \"var2\", \"func1\", \"func2\")")}},
 		{Name: "fn-load-xquery-module-015", XPath: `let $qn-var1 := QName("http://www.w3.org/fots/fn/load-xquery-module/external-var/module", "var1"),
        $test-value := "some value"
       return
         let $module := fn:load-xquery-module("http://www.w3.org/fots/fn/load-xquery-module/external-var/module", map {"variables" : map { $qn-var1 : $test-value }})
         return
-          $module("variables")($qn-var1)`, Assertions: []qt3Assertion{qt3AssertStringValue("some value")}},
+          $module("variables")($qn-var1)`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertStringValue("some value")}},
 		{Name: "fn-load-xquery-module-018", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/functions/module",
        $module := fn:load-xquery-module($module-ns)
       return
@@ -6052,7 +6052,7 @@ func TestQT3_fn_load_xquery_module(t *testing.T) {
       return
       let $fns-values := ($fns(QName($module-ns, "func1"))(0)(), $fns(QName($module-ns, "func2"))(0)())
       return
-      $fns-values`, Assertions: []qt3Assertion{qt3AssertDeepEq("(\"func1\", \"func2\")")}},
+      $fns-values`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertDeepEq("(\"func1\", \"func2\")")}},
 		{Name: "fn-load-xquery-module-019", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/functions/module",
        $module := fn:load-xquery-module($module-ns)
       return
@@ -6060,7 +6060,7 @@ func TestQT3_fn_load_xquery_module(t *testing.T) {
       return
       let $fns-values := ($fns(QName($module-ns, "func1"))(0)(), $fns(QName($module-ns, "func1"))(1)("something"), $fns(QName($module-ns, "func2"))(0)(), $fns(QName($module-ns, "func2"))(1)("something"))
       return
-      $fns-values`, Assertions: []qt3Assertion{qt3AssertDeepEq("(\"func1\", \"func1something\", \"func2\", \"something\")")}},
+      $fns-values`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertDeepEq("(\"func1\", \"func1something\", \"func2\", \"something\")")}},
 		{Name: "fn-load-xquery-module-020", XPath: `let $qn-var1 := QName("http://www.w3.org/fots/fn/load-xquery-module/external-vars/module", "var1"),
        $qn-var2 := QName("http://www.w3.org/fots/fn/load-xquery-module/external-vars/module", "var2"),
        $qn-var3 := QName("http://www.w3.org/fots/fn/load-xquery-module/external-vars/module", "var3")
@@ -6068,7 +6068,7 @@ func TestQT3_fn_load_xquery_module(t *testing.T) {
       let $module := fn:load-xquery-module("http://www.w3.org/fots/fn/load-xquery-module/external-vars/module", 
       map {"variables" : map { $qn-var1 : "some value", $qn-var2 : 42, $qn-var3 : map{"a":1,"b":2,"c":(3,4,5)} }})
       return
-      ($module("variables")($qn-var1), $module("variables")($qn-var2), $module("variables")($qn-var3)("b"))`, Assertions: []qt3Assertion{qt3AssertDeepEq("(\"some value\", 42, 2)")}},
+      ($module("variables")($qn-var1), $module("variables")($qn-var2), $module("variables")($qn-var3)("b"))`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertDeepEq("(\"some value\", 42, 2)")}},
 		{Name: "fn-load-xquery-module-021", XPath: `let $qn-var1 := QName("http://www.w3.org/fots/fn/load-xquery-module/external-vars/module", "var1"),
        $qn-var2 := QName("http://www.w3.org/fots/fn/load-xquery-module/external-vars/module", "var2"),
        $qn-var3 := QName("http://www.w3.org/fots/fn/load-xquery-module/external-vars/module", "var3"),
@@ -6077,51 +6077,51 @@ func TestQT3_fn_load_xquery_module(t *testing.T) {
       let $module := fn:load-xquery-module("http://www.w3.org/fots/fn/load-xquery-module/external-vars/module", 
       map {"variables" : map { $qn-var2 : 42, $qn-var3 : map{"a":1,"b":2,"c":(3,4,5)}, $qn-var4 : "the other" }})
       return
-      ($module("variables")($qn-var1), $module("variables")($qn-var2), $module("variables")($qn-var3)("b"), $module("variables")($qn-var4))`, Assertions: []qt3Assertion{qt3AssertDeepEq("(\"this\", 42, 2, \"that\")")}},
+      ($module("variables")($qn-var1), $module("variables")($qn-var2), $module("variables")($qn-var3)("b"), $module("variables")($qn-var4))`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertDeepEq("(\"this\", 42, 2, \"that\")")}},
 		{Name: "fn-load-xquery-module-022", XPath: `let $module := fn:load-xquery-module("http://www.w3.org/fots/fn/load-xquery-module/import-func/module")
       return
-      $module("functions")(QName("http://www.w3.org/fots/fn/load-xquery-module/valid/module", "func1"))`, Assertions: []qt3Assertion{qt3AssertEmpty()}},
+      $module("functions")(QName("http://www.w3.org/fots/fn/load-xquery-module/valid/module", "func1"))`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertEmpty()}},
 		{Name: "fn-load-xquery-module-023", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/import/module",
        $module := fn:load-xquery-module($module-ns),
        $mod1-ns := "http://www.w3.org/TestModules/module1"
       return
       let $fns := $module("functions")
-      return $fns(QName($mod1-ns, "x"))(0)()`, ExpectError: true},
+      return $fns(QName($mod1-ns, "x"))(0)()`, Skip: "requires XQuery load-xquery-module", ExpectError: true},
 		{Name: "fn-load-xquery-module-024", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/import/module",
        $module := fn:load-xquery-module($module-ns),
        $mod1-ns := "http://www.w3.org/TestModules/module1",
        $mod2-ns := "http://www.w3.org/TestModules/module2"
       return
       let $fns := $module("functions")
-      return $fns(QName($mod2-ns, "y"))(0)()`, ExpectError: true},
+      return $fns(QName($mod2-ns, "y"))(0)()`, Skip: "requires XQuery load-xquery-module", ExpectError: true},
 		{Name: "fn-load-xquery-module-025", XPath: `let $module := fn:load-xquery-module("http://www.w3.org/fots/fn/load-xquery-module/import-vars/module")
       return
-      $module("variables")(QName("http://www.w3.org/fots/fn/load-xquery-module/valid/module", "var1"))`, Assertions: []qt3Assertion{qt3AssertEmpty()}},
+      $module("variables")(QName("http://www.w3.org/fots/fn/load-xquery-module/valid/module", "var1"))`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertEmpty()}},
 		{Name: "fn-load-xquery-module-026", XPath: `let $qn-var1 := QName("http://www.w3.org/fots/fn/load-xquery-module/external-vars/module", "var1")
       return
       let $module := fn:load-xquery-module("http://www.w3.org/fots/fn/load-xquery-module/import-vars/module", 
       map {"variables" : map { $qn-var1 : "that" }})
       return
-      $module("variables")(QName("http://www.w3.org/fots/fn/load-xquery-module/import-vars/module", "var1"))`, Assertions: []qt3Assertion{qt3AssertStringValue("that")}},
+      $module("variables")(QName("http://www.w3.org/fots/fn/load-xquery-module/import-vars/module", "var1"))`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertStringValue("that")}},
 		{Name: "fn-load-xquery-module-027", XPath: `let $qn-var1 := QName("http://www.w3.org/fots/fn/load-xquery-module/external-vars/module", "var1")
       return
       let $module := fn:load-xquery-module("http://www.w3.org/fots/fn/load-xquery-module/import/module", 
       map {"variables" : map { $qn-var1 : "that" }})
       return
-      $module("variables")(QName("http://www.w3.org/fots/fn/load-xquery-module/import/module", "var1"))`, Assertions: []qt3Assertion{qt3AssertStringValue("that")}},
+      $module("variables")(QName("http://www.w3.org/fots/fn/load-xquery-module/import/module", "var1"))`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertStringValue("that")}},
 		{Name: "fn-load-xquery-module-028", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/import-vars/module",
        $module-ext := "http://www.w3.org/fots/fn/load-xquery-module/external-vars/module"
       return
       let $module := fn:load-xquery-module($module-ns, 
       map {"variables" : map {QName($module-ext, "var3") : map{}}})
       return
-      $module("functions")(QName($module-ns, "and"))(0)()`, Assertions: []qt3Assertion{qt3AssertStringValue("this and that")}},
+      $module("functions")(QName($module-ns, "and"))(0)()`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertStringValue("this and that")}},
 		{Name: "fn-load-xquery-module-029", XPath: `let $module := fn:load-xquery-module("http://www.w3.org/fots/fn/load-xquery-module/import-self/module")
       return
-      $module("variables")(QName("http://www.w3.org/fots/fn/load-xquery-module/import-self/module", "var1"))`, Assertions: []qt3Assertion{qt3AssertStringValue("this")}},
+      $module("variables")(QName("http://www.w3.org/fots/fn/load-xquery-module/import-self/module", "var1"))`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertStringValue("this")}},
 		{Name: "fn-load-xquery-module-030", XPath: `let $module := fn:load-xquery-module("http://www.w3.org/TestModules/test1")
       return
-      $module("functions")(QName("http://www.w3.org/TestModules/test1", "ok"))(0)()`, Assertions: []qt3Assertion{qt3AssertStringValue("ok")}},
+      $module("functions")(QName("http://www.w3.org/TestModules/test1", "ok"))(0)()`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertStringValue("ok")}},
 		{Name: "fn-load-xquery-module-033", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/external-vars/module",
        $qn-var1 := QName($module-ns, "var1"),
        $qn-var2 := QName($module-ns, "var2"),
@@ -6135,7 +6135,7 @@ func TestQT3_fn_load_xquery_module(t *testing.T) {
       ($module1("variables")($qn-var1), $module1("variables")($qn-var2), $module1("variables")($qn-var3)("b"),
       $module1("functions")(QName($module-ns, "get-var1"))(0)(), $module1("functions")(QName($module-ns, "get-var2"))(0)(),
       $module2("variables")($qn-var1), $module2("variables")($qn-var2), $module2("variables")($qn-var3)("b"),
-      $module2("functions")(QName($module-ns, "get-var1"))(0)(), $module2("functions")(QName($module-ns, "get-var2"))(0)())`, Assertions: []qt3Assertion{qt3AssertDeepEq("(\"some value\", 42, 2, \"some value\", 42, \"another value\", 11, \"different\", \"another value\", 11)")}},
+      $module2("functions")(QName($module-ns, "get-var1"))(0)(), $module2("functions")(QName($module-ns, "get-var2"))(0)())`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertDeepEq("(\"some value\", 42, 2, \"some value\", 42, \"another value\", 11, \"different\", \"another value\", 11)")}},
 		{Name: "fn-load-xquery-module-034", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/external-vars/module",
        $qn-var1 := QName($module-ns, "var1"),
        $qn-var2 := QName($module-ns, "var2"),
@@ -6150,12 +6150,12 @@ func TestQT3_fn_load_xquery_module(t *testing.T) {
       ($module("variables")($qn-var1), $module("variables")($qn-var2), 
       $module("variables")($qn-var3)("functions")(QName($module-ns, "get-var1"))(0)(),
       $module("variables")($qn-var3)("functions")(QName($module-ns, "get-var2"))(0)()
-      )`, Assertions: []qt3Assertion{qt3AssertDeepEq("(\"some value\", 42, \"  a string\", 11)")}},
+      )`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertDeepEq("(\"some value\", 42, \"  a string\", 11)")}},
 		{Name: "fn-load-xquery-module-035", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/load/module",
        $module-valid-ns := "http://www.w3.org/fots/fn/load-xquery-module/load/module",
        $module := fn:load-xquery-module($module-ns)
       return 
-      $module("variables")(QName($module-ns, "var3"))("variables")`, Assertions: []qt3Assertion{qt3AssertType("map(*)")}},
+      $module("variables")(QName($module-ns, "var3"))("variables")`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertType("map(*)")}},
 		{Name: "fn-load-xquery-module-036", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/load/module",
        $module-valid-ns := "http://www.w3.org/fots/fn/load-xquery-module/valid/module",
        $module := fn:load-xquery-module($module-ns)
@@ -6163,111 +6163,111 @@ func TestQT3_fn_load_xquery_module(t *testing.T) {
       ($module("functions")(QName($module-ns, "get-var1"))(0)(), 
       $module("variables")(QName($module-ns, "var1")), 
       $module("variables")(QName($module-ns, "var3"))("variables")(QName($module-valid-ns, "var1")),
-      $module("variables")(QName($module-ns, "var3"))("functions")(QName($module-valid-ns, "func1"))(0)())`, Assertions: []qt3Assertion{qt3AssertDeepEq("(\"this\", \"this\", \"var1\", \"func1\")")}},
+      $module("variables")(QName($module-ns, "var3"))("functions")(QName($module-valid-ns, "func1"))(0)())`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertDeepEq("(\"this\", \"this\", \"var1\", \"func1\")")}},
 		{Name: "fn-load-xquery-module-037", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/load-self/module",
        $module := fn:load-xquery-module($module-ns, 
       map {"variables" : map { QName($module-ns, "b") : true()}})
       return 
-      $module("variables")(QName($module-ns, "var1"))("variables")(QName($module-ns, "var1"))`, Assertions: []qt3Assertion{qt3AssertStringValue("end")}},
+      $module("variables")(QName($module-ns, "var1"))("variables")(QName($module-ns, "var1"))`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertStringValue("end")}},
 		{Name: "fn-load-xquery-module-040", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/decimal-format/module",
        $module := fn:load-xquery-module($module-ns)
       return
       let $fns := $module("functions")
       return
-      $fns(QName($module-ns, "func"))(1)(1234567.765)`, Assertions: []qt3Assertion{qt3AssertStringValue("1.234.567,76")}},
+      $fns(QName($module-ns, "func"))(1)(1234567.765)`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertStringValue("1.234.567,76")}},
 		{Name: "fn-load-xquery-module-041", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/functions/module"
       return
-      fn:load-xquery-module($module-ns)("functions")(QName($module-ns, "func"))(1)((1,2,3))`, Assertions: []qt3Assertion{qt3AssertStringValue("0 0 1 1 1")}},
+      fn:load-xquery-module($module-ns)("functions")(QName($module-ns, "func"))(1)((1,2,3))`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertStringValue("0 0 1 1 1")}},
 		{Name: "fn-load-xquery-module-042", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/functions/module"      
       return
-      fn:load-xquery-module($module-ns)("functions")(QName($module-ns, "func"))(1)((1,2,3))`, Assertions: []qt3Assertion{qt3AssertStringValue("1 1 1 0 0")}},
+      fn:load-xquery-module($module-ns)("functions")(QName($module-ns, "func"))(1)((1,2,3))`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertStringValue("1 1 1 0 0")}},
 		{Name: "fn-load-xquery-module-045", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/functions/module"
       return
-      fn:load-xquery-module($module-ns)("functions")(QName($module-ns, "func"))(1)("abc")`, Assertions: []qt3Assertion{qt3AssertSkip()}},
+      fn:load-xquery-module($module-ns)("functions")(QName($module-ns, "func"))(1)("abc")`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-load-xquery-module-046", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/functions/module"
       return
-      fn:load-xquery-module($module-ns)("functions")(QName($module-ns, "func"))(1)("abc")`, Assertions: []qt3Assertion{qt3AssertSkip()}},
+      fn:load-xquery-module($module-ns)("functions")(QName($module-ns, "func"))(1)("abc")`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-load-xquery-module-050", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/import-schema/module",
        $module := fn:load-xquery-module($module-ns)
       return
-      $module("functions")(QName($module-ns, "hatsize"))(1)(8)`, Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertSkip()}},
+      $module("functions")(QName($module-ns, "hatsize"))(1)(8)`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-load-xquery-module-051", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/import-schema/module",
        $module := fn:load-xquery-module($module-ns)
       return
-      $module("functions")(QName($module-ns, "validate-ok"))(0)()`, Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-load-xquery-module-060", XPath: "let $module-ns := \"http://www.w3.org/fots/fn/load-xquery-module/context-item/module\", $module := fn:load-xquery-module($module-ns, map{\"context-item\" : \"item\"}) return $module(\"variables\")(QName($module-ns, \"context\"))", ExpectError: true},
+      $module("functions")(QName($module-ns, "validate-ok"))(0)()`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-load-xquery-module-060", XPath: "let $module-ns := \"http://www.w3.org/fots/fn/load-xquery-module/context-item/module\", $module := fn:load-xquery-module($module-ns, map{\"context-item\" : \"item\"}) return $module(\"variables\")(QName($module-ns, \"context\"))", Skip: "requires XQuery load-xquery-module", ExpectError: true},
 		{Name: "fn-load-xquery-module-061", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/valid/module",
        $module := fn:load-xquery-module($module-ns, map{"context-item" : "item"})
       return
       ($module("variables")(QName($module-ns, "var1")), $module("variables")(QName($module-ns, "var2")), 
-      $module("functions")(QName($module-ns, "func1"))(0)(), $module("functions")(QName($module-ns, "func2"))(0)())`, Assertions: []qt3Assertion{qt3AssertDeepEq("(\"var1\", \"var2\", \"func1\", \"func2\")")}},
+      $module("functions")(QName($module-ns, "func1"))(0)(), $module("functions")(QName($module-ns, "func2"))(0)())`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertDeepEq("(\"var1\", \"var2\", \"func1\", \"func2\")")}},
 		{Name: "fn-load-xquery-module-062", XPath: `fn:load-xquery-module("http://www.w3.org/fots/fn/load-xquery-module/valid/module", 
-      map{"variables" : "v"})`, ExpectError: true},
+      map{"variables" : "v"})`, Skip: "requires XQuery load-xquery-module", ExpectError: true},
 		{Name: "fn-load-xquery-module-063", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/valid/module",
        $module := fn:load-xquery-module($module-ns, map{"variables" : map{"wrong":"entry"}})
-      return $module`, ExpectError: true},
+      return $module`, Skip: "requires XQuery load-xquery-module", ExpectError: true},
 		{Name: "fn-load-xquery-module-064", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/valid/module",
        $module := fn:load-xquery-module($module-ns, map{"variables" : map{}})
       return
       ($module("variables")(QName($module-ns, "var1")), $module("variables")(QName($module-ns, "var2")), 
-      $module("functions")(QName($module-ns, "func1"))(0)(), $module("functions")(QName($module-ns, "func2"))(0)())`, Assertions: []qt3Assertion{qt3AssertDeepEq("(\"var1\", \"var2\", \"func1\", \"func2\")")}},
+      $module("functions")(QName($module-ns, "func1"))(0)(), $module("functions")(QName($module-ns, "func2"))(0)())`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertDeepEq("(\"var1\", \"var2\", \"func1\", \"func2\")")}},
 		{Name: "fn-load-xquery-module-065", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/valid/module",
        $module := fn:load-xquery-module($module-ns, map{"variables" : map{(QName($module-ns, "wrong")):"not there"}})
       return
       ($module("variables")(QName($module-ns, "var1")), $module("variables")(QName($module-ns, "var2")), 
-      $module("functions")(QName($module-ns, "func1"))(0)(), $module("functions")(QName($module-ns, "func2"))(0)())`, Assertions: []qt3Assertion{qt3AssertDeepEq("(\"var1\", \"var2\", \"func1\", \"func2\")")}},
+      $module("functions")(QName($module-ns, "func1"))(0)(), $module("functions")(QName($module-ns, "func2"))(0)())`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertDeepEq("(\"var1\", \"var2\", \"func1\", \"func2\")")}},
 		{Name: "fn-load-xquery-module-066", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/valid/module",
        $module := fn:load-xquery-module($module-ns, map{"vendor-options" : 42})      
-      return $module`, ExpectError: true},
+      return $module`, Skip: "requires XQuery load-xquery-module", ExpectError: true},
 		{Name: "fn-load-xquery-module-067", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/valid/module",
        $module := fn:load-xquery-module($module-ns, map{"vendor-options" : map{"wrong":"entry"}})      
-      return $module`, ExpectError: true},
+      return $module`, Skip: "requires XQuery load-xquery-module", ExpectError: true},
 		{Name: "fn-load-xquery-module-068", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/valid/module",
        $module := fn:load-xquery-module($module-ns, map{"vendor-options" : map{}})
       return
       ($module("variables")(QName($module-ns, "var1")), $module("variables")(QName($module-ns, "var2")), 
-      $module("functions")(QName($module-ns, "func1"))(0)(), $module("functions")(QName($module-ns, "func2"))(0)())`, Assertions: []qt3Assertion{qt3AssertDeepEq("(\"var1\", \"var2\", \"func1\", \"func2\")")}},
+      $module("functions")(QName($module-ns, "func1"))(0)(), $module("functions")(QName($module-ns, "func2"))(0)())`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertDeepEq("(\"var1\", \"var2\", \"func1\", \"func2\")")}},
 		{Name: "fn-load-xquery-module-069", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/valid/module",
        $module-unrec := "http://www.w3.example/unrecognised/namespace/nobody/uses",
        $module := fn:load-xquery-module($module-ns, map{"vendor-options" : 
       map{(QName($module-unrec, "option")):"fake"}})
       return
       ($module("variables")(QName($module-ns, "var1")), $module("variables")(QName($module-ns, "var2")), 
-      $module("functions")(QName($module-ns, "func1"))(0)(), $module("functions")(QName($module-ns, "func2"))(0)())`, Assertions: []qt3Assertion{qt3AssertDeepEq("(\"var1\", \"var2\", \"func1\", \"func2\")")}},
+      $module("functions")(QName($module-ns, "func1"))(0)(), $module("functions")(QName($module-ns, "func2"))(0)())`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertDeepEq("(\"var1\", \"var2\", \"func1\", \"func2\")")}},
 		{Name: "fn-load-xquery-module-070", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/valid/module",
        $module-unrec := "http://www.w3.example/unrecognised/namespace/nobody/uses",
        $module := fn:load-xquery-module($module-ns, map{"nonexistant-option" : "ignored"})
       return
       ($module("variables")(QName($module-ns, "var1")), $module("variables")(QName($module-ns, "var2")), 
-      $module("functions")(QName($module-ns, "func1"))(0)(), $module("functions")(QName($module-ns, "func2"))(0)())`, Assertions: []qt3Assertion{qt3AssertDeepEq("(\"var1\", \"var2\", \"func1\", \"func2\")")}},
-		{Name: "fn-load-xquery-module-071", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/main/module\")", ExpectError: true},
+      $module("functions")(QName($module-ns, "func1"))(0)(), $module("functions")(QName($module-ns, "func2"))(0)())`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertDeepEq("(\"var1\", \"var2\", \"func1\", \"func2\")")}},
+		{Name: "fn-load-xquery-module-071", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/main/module\")", Skip: "requires XQuery load-xquery-module", ExpectError: true},
 		{Name: "fn-load-xquery-module-072", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/valid/module",
        $module := fn:load-xquery-module($module-ns, map{"xquery-version" : "3.1"})      
-      return $module`, ExpectError: true},
+      return $module`, Skip: "requires XQuery load-xquery-module", ExpectError: true},
 		{Name: "fn-load-xquery-module-073", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/valid/module",
        $module := fn:load-xquery-module($module-ns, map{"xquery-version" : 3.1})
       return
       ($module("variables")(QName($module-ns, "var1")), $module("variables")(QName($module-ns, "var2")), 
-      $module("functions")(QName($module-ns, "func1"))(0)(), $module("functions")(QName($module-ns, "func2"))(0)())`, Assertions: []qt3Assertion{qt3AssertDeepEq("(\"var1\", \"var2\", \"func1\", \"func2\")")}},
+      $module("functions")(QName($module-ns, "func1"))(0)(), $module("functions")(QName($module-ns, "func2"))(0)())`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertDeepEq("(\"var1\", \"var2\", \"func1\", \"func2\")")}},
 		{Name: "fn-load-xquery-module-074", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/valid/module",
       $module := fn:load-xquery-module($module-ns, map{"xquery-version" : 3.1})
       return
       ( $module("variables")(QName($module-ns, "var3")), 
         $module("functions")(QName($module-ns, "func3"))
-      )`, Assertions: []qt3Assertion{qt3AssertEmpty()}},
-		{Name: "fn-load-xquery-module-901", XPath: "fn:load-xquery-module(\"\")", ExpectError: true},
-		{Name: "fn-load-xquery-module-902", XPath: "fn:load-xquery-module(\"\", map{})", ExpectError: true},
-		{Name: "fn-load-xquery-module-903", XPath: "fn:load-xquery-module(\"http://nonexistent/module\")", ExpectError: true},
-		{Name: "fn-load-xquery-module-904", XPath: "fn:load-xquery-module(\"http://nonexistent/module\", map{})", ExpectError: true},
-		{Name: "fn-load-xquery-module-905", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/invalid/module\")", ExpectError: true},
-		{Name: "fn-load-xquery-module-906", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/invalid/module\", map{})", ExpectError: true},
-		{Name: "fn-load-xquery-module-907", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/external-var/module\")", ExpectError: true},
-		{Name: "fn-load-xquery-module-908", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/external-var/module\", map{})", ExpectError: true},
-		{Name: "fn-load-xquery-module-909", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/context-item/module\")", ExpectError: true},
-		{Name: "fn-load-xquery-module-910", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/context-item/module\", map{})", ExpectError: true},
-		{Name: "fn-load-xquery-module-911", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/external-var/module\", map {\"variables\" : map { QName(\"http://www.w3.org/fots/fn/load-xquery-module/external-var/module\", \"var1\") : 1234 }})", ExpectError: true},
-		{Name: "fn-load-xquery-module-912", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/dynamic-error/module\")", ExpectError: true},
-		{Name: "fn-load-xquery-module-913", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/dynamic-error/module\", map{})", ExpectError: true},
+      )`, Skip: "requires XQuery load-xquery-module", Assertions: []qt3Assertion{qt3AssertEmpty()}},
+		{Name: "fn-load-xquery-module-901", XPath: "fn:load-xquery-module(\"\")", Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-902", XPath: "fn:load-xquery-module(\"\", map{})", Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-903", XPath: "fn:load-xquery-module(\"http://nonexistent/module\")", Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-904", XPath: "fn:load-xquery-module(\"http://nonexistent/module\", map{})", Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-905", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/invalid/module\")", Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-906", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/invalid/module\", map{})", Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-907", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/external-var/module\")", Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-908", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/external-var/module\", map{})", Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-909", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/context-item/module\")", Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-910", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/context-item/module\", map{})", Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-911", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/external-var/module\", map {\"variables\" : map { QName(\"http://www.w3.org/fots/fn/load-xquery-module/external-var/module\", \"var1\") : 1234 }})", Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-912", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/dynamic-error/module\")", Skip: "requires XQuery load-xquery-module", ExpectError: true},
+		{Name: "fn-load-xquery-module-913", XPath: "fn:load-xquery-module(\"http://www.w3.org/fots/fn/load-xquery-module/dynamic-error/module\", map{})", Skip: "requires XQuery load-xquery-module", ExpectError: true},
 		{Name: "fn-load-xquery-module-914", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/valid/module",
        $module := fn:load-xquery-module($module-ns)
       return
@@ -6277,10 +6277,10 @@ func TestQT3_fn_load_xquery_module(t *testing.T) {
           let $var-values := ($vars(QName($module-ns, "var1")), $vars(QName($module-ns, "var2"))),
            $fns-values := ($fns(QName($module-ns, "func1"))(0)(), $fns(QName($module-ns, "func2"))(0)())
           return
-            ($var-values, $fns-values)`, ExpectError: true},
+            ($var-values, $fns-values)`, Skip: "requires XQuery load-xquery-module", ExpectError: true},
 		{Name: "fn-load-xquery-module-915", XPath: `let $module-ns := "http://www.w3.org/fots/fn/load-xquery-module/valid/module",
       $module := fn:load-xquery-module($module-ns, map{"xquery-version" : 93.7})      
-      return $module`, ExpectError: true},
+      return $module`, Skip: "requires XQuery load-xquery-module", ExpectError: true},
 	})
 }
 

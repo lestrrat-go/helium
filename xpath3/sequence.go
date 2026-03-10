@@ -5,7 +5,7 @@ import (
 	"math"
 	"math/big"
 
-	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium"
 )
 
 // SingleNode creates a Sequence containing a single NodeItem.

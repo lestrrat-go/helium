@@ -341,6 +341,8 @@ func getSkipReason(deps []dependency) string {
 				return "requires directory as collection URI"
 			case "fn-transform-XSLT", "fn-transform-XSLT30":
 				return "requires XSLT transform"
+			case "fn-load-xquery-module":
+				return "requires XQuery load-xquery-module"
 			case "fn-format-integer-CLDR":
 				return "requires CLDR format-integer"
 			case "non_unicode_codepoint_collation":

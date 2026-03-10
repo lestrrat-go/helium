@@ -1,6 +1,7 @@
 package xpath3
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 )
@@ -32,7 +33,9 @@ func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
 		return nil, err
 	}
 
-	// Duration/date/time arithmetic — handle before numeric promotion
+	// Duration/date/time arithmetic — handle before numeric promotion.
+	// Contract: evalDateTimeArithmetic returns handled==false only when both
+	// operands are non-duration/non-datetime, in which case err is always nil.
 	if result, handled, err := evalDateTimeArithmetic(e.Op, la, ra); err != nil || handled {
 		return result, err
 	}
@@ -134,6 +137,11 @@ func decimalArith(op TokenType, a, b *big.Rat) (Sequence, error) {
 }
 
 func floatArith(op TokenType, la, ra AtomicValue) (Sequence, error) {
+	// Guard: floatArith should only be called with float/double operands.
+	// Integer and decimal operands are handled by integerArith/decimalArith.
+	if !isFloatOrDouble(la.TypeName) && !isFloatOrDouble(ra.TypeName) {
+		return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("unexpected types in float arithmetic: %s, %s", la.TypeName, ra.TypeName)}
+	}
 	ln := la.ToFloat64()
 	rn := ra.ToFloat64()
 	resultType := TypeDouble
@@ -163,6 +171,7 @@ func floatArith(op TokenType, la, ra AtomicValue) (Sequence, error) {
 		if rn == 0 {
 			return nil, &XPathError{Code: "FOAR0002", Message: "integer division by zero"}
 		}
+		// Per F&O §6.2.4: finite idiv ±INF = 0 (math.Trunc(finite/Inf) = 0).
 		truncated := math.Trunc(ln / rn)
 		bi, _ := new(big.Float).SetFloat64(truncated).Int(nil)
 		return SingleIntegerBig(bi), nil

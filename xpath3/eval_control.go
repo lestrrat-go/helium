@@ -171,13 +171,7 @@ func sortTuples(ec *evalContext, tuples []flworTuple, ob OrderByClause) ([]flwor
 	for i, tup := range tuples {
 		var vals []AtomicValue
 		for _, spec := range ob.Specs {
-			subCtx := &evalContext{
-				goCtx: ec.goCtx, node: ec.node, position: ec.position,
-				size: ec.size, vars: tup.vars, namespaces: ec.namespaces,
-				functions: ec.functions, fnsNS: ec.fnsNS, depth: ec.depth,
-				opCount: ec.opCount, opLimit: ec.opLimit, docOrder: ec.docOrder,
-				maxNodes: ec.maxNodes, currentTime: ec.currentTime,
-			}
+			subCtx := ec.withVars(tup.vars)
 			r, err := eval(subCtx, spec.Expr)
 			if err != nil {
 				return nil, err
