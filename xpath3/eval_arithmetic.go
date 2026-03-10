@@ -36,7 +36,7 @@ func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	// Duration/date/time arithmetic — handle before numeric promotion.
 	// Contract: evalDateTimeArithmetic returns handled==false only when both
 	// operands are non-duration/non-datetime, in which case err is always nil.
-	if result, handled, err := evalDateTimeArithmetic(e.Op, la, ra); err != nil || handled {
+	if result, handled, err := evalDateTimeArithmetic(ec, e.Op, la, ra); err != nil || handled {
 		return result, err
 	}
 

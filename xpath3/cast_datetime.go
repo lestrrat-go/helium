@@ -24,7 +24,7 @@ func castToGType(v AtomicValue, targetType string, format func(time.Time) string
 
 // formatXSDTimezone returns the timezone suffix for an XSD date/time value.
 func formatXSDTimezone(t time.Time) string {
-	if t.Location() == time.UTC {
+	if !HasTimezone(t) {
 		return ""
 	}
 	_, offset := t.Zone()
@@ -211,7 +211,9 @@ func ensureExplicitTZ(t time.Time, s string) time.Time {
 	if hasExplicitTimezone(s) {
 		return t.In(time.FixedZone("", 0))
 	}
-	return t
+	// No explicit timezone — use the sentinel location so we can distinguish
+	// "12:00:00" (no TZ) from "12:00:00Z" (explicit UTC).
+	return t.In(noTZLocation)
 }
 
 func hasExplicitTimezone(s string) bool {

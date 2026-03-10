@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"math"
 	"math/rand"
 	"os"
 	"sort"
@@ -145,12 +146,18 @@ func fnDefaultLanguage(_ context.Context, _ []Sequence) (Sequence, error) {
 	return SingleString("en"), nil
 }
 
-func fnImplicitTimezone(_ context.Context, _ []Sequence) (Sequence, error) {
-	_, offset := time.Now().Zone()
-	hours := offset / 3600
-	minutes := (offset % 3600) / 60
+func fnImplicitTimezone(ctx context.Context, _ []Sequence) (Sequence, error) {
+	var offset int
+	if ec := getFnContext(ctx); ec != nil && ec.implicitTimezone != nil {
+		_, offset = time.Now().In(ec.implicitTimezone).Zone()
+	} else {
+		_, offset = time.Now().Zone()
+	}
 	d := Duration{
-		Seconds: float64(hours*3600 + minutes*60),
+		Seconds: math.Abs(float64(offset)),
+	}
+	if offset < 0 {
+		d.Negative = true
 	}
 	return SingleAtomic(AtomicValue{TypeName: TypeDayTimeDuration, Value: d}), nil
 }

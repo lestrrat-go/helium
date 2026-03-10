@@ -313,6 +313,19 @@ type QNameValue struct {
 
 // Duration represents an XSD duration (used for xs:duration, xs:dayTimeDuration,
 // xs:yearMonthDuration).
+// noTZLocation is a sentinel timezone used for XSD date/time values parsed
+// without an explicit timezone. Go's time.UTC cannot be used as a sentinel
+// because time.Parse returns time.UTC for inputs without a timezone suffix,
+// making it impossible to distinguish "12:00:00" (no TZ) from "12:00:00Z" (explicit UTC).
+// This location has offset 0 but is a distinct pointer from time.UTC.
+var noTZLocation = time.FixedZone("noTZ", 0)
+
+// HasTimezone returns true if the time value has an explicit timezone
+// (i.e., was NOT parsed from a timezone-less XSD lexical form).
+func HasTimezone(t time.Time) bool {
+	return t.Location() != noTZLocation
+}
+
 type Duration struct {
 	Months   int     // total months (years*12 + months)
 	Seconds  float64 // total seconds (days*86400 + hours*3600 + minutes*60 + seconds)

@@ -17,7 +17,7 @@ func isDateTimeType(typeName string) bool {
 // evalDateTimeArithmetic handles arithmetic involving durations and date/time values.
 // Returns (result, handled, error). If handled is false, the caller should fall through
 // to numeric arithmetic.
-func evalDateTimeArithmetic(op TokenType, la, ra AtomicValue) (Sequence, bool, error) {
+func evalDateTimeArithmetic(ec *evalContext, op TokenType, la, ra AtomicValue) (Sequence, bool, error) {
 	lDur := isDurationType(la.TypeName)
 	rDur := isDurationType(ra.TypeName)
 	lDT := isDateTimeType(la.TypeName)
@@ -60,7 +60,7 @@ func evalDateTimeArithmetic(op TokenType, la, ra AtomicValue) (Sequence, bool, e
 	// dateTime - dateTime → dayTimeDuration
 	// time - time → dayTimeDuration
 	if lDT && rDT && la.TypeName == ra.TypeName && op == TokenMinus {
-		return arithmeticDateTimeDatetime(la, ra)
+		return arithmeticDateTimeDatetime(ec, la, ra)
 	}
 
 	// Not a date/time/duration operation
@@ -226,9 +226,21 @@ func addMonths(t time.Time, months int) time.Time {
 }
 
 // arithmeticDateTimeDatetime handles dateTime - dateTime, date - date, time - time.
-func arithmeticDateTimeDatetime(la, ra AtomicValue) (Sequence, bool, error) {
+// Per XPath spec, if either operand lacks a timezone, the implicit timezone is applied.
+func arithmeticDateTimeDatetime(ec *evalContext, la, ra AtomicValue) (Sequence, bool, error) {
 	ta := la.TimeVal()
 	tb := ra.TimeVal()
+
+	// Per XPath spec, apply implicit timezone to operands that lack an explicit timezone.
+	// Use attachTimezone (not In) to preserve the local time components.
+	implicitTZ := ec.getImplicitTimezone()
+	if !HasTimezone(ta) {
+		ta = attachTimezone(ta, implicitTZ)
+	}
+	if !HasTimezone(tb) {
+		tb = attachTimezone(tb, implicitTZ)
+	}
+
 	diff := ta.Sub(tb)
 
 	totalSecs := diff.Seconds()
@@ -276,6 +288,15 @@ func arithmeticDurationDivDuration(la, ra AtomicValue) (Sequence, bool, error) {
 
 	r := new(big.Rat).SetFloat64(lVal / rVal)
 	return SingleDecimal(r), true, nil
+}
+
+// attachTimezone sets the timezone on a time value without converting the local
+// time components. This is used when the XPath spec says to "apply" the implicit
+// timezone to a timezone-less value: the local time stays the same, only the
+// timezone label changes. This differs from time.In() which preserves the UTC
+// instant and changes the local representation.
+func attachTimezone(t time.Time, loc *time.Location) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)
 }
 
 // resultDurationType determines the result type for duration ± duration.

@@ -316,26 +316,19 @@ func fnAdjustDateTimeToTimezone(ctx context.Context, args []Sequence) (Sequence,
 		return nil, nil
 	}
 	if len(args) > 1 && len(args[1]) == 0 {
-		// Remove timezone
-		t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.UTC)
+		// Remove timezone: keep local components
+		t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), noTZLocation)
 		return SingleAtomic(AtomicValue{TypeName: TypeDateTime, Value: t}), nil
 	}
-	if len(args) > 1 {
-		d, ok := extractDuration(args[1])
-		if !ok {
-			return nil, &XPathError{Code: "XPTY0004", Message: "expected dayTimeDuration"}
-		}
-		if err := validateTimezoneOffset(d); err != nil {
-			return nil, err
-		}
-		loc := durationToLocation(d)
-		t = t.In(loc)
+	loc, err := getTargetTimezone(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+	if !HasTimezone(t) {
+		// No timezone — attach the target timezone (same local time)
+		t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)
 	} else {
-		// Adjust to implicit timezone from the dynamic context
-		loc := time.Local
-		if ec := getFnContext(ctx); ec != nil {
-			loc = ec.getImplicitTimezone()
-		}
+		// Has timezone — convert
 		t = t.In(loc)
 	}
 	return SingleAtomic(AtomicValue{TypeName: TypeDateTime, Value: t}), nil
@@ -348,39 +341,20 @@ func fnAdjustDateToTimezone(ctx context.Context, args []Sequence) (Sequence, err
 	}
 	if len(args) > 1 && len(args[1]) == 0 {
 		// Remove timezone: keep local date
-		t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+		t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, noTZLocation)
 		return SingleAtomic(AtomicValue{TypeName: TypeDate, Value: t}), nil
 	}
-	if len(args) > 1 {
-		d, ok := extractDuration(args[1])
-		if !ok {
-			return nil, &XPathError{Code: "XPTY0004", Message: "expected dayTimeDuration"}
-		}
-		if err := validateTimezoneOffset(d); err != nil {
-			return nil, err
-		}
-		loc := durationToLocation(d)
-		if t.Location() == time.UTC {
-			// No timezone — just attach the new timezone
-			t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc)
-		} else {
-			// Has timezone — convert via dateTime (T00:00:00), then extract date
-			// Per XPath F&O §10.7.2
-			dt := t.In(loc)
-			t = time.Date(dt.Year(), dt.Month(), dt.Day(), 0, 0, 0, 0, loc)
-		}
+	loc, err := getTargetTimezone(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+	if !HasTimezone(t) {
+		// No timezone — attach the target timezone (same local date)
+		t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc)
 	} else {
-		// No second arg — adjust to implicit timezone from dynamic context
-		loc := time.Local
-		if ec := getFnContext(ctx); ec != nil {
-			loc = ec.getImplicitTimezone()
-		}
-		if t.Location() == time.UTC {
-			t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc)
-		} else {
-			dt := t.In(loc)
-			t = time.Date(dt.Year(), dt.Month(), dt.Day(), 0, 0, 0, 0, loc)
-		}
+		// Has timezone — convert via dateTime (T00:00:00), then extract date
+		dt := t.In(loc)
+		t = time.Date(dt.Year(), dt.Month(), dt.Day(), 0, 0, 0, 0, loc)
 	}
 	return SingleAtomic(AtomicValue{TypeName: TypeDate, Value: t}), nil
 }
@@ -392,10 +366,27 @@ func fnAdjustTimeToTimezone(ctx context.Context, args []Sequence) (Sequence, err
 	}
 	if len(args) > 1 && len(args[1]) == 0 {
 		// Remove timezone: keep local time components
-		t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.UTC)
+		t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), noTZLocation)
 		return SingleAtomic(AtomicValue{TypeName: TypeTime, Value: t}), nil
 	}
-	if len(args) > 1 {
+	loc, err := getTargetTimezone(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+	if !HasTimezone(t) {
+		// No timezone — attach the target timezone (same local time)
+		t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)
+	} else {
+		// Has timezone — convert
+		t = t.In(loc)
+	}
+	return SingleAtomic(AtomicValue{TypeName: TypeTime, Value: t}), nil
+}
+
+// getTargetTimezone extracts the target timezone from the second argument (if provided)
+// or falls back to the implicit timezone from the dynamic context.
+func getTargetTimezone(ctx context.Context, args []Sequence) (*time.Location, error) {
+	if len(args) > 1 && len(args[1]) > 0 {
 		d, ok := extractDuration(args[1])
 		if !ok {
 			return nil, &XPathError{Code: "XPTY0004", Message: "expected dayTimeDuration"}
@@ -403,17 +394,12 @@ func fnAdjustTimeToTimezone(ctx context.Context, args []Sequence) (Sequence, err
 		if err := validateTimezoneOffset(d); err != nil {
 			return nil, err
 		}
-		loc := durationToLocation(d)
-		t = t.In(loc)
-	} else {
-		// Adjust to implicit timezone from the dynamic context
-		loc := time.Local
-		if ec := getFnContext(ctx); ec != nil {
-			loc = ec.getImplicitTimezone()
-		}
-		t = t.In(loc)
+		return durationToLocation(d), nil
 	}
-	return SingleAtomic(AtomicValue{TypeName: TypeTime, Value: t}), nil
+	if ec := getFnContext(ctx); ec != nil {
+		return ec.getImplicitTimezone(), nil
+	}
+	return time.Local, nil
 }
 
 // validateTimezoneOffset checks that a duration used as a timezone offset is
