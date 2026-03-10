@@ -16,11 +16,10 @@ type DocOrderCache struct {
 //
 // Namespace nodes are virtual (NamespaceNodeWrapper is created fresh on each
 // namespace axis traversal) so they cannot be indexed during BuildFrom.
-// They receive the same position as their parent element. This is correct
-// because: (1) the parent has position P and its first attribute has P+1, so
-// namespace nodes at P sort between the element and its attributes/children;
-// (2) SliceStable preserves input order for equal positions, keeping
-// same-parent namespace nodes in their traversal order; (3) namespace nodes
+// They receive position parent_pos + 1, which is a dedicated slot between the
+// parent element and its first attribute/child (indexWalk uses stride 2).
+// SliceStable preserves input order for equal positions, keeping
+// same-parent namespace nodes in their traversal order. Namespace nodes
 // are deduplicated by {parent, prefix} in DeduplicateNodes/MergeNodeSets,
 // so duplicates from different union branches are already eliminated.
 func (c *DocOrderCache) Position(n helium.Node) int {
@@ -32,7 +31,10 @@ func (c *DocOrderCache) Position(n helium.Node) int {
 		if parent == nil {
 			return 0
 		}
-		return c.Position(parent)
+		// Namespace nodes sort after their parent element but before
+		// attributes and children. The +1 offset lands in the gap
+		// left by stride-2 indexing in indexWalk.
+		return c.Position(parent) + 1
 	}
 	pos, ok := c.positions[n]
 	if !ok {
@@ -54,11 +56,13 @@ func (c *DocOrderCache) BuildFrom(root helium.Node) {
 
 func (c *DocOrderCache) indexWalk(cur helium.Node, pos *int) {
 	c.positions[cur] = *pos
-	(*pos)++
+	// Stride 2: each node occupies an even slot, leaving odd slots
+	// for virtual namespace nodes (position = parent + 1).
+	*pos += 2
 	if elem, ok := cur.(*helium.Element); ok {
 		for _, attr := range elem.Attributes() {
 			c.positions[helium.Node(attr)] = *pos
-			(*pos)++
+			*pos += 2
 		}
 	}
 	for child := cur.FirstChild(); child != nil; child = child.NextSibling() {
@@ -150,7 +154,16 @@ func MergeNodeSets(a, b []helium.Node, cache *DocOrderCache, maxNodes int) ([]he
 }
 
 // DocumentRoot returns the owning Document or the topmost ancestor.
+// Namespace node wrappers may not have OwnerDocument set, so we
+// resolve via Parent first for those.
 func DocumentRoot(n helium.Node) helium.Node {
+	// Namespace node wrappers are created fresh and may lack
+	// OwnerDocument; start from the parent element instead.
+	if n.Type() == helium.NamespaceNode {
+		if p := n.Parent(); p != nil {
+			n = p
+		}
+	}
 	if doc := n.OwnerDocument(); doc != nil {
 		return doc
 	}
