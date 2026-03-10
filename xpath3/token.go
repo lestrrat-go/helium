@@ -106,9 +106,9 @@ const (
 	TokenArray    // array
 
 	// Node comparison
-	TokenIs       // is
-	TokenNodePre  // << (node precedes)
-	TokenNodeFol  // >> (node follows)
+	TokenIs      // is
+	TokenNodePre // << (node precedes)
+	TokenNodeFol // >> (node follows)
 )
 
 var tokenNames = map[TokenType]string{

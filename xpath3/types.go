@@ -33,24 +33,24 @@ func (NodeItem) itemTag() {}
 
 // Atomic type name constants matching XSD types.
 const (
-	TypeString             = "xs:string"
-	TypeInteger            = "xs:integer"
-	TypeDecimal            = "xs:decimal"
-	TypeDouble             = "xs:double"
-	TypeFloat              = "xs:float"
-	TypeBoolean            = "xs:boolean"
-	TypeDate               = "xs:date"
-	TypeDateTime           = "xs:dateTime"
-	TypeTime               = "xs:time"
-	TypeDuration           = "xs:duration"
-	TypeDayTimeDuration    = "xs:dayTimeDuration"
-	TypeYearMonthDuration  = "xs:yearMonthDuration"
-	TypeAnyURI             = "xs:anyURI"
-	TypeQName              = "xs:QName"
-	TypeBase64Binary       = "xs:base64Binary"
-	TypeHexBinary          = "xs:hexBinary"
-	TypeUntypedAtomic      = "xs:untypedAtomic"
-	TypeAnyAtomicType      = "xs:anyAtomicType"
+	TypeString            = "xs:string"
+	TypeInteger           = "xs:integer"
+	TypeDecimal           = "xs:decimal"
+	TypeDouble            = "xs:double"
+	TypeFloat             = "xs:float"
+	TypeBoolean           = "xs:boolean"
+	TypeDate              = "xs:date"
+	TypeDateTime          = "xs:dateTime"
+	TypeTime              = "xs:time"
+	TypeDuration          = "xs:duration"
+	TypeDayTimeDuration   = "xs:dayTimeDuration"
+	TypeYearMonthDuration = "xs:yearMonthDuration"
+	TypeAnyURI            = "xs:anyURI"
+	TypeQName             = "xs:QName"
+	TypeBase64Binary      = "xs:base64Binary"
+	TypeHexBinary         = "xs:hexBinary"
+	TypeUntypedAtomic     = "xs:untypedAtomic"
+	TypeAnyAtomicType     = "xs:anyAtomicType"
 
 	// Derived integer types
 	TypeLong               = "xs:long"
@@ -299,8 +299,8 @@ type QNameValue struct {
 // Duration represents an XSD duration (used for xs:duration, xs:dayTimeDuration,
 // xs:yearMonthDuration).
 type Duration struct {
-	Months  int // total months (years*12 + months)
-	Seconds float64 // total seconds (days*86400 + hours*3600 + minutes*60 + seconds)
+	Months   int     // total months (years*12 + months)
+	Seconds  float64 // total seconds (days*86400 + hours*3600 + minutes*60 + seconds)
 	Negative bool
 }
 

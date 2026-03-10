@@ -415,4 +415,3 @@ func durationToLocation(d Duration) *time.Location {
 	}
 	return time.FixedZone("", offset)
 }
-

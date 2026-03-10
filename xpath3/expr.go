@@ -152,7 +152,7 @@ const (
 
 // SequenceType is used in instance-of, cast-as, castable-as, treat-as.
 type SequenceType struct {
-	ItemTest   NodeTest   // reuses NodeTest interface for item type matching
+	ItemTest   NodeTest // reuses NodeTest interface for item type matching
 	Occurrence Occurrence
 	Void       bool // true for empty-sequence()
 }

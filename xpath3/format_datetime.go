@@ -197,8 +197,8 @@ func stripSpaces(s string) string {
 }
 
 type dtPresentation struct {
-	format    string // the format token (e.g., "01", "1", "Nn", "n", "N", "I", etc.)
-	ordinal   bool
+	format        string // the format token (e.g., "01", "1", "Nn", "n", "N", "I", etc.)
+	ordinal       bool
 	isTraditional bool
 }
 

@@ -130,7 +130,6 @@ func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: math.RoundToEven(n*scale) / scale}), nil
 }
 
-
 func fnFormatNumber(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil

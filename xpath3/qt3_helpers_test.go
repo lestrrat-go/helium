@@ -6,11 +6,11 @@ import (
 	"math"
 	"math/big"
 	"os"
-	"time"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"

@@ -17,70 +17,70 @@ func TestCastFromString(t *testing.T) {
 		check      func(t *testing.T, v xpath3.AtomicValue)
 	}{
 		{
-			name: "string to integer",
+			name:  "string to integer",
 			input: "42", targetType: xpath3.TypeInteger,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				require.Equal(t, int64(42), v.IntegerVal())
 			},
 		},
 		{
-			name: "string to negative integer",
+			name:  "string to negative integer",
 			input: "-7", targetType: xpath3.TypeInteger,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				require.Equal(t, int64(-7), v.IntegerVal())
 			},
 		},
 		{
-			name: "string to double",
+			name:  "string to double",
 			input: "3.14", targetType: xpath3.TypeDouble,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				require.InDelta(t, 3.14, v.DoubleVal(), 0.001)
 			},
 		},
 		{
-			name: "string to double INF",
+			name:  "string to double INF",
 			input: "INF", targetType: xpath3.TypeDouble,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				require.True(t, math.IsInf(v.DoubleVal(), 1))
 			},
 		},
 		{
-			name: "string to double NaN",
+			name:  "string to double NaN",
 			input: "NaN", targetType: xpath3.TypeDouble,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				require.True(t, math.IsNaN(v.DoubleVal()))
 			},
 		},
 		{
-			name: "string to boolean true",
+			name:  "string to boolean true",
 			input: "true", targetType: xpath3.TypeBoolean,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				require.True(t, v.BooleanVal())
 			},
 		},
 		{
-			name: "string to boolean false",
+			name:  "string to boolean false",
 			input: "false", targetType: xpath3.TypeBoolean,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				require.False(t, v.BooleanVal())
 			},
 		},
 		{
-			name: "string to boolean 1",
+			name:  "string to boolean 1",
 			input: "1", targetType: xpath3.TypeBoolean,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				require.True(t, v.BooleanVal())
 			},
 		},
 		{
-			name: "string to decimal",
+			name:  "string to decimal",
 			input: "123.45", targetType: xpath3.TypeDecimal,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				require.Equal(t, xpath3.TypeDecimal, v.TypeName)
 			},
 		},
 		{
-			name: "string to date",
+			name:  "string to date",
 			input: "2024-01-15", targetType: xpath3.TypeDate,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				tv := v.TimeVal()
@@ -90,7 +90,7 @@ func TestCastFromString(t *testing.T) {
 			},
 		},
 		{
-			name: "string to dateTime",
+			name:  "string to dateTime",
 			input: "2024-01-15T10:30:00", targetType: xpath3.TypeDateTime,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				tv := v.TimeVal()
@@ -100,7 +100,7 @@ func TestCastFromString(t *testing.T) {
 			},
 		},
 		{
-			name: "string to time",
+			name:  "string to time",
 			input: "10:30:00", targetType: xpath3.TypeTime,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				tv := v.TimeVal()
@@ -109,7 +109,7 @@ func TestCastFromString(t *testing.T) {
 			},
 		},
 		{
-			name: "string to duration",
+			name:  "string to duration",
 			input: "P1Y2M3DT4H5M6S", targetType: xpath3.TypeDuration,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				d := v.DurationVal()
@@ -118,7 +118,7 @@ func TestCastFromString(t *testing.T) {
 			},
 		},
 		{
-			name: "string to dayTimeDuration",
+			name:  "string to dayTimeDuration",
 			input: "PT24H", targetType: xpath3.TypeDayTimeDuration,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				d := v.DurationVal()
@@ -127,21 +127,21 @@ func TestCastFromString(t *testing.T) {
 			},
 		},
 		{
-			name: "string to anyURI",
+			name:  "string to anyURI",
 			input: "http://example.com", targetType: xpath3.TypeAnyURI,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				require.Equal(t, "http://example.com", v.StringVal())
 			},
 		},
 		{
-			name: "string to hexBinary",
+			name:  "string to hexBinary",
 			input: "48656C6C6F", targetType: xpath3.TypeHexBinary,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				require.Equal(t, []byte("Hello"), v.BytesVal())
 			},
 		},
 		{
-			name: "whitespace trimmed",
+			name:  "whitespace trimmed",
 			input: "  42  ", targetType: xpath3.TypeInteger,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				require.Equal(t, int64(42), v.IntegerVal())

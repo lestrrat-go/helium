@@ -16,20 +16,20 @@ const (
 
 // evalContext holds the evaluation state for an XPath 3.1 expression.
 type evalContext struct {
-	goCtx       context.Context
-	node        helium.Node
-	contextItem Item // non-nil when context item is not a node (simple map over atomics)
-	position    int
-	size        int
-	vars        map[string]Sequence
-	namespaces  map[string]string
-	functions   map[string]Function
-	fnsNS       map[QualifiedName]Function
-	depth       int
-	opCount     *int
-	opLimit     int
-	docOrder    *ixpath.DocOrderCache
-	maxNodes    int
+	goCtx            context.Context
+	node             helium.Node
+	contextItem      Item // non-nil when context item is not a node (simple map over atomics)
+	position         int
+	size             int
+	vars             map[string]Sequence
+	namespaces       map[string]string
+	functions        map[string]Function
+	fnsNS            map[QualifiedName]Function
+	depth            int
+	opCount          *int
+	opLimit          int
+	docOrder         *ixpath.DocOrderCache
+	maxNodes         int
 	currentTime      *time.Time     // current time, set once at construction for stable fn:current-*
 	implicitTimezone *time.Location // implicit timezone for fn:adjust-*-to-timezone (1-arg form)
 }
