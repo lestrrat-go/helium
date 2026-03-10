@@ -51,10 +51,10 @@ func atomicToString(v AtomicValue) (string, error) {
 		return "false", nil
 	case TypeDate:
 		t := v.Value.(time.Time)
-		return fmt.Sprintf("%04d-%02d-%02d%s", t.Year(), t.Month(), t.Day(), formatXSDTimezone(t)), nil
+		return fmt.Sprintf("%s-%02d-%02d%s", formatXSDYear(t.Year()), t.Month(), t.Day(), formatXSDTimezone(t)), nil
 	case TypeDateTime:
 		t := v.Value.(time.Time)
-		s := fmt.Sprintf("%04d-%02d-%02dT%02d:%02d:%02d", t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
+		s := fmt.Sprintf("%s-%02d-%02dT%02d:%02d:%02d", formatXSDYear(t.Year()), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
 		if ns := t.Nanosecond(); ns > 0 {
 			frac := fmt.Sprintf(".%09d", ns)
 			s += strings.TrimRight(frac, "0")
@@ -217,6 +217,17 @@ func isValidDecimalString(s string) bool {
 		}
 	}
 	return hasDigit && i == len(s)
+}
+
+// formatXSDYear formats a year per XSD canonical rules:
+// - At least 4 digits, zero-padded
+// - Negative years get a leading '-'
+// - Years > 9999 use as many digits as needed
+func formatXSDYear(year int) string {
+	if year < 0 {
+		return fmt.Sprintf("-%04d", -year)
+	}
+	return fmt.Sprintf("%04d", year)
 }
 
 func parseXPathDouble(s string) (float64, error) {

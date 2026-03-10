@@ -39,14 +39,66 @@ func formatXSDTimezone(t time.Time) string {
 	return fmt.Sprintf("%+03d:%02d", h, m)
 }
 
+// splitXSDYear splits an XSD date/dateTime string into the year (as int) and
+// the remainder starting from the first '-' after the year digits.
+// It handles optional leading '-' for negative years and years with more than
+// 4 digits (e.g., "-0002-06-01" → year=-2, rest="-06-01";
+// "654321-01-01" → year=654321, rest="-01-01").
+func splitXSDYear(s string) (int, string, error) {
+	i := 0
+	neg := false
+	if i < len(s) && s[i] == '-' {
+		neg = true
+		i++
+	}
+	// Consume year digits (at least 4 required by XSD)
+	start := i
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		i++
+	}
+	digits := i - start
+	if digits < 4 {
+		return 0, "", fmt.Errorf("year must have at least 4 digits")
+	}
+	yearStr := s[start:i]
+	year, err := strconv.Atoi(yearStr)
+	if err != nil {
+		return 0, "", fmt.Errorf("invalid year: %q", yearStr)
+	}
+	if neg {
+		year = -year
+	}
+	return year, s[i:], nil
+}
+
+// buildTimeFromParts constructs a time.Time from a parsed year and the
+// remaining month-day (and optional time/tz) components. It uses time.Parse
+// with a reference year of 2006, then replaces the year with the actual value.
+func buildTimeFromParts(year int, rest string, layouts []string, original string) (time.Time, bool) {
+	// rest starts with "-MM-DD..." — prepend a synthetic 4-digit year for time.Parse
+	synthetic := "2006" + rest
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, synthetic); err == nil {
+			// Replace the reference year with the actual year
+			t = time.Date(year, t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), t.Location())
+			t = ensureExplicitTZ(t, original)
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
 func parseXSDDate(s string) (time.Time, error) {
-	for _, layout := range []string{
+	year, rest, err := splitXSDYear(s)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid xs:date: %q", s)
+	}
+	layouts := []string{
 		"2006-01-02Z07:00",
 		"2006-01-02",
-	} {
-		if t, err := time.Parse(layout, s); err == nil {
-			return ensureExplicitTZ(t, s), nil
-		}
+	}
+	if t, ok := buildTimeFromParts(year, rest, layouts, s); ok {
+		return t, nil
 	}
 	return time.Time{}, fmt.Errorf("invalid xs:date: %q", s)
 }
@@ -58,19 +110,21 @@ func parseXSDDateTime(s string) (time.Time, error) {
 	if isMidnight24 {
 		target = normalized
 	}
-	for _, layout := range []string{
+	year, rest, err := splitXSDYear(target)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid xs:dateTime: %q", s)
+	}
+	layouts := []string{
 		"2006-01-02T15:04:05.999999999Z07:00",
 		"2006-01-02T15:04:05Z07:00",
 		"2006-01-02T15:04:05.999999999",
 		"2006-01-02T15:04:05",
-	} {
-		if t, err := time.Parse(layout, target); err == nil {
-			t = ensureExplicitTZ(t, s)
-			if isMidnight24 {
-				t = t.AddDate(0, 0, 1) // advance to next day
-			}
-			return t, nil
+	}
+	if t, ok := buildTimeFromParts(year, rest, layouts, s); ok {
+		if isMidnight24 {
+			t = t.AddDate(0, 0, 1) // advance to next day
 		}
+		return t, nil
 	}
 	return time.Time{}, fmt.Errorf("invalid xs:dateTime: %q", s)
 }

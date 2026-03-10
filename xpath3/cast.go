@@ -183,6 +183,15 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 			return AtomicValue{}, err
 		}
 		return AtomicValue{TypeName: targetType, Value: s}, nil
+	case TypeQName:
+		// QName → QName is handled by identity check above.
+		// String/untypedAtomic → QName requires namespace context and is
+		// handled by evalCastExpr or the xs:QName constructor function.
+		// If we reach here without context, report an appropriate error.
+		return AtomicValue{}, &XPathError{
+			Code:    "XPTY0004",
+			Message: fmt.Sprintf("cannot cast %s to %s (requires namespace context)", v.TypeName, TypeQName),
+		}
 	}
 
 	return AtomicValue{}, &XPathError{

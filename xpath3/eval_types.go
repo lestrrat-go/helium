@@ -1,6 +1,9 @@
 package xpath3
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 func evalInstanceOfExpr(ec *evalContext, e InstanceOfExpr) (Sequence, error) {
 	seq, err := eval(ec, e.Expr)
@@ -29,6 +32,14 @@ func evalCastExpr(ec *evalContext, e CastExpr) (Sequence, error) {
 		return nil, err
 	}
 	targetType := resolveAtomicTypeName(e.Type, ec)
+	// xs:QName cast from string requires namespace context
+	if targetType == TypeQName {
+		result, err := castToQName(av, ec)
+		if err != nil {
+			return nil, err
+		}
+		return SingleAtomic(result), nil
+	}
 	result, err := CastAtomic(av, targetType)
 	if err != nil {
 		return nil, err
@@ -58,6 +69,11 @@ func evalCastableExpr(ec *evalContext, e CastableExpr) (Sequence, error) {
 	av, err := AtomizeItem(seq[0])
 	if err != nil {
 		return SingleBoolean(false), nil
+	}
+	// xs:QName cast from string requires namespace context
+	if targetType == TypeQName {
+		_, castErr := castToQName(av, ec)
+		return SingleBoolean(castErr == nil), nil
 	}
 	_, castErr := CastAtomic(av, targetType)
 	return SingleBoolean(castErr == nil), nil
@@ -174,4 +190,61 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		return ok
 	}
 	return false
+}
+
+// castToQName casts an atomic value to xs:QName using the evaluation context's
+// namespace bindings to resolve prefixes. Per XPath 3.1, casting from xs:string
+// (or xs:untypedAtomic) to xs:QName requires namespace context.
+func castToQName(v AtomicValue, ec *evalContext) (AtomicValue, error) {
+	// QName → QName: identity
+	if v.TypeName == TypeQName {
+		return v, nil
+	}
+
+	// Only string and untypedAtomic can be cast to QName
+	if v.TypeName != TypeString && v.TypeName != TypeUntypedAtomic {
+		return AtomicValue{}, &XPathError{
+			Code:    "XPTY0004",
+			Message: fmt.Sprintf("cannot cast %s to %s", v.TypeName, TypeQName),
+		}
+	}
+
+	s := strings.TrimSpace(v.StringVal())
+	prefix := ""
+	local := s
+	if idx := strings.IndexByte(s, ':'); idx >= 0 {
+		prefix = s[:idx]
+		local = s[idx+1:]
+	}
+
+	uri := ""
+	if prefix != "" {
+		if ec != nil && ec.namespaces != nil {
+			if ns, ok := ec.namespaces[prefix]; ok {
+				uri = ns
+			} else {
+				return AtomicValue{}, &XPathError{
+					Code:    "FONS0004",
+					Message: fmt.Sprintf("no namespace binding for prefix %q", prefix),
+				}
+			}
+		} else {
+			return AtomicValue{}, &XPathError{
+				Code:    "FONS0004",
+				Message: fmt.Sprintf("no namespace binding for prefix %q", prefix),
+			}
+		}
+	} else {
+		// No prefix: check default namespace in context
+		if ec != nil && ec.namespaces != nil {
+			if ns, ok := ec.namespaces[""]; ok {
+				uri = ns
+			}
+		}
+	}
+
+	return AtomicValue{
+		TypeName: TypeQName,
+		Value:    QNameValue{Prefix: prefix, Local: local, URI: uri},
+	}, nil
 }

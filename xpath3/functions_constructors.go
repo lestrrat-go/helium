@@ -31,10 +31,12 @@ func init() {
 		{"base64Binary", TypeBase64Binary},
 		{"hexBinary", TypeHexBinary},
 		{"untypedAtomic", TypeUntypedAtomic},
-		{"QName", TypeQName},
 	} {
 		registerNS(NSXS, entry.name, 1, 1, makeXSConstructor(entry.targetType))
 	}
+
+	// xs:QName constructor needs namespace context to resolve prefixes
+	registerNS(NSXS, "QName", 1, 1, makeXSQNameConstructor())
 
 	// Derived integer types — cast to integer, then validate range
 	for _, entry := range []struct {
@@ -123,6 +125,70 @@ func makeXSConstructor(targetType string) func(context.Context, []Sequence) (Seq
 			return nil, err
 		}
 		return SingleAtomic(result), nil
+	}
+}
+
+// makeXSQNameConstructor returns a constructor for xs:QName that resolves
+// prefixes using the namespace context from the evaluator.
+func makeXSQNameConstructor() func(context.Context, []Sequence) (Sequence, error) {
+	return func(ctx context.Context, args []Sequence) (Sequence, error) {
+		if len(args[0]) == 0 {
+			return nil, nil
+		}
+		a, err := AtomizeItem(args[0][0])
+		if err != nil {
+			return nil, err
+		}
+		// If already a QName, return as-is
+		if a.TypeName == TypeQName {
+			return SingleAtomic(a), nil
+		}
+		s, err := atomicToString(a)
+		if err != nil {
+			return nil, err
+		}
+		s = strings.TrimSpace(s)
+
+		prefix := ""
+		local := s
+		if idx := strings.IndexByte(s, ':'); idx >= 0 {
+			prefix = s[:idx]
+			local = s[idx+1:]
+		}
+
+		uri := ""
+		if prefix != "" {
+			// Look up the prefix in the evaluation context's namespace bindings
+			ec := getFnContext(ctx)
+			if ec != nil && ec.namespaces != nil {
+				if ns, ok := ec.namespaces[prefix]; ok {
+					uri = ns
+				} else {
+					return nil, &XPathError{
+						Code:    "FONS0004",
+						Message: fmt.Sprintf("no namespace binding for prefix %q", prefix),
+					}
+				}
+			} else {
+				return nil, &XPathError{
+					Code:    "FONS0004",
+					Message: fmt.Sprintf("no namespace binding for prefix %q", prefix),
+				}
+			}
+		} else {
+			// No prefix: check default namespace in context
+			ec := getFnContext(ctx)
+			if ec != nil && ec.namespaces != nil {
+				if ns, ok := ec.namespaces[""]; ok {
+					uri = ns
+				}
+			}
+		}
+
+		return SingleAtomic(AtomicValue{
+			TypeName: TypeQName,
+			Value:    QNameValue{Prefix: prefix, Local: local, URI: uri},
+		}), nil
 	}
 }
 
