@@ -682,12 +682,12 @@ func sortedCategoryNames(cats map[string][]generatedTest) []string {
 
 func removeOldGeneratedFiles(dir string) {
 	// Remove old single-file output
-	os.Remove(filepath.Join(dir, "qt3_generated_test.go"))
+	_ = os.Remove(filepath.Join(dir, "qt3_generated_test.go"))
 
 	// Remove old per-category files
 	matches, _ := filepath.Glob(filepath.Join(dir, "qt3_*_gen_test.go"))
 	for _, m := range matches {
-		os.Remove(m)
+		_ = os.Remove(m)
 	}
 }
 
@@ -696,7 +696,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
@@ -704,7 +704,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 	_, err = io.Copy(out, in)
 	return err
 }
