@@ -158,7 +158,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		if !ok {
 			return false
 		}
-		targetType := resolveAtomicTypeName(AtomicTypeName{Prefix: t.Prefix, Name: t.Name}, ec)
+		targetType := resolveAtomicTypeName(AtomicTypeName(t), ec)
 		if targetType == TypeAnyAtomicType {
 			return true
 		}
