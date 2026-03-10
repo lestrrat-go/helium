@@ -305,11 +305,76 @@ func fnReplace(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(args) > 3 {
 		flags = seqToString(args[3])
 	}
+
+	isLiteral := strings.Contains(flags, "q")
+
+	var goRepl string
+	if isLiteral {
+		// With q flag, replacement is literal — escape Go's special chars
+		goRepl = strings.ReplaceAll(replacement, "$", "$$")
+	} else {
+		// Validate and translate XPath replacement string to Go syntax.
+		var err error
+		goRepl, err = translateXPathReplacement(replacement)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	re, err := compileXPathRegex(pattern, flags)
 	if err != nil {
 		return nil, err
 	}
-	return SingleString(re.ReplaceAllString(s, replacement)), nil
+
+	// XPath spec: error if pattern matches empty string
+	if re.MatchString("") {
+		return nil, &XPathError{Code: "FORX0003", Message: "replacement pattern matches zero-length string"}
+	}
+
+	return SingleString(re.ReplaceAllString(s, goRepl)), nil
+}
+
+// translateXPathReplacement converts an XPath replacement string to Go regexp syntax.
+// XPath uses: $N for backrefs, \$ for literal $, \\ for literal \.
+// Go uses:    $N for backrefs, $$ for literal $.
+func translateXPathReplacement(repl string) (string, error) {
+	var b strings.Builder
+	for i := 0; i < len(repl); i++ {
+		ch := repl[i]
+		switch ch {
+		case '\\':
+			if i+1 >= len(repl) {
+				return "", &XPathError{Code: "FORX0004", Message: "invalid replacement string: trailing backslash"}
+			}
+			next := repl[i+1]
+			switch next {
+			case '\\':
+				b.WriteByte('\\')
+				i++
+			case '$':
+				b.WriteString("$$") // Go's literal $
+				i++
+			default:
+				return "", &XPathError{Code: "FORX0004", Message: fmt.Sprintf("invalid replacement string: \\%c", next)}
+			}
+		case '$':
+			if i+1 >= len(repl) || repl[i+1] < '0' || repl[i+1] > '9' {
+				return "", &XPathError{Code: "FORX0004", Message: "invalid replacement string: $ not followed by digit"}
+			}
+			// Collect all digits after $ for the group number
+			i++
+			b.WriteString("${")
+			for i < len(repl) && repl[i] >= '0' && repl[i] <= '9' {
+				b.WriteByte(repl[i])
+				i++
+			}
+			b.WriteByte('}')
+			i-- // outer loop will i++
+		default:
+			b.WriteByte(ch)
+		}
+	}
+	return b.String(), nil
 }
 
 func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {

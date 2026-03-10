@@ -153,7 +153,19 @@ func qt3EBV(seq xpath3.Sequence) (bool, error) {
 func qt3AssertEq(expected string) qt3Assertion {
 	return func(t *testing.T, seq xpath3.Sequence) {
 		t.Helper()
-		require.Equal(t, expected, qt3StringValue(seq))
+		// assert-eq: expected is an XPath expression; evaluate it and compare string values
+		compiled, err := xpath3.Compile(expected)
+		if err != nil {
+			// Not a valid XPath expr — compare as literal string
+			require.Equal(t, expected, qt3StringValue(seq))
+			return
+		}
+		result, err := compiled.Evaluate(t.Context(), nil)
+		if err != nil {
+			require.Equal(t, expected, qt3StringValue(seq))
+			return
+		}
+		require.Equal(t, qt3StringValue(result.Sequence()), qt3StringValue(seq))
 	}
 }
 
@@ -234,7 +246,15 @@ func qt3AssertSkip() qt3Assertion {
 
 func qt3CheckEq(expected string) qt3Check {
 	return func(seq xpath3.Sequence) bool {
-		return qt3StringValue(seq) == expected
+		compiled, err := xpath3.Compile(expected)
+		if err != nil {
+			return qt3StringValue(seq) == expected
+		}
+		result, err := compiled.Evaluate(context.Background(), nil)
+		if err != nil {
+			return qt3StringValue(seq) == expected
+		}
+		return qt3StringValue(seq) == qt3StringValue(result.Sequence())
 	}
 }
 
