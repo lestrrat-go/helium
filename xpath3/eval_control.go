@@ -6,6 +6,19 @@ import (
 	"strings"
 )
 
+// atomicToInteger extracts an int from an AtomicValue that is an integer type.
+// Returns (index, true) if the value is xs:integer or derived, (0, false) otherwise.
+func atomicToInteger(a AtomicValue) (int, bool) {
+	if !isIntegerDerived(a.TypeName) {
+		return 0, false
+	}
+	n, ok := a.Value.(*big.Int)
+	if !ok {
+		return 0, false
+	}
+	return int(n.Int64()), true
+}
+
 func evalLookupExpr(ec *evalContext, e LookupExpr) (Sequence, error) {
 	base, err := eval(ec, e.Expr)
 	if err != nil {
@@ -50,15 +63,18 @@ func lookupItem(ec *evalContext, item Item, keyExpr Expr, all bool) (Sequence, e
 		if len(keySeq) == 0 {
 			return nil, nil
 		}
-		ka, err := AtomizeItem(keySeq[0])
-		if err != nil {
-			return nil, err
+		var result Sequence
+		for _, keyItem := range keySeq {
+			ka, err := AtomizeItem(keyItem)
+			if err != nil {
+				return nil, err
+			}
+			val, ok := v.Get(ka)
+			if ok {
+				result = append(result, val...)
+			}
 		}
-		val, ok := v.Get(ka)
-		if !ok {
-			return nil, nil
-		}
-		return val, nil
+		return result, nil
 	case ArrayItem:
 		if all {
 			var result Sequence
@@ -74,12 +90,23 @@ func lookupItem(ec *evalContext, item Item, keyExpr Expr, all bool) (Sequence, e
 		if len(keySeq) == 0 {
 			return nil, nil
 		}
-		ka, err := AtomizeItem(keySeq[0])
-		if err != nil {
-			return nil, err
+		var result Sequence
+		for _, keyItem := range keySeq {
+			ka, err := AtomizeItem(keyItem)
+			if err != nil {
+				return nil, err
+			}
+			idx, ok := atomicToInteger(ka)
+			if !ok {
+				return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("array lookup key must be xs:integer, got %s", ka.TypeName)}
+			}
+			member, err := v.Get(idx)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, member...)
 		}
-		idx := int(ka.ToFloat64())
-		return v.Get(idx)
+		return result, nil
 	default:
 		return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("lookup requires map or array, got %T", item)}
 	}

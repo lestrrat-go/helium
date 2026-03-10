@@ -884,11 +884,11 @@ func (p *parser) parseLookupKey() (Expr, bool, error) {
 			return nil, false, fmt.Errorf("%w: integer lookup key but got %s", ErrExpectedToken, tok)
 		}
 		p.lexer.Next()
-		v, err := strconv.ParseFloat(tok.Value, 64)
-		if err != nil {
-			return nil, false, fmt.Errorf("invalid lookup index %q: %w", tok.Value, err)
+		n := new(big.Int)
+		if _, ok := n.SetString(tok.Value, 10); !ok {
+			return nil, false, fmt.Errorf("invalid lookup index %q", tok.Value)
 		}
-		return LiteralExpr{Value: v}, false, nil
+		return LiteralExpr{Value: n}, false, nil
 	case TokenLParen:
 		expr, err := p.parseParenExprOrEmpty()
 		if err != nil {
