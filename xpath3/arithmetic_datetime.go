@@ -179,6 +179,11 @@ func arithmeticDateTimeDuration(op TokenType, dt, dur AtomicValue) (Sequence, bo
 		return nil, true, &XPathError{Code: "XPTY0004", Message: "invalid operator for date/time ± duration"}
 	}
 
+	// xs:time can only be combined with xs:dayTimeDuration, not xs:yearMonthDuration
+	if dt.TypeName == TypeTime && (dur.TypeName == TypeYearMonthDuration || dur.TypeName == TypeDuration) {
+		return nil, true, &XPathError{Code: "XPTY0004", Message: "cannot combine xs:time with xs:yearMonthDuration"}
+	}
+
 	t := dt.TimeVal()
 	d := dur.DurationVal()
 
