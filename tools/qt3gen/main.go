@@ -382,6 +382,14 @@ func getTestSetSkipReason(name string) string {
 		return "requires URI resolution"
 	case "fn-doc", "fn-doc-available":
 		return "requires URI resolution"
+	case "fn-json-to-xml", "fn-xml-to-json":
+		return "requires fn:json-to-xml / fn:xml-to-json"
+	case "fn-serialize":
+		return "requires serialization"
+	case "fn-parse-xml", "fn-parse-xml-fragment":
+		return "requires fn:parse-xml"
+	case "fn-random-number-generator":
+		return "requires fn:random-number-generator"
 	}
 	return ""
 }
