@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
@@ -69,12 +68,30 @@ func fnCodepointsToString(_ context.Context, args []Sequence) (Sequence, error) 
 			return nil, err
 		}
 		cp := int(a.ToFloat64())
-		if !utf8.ValidRune(rune(cp)) {
-			return nil, &XPathError{Code: "FOCH0001", Message: fmt.Sprintf("invalid codepoint: %d", cp)}
+		if !isValidXMLCodepoint(cp) {
+			return nil, &XPathError{Code: "FOCH0001", Message: fmt.Sprintf("invalid XML character [x%X]", cp)}
 		}
 		b.WriteRune(rune(cp))
 	}
 	return SingleString(b.String()), nil
+}
+
+// isValidXMLCodepoint returns true if the codepoint is a valid XML character.
+// Per XML 1.0 §2.2: #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
+func isValidXMLCodepoint(cp int) bool {
+	if cp == 0x9 || cp == 0xA || cp == 0xD {
+		return true
+	}
+	if cp >= 0x20 && cp <= 0xD7FF {
+		return true
+	}
+	if cp >= 0xE000 && cp <= 0xFFFD {
+		return true
+	}
+	if cp >= 0x10000 && cp <= 0x10FFFF {
+		return true
+	}
+	return false
 }
 
 func fnStringToCodepoints(_ context.Context, args []Sequence) (Sequence, error) {

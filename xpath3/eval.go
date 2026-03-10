@@ -26,7 +26,7 @@ type evalContext struct {
 	functions        map[string]Function
 	fnsNS            map[QualifiedName]Function
 	depth            int
-	opCount          *int
+	opCount          *int // shared via pointer across copies; safe because eval is single-goroutine
 	opLimit          int
 	docOrder         *ixpath.DocOrderCache
 	maxNodes         int

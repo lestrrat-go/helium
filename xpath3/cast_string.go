@@ -105,7 +105,7 @@ func formatXPathDouble(f float64) string {
 	abs := math.Abs(f)
 	// XSD 1.1 §3.3.5: plain decimal for abs in [1e-6, 1e6), scientific notation
 	// for abs >= 1e6 or abs < 1e-6. The strict < excludes 1e6 intentionally.
-	if abs >= 0.000001 && abs < 1_000_000 {
+	if abs > 0.000001 && abs < 1_000_000 {
 		s := strconv.FormatFloat(f, 'f', -1, 64)
 		if !strings.Contains(s, ".") {
 			s += ".0"
@@ -159,7 +159,7 @@ func formatXPathFloat(f float64) string {
 	}
 
 	abs := math.Abs(float64(f32))
-	if abs >= 0.000001 && abs < 1_000_000 {
+	if abs > 0.000001 && abs < 1_000_000 {
 		s := strconv.FormatFloat(float64(f32), 'f', -1, 32)
 		if !strings.Contains(s, ".") {
 			s += ".0"

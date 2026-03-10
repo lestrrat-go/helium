@@ -26,6 +26,18 @@ func fnQName(_ context.Context, args []Sequence) (Sequence, error) {
 		prefix = qname[:idx]
 		local = qname[idx+1:]
 	}
+	// Validate: if there's a prefix, namespace must be non-empty
+	if prefix != "" && uri == "" {
+		return nil, &XPathError{Code: "FOCA0002", Message: "namespace must not be empty when QName has a prefix"}
+	}
+	// Validate: prefix (if present) must be a valid NCName
+	if prefix != "" && !isValidNCName(prefix) {
+		return nil, &XPathError{Code: "FOCA0002", Message: "invalid prefix in QName: " + prefix}
+	}
+	// Validate: local part must be a valid NCName
+	if !isValidNCName(local) {
+		return nil, &XPathError{Code: "FOCA0002", Message: "invalid local name in QName: " + local}
+	}
 	return SingleAtomic(AtomicValue{
 		TypeName: TypeQName,
 		Value:    QNameValue{Prefix: prefix, Local: local, URI: uri},
