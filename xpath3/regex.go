@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -392,6 +393,127 @@ var unicodeBlocks = map[string]string{
 	"CJKUnifiedIdeographsExtensionB":       `\x{20000}-\x{2A6DF}`,
 	"CJKCompatibilityIdeographsSupplement": `\x{2F800}-\x{2FA1F}`,
 	"Tags":                                 `\x{E0000}-\x{E007F}`,
+}
+
+// validateXPathRegex checks for patterns that Go's regexp accepts but
+// the XPath/XML Schema regex spec forbids. This must be called before
+// regexp.Compile to reject invalid patterns with FORX0002.
+func validateXPathRegex(pattern string) error {
+	runes := []rune(pattern)
+	inCharClass := 0
+	inQuantifier := false // true when inside a valid {n,m} quantifier
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+
+		if r == '\\' && i+1 < len(runes) {
+			next := runes[i+1]
+			// Back-references (\1, \2, ...) are not allowed in XPath regex
+			// (only in replacement strings for fn:replace).
+			if next >= '1' && next <= '9' {
+				return &XPathError{
+					Code:    "FORX0002",
+					Message: fmt.Sprintf("back-reference \\%c is not allowed in XPath regex", next),
+				}
+			}
+			// \P{X} with invalid category — check for complement class
+			// with unknown property names. The \p{X} case is already handled
+			// by translateUnicodeProperty, but we need to also catch
+			// single-letter \P with invalid categories.
+			if next == 'P' || next == 'p' {
+				neg := next == 'P'
+				if i+2 < len(runes) && runes[i+2] == '{' {
+					end := findClosingBrace(runes, i+3)
+					if end < 0 {
+						return &XPathError{
+							Code:    "FORX0002",
+							Message: fmt.Sprintf("unterminated \\%c{ in regex", next),
+						}
+					}
+					propName := string(runes[i+3 : end])
+					if _, err := translateUnicodeProperty(propName, neg); err != nil {
+						return err
+					}
+					i = end
+					continue
+				}
+			}
+			i++ // skip escaped character
+			continue
+		}
+
+		// Track character class nesting
+		if r == '[' {
+			inCharClass++
+			continue
+		}
+		if r == ']' && inCharClass > 0 {
+			inCharClass--
+			continue
+		}
+
+		// Unescaped '{' outside of a character class and outside of a valid
+		// quantifier context is invalid in XPath regex. Go's regexp accepts
+		// bare braces as literals. Inside character classes, '{' is literal.
+		if r == '{' && inCharClass == 0 {
+			if !isValidQuantifierBrace(runes, i) {
+				return &XPathError{
+					Code:    "FORX0002",
+					Message: "unescaped '{' outside quantifier is not allowed in XPath regex",
+				}
+			}
+			inQuantifier = true
+			continue
+		}
+
+		// Unescaped '}' outside a character class must close a valid quantifier.
+		// Go's regexp accepts bare '}' as a literal, but XPath regex forbids it.
+		if r == '}' && inCharClass == 0 {
+			if inQuantifier {
+				inQuantifier = false
+			} else {
+				return &XPathError{
+					Code:    "FORX0002",
+					Message: "unescaped '}' outside quantifier is not allowed in XPath regex",
+				}
+			}
+			continue
+		}
+	}
+	return nil
+}
+
+// isValidQuantifierBrace checks whether '{' at position i is part of a
+// valid quantifier {n}, {n,}, or {n,m}. The '{' must be preceded by a
+// quantifiable atom (not at the start) and its content must match the
+// quantifier pattern.
+func isValidQuantifierBrace(runes []rune, i int) bool {
+	// Must have a preceding quantifiable atom
+	if i == 0 {
+		return false
+	}
+	prev := runes[i-1]
+	// Valid preceding chars for a quantifier: ), ], or any non-meta char,
+	// or an escape sequence. We check broadly.
+	if prev == '|' || prev == '(' || prev == '{' {
+		return false
+	}
+
+	// Find closing brace
+	end := -1
+	for j := i + 1; j < len(runes); j++ {
+		if runes[j] == '}' {
+			end = j
+			break
+		}
+	}
+	if end < 0 {
+		return false
+	}
+
+	content := string(runes[i+1 : end])
+	// Must match: digits [ "," [ digits ] ]
+	quantRe := regexp.MustCompile(`^\d+(,\d*)?$`)
+	return quantRe.MatchString(content)
 }
 
 // rejectPerlSpecific checks for Perl-specific regex constructs not allowed in XPath.

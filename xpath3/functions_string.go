@@ -11,6 +11,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
+	"golang.org/x/text/unicode/norm"
 )
 
 func init() {
@@ -222,14 +223,35 @@ func fnNormalizeUnicode(_ context.Context, args []Sequence) (Sequence, error) {
 	if s == "" {
 		return SingleString(""), nil
 	}
-	// Only NFC supported in v1
+
+	formName := "NFC" // default
 	if len(args) > 1 {
-		form := strings.TrimSpace(strings.ToUpper(seqToString(args[1])))
-		if form != "" && form != "NFC" {
-			return nil, &XPathError{Code: "FOCH0003", Message: fmt.Sprintf("unsupported normalization form: %s", form)}
+		formName = strings.TrimSpace(strings.ToUpper(seqToString(args[1])))
+		if formName == "" {
+			// Empty form string means return input unchanged
+			return SingleString(s), nil
 		}
 	}
-	return SingleString(s), nil
+
+	var nf norm.Form
+	switch formName {
+	case "NFC":
+		nf = norm.NFC
+	case "NFD":
+		nf = norm.NFD
+	case "NFKC":
+		nf = norm.NFKC
+	case "NFKD":
+		nf = norm.NFKD
+	case "FULLY-NORMALIZED":
+		// FULLY-NORMALIZED is defined by the spec but rarely supported.
+		// We approximate it with NFC, which is the base requirement.
+		nf = norm.NFC
+	default:
+		return nil, &XPathError{Code: "FOCH0003", Message: fmt.Sprintf("unsupported normalization form: %s", formName)}
+	}
+
+	return SingleString(nf.String(s)), nil
 }
 
 func fnUpperCase(_ context.Context, args []Sequence) (Sequence, error) {
@@ -462,6 +484,12 @@ func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// XPath spec: error if pattern matches zero-length string
+	if re.MatchString("") {
+		return nil, &XPathError{Code: "FORX0003", Message: "tokenize pattern matches zero-length string"}
+	}
+
 	parts := re.Split(s, -1)
 	result := make(Sequence, len(parts))
 	for i, p := range parts {
@@ -557,6 +585,11 @@ func writeXMLEscaped(b *strings.Builder, s string) {
 func compileXPathRegex(pattern, flags string) (*regexp.Regexp, error) {
 	// Reject Perl-specific constructs first
 	if err := rejectPerlSpecific(pattern); err != nil {
+		return nil, err
+	}
+
+	// Validate XPath-specific regex restrictions before compilation
+	if err := validateXPathRegex(pattern); err != nil {
 		return nil, err
 	}
 
