@@ -288,9 +288,10 @@ func (p *ietfDateParser) skipComment() {
 		depth := 1
 		p.pos++
 		for p.pos < len(p.input) && depth > 0 {
-			if p.input[p.pos] == '(' {
+			switch p.input[p.pos] {
+			case '(':
 				depth++
-			} else if p.input[p.pos] == ')' {
+			case ')':
 				depth--
 			}
 			p.pos++

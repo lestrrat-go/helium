@@ -455,7 +455,7 @@ func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
 				if gs > groupPos {
 					writeXMLEscaped(&b, s[groupPos:gs])
 				}
-				b.WriteString(fmt.Sprintf(`<fn:group nr="%d">`, g))
+				fmt.Fprintf(&b, `<fn:group nr="%d">`, g)
 				writeXMLEscaped(&b, s[gs:ge])
 				b.WriteString("</fn:group>")
 				groupPos = ge

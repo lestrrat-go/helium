@@ -960,53 +960,6 @@ func tokenAsNCName(tok Token) string {
 	return ""
 }
 
-// --- Location Path Parsing ---
-
-// parseLocationPath parses → AbsoluteLocationPath | RelativeLocationPath.
-func (p *parser) parseLocationPath() (Expr, error) {
-	tok := p.lexer.Peek()
-	path := &LocationPath{}
-
-	if tok.Type == TokenSlash {
-		path.Absolute = true
-		p.lexer.Next()
-		if !p.looksLikeStep() {
-			// Bare "/" selects document root
-			return path, nil
-		}
-		steps, err := p.parseRelativeLocationPath()
-		if err != nil {
-			return nil, err
-		}
-		path.Steps = steps
-		return path, nil
-	}
-
-	if tok.Type == TokenSlashSlash {
-		path.Absolute = true
-		p.lexer.Next()
-		// // is shorthand for /descendant-or-self::node()/
-		path.Steps = append(path.Steps, Step{
-			Axis:     AxisDescendantOrSelf,
-			NodeTest: TypeTest{Kind: NodeKindNode},
-		})
-		steps, err := p.parseRelativeLocationPath()
-		if err != nil {
-			return nil, err
-		}
-		path.Steps = append(path.Steps, steps...)
-		return path, nil
-	}
-
-	// Relative
-	steps, err := p.parseRelativeLocationPath()
-	if err != nil {
-		return nil, err
-	}
-	path.Steps = steps
-	return path, nil
-}
-
 // parseRelativeLocationPath parses → Step (('/' | '//') Step)*.
 func (p *parser) parseRelativeLocationPath() ([]Step, error) {
 	step, err := p.parseStep()
@@ -1129,7 +1082,7 @@ func (p *parser) parseNodeTest(_ AxisType) (NodeTest, error) {
 				p.lexer.Next()
 				return NameTest{Prefix: "*", Local: local.Value}, nil
 			}
-			return nil, fmt.Errorf("expected local name after *:")
+			return nil, fmt.Errorf("expected local name after *")
 		}
 		return NameTest{Local: "*"}, nil
 	}

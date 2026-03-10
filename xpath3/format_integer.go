@@ -70,26 +70,26 @@ func formatIntegerPicture(n *big.Int, picture, lang string) (string, error) {
 	var result string
 	var fmtErr error
 
-	switch {
-	case primary == "A":
+	switch primary {
+	case "A":
 		result = formatAlpha(absN, true)
-	case primary == "a":
+	case "a":
 		result = formatAlpha(absN, false)
-	case primary == "I":
+	case "I":
 		result = formatRoman(absN, true)
-	case primary == "i":
+	case "i":
 		result = formatRoman(absN, false)
-	case primary == "W":
+	case "W":
 		result = formatWords(absN, lang, "upper")
 		if ordinal {
 			result = applyOrdinalWords(result, lang, "upper", ordSuffix)
 		}
-	case primary == "w":
+	case "w":
 		result = formatWords(absN, lang, "lower")
 		if ordinal {
 			result = applyOrdinalWords(result, lang, "lower", ordSuffix)
 		}
-	case primary == "Ww":
+	case "Ww":
 		result = formatWords(absN, lang, "title")
 		if ordinal {
 			result = applyOrdinalWords(result, lang, "title", ordSuffix)

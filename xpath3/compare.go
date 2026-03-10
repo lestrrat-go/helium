@@ -192,24 +192,6 @@ func comparisonFamily(typeName string) string {
 	return ""
 }
 
-// areTypesComparable returns true if two type families can be compared.
-func areTypesComparable(famA, famB string) bool {
-	if famA == famB {
-		return true
-	}
-	// numeric types are comparable with each other
-	if famA == "numeric" && famB == "numeric" {
-		return true
-	}
-	// string and anyURI are compatible (both in "string" family)
-	// duration subtypes are comparable for eq/ne
-	if (famA == "duration" || famA == "duration:YM" || famA == "duration:DT") &&
-		(famB == "duration" || famB == "duration:YM" || famB == "duration:DT") {
-		return true
-	}
-	return false
-}
-
 // promoteForValueComparison applies type promotion rules for value comparison (eq/ne/lt/gt/le/ge).
 // Per XPath 3.1 Section 3.7.2.
 func promoteForValueComparison(a, b AtomicValue) (AtomicValue, AtomicValue) {

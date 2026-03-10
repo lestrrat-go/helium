@@ -138,27 +138,6 @@ func processCharClass(runes []rune) (string, error) {
 	return translateClassContent(s)
 }
 
-// findSubtraction looks for the subtraction operator -[ in a character class.
-// Returns the index of the '-' in the subtraction, or -1.
-func findSubtraction(runes []rune) int {
-	depth := 0
-	for i := 0; i < len(runes); i++ {
-		switch runes[i] {
-		case '[':
-			depth++
-		case ']':
-			depth--
-		case '\\':
-			i++ // skip escaped char
-		case '-':
-			if depth == 1 && i > 1 && i+1 < len(runes) && runes[i+1] == '[' {
-				return i
-			}
-		}
-	}
-	return -1
-}
-
 // translateClassContent translates \p{}, \i, \c escapes inside a character class.
 func translateClassContent(s string) (string, error) {
 	var b strings.Builder

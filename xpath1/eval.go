@@ -705,19 +705,9 @@ func stringValue(n helium.Node) string {
 	return ixpath.StringValue(n)
 }
 
-// collectTextDescendants recursively collects text from Text and CDATA descendants.
-func collectTextDescendants(n helium.Node, b *strings.Builder) {
-	ixpath.CollectTextDescendants(n, b)
-}
-
 // localNameOf returns the local name of any node type.
 func localNameOf(n helium.Node) string {
 	return ixpath.LocalNameOf(n)
-}
-
-// nodePrefix returns the namespace prefix of any node type.
-func nodePrefix(n helium.Node) string {
-	return ixpath.NodePrefix(n)
 }
 
 // nodeNamespaceURI returns the namespace URI of any node type.

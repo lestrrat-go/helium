@@ -11,7 +11,3 @@ func traverseAxis(axis AxisType, node helium.Node) ([]helium.Node, error) {
 	return ixpath.TraverseAxis(ixpath.AxisType(axis), node, maxNodeSetLength)
 }
 
-// traverseAxisSimple handles axes that cannot fail (no size limits apply).
-func traverseAxisSimple(axis AxisType, node helium.Node) []helium.Node {
-	return ixpath.TraverseAxisSimple(ixpath.AxisType(axis), node)
-}

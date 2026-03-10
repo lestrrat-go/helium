@@ -245,7 +245,7 @@ func parseCatalog(path string) *catalog {
 	if err != nil {
 		log.Fatalf("opening catalog: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var c catalog
 	dec := xml.NewDecoder(f)
 	dec.CharsetReader = charset.NewReaderLabel
@@ -260,7 +260,7 @@ func parseTestSet(path string) *testSetFile {
 	if err != nil {
 		log.Fatalf("opening test set %s: %v", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var ts testSetFile
 	dec := xml.NewDecoder(f)
 	dec.CharsetReader = charset.NewReaderLabel

@@ -299,12 +299,6 @@ func qt3CheckEmpty() qt3Check {
 	}
 }
 
-func qt3CheckCount(n int) qt3Check {
-	return func(seq xpath3.Sequence) bool {
-		return len(seq) == n
-	}
-}
-
 func qt3CheckType(_ string) qt3Check {
 	return func(_ xpath3.Sequence) bool {
 		return true // not yet implemented

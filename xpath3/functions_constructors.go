@@ -279,10 +279,7 @@ func validateGregorianValue(typeName, s string) bool {
 }
 
 func extractYearDigits(s string) string {
-	y := s
-	if strings.HasPrefix(y, "-") {
-		y = y[1:]
-	}
+	y := strings.TrimPrefix(s, "-")
 	for i, c := range y {
 		if c == '-' || c == 'Z' || c == '+' {
 			return y[:i]

@@ -232,9 +232,10 @@ func parseDatePresentation(rest string) (dtPresentation, dtWidth) {
 			modPart := formatPart[semiIdx+1:]
 			formatPart = formatPart[:semiIdx]
 			for _, c := range modPart {
-				if c == 'o' {
+				switch c {
+				case 'o':
 					p.ordinal = true
-				} else if c == 't' {
+				case 't':
 					p.isTraditional = true
 				}
 			}
@@ -285,15 +286,15 @@ func parseSimpleInt(s string) int {
 func formatDateTimeValue(value int64, comp byte, p dtPresentation, w dtWidth, lang string) string {
 	format := p.format
 
-	switch {
-	case format == "N" || format == "n" || format == "Nn":
+	switch format {
+	case "N", "n", "Nn":
 		// Named format (for months and days)
 		return formatNamedValue(value, comp, format, lang)
-	case format == "I" || format == "i":
+	case "I", "i":
 		// Roman numerals
 		n := new(big.Int).SetInt64(value)
 		return formatRoman(n, format == "I")
-	case format == "W" || format == "w" || format == "Ww":
+	case "W", "w", "Ww":
 		n := new(big.Int).SetInt64(value)
 		switch format {
 		case "W":
@@ -326,8 +327,6 @@ func formatDateDecimal(value int64, format string, w dtWidth, comp byte) string 
 		if unicode.IsDigit(r) {
 			zeroDigit = unicodeDigitZero(r)
 			minDigits++
-		} else if r == '#' {
-			// optional digit
 		}
 	}
 
@@ -342,9 +341,6 @@ func formatDateDecimal(value int64, format string, w dtWidth, comp byte) string 
 
 	// For year with max width, truncate
 	maxWidth := w.maxWidth
-	if maxWidth < 0 && comp == 'Y' && minDigits <= 4 {
-		// Default: no truncation for year
-	}
 
 	abs := value
 	neg := false
@@ -508,7 +504,6 @@ func formatFractionalSeconds(t time.Time, p dtPresentation, w dtWidth) string {
 	}
 
 	// Count mandatory digits and optional (#) digits, and find grouping separators
-	fmtRunes := []rune(p.format)
 	mandatoryDigits := 0
 	optionalDigits := 0
 	totalDigits := 0
@@ -517,7 +512,7 @@ func formatFractionalSeconds(t time.Time, p dtPresentation, w dtWidth) string {
 		sep rune // separator character
 	}
 	var groups []groupInfo
-	for _, r := range fmtRunes {
+	for _, r := range p.format {
 		if isDecimalDigitInRange(r, zeroDigit) {
 			mandatoryDigits++
 			totalDigits++
