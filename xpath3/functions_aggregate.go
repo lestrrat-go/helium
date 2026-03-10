@@ -25,6 +25,9 @@ func aggregateTypeFamily(typeName string) string {
 	if isIntegerDerived(typeName) {
 		return "numeric"
 	}
+	if isStringDerived(typeName) {
+		return "string"
+	}
 	switch typeName {
 	case TypeDecimal, TypeDouble, TypeFloat:
 		return "numeric"
@@ -79,7 +82,11 @@ func checkAggregateHomogeneity(family, newFamily string) (string, error) {
 }
 
 func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	atoms, err := AtomizeSequence(args[0])
+	if err != nil {
+		return nil, err
+	}
+	if len(atoms) == 0 {
 		return nil, nil
 	}
 	var family string
@@ -90,11 +97,7 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 	sumRat := new(big.Rat)
 	var sumFloat float64
 
-	for _, item := range args[0] {
-		a, err := AtomizeItem(item)
-		if err != nil {
-			return nil, err
-		}
+	for _, a := range atoms {
 		if err := checkSumAvgType(a); err != nil {
 			return nil, err
 		}
@@ -116,9 +119,13 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 	if family == "duration:YM" || family == "duration:DT" {
-		return avgDurations(args[0], family)
+		atomSeq := make(Sequence, len(atoms))
+		for i, a := range atoms {
+			atomSeq[i] = a
+		}
+		return avgDurations(atomSeq, family)
 	}
-	count := len(args[0])
+	count := len(atoms)
 	if allDecOrInt {
 		// avg returns decimal for integer/decimal inputs
 		countRat := new(big.Rat).SetInt64(int64(count))
@@ -215,18 +222,18 @@ func numericTypeWidth(typeName string) int {
 }
 
 func fnMax(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	atoms, err := AtomizeSequence(args[0])
+	if err != nil {
+		return nil, err
+	}
+	if len(atoms) == 0 {
 		return nil, nil
 	}
 	var family string
 	var best AtomicValue
 	widest := TypeInteger
 	first := true
-	for _, item := range args[0] {
-		a, err := AtomizeItem(item)
-		if err != nil {
-			return nil, err
-		}
+	for _, a := range atoms {
 		a = promoteForAggregate(a)
 		newFamily := aggregateTypeFamily(a.TypeName)
 		if newFamily == "" {
@@ -269,18 +276,18 @@ func fnMax(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnMin(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	atoms, err := AtomizeSequence(args[0])
+	if err != nil {
+		return nil, err
+	}
+	if len(atoms) == 0 {
 		return nil, nil
 	}
 	var family string
 	var best AtomicValue
 	widest := TypeInteger
 	first := true
-	for _, item := range args[0] {
-		a, err := AtomizeItem(item)
-		if err != nil {
-			return nil, err
-		}
+	for _, a := range atoms {
 		a = promoteForAggregate(a)
 		newFamily := aggregateTypeFamily(a.TypeName)
 		if newFamily == "" {
@@ -323,7 +330,12 @@ func fnMin(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	// Atomize to handle arrays: sum([1,2,3]) should flatten the array
+	atoms, err := AtomizeSequence(args[0])
+	if err != nil {
+		return nil, err
+	}
+	if len(atoms) == 0 {
 		if len(args) > 1 {
 			return args[1], nil
 		}
@@ -337,11 +349,7 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 	var sumFloat float64
 	widest := TypeInteger
 
-	for _, item := range args[0] {
-		a, err := AtomizeItem(item)
-		if err != nil {
-			return nil, err
-		}
+	for _, a := range atoms {
 		a = promoteForAggregate(a)
 		if err := checkSumAvgType(a); err != nil {
 			return nil, err
@@ -367,7 +375,11 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 	if family == "duration:YM" || family == "duration:DT" {
-		return sumDurations(args[0], family)
+		atomSeq := make(Sequence, len(atoms))
+		for i, a := range atoms {
+			atomSeq[i] = a
+		}
+		return sumDurations(atomSeq, family)
 	}
 	if allInt {
 		return SingleIntegerBig(sumInt), nil
