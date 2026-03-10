@@ -85,7 +85,7 @@ func evalTreatAsExpr(ec *evalContext, e TreatAsExpr) (Sequence, error) {
 		return nil, err
 	}
 	if !matchesSequenceType(seq, e.Type, ec) {
-		return nil, &XPathError{Code: "XPDY0050", Message: "treat as type mismatch"}
+		return nil, &XPathError{Code: "XPDY0050", Message: fmt.Sprintf("treat as: sequence does not match required type %v (actual length %d)", e.Type, len(seq))}
 	}
 	return seq, nil
 }
@@ -219,6 +219,13 @@ func castToQName(v AtomicValue, ec *evalContext) (AtomicValue, error) {
 	if idx := strings.IndexByte(s, ':'); idx >= 0 {
 		prefix = s[:idx]
 		local = s[idx+1:]
+	}
+
+	if !isValidNCName(local) || (prefix != "" && !isValidNCName(prefix)) {
+		return AtomicValue{}, &XPathError{
+			Code:    "FORG0001",
+			Message: fmt.Sprintf("invalid QName: %q", s),
+		}
 	}
 
 	uri := ""

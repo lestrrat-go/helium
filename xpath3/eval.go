@@ -59,45 +59,21 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 }
 
 func (ec *evalContext) withNode(n helium.Node, pos, size int) *evalContext {
-	return &evalContext{
-		goCtx:            ec.goCtx,
-		node:             n,
-		position:         pos,
-		size:             size,
-		vars:             ec.vars,
-		namespaces:       ec.namespaces,
-		functions:        ec.functions,
-		fnsNS:            ec.fnsNS,
-		depth:            ec.depth,
-		opCount:          ec.opCount,
-		opLimit:          ec.opLimit,
-		docOrder:         ec.docOrder,
-		maxNodes:         ec.maxNodes,
-		currentTime:      ec.currentTime,
-		implicitTimezone: ec.implicitTimezone,
-	}
+	cp := *ec
+	cp.node = n
+	cp.contextItem = nil
+	cp.position = pos
+	cp.size = size
+	return &cp
 }
 
 // withContextItem sets a non-node context item (for simple map, etc.)
 func (ec *evalContext) withContextItem(item Item, pos, size int) *evalContext {
-	return &evalContext{
-		goCtx:            ec.goCtx,
-		node:             ec.node,
-		contextItem:      item,
-		position:         pos,
-		size:             size,
-		vars:             ec.vars,
-		namespaces:       ec.namespaces,
-		functions:        ec.functions,
-		fnsNS:            ec.fnsNS,
-		depth:            ec.depth,
-		opCount:          ec.opCount,
-		opLimit:          ec.opLimit,
-		docOrder:         ec.docOrder,
-		maxNodes:         ec.maxNodes,
-		currentTime:      ec.currentTime,
-		implicitTimezone: ec.implicitTimezone,
-	}
+	cp := *ec
+	cp.contextItem = item
+	cp.position = pos
+	cp.size = size
+	return &cp
 }
 
 // getCurrentTime returns the cached current time for this evaluation.

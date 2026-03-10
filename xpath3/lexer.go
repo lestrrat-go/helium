@@ -483,3 +483,23 @@ func isNCNameChar(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) ||
 		r == '.' || r == '-' || r == '_'
 }
+
+// isValidNCName checks whether s is a valid XML NCName (non-empty, starts with
+// a valid NCNameStart character, and all subsequent characters are NCNameChar).
+func isValidNCName(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		if i == 0 {
+			if !isNCNameStart(r) {
+				return false
+			}
+		} else {
+			if !isNCNameChar(r) {
+				return false
+			}
+		}
+	}
+	return true
+}

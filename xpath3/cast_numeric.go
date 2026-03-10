@@ -93,6 +93,8 @@ func castToDecimal(v AtomicValue) (AtomicValue, error) {
 
 func castToBoolean(v AtomicValue) (AtomicValue, error) {
 	switch v.TypeName {
+	case TypeBoolean:
+		return v, nil
 	case TypeInteger:
 		return AtomicValue{TypeName: TypeBoolean, Value: v.BigInt().Sign() != 0}, nil
 	case TypeDouble, TypeFloat:

@@ -145,10 +145,8 @@ func floatArith(op TokenType, la, ra AtomicValue) (Sequence, error) {
 	ln := la.ToFloat64()
 	rn := ra.ToFloat64()
 	resultType := TypeDouble
-	if la.TypeName == TypeFloat || ra.TypeName == TypeFloat {
-		if la.TypeName != TypeDouble && ra.TypeName != TypeDouble {
-			resultType = TypeFloat
-		}
+	if la.TypeName != TypeDouble && ra.TypeName != TypeDouble {
+		resultType = TypeFloat
 	}
 
 	var result float64
@@ -189,6 +187,9 @@ func evalUnaryExpr(ec *evalContext, e UnaryExpr) (Sequence, error) {
 	}
 	if len(r) == 0 {
 		return nil, nil
+	}
+	if len(r) > 1 {
+		return nil, &XPathError{Code: "XPTY0004", Message: "unary minus operand must be a single item"}
 	}
 	a, err := AtomizeItem(r[0])
 	if err != nil {
