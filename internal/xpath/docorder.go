@@ -13,7 +13,16 @@ type DocOrderCache struct {
 }
 
 // Position returns the document-order position of a node, or -1 if unknown.
-// Namespace nodes are positioned right after their parent element.
+//
+// Namespace nodes are virtual (NamespaceNodeWrapper is created fresh on each
+// namespace axis traversal) so they cannot be indexed during BuildFrom.
+// They receive the same position as their parent element. This is correct
+// because: (1) the parent has position P and its first attribute has P+1, so
+// namespace nodes at P sort between the element and its attributes/children;
+// (2) SliceStable preserves input order for equal positions, keeping
+// same-parent namespace nodes in their traversal order; (3) namespace nodes
+// are deduplicated by {parent, prefix} in DeduplicateNodes/MergeNodeSets,
+// so duplicates from different union branches are already eliminated.
 func (c *DocOrderCache) Position(n helium.Node) int {
 	if c.positions == nil {
 		return -1

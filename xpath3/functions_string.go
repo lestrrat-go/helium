@@ -144,6 +144,9 @@ func fnConcat(_ context.Context, args []Sequence) (Sequence, error) {
 func fnStringJoin(_ context.Context, args []Sequence) (Sequence, error) {
 	sep := ""
 	if len(args) > 1 {
+		if len(args[1]) != 1 {
+			return nil, &XPathError{Code: "XPTY0004", Message: "string-join: separator must be a single string"}
+		}
 		sep = seqToString(args[1])
 	}
 	parts := make([]string, 0, len(args[0]))
@@ -195,8 +198,13 @@ func fnStringLength(ctx context.Context, args []Sequence) (Sequence, error) {
 	var s string
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
-		if fc != nil {
-			s, _ = fc.contextStringValue()
+		if fc == nil {
+			return nil, &XPathError{Code: "XPDY0002", Message: "string-length: context item is absent"}
+		}
+		var ok bool
+		s, ok = fc.contextStringValue()
+		if !ok {
+			return nil, &XPathError{Code: "XPDY0002", Message: "string-length: context item is absent"}
 		}
 	} else {
 		if len(args[0]) > 1 {

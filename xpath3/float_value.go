@@ -30,8 +30,11 @@ type FloatValue struct {
 }
 
 // NewFloat creates an xs:float (24-bit precision) FloatValue from a float64.
+// The value is round-tripped through float32 so that values outside the
+// float32 exponent range correctly overflow to ±Inf or underflow to ±0.
 func NewFloat(f float64) *FloatValue {
-	return newFloatValue(f, PrecisionFloat)
+	f32 := float32(f)
+	return newFloatValue(float64(f32), PrecisionFloat)
 }
 
 // NewDouble creates an xs:double (53-bit precision) FloatValue from a float64.

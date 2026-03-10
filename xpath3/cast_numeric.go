@@ -60,6 +60,13 @@ func castStringToFloat(s string) (AtomicValue, error) {
 	case "NaN":
 		return AtomicValue{TypeName: TypeFloat, Value: NewFloat(math.NaN())}, nil
 	}
+	// Reject case-insensitive nan/inf variants that strconv.ParseFloat accepts
+	// but XSD 1.1 does not (only exact "NaN", "INF", "+INF", "-INF" are valid,
+	// already handled above).
+	lower := strings.ToLower(s)
+	if lower == "nan" || lower == "inf" || lower == "+inf" || lower == "-inf" {
+		return AtomicValue{}, castError(s, TypeFloat)
+	}
 	f, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		return AtomicValue{}, castError(s, TypeFloat)
@@ -73,7 +80,8 @@ func castStringToFloat(s string) (AtomicValue, error) {
 	if math.IsInf(float64(f32), 0) {
 		return AtomicValue{}, castError(s, TypeFloat)
 	}
-	return AtomicValue{TypeName: TypeFloat, Value: NewFloat(f)}, nil
+	// Store the float32-rounded value so precision matches xs:float semantics
+	return AtomicValue{TypeName: TypeFloat, Value: NewFloat(float64(f32))}, nil
 }
 
 func castToInteger(v AtomicValue) (AtomicValue, error) {

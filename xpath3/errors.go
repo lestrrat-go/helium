@@ -1,6 +1,10 @@
 package xpath3
 
-import "errors"
+import (
+	"errors"
+
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
+)
 
 // Sentinel errors for the xpath3 package.
 var (
@@ -22,7 +26,9 @@ var (
 	ErrUnionNotNodeSet          = errors.New("xpath3: union operands must be node-sets")
 	ErrPathNotNodeSet           = errors.New("xpath3: path expression requires node-set")
 	ErrUnsupportedBinaryOp      = errors.New("xpath3: unsupported binary operator")
-	ErrNodeSetLimit             = errors.New("xpath3: node-set length limit exceeded")
+	// ErrNodeSetLimit is returned when a node-set exceeds the maximum length.
+	// Aliased from internal/xpath so errors.Is works end-to-end.
+	ErrNodeSetLimit = ixpath.ErrNodeSetLimit
 )
 
 // XPathError is a structured error with an XPath error code.
