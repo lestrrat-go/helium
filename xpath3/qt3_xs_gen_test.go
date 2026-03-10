@@ -160,7 +160,7 @@ func TestQT3_xs_normalizedString(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
 		{Name: "cbcl-normalizedstring-001", XPath: "xs:normalizedString(xs:normalizedString(\"test\"))", Assertions: []qt3Assertion{qt3AssertStringValue("test")}},
-		{Name: "cbcl-normalizedstring-002b", XPath: "xs:normalizedString('\t')", Assertions: []qt3Assertion{qt3AssertStringValue("")}},
+		{Name: "cbcl-normalizedstring-002b", XPath: "xs:normalizedString('\t')", Assertions: []qt3Assertion{qt3AssertStringValue(" ")}},
 		{Name: "cbcl-normalizedstring-003", XPath: "xs:normalizedString(5)", Assertions: []qt3Assertion{qt3AssertStringValue("5")}},
 		{Name: "cbcl-normalizedstring-004", XPath: "\"&#x9;\" castable as xs:normalizedString", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "cbcl-normalizedstring-005", XPath: "5 castable as xs:normalizedString", Assertions: []qt3Assertion{qt3AssertTrue()}},

@@ -1095,7 +1095,7 @@ func TestQT3_fn_codepoints_to_string(t *testing.T) {
 		{Name: "cbcl-codepoints-to-string-024", XPath: "for $x in 13 to 15 return codepoints-to-string($x to $x)", ExpectError: true},
 		{Name: "cbcl-codepoints-to-string-025", XPath: "for $x in 9 to 9 return codepoints-to-string($x to $x+1)", Assertions: []qt3Assertion{qt3AssertEq(`'	
 '`)}},
-		{Name: "cbcl-codepoints-to-string-026", XPath: "for $x in 13 to 13 return codepoints-to-string($x to $x)", Assertions: []qt3Assertion{qt3AssertStringValue("")}},
+		{Name: "cbcl-codepoints-to-string-026", XPath: "for $x in 13 to 13 return codepoints-to-string($x to $x)", Assertions: []qt3Assertion{qt3AssertStringValue("\r")}},
 		{Name: "cbcl-codepoints-to-string-027", XPath: "for $x in (13), $y in (13,9,10) return codepoints-to-string($x to $y)", Assertions: []qt3Assertion{qt3AssertDeepEq("\"\r\", \"\", \"\"")}},
 	})
 }
@@ -1160,26 +1160,26 @@ func TestQT3_fn_collection(t *testing.T) {
 		{Name: "fn-collection-1", XPath: "fn:collection(\"argument1\",\"argument2\")", ExpectError: true},
 		{Name: "fn-collection-2", XPath: "fn:collection(\"thisfileshouldnotexists\")", ExpectError: true},
 		{Name: "fn-collection-3", XPath: "fn:collection(\"invalidURI%gg\")", ExpectError: true},
-		{Name: "fn-collection-4", XPath: "count(fn:collection($collection-uri))", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertEq("2")}},
+		{Name: "fn-collection-4", XPath: "count(fn:collection($collection-uri))", BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertEq("2")}},
 		{Name: "fn-collection-4d", XPath: "count(fn:collection())", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertEq("2")}},
 		{Name: "fn-collection-5", XPath: "count(fn:collection($collection-uri))", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertEq("3")}},
 		{Name: "fn-collection-5d", XPath: "count(fn:collection())", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertEq("3")}},
 		{Name: "fn-collection-7", XPath: "distinct-values(fn:collection($collection-uri)//*[text()[contains(.,\"TCP/IP\")]]/normalize-space())", Skip: "requires external parameters", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
-		{Name: "fn-collection-8", XPath: "for $d in fn:collection($collection-uri) return ($d//title)[1]", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
+		{Name: "fn-collection-8", XPath: "for $d in fn:collection($collection-uri) return ($d//title)[1]", BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
 		{Name: "K2-SeqCollectionFunc-1", XPath: "collection(\"http:\\\\invalidURI\\someURI%gg\")", ExpectError: true},
 		{Name: "K2-SeqCollectionFunc-2", XPath: "collection(\":/\")", ExpectError: true},
 		{Name: "collection-001", XPath: "collection()", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
 		{Name: "collection-002", XPath: "collection(())", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
 		{Name: "collection-003", XPath: "collection() | collection(())", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
 		{Name: "collection-004", XPath: "collection() | collection(())", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
-		{Name: "collection-005", XPath: "collection(\"http://www.w3.org/2010/09/qt-fots-catalog/collection1\")", Skip: "requires external parameters", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
-		{Name: "collection-006", XPath: "collection(\"collection1\")", Skip: "requires external parameters", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
+		{Name: "collection-005", XPath: "collection(\"http://www.w3.org/2010/09/qt-fots-catalog/collection1\")", BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", Skip: "requires external parameters", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
+		{Name: "collection-006", XPath: "collection(\"collection1\")", BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", Skip: "requires external parameters", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
 		{Name: "collection-007", XPath: `collection("http://www.w3.org/2010/09/qt-fots-catalog/collection1") |
-         collection("collection1")`, Skip: "requires external parameters", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
+         collection("collection1")`, BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", Skip: "requires external parameters", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
 		{Name: "collection-008", XPath: `collection("http://www.w3.org/2010/09/qt-fots-catalog/collection1") |
-         collection("collection1")`, Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
+         collection("collection1")`, BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
 		{Name: "collection-009", XPath: `let $c := collection("http://www.w3.org/2010/09/qt-fots-catalog/collection1") return $c
-         | (for $doc in $c return doc(document-uri($doc)))`, Skip: "requires external parameters", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
+         | (for $doc in $c return doc(document-uri($doc)))`, BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", Skip: "requires external parameters", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
 		{Name: "collection-010", XPath: "collection(\"collection/one/\")", Skip: "requires directory as collection URI", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
 		{Name: "collection-900", XPath: "collection(\"nonexistent\")", ExpectError: true},
 		{Name: "collection-901", XPath: "collection()", ExpectError: true},
@@ -2304,13 +2304,13 @@ func TestQT3_fn_doc(t *testing.T) {
 		{Name: "K2-SeqDocFunc-1", XPath: "empty(fn:doc(()))", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "K2-SeqDocFunc-3", XPath: "fn:doc(xs:untypedAtomic(\"file:///example.com/does/not/exist/xqts-testing.xml\"))", Skip: "requires URI resolution", ExpectError: true},
 		{Name: "K2-SeqDocFunc-4", XPath: "doc(\"/example.com/example.org/does/not/exist/doesNotExist/works-mod.xml\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "K2-SeqDocFunc-5", XPath: "doc(\"/example.com/example.org/does/not/exist/doesNotExist/works-mod.xml\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "K2-SeqDocFunc-6", XPath: "doc(\"/example.com/example.org/does/not/exist/doesNotExist/works-mod.xml\")", Skip: "requires URI resolution", ExpectError: true},
+		{Name: "K2-SeqDocFunc-5", XPath: "doc(\"/example.com/example.org/does/not/exist/doesNotExist/works-mod.xml\")", BaseURI: "http://www.example.invalid", Skip: "requires URI resolution", ExpectError: true},
+		{Name: "K2-SeqDocFunc-6", XPath: "doc(\"/example.com/example.org/does/not/exist/doesNotExist/works-mod.xml\")", BaseURI: "file:///", Skip: "requires URI resolution", ExpectError: true},
 		{Name: "K2-SeqDocFunc-7", XPath: "doc(\"example.com\\example.org\\does\\not\\exist\\doesNotExist\\works-mod.xml\")", Skip: "requires URI resolution", ExpectError: true},
 		{Name: "K2-SeqDocFunc-8", XPath: "doc(\"\\example.com\\example.org\\does\\not\\exist\\doesNotExist\\works-mod.xml\")", Skip: "requires URI resolution", ExpectError: true},
 		{Name: "K2-SeqDocFunc-9", XPath: "doc(\"C:\\example.com\\example.org\\does\\not\\exist\\doesNotExist\\works-mod.xml\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "K2-SeqDocFunc-10", XPath: "doc(\"\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "K2-SeqDocFunc-11", XPath: "doc(\"\")", Skip: "requires URI resolution", ExpectError: true},
+		{Name: "K2-SeqDocFunc-10", XPath: "doc(\"\")", BaseURI: "file:///directory/directory/example.com/www.example.com/thisFileDoesNotExist.xml", Skip: "requires URI resolution", ExpectError: true},
+		{Name: "K2-SeqDocFunc-11", XPath: "doc(\"\")", BaseURI: "file:///directory/directory/example.com/", Skip: "requires URI resolution", ExpectError: true},
 	})
 }
 
@@ -3233,30 +3233,36 @@ func TestQT3_fn_format_date(t *testing.T) {
 		{Name: "format-date-008b", XPath: "format-date($d,\"[M𐒡]-[D𐒡]-[Y𐒠𐒠𐒠𐒡]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("𐒩-𐒧-𐒢𐒠𐒠𐒣")}},
 		{Name: "format-date-008c", XPath: "format-date($d,\"([Y𐒠𐒡]-[M𐒠𐒡]-[D𐒠𐒡])\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("(𐒠𐒣-𐒠𐒩-𐒠𐒧)")}},
 		{Name: "format-date-009", XPath: `for $i in 1 to 48, $d in $t + xs:yearMonthDuration('P1M')*$i 
-        return concat("[", $d, ":", format-date($d, '[W]', (), 'ISO', ()), "]")`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`[2004-05-01:18] [2004-06-01:23] [2004-07-01:27] [2004-08-01:31] [2004-09-01:36] [2004-10-01:40] [2004-11-01:45] 
+        return concat("[", $d, ":", format-date($d, '[W]', (), 'ISO', ()), "]")`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            [2004-05-01:18] [2004-06-01:23] [2004-07-01:27] [2004-08-01:31] [2004-09-01:36] [2004-10-01:40] [2004-11-01:45] 
             [2004-12-01:49] [2005-01-01:53] [2005-02-01:5] [2005-03-01:9] [2005-04-01:13] [2005-05-01:17] [2005-06-01:22] 
             [2005-07-01:26] [2005-08-01:31] [2005-09-01:35] [2005-10-01:39] [2005-11-01:44] [2005-12-01:48] [2006-01-01:52] 
             [2006-02-01:5] [2006-03-01:9] [2006-04-01:13] [2006-05-01:18] [2006-06-01:22] [2006-07-01:26] [2006-08-01:31] 
             [2006-09-01:35] [2006-10-01:39] [2006-11-01:44] [2006-12-01:48] [2007-01-01:1] [2007-02-01:5] [2007-03-01:9] 
             [2007-04-01:13] [2007-05-01:18] [2007-06-01:22] [2007-07-01:26] [2007-08-01:31] [2007-09-01:35] [2007-10-01:40] 
-            [2007-11-01:44] [2007-12-01:48] [2008-01-01:1] [2008-02-01:5] [2008-03-01:9] [2008-04-01:14]`)}},
+            [2007-11-01:44] [2007-12-01:48] [2008-01-01:1] [2008-02-01:5] [2008-03-01:9] [2008-04-01:14]
+         `)}},
 		{Name: "format-date-010", XPath: `for $i in 1 to 48, $d in $t + xs:yearMonthDuration('P1M')*$i 
-            return concat("[", $d, ":", format-date($d, '[F01]', (), 'Q{}ISO', ()), ']')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`[2004-01-01:04] [2004-02-01:07] [2004-03-01:01] [2004-04-01:04] [2004-05-01:06] [2004-06-01:02] 
+            return concat("[", $d, ":", format-date($d, '[F01]', (), 'Q{}ISO', ()), ']')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            [2004-01-01:04] [2004-02-01:07] [2004-03-01:01] [2004-04-01:04] [2004-05-01:06] [2004-06-01:02] 
             [2004-07-01:04] [2004-08-01:07] [2004-09-01:03] [2004-10-01:05] [2004-11-01:01] [2004-12-01:03] 
             [2005-01-01:06] [2005-02-01:02] [2005-03-01:02] [2005-04-01:05] [2005-05-01:07] [2005-06-01:03] 
             [2005-07-01:05] [2005-08-01:01] [2005-09-01:04] [2005-10-01:06] [2005-11-01:02] [2005-12-01:04] 
             [2006-01-01:07] [2006-02-01:03] [2006-03-01:03] [2006-04-01:06] [2006-05-01:01] [2006-06-01:04] 
             [2006-07-01:06] [2006-08-01:02] [2006-09-01:05] [2006-10-01:07] [2006-11-01:03] [2006-12-01:05] 
             [2007-01-01:01] [2007-02-01:04] [2007-03-01:04] [2007-04-01:07] [2007-05-01:02] [2007-06-01:05] 
-            [2007-07-01:07] [2007-08-01:03] [2007-09-01:06] [2007-10-01:01] [2007-11-01:04] [2007-12-01:06]`)}},
+            [2007-07-01:07] [2007-08-01:03] [2007-09-01:06] [2007-10-01:01] [2007-11-01:04] [2007-12-01:06]             
+         `)}},
 		{Name: "format-date-011", XPath: `for $i in 1 to 48, $d in $t + xs:dayTimeDuration('P3D')*$i 
-        return concat("[", $d, ":", format-date($d, '[w]', (), 'ISO', ()), ']')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`[2005-12-04:1] [2005-12-07:2] [2005-12-10:2] [2005-12-13:3] [2005-12-16:3] [2005-12-19:4] [2005-12-22:4] 
+        return concat("[", $d, ":", format-date($d, '[w]', (), 'ISO', ()), ']')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            [2005-12-04:1] [2005-12-07:2] [2005-12-10:2] [2005-12-13:3] [2005-12-16:3] [2005-12-19:4] [2005-12-22:4] 
             [2005-12-25:4] [2005-12-28:5] [2005-12-31:5] [2006-01-03:1] [2006-01-06:1] [2006-01-09:2] [2006-01-12:2] 
             [2006-01-15:2] [2006-01-18:3] [2006-01-21:3] [2006-01-24:4] [2006-01-27:4] [2006-01-30:5] [2006-02-02:1] 
             [2006-02-05:1] [2006-02-08:2] [2006-02-11:2] [2006-02-14:3] [2006-02-17:3] [2006-02-20:4] [2006-02-23:4] 
             [2006-02-26:4] [2006-03-01:1] [2006-03-04:1] [2006-03-07:2] [2006-03-10:2] [2006-03-13:3] [2006-03-16:3] 
             [2006-03-19:3] [2006-03-22:4] [2006-03-25:4] [2006-03-28:5] [2006-03-31:5] [2006-04-03:1] [2006-04-06:1] 
-            [2006-04-09:1] [2006-04-12:2] [2006-04-15:2] [2006-04-18:3] [2006-04-21:3] [2006-04-24:4]`)}},
+            [2006-04-09:1] [2006-04-12:2] [2006-04-15:2] [2006-04-18:3] [2006-04-21:3] [2006-04-24:4]            
+         `)}},
 		{Name: "format-date-013a", XPath: "format-date($t, '[Y,4-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("0985")}},
 		{Name: "format-date-013b", XPath: "format-date($t, '[Y,3-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
 		{Name: "format-date-013c", XPath: "format-date($t, '[Y,2-5]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
@@ -3287,7 +3293,8 @@ func TestQT3_fn_format_date(t *testing.T) {
             GMT+9:30; GMT+10; GMT+10:30; GMT+11; GMT+11:30; GMT+12; GMT+12:30; GMT+13; GMT+13:30;
             GMT+14`)}},
 		{Name: "format-date-016", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`GMT-14:00; GMT-13:30; GMT-13:00; GMT-12:30; GMT-12:00; GMT-11:30; GMT-11:00;
+         $z*xs:dayTimeDuration('PT30M')), '[z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         	GMT-14:00; GMT-13:30; GMT-13:00; GMT-12:30; GMT-12:00; GMT-11:30; GMT-11:00;
 			GMT-10:30; GMT-10:00; GMT-09:30; GMT-09:00; GMT-08:30; GMT-08:00; GMT-07:30;
 			GMT-07:00; GMT-06:30; GMT-06:00; GMT-05:30; GMT-05:00; GMT-04:30; GMT-04:00;
 			GMT-03:30; GMT-03:00; GMT-02:30; GMT-02:00; GMT-01:30; GMT-01:00; GMT-00:30;
@@ -3295,46 +3302,59 @@ func TestQT3_fn_format_date(t *testing.T) {
 			GMT+03:30; GMT+04:00; GMT+04:30; GMT+05:00; GMT+05:30; GMT+06:00; GMT+06:30;
 			GMT+07:00; GMT+07:30; GMT+08:00; GMT+08:30; GMT+09:00; GMT+09:30; GMT+10:00;
 			GMT+10:30; GMT+11:00; GMT+11:30; GMT+12:00; GMT+12:30; GMT+13:00; GMT+13:30;
-			GMT+14:00`)}},
+			GMT+14:00
+		 `)}},
 		{Name: "format-date-017", XPath: `string-join( for $z in -12 to +12 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT1H')), '[ZZ]'), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("Y X W V U T S R Q P O N Z A B C D E F G H I K L M")}},
+         $z*xs:dayTimeDuration('PT1H')), '[ZZ]'), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         	Y X W V U T S R Q P O N Z A B C D E F G H I K L M
+		 `)}},
 		{Name: "format-date-018", XPath: "format-date(xs:date('1987-12-13'), '[ZZ]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("J")}},
 		{Name: "format-date-019", XPath: "format-date(xs:date('1987-12-13+05:30'), '[ZZ]')", Assertions: []qt3Assertion{qt3AssertStringValue("+05:30")}},
 		{Name: "format-date-020", XPath: "format-date(xs:date('1987-12-13+13:00'), '[ZZ]')", Assertions: []qt3Assertion{qt3AssertStringValue("+13:00")}},
 		{Name: "format-date-021", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[z00~00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`GMT-14~00; GMT-13~30; GMT-13~00; GMT-12~30; GMT-12~00; GMT-11~30; GMT-11~00; GMT-10~30; 
+         $z*xs:dayTimeDuration('PT30M')), '[z00~00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         	GMT-14~00; GMT-13~30; GMT-13~00; GMT-12~30; GMT-12~00; GMT-11~30; GMT-11~00; GMT-10~30; 
          	GMT-10~00; GMT-09~30; GMT-09~00; GMT-08~30; GMT-08~00; GMT-07~30; GMT-07~00; GMT-06~30; 
          	GMT-06~00; GMT-05~30; GMT-05~00; GMT-04~30; GMT-04~00; GMT-03~30; GMT-03~00; GMT-02~30; 
          	GMT-02~00; GMT-01~30; GMT-01~00; GMT-00~30; GMT+00~00; GMT+00~30; GMT+01~00; GMT+01~30; 
          	GMT+02~00; GMT+02~30; GMT+03~00; GMT+03~30; GMT+04~00; GMT+04~30; GMT+05~00; GMT+05~30; 
          	GMT+06~00; GMT+06~30; GMT+07~00; GMT+07~30; GMT+08~00; GMT+08~30; GMT+09~00; GMT+09~30; 
          	GMT+10~00; GMT+10~30; GMT+11~00; GMT+11~30; GMT+12~00; GMT+12~30; GMT+13~00; GMT+13~30; 
-         	GMT+14~00`)}},
+         	GMT+14~00
+		 `)}},
 		{Name: "format-date-022", XPath: "format-date(xs:date('2012-05-18+05:30'), '[Z٠٠:٠٠]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("+٠٥:٣٠")}},
 		{Name: "format-date-023", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[Z0:01]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`-14:00; -13:30; -13:00; -12:30; -12:00; -11:30; -11:00; -10:30; -10:00; -9:30; -9:00;
+         $z*xs:dayTimeDuration('PT30M')), '[Z0:01]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         	-14:00; -13:30; -13:00; -12:30; -12:00; -11:30; -11:00; -10:30; -10:00; -9:30; -9:00;
          	-8:30; -8:00; -7:30; -7:00; -6:30; -6:00; -5:30; -5:00; -4:30; -4:00; -3:30; -3:00;
          	-2:30; -2:00; -1:30; -1:00; -0:30; +0:00; +0:30; +1:00; +1:30; +2:00; +2:30; +3:00;
          	+3:30; +4:00; +4:30; +5:00; +5:30; +6:00; +6:30; +7:00; +7:30; +8:00; +8:30; +9:00;
-         	+9:30; +10:00; +10:30; +11:00; +11:30; +12:00; +12:30; +13:00; +13:30; +14:00`)}},
+         	+9:30; +10:00; +10:30; +11:00; +11:30; +12:00; +12:30; +13:00; +13:30; +14:00
+		 `)}},
 		{Name: "format-date-024", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[Z999]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`-1400; -1330; -1300; -1230; -1200; -1130; -1100; -1030; -1000; -930; -900; -830; 
+         $z*xs:dayTimeDuration('PT30M')), '[Z999]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         	-1400; -1330; -1300; -1230; -1200; -1130; -1100; -1030; -1000; -930; -900; -830; 
          	-800; -730; -700; -630; -600; -530; -500; -430; -400; -330; -300; -230; -200; 
          	-130; -100; -030; +000; +030; +100; +130; +200; +230; +300; +330; +400; +430; 
          	+500; +530; +600; +630; +700; +730; +800; +830; +900; +930; +1000; +1030; +1100; 
-         	+1130; +1200; +1230; +1300; +1330; +1400`)}},
+         	+1130; +1200; +1230; +1300; +1330; +1400
+		 `)}},
 		{Name: "format-date-025", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[Z99]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`-14; -13:30; -13; -12:30; -12; -11:30; -11; -10:30; -10; -09:30; -09; -08:30; -08;
+         $z*xs:dayTimeDuration('PT30M')), '[Z99]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         	-14; -13:30; -13; -12:30; -12; -11:30; -11; -10:30; -10; -09:30; -09; -08:30; -08;
          	-07:30; -07; -06:30; -06; -05:30; -05; -04:30; -04; -03:30; -03; -02:30; -02; -01:30;
          	-01; -00:30; +00; +00:30; +01; +01:30; +02; +02:30; +03; +03:30; +04; +04:30; +05;
          	+05:30; +06; +06:30; +07; +07:30; +08; +08:30; +09; +09:30; +10; +10:30; +11; +11:30;
-         	+12; +12:30; +13; +13:30; +14`)}},
+         	+12; +12:30; +13; +13:30; +14
+		 `)}},
 		{Name: "format-date-026", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[Z0t]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`-14; -13:30; -13; -12:30; -12; -11:30; -11; -10:30; -10; -9:30; -9; -8:30; -8;
+         $z*xs:dayTimeDuration('PT30M')), '[Z0t]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         	-14; -13:30; -13; -12:30; -12; -11:30; -11; -10:30; -10; -9:30; -9; -8:30; -8;
          	-7:30; -7; -6:30; -6; -5:30; -5; -4:30; -4; -3:30; -3; -2:30; -2; -1:30; -1; -0:30;
          	Z; +0:30; +1; +1:30; +2; +2:30; +3; +3:30; +4; +4:30; +5; +5:30; +6; +6:30; +7;
          	+7:30; +8; +8:30; +9; +9:30; +10; +10:30; +11; +11:30; +12; +12:30; +13;
-         	+13:30; +14`)}},
+         	+13:30; +14
+		 `)}},
 		{Name: "format-date-027", XPath: "format-date(xs:date('2012-05-18+05:30'), '[Z𐒡:𐒠𐒡]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("+𐒥:𐒣𐒠")}},
 		{Name: "format-date-028", XPath: "format-date(xs:date('2012-05-18'), '[ D 01 ] [M 0 1] [ Y 0 0 0 1 ]')", Assertions: []qt3Assertion{qt3AssertStringValue("18 05 2012")}},
 		{Name: "format-date-029", XPath: "format-date(xs:date('2012-05-18'), '[Y9;999]')", Assertions: []qt3Assertion{qt3AssertStringValue("2;012")}},
@@ -3368,12 +3388,18 @@ func TestQT3_fn_format_date(t *testing.T) {
 		{Name: "format-date-809err", XPath: "format-date(xs:date(\"2012-05-18\"),\"[Y999#]\")", ExpectError: true},
 		{Name: "format-date-810err", XPath: "format-date(xs:date(\"2012-05-18\"),\"[Y##9#]\")", ExpectError: true},
 		{Name: "format-date-en101", XPath: `for $i in 1 to 12 return let $d2 := $d + xs:yearMonthDuration('P1M')*$i return
-         format-date($d2, '[MN]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("JANUARY FEBRUARY MARCH APRIL MAY JUNE JULY AUGUST SEPTEMBER OCTOBER NOVEMBER DECEMBER")}},
+         format-date($d2, '[MN]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            JANUARY FEBRUARY MARCH APRIL MAY JUNE JULY AUGUST SEPTEMBER OCTOBER NOVEMBER DECEMBER
+         `)}},
 		{Name: "format-date-en102", XPath: `for $i in 1 to 12 return let $d2 := $d + xs:yearMonthDuration('P1M')*$i return
-         format-date($d2, '[Mn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("january february march april may june july august september october november december")}},
+         format-date($d2, '[Mn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            january february march april may june july august september october november december
+         `)}},
 		{Name: "format-date-en103", XPath: `for $i in 1 to 12 
         return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
-        return format-date($d2, '[MNn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("January February March April May June July August September October November December")}},
+        return format-date($d2, '[MNn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            January February March April May June July August September October November December
+         `)}},
 		{Name: "format-date-en104", XPath: `for $i in 1 to 12 
         return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
         return format-date($d2, '[MN,3-3]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC")}},
@@ -3384,11 +3410,17 @@ func TestQT3_fn_format_date(t *testing.T) {
         return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
         return format-date($d2, '[MNn,3-3]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec")}},
 		{Name: "format-date-en111", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[FN]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("MONDAY TUESDAY WEDNESDAY THURSDAY FRIDAY SATURDAY SUNDAY")}},
+         format-date($d2, '[FN]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+             MONDAY TUESDAY WEDNESDAY THURSDAY FRIDAY SATURDAY SUNDAY
+         `)}},
 		{Name: "format-date-en112", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[Fn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("monday tuesday wednesday thursday friday saturday sunday")}},
+         format-date($d2, '[Fn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+             monday tuesday wednesday thursday friday saturday sunday
+         `)}},
 		{Name: "format-date-en113", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[FNn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("Monday Tuesday Wednesday Thursday Friday Saturday Sunday")}},
+         format-date($d2, '[FNn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            Monday Tuesday Wednesday Thursday Friday Saturday Sunday
+         `)}},
 		{Name: "format-date-en114", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
          format-date($d2, '[FN,3-3]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("MON TUE WED THU FRI SAT SUN")}},
 		{Name: "format-date-en115", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
@@ -3401,51 +3433,74 @@ func TestQT3_fn_format_date(t *testing.T) {
         return let $expected := ('Mon', 'Tues', 'Weds', 'Thur', 'Fri', 'Sat', 'Sun') 
         return (
          	substring($abb, 1, 3), 
-         	starts-with($expected[$i], $abb) and string-length($abb) le 4 and string-length($abb) ge 3)`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("Mon true Tue true Wed true Thu true Fri true Sat true Sun true")}},
+         	starts-with($expected[$i], $abb) and string-length($abb) le 4 and string-length($abb) ge 3)`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            Mon true Tue true Wed true Thu true Fri true Sat true Sun true
+         `)}},
 		{Name: "format-date-en118", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return let $abb :=
          format-date($d2, '[FNn,3-5]', 'en', (), ()) return let $expected := ('Mon', 'Tues', 'Weds',
          'Thurs', 'Fri', 'Sat', 'Sun') return (substring($abb, 1, 3), starts-with($expected[$i],
-         $abb) and string-length($abb) le 5 and string-length($abb) ge 3)`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("Mon true Tue true Wed true Thu true Fri true Sat true Sun true")}},
+         $abb) and string-length($abb) le 5 and string-length($abb) ge 3)`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            Mon true Tue true Wed true Thu true Fri true Sat true Sun true
+         `)}},
 		{Name: "format-date-en121", XPath: `for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[D1o]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`1st 2nd 3rd 4th 5th 6th 7th 8th 9th 10th 11th 12th 13th 14th 15th
+         format-date($d2, '[D1o]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            1st 2nd 3rd 4th 5th 6th 7th 8th 9th 10th 11th 12th 13th 14th 15th
             16th 17th 18th 19th 20th 21st 22nd 23rd 24th 25th 26th 27th 28th 29th 30th
-            31st`)}},
+            31st
+         `)}},
 		{Name: "format-date-en122", XPath: `for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i return
-         format-date($d2, '[Y1o]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`1990th 1991st 1992nd 1993rd 1994th 1995th 1996th 1997th 1998th 1999th
+         format-date($d2, '[Y1o]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            1990th 1991st 1992nd 1993rd 1994th 1995th 1996th 1997th 1998th 1999th
             2000th 2001st 2002nd 2003rd 2004th 2005th 2006th 2007th 2008th 2009th 2010th 2011th
-            2012th 2013th 2014th 2015th 2016th 2017th 2018th 2019th 2020th`)}},
+            2012th 2013th 2014th 2015th 2016th 2017th 2018th 2019th 2020th
+         `)}},
 		{Name: "format-date-en122b", XPath: `for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i return
-         format-date($d2, '[Y0001o]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`1990th 1991st 1992nd 1993rd 1994th 1995th 1996th 1997th 1998th 1999th
+         format-date($d2, '[Y0001o]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            1990th 1991st 1992nd 1993rd 1994th 1995th 1996th 1997th 1998th 1999th
             2000th 2001st 2002nd 2003rd 2004th 2005th 2006th 2007th 2008th 2009th 2010th 2011th
-            2012th 2013th 2014th 2015th 2016th 2017th 2018th 2019th 2020th`)}},
+            2012th 2013th 2014th 2015th 2016th 2017th 2018th 2019th 2020th
+         `)}},
 		{Name: "format-date-en123", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i
-         return format-date($d2, '[DW]', 'en', (), ()), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue(`ONE TWO THREE FOUR FIVE SIX SEVEN EIGHT NINE TEN ELEVEN
+         return format-date($d2, '[DW]', 'en', (), ()), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue(`
+               ONE TWO THREE FOUR FIVE SIX SEVEN EIGHT NINE TEN ELEVEN
                 TWELVE THIRTEEN FOURTEEN FIFTEEN SIXTEEN SEVENTEEN EIGHTEEN NINETEEN TWENTY
                 TWENTY ONE TWENTY TWO TWENTY THREE TWENTY FOUR TWENTY FIVE TWENTY SIX TWENTY
-                SEVEN TWENTY EIGHT TWENTY NINE THIRTY THIRTY ONE`), qt3CheckStringValue(`ONE TWO THREE FOUR FIVE SIX SEVEN EIGHT NINE TEN ELEVEN
+                SEVEN TWENTY EIGHT TWENTY NINE THIRTY THIRTY ONE
+            `), qt3CheckStringValue(`
+               ONE TWO THREE FOUR FIVE SIX SEVEN EIGHT NINE TEN ELEVEN
                TWELVE THIRTEEN FOURTEEN FIFTEEN SIXTEEN SEVENTEEN EIGHTEEN NINETEEN TWENTY
                TWENTY-ONE TWENTY-TWO TWENTY-THREE TWENTY-FOUR TWENTY-FIVE TWENTY-SIX
-               TWENTY-SEVEN TWENTY-EIGHT TWENTY-NINE THIRTY THIRTY-ONE`))}},
+               TWENTY-SEVEN TWENTY-EIGHT TWENTY-NINE THIRTY THIRTY-ONE
+            `))}},
 		{Name: "format-date-en124", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i
-         return format-date($d2, '[Dw]', 'en', (), ()), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue(`one two three four five six seven eight nine ten eleven
+         return format-date($d2, '[Dw]', 'en', (), ()), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue(`
+               one two three four five six seven eight nine ten eleven
                twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty
                twenty one twenty two twenty three twenty four twenty five twenty six twenty
-               seven twenty eight twenty nine thirty thirty one`), qt3CheckStringValue(`one two three four five six seven eight nine ten eleven
+               seven twenty eight twenty nine thirty thirty one
+            `), qt3CheckStringValue(`
+               one two three four five six seven eight nine ten eleven
                twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty
                twenty-one twenty-two twenty-three twenty-four twenty-five twenty-six
-               twenty-seven twenty-eight twenty-nine thirty thirty-one`))}},
+               twenty-seven twenty-eight twenty-nine thirty thirty-one
+            `))}},
 		{Name: "format-date-en125", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i
-         return format-date($d2, '[DWw]', 'en', (), ()), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue(`One; Two; Three; Four; Five; Six; Seven; Eight; Nine; Ten; Eleven;
+         return format-date($d2, '[DWw]', 'en', (), ()), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue(`
+               One; Two; Three; Four; Five; Six; Seven; Eight; Nine; Ten; Eleven;
                Twelve; Thirteen; Fourteen; Fifteen; Sixteen; Seventeen; Eighteen; Nineteen; Twenty;
                Twenty One; Twenty Two; Twenty Three; Twenty Four; Twenty Five; Twenty Six; Twenty
-               Seven; Twenty Eight; Twenty Nine; Thirty; Thirty One`), qt3CheckStringValue(`One; Two; Three; Four; Five; Six; Seven; Eight; Nine; Ten; Eleven;
+               Seven; Twenty Eight; Twenty Nine; Thirty; Thirty One
+            `), qt3CheckStringValue(`
+               One; Two; Three; Four; Five; Six; Seven; Eight; Nine; Ten; Eleven;
                Twelve; Thirteen; Fourteen; Fifteen; Sixteen; Seventeen; Eighteen; Nineteen; Twenty;
                Twenty-One; Twenty-Two; Twenty-Three; Twenty-Four; Twenty-Five; Twenty-Six;
-               Twenty-Seven; Twenty-Eight; Twenty-Nine; Thirty; Thirty-One`))}},
+               Twenty-Seven; Twenty-Eight; Twenty-Nine; Thirty; Thirty-One
+           `))}},
 		{Name: "format-date-en126", XPath: `string-join( 
             for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i
               return replace(format-date($d2, '[YW]', 'en', (), ()), ' AND ', ' '),
-            '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue(`ONE THOUSAND NINE HUNDRED NINETY; ONE THOUSAND NINE HUNDRED
+            '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue(`
+               ONE THOUSAND NINE HUNDRED NINETY; ONE THOUSAND NINE HUNDRED
                NINETY ONE; ONE THOUSAND NINE HUNDRED NINETY TWO; ONE THOUSAND NINE HUNDRED
                NINETY THREE; ONE THOUSAND NINE HUNDRED NINETY FOUR; ONE THOUSAND NINE HUNDRED
                NINETY FIVE; ONE THOUSAND NINE HUNDRED NINETY SIX; ONE THOUSAND NINE HUNDRED
@@ -3456,7 +3511,9 @@ func TestQT3_fn_format_date(t *testing.T) {
                THOUSAND ELEVEN; TWO THOUSAND TWELVE; TWO THOUSAND THIRTEEN; TWO THOUSAND
                FOURTEEN; TWO THOUSAND FIFTEEN; TWO THOUSAND SIXTEEN; TWO THOUSAND
                SEVENTEEN; TWO THOUSAND EIGHTEEN; TWO THOUSAND NINETEEN; TWO THOUSAND
-               TWENTY`), qt3CheckStringValue(`ONE THOUSAND NINE HUNDRED NINETY; ONE THOUSAND NINE HUNDRED
+               TWENTY
+            `), qt3CheckStringValue(`
+               ONE THOUSAND NINE HUNDRED NINETY; ONE THOUSAND NINE HUNDRED
                NINETY-ONE; ONE THOUSAND NINE HUNDRED NINETY-TWO; ONE THOUSAND NINE HUNDRED
                NINETY-THREE; ONE THOUSAND NINE HUNDRED NINETY-FOUR; ONE THOUSAND NINE HUNDRED
                NINETY-FIVE; ONE THOUSAND NINE HUNDRED NINETY-SIX; ONE THOUSAND NINE HUNDRED
@@ -3467,9 +3524,11 @@ func TestQT3_fn_format_date(t *testing.T) {
                THOUSAND ELEVEN; TWO THOUSAND TWELVE; TWO THOUSAND THIRTEEN; TWO THOUSAND
                FOURTEEN; TWO THOUSAND FIFTEEN; TWO THOUSAND SIXTEEN; TWO THOUSAND
                SEVENTEEN; TWO THOUSAND EIGHTEEN; TWO THOUSAND NINETEEN; TWO THOUSAND
-               TWENTY`))}},
+               TWENTY
+            `))}},
 		{Name: "format-date-en127", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i
-         return replace(format-date($d2, '[Yw]', 'en', (), ()), ' and ', ' '), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue(`one thousand nine hundred ninety; one thousand nine hundred
+         return replace(format-date($d2, '[Yw]', 'en', (), ()), ' and ', ' '), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue(`
+               one thousand nine hundred ninety; one thousand nine hundred
                ninety one; one thousand nine hundred ninety two; one thousand nine hundred
                ninety three; one thousand nine hundred ninety four; one thousand nine hundred
                ninety five; one thousand nine hundred ninety six; one thousand nine hundred
@@ -3480,7 +3539,9 @@ func TestQT3_fn_format_date(t *testing.T) {
                thousand eleven; two thousand twelve; two thousand thirteen; two thousand
                fourteen; two thousand fifteen; two thousand sixteen; two thousand
                seventeen; two thousand eighteen; two thousand nineteen; two thousand
-               twenty`), qt3CheckStringValue(`one thousand nine hundred ninety; one thousand nine hundred
+               twenty
+            `), qt3CheckStringValue(`
+               one thousand nine hundred ninety; one thousand nine hundred
                ninety-one; one thousand nine hundred ninety-two; one thousand nine hundred
                ninety-three; one thousand nine hundred ninety-four; one thousand nine hundred
                ninety-five; one thousand nine hundred ninety-six; one thousand nine hundred
@@ -3491,9 +3552,11 @@ func TestQT3_fn_format_date(t *testing.T) {
                thousand eleven; two thousand twelve; two thousand thirteen; two thousand
                fourteen; two thousand fifteen; two thousand sixteen; two thousand
                seventeen; two thousand eighteen; two thousand nineteen; two thousand
-               twenty`))}},
+               twenty
+            `))}},
 		{Name: "format-date-en128", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i
-         return replace(format-date($d2, '[YWw]', 'en', (), ()), ' [Aa]nd ', ' '), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue(`One Thousand Nine Hundred Ninety; One Thousand Nine Hundred
+         return replace(format-date($d2, '[YWw]', 'en', (), ()), ' [Aa]nd ', ' '), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue(`
+               One Thousand Nine Hundred Ninety; One Thousand Nine Hundred
                Ninety One; One Thousand Nine Hundred Ninety Two; One Thousand Nine Hundred
                Ninety Three; One Thousand Nine Hundred Ninety Four; One Thousand Nine Hundred
                Ninety Five; One Thousand Nine Hundred Ninety Six; One Thousand Nine Hundred
@@ -3504,7 +3567,9 @@ func TestQT3_fn_format_date(t *testing.T) {
                Thousand Eleven; Two Thousand Twelve; Two Thousand Thirteen; Two Thousand
                Fourteen; Two Thousand Fifteen; Two Thousand Sixteen; Two Thousand
                Seventeen; Two Thousand Eighteen; Two Thousand Nineteen; Two Thousand
-               Twenty`), qt3CheckStringValue(`One Thousand Nine Hundred Ninety; One Thousand Nine Hundred
+               Twenty
+            `), qt3CheckStringValue(`
+               One Thousand Nine Hundred Ninety; One Thousand Nine Hundred
                Ninety-One; One Thousand Nine Hundred Ninety-Two; One Thousand Nine Hundred
                Ninety-Three; One Thousand Nine Hundred Ninety-Four; One Thousand Nine Hundred
                Ninety-Five; One Thousand Nine Hundred Ninety-Six; One Thousand Nine Hundred
@@ -3515,25 +3580,32 @@ func TestQT3_fn_format_date(t *testing.T) {
                Thousand Eleven; Two Thousand Twelve; Two Thousand Thirteen; Two Thousand
                Fourteen; Two Thousand Fifteen; Two Thousand Sixteen; Two Thousand
                Seventeen; Two Thousand Eighteen; Two Thousand Nineteen; Two Thousand
-               Twenty`))}},
+               Twenty
+            `))}},
 		{Name: "format-date-en129", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i
-         return translate(format-date($d2, '[DWo]', 'en', (), ()), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`FIRST; SECOND; THIRD; FOURTH; FIFTH; SIXTH; SEVENTH; EIGHTH; NINTH;
+         return translate(format-date($d2, '[DWo]', 'en', (), ()), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            FIRST; SECOND; THIRD; FOURTH; FIFTH; SIXTH; SEVENTH; EIGHTH; NINTH;
             TENTH; ELEVENTH; TWELFTH; THIRTEENTH; FOURTEENTH; FIFTEENTH; SIXTEENTH; SEVENTEENTH;
             EIGHTEENTH; NINETEENTH; TWENTIETH; TWENTYFIRST; TWENTYSECOND; TWENTYTHIRD; TWENTYFOURTH;
             TWENTYFIFTH; TWENTYSIXTH; TWENTYSEVENTH; TWENTYEIGHTH; TWENTYNINTH; THIRTIETH;
-            THIRTYFIRST`)}},
+            THIRTYFIRST
+         `)}},
 		{Name: "format-date-en130", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i
-         return translate(format-date($d2, '[Dwo]', 'en', (), ()), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`first; second; third; fourth; fifth; sixth; seventh; eighth; ninth;
+         return translate(format-date($d2, '[Dwo]', 'en', (), ()), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            first; second; third; fourth; fifth; sixth; seventh; eighth; ninth;
             tenth; eleventh; twelfth; thirteenth; fourteenth; fifteenth; sixteenth; seventeenth;
             eighteenth; nineteenth; twentieth; twentyfirst; twentysecond; twentythird; twentyfourth;
             twentyfifth; twentysixth; twentyseventh; twentyeighth; twentyninth; thirtieth;
-            thirtyfirst`)}},
+            thirtyfirst
+         `)}},
 		{Name: "format-date-en131", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i
-         return translate(format-date($d2, '[DWwo]', 'en', (), ()), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`First; Second; Third; Fourth; Fifth; Sixth; Seventh; Eighth; Ninth;
+         return translate(format-date($d2, '[DWwo]', 'en', (), ()), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            First; Second; Third; Fourth; Fifth; Sixth; Seventh; Eighth; Ninth;
             Tenth; Eleventh; Twelfth; Thirteenth; Fourteenth; Fifteenth; Sixteenth; Seventeenth;
             Eighteenth; Nineteenth; Twentieth; TwentyFirst; TwentySecond; TwentyThird; TwentyFourth;
             TwentyFifth; TwentySixth; TwentySeventh; TwentyEighth; TwentyNinth; Thirtieth;
-            ThirtyFirst`)}},
+            ThirtyFirst
+         `)}},
 		{Name: "format-date-en132", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i
          return translate(replace(format-date($d2, '[YWo]', 'en', (), ()), ' AND ', ' '), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`ONETHOUSANDNINEHUNDREDNINETIETH;
             ONETHOUSANDNINEHUNDREDNINETYFIRST; ONETHOUSANDNINEHUNDREDNINETYSECOND;
@@ -3582,12 +3654,18 @@ func TestQT3_fn_format_date(t *testing.T) {
 		{Name: "format-date-en157", XPath: "format-date($b, '[M01]', 'en', ':w', ())", Skip: "requires external parameters", ExpectError: true},
 		{Name: "format-date-en158", XPath: "format-date($b, '[M01]', 'en', 'Q{}1', ())", Skip: "requires external parameters", ExpectError: true},
 		{Name: "format-date-de101", XPath: `for $i in 1 to 12 return let $d2 := $d + xs:yearMonthDuration('P1M')*$i return
-         format-date($d2, '[MN]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("JANUAR FEBRUAR MÄRZ APRIL MAI JUNI JULI AUGUST SEPTEMBER OKTOBER NOVEMBER DEZEMBER")}},
+         format-date($d2, '[MN]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            JANUAR FEBRUAR MÄRZ APRIL MAI JUNI JULI AUGUST SEPTEMBER OKTOBER NOVEMBER DEZEMBER
+         `)}},
 		{Name: "format-date-de102", XPath: `for $i in 1 to 12 return let $d2 := $d + xs:yearMonthDuration('P1M')*$i return
-         format-date($d2, '[Mn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("januar februar märz april mai juni juli august september oktober november dezember")}},
+         format-date($d2, '[Mn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            januar februar märz april mai juni juli august september oktober november dezember
+         `)}},
 		{Name: "format-date-de103", XPath: `for $i in 1 to 12 
          return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
-         return format-date($d2, '[MNn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("Januar Februar März April Mai Juni Juli August September Oktober November Dezember")}},
+         return format-date($d2, '[MNn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            Januar Februar März April Mai Juni Juli August September Oktober November Dezember
+         `)}},
 		{Name: "format-date-de104", XPath: `for $i in 1 to 12 
          return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
          return format-date($d2, '[MN,3-3]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("JAN FEB MÄR APR MAI JUN JUL AUG SEP OKT NOV DEZ")}},
@@ -3598,11 +3676,17 @@ func TestQT3_fn_format_date(t *testing.T) {
          return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
          return format-date($d2, '[MNn,3-3]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("Jan Feb Mär Apr Mai Jun Jul Aug Sep Okt Nov Dez")}},
 		{Name: "format-date-de111", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[FN]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("MONTAG DIENSTAG MITTWOCH DONNERSTAG FREITAG SAMSTAG SONNTAG")}},
+         format-date($d2, '[FN]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            MONTAG DIENSTAG MITTWOCH DONNERSTAG FREITAG SAMSTAG SONNTAG
+         `)}},
 		{Name: "format-date-de112", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[Fn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("montag dienstag mittwoch donnerstag freitag samstag sonntag")}},
+         format-date($d2, '[Fn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            montag dienstag mittwoch donnerstag freitag samstag sonntag
+         `)}},
 		{Name: "format-date-de113", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[FNn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("Montag Dienstag Mittwoch Donnerstag Freitag Samstag Sonntag")}},
+         format-date($d2, '[FNn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            Montag Dienstag Mittwoch Donnerstag Freitag Samstag Sonntag
+         `)}},
 		{Name: "format-date-de114", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
          format-date($d2, '[FN,2-2]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("MO DI MI DO FR SA SO")}},
 		{Name: "format-date-de115", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
@@ -3659,14 +3743,19 @@ func TestQT3_fn_format_dateTime(t *testing.T) {
          1.15 2.15 3.15 4.15 5.15 6.15 7.15 8.15 9.15`)}},
 		{Name: "format-dateTime-005", XPath: `string-join(
           for $i in 1 to 100 return
-          format-dateTime($t + xs:yearMonthDuration('P1Y')*$i, '[YI]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("MCMLI; MCMLII; MCMLIII; MCMLIV; MCMLV; MCMLVI; MCMLVII; MCMLVIII; MCMLIX; MCMLX;             MCMLXI; MCMLXII; MCMLXIII; MCMLXIV; MCMLXV; MCMLXVI; MCMLXVII; MCMLXVIII;             MCMLXIX; MCMLXX; MCMLXXI; MCMLXXII; MCMLXXIII; MCMLXXIV; MCMLXXV; MCMLXXVI;             MCMLXXVII; MCMLXXVIII; MCMLXXIX; MCMLXXX; MCMLXXXI; MCMLXXXII; MCMLXXXIII;             MCMLXXXIV; MCMLXXXV; MCMLXXXVI; MCMLXXXVII; MCMLXXXVIII; MCMLXXXIX; MCMXC;             MCMXCI; MCMXCII; MCMXCIII; MCMXCIV; MCMXCV; MCMXCVI; MCMXCVII; MCMXCVIII;             MCMXCIX; MM; MMI; MMII; MMIII; MMIV; MMV; MMVI; MMVII; MMVIII; MMIX; MMX; MMXI; MMXII;             MMXIII; MMXIV; MMXV; MMXVI; MMXVII; MMXVIII; MMXIX; MMXX; MMXXI; MMXXII; MMXXIII; MMXXIV; MMXXV;             MMXXVI; MMXXVII; MMXXVIII; MMXXIX; MMXXX; MMXXXI; MMXXXII; MMXXXIII; MMXXXIV; MMXXXV;             MMXXXVI; MMXXXVII; MMXXXVIII; MMXXXIX; MMXL; MMXLI; MMXLII; MMXLIII; MMXLIV; MMXLV; MMXLVI;             MMXLVII; MMXLVIII; MMXLIX; MML")}},
+          format-dateTime($t + xs:yearMonthDuration('P1Y')*$i, '[YI]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            MCMLI; MCMLII; MCMLIII; MCMLIV; MCMLV; MCMLVI; MCMLVII; MCMLVIII; MCMLIX; MCMLX;             MCMLXI; MCMLXII; MCMLXIII; MCMLXIV; MCMLXV; MCMLXVI; MCMLXVII; MCMLXVIII;             MCMLXIX; MCMLXX; MCMLXXI; MCMLXXII; MCMLXXIII; MCMLXXIV; MCMLXXV; MCMLXXVI;             MCMLXXVII; MCMLXXVIII; MCMLXXIX; MCMLXXX; MCMLXXXI; MCMLXXXII; MCMLXXXIII;             MCMLXXXIV; MCMLXXXV; MCMLXXXVI; MCMLXXXVII; MCMLXXXVIII; MCMLXXXIX; MCMXC;             MCMXCI; MCMXCII; MCMXCIII; MCMXCIV; MCMXCV; MCMXCVI; MCMXCVII; MCMXCVIII;             MCMXCIX; MM; MMI; MMII; MMIII; MMIV; MMV; MMVI; MMVII; MMVIII; MMIX; MMX; MMXI; MMXII;             MMXIII; MMXIV; MMXV; MMXVI; MMXVII; MMXVIII; MMXIX; MMXX; MMXXI; MMXXII; MMXXIII; MMXXIV; MMXXV;             MMXXVI; MMXXVII; MMXXVIII; MMXXIX; MMXXX; MMXXXI; MMXXXII; MMXXXIII; MMXXXIV; MMXXXV;             MMXXXVI; MMXXXVII; MMXXXVIII; MMXXXIX; MMXL; MMXLI; MMXLII; MMXLIII; MMXLIV; MMXLV; MMXLVI;             MMXLVII; MMXLVIII; MMXLIX; MML
+        `)}},
 		{Name: "format-dateTime-006", XPath: `string-join(
           for $i in 1 to 100 return
-          format-dateTime($t + xs:yearMonthDuration('P17Y')*$i, '[Yi,3-3]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii; cmlxx; cmlxxxvii; iv ; xxi; xxxviii; lv ; lxxii; lxxxix; cvi; cxxiii; cxl; clvii; clxxiv; cxci; ccviii; ccxxv; ccxlii; cclix; cclxxvi; ccxciii; cccx; cccxxvii; cccxliv; ccclxi; ccclxxviii; cccxcv; cdxii; cdxxix; cdxlvi; cdlxiii; cdlxxx; cdxcvii; dxiv; dxxxi; dxlviii; dlxv; dlxxxii; dxcix; dcxvi; dcxxxiii; dcl; dclxvii; dclxxxiv; dcci; dccxviii; dccxxxv; dcclii; dcclxix; dcclxxxvi; dccciii; dcccxx; dcccxxxvii; dcccliv; dccclxxi; dccclxxxviii; cmv; cmxxii; cmxxxix; cmlvi; cmlxxiii; cmxc; vii; xxiv; xli; lviii; lxxv; xcii; cix; cxxvi; cxliii; clx; clxxvii; cxciv; ccxi; ccxxviii; ccxlv; cclxii; cclxxix; ccxcvi; cccxiii; cccxxx; cccxlvii; ccclxiv; ccclxxxi; cccxcviii; cdxv; cdxxxii; cdxlix; cdlxvi; cdlxxxiii; d")}},
-		{Name: "format-dateTime-006a", XPath: "format-dateTime($t, '[Yi,4-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("miv")}},
+          format-dateTime($t + xs:yearMonthDuration('P17Y')*$i, '[Yi,3-3]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii; cmlxx; cmlxxxvii; iv ; xxi; xxxviii; lv ; lxxii; lxxxix; cvi; cxxiii; cxl; clvii; clxxiv; cxci; ccviii; ccxxv; ccxlii; cclix; cclxxvi; ccxciii; cccx; cccxxvii; cccxliv; ccclxi; ccclxxviii; cccxcv; cdxii; cdxxix; cdxlvi; cdlxiii; cdlxxx; cdxcvii; dxiv; dxxxi; dxlviii; dlxv; dlxxxii; dxcix; dcxvi; dcxxxiii; dcl; dclxvii; dclxxxiv; dcci; dccxviii; dccxxxv; dcclii; dcclxix; dcclxxxvi; dccciii; dcccxx; dcccxxxvii; dcccliv; dccclxxi; dccclxxxviii; cmv; cmxxii; cmxxxix; cmlvi; cmlxxiii; cmxc; vii; xxiv; xli; lviii; lxxv; xcii; cix; cxxvi; cxliii; clx; clxxvii; cxciv; ccxi; ccxxviii; ccxlv; cclxii; cclxxix; ccxcvi; cccxiii; cccxxx; cccxlvii; ccclxiv; ccclxxxi; cccxcviii; cdxv; cdxxxii; cdxlix; cdlxvi; cdlxxxiii; d
+         `)}},
+		{Name: "format-dateTime-006a", XPath: "format-dateTime($t, '[Yi,4-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("miv ")}},
 		{Name: "format-dateTime-009", XPath: `for $i in 1 to 48,
                 $d in $t + xs:yearMonthDuration('P1M')*$i
-            return concat("[", $d, ": ", format-dateTime($d, '[W]', (), 'ISO', ()), "]")`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`[2004-01-01T12:00:00: 1] [2004-02-01T12:00:00: 5] [2004-03-01T12:00:00: 10] [2004-04-01T12:00:00: 14] 
+            return concat("[", $d, ": ", format-dateTime($d, '[W]', (), 'ISO', ()), "]")`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            [2004-01-01T12:00:00: 1] [2004-02-01T12:00:00: 5] [2004-03-01T12:00:00: 10] [2004-04-01T12:00:00: 14] 
             [2004-05-01T12:00:00: 18] [2004-06-01T12:00:00: 23] [2004-07-01T12:00:00: 27] [2004-08-01T12:00:00: 31] 
             [2004-09-01T12:00:00: 36] [2004-10-01T12:00:00: 40] [2004-11-01T12:00:00: 45] [2004-12-01T12:00:00: 49] 
             [2005-01-01T12:00:00: 53] [2005-02-01T12:00:00: 5] [2005-03-01T12:00:00: 9] [2005-04-01T12:00:00: 13] 
@@ -3677,10 +3766,12 @@ func TestQT3_fn_format_dateTime(t *testing.T) {
             [2006-09-01T12:00:00: 35] [2006-10-01T12:00:00: 39] [2006-11-01T12:00:00: 44] [2006-12-01T12:00:00: 48] 
             [2007-01-01T12:00:00: 1] [2007-02-01T12:00:00: 5] [2007-03-01T12:00:00: 9] [2007-04-01T12:00:00: 13] 
             [2007-05-01T12:00:00: 18] [2007-06-01T12:00:00: 22] [2007-07-01T12:00:00: 26] [2007-08-01T12:00:00: 31] 
-            [2007-09-01T12:00:00: 35] [2007-10-01T12:00:00: 40] [2007-11-01T12:00:00: 44] [2007-12-01T12:00:00: 48]`)}},
+            [2007-09-01T12:00:00: 35] [2007-10-01T12:00:00: 40] [2007-11-01T12:00:00: 44] [2007-12-01T12:00:00: 48]
+        `)}},
 		{Name: "format-dateTime-010", XPath: `for $i in 1 to 48,
                 $d in $t + xs:yearMonthDuration('P1M')*$i
-            return concat("[", $d, ": ", format-dateTime($d, '[F01]', (), 'ISO', ()))`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`[2004-01-01T12:00:00: 04 [2004-02-01T12:00:00: 07 [2004-03-01T12:00:00: 01 [2004-04-01T12:00:00: 04 
+            return concat("[", $d, ": ", format-dateTime($d, '[F01]', (), 'ISO', ()))`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            [2004-01-01T12:00:00: 04 [2004-02-01T12:00:00: 07 [2004-03-01T12:00:00: 01 [2004-04-01T12:00:00: 04 
             [2004-05-01T12:00:00: 06 [2004-06-01T12:00:00: 02 [2004-07-01T12:00:00: 04 [2004-08-01T12:00:00: 07 
             [2004-09-01T12:00:00: 03 [2004-10-01T12:00:00: 05 [2004-11-01T12:00:00: 01 [2004-12-01T12:00:00: 03 
             [2005-01-01T12:00:00: 06 [2005-02-01T12:00:00: 02 [2005-03-01T12:00:00: 02 [2005-04-01T12:00:00: 05 
@@ -3691,10 +3782,12 @@ func TestQT3_fn_format_dateTime(t *testing.T) {
             [2006-09-01T12:00:00: 05 [2006-10-01T12:00:00: 07 [2006-11-01T12:00:00: 03 [2006-12-01T12:00:00: 05 
             [2007-01-01T12:00:00: 01 [2007-02-01T12:00:00: 04 [2007-03-01T12:00:00: 04 [2007-04-01T12:00:00: 07 
             [2007-05-01T12:00:00: 02 [2007-06-01T12:00:00: 05 [2007-07-01T12:00:00: 07 [2007-08-01T12:00:00: 03 
-            [2007-09-01T12:00:00: 06 [2007-10-01T12:00:00: 01 [2007-11-01T12:00:00: 04 [2007-12-01T12:00:00: 06`)}},
+            [2007-09-01T12:00:00: 06 [2007-10-01T12:00:00: 01 [2007-11-01T12:00:00: 04 [2007-12-01T12:00:00: 06
+         `)}},
 		{Name: "format-dateTime-011", XPath: `for $i in 1 to 48,
                 $d in $t + xs:yearMonthDuration('P1M')*$i
-            return concat("[", $d, ": ", format-dateTime($d, '[w]', (), 'ISO', ()))`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`[2006-01-01T12:00:00: 5 [2006-02-01T12:00:00: 1 [2006-03-01T12:00:00: 1 [2006-04-01T12:00:00: 5 
+            return concat("[", $d, ": ", format-dateTime($d, '[w]', (), 'ISO', ()))`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            [2006-01-01T12:00:00: 5 [2006-02-01T12:00:00: 1 [2006-03-01T12:00:00: 1 [2006-04-01T12:00:00: 5 
             [2006-05-01T12:00:00: 1 [2006-06-01T12:00:00: 1 [2006-07-01T12:00:00: 5 [2006-08-01T12:00:00: 1 
             [2006-09-01T12:00:00: 5 [2006-10-01T12:00:00: 4 [2006-11-01T12:00:00: 1 [2006-12-01T12:00:00: 5 
             [2007-01-01T12:00:00: 1 [2007-02-01T12:00:00: 1 [2007-03-01T12:00:00: 1 [2007-04-01T12:00:00: 5 
@@ -3705,12 +3798,15 @@ func TestQT3_fn_format_dateTime(t *testing.T) {
             [2008-09-01T12:00:00: 1 [2008-10-01T12:00:00: 1 [2008-11-01T12:00:00: 5 [2008-12-01T12:00:00: 1 
             [2009-01-01T12:00:00: 1 [2009-02-01T12:00:00: 5 [2009-03-01T12:00:00: 4 [2009-04-01T12:00:00: 1 
             [2009-05-01T12:00:00: 5 [2009-06-01T12:00:00: 1 [2009-07-01T12:00:00: 1 [2009-08-01T12:00:00: 5 
-            [2009-09-01T12:00:00: 1 [2009-10-01T12:00:00: 1 [2009-11-01T12:00:00: 5 [2009-12-01T12:00:00: 1`)}},
+            [2009-09-01T12:00:00: 1 [2009-10-01T12:00:00: 1 [2009-11-01T12:00:00: 5 [2009-12-01T12:00:00: 1
+         `)}},
 		{Name: "format-dateTime-012", XPath: `for $i in 1 to 60 return
-            format-dateTime($t + xs:dayTimeDuration('PT61S')*$i, '[mA].[sa]')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`P.g Q.h R.i S.j T.k U.l V.m W.n X.o Y.p Z.q AA.r AB.s AC.t AD.u AE.v AF.w AG.x AH.y AI.z AJ.aa 
+            format-dateTime($t + xs:dayTimeDuration('PT61S')*$i, '[mA].[sa]')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            P.g Q.h R.i S.j T.k U.l V.m W.n X.o Y.p Z.q AA.r AB.s AC.t AD.u AE.v AF.w AG.x AH.y AI.z AJ.aa 
             AK.ab AL.ac AM.ad AN.ae AO.af AP.ag AQ.ah AR.ai AS.aj AT.ak AU.al AV.am AW.an AX.ao AY.ap AZ.aq 
             BA.ar BB.as BC.at BD.au BE.av BF.aw BG.ax 
-            0.ay A.az B.ba C.bb D.bc E.bd F.be G.bf H.bg J.0 K.a L.b M.c N.d O.e P.f`)}},
+            0.ay A.az B.ba C.bb D.bc E.bd F.be G.bf H.bg J.0 K.a L.b M.c N.d O.e P.f
+         `)}},
 		{Name: "format-dateTime-013a", XPath: "format-dateTime($t, '[Y,4-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("0985")}},
 		{Name: "format-dateTime-013b", XPath: "format-dateTime($t, '[Y,3-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
 		{Name: "format-dateTime-013c", XPath: "format-dateTime($t, '[Y,2-5]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
@@ -3735,52 +3831,62 @@ func TestQT3_fn_format_dateTime(t *testing.T) {
 		{Name: "format-dateTime-014", XPath: `string-join(
                for $z in -28 to +28
                return format-dateTime(adjust-dateTime-to-timezone(
-                   $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][Z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`0715-14:00; 0745-13:30; 0815-13:00; 0845-12:30; 0915-12:00; 0945-11:30; 1015-11:00; 1045-10:30; 1115-10:00; 
+                   $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][Z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            0715-14:00; 0745-13:30; 0815-13:00; 0845-12:30; 0915-12:00; 0945-11:30; 1015-11:00; 1045-10:30; 1115-10:00; 
             1145-09:30; 1215-09:00; 1245-08:30; 0115-08:00; 0145-07:30; 0215-07:00; 0245-06:30; 0315-06:00; 0345-05:30;
             0415-05:00; 0445-04:30; 0515-04:00; 0545-03:30; 0615-03:00; 0645-02:30; 0715-02:00; 0745-01:30; 0815-01:00;
             0845-00:30; 0915+00:00; 0945+00:30; 1015+01:00; 1045+01:30; 1115+02:00; 1145+02:30; 1215+03:00; 1245+03:30;
             0115+04:00; 0145+04:30; 0215+05:00; 0245+05:30; 0315+06:00; 0345+06:30; 0415+07:00; 0445+07:30; 0515+08:00;
             0545+08:30; 0615+09:00; 0645+09:30; 0715+10:00; 0745+10:30; 0815+11:00; 0845+11:30; 0915+12:00; 0945+12:30;
-            1015+13:00; 1045+13:30; 1115+14:00`)}},
+            1015+13:00; 1045+13:30; 1115+14:00
+         `)}},
 		{Name: "format-dateTime-015", XPath: `string-join(
                for $z in -28 to +28
                return format-dateTime(adjust-dateTime-to-timezone(
-                          $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z0]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`0715GMT-14; 0745GMT-13:30; 0815GMT-13; 0845GMT-12:30; 0915GMT-12; 0945GMT-11:30; 1015GMT-11; 1045GMT-10:30;
+                          $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z0]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            0715GMT-14; 0745GMT-13:30; 0815GMT-13; 0845GMT-12:30; 0915GMT-12; 0945GMT-11:30; 1015GMT-11; 1045GMT-10:30;
             1115GMT-10; 1145GMT-9:30; 1215GMT-9; 1245GMT-8:30; 0115GMT-8; 0145GMT-7:30; 0215GMT-7; 0245GMT-6:30; 0315GMT-6;
             0345GMT-5:30; 0415GMT-5; 0445GMT-4:30; 0515GMT-4; 0545GMT-3:30; 0615GMT-3; 0645GMT-2:30; 0715GMT-2; 0745GMT-1:30;
             0815GMT-1; 0845GMT-0:30; 0915GMT+0; 0945GMT+0:30; 1015GMT+1; 1045GMT+1:30; 1115GMT+2; 1145GMT+2:30; 1215GMT+3; 
             1245GMT+3:30; 0115GMT+4; 0145GMT+4:30; 0215GMT+5; 0245GMT+5:30; 0315GMT+6; 0345GMT+6:30; 0415GMT+7; 0445GMT+7:30;             
             0515GMT+8; 0545GMT+8:30; 0615GMT+9; 0645GMT+9:30; 0715GMT+10; 0745GMT+10:30; 0815GMT+11; 0845GMT+11:30; 0915GMT+12;             
-            0945GMT+12:30; 1015GMT+13; 1045GMT+13:30; 1115GMT+14`)}},
+            0945GMT+12:30; 1015GMT+13; 1045GMT+13:30; 1115GMT+14
+         `)}},
 		{Name: "format-dateTime-016", XPath: `string-join(
                for $z in -28 to +28
                return format-dateTime(adjust-dateTime-to-timezone(
-               $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z00:00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00;            
+               $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z00:00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00;            
              1045GMT-10:30; 1115GMT-10:00; 1145GMT-09:30; 1215GMT-09:00; 1245GMT-08:30; 0115GMT-08:00; 0145GMT-07:30;             
              0215GMT-07:00; 0245GMT-06:30; 0315GMT-06:00; 0345GMT-05:30; 0415GMT-05:00; 0445GMT-04:30; 0515GMT-04:00;             
              0545GMT-03:30; 0615GMT-03:00; 0645GMT-02:30; 0715GMT-02:00; 0745GMT-01:30; 0815GMT-01:00; 0845GMT-00:30;             
              0915GMT+00:00; 0945GMT+00:30; 1015GMT+01:00; 1045GMT+01:30; 1115GMT+02:00; 1145GMT+02:30; 1215GMT+03:00; 1245GMT+03:30;             
              0115GMT+04:00; 0145GMT+04:30; 0215GMT+05:00; 0245GMT+05:30; 0315GMT+06:00; 0345GMT+06:30; 0415GMT+07:00;             
              0445GMT+07:30; 0515GMT+08:00; 0545GMT+08:30; 0615GMT+09:00; 0645GMT+09:30; 0715GMT+10:00; 0745GMT+10:30;             
-             0815GMT+11:00; 0845GMT+11:30; 0915GMT+12:00; 0945GMT+12:30; 1015GMT+13:00; 1045GMT+13:30; 1115GMT+14:00`)}},
+             0815GMT+11:00; 0845GMT+11:30; 0915GMT+12:00; 0945GMT+12:30; 1015GMT+13:00; 1045GMT+13:30; 1115GMT+14:00
+        `)}},
 		{Name: "format-dateTime-017", XPath: `string-join(
                for $z in -28 to +28
-               return format-dateTime(adjust-dateTime-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`0715GMT-14; 0745GMT-13:30; 0815GMT-13; 0845GMT-12:30; 0915GMT-12; 0945GMT-11:30; 1015GMT-11; 1045GMT-10:30; 
+               return format-dateTime(adjust-dateTime-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+             0715GMT-14; 0745GMT-13:30; 0815GMT-13; 0845GMT-12:30; 0915GMT-12; 0945GMT-11:30; 1015GMT-11; 1045GMT-10:30; 
              1115GMT-10; 1145GMT-09:30; 1215GMT-09; 1245GMT-08:30; 0115GMT-08; 0145GMT-07:30; 0215GMT-07; 0245GMT-06:30;
              0315GMT-06; 0345GMT-05:30; 0415GMT-05; 0445GMT-04:30; 0515GMT-04; 0545GMT-03:30; 0615GMT-03; 0645GMT-02:30;
              0715GMT-02; 0745GMT-01:30; 0815GMT-01; 0845GMT-00:30; 0915GMT+00; 0945GMT+00:30; 1015GMT+01; 1045GMT+01:30; 1115GMT+02;
              1145GMT+02:30; 1215GMT+03; 1245GMT+03:30; 0115GMT+04; 0145GMT+04:30; 0215GMT+05; 0245GMT+05:30; 0315GMT+06;
              0345GMT+06:30; 0415GMT+07; 0445GMT+07:30; 0515GMT+08; 0545GMT+08:30; 0615GMT+09; 0645GMT+09:30; 0715GMT+10;
-             0745GMT+10:30; 0815GMT+11; 0845GMT+11:30; 0915GMT+12; 0945GMT+12:30; 1015GMT+13; 1045GMT+13:30; 1115GMT+14`)}},
+             0745GMT+10:30; 0815GMT+11; 0845GMT+11:30; 0915GMT+12; 0945GMT+12:30; 1015GMT+13; 1045GMT+13:30; 1115GMT+14
+         `)}},
 		{Name: "format-dateTime-018", XPath: `string-join(
                for $z in -28 to +28
-               return format-dateTime(adjust-dateTime-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`0715GMT-14; 0745GMT-13:30; 0815GMT-13; 0845GMT-12:30; 0915GMT-12; 0945GMT-11:30; 1015GMT-11; 1045GMT-10:30;
+               return format-dateTime(adjust-dateTime-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            0715GMT-14; 0745GMT-13:30; 0815GMT-13; 0845GMT-12:30; 0915GMT-12; 0945GMT-11:30; 1015GMT-11; 1045GMT-10:30;
             1115GMT-10; 1145GMT-09:30; 1215GMT-09; 1245GMT-08:30; 0115GMT-08; 0145GMT-07:30; 0215GMT-07; 0245GMT-06:30; 0315GMT-06;
             0345GMT-05:30; 0415GMT-05; 0445GMT-04:30; 0515GMT-04; 0545GMT-03:30; 0615GMT-03; 0645GMT-02:30; 0715GMT-02; 0745GMT-01:30;
             0815GMT-01; 0845GMT-00:30; 0915GMT+00; 0945GMT+00:30; 1015GMT+01; 1045GMT+01:30; 1115GMT+02; 1145GMT+02:30; 1215GMT+03;
             1245GMT+03:30; 0115GMT+04; 0145GMT+04:30; 0215GMT+05; 0245GMT+05:30; 0315GMT+06; 0345GMT+06:30; 0415GMT+07; 0445GMT+07:30;
             0515GMT+08; 0545GMT+08:30; 0615GMT+09; 0645GMT+09:30; 0715GMT+10; 0745GMT+10:30; 0815GMT+11; 0845GMT+11:30; 0915GMT+12;
-            0945GMT+12:30; 1015GMT+13; 1045GMT+13:30; 1115GMT+14`)}},
+            0945GMT+12:30; 1015GMT+13; 1045GMT+13:30; 1115GMT+14
+         `)}},
 		{Name: "format-dateTime-019a", XPath: "format-dateTime(xs:dateTime('2015-02-15T12:00:00Z'), '[D] [MNn] [Y0001] @ [H01]:[m01] [Z]', 'en', (), 'America/New_York')", Assertions: []qt3Assertion{qt3AssertEq("'15 February 2015 @ 07:00 -05:00'")}},
 		{Name: "format-dateTime-019b", XPath: "format-dateTime(xs:dateTime('2015-08-15T12:00:00Z'), '[D] [MNn] [Y0001] @ [H01]:[m01] [Z]', 'en', (), 'America/New_York')", Assertions: []qt3Assertion{qt3AssertEq("'15 August 2015 @ 08:00 -04:00'")}},
 		{Name: "format-dateTime-019c", XPath: "format-dateTime(xs:dateTime('2015-02-15T12:00:00Z'), '[D] [MNn] [Y0001] @ [H01]:[m01] [ZN]', 'en', (), 'America/New_York')", Assertions: []qt3Assertion{qt3AssertEq("'15 February 2015 @ 07:00 EST'")}},
@@ -3794,8 +3900,10 @@ func TestQT3_fn_format_dateTime(t *testing.T) {
         format-dateTime($d2, '[Y][EN]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckDeepEq("\"1990AD\", \"55BC\""), qt3CheckDeepEq("\"1990CE\", \"55BCE\""), qt3CheckDeepEq("\"1990A.D.\", \"55B.C.\""), qt3CheckDeepEq("\"1990C.E.\", \"55B.C.E.\""))}},
 		{Name: "format-dateTime-en142", XPath: `for $i in 0 to 23 return
         let $t := $b + xs:dayTimeDuration('PT1H')*$i return
-        translate(format-dateTime($t, '[h]~[m][P]', 'en', (), ()), '.- ', '')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`12~10am 1~10am 2~10am 3~10am 4~10am 5~10am 6~10am 7~10am 8~10am 9~10am 10~10am 11~10am 12~10pm 
-         1~10pm 2~10pm 3~10pm 4~10pm 5~10pm 6~10pm 7~10pm 8~10pm 9~10pm 10~10pm 11~10pm`)}},
+        translate(format-dateTime($t, '[h]~[m][P]', 'en', (), ()), '.- ', '')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         12~10am 1~10am 2~10am 3~10am 4~10am 5~10am 6~10am 7~10am 8~10am 9~10am 10~10am 11~10am 12~10pm 
+         1~10pm 2~10pm 3~10pm 4~10pm 5~10pm 6~10pm 7~10pm 8~10pm 9~10pm 10~10pm 11~10pm
+         `)}},
 		{Name: "format-dateTime-en143", XPath: `for $i in 0 to 1 return
         let $t := $b + xs:dayTimeDuration('PT12H')*$i return
         translate(format-dateTime($t, '[h]~[m][P]', 'en', (), ()), '.- ', '')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("12~00am 12~00pm")}},
@@ -4198,8 +4306,10 @@ func TestQT3_fn_format_time(t *testing.T) {
 		{Name: "format-time-002i", XPath: "format-time($t,\"[H]:[m]:[s].[f01]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.45")}},
 		{Name: "format-time-002j", XPath: "format-time($t,\"[H]:[m]:[s].[f001]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.456")}},
 		{Name: "format-time-004", XPath: `for $i in 1 to 24 return
-        format-time($t + xs:dayTimeDuration('PT1H')*$i, '[h].[m]')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`10.15 11.15 12.15 1.15 2.15 3.15 4.15 5.15 6.15 7.15 8.15 9.15 10.15 11.15 
-         12.15 1.15 2.15 3.15 4.15 5.15 6.15 7.15 8.15 9.15`)}},
+        format-time($t + xs:dayTimeDuration('PT1H')*$i, '[h].[m]')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         10.15 11.15 12.15 1.15 2.15 3.15 4.15 5.15 6.15 7.15 8.15 9.15 10.15 11.15 
+         12.15 1.15 2.15 3.15 4.15 5.15 6.15 7.15 8.15 9.15
+         `)}},
 		{Name: "format-time-013n", XPath: "format-time($t, '[m,3]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("015")}},
 		{Name: "format-time-013p", XPath: "format-time($t, '[f,4-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("4560")}},
 		{Name: "format-time-013q", XPath: "format-time($t, '[f,1-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("456")}},
@@ -4211,55 +4321,65 @@ func TestQT3_fn_format_time(t *testing.T) {
 		{Name: "format-time-014", XPath: `string-join(
                for $z in -28 to +28
                return format-time(adjust-time-to-timezone(
-               $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][Z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`0715-14:00; 0745-13:30; 0815-13:00; 0845-12:30; 0915-12:00; 0945-11:30; 1015-11:00; 1045-10:30; 1115-10:00; 
+               $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][Z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+             0715-14:00; 0745-13:30; 0815-13:00; 0845-12:30; 0915-12:00; 0945-11:30; 1015-11:00; 1045-10:30; 1115-10:00; 
              1145-09:30; 1215-09:00; 1245-08:30; 0115-08:00; 0145-07:30; 0215-07:00; 0245-06:30; 0315-06:00; 0345-05:30; 
              0415-05:00; 0445-04:30; 0515-04:00; 0545-03:30; 0615-03:00; 0645-02:30; 0715-02:00; 0745-01:30; 0815-01:00; 
              0845-00:30; 0915+00:00; 0945+00:30; 1015+01:00; 1045+01:30; 1115+02:00; 1145+02:30; 1215+03:00; 1245+03:30;
              0115+04:00; 0145+04:30; 0215+05:00; 0245+05:30; 0315+06:00; 0345+06:30; 0415+07:00; 0445+07:30; 0515+08:00; 
              0545+08:30; 0615+09:00; 0645+09:30; 0715+10:00; 0745+10:30; 0815+11:00; 0845+11:30; 0915+12:00; 0945+12:30; 
-             1015+13:00; 1045+13:30; 1115+14:00`)}},
+             1015+13:00; 1045+13:30; 1115+14:00
+         `)}},
 		{Name: "format-time-015", XPath: `string-join(
                for $z in -28 to +28
                return format-time(adjust-time-to-timezone(
-                        $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00; 1045GMT-10:30;
+                        $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00; 1045GMT-10:30;
             1115GMT-10:00; 1145GMT-09:30; 1215GMT-09:00; 1245GMT-08:30; 0115GMT-08:00; 0145GMT-07:30; 0215GMT-07:00; 0245GMT-06:30;
             0315GMT-06:00; 0345GMT-05:30; 0415GMT-05:00; 0445GMT-04:30; 0515GMT-04:00; 0545GMT-03:30; 0615GMT-03:00; 0645GMT-02:30;
             0715GMT-02:00; 0745GMT-01:30; 0815GMT-01:00; 0845GMT-00:30; 0915GMT+00:00; 0945GMT+00:30; 1015GMT+01:00; 1045GMT+01:30; 1115GMT+02:00;
             1145GMT+02:30; 1215GMT+03:00; 1245GMT+03:30; 0115GMT+04:00; 0145GMT+04:30; 0215GMT+05:00; 0245GMT+05:30; 0315GMT+06:00;
             0345GMT+06:30; 0415GMT+07:00; 0445GMT+07:30; 0515GMT+08:00; 0545GMT+08:30; 0615GMT+09:00; 0645GMT+09:30; 0715GMT+10:00;
             0745GMT+10:30; 0815GMT+11:00; 0845GMT+11:30; 0915GMT+12:00; 0945GMT+12:30; 1015GMT+13:00; 1045GMT+13:30;
-            1115GMT+14:00`)}},
+            1115GMT+14:00
+         `)}},
 		{Name: "format-time-016", XPath: `string-join(
                for $z in -28 to +28
                return format-time(adjust-time-to-timezone(
-                        $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z,6-6]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00; 1045GMT-10:30;
+                        $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z,6-6]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+             0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00; 1045GMT-10:30;
             1115GMT-10:00; 1145GMT-09:30; 1215GMT-09:00; 1245GMT-08:30; 0115GMT-08:00; 0145GMT-07:30; 0215GMT-07:00; 0245GMT-06:30;
             0315GMT-06:00; 0345GMT-05:30; 0415GMT-05:00; 0445GMT-04:30; 0515GMT-04:00; 0545GMT-03:30; 0615GMT-03:00; 0645GMT-02:30;
             0715GMT-02:00; 0745GMT-01:30; 0815GMT-01:00; 0845GMT-00:30; 0915GMT+00:00; 0945GMT+00:30; 1015GMT+01:00; 1045GMT+01:30; 1115GMT+02:00;
             1145GMT+02:30; 1215GMT+03:00; 1245GMT+03:30; 0115GMT+04:00; 0145GMT+04:30; 0215GMT+05:00; 0245GMT+05:30; 0315GMT+06:00;
             0345GMT+06:30; 0415GMT+07:00; 0445GMT+07:30; 0515GMT+08:00; 0545GMT+08:30; 0615GMT+09:00; 0645GMT+09:30; 0715GMT+10:00;
             0745GMT+10:30; 0815GMT+11:00; 0845GMT+11:30; 0915GMT+12:00; 0945GMT+12:30; 1015GMT+13:00; 1045GMT+13:30;
-            1115GMT+14:00`)}},
+            1115GMT+14:00
+        `)}},
 		{Name: "format-time-017", XPath: `string-join(
                for $z in -28 to +28
-               return format-time(adjust-time-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z,5-6]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00; 1045GMT-10:30;
+               return format-time(adjust-time-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z,5-6]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+             0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00; 1045GMT-10:30;
             1115GMT-10:00; 1145GMT-09:30; 1215GMT-09:00; 1245GMT-08:30; 0115GMT-08:00; 0145GMT-07:30; 0215GMT-07:00; 0245GMT-06:30;
             0315GMT-06:00; 0345GMT-05:30; 0415GMT-05:00; 0445GMT-04:30; 0515GMT-04:00; 0545GMT-03:30; 0615GMT-03:00; 0645GMT-02:30;
             0715GMT-02:00; 0745GMT-01:30; 0815GMT-01:00; 0845GMT-00:30; 0915GMT+00:00; 0945GMT+00:30; 1015GMT+01:00; 1045GMT+01:30; 1115GMT+02:00;
             1145GMT+02:30; 1215GMT+03:00; 1245GMT+03:30; 0115GMT+04:00; 0145GMT+04:30; 0215GMT+05:00; 0245GMT+05:30; 0315GMT+06:00;
             0345GMT+06:30; 0415GMT+07:00; 0445GMT+07:30; 0515GMT+08:00; 0545GMT+08:30; 0615GMT+09:00; 0645GMT+09:30; 0715GMT+10:00;
             0745GMT+10:30; 0815GMT+11:00; 0845GMT+11:30; 0915GMT+12:00; 0945GMT+12:30; 1015GMT+13:00; 1045GMT+13:30;
-            1115GMT+14:00`)}},
+            1115GMT+14:00
+         `)}},
 		{Name: "format-time-018", XPath: `string-join(
                for $z in -28 to +28
-               return format-time(adjust-time-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z,2-6]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00; 1045GMT-10:30;
+               return format-time(adjust-time-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z,2-6]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+              0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00; 1045GMT-10:30;
             1115GMT-10:00; 1145GMT-09:30; 1215GMT-09:00; 1245GMT-08:30; 0115GMT-08:00; 0145GMT-07:30; 0215GMT-07:00; 0245GMT-06:30;
             0315GMT-06:00; 0345GMT-05:30; 0415GMT-05:00; 0445GMT-04:30; 0515GMT-04:00; 0545GMT-03:30; 0615GMT-03:00; 0645GMT-02:30;
             0715GMT-02:00; 0745GMT-01:30; 0815GMT-01:00; 0845GMT-00:30; 0915GMT+00:00; 0945GMT+00:30; 1015GMT+01:00; 1045GMT+01:30; 1115GMT+02:00;
             1145GMT+02:30; 1215GMT+03:00; 1245GMT+03:30; 0115GMT+04:00; 0145GMT+04:30; 0215GMT+05:00; 0245GMT+05:30; 0315GMT+06:00;
             0345GMT+06:30; 0415GMT+07:00; 0445GMT+07:30; 0515GMT+08:00; 0545GMT+08:30; 0615GMT+09:00; 0645GMT+09:30; 0715GMT+10:00;
             0745GMT+10:30; 0815GMT+11:00; 0845GMT+11:30; 0915GMT+12:00; 0945GMT+12:30; 1015GMT+13:00; 1045GMT+13:30;
-            1115GMT+14:00`)}},
+            1115GMT+14:00
+         `)}},
 		{Name: "format-time-019", XPath: "format-time(xs:time('09:15:06.456'),\"[f๐๐๐]\")", Assertions: []qt3Assertion{qt3AssertStringValue("๔๕๖")}},
 		{Name: "format-time-020", XPath: "format-time(xs:time('09:15:06.456'),\"[H٠]:[m٠]:[s٠٠]:[f٠٠٠]\")", Assertions: []qt3Assertion{qt3AssertStringValue("٩:١٥:٠٦:٤٥٦")}},
 		{Name: "format-time-021", XPath: "format-time(xs:time('09:15:06.456'),\"[Pn]/[PNn]/[PN]\")", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("am/Am/AM"), qt3CheckStringValue("a.m./A.M./A.M."))}},
@@ -4748,7 +4868,7 @@ func TestQT3_fn_function_lookup(t *testing.T) {
 		{Name: "fn-function-lookup-413", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'default-collation'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-414", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'default-collation'), 0)()", Assertions: []qt3Assertion{qt3AssertStringValue("http://www.w3.org/2005/xpath-functions/collation/codepoint")}},
 		{Name: "fn-function-lookup-415", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'static-base-uri'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-416", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'static-base-uri'), 0)()", Assertions: []qt3Assertion{qt3AssertType("xs:anyURI?")}},
+		{Name: "fn-function-lookup-416", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'static-base-uri'), 0)()", BaseURI: "http://www.example.com", Assertions: []qt3Assertion{qt3AssertType("xs:anyURI?")}},
 		{Name: "fn-function-lookup-417", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'function-lookup'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-418", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'function-lookup'), 2)(fn:QName('http://www.example.org', 'foo:bar'), 1)", Assertions: []qt3Assertion{qt3AssertEmpty()}},
 		{Name: "fn-function-lookup-419", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'function-name'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
@@ -4930,13 +5050,13 @@ string')`, Assertions: []qt3Assertion{qt3AssertStringValue("normalized string")}
 		{Name: "fn-function-lookup-734", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'default-language'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-735", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'default-language'), 0)()", Assertions: []qt3Assertion{qt3AssertType("xs:language")}},
 		{Name: "fn-function-lookup-736", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'json-doc'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-737", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'json-doc'), 1)( 'does-not-exist.txt' )", ExpectError: true},
+		{Name: "fn-function-lookup-737", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'json-doc'), 1)( 'does-not-exist.txt' )", BaseURI: "http://www.w3.org/fots/unparsed-text/", ExpectError: true},
 		{Name: "fn-function-lookup-738", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'json-doc'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-739", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'json-doc'), 2)( 'does-not-exist.txt', map {} )", ExpectError: true},
+		{Name: "fn-function-lookup-739", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'json-doc'), 2)( 'does-not-exist.txt', map {} )", BaseURI: "http://www.w3.org/fots/unparsed-text/", ExpectError: true},
 		{Name: "fn-function-lookup-740", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'json-to-xml'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-741", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'json-to-xml'), 1)( '{}' )", Assertions: []qt3Assertion{qt3AssertCount(1), qt3AssertType("document-node()"), qt3AssertSkip()}},
 		{Name: "fn-function-lookup-742", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'json-to-xml'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-743", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'json-to-xml'), 2)( '{}', map {} )", Assertions: []qt3Assertion{qt3AssertCount(1), qt3AssertType("document-node()"), qt3AssertSkip()}},
+		{Name: "fn-function-lookup-743", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'json-to-xml'), 2)( '{}', map {} )", BaseURI: "http://www.w3.org/fots/unparsed-text/", Assertions: []qt3Assertion{qt3AssertCount(1), qt3AssertType("document-node()"), qt3AssertSkip()}},
 		{Name: "fn-function-lookup-744", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'parse-json'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-745", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'parse-json'), 1)( 'true' )", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-746", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'parse-json'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
@@ -5797,7 +5917,7 @@ func TestQT3_fn_json_doc(t *testing.T) {
 		{Name: "json-doc-error-029", XPath: "fn:json-doc(\"http://www.example.org/%gg\")", Skip: "requires URI resolution", ExpectError: true},
 		{Name: "json-doc-error-030", XPath: "fn:json-doc(\"http://www.w3.org/fots/unparsed-text/does-not-exist.txt\")", Skip: "requires URI resolution", ExpectError: true},
 		{Name: "json-doc-error-031", XPath: "fn:json-doc(\"unparsed-text/text-plain-utf-8.txt\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "json-doc-error-032", XPath: "fn:json-doc(\"does-not-exist.txt\")", Skip: "requires URI resolution", ExpectError: true},
+		{Name: "json-doc-error-032", XPath: "fn:json-doc(\"does-not-exist.txt\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", Skip: "requires URI resolution", ExpectError: true},
 	})
 }
 
@@ -6857,8 +6977,7 @@ func TestQT3_fn_matches_re(t *testing.T) {
 		{Name: "re00064", XPath: "(every $s in tokenize('', ',') satisfies matches($s, '^(?:[^\\?])$')) and (every $s in tokenize('?', ',') satisfies not(matches($s, '^(?:[^\\?])$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00065", XPath: "(every $s in tokenize('a+*abc', ',') satisfies matches($s, '^(?:([^\\?])*)$')) and (every $s in tokenize('', ',') satisfies not(matches($s, '^(?:([^\\?])*)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00066", XPath: "(every $s in tokenize('a*a', ',') satisfies matches($s, '^(?:\\c[^\\d]\\c)$')) and (every $s in tokenize('aa', ',') satisfies not(matches($s, '^(?:\\c[^\\d]\\c)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "re00067", XPath: `(every $s in tokenize('', ',') satisfies matches($s, '^(?:\c[^\s]\c)$')) and (every $s in tokenize('a c,az,a
-c,a	r', ',') satisfies not(matches($s, '^(?:\c[^\s]\c)$')))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "re00067", XPath: "(every $s in tokenize('', ',') satisfies matches($s, '^(?:\\c[^\\s]\\c)$')) and (every $s in tokenize('a c,a\rz,a\nc,a\tr', ',') satisfies not(matches($s, '^(?:\\c[^\\s]\\c)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00068", XPath: "(every $s in tokenize('', ',') satisfies matches($s, '^(?:[^\\^a])$')) and (every $s in tokenize('^,a', ',') satisfies not(matches($s, '^(?:[^\\^a])$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00069", XPath: "(every $s in tokenize('abc', ',') satisfies matches($s, '^(?:[a-abc]{3})$')) and (every $s in tokenize('', ',') satisfies not(matches($s, '^(?:[a-abc]{3})$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00070", XPath: "(every $s in tokenize('}-', ',') satisfies matches($s, '^(?:[a-\\}-]+)$')) and (every $s in tokenize('', ',') satisfies not(matches($s, '^(?:[a-\\}-]+)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
@@ -6897,10 +7016,7 @@ c,a	r', ',') satisfies not(matches($s, '^(?:\c[^\s]\c)$')))`, Assertions: []qt3A
 		{Name: "re00101", XPath: "(every $s in tokenize('a--aa---', ',') satisfies matches($s, '^(?:[a-]*)$')) and (every $s in tokenize('', ',') satisfies not(matches($s, '^(?:[a-]*)$')))", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue())}},
 		{Name: "re00102", XPath: "(every $s in tokenize('a-x', ',') satisfies matches($s, '^(?:[a-a-x-x]+)$')) and (every $s in tokenize('j,a-b', ',') satisfies not(matches($s, '^(?:[a-a-x-x]+)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00102a", XPath: "(every $s in tokenize('a-x', ',') satisfies matches($s, '^(?:[a-a-x-x]+)$')) and (every $s in tokenize('j,a-b', ',') satisfies not(matches($s, '^(?:[a-a-x-x]+)$')))", ExpectError: true},
-		{Name: "re00103", XPath: `(every $s in tokenize('\|.-^?*+[]{}()*[[]{}}))
-		
-
-*()', ',') satisfies matches($s, '^(?:[\n\r\t\\\|\.\-\^\?\*\+\{\}\[\]\(\)]*)$')) and (every $s in tokenize('', ',') satisfies not(matches($s, '^(?:[\n\r\t\\\|\.\-\^\?\*\+\{\}\[\]\(\)]*)$')))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "re00103", XPath: "(every $s in tokenize('\\|.-^?*+[]{}()*[[]{}}))\n\r\t\t\n\n\r*()', ',') satisfies matches($s, '^(?:[\\n\\r\\t\\\\\\|\\.\\-\\^\\?\\*\\+\\{\\}\\[\\]\\(\\)]*)$')) and (every $s in tokenize('', ',') satisfies not(matches($s, '^(?:[\\n\\r\\t\\\\\\|\\.\\-\\^\\?\\*\\+\\{\\}\\[\\]\\(\\)]*)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00104", XPath: "(every $s in tokenize('a**,aa*,a', ',') satisfies matches($s, '^(?:[a\\*]*)$')) and (every $s in tokenize('', ',') satisfies not(matches($s, '^(?:[a\\*]*)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00105", XPath: "(every $s in tokenize('a?,a?a?a?,a,a??,aa?', ',') satisfies matches($s, '^(?:[(a\\?)?]+)$')) and (every $s in tokenize('', ',') satisfies not(matches($s, '^(?:[(a\\?)?]+)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00106", XPath: "(every $s in tokenize('\\t', ',') satisfies matches($s, '^(?:\\\\t)$')) and (every $s in tokenize('t,\\\\t,\t', ',') satisfies not(matches($s, '^(?:\\\\t)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
@@ -6924,27 +7040,8 @@ c,a	r', ',') satisfies not(matches($s, '^(?:\c[^\s]\c)$')))`, Assertions: []qt3A
 		{Name: "re00122", XPath: "(every $s in tokenize(')', ',') satisfies matches($s, '^(?:\\))$')) and (every $s in tokenize('', ',') satisfies not(matches($s, '^(?:\\))$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00123", XPath: "(every $s in tokenize('[', ',') satisfies matches($s, '^(?:\\[)$')) and (every $s in tokenize('', ',') satisfies not(matches($s, '^(?:\\[)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00124", XPath: "(every $s in tokenize(']', ',') satisfies matches($s, '^(?:\\])$')) and (every $s in tokenize('', ',') satisfies not(matches($s, '^(?:\\])$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "re00125", XPath: `(every $s in tokenize('', ',') satisfies matches($s, '^(?:\n\\\r\|\t\.\-\^\?\*\+\{\}\(\)\[\])$')) and (every $s in tokenize('
-\|	.-^?*+{}()[,\|	.-^?*+{}()[],
-\|	-^?*+{}()[]', ',') satisfies not(matches($s, '^(?:\n\\\r\|\t\.\-\^\?\*\+\{\}\(\)\[\])$')))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "re00126", XPath: `not(matches('', '^(?:\n\na\n\nb\n\n)$')) and
-         (every $s in tokenize('
-
-a
-
-b;
-,
-a
-
-b;
-
-,
-
-a
-
-b;
-', ',') 
-                satisfies not(matches($s, '^(?:\n\na\n\nb\n\n)$')))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "re00125", XPath: "(every $s in tokenize('', ',') satisfies matches($s, '^(?:\\n\\\\\\r\\|\\t\\.\\-\\^\\?\\*\\+\\{\\}\\(\\)\\[\\])$')) and (every $s in tokenize('\n\\\r|\t.-^?*+{}()[,\\\r|\t.-^?*+{}()[],\n\\\r|\t-^?*+{}()[]', ',') satisfies not(matches($s, '^(?:\\n\\\\\\r\\|\\t\\.\\-\\^\\?\\*\\+\\{\\}\\(\\)\\[\\])$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "re00126", XPath: "not(matches('', '^(?:\\n\\na\\n\\nb\\n\\n)$')) and\n         (every $s in tokenize('\n\na\n\nb;\n,\na\n\nb;\n\n,\n\na\n\nb;\n\r', ',') \n                satisfies not(matches($s, '^(?:\\n\\na\\n\\nb\\n\\n)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00127", XPath: `let $d := codepoints-to-string(13) return (
         matches($d||$d||'a'||$d||$d||'b'||$d||$d,          '^\r\ra\r\rb\r\r$'),
         matches($d||$d||'a'||$d||$d||'b'||$d||$d,          '^\r+a\r+b\r+$'),
@@ -6966,11 +7063,7 @@ a
 b
 c
 ', ',') satisfies matches($s, '^(?:\na\nb\nc\n)$')) and (every $s in tokenize('', ',') satisfies not(matches($s, '^(?:\na\nb\nc\n)$')))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "re00133", XPath: `(every $s in tokenize('	a 
-
- 	b, a  b, a  b ,	a 
-
- b', ',') satisfies matches($s, '^(?:(\t|\s)a(\r\n|\r|\n|\s)+(\s|\t)b(\s|\r\n|\r|\n)*)$')) and (every $s in tokenize(' a b, a b ', ',') satisfies not(matches($s, '^(?:(\t|\s)a(\r\n|\r|\n|\s)+(\s|\t)b(\s|\r\n|\r|\n)*)$')))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "re00133", XPath: "(every $s in tokenize('\ta \n\r\n \r\tb, a  b, a  b ,\ta \n\r\n \rb', ',') satisfies matches($s, '^(?:(\\t|\\s)a(\\r\\n|\\r|\\n|\\s)+(\\s|\\t)b(\\s|\\r\\n|\\r|\\n)*)$')) and (every $s in tokenize(' a b, a b ', ',') satisfies not(matches($s, '^(?:(\\t|\\s)a(\\r\\n|\\r|\\n|\\s)+(\\s|\\t)b(\\s|\\r\\n|\\r|\\n)*)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00134", XPath: "(every $s in tokenize('\\c', ',') satisfies matches($s, '^(?:\\\\c)$')) and (every $s in tokenize('\\p{_xmlC},\\\\c,\\\\', ',') satisfies not(matches($s, '^(?:\\\\c)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00135", XPath: "(every $s in tokenize('\\.,\\s,\\S,\\i,\\I,\\c,\\C,\\d,\\D,\\w,\\W', ';') satisfies matches($s, '^(?:\\\\.,\\\\s,\\\\S,\\\\i,\\\\I,\\\\c,\\\\C,\\\\d,\\\\D,\\\\w,\\\\W)$')) and (every $s in tokenize('', ';') satisfies not(matches($s, '^(?:\\\\.,\\\\s,\\\\S,\\\\i,\\\\I,\\\\c,\\\\C,\\\\d,\\\\D,\\\\w,\\\\W)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00136", XPath: "(every $s in tokenize('\\.abcd,\\sssss,\\SSSSSS,\\iiiiiii,\\,\\c,\\CCCCCC,\\ddd,\\D,\\wwwwwww,\\WWW', ';') satisfies matches($s, '^(?:\\\\.*,\\\\s*,\\\\S*,\\\\i*,\\\\I?,\\\\c+,\\\\C+,\\\\d{0,3},\\\\D{1,1000},\\\\w*,\\\\W+)$')) and (every $s in tokenize('', ';') satisfies not(matches($s, '^(?:\\\\.*,\\\\s*,\\\\S*,\\\\i*,\\\\I?,\\\\c+,\\\\C+,\\\\d{0,3},\\\\D{1,1000},\\\\w*,\\\\W+)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
@@ -7319,39 +7412,27 @@ c
 		{Name: "re00479", XPath: "(every $s in tokenize('', ',') satisfies matches($s, '^(?:\\p{IsTags})$')) and (every $s in tokenize('\U0002fa1f', ',') satisfies not(matches($s, '^(?:\\p{IsTags})$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00480", XPath: "(every $s in tokenize('\U000ffffd', ',') satisfies matches($s, '^(?:\\p{IsSupplementaryPrivateUseArea-A})$')) and (every $s in tokenize('\U000e007f', ',') satisfies not(matches($s, '^(?:\\p{IsSupplementaryPrivateUseArea-A})$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00481", XPath: "(every $s in tokenize('a, ', ',') satisfies matches($s, '^(?:.)$')) and (every $s in tokenize('aa,', ',') satisfies not(matches($s, '^(?:.)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "re00482", XPath: `(every $s in tokenize(' ,
-,,	', ',') satisfies matches($s, '^(?:\s)$')) and (every $s in tokenize('a,', ',') satisfies not(matches($s, '^(?:\s)$')))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "re00483", XPath: `(every $s in tokenize('  	
-a c
-	 a 
-	   
-,aa a', ',') satisfies matches($s, '^(?:\s*\c\s?\c\s+\c\s*)$')) and (every $s in tokenize(' a  a a,aaa, a aa ', ',') satisfies not(matches($s, '^(?:\s*\c\s?\c\s+\c\s*)$')))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "re00482", XPath: "(every $s in tokenize(' ,\n,\r,\t', ',') satisfies matches($s, '^(?:\\s)$')) and (every $s in tokenize('a,', ',') satisfies not(matches($s, '^(?:\\s)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "re00483", XPath: "(every $s in tokenize('  \t\n\ra c\n\t\r a \n\r\t   \r\n,aa a', ',') satisfies matches($s, '^(?:\\s*\\c\\s?\\c\\s+\\c\\s*)$')) and (every $s in tokenize(' a  a a,aaa, a aa ', ',') satisfies not(matches($s, '^(?:\\s*\\c\\s?\\c\\s+\\c\\s*)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00484", XPath: "(every $s in tokenize('aa,a a,a   a', ',') satisfies matches($s, '^(?:a\\s{0,3}a)$')) and (every $s in tokenize('a    a,aa a', ',') satisfies not(matches($s, '^(?:a\\s{0,3}a)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00485", XPath: `(every $s in tokenize('', ',') satisfies matches($s, '^(?:a\sb)$')) and (every $s in tokenize('a 
 b', ',') satisfies not(matches($s, '^(?:a\sb)$')))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "re00486", XPath: `(every $s in tokenize('a', ',') satisfies matches($s, '^(?:\S)$')) and (every $s in tokenize(' ,
-,,	,aa', ',') satisfies not(matches($s, '^(?:\S)$')))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "re00486", XPath: "(every $s in tokenize('a', ',') satisfies matches($s, '^(?:\\S)$')) and (every $s in tokenize(' ,\n,\r,\t,aa', ',') satisfies not(matches($s, '^(?:\\S)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00487", XPath: "(every $s in tokenize('', ',') satisfies matches($s, '^(?:\\S+)$')) and (every $s in tokenize('a b', ',') satisfies not(matches($s, '^(?:\\S+)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00488", XPath: "(every $s in tokenize('', ',') satisfies matches($s, '^(?:\\S*)$')) and (every $s in tokenize('', ',') satisfies not(matches($s, '^(?:\\S*)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00489", XPath: "(every $s in tokenize('a b\t, a  \r', ',') satisfies matches($s, '^(?:\\S?\\s?\\S?\\s+)$')) and (every $s in tokenize('a  b, a b,ab', ',') satisfies not(matches($s, '^(?:\\S?\\s?\\S?\\s+)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "re00490", XPath: `(every $s in tokenize('_,:,a', ',') satisfies matches($s, '^(?:\i)$')) and (every $s in tokenize(' ,
-,,	', ',') satisfies not(matches($s, '^(?:\i)$')))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "re00490", XPath: "(every $s in tokenize('_,:,a', ',') satisfies matches($s, '^(?:\\i)$')) and (every $s in tokenize(' ,\n,\r,\t', ',') satisfies not(matches($s, '^(?:\\i)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00491", XPath: "(every $s in tokenize('_:abcdefghijklmnopqrstuvwxyzAZ:_', ',') satisfies matches($s, '^(?:\\i*)$')) and (every $s in tokenize('', ',') satisfies not(matches($s, '^(?:\\i*)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00492", XPath: "(every $s in tokenize('', ',') satisfies matches($s, '^(?:\\i+)$')) and (every $s in tokenize('a b', ',') satisfies not(matches($s, '^(?:\\i+)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00493", XPath: "(every $s in tokenize('zabcsdea', ',') satisfies matches($s, '^(?:\\c\\i*a)$')) and (every $s in tokenize('ab', ',') satisfies not(matches($s, '^(?:\\c\\i*a)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "re00494", XPath: `(every $s in tokenize('a b  c  Z  :_   dy 	b 
-   ', ',') satisfies matches($s, '^(?:[\s\i]*)$')) and (every $s in tokenize('1', ',') satisfies not(matches($s, '^(?:[\s\i]*)$')))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "re00495", XPath: `(every $s in tokenize(' ,
-,,	', ',') satisfies matches($s, '^(?:\I)$')) and (every $s in tokenize('_,:,a', ',') satisfies not(matches($s, '^(?:\I)$')))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "re00494", XPath: "(every $s in tokenize('a b  c  Z  :_   d\ry \tb \n   ', ',') satisfies matches($s, '^(?:[\\s\\i]*)$')) and (every $s in tokenize('1', ',') satisfies not(matches($s, '^(?:[\\s\\i]*)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "re00495", XPath: "(every $s in tokenize(' ,\n,\r,\t', ',') satisfies matches($s, '^(?:\\I)$')) and (every $s in tokenize('_,:,a', ',') satisfies not(matches($s, '^(?:\\I)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00496", XPath: "(every $s in tokenize('1234', ',') satisfies matches($s, '^(?:\\I*)$')) and (every $s in tokenize('', ',') satisfies not(matches($s, '^(?:\\I*)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00497", XPath: "(every $s in tokenize('a  123c', ',') satisfies matches($s, '^(?:a\\I+\\c)$')) and (every $s in tokenize('b123c,a123 123cc', ',') satisfies not(matches($s, '^(?:a\\I+\\c)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "re00498", XPath: `(every $s in tokenize('_,:,a', ',') satisfies matches($s, '^(?:\c)$')) and (every $s in tokenize(' ,
-,,	', ',') satisfies not(matches($s, '^(?:\c)$')))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "re00499", XPath: `(every $s in tokenize('c?1 abc,?0zzz', ',') satisfies matches($s, '^(?:\c?\?\d\s\c+)$')) and (every $s in tokenize('aa?3 c,a?2
-', ',') satisfies not(matches($s, '^(?:\c?\?\d\s\c+)$')))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "re00498", XPath: "(every $s in tokenize('_,:,a', ',') satisfies matches($s, '^(?:\\c)$')) and (every $s in tokenize(' ,\n,\r,\t', ',') satisfies not(matches($s, '^(?:\\c)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "re00499", XPath: "(every $s in tokenize('c?1 abc,?0\rzzz', ',') satisfies matches($s, '^(?:\\c?\\?\\d\\s\\c+)$')) and (every $s in tokenize('aa?3 c,a?2\n', ',') satisfies not(matches($s, '^(?:\\c?\\?\\d\\s\\c+)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00500", XPath: "(every $s in tokenize('a,aa,aaaaaaaaaaaaaaaaaaaaaaaaaa', ',') satisfies matches($s, '^(?:\\c?\\c+\\c*)$')) and (every $s in tokenize('', ',') satisfies not(matches($s, '^(?:\\c?\\c+\\c*)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "re00501", XPath: `(every $s in tokenize(' ,
-,,	', ',') satisfies matches($s, '^(?:\C)$')) and (every $s in tokenize('_,:,a', ',') satisfies not(matches($s, '^(?:\C)$')))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "re00501", XPath: "(every $s in tokenize(' ,\n,\r,\t', ',') satisfies matches($s, '^(?:\\C)$')) and (every $s in tokenize('_,:,a', ',') satisfies not(matches($s, '^(?:\\C)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00502", XPath: `(every $s in tokenize('a*a**a***,aa*a', ',') satisfies matches($s, '^(?:\c\C?\c\C+\c\C*)$')) 
         and (every $s in tokenize(',a12b1c1,ab12345,1a2a2,a1b1c1a', ',') satisfies not(matches($s, '^(?:\c\C?\c\C+\c\C*)$')))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00503", XPath: `(every $s in tokenize('0,۰,০,੦,૦,୦,௧,౦,೦,൦,๐,໐,༠,၀,០,᠐,０,𝟎,9,٩,۹,९,৯,੯,૯,୯,௯,౯,೯,൯,๙,໙,༩,၉,៩,᠙,９,𝟿', ',') satisfies matches($s, '^(?:\d)$')) 
@@ -7839,9 +7920,7 @@ b', ',') satisfies not(matches($s, '^(?:a\sb)$')))`, Assertions: []qt3Assertion{
 		{Name: "re00982", XPath: "(every $s in tokenize('test@someverylongemailaddress.com', ',') satisfies matches($s, '^(?:^([0-9a-zA-Z]([-.\\w]*[0-9a-zA-Z])*@(([0-9a-zA-Z])+([-\\w]*[0-9a-zA-Z])*\\.)+[a-zA-Z]{2,9}))$')) and (every $s in tokenize('mhk%mhk.me.uk', ',') satisfies not(matches($s, '^(?:^([0-9a-zA-Z]([-.\\w]*[0-9a-zA-Z])*@(([0-9a-zA-Z])+([-\\w]*[0-9a-zA-Z])*\\.)+[a-zA-Z]{2,9}))$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00983", XPath: "(every $s in tokenize('first.last@seznam.cz,first-last@seznam.cz', ',') satisfies matches($s, '^(?:[\\w\\-\\.]+@.*)$')) and (every $s in tokenize('first_last@seznam.cz', ',') satisfies not(matches($s, '^(?:[\\w\\-\\.]+@.*)$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00984", XPath: "(every $s in tokenize('2,3,4,5,6,7,8,9,A,B,C,D,E,F,G,H,I,P,Q,R,S,T,U,V,W,X,Y,`,a,b,c,d,e,f,g,h,i,p,q,r,s,t,u,v,w,x,y,Ā,ā,Ă,ă,Ą,ą,Ć,ć,Ĉ,ĉ,Đ,đ,Ē,ē,Ĕ,ĕ,Ė,ė,Ę,ę,Ġ,ġ,Ģ,ģ,Ĥ,ĥ,Ħ,ħ,Ĩ,ĩ,İ,ı,Ĳ,ĳ,Ĵ,ĵ,Ķ,ķ,ĸ,Ĺ,ŀ,Ł,ł,Ń,ń,Ņ,ņ,Ň,ň,ŉ,Ő,ő,Œ,œ,Ŕ,ŕ,Ŗ,ŗ,Ř,ř,Š,š,Ţ,ţ,Ť,ť,Ŧ,ŧ,Ũ,ũ,Ű,ű,Ų,ų,Ŵ,ŵ,Ŷ,ŷ,Ÿ,Ź,ƀ,Ɓ,Ƃ,ƃ,Ƅ,ƅ,Ɔ,Ƈ,ƈ,Ɖ,Ɛ,Ƒ,ƒ,Ɠ,Ɣ,ƕ,Ɩ,Ɨ,Ƙ,ƙ,Ȁ,ȁ,Ȃ,ȃ,Ȅ,ȅ,Ȇ,ȇ,Ȉ,ȉ,Ȑ,ȑ,Ȓ,ȓ,Ȕ,ȕ,Ȗ,ȗ,Ș,ș,Ƞ,Ȣ,ȣ,Ȥ,ȥ,Ȧ,ȧ,Ȩ,ȩ,Ȱ,ȱ,Ȳ,ȳ,ɐ,ɑ,ɒ,ɓ,ɔ,ɕ,ɖ,ɗ,ɘ,ə,ɠ,ɡ,ɢ,ɣ,ɤ,ɥ,ɦ,ɧ,ɨ,ɩ,ɰ,ɱ,ɲ,ɳ,ɴ,ɵ,ɶ,ɷ,ɸ,ɹ,ʀ,ʁ,ʂ,ʃ,ʄ,ʅ,ʆ,ʇ,ʈ,ʉ,ʐ,ʑ,ʒ,ʓ,ʔ,ʕ,ʖ,ʗ,ʘ,ʙ,̀,́,̂,̃,̄,̅,̆,̇,̈,̉,̐,̑,̒,̓,̔,̕,̖,̗,̘,̙,̠,̡,̢,̣,̤,̥,̦,̧,̨,̩,̰,̱,̲,̳,̴,̵,̶,̷,̸,̹,̀,́,͂,̓,̈́,ͅ,͆,͇,͈,͉,͠,͡,͢,ͣ,ͤ,ͥ,ͦ,ͧ,ͨ,ͩ,ʹ,͵,΄,΅,Ά,Έ,Ή,ΐ,Α,Β,Γ,Δ,Ε,Ζ,Η,Θ,Ι,Ѐ,Ё,Ђ,Ѓ,Є,Ѕ,І,Ї,Ј,Љ,А,Б,В,Г,Д,Е,Ж,З,И,Й,Р,С,Т,У,Ф,Х,Ц,Ч,Ш,Щ,а,б,в,г,д,е,ж,з,и,й,р,с,т,у,ф,х,ц,ч,ш,щ,ѐ,ё,ђ,ѓ,є,ѕ,і,ї,ј,љ,Ѡ,ѡ,Ѣ,ѣ,Ѥ,ѥ,Ѧ,ѧ,Ѩ,ѩ,Ѱ,ѱ,Ѳ,ѳ,Ѵ,ѵ,Ѷ,ѷ,Ѹ,ѹ,Ҁ,ҁ,҂,҃,҄,҅,҆,҈,҉,Ґ,ґ,Ғ,ғ,Ҕ,ҕ,Җ,җ,Ҙ,ҙ,Ԁ,ԁ,Ԃ,ԃ,Ԅ,ԅ,Ԇ,ԇ,Ԉ,ԉ,Ա,Բ,Գ,Դ,Ե,Զ,Է,Ը,Թ,Հ,Ձ,Ղ,Ճ,Մ,Յ,Ն,Շ,Ո,Չ,Ր,Ց,Ւ,Փ,Ք,Օ,Ֆ,ՙ,ա,բ,գ,դ,ե,զ,է,ը,թ,հ,ձ,ղ,ճ,մ,յ,ն,շ,ո,չ,ր,ց,ւ,փ,ք,օ,ֆ,և,֑,֒,֓,֔,֕,֖,֗,֘,֙,ء,آ,أ,ؤ,إ,ئ,ا,ب,ة,ذ,ر,ز,س,ش,ص,ض,ط,ظ,ع,ـ,ف,ق,ك,ل,م,ن,ه,و,ى,ِ,ّ,ْ,ٓ,ٔ,ٕ,٠,١,٢,٣,٤,٥,٦,٧,٨,٩,ٰ,ٱ,ٲ,ٳ,ٴ,ٵ,ٶ,ٷ,ٸ,ٹ,ڀ,ځ,ڂ,ڃ,ڄ,څ,چ,ڇ,ڈ,ډ,ڐ,ڑ,ڒ,ړ,ڔ,ڕ,ږ,ڗ,ژ,ڙ,ܐ,ܑ,ܒ,ܓ,ܔ,ܕ,ܖ,ܗ,ܘ,ܙ,ܠ,ܡ,ܢ,ܣ,ܤ,ܥ,ܦ,ܧ,ܨ,ܩ,ܰ,ܱ,ܲ,ܳ,ܴ,ܵ,ܶ'||\n      ',ܷ,ܸ,ܹ,݀,݁,݂,݃,݄,݅,݆,݇,݈,݉,ހ,ށ,ނ,ރ,ބ,ޅ,ކ,އ,ވ,މ,ސ,ޑ,ޒ,ޓ,ޔ,ޕ,ޖ,ޗ,ޘ,ޙ,ँ,ं,ः,अ,आ,इ,ई,उ,ऐ,ऑ,ऒ,ओ,औ,क,ख,ग,घ,ङ,ठ,ड,ढ,ण,त,थ,द,ध,न,ऩ,र,ऱ,ल,ळ,ऴ,व,श,ष,स,ह,ी,ु,ू,ृ,ॄ,ॅ,ॆ,े,ै,ॉ,ॐ,॑,॒,॓,॔,क़,ख़,ॠ,ॡ,ॢ,ॣ,०,१,२,३,ঁ,ং,ঃ,অ,আ,ই,ঈ,উ,ঐ,ও,ঔ,ক,খ,গ,ঘ,ঙ,က,ခ,ဂ,ဃ,င,စ,ဆ,ဇ,ဈ,ဉ,တ,ထ,ဒ,ဓ,န,ပ,ဖ,ဗ,ဘ,မ,ဠ,အ,ဣ,ဤ,ဥ,ဦ,ဧ,ဩ,ူ,ေ,ဲ,ံ,့,း,္,၀,၁,၂,၃,၄,၅,၆,၇,၈,၉,ၐ,ၑ,ၒ,ၓ,ၔ,ၕ,ၖ,ၗ,ၘ,ၙ,ᄀ,ᄁ,ᄂ,ᄃ,ᄄ,ᄅ,ᄆ,ᄇ,ᄈ,ᄉ,ᄐ,ᄑ,ᄒ,ᄓ,ᄔ,ᄕ,ᄖ,ᄗ,ᄘ,ᄙ,ᄠ,ᄡ,ᄢ,ᄣ,ᄤ,ᄥ,ᄦ,ᄧ,ᄨ,ᄩ,ᄰ,ᄱ,ᄲ,ᄳ,ᄴ,ᄵ,ᄶ,ᄷ,ᄸ,ᄹ,ᅀ,ᅁ,ᅂ,ᅃ,ᅄ,ᅅ,ᅆ,ᅇ,ᅈ,ᅉ,ᅐ,ᅑ,ᅒ,ᅓ,ᅔ,ᅕ,ᅖ,ᅗ,ᅘ,ᅙ,ᅠ,ᅡ,ᅢ,ᅣ,ᅤ,ᅥ,ᅦ,ᅧ,ᅨ,ᅩ,ᅰ,ᅱ,ᅲ,ᅳ,ᅴ,ᅵ,ᅶ,ᅷ,ᅸ,ᅹ,ᆀ,ᆁ,ᆂ,ᆃ,ᆄ,ᆅ,ᆆ,ᆇ,ᆈ,ᆉ,ᆐ,ᆑ,ᆒ,ᆓ,ᆔ,ᆕ,ᆖ,ᆗ,ᆘ,ᆙ,ሀ,ሁ,ሂ,ሃ,ሄ,ህ,ሆ,ለ,ሉ,ሐ,ሑ,ሒ,ሓ,ሔ,ሕ,ሖ,ሗ,መ,ሙ,ሠ,ሡ,ሢ,ሣ,ሤ,ሥ,ሦ,ሧ,ረ,ሩ,ሰ,ሱ,ሲ,ሳ,ሴ,ስ,ሶ,ሷ,ሸ,ሹ,ቀ,ቁ,ቂ,ቃ,ቄ,ቅ,ቆ,ቈ,ቐ,ቑ,ቒ,ቓ,ቔ,ቕ,ቖ,ቘ,በ,ቡ,ቢ,ባ,ቤ,ብ,ቦ,ቧ,ቨ,ቩ,ተ,ቱ,ቲ,ታ,ቴ,ት,ቶ,ቷ,ቸ,ቹ,ኀ,ኁ,ኂ,ኃ,ኄ,ኅ,ኆ,ኈ,ነ,ኑ,ኒ,ና,ኔ,ን,ኖ,ኗ,ኘ,ኙ,ጀ,ጁ,ጂ,ጃ,ጄ,ጅ,ጆ,ጇ,ገ,ጉ,ጐ,ጒ,ጓ,ጔ,ጕ,ጘ,ጙ,ጠ,ጡ,ጢ,ጣ,ጤ,ጥ,ጦ,ጧ,ጨ,ጩ,ጰ,ጱ,ጲ,ጳ,ጴ,ጵ,ጶ,ጷ,ጸ,ጹ,ፀ,ፁ,ፂ,ፃ,ፄ,ፅ,ፆ,ፈ,ፉ,ፐ,ፑ,ፒ,ፓ,ፔ,ፕ,ፖ,ፗ,ፘ,ፙ,፩,፰,፱,፲,፳,፴,፵,፶,፷,፸,፹,ᐁ,ᐂ,ᐃ,ᐄ,ᐅ,ᐆ,ᐇ,ᐈ,ᐉ,ᐐ,ᐑ,ᐒ,ᐓ,ᐔ,ᐕ,ᐖ,ᐗ,ᐘ,ᐙ,ᐠ,ᐡ,ᐢ,ᐣ,ᐤ,ᐥ,ᐦ,ᐧ,ᐨ,ᐩ,ᐰ,ᐱ,ᐲ,ᐳ,ᐴ,ᐵ,ᐶ,ᐷ,ᐸ,ᐹ,ᑀ,ᑁ,ᑂ,ᑃ,ᑄ,ᑅ,ᑆ,ᑇ,ᑈ,ᑉ,ᑐ,ᑑ,ᑒ,ᑓ,ᑔ,ᑕ,ᑖ,ᑗ,ᑘ,ᑙ,ᑠ,ᑡ,ᑢ,ᑣ,ᑤ,ᑥ,ᑦ,ᑧ,ᑨ,ᑩ,ᑰ,ᑱ,ᑲ,ᑳ,ᑴ,ᑵ,ᑶ,ᑷ,ᑸ,ᑹ,ᒀ,ᒁ,ᒂ,ᒃ,ᒄ,ᒅ,ᒆ,ᒇ,ᒈ,ᒉ,ᒐ'||\n      ',ᒑ,ᒒ,ᒓ,ᒔ,ᒕ,ᒖ,ᒗ,ᒘ,ᒙ,ᔀ,ᔁ,ᔂ,ᔃ,ᔄ,ᔅ,ᔆ,ᔇ,ᔈ,ᔉ,ᔐ,ᔑ,ᔒ,ᔓ,ᔔ,ᔕ,ᔖ,ᔗ,ᔘ,ᔙ,ᔠ,ᔡ,ᔢ,ᔣ,ᔤ,ᔥ,ᔦ,ᔧ,ᔨ,ᔩ,ᔰ,ᔱ,ᔲ,ᔳ,ᔴ,ᔵ,ᔶ,ᔷ,ᔸ,ᔹ,ᕀ,ᕁ,ᕂ,ᕃ,ᕄ,ᕅ,ᕆ,ᕇ,ᕈ,ᕉ,ᕐ,ᕑ,ᕒ,ᕓ,ᕔ,ᕕ,ᕖ,ᕗ,ᕘ,ᕙ,ᕠ,ᕡ,ᕢ,ᕣ,ᕤ,ᕥ,ᕦ,ᕧ,ᕨ,ᕩ,ᕰ,ᕱ,ᕲ,ᕳ,ᕴ,ᕵ,ᕶ,ᕷ,ᕸ,ᕹ,ᖀ,ᖁ,ᖂ,ᖃ,ᖄ,ᖅ,ᖆ,ᖇ,ᖈ,ᖉ,ᖐ,ᖑ,ᖒ,ᖓ,ᖔ,ᖕ,ᖖ,ᖗ,ᖘ,ᖙ,ᘀ,ᘁ,ᘂ,ᘃ,ᘄ,ᘅ,ᘆ,ᘇ,ᘈ,ᘉ,ᘐ,ᘑ,ᘒ,ᘓ,ᘔ,ᘕ,ᘖ,ᘗ,ᘘ,ᘙ,ᘠ,ᘡ,ᘢ,ᘣ,ᘤ,ᘥ,ᘦ,ᘧ,ᘨ,ᘩ,ᘰ,ᘱ,ᘲ,ᘳ,ᘴ,ᘵ,ᘶ,ᘷ,ᘸ,ᘹ,ᙀ,ᙁ,ᙂ,ᙃ,ᙄ,ᙅ,ᙆ,ᙇ,ᙈ,ᙉ,ᙐ,ᙑ,ᙒ,ᙓ,ᙔ,ᙕ,ᙖ,ᙗ,ᙘ,ᙙ,ᙠ,ᙡ,ᙢ,ᙣ,ᙤ,ᙥ,ᙦ,ᙧ,ᙨ,ᙩ,ᙰ,ᙱ,ᙲ,ᙳ,ᙴ,ᙵ,ᙶ,ᚁ,ᚂ,ᚃ,ᚄ,ᚅ,ᚆ,ᚇ,ᚈ,ᚉ,ᚐ,ᚑ,ᚒ,ᚓ,ᚔ,ᚕ,ᚖ,ᚗ,ᚘ,ᚙ,ᜀ,ᜁ,ᜂ,ᜃ,ᜄ,ᜅ,ᜆ,ᜇ,ᜈ,ᜉ,ᜐ,ᜑ,ᜒ,ᜓ,᜔,ᜠ,ᜡ,ᜢ,ᜣ,ᜤ,ᜥ,ᜦ,ᜧ,ᜨ,ᜩ,ᜰ,ᜱ,ᜲ,ᜳ,᜴,ᝀ,ᝁ,ᝂ,ᝃ,ᝄ,ᝅ,ᝆ,ᝇ,ᝈ,ᝉ,ᝐ,ᝑ,ᝒ,ᝓ,ᝠ,ᝡ,ᝢ,ᝣ,ᝤ,ᝥ,ᝦ,ᝧ,ᝨ,ᝩ,ᝰ,ᝲ,ᝳ,ក,ខ,គ,ឃ,ង,ច,ឆ,ជ,ឈ,ញ,ថ,ទ,ធ,ន,ប,ផ,ព,ភ,ម,យ,᠐,᠑,᠒,᠓,᠔,᠕,᠖,᠗,᠘,᠙,ᠠ,ᠡ,ᠢ,ᠣ,ᠤ,ᠥ,ᠦ,ᠧ,ᠨ,ᠩ,ᠰ,ᠱ,ᠲ,ᠳ,ᠴ,ᠵ,ᠶ,ᠷ,ᠸ,ᠹ,ᡀ,ᡁ,ᡂ,ᡃ,ᡄ,ᡅ,ᡆ,ᡇ,ᡈ,ᡉ,ᡐ,ᡑ,ᡒ,ᡓ,ᡔ,ᡕ,ᡖ,ᡗ,ᡘ,ᡙ,ᡠ,ᡡ,ᡢ,ᡣ,ᡤ,ᡥ,ᡦ,ᡧ,ᡨ,ᡩ,ᡰ,ᡱ,ᡲ,ᡳ,ᡴ,ᡵ,ᡶ,ᡷ,ᢀ,ᢁ,ᢂ,ᢃ,ᢄ,ᢅ,ᢆ,ᢇ,ᢈ,ᢉ,ᢐ,ᢑ,ᢒ,ᢓ,ᢔ,ᢕ,ᢖ,ᢗ,ᢘ,ᢙ,⁄,⁒,⁰,ⁱ,⁴,⁵,⁶,⁷,⁸,⁹,₀,₁,₂,₃,₄,₅,₆,₇,₈,₉,℀,℁,ℂ,℃,℄,℅,℆,ℇ,℈,℉,ℐ,ℑ,ℒ,ℓ,℔,ℕ,№,℗,℘,ℙ,℠,℡,™,℣,ℤ,℥,Ω,℧,ℨ,℩,ℰ,ℱ,Ⅎ,ℳ,ℴ,ℵ,ℶ,ℷ,ℸ,ℹ,⅀,⅁,⅂,⅃,⅄,ⅅ,ⅆ,ⅇ,ⅈ,ⅉ,⅓,⅔,⅕,⅖,⅗,⅘,⅙,Ⅰ,Ⅱ,Ⅲ,Ⅳ,Ⅴ,Ⅵ,Ⅶ,Ⅷ,Ⅸ,Ⅹ,ⅰ,ⅱ,ⅲ,ⅳ,ⅴ,ⅵ,ⅶ,ⅷ,ⅸ,ⅹ,ↀ,ↁ,ↂ,Ↄ,←,↑,→,↓,↔,↕,↖,↗,↘,↙,∀,∁,∂,∃,∄,∅,∆,∇,∈,∉,∐,∑,−,∓,∔,∕,∖,∗,∘,∙,∠,∡,∢,∣,∤,∥,∦,∧,∨,∩,∰,∱,∲,∳,∴,∵'||\n      ',∶,∷,∸,∹,≀,≁,≂,≃,≄,≅,≆,≇,≈,≉,≐,≑,≒,≓,≔,≕,≖,≗,≘,≙,≠,≡,≢,≣,≤,≥,≦,≧,≨,≩,≰,≱,≲,≳,≴,≵,≶,≷,≸,≹,⊀,⊁,⊂,⊃,⊄,⊅,⊆,⊇,⊈,⊉,⊐,⊑,⊒,⊓,⊔,⊕,⊖,⊗,⊘,⊙,⌀,⌁,⌂,⌃,⌄,⌅,⌆,⌇,⌐,⌑,⌒,⌓,⌔,⌕,⌖,⌗,⌘,⌙,⌠,⌡,⌢,⌣,⌤,⌥,⌦,⌧,⌨,⌰,⌱,⌲,⌳,⌴,⌵,⌶,⌷,⌸,⌹,⍀,⍁,⍂,⍃,⍄,⍅,⍆,⍇,⍈,⍉,⍐,⍑,⍒,⍓,⍔,⍕,⍖,⍗,⍘,⍙,⍠,⍡,⍢,⍣,⍤,⍥,⍦,⍧,⍨,⍩,⍰,⍱,⍲,⍳,⍴,⍵,⍶,⍷,⍸,⍹,⎀,⎁,⎂,⎃,⎄,⎅,⎆,⎇,⎈,⎉,⎐,⎑,⎒,⎓,⎔,⎕,⎖,⎗,⎘,⎙,␀,␁,␂,␃,␄,␅,␆,␇,␈,␉,␐,␑,␒,␓,␔,␕,␖,␗,␘,␙,␠,␡,␢,␣,␤,␥,␦,⑀,⑁,⑂,⑃,⑄,⑅,⑆,⑇,⑈,⑉,①,②,③,④,⑤,⑥,⑦,⑧,⑨,⑩,⑰,⑱,⑲,⑳,⑴,⑵,⑶,⑷,⑸,⑹,⒀,⒁,⒂,⒃,⒄,⒅,⒆,⒇,⒈,⒉,⒐,⒑,⒒,⒓,⒔,⒕,⒖,⒗,⒘,⒙,─,━,│,┃,┄,┅,┆,┇,┈,┉,┐,┑,┒,┓,└,┕,┖,┗,┘,┙,┠,┡,┢,┣,┤,┥,┦,┧,┨,┩,┰,┱,┲,┳,┴,┵,┶,┷,┸,┹,╀,╁,╂,╃,╄,╅,╆,╇,╈,╉,═,║,╒,╓,╔,╕,╖,╗,╘,╙,╠,╡,╢,╣,╤,╥,╦,╧,╨,╩,╰,╱,╲,╳,╴,╵,╶,╷,╸,╹,▀,▁,▂,▃,▄,▅,▆,▇,█,▉,▐,░,▒,▓,▔,▕,▖,▗,▘,▙,☀,☁,☂,☃,☄,★,☆,☇,☈,☉,☐,☑,☒,☓,☖,☗,☙,☠,☡,☢,☣,☤,☥,☦,☧,☨,☩,☰,☱,☲,☳,☴,☵,☶,☷,☸,☹,♀,♁,♂,♃,♄,♅,♆,♇,♈,♉,♐,♑,♒,♓,♔,♕,♖,♗,♘,♙,♠,♡,♢,♣,♤,♥,♦,♧,♨,♩,♰,♱,♲,♳,♴,♵,♶,♷,♸,♹,⚀,⚁,⚂,⚃,⚄,⚅,⚆,⚇,⚈,⚉,✁,✂,✃,✄,✆,✇,✈,✉,✐,✑,✒,✓,✔,✕,✖,✗,✘,✙,✠,✡,✢,✣,✤,✥,✦,✧,✩,✰,✱,✲,✳,✴,✵,✶,✷,✸,✹,❀,❁,❂,❃,❄,❅,❆,❇,❈,❉,❐,❑,❒,❖,❘,❙,❡,❢,❣,❤,❥,❦,❧,❶,❷,❸,❹,➀,➁,➂,➃,➄,➅,➆,➇,➈,➉,➐,➑,➒,➓,➔,➘,➙,⠀,⠁,⠂,⠃,⠄,⠅,⠆,⠇,⠈,⠉,⠐,⠑,⠒,⠓,⠔,⠕,⠖,⠗,⠘,⠙,⠠,⠡,⠢,⠣,⠤,⠥,⠦,⠧,⠨,⠩,⠰,⠱,⠲,⠳,⠴,⠵,⠶,⠷,⠸,⠹,⡀,⡁,⡂,⡃,⡄,⡅,⡆,⡇,⡈,⡉,⡐,⡑,⡒,⡓,⡔,⡕,⡖,⡗,⡘,⡙,⡠,⡡,⡢,⡣,⡤,⡥,⡦,⡧,⡨,⡩,⡰,⡱,⡲,⡳,⡴,⡵,⡶,⡷,⡸,⡹,⢀,⢁,⢂,⢃,⢄,⢅,⢆,⢇,⢈,⢉,⢐,⢑,⢒,⢓,⢔,⢕,⢖,⢗,⢘,⢙,⤀,⤁,⤂,⤃,⤄,⤅,⤆,⤇,⤈,⤉,⤐,⤑,⤒,⤓,⤔,⤕,⤖,⤗,⤘,⤙,⤠,⤡,⤢,⤣,⤤,⤥,⤦,⤧,⤨,⤩,⤰,⤱,⤲,⤳,⤴,⤵,⤶,⤷,⤸,⤹,⥀,⥁,⥂,⥃,⥄,⥅,⥆,⥇,⥈,⥉,⥐,⥑,⥒,⥓,⥔,⥕,⥖,⥗,⥘,⥙,⥠,⥡,⥢,⥣,⥤,⥥,⥦,⥧,⥨,⥩,⥰,⥱,⥲,⥳,⥴,⥵,⥶,⥷,⥸,⥹,⦀,⦁,⦂,⦙,〄,々,〆,〇,〒,〓,〠,〡,〢,〣,〤,〥,〦,〧,〨,〩,〱,〲,〳,〴,〵,〶,〷,〸,〹,ぁ,あ,ぃ,い,ぅ,う,ぇ,え,ぉ,ぐ,け,げ,こ,ご,さ,ざ,し,じ,す,だ,ち,ぢ,っ,つ,づ,て,で,と,ど,ば,ぱ,ひ,び,ぴ,ふ,ぶ,ぷ,へ,べ,む,め,も,ゃ,や,ゅ,ゆ,ょ,よ,ら,ゐ,ゑ,を,ん,ゔ,ゕ,ゖ,゙,ㄅ,ㄆ,ㄇ,ㄈ,ㄉ,ㄐ,ㄑ,ㄒ,ㄓ,ㄔ,ㄕ,ㄖ,ㄗ,ㄘ,ㄙ,ㄠ,ㄡ,ㄢ,ㄣ,ㄤ,ㄥ,ㄦ,ㄧ,ㄨ,ㄩ,ㄱ,ㄲ,ㄳ,ㄴ,ㄵ,ㄶ,ㄷ,ㄸ,ㄹ,ㅀ,ㅁ,ㅂ,ㅃ,ㅄ,ㅅ,ㅆ,ㅇ,ㅈ,ㅉ,ㅐ,ㅑ,ㅒ,ㅓ,ㅔ,ㅕ,ㅖ,ㅗ,ㅘ,ㅙ,ㅠ,ㅡ,ㅢ,ㅣ,ㅤ,ㅥ,ㅦ,ㅧ,ㅨ,ㅩ,ㅰ,ㅱ,ㅲ,ㅳ,ㅴ,ㅵ,ㅶ,ㅷ,ㅸ,ㅹ,ㆀ,ㆁ,ㆂ,ㆃ,ㆄ,ㆅ,ㆆ,ㆇ,ㆈ,ㆉ,㆐,㆑,㆒,㆓,㆔,㆕,㆖,㆗,㆘,㆙,㈀,㈁,㈂,㈃,㈄,㈅,㈆,㈇,㈈,㈉,㈐,㈑,㈒,㈓,㈔,㈕,㈖,㈗,㈘,㈙,㈠,㈡,㈢,㈣,㈤,㈥,㈦,㈧,㈨,㈩,㈰,㈱,㈲,㈳,㈴,㈵,㈶,㈷,㈸,㈹,㉀,㉁,㉂,㉃,㉑,㉒,㉓,㉔,㉕,㉖,㉗,㉘,㉙,㉠,㉡,㉢,㉣,㉤,㉥,㉦,㉧,㉨,㉩,㉰,㉱,㉲,㉳,㉴,㉵,㉶,㉷,㉸,㉹,㊀,㊁,㊂,㊃,㊄,㊅,㊆,㊇,㊈,㊉,㊐,㊑,㊒,㊓,㊔,㊕,㊖,㊗,㊘,㊙,㌀,㌁,㌂,㌃,㌄,㌅,㌆,㌇,㌈,㌉,㌐,㌑,㌒,㌓,㌔,㌕,㌖,㌗,㌘,㌙,㌠,㌡,㌢,㌣,㌤,㌥,㌦,㌧,㌨,㌩,㌰,㌱,㌲,㌳,㌴,㌵,㌶,㌷,㌸,㌹,㍀,㍁,㍂,㍃,㍄,㍅,㍆,㍇,㍈,㍉,㍐,㍑,㍒,㍓,㍔,㍕,㍖,㍗,㍘,㍙,㍠,㍡,㍢,㍣,㍤,㍥,㍦,㍧,㍨,㍩,㍰,㍱,㍲,㍳,㍴,㍵,㍶,㎀,㎁,㎂,㎃,㎄,㎅,㎆,㎇,㎈,㎉,㎐,㎑,㎒,㎓,㎔,㎕,㎖,㎗,㎘,㎙,㐀,㐁,㐂,㐃,㐄,㐅,㐆,㐇,㐈,㐉,㐐,㐑,㐒,㐓,㐔,㐕,㐖,㐗,㐘,㐙,㐠,㐡,㐢,㐣,㐤,㐥,㐦,㐧,㐨,㐩,㐰,㐱,㐲,㐳,㐴,㐵,㐶,㐷,㐸,㐹,㑀,㑁,㑂,㑃,㑄,㑅,㑆,㑇,㑈,㑉,㑐,㑑,㑒,㑓,㑔,㑕,㑖,㑗,㑘,㑙,㑠,㑡,㑢,㑣,㑤,㑥,㑦,㑧,㑨,㑩,㑰,㑱,㑲,㑳,㑴,㑵,㑶,㑷,㑸,㑹,㒀,㒁,㒂,㒃,㒄,㒅,㒆,㒇,㒈,㒉,㒐,㒑,㒒,㒓,㒔,㒕,㒖,㒗,㒘,㒙,㔀,㔁,㔂,㔃,㔄,㔅,㔆,㔇,㔈,㔉,㔐,㔑,㔒,㔓,㔔,㔕,㔖,㔗,㔘,㔙,㔠,㔡,㔢,㔣,㔤,㔥,㔦,㔧,㔨,㔩,㔰,㔱,㔲,㔳,㔴,㔵,㔶,㔷,㔸,㔹,㕀,㕁,㕂,㕃,㕄,㕅,㕆,㕇,㕈,㕉,㕐,㕑,㕒,㕓,㕔,㕕,㕖,㕗,㕘,㕙,㕠,㕡,㕢,㕣,㕤,㕥,㕦,㕧,㕨,㕩,㕰,㕱,㕲,㕳,㕴,㕵,㕶,㕷,㕸,㕹,㖀,㖁,㖂,㖃,㖄,㖅,㖆,㖇,㖈,㖉,㖐,㖑,㖒,㖓,㖔,㖕,㖖,㖗,㖘,㖙,㘀,㘁,㘂,㘃,㘄,㘅,㘆,㘇,㘈,㘉,㘐,㘑,㘒,㘓,㘔,㘕,㘖,㘗,㘘,㘙,㘠,㘡,㘢,㘣,㘤,㘥,㘦,㘧,㘨,㘩,㘰,㘱,㘲,㘳,㘴,㘵,㘶,㘷,㘸,㘹,㙀,㙁,㙂,㙃,㙄,㙅,㙆,㙇,㙈,㙉,㙐,㙑,㙒,㙓,㙔,㙕,㙖,㙗,㙘,㙙,㙠,㙡,㙢,㙣,㙤,㙥,㙦,㙧,㙨,㙩,㙰,㙱,㙲,㙳,㙴,㙵,㙶,㙷,㙸,㙹,㚀,㚁,㚂,㚃,㚄,㚅,㚆,㚇,㚈,㚉,㚐,㚑,㚒,㚓,㚔,㚕,㚖,㚗,㚘,㚙,㜀,㜁,㜂,㜃,㜄,㜅,㜆,㜇,㜈,㜉,㜐,㜑,㜒,㜓,㜔,㜕,㜖,㜗,㜘,㜙,㜠,㜡,㜢,㜣,㜤,㜥,㜦,㜧,㜨,㜩,㜰,㜱,㜲,㜳,㜴,㜵,㜶,㜷,㜸,㜹,㝀,㝁,㝂,㝃,㝄,㝅,㝆,㝇,㝈,㝉,㝐,㝑,㝒,㝓,㝔,㝕,㝖,㝗,㝘,㝙,㝠,㝡,㝢,㝣,㝤,㝥,㝦,㝧,㝨,㝩,㝰,㝱,㝲,㝳,㝴,㝵,㝶,㝷,㝸,㝹,㞀,㞁,㞂,㞃,㞄,㞅,㞆,㞇,㞈,㞉,㞐,㞑,㞒,㞓,㞔,㞕,㞖,㞗,㞘,㞙,㠀,㠁,㠂,㠃,㠄,㠅,㠆,㠇,㠈,㠉,㠐,㠑,㠒,㠓,㠔,㠕,㠖,㠗,㠘,㠙,㠠,㠡,㠢,㠣,㠤,㠥,㠦,㠧,㠨,㠩,㠰,㠱,㠲,㠳,㠴,㠵,㠶,㠷,㠸,㠹,㡀,㡁,㡂,㡃,㡄,㡅,㡆,㡇,㡈,㡉,㡐,㡑,㡒,㡓,㡔,㡕,㡖,㡗,㡘,㡙,㡠,㡡,㡢,㡣,㡤,㡥,㡦,㡧,㡨,㡩,㡰,㡱,㡲,㡳,㡴,㡵,㡶,㡷,㡸,㡹,㢀,㢁,㢂,㢃,㢄,㢅,㢆,㢇,㢈,㢉,㢐,㢑,㢒,㢓,㢔,㢕,㢖,㢗,㢘,㢙,㤀,㤁,㤂,㤃,㤄,㤅,㤆,㤇,㤈,㤉,㤐,㤑,㤒,㤓,㤔,㤕,㤖,㤗,㤘,㤙,㤠,㤡,㤢,㤣,㤤,㤥,㤦,㤧,㤨,㤩,㤰,㤱,㤲,㤳,㤴,㤵,㤶,㤷,㤸,㤹,㥀,㥁,㥂,㥃,㥄,㥅,㥆,㥇,㥈,㥉,㥐,㥑,㥒,㥓,㥔,㥕,㥖,㥗,㥘,㥙,㥠,㥡,㥢,㥣,㥤,㥥,㥦,㥧,㥨,㥩,㥰,㥱,㥲,㥳,㥴,㥵,㥶,㥷,㥸,㥹,㦀,㦁,㦂,㦃,㦄,㦅,㦆,㦇,㦈,㦉,㦐,㦑,㦒,㦓,㦔,㦕,㦖,㦗,㦘,㦙,䀀,䀁,䀂,䀃,䀄,䀅,䀆,䀇,䀈,䀉,䀐,䀑,䀒,䀓,䀔,䀕,䀖,䀗,䀘,䀙,䀠,䀡,䀢,䀣,䀤,䀥,䀦,䀧,䀨,䀩,䀰,䀱,䀲,䀳,䀴,䀵,䀶,䀷,䀸,䀹,䁀,䁁,䁂,䁃,䁄,䁅,䁆,䁇,䁈,䁉,䁐,䁑,䁒,䁓,䁔,䁕,䁖,䁗,䁘,䁙,䁠,䁡,䁢,䁣,䁤,䁥,䁦,䁧,䁨,䁩,䁰,䁱,䁲,䁳,䁴,䁵,䁶,䁷,䁸,䁹,䂀,䂁,䂂,䂃,䂄,䂅,䂆,䂇,䂈,䂉,䂐,䂑,䂒,䂓,䂔,䂕,䂖,䂗,䂘,䂙,䄀,䄁,䄂,䄃,䄄,䄅,䄆,䄇,䄈,䄉,䄐,䄑,䄒,䄓,䄔,䄕,䄖,䄗,䄘,䄙,䄠,䄡,䄢,䄣,䄤,䄥,䄦,䄧,䄨,䄩,䄰,䄱,䄲,䄳,䄴,䄵,䄶,䄷,䄸,䄹,䅀,䅁,䅂,䅃,䅄,䅅,䅆,䅇,䅈,䅉,䅐,䅑,䅒,䅓,䅔,䅕,䅖,䅗,䅘,䅙,䅠,䅡,䅢,䅣,䅤,䅥,䅦,䅧,䅨,䅩,䅰,䅱,䅲,䅳,䅴,䅵,䅶,䅷,䅸,䅹,䆀,䆁,䆂,䆃,䆄,䆅,䆆,䆇,䆈,䆉,䆐,䆑,䆒,䆓,䆔,䆕,䆖,䆗,䆘,䆙,䈀,䈁,䈂,䈃,䈄,䈅,䈆,䈇,䈈,䈉,䈐,䈑,䈒,䈓,䈔,䈕,䈖,䈗,䈘,䈙,䈠,䈡,䈢,䈣,䈤,䈥,䈦,䈧,䈨,䈩,䈰,䈱,䈲,䈳,䈴,䈵,䈶,䈷,䈸,䈹,䉀,䉁,䉂,䉃,䉄,䉅,䉆,䉇,䉈,䉉,䉐,䉑,䉒,䉓,䉔,䉕,䉖,䉗,䉘,䉙,䉠,䉡,䉢,䉣,䉤,䉥,䉦,䉧,䉨,䉩,䉰,䉱,䉲,䉳,䉴,䉵,䉶,䉷,䉸,䉹,䊀,䊁,䊂,䊃,䊄,䊅,䊆,䊇,䊈,䊉,䊐,䊑,䊒,䊓,䊔,䊕,䊖,䊗,䊘,䊙,䌀,䌁,䌂,䌃,䌄,䌅,䌆,䌇,䌈,䌉,䌐,䌑,䌒,䌓,䌔,䌕,䌖,䌗,䌘,䌙,䌠,䌡,䌢,䌣,䌤,䌥,䌦,䌧,䌨,䌩,䌰,䌱,䌲,䌳,䌴,䌵,䌶,䌷,䌸,䌹,䍀,䍁,䍂,䍃,䍄,䍅,䍆,䍇,䍈,䍉,䍐,䍑,䍒,䍓,䍔,䍕,䍖,䍗,䍘,䍙,䍠,䍡,䍢,䍣,䍤,䍥,䍦,䍧,䍨,䍩,䍰,䍱,䍲,䍳,䍴,䍵,䍶,䍷,䍸,䍹,䎀,䎁,䎂,䎃,䎄,䎅,䎆,䎇,䎈,䎉,䎐,䎑,䎒,䎓,䎔,䎕,䎖,䎗,䎘,䎙,䐀,䐁,䐂,䐃,䐄,䐅,䐆,䐇,䐈,䐉,䐐,䐑,䐒,䐓,䐔,䐕,䐖,䐗,䐘,䐙,䐠,䐡,䐢,䐣,䐤,䐥,䐦,䐧,䐨,䐩,䐰,䐱,䐲,䐳,䐴,䐵,䐶,䐷,䐸,䐹,䑀,䑁,䑂,䑃,䑄,䑅,䑆,䑇,䑈,䑉,䑐,䑑,䑒,䑓,䑔,䑕,䑖,䑗,䑘,䑙,䑠,䑡,䑢,䑣,䑤,䑥,䑦,䑧,䑨,䑩,䑰,䑱,䑲,䑳,䑴,䑵,䑶,䑷,䑸,䑹,䒀,䒁,䒂,䒃,䒄,䒅,䒆,䒇,䒈,䒉,䒐,䒑,䒒,䒓,䒔,䒕,䒖,䒗,䒘,䒙,䔀,䔁,䔂,䔃,䔄,䔅,䔆,䔇,䔈,䔉,䔐,䔑,䔒,䔓,䔔,䔕,䔖,䔗,䔘,䔙,䔠,䔡,䔢,䔣,䔤,䔥,䔦,䔧,䔨,䔩,䔰,䔱,䔲,䔳,䔴,䔵,䔶,䔷,䔸,䔹,䕀,䕁,䕂,䕃,䕄,䕅,䕆,䕇,䕈,䕉,䕐,䕑,䕒,䕓,䕔,䕕,䕖,䕗,䕘,䕙,䕠,䕡,䕢,䕣,䕤,䕥,䕦,䕧,䕨,䕩,䕰,䕱,䕲,䕳,䕴,䕵,䕶,䕷,䕸,䕹,䖀,䖁,䖂,䖃,䖄,䖅,䖆,䖇,䖈,䖉,䖐,䖑,䖒,䖓,䖔,䖕,䖖,䖗,䖘,䖙,䘀,䘁,䘂,䘃,䘄,䘅,䘆,䘇,䘈,䘉,䘐,䘑,䘒,䘓,䘔,䘕,䘖,䘗,䘘,䘙,䘠,䘡,䘢,䘣,䘤,䘥,䘦,䘧,䘨,䘩,䘰,䘱,䘲,䘳,䘴,䘵,䘶,䘷,䘸,䘹,䙀,䙁,䙂,䙃,䙄,䙅,䙆,䙇,䙈,䙉,䙐,䙑,䙒,䙓,䙔,䙕,䙖,䙗,䙘,䙙,䙠,䙡,䙢,䙣,䙤,䙥,䙦,䙧,䙨,䙩,䙰,䙱,䙲,䙳,䙴,䙵,䙶,䙷,䙸,䙹,䚀,䚁,䚂,䚃,䚄,䚅,䚆,䚇,䚈,䚉,䚐,䚑,䚒,䚓,䚔,䚕,䚖,䚗,䚘,䚙,䜀,䜁,䜂,䜃,䜄,䜅,䜆,䜇,䜈,䜉,䜐,䜑,䜒,䜓,䜔,䜕,䜖,䜗,䜘,䜙,䜠,䜡,䜢,䜣,䜤,䜥,䜦,䜧,䜨,䜩,䜰,䜱,䜲,䜳,䜴,䜵,䜶,䜷,䜸,䜹,䝀,䝁,䝂,䝃,䝄,䝅,䝆,䝇,䝈,䝉,䝐,䝑,䝒,䝓,䝔,䝕,䝖,䝗,䝘,䝙,䝠,䝡,䝢,䝣,䝤,䝥,䝦,䝧,䝨,䝩,䝰,䝱,䝲,䝳,䝴,䝵,䝶,䝷,䝸,䝹,䞀,䞁,䞂,䞃,䞄,䞅,䞆,䞇,䞈,䞉,䞐,䞑,䞒,䞓,䞔,䞕,䞖,䞗,䞘,䞙,䠀,䠁,䠂,䠃,䠄,䠅,䠆,䠇,䠈,䠉,䠐,䠑,䠒,䠓,䠔,䠕,䠖,䠗,䠘,䠙,䠠,䠡,䠢,䠣,䠤,䠥,䠦,䠧,䠨,䠩,䠰,䠱,䠲,䠳,䠴,䠵,䠶,䠷,䠸,䠹,䡀,䡁,䡂,䡃,䡄,䡅,䡆,䡇,䡈,䡉,䡐,䡑,䡒,䡓,䡔,䡕,䡖,䡗,䡘,䡙,䡠,䡡,䡢,䡣,䡤,䡥,䡦,䡧,䡨,䡩,䡰,䡱,䡲,䡳,䡴,䡵,䡶,䡷,䡸,䡹,䢀,䢁,䢂,䢃,䢄,䢅,䢆,䢇,䢈,䢉,䢐,䢑,䢒,䢓,䢔,䢕,䢖,䢗,䢘,䢙,䤀,䤁,䤂,䤃,䤄,䤅,䤆,䤇,䤈,䤉,䤐,䤑,䤒,䤓,䤔,䤕,䤖,䤗,䤘,䤙,䤠,䤡,䤢,䤣,䤤,䤥,䤦,䤧,䤨,䤩,䤰,䤱,䤲,䤳,䤴,䤵,䤶,䤷,䤸,䤹,䥀,䥁,䥂,䥃,䥄,䥅,䥆,䥇,䥈,䥉,䥐,䥑,䥒,䥓,䥔,䥕,䥖,䥗,䥘,䥙,䥠,䥡,䥢,䥣,䥤,䥥,䥦,䥧,䥨,䥩,䥰,䥱,䥲,䥳,䥴,䥵,䥶,䥷,䥸,䥹,䦀,䦁,䦂,䦃,䦄,䦅,䦆,䦇,䦈,䦉,䦐,䦑,䦒,䦓,䦔,䦕,䦖,䦗,䦘,䦙,倀,倁,倂,倃,倄,倅,倆,倇,倈,倉,倐,們,倒,倓,倔,倕,倖,倗,倘,候,倠,倡,倢,倣,値,倥,倦,倧,倨,倩,倰,倱,倲,倳,倴,倵,倶,倷,倸,倹,偀,偁,偂,偃,偄,偅,偆,假,偈,偉,偐,偑,偒,偓,偔,偕,偖,偗,偘,偙,偠,偡,偢,偣,偤,健,偦,偧,偨,偩,偰,偱,偲,偳,側,偵,偶,偷,偸,偹,傀,傁,傂,傃,傄,傅,傆,傇,傈,傉,傐,傑,傒,傓,傔,傕,傖,傗,傘,備,儀,儁,儂,儃,億,儅,儆,儇,儈,儉,儐,儑,儒,儓,儔,儕,儖,儗,儘,儙,儠,儡,儢,儣,儤,儥,儦,儧,儨,儩,儰,儱,儲,儳,儴,儵,儶,儷,儸,儹,兀,允,兂,元,兄,充,兆,兇,先,光,児,兑,兒,兓,兔,兕,兖,兗,兘,兙,兠,兡,兢,兣,兤,入,兦,內,全,兩,兰,共,兲,关,兴,兵,其,具,典,兹,冀,冁,冂,冃,冄,内,円,冇,冈,冉,冐,冑,冒,冓,冔,冕,冖,冗,冘,写,刀,刁,刂,刃,刄,刅,分,切,刈,刉,刐,刑,划,刓,刔,刕,刖,列,刘,则,删,刡,刢,刣,判,別,刦,刧,刨,利,到,刱,刲,刳,刴,刵,制,刷,券,刹,剀,剁,剂,剃,剄,剅,剆,則,剈,剉,剐,剑,剒,剓,剔,剕,剖,剗,剘,剙,剠,剡,剢,剣,剤,剥,剦,剧,剨,剩,剰,剱,割,剳,剴,創,剶,剷,剸,剹,劀,劁,劂,劃,劄,劅,劆,劇,劈,劉,劐,劑,劒,劓,劔,劕,劖,劗,劘,劙,匀,匁,匂,匃,匄,包,匆,匇,匈,匉,匐,匑,匒,匓,匔,匕,化,北,匘,匙,匠,匡,匢,匣,匤,匥,匦,匧,匨,匩,匰,匱,匲,匳,匴,匵,匶,匷,匸,匹,區,十,卂,千,卄,卅,卆,升,午,卉,卐,卑,卒,卓,協,单,卖,南,単,卙,占,卡,卢,卣,卤,卥,卦,卧,卨,卩,印,危,卲,即,却,卵,卶,卷,卸,卹,厀,厁,厂,厃,厄,厅,历,厇,厈,厉,厐,厑,厒,厓,厔,厕,厖,厗,厘,厙,吀,吁,吂,吃,各,吅,吆,吇,合,吉,吐,向,吒,吓,吔,吕,吖,吗,吘,吙,吠,吡,吢,吣,吤,吥,否,吧,吨,吩,吰,吱,吲,吳,吴,吵,吶,吷,吸,吹,呀,呁,呂,呃,呄,呅,呆,呇,呈,呉,呐,呑,呒,呓,呔,呕,呖,呗,员,呙,呠,呡,呢,呣,呤,呥,呦,呧,周,呩,呰,呱,呲,味,呴,呵,呶,呷,呸,呹,咀,咁,咂,咃,咄,咅,咆,咇,咈,咉,咐,咑,咒,咓,咔,咕,咖,咗,咘,咙,唀,唁,唂,唃,唄,唅,唆,唇,唈,唉,唐,唑,唒,唓,唔,唕,唖,唗,唘,唙,唠,唡,唢,唣,唤,唥,唦,唧,唨,唩,唰,唱,唲,唳,唴,唵,唶,唷,唸,唹,啀,啁,啂,啃,啄,啅,商,啇,啈,啉,啐,啑,啒,啓,啔,啕,啖,啗,啘,啙,啠,啡,啢,啣,啤,啥,啦,啧,啨,啩,啰,啱,啲,啳,啴,啵,啶,啷,啸,啹,喀,喁,喂,喃,善,喅,喆,喇,喈,喉,喐,喑,喒,喓,喔,喕,喖,喗,喘,喙,嘀,嘁,嘂,嘃,嘄,嘅,嘆,嘇,嘈,嘉,嘐,嘑,嘒,嘓,嘔,嘕,嘖,嘗,嘘,嘙,嘠,嘡,嘢,嘣,嘤,嘥,嘦,嘧,嘨,嘩,嘰,嘱,嘲,嘳,嘴,嘵,嘶,嘷,嘸,嘹,噀,噁,噂,噃,噄,噅,噆,噇,噈,噉,噐,噑,噒,噓,噔,噕,噖,噗,噘,噙,噠,噡,噢,噣,噤,噥,噦,噧,器,噩,噰,噱,噲,噳,噴,噵,噶,噷,噸,噹,嚀,嚁,嚂,嚃,嚄,嚅,嚆,嚇,嚈,嚉,嚐,嚑,嚒,嚓,嚔,嚕,嚖,嚗,嚘,嚙,圀,圁,圂,圃,圄,圅,圆,圇,圈,圉,圐,圑,園,圓,圔,圕,圖,圗,團,圙,圠,圡,圢,圣,圤,圥,圦,圧,在,圩,地,圱,圲,圳,圴,圵,圶,圷,圸,圹,址,坁,坂,坃,坄,坅,坆,均,坈,坉,坐,坑,坒,坓,坔,坕,坖,块,坘,坙,坠,坡,坢,坣,坤,坥,坦,坧,坨,坩,坰,坱,坲,坳,坴,坵,坶,坷,坸,坹,垀,垁,垂,垃,垄,垅,垆,垇,垈,垉,垐,垑,垒,垓,垔,垕,垖,垗,垘,垙,堀,堁,堂,堃,堄,堅,堆,堇,堈,堉,堐,堑,堒,堓,堔,堕,堖,堗,堘,堙,堠,堡,堢,堣,堤,堥,堦,堧,堨,堩,堰,報,堲,堳,場,堵,堶,堷,堸,堹,塀,塁,塂,塃,塄,塅,塆,塇,塈,塉,塐,塑,塒,塓,塔,塕,塖,塗,塘,塙,塠,塡,塢,塣,塤,塥,塦,塧,塨,塩,塰,塱,塲,塳,塴,塵,塶,塷,塸,塹,墀,墁,墂,境,墄,墅,墆,墇,墈,墉,墐,墑,墒,墓,墔,墕,墖,増,墘,墙,夀,夁,夂,夃,处,夅,夆,备,夈,変,夐,夑,夒,夓,夔,夕,外,夗,夘,夙,夠,夡,夢,夣,夤,夥,夦,大,夨,天,夰,失,夲,夳,头,夵,夶,夷,夸,夹,奀,奁,奂,奃,奄,奅,奆,奇,奈,奉,奐,契,奒,奓,奔,奕,奖,套,奘,奙,奠,奡,奢,奣,奤,奥,奦,奧,奨,奩,奰,奱,奲,女,奴,奵,奶,奷,奸,她,妀,妁,如,妃,妄,妅,妆,妇,妈,妉,妐,妑,妒,妓,妔,妕,妖,妗,妘,妙,怀,态,怂,怃,怄,怅,怆,怇,怈,怉,怐,怑,怒,怓,怔,怕,怖,怗,怘,怙,怠,怡,怢,怣,怤,急,怦,性,怨,怩,怰,怱,怲,怳,怴,怵,怶,怷,怸,怹,恀,恁,恂,恃,恄,恅,恆,恇,恈,恉,恐,恑,恒,恓,恔,恕,恖,恗,恘,恙,恠,恡,恢,恣,恤,恥,恦,恧,恨,恩,恰,恱,恲,恳,恴,恵,恶,恷,恸,恹,悀,悁,悂,悃,悄,悅,悆,悇,悈,悉,悐,悑,悒,悓,悔,悕,悖,悗,悘,悙,愀,愁,愂,愃,愄,愅,愆,愇,愈,愉,愐,愑,愒,愓,愔,愕,愖,愗,愘,愙,愠,愡,愢,愣,愤,愥,愦,愧,愨,愩,愰,愱,愲,愳,愴,愵,愶,愷,愸,愹,慀,慁,慂,慃,慄,慅,慆,慇,慈,慉,慐,慑,慒,慓,慔,慕,慖,慗,慘,慙,慠,慡,慢,慣,慤,慥,慦,慧,慨,慩,慰,慱,慲,慳,慴,慵,慶,慷,慸,慹,憀,憁,憂,憃,憄,憅,憆,憇,憈,憉,憐,憑,憒,憓,憔,憕,憖,憗,憘,憙,戀,戁,戂,戃,戄,戅,戆,戇,戈,戉,成,我,戒,戓,戔,戕,或,戗,战,戙,戠,戡,戢,戣,戤,戥,戦,戧,戨,戩,戰,戱,戲,戳,戴,戵,戶,户,戸,戹,所,扁,扂,扃,扄,扅,扆,扇,扈,扉,扐,扑,扒,打,扔,払,扖,扗,托,扙,扠,扡,扢,扣,扤,扥,扦,执,扨,扩,扰,扱,扲,扳,扴,扵,扶,扷,扸,批,技,抁,抂,抃,抄,抅,抆,抇,抈,抉,抐,抑,抒,抓,抔,投,抖,抗,折,抙,挀,持,挂,挃,挄,挅,挆,指,挈,按,挐,挑,挒,挓,挔,挕,挖,挗,挘,挙,挠,挡,挢,挣,挤,挥,挦,挧,挨,挩,挰,挱,挲,挳,挴,挵,挶,挷,挸,挹,捀,捁,捂,捃,捄,捅,捆,捇,捈,捉,捐,捑,捒,捓,捔,捕,捖,捗,捘,捙,捠,捡,换,捣,捤,捥,捦,捧,捨,捩,捰,捱,捲,捳,捴,捵,捶,捷,捸,捹,掀,掁,掂,掃,掄,掅,掆,掇,授,掉,掐,掑,排,掓,掔,掕,掖,掗,掘,掙,搀,搁,搂,搃,搄,搅,搆,搇,搈,搉,搐,搑,搒,搓,搔,搕,搖,搗,搘,搙,搠,搡,搢,搣,搤,搥,搦,搧,搨,搩,搰,搱,搲,搳,搴,搵,搶,搷,搸,搹,摀,摁,摂,摃,摄,摅,摆,摇,摈,摉,摐,摑,摒,摓,摔,摕,摖,摗,摘,摙,摠,摡,摢,摣,摤,摥,摦,摧,摨,摩,摰,摱,摲,摳,摴,摵,摶,摷,摸,摹,撀,撁,撂,撃,撄,撅,撆,撇,撈,撉,撐,撑,撒,撓,撔,撕,撖,撗,撘,撙,攀,攁,攂,攃,攄,攅,攆,攇,攈,攉,攐,攑,攒,攓,攔,攕,攖,攗,攘,攙,攠,攡,攢,攣,攤,攥,攦,攧,攨,攩,攰,攱,攲,攳,攴,攵,收,攷,攸,改,敀,敁,敂,敃,敄,故,敆,敇,效,敉,敐,救,敒,敓,敔,敕,敖,敗,敘,教,敠,敡,敢,散,敤,敥,敦,敧,敨,敩,数,敱,敲,敳,整,敵,敶,敷,數,敹,斀,斁,斂,斃,斄,斅,斆,文,斈,斉,斐,斑,斒,斓,斔,斕,斖,斗,斘,料,昀,昁,昂,昃,昄,昅,昆,昇,昈,昉,昐,昑,昒,易,昔,昕,昖,昗,昘,昙,映,昡,昢,昣,昤,春,昦,昧,昨,昩,昰,昱,昲,昳,昴,昵,昶,昷,昸,昹,晀,晁,時,晃,晄,晅,晆,晇,晈,晉,晐,晑,晒,晓,晔,晕,晖,晗,晘,晙,晠,晡,晢,晣,晤,晥,晦,晧,晨,晩,晰,晱,晲,晳,晴,晵,晶,晷,晸,晹,暀,暁,暂,暃,暄,暅,暆,暇,暈,暉,暐,暑,暒,暓,暔,暕,暖,暗,暘,暙,最,朁,朂,會,朄,朅,朆,朇,月,有,朐,朑,朒,朓,朔,朕,朖,朗,朘,朙,朠,朡,朢,朣,朤,朥,朦,朧,木,朩,朰,朱,朲,朳,朴,朵,朶,朷,朸,朹,杀,杁,杂,权,杄,杅,杆,杇,杈,杉,材,村,杒,杓,杔,杕,杖,杗,杘,杙,杠,条,杢,杣,杤,来,杦,杧,杨,杩,杰,東,杲,杳,杴,杵,杶,杷,杸,杹,枀,极,枂,枃,构,枅,枆,枇,枈,枉,析,枑,枒,枓,枔,枕,枖,林,枘,枙,栀,栁,栂,栃,栄,栅,栆,标,栈,栉,栐,树,栒,栓,栔,栕,栖,栗,栘,栙,栠,校,栢,栣,栤,栥,栦,栧,栨,栩,栰,栱,栲,栳,栴,栵,栶,样,核,根,桀,桁,桂,桃,桄,桅,框,桇,案,桉,桐,桑,桒,桓,桔,桕,桖,桗,桘,桙,桠,桡,桢,档,桤,桥,桦,桧,桨,桩,桰,桱,桲,桳,桴,桵,桶,桷,桸,桹,梀,梁,梂,梃,梄,梅,梆,梇,梈,梉,梐,梑,梒,梓,梔,梕,梖,梗,梘,梙,椀,椁,椂,椃,椄,椅,椆,椇,椈,椉,椐,椑,椒,椓,椔,椕,椖,椗,椘,椙,椠,椡,椢,椣,椤,椥,椦,椧,椨,椩,椰,椱,椲,椳,椴,椵,椶,椷,椸,椹,楀,楁,楂,楃,楄,楅,楆,楇,楈,楉,楐,楑,楒,楓,楔,楕,楖,楗,楘,楙,楠,楡,楢,楣,楤,楥,楦,楧,楨,楩,楰,楱,楲,楳,楴,極,楶,楷,楸,楹,榀,榁,概,榃,榄,榅,榆,榇,榈,榉,榐,榑,榒,榓,榔,榕,榖,榗,榘,榙,瀀,瀁,瀂,瀃,瀄,瀅,瀆,瀇,瀈,瀉,瀐,瀑,瀒,瀓,瀔,瀕,瀖,瀗,瀘,瀙,瀠,瀡,瀢,瀣,瀤,瀥,瀦,瀧,瀨,瀩,瀰,瀱,瀲,瀳,瀴,瀵,瀶,瀷,瀸,瀹,灀,灁,灂,灃,灄,灅,灆,灇,灈,灉,灐,灑,灒,灓,灔,灕,灖,灗,灘,灙,灠,灡,灢,灣,灤,灥,灦,灧,灨,灩,灰,灱,灲,灳,灴,灵,灶,灷,灸,灹,炀,炁,炂,炃,炄,炅,炆,炇,炈,炉,炐,炑,炒,炓,炔,炕,炖,炗,炘,炙,焀,焁,焂,焃,焄,焅,焆,焇,焈,焉,焐,焑,焒,焓,焔,焕,焖,焗,焘,焙,焠,無,焢,焣,焤,焥,焦,焧,焨,焩,焰,焱,焲,焳,焴,焵,然,焷,焸,焹,煀,煁,煂,煃,煄,煅,煆,煇,煈,煉,煐,煑,煒,煓,煔,煕,煖,煗,煘,煙,煠,煡,煢,煣,煤,煥,煦,照,煨,煩,煰,煱,煲,煳,煴,煵,煶,煷,煸,煹,熀,熁,熂,熃,熄,熅,熆,熇,熈,熉,熐,熑,熒,熓,熔,熕,熖,熗,熘,熙,爀,爁,爂,爃,爄,爅,爆,爇,爈,爉,爐,爑,爒,爓,爔,爕,爖,爗,爘,爙,爠,爡,爢,爣,爤,爥,爦,爧,爨,爩,爰,爱,爲,爳,爴,爵,父,爷,爸,爹,牀,牁,牂,牃,牄,牅,牆,片,版,牉,牐,牑,牒,牓,牔,牕,牖,牗,牘,牙,牠,牡,牢,牣,牤,牥,牦,牧,牨,物,牰,牱,牲,牳,牴,牵,牶,牷,牸,特,犀,犁,犂,犃,犄,犅,犆,犇,犈,犉,犐,犑,犒,犓,犔,犕,犖,犗,犘,犙,猀,猁,猂,猃,猄,猅,猆,猇,猈,猉,猐,猑,猒,猓,猔,猕,猖,猗,猘,猙,猠,猡,猢,猣,猤,猥,猦,猧,猨,猩,猰,猱,猲,猳,猴,猵,猶,猷,猸,猹,獀,獁,獂,獃,獄,獅,獆,獇,獈,獉,獐,獑,獒,獓,獔,獕,獖,獗,獘,獙,獠,獡,獢,獣,獤,獥,獦,獧,獨,獩,獰,獱,獲,獳,獴,獵,獶,獷,獸,獹,玀,玁,玂,玃,玄,玅,玆,率,玈,玉,玐,玑,玒,玓,玔,玕,玖,玗,玘,玙,琀,琁,琂,球,琄,琅,理,琇,琈,琉,琐,琑,琒,琓,琔,琕,琖,琗,琘,琙,琠,琡,琢,琣,琤,琥,琦,琧,琨,琩,琰,琱,琲,琳,琴,琵,琶,琷,琸,琹,瑀,瑁,瑂,瑃,瑄,瑅,瑆,瑇,瑈,瑉,瑐,瑑,瑒,瑓,瑔,瑕,瑖,瑗,瑘,瑙,瑠,瑡,瑢,瑣,瑤,瑥,瑦,瑧,瑨,瑩,瑰,瑱,瑲,瑳,瑴,瑵,瑶,瑷,瑸,瑹,璀,璁,璂,璃,璄,璅,璆,璇,璈,璉,璐,璑,璒,璓,璔,璕,璖,璗,璘,璙,甀,甁,甂,甃,甄,甅,甆,甇,甈,甉,甐,甑,甒,甓,甔,甕,甖,甗,甘,甙,甠,甡,產,産,甤,甥,甦,甧,用,甩,田,由,甲,申,甴,电,甶,男,甸,甹,畀,畁,畂,畃,畄,畅,畆,畇,畈,畉,畐,畑,畒,畓,畔,畕,畖,畗,畘,留,畠,畡,畢,畣,畤,略,畦,畧,畨,畩,異,畱,畲,畳,畴,畵,當,畷,畸,畹,疀,疁,疂,疃,疄,疅,疆,疇,疈,疉,疐,疑,疒,疓,疔,疕,疖,疗,疘,疙,瘀,瘁,瘂,瘃,瘄,瘅,瘆,瘇,瘈,瘉,瘐,瘑,瘒,瘓,瘔,瘕,瘖,瘗,瘘,瘙,瘠,瘡,瘢,瘣,瘤,瘥,瘦,瘧,瘨,瘩,瘰,瘱,瘲,瘳,瘴,瘵,瘶,瘷,瘸,瘹,癀,癁,療,癃,癄,癅,癆,癇,癈,癉,癐,癑,癒,癓,癔,癕,癖,癗,癘,癙,癠,癡,癢,癣,癤,癥,癦,癧,癨,癩,癰,癱,癲,癳,癴,癵,癶,癷,癸,癹,皀,皁,皂,皃,的,皅,皆,皇,皈,皉,皐,皑,皒,皓,皔,皕,皖,皗,皘,皙,眀,省,眂,眃,眄,眅,眆,眇,眈,眉,眐,眑,眒,眓,眔,眕,眖,眗,眘,眙,眠,眡,眢,眣,眤,眥,眦,眧,眨,眩,眰,眱,眲,眳,眴,眵,眶,眷,眸,眹,着,睁,睂,睃,睄,睅,睆,睇,睈,睉,睐,睑,睒,睓,睔,睕,睖,睗,睘,睙,睠,睡,睢,督,睤,睥,睦,睧,睨,睩,睰,睱,睲,睳,睴,睵,睶,睷,睸,睹,瞀,瞁,瞂,瞃,瞄,瞅,瞆,瞇,瞈,瞉,瞐,瞑,瞒,瞓,瞔,瞕,瞖,瞗,瞘,瞙,砀,码,砂,砃,砄,砅,砆,砇,砈,砉,砐,砑,砒,砓,研,砕,砖,砗,砘,砙,砠,砡,砢,砣,砤,砥,砦,砧,砨,砩,砰,砱,砲,砳,破,砵,砶,砷,砸,砹,础,硁,硂,硃,硄,硅,硆,硇,硈,硉,硐,硑,硒,硓,硔,硕,硖,硗,硘,硙,硠,硡,硢,硣,硤,硥,硦,硧,硨,硩,硰,硱,硲,硳,硴,硵,硶,硷,硸,硹,碀,碁,碂,碃,碄,碅,碆,碇,碈,碉,碐,碑,碒,碓,碔,碕,碖,碗,碘,碙,礀,礁,礂,礃,礄,礅,礆,礇,礈,礉,礐,礑,礒,礓,礔,礕,礖,礗,礘,礙,礠,礡,礢,礣,礤,礥,礦,礧,礨,礩,礰,礱,礲,礳,礴,礵,礶,礷,礸,礹,祀,祁,祂,祃,祄,祅,祆,祇,祈,祉,祐,祑,祒,祓,祔,祕,祖,祗,祘,祙,祠,祡,祢,祣,祤,祥,祦,祧,票,祩,祰,祱,祲,祳,祴,祵,祶,祷,祸,祹,禀,禁,禂,禃,禄,禅,禆,禇,禈,禉,禐,禑,禒,禓,禔,禕,禖,禗,禘,禙,耀,老,耂,考,耄,者,耆,耇,耈,耉,耐,耑,耒,耓,耔,耕,耖,耗,耘,耙,耠,耡,耢,耣,耤,耥,耦,耧,耨,耩,耰,耱,耲,耳,耴,耵,耶,耷,耸,耹,聀,聁,聂,聃,聄,聅,聆,聇,聈,聉,聐,聑,聒,聓,联,聕,聖,聗,聘,聙,聠,聡,聢,聣,聤,聥,聦,聧,聨,聩,聰,聱,聲,聳,聴,聵,聶,職,聸,聹,肀,肁,肂,肃,肄,肅,肆,肇,肈,肉,肐,肑,肒,肓,肔,肕,肖,肗,肘,肙,脀,脁,脂,脃,脄,脅,脆,脇,脈,脉,脐,脑,脒,脓,脔,脕,脖,脗,脘,脙,脠,脡,脢,脣,脤,脥,脦,脧,脨,脩,脰,脱,脲,脳,脴,脵,脶,脷,脸,脹,腀,腁,腂,腃,腄,腅,腆,腇,腈,腉,腐,腑,腒,腓,腔,腕,腖,腗,腘,腙,腠,腡,腢,腣,腤,腥,腦,腧,腨,腩,腰,腱,腲,腳,腴,腵,腶,腷,腸,腹,膀,膁,膂,膃,膄,膅,膆,膇,膈,膉,膐,膑,膒,膓,膔,膕,膖,膗,膘,膙,舀,舁,舂,舃,舄,舅,舆,與,興,舉,舐,舑,舒,舓,舔,舕,舖,舗,舘,舙,舠,舡,舢,舣,舤,舥,舦,舧,舨,舩,舰,舱,舲,舳,舴,舵,舶,舷,舸,船,艀,艁,艂,艃,艄,艅,艆,艇,艈,艉,艐,艑,艒,艓,艔,艕,艖,艗,艘,艙,艠,艡,艢,艣,艤,艥,艦,艧,艨,艩,艰,艱,色,艳,艴,艵,艶,艷,艸,艹,芀,芁,节,芃,芄,芅,芆,芇,芈,芉,芐,芑,芒,芓,芔,芕,芖,芗,芘,芙,茀,茁,茂,范,茄,茅,茆,茇,茈,茉,茐,茑,茒,茓,茔,茕,茖,茗,茘,茙,茠,茡,茢,茣,茤,茥,茦,茧,茨,茩,茰,茱,茲,茳,茴,茵,茶,茷,茸,茹,荀,荁,荂,荃,荄,荅,荆,荇,荈,草,荐,荑,荒,荓,荔,荕,荖,荗,荘,荙,荠,荡,荢,荣,荤,荥,荦,荧,荨,荩,荰,荱,荲,荳,荴,荵,荶,荷,荸,荹,莀,莁,莂,莃,莄,莅,莆,莇,莈,莉,莐,莑,莒,莓,莔,莕,莖,莗,莘,莙,萀,萁,萂,萃,萄,萅,萆,萇,萈,萉,萐,萑,萒,萓,萔,萕,萖,萗,萘,萙,萠,萡,萢,萣,萤,营,萦,萧,萨,萩,萰,萱,萲,萳,萴,萵,萶,萷,萸,萹,葀,葁,葂,葃,葄,葅,葆,葇,葈,葉,葐,葑,葒,葓,葔,葕,葖,著,葘,葙,葠,葡,葢,董,葤,葥,葦,葧,葨,葩,葰,葱,葲,葳,葴,葵,葶,葷,葸,葹,蒀,蒁,蒂,蒃,蒄,蒅,蒆,蒇,蒈,蒉,蒐,蒑,蒒,蒓,蒔,蒕,蒖,蒗,蒘,蒙,蔀,蔁,蔂,蔃,蔄,蔅,蔆,蔇,蔈,蔉,蔐,蔑,蔒,蔓,蔔,蔕,蔖,蔗,蔘,蔙,蔠,蔡,蔢,蔣,蔤,蔥,蔦,蔧,蔨,蔩,蔰,蔱,蔲,蔳,蔴,蔵,蔶,蔷,蔸,蔹,蕀,蕁,蕂,蕃,蕄,蕅,蕆,蕇,蕈,蕉,蕐,蕑,蕒,蕓,蕔,蕕,蕖,蕗,蕘,蕙,蕠,蕡,蕢,蕣,蕤,蕥,蕦,蕧,蕨,蕩,蕰,蕱,蕲,蕳,蕴,蕵,蕶,蕷,蕸,蕹,薀,薁,薂,薃,薄,薅,薆,薇,薈,薉,薐,薑,薒,薓,薔,薕,薖,薗,薘,薙,蘀,蘁,蘂,蘃,蘄,蘅,蘆,蘇,蘈,蘉,蘐,蘑,蘒,蘓,蘔,蘕,蘖,蘗,蘘,蘙,蘠,蘡,蘢,蘣,蘤,蘥,蘦,蘧,蘨,蘩,蘰,蘱,蘲,蘳,蘴,蘵,蘶,蘷,蘸,蘹,虀,虁,虂,虃,虄,虅,虆,虇,虈,虉,虐,虑,虒,虓,虔,處,虖,虗,虘,虙,虠,虡,虢,虣,虤,虥,虦,虧,虨,虩,虰,虱,虲,虳,虴,虵,虶,虷,虸,虹,蚀,蚁,蚂,蚃,蚄,蚅,蚆,蚇,蚈,蚉,蚐,蚑,蚒,蚓,蚔,蚕,蚖,蚗,蚘,蚙,蜀,蜁,蜂,蜃,蜄,蜅,蜆,蜇,蜈,蜉,蜐,蜑,蜒,蜓,蜔,蜕,蜖,蜗,蜘,蜙,蜠,蜡,蜢,蜣,蜤,蜥,蜦,蜧,蜨,蜩,蜰,蜱,蜲,蜳,蜴,蜵,蜶,蜷,蜸,蜹,蝀,蝁,蝂,蝃,蝄,蝅,蝆,蝇,蝈,蝉,蝐,蝑,蝒,蝓,蝔,蝕,蝖,蝗,蝘,蝙,蝠,蝡,蝢,蝣,蝤,蝥,蝦,蝧,蝨,蝩,蝰,蝱,蝲,蝳,蝴,蝵,蝶,蝷,蝸,蝹,螀,螁,螂,螃,螄,螅,螆,螇,螈,螉,螐,螑,螒,螓,螔,螕,螖,螗,螘,螙,蠀,蠁,蠂,蠃,蠄,蠅,蠆,蠇,蠈,蠉,蠐,蠑,蠒,蠓,蠔,蠕,蠖,蠗,蠘,蠙,蠠,蠡,蠢,蠣,蠤,蠥,蠦,蠧,蠨,蠩,蠰,蠱,蠲,蠳,蠴,蠵,蠶,蠷,蠸,蠹,血,衁,衂,衃,衄,衅,衆,衇,衈,衉,衐,衑,衒,術,衔,衕,衖,街,衘,衙,衠,衡,衢,衣,衤,补,衦,衧,表,衩,衰,衱,衲,衳,衴,衵,衶,衷,衸,衹,袀,袁,袂,袃,袄,袅,袆,袇,袈,袉,袐,袑,袒,袓,袔,袕,袖,袗,袘,袙,褀,褁,褂,褃,褄,褅,褆,複,褈,褉,褐,褑,褒,褓,褔,褕,褖,褗,褘,褙,褠,褡,褢,褣,褤,褥,褦,褧,褨,褩,褰,褱,褲,褳,褴,褵,褶,褷,褸,褹,襀,襁,襂,襃,襄,襅,襆,襇,襈,襉,襐,襑,襒,襓,襔,襕,襖,襗,襘,襙,襠,襡,襢,襣,襤,襥,襦,襧,襨,襩,襰,襱,襲,襳,襴,襵,襶,襷,襸,襹,覀,要,覂,覃,覄,覅,覆,覇,覈,覉,覐,覑,覒,覓,覔,覕,視,覗,覘,覙,退,送,适,逃,逄,逅,逆,逇,逈,选,逐,逑,递,逓,途,逕,逖,逗,逘,這,造,逡,逢,連,逤,逥,逦,逧,逨,逩,逰,週,進,逳,逴,逵,逶,逷,逸,逹,遀,遁,遂,遃,遄,遅,遆,遇,遈,遉,遐,遑,遒,道,達,違,遖,遗,遘,遙,遠,遡,遢,遣,遤,遥,遦,遧,遨,適,遰,遱,遲,遳,遴,遵,遶,遷,選,遹,邀,邁,邂,邃,還,邅,邆,邇,邈,邉,邐,邑,邒,邓,邔,邕,邖,邗,邘,邙,鄀,鄁,鄂,鄃,鄄,鄅,鄆,鄇,鄈,鄉,鄐,鄑,鄒,鄓,鄔,鄕,鄖,鄗,鄘,鄙,鄠,鄡,鄢,鄣,鄤,鄥,鄦,鄧,鄨,鄩,鄰,鄱,鄲,鄳,鄴,鄵,鄶,鄷,鄸,鄹,酀,酁,酂,酃,酄,酅,酆,酇,酈,酉,酐,酑,酒,酓,酔,酕,酖,酗,酘,酙,酠,酡,酢,酣,酤,酥,酦,酧,酨,酩,酰,酱,酲,酳,酴,酵,酶,酷,酸,酹,醀,醁,醂,醃,醄,醅,醆,醇,醈,醉,醐,醑,醒,醓,醔,醕,醖,醗,醘,醙,鈀,鈁,鈂,鈃,鈄,鈅,鈆,鈇,鈈,鈉,鈐,鈑,鈒,鈓,鈔,鈕,鈖,鈗,鈘,鈙,鈠,鈡,鈢,鈣,鈤,鈥,鈦,鈧,鈨,鈩,鈰,鈱,鈲,鈳,鈴,鈵,鈶,鈷,鈸,鈹,鉀,鉁,鉂,鉃,鉄,鉅,鉆,鉇,鉈,鉉,鉐,鉑,鉒,鉓,鉔,鉕,鉖,鉗,鉘,鉙,鉠,鉡,鉢,鉣,鉤,鉥,鉦,鉧,鉨,鉩,鉰,鉱,鉲,鉳,鉴,鉵,鉶,鉷,鉸,鉹,銀,銁,銂,銃,銄,銅,銆,銇,銈,銉,銐,銑,銒,銓,銔,銕,銖,銗,銘,銙,錀,錁,錂,錃,錄,錅,錆,錇,錈,錉,錐,錑,錒,錓,錔,錕,錖,錗,錘,錙,錠,錡,錢,錣,錤,錥,錦,錧,錨,錩,錰,錱,録,錳,錴,錵,錶,錷,錸,錹,鍀,鍁,鍂,鍃,鍄,鍅,鍆,鍇,鍈,鍉,鍐,鍑,鍒,鍓,鍔,鍕,鍖,鍗,鍘,鍙,鍠,鍡,鍢,鍣,鍤,鍥,鍦,鍧,鍨,鍩,鍰,鍱,鍲,鍳,鍴,鍵,鍶,鍷,鍸,鍹,鎀,鎁,鎂,鎃,鎄,鎅,鎆,鎇,鎈,鎉,鎐,鎑,鎒,鎓,鎔,鎕,鎖,鎗,鎘,鎙,鐀,鐁,鐂,鐃,鐄,鐅,鐆,鐇,鐈,鐉,鐐,鐑,鐒,鐓,鐔,鐕,鐖,鐗,鐘,鐙,鐠,鐡,鐢,鐣,鐤,鐥,鐦,鐧,鐨,鐩,鐰,鐱,鐲,鐳,鐴,鐵,鐶,鐷,鐸,鐹,鑀,鑁,鑂,鑃,鑄,鑅,鑆,鑇,鑈,鑉,鑐,鑑,鑒,鑓,鑔,鑕,鑖,鑗,鑘,鑙,鑠,鑡,鑢,鑣,鑤,鑥,鑦,鑧,鑨,鑩,鑰,鑱,鑲,鑳,鑴,鑵,鑶,鑷,鑸,鑹,钀,钁,钂,钃,钄,钅,钆,钇,针,钉,钐,钑,钒,钓,钔,钕,钖,钗,钘,钙,销,锁,锂,锃,锄,锅,锆,锇,锈,锉,锐,锑,锒,锓,锔,锕,锖,锗,锘,错,锠,锡,锢,锣,锤,锥,锦,锧,锨,锩,锰,锱,锲,锳,锴,锵,锶,锷,锸,锹,镀,镁,镂,镃,镄,镅,镆,镇,镈,镉,镐,镑,镒,镓,镔,镕,镖,镗,镘,镙,镠,镡,镢,镣,镤,镥,镦,镧,镨,镩,镰,镱,镲,镳,镴,镵,镶,長,镸,镹,門,閁,閂,閃,閄,閅,閆,閇,閈,閉,閐,閑,閒,間,閔,閕,閖,閗,閘,閙,阀,阁,阂,阃,阄,阅,阆,阇,阈,阉,阐,阑,阒,阓,阔,阕,阖,阗,阘,阙,阠,阡,阢,阣,阤,阥,阦,阧,阨,阩,阰,阱,防,阳,阴,阵,阶,阷,阸,阹,陀,陁,陂,陃,附,际,陆,陇,陈,陉,限,陑,陒,陓,陔,陕,陖,陗,陘,陙,陠,陡,院,陣,除,陥,陦,陧,陨,险,陰,陱,陲,陳,陴,陵,陶,陷,陸,陹,隀,隁,隂,隃,隄,隅,隆,隇,隈,隉,隐,隑,隒,隓,隔,隕,隖,隗,隘,隙,需,霁,霂,霃,霄,霅,霆,震,霈,霉,霐,霑,霒,霓,霔,霕,霖,霗,霘,霙,霠,霡,霢,霣,霤,霥,霦,霧,霨,霩,霰,霱,露,霳,霴,霵,霶,霷,霸,霹,靀,靁,靂,靃,靄,靅,靆,靇,靈,靉,靐,靑,青,靓,靔,靕,靖,靗,靘,静,靠,靡,面,靣,靤,靥,靦,靧,靨,革,靰,靱,靲,靳,靴,靵,靶,靷,靸,靹,鞀,鞁,鞂,鞃,鞄,鞅,鞆,鞇,鞈,鞉,鞐,鞑,鞒,鞓,鞔,鞕,鞖,鞗,鞘,鞙,頀,頁,頂,頃,頄,項,順,頇,須,頉,預,頑,頒,頓,頔,頕,頖,頗,領,頙,頠,頡,頢,頣,頤,頥,頦,頧,頨,頩,頰,頱,頲,頳,頴,頵,頶,頷,頸,頹,顀,顁,顂,顃,顄,顅,顆,顇,顈,顉,顐,顑,顒,顓,顔,顕,顖,顗,願,顙,顠,顡,顢,顣,顤,顥,顦,顧,顨,顩,顰,顱,顲,顳,顴,页,顶,顷,顸,项,颀,颁,颂,颃,预,颅,领,颇,颈,颉,颐,频,颒,颓,颔,颕,颖,颗,题,颙,餀,餁,餂,餃,餄,餅,餆,餇,餈,餉,餐,餑,餒,餓,餔,餕,餖,餗,餘,餙,餠,餡,餢,餣,餤,餥,餦,餧,館,餩,餰,餱,餲,餳,餴,餵,餶,餷,餸,餹,饀,饁,饂,饃,饄,饅,饆,饇,饈,饉,饐,饑,饒,饓,饔,饕,饖,饗,饘,饙,饠,饡,饢,饣,饤,饥,饦,饧,饨,饩,饰,饱,饲,饳,饴,饵,饶,饷,饸,饹,馀,馁,馂,馃,馄,馅,馆,馇,馈,馉,馐,馑,馒,馓,馔,馕,首,馗,馘,香', ',') satisfies matches($s, '^(?:[\\w])$')) and (every $s in tokenize('', ',') satisfies not(matches($s, '^(?:[\\w])$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "re00985", XPath: `(every $s in tokenize('0,1,2,3,4,5,6,7,8,9,٠,١,٢,٣,٤,٥,٦,٧,٨,٩,۰,۱,۲,۳,۴,۵,۶,۷,۸,۹,०,१,२,३,४,५,६,७,८,९,০,১,২,৩,৪,৫,৬,৭,৮,৯,੦,੧,੨,੩,੪,੫,੬,੭,੮,੯,૦,૧,૨,૩,૪,૫,૬,૭,૮,૯,୦,୧,୨,୩,୪,୫,୬,୭,୮,୯,௧,௨,௩,௪,௫,௬,௭,௮,௯,౦,౧,౨,౩,౪,౫,౬,౭,౮,౯,೦,೧,೨,೩,೪,೫,೬,೭,೮,೯,൦,൧,൨,൩,൪,൫,൬,൭,൮,൯,๐,๑,๒,๓,๔,๕,๖,๗,๘,๙,໐,໑,໒,໓,໔,໕,໖,໗,໘,໙,༠,༡,༢,༣,༤,༥,༦,༧,༨,༩,၀,၁,၂,၃,၄,၅,၆,၇,၈,၉,០,១,២,៣,៤,៥,៦,៧,៨,៩,᠐,᠑,᠒,᠓,᠔,᠕,᠖,᠗,᠘,᠙,０,１,２,３,４,５,６,７,８,９', ',') satisfies matches($s, '^(?:[\d])$')) and (every $s in tokenize('	,
-,, ,!,",#,$,왣,왤,왥,왦,왧,왨,왩,왪,왫,왬,왭,왮,왯,왰,왱,왲,왳,왴,왵,왶,왷,외,왹,왺,왻,왼,왽,왾,왿,욀,욁,욂,욃,욄,욅,욆,욇,욈,욉,욊,욋,욌,욍,욎,욏,욐,욑,욒,욓,요,욕,욖,욗,욘,욙,욚,욛,욜,욝,욞,욟,욠,욡,욢,욣,욤,욥,욦,욧,욨,용,욪,욫,욬,욭,욮,욯,우,욱,욲,욳,운,욵,욶,욷,울,욹,욺,욻,욼,욽,욾,욿,움,웁,웂,웃,웄,웅,웆,웇,웈,웉,웊,웋,워,웍,웎,웏,원,웑,웒,웓,월,웕,웖,웗,웘,웙,웚,웛,웜,웝,웞,웟,웠,웡,웢,웣,웤,웥,웦,웧,웨,웩,웪,웫,웬,웭,웮,웯,웰,웱,웲,웳,웴,웵,웶,웷,웸,웹,웺,웻,웼,웽,웾,웿,윀,윁,윂,윃,위,윅,윆,윇,윈,윉,윊,윋,윌,윍,윎,윏,윐,윑,윒,윓,윔,윕,윖,윗,윘,윙,윚,윛,윜,윝,윞,윟,유,육,윢,윣,윤,윥,윦,윧,율,윩,윪,윫,윬,윭,윮,윯,윰,윱,윲,윳,윴,융,윶,윷,윸,윹,윺,윻,으,윽,윾,윿,은,읁,읂,읃,을,읅,읆,읇,읈,읉,읊,읋,음,읍,읎,읏,읐,응,읒,읓,읔,읕,읖,읗,의,읙,읚,읛,읜,읝,읞,읟,읠,읡,읢,읣,읤,읥,읦,읧,읨,읩,읪,읫,읬,읭,읮,읯,읰,읱,읲,읳,이,익,읶,읷,인,읹,읺,읻,일,재,잭,잮,잯,잰,잱,잲,잳,잴,잵,잶,잷,잸,잹,잺,잻,잼,잽,잾,잿,쟀,쟁,쟂,쟃,쟄,쟅,쟆,쟇,쟈,쟉,쟊,쟋,쟌,쟍,쟎,쟏,쟐,쟑,쟒,쟓,쟔,쟕,쟖,쟗,쟘,쟙,쟚,쟛,쟜,쟝,쟞,쟟,쟠,쟡,쟢,쟣,쟤,쟥,쟦,쟧,쟨,쟩,쟪,쟫,쟬,쟭,쟮,쟯,쟰,쟱,쟲,쟳,쟴,쟵,쟶,쟷,쟸,쟹,쟺,쟻,쟼,쟽,쟾,쟿,저,적,젂,젃,전,젅,젆,젇,절,젉,젊,젋,젌,젍,젎,젏,점,접,젒,젓,젔,정,젖,젗,젘,젙,젚,젛,제,젝,젞,젟,젠,젡,젢,젣,젤,젥,젦,젧,젨,젩,젪,젫,젬,젭,젮,젯,젰,젱,젲,젳,젴,젵,젶,젷,져,젹,젺,젻,젼,젽,젾,젿,졀,졁,졂,졃,졄,졅,졆,졇,졈,졉,졊,졋'||
-',졌,졍,졎,졏,졐,졑,졒,졓,졔,졕,졖,졗,졘,졙,졚,졛,졜,졝,졞,졟,졠,졡,졢,졣,졤,졥,졦,졧,졨,졩,졪,졫,졬,졭,졮,졯,조,족,졲,졳,존,졵,졶,졷,졸,졹,졺,졻,졼,졽,졾,졿,좀,좁,좂,좃,좄,종,좆,좇,좈,좉,좊,좋,좌,좍,좎,좏,좐,좑,좒,좓,좔,좕,좖,좗,좘,좙,좚,좛,좜,좝,좞,좟,좠,좡,좢,좣,좤,좥,좦,좧,좨,좩,좪,좫,좬,좭,좮,좯,좰,좱,좲,좳,좴,좵,좶,좷,좸,좹,좺,좻,좼,좽,좾,좿,죀,죁,죂,죃,죄,죅,죆,죇,죈,죉,죊,죋,죌,죍,죎,죏,죐,죑,죒,죓,죔,죕,죖,죗,죘,죙,죚,죛,죜,죝,죞,죟,죠,죡,죢,죣,죤,죥,죦,죧,죨,죩,죪,죫,죬,죭,죮,죯,죰,죱,죲,죳,죴,죵,죶,죷,죸,죹,죺,죻,주,죽,죾,죿,준,줁,줂,줃,줄,줅,줆,줇,줈,줉,줊,줋,줌,줍,줎,줏,줐,중,줒,줓,줔,줕,줖,줗,줘,줙,줚,줛,줜,줝,줞,줟,줠,줡,줢,줣,줤,줥,줦,줧,줨,줩,줪,줫,줬,줭,줮,줯,줰,줱,줲,줳,줴,줵,줶,줷,줸,줹,줺,줻,줼,줽,줾,줿,쥀,쥁,쥂,쥃,쥄,쥅,쥆,쥇,쥈,쥉,쥊,쥋,쥌,쥍,쥎,쥏,쥐,쥑,쥒,쥓,쥔,쥕,쥖,쥗,쥘,쥙,쥚,쥛,쥜,쥝,쥞,쥟,쥠,쥡,쥢,쥣,쥤,쥥,쥦,쥧,쥨,쥩,쥪,쥫,쥬,쥭,쥮,쥯,쥰,쥱,쥲,＂,＃,＄,％,＆,＇,（,）,＊,＋,，,－,．,／,：,；,＜,＝,＞,？,＠,Ａ,Ｂ,Ｃ,Ｄ,Ｅ,Ｆ,Ｇ,Ｈ,Ｉ,Ｊ,Ｋ,Ｌ,Ｍ,Ｎ,Ｏ,Ｐ,Ｑ,Ｒ,Ｓ,Ｔ,Ｕ,Ｖ,Ｗ,Ｘ,Ｙ,Ｚ,［,＼,］,＾,＿,｀,ａ,ｂ,ｃ,ｄ,ｅ,ｆ,ｇ,ｈ,ｉ,ｊ,ｋ,ｌ,ｍ,ｎ,ｏ,ｐ,ｑ,ｒ,ｓ,ｔ,ｕ,ｖ,ｗ,ｘ,ｙ,ｚ,｛,｜,｝,～,｟,｠,｡,｢,｣,､,･,ｦ,ｧ,ｨ,ｩ,ｪ,ｫ,ｬ,ｭ,ｮ,ｯ,ｰ,ｱ,ｲ,ｳ,ｴ,ｵ,ｶ,ｷ,ｸ,ｹ,ｺ,ｻ,ｼ,ｽ,ｾ,ｿ,ﾀ,ﾁ,ﾂ,ﾃ,ﾄ,ﾅ,ﾆ,ﾇ,ﾈ,ﾉ,ﾊ,ﾋ,ﾌ,ﾍ,￢,￣,￤,￥,￦,￧,￨,￩,￪,￫,￬,￭,￮,￯,￰,￱,￲,￳,￴,￵,￶,￷,￸,￹,￺,￻,￼,�', ',') satisfies not(matches($s, '^(?:[\d])$')))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "re00985", XPath: "(every $s in tokenize('0,1,2,3,4,5,6,7,8,9,٠,١,٢,٣,٤,٥,٦,٧,٨,٩,۰,۱,۲,۳,۴,۵,۶,۷,۸,۹,०,१,२,३,४,५,६,७,८,९,০,১,২,৩,৪,৫,৬,৭,৮,৯,੦,੧,੨,੩,੪,੫,੬,੭,੮,੯,૦,૧,૨,૩,૪,૫,૬,૭,૮,૯,୦,୧,୨,୩,୪,୫,୬,୭,୮,୯,௧,௨,௩,௪,௫,௬,௭,௮,௯,౦,౧,౨,౩,౪,౫,౬,౭,౮,౯,೦,೧,೨,೩,೪,೫,೬,೭,೮,೯,൦,൧,൨,൩,൪,൫,൬,൭,൮,൯,๐,๑,๒,๓,๔,๕,๖,๗,๘,๙,໐,໑,໒,໓,໔,໕,໖,໗,໘,໙,༠,༡,༢,༣,༤,༥,༦,༧,༨,༩,၀,၁,၂,၃,၄,၅,၆,၇,၈,၉,០,១,២,៣,៤,៥,៦,៧,៨,៩,᠐,᠑,᠒,᠓,᠔,᠕,᠖,᠗,᠘,᠙,０,１,２,３,４,５,６,７,８,９', ',') satisfies matches($s, '^(?:[\\d])$')) and (every $s in tokenize('\t,\n,\r, ,!,\",#,$,왣,왤,왥,왦,왧,왨,왩,왪,왫,왬,왭,왮,왯,왰,왱,왲,왳,왴,왵,왶,왷,외,왹,왺,왻,왼,왽,왾,왿,욀,욁,욂,욃,욄,욅,욆,욇,욈,욉,욊,욋,욌,욍,욎,욏,욐,욑,욒,욓,요,욕,욖,욗,욘,욙,욚,욛,욜,욝,욞,욟,욠,욡,욢,욣,욤,욥,욦,욧,욨,용,욪,욫,욬,욭,욮,욯,우,욱,욲,욳,운,욵,욶,욷,울,욹,욺,욻,욼,욽,욾,욿,움,웁,웂,웃,웄,웅,웆,웇,웈,웉,웊,웋,워,웍,웎,웏,원,웑,웒,웓,월,웕,웖,웗,웘,웙,웚,웛,웜,웝,웞,웟,웠,웡,웢,웣,웤,웥,웦,웧,웨,웩,웪,웫,웬,웭,웮,웯,웰,웱,웲,웳,웴,웵,웶,웷,웸,웹,웺,웻,웼,웽,웾,웿,윀,윁,윂,윃,위,윅,윆,윇,윈,윉,윊,윋,윌,윍,윎,윏,윐,윑,윒,윓,윔,윕,윖,윗,윘,윙,윚,윛,윜,윝,윞,윟,유,육,윢,윣,윤,윥,윦,윧,율,윩,윪,윫,윬,윭,윮,윯,윰,윱,윲,윳,윴,융,윶,윷,윸,윹,윺,윻,으,윽,윾,윿,은,읁,읂,읃,을,읅,읆,읇,읈,읉,읊,읋,음,읍,읎,읏,읐,응,읒,읓,읔,읕,읖,읗,의,읙,읚,읛,읜,읝,읞,읟,읠,읡,읢,읣,읤,읥,읦,읧,읨,읩,읪,읫,읬,읭,읮,읯,읰,읱,읲,읳,이,익,읶,읷,인,읹,읺,읻,일,재,잭,잮,잯,잰,잱,잲,잳,잴,잵,잶,잷,잸,잹,잺,잻,잼,잽,잾,잿,쟀,쟁,쟂,쟃,쟄,쟅,쟆,쟇,쟈,쟉,쟊,쟋,쟌,쟍,쟎,쟏,쟐,쟑,쟒,쟓,쟔,쟕,쟖,쟗,쟘,쟙,쟚,쟛,쟜,쟝,쟞,쟟,쟠,쟡,쟢,쟣,쟤,쟥,쟦,쟧,쟨,쟩,쟪,쟫,쟬,쟭,쟮,쟯,쟰,쟱,쟲,쟳,쟴,쟵,쟶,쟷,쟸,쟹,쟺,쟻,쟼,쟽,쟾,쟿,저,적,젂,젃,전,젅,젆,젇,절,젉,젊,젋,젌,젍,젎,젏,점,접,젒,젓,젔,정,젖,젗,젘,젙,젚,젛,제,젝,젞,젟,젠,젡,젢,젣,젤,젥,젦,젧,젨,젩,젪,젫,젬,젭,젮,젯,젰,젱,젲,젳,젴,젵,젶,젷,져,젹,젺,젻,젼,젽,젾,젿,졀,졁,졂,졃,졄,졅,졆,졇,졈,졉,졊,졋'||\n',졌,졍,졎,졏,졐,졑,졒,졓,졔,졕,졖,졗,졘,졙,졚,졛,졜,졝,졞,졟,졠,졡,졢,졣,졤,졥,졦,졧,졨,졩,졪,졫,졬,졭,졮,졯,조,족,졲,졳,존,졵,졶,졷,졸,졹,졺,졻,졼,졽,졾,졿,좀,좁,좂,좃,좄,종,좆,좇,좈,좉,좊,좋,좌,좍,좎,좏,좐,좑,좒,좓,좔,좕,좖,좗,좘,좙,좚,좛,좜,좝,좞,좟,좠,좡,좢,좣,좤,좥,좦,좧,좨,좩,좪,좫,좬,좭,좮,좯,좰,좱,좲,좳,좴,좵,좶,좷,좸,좹,좺,좻,좼,좽,좾,좿,죀,죁,죂,죃,죄,죅,죆,죇,죈,죉,죊,죋,죌,죍,죎,죏,죐,죑,죒,죓,죔,죕,죖,죗,죘,죙,죚,죛,죜,죝,죞,죟,죠,죡,죢,죣,죤,죥,죦,죧,죨,죩,죪,죫,죬,죭,죮,죯,죰,죱,죲,죳,죴,죵,죶,죷,죸,죹,죺,죻,주,죽,죾,죿,준,줁,줂,줃,줄,줅,줆,줇,줈,줉,줊,줋,줌,줍,줎,줏,줐,중,줒,줓,줔,줕,줖,줗,줘,줙,줚,줛,줜,줝,줞,줟,줠,줡,줢,줣,줤,줥,줦,줧,줨,줩,줪,줫,줬,줭,줮,줯,줰,줱,줲,줳,줴,줵,줶,줷,줸,줹,줺,줻,줼,줽,줾,줿,쥀,쥁,쥂,쥃,쥄,쥅,쥆,쥇,쥈,쥉,쥊,쥋,쥌,쥍,쥎,쥏,쥐,쥑,쥒,쥓,쥔,쥕,쥖,쥗,쥘,쥙,쥚,쥛,쥜,쥝,쥞,쥟,쥠,쥡,쥢,쥣,쥤,쥥,쥦,쥧,쥨,쥩,쥪,쥫,쥬,쥭,쥮,쥯,쥰,쥱,쥲,＂,＃,＄,％,＆,＇,（,）,＊,＋,，,－,．,／,：,；,＜,＝,＞,？,＠,Ａ,Ｂ,Ｃ,Ｄ,Ｅ,Ｆ,Ｇ,Ｈ,Ｉ,Ｊ,Ｋ,Ｌ,Ｍ,Ｎ,Ｏ,Ｐ,Ｑ,Ｒ,Ｓ,Ｔ,Ｕ,Ｖ,Ｗ,Ｘ,Ｙ,Ｚ,［,＼,］,＾,＿,｀,ａ,ｂ,ｃ,ｄ,ｅ,ｆ,ｇ,ｈ,ｉ,ｊ,ｋ,ｌ,ｍ,ｎ,ｏ,ｐ,ｑ,ｒ,ｓ,ｔ,ｕ,ｖ,ｗ,ｘ,ｙ,ｚ,｛,｜,｝,～,｟,｠,｡,｢,｣,､,･,ｦ,ｧ,ｨ,ｩ,ｪ,ｫ,ｬ,ｭ,ｮ,ｯ,ｰ,ｱ,ｲ,ｳ,ｴ,ｵ,ｶ,ｷ,ｸ,ｹ,ｺ,ｻ,ｼ,ｽ,ｾ,ｿ,ﾀ,ﾁ,ﾂ,ﾃ,ﾄ,ﾅ,ﾆ,ﾇ,ﾈ,ﾉ,ﾊ,ﾋ,ﾌ,ﾍ,￢,￣,￤,￥,￦,\uffe7,￨,￩,￪,￫,￬,￭,￮,\uffef,\ufff0,\ufff1,\ufff2,\ufff3,\ufff4,\ufff5,\ufff6,\ufff7,\ufff8,\ufff9,\ufffa,\ufffb,￼,�', ',') satisfies not(matches($s, '^(?:[\\d])$')))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "re00988", XPath: "matches('qwerty','[-[xyz]]')", ExpectError: true},
 		{Name: "re00989", XPath: "matches('qwerty','[^-[xyz]]')", ExpectError: true},
 		{Name: "re00990", XPath: "matches('$', '^\\$$') and not(matches('\\$', '^\\$$'))", Assertions: []qt3Assertion{qt3AssertTrue()}},
@@ -8454,12 +8533,9 @@ newline characters.")`, Assertions: []qt3Assertion{qt3AssertStringValue("This te
 		{Name: "fn-normalize-space-13", XPath: "fn:normalize-space(\"\t\t\")", Assertions: []qt3Assertion{qt3AssertEq("\"\""), qt3AssertCount(1)}},
 		{Name: "fn-normalize-space-14", XPath: `fn:normalize-space("
 ")`, Assertions: []qt3Assertion{qt3AssertEq("\"\""), qt3AssertCount(1)}},
-		{Name: "fn-normalize-space-15", XPath: `fn:normalize-space("
-
-")`, Assertions: []qt3Assertion{qt3AssertEq("\"\""), qt3AssertCount(1)}},
+		{Name: "fn-normalize-space-15", XPath: "fn:normalize-space(\"\r\n\r\n\")", Assertions: []qt3Assertion{qt3AssertEq("\"\""), qt3AssertCount(1)}},
 		{Name: "fn-normalize-space-16", XPath: "fn:normalize-space(\" \t  \t \")", Assertions: []qt3Assertion{qt3AssertEq("\"\""), qt3AssertCount(1)}},
-		{Name: "fn-normalize-space-17", XPath: `fn:normalize-space("   
- ")`, Assertions: []qt3Assertion{qt3AssertEq("\"\""), qt3AssertCount(1)}},
+		{Name: "fn-normalize-space-17", XPath: "fn:normalize-space(\" \r  \n \")", Assertions: []qt3Assertion{qt3AssertEq("\"\""), qt3AssertCount(1)}},
 		{Name: "fn-normalize-space-18", XPath: `fn:normalize-space("	
 ")`, Assertions: []qt3Assertion{qt3AssertEq("\"\""), qt3AssertCount(1)}},
 		{Name: "fn-normalize-space-19", XPath: "fn:normalize-space(\"\t12345\")", Assertions: []qt3Assertion{qt3AssertStringValue("12345")}},
@@ -8527,7 +8603,7 @@ func TestQT3_fn_normalize_unicode(t *testing.T) {
 		{Name: "cbcl-fn-normalize-unicode-003", XPath: "boolean(normalize-unicode(\"blah\",\"ZZZ\"))", ExpectError: true},
 		{Name: "cbcl-fn-normalize-unicode-004", XPath: "normalize-unicode((),\"NFC\")", Assertions: []qt3Assertion{qt3AssertStringValue("")}},
 		{Name: "cbcl-fn-normalize-unicode-005", XPath: "normalize-unicode(\"\",\"NFC\")", Assertions: []qt3Assertion{qt3AssertStringValue("")}},
-		{Name: "cbcl-fn-normalize-unicode-006", XPath: "normalize-unicode(codepoints-to-string(2494),\"FULLY-NORMALIZED\")", Assertions: []qt3Assertion{qt3AssertStringValue("া")}},
+		{Name: "cbcl-fn-normalize-unicode-006", XPath: "normalize-unicode(codepoints-to-string(2494),\"FULLY-NORMALIZED\")", Assertions: []qt3Assertion{qt3AssertStringValue(" া")}},
 		{Name: "cbcl-fn-normalize-unicode-006a", XPath: "normalize-unicode(codepoints-to-string(2494),\"FULLY-NORMALIZED\")", ExpectError: true},
 	})
 }
@@ -9248,7 +9324,7 @@ func TestQT3_fn_parse_xml_fragment(t *testing.T) {
 		{Name: "parse-xml-fragment-005", XPath: "parse-xml-fragment(\"\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertStringValue("")}},
 		{Name: "parse-xml-fragment-006", XPath: "parse-xml-fragment(\"vanessa\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertStringValue("vanessa")}},
 		{Name: "parse-xml-fragment-007", XPath: "parse-xml-fragment(\"<a/><b/><c/>\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "parse-xml-fragment-008", XPath: "parse-xml-fragment(\"  \")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertStringValue("")}},
+		{Name: "parse-xml-fragment-008", XPath: "parse-xml-fragment(\"  \")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertStringValue("  ")}},
 		{Name: "parse-xml-fragment-009", XPath: "parse-xml-fragment(\"<a> </a> <b> </b>\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "parse-xml-fragment-010", XPath: "parse-xml-fragment(\"<a/><!--comment--><?PI?><b/>\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "parse-xml-fragment-011", XPath: "string(parse-xml-fragment(codepoints-to-string((38, 108, 116, 59))))", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertEq("\"<\"")}},
@@ -10545,28 +10621,13 @@ func TestQT3_fn_serialize(t *testing.T) {
 		{Name: "serialize-json-104", XPath: "normalize-space(serialize(true(), map{'method':'json'}))", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("true")}},
 		{Name: "serialize-json-105", XPath: "normalize-space(serialize(false(), map{'method':'json'}))", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("false")}},
 		{Name: "serialize-json-106", XPath: "serialize(map{'abc':23}, map{'method':'json'})", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-json-107", XPath: `let $r := serialize(map{'abc':23, 'xyz':49}, map{'method':'json'}) return
-            translate($r,' 	
-', '')`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertType("xs:string"), qt3AssertCount(1), qt3AssertSkip()}},
-		{Name: "serialize-json-108", XPath: `let $r := serialize(parse-json('[1, 2, 3, "four", true, false, null]'),
-            map{'method':'json'}) return translate($r,' 	
-', '')`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[1,2,3,\"four\",true,false,null]")}},
-		{Name: "serialize-json-109", XPath: `let $r := serialize([1, 2, 3, "four", true(), false()], map{'method':'json'}) return
-            translate($r,' 	
-', '')`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[1,2,3,\"four\",true,false]")}},
-		{Name: "serialize-json-110", XPath: `let $r := serialize(parse-json('[[1, 2], [3, 4], [5, 6], [7], [], [null]]'),
-            map{'method':'json'}) return translate($r,' 	
-', '')`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[[1,2],[3,4],[5,6],[7],[],[null]]")}},
-		{Name: "serialize-json-111", XPath: `let $r := serialize(map{"abc":array{1 to 10}}, map{'method':'json'}) return translate($r,'
-            	
-', '')`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("{\"abc\":[1,2,3,4,5,6,7,8,9,10]}")}},
-		{Name: "serialize-json-112", XPath: `let $r := serialize([map{"abc":1},map{"def":2},map{"ghi":3}], map{'method':'json'})
-            return translate($r,' 	
-', '')`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[{\"abc\":1},{\"def\":2},{\"ghi\":3}]")}},
-		{Name: "serialize-json-113", XPath: `let $r :=
-            serialize(map{"abc": map{"abc":map{"abc":1}, "def": map{"def":2}}},
-            map{'method':'json'}) return translate($r,' 	
-', '')`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertType("xs:string"), qt3AssertSkip(), qt3AssertSkip()}},
+		{Name: "serialize-json-107", XPath: "let $r := serialize(map{'abc':23, 'xyz':49}, map{'method':'json'}) return\n            translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertType("xs:string"), qt3AssertCount(1), qt3AssertSkip()}},
+		{Name: "serialize-json-108", XPath: "let $r := serialize(parse-json('[1, 2, 3, \"four\", true, false, null]'),\n            map{'method':'json'}) return translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[1,2,3,\"four\",true,false,null]")}},
+		{Name: "serialize-json-109", XPath: "let $r := serialize([1, 2, 3, \"four\", true(), false()], map{'method':'json'}) return\n            translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[1,2,3,\"four\",true,false]")}},
+		{Name: "serialize-json-110", XPath: "let $r := serialize(parse-json('[[1, 2], [3, 4], [5, 6], [7], [], [null]]'),\n            map{'method':'json'}) return translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[[1,2],[3,4],[5,6],[7],[],[null]]")}},
+		{Name: "serialize-json-111", XPath: "let $r := serialize(map{\"abc\":array{1 to 10}}, map{'method':'json'}) return translate($r,'\n            \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("{\"abc\":[1,2,3,4,5,6,7,8,9,10]}")}},
+		{Name: "serialize-json-112", XPath: "let $r := serialize([map{\"abc\":1},map{\"def\":2},map{\"ghi\":3}], map{'method':'json'})\n            return translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[{\"abc\":1},{\"def\":2},{\"ghi\":3}]")}},
+		{Name: "serialize-json-113", XPath: "let $r :=\n            serialize(map{\"abc\": map{\"abc\":map{\"abc\":1}, \"def\": map{\"def\":2}}},\n            map{'method':'json'}) return translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertType("xs:string"), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "serialize-json-114", XPath: `let $r := serialize('𝄞', map{'method':'json', 'encoding':'ISO-8859-1'}) return
             translate(normalize-space($r), 'abcdef', 'ABCDEF')`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("\"\\uD834\\uDD1E\"")}},
 		{Name: "serialize-json-115", XPath: `let $r := serialize('
@@ -10581,33 +10642,17 @@ func TestQT3_fn_serialize(t *testing.T) {
 		{Name: "serialize-json-119", XPath: "parse-json(serialize(12.34e-30, map{'method':'json'}))", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "serialize-json-120", XPath: "serialize(\"abc\"\"def\", map{'method':'json'})", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "serialize-json-121", XPath: "serialize(\"abc\\\\def\", map{'method':'json'})", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "serialize-json-122", XPath: `let $r := serialize([number('NaN'), number('INF'), number('-INF')],
-            map{'method':'json'}) return translate($r,' 	
-', '')`, Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-json-123", XPath: `let $r := serialize([0,0,xs:untypedAtomic("abcd")], map{'method':'json'}) return
-            translate($r,' 	
-', '')`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[0,0,\"abcd\"]")}},
-		{Name: "serialize-json-124", XPath: `let $r := serialize(map{1:"a",2:"b",4:"d",10:"j",7:"g"}, map{'method':'json'}) return
-            translate($r,' 	
-', '')`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertType("xs:string"), qt3AssertCount(1), qt3AssertSkip()}},
-		{Name: "serialize-json-125", XPath: `let $r := serialize([0,0,xs:date('2011-04-06')], map{'method':'json'}) 
-            return translate($r,' 	
-', '')`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[0,0,\"2011-04-06\"]")}},
-		{Name: "serialize-json-126", XPath: `let $r := serialize(map{"a":xs:date('2011-04-06')}, map{'method':'json'}) 
-            return translate($r,' 	
-', '')`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("{\"a\":\"2011-04-06\"}")}},
+		{Name: "serialize-json-122", XPath: "let $r := serialize([number('NaN'), number('INF'), number('-INF')],\n            map{'method':'json'}) return translate($r,' \t\n\r', '')", Skip: "requires serialization", ExpectError: true},
+		{Name: "serialize-json-123", XPath: "let $r := serialize([0,0,xs:untypedAtomic(\"abcd\")], map{'method':'json'}) return\n            translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[0,0,\"abcd\"]")}},
+		{Name: "serialize-json-124", XPath: "let $r := serialize(map{1:\"a\",2:\"b\",4:\"d\",10:\"j\",7:\"g\"}, map{'method':'json'}) return\n            translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertType("xs:string"), qt3AssertCount(1), qt3AssertSkip()}},
+		{Name: "serialize-json-125", XPath: "let $r := serialize([0,0,xs:date('2011-04-06')], map{'method':'json'}) \n            return translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[0,0,\"2011-04-06\"]")}},
+		{Name: "serialize-json-126", XPath: "let $r := serialize(map{\"a\":xs:date('2011-04-06')}, map{'method':'json'}) \n            return translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("{\"a\":\"2011-04-06\"}")}},
 		{Name: "serialize-json-127", XPath: `let $r := serialize(map{"a":doc($uri)}, map{'method':'json'}) 
             return translate($r, codepoints-to-string((32, 9, 10, 13)), '')`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("{\"a\":\"<a>text<\\/a>\"}")}},
 		{Name: "serialize-json-128", XPath: "serialize(map{\"uri\":xs:anyURI('http://www.w3.org/')}, map{'method':'json'})", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("{\"uri\":\"http:\\/\\/www.w3.org\\/\"}")}},
-		{Name: "serialize-json-130", XPath: `let $r := serialize((1, 2, 3, "four", true(), false()), map{'method':'json'}) return
-            translate($r,' 	
-', '')`, Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-json-131", XPath: `let $r := serialize(map{"abc":(1 to 10)}, map{'method':'json'}) return translate($r,'
-            	
-', '')`, Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-json-132", XPath: `let $r := serialize((map{"abc":1},map{"def":2},map{"ghi":3}), map{'method':'json'})
-            return translate($r,' 	
-', '')`, Skip: "requires serialization", ExpectError: true},
+		{Name: "serialize-json-130", XPath: "let $r := serialize((1, 2, 3, \"four\", true(), false()), map{'method':'json'}) return\n            translate($r,' \t\n\r', '')", Skip: "requires serialization", ExpectError: true},
+		{Name: "serialize-json-131", XPath: "let $r := serialize(map{\"abc\":(1 to 10)}, map{'method':'json'}) return translate($r,'\n            \t\n\r', '')", Skip: "requires serialization", ExpectError: true},
+		{Name: "serialize-json-132", XPath: "let $r := serialize((map{\"abc\":1},map{\"def\":2},map{\"ghi\":3}), map{'method':'json'})\n            return translate($r,' \t\n\r', '')", Skip: "requires serialization", ExpectError: true},
 		{Name: "serialize-json-133", XPath: "serialize([1,2,3], map{'method':'json', \"indent\":23})", Skip: "requires serialization", ExpectError: true},
 		{Name: "serialize-json-134", XPath: "serialize([1,2,3], map{'method':'json', \"indent\":\"true\"})", Skip: "requires serialization", ExpectError: true},
 		{Name: "serialize-json-135", XPath: "serialize([1,2,3], map{'method':'json', \"indent\":(true(),false())})", Skip: "requires serialization", ExpectError: true},
@@ -10804,7 +10849,7 @@ func TestQT3_fn_static_base_uri(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
 		{Name: "fn-static-base-1", XPath: "fn:static-base-uri(\"A argument\")", ExpectError: true},
-		{Name: "fn-static-base-15", XPath: "static-base-uri()", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("http://www.example.com"), qt3CheckStringValue("http://www.example.com/"))}},
+		{Name: "fn-static-base-15", XPath: "static-base-uri()", BaseURI: "http://www.example.com", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("http://www.example.com"), qt3CheckStringValue("http://www.example.com/"))}},
 		{Name: "K-StaticBaseURIFunc-1", XPath: "static-base-uri(.)", ExpectError: true},
 		{Name: "K-StaticBaseURIFunc-2", XPath: "static-base-uri(1, 2)", ExpectError: true},
 		{Name: "K-StaticBaseURIFunc-3", XPath: "if(static-base-uri()) then true() else true()", Assertions: []qt3Assertion{qt3AssertTrue()}},
@@ -11143,7 +11188,7 @@ func TestQT3_fn_subsequence(t *testing.T) {
 func TestQT3_fn_substring(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
-		{Name: "fn-substring-1", XPath: "fn:substring(\"motor car\", 6)", Assertions: []qt3Assertion{qt3AssertStringValue("car"), qt3AssertType("xs:string")}},
+		{Name: "fn-substring-1", XPath: "fn:substring(\"motor car\", 6)", Assertions: []qt3Assertion{qt3AssertStringValue(" car"), qt3AssertType("xs:string")}},
 		{Name: "fn-substring-2", XPath: "fn:substring(\"metadata\", 4, 3)", Assertions: []qt3Assertion{qt3AssertStringValue("ada")}},
 		{Name: "fn-substring-3", XPath: "fn:substring(\"12345\", 1.5, 2.6)", Assertions: []qt3Assertion{qt3AssertStringValue("234")}},
 		{Name: "fn-substring-4", XPath: "fn:substring(\"12345\", 0, 3)", Assertions: []qt3Assertion{qt3AssertStringValue("12")}},
@@ -11219,7 +11264,7 @@ func TestQT3_fn_substring_after(t *testing.T) {
 		{Name: "fn-substring-after-20", XPath: "fn:substring-after(\"12345\",\"1234\")", Assertions: []qt3Assertion{qt3AssertStringValue("5")}},
 		{Name: "fn-substring-after-21", XPath: "fn:substring-after(\"substring-after\",\"refta-gnirtsbus\")", Assertions: []qt3Assertion{qt3AssertEq("\"\""), qt3AssertCount(1)}},
 		{Name: "fn-substring-after-22", XPath: "substring-after(\"banana\", \"a\", \"http://www.w3.org/2005/xpath-functions/collation/codepoint\")", Assertions: []qt3Assertion{qt3AssertEq("\"nana\"")}},
-		{Name: "fn-substring-after-23", XPath: "substring-after(\"banana\", \"a\", \"collation/codepoint\")", Assertions: []qt3Assertion{qt3AssertEq("\"nana\"")}},
+		{Name: "fn-substring-after-23", XPath: "substring-after(\"banana\", \"a\", \"collation/codepoint\")", BaseURI: "http://www.w3.org/2005/xpath-functions/", Assertions: []qt3Assertion{qt3AssertEq("\"nana\"")}},
 		{Name: "fn-substring-after-24", XPath: "substring-after(\"banana\", \"A\", \"http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind\")", Skip: "requires non-Unicode codepoint collation", Assertions: []qt3Assertion{qt3AssertEq("\"nana\"")}},
 		{Name: "fn-substring-after-25", XPath: "substring-after(\"𐀁𐀂𐀃\", \"𐀂\")", Assertions: []qt3Assertion{qt3AssertEq("\"𐀃\"")}},
 		{Name: "fn-substring-after-26", XPath: "substring-after(\"banana\", \"A\", \"http://www.w3.org/2005/xpath-functions/collation/html-ascii-case-insensitive\")", Assertions: []qt3Assertion{qt3AssertEq("\"nana\"")}},
@@ -11281,7 +11326,7 @@ func TestQT3_fn_substring_before(t *testing.T) {
 		{Name: "fn-substring-before-21", XPath: "fn:substring-before(\"substring-before\",\"erofeb-gnirtsbus\")", Assertions: []qt3Assertion{qt3AssertEq("\"\""), qt3AssertCount(1)}},
 		{Name: "fn-substring-before-22", XPath: `substring-before("banana", "a",
          "http://www.w3.org/2005/xpath-functions/collation/codepoint")`, Assertions: []qt3Assertion{qt3AssertEq("\"b\"")}},
-		{Name: "fn-substring-before-23", XPath: "substring-before(\"banana\", \"a\", \"collation/codepoint\")", Assertions: []qt3Assertion{qt3AssertEq("\"b\"")}},
+		{Name: "fn-substring-before-23", XPath: "substring-before(\"banana\", \"a\", \"collation/codepoint\")", BaseURI: "http://www.w3.org/2005/xpath-functions/", Assertions: []qt3Assertion{qt3AssertEq("\"b\"")}},
 		{Name: "fn-substring-before-24", XPath: `substring-before("banana", "A",
          "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind")`, Skip: "requires non-Unicode codepoint collation", Assertions: []qt3Assertion{qt3AssertEq("\"b\"")}},
 		{Name: "fn-substring-before-25", XPath: "substring-before(\"𐀁𐀂𐀃\", \"𐀂\")", Assertions: []qt3Assertion{qt3AssertEq("\"𐀁\"")}},
@@ -13052,12 +13097,12 @@ func TestQT3_fn_unordered(t *testing.T) {
 func TestQT3_fn_unparsed_text(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
-		{Name: "fn-unparsed-text-001", XPath: "fn:unparsed-text()", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-002", XPath: "fn:unparsed-text#0", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-003", XPath: "fn:exists( fn:unparsed-text#1 )", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-004", XPath: "fn:exists( fn:unparsed-text#2 )", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-005", XPath: "fn:unparsed-text(static-base-uri(), \"utf-8\", \"\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-006", XPath: "fn:unparsed-text#3", Skip: "requires URI resolution", ExpectError: true},
+		{Name: "fn-unparsed-text-001", XPath: "fn:unparsed-text()", ExpectError: true},
+		{Name: "fn-unparsed-text-002", XPath: "fn:unparsed-text#0", ExpectError: true},
+		{Name: "fn-unparsed-text-003", XPath: "fn:exists( fn:unparsed-text#1 )", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-004", XPath: "fn:exists( fn:unparsed-text#2 )", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-005", XPath: "fn:unparsed-text(static-base-uri(), \"utf-8\", \"\")", ExpectError: true},
+		{Name: "fn-unparsed-text-006", XPath: "fn:unparsed-text#3", ExpectError: true},
 		{Name: "fn-unparsed-text-007", XPath: `fn:unparsed-text( if ( fn:current-dateTime() eq
                                    fn:dateTime( fn:current-date(),
                                                 fn:current-time() ))
@@ -13068,7 +13113,7 @@ func TestQT3_fn_unparsed_text(t *testing.T) {
                                 else 1 ),
               fn:unparsed-text( if (current-date() eq xs:date('1900-01-01'))
                                 then 1
-                                else "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt") )`, Skip: "requires URI resolution", ExpectError: true},
+                                else "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt") )`, ExpectError: true},
 		{Name: "fn-unparsed-text-009", XPath: `fn:unparsed-text( "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt",
                               if ( fn:current-dateTime() eq
                                    fn:dateTime( fn:current-date(),
@@ -13082,7 +13127,7 @@ func TestQT3_fn_unparsed_text(t *testing.T) {
               fn:unparsed-text( "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt",
                                 if (current-date() eq xs:date('1900-01-01'))
                                 then 1
-                                else "utf-8") )`, Skip: "requires URI resolution", ExpectError: true},
+                                else "utf-8") )`, ExpectError: true},
 		{Name: "fn-unparsed-text-011", XPath: `fn:unparsed-text( "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt",
                               if ( fn:current-dateTime() eq
                                    fn:dateTime( fn:current-date(),
@@ -13096,68 +13141,68 @@ func TestQT3_fn_unparsed_text(t *testing.T) {
               fn:unparsed-text( "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt",
                                 if (current-date() eq xs:date('1900-01-01'))
                                 then ()
-                                else "utf-8") )`, Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-013", XPath: "fn:unparsed-text(\"http://www.example.org/#fragment\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-014", XPath: "fn:unparsed-text(\"http://www.example.org/#fragment\", \"utf-8\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-015", XPath: "fn:unparsed-text(\"http://www.example.org/%gg\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-016", XPath: "fn:unparsed-text(\"http://www.example.org/%gg\", \"utf-8\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-017", XPath: "fn:unparsed-text(\":/\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-018", XPath: "fn:unparsed-text(\":/\", \"utf-8\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-019", XPath: "fn:unparsed-text( \"http://www.w3.org/fots/unparsed-text/does-not-exist.txt\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-020", XPath: "fn:unparsed-text( \"http://www.w3.org/fots/unparsed-text/does-not-exist.txt\", \"utf-8\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-021", XPath: "fn:unparsed-text(\"surely-nobody-supports-this:/path.txt\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-022", XPath: "fn:unparsed-text(\"surely-nobody-supports-this:/path.txt\", \"utf-8\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-023", XPath: "fn:unparsed-text(\"unparsed-text/text-plain-utf-8.txt\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-024", XPath: "fn:unparsed-text(\"unparsed-text/text-plain-utf-8.txt\", \"utf-8\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-025", XPath: "fn:unparsed-text(\"does-not-exist.txt\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-026", XPath: "fn:unparsed-text(\"does-not-exist.txt\", \"utf-8\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-027", XPath: "fn:unparsed-text(\"text-plain-utf-8.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
-		{Name: "fn-unparsed-text-028", XPath: "fn:unparsed-text(\"text-plain-utf-8.txt\", \"utf-8\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
-		{Name: "fn-unparsed-text-029", XPath: "fn:unparsed-text(\"C:\\file-might-exist.txt\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-030", XPath: "fn:unparsed-text(\"C:\\file-might-exist.txt\", \"utf-8\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-031", XPath: "fn:unparsed-text(\"\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
-		{Name: "fn-unparsed-text-032", XPath: "fn:unparsed-text(\"\", \"utf-8\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
-		{Name: "fn-unparsed-text-033", XPath: "fn:unparsed-text(\"\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-034", XPath: "fn:unparsed-text(\"\", \"utf-8\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-035", XPath: "(1, fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/does-not-exist.txt\"))[1]", Skip: "requires URI resolution", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("1"))}},
-		{Name: "fn-unparsed-text-036", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt\", \"123\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-037", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/unknown-encoding.txt\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-038", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-invalid.txt\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-039", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/non-xml-character.txt\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-040", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/invalid-xml.xml\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("<?xml version=\"1.0\" encoding=\"utf-16\"?><text>hello\u00a0world")}},
-		{Name: "fn-unparsed-text-041", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
-		{Name: "fn-unparsed-text-042", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
-		{Name: "fn-unparsed-text-043", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
-		{Name: "fn-unparsed-text-044", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
-		{Name: "fn-unparsed-text-045", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-iso-8859-1.txt\")", Skip: "requires URI resolution", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("hello\u00a0world"))}},
-		{Name: "fn-unparsed-text-046", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-xml-utf-8.xml\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("<?xml version=\"1.0\" encoding=\"utf-8\"?><text>hello\u00a0world</text>")}},
-		{Name: "fn-unparsed-text-047", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-xml-utf-16.xml\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("<?xml version=\"1.0\" encoding=\"utf-16\"?><text>hello\u00a0world</text>")}},
-		{Name: "fn-unparsed-text-048", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-xml-iso-8859-1.xml\")", Skip: "requires URI resolution", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("<?xml version=\"1.0\" encoding=\"iso-8859-1\"?><text>hello\u00a0world</text>"))}},
-		{Name: "fn-unparsed-text-049", XPath: "string-length(fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-lines.txt\"))", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("400")}},
-		{Name: "fn-unparsed-text-050", XPath: "string-length(fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines.txt\"))", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("400")}},
-		{Name: "fn-unparsed-text-051", XPath: "string-length(fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom-lines.txt\"))", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("400")}},
-		{Name: "fn-unparsed-text-052", XPath: "string-length(fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom-lines.txt\"))", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("400")}},
-		{Name: "fn-unparsed-text-053", XPath: "fn:unparsed-text($href)", Skip: "requires URI resolution", ExpectError: true},
+                                else "utf-8") )`, Skip: "requires static typing", ExpectError: true},
+		{Name: "fn-unparsed-text-013", XPath: "fn:unparsed-text(\"http://www.example.org/#fragment\")", ExpectError: true},
+		{Name: "fn-unparsed-text-014", XPath: "fn:unparsed-text(\"http://www.example.org/#fragment\", \"utf-8\")", ExpectError: true},
+		{Name: "fn-unparsed-text-015", XPath: "fn:unparsed-text(\"http://www.example.org/%gg\")", ExpectError: true},
+		{Name: "fn-unparsed-text-016", XPath: "fn:unparsed-text(\"http://www.example.org/%gg\", \"utf-8\")", ExpectError: true},
+		{Name: "fn-unparsed-text-017", XPath: "fn:unparsed-text(\":/\")", ExpectError: true},
+		{Name: "fn-unparsed-text-018", XPath: "fn:unparsed-text(\":/\", \"utf-8\")", ExpectError: true},
+		{Name: "fn-unparsed-text-019", XPath: "fn:unparsed-text( \"http://www.w3.org/fots/unparsed-text/does-not-exist.txt\")", ExpectError: true},
+		{Name: "fn-unparsed-text-020", XPath: "fn:unparsed-text( \"http://www.w3.org/fots/unparsed-text/does-not-exist.txt\", \"utf-8\")", ExpectError: true},
+		{Name: "fn-unparsed-text-021", XPath: "fn:unparsed-text(\"surely-nobody-supports-this:/path.txt\")", ExpectError: true},
+		{Name: "fn-unparsed-text-022", XPath: "fn:unparsed-text(\"surely-nobody-supports-this:/path.txt\", \"utf-8\")", ExpectError: true},
+		{Name: "fn-unparsed-text-023", XPath: "fn:unparsed-text(\"unparsed-text/text-plain-utf-8.txt\")", ExpectError: true},
+		{Name: "fn-unparsed-text-024", XPath: "fn:unparsed-text(\"unparsed-text/text-plain-utf-8.txt\", \"utf-8\")", ExpectError: true},
+		{Name: "fn-unparsed-text-025", XPath: "fn:unparsed-text(\"does-not-exist.txt\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", ExpectError: true},
+		{Name: "fn-unparsed-text-026", XPath: "fn:unparsed-text(\"does-not-exist.txt\", \"utf-8\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", ExpectError: true},
+		{Name: "fn-unparsed-text-027", XPath: "fn:unparsed-text(\"text-plain-utf-8.txt\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
+		{Name: "fn-unparsed-text-028", XPath: "fn:unparsed-text(\"text-plain-utf-8.txt\", \"utf-8\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
+		{Name: "fn-unparsed-text-029", XPath: "fn:unparsed-text(\"C:\\file-might-exist.txt\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", ExpectError: true},
+		{Name: "fn-unparsed-text-030", XPath: "fn:unparsed-text(\"C:\\file-might-exist.txt\", \"utf-8\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", ExpectError: true},
+		{Name: "fn-unparsed-text-031", XPath: "fn:unparsed-text(\"\")", BaseURI: "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
+		{Name: "fn-unparsed-text-032", XPath: "fn:unparsed-text(\"\", \"utf-8\")", BaseURI: "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
+		{Name: "fn-unparsed-text-033", XPath: "fn:unparsed-text(\"\")", BaseURI: "http://www.w3.org/fots/unparsed-text/does-not-exists.txt", ExpectError: true},
+		{Name: "fn-unparsed-text-034", XPath: "fn:unparsed-text(\"\", \"utf-8\")", BaseURI: "http://www.w3.org/fots/unparsed-text/does-not-exists.txt", ExpectError: true},
+		{Name: "fn-unparsed-text-035", XPath: "(1, fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/does-not-exist.txt\"))[1]", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("1"))}},
+		{Name: "fn-unparsed-text-036", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt\", \"123\")", ExpectError: true},
+		{Name: "fn-unparsed-text-037", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/unknown-encoding.txt\")", ExpectError: true},
+		{Name: "fn-unparsed-text-038", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-invalid.txt\")", ExpectError: true},
+		{Name: "fn-unparsed-text-039", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/non-xml-character.txt\")", ExpectError: true},
+		{Name: "fn-unparsed-text-040", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/invalid-xml.xml\")", Assertions: []qt3Assertion{qt3AssertStringValue("<?xml version=\"1.0\" encoding=\"utf-16\"?><text>hello\u00a0world\r\n")}},
+		{Name: "fn-unparsed-text-041", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt\")", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
+		{Name: "fn-unparsed-text-042", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom.txt\")", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
+		{Name: "fn-unparsed-text-043", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom.txt\")", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
+		{Name: "fn-unparsed-text-044", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom.txt\")", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
+		{Name: "fn-unparsed-text-045", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-iso-8859-1.txt\")", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("hello\u00a0world"))}},
+		{Name: "fn-unparsed-text-046", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-xml-utf-8.xml\")", Assertions: []qt3Assertion{qt3AssertStringValue("<?xml version=\"1.0\" encoding=\"utf-8\"?><text>hello\u00a0world</text>")}},
+		{Name: "fn-unparsed-text-047", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-xml-utf-16.xml\")", Assertions: []qt3Assertion{qt3AssertStringValue("<?xml version=\"1.0\" encoding=\"utf-16\"?><text>hello\u00a0world</text>")}},
+		{Name: "fn-unparsed-text-048", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-xml-iso-8859-1.xml\")", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("<?xml version=\"1.0\" encoding=\"iso-8859-1\"?><text>hello\u00a0world</text>"))}},
+		{Name: "fn-unparsed-text-049", XPath: "string-length(fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-lines.txt\"))", Assertions: []qt3Assertion{qt3AssertStringValue("400")}},
+		{Name: "fn-unparsed-text-050", XPath: "string-length(fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines.txt\"))", Assertions: []qt3Assertion{qt3AssertStringValue("400")}},
+		{Name: "fn-unparsed-text-051", XPath: "string-length(fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom-lines.txt\"))", Assertions: []qt3Assertion{qt3AssertStringValue("400")}},
+		{Name: "fn-unparsed-text-052", XPath: "string-length(fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom-lines.txt\"))", Assertions: []qt3Assertion{qt3AssertStringValue("400")}},
+		{Name: "fn-unparsed-text-053", XPath: "fn:unparsed-text($href)", Skip: "requires external parameters", ExpectError: true},
 		{Name: "fn-unparsed-text-054", XPath: `for $t1 in unparsed-text('http://date.jsontest.com') return
          every $i in 1 to 50 satisfies (parse-xml('<a><b><c>' || $i || '</c></b></a>')//c (:waste some time:) and 
-                unparsed-text(translate(concat('http://date.jsontest.com', $i), '0123456789', '')) eq $t1)`, Skip: "requires URI resolution", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue())}},
+                unparsed-text(translate(concat('http://date.jsontest.com', $i), '0123456789', '')) eq $t1)`, Skip: "requires remote HTTP access", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue())}},
 		{Name: "fn-unparsed-text-054a", XPath: `for $t1 in unparsed-text('https://timeanddate.com') return
          every $i in 1 to 50 satisfies (parse-xml('<a><b><c>' || $i || '</c></b></a>')//c (:waste some time:)
-               and unparsed-text(translate(concat('https://timeanddate.com', $i), '0123456789', '')) eq $t1)`, Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue())}},
-		{Name: "fn-unparsed-text-055", XPath: "string-length(unparsed-text('http://www.w3.org/fots/unparsed-text/text-with-surrogates.txt'))", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertEq("2048")}},
-		{Name: "fn-unparsed-text-056", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-xml-unknown-encoding.xml\")", Skip: "requires URI resolution", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("<?xml version=\"1.0\" encoding=\"foo\"?><text>hello\u00a0world</text>"))}},
+               and unparsed-text(translate(concat('https://timeanddate.com', $i), '0123456789', '')) eq $t1)`, Skip: "requires remote HTTP access", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue())}},
+		{Name: "fn-unparsed-text-055", XPath: "string-length(unparsed-text('http://www.w3.org/fots/unparsed-text/text-with-surrogates.txt'))", Assertions: []qt3Assertion{qt3AssertEq("2048")}},
+		{Name: "fn-unparsed-text-056", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-xml-unknown-encoding.xml\")", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("<?xml version=\"1.0\" encoding=\"foo\"?><text>hello\u00a0world</text>"))}},
 	})
 }
 
 func TestQT3_fn_unparsed_text_available(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
-		{Name: "fn-unparsed-text-available-001", XPath: "fn:unparsed-text-available()", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-available-002", XPath: "fn:unparsed-text-available#0", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-available-003", XPath: "fn:exists( fn:unparsed-text-available#1 )", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-available-004", XPath: "fn:exists( fn:unparsed-text-available#2 )", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-available-005", XPath: "fn:unparsed-text-available(static-base-uri(), \"utf-8\", \"\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-available-006", XPath: "fn:unparsed-text-available#3", Skip: "requires URI resolution", ExpectError: true},
+		{Name: "fn-unparsed-text-available-001", XPath: "fn:unparsed-text-available()", ExpectError: true},
+		{Name: "fn-unparsed-text-available-002", XPath: "fn:unparsed-text-available#0", ExpectError: true},
+		{Name: "fn-unparsed-text-available-003", XPath: "fn:exists( fn:unparsed-text-available#1 )", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-available-004", XPath: "fn:exists( fn:unparsed-text-available#2 )", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-available-005", XPath: "fn:unparsed-text-available(static-base-uri(), \"utf-8\", \"\")", ExpectError: true},
+		{Name: "fn-unparsed-text-available-006", XPath: "fn:unparsed-text-available#3", ExpectError: true},
 		{Name: "fn-unparsed-text-available-007", XPath: `fn:unparsed-text-available( 
               if ( fn:current-dateTime() eq fn:dateTime( fn:current-date(), fn:current-time() ))
               then "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt"
@@ -13169,7 +13214,7 @@ func TestQT3_fn_unparsed_text_available(t *testing.T) {
               fn:unparsed-text-available( 
                 if (current-date() eq xs:date('1900-01-01'))
                 then 1
-                else "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt") )`, Skip: "requires URI resolution", ExpectError: true},
+                else "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt") )`, Skip: "requires static typing", ExpectError: true},
 		{Name: "fn-unparsed-text-available-009", XPath: `fn:unparsed-text-available( 
               "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt",
               if ( fn:current-dateTime() eq fn:dateTime( fn:current-date(),
@@ -13185,7 +13230,7 @@ func TestQT3_fn_unparsed_text_available(t *testing.T) {
                 "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt",
                 if (current-date() eq xs:date('1900-01-01'))
                 then 1
-                else "utf-8") )`, Skip: "requires URI resolution", ExpectError: true},
+                else "utf-8") )`, Skip: "requires static typing", ExpectError: true},
 		{Name: "fn-unparsed-text-available-011", XPath: `fn:unparsed-text-available( 
               "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt",
               if ( fn:current-dateTime() eq fn:dateTime( fn:current-date(),
@@ -13201,61 +13246,61 @@ func TestQT3_fn_unparsed_text_available(t *testing.T) {
                 "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt",
                 if (current-date() eq xs:date('1900-01-01'))
                 then ()
-                else "utf-8") )`, Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-available-013", XPath: "fn:unparsed-text-available(\"http://www.example.org/#fragment\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-014", XPath: "fn:unparsed-text-available(\"http://www.example.org/#fragment\", \"utf-8\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-015", XPath: "fn:unparsed-text-available(\"http://www.example.org/%gg\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-016", XPath: "fn:unparsed-text-available(\"http://www.example.org/%gg\", \"utf-8\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-017", XPath: "fn:unparsed-text-available(\":/\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-018", XPath: "fn:unparsed-text-available(\":/\", \"utf-8\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-019", XPath: "fn:unparsed-text-available( \"http://www.w3.org/fots/unparsed-text/does-not-exist.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-020", XPath: "fn:unparsed-text-available( \"http://www.w3.org/fots/unparsed-text/does-not-exist.txt\", \"utf-8\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-021", XPath: "fn:unparsed-text-available(\"surely-nobody-supports-this:/path.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-022", XPath: "fn:unparsed-text-available(\"surely-nobody-supports-this:/path.txt\", \"utf-8\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-023", XPath: "fn:unparsed-text-available(\"unparsed-text/text-plain-utf-8.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-024", XPath: "fn:unparsed-text-available(\"unparsed-text/text-plain-utf-8.txt\", \"utf-8\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-025", XPath: "fn:unparsed-text-available(\"does-not-exist.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-026", XPath: "fn:unparsed-text-available(\"does-not-exist.txt\", \"utf-8\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-027", XPath: "fn:unparsed-text-available(\"text-plain-utf-8.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-available-028", XPath: "fn:unparsed-text-available(\"text-plain-utf-8.txt\", \"utf-8\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-available-029", XPath: "fn:unparsed-text-available(\"C:\\file-might-exist.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-030", XPath: "fn:unparsed-text-available(\"C:\\file-might-exist.txt\", \"utf-8\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-031", XPath: "fn:unparsed-text-available(\"\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-available-032", XPath: "fn:unparsed-text-available(\"\", \"utf-8\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-available-033", XPath: "fn:unparsed-text-available(\"\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-034", XPath: "fn:unparsed-text-available(\"\", \"utf-8\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-035", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt\", \"123\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-036", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/unknown-encoding.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-037", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-invalid.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-038", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/non-xml-character.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-039", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/invalid-xml.xml\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-available-040", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-available-041", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-available-042", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-available-043", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-available-044", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-iso-8859-1.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue(), qt3CheckFalse())}},
-		{Name: "fn-unparsed-text-available-045", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-xml-utf-8.xml\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-available-046", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-xml-utf-16.xml\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-available-047", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-xml-iso-8859-1.xml\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue(), qt3CheckFalse())}},
-		{Name: "fn-unparsed-text-available-048", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-lines.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-available-049", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-available-050", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom-lines.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-available-051", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom-lines.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-available-052", XPath: "fn:unparsed-text-available($href)", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-053", XPath: "fn:unparsed-text-available(\"x\"[current-date() lt xs:date('1900-01-01')])", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-unparsed-text-available-054", XPath: "fn:unparsed-text-available(\"x\"[current-date() lt xs:date('1900-01-01')], \"utf-8\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertFalse()}},
+                else "utf-8") )`, Skip: "requires static typing", ExpectError: true},
+		{Name: "fn-unparsed-text-available-013", XPath: "fn:unparsed-text-available(\"http://www.example.org/#fragment\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-014", XPath: "fn:unparsed-text-available(\"http://www.example.org/#fragment\", \"utf-8\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-015", XPath: "fn:unparsed-text-available(\"http://www.example.org/%gg\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-016", XPath: "fn:unparsed-text-available(\"http://www.example.org/%gg\", \"utf-8\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-017", XPath: "fn:unparsed-text-available(\":/\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-018", XPath: "fn:unparsed-text-available(\":/\", \"utf-8\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-019", XPath: "fn:unparsed-text-available( \"http://www.w3.org/fots/unparsed-text/does-not-exist.txt\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-020", XPath: "fn:unparsed-text-available( \"http://www.w3.org/fots/unparsed-text/does-not-exist.txt\", \"utf-8\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-021", XPath: "fn:unparsed-text-available(\"surely-nobody-supports-this:/path.txt\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-022", XPath: "fn:unparsed-text-available(\"surely-nobody-supports-this:/path.txt\", \"utf-8\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-023", XPath: "fn:unparsed-text-available(\"unparsed-text/text-plain-utf-8.txt\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-024", XPath: "fn:unparsed-text-available(\"unparsed-text/text-plain-utf-8.txt\", \"utf-8\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-025", XPath: "fn:unparsed-text-available(\"does-not-exist.txt\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-026", XPath: "fn:unparsed-text-available(\"does-not-exist.txt\", \"utf-8\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-027", XPath: "fn:unparsed-text-available(\"text-plain-utf-8.txt\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-available-028", XPath: "fn:unparsed-text-available(\"text-plain-utf-8.txt\", \"utf-8\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-available-029", XPath: "fn:unparsed-text-available(\"C:\\file-might-exist.txt\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-030", XPath: "fn:unparsed-text-available(\"C:\\file-might-exist.txt\", \"utf-8\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-031", XPath: "fn:unparsed-text-available(\"\")", BaseURI: "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-available-032", XPath: "fn:unparsed-text-available(\"\", \"utf-8\")", BaseURI: "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-available-033", XPath: "fn:unparsed-text-available(\"\")", BaseURI: "http://www.w3.org/fots/unparsed-text/does-not-exists.txt", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-034", XPath: "fn:unparsed-text-available(\"\", \"utf-8\")", BaseURI: "http://www.w3.org/fots/unparsed-text/does-not-exists.txt", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-035", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt\", \"123\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-036", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/unknown-encoding.txt\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-037", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-invalid.txt\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-038", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/non-xml-character.txt\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-039", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/invalid-xml.xml\")", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-available-040", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt\")", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-available-041", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom.txt\")", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-available-042", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom.txt\")", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-available-043", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom.txt\")", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-available-044", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-iso-8859-1.txt\")", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue(), qt3CheckFalse())}},
+		{Name: "fn-unparsed-text-available-045", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-xml-utf-8.xml\")", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-available-046", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-xml-utf-16.xml\")", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-available-047", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-xml-iso-8859-1.xml\")", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue(), qt3CheckFalse())}},
+		{Name: "fn-unparsed-text-available-048", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-lines.txt\")", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-available-049", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines.txt\")", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-available-050", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom-lines.txt\")", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-available-051", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom-lines.txt\")", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-available-052", XPath: "fn:unparsed-text-available($href)", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-053", XPath: "fn:unparsed-text-available(\"x\"[current-date() lt xs:date('1900-01-01')])", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-054", XPath: "fn:unparsed-text-available(\"x\"[current-date() lt xs:date('1900-01-01')], \"utf-8\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
 	})
 }
 
 func TestQT3_fn_unparsed_text_lines(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
-		{Name: "fn-unparsed-text-lines-001", XPath: "fn:unparsed-text-lines()", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-002", XPath: "fn:unparsed-text-lines#0", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-003", XPath: "fn:exists(fn:unparsed-text-lines#1)", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-lines-004", XPath: "fn:exists(fn:unparsed-text-lines#2)", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-lines-005", XPath: "fn:unparsed-text-lines(static-base-uri(), \"utf-8\", \"\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-006", XPath: "fn:unparsed-text-lines#3", Skip: "requires URI resolution", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-001", XPath: "fn:unparsed-text-lines()", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-002", XPath: "fn:unparsed-text-lines#0", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-003", XPath: "fn:exists(fn:unparsed-text-lines#1)", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-lines-004", XPath: "fn:exists(fn:unparsed-text-lines#2)", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-unparsed-text-lines-005", XPath: "fn:unparsed-text-lines(static-base-uri(), \"utf-8\", \"\")", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-006", XPath: "fn:unparsed-text-lines#3", ExpectError: true},
 		{Name: "fn-unparsed-text-lines-007", XPath: `fn:unparsed-text-lines( 
               if ( fn:current-dateTime() eq fn:dateTime( fn:current-date(),
                                                          fn:current-time() ))
@@ -13268,7 +13313,7 @@ func TestQT3_fn_unparsed_text_lines(t *testing.T) {
               fn:unparsed-text-lines( 
                 if (current-date() eq xs:date('1900-01-01'))
                 then 1
-                else "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt") )`, Skip: "requires URI resolution", ExpectError: true},
+                else "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt") )`, ExpectError: true},
 		{Name: "fn-unparsed-text-lines-009", XPath: `fn:unparsed-text-lines( 
               "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt",
               if ( fn:current-dateTime() eq fn:dateTime( fn:current-date(),
@@ -13284,7 +13329,7 @@ func TestQT3_fn_unparsed_text_lines(t *testing.T) {
                 "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt",
                 if (current-date() eq xs:date('1900-01-01'))
                 then 1
-                else "utf-8") )`, Skip: "requires URI resolution", ExpectError: true},
+                else "utf-8") )`, ExpectError: true},
 		{Name: "fn-unparsed-text-lines-011", XPath: `fn:unparsed-text-lines( 
               "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt",
               if ( fn:current-dateTime() eq fn:dateTime( fn:current-date(),
@@ -13300,50 +13345,50 @@ func TestQT3_fn_unparsed_text_lines(t *testing.T) {
               "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt",
               if (current-date() eq xs:date('1900-01-01'))
               then ()
-              else "utf-8") )`, Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-013", XPath: "fn:unparsed-text-lines(\"http://www.example.org/#fragment\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-014", XPath: "fn:unparsed-text-lines(\"http://www.example.org/#fragment\", \"utf-8\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-015", XPath: "fn:unparsed-text-lines(\"http://www.example.org/%gg\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-016", XPath: "fn:unparsed-text-lines(\"http://www.example.org/%gg\", \"utf-8\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-017", XPath: "fn:unparsed-text-lines(\":/\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-018", XPath: "fn:unparsed-text-lines(\":/\", \"utf-8\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-019", XPath: "fn:unparsed-text-lines( \"http://www.w3.org/fots/unparsed-text/does-not-exist.txt\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-020", XPath: "fn:unparsed-text-lines( \"http://www.w3.org/fots/unparsed-text/does-not-exist.txt\", \"utf-8\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-021", XPath: "fn:unparsed-text-lines(\"surely-nobody-supports-this:/path.txt\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-022", XPath: "fn:unparsed-text-lines(\"surely-nobody-supports-this:/path.txt\", \"utf-8\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-023", XPath: "fn:unparsed-text-lines(\"unparsed-text/text-plain-utf-8.txt\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-024", XPath: "fn:unparsed-text-lines(\"unparsed-text/text-plain-utf-8.txt\", \"utf-8\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-025", XPath: "fn:unparsed-text-lines(\"does-not-exist.txt\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-026", XPath: "fn:unparsed-text-lines(\"does-not-exist.txt\", \"utf-8\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-027", XPath: "fn:unparsed-text-lines(\"text-plain-utf-8.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
-		{Name: "fn-unparsed-text-lines-028", XPath: "fn:unparsed-text-lines(\"text-plain-utf-8.txt\", \"utf-8\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
-		{Name: "fn-unparsed-text-lines-029", XPath: "fn:unparsed-text-lines(\"C:\\file-might-exist.txt\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-030", XPath: "fn:unparsed-text-lines(\"C:\\file-might-exist.txt\", \"utf-8\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-031", XPath: "fn:unparsed-text-lines(\"\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
-		{Name: "fn-unparsed-text-lines-032", XPath: "fn:unparsed-text-lines(\"\", \"utf-8\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
-		{Name: "fn-unparsed-text-lines-033", XPath: "fn:unparsed-text-lines(\"\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-034", XPath: "fn:unparsed-text-lines(\"\", \"utf-8\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-035", XPath: "(1, fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/does-not-exist.txt\"))[1]", Skip: "requires URI resolution", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("1"))}},
-		{Name: "fn-unparsed-text-lines-036", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt\", \"123\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-037", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/unknown-encoding.txt\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-038", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-invalid.txt\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-039", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/non-xml-character.txt\")", Skip: "requires URI resolution", ExpectError: true},
-		{Name: "fn-unparsed-text-lines-040", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/invalid-xml.xml\")", Skip: "requires URI resolution", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckDeepEq("'<?xml version=\"1.0\" encoding=\"utf-16\"?><text>hello\u00a0world'"))}},
-		{Name: "fn-unparsed-text-lines-041", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
-		{Name: "fn-unparsed-text-lines-042", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
-		{Name: "fn-unparsed-text-lines-043", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
-		{Name: "fn-unparsed-text-lines-044", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom.txt\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
-		{Name: "fn-unparsed-text-lines-045", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-iso-8859-1.txt\")", Skip: "requires URI resolution", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("hello\u00a0world"))}},
-		{Name: "fn-unparsed-text-lines-046", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-xml-utf-8.xml\")", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertStringValue("<?xml version=\"1.0\" encoding=\"utf-8\"?><text>hello\u00a0world</text>")}},
-		{Name: "fn-unparsed-text-lines-047", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-xml-utf-16.xml\")", Skip: "requires URI resolution", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("<?xml version=\"1.0\" encoding=\"utf-16\"?><text>hello\u00a0world</text>"))}},
-		{Name: "fn-unparsed-text-lines-048", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-xml-iso-8859-1.xml\")", Skip: "requires URI resolution", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("<?xml version=\"1.0\" encoding=\"iso-8859-1\"?><text>hello\u00a0world</text>"))}},
-		{Name: "fn-unparsed-text-lines-049", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-lines.txt\") ! string-length(.)", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertDeepEq("(53, 54, 179, 77, 32)")}},
-		{Name: "fn-unparsed-text-lines-050", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines.txt\") ! string-length(.)", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertDeepEq("(53, 54, 179, 77, 32)")}},
-		{Name: "fn-unparsed-text-lines-051", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom-lines.txt\") ! string-length(.)", Skip: "requires URI resolution", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckDeepEq("(53, 54, 179, 77, 32)"))}},
-		{Name: "fn-unparsed-text-lines-052", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom-lines.txt\") ! string-length(.)", Skip: "requires URI resolution", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckDeepEq("(53, 54, 179, 77, 32)"))}},
-		{Name: "fn-unparsed-text-lines-053", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines-2.txt\") ! string-length(.)", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertDeepEq("(50, 0, 0, 50, 0, 0)")}},
-		{Name: "fn-unparsed-text-lines-054", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines-3.txt\") ! string-length(.)", Skip: "requires URI resolution", Assertions: []qt3Assertion{qt3AssertDeepEq("(46, 0, 20)")}},
-		{Name: "fn-unparsed-text-lines-055", XPath: "fn:unparsed-text-lines($href)", Skip: "requires URI resolution", ExpectError: true},
+              else "utf-8") )`, Skip: "requires static typing", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-013", XPath: "fn:unparsed-text-lines(\"http://www.example.org/#fragment\")", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-014", XPath: "fn:unparsed-text-lines(\"http://www.example.org/#fragment\", \"utf-8\")", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-015", XPath: "fn:unparsed-text-lines(\"http://www.example.org/%gg\")", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-016", XPath: "fn:unparsed-text-lines(\"http://www.example.org/%gg\", \"utf-8\")", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-017", XPath: "fn:unparsed-text-lines(\":/\")", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-018", XPath: "fn:unparsed-text-lines(\":/\", \"utf-8\")", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-019", XPath: "fn:unparsed-text-lines( \"http://www.w3.org/fots/unparsed-text/does-not-exist.txt\")", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-020", XPath: "fn:unparsed-text-lines( \"http://www.w3.org/fots/unparsed-text/does-not-exist.txt\", \"utf-8\")", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-021", XPath: "fn:unparsed-text-lines(\"surely-nobody-supports-this:/path.txt\")", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-022", XPath: "fn:unparsed-text-lines(\"surely-nobody-supports-this:/path.txt\", \"utf-8\")", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-023", XPath: "fn:unparsed-text-lines(\"unparsed-text/text-plain-utf-8.txt\")", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-024", XPath: "fn:unparsed-text-lines(\"unparsed-text/text-plain-utf-8.txt\", \"utf-8\")", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-025", XPath: "fn:unparsed-text-lines(\"does-not-exist.txt\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-026", XPath: "fn:unparsed-text-lines(\"does-not-exist.txt\", \"utf-8\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-027", XPath: "fn:unparsed-text-lines(\"text-plain-utf-8.txt\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
+		{Name: "fn-unparsed-text-lines-028", XPath: "fn:unparsed-text-lines(\"text-plain-utf-8.txt\", \"utf-8\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
+		{Name: "fn-unparsed-text-lines-029", XPath: "fn:unparsed-text-lines(\"C:\\file-might-exist.txt\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-030", XPath: "fn:unparsed-text-lines(\"C:\\file-might-exist.txt\", \"utf-8\")", BaseURI: "http://www.w3.org/fots/unparsed-text/", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-031", XPath: "fn:unparsed-text-lines(\"\")", BaseURI: "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
+		{Name: "fn-unparsed-text-lines-032", XPath: "fn:unparsed-text-lines(\"\", \"utf-8\")", BaseURI: "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
+		{Name: "fn-unparsed-text-lines-033", XPath: "fn:unparsed-text-lines(\"\")", BaseURI: "http://www.w3.org/fots/unparsed-text/does-not-exists.txt", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-034", XPath: "fn:unparsed-text-lines(\"\", \"utf-8\")", BaseURI: "http://www.w3.org/fots/unparsed-text/does-not-exists.txt", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-035", XPath: "(1, fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/does-not-exist.txt\"))[1]", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("1"))}},
+		{Name: "fn-unparsed-text-lines-036", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt\", \"123\")", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-037", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/unknown-encoding.txt\")", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-038", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-invalid.txt\")", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-039", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/non-xml-character.txt\")", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-040", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/invalid-xml.xml\")", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckDeepEq("'<?xml version=\"1.0\" encoding=\"utf-16\"?><text>hello\u00a0world'"))}},
+		{Name: "fn-unparsed-text-lines-041", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt\")", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
+		{Name: "fn-unparsed-text-lines-042", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom.txt\")", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
+		{Name: "fn-unparsed-text-lines-043", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom.txt\")", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
+		{Name: "fn-unparsed-text-lines-044", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom.txt\")", Assertions: []qt3Assertion{qt3AssertStringValue("hello\u00a0world")}},
+		{Name: "fn-unparsed-text-lines-045", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-iso-8859-1.txt\")", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("hello\u00a0world"))}},
+		{Name: "fn-unparsed-text-lines-046", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-xml-utf-8.xml\")", Assertions: []qt3Assertion{qt3AssertStringValue("<?xml version=\"1.0\" encoding=\"utf-8\"?><text>hello\u00a0world</text>")}},
+		{Name: "fn-unparsed-text-lines-047", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-xml-utf-16.xml\")", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("<?xml version=\"1.0\" encoding=\"utf-16\"?><text>hello\u00a0world</text>"))}},
+		{Name: "fn-unparsed-text-lines-048", XPath: "fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-xml-iso-8859-1.xml\")", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("<?xml version=\"1.0\" encoding=\"iso-8859-1\"?><text>hello\u00a0world</text>"))}},
+		{Name: "fn-unparsed-text-lines-049", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-lines.txt\") ! string-length(.)", Assertions: []qt3Assertion{qt3AssertDeepEq("(53, 54, 179, 77, 32)")}},
+		{Name: "fn-unparsed-text-lines-050", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines.txt\") ! string-length(.)", Assertions: []qt3Assertion{qt3AssertDeepEq("(53, 54, 179, 77, 32)")}},
+		{Name: "fn-unparsed-text-lines-051", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom-lines.txt\") ! string-length(.)", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckDeepEq("(53, 54, 179, 77, 32)"))}},
+		{Name: "fn-unparsed-text-lines-052", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom-lines.txt\") ! string-length(.)", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckDeepEq("(53, 54, 179, 77, 32)"))}},
+		{Name: "fn-unparsed-text-lines-053", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines-2.txt\") ! string-length(.)", Assertions: []qt3Assertion{qt3AssertDeepEq("(50, 0, 0, 50, 0, 0)")}},
+		{Name: "fn-unparsed-text-lines-054", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines-3.txt\") ! string-length(.)", Assertions: []qt3Assertion{qt3AssertDeepEq("(46, 0, 20)")}},
+		{Name: "fn-unparsed-text-lines-055", XPath: "fn:unparsed-text-lines($href)", Skip: "requires external parameters", ExpectError: true},
 	})
 }
 

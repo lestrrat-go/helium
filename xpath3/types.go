@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"math/big"
 	"strings"
 	"time"
@@ -308,9 +309,11 @@ type Duration struct {
 
 // FunctionItem represents a callable function value (inline, named ref, partial application).
 type FunctionItem struct {
-	Arity  int
-	Name   string // empty for anonymous
-	Invoke func(ctx context.Context, args []Sequence) (Sequence, error)
+	Arity      int
+	Name       string // empty for anonymous
+	Invoke     func(ctx context.Context, args []Sequence) (Sequence, error)
+	ParamTypes []SequenceType // parameter type annotations (nil if untyped)
+	ReturnType *SequenceType  // return type annotation (nil if untyped)
 }
 
 func (FunctionItem) itemTag() {}
@@ -344,28 +347,45 @@ type mapKey struct {
 }
 
 func normalizeMapKey(key AtomicValue) mapKey {
-	// Normalize type names so that equivalent numeric types use the same key.
-	// Per XPath 3.1 spec, map keys use value-based equality: xs:float(1.0)
-	// and xs:double(1.0) should be the same key.
+	// Per XPath 3.1 spec, map keys use value-based equality (eq operator semantics).
+	// Numerics that compare equal are the same key: xs:integer(1), xs:double(1.0e0),
+	// xs:float(1.0), and xs:decimal(1.0) all refer to the same map entry.
+	// xs:string and xs:untypedAtomic are compared as strings.
+	// xs:anyURI promotes to xs:string for comparison.
 	tn := key.TypeName
-	if isIntegerDerived(tn) {
-		tn = TypeInteger
-	} else if tn == TypeFloat {
-		tn = TypeDouble
+
+	// Normalize string-like types: xs:untypedAtomic and xs:anyURI promote to xs:string
+	if tn == TypeUntypedAtomic || tn == TypeAnyURI {
+		return mapKey{typeName: TypeString, value: key.Value}
+	}
+
+	// Normalize all numeric types to a common representation.
+	// Convert to float64 for comparison (like eq does), but handle integer values
+	// that can be exactly represented as float64 specially to avoid precision loss.
+	if key.IsNumeric() {
+		f := key.ToFloat64()
+		if math.IsNaN(f) {
+			// NaN = NaN for map key purposes (all NaN values are the same key)
+			return mapKey{typeName: "numeric", value: "NaN"}
+		}
+		// Use float64 value as key so that 1 (integer) == 1.0 (double) == 1.0 (decimal)
+		return mapKey{typeName: "numeric", value: f}
+	}
+
+	// Normalize duration types: xs:duration, xs:yearMonthDuration, xs:dayTimeDuration
+	// that have equal values should be the same key
+	if tn == TypeDuration || tn == TypeYearMonthDuration || tn == TypeDayTimeDuration {
+		tn = TypeDuration
 	}
 
 	switch v := key.Value.(type) {
-	case *big.Int:
-		return mapKey{typeName: tn, value: v.String()}
-	case *big.Rat:
-		return mapKey{typeName: tn, value: v.RatString()}
-	case float64:
-		// Normalize float to double for consistent map keys
-		return mapKey{typeName: tn, value: v}
 	case time.Time:
 		return mapKey{typeName: tn, value: v.UTC().Format(time.RFC3339Nano)}
 	case []byte:
 		return mapKey{typeName: tn, value: hex.EncodeToString(v)}
+	case QNameValue:
+		// QName equality is based on URI and local name, not prefix
+		return mapKey{typeName: tn, value: v.URI + "\x00" + v.Local}
 	default:
 		return mapKey{typeName: tn, value: key.Value}
 	}
@@ -468,6 +488,7 @@ const (
 	MergeUseFirst MergePolicy = iota
 	MergeUseLast
 	MergeReject
+	MergeCombine
 )
 
 // MergeMaps merges multiple maps according to the given policy.
@@ -490,6 +511,13 @@ func MergeMaps(maps []MapItem, policy MergePolicy) (MapItem, error) {
 						Code:    "FOJS0003",
 						Message: fmt.Sprintf("duplicate key in map merge: %v", e.key.Value),
 					}
+				case MergeCombine:
+					// Combine: concatenate values
+					allEntries[idx] = mapEntry{
+						key:   allEntries[idx].key,
+						value: append(allEntries[idx].value, e.value...),
+					}
+					continue
 				}
 			}
 			seen[nk] = len(allEntries)

@@ -40,17 +40,25 @@ func fnFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Per XPath 3.1, the callback must have arity 1
+	if fi.Arity >= 0 && fi.Arity != 1 {
+		return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("fn:filter callback must have arity 1, got %d", fi.Arity)}
+	}
 	var result Sequence
 	for _, item := range seq {
 		r, err := fi.Invoke(ctx, []Sequence{{item}})
 		if err != nil {
 			return nil, err
 		}
-		b, err := EBV(r)
-		if err != nil {
-			return nil, err
+		// Per XPath 3.1, the callback must return exactly one xs:boolean
+		if len(r) != 1 {
+			return nil, &XPathError{Code: "XPTY0004", Message: "fn:filter callback must return a single xs:boolean value"}
 		}
-		if b {
+		av, ok := r[0].(AtomicValue)
+		if !ok || av.TypeName != TypeBoolean {
+			return nil, &XPathError{Code: "XPTY0004", Message: "fn:filter callback must return a single xs:boolean value"}
+		}
+		if av.BooleanVal() {
 			result = append(result, item)
 		}
 	}
@@ -95,6 +103,10 @@ func fnForEachPair(ctx context.Context, args []Sequence) (Sequence, error) {
 	fi, err := extractFunctionItem(args[2])
 	if err != nil {
 		return nil, err
+	}
+	// Per XPath 3.1, the callback must have arity 2
+	if fi.Arity >= 0 && fi.Arity != 2 {
+		return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("fn:for-each-pair callback must have arity 2, got %d", fi.Arity)}
 	}
 	size := len(seq1)
 	if len(seq2) < size {
@@ -198,9 +210,52 @@ func extractFunctionItem(seq Sequence) (FunctionItem, error) {
 	if len(seq) != 1 {
 		return FunctionItem{}, &XPathError{Code: "XPTY0004", Message: "expected single function item"}
 	}
-	fi, ok := seq[0].(FunctionItem)
-	if !ok {
+	switch v := seq[0].(type) {
+	case FunctionItem:
+		return v, nil
+	case MapItem:
+		// Maps are functions: map($key) → value
+		return FunctionItem{
+			Arity: 1,
+			Invoke: func(ctx context.Context, args []Sequence) (Sequence, error) {
+				if len(args) != 1 || len(args[0]) != 1 {
+					return nil, &XPathError{Code: "XPTY0004", Message: "map lookup requires exactly one argument"}
+				}
+				key, err := AtomizeItem(args[0][0])
+				if err != nil {
+					return nil, err
+				}
+				val, ok := v.Get(key)
+				if !ok {
+					return nil, nil
+				}
+				return val, nil
+			},
+		}, nil
+	case ArrayItem:
+		// Arrays are functions: array($index) → member
+		return FunctionItem{
+			Arity: 1,
+			Invoke: func(ctx context.Context, args []Sequence) (Sequence, error) {
+				if len(args) != 1 || len(args[0]) != 1 {
+					return nil, &XPathError{Code: "XPTY0004", Message: "array lookup requires exactly one argument"}
+				}
+				key, err := AtomizeItem(args[0][0])
+				if err != nil {
+					return nil, err
+				}
+				if !isIntegerDerived(key.TypeName) {
+					return nil, &XPathError{Code: "XPTY0004", Message: "array lookup requires xs:integer index"}
+				}
+				bi := key.BigInt()
+				if !bi.IsInt64() {
+					return nil, &XPathError{Code: "FOAY0001", Message: "array index out of range"}
+				}
+				idx := int(bi.Int64())
+				return v.Get(idx)
+			},
+		}, nil
+	default:
 		return FunctionItem{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("expected function item, got %T", seq[0])}
 	}
-	return fi, nil
 }

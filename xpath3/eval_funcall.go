@@ -119,8 +119,20 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 func evalInlineFunctionExpr(ec *evalContext, e InlineFunctionExpr) (Sequence, error) {
 	// Capture current variable scope snapshot
 	closedVars := copyVars(ec.vars)
+	// Collect parameter types for subtype checking
+	var paramTypes []SequenceType
+	for _, p := range e.Params {
+		if p.TypeHint != nil {
+			paramTypes = append(paramTypes, *p.TypeHint)
+		}
+	}
+	if len(paramTypes) != len(e.Params) {
+		paramTypes = nil // All-or-nothing: only set if all params are typed
+	}
 	fi := FunctionItem{
-		Arity: len(e.Params),
+		Arity:      len(e.Params),
+		ParamTypes: paramTypes,
+		ReturnType: e.ReturnType,
 		Invoke: func(ctx context.Context, args []Sequence) (Sequence, error) {
 			if len(args) != len(e.Params) {
 				return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("inline function requires %d arguments, got %d", len(e.Params), len(args))}
@@ -141,9 +153,25 @@ func evalInlineFunctionExpr(ec *evalContext, e InlineFunctionExpr) (Sequence, er
 				currentTime: ec.currentTime,
 			}
 			for i, param := range e.Params {
+				// Check parameter type if specified
+				if param.TypeHint != nil {
+					if !matchesSequenceType(args[i], *param.TypeHint, innerCtx) {
+						return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("inline function parameter $%s: value does not match required type %v", param.Name, *param.TypeHint)}
+					}
+				}
 				innerCtx.vars[param.Name] = args[i]
 			}
-			return eval(innerCtx, e.Body)
+			result, err := eval(innerCtx, e.Body)
+			if err != nil {
+				return nil, err
+			}
+			// Check return type if specified
+			if e.ReturnType != nil {
+				if !matchesSequenceType(result, *e.ReturnType, innerCtx) {
+					return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("inline function return value does not match required type %v", *e.ReturnType)}
+				}
+			}
+			return result, nil
 		},
 	}
 	return Sequence{fi}, nil
@@ -186,6 +214,7 @@ func partialApply(ec *evalContext, e FunctionCall, fixedArgs []Sequence) (Sequen
 
 func evalMapConstructorExpr(ec *evalContext, e MapConstructorExpr) (Sequence, error) {
 	entries := make([]MapEntry, len(e.Pairs))
+	seen := make(map[mapKey]struct{}, len(e.Pairs))
 	for i, pair := range e.Pairs {
 		keySeq, err := eval(ec, pair.Key)
 		if err != nil {
@@ -198,6 +227,12 @@ func evalMapConstructorExpr(ec *evalContext, e MapConstructorExpr) (Sequence, er
 		if err != nil {
 			return nil, err
 		}
+		// Per XPath 3.1, duplicate keys in a map constructor raise XQDY0137
+		nk := normalizeMapKey(ka)
+		if _, dup := seen[nk]; dup {
+			return nil, &XPathError{Code: "XQDY0137", Message: fmt.Sprintf("duplicate key in map constructor: %v", ka.Value)}
+		}
+		seen[nk] = struct{}{}
 		valSeq, err := eval(ec, pair.Value)
 		if err != nil {
 			return nil, err

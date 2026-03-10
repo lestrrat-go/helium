@@ -215,7 +215,6 @@ func TestQT3_misc_UCACollation(t *testing.T) {
 func TestQT3_misc_XMLEdition(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
-		{Name: "line-ending-P002", XPath: `deep-equal(string-to-codepoints('
-'), (13, 10))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "line-ending-P002", XPath: "deep-equal(string-to-codepoints('\r\n'), (13, 10))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 	})
 }

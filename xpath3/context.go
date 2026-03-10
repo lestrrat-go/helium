@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"io"
+	"net/http"
 	"time"
 )
 
@@ -35,6 +36,7 @@ type Context struct {
 	implicitTimezone *time.Location
 	baseURI          string
 	uriResolver      URIResolver
+	httpClient       *http.Client
 }
 
 // ContextOption configures a Context.
@@ -98,6 +100,15 @@ func WithBaseURI(uri string) ContextOption {
 func WithURIResolver(r URIResolver) ContextOption {
 	return func(c *Context) {
 		c.uriResolver = r
+	}
+}
+
+// WithHTTPClient sets the HTTP client used for fetching http:// and https://
+// resources in fn:unparsed-text and similar functions. If not set, HTTP URIs
+// are not supported (unless a URIResolver handles them).
+func WithHTTPClient(c *http.Client) ContextOption {
+	return func(ctx *Context) {
+		ctx.httpClient = c
 	}
 }
 

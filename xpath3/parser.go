@@ -1847,16 +1847,42 @@ func (p *parser) parseItemType() (NodeTest, error) {
 			return nil, fmt.Errorf("%w: '(' after 'function' but got %s", ErrExpectedToken, p.lexer.Peek())
 		}
 		p.lexer.Next()
-		// Consume balanced content: function(*), function(), or function(params) as ReturnType
-		p.skipBalancedParens()
-		// Check for "as ReturnType" after the closing paren
-		if p.lexer.Peek().Type == TokenAs {
+		// function(*) - any function test
+		if p.lexer.Peek().Type == TokenStar {
 			p.lexer.Next()
-			if _, err := p.parseSequenceType(); err != nil {
-				return nil, err
+			if err := p.expectToken(TokenRParen); err != nil {
+				return nil, fmt.Errorf("expected ')' after function(*")
+			}
+			return FunctionTest{AnyFunction: true}, nil
+		}
+		// function() as ReturnType or function(ParamTypes) as ReturnType
+		var paramTypes []SequenceType
+		if p.lexer.Peek().Type != TokenRParen {
+			for {
+				st, err := p.parseSequenceType()
+				if err != nil {
+					return nil, err
+				}
+				paramTypes = append(paramTypes, st)
+				if p.lexer.Peek().Type != TokenComma {
+					break
+				}
+				p.lexer.Next()
 			}
 		}
-		return FunctionTest{}, nil
+		if err := p.expectToken(TokenRParen); err != nil {
+			return nil, fmt.Errorf("expected ')' in function type test")
+		}
+		var returnType SequenceType
+		if p.lexer.Peek().Type == TokenAs {
+			p.lexer.Next()
+			rt, err := p.parseSequenceType()
+			if err != nil {
+				return nil, err
+			}
+			returnType = rt
+		}
+		return FunctionTest{ParamTypes: paramTypes, ReturnType: returnType}, nil
 	}
 
 	if tok.Type == TokenMap {
@@ -1865,8 +1891,32 @@ func (p *parser) parseItemType() (NodeTest, error) {
 			return nil, fmt.Errorf("%w: '(' after 'map' but got %s", ErrExpectedToken, p.lexer.Peek())
 		}
 		p.lexer.Next()
-		p.skipBalancedParens()
-		return MapTest{}, nil
+		// map(*) or map(KeyType, ValueType)
+		if p.lexer.Peek().Type == TokenStar {
+			p.lexer.Next() // consume *
+			if err := p.expectToken(TokenRParen); err != nil {
+				return nil, fmt.Errorf("expected ')' after map(*")
+			}
+			return MapTest{AnyType: true}, nil
+		}
+		// Parse key type (must be an atomic type)
+		keyType, err := p.parseAtomicOrUnionType()
+		if err != nil {
+			return nil, err
+		}
+		if p.lexer.Peek().Type != TokenComma {
+			return nil, fmt.Errorf("%w: ',' in map(K, V) type test", ErrExpectedToken)
+		}
+		p.lexer.Next() // consume comma
+		// Parse value sequence type
+		valType, err := p.parseSequenceType()
+		if err != nil {
+			return nil, err
+		}
+		if err := p.expectToken(TokenRParen); err != nil {
+			return nil, fmt.Errorf("expected ')' after map type test")
+		}
+		return MapTest{KeyType: keyType, ValType: valType}, nil
 	}
 
 	if tok.Type == TokenArray {
@@ -1875,8 +1925,23 @@ func (p *parser) parseItemType() (NodeTest, error) {
 			return nil, fmt.Errorf("%w: '(' after 'array' but got %s", ErrExpectedToken, p.lexer.Peek())
 		}
 		p.lexer.Next()
-		p.skipBalancedParens()
-		return ArrayTest{}, nil
+		// array(*) or array(MemberType)
+		if p.lexer.Peek().Type == TokenStar {
+			p.lexer.Next() // consume *
+			if err := p.expectToken(TokenRParen); err != nil {
+				return nil, fmt.Errorf("expected ')' after array(*")
+			}
+			return ArrayTest{AnyType: true}, nil
+		}
+		// Parse member sequence type
+		memberType, err := p.parseSequenceType()
+		if err != nil {
+			return nil, err
+		}
+		if err := p.expectToken(TokenRParen); err != nil {
+			return nil, fmt.Errorf("expected ')' after array type test")
+		}
+		return ArrayTest{MemberType: memberType}, nil
 	}
 
 	return nil, fmt.Errorf("%w: item type but got %s", ErrExpectedToken, tok)
@@ -1947,23 +2012,6 @@ func (p *parser) expectToken(expected TokenType) error {
 	}
 	p.lexer.Next()
 	return nil
-}
-
-// skipBalancedParens consumes tokens until the matching ')' is found,
-// handling nested parentheses. The opening '(' must already be consumed.
-func (p *parser) skipBalancedParens() {
-	depth := 1
-	for depth > 0 {
-		tok := p.lexer.Next()
-		switch tok.Type {
-		case TokenLParen:
-			depth++
-		case TokenRParen:
-			depth--
-		case TokenEOF:
-			return
-		}
-	}
 }
 
 // looksLikeStep returns true if the next token(s) look like the start of a location step.

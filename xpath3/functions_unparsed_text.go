@@ -219,14 +219,15 @@ func isHexDigit(b byte) bool {
 
 // readUnparsedTextURI reads content from the resolved URI.
 func readUnparsedTextURI(ctx context.Context, uri string) ([]byte, error) {
-	// Check for custom URI resolver first
 	ec := getFnContext(ctx)
+
+	// Check for custom URI resolver first
 	if ec != nil && ec.uriResolver != nil {
 		rc, err := ec.uriResolver.ResolveURI(uri)
 		if err != nil {
 			return nil, err
 		}
-		defer rc.Close()
+		defer func() { _ = rc.Close() }()
 		return io.ReadAll(rc)
 	}
 
@@ -235,12 +236,26 @@ func readUnparsedTextURI(ctx context.Context, uri string) ([]byte, error) {
 		return nil, err
 	}
 
+	// HTTP/HTTPS: use the configured HTTP client
+	if parsed.Scheme == "http" || parsed.Scheme == "https" {
+		if ec == nil || ec.httpClient == nil {
+			return nil, fmt.Errorf("no HTTP client configured for URI: %s", uri)
+		}
+		resp, err := ec.httpClient.Get(uri)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != 200 {
+			return nil, fmt.Errorf("HTTP %d for %s", resp.StatusCode, uri)
+		}
+		return io.ReadAll(resp.Body)
+	}
+
 	switch parsed.Scheme {
 	case "file":
-		path := parsed.Path
-		return os.ReadFile(path)
+		return os.ReadFile(parsed.Path)
 	case "":
-		// Treat as local file path
 		return os.ReadFile(uri)
 	default:
 		return nil, fmt.Errorf("unsupported URI scheme: %s", parsed.Scheme)

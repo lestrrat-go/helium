@@ -53,6 +53,8 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 					duplicates = MergeUseLast
 				case "reject":
 					duplicates = MergeReject
+				case "combine":
+					duplicates = MergeCombine
 				}
 			}
 		}
@@ -106,7 +108,10 @@ func fnMapGet(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if len(args[1]) == 0 {
-		return nil, nil
+		return nil, &XPathError{Code: "XPTY0004", Message: "map:get requires a key argument"}
+	}
+	if len(args[1]) > 1 {
+		return nil, &XPathError{Code: "XPTY0004", Message: "map:get key must be a single atomic value"}
 	}
 	ka, err := AtomizeItem(args[1][0])
 	if err != nil {
@@ -193,14 +198,33 @@ func fnMapFind(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	var results []Sequence
-	for _, item := range args[0] {
-		m, ok := item.(MapItem)
-		if !ok {
-			continue
-		}
-		if val, found := m.Get(ka); found {
-			results = append(results, val)
+	mapFindRecurse(args[0], ka, &results)
+	return Sequence{NewArray(results)}, nil
+}
+
+// mapFindRecurse recursively searches for a key in maps within items.
+// Per XPath 3.1, map:find searches recursively through maps and arrays.
+func mapFindRecurse(items Sequence, key AtomicValue, results *[]Sequence) {
+	for _, item := range items {
+		switch v := item.(type) {
+		case MapItem:
+			if val, found := v.Get(key); found {
+				*results = append(*results, val)
+			}
+			// Also recurse into map values
+			_ = v.ForEach(func(_ AtomicValue, val Sequence) error {
+				mapFindRecurse(val, key, results)
+				return nil
+			})
+		case ArrayItem:
+			// Recurse into array members
+			for i := 1; i <= v.Size(); i++ {
+				member, err := v.Get(i)
+				if err != nil {
+					continue
+				}
+				mapFindRecurse(member, key, results)
+			}
 		}
 	}
-	return Sequence{NewArray(results)}, nil
 }

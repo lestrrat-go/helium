@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/lestrrat-go/helium"
@@ -34,6 +35,7 @@ type evalContext struct {
 	implicitTimezone *time.Location // for fn:adjust-*-to-timezone (1-arg form)
 	baseURI          string         // static base URI for resolving relative URIs
 	uriResolver      URIResolver    // custom URI resolver for fn:unparsed-text, fn:doc, etc.
+	httpClient       *http.Client   // HTTP client for http/https URI resolution
 }
 
 func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
@@ -58,6 +60,7 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 		ec.implicitTimezone = xctx.implicitTimezone
 		ec.baseURI = xctx.baseURI
 		ec.uriResolver = xctx.uriResolver
+		ec.httpClient = xctx.httpClient
 	}
 	return ec
 }

@@ -184,16 +184,249 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		}
 		return isSubtypeOf(av.TypeName, targetType)
 	case FunctionTest:
-		_, ok := item.(FunctionItem)
-		return ok
+		// Maps and arrays are functions per XPath 3.1
+		if t.AnyFunction {
+			switch item.(type) {
+			case FunctionItem, MapItem, ArrayItem:
+				return true
+			}
+			return false
+		}
+		// Typed function test: function(ParamTypes...) as ReturnType
+		switch v := item.(type) {
+		case FunctionItem:
+			// Check arity matches
+			if v.Arity >= 0 && v.Arity != len(t.ParamTypes) {
+				return false
+			}
+			// If the function has typed parameters, check subtype relationship
+			// Function subtyping: contravariant in parameters, covariant in return type
+			if v.ParamTypes != nil && len(t.ParamTypes) > 0 {
+				for i, testParam := range t.ParamTypes {
+					// Contravariant: the function's declared param type must be a supertype
+					// of (or same as) the test's param type. In practice, this means the
+					// test's param type must be a subtype of the function's param type.
+					if !isSequenceSubtype(testParam, v.ParamTypes[i], ec) {
+						return false
+					}
+				}
+			}
+			// Return type: covariant - the function's return must be a subtype of test's return
+			if v.ReturnType != nil && t.ReturnType.ItemTest != nil {
+				if !isSequenceSubtype(*v.ReturnType, t.ReturnType, ec) {
+					return false
+				}
+			}
+			return true
+		case MapItem:
+			// Maps are function(xs:anyAtomicType) as item()*
+			// Match function(K) as V:
+			// - If V requires at least one item (ExactlyOne or OneOrMore), the map can't
+			//   guarantee returning non-empty for all possible K inputs → false
+			// - Otherwise, check that all existing values for keys matching K satisfy V
+			if len(t.ParamTypes) != 1 {
+				return false
+			}
+			rt := t.ReturnType
+			// Maps may return empty for missing keys, so V must allow empty
+			if !rt.Void && (rt.Occurrence == OccurrenceExactlyOne || rt.Occurrence == OccurrenceOneOrMore) {
+				return false
+			}
+			allMatch := true
+			m := v
+			_ = m.ForEach(func(k AtomicValue, val Sequence) error {
+				if matchesItemType(k, t.ParamTypes[0].ItemTest, ec) {
+					if !matchesSequenceType(val, rt, ec) {
+						allMatch = false
+					}
+				}
+				return nil
+			})
+			return allMatch
+		case ArrayItem:
+			// Arrays are function(xs:integer) as item()*
+			if len(t.ParamTypes) != 1 {
+				return false
+			}
+			// Check all members match return type
+			for i := 1; i <= v.Size(); i++ {
+				member, err := v.Get(i)
+				if err != nil {
+					return false
+				}
+				if !matchesSequenceType(member, t.ReturnType, ec) {
+					return false
+				}
+			}
+			return true
+		}
+		return false
 	case MapTest:
-		_, ok := item.(MapItem)
-		return ok
+		m, ok := item.(MapItem)
+		if !ok {
+			return false
+		}
+		if t.AnyType {
+			return true
+		}
+		// Typed map test: check all keys match key type and all values match value type
+		allMatch := true
+		_ = m.ForEach(func(k AtomicValue, v Sequence) error {
+			if !matchesItemType(k, t.KeyType, ec) {
+				allMatch = false
+			}
+			if allMatch && !matchesSequenceType(v, t.ValType, ec) {
+				allMatch = false
+			}
+			return nil
+		})
+		return allMatch
 	case ArrayTest:
-		_, ok := item.(ArrayItem)
-		return ok
+		a, ok := item.(ArrayItem)
+		if !ok {
+			return false
+		}
+		if t.AnyType {
+			return true
+		}
+		// Typed array test: check all members match member type
+		for i := 1; i <= a.Size(); i++ {
+			member, err := a.Get(i)
+			if err != nil {
+				return false
+			}
+			if !matchesSequenceType(member, t.MemberType, ec) {
+				return false
+			}
+		}
+		return true
 	}
 	return false
+}
+
+// isSequenceSubtype checks if type A is a subtype of type B.
+// This is used for function subtyping checks.
+func isSequenceSubtype(a, b SequenceType, ec *evalContext) bool {
+	// Void (empty-sequence()) is subtype of anything with ZeroOrMore or ZeroOrOne occurrence
+	if a.Void {
+		return b.Void || b.Occurrence == OccurrenceZeroOrMore || b.Occurrence == OccurrenceZeroOrOne
+	}
+	if b.Void {
+		return a.Void
+	}
+	// Check occurrence compatibility: A's occurrence must be at least as restrictive as B's
+	if !occurrenceSubtype(a.Occurrence, b.Occurrence) {
+		return false
+	}
+	// Check item type subtype
+	return isItemTypeSubtype(a.ItemTest, b.ItemTest, ec)
+}
+
+// occurrenceSubtype checks if occurrence a is at least as restrictive as b.
+func occurrenceSubtype(a, b Occurrence) bool {
+	switch b {
+	case OccurrenceZeroOrMore:
+		return true // anything is subtype of *
+	case OccurrenceOneOrMore:
+		return a == OccurrenceExactlyOne || a == OccurrenceOneOrMore
+	case OccurrenceZeroOrOne:
+		return a == OccurrenceExactlyOne || a == OccurrenceZeroOrOne
+	case OccurrenceExactlyOne:
+		return a == OccurrenceExactlyOne
+	}
+	return false
+}
+
+// isItemTypeSubtype checks if item type A is a subtype of item type B.
+func isItemTypeSubtype(a, b NodeTest, ec *evalContext) bool {
+	if b == nil || isAnyItemTest(b) {
+		return true // item() is supertype of everything
+	}
+	if a == nil || isAnyItemTest(a) {
+		return false // item() is not subtype of anything more specific
+	}
+	// Same type category checks
+	switch bt := b.(type) {
+	case AtomicOrUnionType:
+		at, ok := a.(AtomicOrUnionType)
+		if !ok {
+			return false
+		}
+		aType := resolveAtomicTypeName(AtomicTypeName(at), ec)
+		bType := resolveAtomicTypeName(AtomicTypeName(bt), ec)
+		return isSubtypeOf(aType, bType)
+	case MapTest:
+		at, ok := a.(MapTest)
+		if !ok {
+			// FunctionTest might be supertype of MapTest
+			return false
+		}
+		if bt.AnyType {
+			return true // map(*) is supertype of all maps
+		}
+		if at.AnyType {
+			return false // map(*) is not subtype of typed map
+		}
+		// Check key and value types
+		return isItemTypeSubtype(at.KeyType, bt.KeyType, ec) &&
+			isSequenceSubtype(at.ValType, bt.ValType, ec)
+	case ArrayTest:
+		at, ok := a.(ArrayTest)
+		if !ok {
+			return false
+		}
+		if bt.AnyType {
+			return true
+		}
+		if at.AnyType {
+			return false
+		}
+		return isSequenceSubtype(at.MemberType, bt.MemberType, ec)
+	case FunctionTest:
+		// MapTest and ArrayTest are subtypes of FunctionTest
+		if bt.AnyFunction {
+			switch a.(type) {
+			case FunctionTest, MapTest, ArrayTest:
+				return true
+			}
+			return false
+		}
+		// Typed function test: check contravariant params and covariant return
+		switch at := a.(type) {
+		case FunctionTest:
+			if at.AnyFunction {
+				return false
+			}
+			if len(at.ParamTypes) != len(bt.ParamTypes) {
+				return false
+			}
+			for i := range bt.ParamTypes {
+				// Contravariant: B's param must be subtype of A's param
+				if !isSequenceSubtype(bt.ParamTypes[i], at.ParamTypes[i], ec) {
+					return false
+				}
+			}
+			return isSequenceSubtype(at.ReturnType, bt.ReturnType, ec)
+		case MapTest:
+			// Map is function(xs:anyAtomicType) as item()*
+			if len(bt.ParamTypes) != 1 {
+				return false
+			}
+			return true // Maps can be subtype of compatible function tests
+		case ArrayTest:
+			if len(bt.ParamTypes) != 1 {
+				return false
+			}
+			return true
+		}
+		return false
+	}
+	return false
+}
+
+func isAnyItemTest(t NodeTest) bool {
+	_, ok := t.(AnyItemTest)
+	return ok
 }
 
 // castToQName casts an atomic value to xs:QName using the evaluation context's

@@ -3,9 +3,11 @@ package xpath3_test
 import (
 	"context"
 	"fmt"
-	"io"
 	"math"
 	"math/big"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -42,6 +44,13 @@ type qt3Test struct {
 
 func qt3RunTests(t *testing.T, tests []qt3Test) {
 	t.Helper()
+	var httpClient *http.Client
+	for _, tc := range tests {
+		if tc.BaseURI != "" {
+			httpClient = qt3NewTestServer(t)
+			break
+		}
+	}
 	for _, tc := range tests {
 		t.Run(tc.Name, func(t *testing.T) {
 			t.Parallel()
@@ -54,13 +63,15 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 			opts := []xpath3.ContextOption{
 				xpath3.WithImplicitTimezone(qt3ImplicitTZ),
 			}
+			if httpClient != nil {
+				opts = append(opts, xpath3.WithHTTPClient(httpClient))
+			}
 			if len(tc.Namespaces) > 0 {
 				opts = append(opts, xpath3.WithNamespaces(tc.Namespaces))
 			}
 			if tc.BaseURI != "" {
 				opts = append(opts, xpath3.WithBaseURI(tc.BaseURI))
 			}
-			opts = append(opts, xpath3.WithURIResolver(qt3URIResolver()))
 			ctx = xpath3.NewContext(ctx, opts...)
 			var doc helium.Node
 			if tc.DocPath != "" {
@@ -462,32 +473,28 @@ func qt3FormatSeq(seq xpath3.Sequence) string {
 	return strings.Join(parts, ", ")
 }
 
-// qt3URIResolverImpl maps http://www.w3.org/fots/ URIs to local test data files.
-type qt3URIResolverImpl struct {
-	sourceDir string
-}
-
-func qt3URIResolver() xpath3.URIResolver {
+// qt3Handler returns an http.Handler that serves QT3 test resource files.
+// It maps URL paths under /fots/ to files under testdata/qt3ts/source/fn/.
+func qt3Handler() http.Handler {
 	_, f, _, _ := runtime.Caller(0)
-	sourceDir := filepath.Join(filepath.Dir(f), "..", "testdata", "qt3ts", "source")
-	return &qt3URIResolverImpl{sourceDir: sourceDir}
+	sourceDir := filepath.Join(filepath.Dir(f), "..", "testdata", "qt3ts", "source", "fn")
+	return http.StripPrefix("/fots/", http.FileServer(http.Dir(sourceDir)))
 }
 
-func (r *qt3URIResolverImpl) ResolveURI(uri string) (io.ReadCloser, error) {
-	const fotsPrefix = "http://www.w3.org/fots/"
-	if strings.HasPrefix(uri, fotsPrefix) {
-		relPath := uri[len(fotsPrefix):]
-		localPath := filepath.Join(r.sourceDir, "fn", relPath)
-		return os.Open(localPath)
+// qt3NewTestServer creates an httptest.Server with the QT3 handler and
+// returns an HTTP client whose transport routes all requests (regardless
+// of hostname) to that server.
+func qt3NewTestServer(t *testing.T) *http.Client {
+	t.Helper()
+	srv := httptest.NewServer(qt3Handler())
+	t.Cleanup(srv.Close)
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(_ context.Context, network, _ string) (net.Conn, error) {
+				return net.Dial(network, srv.Listener.Addr().String())
+			},
+		},
 	}
-	// Also handle file:// URIs and bare file paths
-	if strings.HasPrefix(uri, "file://") {
-		return os.Open(uri[len("file://"):])
-	}
-	if filepath.IsAbs(uri) {
-		return os.Open(uri)
-	}
-	return nil, fmt.Errorf("qt3URIResolver: unsupported URI: %s", uri)
 }
 
 func qt3FormatItem(item xpath3.Item) string {

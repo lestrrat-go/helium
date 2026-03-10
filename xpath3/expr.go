@@ -110,18 +110,29 @@ type NamespaceNodeTest struct{}
 
 func (NamespaceNodeTest) nodeTest() {}
 
-// FunctionTest matches function(*).
-type FunctionTest struct{}
+// FunctionTest matches function(*) or function(ParamTypes...) as ReturnType.
+type FunctionTest struct {
+	AnyFunction bool           // true for function(*)
+	ParamTypes  []SequenceType // parameter types (empty for function(*))
+	ReturnType  SequenceType   // return type (zero value for function(*))
+}
 
 func (FunctionTest) nodeTest() {}
 
-// MapTest matches map(*).
-type MapTest struct{}
+// MapTest matches map(*) or map(KeyType, ValueType).
+type MapTest struct {
+	AnyType  bool         // true for map(*)
+	KeyType  NodeTest     // key type (e.g. AtomicOrUnionType for xs:string)
+	ValType  SequenceType // value sequence type
+}
 
 func (MapTest) nodeTest() {}
 
-// ArrayTest matches array(*).
-type ArrayTest struct{}
+// ArrayTest matches array(*) or array(MemberType).
+type ArrayTest struct {
+	AnyType    bool         // true for array(*)
+	MemberType SequenceType // member sequence type
+}
 
 func (ArrayTest) nodeTest() {}
 

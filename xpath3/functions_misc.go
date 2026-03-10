@@ -21,8 +21,14 @@ func init() {
 	registerFn("random-number-generator", 0, 1, fnRandomNumberGenerator)
 }
 
-func fnStaticBaseURI(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, nil // Not available in this implementation
+func fnStaticBaseURI(ctx context.Context, _ []Sequence) (Sequence, error) {
+	if ec := getFnContext(ctx); ec != nil && ec.baseURI != "" {
+		return SingleAtomic(AtomicValue{
+			TypeName: TypeAnyURI,
+			Value:    ec.baseURI,
+		}), nil
+	}
+	return nil, nil
 }
 
 func fnDefaultCollation(_ context.Context, _ []Sequence) (Sequence, error) {

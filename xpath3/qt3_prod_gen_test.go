@@ -1360,9 +1360,7 @@ func TestQT3_prod_CastableExpr(t *testing.T) {
 		{Name: "cbcl-castable-negativeInteger-001", XPath: "0 castable as xs:negativeInteger", Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "cbcl-castable-negativeInteger-002", XPath: "\"0\" castable as xs:negativeInteger", Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "cbcl-castable-nmtoken-001", XPath: "xs:NMTOKEN('NMTOKEN') castable as xs:NMTOKEN", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "cbcl-castable-nmtoken-002b", XPath: `"
-	 foobar 
-	" castable as xs:NMTOKEN`, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "cbcl-castable-nmtoken-002b", XPath: "\"\r\n\t foobar \n\r\t\" castable as xs:NMTOKEN", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "cbcl-castable-nonNegativeInteger-001", XPath: "-1 castable as xs:nonNegativeInteger", Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "cbcl-castable-nonNegativeInteger-002", XPath: "\"-1\" castable as xs:nonNegativeInteger", Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "cbcl-castable-nonPositiveInteger-001", XPath: "1 castable as xs:nonPositiveInteger", Assertions: []qt3Assertion{qt3AssertFalse()}},
@@ -4191,7 +4189,8 @@ func TestQT3_prod_CastExpr(t *testing.T) {
                 xs:hexBinary("FFFF"), xs:anyURI("http://example.com/"), xs:QName("localName"),
                 xs:string("An xs:string"), xs:normalizedString("normalizedString"), xs:token("token"),
                 xs:language("language"), xs:NMTOKEN("NMTOKEN"), xs:Name("Name"), xs:NCName("NCName"),
-                xs:ID("ID"), xs:IDREF("IDREF"), xs:ENTITY("ENTITY")`, Assertions: []qt3Assertion{qt3AssertStringValue(`xs:untypedAtomic 2002-10-10T23:02:12Z 2002-10-10Z 23:02:12Z P1Y PT1S P1M 3000 40000 2 16 0
+                xs:ID("ID"), xs:IDREF("IDREF"), xs:ENTITY("ENTITY")`, Assertions: []qt3Assertion{qt3AssertStringValue(`
+             xs:untypedAtomic 2002-10-10T23:02:12Z 2002-10-10Z 23:02:12Z P1Y PT1S P1M 3000 40000 2 16 0
              -4 5 6 7 8 9 10 11 12 13 14 1976-02Z 2005-12:00 --12-25-14:00 ---25-14:00 --12-14:00 true
              aaaa FFFF http://example.com/ localName An xs:string normalizedString token language
              NMTOKEN Name NCName ID IDREF ENTITY`)}},
@@ -4349,35 +4348,20 @@ func TestQT3_prod_CastExpr_derived(t *testing.T) {
 		{Name: "cbcl-cast-ncname-002", XPath: "fn:current-time() cast as xs:NCName", ExpectError: true},
 		{Name: "cbcl-cast-negativeInteger-001", XPath: "xs:negativeInteger(0)", ExpectError: true},
 		{Name: "cbcl-cast-negativeInteger-002", XPath: "xs:negativeInteger(\"0\")", ExpectError: true},
-		{Name: "cbcl-cast-nmtoken-001b", XPath: `for $string in ("
-	 foobar 
-	" cast as xs:NMTOKEN) return not(contains($string, '	') or contains($string, '
-') or contains($string, '') or string-length($string) ne 6)`, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "cbcl-cast-nmtoken-001b", XPath: "for $string in (\"\r\n\t foobar \n\r\t\" cast as xs:NMTOKEN) return not(contains($string, '\t') or contains($string, '\n') or contains($string, '\r') or string-length($string) ne 6)", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "cbcl-cast-nmtoken-002", XPath: "xs:NMTOKEN('NMTOKEN') cast as xs:NMTOKEN", Assertions: []qt3Assertion{qt3AssertStringValue("NMTOKEN")}},
 		{Name: "cbcl-cast-nonNegativeInteger-001", XPath: "xs:nonNegativeInteger(-1)", ExpectError: true},
 		{Name: "cbcl-cast-nonNegativeInteger-002", XPath: "xs:nonNegativeInteger(\"-1\")", ExpectError: true},
 		{Name: "cbcl-cast-nonPositiveInteger-001", XPath: "xs:nonPositiveInteger(1)", ExpectError: true},
 		{Name: "cbcl-cast-nonPositiveInteger-002", XPath: "xs:nonPositiveInteger(\"1\")", ExpectError: true},
-		{Name: "cbcl-cast-normalizedString-001b", XPath: `for $string in (" foo 	 bar 
-" cast as xs:normalizedString)
-        return not(contains($string, '	') or 
-                   contains($string, '
-') or 
-                   contains($string, '') or 
-                   string-length($string) ne 13)`, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "cbcl-cast-normalizedString-001b", XPath: "for $string in (\"\r foo \t bar \n\" cast as xs:normalizedString)\n        return not(contains($string, '\t') or \n                   contains($string, '\n') or \n                   contains($string, '\r') or \n                   string-length($string) ne 13)", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "cbcl-cast-positiveInteger-001", XPath: "xs:positiveInteger(0)", ExpectError: true},
 		{Name: "cbcl-cast-positiveInteger-002", XPath: "xs:positiveInteger(\"0\")", ExpectError: true},
 		{Name: "cbcl-cast-short-001", XPath: "xs:short(32768)", ExpectError: true},
 		{Name: "cbcl-cast-short-002", XPath: "xs:short(-32769)", ExpectError: true},
 		{Name: "cbcl-cast-short-003", XPath: "xs:short(\"32768\")", ExpectError: true},
 		{Name: "cbcl-cast-short-004", XPath: "xs:short(\"-32769\")", ExpectError: true},
-		{Name: "cbcl-cast-token-001b", XPath: `for $string in (" foo 	 bar 
-" cast as xs:token) 
-        return not(contains($string, '	') or 
-                   contains($string, '
-') or 
-                   contains($string, '') or 
-                   string-length($string) ne 7)`, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "cbcl-cast-token-001b", XPath: "for $string in (\"\r foo \t bar \n\" cast as xs:token) \n        return not(contains($string, '\t') or \n                   contains($string, '\n') or \n                   contains($string, '\r') or \n                   string-length($string) ne 7)", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "cbcl-cast-unsignedByte-001", XPath: "xs:unsignedByte(256)", ExpectError: true},
 		{Name: "cbcl-cast-unsignedByte-002", XPath: "xs:unsignedByte(-1)", ExpectError: true},
 		{Name: "cbcl-cast-unsignedByte-003", XPath: "xs:unsignedByte(\"256\")", ExpectError: true},
@@ -6690,7 +6674,7 @@ func TestQT3_prod_NamedFunctionRef(t *testing.T) {
 		{Name: "function-literal-413", XPath: "exists(Q{http://www.w3.org/2005/xpath-functions}default-collation#0)", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "function-literal-414", XPath: "Q{http://www.w3.org/2005/xpath-functions}default-collation#0()", Assertions: []qt3Assertion{qt3AssertStringValue("http://www.w3.org/2005/xpath-functions/collation/codepoint")}},
 		{Name: "function-literal-415", XPath: "exists(Q{http://www.w3.org/2005/xpath-functions}static-base-uri#0)", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "function-literal-416", XPath: "Q{http://www.w3.org/2005/xpath-functions}static-base-uri#0()", Assertions: []qt3Assertion{qt3AssertType("xs:anyURI?")}},
+		{Name: "function-literal-416", XPath: "Q{http://www.w3.org/2005/xpath-functions}static-base-uri#0()", BaseURI: "http://www.example.com", Assertions: []qt3Assertion{qt3AssertType("xs:anyURI?")}},
 		{Name: "function-literal-417", XPath: "exists(Q{http://www.w3.org/2005/xpath-functions}function-lookup#2)", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "function-literal-418", XPath: "Q{http://www.w3.org/2005/xpath-functions}function-lookup#2(fn:QName('http://www.example.org', 'foo:bar'), 1)", Assertions: []qt3Assertion{qt3AssertEmpty()}},
 		{Name: "function-literal-419", XPath: "exists(Q{http://www.w3.org/2005/xpath-functions}function-name#1)", Assertions: []qt3Assertion{qt3AssertTrue()}},
