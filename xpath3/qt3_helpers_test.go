@@ -3,6 +3,7 @@ package xpath3_test
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"math/big"
 	"os"
@@ -28,8 +29,10 @@ type qt3Test struct {
 	XPath       string
 	DocPath     string // relative to qt3TestDataDir(); empty = no context document
 	Namespaces  map[string]string
+	BaseURI     string // static base URI for fn:unparsed-text etc.
 	Skip        string
 	ExpectError bool
+	AcceptError bool // error is acceptable but not required (any-of with error + non-error)
 	Assertions  []qt3Assertion
 }
 
@@ -54,6 +57,10 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 			if len(tc.Namespaces) > 0 {
 				opts = append(opts, xpath3.WithNamespaces(tc.Namespaces))
 			}
+			if tc.BaseURI != "" {
+				opts = append(opts, xpath3.WithBaseURI(tc.BaseURI))
+			}
+			opts = append(opts, xpath3.WithURIResolver(qt3URIResolver()))
 			ctx = xpath3.NewContext(ctx, opts...)
 			var doc helium.Node
 			if tc.DocPath != "" {
@@ -61,14 +68,14 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 			}
 			compiled, err := xpath3.Compile(tc.XPath)
 			if err != nil {
-				if tc.ExpectError {
+				if tc.ExpectError || tc.AcceptError {
 					return
 				}
 				require.NoError(t, err, "compile: %s", tc.XPath)
 			}
 			result, err := compiled.Evaluate(ctx, doc)
 			if err != nil {
-				if tc.ExpectError {
+				if tc.ExpectError || tc.AcceptError {
 					return
 				}
 				require.NoError(t, err, "eval: %s", tc.XPath)
@@ -312,6 +319,12 @@ func qt3CheckType(_ string) qt3Check {
 	}
 }
 
+func qt3CheckCount(n int) qt3Check {
+	return func(seq xpath3.Sequence) bool {
+		return len(seq) == n
+	}
+}
+
 func qt3CheckDeepEq(expected string) qt3Check {
 	return func(seq xpath3.Sequence) bool {
 		compiled, err := xpath3.Compile(expected)
@@ -447,6 +460,34 @@ func qt3FormatSeq(seq xpath3.Sequence) string {
 		return parts[0]
 	}
 	return strings.Join(parts, ", ")
+}
+
+// qt3URIResolverImpl maps http://www.w3.org/fots/ URIs to local test data files.
+type qt3URIResolverImpl struct {
+	sourceDir string
+}
+
+func qt3URIResolver() xpath3.URIResolver {
+	_, f, _, _ := runtime.Caller(0)
+	sourceDir := filepath.Join(filepath.Dir(f), "..", "testdata", "qt3ts", "source")
+	return &qt3URIResolverImpl{sourceDir: sourceDir}
+}
+
+func (r *qt3URIResolverImpl) ResolveURI(uri string) (io.ReadCloser, error) {
+	const fotsPrefix = "http://www.w3.org/fots/"
+	if strings.HasPrefix(uri, fotsPrefix) {
+		relPath := uri[len(fotsPrefix):]
+		localPath := filepath.Join(r.sourceDir, "fn", relPath)
+		return os.Open(localPath)
+	}
+	// Also handle file:// URIs and bare file paths
+	if strings.HasPrefix(uri, "file://") {
+		return os.Open(uri[len("file://"):])
+	}
+	if filepath.IsAbs(uri) {
+		return os.Open(uri)
+	}
+	return nil, fmt.Errorf("qt3URIResolver: unsupported URI: %s", uri)
 }
 
 func qt3FormatItem(item xpath3.Item) string {

@@ -32,6 +32,8 @@ type evalContext struct {
 	maxNodes         int
 	currentTime      *time.Time     // set once at construction for stable fn:current-*
 	implicitTimezone *time.Location // for fn:adjust-*-to-timezone (1-arg form)
+	baseURI          string         // static base URI for resolving relative URIs
+	uriResolver      URIResolver    // custom URI resolver for fn:unparsed-text, fn:doc, etc.
 }
 
 func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
@@ -54,6 +56,8 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 		ec.functions = xctx.functions
 		ec.fnsNS = xctx.functionsNS
 		ec.implicitTimezone = xctx.implicitTimezone
+		ec.baseURI = xctx.baseURI
+		ec.uriResolver = xctx.uriResolver
 	}
 	return ec
 }

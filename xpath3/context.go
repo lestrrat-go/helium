@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"io"
 	"time"
 )
 
@@ -18,6 +19,12 @@ type QualifiedName struct {
 	Name string
 }
 
+// URIResolver resolves URIs to readable content for fn:unparsed-text and fn:doc.
+// The resolved URI is the absolute URI after base URI resolution.
+type URIResolver interface {
+	ResolveURI(uri string) (io.ReadCloser, error)
+}
+
 // Context holds XPath evaluation settings provided by the caller.
 type Context struct {
 	namespaces       map[string]string
@@ -26,6 +33,8 @@ type Context struct {
 	functionsNS      map[QualifiedName]Function
 	opLimit          int
 	implicitTimezone *time.Location
+	baseURI          string
+	uriResolver      URIResolver
 }
 
 // ContextOption configures a Context.
@@ -73,6 +82,22 @@ func WithFunctionsNS(fns map[QualifiedName]Function) ContextOption {
 func WithImplicitTimezone(loc *time.Location) ContextOption {
 	return func(c *Context) {
 		c.implicitTimezone = loc
+	}
+}
+
+// WithBaseURI sets the static base URI for the evaluation context.
+// This is used for resolving relative URIs in fn:unparsed-text, fn:doc, etc.
+func WithBaseURI(uri string) ContextOption {
+	return func(c *Context) {
+		c.baseURI = uri
+	}
+}
+
+// WithURIResolver sets a custom URI resolver for functions that load external
+// resources such as fn:unparsed-text and fn:doc.
+func WithURIResolver(r URIResolver) ContextOption {
+	return func(c *Context) {
+		c.uriResolver = r
 	}
 }
 

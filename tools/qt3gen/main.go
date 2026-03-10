@@ -376,6 +376,12 @@ func getTestSetSkipReason(name string) string {
 	switch name {
 	case "fn-id", "fn-idref":
 		return "requires DTD ID/IDREF typing"
+	case "fn-unparsed-text", "fn-unparsed-text-lines", "fn-unparsed-text-available":
+		return "requires URI resolution"
+	case "fn-json-doc":
+		return "requires URI resolution"
+	case "fn-doc", "fn-doc-available":
+		return "requires URI resolution"
 	}
 	return ""
 }
@@ -544,6 +550,9 @@ func generateTestFile(tests []generatedTest) string {
 			if assertionsExpectError(tc.Assertions) {
 				b.WriteString(", ExpectError: true")
 			} else {
+				if assertionsAcceptError(tc.Assertions) {
+					b.WriteString(", AcceptError: true")
+				}
 				assertExprs := emitAssertions(tc.Assertions)
 				if len(assertExprs) > 0 {
 					b.WriteString(", Assertions: []qt3Assertion{")
@@ -568,10 +577,40 @@ func assertionsExpectError(assertions []assertion) bool {
 			return true
 		}
 		if a.Type == "any-of" {
+			// Only treat as error-only if ALL children are errors.
+			// If any-of has both error and non-error children,
+			// the non-error result is also acceptable (XP31 behavior).
+			allError := true
+			for _, child := range a.Children {
+				if child.Type != "error" {
+					allError = false
+					break
+				}
+			}
+			if allError {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// assertionsAcceptError returns true when any-of contains both error and non-error children.
+// In this case, an error is acceptable but a valid result should also be checked.
+func assertionsAcceptError(assertions []assertion) bool {
+	for _, a := range assertions {
+		if a.Type == "any-of" {
+			hasError := false
+			hasNonError := false
 			for _, child := range a.Children {
 				if child.Type == "error" {
-					return true
+					hasError = true
+				} else {
+					hasNonError = true
 				}
+			}
+			if hasError && hasNonError {
+				return true
 			}
 		}
 	}

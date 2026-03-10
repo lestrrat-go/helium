@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/big"
 
@@ -18,11 +19,28 @@ func init() {
 	registerFn("format-number", 2, 3, fnFormatNumber)
 }
 
+// promoteToNumeric atomizes an item and ensures it is numeric.
+// xs:untypedAtomic is cast to xs:double per XPath spec.
+// Non-numeric types raise XPTY0004.
+func promoteToNumeric(item Item) (AtomicValue, error) {
+	a, err := AtomizeItem(item)
+	if err != nil {
+		return a, err
+	}
+	if a.TypeName == TypeUntypedAtomic {
+		return castToDouble(a)
+	}
+	if !a.IsNumeric() {
+		return a, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("expected numeric type, got %s", a.TypeName)}
+	}
+	return a, nil
+}
+
 func fnAbs(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
-	a, err := AtomizeItem(args[0][0])
+	a, err := promoteToNumeric(args[0][0])
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +61,7 @@ func fnCeiling(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
-	a, err := AtomizeItem(args[0][0])
+	a, err := promoteToNumeric(args[0][0])
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +82,7 @@ func fnFloor(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
-	a, err := AtomizeItem(args[0][0])
+	a, err := promoteToNumeric(args[0][0])
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +103,7 @@ func fnRound(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
-	a, err := AtomizeItem(args[0][0])
+	a, err := promoteToNumeric(args[0][0])
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +129,7 @@ func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
-	a, err := AtomizeItem(args[0][0])
+	a, err := promoteToNumeric(args[0][0])
 	if err != nil {
 		return nil, err
 	}

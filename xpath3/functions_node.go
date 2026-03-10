@@ -34,9 +34,6 @@ func init() {
 	registerFn("id", 1, 2, fnID)
 	registerFn("idref", 1, 2, fnIDRef)
 	registerFn("element-with-id", 1, 2, fnElementWithID)
-	registerFn("unparsed-text", 1, 2, fnUnparsedText)
-	registerFn("unparsed-text-available", 1, 2, fnUnparsedTextAvailable)
-	registerFn("unparsed-text-lines", 1, 2, fnUnparsedTextLines)
 	registerFn("collection", 0, 1, fnCollection)
 	registerFn("uri-collection", 0, 1, fnURICollection)
 }
@@ -443,18 +440,6 @@ func fnIDRef(_ context.Context, _ []Sequence) (Sequence, error) {
 
 func fnElementWithID(_ context.Context, _ []Sequence) (Sequence, error) {
 	return nil, nil
-}
-
-func fnUnparsedText(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, &XPathError{Code: "FOUT1170", Message: "fn:unparsed-text: URI resolution not supported"}
-}
-
-func fnUnparsedTextAvailable(_ context.Context, _ []Sequence) (Sequence, error) {
-	return SingleBoolean(false), nil
-}
-
-func fnUnparsedTextLines(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, &XPathError{Code: "FOUT1170", Message: "fn:unparsed-text-lines: URI resolution not supported"}
 }
 
 func fnCollection(_ context.Context, _ []Sequence) (Sequence, error) {

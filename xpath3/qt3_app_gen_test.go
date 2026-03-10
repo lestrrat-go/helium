@@ -293,7 +293,7 @@ Traverse City, MI 49684'
 		{Name: "functx-fn-resolve-uri-1", XPath: "(resolve-uri('prod', 'http://datypic.com/'))", Assertions: []qt3Assertion{qt3AssertStringValue("http://datypic.com/prod")}},
 		{Name: "functx-fn-resolve-uri-2", XPath: "(resolve-uri('prod2', 'http://datypic.com/prod1'))", Assertions: []qt3Assertion{qt3AssertStringValue("http://datypic.com/prod2")}},
 		{Name: "functx-fn-resolve-uri-3", XPath: "(resolve-uri( 'http://example.org','http://datypic.com'))", Assertions: []qt3Assertion{qt3AssertStringValue("http://example.org")}},
-		{Name: "functx-fn-resolve-uri-4", XPath: "(resolve-uri( 'http://datypic.com', '../base'))", ExpectError: true},
+		{Name: "functx-fn-resolve-uri-4", XPath: "(resolve-uri( 'http://datypic.com', '../base'))", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("http://datypic.com"))}},
 		{Name: "functx-fn-resolve-uri-5", XPath: "(resolve-uri( '', 'http://datypic.com'))", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("http://datypic.com"), qt3CheckStringValue("http://datypic.com/"))}},
 		{Name: "functx-fn-resolve-uri-all", XPath: "(resolve-uri('prod', 'http://datypic.com/'), resolve-uri('prod2', 'http://datypic.com/prod1'), resolve-uri( 'http://example.org','http://datypic.com'), resolve-uri( 'http://datypic.com', '../base'), resolve-uri( '', 'http://datypic.com'))", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "functx-fn-reverse-1", XPath: "(reverse( (1, 2, 3, 4, 5) ))", Assertions: []qt3Assertion{qt3AssertStringValue("5 4 3 2 1")}},
