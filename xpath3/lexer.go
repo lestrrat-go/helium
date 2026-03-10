@@ -254,8 +254,21 @@ func (l *lexer) tokenize() error {
 			if name == "" {
 				return fmt.Errorf("%w: variable name after '$' at position %d", ErrUnexpectedToken, l.pos)
 			}
-			// Check for QName (prefix:local) — e.g., $err:code
-			if l.pos < len(l.input) && l.input[l.pos] == ':' && l.pos+1 < len(l.input) {
+			// URIQualifiedName: $Q{uri}local
+			if name == "Q" && l.pos < len(l.input) && l.input[l.pos] == '{' {
+				l.pos++ // consume '{'
+				braceStart := l.pos
+				for l.pos < len(l.input) && l.input[l.pos] != '}' {
+					l.pos++
+				}
+				if l.pos < len(l.input) {
+					uri := strings.TrimSpace(l.input[braceStart:l.pos])
+					l.pos++ // consume '}'
+					local := l.scanNCName()
+					name = "Q{" + uri + "}" + local
+				}
+			} else if l.pos < len(l.input) && l.input[l.pos] == ':' && l.pos+1 < len(l.input) {
+				// Check for QName (prefix:local) — e.g., $err:code
 				r2, _ := utf8.DecodeRuneInString(l.input[l.pos+1:])
 				if isNCNameStart(r2) {
 					l.pos++ // consume ':'
