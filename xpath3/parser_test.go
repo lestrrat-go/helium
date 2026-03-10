@@ -125,7 +125,7 @@ func TestParseXPath3Extensions(t *testing.T) {
 		{"let", "let $x := 1 return $x + 1"},
 		{"for multi binding", "for $x in //a, $y in //b return concat($x, $y)"},
 		{"let multi binding", "let $x := 1, $y := 2 return $x + $y"},
-		{"for let combined", "for $x in //a let $y := name($x) return $y"},
+		{"for let combined", "for $x in //a return let $y := name($x) return $y"},
 
 		// Quantified
 		{"some", "some $x in //a satisfies $x > 0"},

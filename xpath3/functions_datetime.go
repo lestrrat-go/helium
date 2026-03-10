@@ -179,10 +179,16 @@ func fnTimezoneFromDateTime(_ context.Context, args []Sequence) (Sequence, error
 	if !ok {
 		return nil, nil
 	}
+	if !HasTimezone(t) {
+		return nil, nil
+	}
 	_, offset := t.Zone()
-	hours := offset / 3600
-	minutes := (offset % 3600) / 60
-	d := Duration{Seconds: float64(hours*3600 + minutes*60)}
+	secs := float64(offset)
+	neg := secs < 0
+	if neg {
+		secs = -secs
+	}
+	d := Duration{Seconds: secs, Negative: neg}
 	return SingleAtomic(AtomicValue{TypeName: TypeDayTimeDuration, Value: d}), nil
 }
 
