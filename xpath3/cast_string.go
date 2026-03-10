@@ -71,7 +71,7 @@ func atomicToString(v AtomicValue) (string, error) {
 			return "", fmt.Errorf("xpath3: internal error: expected time.Time value for %s", v.TypeName)
 		}
 		return fmt.Sprintf("%s-%02d-%02d%s", formatXSDYear(t.Year()), t.Month(), t.Day(), formatXSDTimezone(t)), nil
-	case TypeDateTime:
+	case TypeDateTime, TypeDateTimeStamp:
 		t, ok := v.Value.(time.Time)
 		if !ok {
 			return "", fmt.Errorf("xpath3: internal error: expected time.Time value for %s", v.TypeName)
@@ -257,6 +257,44 @@ func isValidDecimalString(s string) bool {
 		}
 	}
 	return hasDigit && i == len(s)
+}
+
+// normalizeWhitespace replaces #x9, #xA, #xD with #x20 (for xs:normalizedString).
+func normalizeWhitespace(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case '\t', '\n', '\r':
+			return ' '
+		default:
+			return r
+		}
+	}, s)
+}
+
+// collapseWhitespace normalizes then collapses whitespace (for xs:token and derived).
+// Replaces #x9, #xA, #xD with #x20, then collapses runs of #x20 to a single space,
+// and strips leading/trailing spaces.
+func collapseWhitespace(s string) string {
+	s = normalizeWhitespace(s)
+	var b strings.Builder
+	b.Grow(len(s))
+	inSpace := true // treat leading spaces as collapsible
+	for _, r := range s {
+		if r == ' ' {
+			if !inSpace {
+				inSpace = true
+				b.WriteByte(' ')
+			}
+		} else {
+			inSpace = false
+			b.WriteRune(r)
+		}
+	}
+	result := b.String()
+	if len(result) > 0 && result[len(result)-1] == ' ' {
+		return result[:len(result)-1]
+	}
+	return result
 }
 
 // formatXSDYear formats a year per XSD canonical rules:

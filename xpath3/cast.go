@@ -122,6 +122,17 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 			t := v.TimeVal()
 			return AtomicValue{TypeName: TypeDateTime, Value: t}, nil
 		}
+	case TypeDateTimeStamp:
+		// xs:dateTimeStamp is xs:dateTime with a required timezone
+		dt, err := CastAtomic(v, TypeDateTime)
+		if err != nil {
+			return AtomicValue{}, err
+		}
+		if !HasTimezone(dt.TimeVal()) {
+			return AtomicValue{}, &XPathError{Code: "FORG0001", Message: "xs:dateTimeStamp requires a timezone"}
+		}
+		dt.TypeName = TypeDateTimeStamp
+		return dt, nil
 	case TypeTime:
 		if v.TypeName == TypeString {
 			return CastFromString(v.StringVal(), TypeTime)
@@ -175,13 +186,19 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		return castToGType(v, targetType, func(t time.Time) string {
 			return fmt.Sprintf("%04d-%02d%s", t.Year(), t.Month(), formatXSDTimezone(t))
 		})
-	case TypeNormalizedString, TypeToken, TypeLanguage, TypeName, TypeNCName,
+	case TypeNormalizedString:
+		s, err := atomicToString(v)
+		if err != nil {
+			return AtomicValue{}, err
+		}
+		return AtomicValue{TypeName: targetType, Value: normalizeWhitespace(s)}, nil
+	case TypeToken, TypeLanguage, TypeName, TypeNCName,
 		TypeNMTOKEN, TypeNMTOKENS, TypeENTITY, TypeID, TypeIDREF, TypeIDREFS:
 		s, err := atomicToString(v)
 		if err != nil {
 			return AtomicValue{}, err
 		}
-		return AtomicValue{TypeName: targetType, Value: s}, nil
+		return AtomicValue{TypeName: targetType, Value: collapseWhitespace(s)}, nil
 	case TypeQName:
 		// QName → QName is handled by identity check above.
 		// String/untypedAtomic → QName requires namespace context and is
@@ -322,9 +339,14 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 			return AtomicValue{}, castError(s, targetType)
 		}
 		return AtomicValue{TypeName: TypeGYearMonth, Value: s}, nil
-	case TypeNormalizedString, TypeToken, TypeLanguage, TypeName, TypeNCName,
+	case TypeNormalizedString:
+		// xs:normalizedString: replace #x9, #xA, #xD with #x20
+		s = normalizeWhitespace(s)
+		return AtomicValue{TypeName: targetType, Value: s}, nil
+	case TypeToken, TypeLanguage, TypeName, TypeNCName,
 		TypeNMTOKEN, TypeNMTOKENS, TypeENTITY, TypeID, TypeIDREF, TypeIDREFS:
-		// String-derived types: accept the string value directly
+		// xs:token and derived: normalize + collapse whitespace
+		s = collapseWhitespace(s)
 		return AtomicValue{TypeName: targetType, Value: s}, nil
 	}
 	return AtomicValue{}, &XPathError{

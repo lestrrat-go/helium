@@ -333,8 +333,34 @@ func validateJSONResultStrings(item Item) *XPathError {
 	return nil
 }
 
-func fnJSONDoc(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, &XPathError{Code: "FODC0002", Message: "json-doc: URI resolution not supported"}
+func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
+	if len(args[0]) == 0 {
+		return nil, nil
+	}
+	uri := seqToString(args[0])
+
+	ec := getFnContext(ctx)
+	if ec == nil || ec.httpClient == nil {
+		return nil, &XPathError{Code: "FODC0002", Message: "json-doc: no HTTP client configured for URI: " + uri}
+	}
+
+	resp, err := ec.httpClient.Get(uri)
+	if err != nil {
+		return nil, &XPathError{Code: "FODC0002", Message: fmt.Sprintf("json-doc: failed to fetch %s: %v", uri, err)}
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != 200 {
+		return nil, &XPathError{Code: "FODC0002", Message: fmt.Sprintf("json-doc: HTTP %d for %s", resp.StatusCode, uri)}
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, &XPathError{Code: "FODC0002", Message: fmt.Sprintf("json-doc: error reading %s: %v", uri, err)}
+	}
+
+	// Delegate to parse-json logic
+	jsonStr := string(body)
+	return fnParseJSON(ctx, []Sequence{{AtomicValue{TypeName: TypeString, Value: jsonStr}}})
 }
 
 func fnSerialize(_ context.Context, args []Sequence) (Sequence, error) {

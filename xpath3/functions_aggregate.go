@@ -49,6 +49,10 @@ func aggregateTypeFamily(typeName string) string {
 		return "time"
 	case TypeBoolean:
 		return "boolean"
+	case TypeBase64Binary:
+		return "base64Binary"
+	case TypeHexBinary:
+		return "hexBinary"
 	}
 	return ""
 }

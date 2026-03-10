@@ -40,6 +40,17 @@ func evalCastExpr(ec *evalContext, e CastExpr) (Sequence, error) {
 		}
 		return SingleAtomic(result), nil
 	}
+	// xs:numeric is a union type: if already numeric return as-is, else cast to double
+	if targetType == TypeNumeric {
+		if av.IsNumeric() {
+			return SingleAtomic(av), nil
+		}
+		result, err := CastAtomic(av, TypeDouble)
+		if err != nil {
+			return nil, err
+		}
+		return SingleAtomic(result), nil
+	}
 	result, err := CastAtomic(av, targetType)
 	if err != nil {
 		return nil, err
@@ -73,6 +84,14 @@ func evalCastableExpr(ec *evalContext, e CastableExpr) (Sequence, error) {
 	// xs:QName cast from string requires namespace context
 	if targetType == TypeQName {
 		_, castErr := castToQName(av, ec)
+		return SingleBoolean(castErr == nil), nil
+	}
+	// xs:numeric is a union type
+	if targetType == TypeNumeric {
+		if av.IsNumeric() {
+			return SingleBoolean(true), nil
+		}
+		_, castErr := CastAtomic(av, TypeDouble)
 		return SingleBoolean(castErr == nil), nil
 	}
 	_, castErr := CastAtomic(av, targetType)

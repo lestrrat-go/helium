@@ -449,9 +449,9 @@ query
 func TestQT3_app_UseCaseJSON(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
-		{Name: "UseCaseJSON-001", XPath: "json-doc(\"mildred.json\")?phone?*[?type = 'mobile']?number", Assertions: []qt3Assertion{qt3AssertStringValue("07356 740756")}},
+		{Name: "UseCaseJSON-001", XPath: "json-doc(\"mildred.json\")?phone?*[?type = 'mobile']?number", NeedsHTTP: true, ResourceMap: map[string]string{"mildred.json": "app/UseCaseJSON/mildred.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("07356 740756")}},
 		{Name: "UseCaseJSON-007", XPath: `let $sats := json-doc("satellites.json")("satellites")
-        return map { "visible" : array { map:keys($sats)[$sats(.)("visible")] }, "invisible" : array { map:keys($sats)[not($sats(.)("visible"))] } }`, Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckDeepEq("map { \"visible\" : [ \"AJISAI (EGS)\", \"AKARI (ASTRO-F)\" ], \"invisible\" : [ \"AAU CUBESAT\" ] }"), qt3CheckDeepEq("map { \"visible\" : [ \"AKARI (ASTRO-F)\" , \"AJISAI (EGS)\"], \"invisible\" : [ \"AAU CUBESAT\" ] }"))}},
+        return map { "visible" : array { map:keys($sats)[$sats(.)("visible")] }, "invisible" : array { map:keys($sats)[not($sats(.)("visible"))] } }`, NeedsHTTP: true, ResourceMap: map[string]string{"satellites.json": "app/UseCaseJSON/satellites.json"}, Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckDeepEq("map { \"visible\" : [ \"AJISAI (EGS)\", \"AKARI (ASTRO-F)\" ], \"invisible\" : [ \"AAU CUBESAT\" ] }"), qt3CheckDeepEq("map { \"visible\" : [ \"AKARI (ASTRO-F)\" , \"AJISAI (EGS)\"], \"invisible\" : [ \"AAU CUBESAT\" ] }"))}},
 		{Name: "UseCaseJSON-008", XPath: `array {
           for $page in doc($uri)//page
           return map {
@@ -466,7 +466,7 @@ func TestQT3_app_UseCaseJSON(t *testing.T) {
 				return
 				if ($entry?*("app$control")("yt$state")("name") = "restricted")
 				  then map:remove($feed, "entry")
-				  else $feed`, Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Assertions: []qt3Assertion{qt3AssertDeepEq("map {\"author\" : [map {\"name\" : map {\"$t\" : \"YouTube\"}, \"uri\" : map {\"$t\" : \"http://www.youtube.com/\"}}], \"category\" : [map {\"scheme\" : \"http://schemas.google.com/g/2005#kind\", \"term\" : \"http://gdata.youtube.com/schemas/2007#video\"}]}")}},
+				  else $feed`, NeedsHTTP: true, ResourceMap: map[string]string{"incoming.json": "app/UseCaseJSON/incoming.json"}, Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Assertions: []qt3Assertion{qt3AssertDeepEq("map {\"author\" : [map {\"name\" : map {\"$t\" : \"YouTube\"}, \"uri\" : map {\"$t\" : \"http://www.youtube.com/\"}}], \"category\" : [map {\"scheme\" : \"http://schemas.google.com/g/2005#kind\", \"term\" : \"http://gdata.youtube.com/schemas/2007#video\"}]}")}},
 	})
 }
 
@@ -476,7 +476,7 @@ func TestQT3_app_UseCaseNLP(t *testing.T) {
 		{Name: "UseCaseNLP-003", XPath: `array {
             for $w in json-doc('speech-representation.json')?*
             return map { "pos" : $w(2), "lemma" : $w(1) }
-          }`, Assertions: []qt3Assertion{qt3AssertDeepEq(`[ map { "pos" : "DT", "lemma" : "A" }, 
+          }`, NeedsHTTP: true, ResourceMap: map[string]string{"speech-representation.json": "app/UseCaseNLP/speech-representation.json"}, Assertions: []qt3Assertion{qt3AssertDeepEq(`[ map { "pos" : "DT", "lemma" : "A" }, 
         	  map { "pos" : "NN", "lemma" : "bride" }, 
         	  map { "pos" : ",", "lemma" : "," }, 
         	  map { "pos" : "PRP", "lemma" : "you" }, 

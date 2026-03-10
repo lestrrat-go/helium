@@ -29,9 +29,11 @@ type qt3Check func(seq xpath3.Sequence) bool
 type qt3Test struct {
 	Name        string
 	XPath       string
-	DocPath     string // relative to qt3TestDataDir(); empty = no context document
+	DocPath     string            // relative to qt3TestDataDir(); empty = no context document
 	Namespaces  map[string]string
-	BaseURI     string // static base URI for fn:unparsed-text etc.
+	BaseURI     string            // static base URI for fn:unparsed-text etc.
+	NeedsHTTP   bool              // test requires HTTP client (e.g. fn:json-doc with URL)
+	ResourceMap map[string]string // URI → file path (relative to qt3TestDataDir()) for resource resolution
 	Skip        string
 	ExpectError bool
 	AcceptError bool // error is acceptable but not required (any-of with error + non-error)
@@ -44,12 +46,20 @@ type qt3Test struct {
 
 func qt3RunTests(t *testing.T, tests []qt3Test) {
 	t.Helper()
-	var httpClient *http.Client
+	// Collect resource mappings and determine if HTTP server is needed
+	resourceMap := make(map[string]string)
+	needsHTTP := false
 	for _, tc := range tests {
-		if tc.BaseURI != "" {
-			httpClient = qt3NewTestServer(t)
-			break
+		if tc.BaseURI != "" || tc.NeedsHTTP {
+			needsHTTP = true
 		}
+		for uri, path := range tc.ResourceMap {
+			resourceMap[uri] = path
+		}
+	}
+	var httpClient *http.Client
+	if needsHTTP {
+		httpClient = qt3NewTestServer(t, resourceMap)
 	}
 	for _, tc := range tests {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -475,19 +485,48 @@ func qt3FormatSeq(seq xpath3.Sequence) string {
 }
 
 // qt3Handler returns an http.Handler that serves QT3 test resource files.
-// It maps URL paths under /fots/ to files under testdata/qt3ts/source/fn/.
-func qt3Handler() http.Handler {
-	_, f, _, _ := runtime.Caller(0)
-	sourceDir := filepath.Join(filepath.Dir(f), "..", "testdata", "qt3ts", "source", "fn")
-	return http.StripPrefix("/fots/", http.FileServer(http.Dir(sourceDir)))
+// It maps:
+//   - /fots/* → testdata/qt3ts/testdata/fn/* (for unparsed-text etc.)
+//   - Resource URIs → local files via resourceMap
+func qt3Handler(resourceMap map[string]string) http.Handler {
+	dataDir := qt3TestDataDir()
+	fotsDir := filepath.Join(dataDir, "fn")
+	// Build a path-based lookup from the resource map.
+	// resourceMap keys are full URIs (e.g., "http://www.w3.org/qt3/json/data004-json").
+	// We extract the URL path and map it to a local file.
+	pathMap := make(map[string]string)
+	for uri, relPath := range resourceMap {
+		// Extract the path portion from the URI
+		idx := strings.Index(uri, "://")
+		if idx >= 0 {
+			rest := uri[idx+3:]
+			slashIdx := strings.Index(rest, "/")
+			if slashIdx >= 0 {
+				pathMap[rest[slashIdx:]] = filepath.Join(dataDir, relPath)
+			}
+		}
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check resource map first
+		if filePath, ok := pathMap[r.URL.Path]; ok {
+			http.ServeFile(w, r, filePath)
+			return
+		}
+		// Fallback: /fots/ prefix for unparsed-text resources
+		if strings.HasPrefix(r.URL.Path, "/fots/") {
+			http.StripPrefix("/fots/", http.FileServer(http.Dir(fotsDir))).ServeHTTP(w, r)
+			return
+		}
+		http.NotFound(w, r)
+	})
 }
 
 // qt3NewTestServer creates an httptest.Server with the QT3 handler and
 // returns an HTTP client whose transport routes all requests (regardless
 // of hostname) to that server.
-func qt3NewTestServer(t *testing.T) *http.Client {
+func qt3NewTestServer(t *testing.T, resourceMap map[string]string) *http.Client {
 	t.Helper()
-	srv := httptest.NewServer(qt3Handler())
+	srv := httptest.NewServer(qt3Handler(resourceMap))
 	t.Cleanup(srv.Close)
 	return &http.Client{
 		Transport: &http.Transport{

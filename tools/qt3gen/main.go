@@ -62,9 +62,15 @@ type environment struct {
 	Name          string          `xml:"name,attr"`
 	Ref           string          `xml:"ref,attr"`
 	Sources       []source        `xml:"source"`
+	Resources     []resource      `xml:"resource"`
 	Namespaces    []namespace     `xml:"namespace"`
 	Params        []param         `xml:"param"`
 	StaticBaseURI *staticBaseURI  `xml:"static-base-uri"`
+}
+
+type resource struct {
+	File string `xml:"file,attr"`
+	URI  string `xml:"uri,attr"`
 }
 
 type source struct {
@@ -133,6 +139,7 @@ func main() {
 
 	var allTests []generatedTest
 	docFiles := make(map[string]bool)
+	resourceFiles := make(map[string]bool)
 
 	for _, tsRef := range cat.TestSets {
 		tsFile := filepath.Join(sourceDir, tsRef.File)
@@ -195,6 +202,26 @@ func main() {
 				baseURI = env.StaticBaseURI.URI
 			}
 
+			// Detect resource environments (e.g., fn:json-doc tests with URI-mapped files)
+			needsHTTP := false
+			var resMap map[string]string
+			if env != nil && len(env.Resources) > 0 {
+				needsHTTP = true
+				resMap = make(map[string]string)
+				for _, res := range env.Resources {
+					if res.File != "" && res.URI != "" {
+						var resPath string
+						if envIsGlobal {
+							resPath = res.File
+						} else {
+							resPath = filepath.Join(tsDir, res.File)
+						}
+						resourceFiles[resPath] = true
+						resMap[res.URI] = resPath
+					}
+				}
+			}
+
 			allTests = append(allTests, generatedTest{
 				SetName:        tsRef.Name,
 				CaseName:       tc.Name,
@@ -202,6 +229,8 @@ func main() {
 				ContextDocPath: contextDocPath,
 				Namespaces:     collectNamespaces(env),
 				BaseURI:        baseURI,
+				NeedsHTTP:      needsHTTP,
+				ResourceMap:    resMap,
 				Assertions:     assertions,
 				SkipReason:     skipReason,
 			})
@@ -215,6 +244,17 @@ func main() {
 		dstFull := filepath.Join(docsDir, docPath)
 		if err := copyFile(srcFull, dstFull); err != nil {
 			log.Printf("warning: copying %s: %v", docPath, err)
+			continue
+		}
+		copied++
+	}
+
+	// Copy resource files (for fn:json-doc etc.)
+	for resPath := range resourceFiles {
+		srcFull := filepath.Join(sourceDir, resPath)
+		dstFull := filepath.Join(docsDir, resPath)
+		if err := copyFile(srcFull, dstFull); err != nil {
+			log.Printf("warning: copying resource %s: %v", resPath, err)
 			continue
 		}
 		copied++
@@ -401,7 +441,7 @@ func getTestCaseSkipReason(setName, caseName string) string {
 		"fn-unparsed-text-available-010", "fn-unparsed-text-available-012",
 		"fn-unparsed-text-lines-012":
 		return "requires static typing"
-	}
+}
 	return ""
 }
 
@@ -409,8 +449,6 @@ func getTestSetSkipReason(name string) string {
 	switch name {
 	case "fn-id", "fn-idref":
 		return "requires DTD ID/IDREF typing"
-	case "fn-json-doc":
-		return "requires URI resolution"
 	case "fn-doc", "fn-doc-available":
 		return "requires URI resolution"
 	case "fn-json-to-xml", "fn-xml-to-json":
@@ -534,6 +572,8 @@ type generatedTest struct {
 	ContextDocPath string
 	Namespaces     map[string]string
 	BaseURI        string
+	NeedsHTTP      bool
+	ResourceMap    map[string]string // URI → file path relative to testdata dir
 	Assertions     []assertion
 	SkipReason     string
 }
@@ -581,6 +621,20 @@ func generateTestFile(tests []generatedTest) string {
 			}
 			if tc.BaseURI != "" {
 				fmt.Fprintf(&b, ", BaseURI: %q", tc.BaseURI)
+			}
+			if tc.NeedsHTTP {
+				b.WriteString(", NeedsHTTP: true")
+			}
+			if len(tc.ResourceMap) > 0 {
+				b.WriteString(", ResourceMap: map[string]string{")
+				keys := sortedKeys(tc.ResourceMap)
+				for i, k := range keys {
+					if i > 0 {
+						b.WriteString(", ")
+					}
+					fmt.Fprintf(&b, "%q: %q", k, tc.ResourceMap[k])
+				}
+				b.WriteString("}")
 			}
 			if len(tc.Namespaces) > 0 {
 				b.WriteString(", Namespaces: map[string]string{")

@@ -241,7 +241,11 @@ func makeXSStringRestriction(typeName string, validate *regexp.Regexp) func(cont
 		if err != nil {
 			return nil, err
 		}
-		s = strings.TrimSpace(s)
+		if typeName == TypeNormalizedString {
+			s = normalizeWhitespace(s)
+		} else {
+			s = collapseWhitespace(s)
+		}
 		if validate != nil && !validate.MatchString(s) {
 			return nil, &XPathError{
 				Code:    "FORG0001",
@@ -486,7 +490,10 @@ func makeXSDateTimeStamp() func(context.Context, []Sequence) (Sequence, error) {
 	}
 }
 
-func fnXSError(_ context.Context, _ []Sequence) (Sequence, error) {
+func fnXSError(_ context.Context, args []Sequence) (Sequence, error) {
+	if len(args[0]) == 0 {
+		return nil, nil
+	}
 	return nil, &XPathError{
 		Code:    "FORG0001",
 		Message: "xs:error always fails",
