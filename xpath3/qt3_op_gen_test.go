@@ -2038,56 +2038,6 @@ func TestQT3_op_node_before(t *testing.T) {
 	})
 }
 
-func TestQT3_op_NOTATION_equal(t *testing.T) {
-	t.Parallel()
-	qt3RunTests(t, []qt3Test{
-		{Name: "Comp-notation-1", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         fn:not(exactly-one(//*:NOTATION1[1]) eq exactly-one(//*:NOTATION3[1]))`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "Comp-notation-2", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         exactly-one(//*:NOTATION1[1]) eq exactly-one(//*:NOTATION2[1])`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue(), qt3CheckFalse())}},
-		{Name: "Comp-notation-3", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         exactly-one(//*:NOTATION1[1]) eq exactly-one(//*:NOTATION4[1])`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "Comp-notation-4", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         exactly-one(//*:NOTATION1[1]) ne exactly-one(//*:NOTATION3[1])`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "Comp-notation-5", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         exactly-one(//*:NOTATION1[1]) ne exactly-one(//*:NOTATION2[1])`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "Comp-notation-6", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         exactly-one(//*:NOTATION1[1]) ne exactly-one(//*:NOTATION4[1])`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "Comp-notation-7", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         fn:not(exactly-one(//*:NOTATION1[1]) eq exactly-one(//*:NOTATION3[1]))`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "Comp-notation-8", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         fn:not(exactly-one(//*:NOTATION1[1]) eq exactly-one(//*:NOTATION2[1]))`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "Comp-notation-9", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         fn:not(exactly-one(//*:NOTATION1[1]) ne exactly-one(//*:NOTATION3[1]))`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "Comp-notation-10", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         fn:not(exactly-one(//*:NOTATION1[1]) ne exactly-one(//*:NOTATION2[1]))`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "Comp-notation-11", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         fn:boolean(exactly-one(//*:NOTATION1[1]) eq exactly-one(//*:NOTATION2[1]))`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "Comp-notation-12", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         fn:boolean(exactly-one(//*:NOTATION1[1]) ne exactly-one(//*:NOTATION2[1]))`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "Comp-notation-13", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         (exactly-one(//*:NOTATION1[1]) eq exactly-one(//*:NOTATION2[1])) and fn:true()`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "Comp-notation-14", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         (exactly-one(//*:NOTATION1[1]) ne exactly-one(//*:NOTATION2[1])) and fn:true()`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "Comp-notation-15", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         (exactly-one(//*:NOTATION1[1]) eq exactly-one(//*:NOTATION2[1])) or fn:true()`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "Comp-notation-16", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         (exactly-one(//*:NOTATION1[1]) ne exactly-one(//*:NOTATION2[1])) or fn:true()`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "Comp-notation-17", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         (exactly-one(//*:NOTATION1[1]) eq exactly-one(//*:NOTATION2[1])) and fn:false()`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "Comp-notation-18", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         (exactly-one(//*:NOTATION1[1]) ne exactly-one(//*:NOTATION2[1])) and fn:false()`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "Comp-notation-19", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         (exactly-one(//*:NOTATION1[1]) eq exactly-one(//*:NOTATION2[1])) or fn:false()`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "Comp-notation-20", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         (exactly-one(//*:NOTATION1[1]) ne exactly-one(//*:NOTATION2[1])) or fn:false()`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "Comp-notation-21", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         exactly-one(//*:NOTATION1[1]) eq exactly-one(//*:NOTATION2[1])`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "Comp-notation-22", XPath: `import schema namespace myns="http://www.example.com/notation"; 
-         exactly-one(//*:NOTATION1[1]) ne exactly-one(//*:NOTATION2[1])`, DocPath: "op/NOTATION-equal/notation.xml", Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckFalse(), qt3CheckTrue())}},
-	})
-}
-
 func TestQT3_op_numeric_add(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{

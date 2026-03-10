@@ -49,6 +49,7 @@ type testSetRef struct {
 
 type testSetFile struct {
 	Name         string        `xml:"name,attr"`
+	Dependencies []dependency  `xml:"dependency"`
 	Environments []environment `xml:"environment"`
 	TestCases    []testCase    `xml:"test-case"`
 }
@@ -138,12 +139,18 @@ func main() {
 			localEnvs[ts.Environments[i].Name] = &ts.Environments[i]
 		}
 
+		// Skip entire test set if it requires XQuery at the set level
+		if !isXPathApplicable(ts.Dependencies) {
+			continue
+		}
+
 		for _, tc := range ts.TestCases {
-			if !isXPathApplicable(tc.Dependencies) {
+			mergedDeps := mergeDeps(ts.Dependencies, tc.Dependencies)
+			if !isXPathApplicable(mergedDeps) {
 				continue
 			}
 
-			skipReason := getSkipReason(tc.Dependencies)
+			skipReason := getSkipReason(mergedDeps)
 			env, envIsGlobal := resolveEnvironment(tc.Environment, localEnvs, globalEnvs)
 
 			if env != nil {
@@ -273,6 +280,29 @@ func parseTestSet(path string) *testSetFile {
 // ──────────────────────────────────────────────────────────────────────
 // Spec filtering
 // ──────────────────────────────────────────────────────────────────────
+
+// mergeDeps combines test-set-level and test-case-level dependencies.
+// If a test case has its own spec dependency, it takes precedence over the
+// test-set-level spec dependency. Other dependency types are concatenated.
+func mergeDeps(setDeps, caseDeps []dependency) []dependency {
+	caseHasSpec := false
+	for _, d := range caseDeps {
+		if d.Type == "spec" {
+			caseHasSpec = true
+			break
+		}
+	}
+
+	merged := make([]dependency, 0, len(setDeps)+len(caseDeps))
+	for _, d := range setDeps {
+		if d.Type == "spec" && caseHasSpec {
+			continue // test-case spec overrides test-set spec
+		}
+		merged = append(merged, d)
+	}
+	merged = append(merged, caseDeps...)
+	return merged
+}
 
 func isXPathApplicable(deps []dependency) bool {
 	hasSpecDep := false
