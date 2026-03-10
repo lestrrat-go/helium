@@ -167,14 +167,16 @@ func partialApply(ec *evalContext, e FunctionCall, fixedArgs []Sequence) (Sequen
 		Arity: len(placeholderIndices),
 		Name:  e.Name,
 		Invoke: func(ctx context.Context, partialArgs []Sequence) (Sequence, error) {
+			if len(partialArgs) != len(placeholderIndices) {
+				return nil, &XPathError{
+					Code:    "XPTY0004",
+					Message: fmt.Sprintf("arity mismatch in partial application: expected %d arguments, got %d", len(placeholderIndices), len(partialArgs)),
+				}
+			}
 			fullArgs := make([]Sequence, len(e.Args))
 			copy(fullArgs, fixedArgs)
-			pi := 0
-			for _, idx := range placeholderIndices {
-				if pi < len(partialArgs) {
-					fullArgs[idx] = partialArgs[pi]
-					pi++
-				}
+			for pi, idx := range placeholderIndices {
+				fullArgs[idx] = partialArgs[pi]
 			}
 			return fn.Call(ctx, fullArgs)
 		},

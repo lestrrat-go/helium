@@ -51,7 +51,7 @@ type Context struct {
 type ContextOption func(*Context)
 
 func WithNamespaces(ns map[string]string) ContextOption
-func WithVariables(vars map[string]any) ContextOption    // any: Sequence|[]helium.Node|string|float64|bool
+func WithVariables(vars map[string]Sequence) ContextOption
 func WithOpLimit(limit int) ContextOption
 func WithFunctions(fns map[string]Function) ContextOption
 func WithFunctionsNS(fns map[QualifiedName]Function) ContextOption
@@ -95,7 +95,7 @@ All sentinel errors prefixed `xpath3:`. Wrap with `fmt.Errorf("%w: detail", ErrS
 
 ```go
 type XPathError struct {
-    Code    string    // e.g. "err:FOER0000", "err:XPTY0004"
+    Code    string    // e.g. "XPTY0004", "FOER0000" (without err: prefix)
     Message string
     Value   Sequence  // optional attached value
 }

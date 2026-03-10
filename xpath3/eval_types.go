@@ -90,6 +90,10 @@ func evalTreatAsExpr(ec *evalContext, e TreatAsExpr) (Sequence, error) {
 	return seq, nil
 }
 
+// resolveAtomicTypeName maps an AtomicTypeName to an internal xs:-prefixed type string.
+// Per XPath 3.1, unprefixed type names in cast/instance-of default to the xs: namespace.
+// This is a pragmatic simplification; a strict implementation would require checking
+// the default element namespace and raising XPST0081 if it is not XSD.
 func resolveAtomicTypeName(tn AtomicTypeName, ec *evalContext) string {
 	if tn.Prefix == "" {
 		return "xs:" + tn.Name

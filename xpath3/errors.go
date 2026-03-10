@@ -28,7 +28,7 @@ var (
 // XPathError is a structured error with an XPath error code.
 // Codes are stored without namespace prefix (e.g. "XPTY0004", not "err:XPTY0004").
 type XPathError struct {
-	Code    string // e.g. "FOER0000", "XPTY0004"
+	Code    string // e.g. "XPTY0004", "FOER0000" (without err: prefix)
 	Message string
 }
 

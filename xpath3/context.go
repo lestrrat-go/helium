@@ -38,8 +38,7 @@ func WithNamespaces(ns map[string]string) ContextOption {
 	}
 }
 
-// WithVariables binds variable names to values.
-// Supported value types: Sequence, []helium.Node, string, float64, int64, bool.
+// WithVariables binds variable names to pre-constructed Sequence values.
 func WithVariables(vars map[string]Sequence) ContextOption {
 	return func(c *Context) {
 		c.variables = vars

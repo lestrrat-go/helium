@@ -111,7 +111,7 @@ func (ec *evalContext) getImplicitTimezone() *time.Location {
 	if ec.implicitTimezone != nil {
 		return ec.implicitTimezone
 	}
-	return time.Now().Location()
+	return time.Local
 }
 
 func (ec *evalContext) withVar(name string, val Sequence) *evalContext {
