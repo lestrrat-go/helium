@@ -339,10 +339,10 @@ func (p *parser) parseCastAsExpr() (Expr, error) {
 	return left, nil
 }
 
-// parseArrowExpr parses → SimpleMapExpr ('=>' ArrowFunctionSpecifier ArgumentList)*.
+// parseArrowExpr parses → UnaryExpr ('=>' ArrowFunctionSpecifier ArgumentList)*.
 // Desugared: $x => f(a, b) becomes f($x, a, b).
 func (p *parser) parseArrowExpr() (Expr, error) {
-	left, err := p.parseSimpleMapExpr()
+	left, err := p.parseUnaryExpr()
 	if err != nil {
 		return nil, err
 	}
@@ -409,26 +409,11 @@ func (p *parser) parseArrowTarget() (Expr, string, string, error) {
 	return nil, "", "", fmt.Errorf("%w: arrow function target but got %s", ErrExpectedToken, tok)
 }
 
-// parseSimpleMapExpr parses → UnaryExpr ('!' UnaryExpr)*.
-func (p *parser) parseSimpleMapExpr() (Expr, error) {
-	left, err := p.parseUnaryExpr()
-	if err != nil {
-		return nil, err
-	}
-	for p.lexer.Peek().Type == TokenBang {
-		p.lexer.Next()
-		right, err := p.parseUnaryExpr()
-		if err != nil {
-			return nil, err
-		}
-		left = SimpleMapExpr{Left: left, Right: right}
-	}
-	return left, nil
-}
-
-// parseUnaryExpr parses → ('-' | '+')* PathExpr.
+// parseUnaryExpr parses → ('-' | '+')* ValueExpr.
+// ValueExpr ::= SimpleMapExpr.
 func (p *parser) parseUnaryExpr() (Expr, error) {
 	negate := 0
+	hasUnary := false
 loop:
 	for {
 		tok := p.lexer.Peek()
@@ -436,21 +421,41 @@ loop:
 		case TokenMinus:
 			p.lexer.Next()
 			negate++
+			hasUnary = true
 		case TokenPlus:
 			p.lexer.Next()
-			// unary + is a no-op
+			hasUnary = true
+			// unary + is a no-op for negate count but still marks as having unary
 		default:
 			break loop
 		}
 	}
-	expr, err := p.parsePathExpr()
+	expr, err := p.parseSimpleMapExpr()
 	if err != nil {
 		return nil, err
 	}
+	_ = hasUnary
 	for i := 0; i < negate; i++ {
 		expr = UnaryExpr{Operand: expr}
 	}
 	return expr, nil
+}
+
+// parseSimpleMapExpr parses → PathExpr ('!' PathExpr)*.
+func (p *parser) parseSimpleMapExpr() (Expr, error) {
+	left, err := p.parsePathExpr()
+	if err != nil {
+		return nil, err
+	}
+	for p.lexer.Peek().Type == TokenBang {
+		p.lexer.Next()
+		right, err := p.parsePathExpr()
+		if err != nil {
+			return nil, err
+		}
+		left = SimpleMapExpr{Left: left, Right: right}
+	}
+	return left, nil
 }
 
 // parsePathExpr → LocationPath | PostfixExpr (('/' | '//') RelativeLocationPath)?

@@ -20,12 +20,12 @@ func TestAtomicValueAccessors(t *testing.T) {
 		v := xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(42)}
 		require.Equal(t, int64(42), v.IntegerVal())
 		require.True(t, v.IsNumeric())
-		require.Equal(t, float64(42), v.ToFloat64())
+		require.InDelta(t, float64(42), v.ToFloat64(), 0)
 	})
 
 	t.Run("double", func(t *testing.T) {
-		v := xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: 3.14}
-		require.Equal(t, 3.14, v.DoubleVal())
+		v := xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(3.14)}
+		require.InDelta(t, 3.14, v.DoubleVal(), 1e-9)
 		require.True(t, v.IsNumeric())
 	})
 

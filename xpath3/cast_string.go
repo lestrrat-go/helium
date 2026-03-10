@@ -31,29 +31,51 @@ func atomicToString(v AtomicValue) (string, error) {
 		TypeNormalizedString, TypeToken, TypeLanguage, TypeName, TypeNCName,
 		TypeNMTOKEN, TypeNMTOKENS, TypeENTITY, TypeID, TypeIDREF, TypeIDREFS,
 		TypeGDay, TypeGMonth, TypeGMonthDay, TypeGYear, TypeGYearMonth:
-		return v.Value.(string), nil
+		s, ok := v.Value.(string)
+		if !ok {
+			return "", fmt.Errorf("xpath3: internal error: expected string value for %s", v.TypeName)
+		}
+		return s, nil
 	case TypeInteger,
 		TypeLong, TypeInt, TypeShort, TypeByte,
 		TypeUnsignedLong, TypeUnsignedInt, TypeUnsignedShort, TypeUnsignedByte,
 		TypeNonNegativeInteger, TypeNonPositiveInteger,
 		TypePositiveInteger, TypeNegativeInteger:
-		return v.Value.(*big.Int).String(), nil
+		n, ok := v.Value.(*big.Int)
+		if !ok {
+			return "", fmt.Errorf("xpath3: internal error: expected *big.Int value for %s", v.TypeName)
+		}
+		return n.String(), nil
 	case TypeDecimal:
-		return DecimalToString(v.Value.(*big.Rat)), nil
+		r, ok := v.Value.(*big.Rat)
+		if !ok {
+			return "", fmt.Errorf("xpath3: internal error: expected *big.Rat value for %s", v.TypeName)
+		}
+		return DecimalToString(r), nil
 	case TypeDouble:
-		return formatXPathDouble(v.Value.(float64)), nil
+		return formatXPathDouble(v.FloatVal().Float64()), nil
 	case TypeFloat:
-		return formatXPathFloat(v.Value.(float64)), nil
+		return formatXPathFloat(v.FloatVal().Float64()), nil
 	case TypeBoolean:
-		if v.Value.(bool) {
+		b, ok := v.Value.(bool)
+		if !ok {
+			return "", fmt.Errorf("xpath3: internal error: expected bool value for %s", v.TypeName)
+		}
+		if b {
 			return "true", nil
 		}
 		return "false", nil
 	case TypeDate:
-		t := v.Value.(time.Time)
+		t, ok := v.Value.(time.Time)
+		if !ok {
+			return "", fmt.Errorf("xpath3: internal error: expected time.Time value for %s", v.TypeName)
+		}
 		return fmt.Sprintf("%s-%02d-%02d%s", formatXSDYear(t.Year()), t.Month(), t.Day(), formatXSDTimezone(t)), nil
 	case TypeDateTime:
-		t := v.Value.(time.Time)
+		t, ok := v.Value.(time.Time)
+		if !ok {
+			return "", fmt.Errorf("xpath3: internal error: expected time.Time value for %s", v.TypeName)
+		}
 		s := fmt.Sprintf("%s-%02d-%02dT%02d:%02d:%02d", formatXSDYear(t.Year()), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
 		if ns := t.Nanosecond(); ns > 0 {
 			frac := fmt.Sprintf(".%09d", ns)
@@ -61,7 +83,10 @@ func atomicToString(v AtomicValue) (string, error) {
 		}
 		return s + formatXSDTimezone(t), nil
 	case TypeTime:
-		t := v.Value.(time.Time)
+		t, ok := v.Value.(time.Time)
+		if !ok {
+			return "", fmt.Errorf("xpath3: internal error: expected time.Time value for %s", v.TypeName)
+		}
 		s := fmt.Sprintf("%02d:%02d:%02d", t.Hour(), t.Minute(), t.Second())
 		if ns := t.Nanosecond(); ns > 0 {
 			frac := fmt.Sprintf(".%09d", ns)
@@ -69,13 +94,28 @@ func atomicToString(v AtomicValue) (string, error) {
 		}
 		return s + formatXSDTimezone(t), nil
 	case TypeDuration, TypeDayTimeDuration, TypeYearMonthDuration:
-		return formatDuration(v.Value.(Duration)), nil
+		d, ok := v.Value.(Duration)
+		if !ok {
+			return "", fmt.Errorf("xpath3: internal error: expected Duration value for %s", v.TypeName)
+		}
+		return formatDuration(d), nil
 	case TypeBase64Binary:
-		return base64.StdEncoding.EncodeToString(v.Value.([]byte)), nil
+		b, ok := v.Value.([]byte)
+		if !ok {
+			return "", fmt.Errorf("xpath3: internal error: expected []byte value for %s", v.TypeName)
+		}
+		return base64.StdEncoding.EncodeToString(b), nil
 	case TypeHexBinary:
-		return strings.ToUpper(hex.EncodeToString(v.Value.([]byte))), nil
+		b, ok := v.Value.([]byte)
+		if !ok {
+			return "", fmt.Errorf("xpath3: internal error: expected []byte value for %s", v.TypeName)
+		}
+		return strings.ToUpper(hex.EncodeToString(b)), nil
 	case TypeQName:
-		q := v.Value.(QNameValue)
+		q, ok := v.Value.(QNameValue)
+		if !ok {
+			return "", fmt.Errorf("xpath3: internal error: expected QNameValue for %s", v.TypeName)
+		}
 		if q.Prefix != "" {
 			return q.Prefix + ":" + q.Local, nil
 		}
@@ -232,7 +272,7 @@ func formatXSDYear(year int) string {
 
 func parseXPathDouble(s string) (float64, error) {
 	switch s {
-	case "INF":
+	case "INF", "+INF":
 		return math.Inf(1), nil
 	case "-INF":
 		return math.Inf(-1), nil

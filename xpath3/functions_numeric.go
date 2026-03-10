@@ -2,7 +2,6 @@ package xpath3
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"math/big"
 
@@ -31,7 +30,7 @@ func promoteToNumeric(item Item) (AtomicValue, error) {
 		return castToDouble(a)
 	}
 	if !a.IsNumeric() {
-		return a, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("expected numeric type, got %s", a.TypeName)}
+		return a, &XPathError{Code: "XPTY0004", Message: "expected numeric type, got " + a.TypeName}
 	}
 	return a, nil
 }
@@ -52,9 +51,9 @@ func fnAbs(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	f := a.ToFloat64()
 	if math.IsNaN(f) || math.IsInf(f, 0) || f == 0 {
-		return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: f}), nil
+		return SingleAtomic(a), nil
 	}
-	return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: math.Abs(f)}), nil
+	return SingleAtomic(makeFloatResult(a.TypeName, math.Abs(f))), nil
 }
 
 func fnCeiling(_ context.Context, args []Sequence) (Sequence, error) {
@@ -73,9 +72,9 @@ func fnCeiling(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	f := a.ToFloat64()
 	if math.IsNaN(f) || math.IsInf(f, 0) || f == 0 {
-		return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: f}), nil
+		return SingleAtomic(a), nil
 	}
-	return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: math.Ceil(f)}), nil
+	return SingleAtomic(makeFloatResult(a.TypeName, math.Ceil(f))), nil
 }
 
 func fnFloor(_ context.Context, args []Sequence) (Sequence, error) {
@@ -94,9 +93,9 @@ func fnFloor(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	f := a.ToFloat64()
 	if math.IsNaN(f) || math.IsInf(f, 0) || f == 0 {
-		return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: f}), nil
+		return SingleAtomic(a), nil
 	}
-	return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: math.Floor(f)}), nil
+	return SingleAtomic(makeFloatResult(a.TypeName, math.Floor(f))), nil
 }
 
 func fnRound(_ context.Context, args []Sequence) (Sequence, error) {
@@ -115,14 +114,14 @@ func fnRound(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	n := a.ToFloat64()
 	if math.IsNaN(n) || math.IsInf(n, 0) || n == 0 {
-		return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: n}), nil
+		return SingleAtomic(a), nil
 	}
 	// XPath round: round half towards positive infinity
 	r := math.Floor(n + 0.5)
 	if r == 0 && n < 0 {
 		r = math.Copysign(0, -1)
 	}
-	return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: r}), nil
+	return SingleAtomic(makeFloatResult(a.TypeName, r)), nil
 }
 
 func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
@@ -153,10 +152,10 @@ func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	n := a.ToFloat64()
 	if math.IsNaN(n) || math.IsInf(n, 0) || n == 0 {
-		return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: n}), nil
+		return SingleAtomic(a), nil
 	}
 	scale := math.Pow(10, float64(precision))
-	return SingleAtomic(AtomicValue{TypeName: a.TypeName, Value: math.RoundToEven(n*scale) / scale}), nil
+	return SingleAtomic(makeFloatResult(a.TypeName, math.RoundToEven(n*scale)/scale)), nil
 }
 
 func fnFormatNumber(_ context.Context, args []Sequence) (Sequence, error) {

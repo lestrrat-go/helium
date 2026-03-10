@@ -228,7 +228,9 @@ func (l *lexer) tokenize() error {
 			case l.pos < len(l.input) && l.input[l.pos] >= '0' && l.input[l.pos] <= '9':
 				// .5 style number
 				l.pos-- // back to the dot
-				l.scanNumber()
+				if err := l.scanNumber(); err != nil {
+					return err
+				}
 			default:
 				l.emit(TokenDot, ".")
 			}
@@ -269,7 +271,9 @@ func (l *lexer) tokenize() error {
 			}
 			l.emit(TokenString, s)
 		case r >= '0' && r <= '9':
-			l.scanNumber()
+			if err := l.scanNumber(); err != nil {
+				return err
+			}
 		case isNCNameStart(r):
 			l.scanNameOrKeyword()
 		default:
@@ -366,7 +370,7 @@ func (l *lexer) scanString() (string, error) {
 	return "", fmt.Errorf("%w: starting at position %d", ErrUnterminatedString, start-1)
 }
 
-func (l *lexer) scanNumber() {
+func (l *lexer) scanNumber() error {
 	start := l.pos
 	for l.pos < len(l.input) && l.input[l.pos] >= '0' && l.input[l.pos] <= '9' {
 		l.pos++
@@ -387,7 +391,16 @@ func (l *lexer) scanNumber() {
 			l.pos++
 		}
 	}
+	// XPath 3.1 A.2.1: a numeric literal immediately followed by a name start
+	// character (letter, underscore) is a lexical error.
+	if l.pos < len(l.input) {
+		r, _ := utf8.DecodeRuneInString(l.input[l.pos:])
+		if isNCNameStart(r) {
+			return fmt.Errorf("%w: numeric literal immediately followed by name at position %d", ErrUnexpectedToken, start)
+		}
+	}
 	l.emit(TokenNumber, l.input[start:l.pos])
+	return nil
 }
 
 // scanNameOrKeyword scans an NCName and determines if it's a keyword or name.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"math"
 	"math/big"
 	"strings"
@@ -201,9 +202,14 @@ func (a AtomicValue) BigRat() *big.Rat {
 	return a.Value.(*big.Rat)
 }
 
-// DoubleVal returns the backing float64 value.
+// DoubleVal returns the backing float64 value (extracts from *FloatValue).
 func (a AtomicValue) DoubleVal() float64 {
-	return a.Value.(float64)
+	return a.Value.(*FloatValue).Float64()
+}
+
+// FloatVal returns the backing *FloatValue.
+func (a AtomicValue) FloatVal() *FloatValue {
+	return a.Value.(*FloatValue)
 }
 
 // BooleanVal returns the backing bool value.
@@ -246,14 +252,22 @@ func (a AtomicValue) IsNumeric() bool {
 // ToFloat64 converts any numeric atomic value to float64.
 func (a AtomicValue) ToFloat64() float64 {
 	if isIntegerDerived(a.TypeName) {
-		f, _ := new(big.Float).SetInt(a.Value.(*big.Int)).Float64()
+		n, ok := a.Value.(*big.Int)
+		if !ok {
+			return 0
+		}
+		f, _ := new(big.Float).SetInt(n).Float64()
 		return f
 	}
 	switch a.TypeName {
 	case TypeDouble, TypeFloat:
-		return a.Value.(float64)
+		return a.Value.(*FloatValue).Float64()
 	case TypeDecimal:
-		f, _ := a.Value.(*big.Rat).Float64()
+		r, ok := a.Value.(*big.Rat)
+		if !ok {
+			return 0
+		}
+		f, _ := r.Float64()
 		return f
 	}
 	return 0
@@ -419,9 +433,7 @@ func (m MapItem) Put(key AtomicValue, value Sequence) MapItem {
 	newEntries := make([]mapEntry, len(m.entries))
 	copy(newEntries, m.entries)
 	newIndex := make(map[mapKey]int, len(m.index)+1)
-	for k, v := range m.index {
-		newIndex[k] = v
-	}
+	maps.Copy(newIndex, m.index)
 
 	if idx, ok := newIndex[nk]; ok {
 		newEntries[idx] = mapEntry{key: key, value: value}

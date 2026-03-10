@@ -39,7 +39,7 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 	if isAbstractCastTarget(targetType) {
 		return AtomicValue{}, &XPathError{
 			Code:    "XPST0080",
-			Message: fmt.Sprintf("cannot cast to abstract type %s", targetType),
+			Message: "cannot cast to abstract type " + targetType,
 		}
 	}
 
@@ -228,11 +228,11 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 		if err != nil {
 			return AtomicValue{}, castError(s, targetType)
 		}
-		// Reject string values that overflow to infinity (but allow "INF"/"-INF" literals)
-		if math.IsInf(f, 0) && s != "INF" && s != "-INF" {
+		// Reject string values that overflow to infinity (but allow "INF"/"+INF"/"-INF" literals)
+		if math.IsInf(f, 0) && s != "INF" && s != "+INF" && s != "-INF" {
 			return AtomicValue{}, castError(s, targetType)
 		}
-		return AtomicValue{TypeName: TypeDouble, Value: f}, nil
+		return AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}, nil
 	case TypeFloat:
 		f, err := parseXPathDouble(s)
 		if err != nil {
@@ -245,7 +245,7 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 				return AtomicValue{}, castError(s, targetType)
 			}
 		}
-		return AtomicValue{TypeName: TypeFloat, Value: f}, nil
+		return AtomicValue{TypeName: TypeFloat, Value: NewFloat(f)}, nil
 	case TypeBoolean:
 		switch s {
 		case "true", "1":
@@ -343,7 +343,7 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 	}
 	return AtomicValue{}, &XPathError{
 		Code:    "XPTY0004",
-		Message: fmt.Sprintf("cannot cast string to %s", targetType),
+		Message: "cannot cast string to " + targetType,
 	}
 }
 

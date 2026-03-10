@@ -96,6 +96,7 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 	sumInt := new(big.Int)
 	sumRat := new(big.Rat)
 	var sumFloat float64
+	widest := TypeInteger
 
 	for _, a := range atoms {
 		if err := checkSumAvgType(a); err != nil {
@@ -105,6 +106,9 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 		family, err = checkAggregateHomogeneity(family, newFamily)
 		if err != nil {
 			return nil, err
+		}
+		if numericTypeWidth(a.TypeName) > numericTypeWidth(widest) {
+			widest = a.TypeName
 		}
 		if isIntegerDerived(a.TypeName) {
 			sumInt.Add(sumInt, a.BigInt())
@@ -136,7 +140,11 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 		f, _ := new(big.Float).SetInt(sumInt).Float64()
 		sumFloat = f
 	}
-	return SingleDouble(sumFloat / float64(count)), nil
+	avg := sumFloat / float64(count)
+	if widest == TypeFloat {
+		return SingleFloat(avg), nil
+	}
+	return SingleDouble(avg), nil
 }
 
 func avgDurations(seq Sequence, family string) (Sequence, error) {
@@ -176,7 +184,7 @@ func promoteForAggregate(a AtomicValue) AtomicValue {
 	if a.TypeName == TypeUntypedAtomic {
 		f, err := castToDouble(a)
 		if err != nil {
-			return AtomicValue{TypeName: TypeDouble, Value: math.NaN()}
+			return AtomicValue{TypeName: TypeDouble, Value: NewDouble(math.NaN())}
 		}
 		return f
 	}
@@ -193,9 +201,9 @@ func promoteResult(best AtomicValue, widest string) AtomicValue {
 	}
 	switch widest {
 	case TypeDouble:
-		return AtomicValue{TypeName: TypeDouble, Value: best.ToFloat64()}
+		return AtomicValue{TypeName: TypeDouble, Value: NewDouble(best.ToFloat64())}
 	case TypeFloat:
-		return AtomicValue{TypeName: TypeFloat, Value: best.ToFloat64()}
+		return AtomicValue{TypeName: TypeFloat, Value: NewFloat(best.ToFloat64())}
 	case TypeDecimal:
 		if isIntegerDerived(best.TypeName) {
 			return AtomicValue{TypeName: TypeDecimal, Value: new(big.Rat).SetInt(best.BigInt())}
@@ -249,8 +257,8 @@ func fnMax(_ context.Context, args []Sequence) (Sequence, error) {
 		if family == "numeric" && numericTypeWidth(a.TypeName) > numericTypeWidth(widest) {
 			widest = a.TypeName
 		}
-		if (a.TypeName == TypeDouble || a.TypeName == TypeFloat) && math.IsNaN(a.Value.(float64)) {
-			return SingleAtomic(AtomicValue{TypeName: TypeDouble, Value: math.NaN()}), nil
+		if (a.TypeName == TypeDouble || a.TypeName == TypeFloat) && a.FloatVal().IsNaN() {
+			return SingleAtomic(AtomicValue{TypeName: TypeDouble, Value: NewDouble(math.NaN())}), nil
 		}
 		if first {
 			best = a
@@ -303,8 +311,8 @@ func fnMin(_ context.Context, args []Sequence) (Sequence, error) {
 		if family == "numeric" && numericTypeWidth(a.TypeName) > numericTypeWidth(widest) {
 			widest = a.TypeName
 		}
-		if (a.TypeName == TypeDouble || a.TypeName == TypeFloat) && math.IsNaN(a.Value.(float64)) {
-			return SingleAtomic(AtomicValue{TypeName: TypeDouble, Value: math.NaN()}), nil
+		if (a.TypeName == TypeDouble || a.TypeName == TypeFloat) && a.FloatVal().IsNaN() {
+			return SingleAtomic(AtomicValue{TypeName: TypeDouble, Value: NewDouble(math.NaN())}), nil
 		}
 		if first {
 			best = a
@@ -382,6 +390,9 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	if allDecOrInt {
 		return SingleDecimal(sumRat), nil
+	}
+	if widest == TypeFloat {
+		return SingleFloat(sumFloat), nil
 	}
 	return SingleDouble(sumFloat), nil
 }

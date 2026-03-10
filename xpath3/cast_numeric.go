@@ -11,18 +11,19 @@ func castToDouble(v AtomicValue) (AtomicValue, error) {
 	case TypeDouble:
 		return v, nil
 	case TypeFloat:
-		return AtomicValue{TypeName: TypeDouble, Value: v.DoubleVal()}, nil
+		// Promote float to double precision (preserving the float32-precision value)
+		return AtomicValue{TypeName: TypeDouble, Value: NewDouble(v.DoubleVal())}, nil
 	case TypeInteger:
 		f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
-		return AtomicValue{TypeName: TypeDouble, Value: f}, nil
+		return AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}, nil
 	case TypeDecimal:
 		f, _ := v.BigRat().Float64()
-		return AtomicValue{TypeName: TypeDouble, Value: f}, nil
+		return AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}, nil
 	case TypeBoolean:
 		if v.BooleanVal() {
-			return AtomicValue{TypeName: TypeDouble, Value: float64(1)}, nil
+			return AtomicValue{TypeName: TypeDouble, Value: NewDouble(1)}, nil
 		}
-		return AtomicValue{TypeName: TypeDouble, Value: float64(0)}, nil
+		return AtomicValue{TypeName: TypeDouble, Value: NewDouble(0)}, nil
 	case TypeString, TypeUntypedAtomic:
 		return CastFromString(v.StringVal(), TypeDouble)
 	}
@@ -30,14 +31,13 @@ func castToDouble(v AtomicValue) (AtomicValue, error) {
 }
 
 func castToFloat(v AtomicValue) (AtomicValue, error) {
-	result, err := castToDouble(v)
+	// Get the float64 value first, then store with float precision (24-bit)
+	dbl, err := castToDouble(v)
 	if err != nil {
 		return AtomicValue{}, err
 	}
-	// Narrow to single-precision semantics before changing the type
-	result.Value = float64(float32(result.DoubleVal()))
-	result.TypeName = TypeFloat
-	return result, nil
+	f := dbl.DoubleVal()
+	return AtomicValue{TypeName: TypeFloat, Value: NewFloat(f)}, nil
 }
 
 func castToInteger(v AtomicValue) (AtomicValue, error) {

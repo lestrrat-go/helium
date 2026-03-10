@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -39,7 +40,7 @@ func fnParseJSON(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 
-	var raw interface{}
+	var raw any
 	dec := json.NewDecoder(strings.NewReader(s))
 	dec.UseNumber()
 	if err := dec.Decode(&raw); err != nil {
@@ -52,7 +53,7 @@ func fnParseJSON(_ context.Context, args []Sequence) (Sequence, error) {
 	if err == nil {
 		return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("unexpected trailing content after JSON value: %v", extra)}
 	}
-	if err != io.EOF {
+	if !errors.Is(err, io.EOF) {
 		return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("invalid trailing content: %v", err)}
 	}
 
@@ -97,7 +98,7 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 				opts.liberal = b
 			} else {
 				return opts, &XPathError{Code: "FOJS0005",
-					Message: fmt.Sprintf("option 'liberal' must be xs:boolean, got %s", av.TypeName)}
+					Message: "option 'liberal' must be xs:boolean, got " + av.TypeName}
 			}
 		}
 	}
@@ -125,7 +126,7 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 				opts.escape = b
 			} else {
 				return opts, &XPathError{Code: "FOJS0005",
-					Message: fmt.Sprintf("option 'escape' must be xs:boolean, got %s", av.TypeName)}
+					Message: "option 'escape' must be xs:boolean, got " + av.TypeName}
 			}
 		}
 	}
@@ -245,17 +246,16 @@ func checkDuplicateKeys(s string) *XPathError {
 func checkDuplicateKeysDecoder(dec *json.Decoder) *XPathError {
 	tok, err := dec.Token()
 	if err != nil {
-		return nil
+		return nil //nolint:nilerr // decoder error means no more tokens; return no duplicate error
 	}
-	switch v := tok.(type) {
-	case json.Delim:
+	if v, ok := tok.(json.Delim); ok {
 		switch v {
 		case '{':
 			keys := make(map[string]bool)
 			for dec.More() {
 				keyTok, err := dec.Token()
 				if err != nil {
-					return nil
+					return nil //nolint:nilerr // decoder error means no more tokens; return no duplicate error
 				}
 				key, ok := keyTok.(string)
 				if !ok {
@@ -378,10 +378,10 @@ func serializeItem(item Item) string {
 	}
 }
 
-func jsonToXDM(v interface{}) (Item, error) {
+func jsonToXDM(v any) (Item, error) {
 	switch val := v.(type) {
 	case nil:
-		return nil, nil
+		return nil, nil //nolint:nilnil // JSON null maps to empty sequence (nil Item, nil error) per XPath spec
 	case bool:
 		return AtomicValue{TypeName: TypeBoolean, Value: val}, nil
 	case json.Number:
@@ -389,22 +389,22 @@ func jsonToXDM(v interface{}) (Item, error) {
 		if strings.ContainsAny(s, ".eE") {
 			f, err := val.Float64()
 			if err != nil {
-				return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("invalid JSON number: %s", s)}
+				return nil, &XPathError{Code: "FOJS0001", Message: "invalid JSON number: " + s}
 			}
-			return AtomicValue{TypeName: TypeDouble, Value: f}, nil
+			return AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}, nil
 		}
 		n, ok := new(big.Int).SetString(s, 10)
 		if !ok {
 			f, err := val.Float64()
 			if err != nil {
-				return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("invalid JSON number: %s", s)}
+				return nil, &XPathError{Code: "FOJS0001", Message: "invalid JSON number: " + s}
 			}
-			return AtomicValue{TypeName: TypeDouble, Value: f}, nil
+			return AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}, nil
 		}
 		return AtomicValue{TypeName: TypeInteger, Value: n}, nil
 	case string:
 		return AtomicValue{TypeName: TypeString, Value: val}, nil
-	case []interface{}:
+	case []any:
 		members := make([]Sequence, len(val))
 		for i, elem := range val {
 			item, err := jsonToXDM(elem)
@@ -418,7 +418,7 @@ func jsonToXDM(v interface{}) (Item, error) {
 			}
 		}
 		return NewArray(members), nil
-	case map[string]interface{}:
+	case map[string]any:
 		entries := make([]MapEntry, 0, len(val))
 		for k, v := range val {
 			item, err := jsonToXDM(v)

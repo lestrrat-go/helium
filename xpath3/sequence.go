@@ -40,7 +40,12 @@ func SingleDecimal(r *big.Rat) Sequence {
 
 // SingleDouble creates a Sequence containing a single xs:double.
 func SingleDouble(f float64) Sequence {
-	return Sequence{AtomicValue{TypeName: TypeDouble, Value: f}}
+	return Sequence{AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}}
+}
+
+// SingleFloat creates a Sequence containing a single xs:float.
+func SingleFloat(f float64) Sequence {
+	return Sequence{AtomicValue{TypeName: TypeFloat, Value: NewFloat(f)}}
 }
 
 // SingleString creates a Sequence containing a single xs:string.
@@ -137,8 +142,9 @@ func ebvAtomic(v AtomicValue) (bool, error) {
 		return val.Sign() != 0, nil
 	case *big.Rat:
 		return val.Sign() != 0, nil
-	case float64:
-		return val != 0 && !math.IsNaN(val), nil
+	case *FloatValue:
+		f := val.Float64()
+		return f != 0 && !math.IsNaN(f), nil
 	case bool:
 		return val, nil
 	case string:

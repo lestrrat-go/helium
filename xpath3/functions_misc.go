@@ -43,7 +43,7 @@ func fnAvailableEnvVars(_ context.Context, _ []Sequence) (Sequence, error) {
 	result := make(Sequence, len(envs))
 	for i, env := range envs {
 		// Each entry is "KEY=VALUE"; we want just the key
-		for j := 0; j < len(env); j++ {
+		for j := range len(env) {
 			if env[j] == '=' {
 				result[i] = AtomicValue{TypeName: TypeString, Value: env[:j]}
 				break
@@ -135,7 +135,7 @@ func makeRNGMap(seed int64) MapItem {
 	}
 
 	return NewMap([]MapEntry{
-		{Key: AtomicValue{TypeName: TypeString, Value: "number"}, Value: Sequence{AtomicValue{TypeName: TypeDouble, Value: number}}},
+		{Key: AtomicValue{TypeName: TypeString, Value: "number"}, Value: Sequence{AtomicValue{TypeName: TypeDouble, Value: NewDouble(number)}}},
 		{Key: AtomicValue{TypeName: TypeString, Value: "next"}, Value: Sequence{nextFn}},
 		{Key: AtomicValue{TypeName: TypeString, Value: "permute"}, Value: Sequence{permuteFn}},
 	})

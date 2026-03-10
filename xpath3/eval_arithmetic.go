@@ -56,6 +56,14 @@ func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
 		ra = castVal
 	}
 
+	// Both operands must be numeric after promotion
+	if !la.IsNumeric() {
+		return nil, &XPathError{Code: "XPTY0004", Message: "arithmetic operand must be numeric, got " + la.TypeName}
+	}
+	if !ra.IsNumeric() {
+		return nil, &XPathError{Code: "XPTY0004", Message: "arithmetic operand must be numeric, got " + ra.TypeName}
+	}
+
 	// Tier 1: both integer → big.Int arithmetic
 	if isIntegerDerived(la.TypeName) && isIntegerDerived(ra.TypeName) {
 		return integerArith(e.Op, la.BigInt(), ra.BigInt())
@@ -70,7 +78,7 @@ func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
 
 func integerArith(op TokenType, a, b *big.Int) (Sequence, error) {
 	result := new(big.Int)
-	switch op {
+	switch op { //nolint:exhaustive // only arithmetic operators are valid here; default handles the rest
 	case TokenPlus:
 		result.Add(a, b)
 	case TokenMinus:
@@ -94,13 +102,15 @@ func integerArith(op TokenType, a, b *big.Int) (Sequence, error) {
 			return nil, &XPathError{Code: "FOAR0002", Message: "modulo by zero"}
 		}
 		result.Rem(a, b)
+	default:
+		return nil, &XPathError{Code: "XPTY0004", Message: "unsupported integer arithmetic operator"}
 	}
 	return SingleIntegerBig(result), nil
 }
 
 func decimalArith(op TokenType, a, b *big.Rat) (Sequence, error) {
 	result := new(big.Rat)
-	switch op {
+	switch op { //nolint:exhaustive // only arithmetic operators are valid here; default handles the rest
 	case TokenPlus:
 		result.Add(a, b)
 	case TokenMinus:
@@ -132,6 +142,8 @@ func decimalArith(op TokenType, a, b *big.Rat) (Sequence, error) {
 		intPart := new(big.Int).Quo(q.Num(), q.Denom())
 		qr := new(big.Rat).SetInt(intPart)
 		result.Sub(a, new(big.Rat).Mul(qr, b))
+	default:
+		return nil, &XPathError{Code: "XPTY0004", Message: "unsupported decimal arithmetic operator"}
 	}
 	return SingleDecimal(result), nil
 }
@@ -150,7 +162,7 @@ func floatArith(op TokenType, la, ra AtomicValue) (Sequence, error) {
 	}
 
 	var result float64
-	switch op {
+	switch op { //nolint:exhaustive // only arithmetic operators are valid here; default handles the rest
 	case TokenPlus:
 		result = ln + rn
 	case TokenMinus:
@@ -175,9 +187,14 @@ func floatArith(op TokenType, la, ra AtomicValue) (Sequence, error) {
 		return SingleIntegerBig(bi), nil
 	case TokenMod:
 		result = math.Mod(ln, rn)
+	default:
+		return nil, &XPathError{Code: "XPTY0004", Message: "unsupported float arithmetic operator"}
 	}
 
-	return SingleAtomic(AtomicValue{TypeName: resultType, Value: result}), nil
+	if resultType == TypeFloat {
+		return SingleAtomic(AtomicValue{TypeName: TypeFloat, Value: NewFloat(result)}), nil
+	}
+	return SingleAtomic(AtomicValue{TypeName: TypeDouble, Value: NewDouble(result)}), nil
 }
 
 func evalUnaryExpr(ec *evalContext, e UnaryExpr) (Sequence, error) {
@@ -195,17 +212,27 @@ func evalUnaryExpr(ec *evalContext, e UnaryExpr) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Promote xs:untypedAtomic to xs:double per XPath 3.1 spec
+	if a.TypeName == TypeUntypedAtomic {
+		castVal, err := CastAtomic(a, TypeDouble)
+		if err != nil {
+			return nil, err
+		}
+		a = castVal
+	}
 	if isIntegerDerived(a.TypeName) {
 		return SingleIntegerBig(new(big.Int).Neg(a.BigInt())), nil
 	}
 	if a.TypeName == TypeDecimal {
 		return SingleDecimal(new(big.Rat).Neg(a.BigRat())), nil
 	}
-	n := a.ToFloat64()
 	if a.TypeName == TypeFloat {
-		return SingleAtomic(AtomicValue{TypeName: TypeFloat, Value: -n}), nil
+		return SingleAtomic(AtomicValue{TypeName: TypeFloat, Value: a.FloatVal().Neg()}), nil
 	}
-	return SingleDouble(-n), nil
+	if a.TypeName == TypeDouble {
+		return SingleAtomic(AtomicValue{TypeName: TypeDouble, Value: a.FloatVal().Neg()}), nil
+	}
+	return nil, &XPathError{Code: "XPTY0004", Message: "unary operator requires numeric type, got " + a.TypeName}
 }
 
 // needsDecimalArith returns true if arithmetic should use big.Rat (decimal tier).

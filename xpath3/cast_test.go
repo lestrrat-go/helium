@@ -20,6 +20,7 @@ func TestCastFromString(t *testing.T) {
 			name:  "string to integer",
 			input: "42", targetType: xpath3.TypeInteger,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
 				require.Equal(t, int64(42), v.IntegerVal())
 			},
 		},
@@ -27,6 +28,7 @@ func TestCastFromString(t *testing.T) {
 			name:  "string to negative integer",
 			input: "-7", targetType: xpath3.TypeInteger,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
 				require.Equal(t, int64(-7), v.IntegerVal())
 			},
 		},
@@ -34,6 +36,7 @@ func TestCastFromString(t *testing.T) {
 			name:  "string to double",
 			input: "3.14", targetType: xpath3.TypeDouble,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
 				require.InDelta(t, 3.14, v.DoubleVal(), 0.001)
 			},
 		},
@@ -41,6 +44,7 @@ func TestCastFromString(t *testing.T) {
 			name:  "string to double INF",
 			input: "INF", targetType: xpath3.TypeDouble,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
 				require.True(t, math.IsInf(v.DoubleVal(), 1))
 			},
 		},
@@ -48,6 +52,7 @@ func TestCastFromString(t *testing.T) {
 			name:  "string to double NaN",
 			input: "NaN", targetType: xpath3.TypeDouble,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
 				require.True(t, math.IsNaN(v.DoubleVal()))
 			},
 		},
@@ -55,6 +60,7 @@ func TestCastFromString(t *testing.T) {
 			name:  "string to boolean true",
 			input: "true", targetType: xpath3.TypeBoolean,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
 				require.True(t, v.BooleanVal())
 			},
 		},
@@ -62,6 +68,7 @@ func TestCastFromString(t *testing.T) {
 			name:  "string to boolean false",
 			input: "false", targetType: xpath3.TypeBoolean,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
 				require.False(t, v.BooleanVal())
 			},
 		},
@@ -69,6 +76,7 @@ func TestCastFromString(t *testing.T) {
 			name:  "string to boolean 1",
 			input: "1", targetType: xpath3.TypeBoolean,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
 				require.True(t, v.BooleanVal())
 			},
 		},
@@ -76,6 +84,7 @@ func TestCastFromString(t *testing.T) {
 			name:  "string to decimal",
 			input: "123.45", targetType: xpath3.TypeDecimal,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
 				require.Equal(t, xpath3.TypeDecimal, v.TypeName)
 			},
 		},
@@ -83,6 +92,7 @@ func TestCastFromString(t *testing.T) {
 			name:  "string to date",
 			input: "2024-01-15", targetType: xpath3.TypeDate,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
 				tv := v.TimeVal()
 				require.Equal(t, 2024, tv.Year())
 				require.Equal(t, 1, int(tv.Month()))
@@ -93,6 +103,7 @@ func TestCastFromString(t *testing.T) {
 			name:  "string to dateTime",
 			input: "2024-01-15T10:30:00", targetType: xpath3.TypeDateTime,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
 				tv := v.TimeVal()
 				require.Equal(t, 2024, tv.Year())
 				require.Equal(t, 10, tv.Hour())
@@ -103,6 +114,7 @@ func TestCastFromString(t *testing.T) {
 			name:  "string to time",
 			input: "10:30:00", targetType: xpath3.TypeTime,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
 				tv := v.TimeVal()
 				require.Equal(t, 10, tv.Hour())
 				require.Equal(t, 30, tv.Minute())
@@ -112,6 +124,7 @@ func TestCastFromString(t *testing.T) {
 			name:  "string to duration",
 			input: "P1Y2M3DT4H5M6S", targetType: xpath3.TypeDuration,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
 				d := v.DurationVal()
 				require.Equal(t, 14, d.Months) // 1*12 + 2
 				require.InDelta(t, 3*86400+4*3600+5*60+6, d.Seconds, 0.001)
@@ -121,6 +134,7 @@ func TestCastFromString(t *testing.T) {
 			name:  "string to dayTimeDuration",
 			input: "PT24H", targetType: xpath3.TypeDayTimeDuration,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
 				d := v.DurationVal()
 				require.Equal(t, 0, d.Months)
 				require.InDelta(t, 86400.0, d.Seconds, 0.001)
@@ -130,6 +144,7 @@ func TestCastFromString(t *testing.T) {
 			name:  "string to anyURI",
 			input: "http://example.com", targetType: xpath3.TypeAnyURI,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
 				require.Equal(t, "http://example.com", v.StringVal())
 			},
 		},
@@ -137,6 +152,7 @@ func TestCastFromString(t *testing.T) {
 			name:  "string to hexBinary",
 			input: "48656C6C6F", targetType: xpath3.TypeHexBinary,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
 				require.Equal(t, []byte("Hello"), v.BytesVal())
 			},
 		},
@@ -144,6 +160,7 @@ func TestCastFromString(t *testing.T) {
 			name:  "whitespace trimmed",
 			input: "  42  ", targetType: xpath3.TypeInteger,
 			check: func(t *testing.T, v xpath3.AtomicValue) {
+				t.Helper()
 				require.Equal(t, int64(42), v.IntegerVal())
 			},
 		},
@@ -186,11 +203,11 @@ func TestCastAtomic(t *testing.T) {
 		result, err := xpath3.CastAtomic(v, xpath3.TypeDouble)
 		require.NoError(t, err)
 		require.Equal(t, xpath3.TypeDouble, result.TypeName)
-		require.Equal(t, float64(42), result.DoubleVal())
+		require.InDelta(t, float64(42), result.DoubleVal(), 0)
 	})
 
 	t.Run("double to integer", func(t *testing.T) {
-		v := xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: 3.7}
+		v := xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(3.7)}
 		result, err := xpath3.CastAtomic(v, xpath3.TypeInteger)
 		require.NoError(t, err)
 		require.Equal(t, int64(3), result.IntegerVal())
@@ -214,7 +231,7 @@ func TestCastAtomic(t *testing.T) {
 		v := xpath3.AtomicValue{TypeName: xpath3.TypeBoolean, Value: false}
 		result, err := xpath3.CastAtomic(v, xpath3.TypeDouble)
 		require.NoError(t, err)
-		require.Equal(t, float64(0), result.DoubleVal())
+		require.InDelta(t, float64(0), result.DoubleVal(), 0)
 	})
 
 	t.Run("same type is identity", func(t *testing.T) {
@@ -239,13 +256,13 @@ func TestCastAtomic(t *testing.T) {
 	})
 
 	t.Run("NaN to integer fails", func(t *testing.T) {
-		v := xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: math.NaN()}
+		v := xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(math.NaN())}
 		_, err := xpath3.CastAtomic(v, xpath3.TypeInteger)
 		require.Error(t, err)
 	})
 
 	t.Run("INF to integer fails", func(t *testing.T) {
-		v := xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: math.Inf(1)}
+		v := xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(math.Inf(1))}
 		_, err := xpath3.CastAtomic(v, xpath3.TypeInteger)
 		require.Error(t, err)
 	})
@@ -280,10 +297,10 @@ func TestAtomicToString(t *testing.T) {
 		expect string
 	}{
 		{"integer", xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(42)}, "42"},
-		{"double", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: 3.14}, "3.14"},
-		{"double zero", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: 0.0}, "0"},
-		{"double INF", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: math.Inf(1)}, "INF"},
-		{"double NaN", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: math.NaN()}, "NaN"},
+		{"double", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(3.14)}, "3.14"},
+		{"double zero", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(0.0)}, "0"},
+		{"double INF", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(math.Inf(1))}, "INF"},
+		{"double NaN", xpath3.AtomicValue{TypeName: xpath3.TypeDouble, Value: xpath3.NewDouble(math.NaN())}, "NaN"},
 		{"true", xpath3.AtomicValue{TypeName: xpath3.TypeBoolean, Value: true}, "true"},
 		{"false", xpath3.AtomicValue{TypeName: xpath3.TypeBoolean, Value: false}, "false"},
 	}
@@ -326,7 +343,7 @@ func TestDurationParsing(t *testing.T) {
 	}
 }
 
-func mustParseDateTime(s string) interface{} {
+func mustParseDateTime(s string) any {
 	v, err := xpath3.CastFromString(s, xpath3.TypeDateTime)
 	if err != nil {
 		panic(err)
