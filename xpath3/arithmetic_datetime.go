@@ -185,6 +185,13 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 	if math.IsInf(months, 0) || math.IsInf(secs, 0) {
 		return nil, true, &XPathError{Code: "FODT0002", Message: "duration overflow"}
 	}
+	// Detect precision loss for very large values
+	const maxExactFloat64 = 1 << 53
+	absSecs := math.Abs(secs)
+	absMonths := math.Abs(months)
+	if absSecs > maxExactFloat64 || absMonths > maxExactFloat64 {
+		return nil, true, &XPathError{Code: "FODT0002", Message: "duration overflow"}
+	}
 
 	// Per XPath F&O spec: months are rounded "half towards positive infinity"
 	// i.e. math.Floor(months + 0.5)
@@ -302,6 +309,15 @@ func arithmeticDateTimeDatetime(ec *evalContext, la, ra AtomicValue) (Sequence, 
 
 // arithmeticDurationDivDuration handles duration / duration → decimal.
 func arithmeticDurationDivDuration(la, ra AtomicValue) (Sequence, bool, error) {
+	// xs:duration (generic) does not support arithmetic
+	if la.TypeName == TypeDuration || ra.TypeName == TypeDuration {
+		return nil, true, &XPathError{Code: "XPTY0004", Message: "xs:duration cannot be used in arithmetic"}
+	}
+	// Cannot mix YMD and DTD
+	if la.TypeName != ra.TypeName {
+		return nil, true, &XPathError{Code: "XPTY0004", Message: "cannot divide different duration subtypes"}
+	}
+
 	ld := la.DurationVal()
 	rd := ra.DurationVal()
 
