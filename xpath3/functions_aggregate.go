@@ -57,6 +57,21 @@ func aggregateTypeFamily(typeName string) string {
 	return ""
 }
 
+// validateCollationArg checks if the collation argument at args[idx] is supported.
+func validateCollationArg(args []Sequence, idx int) error {
+	if len(args) <= idx || len(args[idx]) == 0 {
+		return nil
+	}
+	uri := seqToString(args[idx])
+	if uri != codepointCollationURI {
+		return &XPathError{
+			Code:    "FOCH0002",
+			Message: fmt.Sprintf("unsupported collation: %s", uri),
+		}
+	}
+	return nil
+}
+
 func checkSumAvgType(a AtomicValue) error {
 	family := aggregateTypeFamily(a.TypeName)
 	switch family {
@@ -237,53 +252,10 @@ func fnMax(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(atoms) == 0 {
 		return nil, nil
 	}
-	var family string
-	var best AtomicValue
-	widest := TypeInteger
-	first := true
-	for _, a := range atoms {
-		a, err = promoteForAggregate(a)
-		if err != nil {
-			return nil, err
-		}
-		newFamily := aggregateTypeFamily(a.TypeName)
-		if newFamily == "" || newFamily == "duration" {
-			return nil, &XPathError{
-				Code:    "FORG0006",
-				Message: fmt.Sprintf("invalid type %s for fn:max", a.TypeName),
-			}
-		}
-		if family == "" {
-			family = newFamily
-		} else if family != newFamily {
-			return nil, &XPathError{
-				Code:    "FORG0006",
-				Message: fmt.Sprintf("incompatible types in fn:max: %s and %s", family, newFamily),
-			}
-		}
-		if family == "numeric" && numericTypeWidth(a.TypeName) > numericTypeWidth(widest) {
-			widest = a.TypeName
-		}
-		if (a.TypeName == TypeDouble || a.TypeName == TypeFloat) && a.FloatVal().IsNaN() {
-			return SingleAtomic(AtomicValue{TypeName: TypeDouble, Value: NewDouble(math.NaN())}), nil
-		}
-		if first {
-			best = a
-			first = false
-			continue
-		}
-		gt, err := ValueCompare(TokenGt, a, best)
-		if err != nil {
-			return nil, err
-		}
-		if gt {
-			best = a
-		}
+	if err := validateCollationArg(args, 1); err != nil {
+		return nil, err
 	}
-	if family == "numeric" {
-		best = promoteResult(best, widest)
-	}
-	return SingleAtomic(best), nil
+	return maxMinCommon(atoms, true)
 }
 
 func fnMin(_ context.Context, args []Sequence) (Sequence, error) {
@@ -294,10 +266,42 @@ func fnMin(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(atoms) == 0 {
 		return nil, nil
 	}
+	if err := validateCollationArg(args, 1); err != nil {
+		return nil, err
+	}
+	return maxMinCommon(atoms, false)
+}
+
+func maxMinCommon(atoms []AtomicValue, isMax bool) (Sequence, error) {
+	fnName := "fn:min"
+	if isMax {
+		fnName = "fn:max"
+	}
+	// Single-item case: validate type but preserve derived type
+	if len(atoms) == 1 {
+		a := atoms[0]
+		if a.TypeName == TypeUntypedAtomic {
+			var err error
+			a, err = promoteForAggregate(a)
+			if err != nil {
+				return nil, err
+			}
+		}
+		family := aggregateTypeFamily(a.TypeName)
+		if family == "" || family == "duration" {
+			return nil, &XPathError{
+				Code:    "FORG0006",
+				Message: fmt.Sprintf("invalid type %s for %s", a.TypeName, fnName),
+			}
+		}
+		return SingleAtomic(a), nil
+	}
 	var family string
 	var best AtomicValue
 	widest := TypeInteger
 	first := true
+	hasNaN := false
+	var err error
 	for _, a := range atoms {
 		a, err = promoteForAggregate(a)
 		if err != nil {
@@ -307,7 +311,7 @@ func fnMin(_ context.Context, args []Sequence) (Sequence, error) {
 		if newFamily == "" || newFamily == "duration" {
 			return nil, &XPathError{
 				Code:    "FORG0006",
-				Message: fmt.Sprintf("invalid type %s for fn:min", a.TypeName),
+				Message: fmt.Sprintf("invalid type %s for %s", a.TypeName, fnName),
 			}
 		}
 		if family == "" {
@@ -315,27 +319,40 @@ func fnMin(_ context.Context, args []Sequence) (Sequence, error) {
 		} else if family != newFamily {
 			return nil, &XPathError{
 				Code:    "FORG0006",
-				Message: fmt.Sprintf("incompatible types in fn:min: %s and %s", family, newFamily),
+				Message: fmt.Sprintf("incompatible types in %s: %s and %s", fnName, family, newFamily),
 			}
 		}
 		if family == "numeric" && numericTypeWidth(a.TypeName) > numericTypeWidth(widest) {
 			widest = a.TypeName
 		}
 		if (a.TypeName == TypeDouble || a.TypeName == TypeFloat) && a.FloatVal().IsNaN() {
-			return SingleAtomic(AtomicValue{TypeName: TypeDouble, Value: NewDouble(math.NaN())}), nil
+			hasNaN = true
+			continue
 		}
 		if first {
 			best = a
 			first = false
 			continue
 		}
-		lt, err := ValueCompare(TokenLt, a, best)
+		var cmp bool
+		if isMax {
+			cmp, err = ValueCompare(TokenGt, a, best)
+		} else {
+			cmp, err = ValueCompare(TokenLt, a, best)
+		}
 		if err != nil {
 			return nil, err
 		}
-		if lt {
+		if cmp {
 			best = a
 		}
+	}
+	if hasNaN {
+		nanType := widest
+		if nanType != TypeFloat {
+			nanType = TypeDouble
+		}
+		return SingleAtomic(AtomicValue{TypeName: nanType, Value: NewDouble(math.NaN())}), nil
 	}
 	if family == "numeric" {
 		best = promoteResult(best, widest)
@@ -459,6 +476,9 @@ func sumDurations(seq Sequence, family string) (Sequence, error) {
 func fnDistinctValues(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
+	}
+	if err := validateCollationArg(args, 1); err != nil {
+		return nil, err
 	}
 	var result []AtomicValue
 	seenNaN := false
