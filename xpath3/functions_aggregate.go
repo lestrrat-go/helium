@@ -460,19 +460,56 @@ func fnDistinctValues(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
-	seen := make(map[string]bool)
-	var result Sequence
+	var result []AtomicValue
+	seenNaN := false
 	for _, item := range args[0] {
 		a, err := AtomizeItem(item)
 		if err != nil {
 			return nil, err
 		}
-		s, _ := atomicToString(a)
-		key := a.TypeName + ":" + s
-		if !seen[key] {
-			seen[key] = true
+		// Promote untypedAtomic to string for comparison per spec
+		if a.TypeName == TypeUntypedAtomic {
+			a = AtomicValue{TypeName: TypeString, Value: a.StringVal()}
+		}
+		// NaN handling: op:is-same-key treats all NaN values as equal
+		if isAtomicNaN(a) {
+			if seenNaN {
+				continue
+			}
+			seenNaN = true
+			result = append(result, a)
+			continue
+		}
+		found := false
+		for _, existing := range result {
+			if isAtomicNaN(existing) {
+				continue
+			}
+			eq, err := ValueCompare(TokenEq, a, existing)
+			if err != nil {
+				// Incomparable types are considered distinct
+				continue
+			}
+			if eq {
+				found = true
+				break
+			}
+		}
+		if !found {
 			result = append(result, a)
 		}
 	}
-	return result, nil
+	seq := make(Sequence, len(result))
+	for i, a := range result {
+		seq[i] = a
+	}
+	return seq, nil
+}
+
+// isAtomicNaN returns true if the atomic value is a float or double NaN.
+func isAtomicNaN(a AtomicValue) bool {
+	if a.TypeName == TypeDouble || a.TypeName == TypeFloat {
+		return a.FloatVal().IsNaN()
+	}
+	return false
 }
