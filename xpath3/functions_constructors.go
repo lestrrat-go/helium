@@ -81,10 +81,10 @@ func init() {
 		registerNS(NSXS, entry.name, 1, 1, makeXSStringRestriction(entry.typeName, entry.re))
 	}
 
-	// List types — split by whitespace, validate each token
-	registerNS(NSXS, "NMTOKENS", 1, 1, makeXSTokenList(TypeNMTOKENS, reNMTOKEN))
-	registerNS(NSXS, "IDREFS", 1, 1, makeXSTokenList(TypeIDREFS, reNCName))
-	registerNS(NSXS, "ENTITIES", 1, 1, makeXSTokenList(TypeENTITIES, reNCName))
+	// List types — split by whitespace, produce sequence of item type values
+	registerNS(NSXS, "NMTOKENS", 1, 1, makeXSTokenList(TypeNMTOKEN, reNMTOKEN))
+	registerNS(NSXS, "IDREFS", 1, 1, makeXSTokenList(TypeIDREF, reNCName))
+	registerNS(NSXS, "ENTITIES", 1, 1, makeXSTokenList(TypeENTITY, reNCName))
 
 	// Gregorian date part types
 	for _, entry := range []struct {
@@ -269,7 +269,7 @@ func makeXSStringRestriction(typeName string, validate *regexp.Regexp) func(cont
 }
 
 // makeXSTokenList returns a constructor for xs:NMTOKENS or xs:IDREFS (whitespace-separated list).
-func makeXSTokenList(typeName string, tokenRe *regexp.Regexp) func(context.Context, []Sequence) (Sequence, error) {
+func makeXSTokenList(itemType string, tokenRe *regexp.Regexp) func(context.Context, []Sequence) (Sequence, error) {
 	return func(_ context.Context, args []Sequence) (Sequence, error) {
 		if len(args[0]) == 0 {
 			return nil, nil
@@ -286,19 +286,21 @@ func makeXSTokenList(typeName string, tokenRe *regexp.Regexp) func(context.Conte
 		if s == "" {
 			return nil, &XPathError{
 				Code:    "FORG0001",
-				Message: fmt.Sprintf("cannot cast empty string to %s", typeName),
+				Message: fmt.Sprintf("cannot cast empty string to %s", itemType),
 			}
 		}
 		tokens := strings.Fields(s)
-		for _, tok := range tokens {
+		result := make(Sequence, len(tokens))
+		for i, tok := range tokens {
 			if !tokenRe.MatchString(tok) {
 				return nil, &XPathError{
 					Code:    "FORG0001",
-					Message: fmt.Sprintf("invalid token %q in %s", tok, typeName),
+					Message: fmt.Sprintf("invalid token %q in %s", tok, itemType),
 				}
 			}
+			result[i] = AtomicValue{TypeName: itemType, Value: tok}
 		}
-		return SingleAtomic(AtomicValue{TypeName: typeName, Value: strings.Join(tokens, " ")}), nil
+		return result, nil
 	}
 }
 
