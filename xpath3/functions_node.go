@@ -303,13 +303,16 @@ func fnLang(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) > 1 {
 		nodes, ok := NodesFrom(args[1])
 		if !ok || len(nodes) == 0 {
-			return SingleBoolean(false), nil
+			return nil, &XPathError{Code: "XPTY0004", Message: "fn:lang second argument must be a node"}
 		}
 		n = nodes[0]
 	} else {
 		fc := getFnContext(ctx)
-		if fc == nil || fc.node == nil {
-			return SingleBoolean(false), nil
+		if fc == nil || (fc.contextItem == nil && fc.node == nil) {
+			return nil, &XPathError{Code: "XPDY0002", Message: "context item is absent"}
+		}
+		if fc.node == nil {
+			return nil, &XPathError{Code: "XPTY0004", Message: "context item is not a node for fn:lang"}
 		}
 		n = fc.node
 	}

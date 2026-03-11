@@ -111,7 +111,7 @@ func evalDynamicFunctionCall(ec *evalContext, e DynamicFunctionCall) (Sequence, 
 		if v.Arity >= 0 && len(args) != v.Arity {
 			return nil, fmt.Errorf("%w: expected %d arguments, got %d", ErrArityMismatch, v.Arity, len(args))
 		}
-		return v.Invoke(ec.goCtx, args)
+		return v.Invoke(withFnContext(ec.goCtx, ec), args)
 	case MapItem:
 		// Maps are functions: $map($key) → value
 		if len(args) != 1 || len(args[0]) != 1 {
@@ -156,6 +156,9 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 	}
 	minArity := fn.MinArity()
 	ns := resolvePrefix(ec, e.Prefix)
+	// Per XPath 3.1 Section 3.1.6: if the function is focus-dependent,
+	// the dynamic context (including focus) is fixed at reference creation time.
+	capturedCtx := withFnContext(ec.goCtx, ec)
 	fi := FunctionItem{
 		Arity:     e.Arity,
 		Name:      e.Name,
@@ -164,7 +167,7 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 			if len(args) < minArity {
 				return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("fn:%s requires at least %d arguments, got %d", e.Name, minArity, len(args))}
 			}
-			return fn.Call(ctx, args)
+			return fn.Call(capturedCtx, args)
 		},
 	}
 	// Populate type signature from built-in registry
