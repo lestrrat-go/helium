@@ -441,11 +441,7 @@ func (l *lexer) scanNameOrKeyword() {
 		uri := collapseWhitespace(l.input[braceStart:l.pos])
 		l.pos++ // consume '}'
 		local := l.scanNCName()
-		if uri == "" {
-			l.emit(TokenName, local)
-		} else {
-			l.emit(TokenName, "Q{"+uri+"}"+local)
-		}
+		l.emit(TokenName, "Q{"+uri+"}"+local)
 		return
 	}
 
