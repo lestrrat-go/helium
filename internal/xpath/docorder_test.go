@@ -11,7 +11,7 @@ import (
 // buildDoc creates a minimal document:
 //
 //	<root xmlns:ns="urn:ns">
-//	  <child attr="v"/>
+//	  <child ns:attr="v"/>
 //	</root>
 func buildDoc(t *testing.T) (*helium.Document, *helium.Element, *helium.Element) {
 	t.Helper()
@@ -20,15 +20,14 @@ func buildDoc(t *testing.T) (*helium.Document, *helium.Element, *helium.Element)
 	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
-	ns := helium.NewNamespace("ns", "urn:ns")
 	require.NoError(t, root.DeclareNamespace("ns", "urn:ns"))
 
 	child, err := doc.CreateElement("child")
 	require.NoError(t, err)
 	require.NoError(t, root.AddChild(child))
 
-	_, err = doc.CreateAttribute("attr", "v", ns)
-	require.NoError(t, err)
+	ns := helium.NewNamespace("ns", "urn:ns")
+	require.NoError(t, child.SetAttributeNS("attr", "v", ns))
 
 	return doc, root, child
 }

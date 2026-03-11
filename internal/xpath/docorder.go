@@ -29,12 +29,16 @@ func (c *DocOrderCache) Position(n helium.Node) int {
 	if n.Type() == helium.NamespaceNode {
 		parent := n.Parent()
 		if parent == nil {
-			return 0
+			return -1
+		}
+		parentPos := c.Position(parent)
+		if parentPos < 0 {
+			return -1
 		}
 		// Namespace nodes sort after their parent element but before
 		// attributes and children. The +1 offset lands in the gap
 		// left by stride-2 indexing in indexWalk.
-		return c.Position(parent) + 1
+		return parentPos + 1
 	}
 	pos, ok := c.positions[n]
 	if !ok {
