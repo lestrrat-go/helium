@@ -248,7 +248,13 @@ func fnHasChildren(ctx context.Context, args []Sequence) (Sequence, error) {
 	if n == nil {
 		return SingleBoolean(false), nil
 	}
-	return SingleBoolean(n.FirstChild() != nil), nil
+	// Per XPath spec, only document and element nodes can have children
+	switch n.(type) {
+	case *helium.Document, *helium.Element:
+		return SingleBoolean(n.FirstChild() != nil), nil
+	default:
+		return SingleBoolean(false), nil
+	}
 }
 
 func fnInnermost(_ context.Context, args []Sequence) (Sequence, error) {
@@ -490,6 +496,9 @@ func nodeArgOrCtx(ctx context.Context, args []Sequence) (helium.Node, error) {
 	}
 	if len(args[0]) == 0 {
 		return nil, nil
+	}
+	if len(args[0]) > 1 {
+		return nil, &XPathError{Code: "XPTY0004", Message: "expected single node, got sequence of length > 1"}
 	}
 	ni, ok := args[0][0].(NodeItem)
 	if !ok {
