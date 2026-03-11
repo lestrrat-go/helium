@@ -29,7 +29,7 @@ string → lexer ([]Token) → parser (Expr AST) → eval(evalContext, Expr) →
 |------|----------|
 | `axes.go` | `AxisType` enum, `TraverseAxis(axis, node, maxNodes)`, all 13 axis functions, namespace helpers |
 | `docorder.go` | `DocOrderCache`, `DeduplicateNodes`, `MergeNodeSets`, `DocumentRoot` |
-| `stringvalue.go` | `StringValue(Node)`, `CollectTextDescendants`, `LocalNameOf`, `NodeNamespaceURI`, `NodePrefix` |
+| `stringvalue.go` | `StringValue(Node)`, `collectTextDescendants` (unexported, depth-guarded), `LocalNameOf`, `NodeNamespaceURI`, `NodePrefix` |
 | `limits.go` | `DefaultMaxRecursionDepth=5000`, `DefaultMaxNodeSetLength=10_000_000`, `ErrNodeSetLimit` |
 
 ### `TraverseAxis` signature
@@ -53,7 +53,7 @@ func DocumentRoot(n helium.Node) helium.Node
 
 ```go
 func StringValue(n helium.Node) string
-func CollectTextDescendants(n helium.Node, b *strings.Builder)
+// unexported: collectTextDescendants(n helium.Node, b *strings.Builder, depth int) error
 func LocalNameOf(n helium.Node) string
 func NodeNamespaceURI(n helium.Node) string
 func NodePrefix(n helium.Node) string
