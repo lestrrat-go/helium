@@ -402,6 +402,7 @@ var unicodeBlocks = map[string]string{
 	"OldItalic":                            `\x{10300}-\x{1032F}`,
 	"Gothic":                               `\x{10330}-\x{1034F}`,
 	"Deseret":                              `\x{10400}-\x{1044F}`,
+	"Emoticons":                            `\x{1F600}-\x{1F64F}`,
 	"ByzantineMusicalSymbols":              `\x{1D000}-\x{1D0FF}`,
 	"MusicalSymbols":                       `\x{1D100}-\x{1D1FF}`,
 	"MathematicalAlphanumericSymbols":      `\x{1D400}-\x{1D7FF}`,
