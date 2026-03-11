@@ -151,7 +151,15 @@ func fnCodepointEqual(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 || len(args[1]) == 0 {
 		return nil, nil
 	}
-	return SingleBoolean(seqToString(args[0]) == seqToString(args[1])), nil
+	s1, err := coerceArgToStringOpt(args[0])
+	if err != nil {
+		return nil, err
+	}
+	s2, err := coerceArgToStringOpt(args[1])
+	if err != nil {
+		return nil, err
+	}
+	return SingleBoolean(s1 == s2), nil
 }
 
 func fnConcat(_ context.Context, args []Sequence) (Sequence, error) {
