@@ -422,9 +422,10 @@ func validateXPathRegex(pattern string) error {
 
 		if r == '\\' && i+1 < len(runes) {
 			next := runes[i+1]
-			// Back-references (\1, \2, ...) are not allowed in XPath regex
-			// (only in replacement strings for fn:replace).
-			if next >= '1' && next <= '9' {
+			// Back-references (\0, \1, \2, ...) are not allowed in XPath regex
+			// (only in replacement strings for fn:replace). \0 is also not a
+			// valid escape in XML Schema regex.
+			if next >= '0' && next <= '9' {
 				return &XPathError{
 					Code:    "FORX0002",
 					Message: fmt.Sprintf("back-reference \\%c is not allowed in XPath regex", next),
