@@ -136,19 +136,29 @@ func ebvSingle(item Item) (bool, error) {
 }
 
 func ebvAtomic(v AtomicValue) (bool, error) {
-	// Check backing type first to avoid panics from mismatched TypeName/Value
-	switch val := v.Value.(type) {
-	case *big.Int:
-		return val.Sign() != 0, nil
-	case *big.Rat:
-		return val.Sign() != 0, nil
-	case *FloatValue:
-		f := val.Float64()
-		return f != 0 && !math.IsNaN(f), nil
-	case bool:
-		return val, nil
-	case string:
-		return val != "", nil
+	// Per XPath 3.1 §2.4.3, EBV is defined for: boolean, string, anyURI,
+	// untypedAtomic, string-derived types, and numeric types only.
+	switch v.TypeName {
+	case TypeBoolean:
+		return v.Value.(bool), nil
+	case TypeString, TypeAnyURI, TypeUntypedAtomic:
+		s, _ := v.Value.(string)
+		return s != "", nil
+	}
+	if isStringDerived(v.TypeName) {
+		s, _ := v.Value.(string)
+		return s != "", nil
+	}
+	if v.IsNumeric() {
+		switch val := v.Value.(type) {
+		case *big.Int:
+			return val.Sign() != 0, nil
+		case *big.Rat:
+			return val.Sign() != 0, nil
+		case *FloatValue:
+			f := val.Float64()
+			return f != 0 && !math.IsNaN(f), nil
+		}
 	}
 	return false, &XPathError{
 		Code:    "FORG0006",
