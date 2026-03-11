@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/big"
 	"sort"
 
@@ -111,29 +112,55 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	start := int(a.ToFloat64())
-	if start < 1 {
-		start = 1
+	if !isSubtypeOf(a.TypeName, TypeNumeric) {
+		return nil, &XPathError{Code: "XPTY0004", Message: "subsequence: starting position must be numeric"}
 	}
+	startF := math.Round(a.ToFloat64())
 
-	length := len(seq) - start + 1
-	if len(args) > 2 {
+	hasLength := len(args) > 2
+	var lengthF float64
+	if hasLength {
 		la, err := AtomizeItem(args[2][0])
 		if err != nil {
 			return nil, err
 		}
-		length = int(la.ToFloat64())
+		if !isSubtypeOf(la.TypeName, TypeNumeric) {
+			return nil, &XPathError{Code: "XPTY0004", Message: "subsequence: length must be numeric"}
+		}
+		lengthF = math.Round(la.ToFloat64())
 	}
 
-	if start > len(seq) || length <= 0 {
+	// Handle NaN start or NaN length
+	if math.IsNaN(startF) {
+		return nil, nil
+	}
+	if hasLength && math.IsNaN(lengthF) {
 		return nil, nil
 	}
 
-	end := start - 1 + length
-	if end > len(seq) {
-		end = len(seq)
+	// Compute end position: startF + lengthF (only when length is given)
+	var endF float64
+	if hasLength {
+		endF = startF + lengthF
+		// -INF + INF = NaN → empty result
+		if math.IsNaN(endF) {
+			return nil, nil
+		}
 	}
-	return seq[start-1 : end], nil
+
+	// Items at position p where startF <= p (and p < endF if length given)
+	var result Sequence
+	for i, item := range seq {
+		p := float64(i + 1)
+		if p < startF {
+			continue
+		}
+		if hasLength && p >= endF {
+			break
+		}
+		result = append(result, item)
+	}
+	return result, nil
 }
 
 func fnUnordered(_ context.Context, args []Sequence) (Sequence, error) {
@@ -463,17 +490,21 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 			}
 			pairs[i] = sortPair{item: item, key: k}
 		} else {
-			// Default key: atomize the item
-			a, err := AtomizeItem(item)
+			// Default key: fn:data() semantics (atomize, flattening arrays)
+			atoms, err := AtomizeSequence(Sequence{item})
 			if err != nil {
 				pairs[i] = sortPair{item: item, key: nil}
 			} else {
-				pairs[i] = sortPair{item: item, key: Sequence{a}}
+				key := make(Sequence, len(atoms))
+				for k, a := range atoms {
+					key[k] = a
+				}
+				pairs[i] = sortPair{item: item, key: key}
 			}
 		}
 	}
 
-	// Stable sort using comparison
+	// Stable sort using comparison — compare key sequences lexicographically
 	var sortErr error
 	sort.SliceStable(pairs, func(i, j int) bool {
 		if sortErr != nil {
@@ -481,28 +512,36 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		ki := pairs[i].key
 		kj := pairs[j].key
-		if len(ki) == 0 && len(kj) == 0 {
-			return false
+		minLen := len(ki)
+		if len(kj) < minLen {
+			minLen = len(kj)
 		}
-		if len(ki) == 0 {
-			return true // empty < non-empty
+		for idx := 0; idx < minLen; idx++ {
+			ai, err1 := AtomizeItem(ki[idx])
+			aj, err2 := AtomizeItem(kj[idx])
+			if err1 != nil || err2 != nil {
+				return false
+			}
+			less, err := ValueCompare(TokenLt, ai, aj)
+			if err != nil {
+				sortErr = err
+				return false
+			}
+			if less {
+				return true
+			}
+			greater, err := ValueCompare(TokenGt, ai, aj)
+			if err != nil {
+				sortErr = err
+				return false
+			}
+			if greater {
+				return false
+			}
+			// Equal — continue to next key component
 		}
-		if len(kj) == 0 {
-			return false
-		}
-		ai, err1 := AtomizeItem(ki[0])
-		aj, err2 := AtomizeItem(kj[0])
-		if err1 != nil || err2 != nil {
-			return false
-		}
-		less, err := ValueCompare(TokenLt, ai, aj)
-		if err != nil {
-			// Fall back to string comparison
-			si, _ := atomicToString(ai)
-			sj, _ := atomicToString(aj)
-			return si < sj
-		}
-		return less
+		// All compared items equal; shorter key comes first
+		return len(ki) < len(kj)
 	})
 	if sortErr != nil {
 		return nil, sortErr
