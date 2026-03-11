@@ -61,6 +61,11 @@ func splitXSDYear(s string) (int, string, error) {
 	if digits < 4 {
 		return 0, "", fmt.Errorf("year must have at least 4 digits")
 	}
+	// Per XSD: years with more than 4 digits must not have leading zeros
+	if digits > 4 && s[start] == '0' {
+		return 0, "", fmt.Errorf("year with leading zeros is not valid")
+	}
+	// Year 0000 is not valid per XSD (no year zero)
 	yearStr := s[start:i]
 	year, err := strconv.Atoi(yearStr)
 	if err != nil {
