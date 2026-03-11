@@ -46,19 +46,28 @@ func init() {
 func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
-		if fc == nil {
-			return SingleString(""), nil
+		if fc == nil || (fc.contextItem == nil && fc.node == nil) {
+			return nil, &XPathError{Code: "XPDY0002", Message: "context item is absent"}
 		}
 		s, ok := fc.contextStringValue()
 		if !ok {
-			return SingleString(""), nil
+			return nil, &XPathError{Code: "XPTY0004", Message: "context item has no string value"}
 		}
 		return SingleString(s), nil
 	}
 	if len(args[0]) == 0 {
 		return SingleString(""), nil
 	}
-	a, err := AtomizeItem(args[0][0])
+	if len(args[0]) > 1 {
+		return nil, &XPathError{Code: "XPTY0004", Message: "fn:string requires a single item, got sequence of length > 1"}
+	}
+	item := args[0][0]
+	// fn:string does not accept function items, maps, or arrays
+	switch item.(type) {
+	case FunctionItem, MapItem, ArrayItem:
+		return nil, &XPathError{Code: "FOTY0014", Message: fmt.Sprintf("fn:string: cannot get string value of %T", item)}
+	}
+	a, err := AtomizeItem(item)
 	if err != nil {
 		return nil, err
 	}
@@ -227,9 +236,14 @@ func fnNormalizeSpace(ctx context.Context, args []Sequence) (Sequence, error) {
 	var s string
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
-		if fc != nil {
-			s, _ = fc.contextStringValue()
+		if fc == nil || (fc.contextItem == nil && fc.node == nil) {
+			return nil, &XPathError{Code: "XPDY0002", Message: "context item is absent"}
 		}
+		sv, ok := fc.contextStringValue()
+		if !ok {
+			return nil, &XPathError{Code: "XPTY0004", Message: "context item has no string value"}
+		}
+		s = sv
 	} else {
 		s = seqToString(args[0])
 	}

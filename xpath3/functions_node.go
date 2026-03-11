@@ -372,8 +372,8 @@ func fnNamespaceURI(ctx context.Context, args []Sequence) (Sequence, error) {
 func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
-		if fc == nil {
-			return SingleDouble(math.NaN()), nil
+		if fc == nil || (fc.contextItem == nil && fc.node == nil) {
+			return nil, &XPathError{Code: "XPDY0002", Message: "context item is absent"}
 		}
 		s, ok := fc.contextStringValue()
 		if !ok {
