@@ -103,6 +103,7 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 	widest := TypeInteger
 
 	for _, a := range atoms {
+		a = promoteForAggregate(a)
 		if err := checkSumAvgType(a); err != nil {
 			return nil, err
 		}
