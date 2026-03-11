@@ -227,11 +227,15 @@ func fnArrayFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		b, err := EBV(r)
-		if err != nil {
-			return nil, err
+		// Per XPath 3.1, the callback must return exactly one xs:boolean
+		if len(r) != 1 {
+			return nil, &XPathError{Code: "XPTY0004", Message: "array:filter callback must return a single xs:boolean value"}
 		}
-		if b {
+		av, ok := r[0].(AtomicValue)
+		if !ok || av.TypeName != TypeBoolean {
+			return nil, &XPathError{Code: "XPTY0004", Message: "array:filter callback must return xs:boolean"}
+		}
+		if av.BooleanVal() {
 			result = append(result, m)
 		}
 	}
