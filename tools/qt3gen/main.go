@@ -441,7 +441,11 @@ func getTestCaseSkipReason(setName, caseName string) string {
 		"fn-unparsed-text-available-010", "fn-unparsed-text-available-012",
 		"fn-unparsed-text-lines-012":
 		return "requires static typing"
-}
+	// These tests have expected results tied to Unicode 7.0 case mappings.
+	// Go uses Unicode 15.0 which added U+03F3↔U+037F case pair in Unicode 9.0.
+	case "fn-upper-case-19", "fn-lower-case-19":
+		return "expected results differ in Unicode 15.0 vs 7.0"
+	}
 	return ""
 }
 
