@@ -51,8 +51,13 @@ func LocalNameOf(n helium.Node) string {
 		return v.LocalName()
 	case *helium.Attribute:
 		return v.LocalName()
+	case *helium.ProcessingInstruction:
+		return v.Name()
+	case *helium.NamespaceNodeWrapper:
+		return v.Name()
 	default:
-		return n.Name()
+		// Document, text, comment nodes have no local name per XPath spec
+		return ""
 	}
 }
 
