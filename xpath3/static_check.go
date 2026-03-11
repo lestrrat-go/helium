@@ -287,6 +287,10 @@ func checkPrefixesInFLWORClause(clause FLWORClause, namespaces map[string]string
 
 // checkPrefixesInVarName checks a FLWOR variable name like "prefix:local" for undeclared prefix.
 func checkPrefixesInVarName(varName string, namespaces map[string]string) error {
+	// URIQualifiedName (Q{uri}local) — prefix is already resolved
+	if strings.HasPrefix(varName, "Q{") {
+		return nil
+	}
 	if idx := strings.IndexByte(varName, ':'); idx >= 0 {
 		return validatePrefix(varName[:idx], namespaces)
 	}

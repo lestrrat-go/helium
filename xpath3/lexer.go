@@ -265,7 +265,12 @@ func (l *lexer) tokenize() error {
 					uri := strings.TrimSpace(l.input[braceStart:l.pos])
 					l.pos++ // consume '}'
 					local := l.scanNCName()
-					name = "Q{" + uri + "}" + local
+					if uri == "" {
+						// Q{}local with empty URI is equivalent to unprefixed local
+						name = local
+					} else {
+						name = "Q{" + uri + "}" + local
+					}
 				}
 			} else if l.pos < len(l.input) && l.input[l.pos] == ':' && l.pos+1 < len(l.input) {
 				// Check for QName (prefix:local) — e.g., $err:code
@@ -436,7 +441,11 @@ func (l *lexer) scanNameOrKeyword() {
 		uri := strings.TrimSpace(l.input[braceStart:l.pos])
 		l.pos++ // consume '}'
 		local := l.scanNCName()
-		l.emit(TokenName, "Q{"+uri+"}"+local)
+		if uri == "" {
+			l.emit(TokenName, local)
+		} else {
+			l.emit(TokenName, "Q{"+uri+"}"+local)
+		}
 		return
 	}
 
