@@ -165,7 +165,11 @@ func fnCodepointEqual(_ context.Context, args []Sequence) (Sequence, error) {
 func fnConcat(_ context.Context, args []Sequence) (Sequence, error) {
 	var b strings.Builder
 	for _, arg := range args {
-		b.WriteString(seqToString(arg))
+		s, err := seqToStringErr(arg)
+		if err != nil {
+			return nil, err
+		}
+		b.WriteString(s)
 	}
 	return SingleString(b.String()), nil
 }
@@ -501,7 +505,10 @@ func fnCollationKey(ctx context.Context, args []Sequence) (Sequence, error) {
 	if _, err := getCollation(ctx, args, 1); err != nil {
 		return nil, err
 	}
-	s := seqToString(args[0])
+	s, err := coerceArgToString(args[0])
+	if err != nil {
+		return nil, err
+	}
 	// Return string bytes as base64Binary
 	return SingleAtomic(AtomicValue{TypeName: TypeBase64Binary, Value: []byte(s)}), nil
 }
