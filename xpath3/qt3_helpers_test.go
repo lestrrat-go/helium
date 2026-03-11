@@ -46,21 +46,15 @@ type qt3Test struct {
 
 func qt3RunTests(t *testing.T, tests []qt3Test) {
 	t.Helper()
-	// Collect resource mappings and determine if HTTP server is needed
+	// Collect resource mappings
 	resourceMap := make(map[string]string)
-	needsHTTP := false
 	for _, tc := range tests {
-		if tc.BaseURI != "" || tc.NeedsHTTP {
-			needsHTTP = true
-		}
 		for uri, path := range tc.ResourceMap {
 			resourceMap[uri] = path
 		}
 	}
-	var httpClient *http.Client
-	if needsHTTP {
-		httpClient = qt3NewTestServer(t, resourceMap)
-	}
+	// Always start an HTTP server so unparsed-text can resolve relative URIs
+	httpClient := qt3NewTestServer(t, resourceMap)
 	for _, tc := range tests {
 		t.Run(tc.Name, func(t *testing.T) {
 			t.Parallel()
@@ -72,15 +66,16 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 			qt3ImplicitTZ := time.FixedZone("", -5*3600)
 			opts := []xpath3.ContextOption{
 				xpath3.WithImplicitTimezone(qt3ImplicitTZ),
-			}
-			if httpClient != nil {
-				opts = append(opts, xpath3.WithHTTPClient(httpClient))
+				xpath3.WithHTTPClient(httpClient),
 			}
 			if len(tc.Namespaces) > 0 {
 				opts = append(opts, xpath3.WithNamespaces(tc.Namespaces))
 			}
 			if tc.BaseURI != "" {
 				opts = append(opts, xpath3.WithBaseURI(tc.BaseURI))
+			} else {
+				// Default base URI: resolve relative paths via HTTP against /fots/
+				opts = append(opts, xpath3.WithBaseURI("http://www.w3.org/fots/"))
 			}
 			ctx = xpath3.NewContext(ctx, opts...)
 			var doc helium.Node
