@@ -183,11 +183,7 @@ func buildNodePath(n helium.Node) string {
 			local := ixpath.LocalNameOf(cur)
 			uri := ixpath.NodeNamespaceURI(cur)
 			pos := elementPosition(cur)
-			if uri != "" {
-				parts = append(parts, fmt.Sprintf("Q{%s}%s[%d]", uri, local, pos))
-			} else {
-				parts = append(parts, fmt.Sprintf("%s[%d]", local, pos))
-			}
+			parts = append(parts, fmt.Sprintf("Q{%s}%s[%d]", uri, local, pos))
 		case helium.AttributeNode:
 			local := ixpath.LocalNameOf(cur)
 			uri := ixpath.NodeNamespaceURI(cur)
