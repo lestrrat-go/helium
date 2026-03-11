@@ -73,7 +73,7 @@ func extractArrayIndex(seq Sequence) (int, error) {
 	}
 	bi := av.BigInt()
 	if !bi.IsInt64() {
-		return 0, &XPathError{Code: "FOAY0001", Message: "array index out of range"}
+		return 0, &XPathError{Code: errCodeFOAY0001, Message: "array index out of range"}
 	}
 	return int(bi.Int64()), nil
 }
@@ -134,7 +134,7 @@ func fnArrayRemove(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 		pos := int(av.ToFloat64())
 		if pos < 1 || pos > size {
-			return nil, &XPathError{Code: "FOAY0001", Message: fmt.Sprintf("array:remove: position %d out of range 1..%d", pos, size)}
+			return nil, &XPathError{Code: errCodeFOAY0001, Message: fmt.Sprintf("array:remove: position %d out of range 1..%d", pos, size)}
 		}
 		positions[pos] = struct{}{}
 	}
@@ -156,7 +156,7 @@ func fnArrayInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
 	pos := int(seqToDouble(args[1]))
 	members := a.Members()
 	if pos < 1 || pos > len(members)+1 {
-		return nil, &XPathError{Code: "FOAY0001", Message: "array index out of bounds"}
+		return nil, &XPathError{Code: errCodeFOAY0001, Message: "array index out of bounds"}
 	}
 	result := make([]Sequence, 0, len(members)+1)
 	result = append(result, members[:pos-1]...)
@@ -171,7 +171,7 @@ func fnArrayHead(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if a.Size() == 0 {
-		return nil, &XPathError{Code: "FOAY0001", Message: "array:head on empty array"}
+		return nil, &XPathError{Code: errCodeFOAY0001, Message: "array:head on empty array"}
 	}
 	return a.Get(1)
 }
@@ -182,7 +182,7 @@ func fnArrayTail(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if a.Size() == 0 {
-		return nil, &XPathError{Code: "FOAY0001", Message: "array:tail on empty array"}
+		return nil, &XPathError{Code: errCodeFOAY0001, Message: "array:tail on empty array"}
 	}
 	sub, err := a.SubArray(2, a.Size()-1)
 	if err != nil {

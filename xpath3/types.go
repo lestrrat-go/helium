@@ -590,7 +590,7 @@ func NewArray(members []Sequence) ArrayItem {
 func (a ArrayItem) Get(index int) (Sequence, error) {
 	if index < 1 || index > len(a.members) {
 		return nil, &XPathError{
-			Code:    "FOAY0001",
+			Code:    errCodeFOAY0001,
 			Message: fmt.Sprintf("array index %d out of bounds (size %d)", index, len(a.members)),
 		}
 	}
@@ -606,7 +606,7 @@ func (a ArrayItem) Size() int {
 func (a ArrayItem) Put(index int, value Sequence) (ArrayItem, error) {
 	if index < 1 || index > len(a.members) {
 		return ArrayItem{}, &XPathError{
-			Code:    "FOAY0001",
+			Code:    errCodeFOAY0001,
 			Message: fmt.Sprintf("array index %d out of bounds (size %d)", index, len(a.members)),
 		}
 	}
@@ -633,7 +633,7 @@ func (a ArrayItem) Members() []Sequence {
 func (a ArrayItem) SubArray(start, length int) (ArrayItem, error) {
 	if start < 1 || length < 0 || start+length-1 > len(a.members) {
 		return ArrayItem{}, &XPathError{
-			Code:    "FOAY0001",
+			Code:    errCodeFOAY0001,
 			Message: fmt.Sprintf("array subarray(%d, %d) out of bounds (size %d)", start, length, len(a.members)),
 		}
 	}

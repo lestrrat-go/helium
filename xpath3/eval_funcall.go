@@ -139,7 +139,7 @@ func evalDynamicFunctionCall(ec *evalContext, e DynamicFunctionCall) (Sequence, 
 		}
 		bi := key.BigInt()
 		if !bi.IsInt64() {
-			return nil, &XPathError{Code: "FOAY0001", Message: "array index out of range"}
+			return nil, &XPathError{Code: errCodeFOAY0001, Message: "array index out of range"}
 		}
 		idx := int(bi.Int64())
 		return v.Get(idx)
