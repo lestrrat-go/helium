@@ -201,7 +201,7 @@ func promoteForAggregate(a AtomicValue) (AtomicValue, error) {
 		f, err := castToDouble(a)
 		if err != nil {
 			return AtomicValue{}, &XPathError{
-				Code:    "FORG0001",
+				Code:    errCodeFORG0001,
 				Message: fmt.Sprintf("cannot promote %q to xs:double", a.StringVal()),
 			}
 		}

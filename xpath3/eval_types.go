@@ -607,7 +607,7 @@ func castToQName(v AtomicValue, ec *evalContext) (AtomicValue, error) {
 
 	if !isValidNCName(local) || (prefix != "" && !isValidNCName(prefix)) {
 		return AtomicValue{}, &XPathError{
-			Code:    "FORG0001",
+			Code:    errCodeFORG0001,
 			Message: fmt.Sprintf("invalid QName: %q", s),
 		}
 	}

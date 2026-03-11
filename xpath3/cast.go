@@ -56,13 +56,13 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		min, max := integerTypeRange(targetType)
 		if min != nil && n.Cmp(min) < 0 {
 			return AtomicValue{}, &XPathError{
-				Code:    "FORG0001",
+				Code:    errCodeFORG0001,
 				Message: fmt.Sprintf("value %s out of range for %s", n.String(), targetType),
 			}
 		}
 		if max != nil && n.Cmp(max) > 0 {
 			return AtomicValue{}, &XPathError{
-				Code:    "FORG0001",
+				Code:    errCodeFORG0001,
 				Message: fmt.Sprintf("value %s out of range for %s", n.String(), targetType),
 			}
 		}
@@ -129,7 +129,7 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 			return AtomicValue{}, err
 		}
 		if !HasTimezone(dt.TimeVal()) {
-			return AtomicValue{}, &XPathError{Code: "FORG0001", Message: "xs:dateTimeStamp requires a timezone"}
+			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: "xs:dateTimeStamp requires a timezone"}
 		}
 		dt.TypeName = TypeDateTimeStamp
 		return dt, nil
@@ -438,7 +438,7 @@ func integerTypeRange(typeName string) (min *big.Int, max *big.Int) {
 
 func castError(value string, targetType string) *XPathError {
 	return &XPathError{
-		Code:    "FORG0001",
+		Code:    errCodeFORG0001,
 		Message: fmt.Sprintf("cannot cast %q to %s", value, targetType),
 	}
 }

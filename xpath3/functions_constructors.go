@@ -229,7 +229,7 @@ func makeXSIntegerRangeBig(typeName string, minBig, maxBig *big.Int) func(contex
 		n := iv.BigInt()
 		if n.Cmp(minBig) < 0 || n.Cmp(maxBig) > 0 {
 			return nil, &XPathError{
-				Code:    "FORG0001",
+				Code:    errCodeFORG0001,
 				Message: fmt.Sprintf("value %s out of range for %s", n.String(), typeName),
 			}
 		}
@@ -265,7 +265,7 @@ func makeXSStringRestriction(typeName string, validate *regexp.Regexp) func(cont
 		}
 		if validate != nil && !validate.MatchString(s) {
 			return nil, &XPathError{
-				Code:    "FORG0001",
+				Code:    errCodeFORG0001,
 				Message: fmt.Sprintf("cannot cast %q to %s", s, typeName),
 			}
 		}
@@ -299,7 +299,7 @@ func makeXSTokenList(itemType string, tokenRe *regexp.Regexp) func(context.Conte
 		for i, tok := range tokens {
 			if !tokenRe.MatchString(tok) {
 				return nil, &XPathError{
-					Code:    "FORG0001",
+					Code:    errCodeFORG0001,
 					Message: fmt.Sprintf("invalid token %q in %s", tok, itemType),
 				}
 			}
@@ -334,7 +334,7 @@ func makeXSGregorian(typeName string, re *regexp.Regexp) func(context.Context, [
 		s = strings.TrimSpace(s)
 		if !re.MatchString(s) || !validateGregorianValue(typeName, s) {
 			return nil, &XPathError{
-				Code:    "FORG0001",
+				Code:    errCodeFORG0001,
 				Message: fmt.Sprintf("cannot cast %q to %s", s, typeName),
 			}
 		}
@@ -482,7 +482,7 @@ func makeXSDateTimeStamp() func(context.Context, []Sequence) (Sequence, error) {
 		s, _ := atomicToString(a)
 		if !strings.HasSuffix(s, "Z") && !reDateTimeStampTZ.MatchString(s) {
 			return nil, &XPathError{
-				Code:    "FORG0001",
+				Code:    errCodeFORG0001,
 				Message: "xs:dateTimeStamp requires a timezone",
 			}
 		}
@@ -495,7 +495,7 @@ func fnXSError(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, nil
 	}
 	return nil, &XPathError{
-		Code:    "FORG0001",
+		Code:    errCodeFORG0001,
 		Message: "xs:error always fails",
 	}
 }
