@@ -39,11 +39,17 @@ type XPathError struct {
 }
 
 func (e *XPathError) Error() string {
+	if e == nil {
+		return ""
+	}
 	return e.Code + ": " + e.Message
 }
 
 // Is supports errors.Is matching by code.
 func (e *XPathError) Is(target error) bool {
+	if e == nil {
+		return false
+	}
 	if t, ok := target.(*XPathError); ok {
 		return e.Code == t.Code
 	}

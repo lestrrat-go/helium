@@ -13,4 +13,4 @@ const (
 )
 
 // ErrNodeSetLimit is returned when a node-set exceeds DefaultMaxNodeSetLength.
-var ErrNodeSetLimit = errors.New("node-set length limit exceeded")
+var ErrNodeSetLimit = errors.New("xpath: node-set length limit exceeded")
