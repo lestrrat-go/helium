@@ -201,6 +201,21 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 		}
 		return seq, false
 	}
+	// Verify occurrence constraint on the coerced result
+	switch st.Occurrence {
+	case OccurrenceExactlyOne:
+		if len(result) != 1 {
+			return seq, false
+		}
+	case OccurrenceOneOrMore:
+		if len(result) == 0 {
+			return seq, false
+		}
+	case OccurrenceZeroOrOne:
+		if len(result) > 1 {
+			return seq, false
+		}
+	}
 	return result, true
 }
 
