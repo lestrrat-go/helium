@@ -15,7 +15,8 @@ import (
 //   - \c / \C → XML NameChar / negated
 //   - Character class subtraction [a-z-[aeiou]] → expanded
 //   - Rejects Perl-specific constructs (\b, \B, etc.) not in XPath
-func translateXPathRegex(pattern string) (string, error) {
+func translateXPathRegex(pattern string, dotAll ...bool) (string, error) {
+	isDotAll := len(dotAll) > 0 && dotAll[0]
 	var b strings.Builder
 	runes := []rune(pattern)
 	i := 0
@@ -80,6 +81,20 @@ func translateXPathRegex(pattern string) (string, error) {
 			}
 			b.WriteString(cls)
 			i += consumed
+			continue
+		}
+
+		// XPath regex: '.' matches any char except \n and \r (without 's' flag).
+		// Go's RE2 '.' matches any char except \n. Replace bare '.'
+		// (outside character classes) with [^\n\r] to also exclude \r.
+		// With 's' flag (dot-all), '.' matches everything — use [\s\S] for Go.
+		if r == '.' {
+			if isDotAll {
+				b.WriteString(`[\s\S]`)
+			} else {
+				b.WriteString(`[^\n\r]`)
+			}
+			i++
 			continue
 		}
 

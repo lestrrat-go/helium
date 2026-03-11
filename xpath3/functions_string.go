@@ -525,9 +525,9 @@ func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, nil
 	}
 
-	// 1-arg form: split on whitespace (normalize-space first)
+	// 1-arg form: normalize XML whitespace (#x20, #x9, #xA, #xD), then split
 	if len(args) == 1 {
-		tokens := strings.Fields(s)
+		tokens := splitXMLWhitespace(s)
 		result := make(Sequence, len(tokens))
 		for i, t := range tokens {
 			result[i] = AtomicValue{TypeName: TypeString, Value: t}
@@ -556,6 +556,31 @@ func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
 		result[i] = AtomicValue{TypeName: TypeString, Value: p}
 	}
 	return result, nil
+}
+
+// splitXMLWhitespace splits s on XML whitespace (#x20, #x9, #xA, #xD),
+// stripping leading/trailing whitespace and collapsing runs. Unlike
+// strings.Fields, it does NOT treat Unicode whitespace (e.g. \u00A0) as
+// separators.
+func splitXMLWhitespace(s string) []string {
+	var tokens []string
+	start := -1
+	for i, r := range s {
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			if start >= 0 {
+				tokens = append(tokens, s[start:i])
+				start = -1
+			}
+		} else {
+			if start < 0 {
+				start = i
+			}
+		}
+	}
+	if start >= 0 {
+		tokens = append(tokens, s[start:])
+	}
+	return tokens
 }
 
 func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
@@ -643,18 +668,25 @@ func writeXMLEscaped(b *strings.Builder, s string) {
 // Maps XPath flags (i,m,s,x) to Go regexp equivalents.
 // Translates XPath/XML Schema regex features to Go-compatible patterns.
 func compileXPathRegex(pattern, flags string) (*regexp.Regexp, error) {
-	// Reject Perl-specific constructs first
-	if err := rejectPerlSpecific(pattern); err != nil {
-		return nil, err
-	}
+	// Check for 'q' flag early to skip validation for literal patterns
+	hasQ := strings.ContainsRune(flags, 'q')
 
-	// Validate XPath-specific regex restrictions before compilation
-	if err := validateXPathRegex(pattern); err != nil {
-		return nil, err
+	if !hasQ {
+		// Reject Perl-specific constructs first
+		if err := rejectPerlSpecific(pattern); err != nil {
+			return nil, err
+		}
+
+		// Validate XPath-specific regex restrictions before compilation
+		if err := validateXPathRegex(pattern); err != nil {
+			return nil, err
+		}
 	}
 
 	var prefix strings.Builder
 	prefix.WriteString("(?")
+	dotAll := false
+	literal := false
 	for _, f := range flags {
 		switch f {
 		case 'i':
@@ -662,30 +694,30 @@ func compileXPathRegex(pattern, flags string) (*regexp.Regexp, error) {
 		case 'm':
 			prefix.WriteRune('m')
 		case 's':
-			prefix.WriteRune('s')
+			// Handled by translateXPathRegex dotAll parameter;
+			// do not add Go's (?s) since we expand '.' ourselves.
+			dotAll = true
 		case 'x':
 			// Free-spacing mode: strip unescaped whitespace and #-comments
 			pattern = stripFreeSpacing(pattern)
 		case 'q':
-			// Literal mode: quote the entire pattern
-			pattern = regexp.QuoteMeta(pattern)
-			// No need for further translation
-			re, err := regexp.Compile(pattern)
-			if err != nil {
-				return nil, &XPathError{Code: "FORX0002", Message: fmt.Sprintf("invalid regular expression: %s", err)}
-			}
-			return re, nil
+			// Literal mode: quote the entire pattern, skip regex translation
+			literal = true
 		default:
 			return nil, &XPathError{Code: "FORX0001", Message: fmt.Sprintf("invalid regex flag: %c", f)}
 		}
 	}
 
-	// Translate XPath/XML Schema regex features to Go-compatible patterns
-	translated, err := translateXPathRegex(pattern)
-	if err != nil {
-		return nil, err
+	if literal {
+		pattern = regexp.QuoteMeta(pattern)
+	} else {
+		// Translate XPath/XML Schema regex features to Go-compatible patterns
+		translated, err := translateXPathRegex(pattern, dotAll)
+		if err != nil {
+			return nil, err
+		}
+		pattern = translated
 	}
-	pattern = translated
 
 	if prefix.Len() > 2 {
 		prefix.WriteRune(')')
