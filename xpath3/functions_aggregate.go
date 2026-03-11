@@ -79,7 +79,7 @@ func checkSumAvgType(a AtomicValue) error {
 		return nil
 	}
 	return &XPathError{
-		Code:    "FORG0006",
+		Code:    errCodeFORG0006,
 		Message: fmt.Sprintf("invalid type %s for aggregate function", a.TypeName),
 	}
 }
@@ -95,7 +95,7 @@ func checkAggregateHomogeneity(family, newFamily string) (string, error) {
 		return "numeric", nil
 	}
 	return "", &XPathError{
-		Code:    "FORG0006",
+		Code:    errCodeFORG0006,
 		Message: fmt.Sprintf("incompatible types in aggregate: %s and %s", family, newFamily),
 	}
 }
@@ -290,7 +290,7 @@ func maxMinCommon(atoms []AtomicValue, isMax bool) (Sequence, error) {
 		family := aggregateTypeFamily(a.TypeName)
 		if family == "" || family == "duration" {
 			return nil, &XPathError{
-				Code:    "FORG0006",
+				Code:    errCodeFORG0006,
 				Message: fmt.Sprintf("invalid type %s for %s", a.TypeName, fnName),
 			}
 		}
@@ -310,7 +310,7 @@ func maxMinCommon(atoms []AtomicValue, isMax bool) (Sequence, error) {
 		newFamily := aggregateTypeFamily(a.TypeName)
 		if newFamily == "" || newFamily == "duration" {
 			return nil, &XPathError{
-				Code:    "FORG0006",
+				Code:    errCodeFORG0006,
 				Message: fmt.Sprintf("invalid type %s for %s", a.TypeName, fnName),
 			}
 		}
@@ -318,7 +318,7 @@ func maxMinCommon(atoms []AtomicValue, isMax bool) (Sequence, error) {
 			family = newFamily
 		} else if family != newFamily {
 			return nil, &XPathError{
-				Code:    "FORG0006",
+				Code:    errCodeFORG0006,
 				Message: fmt.Sprintf("incompatible types in %s: %s and %s", fnName, family, newFamily),
 			}
 		}

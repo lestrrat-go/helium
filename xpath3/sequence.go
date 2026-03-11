@@ -116,7 +116,7 @@ func EBV(seq Sequence) (bool, error) {
 	}
 
 	return false, &XPathError{
-		Code:    "FORG0006",
+		Code:    errCodeFORG0006,
 		Message: "effective boolean value not defined for sequence of length > 1 starting with non-node",
 	}
 }
@@ -129,7 +129,7 @@ func ebvSingle(item Item) (bool, error) {
 		return true, nil
 	default:
 		return false, &XPathError{
-			Code:    "FORG0006",
+			Code:    errCodeFORG0006,
 			Message: fmt.Sprintf("effective boolean value not defined for %T", item),
 		}
 	}
@@ -161,7 +161,7 @@ func ebvAtomic(v AtomicValue) (bool, error) {
 		}
 	}
 	return false, &XPathError{
-		Code:    "FORG0006",
+		Code:    errCodeFORG0006,
 		Message: fmt.Sprintf("effective boolean value not defined for %s", v.TypeName),
 	}
 }
