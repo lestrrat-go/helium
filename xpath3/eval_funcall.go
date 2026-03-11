@@ -227,11 +227,13 @@ func evalInlineFunctionExpr(ec *evalContext, e InlineFunctionExpr) (Sequence, er
 			if err != nil {
 				return nil, err
 			}
-			// Check return type if specified
+			// Apply function coercion rules for return type if specified
 			if e.ReturnType != nil {
-				if !matchesSequenceType(result, *e.ReturnType, innerCtx) {
+				coerced, ok := coerceToSequenceType(result, *e.ReturnType, innerCtx)
+				if !ok {
 					return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("inline function return value does not match required type %v", *e.ReturnType)}
 				}
+				result = coerced
 			}
 			return result, nil
 		},
