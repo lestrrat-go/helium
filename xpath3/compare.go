@@ -344,9 +344,11 @@ func compareAtomic(op TokenType, a, b AtomicValue) (bool, error) {
 		case TypeYearMonthDuration, TypeDayTimeDuration:
 			return compareDuration(op, a.DurationVal(), b.DurationVal())
 		case TypeDuration:
-			// xs:duration values cannot be compared (XPTY0004).
-			// Only xs:yearMonthDuration and xs:dayTimeDuration are comparable.
-			return false, &XPathError{Code: "XPTY0004", Message: "xs:duration values are not comparable"}
+			// xs:duration supports eq/ne only, not ordering
+			if op != TokenEq && op != TokenNe {
+				return false, &XPathError{Code: "XPTY0004", Message: "xs:duration values are not orderable"}
+			}
+			return compareDuration(op, a.DurationVal(), b.DurationVal())
 		case TypeBase64Binary:
 			return compareBinary(op, a.Value.([]byte), b.Value.([]byte))
 		case TypeHexBinary:
@@ -366,13 +368,21 @@ func compareAtomic(op TokenType, a, b AtomicValue) (bool, error) {
 		}
 	}
 
-	// Duration cross-subtype comparison (eq/ne only between YM and DT)
+	// Duration comparison
 	famA := comparisonFamily(a.TypeName)
 	famB := comparisonFamily(b.TypeName)
 	if strings.HasPrefix(famA, "duration") && strings.HasPrefix(famB, "duration") {
-		// If either operand is plain xs:duration (not YM or DT subtype), error
+		// xs:duration supports eq/ne only (not ordering)
 		if a.TypeName == TypeDuration || b.TypeName == TypeDuration {
-			return false, &XPathError{Code: "XPTY0004", Message: "xs:duration values are not comparable"}
+			if op != TokenEq && op != TokenNe {
+				return false, &XPathError{Code: "XPTY0004", Message: "xs:duration values are not orderable"}
+			}
+		}
+		// Cross-subtype (YMD vs DTD): eq/ne only, ordering is XPTY0004
+		if a.TypeName != b.TypeName && a.TypeName != TypeDuration && b.TypeName != TypeDuration {
+			if op != TokenEq && op != TokenNe {
+				return false, &XPathError{Code: "XPTY0004", Message: "cannot order xs:yearMonthDuration and xs:dayTimeDuration"}
+			}
 		}
 		return compareDuration(op, a.DurationVal(), b.DurationVal())
 	}
