@@ -234,27 +234,6 @@ func promoteForGeneralComparison(a, b AtomicValue) (AtomicValue, AtomicValue, er
 	return a, b, nil
 }
 
-// castUntypedForComparison casts an untypedAtomic value for value comparison.
-// Returns (castValue, otherValue). On cast failure, returns values that will
-// produce a type error in compareAtomic.
-func castUntypedForComparison(untyped, other AtomicValue) (AtomicValue, AtomicValue) {
-	targetType := other.TypeName
-	// For numeric types, cast to double
-	if other.IsNumeric() {
-		targetType = TypeDouble
-	}
-	// String-derived types: cast to string for comparison
-	if isStringDerived(targetType) {
-		targetType = TypeString
-	}
-	result, err := CastFromString(stringFromAtomic(untyped), targetType)
-	if err != nil {
-		// Cast failed — return the raw untypedAtomic; compareAtomic will reject mismatched types
-		return AtomicValue{TypeName: TypeString, Value: stringFromAtomic(untyped)}, other
-	}
-	return result, other
-}
-
 // castUntypedToType casts an untypedAtomic value to the given target type.
 // For general comparison, cast failures are errors (not silently ignored).
 func castUntypedToType(untyped AtomicValue, targetType string) (AtomicValue, error) {

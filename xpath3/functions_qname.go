@@ -18,6 +18,26 @@ func init() {
 }
 
 func fnQName(_ context.Context, args []Sequence) (Sequence, error) {
+	// Validate argument types: $paramURI as xs:string?, $paramQName as xs:string
+	if len(args[0]) > 0 {
+		a, err := AtomizeItem(args[0][0])
+		if err != nil {
+			return nil, err
+		}
+		if a.TypeName != TypeString && a.TypeName != TypeUntypedAtomic && a.TypeName != TypeAnyURI {
+			return nil, &XPathError{Code: "XPTY0004", Message: "fn:QName namespace argument must be a string"}
+		}
+	}
+	if len(args[1]) > 0 {
+		a, err := AtomizeItem(args[1][0])
+		if err != nil {
+			return nil, err
+		}
+		if a.TypeName != TypeString && a.TypeName != TypeUntypedAtomic {
+			return nil, &XPathError{Code: "XPTY0004", Message: "fn:QName QName argument must be a string"}
+		}
+	}
+
 	uri := seqToString(args[0])
 	qname := seqToString(args[1])
 	prefix := ""
@@ -25,6 +45,10 @@ func fnQName(_ context.Context, args []Sequence) (Sequence, error) {
 	if idx := strings.IndexByte(qname, ':'); idx >= 0 {
 		prefix = qname[:idx]
 		local = qname[idx+1:]
+		// Empty prefix with colon (e.g., ":person") is invalid
+		if prefix == "" {
+			return nil, &XPathError{Code: "FOCA0002", Message: "invalid QName: " + qname}
+		}
 	}
 	// Validate: if there's a prefix, namespace must be non-empty
 	if prefix != "" && uri == "" {
