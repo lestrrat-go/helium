@@ -1,10 +1,13 @@
 package xpath
 
 import (
+	"fmt"
 	"strings"
 
-	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium"
 )
+
+var maxCollectTextDescendantsDepth = 2048
 
 // StringValue returns the XPath string-value of a node.
 // Rules are identical across XPath 1.0 and 3.1.
@@ -18,7 +21,9 @@ func StringValue(n helium.Node) string {
 		// XPath spec 5.2: string-value of element/document is the
 		// concatenation of string-values of all text node descendants.
 		var b strings.Builder
-		CollectTextDescendants(n, &b)
+		// In practice, this should never error since the parser already caps depth.
+		// If it does, we return the string collected so far.
+		_ = collectTextDescendants(n, &b, 0)
 		return b.String()
 	case helium.TextNode, helium.CDATASectionNode:
 		return string(n.Content())
@@ -32,18 +37,24 @@ func StringValue(n helium.Node) string {
 	return ""
 }
 
-// CollectTextDescendants recursively collects text from Text and CDATA descendants.
-// Recursion depth is bounded by the document tree depth, which the parser already
-// caps (maxElemDepth, default 256 / huge-mode 2048). No additional guard needed.
-func CollectTextDescendants(n helium.Node, b *strings.Builder) {
+// collectTextDescendants recursively collects text from Text and CDATA descendants.
+// For parser-produced trees, depth is bounded by maxElemDepth (default 256 / huge-mode 2048).
+// A depth guard is included for programmatically constructed trees.
+func collectTextDescendants(n helium.Node, b *strings.Builder, depth int) error {
+	if depth >= maxCollectTextDescendantsDepth {
+		return fmt.Errorf("exceeded max recursion depth of %d in collectTextDescendants", maxCollectTextDescendantsDepth)
+	}
 	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
 		switch c.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
 			b.Write(c.Content())
 		default:
-			CollectTextDescendants(c, b)
+			if err := collectTextDescendants(c, b, depth+1); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }
 
 // LocalNameOf returns the local name of any node type.

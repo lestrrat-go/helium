@@ -17,10 +17,10 @@ if [ -d "$TARGET_DIR/.git" ]; then
         exit 0
     fi
     echo "At $CURRENT_SHA, updating to pinned commit $QT3TESTS_COMMIT_SHA ..."
-    git fetch --all --tags --prune
+    git fetch --filter=blob:none --prune --no-tags origin "$QT3TESTS_COMMIT_SHA"
 else
     echo "Cloning W3C QT3 test suite into $TARGET_DIR ..."
-    git clone https://github.com/w3c/qt3tests.git "$TARGET_DIR"
+    git clone --filter=blob:none --no-tags https://github.com/w3c/qt3tests.git "$TARGET_DIR"
     cd "$TARGET_DIR"
 fi
 

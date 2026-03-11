@@ -17,10 +17,10 @@ if [ -d "$TARGET_DIR/.git" ]; then
         exit 0
     fi
     echo "At $CURRENT_SHA, updating to pinned commit $SAXON_COMMIT_SHA ..."
-    git fetch --all --tags --prune
+    git fetch --depth=1 --no-tags origin "$SAXON_COMMIT_SHA"
 else
     echo "Cloning Saxon-HE into $TARGET_DIR ..."
-    git clone https://github.com/Saxonica/Saxon-HE.git "$TARGET_DIR"
+    git clone --depth=1 --no-tags https://github.com/Saxonica/Saxon-HE.git "$TARGET_DIR"
     cd "$TARGET_DIR"
 fi
 
