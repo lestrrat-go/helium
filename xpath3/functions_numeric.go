@@ -106,18 +106,40 @@ func fnRound(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	precision := 0
+	if len(args) > 1 && len(args[1]) > 0 {
+		pa, err := AtomizeItem(args[1][0])
+		if err != nil {
+			return nil, err
+		}
+		pa, err = CastAtomic(pa, TypeInteger)
+		if err != nil {
+			return nil, err
+		}
+		precision = int(pa.BigInt().Int64())
+	}
 	if isIntegerDerived(a.TypeName) {
-		return SingleIntegerBig(new(big.Int).Set(a.BigInt())), nil
+		if precision >= 0 {
+			return SingleIntegerBig(new(big.Int).Set(a.BigInt())), nil
+		}
+		return SingleIntegerBig(roundIntegerHalfUp(a.BigInt(), -precision)), nil
 	}
 	if a.TypeName == TypeDecimal {
-		return SingleDecimal(ratRound(a.BigRat())), nil
+		if precision == 0 {
+			return SingleDecimal(ratRound(a.BigRat())), nil
+		}
+		return SingleDecimal(ratRoundPrecision(a.BigRat(), precision)), nil
 	}
 	n := a.ToFloat64()
 	if math.IsNaN(n) || math.IsInf(n, 0) || n == 0 {
 		return SingleAtomic(a), nil
 	}
+	if precision > 308 {
+		return SingleAtomic(a), nil
+	}
+	scale := math.Pow(10, float64(precision))
 	// XPath round: round half towards positive infinity
-	r := math.Floor(n + 0.5)
+	r := math.Floor(n*scale+0.5) / scale
 	if r == 0 && n < 0 {
 		r = math.Copysign(0, -1)
 	}
@@ -252,4 +274,46 @@ func roundIntegerHalfToEven(n *big.Int, scale int) *big.Int {
 		q.Sub(q, big.NewInt(1))
 	}
 	return new(big.Int).Mul(q, pow)
+}
+
+// roundIntegerHalfUp rounds a *big.Int to 10^scale using half-up (towards positive infinity).
+func roundIntegerHalfUp(n *big.Int, scale int) *big.Int {
+	pow := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(scale)), nil)
+	q, r := new(big.Int).QuoRem(n, pow, new(big.Int))
+	half := new(big.Int).Quo(pow, big.NewInt(2))
+	absR := new(big.Int).Abs(r)
+	cmp := absR.Cmp(half)
+	if cmp < 0 {
+		return new(big.Int).Mul(q, pow)
+	}
+	// Half or more: round towards positive infinity
+	if n.Sign() >= 0 {
+		q.Add(q, big.NewInt(1))
+	}
+	return new(big.Int).Mul(q, pow)
+}
+
+// ratRoundPrecision rounds a *big.Rat to the given precision (number of decimal places)
+// using half-up rounding (towards positive infinity on tie).
+func ratRoundPrecision(r *big.Rat, precision int) *big.Rat {
+	if precision >= 0 {
+		scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(precision)), nil)
+		// Multiply by scale, round, divide by scale
+		shifted := new(big.Rat).Mul(r, new(big.Rat).SetInt(scale))
+		half := new(big.Rat).SetFrac64(1, 2)
+		rounded := ratFloor(new(big.Rat).Add(shifted, half))
+		return new(big.Rat).Quo(rounded, new(big.Rat).SetInt(scale))
+	}
+	// Negative precision: round to 10^(-precision)
+	result := roundIntegerHalfUp(ratFloorInt(r), -precision)
+	return new(big.Rat).SetInt(result)
+}
+
+// ratFloorInt returns floor of a rational as big.Int.
+func ratFloorInt(r *big.Rat) *big.Int {
+	q := new(big.Int).Div(r.Num(), r.Denom())
+	if r.Sign() < 0 && new(big.Int).Mul(q, r.Denom()).Cmp(r.Num()) != 0 {
+		q.Sub(q, big.NewInt(1))
+	}
+	return q
 }

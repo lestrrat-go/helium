@@ -94,16 +94,16 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, nil
 	}
 	var family string
-	// Track whether all values are integer/decimal for type-preserving avg
-	allInt := true
 	allDecOrInt := true
-	sumInt := new(big.Int)
 	sumRat := new(big.Rat)
 	var sumFloat float64
 	widest := TypeInteger
 
 	for _, a := range atoms {
-		a = promoteForAggregate(a)
+		a, err = promoteForAggregate(a)
+		if err != nil {
+			return nil, err
+		}
 		if err := checkSumAvgType(a); err != nil {
 			return nil, err
 		}
@@ -116,13 +116,13 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 			widest = a.TypeName
 		}
 		if isIntegerDerived(a.TypeName) {
-			sumInt.Add(sumInt, a.BigInt())
 			sumRat.Add(sumRat, new(big.Rat).SetInt(a.BigInt()))
+			sumFloat += a.ToFloat64()
 		} else if a.TypeName == TypeDecimal {
-			allInt = false
 			sumRat.Add(sumRat, a.BigRat())
+			f, _ := a.BigRat().Float64()
+			sumFloat += f
 		} else {
-			allInt = false
 			allDecOrInt = false
 			sumFloat += a.ToFloat64()
 		}
@@ -141,10 +141,6 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 		return SingleDecimal(new(big.Rat).Quo(sumRat, countRat)), nil
 	}
 	// Float/double path
-	if allInt {
-		f, _ := new(big.Float).SetInt(sumInt).Float64()
-		sumFloat = f
-	}
 	avg := sumFloat / float64(count)
 	if widest == TypeFloat {
 		return SingleFloat(avg), nil
@@ -185,18 +181,21 @@ func avgDurations(seq Sequence, family string) (Sequence, error) {
 }
 
 // promoteForAggregate promotes an atomic value for aggregate operations.
-func promoteForAggregate(a AtomicValue) AtomicValue {
+func promoteForAggregate(a AtomicValue) (AtomicValue, error) {
 	if a.TypeName == TypeUntypedAtomic {
 		f, err := castToDouble(a)
 		if err != nil {
-			return AtomicValue{TypeName: TypeDouble, Value: NewDouble(math.NaN())}
+			return AtomicValue{}, &XPathError{
+				Code:    "FORG0001",
+				Message: fmt.Sprintf("cannot promote %q to xs:double", a.StringVal()),
+			}
 		}
-		return f
+		return f, nil
 	}
 	if isIntegerDerived(a.TypeName) && a.TypeName != TypeInteger {
-		return AtomicValue{TypeName: TypeInteger, Value: a.BigInt()}
+		return AtomicValue{TypeName: TypeInteger, Value: a.BigInt()}, nil
 	}
-	return a
+	return a, nil
 }
 
 // promoteResult promotes the result of fn:max/fn:min to the widest numeric type.
@@ -243,7 +242,10 @@ func fnMax(_ context.Context, args []Sequence) (Sequence, error) {
 	widest := TypeInteger
 	first := true
 	for _, a := range atoms {
-		a = promoteForAggregate(a)
+		a, err = promoteForAggregate(a)
+		if err != nil {
+			return nil, err
+		}
 		newFamily := aggregateTypeFamily(a.TypeName)
 		if newFamily == "" {
 			return nil, &XPathError{
@@ -297,7 +299,10 @@ func fnMin(_ context.Context, args []Sequence) (Sequence, error) {
 	widest := TypeInteger
 	first := true
 	for _, a := range atoms {
-		a = promoteForAggregate(a)
+		a, err = promoteForAggregate(a)
+		if err != nil {
+			return nil, err
+		}
 		newFamily := aggregateTypeFamily(a.TypeName)
 		if newFamily == "" {
 			return nil, &XPathError{
@@ -350,6 +355,20 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 		return SingleInteger(0), nil
 	}
+	if len(atoms) == 1 {
+		a := atoms[0]
+		// Promote untypedAtomic to double per spec, but preserve derived integer types
+		if a.TypeName == TypeUntypedAtomic {
+			a, err = promoteForAggregate(a)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if err := checkSumAvgType(a); err != nil {
+			return nil, err
+		}
+		return SingleAtomic(a), nil
+	}
 	var family string
 	allInt := true
 	allDecOrInt := true
@@ -359,7 +378,10 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 	widest := TypeInteger
 
 	for _, a := range atoms {
-		a = promoteForAggregate(a)
+		a, err = promoteForAggregate(a)
+		if err != nil {
+			return nil, err
+		}
 		if err := checkSumAvgType(a); err != nil {
 			return nil, err
 		}
@@ -374,9 +396,12 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 		if isIntegerDerived(a.TypeName) {
 			sumInt.Add(sumInt, a.BigInt())
 			sumRat.Add(sumRat, new(big.Rat).SetInt(a.BigInt()))
+			sumFloat += a.ToFloat64()
 		} else if a.TypeName == TypeDecimal {
 			allInt = false
 			sumRat.Add(sumRat, a.BigRat())
+			f, _ := a.BigRat().Float64()
+			sumFloat += f
 		} else {
 			allInt = false
 			allDecOrInt = false
