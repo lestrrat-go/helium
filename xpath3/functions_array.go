@@ -339,6 +339,14 @@ func fnArraySort(ctx context.Context, args []Sequence) (Sequence, error) {
 	members := make([]Sequence, len(a.Members()))
 	copy(members, a.Members())
 
+	// Optional collation (2nd arg) — validate but we only support codepoint
+	if len(args) > 1 && len(args[1]) > 0 {
+		uri := seqToString(args[1])
+		if uri != "" && uri != codepointCollationURI {
+			return nil, &XPathError{Code: "FOCH0002", Message: fmt.Sprintf("unsupported collation: %s", uri)}
+		}
+	}
+
 	// Optional key function (3rd arg)
 	var keyFn *FunctionItem
 	if len(args) > 2 {
@@ -351,8 +359,7 @@ func fnArraySort(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	type sortEntry struct {
 		member Sequence
-		key    float64
-		strKey string
+		key    Sequence // atomized key sequence for comparison
 	}
 	entries := make([]sortEntry, len(members))
 	for i, m := range members {
@@ -362,29 +369,67 @@ func fnArraySort(ctx context.Context, args []Sequence) (Sequence, error) {
 			if err != nil {
 				return nil, err
 			}
-			if len(r) > 0 {
-				av, err := AtomizeItem(r[0])
-				if err == nil {
-					entries[i].key = av.ToFloat64()
-					s, _ := atomicToString(av)
-					entries[i].strKey = s
-				}
+			entries[i].key = r
+		} else {
+			// Default: atomize the member
+			atoms, err := AtomizeSequence(m)
+			if err != nil {
+				return nil, err
 			}
-		} else if len(m) > 0 {
-			av, err := AtomizeItem(m[0])
-			if err == nil {
-				entries[i].key = av.ToFloat64()
-				s, _ := atomicToString(av)
-				entries[i].strKey = s
+			entries[i].key = make(Sequence, len(atoms))
+			for j, av := range atoms {
+				entries[i].key[j] = av
 			}
 		}
 	}
+
+	var sortErr error
 	sort.SliceStable(entries, func(i, j int) bool {
-		if entries[i].strKey != "" || entries[j].strKey != "" {
-			return entries[i].strKey < entries[j].strKey
+		if sortErr != nil {
+			return false
 		}
-		return entries[i].key < entries[j].key
+		ki := entries[i].key
+		kj := entries[j].key
+		// Compare element-by-element per XPath 3.1 sort key comparison
+		minLen := len(ki)
+		if len(kj) < minLen {
+			minLen = len(kj)
+		}
+		for idx := 0; idx < minLen; idx++ {
+			ai, errI := AtomizeItem(ki[idx])
+			aj, errJ := AtomizeItem(kj[idx])
+			if errI != nil {
+				sortErr = errI
+				return false
+			}
+			if errJ != nil {
+				sortErr = errJ
+				return false
+			}
+			lt, err := ValueCompare(TokenLt, ai, aj)
+			if err != nil {
+				sortErr = err
+				return false
+			}
+			if lt {
+				return true
+			}
+			gt, err := ValueCompare(TokenGt, ai, aj)
+			if err != nil {
+				sortErr = err
+				return false
+			}
+			if gt {
+				return false
+			}
+			// equal — continue to next element
+		}
+		return len(ki) < len(kj)
 	})
+	if sortErr != nil {
+		return nil, sortErr
+	}
+
 	sorted := make([]Sequence, len(entries))
 	for i, e := range entries {
 		sorted[i] = e.member
