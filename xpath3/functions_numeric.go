@@ -49,11 +49,7 @@ func fnAbs(_ context.Context, args []Sequence) (Sequence, error) {
 	if a.TypeName == TypeDecimal {
 		return SingleDecimal(new(big.Rat).Abs(a.BigRat())), nil
 	}
-	f := a.ToFloat64()
-	if math.IsNaN(f) || math.IsInf(f, 0) || f == 0 {
-		return SingleAtomic(a), nil
-	}
-	return SingleAtomic(makeFloatResult(a.TypeName, math.Abs(f))), nil
+	return SingleAtomic(makeFloatResult(a.TypeName, math.Abs(a.ToFloat64()))), nil
 }
 
 func fnCeiling(_ context.Context, args []Sequence) (Sequence, error) {
