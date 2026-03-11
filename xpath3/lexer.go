@@ -452,9 +452,15 @@ func (l *lexer) scanNameOrKeyword() {
 
 	// Always-keywords: for, let, some, every, if, try, catch, function, map, array
 	// These start sub-expressions, so they are recognized regardless of context —
-	// EXCEPT after '/' or '//' where they must be treated as element name tests.
+	// EXCEPT after '/' or '//' where they must be treated as element name tests,
+	// unless immediately followed by '{' (curly array/map constructor).
 	if tokType, ok := alwaysKeywords[name]; ok {
 		if !l.isAfterSlash() {
+			l.emit(tokType, name)
+			return
+		}
+		// After '/', array{ and map{ are still constructors, not name tests
+		if (tokType == TokenArray || tokType == TokenMap) && l.pos < len(l.input) && l.input[l.pos] == '{' {
 			l.emit(tokType, name)
 			return
 		}
