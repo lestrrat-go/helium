@@ -431,10 +431,19 @@ func fnSubstringAfter(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnMatches(_ context.Context, args []Sequence) (Sequence, error) {
+	if len(args[0]) == 0 {
+		return SingleBoolean(false), nil // input is xs:string? — empty yields false
+	}
 	s := seqToString(args[0])
+	if len(args[1]) == 0 {
+		return nil, &XPathError{Code: "XPTY0004", Message: "fn:matches pattern must not be empty sequence"}
+	}
 	pattern := seqToString(args[1])
 	flags := ""
 	if len(args) > 2 {
+		if len(args[2]) == 0 {
+			return nil, &XPathError{Code: "XPTY0004", Message: "fn:matches flags must not be empty sequence"}
+		}
 		flags = seqToString(args[2])
 	}
 	re, err := compileXPathRegex(pattern, flags)
@@ -454,11 +463,23 @@ func fnCollationKey(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnReplace(_ context.Context, args []Sequence) (Sequence, error) {
+	if len(args[0]) == 0 {
+		return SingleString(""), nil // input is xs:string? — empty yields ""
+	}
 	s := seqToString(args[0])
+	if len(args[1]) == 0 {
+		return nil, &XPathError{Code: "XPTY0004", Message: "fn:replace pattern must not be empty sequence"}
+	}
 	pattern := seqToString(args[1])
+	if len(args[2]) == 0 {
+		return nil, &XPathError{Code: "XPTY0004", Message: "fn:replace replacement must not be empty sequence"}
+	}
 	replacement := seqToString(args[2])
 	flags := ""
 	if len(args) > 3 {
+		if len(args[3]) == 0 {
+			return nil, &XPathError{Code: "XPTY0004", Message: "fn:replace flags must not be empty sequence"}
+		}
 		flags = seqToString(args[3])
 	}
 
@@ -534,6 +555,9 @@ func translateXPathReplacement(repl string) (string, error) {
 }
 
 func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
+	if len(args[0]) == 0 {
+		return nil, nil // input is xs:string? — empty yields empty
+	}
 	s := seqToString(args[0])
 	if s == "" {
 		return nil, nil
@@ -549,9 +573,15 @@ func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
 		return result, nil
 	}
 
+	if len(args[1]) == 0 {
+		return nil, &XPathError{Code: "XPTY0004", Message: "fn:tokenize pattern must not be empty sequence"}
+	}
 	pattern := seqToString(args[1])
 	flags := ""
 	if len(args) > 2 {
+		if len(args[2]) == 0 {
+			return nil, &XPathError{Code: "XPTY0004", Message: "fn:tokenize flags must not be empty sequence"}
+		}
 		flags = seqToString(args[2])
 	}
 	re, err := compileXPathRegex(pattern, flags)
