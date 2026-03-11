@@ -419,24 +419,48 @@ func deepEqualArray(a, b ArrayItem) (bool, error) {
 }
 
 func fnIndexOf(_ context.Context, args []Sequence) (Sequence, error) {
-	seq := args[0]
 	if len(args[1]) == 0 {
-		return nil, nil
+		return nil, &XPathError{Code: "XPTY0004", Message: "index-of: search value must not be empty sequence"}
 	}
 	search, err := AtomizeItem(args[1][0])
 	if err != nil {
 		return nil, err
 	}
-	ss, _ := atomicToString(search)
+	// Validate optional collation argument (3rd arg)
+	if len(args) > 2 {
+		if len(args[2]) == 0 {
+			return nil, &XPathError{Code: "XPTY0004", Message: "collation argument must not be empty"}
+		}
+		collA, err := AtomizeItem(args[2][0])
+		if err != nil {
+			return nil, err
+		}
+		coll := collA.StringVal()
+		if coll != codepointCollationURI {
+			return nil, &XPathError{Code: "FOCH0002", Message: "unsupported collation: " + coll}
+		}
+	}
+	// Per spec: untypedAtomic values are cast to xs:string for comparison
+	if search.TypeName == TypeUntypedAtomic {
+		search = AtomicValue{TypeName: TypeString, Value: search.StringVal()}
+	}
+
+	// Atomize sequence to handle arrays (XPath 3.1: atomizing flattens arrays)
+	atoms, err := AtomizeSequence(args[0])
+	if err != nil {
+		return nil, err
+	}
 
 	var result Sequence
-	for i, item := range seq {
-		a, err := AtomizeItem(item)
-		if err != nil {
-			continue
+	for i, a := range atoms {
+		if a.TypeName == TypeUntypedAtomic {
+			a = AtomicValue{TypeName: TypeString, Value: a.StringVal()}
 		}
-		as, _ := atomicToString(a)
-		if as == ss && a.TypeName == search.TypeName {
+		eq, err := compareAtomic(TokenEq, a, search)
+		if err != nil {
+			continue // incomparable types are silently skipped
+		}
+		if eq {
 			result = append(result, AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(i + 1))})
 		}
 	}
