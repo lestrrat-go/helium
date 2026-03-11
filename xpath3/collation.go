@@ -82,19 +82,20 @@ func makeUCACollation(params string) *collationImpl {
 	opts := parseUCAParams(params)
 
 	cl := collate.New(opts.tag, opts.collateOpts...)
+	numeric := opts.numeric
 
 	return &collationImpl{
 		compare: func(a, b string) int {
 			return cl.CompareString(a, b)
 		},
 		indexOf: func(s, substr string) (int, int) {
-			return ucaIndexOf(cl, s, substr)
+			return ucaIndexOf(cl, s, substr, numeric)
 		},
 		hasPrefix: func(s, prefix string) (bool, int) {
-			return ucaHasPrefix(cl, s, prefix)
+			return ucaHasPrefix(cl, s, prefix, numeric)
 		},
 		hasSuffix: func(s, suffix string) (bool, int) {
-			return ucaHasSuffix(cl, s, suffix)
+			return ucaHasSuffix(cl, s, suffix, numeric)
 		},
 	}
 }
@@ -102,6 +103,7 @@ func makeUCACollation(params string) *collationImpl {
 type ucaParams struct {
 	tag         language.Tag
 	collateOpts []collate.Option
+	numeric     bool
 }
 
 func parseUCAParams(query string) ucaParams {
@@ -133,6 +135,7 @@ func parseUCAParams(query string) ucaParams {
 		case "numeric":
 			if val == "yes" {
 				p.collateOpts = append(p.collateOpts, collate.Numeric)
+				p.numeric = true
 			}
 		}
 	}
@@ -141,7 +144,7 @@ func parseUCAParams(query string) ucaParams {
 
 // ucaIndexOf finds substr in s using UCA collation, scanning rune by rune.
 // Tries varying match lengths to handle numeric collation (e.g., "001" == "1").
-func ucaIndexOf(cl *collate.Collator, s, substr string) (int, int) {
+func ucaIndexOf(cl *collate.Collator, s, substr string, numeric bool) (int, int) {
 	if substr == "" {
 		return 0, 0
 	}
@@ -158,6 +161,9 @@ func ucaIndexOf(cl *collate.Collator, s, substr string) (int, int) {
 		for matchLen := minLen; matchLen <= maxLen; matchLen++ {
 			candidate := string(sRunes[i : i+matchLen])
 			if cl.CompareString(candidate, substr) == 0 {
+				if numeric && splitsDigitRun(sRunes, i, i+matchLen) {
+					continue
+				}
 				bytePos := len(string(sRunes[:i]))
 				byteLen := len(candidate)
 				return bytePos, byteLen
@@ -167,6 +173,9 @@ func ucaIndexOf(cl *collate.Collator, s, substr string) (int, int) {
 		for matchLen := minLen - 1; matchLen > 0; matchLen-- {
 			candidate := string(sRunes[i : i+matchLen])
 			if cl.CompareString(candidate, substr) == 0 {
+				if numeric && splitsDigitRun(sRunes, i, i+matchLen) {
+					continue
+				}
 				bytePos := len(string(sRunes[:i]))
 				byteLen := len(candidate)
 				return bytePos, byteLen
@@ -176,30 +185,83 @@ func ucaIndexOf(cl *collate.Collator, s, substr string) (int, int) {
 	return -1, 0
 }
 
+// splitsDigitRun returns true if the match boundary [start, end) in runes
+// would split a contiguous run of digits. This is used with numeric collation
+// to avoid matching "10" inside "100".
+func splitsDigitRun(runes []rune, start, end int) bool {
+	// Check if start splits a digit run (digit before and at start)
+	if start > 0 && isDigit(runes[start-1]) && isDigit(runes[start]) {
+		return true
+	}
+	// Check if end splits a digit run (digit at end-1 and at end)
+	if end > 0 && end < len(runes) && isDigit(runes[end-1]) && isDigit(runes[end]) {
+		return true
+	}
+	return false
+}
+
+func isDigit(r rune) bool {
+	return r >= '0' && r <= '9'
+}
+
 // ucaHasPrefix checks if s starts with prefix under UCA collation.
-func ucaHasPrefix(cl *collate.Collator, s, prefix string) (bool, int) {
+func ucaHasPrefix(cl *collate.Collator, s, prefix string, numeric bool) (bool, int) {
 	prefixRunes := []rune(prefix)
 	sRunes := []rune(s)
 	if len(sRunes) < len(prefixRunes) {
 		return false, 0
 	}
-	candidate := string(sRunes[:len(prefixRunes)])
-	if cl.CompareString(candidate, prefix) == 0 {
-		return true, len(candidate)
+	// Try match lengths from len(prefixRunes) upward to handle numeric expansion
+	for matchLen := len(prefixRunes); matchLen <= len(sRunes); matchLen++ {
+		candidate := string(sRunes[:matchLen])
+		if cl.CompareString(candidate, prefix) == 0 {
+			if numeric && splitsDigitRun(sRunes, 0, matchLen) {
+				continue
+			}
+			return true, len(candidate)
+		}
+	}
+	// Also try shorter matches
+	for matchLen := len(prefixRunes) - 1; matchLen > 0; matchLen-- {
+		candidate := string(sRunes[:matchLen])
+		if cl.CompareString(candidate, prefix) == 0 {
+			if numeric && splitsDigitRun(sRunes, 0, matchLen) {
+				continue
+			}
+			return true, len(candidate)
+		}
 	}
 	return false, 0
 }
 
 // ucaHasSuffix checks if s ends with suffix under UCA collation.
-func ucaHasSuffix(cl *collate.Collator, s, suffix string) (bool, int) {
+func ucaHasSuffix(cl *collate.Collator, s, suffix string, numeric bool) (bool, int) {
 	suffixRunes := []rune(suffix)
 	sRunes := []rune(s)
 	if len(sRunes) < len(suffixRunes) {
 		return false, 0
 	}
-	candidate := string(sRunes[len(sRunes)-len(suffixRunes):])
-	if cl.CompareString(candidate, suffix) == 0 {
-		return true, len(candidate)
+	// Try match lengths from len(suffixRunes) upward
+	for matchLen := len(suffixRunes); matchLen <= len(sRunes); matchLen++ {
+		start := len(sRunes) - matchLen
+		candidate := string(sRunes[start:])
+		if cl.CompareString(candidate, suffix) == 0 {
+			if numeric && splitsDigitRun(sRunes, start, len(sRunes)) {
+				continue
+			}
+			return true, len(candidate)
+		}
+	}
+	// Also try shorter matches
+	for matchLen := len(suffixRunes) - 1; matchLen > 0; matchLen-- {
+		start := len(sRunes) - matchLen
+		candidate := string(sRunes[start:])
+		if cl.CompareString(candidate, suffix) == 0 {
+			if numeric && splitsDigitRun(sRunes, start, len(sRunes)) {
+				continue
+			}
+			return true, len(candidate)
+		}
 	}
 	return false, 0
 }
