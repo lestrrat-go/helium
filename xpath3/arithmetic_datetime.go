@@ -305,34 +305,46 @@ func arithmeticDurationDivDuration(la, ra AtomicValue) (Sequence, bool, error) {
 	ld := la.DurationVal()
 	rd := ra.DurationVal()
 
-	// Convert to total seconds for dayTimeDuration, total months for yearMonthDuration
-	var lVal, rVal float64
-	if la.TypeName == TypeYearMonthDuration {
-		lVal = float64(ld.Months)
-		if ld.Negative {
-			lVal = -lVal
-		}
-		rVal = float64(rd.Months)
-		if rd.Negative {
-			rVal = -rVal
-		}
-	} else {
-		lVal = ld.Seconds
-		if ld.Negative {
-			lVal = -lVal
-		}
-		rVal = rd.Seconds
-		if rd.Negative {
-			rVal = -rVal
+	isYM := la.TypeName == TypeYearMonthDuration
+
+	// Check for overflow: float64 cannot exactly represent seconds beyond 2^53,
+	// so large dayTimeDuration values produce imprecise results.
+	if !isYM {
+		const maxExactFloat64 = 1 << 53
+		if ld.Seconds > maxExactFloat64 || rd.Seconds > maxExactFloat64 {
+			return nil, true, &XPathError{Code: "FODT0002", Message: "dayTimeDuration value too large for exact division"}
 		}
 	}
 
-	if rVal == 0 {
+	lRat := durationToRat(ld, isYM)
+	rRat := durationToRat(rd, ra.TypeName == TypeYearMonthDuration)
+
+	if rRat.Sign() == 0 {
 		return nil, true, &XPathError{Code: "FOAR0002", Message: "division of duration by zero duration"}
 	}
 
-	r := new(big.Rat).SetFloat64(lVal / rVal)
+	r := new(big.Rat).Quo(lRat, rRat)
 	return SingleDecimal(r), true, nil
+}
+
+// durationToRat converts a Duration to an exact big.Rat value.
+// For yearMonthDuration, the value is total months; for dayTimeDuration, total seconds.
+func durationToRat(d Duration, isYM bool) *big.Rat {
+	var r *big.Rat
+	if isYM {
+		r = new(big.Rat).SetInt64(int64(d.Months))
+	} else {
+		// Use big.Float → big.Rat to handle values exceeding int64 range
+		bf := new(big.Float).SetPrec(256).SetFloat64(d.Seconds)
+		r, _ = bf.Rat(nil)
+		if d.FracSec != nil {
+			r.Add(r, d.FracSec)
+		}
+	}
+	if d.Negative {
+		r.Neg(r)
+	}
+	return r
 }
 
 // attachTimezone sets the timezone on a time value without converting the local
