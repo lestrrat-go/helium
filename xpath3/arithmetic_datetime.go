@@ -152,6 +152,11 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 		return nil, true, &XPathError{Code: "XPTY0004", Message: "invalid operator for duration*number"}
 	}
 
+	// xs:duration (generic) does not support arithmetic — only YMD and DTD do
+	if dur.TypeName == TypeDuration {
+		return nil, true, &XPathError{Code: "XPTY0004", Message: "xs:duration cannot be used in arithmetic"}
+	}
+
 	d := dur.DurationVal()
 	n := num.ToFloat64()
 
@@ -181,7 +186,9 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 		return nil, true, &XPathError{Code: "FODT0002", Message: "duration overflow"}
 	}
 
-	resMonths := int(math.Round(months))
+	// Per XPath F&O spec: months are rounded "half towards positive infinity"
+	// i.e. math.Floor(months + 0.5)
+	resMonths := int(math.Floor(months + 0.5))
 	resSecs := secs
 	negative := resMonths < 0 || (resMonths == 0 && resSecs < 0)
 	if negative {
