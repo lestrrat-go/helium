@@ -186,7 +186,7 @@ func makeXSQNameConstructor() func(context.Context, []Sequence) (Sequence, error
 			}
 			if !resolved {
 				return nil, &XPathError{
-					Code:    "FONS0004",
+					Code:    errCodeFONS0004,
 					Message: fmt.Sprintf("no namespace binding for prefix %q", prefix),
 				}
 			}

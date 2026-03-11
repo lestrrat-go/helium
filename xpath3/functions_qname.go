@@ -161,7 +161,7 @@ func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
 	if prefix != "" {
 		ns := helium.LookupNSByPrefix(elem, prefix)
 		if ns == nil {
-			return nil, &XPathError{Code: "FONS0004", Message: "resolve-QName: no namespace binding for prefix " + prefix}
+			return nil, &XPathError{Code: errCodeFONS0004, Message: "resolve-QName: no namespace binding for prefix " + prefix}
 		}
 		uri = ns.URI()
 	} else {

@@ -630,7 +630,7 @@ func castToQName(v AtomicValue, ec *evalContext) (AtomicValue, error) {
 		}
 		if !resolved {
 			return AtomicValue{}, &XPathError{
-				Code:    "FONS0004",
+				Code:    errCodeFONS0004,
 				Message: fmt.Sprintf("no namespace binding for prefix %q", prefix),
 			}
 		}
