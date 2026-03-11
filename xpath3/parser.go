@@ -914,6 +914,14 @@ func (p *parser) parseLookupKey() (Expr, bool, error) {
 func tokenAsNCName(tok Token) string {
 	switch tok.Type {
 	case TokenName:
+		// Reject URIQualifiedNames (Q{uri}local) — they are not NCNames
+		if strings.HasPrefix(tok.Value, "Q{") {
+			return ""
+		}
+		// Reject prefixed names (prefix:local) — they are QNames, not NCNames
+		if strings.Contains(tok.Value, ":") {
+			return ""
+		}
 		return tok.Value
 	case TokenDiv:
 		return "div"
