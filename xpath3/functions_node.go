@@ -256,16 +256,20 @@ func fnInnermost(_ context.Context, args []Sequence) (Sequence, error) {
 	for _, n := range nodes {
 		nodeSet[n] = true
 	}
+	// A node is innermost if it is not an ancestor of any other node in the set.
+	// Collect all ancestors of nodes in the set, then exclude them.
+	ancestors := make(map[helium.Node]bool)
+	for _, n := range nodes {
+		for p := n.Parent(); p != nil; p = p.Parent() {
+			if ancestors[p] {
+				break // already traced this path
+			}
+			ancestors[p] = true
+		}
+	}
 	var result Sequence
 	for _, n := range nodes {
-		isInner := true
-		for p := n.Parent(); p != nil; p = p.Parent() {
-			if nodeSet[p] {
-				isInner = false
-				break
-			}
-		}
-		if isInner {
+		if !ancestors[n] {
 			result = append(result, NodeItem{Node: n})
 		}
 	}
