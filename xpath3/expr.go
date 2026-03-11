@@ -226,6 +226,7 @@ func (BinaryExpr) exprNode() {}
 // UnaryExpr represents unary negation (-expr) or unary plus (+expr).
 type UnaryExpr struct {
 	Operand Expr
+	Negate  bool
 }
 
 func (UnaryExpr) exprNode() {}

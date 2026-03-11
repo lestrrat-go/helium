@@ -434,9 +434,12 @@ loop:
 	if err != nil {
 		return nil, err
 	}
-	_ = hasUnary
+	if hasUnary && negate == 0 {
+		// Pure unary plus: wrap to enforce numeric type check
+		expr = UnaryExpr{Operand: expr, Negate: false}
+	}
 	for i := 0; i < negate; i++ {
-		expr = UnaryExpr{Operand: expr}
+		expr = UnaryExpr{Operand: expr, Negate: true}
 	}
 	return expr, nil
 }

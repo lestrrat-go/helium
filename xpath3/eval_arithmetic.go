@@ -220,6 +220,13 @@ func evalUnaryExpr(ec *evalContext, e UnaryExpr) (Sequence, error) {
 		}
 		a = castVal
 	}
+	if !e.Negate {
+		// Unary plus: type check only, return value unchanged
+		if !isSubtypeOf(a.TypeName, TypeDecimal) && a.TypeName != TypeFloat && a.TypeName != TypeDouble {
+			return nil, &XPathError{Code: "XPTY0004", Message: "unary operator requires numeric type, got " + a.TypeName}
+		}
+		return SingleAtomic(a), nil
+	}
 	if isIntegerDerived(a.TypeName) {
 		return SingleIntegerBig(new(big.Int).Neg(a.BigInt())), nil
 	}
