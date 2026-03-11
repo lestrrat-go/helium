@@ -372,15 +372,31 @@ func isXPathApplicable(deps []dependency) bool {
 		}
 		hasSpecDep = true
 		for _, v := range strings.Fields(d.Value) {
-			if strings.HasPrefix(v, "XP") {
-				if d.Satisfied == "false" {
-					continue
-				}
+			if !strings.HasPrefix(v, "XP") {
+				continue
+			}
+			if d.Satisfied == "false" {
+				continue
+			}
+			// We target XPath 3.1. Accept versions that include 3.1:
+			// XP31, XP31+, XP30+, XP20+, XP10+ all cover 3.1.
+			// Reject exact versions that exclude 3.1: XP10, XP20, XP30.
+			if xpVersionIncludes31(v) {
 				return true
 			}
 		}
 	}
 	return !hasSpecDep
+}
+
+// xpVersionIncludes31 returns true if the XPath spec token includes version 3.1.
+// Tokens like "XP31", "XP31+", "XP30+", "XP20+" include 3.1.
+// Tokens like "XP30", "XP20", "XP10" do not.
+func xpVersionIncludes31(v string) bool {
+	if strings.HasSuffix(v, "+") {
+		return true // any "XPxx+" includes later versions
+	}
+	return v == "XP31" // exact match only for 3.1
 }
 
 func getSkipReason(deps []dependency) string {
