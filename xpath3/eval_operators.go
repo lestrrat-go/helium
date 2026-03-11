@@ -100,11 +100,11 @@ func concatToString(seq Sequence) (string, error) {
 	}
 	switch seq[0].(type) {
 	case FunctionItem:
-		return "", &XPathError{Code: "FOTY0014", Message: "cannot get string value of function item"}
+		return "", &XPathError{Code: errCodeFOTY0014, Message: "cannot get string value of function item"}
 	case MapItem:
-		return "", &XPathError{Code: "FOTY0014", Message: "cannot get string value of map item"}
+		return "", &XPathError{Code: errCodeFOTY0014, Message: "cannot get string value of map item"}
 	case ArrayItem:
-		return "", &XPathError{Code: "FOTY0014", Message: "cannot get string value of array item"}
+		return "", &XPathError{Code: errCodeFOTY0014, Message: "cannot get string value of array item"}
 	}
 	return seqToString(seq), nil
 }

@@ -66,7 +66,7 @@ func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
 	// fn:string does not accept function items, maps, or arrays
 	switch item.(type) {
 	case FunctionItem, MapItem, ArrayItem:
-		return nil, &XPathError{Code: "FOTY0014", Message: fmt.Sprintf("fn:string: cannot get string value of %T", item)}
+		return nil, &XPathError{Code: errCodeFOTY0014, Message: fmt.Sprintf("fn:string: cannot get string value of %T", item)}
 	}
 	a, err := AtomizeItem(item)
 	if err != nil {
