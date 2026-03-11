@@ -39,7 +39,10 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 		maps = append(maps, m)
 	}
 	duplicates := MergeUseLast
-	if len(args) > 1 && len(args[1]) > 0 {
+	if len(args) > 1 {
+		if len(args[1]) == 0 {
+			return nil, &XPathError{Code: "XPTY0004", Message: "map:merge: options argument must be a map, got empty sequence"}
+		}
 		// The options map should contain "duplicates" key
 		optMap, ok := args[1][0].(MapItem)
 		if ok {
