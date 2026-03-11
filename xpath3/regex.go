@@ -233,7 +233,7 @@ func translateUnicodeProperty(name string, neg bool) (string, error) {
 				return "[" + v + "]", nil
 			}
 		}
-		return "", &XPathError{Code: "FORX0002", Message: fmt.Sprintf("unknown Unicode block: Is%s", blockName)}
+		return "", &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("unknown Unicode block: Is%s", blockName)}
 	}
 
 	// Check Go-supported category/script names
@@ -241,7 +241,7 @@ func translateUnicodeProperty(name string, neg bool) (string, error) {
 		return prefix + "{" + name + "}", nil
 	}
 
-	return "", &XPathError{Code: "FORX0002", Message: fmt.Sprintf("unknown Unicode property: %s", name)}
+	return "", &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("unknown Unicode property: %s", name)}
 }
 
 // goSupportedScripts lists script names supported by Go's regexp engine.
@@ -428,7 +428,7 @@ func validateXPathRegex(pattern string) error {
 			// valid escape in XML Schema regex.
 			if next >= '0' && next <= '9' {
 				return &XPathError{
-					Code:    "FORX0002",
+					Code:    errCodeFORX0002,
 					Message: fmt.Sprintf("back-reference \\%c is not allowed in XPath regex", next),
 				}
 			}
@@ -442,7 +442,7 @@ func validateXPathRegex(pattern string) error {
 					end := findClosingBrace(runes, i+3)
 					if end < 0 {
 						return &XPathError{
-							Code:    "FORX0002",
+							Code:    errCodeFORX0002,
 							Message: fmt.Sprintf("unterminated \\%c{ in regex", next),
 						}
 					}
@@ -474,7 +474,7 @@ func validateXPathRegex(pattern string) error {
 		if r == '{' && inCharClass == 0 {
 			if !isValidQuantifierBrace(runes, i) {
 				return &XPathError{
-					Code:    "FORX0002",
+					Code:    errCodeFORX0002,
 					Message: "unescaped '{' outside quantifier is not allowed in XPath regex",
 				}
 			}
@@ -489,7 +489,7 @@ func validateXPathRegex(pattern string) error {
 				inQuantifier = false
 			} else {
 				return &XPathError{
-					Code:    "FORX0002",
+					Code:    errCodeFORX0002,
 					Message: "unescaped '}' outside quantifier is not allowed in XPath regex",
 				}
 			}
@@ -541,7 +541,7 @@ func rejectPerlSpecific(pattern string) error {
 			switch runes[i+1] {
 			case 'b', 'B', 'A', 'Z', 'z':
 				return &XPathError{
-					Code:    "FORX0002",
+					Code:    errCodeFORX0002,
 					Message: fmt.Sprintf("Perl-specific escape \\%c is not allowed in XPath regex", runes[i+1]),
 				}
 			}
@@ -555,7 +555,7 @@ func rejectPerlSpecific(pattern string) error {
 				continue
 			}
 			return &XPathError{
-				Code:    "FORX0002",
+				Code:    errCodeFORX0002,
 				Message: "inline flag groups (?...) are not allowed in XPath regex",
 			}
 		}

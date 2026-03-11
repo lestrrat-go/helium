@@ -850,7 +850,7 @@ func compileXPathRegex(pattern, flags string) (*regexp.Regexp, error) {
 	}
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		return nil, &XPathError{Code: "FORX0002", Message: fmt.Sprintf("invalid regular expression: %s", err)}
+		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("invalid regular expression: %s", err)}
 	}
 	return re, nil
 }
