@@ -141,8 +141,14 @@ func fnCompare(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 || len(args[1]) == 0 {
 		return nil, nil
 	}
-	s1 := seqToString(args[0])
-	s2 := seqToString(args[1])
+	s1, err := coerceArgToString(args[0])
+	if err != nil {
+		return nil, err
+	}
+	s2, err := coerceArgToString(args[1])
+	if err != nil {
+		return nil, err
+	}
 	cmp := coll.compare(s1, s2)
 	return SingleInteger(int64(cmp)), nil
 }
