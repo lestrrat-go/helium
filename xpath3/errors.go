@@ -7,6 +7,7 @@ import (
 )
 
 const errCodeXPTY0004 = "XPTY0004"
+const errCodeFOAR0002 = "FOAR0002"
 const errCodeFORG0006 = "FORG0006"
 
 // Sentinel errors for the xpath3 package.

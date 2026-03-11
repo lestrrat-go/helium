@@ -336,7 +336,7 @@ func arithmeticDurationDivDuration(la, ra AtomicValue) (Sequence, bool, error) {
 	rRat := durationToRat(rd, ra.TypeName == TypeYearMonthDuration)
 
 	if rRat.Sign() == 0 {
-		return nil, true, &XPathError{Code: "FOAR0002", Message: "division of duration by zero duration"}
+		return nil, true, &XPathError{Code: errCodeFOAR0002, Message: "division of duration by zero duration"}
 	}
 
 	r := new(big.Rat).Quo(lRat, rRat)
