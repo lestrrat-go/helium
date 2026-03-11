@@ -354,8 +354,8 @@ func compareAtomic(op TokenType, a, b AtomicValue) (bool, error) {
 		case TypeQName:
 			return compareQName(op, a.Value.(QNameValue), b.Value.(QNameValue))
 		case TypeGDay, TypeGMonth, TypeGMonthDay, TypeGYear, TypeGYearMonth:
-			sa := stringFromAtomic(a)
-			sb := stringFromAtomic(b)
+			sa := normalizeGTZ(stringFromAtomic(a))
+			sb := normalizeGTZ(stringFromAtomic(b))
 			cmp := strings.Compare(sa, sb)
 			return applyCompare(op, cmp), nil
 		}
@@ -415,6 +415,15 @@ func applyImplicitTZ(t time.Time) time.Time {
 	// No timezone — apply implicit timezone (system local).
 	// Use time.Local directly rather than time.Now().Zone() for consistency.
 	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.Local)
+}
+
+// normalizeGTZ normalizes timezone suffixes in g* type string values
+// so that -00:00, +00:00, and Z are all treated as equivalent.
+func normalizeGTZ(s string) string {
+	if strings.HasSuffix(s, "+00:00") || strings.HasSuffix(s, "-00:00") {
+		return s[:len(s)-6] + "Z"
+	}
+	return s
 }
 
 func compareTime(op TokenType, a, b time.Time) bool {
