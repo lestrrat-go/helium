@@ -469,8 +469,11 @@ func fnDocAvailable(_ context.Context, _ []Sequence) (Sequence, error) {
 func nodeArgOrCtx(ctx context.Context, args []Sequence) (helium.Node, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
-		if fc == nil || fc.node == nil {
-			return nil, nil
+		if fc == nil {
+			return nil, &XPathError{Code: "XPDY0002", Message: "context item is absent"}
+		}
+		if fc.node == nil {
+			return nil, &XPathError{Code: "XPTY0004", Message: "context item is not a node"}
 		}
 		return fc.node, nil
 	}
