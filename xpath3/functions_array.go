@@ -374,7 +374,7 @@ func fnArraySort(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) > 1 && len(args[1]) > 0 {
 		uri := seqToString(args[1])
 		if uri != "" && uri != codepointCollationURI {
-			return nil, &XPathError{Code: "FOCH0002", Message: fmt.Sprintf("unsupported collation: %s", uri)}
+			return nil, &XPathError{Code: errCodeFOCH0002, Message: fmt.Sprintf("unsupported collation: %s", uri)}
 		}
 	}
 

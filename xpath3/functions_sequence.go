@@ -437,7 +437,7 @@ func fnIndexOf(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 		coll := collA.StringVal()
 		if coll != codepointCollationURI {
-			return nil, &XPathError{Code: "FOCH0002", Message: "unsupported collation: " + coll}
+			return nil, &XPathError{Code: errCodeFOCH0002, Message: "unsupported collation: " + coll}
 		}
 	}
 	// Per spec: untypedAtomic values are cast to xs:string for comparison

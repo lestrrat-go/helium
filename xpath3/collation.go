@@ -306,6 +306,6 @@ func resolveCollation(uri, baseURI string) (*collationImpl, error) {
 		}
 		return makeUCACollation(params), nil
 	default:
-		return nil, &XPathError{Code: "FOCH0002", Message: fmt.Sprintf("unsupported collation: %s", uri)}
+		return nil, &XPathError{Code: errCodeFOCH0002, Message: fmt.Sprintf("unsupported collation: %s", uri)}
 	}
 }

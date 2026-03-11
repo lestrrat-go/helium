@@ -65,7 +65,7 @@ func validateCollationArg(args []Sequence, idx int) error {
 	uri := seqToString(args[idx])
 	if uri != codepointCollationURI {
 		return &XPathError{
-			Code:    "FOCH0002",
+			Code:    errCodeFOCH0002,
 			Message: fmt.Sprintf("unsupported collation: %s", uri),
 		}
 	}
