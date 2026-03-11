@@ -41,25 +41,37 @@ func (r *Result) IsString() (string, bool)
 
 ```go
 type Context struct {
-    namespaces  map[string]string
-    variables   map[string]Sequence
-    functions   map[string]Function
-    functionsNS map[QualifiedName]Function
-    opLimit     int
+    namespaces       map[string]string
+    variables        map[string]Sequence
+    functions        map[string]Function
+    functionsNS      map[QualifiedName]Function
+    opLimit          int
+    implicitTimezone *time.Location
+    baseURI          string
+    uriResolver      URIResolver
+    httpClient       *http.Client
 }
 
 type ContextOption func(*Context)
 
-func WithNamespaces(ns map[string]string) ContextOption
-func WithVariables(vars map[string]Sequence) ContextOption
+func WithNamespaces(ns map[string]string) ContextOption       // defensively copied
+func WithVariables(vars map[string]Sequence) ContextOption    // defensively copied
 func WithOpLimit(limit int) ContextOption
-func WithFunctions(fns map[string]Function) ContextOption
-func WithFunctionsNS(fns map[QualifiedName]Function) ContextOption
+func WithFunctions(fns map[string]Function) ContextOption     // defensively copied
+func WithFunctionsNS(fns map[QualifiedName]Function) ContextOption // defensively copied
+func WithImplicitTimezone(loc *time.Location) ContextOption
+func WithBaseURI(uri string) ContextOption
+func WithURIResolver(r URIResolver) ContextOption
+func WithHTTPClient(client *http.Client) ContextOption
 
 func NewContext(ctx context.Context, opts ...ContextOption) context.Context
 func GetContext(ctx context.Context) *Context
 
 type QualifiedName struct { URI, Name string }
+
+type URIResolver interface {
+    ResolveURI(uri string) (io.ReadCloser, error)
+}
 ```
 
 User functions registered via `WithFunctionsNS` CANNOT override built-ins in `fn:` namespace.
@@ -68,24 +80,25 @@ User functions registered via `WithFunctionsNS` CANNOT override built-ins in `fn
 
 ```go
 var (
-    ErrNotNodeSet         // result is not a node-set
-    ErrRecursionLimit     // recursion limit exceeded
-    ErrOpLimit            // operation limit exceeded
-    ErrUnknownFunction    // unknown function
+    ErrNotNodeSet               // result is not a node-set
+    ErrRecursionLimit           // recursion limit exceeded
+    ErrOpLimit                  // operation limit exceeded
+    ErrUnknownFunction          // unknown function
     ErrUnknownFunctionNamespace // unknown function namespace prefix
-    ErrUnsupportedExpr    // unsupported expression type
-    ErrUndefinedVariable  // undefined variable
-    ErrTypeMismatch       // type mismatch
-    ErrInvalidArgCount    // invalid argument count
-    ErrCastFailed         // cast failed
-    ErrArityMismatch      // arity mismatch
-    ErrDynamicError       // dynamic error
-    ErrUnexpectedToken    // unexpected token
-    ErrUnexpectedChar     // unexpected character
-    ErrUnterminatedString // unterminated string
-    ErrUnknownAxis        // unknown axis
-    ErrExpectedToken      // expected token
-    ErrExprTooDeep        // expression nesting too deep
+    ErrUnsupportedExpr          // unsupported expression type
+    ErrUndefinedVariable        // undefined variable
+    ErrTypeMismatch             // type mismatch
+    ErrArityMismatch            // arity mismatch
+    ErrUnexpectedToken          // unexpected token
+    ErrUnexpectedChar           // unexpected character
+    ErrUnterminatedString       // unterminated string
+    ErrUnknownAxis              // unknown axis
+    ErrExpectedToken            // expected token
+    ErrExprTooDeep              // expression nesting too deep
+    ErrUnionNotNodeSet          // union operands must be node-sets
+    ErrPathNotNodeSet           // path expression requires node-set
+    ErrUnsupportedBinaryOp      // unsupported binary operator
+    ErrNodeSetLimit             // node-set size limit exceeded (alias of internal/xpath.ErrNodeSetLimit)
 )
 ```
 
