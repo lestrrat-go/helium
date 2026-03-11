@@ -1139,7 +1139,7 @@ func (p *parser) parseNodeTest(_ AxisType) (NodeTest, error) {
 			uri := tok.Value[2:idx]
 			local := tok.Value[idx+1:]
 			if uri == "http://www.w3.org/2000/xmlns/" {
-				return nil, &XPathError{Code: "XPST0081", Message: "the xmlns namespace URI cannot be used in name tests"}
+				return nil, &XPathError{Code: errCodeXPST0081, Message: "the xmlns namespace URI cannot be used in name tests"}
 			}
 			return NameTest{URI: uri, Local: local}, nil
 		}

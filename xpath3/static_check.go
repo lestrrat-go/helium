@@ -239,7 +239,7 @@ func validatePrefix(prefix string, namespaces map[string]string) error {
 		return nil
 	}
 	return &XPathError{
-		Code:    "XPST0081",
+		Code:    errCodeXPST0081,
 		Message: "undeclared namespace prefix: " + prefix,
 	}
 }
@@ -269,7 +269,7 @@ func checkPrefixesInNodeTest(nt NodeTest, namespaces map[string]string) error {
 		if t.Prefix == "" {
 			if namespaces == nil || namespaces[""] == "" {
 				return &XPathError{
-					Code:    "XPST0081",
+					Code:    errCodeXPST0081,
 					Message: fmt.Sprintf("unprefixed type name %q requires a default element namespace", t.Name),
 				}
 			}

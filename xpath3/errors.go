@@ -8,6 +8,7 @@ import (
 
 const errCodeXPTY0004 = "XPTY0004"
 const errCodeXPDY0002 = "XPDY0002"
+const errCodeXPST0081 = "XPST0081"
 const errCodeFOAR0002 = "FOAR0002"
 const errCodeFOCA0002 = "FOCA0002"
 const errCodeFOCH0002 = "FOCH0002"
