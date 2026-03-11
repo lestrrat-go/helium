@@ -151,6 +151,38 @@ func ValueCompare(op TokenType, a, b AtomicValue) (bool, error) {
 	return compareAtomic(op, pa, pb)
 }
 
+// valueCompareThreeWay compares two atomic values and returns -1, 0, or 1.
+// If coll is non-nil, it is used for string comparisons instead of codepoint order.
+func valueCompareThreeWay(a, b AtomicValue, coll *collationImpl) (int, error) {
+	pa, pb := promoteForValueComparison(a, b)
+
+	// If both are strings and a collation is provided, use it
+	aStr := isStringDerived(pa.TypeName) || pa.TypeName == TypeAnyURI
+	bStr := isStringDerived(pb.TypeName) || pb.TypeName == TypeAnyURI
+	if aStr && bStr && coll != nil {
+		sa := stringFromAtomic(pa)
+		sb := stringFromAtomic(pb)
+		return coll.compare(sa, sb), nil
+	}
+
+	// Fall back to standard comparison
+	less, err := compareAtomic(TokenLt, pa, pb)
+	if err != nil {
+		return 0, err
+	}
+	if less {
+		return -1, nil
+	}
+	greater, err := compareAtomic(TokenGt, pa, pb)
+	if err != nil {
+		return 0, err
+	}
+	if greater {
+		return 1, nil
+	}
+	return 0, nil
+}
+
 // comparisonFamily returns a type family string for comparison compatibility checking.
 func comparisonFamily(typeName string) string {
 	if isIntegerDerived(typeName) {

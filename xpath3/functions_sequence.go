@@ -466,6 +466,19 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 		return input, nil
 	}
 
+	// Optional collation (2nd argument)
+	var coll *collationImpl
+	if len(args) >= 2 && len(args[1]) > 0 {
+		uri := seqToString(args[1])
+		if uri != "" {
+			var err error
+			coll, err = resolveCollation(uri, "")
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	// Optional key function (3rd argument)
 	var keyFn *FunctionItem
 	if len(args) >= 3 && len(args[2]) > 0 {
@@ -522,20 +535,15 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 			if err1 != nil || err2 != nil {
 				return false
 			}
-			less, err := ValueCompare(TokenLt, ai, aj)
+			cmp, err := valueCompareThreeWay(ai, aj, coll)
 			if err != nil {
 				sortErr = err
 				return false
 			}
-			if less {
+			if cmp < 0 {
 				return true
 			}
-			greater, err := ValueCompare(TokenGt, ai, aj)
-			if err != nil {
-				sortErr = err
-				return false
-			}
-			if greater {
+			if cmp > 0 {
 				return false
 			}
 			// Equal — continue to next key component

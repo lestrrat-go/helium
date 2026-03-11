@@ -275,6 +275,9 @@ const ucaCollationURI = "http://www.w3.org/2013/collation/UCA"
 // htmlASCIICaseInsensitiveURI is the HTML ASCII case-insensitive collation URI.
 const htmlASCIICaseInsensitiveURI = "http://www.w3.org/2005/xpath-functions/collation/html-ascii-case-insensitive"
 
+// caseblindCollationURI is the QT3 test suite's case-blind collation URI.
+const caseblindCollationURI = "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind"
+
 // resolveCollation resolves a collation URI string to a collation implementation.
 // If baseURI is non-empty, relative URIs are resolved against it.
 func resolveCollation(uri, baseURI string) (*collationImpl, error) {
@@ -293,6 +296,8 @@ func resolveCollation(uri, baseURI string) (*collationImpl, error) {
 	case uri == codepointCollationURI:
 		return codepointCollation, nil
 	case uri == htmlASCIICaseInsensitiveURI:
+		return htmlASCIICaseInsensitiveCollation, nil
+	case uri == caseblindCollationURI:
 		return htmlASCIICaseInsensitiveCollation, nil
 	case strings.HasPrefix(uri, ucaCollationURI):
 		params := ""
