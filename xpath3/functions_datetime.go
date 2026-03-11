@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"math"
+	"math/big"
 	"time"
 )
 
@@ -307,11 +308,17 @@ func fnSecondsFromDuration(_ context.Context, args []Sequence) (Sequence, error)
 	if !ok {
 		return nil, nil
 	}
-	sec := math.Mod(d.Seconds, 60)
-	if d.Negative {
-		sec = -sec
+	// Use exact arithmetic: integer total seconds mod 60 + exact fractional part
+	intSec := int64(d.Seconds)
+	wholeSec := intSec % 60
+	result := new(big.Rat).SetInt64(wholeSec)
+	if d.FracSec != nil {
+		result.Add(result, d.FracSec)
 	}
-	return SingleDouble(sec), nil
+	if d.Negative {
+		result.Neg(result)
+	}
+	return SingleDecimal(result), nil
 }
 
 // --- timezone adjustment ---

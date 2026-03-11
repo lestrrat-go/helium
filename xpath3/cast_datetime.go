@@ -3,6 +3,7 @@ package xpath3
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -389,6 +390,15 @@ func parseXSDDuration(s string) (Duration, error) {
 				d.Seconds += f * 60
 			case 'S':
 				d.Seconds += f
+				// Store exact fractional seconds as big.Rat to avoid float64 precision loss
+				if strings.ContainsRune(numStr, '.') {
+					r, ok := new(big.Rat).SetString(numStr)
+					if ok {
+						// Extract just the fractional part: frac = r - floor(r)
+						intPart := new(big.Int).Div(r.Num(), r.Denom())
+						d.FracSec = new(big.Rat).Sub(r, new(big.Rat).SetInt(intPart))
+					}
+				}
 			default:
 				return Duration{}, fmt.Errorf("invalid duration designator: %c", designator)
 			}

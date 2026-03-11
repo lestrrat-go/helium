@@ -329,6 +329,7 @@ func HasTimezone(t time.Time) bool {
 type Duration struct {
 	Months   int     // total months (years*12 + months)
 	Seconds  float64 // total seconds (days*86400 + hours*3600 + minutes*60 + seconds)
+	FracSec  *big.Rat // exact fractional seconds component (the part after decimal in 'S'), nil if integer
 	Negative bool
 }
 
