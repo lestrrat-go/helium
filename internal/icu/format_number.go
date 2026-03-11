@@ -731,6 +731,10 @@ func RatDecimalDigits(r *big.Rat) int {
 		}
 		fives++
 	}
+	// If d != 1 after removing all 2s and 5s, the decimal is non-terminating
+	if d.Cmp(big.NewInt(1)) != 0 {
+		return math.MaxInt
+	}
 	if twos > fives {
 		return twos
 	}
