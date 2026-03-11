@@ -503,6 +503,18 @@ func (l *lexer) isOperatorContext() bool {
 	case TokenName, TokenNumber, TokenString, TokenRParen, TokenRBracket,
 		TokenDot, TokenDotDot, TokenStar, TokenVariableRef, TokenRBrace:
 		return true
+	case TokenQMark:
+		// '?' is value-producing when it follows a type name (occurrence indicator
+		// in "cast as xs:double ?", "instance of xs:integer ?"), but NOT when it
+		// starts a unary lookup expression ("?key"). Check second-to-last token:
+		// if it's a name, this '?' is an occurrence indicator.
+		if len(l.tokens) >= 2 {
+			prev2 := l.tokens[len(l.tokens)-2]
+			if prev2.Type == TokenName {
+				return true
+			}
+		}
+		return false
 	// Multi-token keyword pairs: "instance of", "cast as", "castable as",
 	// "treat as" — the secondary keyword follows the primary keyword.
 	case TokenInstanceOf, TokenCastAs, TokenCastableAs, TokenTreatAs:

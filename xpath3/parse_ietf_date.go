@@ -447,17 +447,6 @@ func (p *ietfDateParser) peekTZ() bool {
 	return false
 }
 
-func (p *ietfDateParser) readInt() (int, error) {
-	start := p.pos
-	for p.pos < len(p.input) && p.input[p.pos] >= '0' && p.input[p.pos] <= '9' {
-		p.pos++
-	}
-	if p.pos == start {
-		return 0, fmt.Errorf("expected integer at position %d", p.pos)
-	}
-	return strconv.Atoi(p.input[start:p.pos])
-}
-
 // readIntN reads an integer with digit count in [minDigits, maxDigits].
 func (p *ietfDateParser) readIntN(minDigits, maxDigits int) (int, error) {
 	start := p.pos
