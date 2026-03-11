@@ -83,6 +83,13 @@ func fnCodepointsToString(_ context.Context, args []Sequence) (Sequence, error) 
 		if err != nil {
 			return nil, err
 		}
+		// Function coercion: cast untypedAtomic to integer
+		if a.TypeName == TypeUntypedAtomic {
+			a, err = CastAtomic(a, TypeInteger)
+			if err != nil {
+				return nil, err
+			}
+		}
 		cp := int(a.ToFloat64())
 		if !isValidXMLCodepoint(cp) {
 			return nil, &XPathError{Code: "FOCH0001", Message: fmt.Sprintf("invalid XML character [x%X]", cp)}
