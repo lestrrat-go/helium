@@ -51,8 +51,31 @@ func fnArrayGet(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	idx := int(seqToDouble(args[1]))
+	idx, err := extractArrayIndex(args[1])
+	if err != nil {
+		return nil, err
+	}
 	return a.Get(idx)
+}
+
+// extractArrayIndex extracts a single xs:integer index from a sequence, validating
+// that it is exactly one integer (not a decimal, sequence, etc.).
+func extractArrayIndex(seq Sequence) (int, error) {
+	if len(seq) != 1 {
+		return 0, &XPathError{Code: "XPTY0004", Message: "array index must be a single xs:integer"}
+	}
+	av, err := AtomizeItem(seq[0])
+	if err != nil {
+		return 0, err
+	}
+	if !isIntegerDerived(av.TypeName) {
+		return 0, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("array index must be xs:integer, got %s", av.TypeName)}
+	}
+	bi := av.BigInt()
+	if !bi.IsInt64() {
+		return 0, &XPathError{Code: "FOAY0001", Message: "array index out of range"}
+	}
+	return int(bi.Int64()), nil
 }
 
 func fnArrayPut(_ context.Context, args []Sequence) (Sequence, error) {
@@ -60,7 +83,10 @@ func fnArrayPut(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	idx := int(seqToDouble(args[1]))
+	idx, err := extractArrayIndex(args[1])
+	if err != nil {
+		return nil, err
+	}
 	result, err := a.Put(idx, args[2])
 	if err != nil {
 		return nil, err
