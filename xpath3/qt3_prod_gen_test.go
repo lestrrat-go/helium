@@ -379,7 +379,7 @@ func TestQT3_prod_AxisStep_abbr(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
 		{Name: "abbreviatedSyntax-1", XPath: "for $h in (/works/employee[4]) return $h/hours/string()", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertStringValue("20 40")}},
-		{Name: "abbreviatedSyntax-2", XPath: "for $h in (/works/employee[2]) return $h/text()", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertStringValue("Text data from Employee[2]")}},
+		{Name: "abbreviatedSyntax-2", XPath: "for $h in (/works/employee[2]) return $h/text()", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertStringValueNS("Text data from Employee[2]")}},
 		{Name: "abbreviatedSyntax-3", XPath: "for $h in (/works/employee[10]) return $h/@name", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertStringValue("John Doe 10")}},
 		{Name: "abbreviatedSyntax-5", XPath: "for $h in (/works) return $h/employee[1]/@name", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertStringValue("Jane Doe 1")}},
 		{Name: "abbreviatedSyntax-6", XPath: "for $h in (/works) return $h/employee[fn:last()]/@name", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertStringValue("Jane Doe 13")}},
@@ -583,7 +583,7 @@ func TestQT3_prod_AxisStep_unabbr(t *testing.T) {
 	qt3RunTests(t, []qt3Test{
 		{Name: "unabbreviatedSyntax-1", XPath: "for $h in (/works/employee) return $h/child::empnum", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "unabbreviatedSyntax-2", XPath: "for $h in (/works/employee[1]) return $h/child::*", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "unabbreviatedSyntax-3", XPath: "for $h in (/works[1]/employee[2]) return $h/child::text()", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertStringValue("Text data from Employee[2]")}},
+		{Name: "unabbreviatedSyntax-3", XPath: "for $h in (/works[1]/employee[2]) return $h/child::text()", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertStringValueNS("Text data from Employee[2]")}},
 		{Name: "unabbreviatedSyntax-4", XPath: "for $h in (/works/employee[1]) return $h/child::node()", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "unabbreviatedSyntax-5", XPath: "for $h in (/works/employee[2]) return $h/child::node()", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "unabbreviatedSyntax-8", XPath: "for $h in (/works/employee[1]/hours) return $h/parent::node()", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
@@ -4189,7 +4189,7 @@ func TestQT3_prod_CastExpr(t *testing.T) {
                 xs:hexBinary("FFFF"), xs:anyURI("http://example.com/"), xs:QName("localName"),
                 xs:string("An xs:string"), xs:normalizedString("normalizedString"), xs:token("token"),
                 xs:language("language"), xs:NMTOKEN("NMTOKEN"), xs:Name("Name"), xs:NCName("NCName"),
-                xs:ID("ID"), xs:IDREF("IDREF"), xs:ENTITY("ENTITY")`, Assertions: []qt3Assertion{qt3AssertStringValue(`
+                xs:ID("ID"), xs:IDREF("IDREF"), xs:ENTITY("ENTITY")`, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
              xs:untypedAtomic 2002-10-10T23:02:12Z 2002-10-10Z 23:02:12Z P1Y PT1S P1M 3000 40000 2 16 0
              -4 5 6 7 8 9 10 11 12 13 14 1976-02Z 2005-12:00 --12-25-14:00 ---25-14:00 --12-14:00 true
              aaaa FFFF http://example.com/ localName An xs:string normalizedString token language

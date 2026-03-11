@@ -3202,7 +3202,7 @@ func TestQT3_fn_format_date(t *testing.T) {
 		{Name: "format-date-001f", XPath: "format-date($d,\"[[[Y0001]-[M01]-[D01]]]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("[2003-09-07]")}},
 		{Name: "format-date-001g", XPath: "format-date($d,\"([Y01]-[M01]-[D01])\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("(03-09-07)")}},
 		{Name: "format-date-005", XPath: `string-join( for $i in 1 to 100 return format-date($t + xs:yearMonthDuration('P1Y')*$i,
-         '[YI]'), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`MCMLI MCMLII MCMLIII MCMLIV MCMLV MCMLVI MCMLVII MCMLVIII
+         '[YI]'), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`MCMLI MCMLII MCMLIII MCMLIV MCMLV MCMLVI MCMLVII MCMLVIII
             MCMLIX MCMLX MCMLXI MCMLXII MCMLXIII MCMLXIV MCMLXV MCMLXVI MCMLXVII MCMLXVIII
             MCMLXIX MCMLXX MCMLXXI MCMLXXII MCMLXXIII MCMLXXIV MCMLXXV MCMLXXVI MCMLXXVII
             MCMLXXVIII MCMLXXIX MCMLXXX MCMLXXXI MCMLXXXII MCMLXXXIII MCMLXXXIV MCMLXXXV
@@ -3214,7 +3214,7 @@ func TestQT3_fn_format_date(t *testing.T) {
             MMXXXIX MMXL MMXLI MMXLII MMXLIII MMXLIV MMXLV MMXLVI MMXLVII MMXLVIII MMXLIX
             MML`)}},
 		{Name: "format-date-006", XPath: `string-join( for $i in 1 to 100 return format-date($t +
-         xs:yearMonthDuration('P17Y')*$i, '[Yi,4-4]'), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`dcccxvii dcccxxxiv dcccli dccclxviii dccclxxxv cmii cmxix
+         xs:yearMonthDuration('P17Y')*$i, '[Yi,4-4]'), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`dcccxvii dcccxxxiv dcccli dccclxviii dccclxxxv cmii cmxix
             cmxxxvi cmliii cmlxx cmlxxxvii miv mxxi mxxxviii mlv mlxxii mlxxxix mcvi
             mcxxiii mcxl mclvii mclxxiv mcxci mccviii mccxxv mccxlii mcclix mcclxxvi
             mccxciii mcccx mcccxxvii mcccxliv mccclxi mccclxxviii mcccxcv mcdxii mcdxxix
@@ -3233,7 +3233,7 @@ func TestQT3_fn_format_date(t *testing.T) {
 		{Name: "format-date-008b", XPath: "format-date($d,\"[M𐒡]-[D𐒡]-[Y𐒠𐒠𐒠𐒡]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("𐒩-𐒧-𐒢𐒠𐒠𐒣")}},
 		{Name: "format-date-008c", XPath: "format-date($d,\"([Y𐒠𐒡]-[M𐒠𐒡]-[D𐒠𐒡])\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("(𐒠𐒣-𐒠𐒩-𐒠𐒧)")}},
 		{Name: "format-date-009", XPath: `for $i in 1 to 48, $d in $t + xs:yearMonthDuration('P1M')*$i 
-        return concat("[", $d, ":", format-date($d, '[W]', (), 'ISO', ()), "]")`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+        return concat("[", $d, ":", format-date($d, '[W]', (), 'ISO', ()), "]")`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             [2004-05-01:18] [2004-06-01:23] [2004-07-01:27] [2004-08-01:31] [2004-09-01:36] [2004-10-01:40] [2004-11-01:45] 
             [2004-12-01:49] [2005-01-01:53] [2005-02-01:5] [2005-03-01:9] [2005-04-01:13] [2005-05-01:17] [2005-06-01:22] 
             [2005-07-01:26] [2005-08-01:31] [2005-09-01:35] [2005-10-01:39] [2005-11-01:44] [2005-12-01:48] [2006-01-01:52] 
@@ -3243,7 +3243,7 @@ func TestQT3_fn_format_date(t *testing.T) {
             [2007-11-01:44] [2007-12-01:48] [2008-01-01:1] [2008-02-01:5] [2008-03-01:9] [2008-04-01:14]
          `)}},
 		{Name: "format-date-010", XPath: `for $i in 1 to 48, $d in $t + xs:yearMonthDuration('P1M')*$i 
-            return concat("[", $d, ":", format-date($d, '[F01]', (), 'Q{}ISO', ()), ']')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            return concat("[", $d, ":", format-date($d, '[F01]', (), 'Q{}ISO', ()), ']')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             [2004-01-01:04] [2004-02-01:07] [2004-03-01:01] [2004-04-01:04] [2004-05-01:06] [2004-06-01:02] 
             [2004-07-01:04] [2004-08-01:07] [2004-09-01:03] [2004-10-01:05] [2004-11-01:01] [2004-12-01:03] 
             [2005-01-01:06] [2005-02-01:02] [2005-03-01:02] [2005-04-01:05] [2005-05-01:07] [2005-06-01:03] 
@@ -3254,7 +3254,7 @@ func TestQT3_fn_format_date(t *testing.T) {
             [2007-07-01:07] [2007-08-01:03] [2007-09-01:06] [2007-10-01:01] [2007-11-01:04] [2007-12-01:06]             
          `)}},
 		{Name: "format-date-011", XPath: `for $i in 1 to 48, $d in $t + xs:dayTimeDuration('P3D')*$i 
-        return concat("[", $d, ":", format-date($d, '[w]', (), 'ISO', ()), ']')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+        return concat("[", $d, ":", format-date($d, '[w]', (), 'ISO', ()), ']')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             [2005-12-04:1] [2005-12-07:2] [2005-12-10:2] [2005-12-13:3] [2005-12-16:3] [2005-12-19:4] [2005-12-22:4] 
             [2005-12-25:4] [2005-12-28:5] [2005-12-31:5] [2006-01-03:1] [2006-01-06:1] [2006-01-09:2] [2006-01-12:2] 
             [2006-01-15:2] [2006-01-18:3] [2006-01-21:3] [2006-01-24:4] [2006-01-27:4] [2006-01-30:5] [2006-02-02:1] 
@@ -3278,14 +3278,14 @@ func TestQT3_fn_format_date(t *testing.T) {
 		{Name: "format-date-013m", XPath: "format-date($t, '[M,*-2]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("3")}},
 		{Name: "format-date-013n", XPath: "format-date($t, '[M,3]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("003")}},
 		{Name: "format-date-014", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[Z]'), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`-14:00 -13:30 -13:00 -12:30 -12:00 -11:30 -11:00 -10:30 -10:00
+         $z*xs:dayTimeDuration('PT30M')), '[Z]'), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`-14:00 -13:30 -13:00 -12:30 -12:00 -11:30 -11:00 -10:30 -10:00
             -09:30 -09:00 -08:30 -08:00 -07:30 -07:00 -06:30 -06:00 -05:30 -05:00 -04:30
             -04:00 -03:30 -03:00 -02:30 -02:00 -01:30 -01:00 -00:30 +00:00 +00:30 +01:00
             +01:30 +02:00 +02:30 +03:00 +03:30 +04:00 +04:30 +05:00 +05:30 +06:00 +06:30
             +07:00 +07:30 +08:00 +08:30 +09:00 +09:30 +10:00 +10:30 +11:00 +11:30 +12:00
             +12:30 +13:00 +13:30 +14:00`)}},
 		{Name: "format-date-015", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[z0]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`GMT-14; GMT-13:30; GMT-13; GMT-12:30; GMT-12; GMT-11:30; GMT-11;
+         $z*xs:dayTimeDuration('PT30M')), '[z0]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`GMT-14; GMT-13:30; GMT-13; GMT-12:30; GMT-12; GMT-11:30; GMT-11;
             GMT-10:30; GMT-10; GMT-9:30; GMT-9; GMT-8:30; GMT-8; GMT-7:30; GMT-7; GMT-6:30; GMT-6;
             GMT-5:30; GMT-5; GMT-4:30; GMT-4; GMT-3:30; GMT-3; GMT-2:30; GMT-2; GMT-1:30; GMT-1;
             GMT-0:30; GMT+0; GMT+0:30; GMT+1; GMT+1:30; GMT+2; GMT+2:30; GMT+3; GMT+3:30; GMT+4;
@@ -3293,7 +3293,7 @@ func TestQT3_fn_format_date(t *testing.T) {
             GMT+9:30; GMT+10; GMT+10:30; GMT+11; GMT+11:30; GMT+12; GMT+12:30; GMT+13; GMT+13:30;
             GMT+14`)}},
 		{Name: "format-date-016", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         $z*xs:dayTimeDuration('PT30M')), '[z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
          	GMT-14:00; GMT-13:30; GMT-13:00; GMT-12:30; GMT-12:00; GMT-11:30; GMT-11:00;
 			GMT-10:30; GMT-10:00; GMT-09:30; GMT-09:00; GMT-08:30; GMT-08:00; GMT-07:30;
 			GMT-07:00; GMT-06:30; GMT-06:00; GMT-05:30; GMT-05:00; GMT-04:30; GMT-04:00;
@@ -3305,14 +3305,14 @@ func TestQT3_fn_format_date(t *testing.T) {
 			GMT+14:00
 		 `)}},
 		{Name: "format-date-017", XPath: `string-join( for $z in -12 to +12 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT1H')), '[ZZ]'), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         $z*xs:dayTimeDuration('PT1H')), '[ZZ]'), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
          	Y X W V U T S R Q P O N Z A B C D E F G H I K L M
 		 `)}},
 		{Name: "format-date-018", XPath: "format-date(xs:date('1987-12-13'), '[ZZ]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("J")}},
 		{Name: "format-date-019", XPath: "format-date(xs:date('1987-12-13+05:30'), '[ZZ]')", Assertions: []qt3Assertion{qt3AssertStringValue("+05:30")}},
 		{Name: "format-date-020", XPath: "format-date(xs:date('1987-12-13+13:00'), '[ZZ]')", Assertions: []qt3Assertion{qt3AssertStringValue("+13:00")}},
 		{Name: "format-date-021", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[z00~00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         $z*xs:dayTimeDuration('PT30M')), '[z00~00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
          	GMT-14~00; GMT-13~30; GMT-13~00; GMT-12~30; GMT-12~00; GMT-11~30; GMT-11~00; GMT-10~30; 
          	GMT-10~00; GMT-09~30; GMT-09~00; GMT-08~30; GMT-08~00; GMT-07~30; GMT-07~00; GMT-06~30; 
          	GMT-06~00; GMT-05~30; GMT-05~00; GMT-04~30; GMT-04~00; GMT-03~30; GMT-03~00; GMT-02~30; 
@@ -3324,7 +3324,7 @@ func TestQT3_fn_format_date(t *testing.T) {
 		 `)}},
 		{Name: "format-date-022", XPath: "format-date(xs:date('2012-05-18+05:30'), '[Z٠٠:٠٠]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("+٠٥:٣٠")}},
 		{Name: "format-date-023", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[Z0:01]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         $z*xs:dayTimeDuration('PT30M')), '[Z0:01]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
          	-14:00; -13:30; -13:00; -12:30; -12:00; -11:30; -11:00; -10:30; -10:00; -9:30; -9:00;
          	-8:30; -8:00; -7:30; -7:00; -6:30; -6:00; -5:30; -5:00; -4:30; -4:00; -3:30; -3:00;
          	-2:30; -2:00; -1:30; -1:00; -0:30; +0:00; +0:30; +1:00; +1:30; +2:00; +2:30; +3:00;
@@ -3332,7 +3332,7 @@ func TestQT3_fn_format_date(t *testing.T) {
          	+9:30; +10:00; +10:30; +11:00; +11:30; +12:00; +12:30; +13:00; +13:30; +14:00
 		 `)}},
 		{Name: "format-date-024", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[Z999]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         $z*xs:dayTimeDuration('PT30M')), '[Z999]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
          	-1400; -1330; -1300; -1230; -1200; -1130; -1100; -1030; -1000; -930; -900; -830; 
          	-800; -730; -700; -630; -600; -530; -500; -430; -400; -330; -300; -230; -200; 
          	-130; -100; -030; +000; +030; +100; +130; +200; +230; +300; +330; +400; +430; 
@@ -3340,7 +3340,7 @@ func TestQT3_fn_format_date(t *testing.T) {
          	+1130; +1200; +1230; +1300; +1330; +1400
 		 `)}},
 		{Name: "format-date-025", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[Z99]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         $z*xs:dayTimeDuration('PT30M')), '[Z99]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
          	-14; -13:30; -13; -12:30; -12; -11:30; -11; -10:30; -10; -09:30; -09; -08:30; -08;
          	-07:30; -07; -06:30; -06; -05:30; -05; -04:30; -04; -03:30; -03; -02:30; -02; -01:30;
          	-01; -00:30; +00; +00:30; +01; +01:30; +02; +02:30; +03; +03:30; +04; +04:30; +05;
@@ -3348,7 +3348,7 @@ func TestQT3_fn_format_date(t *testing.T) {
          	+12; +12:30; +13; +13:30; +14
 		 `)}},
 		{Name: "format-date-026", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[Z0t]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         $z*xs:dayTimeDuration('PT30M')), '[Z0t]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
          	-14; -13:30; -13; -12:30; -12; -11:30; -11; -10:30; -10; -9:30; -9; -8:30; -8;
          	-7:30; -7; -6:30; -6; -5:30; -5; -4:30; -4; -3:30; -3; -2:30; -2; -1:30; -1; -0:30;
          	Z; +0:30; +1; +1:30; +2; +2:30; +3; +3:30; +4; +4:30; +5; +5:30; +6; +6:30; +7;
@@ -3388,37 +3388,37 @@ func TestQT3_fn_format_date(t *testing.T) {
 		{Name: "format-date-809err", XPath: "format-date(xs:date(\"2012-05-18\"),\"[Y999#]\")", ExpectError: true},
 		{Name: "format-date-810err", XPath: "format-date(xs:date(\"2012-05-18\"),\"[Y##9#]\")", ExpectError: true},
 		{Name: "format-date-en101", XPath: `for $i in 1 to 12 return let $d2 := $d + xs:yearMonthDuration('P1M')*$i return
-         format-date($d2, '[MN]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         format-date($d2, '[MN]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             JANUARY FEBRUARY MARCH APRIL MAY JUNE JULY AUGUST SEPTEMBER OCTOBER NOVEMBER DECEMBER
          `)}},
 		{Name: "format-date-en102", XPath: `for $i in 1 to 12 return let $d2 := $d + xs:yearMonthDuration('P1M')*$i return
-         format-date($d2, '[Mn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         format-date($d2, '[Mn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             january february march april may june july august september october november december
          `)}},
 		{Name: "format-date-en103", XPath: `for $i in 1 to 12 
         return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
-        return format-date($d2, '[MNn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+        return format-date($d2, '[MNn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             January February March April May June July August September October November December
          `)}},
 		{Name: "format-date-en104", XPath: `for $i in 1 to 12 
         return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
-        return format-date($d2, '[MN,3-3]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC")}},
+        return format-date($d2, '[MN,3-3]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS("JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC")}},
 		{Name: "format-date-en105", XPath: `for $i in 1 to 12 
         return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
-        return format-date($d2, '[Mn,3-3]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("jan feb mar apr may jun jul aug sep oct nov dec")}},
+        return format-date($d2, '[Mn,3-3]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS("jan feb mar apr may jun jul aug sep oct nov dec")}},
 		{Name: "format-date-en106", XPath: `for $i in 1 to 12 
         return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
-        return format-date($d2, '[MNn,3-3]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec")}},
+        return format-date($d2, '[MNn,3-3]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec")}},
 		{Name: "format-date-en111", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[FN]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         format-date($d2, '[FN]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
              MONDAY TUESDAY WEDNESDAY THURSDAY FRIDAY SATURDAY SUNDAY
          `)}},
 		{Name: "format-date-en112", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[Fn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         format-date($d2, '[Fn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
              monday tuesday wednesday thursday friday saturday sunday
          `)}},
 		{Name: "format-date-en113", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[FNn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         format-date($d2, '[FNn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             Monday Tuesday Wednesday Thursday Friday Saturday Sunday
          `)}},
 		{Name: "format-date-en114", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
@@ -3433,64 +3433,64 @@ func TestQT3_fn_format_date(t *testing.T) {
         return let $expected := ('Mon', 'Tues', 'Weds', 'Thur', 'Fri', 'Sat', 'Sun') 
         return (
          	substring($abb, 1, 3), 
-         	starts-with($expected[$i], $abb) and string-length($abb) le 4 and string-length($abb) ge 3)`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         	starts-with($expected[$i], $abb) and string-length($abb) le 4 and string-length($abb) ge 3)`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             Mon true Tue true Wed true Thu true Fri true Sat true Sun true
          `)}},
 		{Name: "format-date-en118", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return let $abb :=
          format-date($d2, '[FNn,3-5]', 'en', (), ()) return let $expected := ('Mon', 'Tues', 'Weds',
          'Thurs', 'Fri', 'Sat', 'Sun') return (substring($abb, 1, 3), starts-with($expected[$i],
-         $abb) and string-length($abb) le 5 and string-length($abb) ge 3)`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         $abb) and string-length($abb) le 5 and string-length($abb) ge 3)`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             Mon true Tue true Wed true Thu true Fri true Sat true Sun true
          `)}},
 		{Name: "format-date-en121", XPath: `for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[D1o]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         format-date($d2, '[D1o]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             1st 2nd 3rd 4th 5th 6th 7th 8th 9th 10th 11th 12th 13th 14th 15th
             16th 17th 18th 19th 20th 21st 22nd 23rd 24th 25th 26th 27th 28th 29th 30th
             31st
          `)}},
 		{Name: "format-date-en122", XPath: `for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i return
-         format-date($d2, '[Y1o]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         format-date($d2, '[Y1o]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             1990th 1991st 1992nd 1993rd 1994th 1995th 1996th 1997th 1998th 1999th
             2000th 2001st 2002nd 2003rd 2004th 2005th 2006th 2007th 2008th 2009th 2010th 2011th
             2012th 2013th 2014th 2015th 2016th 2017th 2018th 2019th 2020th
          `)}},
 		{Name: "format-date-en122b", XPath: `for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i return
-         format-date($d2, '[Y0001o]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         format-date($d2, '[Y0001o]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             1990th 1991st 1992nd 1993rd 1994th 1995th 1996th 1997th 1998th 1999th
             2000th 2001st 2002nd 2003rd 2004th 2005th 2006th 2007th 2008th 2009th 2010th 2011th
             2012th 2013th 2014th 2015th 2016th 2017th 2018th 2019th 2020th
          `)}},
 		{Name: "format-date-en123", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i
-         return format-date($d2, '[DW]', 'en', (), ()), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue(`
+         return format-date($d2, '[DW]', 'en', (), ()), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValueNS(`
                ONE TWO THREE FOUR FIVE SIX SEVEN EIGHT NINE TEN ELEVEN
                 TWELVE THIRTEEN FOURTEEN FIFTEEN SIXTEEN SEVENTEEN EIGHTEEN NINETEEN TWENTY
                 TWENTY ONE TWENTY TWO TWENTY THREE TWENTY FOUR TWENTY FIVE TWENTY SIX TWENTY
                 SEVEN TWENTY EIGHT TWENTY NINE THIRTY THIRTY ONE
-            `), qt3CheckStringValue(`
+            `), qt3CheckStringValueNS(`
                ONE TWO THREE FOUR FIVE SIX SEVEN EIGHT NINE TEN ELEVEN
                TWELVE THIRTEEN FOURTEEN FIFTEEN SIXTEEN SEVENTEEN EIGHTEEN NINETEEN TWENTY
                TWENTY-ONE TWENTY-TWO TWENTY-THREE TWENTY-FOUR TWENTY-FIVE TWENTY-SIX
                TWENTY-SEVEN TWENTY-EIGHT TWENTY-NINE THIRTY THIRTY-ONE
             `))}},
 		{Name: "format-date-en124", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i
-         return format-date($d2, '[Dw]', 'en', (), ()), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue(`
+         return format-date($d2, '[Dw]', 'en', (), ()), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValueNS(`
                one two three four five six seven eight nine ten eleven
                twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty
                twenty one twenty two twenty three twenty four twenty five twenty six twenty
                seven twenty eight twenty nine thirty thirty one
-            `), qt3CheckStringValue(`
+            `), qt3CheckStringValueNS(`
                one two three four five six seven eight nine ten eleven
                twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty
                twenty-one twenty-two twenty-three twenty-four twenty-five twenty-six
                twenty-seven twenty-eight twenty-nine thirty thirty-one
             `))}},
 		{Name: "format-date-en125", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i
-         return format-date($d2, '[DWw]', 'en', (), ()), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue(`
+         return format-date($d2, '[DWw]', 'en', (), ()), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValueNS(`
                One; Two; Three; Four; Five; Six; Seven; Eight; Nine; Ten; Eleven;
                Twelve; Thirteen; Fourteen; Fifteen; Sixteen; Seventeen; Eighteen; Nineteen; Twenty;
                Twenty One; Twenty Two; Twenty Three; Twenty Four; Twenty Five; Twenty Six; Twenty
                Seven; Twenty Eight; Twenty Nine; Thirty; Thirty One
-            `), qt3CheckStringValue(`
+            `), qt3CheckStringValueNS(`
                One; Two; Three; Four; Five; Six; Seven; Eight; Nine; Ten; Eleven;
                Twelve; Thirteen; Fourteen; Fifteen; Sixteen; Seventeen; Eighteen; Nineteen; Twenty;
                Twenty-One; Twenty-Two; Twenty-Three; Twenty-Four; Twenty-Five; Twenty-Six;
@@ -3499,7 +3499,7 @@ func TestQT3_fn_format_date(t *testing.T) {
 		{Name: "format-date-en126", XPath: `string-join( 
             for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i
               return replace(format-date($d2, '[YW]', 'en', (), ()), ' AND ', ' '),
-            '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue(`
+            '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValueNS(`
                ONE THOUSAND NINE HUNDRED NINETY; ONE THOUSAND NINE HUNDRED
                NINETY ONE; ONE THOUSAND NINE HUNDRED NINETY TWO; ONE THOUSAND NINE HUNDRED
                NINETY THREE; ONE THOUSAND NINE HUNDRED NINETY FOUR; ONE THOUSAND NINE HUNDRED
@@ -3512,7 +3512,7 @@ func TestQT3_fn_format_date(t *testing.T) {
                FOURTEEN; TWO THOUSAND FIFTEEN; TWO THOUSAND SIXTEEN; TWO THOUSAND
                SEVENTEEN; TWO THOUSAND EIGHTEEN; TWO THOUSAND NINETEEN; TWO THOUSAND
                TWENTY
-            `), qt3CheckStringValue(`
+            `), qt3CheckStringValueNS(`
                ONE THOUSAND NINE HUNDRED NINETY; ONE THOUSAND NINE HUNDRED
                NINETY-ONE; ONE THOUSAND NINE HUNDRED NINETY-TWO; ONE THOUSAND NINE HUNDRED
                NINETY-THREE; ONE THOUSAND NINE HUNDRED NINETY-FOUR; ONE THOUSAND NINE HUNDRED
@@ -3527,7 +3527,7 @@ func TestQT3_fn_format_date(t *testing.T) {
                TWENTY
             `))}},
 		{Name: "format-date-en127", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i
-         return replace(format-date($d2, '[Yw]', 'en', (), ()), ' and ', ' '), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue(`
+         return replace(format-date($d2, '[Yw]', 'en', (), ()), ' and ', ' '), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValueNS(`
                one thousand nine hundred ninety; one thousand nine hundred
                ninety one; one thousand nine hundred ninety two; one thousand nine hundred
                ninety three; one thousand nine hundred ninety four; one thousand nine hundred
@@ -3540,7 +3540,7 @@ func TestQT3_fn_format_date(t *testing.T) {
                fourteen; two thousand fifteen; two thousand sixteen; two thousand
                seventeen; two thousand eighteen; two thousand nineteen; two thousand
                twenty
-            `), qt3CheckStringValue(`
+            `), qt3CheckStringValueNS(`
                one thousand nine hundred ninety; one thousand nine hundred
                ninety-one; one thousand nine hundred ninety-two; one thousand nine hundred
                ninety-three; one thousand nine hundred ninety-four; one thousand nine hundred
@@ -3555,7 +3555,7 @@ func TestQT3_fn_format_date(t *testing.T) {
                twenty
             `))}},
 		{Name: "format-date-en128", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i
-         return replace(format-date($d2, '[YWw]', 'en', (), ()), ' [Aa]nd ', ' '), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue(`
+         return replace(format-date($d2, '[YWw]', 'en', (), ()), ' [Aa]nd ', ' '), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValueNS(`
                One Thousand Nine Hundred Ninety; One Thousand Nine Hundred
                Ninety One; One Thousand Nine Hundred Ninety Two; One Thousand Nine Hundred
                Ninety Three; One Thousand Nine Hundred Ninety Four; One Thousand Nine Hundred
@@ -3568,7 +3568,7 @@ func TestQT3_fn_format_date(t *testing.T) {
                Fourteen; Two Thousand Fifteen; Two Thousand Sixteen; Two Thousand
                Seventeen; Two Thousand Eighteen; Two Thousand Nineteen; Two Thousand
                Twenty
-            `), qt3CheckStringValue(`
+            `), qt3CheckStringValueNS(`
                One Thousand Nine Hundred Ninety; One Thousand Nine Hundred
                Ninety-One; One Thousand Nine Hundred Ninety-Two; One Thousand Nine Hundred
                Ninety-Three; One Thousand Nine Hundred Ninety-Four; One Thousand Nine Hundred
@@ -3583,7 +3583,7 @@ func TestQT3_fn_format_date(t *testing.T) {
                Twenty
             `))}},
 		{Name: "format-date-en129", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i
-         return translate(format-date($d2, '[DWo]', 'en', (), ()), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         return translate(format-date($d2, '[DWo]', 'en', (), ()), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             FIRST; SECOND; THIRD; FOURTH; FIFTH; SIXTH; SEVENTH; EIGHTH; NINTH;
             TENTH; ELEVENTH; TWELFTH; THIRTEENTH; FOURTEENTH; FIFTEENTH; SIXTEENTH; SEVENTEENTH;
             EIGHTEENTH; NINETEENTH; TWENTIETH; TWENTYFIRST; TWENTYSECOND; TWENTYTHIRD; TWENTYFOURTH;
@@ -3591,7 +3591,7 @@ func TestQT3_fn_format_date(t *testing.T) {
             THIRTYFIRST
          `)}},
 		{Name: "format-date-en130", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i
-         return translate(format-date($d2, '[Dwo]', 'en', (), ()), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         return translate(format-date($d2, '[Dwo]', 'en', (), ()), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             first; second; third; fourth; fifth; sixth; seventh; eighth; ninth;
             tenth; eleventh; twelfth; thirteenth; fourteenth; fifteenth; sixteenth; seventeenth;
             eighteenth; nineteenth; twentieth; twentyfirst; twentysecond; twentythird; twentyfourth;
@@ -3599,7 +3599,7 @@ func TestQT3_fn_format_date(t *testing.T) {
             thirtyfirst
          `)}},
 		{Name: "format-date-en131", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i
-         return translate(format-date($d2, '[DWwo]', 'en', (), ()), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         return translate(format-date($d2, '[DWwo]', 'en', (), ()), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             First; Second; Third; Fourth; Fifth; Sixth; Seventh; Eighth; Ninth;
             Tenth; Eleventh; Twelfth; Thirteenth; Fourteenth; Fifteenth; Sixteenth; Seventeenth;
             Eighteenth; Nineteenth; Twentieth; TwentyFirst; TwentySecond; TwentyThird; TwentyFourth;
@@ -3607,7 +3607,7 @@ func TestQT3_fn_format_date(t *testing.T) {
             ThirtyFirst
          `)}},
 		{Name: "format-date-en132", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i
-         return translate(replace(format-date($d2, '[YWo]', 'en', (), ()), ' AND ', ' '), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`ONETHOUSANDNINEHUNDREDNINETIETH;
+         return translate(replace(format-date($d2, '[YWo]', 'en', (), ()), ' AND ', ' '), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`ONETHOUSANDNINEHUNDREDNINETIETH;
             ONETHOUSANDNINEHUNDREDNINETYFIRST; ONETHOUSANDNINEHUNDREDNINETYSECOND;
             ONETHOUSANDNINEHUNDREDNINETYTHIRD; ONETHOUSANDNINEHUNDREDNINETYFOURTH;
             ONETHOUSANDNINEHUNDREDNINETYFIFTH; ONETHOUSANDNINEHUNDREDNINETYSIXTH;
@@ -3620,7 +3620,7 @@ func TestQT3_fn_format_date(t *testing.T) {
             TWOTHOUSANDSIXTEENTH; TWOTHOUSANDSEVENTEENTH; TWOTHOUSANDEIGHTEENTH;
             TWOTHOUSANDNINETEENTH; TWOTHOUSANDTWENTIETH`)}},
 		{Name: "format-date-en133", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i
-         return translate(replace(format-date($d2, '[Ywo]', 'en', (), ()), ' and ', ' '), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`onethousandninehundredninetieth;
+         return translate(replace(format-date($d2, '[Ywo]', 'en', (), ()), ' and ', ' '), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`onethousandninehundredninetieth;
             onethousandninehundredninetyfirst; onethousandninehundredninetysecond;
             onethousandninehundredninetythird; onethousandninehundredninetyfourth;
             onethousandninehundredninetyfifth; onethousandninehundredninetysixth;
@@ -3633,7 +3633,7 @@ func TestQT3_fn_format_date(t *testing.T) {
             twothousandsixteenth; twothousandseventeenth; twothousandeighteenth;
             twothousandnineteenth; twothousandtwentieth`)}},
 		{Name: "format-date-en134", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i
-         return translate(replace(format-date($d2, '[YWwo]', 'en', (), ()), ' [Aa]nd ', ' '), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`OneThousandNineHundredNinetieth;
+         return translate(replace(format-date($d2, '[YWwo]', 'en', (), ()), ' [Aa]nd ', ' '), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`OneThousandNineHundredNinetieth;
             OneThousandNineHundredNinetyFirst; OneThousandNineHundredNinetySecond;
             OneThousandNineHundredNinetyThird; OneThousandNineHundredNinetyFourth;
             OneThousandNineHundredNinetyFifth; OneThousandNineHundredNinetySixth;
@@ -3654,37 +3654,37 @@ func TestQT3_fn_format_date(t *testing.T) {
 		{Name: "format-date-en157", XPath: "format-date($b, '[M01]', 'en', ':w', ())", Skip: "requires external parameters", ExpectError: true},
 		{Name: "format-date-en158", XPath: "format-date($b, '[M01]', 'en', 'Q{}1', ())", Skip: "requires external parameters", ExpectError: true},
 		{Name: "format-date-de101", XPath: `for $i in 1 to 12 return let $d2 := $d + xs:yearMonthDuration('P1M')*$i return
-         format-date($d2, '[MN]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         format-date($d2, '[MN]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             JANUAR FEBRUAR MÄRZ APRIL MAI JUNI JULI AUGUST SEPTEMBER OKTOBER NOVEMBER DEZEMBER
          `)}},
 		{Name: "format-date-de102", XPath: `for $i in 1 to 12 return let $d2 := $d + xs:yearMonthDuration('P1M')*$i return
-         format-date($d2, '[Mn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         format-date($d2, '[Mn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             januar februar märz april mai juni juli august september oktober november dezember
          `)}},
 		{Name: "format-date-de103", XPath: `for $i in 1 to 12 
          return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
-         return format-date($d2, '[MNn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         return format-date($d2, '[MNn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             Januar Februar März April Mai Juni Juli August September Oktober November Dezember
          `)}},
 		{Name: "format-date-de104", XPath: `for $i in 1 to 12 
          return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
-         return format-date($d2, '[MN,3-3]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("JAN FEB MÄR APR MAI JUN JUL AUG SEP OKT NOV DEZ")}},
+         return format-date($d2, '[MN,3-3]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS("JAN FEB MÄR APR MAI JUN JUL AUG SEP OKT NOV DEZ")}},
 		{Name: "format-date-de105", XPath: `for $i in 1 to 12 
          return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
-         return format-date($d2, '[Mn,3-3]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("jan feb mär apr mai jun jul aug sep okt nov dez")}},
+         return format-date($d2, '[Mn,3-3]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS("jan feb mär apr mai jun jul aug sep okt nov dez")}},
 		{Name: "format-date-de106", XPath: `for $i in 1 to 12 
          return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
-         return format-date($d2, '[MNn,3-3]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("Jan Feb Mär Apr Mai Jun Jul Aug Sep Okt Nov Dez")}},
+         return format-date($d2, '[MNn,3-3]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS("Jan Feb Mär Apr Mai Jun Jul Aug Sep Okt Nov Dez")}},
 		{Name: "format-date-de111", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[FN]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         format-date($d2, '[FN]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             MONTAG DIENSTAG MITTWOCH DONNERSTAG FREITAG SAMSTAG SONNTAG
          `)}},
 		{Name: "format-date-de112", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[Fn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         format-date($d2, '[Fn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             montag dienstag mittwoch donnerstag freitag samstag sonntag
          `)}},
 		{Name: "format-date-de113", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[FNn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+         format-date($d2, '[FNn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             Montag Dienstag Mittwoch Donnerstag Freitag Samstag Sonntag
          `)}},
 		{Name: "format-date-de114", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
@@ -3739,22 +3739,22 @@ func TestQT3_fn_format_dateTime(t *testing.T) {
 		{Name: "format-dateTime-003q", XPath: "format-dateTime($t,\"[H]:[m]:[s].[f001]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.456")}},
 		{Name: "format-dateTime-003r", XPath: "format-dateTime($t,'[Y0001]-[M01]-[D01]T[H01]:[m01]:[s01].[f001]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("2003-09-07T09:15:06.456")}},
 		{Name: "format-dateTime-004", XPath: `for $i in 1 to 24 return
-        format-dateTime($t + xs:dayTimeDuration('PT1H')*$i, '[h].[m]')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`10.15 11.15 12.15 1.15 2.15 3.15 4.15 5.15 6.15 7.15 8.15 9.15 10.15 11.15 12.15 
+        format-dateTime($t + xs:dayTimeDuration('PT1H')*$i, '[h].[m]')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`10.15 11.15 12.15 1.15 2.15 3.15 4.15 5.15 6.15 7.15 8.15 9.15 10.15 11.15 12.15 
          1.15 2.15 3.15 4.15 5.15 6.15 7.15 8.15 9.15`)}},
 		{Name: "format-dateTime-005", XPath: `string-join(
           for $i in 1 to 100 return
-          format-dateTime($t + xs:yearMonthDuration('P1Y')*$i, '[YI]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+          format-dateTime($t + xs:yearMonthDuration('P1Y')*$i, '[YI]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             MCMLI; MCMLII; MCMLIII; MCMLIV; MCMLV; MCMLVI; MCMLVII; MCMLVIII; MCMLIX; MCMLX;             MCMLXI; MCMLXII; MCMLXIII; MCMLXIV; MCMLXV; MCMLXVI; MCMLXVII; MCMLXVIII;             MCMLXIX; MCMLXX; MCMLXXI; MCMLXXII; MCMLXXIII; MCMLXXIV; MCMLXXV; MCMLXXVI;             MCMLXXVII; MCMLXXVIII; MCMLXXIX; MCMLXXX; MCMLXXXI; MCMLXXXII; MCMLXXXIII;             MCMLXXXIV; MCMLXXXV; MCMLXXXVI; MCMLXXXVII; MCMLXXXVIII; MCMLXXXIX; MCMXC;             MCMXCI; MCMXCII; MCMXCIII; MCMXCIV; MCMXCV; MCMXCVI; MCMXCVII; MCMXCVIII;             MCMXCIX; MM; MMI; MMII; MMIII; MMIV; MMV; MMVI; MMVII; MMVIII; MMIX; MMX; MMXI; MMXII;             MMXIII; MMXIV; MMXV; MMXVI; MMXVII; MMXVIII; MMXIX; MMXX; MMXXI; MMXXII; MMXXIII; MMXXIV; MMXXV;             MMXXVI; MMXXVII; MMXXVIII; MMXXIX; MMXXX; MMXXXI; MMXXXII; MMXXXIII; MMXXXIV; MMXXXV;             MMXXXVI; MMXXXVII; MMXXXVIII; MMXXXIX; MMXL; MMXLI; MMXLII; MMXLIII; MMXLIV; MMXLV; MMXLVI;             MMXLVII; MMXLVIII; MMXLIX; MML
         `)}},
 		{Name: "format-dateTime-006", XPath: `string-join(
           for $i in 1 to 100 return
-          format-dateTime($t + xs:yearMonthDuration('P17Y')*$i, '[Yi,3-3]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+          format-dateTime($t + xs:yearMonthDuration('P17Y')*$i, '[Yi,3-3]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
 dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii; cmlxx; cmlxxxvii; iv ; xxi; xxxviii; lv ; lxxii; lxxxix; cvi; cxxiii; cxl; clvii; clxxiv; cxci; ccviii; ccxxv; ccxlii; cclix; cclxxvi; ccxciii; cccx; cccxxvii; cccxliv; ccclxi; ccclxxviii; cccxcv; cdxii; cdxxix; cdxlvi; cdlxiii; cdlxxx; cdxcvii; dxiv; dxxxi; dxlviii; dlxv; dlxxxii; dxcix; dcxvi; dcxxxiii; dcl; dclxvii; dclxxxiv; dcci; dccxviii; dccxxxv; dcclii; dcclxix; dcclxxxvi; dccciii; dcccxx; dcccxxxvii; dcccliv; dccclxxi; dccclxxxviii; cmv; cmxxii; cmxxxix; cmlvi; cmlxxiii; cmxc; vii; xxiv; xli; lviii; lxxv; xcii; cix; cxxvi; cxliii; clx; clxxvii; cxciv; ccxi; ccxxviii; ccxlv; cclxii; cclxxix; ccxcvi; cccxiii; cccxxx; cccxlvii; ccclxiv; ccclxxxi; cccxcviii; cdxv; cdxxxii; cdxlix; cdlxvi; cdlxxxiii; d
          `)}},
 		{Name: "format-dateTime-006a", XPath: "format-dateTime($t, '[Yi,4-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("miv ")}},
 		{Name: "format-dateTime-009", XPath: `for $i in 1 to 48,
                 $d in $t + xs:yearMonthDuration('P1M')*$i
-            return concat("[", $d, ": ", format-dateTime($d, '[W]', (), 'ISO', ()), "]")`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            return concat("[", $d, ": ", format-dateTime($d, '[W]', (), 'ISO', ()), "]")`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             [2004-01-01T12:00:00: 1] [2004-02-01T12:00:00: 5] [2004-03-01T12:00:00: 10] [2004-04-01T12:00:00: 14] 
             [2004-05-01T12:00:00: 18] [2004-06-01T12:00:00: 23] [2004-07-01T12:00:00: 27] [2004-08-01T12:00:00: 31] 
             [2004-09-01T12:00:00: 36] [2004-10-01T12:00:00: 40] [2004-11-01T12:00:00: 45] [2004-12-01T12:00:00: 49] 
@@ -3770,7 +3770,7 @@ dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii
         `)}},
 		{Name: "format-dateTime-010", XPath: `for $i in 1 to 48,
                 $d in $t + xs:yearMonthDuration('P1M')*$i
-            return concat("[", $d, ": ", format-dateTime($d, '[F01]', (), 'ISO', ()))`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            return concat("[", $d, ": ", format-dateTime($d, '[F01]', (), 'ISO', ()))`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             [2004-01-01T12:00:00: 04 [2004-02-01T12:00:00: 07 [2004-03-01T12:00:00: 01 [2004-04-01T12:00:00: 04 
             [2004-05-01T12:00:00: 06 [2004-06-01T12:00:00: 02 [2004-07-01T12:00:00: 04 [2004-08-01T12:00:00: 07 
             [2004-09-01T12:00:00: 03 [2004-10-01T12:00:00: 05 [2004-11-01T12:00:00: 01 [2004-12-01T12:00:00: 03 
@@ -3786,7 +3786,7 @@ dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii
          `)}},
 		{Name: "format-dateTime-011", XPath: `for $i in 1 to 48,
                 $d in $t + xs:yearMonthDuration('P1M')*$i
-            return concat("[", $d, ": ", format-dateTime($d, '[w]', (), 'ISO', ()))`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            return concat("[", $d, ": ", format-dateTime($d, '[w]', (), 'ISO', ()))`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             [2006-01-01T12:00:00: 5 [2006-02-01T12:00:00: 1 [2006-03-01T12:00:00: 1 [2006-04-01T12:00:00: 5 
             [2006-05-01T12:00:00: 1 [2006-06-01T12:00:00: 1 [2006-07-01T12:00:00: 5 [2006-08-01T12:00:00: 1 
             [2006-09-01T12:00:00: 5 [2006-10-01T12:00:00: 4 [2006-11-01T12:00:00: 1 [2006-12-01T12:00:00: 5 
@@ -3801,7 +3801,7 @@ dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii
             [2009-09-01T12:00:00: 1 [2009-10-01T12:00:00: 1 [2009-11-01T12:00:00: 5 [2009-12-01T12:00:00: 1
          `)}},
 		{Name: "format-dateTime-012", XPath: `for $i in 1 to 60 return
-            format-dateTime($t + xs:dayTimeDuration('PT61S')*$i, '[mA].[sa]')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+            format-dateTime($t + xs:dayTimeDuration('PT61S')*$i, '[mA].[sa]')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             P.g Q.h R.i S.j T.k U.l V.m W.n X.o Y.p Z.q AA.r AB.s AC.t AD.u AE.v AF.w AG.x AH.y AI.z AJ.aa 
             AK.ab AL.ac AM.ad AN.ae AO.af AP.ag AQ.ah AR.ai AS.aj AT.ak AU.al AV.am AW.an AX.ao AY.ap AZ.aq 
             BA.ar BB.as BC.at BD.au BE.av BF.aw BG.ax 
@@ -3831,7 +3831,7 @@ dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii
 		{Name: "format-dateTime-014", XPath: `string-join(
                for $z in -28 to +28
                return format-dateTime(adjust-dateTime-to-timezone(
-                   $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][Z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+                   $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][Z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             0715-14:00; 0745-13:30; 0815-13:00; 0845-12:30; 0915-12:00; 0945-11:30; 1015-11:00; 1045-10:30; 1115-10:00; 
             1145-09:30; 1215-09:00; 1245-08:30; 0115-08:00; 0145-07:30; 0215-07:00; 0245-06:30; 0315-06:00; 0345-05:30;
             0415-05:00; 0445-04:30; 0515-04:00; 0545-03:30; 0615-03:00; 0645-02:30; 0715-02:00; 0745-01:30; 0815-01:00;
@@ -3843,7 +3843,7 @@ dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii
 		{Name: "format-dateTime-015", XPath: `string-join(
                for $z in -28 to +28
                return format-dateTime(adjust-dateTime-to-timezone(
-                          $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z0]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+                          $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z0]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             0715GMT-14; 0745GMT-13:30; 0815GMT-13; 0845GMT-12:30; 0915GMT-12; 0945GMT-11:30; 1015GMT-11; 1045GMT-10:30;
             1115GMT-10; 1145GMT-9:30; 1215GMT-9; 1245GMT-8:30; 0115GMT-8; 0145GMT-7:30; 0215GMT-7; 0245GMT-6:30; 0315GMT-6;
             0345GMT-5:30; 0415GMT-5; 0445GMT-4:30; 0515GMT-4; 0545GMT-3:30; 0615GMT-3; 0645GMT-2:30; 0715GMT-2; 0745GMT-1:30;
@@ -3855,7 +3855,7 @@ dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii
 		{Name: "format-dateTime-016", XPath: `string-join(
                for $z in -28 to +28
                return format-dateTime(adjust-dateTime-to-timezone(
-               $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z00:00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+               $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z00:00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00;            
              1045GMT-10:30; 1115GMT-10:00; 1145GMT-09:30; 1215GMT-09:00; 1245GMT-08:30; 0115GMT-08:00; 0145GMT-07:30;             
              0215GMT-07:00; 0245GMT-06:30; 0315GMT-06:00; 0345GMT-05:30; 0415GMT-05:00; 0445GMT-04:30; 0515GMT-04:00;             
@@ -3867,7 +3867,7 @@ dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii
         `)}},
 		{Name: "format-dateTime-017", XPath: `string-join(
                for $z in -28 to +28
-               return format-dateTime(adjust-dateTime-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+               return format-dateTime(adjust-dateTime-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
              0715GMT-14; 0745GMT-13:30; 0815GMT-13; 0845GMT-12:30; 0915GMT-12; 0945GMT-11:30; 1015GMT-11; 1045GMT-10:30; 
              1115GMT-10; 1145GMT-09:30; 1215GMT-09; 1245GMT-08:30; 0115GMT-08; 0145GMT-07:30; 0215GMT-07; 0245GMT-06:30;
              0315GMT-06; 0345GMT-05:30; 0415GMT-05; 0445GMT-04:30; 0515GMT-04; 0545GMT-03:30; 0615GMT-03; 0645GMT-02:30;
@@ -3878,7 +3878,7 @@ dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii
          `)}},
 		{Name: "format-dateTime-018", XPath: `string-join(
                for $z in -28 to +28
-               return format-dateTime(adjust-dateTime-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+               return format-dateTime(adjust-dateTime-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             0715GMT-14; 0745GMT-13:30; 0815GMT-13; 0845GMT-12:30; 0915GMT-12; 0945GMT-11:30; 1015GMT-11; 1045GMT-10:30;
             1115GMT-10; 1145GMT-09:30; 1215GMT-09; 1245GMT-08:30; 0115GMT-08; 0145GMT-07:30; 0215GMT-07; 0245GMT-06:30; 0315GMT-06;
             0345GMT-05:30; 0415GMT-05; 0445GMT-04:30; 0515GMT-04; 0545GMT-03:30; 0615GMT-03; 0645GMT-02:30; 0715GMT-02; 0745GMT-01:30;
@@ -3900,7 +3900,7 @@ dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii
         format-dateTime($d2, '[Y][EN]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckDeepEq("\"1990AD\", \"55BC\""), qt3CheckDeepEq("\"1990CE\", \"55BCE\""), qt3CheckDeepEq("\"1990A.D.\", \"55B.C.\""), qt3CheckDeepEq("\"1990C.E.\", \"55B.C.E.\""))}},
 		{Name: "format-dateTime-en142", XPath: `for $i in 0 to 23 return
         let $t := $b + xs:dayTimeDuration('PT1H')*$i return
-        translate(format-dateTime($t, '[h]~[m][P]', 'en', (), ()), '.- ', '')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+        translate(format-dateTime($t, '[h]~[m][P]', 'en', (), ()), '.- ', '')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
          12~10am 1~10am 2~10am 3~10am 4~10am 5~10am 6~10am 7~10am 8~10am 9~10am 10~10am 11~10am 12~10pm 
          1~10pm 2~10pm 3~10pm 4~10pm 5~10pm 6~10pm 7~10pm 8~10pm 9~10pm 10~10pm 11~10pm
          `)}},
@@ -4306,7 +4306,7 @@ func TestQT3_fn_format_time(t *testing.T) {
 		{Name: "format-time-002i", XPath: "format-time($t,\"[H]:[m]:[s].[f01]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.45")}},
 		{Name: "format-time-002j", XPath: "format-time($t,\"[H]:[m]:[s].[f001]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.456")}},
 		{Name: "format-time-004", XPath: `for $i in 1 to 24 return
-        format-time($t + xs:dayTimeDuration('PT1H')*$i, '[h].[m]')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+        format-time($t + xs:dayTimeDuration('PT1H')*$i, '[h].[m]')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
          10.15 11.15 12.15 1.15 2.15 3.15 4.15 5.15 6.15 7.15 8.15 9.15 10.15 11.15 
          12.15 1.15 2.15 3.15 4.15 5.15 6.15 7.15 8.15 9.15
          `)}},
@@ -4321,7 +4321,7 @@ func TestQT3_fn_format_time(t *testing.T) {
 		{Name: "format-time-014", XPath: `string-join(
                for $z in -28 to +28
                return format-time(adjust-time-to-timezone(
-               $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][Z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+               $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][Z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
              0715-14:00; 0745-13:30; 0815-13:00; 0845-12:30; 0915-12:00; 0945-11:30; 1015-11:00; 1045-10:30; 1115-10:00; 
              1145-09:30; 1215-09:00; 1245-08:30; 0115-08:00; 0145-07:30; 0215-07:00; 0245-06:30; 0315-06:00; 0345-05:30; 
              0415-05:00; 0445-04:30; 0515-04:00; 0545-03:30; 0615-03:00; 0645-02:30; 0715-02:00; 0745-01:30; 0815-01:00; 
@@ -4333,7 +4333,7 @@ func TestQT3_fn_format_time(t *testing.T) {
 		{Name: "format-time-015", XPath: `string-join(
                for $z in -28 to +28
                return format-time(adjust-time-to-timezone(
-                        $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+                        $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00; 1045GMT-10:30;
             1115GMT-10:00; 1145GMT-09:30; 1215GMT-09:00; 1245GMT-08:30; 0115GMT-08:00; 0145GMT-07:30; 0215GMT-07:00; 0245GMT-06:30;
             0315GMT-06:00; 0345GMT-05:30; 0415GMT-05:00; 0445GMT-04:30; 0515GMT-04:00; 0545GMT-03:30; 0615GMT-03:00; 0645GMT-02:30;
@@ -4346,7 +4346,7 @@ func TestQT3_fn_format_time(t *testing.T) {
 		{Name: "format-time-016", XPath: `string-join(
                for $z in -28 to +28
                return format-time(adjust-time-to-timezone(
-                        $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z,6-6]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+                        $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z,6-6]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
              0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00; 1045GMT-10:30;
             1115GMT-10:00; 1145GMT-09:30; 1215GMT-09:00; 1245GMT-08:30; 0115GMT-08:00; 0145GMT-07:30; 0215GMT-07:00; 0245GMT-06:30;
             0315GMT-06:00; 0345GMT-05:30; 0415GMT-05:00; 0445GMT-04:30; 0515GMT-04:00; 0545GMT-03:30; 0615GMT-03:00; 0645GMT-02:30;
@@ -4358,7 +4358,7 @@ func TestQT3_fn_format_time(t *testing.T) {
         `)}},
 		{Name: "format-time-017", XPath: `string-join(
                for $z in -28 to +28
-               return format-time(adjust-time-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z,5-6]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+               return format-time(adjust-time-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z,5-6]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
              0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00; 1045GMT-10:30;
             1115GMT-10:00; 1145GMT-09:30; 1215GMT-09:00; 1245GMT-08:30; 0115GMT-08:00; 0145GMT-07:30; 0215GMT-07:00; 0245GMT-06:30;
             0315GMT-06:00; 0345GMT-05:30; 0415GMT-05:00; 0445GMT-04:30; 0515GMT-04:00; 0545GMT-03:30; 0615GMT-03:00; 0645GMT-02:30;
@@ -4370,7 +4370,7 @@ func TestQT3_fn_format_time(t *testing.T) {
          `)}},
 		{Name: "format-time-018", XPath: `string-join(
                for $z in -28 to +28
-               return format-time(adjust-time-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z,2-6]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue(`
+               return format-time(adjust-time-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z,2-6]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
               0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00; 1045GMT-10:30;
             1115GMT-10:00; 1145GMT-09:30; 1215GMT-09:00; 1245GMT-08:30; 0115GMT-08:00; 0145GMT-07:30; 0215GMT-07:00; 0245GMT-06:30;
             0315GMT-06:00; 0345GMT-05:30; 0415GMT-05:00; 0445GMT-04:30; 0515GMT-04:00; 0545GMT-03:30; 0615GMT-03:00; 0645GMT-02:30;

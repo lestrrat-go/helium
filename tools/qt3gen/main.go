@@ -111,9 +111,10 @@ type resultSpec struct {
 }
 
 type assertion struct {
-	Type     string
-	Value    string
-	Children []assertion
+	Type           string
+	Value          string
+	NormalizeSpace bool
+	Children       []assertion
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -527,10 +528,11 @@ type xmlResult struct {
 }
 
 type xmlAssertion struct {
-	XMLName  xml.Name
-	Code     string         `xml:"code,attr"`
-	Inner    []byte         `xml:",innerxml"`
-	Children []xmlAssertion `xml:",any"`
+	XMLName        xml.Name
+	Code           string         `xml:"code,attr"`
+	NormalizeSpace string         `xml:"normalize-space,attr"`
+	Inner          []byte         `xml:",innerxml"`
+	Children       []xmlAssertion `xml:",any"`
 }
 
 func parseAssertionXML(s string) []assertion {
@@ -553,8 +555,9 @@ func convertAssertion(xa xmlAssertion) assertion {
 		value = strings.TrimSpace(value)
 	}
 	a := assertion{
-		Type:  xa.XMLName.Local,
-		Value: value,
+		Type:           xa.XMLName.Local,
+		Value:          value,
+		NormalizeSpace: xa.NormalizeSpace == "true",
 	}
 	if xa.Code != "" {
 		a.Value = xa.Code
@@ -739,6 +742,9 @@ func emitAssertion(a assertion) []string {
 	case "assert-eq":
 		return []string{fmt.Sprintf("qt3AssertEq(%s)", goStringLiteral(a.Value))}
 	case "assert-string-value":
+		if a.NormalizeSpace {
+			return []string{fmt.Sprintf("qt3AssertStringValueNS(%s)", goStringLiteral(a.Value))}
+		}
 		return []string{fmt.Sprintf("qt3AssertStringValue(%s)", goStringLiteral(a.Value))}
 	case "assert-true":
 		return []string{"qt3AssertTrue()"}
@@ -782,6 +788,9 @@ func emitCheck(a assertion) string {
 	case "assert-eq":
 		return fmt.Sprintf("qt3CheckEq(%s)", goStringLiteral(a.Value))
 	case "assert-string-value":
+		if a.NormalizeSpace {
+			return fmt.Sprintf("qt3CheckStringValueNS(%s)", goStringLiteral(a.Value))
+		}
 		return fmt.Sprintf("qt3CheckStringValue(%s)", goStringLiteral(a.Value))
 	case "assert-true":
 		return "qt3CheckTrue()"

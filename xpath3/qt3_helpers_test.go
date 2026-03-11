@@ -227,6 +227,14 @@ func qt3AssertStringValue(expected string) qt3Assertion {
 	}
 }
 
+func qt3AssertStringValueNS(expected string) qt3Assertion {
+	return func(t *testing.T, seq xpath3.Sequence) {
+		t.Helper()
+		got := strings.Join(strings.Fields(qt3StringValue(seq)), " ")
+		require.Equal(t, expected, got)
+	}
+}
+
 func qt3AssertTrue() qt3Assertion {
 	return func(t *testing.T, seq xpath3.Sequence) {
 		t.Helper()
@@ -312,6 +320,13 @@ func qt3CheckEq(expected string) qt3Check {
 func qt3CheckStringValue(expected string) qt3Check {
 	return func(seq xpath3.Sequence) bool {
 		return qt3StringValue(seq) == expected
+	}
+}
+
+func qt3CheckStringValueNS(expected string) qt3Check {
+	return func(seq xpath3.Sequence) bool {
+		got := strings.Join(strings.Fields(qt3StringValue(seq)), " ")
+		return got == expected
 	}
 }
 
