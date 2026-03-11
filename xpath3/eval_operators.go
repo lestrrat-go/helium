@@ -129,14 +129,15 @@ func evalRangeExpr(ec *evalContext, e RangeExpr) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Cast operands to xs:integer per spec (rejects NaN, Inf, non-numeric)
-	saInt, castErr := CastAtomic(sa, TypeInteger)
-	if castErr != nil {
-		return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("range operand: %v", castErr)}
+	// Per spec, operands are converted using function coercion rules for xs:integer?.
+	// This allows untypedAtomic → integer, but rejects double/float/decimal → integer.
+	saInt, err := coerceToInteger(sa)
+	if err != nil {
+		return nil, err
 	}
-	eaInt, castErr := CastAtomic(ea, TypeInteger)
-	if castErr != nil {
-		return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("range operand: %v", castErr)}
+	eaInt, err := coerceToInteger(ea)
+	if err != nil {
+		return nil, err
 	}
 	start := saInt.BigInt()
 	end := eaInt.BigInt()

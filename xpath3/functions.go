@@ -271,6 +271,23 @@ func extractSingleAtomicArg(seq Sequence, fnName string) (AtomicValue, error) {
 	return AtomizeItem(seq[0])
 }
 
+// coerceToInteger applies function coercion rules for xs:integer to a single AtomicValue.
+// Accepts: xs:integer (and subtypes), xs:untypedAtomic (cast to integer).
+// Rejects double, float, decimal, and all other types with XPTY0004.
+func coerceToInteger(a AtomicValue) (AtomicValue, error) {
+	if a.TypeName == TypeUntypedAtomic {
+		casted, cerr := castToInteger(a)
+		if cerr != nil {
+			return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("cannot cast %s to xs:integer", a.TypeName)}
+		}
+		return casted, nil
+	}
+	if !isSubtypeOf(a.TypeName, TypeInteger) {
+		return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("expected xs:integer, got %s", a.TypeName)}
+	}
+	return a, nil
+}
+
 // seqToDouble atomizes the first item to a float64.
 func seqToDouble(seq Sequence) float64 {
 	if len(seq) == 0 {
