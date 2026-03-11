@@ -78,10 +78,18 @@ func init() {
 	registerSig("node-name", 1, []SequenceType{stNode(OccurrenceZeroOrOne)}, stAtomic(TypeQName, OccurrenceZeroOrOne))
 
 	// String functions
+	strQToStr := stAtomic(TypeString, OccurrenceExactlyOne)
+	strQParam := []SequenceType{stAtomic(TypeString, OccurrenceZeroOrOne)}
 	registerSig("string", 0, nil, stAtomic(TypeString, OccurrenceExactlyOne))
 	registerSig("string", 1, []SequenceType{stItem(OccurrenceZeroOrOne)}, stAtomic(TypeString, OccurrenceExactlyOne))
 	registerSig("string-length", 0, nil, stAtomic(TypeInteger, OccurrenceExactlyOne))
-	registerSig("string-length", 1, []SequenceType{stAtomic(TypeString, OccurrenceZeroOrOne)}, stAtomic(TypeInteger, OccurrenceExactlyOne))
+	registerSig("string-length", 1, strQParam, stAtomic(TypeInteger, OccurrenceExactlyOne))
+	registerSig("upper-case", 1, strQParam, strQToStr)
+	registerSig("lower-case", 1, strQParam, strQToStr)
+	registerSig("normalize-space", 0, nil, strQToStr)
+	registerSig("normalize-space", 1, strQParam, strQToStr)
+	registerSig("normalize-unicode", 1, strQParam, strQToStr)
+	registerSig("normalize-unicode", 2, []SequenceType{stAtomic(TypeString, OccurrenceZeroOrOne), stAtomic(TypeString, OccurrenceExactlyOne)}, strQToStr)
 	registerSig("concat", 2, []SequenceType{stItem(OccurrenceZeroOrMore), stItem(OccurrenceZeroOrMore)}, stAtomic(TypeString, OccurrenceExactlyOne))
 	registerSig("contains", 2, []SequenceType{stAtomic(TypeString, OccurrenceZeroOrOne), stAtomic(TypeString, OccurrenceZeroOrOne)}, stAtomic(TypeBoolean, OccurrenceExactlyOne))
 

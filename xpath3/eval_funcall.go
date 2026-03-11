@@ -158,21 +158,35 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 	// Per XPath 3.1 Section 3.1.6: if the function is focus-dependent,
 	// the dynamic context (including focus) is fixed at reference creation time.
 	capturedCtx := withFnContext(ec.goCtx, ec)
+	// Populate type signature from built-in registry
+	var paramTypes []SequenceType
+	var returnType *SequenceType
+	if sig := lookupFunctionSignature(ns, e.Name, e.Arity); sig != nil {
+		paramTypes = sig.ParamTypes
+		returnType = sig.ReturnType
+	}
 	fi := FunctionItem{
-		Arity:     e.Arity,
-		Name:      e.Name,
-		Namespace: ns,
+		Arity:      e.Arity,
+		Name:       e.Name,
+		Namespace:  ns,
+		ParamTypes: paramTypes,
+		ReturnType: returnType,
 		Invoke: func(ctx context.Context, args []Sequence) (Sequence, error) {
 			if len(args) < minArity {
 				return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("fn:%s requires at least %d arguments, got %d", e.Name, minArity, len(args))}
 			}
+			// Type-check arguments against declared parameter types
+			if paramTypes != nil {
+				for i, arg := range args {
+					if i < len(paramTypes) {
+						if _, ok := coerceToSequenceType(arg, paramTypes[i], nil); !ok {
+							return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", e.Name, i+1, paramTypes[i])}
+						}
+					}
+				}
+			}
 			return fn.Call(capturedCtx, args)
 		},
-	}
-	// Populate type signature from built-in registry
-	if sig := lookupFunctionSignature(ns, e.Name, e.Arity); sig != nil {
-		fi.ParamTypes = sig.ParamTypes
-		fi.ReturnType = sig.ReturnType
 	}
 	return Sequence{fi}, nil
 }
