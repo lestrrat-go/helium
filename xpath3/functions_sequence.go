@@ -445,16 +445,16 @@ func fnIndexOf(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnLast(ctx context.Context, _ []Sequence) (Sequence, error) {
 	fc := getFnContext(ctx)
-	if fc == nil {
-		return SingleInteger(0), nil
+	if fc == nil || (fc.node == nil && fc.contextItem == nil) {
+		return nil, &XPathError{Code: "XPDY0002", Message: "last() requires a focus (context item)"}
 	}
 	return SingleInteger(int64(fc.size)), nil
 }
 
 func fnPosition(ctx context.Context, _ []Sequence) (Sequence, error) {
 	fc := getFnContext(ctx)
-	if fc == nil {
-		return SingleInteger(0), nil
+	if fc == nil || (fc.node == nil && fc.contextItem == nil) {
+		return nil, &XPathError{Code: "XPDY0002", Message: "position() requires a focus (context item)"}
 	}
 	return SingleInteger(int64(fc.position)), nil
 }
