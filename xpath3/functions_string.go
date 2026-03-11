@@ -485,19 +485,6 @@ func fnReplace(_ context.Context, args []Sequence) (Sequence, error) {
 
 	isLiteral := strings.Contains(flags, "q")
 
-	var goRepl string
-	if isLiteral {
-		// With q flag, replacement is literal — escape Go's special chars
-		goRepl = strings.ReplaceAll(replacement, "$", "$$")
-	} else {
-		// Validate and translate XPath replacement string to Go syntax.
-		var err error
-		goRepl, err = translateXPathReplacement(replacement)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	re, err := compileXPathRegex(pattern, flags)
 	if err != nil {
 		return nil, err
@@ -508,13 +495,27 @@ func fnReplace(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: "FORX0003", Message: "replacement pattern matches zero-length string"}
 	}
 
+	var goRepl string
+	if isLiteral {
+		// With q flag, replacement is literal — escape Go's special chars
+		goRepl = strings.ReplaceAll(replacement, "$", "$$")
+	} else {
+		// Validate and translate XPath replacement string to Go syntax.
+		goRepl, err = translateXPathReplacement(replacement, re.NumSubexp())
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return SingleString(re.ReplaceAllString(s, goRepl)), nil
 }
 
 // translateXPathReplacement converts an XPath replacement string to Go regexp syntax.
 // XPath uses: $N for backrefs, \$ for literal $, \\ for literal \.
 // Go uses:    $N for backrefs, $$ for literal $.
-func translateXPathReplacement(repl string) (string, error) {
+// numGroups is the number of capture groups in the pattern — $N consumes the
+// maximum number of digits that form a valid group reference (≤ numGroups).
+func translateXPathReplacement(repl string, numGroups int) (string, error) {
 	var b strings.Builder
 	for i := 0; i < len(repl); i++ {
 		ch := repl[i]
@@ -538,14 +539,37 @@ func translateXPathReplacement(repl string) (string, error) {
 			if i+1 >= len(repl) || repl[i+1] < '0' || repl[i+1] > '9' {
 				return "", &XPathError{Code: "FORX0004", Message: "invalid replacement string: $ not followed by digit"}
 			}
-			// Collect all digits after $ for the group number
+			// Collect digits after $, but only consume as many as form a
+			// valid group number (≤ numGroups). Remaining digits are literal.
 			i++
-			b.WriteString("${")
+			start := i
+			num := 0
+			validEnd := start // end of the longest valid group number
 			for i < len(repl) && repl[i] >= '0' && repl[i] <= '9' {
-				b.WriteByte(repl[i])
+				num = num*10 + int(repl[i]-'0')
 				i++
+				if num > 0 && num <= numGroups {
+					validEnd = i
+				}
 			}
-			b.WriteByte('}')
+			if validEnd == start {
+				// No valid group number found — $0 or group exceeds numGroups
+				// Per XPath spec, this is still valid syntax but refers to
+				// a non-existent group, which Go replaces with empty string.
+				// Write the full collected number.
+				b.WriteString("${")
+				b.WriteString(repl[start:i])
+				b.WriteByte('}')
+			} else {
+				// Write the valid group reference
+				b.WriteString("${")
+				b.WriteString(repl[start:validEnd])
+				b.WriteByte('}')
+				// Write remaining digits as literal text
+				for k := validEnd; k < i; k++ {
+					b.WriteByte(repl[k])
+				}
+			}
 			i-- // outer loop will i++
 		default:
 			b.WriteByte(ch)
