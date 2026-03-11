@@ -41,21 +41,24 @@ func evalValueComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Atomize operands (handles arrays, nodes, etc.)
+	leftAtoms, err := AtomizeSequence(left)
+	if err != nil {
+		return nil, err
+	}
+	rightAtoms, err := AtomizeSequence(right)
+	if err != nil {
+		return nil, err
+	}
 	// Empty sequence yields empty sequence
-	if len(left) == 0 || len(right) == 0 {
+	if len(leftAtoms) == 0 || len(rightAtoms) == 0 {
 		return nil, nil
 	}
-	if len(left) > 1 || len(right) > 1 {
+	if len(leftAtoms) > 1 || len(rightAtoms) > 1 {
 		return nil, &XPathError{Code: "XPTY0004", Message: "value comparison requires singletons"}
 	}
-	la, err := AtomizeItem(left[0])
-	if err != nil {
-		return nil, err
-	}
-	ra, err := AtomizeItem(right[0])
-	if err != nil {
-		return nil, err
-	}
+	la := leftAtoms[0]
+	ra := rightAtoms[0]
 	result, err := ValueCompare(e.Op, la, ra)
 	if err != nil {
 		return nil, err
