@@ -55,6 +55,9 @@ func formatDateTimeCommon(args []Sequence, typeName string) (Sequence, error) {
 			return nil, err
 		}
 		lang = langAtom.StringVal()
+		if lang == "" {
+			return nil, &XPathError{Code: "FOFD1340", Message: "format-dateTime: language argument must not be empty"}
+		}
 	}
 
 	result, err := formatDateTimePicture(t, picture, lang, typeName)
