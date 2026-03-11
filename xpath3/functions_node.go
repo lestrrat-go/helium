@@ -84,9 +84,13 @@ func fnNilled(ctx context.Context, args []Sequence) (Sequence, error) {
 	return nil, nil
 }
 
-func fnData(_ context.Context, args []Sequence) (Sequence, error) {
+func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
-		return nil, &XPathError{Code: "XPTY0004", Message: "data() requires an argument when context item is absent"}
+		fc := getFnContext(ctx)
+		if fc == nil || fc.node == nil {
+			return nil, &XPathError{Code: "XPDY0002", Message: "data() requires a context item"}
+		}
+		args = []Sequence{{NodeItem{Node: fc.node}}}
 	}
 	atoms, err := AtomizeSequence(args[0])
 	if err != nil {
