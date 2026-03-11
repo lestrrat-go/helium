@@ -489,8 +489,10 @@ func (l *lexer) isOperatorContext() bool {
 	prev := l.tokens[len(l.tokens)-1]
 	switch prev.Type {
 	// Value-producing tokens: an operator is expected after these.
+	// Note: TokenQMark is NOT here — after '?' we expect a lookup key (NCName),
+	// so keywords like 'or', 'and' must be treated as names, not operators.
 	case TokenName, TokenNumber, TokenString, TokenRParen, TokenRBracket,
-		TokenDot, TokenDotDot, TokenStar, TokenVariableRef, TokenRBrace, TokenQMark:
+		TokenDot, TokenDotDot, TokenStar, TokenVariableRef, TokenRBrace:
 		return true
 	// Multi-token keyword pairs: "instance of", "cast as", "castable as",
 	// "treat as" — the secondary keyword follows the primary keyword.
