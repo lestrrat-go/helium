@@ -1653,9 +1653,17 @@ func (p *parser) parseFunctionKeyword() (Expr, error) {
 		return nil, fmt.Errorf("%w: '{' for function body but got %s", ErrExpectedToken, p.lexer.Peek())
 	}
 	p.lexer.Next()
-	body, err := p.parseExpression()
-	if err != nil {
-		return nil, err
+
+	var body Expr
+	if p.lexer.Peek().Type == TokenRBrace {
+		// Empty function body: function(){} returns empty sequence
+		body = SequenceExpr{Items: nil}
+	} else {
+		var err error
+		body, err = p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
 	}
 	if p.lexer.Peek().Type != TokenRBrace {
 		return nil, fmt.Errorf("%w: '}' after function body but got %s", ErrExpectedToken, p.lexer.Peek())
