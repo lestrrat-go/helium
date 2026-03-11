@@ -370,6 +370,9 @@ func parseXSDDuration(s string) (Duration, error) {
 			}
 			switch designator {
 			case 'Y':
+				if n > math.MaxInt/12 {
+					return Duration{}, fmt.Errorf("duration overflow: %sY", numStr)
+				}
 				d.Months += n * 12
 			case 'M':
 				d.Months += n
