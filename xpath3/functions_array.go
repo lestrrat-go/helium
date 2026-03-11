@@ -99,18 +99,23 @@ func fnArrayRemove(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	// args[1] is a sequence of positions to remove
-	positions := make(map[int]bool)
+	positions := make(map[int]struct{})
+	size := a.Size()
 	for _, item := range args[1] {
 		av, err := AtomizeItem(item)
 		if err != nil {
 			return nil, err
 		}
-		positions[int(av.ToFloat64())] = true
+		pos := int(av.ToFloat64())
+		if pos < 1 || pos > size {
+			return nil, &XPathError{Code: "FOAY0001", Message: fmt.Sprintf("array:remove: position %d out of range 1..%d", pos, size)}
+		}
+		positions[pos] = struct{}{}
 	}
 	members := a.Members()
 	var result []Sequence
 	for i, m := range members {
-		if !positions[i+1] {
+		if _, skip := positions[i+1]; !skip {
 			result = append(result, m)
 		}
 	}
