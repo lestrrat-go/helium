@@ -251,18 +251,26 @@ func fnNormalizeSpace(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnNormalizeUnicode(_ context.Context, args []Sequence) (Sequence, error) {
-	s := seqToString(args[0])
-	if s == "" {
-		return SingleString(""), nil
+	s, err := coerceArgToString(args[0])
+	if err != nil {
+		return nil, err
 	}
 
 	formName := "NFC" // default
 	if len(args) > 1 {
-		formName = strings.TrimSpace(strings.ToUpper(seqToString(args[1])))
+		form, err := coerceArgToStringRequired(args[1])
+		if err != nil {
+			return nil, err
+		}
+		formName = strings.TrimSpace(strings.ToUpper(form))
 		if formName == "" {
 			// Empty form string means return input unchanged
 			return SingleString(s), nil
 		}
+	}
+
+	if s == "" {
+		return SingleString(""), nil
 	}
 
 	var nf norm.Form
