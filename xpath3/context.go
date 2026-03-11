@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"io"
+	"maps"
 	"net/http"
 	"time"
 )
@@ -43,16 +44,18 @@ type Context struct {
 type ContextOption func(*Context)
 
 // WithNamespaces binds namespace prefixes to URIs for the evaluation.
+// The map is defensively copied to prevent caller mutation from affecting evaluation.
 func WithNamespaces(ns map[string]string) ContextOption {
 	return func(c *Context) {
-		c.namespaces = ns
+		c.namespaces = maps.Clone(ns)
 	}
 }
 
 // WithVariables binds variable names to pre-constructed Sequence values.
+// The map is defensively copied to prevent caller mutation from affecting evaluation.
 func WithVariables(vars map[string]Sequence) ContextOption {
 	return func(c *Context) {
-		c.variables = vars
+		c.variables = maps.Clone(vars)
 	}
 }
 
@@ -65,16 +68,18 @@ func WithOpLimit(limit int) ContextOption {
 }
 
 // WithFunctions registers user-defined functions by local name.
+// The map is defensively copied to prevent caller mutation from affecting evaluation.
 func WithFunctions(fns map[string]Function) ContextOption {
 	return func(c *Context) {
-		c.functions = fns
+		c.functions = maps.Clone(fns)
 	}
 }
 
 // WithFunctionsNS registers user-defined functions by qualified name.
+// The map is defensively copied to prevent caller mutation from affecting evaluation.
 func WithFunctionsNS(fns map[QualifiedName]Function) ContextOption {
 	return func(c *Context) {
-		c.functionsNS = fns
+		c.functionsNS = maps.Clone(fns)
 	}
 }
 
