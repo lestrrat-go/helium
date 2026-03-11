@@ -73,8 +73,8 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 			}
 			if tc.BaseURI != "" {
 				opts = append(opts, xpath3.WithBaseURI(tc.BaseURI))
-			} else {
-				// Default base URI: resolve relative paths via HTTP against /fots/
+			} else if tc.NeedsHTTP {
+				// Default base URI only for HTTP tests that need relative URI resolution
 				opts = append(opts, xpath3.WithBaseURI("http://www.w3.org/fots/"))
 			}
 			ctx = xpath3.NewContext(ctx, opts...)
