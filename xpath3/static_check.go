@@ -1,6 +1,7 @@
 package xpath3
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -228,6 +229,16 @@ func checkPrefixesInNodeTest(nt NodeTest, namespaces map[string]string) error {
 	case NameTest:
 		return validatePrefix(t.Prefix, namespaces)
 	case AtomicOrUnionType:
+		// Unprefixed atomic type names require a default element namespace binding.
+		// Without one, the name cannot be resolved (XPST0081).
+		if t.Prefix == "" {
+			if namespaces == nil || namespaces[""] == "" {
+				return &XPathError{
+					Code:    "XPST0081",
+					Message: fmt.Sprintf("unprefixed type name %q requires a default element namespace", t.Name),
+				}
+			}
+		}
 		return validatePrefix(t.Prefix, namespaces)
 	case DocumentTest:
 		return checkPrefixesInNodeTest(t.Inner, namespaces)
