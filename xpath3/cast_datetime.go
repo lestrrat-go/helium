@@ -65,7 +65,7 @@ func splitXSDYear(s string) (int, string, error) {
 	if digits > 4 && s[start] == '0' {
 		return 0, "", fmt.Errorf("year with leading zeros is not valid")
 	}
-	// Year 0000 is not valid per XSD (no year zero)
+	// XSD 1.1: year 0000 is valid
 	yearStr := s[start:i]
 	year, err := strconv.Atoi(yearStr)
 	if err != nil {
@@ -270,11 +270,8 @@ func hasExplicitTimezone(s string) bool {
 }
 
 // validateDateComponents checks that month and day are in valid ranges.
-// year 0 is invalid in XSD (there is no year zero).
+// XSD 1.1: year 0000 is valid.
 func validateDateComponents(month, day, year int) error {
-	if year == 0 {
-		return fmt.Errorf("year 0000 is not valid in XSD")
-	}
 	if month < 1 || month > 12 {
 		return fmt.Errorf("month %d out of range 1-12", month)
 	}

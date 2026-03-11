@@ -368,21 +368,14 @@ func validateGregorianValue(typeName, s string) bool {
 		maxDay := daysInMonth(4, month) // year 4 is a leap year
 		return day >= 1 && day <= maxDay
 	case TypeGYear:
-		// xs:gYear: reject 0000 and -0000 (year zero is invalid)
+		// XSD 1.1: year 0000 is valid
 		y := extractYearDigits(s)
-		if isAllZero(y) {
-			return false
-		}
 		if len(y) > 9 {
 			return false
 		}
 	case TypeGYearMonth:
-		// xs:gYearMonth: reject 0000, validate month 01-12
-		neg := strings.HasPrefix(s, "-")
+		// XSD 1.1: year 0000 is valid, validate month 01-12
 		y := extractYearDigits(s)
-		if !neg && isAllZero(y) {
-			return false
-		}
 		if len(y) > 9 {
 			return false
 		}
