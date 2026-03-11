@@ -75,16 +75,37 @@ func splitXSDYear(s string) (int, string, error) {
 // remaining month-day (and optional time/tz) components. It uses time.Parse
 // with a reference year of 2006, then replaces the year with the actual value.
 func buildTimeFromParts(year int, rest string, layouts []string, original string) (time.Time, bool) {
-	// rest starts with "-MM-DD..." — prepend a synthetic 4-digit year for time.Parse
+	// rest starts with "-MM-DD..." — prepend a synthetic 4-digit year for time.Parse.
+	// Go's time.Parse reference year (2006) is not a leap year, so Feb 29 fails.
+	// Use a leap year (2000) in the value string. Go layout uses "2006" for year,
+	// but the value has "2000" — Go only matches positionally for fixed-width
+	// components so we must re-format the layout to accept "2000".
+	// Alternative approach: if the actual year is a leap year, temporarily
+	// parse as Jan 1 to get the timezone, then construct manually.
+
 	synthetic := "2006" + rest
 	for _, layout := range layouts {
 		if t, err := time.Parse(layout, synthetic); err == nil {
-			// Replace the reference year with the actual year
 			t = time.Date(year, t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), t.Location())
 			t = ensureExplicitTZ(t, original)
 			return t, true
 		}
 	}
+
+	// Retry with a leap-year workaround for Feb 29: parse a modified string
+	// with day=28, then adjust the day back to the original value.
+	if strings.HasPrefix(rest, "-02-29") {
+		modRest := "-02-28" + rest[6:]
+		synthetic = "2006" + modRest
+		for _, layout := range layouts {
+			if t, err := time.Parse(layout, synthetic); err == nil {
+				t = time.Date(year, t.Month(), 29, t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), t.Location())
+				t = ensureExplicitTZ(t, original)
+				return t, true
+			}
+		}
+	}
+
 	return time.Time{}, false
 }
 
