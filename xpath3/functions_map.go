@@ -92,10 +92,7 @@ func fnMapContains(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(args[1]) == 0 {
-		return SingleBoolean(false), nil
-	}
-	ka, err := AtomizeItem(args[1][0])
+	ka, err := extractSingleAtomicArg(args[1], "map:contains")
 	if err != nil {
 		return nil, err
 	}
