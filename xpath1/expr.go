@@ -31,12 +31,6 @@ const (
 	AxisAncestorOrSelf   = ixpath.AxisAncestorOrSelf
 )
 
-// axisFromName maps an axis name string to its AxisType.
-// Returns the axis and true if recognized, or AxisChild and false otherwise.
-func axisFromName(name string) (AxisType, bool) {
-	return ixpath.AxisFromName(name)
-}
-
 // NodeTest filters nodes selected by an axis.
 type NodeTest interface {
 	nodeTest()
