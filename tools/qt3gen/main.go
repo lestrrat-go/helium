@@ -367,6 +367,12 @@ func mergeDeps(setDeps, caseDeps []dependency) []dependency {
 func isXPathApplicable(deps []dependency) bool {
 	hasSpecDep := false
 	for _, d := range deps {
+		// Exclude tests that require the absence of a feature we support.
+		// E.g. unicode-normalization-form value="FULLY-NORMALIZED" satisfied="false"
+		// means the test is for processors that do NOT support that form.
+		if d.Satisfied == "false" && isSupportedFeature(d) {
+			return false
+		}
 		if d.Type != "spec" {
 			continue
 		}
@@ -387,6 +393,22 @@ func isXPathApplicable(deps []dependency) bool {
 		}
 	}
 	return !hasSpecDep
+}
+
+// isSupportedFeature returns true if the dependency refers to a feature
+// that this implementation supports. Used to exclude tests requiring the
+// absence of such features (satisfied="false").
+func isSupportedFeature(d dependency) bool {
+	switch d.Type {
+	case "unicode-normalization-form":
+		switch d.Value {
+		case "NFC", "NFD", "NFKC", "NFKD", "FULLY-NORMALIZED":
+			return true
+		}
+	case "xsd-version":
+		return d.Value == "1.1"
+	}
+	return false
 }
 
 // xpVersionIncludes31 returns true if the XPath spec token includes version 3.1.

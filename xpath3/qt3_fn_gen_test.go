@@ -8588,13 +8588,11 @@ func TestQT3_fn_normalize_unicode(t *testing.T) {
 		{Name: "K-NormalizeUnicodeFunc-12", XPath: "normalize-unicode(\"f oo\", \"NFC\") eq \"f oo\"", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "K-NormalizeUnicodeFunc-13", XPath: "normalize-unicode((\"a string\", error()), \"NFC\")", ExpectError: true},
 		{Name: "cbcl-fn-normalize-unicode-001", XPath: "normalize-unicode(\"blah\",\"FULLY-NORMALIZED\")", Assertions: []qt3Assertion{qt3AssertStringValue("blah")}},
-		{Name: "cbcl-fn-normalize-unicode-001a", XPath: "normalize-unicode(\"blah\",\"FULLY-NORMALIZED\")", ExpectError: true},
 		{Name: "cbcl-fn-normalize-unicode-002", XPath: "boolean(normalize-unicode(\"blah\",\"NFC\"))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "cbcl-fn-normalize-unicode-003", XPath: "boolean(normalize-unicode(\"blah\",\"ZZZ\"))", ExpectError: true},
 		{Name: "cbcl-fn-normalize-unicode-004", XPath: "normalize-unicode((),\"NFC\")", Assertions: []qt3Assertion{qt3AssertStringValue("")}},
 		{Name: "cbcl-fn-normalize-unicode-005", XPath: "normalize-unicode(\"\",\"NFC\")", Assertions: []qt3Assertion{qt3AssertStringValue("")}},
 		{Name: "cbcl-fn-normalize-unicode-006", XPath: "normalize-unicode(codepoints-to-string(2494),\"FULLY-NORMALIZED\")", Assertions: []qt3Assertion{qt3AssertStringValue(" া")}},
-		{Name: "cbcl-fn-normalize-unicode-006a", XPath: "normalize-unicode(codepoints-to-string(2494),\"FULLY-NORMALIZED\")", ExpectError: true},
 	})
 }
 

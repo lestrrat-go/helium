@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
 	"golang.org/x/text/cases"
@@ -284,9 +285,17 @@ func fnNormalizeUnicode(_ context.Context, args []Sequence) (Sequence, error) {
 	case "NFKD":
 		nf = norm.NFKD
 	case "FULLY-NORMALIZED":
-		// FULLY-NORMALIZED is defined by the spec but rarely supported.
-		// We approximate it with NFC, which is the base requirement.
-		nf = norm.NFC
+		// W3C Charmod Normalization: NFC + if the result starts with a
+		// composing character (combining mark or character that participates
+		// in canonical composition as a trailing element), prepend a space.
+		result := norm.NFC.String(s)
+		if len(result) > 0 {
+			r, _ := utf8.DecodeRuneInString(result)
+			if unicode.In(r, unicode.Mn, unicode.Mc, unicode.Me) {
+				result = " " + result
+			}
+		}
+		return SingleString(result), nil
 	default:
 		return nil, &XPathError{Code: "FOCH0003", Message: fmt.Sprintf("unsupported normalization form: %s", formName)}
 	}
