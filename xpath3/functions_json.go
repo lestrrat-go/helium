@@ -341,21 +341,21 @@ func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	ec := getFnContext(ctx)
 	if ec == nil || ec.httpClient == nil {
-		return nil, &XPathError{Code: "FODC0002", Message: "json-doc: no HTTP client configured for URI: " + uri}
+		return nil, &XPathError{Code: errCodeFODC0002, Message: "json-doc: no HTTP client configured for URI: " + uri}
 	}
 
 	resp, err := ec.httpClient.Get(uri)
 	if err != nil {
-		return nil, &XPathError{Code: "FODC0002", Message: fmt.Sprintf("json-doc: failed to fetch %s: %v", uri, err)}
+		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("json-doc: failed to fetch %s: %v", uri, err)}
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
-		return nil, &XPathError{Code: "FODC0002", Message: fmt.Sprintf("json-doc: HTTP %d for %s", resp.StatusCode, uri)}
+		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("json-doc: HTTP %d for %s", resp.StatusCode, uri)}
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, &XPathError{Code: "FODC0002", Message: fmt.Sprintf("json-doc: error reading %s: %v", uri, err)}
+		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("json-doc: error reading %s: %v", uri, err)}
 	}
 
 	// Delegate to parse-json logic

@@ -470,11 +470,11 @@ func fnElementWithID(_ context.Context, _ []Sequence) (Sequence, error) {
 }
 
 func fnCollection(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, &XPathError{Code: "FODC0002", Message: "fn:collection: not supported"}
+	return nil, &XPathError{Code: errCodeFODC0002, Message: "fn:collection: not supported"}
 }
 
 func fnURICollection(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, &XPathError{Code: "FODC0002", Message: "fn:uri-collection: not supported"}
+	return nil, &XPathError{Code: errCodeFODC0002, Message: "fn:uri-collection: not supported"}
 }
 
 func fnDoc(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -510,12 +510,12 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 
 	data, err := readUnparsedTextURI(ctx, resolved)
 	if err != nil {
-		return nil, &XPathError{Code: "FODC0002", Message: fmt.Sprintf("fn:doc: cannot retrieve resource: %v", err)}
+		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: cannot retrieve resource: %v", err)}
 	}
 
 	doc, err := helium.Parse(ctx, data)
 	if err != nil {
-		return nil, &XPathError{Code: "FODC0002", Message: fmt.Sprintf("fn:doc: cannot parse document: %v", err)}
+		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: cannot parse document: %v", err)}
 	}
 	doc.SetURL(resolved)
 	return doc, nil
@@ -523,7 +523,7 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 
 func resolveDocURI(ctx context.Context, uri string) (string, error) {
 	if uri == "" {
-		return "", &XPathError{Code: "FODC0002", Message: "fn:doc: empty URI"}
+		return "", &XPathError{Code: errCodeFODC0002, Message: "fn:doc: empty URI"}
 	}
 
 	// Absolute file path — use directly
@@ -533,7 +533,7 @@ func resolveDocURI(ctx context.Context, uri string) (string, error) {
 
 	parsed, err := url.Parse(uri)
 	if err != nil {
-		return "", &XPathError{Code: "FODC0002", Message: fmt.Sprintf("fn:doc: invalid URI: %s", uri)}
+		return "", &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: invalid URI: %s", uri)}
 	}
 
 	if parsed.Scheme != "" {
@@ -541,7 +541,7 @@ func resolveDocURI(ctx context.Context, uri string) (string, error) {
 		case "file", "http", "https":
 			return uri, nil
 		default:
-			return "", &XPathError{Code: "FODC0002", Message: fmt.Sprintf("fn:doc: unsupported URI scheme: %s", parsed.Scheme)}
+			return "", &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: unsupported URI scheme: %s", parsed.Scheme)}
 		}
 	}
 

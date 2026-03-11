@@ -10,6 +10,7 @@ const errCodeXPTY0004 = "XPTY0004"
 const errCodeFOAR0002 = "FOAR0002"
 const errCodeFOCA0002 = "FOCA0002"
 const errCodeFOCH0002 = "FOCH0002"
+const errCodeFODC0002 = "FODC0002"
 const errCodeFORG0006 = "FORG0006"
 
 // Sentinel errors for the xpath3 package.
