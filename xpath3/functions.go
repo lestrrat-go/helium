@@ -262,13 +262,14 @@ func coerceArgToInteger(seq Sequence) (int64, error) {
 // extractSingleAtomicArg enforces that seq contains exactly one item and atomizes it.
 // Used for function parameters typed as xs:anyAtomicType (not optional).
 func extractSingleAtomicArg(seq Sequence, fnName string) (AtomicValue, error) {
-	if len(seq) == 0 {
+	switch len(seq) {
+	case 0:
 		return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fnName + ": expected single atomic value, got empty sequence"}
-	}
-	if len(seq) > 1 {
+	case 1:
+		return AtomizeItem(seq[0])
+	default:
 		return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fnName + ": expected single atomic value, got sequence of length > 1"}
 	}
-	return AtomizeItem(seq[0])
 }
 
 // coerceToInteger applies function coercion rules for xs:integer to a single AtomicValue.
