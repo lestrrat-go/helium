@@ -271,6 +271,13 @@ func partialApply(ec *evalContext, e FunctionCall, fixedArgs []Sequence) (Sequen
 		return nil, err
 	}
 
+	// Look up type signature for type checking placeholder arguments
+	ns := resolvePrefix(ec, e.Prefix)
+	var paramTypes []SequenceType
+	if sig := lookupFunctionSignature(ns, e.Name, len(e.Args)); sig != nil {
+		paramTypes = sig.ParamTypes
+	}
+
 	// Per XPath 3.1, partial applications are anonymous functions
 	fi := FunctionItem{
 		Arity: len(placeholderIndices),
@@ -285,6 +292,16 @@ func partialApply(ec *evalContext, e FunctionCall, fixedArgs []Sequence) (Sequen
 			copy(fullArgs, fixedArgs)
 			for pi, idx := range placeholderIndices {
 				fullArgs[idx] = partialArgs[pi]
+			}
+			// Type-check placeholder arguments against declared parameter types
+			if paramTypes != nil {
+				for pi, idx := range placeholderIndices {
+					if idx < len(paramTypes) {
+						if _, ok := coerceToSequenceType(partialArgs[pi], paramTypes[idx], nil); !ok {
+							return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("fn:%s: argument %d does not match required type %v", e.Name, idx+1, paramTypes[idx])}
+						}
+					}
+				}
 			}
 			return fn.Call(ctx, fullArgs)
 		},

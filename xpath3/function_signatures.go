@@ -91,7 +91,19 @@ func init() {
 	registerSig("normalize-unicode", 1, strQParam, strQToStr)
 	registerSig("normalize-unicode", 2, []SequenceType{stAtomic(TypeString, OccurrenceZeroOrOne), stAtomic(TypeString, OccurrenceExactlyOne)}, strQToStr)
 	registerSig("concat", 2, []SequenceType{stItem(OccurrenceZeroOrMore), stItem(OccurrenceZeroOrMore)}, stAtomic(TypeString, OccurrenceExactlyOne))
-	registerSig("contains", 2, []SequenceType{stAtomic(TypeString, OccurrenceZeroOrOne), stAtomic(TypeString, OccurrenceZeroOrOne)}, stAtomic(TypeBoolean, OccurrenceExactlyOne))
+	strQQBool := stAtomic(TypeBoolean, OccurrenceExactlyOne)
+	strQQParams := []SequenceType{stAtomic(TypeString, OccurrenceZeroOrOne), stAtomic(TypeString, OccurrenceZeroOrOne)}
+	registerSig("contains", 2, strQQParams, strQQBool)
+	registerSig("starts-with", 2, strQQParams, strQQBool)
+	registerSig("ends-with", 2, strQQParams, strQQBool)
+	registerSig("substring-before", 2, strQQParams, strQToStr)
+	registerSig("substring-after", 2, strQQParams, strQToStr)
+	registerSig("matches", 2, strQQParams, strQQBool)
+	registerSig("matches", 3, []SequenceType{stAtomic(TypeString, OccurrenceZeroOrOne), stAtomic(TypeString, OccurrenceExactlyOne), stAtomic(TypeString, OccurrenceExactlyOne)}, strQQBool)
+	registerSig("replace", 3, []SequenceType{stAtomic(TypeString, OccurrenceZeroOrOne), stAtomic(TypeString, OccurrenceExactlyOne), stAtomic(TypeString, OccurrenceExactlyOne)}, strQToStr)
+	registerSig("translate", 3, []SequenceType{stAtomic(TypeString, OccurrenceZeroOrOne), stAtomic(TypeString, OccurrenceExactlyOne), stAtomic(TypeString, OccurrenceExactlyOne)}, strQToStr)
+	registerSig("substring", 2, []SequenceType{stAtomic(TypeString, OccurrenceZeroOrOne), stAtomic(TypeDouble, OccurrenceExactlyOne)}, strQToStr)
+	registerSig("substring", 3, []SequenceType{stAtomic(TypeString, OccurrenceZeroOrOne), stAtomic(TypeDouble, OccurrenceExactlyOne), stAtomic(TypeDouble, OccurrenceExactlyOne)}, strQToStr)
 
 	// Boolean functions
 	registerSig("boolean", 1, []SequenceType{stItem(OccurrenceZeroOrMore)}, stAtomic(TypeBoolean, OccurrenceExactlyOne))
