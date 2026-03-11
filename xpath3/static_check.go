@@ -5,6 +5,29 @@ import (
 	"strings"
 )
 
+// knownXSTypeNames lists valid type local names in the xs: namespace
+// for use in SequenceType (instance of, cast as, etc.).
+var knownXSTypeNames = map[string]struct{}{
+	"string": {}, "integer": {}, "decimal": {}, "double": {},
+	"float": {}, "boolean": {}, "date": {}, "dateTime": {},
+	"time": {}, "duration": {}, "dayTimeDuration": {},
+	"yearMonthDuration": {}, "anyURI": {}, "QName": {},
+	"base64Binary": {}, "hexBinary": {}, "untypedAtomic": {},
+	"anyAtomicType": {}, "long": {}, "int": {}, "short": {},
+	"byte": {}, "unsignedLong": {}, "unsignedInt": {},
+	"unsignedShort": {}, "unsignedByte": {},
+	"nonNegativeInteger": {}, "nonPositiveInteger": {},
+	"positiveInteger": {}, "negativeInteger": {},
+	"normalizedString": {}, "token": {}, "language": {},
+	"Name": {}, "NCName": {}, "NMTOKEN": {}, "ENTITY": {},
+	"ID": {}, "IDREF": {}, "gDay": {}, "gMonth": {},
+	"gMonthDay": {}, "gYear": {}, "gYearMonth": {},
+	"dateTimeStamp": {}, "error": {}, "numeric": {},
+	"NOTATION": {},
+	// List types (rejected separately as XPST0051):
+	"NMTOKENS": {}, "IDREFS": {}, "ENTITIES": {},
+}
+
 // checkPrefixes walks the AST and validates that all namespace prefixes
 // are bound. This catches XPST0081 static errors even in unreachable branches
 // (e.g., "if (true()) then 1 else $unbound:var").
@@ -251,14 +274,21 @@ func checkPrefixesInNodeTest(nt NodeTest, namespaces map[string]string) error {
 				}
 			}
 		}
-		// XSD list types (NMTOKENS, IDREFS, ENTITIES) are not valid atomic/union
-		// types in SequenceType — they are list types (XPST0051).
 		if t.Prefix == "xs" || t.Prefix == "xsd" {
+			// XSD list types (NMTOKENS, IDREFS, ENTITIES) are not valid atomic/union
+			// types in SequenceType — they are list types (XPST0051).
 			switch t.Name {
 			case "NMTOKENS", "IDREFS", "ENTITIES":
 				return &XPathError{
 					Code:    "XPST0051",
 					Message: fmt.Sprintf("xs:%s is a list type and cannot be used as an atomic type", t.Name),
+				}
+			}
+			// Unknown type name in xs: namespace
+			if _, ok := knownXSTypeNames[t.Name]; !ok {
+				return &XPathError{
+					Code:    "XPST0051",
+					Message: fmt.Sprintf("unknown type xs:%s", t.Name),
 				}
 			}
 		}

@@ -491,13 +491,17 @@ func isItemTypeSubtype(a, b NodeTest, ec *evalContext) bool {
 		return isSequenceSubtype(at.MemberType, bt.MemberType, ec)
 	case TypeTest:
 		// node() and its kind specializations
+		if bt.Kind == NodeKindNode {
+			// node() is supertype of all node-related tests
+			switch a.(type) {
+			case TypeTest, ElementTest, AttributeTest, DocumentTest, NameTest:
+				return true
+			}
+			return false
+		}
 		at, ok := a.(TypeTest)
 		if !ok {
 			return false
-		}
-		// node() is supertype of all node kinds
-		if bt.Kind == NodeKindNode {
-			return true
 		}
 		// Same kind or at is more specific
 		return at.Kind == bt.Kind

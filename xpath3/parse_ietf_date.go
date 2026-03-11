@@ -572,14 +572,14 @@ var monthNames = map[string]int{
 	"sep": 9, "oct": 10, "nov": 11, "dec": 12,
 }
 
-var dayOfWeekNames = map[string]bool{
-	"mon": true, "monday": true,
-	"tue": true, "tuesday": true,
-	"wed": true, "wednesday": true,
-	"thu": true, "thursday": true,
-	"fri": true, "friday": true,
-	"sat": true, "saturday": true,
-	"sun": true, "sunday": true,
+var dayOfWeekNames = map[string]struct{}{
+	"mon": {}, "monday": {},
+	"tue": {}, "tuesday": {},
+	"wed": {}, "wednesday": {},
+	"thu": {}, "thursday": {},
+	"fri": {}, "friday": {},
+	"sat": {}, "saturday": {},
+	"sun": {}, "sunday": {},
 }
 
 // ietfTimezones maps timezone abbreviations to UTC offsets in seconds.

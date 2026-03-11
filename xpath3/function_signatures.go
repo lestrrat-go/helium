@@ -45,6 +45,23 @@ func stItem(occ Occurrence) SequenceType {
 	return SequenceType{ItemTest: AnyItemTest{}, Occurrence: occ}
 }
 
+func stFunc(params []SequenceType, ret SequenceType) SequenceType {
+	return SequenceType{
+		ItemTest: FunctionTest{
+			ParamTypes: params,
+			ReturnType: ret,
+		},
+		Occurrence: OccurrenceExactlyOne,
+	}
+}
+
+func stFuncAny() SequenceType {
+	return SequenceType{
+		ItemTest:   FunctionTest{AnyFunction: true},
+		Occurrence: OccurrenceExactlyOne,
+	}
+}
+
 func init() {
 	// Numeric functions — (xs:numeric?) as xs:numeric?
 	numQQ := []SequenceType{stAtomic(TypeNumeric, OccurrenceZeroOrOne)}
@@ -89,6 +106,35 @@ func init() {
 	// Sequence functions
 	registerSig("empty", 1, []SequenceType{stItem(OccurrenceZeroOrMore)}, stAtomic(TypeBoolean, OccurrenceExactlyOne))
 	registerSig("exists", 1, []SequenceType{stItem(OccurrenceZeroOrMore)}, stAtomic(TypeBoolean, OccurrenceExactlyOne))
+
+	// Higher-order functions
+	registerSig("filter", 2, []SequenceType{
+		stItem(OccurrenceZeroOrMore),
+		stFunc([]SequenceType{stItem(OccurrenceExactlyOne)}, stAtomic(TypeBoolean, OccurrenceExactlyOne)),
+	}, stItem(OccurrenceZeroOrMore))
+	registerSig("for-each", 2, []SequenceType{
+		stItem(OccurrenceZeroOrMore),
+		stFunc([]SequenceType{stItem(OccurrenceExactlyOne)}, stItem(OccurrenceZeroOrMore)),
+	}, stItem(OccurrenceZeroOrMore))
+	registerSig("for-each-pair", 3, []SequenceType{
+		stItem(OccurrenceZeroOrMore),
+		stItem(OccurrenceZeroOrMore),
+		stFunc([]SequenceType{stItem(OccurrenceExactlyOne), stItem(OccurrenceExactlyOne)}, stItem(OccurrenceZeroOrMore)),
+	}, stItem(OccurrenceZeroOrMore))
+	registerSig("fold-left", 3, []SequenceType{
+		stItem(OccurrenceZeroOrMore),
+		stItem(OccurrenceZeroOrMore),
+		stFunc([]SequenceType{stItem(OccurrenceZeroOrMore), stItem(OccurrenceExactlyOne)}, stItem(OccurrenceZeroOrMore)),
+	}, stItem(OccurrenceZeroOrMore))
+	registerSig("fold-right", 3, []SequenceType{
+		stItem(OccurrenceZeroOrMore),
+		stItem(OccurrenceZeroOrMore),
+		stFunc([]SequenceType{stItem(OccurrenceExactlyOne), stItem(OccurrenceZeroOrMore)}, stItem(OccurrenceZeroOrMore)),
+	}, stItem(OccurrenceZeroOrMore))
+	registerSig("sort", 2, []SequenceType{
+		stItem(OccurrenceZeroOrMore),
+		stFunc([]SequenceType{stItem(OccurrenceExactlyOne)}, stItem(OccurrenceZeroOrMore)),
+	}, stItem(OccurrenceZeroOrMore))
 }
 
 // lookupFunctionSignature returns the type signature for a built-in function.
