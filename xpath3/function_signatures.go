@@ -25,13 +25,6 @@ func registerSig(name string, arity int, params []SequenceType, ret SequenceType
 	}
 }
 
-func registerSigNS(uri, name string, arity int, params []SequenceType, ret SequenceType) {
-	builtinSignatures[sigKey{URI: uri, Name: name, Arity: arity}] = functionSignature{
-		ParamTypes: params,
-		ReturnType: &ret,
-	}
-}
-
 // seqType helpers for concise signature definitions
 func stAtomic(typeName string, occ Occurrence) SequenceType {
 	// typeName is like "xs:numeric" — split into prefix and name
@@ -50,10 +43,6 @@ func stNode(occ Occurrence) SequenceType {
 
 func stItem(occ Occurrence) SequenceType {
 	return SequenceType{ItemTest: AnyItemTest{}, Occurrence: occ}
-}
-
-func stEmpty() SequenceType {
-	return SequenceType{Void: true}
 }
 
 func init() {
