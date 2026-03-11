@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net/url"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -480,12 +481,83 @@ func fnURICollection(_ context.Context, _ []Sequence) (Sequence, error) {
 	return nil, &XPathError{Code: "FODC0002", Message: "fn:uri-collection: not supported"}
 }
 
-func fnDoc(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, &XPathError{Code: "FODC0002", Message: "fn:doc: URI resolution not supported"}
+func fnDoc(ctx context.Context, args []Sequence) (Sequence, error) {
+	if len(args[0]) == 0 {
+		return nil, nil
+	}
+	uri := seqToString(args[0])
+	doc, err := loadDoc(ctx, uri)
+	if err != nil {
+		return nil, err
+	}
+	return SingleNode(doc), nil
 }
 
-func fnDocAvailable(_ context.Context, _ []Sequence) (Sequence, error) {
-	return SingleBoolean(false), nil
+func fnDocAvailable(ctx context.Context, args []Sequence) (Sequence, error) {
+	if len(args[0]) == 0 {
+		return SingleBoolean(false), nil
+	}
+	uri := seqToString(args[0])
+	_, err := loadDoc(ctx, uri)
+	return SingleBoolean(err == nil), nil
+}
+
+func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
+	if strings.Contains(uri, "#") {
+		return nil, &XPathError{Code: "FODC0005", Message: "fn:doc: URI must not contain a fragment identifier"}
+	}
+
+	resolved, err := resolveDocURI(ctx, uri)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := readUnparsedTextURI(ctx, resolved)
+	if err != nil {
+		return nil, &XPathError{Code: "FODC0002", Message: fmt.Sprintf("fn:doc: cannot retrieve resource: %v", err)}
+	}
+
+	doc, err := helium.Parse(ctx, data)
+	if err != nil {
+		return nil, &XPathError{Code: "FODC0002", Message: fmt.Sprintf("fn:doc: cannot parse document: %v", err)}
+	}
+	doc.SetURL(resolved)
+	return doc, nil
+}
+
+func resolveDocURI(ctx context.Context, uri string) (string, error) {
+	if uri == "" {
+		return "", &XPathError{Code: "FODC0002", Message: "fn:doc: empty URI"}
+	}
+
+	// Absolute file path — use directly
+	if strings.HasPrefix(uri, "/") {
+		return uri, nil
+	}
+
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return "", &XPathError{Code: "FODC0002", Message: fmt.Sprintf("fn:doc: invalid URI: %s", uri)}
+	}
+
+	if parsed.Scheme != "" {
+		switch parsed.Scheme {
+		case "file", "http", "https":
+			return uri, nil
+		default:
+			return "", &XPathError{Code: "FODC0002", Message: fmt.Sprintf("fn:doc: unsupported URI scheme: %s", parsed.Scheme)}
+		}
+	}
+
+	// Relative URI — resolve against base URI
+	ec := getFnContext(ctx)
+	if ec != nil && ec.baseURI != "" {
+		base, berr := url.Parse(ec.baseURI)
+		if berr == nil {
+			return base.ResolveReference(parsed).String(), nil
+		}
+	}
+	return uri, nil
 }
 
 // nodeArgOrCtx extracts a node from the first argument or falls back to the context node.
