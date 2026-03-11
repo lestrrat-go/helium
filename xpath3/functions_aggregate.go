@@ -247,7 +247,7 @@ func fnMax(_ context.Context, args []Sequence) (Sequence, error) {
 			return nil, err
 		}
 		newFamily := aggregateTypeFamily(a.TypeName)
-		if newFamily == "" {
+		if newFamily == "" || newFamily == "duration" {
 			return nil, &XPathError{
 				Code:    "FORG0006",
 				Message: fmt.Sprintf("invalid type %s for fn:max", a.TypeName),
@@ -304,7 +304,7 @@ func fnMin(_ context.Context, args []Sequence) (Sequence, error) {
 			return nil, err
 		}
 		newFamily := aggregateTypeFamily(a.TypeName)
-		if newFamily == "" {
+		if newFamily == "" || newFamily == "duration" {
 			return nil, &XPathError{
 				Code:    "FORG0006",
 				Message: fmt.Sprintf("invalid type %s for fn:min", a.TypeName),
