@@ -18,7 +18,7 @@ func castToGType(v AtomicValue, targetType string, format func(time.Time) string
 		return CastFromString(v.StringVal(), targetType)
 	}
 	return AtomicValue{}, &XPathError{
-		Code:    "XPTY0004",
+		Code: errCodeXPTY0004,
 		Message: fmt.Sprintf("cannot cast %s to %s", v.TypeName, targetType),
 	}
 }

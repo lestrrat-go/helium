@@ -52,7 +52,7 @@ func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		s, ok := fc.contextStringValue()
 		if !ok {
-			return nil, &XPathError{Code: "XPTY0004", Message: "context item has no string value"}
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "context item has no string value"}
 		}
 		return SingleString(s), nil
 	}
@@ -60,7 +60,7 @@ func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
 		return SingleString(""), nil
 	}
 	if len(args[0]) > 1 {
-		return nil, &XPathError{Code: "XPTY0004", Message: "fn:string requires a single item, got sequence of length > 1"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:string requires a single item, got sequence of length > 1"}
 	}
 	item := args[0][0]
 	// fn:string does not accept function items, maps, or arrays
@@ -184,7 +184,7 @@ func fnStringJoin(_ context.Context, args []Sequence) (Sequence, error) {
 	sep := ""
 	if len(args) > 1 {
 		if len(args[1]) != 1 {
-			return nil, &XPathError{Code: "XPTY0004", Message: "string-join: separator must be a single string"}
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "string-join: separator must be a single string"}
 		}
 		sep = seqToString(args[1])
 	}
@@ -247,7 +247,7 @@ func fnStringLength(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 	} else {
 		if len(args[0]) > 1 {
-			return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("string-length: expected single item, got sequence of length %d", len(args[0]))}
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("string-length: expected single item, got sequence of length %d", len(args[0]))}
 		}
 		var err error
 		s, err = seqToStringErr(args[0])
@@ -267,7 +267,7 @@ func fnNormalizeSpace(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		sv, ok := fc.contextStringValue()
 		if !ok {
-			return nil, &XPathError{Code: "XPTY0004", Message: "context item has no string value"}
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "context item has no string value"}
 		}
 		s = sv
 	} else {
@@ -490,13 +490,13 @@ func fnMatches(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	s := seqToString(args[0])
 	if len(args[1]) == 0 {
-		return nil, &XPathError{Code: "XPTY0004", Message: "fn:matches pattern must not be empty sequence"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:matches pattern must not be empty sequence"}
 	}
 	pattern := seqToString(args[1])
 	flags := ""
 	if len(args) > 2 {
 		if len(args[2]) == 0 {
-			return nil, &XPathError{Code: "XPTY0004", Message: "fn:matches flags must not be empty sequence"}
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:matches flags must not be empty sequence"}
 		}
 		flags = seqToString(args[2])
 	}
@@ -525,17 +525,17 @@ func fnReplace(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	s := seqToString(args[0])
 	if len(args[1]) == 0 {
-		return nil, &XPathError{Code: "XPTY0004", Message: "fn:replace pattern must not be empty sequence"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:replace pattern must not be empty sequence"}
 	}
 	pattern := seqToString(args[1])
 	if len(args[2]) == 0 {
-		return nil, &XPathError{Code: "XPTY0004", Message: "fn:replace replacement must not be empty sequence"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:replace replacement must not be empty sequence"}
 	}
 	replacement := seqToString(args[2])
 	flags := ""
 	if len(args) > 3 {
 		if len(args[3]) == 0 {
-			return nil, &XPathError{Code: "XPTY0004", Message: "fn:replace flags must not be empty sequence"}
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:replace flags must not be empty sequence"}
 		}
 		flags = seqToString(args[3])
 	}
@@ -655,13 +655,13 @@ func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 
 	if len(args[1]) == 0 {
-		return nil, &XPathError{Code: "XPTY0004", Message: "fn:tokenize pattern must not be empty sequence"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:tokenize pattern must not be empty sequence"}
 	}
 	pattern := seqToString(args[1])
 	flags := ""
 	if len(args) > 2 {
 		if len(args[2]) == 0 {
-			return nil, &XPathError{Code: "XPTY0004", Message: "fn:tokenize flags must not be empty sequence"}
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:tokenize flags must not be empty sequence"}
 		}
 		flags = seqToString(args[2])
 	}

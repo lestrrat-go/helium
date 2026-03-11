@@ -149,7 +149,7 @@ func makeXSQNameConstructor() func(context.Context, []Sequence) (Sequence, error
 		// Only string and untypedAtomic can be cast to QName
 		if a.TypeName != TypeString && a.TypeName != TypeUntypedAtomic {
 			return nil, &XPathError{
-				Code:    "XPTY0004",
+				Code:    errCodeXPTY0004,
 				Message: fmt.Sprintf("cannot cast %s to %s", a.TypeName, TypeQName),
 			}
 		}

@@ -29,11 +29,11 @@ func init() {
 
 func extractArray(seq Sequence) (ArrayItem, error) {
 	if len(seq) != 1 {
-		return ArrayItem{}, &XPathError{Code: "XPTY0004", Message: "expected single array"}
+		return ArrayItem{}, &XPathError{Code: errCodeXPTY0004, Message: "expected single array"}
 	}
 	a, ok := seq[0].(ArrayItem)
 	if !ok {
-		return ArrayItem{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("expected array, got %T", seq[0])}
+		return ArrayItem{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected array, got %T", seq[0])}
 	}
 	return a, nil
 }
@@ -62,14 +62,14 @@ func fnArrayGet(_ context.Context, args []Sequence) (Sequence, error) {
 // that it is exactly one integer (not a decimal, sequence, etc.).
 func extractArrayIndex(seq Sequence) (int, error) {
 	if len(seq) != 1 {
-		return 0, &XPathError{Code: "XPTY0004", Message: "array index must be a single xs:integer"}
+		return 0, &XPathError{Code: errCodeXPTY0004, Message: "array index must be a single xs:integer"}
 	}
 	av, err := AtomizeItem(seq[0])
 	if err != nil {
 		return 0, err
 	}
 	if !isIntegerDerived(av.TypeName) {
-		return 0, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("array index must be xs:integer, got %s", av.TypeName)}
+		return 0, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("array index must be xs:integer, got %s", av.TypeName)}
 	}
 	bi := av.BigInt()
 	if !bi.IsInt64() {
@@ -209,7 +209,7 @@ func fnArrayJoin(_ context.Context, args []Sequence) (Sequence, error) {
 	for _, item := range args[0] {
 		a, ok := item.(ArrayItem)
 		if !ok {
-			return nil, &XPathError{Code: "XPTY0004", Message: "array:join requires sequence of arrays"}
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "array:join requires sequence of arrays"}
 		}
 		allMembers = append(allMembers, a.Members()...)
 	}
@@ -260,11 +260,11 @@ func fnArrayFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		// Per XPath 3.1, the callback must return exactly one xs:boolean
 		if len(r) != 1 {
-			return nil, &XPathError{Code: "XPTY0004", Message: "array:filter callback must return a single xs:boolean value"}
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "array:filter callback must return a single xs:boolean value"}
 		}
 		av, ok := r[0].(AtomicValue)
 		if !ok || av.TypeName != TypeBoolean {
-			return nil, &XPathError{Code: "XPTY0004", Message: "array:filter callback must return xs:boolean"}
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "array:filter callback must return xs:boolean"}
 		}
 		if av.BooleanVal() {
 			result = append(result, m)

@@ -30,7 +30,7 @@ func castToDouble(v AtomicValue) (AtomicValue, error) {
 	case TypeString, TypeUntypedAtomic:
 		return CastFromString(v.StringVal(), TypeDouble)
 	}
-	return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("cannot cast %s to xs:double", v.TypeName)}
+	return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:double", v.TypeName)}
 }
 
 func castToFloat(v AtomicValue) (AtomicValue, error) {
@@ -108,7 +108,7 @@ func castToInteger(v AtomicValue) (AtomicValue, error) {
 	case TypeString, TypeUntypedAtomic:
 		return CastFromString(v.StringVal(), TypeInteger)
 	}
-	return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("cannot cast %s to xs:integer", v.TypeName)}
+	return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:integer", v.TypeName)}
 }
 
 func castToDecimal(v AtomicValue) (AtomicValue, error) {
@@ -131,7 +131,7 @@ func castToDecimal(v AtomicValue) (AtomicValue, error) {
 	case TypeString, TypeUntypedAtomic:
 		return CastFromString(v.StringVal(), TypeDecimal)
 	}
-	return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("cannot cast %s to xs:decimal", v.TypeName)}
+	return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:decimal", v.TypeName)}
 }
 
 func castToBoolean(v AtomicValue) (AtomicValue, error) {
@@ -148,7 +148,7 @@ func castToBoolean(v AtomicValue) (AtomicValue, error) {
 	case TypeString, TypeUntypedAtomic:
 		return CastFromString(v.StringVal(), TypeBoolean)
 	}
-	return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("cannot cast %s to xs:boolean", v.TypeName)}
+	return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:boolean", v.TypeName)}
 }
 
 func castToBase64Binary(v AtomicValue) (AtomicValue, error) {
@@ -158,7 +158,7 @@ func castToBase64Binary(v AtomicValue) (AtomicValue, error) {
 	case TypeString, TypeUntypedAtomic:
 		return CastFromString(v.StringVal(), TypeBase64Binary)
 	}
-	return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("cannot cast %s to xs:base64Binary", v.TypeName)}
+	return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:base64Binary", v.TypeName)}
 }
 
 // xsdBase64Encoding is base64.StdEncoding with Strict() to reject non-zero
@@ -186,5 +186,5 @@ func castToHexBinary(v AtomicValue) (AtomicValue, error) {
 	case TypeString, TypeUntypedAtomic:
 		return CastFromString(v.StringVal(), TypeHexBinary)
 	}
-	return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("cannot cast %s to xs:hexBinary", v.TypeName)}
+	return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:hexBinary", v.TypeName)}
 }

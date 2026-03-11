@@ -113,7 +113,7 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if !isSubtypeOf(a.TypeName, TypeNumeric) {
-		return nil, &XPathError{Code: "XPTY0004", Message: "subsequence: starting position must be numeric"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: starting position must be numeric"}
 	}
 	startF := math.Round(a.ToFloat64())
 
@@ -125,7 +125,7 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 			return nil, err
 		}
 		if !isSubtypeOf(la.TypeName, TypeNumeric) {
-			return nil, &XPathError{Code: "XPTY0004", Message: "subsequence: length must be numeric"}
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: length must be numeric"}
 		}
 		lengthF = math.Round(la.ToFloat64())
 	}
@@ -420,7 +420,7 @@ func deepEqualArray(a, b ArrayItem) (bool, error) {
 
 func fnIndexOf(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(args[1]) == 0 {
-		return nil, &XPathError{Code: "XPTY0004", Message: "index-of: search value must not be empty sequence"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "index-of: search value must not be empty sequence"}
 	}
 	search, err := AtomizeItem(args[1][0])
 	if err != nil {
@@ -429,7 +429,7 @@ func fnIndexOf(_ context.Context, args []Sequence) (Sequence, error) {
 	// Validate optional collation argument (3rd arg)
 	if len(args) > 2 {
 		if len(args[2]) == 0 {
-			return nil, &XPathError{Code: "XPTY0004", Message: "collation argument must not be empty"}
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "collation argument must not be empty"}
 		}
 		collA, err := AtomizeItem(args[2][0])
 		if err != nil {

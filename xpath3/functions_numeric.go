@@ -30,7 +30,7 @@ func promoteToNumeric(item Item) (AtomicValue, error) {
 		return castToDouble(a)
 	}
 	if !a.IsNumeric() {
-		return a, &XPathError{Code: "XPTY0004", Message: "expected numeric type, got " + a.TypeName}
+		return a, &XPathError{Code: errCodeXPTY0004, Message: "expected numeric type, got " + a.TypeName}
 	}
 	return a, nil
 }

@@ -19,10 +19,10 @@ func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
 		return nil, nil // empty sequence
 	}
 	if len(left) > 1 {
-		return nil, &XPathError{Code: "XPTY0004", Message: "arithmetic operand must be a single item"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "arithmetic operand must be a single item"}
 	}
 	if len(right) > 1 {
-		return nil, &XPathError{Code: "XPTY0004", Message: "arithmetic operand must be a single item"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "arithmetic operand must be a single item"}
 	}
 	la, err := AtomizeItem(left[0])
 	if err != nil {
@@ -58,10 +58,10 @@ func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
 
 	// Both operands must be numeric after promotion
 	if !la.IsNumeric() {
-		return nil, &XPathError{Code: "XPTY0004", Message: "arithmetic operand must be numeric, got " + la.TypeName}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "arithmetic operand must be numeric, got " + la.TypeName}
 	}
 	if !ra.IsNumeric() {
-		return nil, &XPathError{Code: "XPTY0004", Message: "arithmetic operand must be numeric, got " + ra.TypeName}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "arithmetic operand must be numeric, got " + ra.TypeName}
 	}
 
 	// Tier 1: both integer → big.Int arithmetic
@@ -103,7 +103,7 @@ func integerArith(op TokenType, a, b *big.Int) (Sequence, error) {
 		}
 		result.Rem(a, b)
 	default:
-		return nil, &XPathError{Code: "XPTY0004", Message: "unsupported integer arithmetic operator"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "unsupported integer arithmetic operator"}
 	}
 	return SingleIntegerBig(result), nil
 }
@@ -143,7 +143,7 @@ func decimalArith(op TokenType, a, b *big.Rat) (Sequence, error) {
 		qr := new(big.Rat).SetInt(intPart)
 		result.Sub(a, new(big.Rat).Mul(qr, b))
 	default:
-		return nil, &XPathError{Code: "XPTY0004", Message: "unsupported decimal arithmetic operator"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "unsupported decimal arithmetic operator"}
 	}
 	return SingleDecimal(result), nil
 }
@@ -152,7 +152,7 @@ func floatArith(op TokenType, la, ra AtomicValue) (Sequence, error) {
 	// Guard: floatArith should only be called with float/double operands.
 	// Integer and decimal operands are handled by integerArith/decimalArith.
 	if !isFloatOrDouble(la.TypeName) && !isFloatOrDouble(ra.TypeName) {
-		return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("unexpected types in float arithmetic: %s, %s", la.TypeName, ra.TypeName)}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("unexpected types in float arithmetic: %s, %s", la.TypeName, ra.TypeName)}
 	}
 	ln := la.ToFloat64()
 	rn := ra.ToFloat64()
@@ -188,7 +188,7 @@ func floatArith(op TokenType, la, ra AtomicValue) (Sequence, error) {
 	case TokenMod:
 		result = math.Mod(ln, rn)
 	default:
-		return nil, &XPathError{Code: "XPTY0004", Message: "unsupported float arithmetic operator"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "unsupported float arithmetic operator"}
 	}
 
 	if resultType == TypeFloat {
@@ -206,7 +206,7 @@ func evalUnaryExpr(ec *evalContext, e UnaryExpr) (Sequence, error) {
 		return nil, nil
 	}
 	if len(r) > 1 {
-		return nil, &XPathError{Code: "XPTY0004", Message: "unary minus operand must be a single item"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "unary minus operand must be a single item"}
 	}
 	a, err := AtomizeItem(r[0])
 	if err != nil {
@@ -223,7 +223,7 @@ func evalUnaryExpr(ec *evalContext, e UnaryExpr) (Sequence, error) {
 	if !e.Negate {
 		// Unary plus: type check only, return value unchanged
 		if !isSubtypeOf(a.TypeName, TypeDecimal) && a.TypeName != TypeFloat && a.TypeName != TypeDouble {
-			return nil, &XPathError{Code: "XPTY0004", Message: "unary operator requires numeric type, got " + a.TypeName}
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "unary operator requires numeric type, got " + a.TypeName}
 		}
 		return SingleAtomic(a), nil
 	}
@@ -239,7 +239,7 @@ func evalUnaryExpr(ec *evalContext, e UnaryExpr) (Sequence, error) {
 	if a.TypeName == TypeDouble {
 		return SingleAtomic(AtomicValue{TypeName: TypeDouble, Value: a.FloatVal().Neg()}), nil
 	}
-	return nil, &XPathError{Code: "XPTY0004", Message: "unary operator requires numeric type, got " + a.TypeName}
+	return nil, &XPathError{Code: errCodeXPTY0004, Message: "unary operator requires numeric type, got " + a.TypeName}
 }
 
 // needsDecimalArith returns true if arithmetic should use big.Rat (decimal tier).

@@ -20,11 +20,11 @@ func init() {
 
 func extractMap(seq Sequence) (MapItem, error) {
 	if len(seq) != 1 {
-		return MapItem{}, &XPathError{Code: "XPTY0004", Message: "expected single map"}
+		return MapItem{}, &XPathError{Code: errCodeXPTY0004, Message: "expected single map"}
 	}
 	m, ok := seq[0].(MapItem)
 	if !ok {
-		return MapItem{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("expected map, got %T", seq[0])}
+		return MapItem{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected map, got %T", seq[0])}
 	}
 	return m, nil
 }
@@ -34,14 +34,14 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 	for _, item := range args[0] {
 		m, ok := item.(MapItem)
 		if !ok {
-			return nil, &XPathError{Code: "XPTY0004", Message: "map:merge requires sequence of maps"}
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:merge requires sequence of maps"}
 		}
 		maps = append(maps, m)
 	}
 	duplicates := MergeUseLast
 	if len(args) > 1 {
 		if len(args[1]) == 0 {
-			return nil, &XPathError{Code: "XPTY0004", Message: "map:merge: options argument must be a map, got empty sequence"}
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:merge: options argument must be a map, got empty sequence"}
 		}
 		// The options map should contain "duplicates" key
 		optMap, ok := args[1][0].(MapItem)
@@ -108,10 +108,10 @@ func fnMapGet(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if len(args[1]) == 0 {
-		return nil, &XPathError{Code: "XPTY0004", Message: "map:get requires a key argument"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:get requires a key argument"}
 	}
 	if len(args[1]) > 1 {
-		return nil, &XPathError{Code: "XPTY0004", Message: "map:get key must be a single atomic value"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:get key must be a single atomic value"}
 	}
 	ka, err := AtomizeItem(args[1][0])
 	if err != nil {
@@ -130,7 +130,7 @@ func fnMapPut(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if len(args[1]) == 0 {
-		return nil, &XPathError{Code: "XPTY0004", Message: "map:put requires key"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:put requires key"}
 	}
 	ka, err := AtomizeItem(args[1][0])
 	if err != nil {
@@ -141,7 +141,7 @@ func fnMapPut(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnMapEntry(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
-		return nil, &XPathError{Code: "XPTY0004", Message: "map:entry requires key"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:entry requires key"}
 	}
 	ka, err := AtomizeItem(args[0][0])
 	if err != nil {

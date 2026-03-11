@@ -201,7 +201,7 @@ func seqToStringErr(seq Sequence) (string, error) {
 // Like coerceArgToString but rejects empty sequences (for non-optional string parameters).
 func coerceArgToStringRequired(seq Sequence) (string, error) {
 	if len(seq) == 0 {
-		return "", &XPathError{Code: "XPTY0004", Message: "expected xs:string, got empty sequence"}
+		return "", &XPathError{Code: errCodeXPTY0004, Message: "expected xs:string, got empty sequence"}
 	}
 	return coerceArgToString(seq)
 }
@@ -227,7 +227,7 @@ func coerceArgToString(seq Sequence) (string, error) {
 		}
 		return s, nil
 	default:
-		return "", &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("expected xs:string?, got %s", a.TypeName)}
+		return "", &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected xs:string?, got %s", a.TypeName)}
 	}
 }
 
@@ -236,7 +236,7 @@ func coerceArgToString(seq Sequence) (string, error) {
 // Rejects all other types with XPTY0004.
 func coerceArgToInteger(seq Sequence) (int64, error) {
 	if len(seq) == 0 {
-		return 0, &XPathError{Code: "XPTY0004", Message: "expected xs:integer, got empty sequence"}
+		return 0, &XPathError{Code: errCodeXPTY0004, Message: "expected xs:integer, got empty sequence"}
 	}
 	a, err := AtomizeItem(seq[0])
 	if err != nil {
@@ -245,12 +245,12 @@ func coerceArgToInteger(seq Sequence) (int64, error) {
 	if a.TypeName == TypeUntypedAtomic {
 		casted, cerr := castToInteger(a)
 		if cerr != nil {
-			return 0, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("cannot cast %s to xs:integer", a.TypeName)}
+			return 0, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:integer", a.TypeName)}
 		}
 		a = casted
 	}
 	if !isSubtypeOf(a.TypeName, TypeInteger) {
-		return 0, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("expected xs:integer, got %s", a.TypeName)}
+		return 0, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected xs:integer, got %s", a.TypeName)}
 	}
 	n, ok := a.Value.(*big.Int)
 	if !ok {
@@ -264,11 +264,11 @@ func coerceArgToInteger(seq Sequence) (int64, error) {
 func extractSingleAtomicArg(seq Sequence, fnName string) (AtomicValue, error) {
 	switch len(seq) {
 	case 0:
-		return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fnName + ": expected single atomic value, got empty sequence"}
+		return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fnName + ": expected single atomic value, got empty sequence"}
 	case 1:
 		return AtomizeItem(seq[0])
 	default:
-		return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fnName + ": expected single atomic value, got sequence of length > 1"}
+		return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fnName + ": expected single atomic value, got sequence of length > 1"}
 	}
 }
 
@@ -279,12 +279,12 @@ func coerceToInteger(a AtomicValue) (AtomicValue, error) {
 	if a.TypeName == TypeUntypedAtomic {
 		casted, cerr := castToInteger(a)
 		if cerr != nil {
-			return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("cannot cast %s to xs:integer", a.TypeName)}
+			return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:integer", a.TypeName)}
 		}
 		return casted, nil
 	}
 	if !isSubtypeOf(a.TypeName, TypeInteger) {
-		return AtomicValue{}, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("expected xs:integer, got %s", a.TypeName)}
+		return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected xs:integer, got %s", a.TypeName)}
 	}
 	return a, nil
 }

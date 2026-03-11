@@ -98,7 +98,7 @@ func lookupItem(ec *evalContext, item Item, keyExpr Expr, all bool) (Sequence, e
 			}
 			idx, ok := atomicToInteger(ka)
 			if !ok {
-				return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("array lookup key must be xs:integer, got %s", ka.TypeName)}
+				return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("array lookup key must be xs:integer, got %s", ka.TypeName)}
 			}
 			member, err := v.Get(idx)
 			if err != nil {
@@ -108,7 +108,7 @@ func lookupItem(ec *evalContext, item Item, keyExpr Expr, all bool) (Sequence, e
 		}
 		return result, nil
 	default:
-		return nil, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("lookup requires map or array, got %T", item)}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("lookup requires map or array, got %T", item)}
 	}
 }
 

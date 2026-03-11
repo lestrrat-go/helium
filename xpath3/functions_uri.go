@@ -29,7 +29,7 @@ func coerceArgToStringOpt(seq Sequence) (string, error) {
 		return "", nil
 	}
 	if len(seq) > 1 {
-		return "", &XPathError{Code: "XPTY0004", Message: "expected xs:string?, got sequence of length > 1"}
+		return "", &XPathError{Code: errCodeXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
 	}
 	return coerceArgToString(seq)
 }

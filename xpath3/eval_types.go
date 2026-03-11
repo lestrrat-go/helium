@@ -22,10 +22,10 @@ func evalCastExpr(ec *evalContext, e CastExpr) (Sequence, error) {
 		if e.AllowEmpty {
 			return nil, nil
 		}
-		return nil, &XPathError{Code: "XPTY0004", Message: "cast requires non-empty sequence"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "cast requires non-empty sequence"}
 	}
 	if len(seq) > 1 {
-		return nil, &XPathError{Code: "XPTY0004", Message: "cast requires singleton"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "cast requires singleton"}
 	}
 	av, err := AtomizeItem(seq[0])
 	if err != nil {
@@ -592,7 +592,7 @@ func castToQName(v AtomicValue, ec *evalContext) (AtomicValue, error) {
 	// Only string and untypedAtomic can be cast to QName
 	if v.TypeName != TypeString && v.TypeName != TypeUntypedAtomic {
 		return AtomicValue{}, &XPathError{
-			Code:    "XPTY0004",
+			Code: errCodeXPTY0004,
 			Message: fmt.Sprintf("cannot cast %s to %s", v.TypeName, TypeQName),
 		}
 	}

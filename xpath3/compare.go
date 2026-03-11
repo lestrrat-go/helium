@@ -55,7 +55,7 @@ func evalValueComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
 		return nil, nil
 	}
 	if len(leftAtoms) > 1 || len(rightAtoms) > 1 {
-		return nil, &XPathError{Code: "XPTY0004", Message: "value comparison requires singletons"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "value comparison requires singletons"}
 	}
 	la := leftAtoms[0]
 	ra := rightAtoms[0]
@@ -80,15 +80,15 @@ func evalNodeComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
 		return nil, nil
 	}
 	if len(left) > 1 || len(right) > 1 {
-		return nil, &XPathError{Code: "XPTY0004", Message: "node comparison requires singletons"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "node comparison requires singletons"}
 	}
 	ln, ok := left[0].(NodeItem)
 	if !ok {
-		return nil, &XPathError{Code: "XPTY0004", Message: "node comparison requires node operands"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "node comparison requires node operands"}
 	}
 	rn, ok := right[0].(NodeItem)
 	if !ok {
-		return nil, &XPathError{Code: "XPTY0004", Message: "node comparison requires node operands"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "node comparison requires node operands"}
 	}
 	switch e.Op {
 	case TokenIs:
@@ -346,7 +346,7 @@ func compareAtomic(op TokenType, a, b AtomicValue) (bool, error) {
 		case TypeDuration:
 			// xs:duration supports eq/ne only, not ordering
 			if op != TokenEq && op != TokenNe {
-				return false, &XPathError{Code: "XPTY0004", Message: "xs:duration values are not orderable"}
+				return false, &XPathError{Code: errCodeXPTY0004, Message: "xs:duration values are not orderable"}
 			}
 			return compareDuration(op, a.DurationVal(), b.DurationVal())
 		case TypeBase64Binary:
@@ -375,13 +375,13 @@ func compareAtomic(op TokenType, a, b AtomicValue) (bool, error) {
 		// xs:duration supports eq/ne only (not ordering)
 		if a.TypeName == TypeDuration || b.TypeName == TypeDuration {
 			if op != TokenEq && op != TokenNe {
-				return false, &XPathError{Code: "XPTY0004", Message: "xs:duration values are not orderable"}
+				return false, &XPathError{Code: errCodeXPTY0004, Message: "xs:duration values are not orderable"}
 			}
 		}
 		// Cross-subtype (YMD vs DTD): eq/ne only, ordering is XPTY0004
 		if a.TypeName != b.TypeName && a.TypeName != TypeDuration && b.TypeName != TypeDuration {
 			if op != TokenEq && op != TokenNe {
-				return false, &XPathError{Code: "XPTY0004", Message: "cannot order xs:yearMonthDuration and xs:dayTimeDuration"}
+				return false, &XPathError{Code: errCodeXPTY0004, Message: "cannot order xs:yearMonthDuration and xs:dayTimeDuration"}
 			}
 		}
 		return compareDuration(op, a.DurationVal(), b.DurationVal())
@@ -389,7 +389,7 @@ func compareAtomic(op TokenType, a, b AtomicValue) (bool, error) {
 
 	// Types are not comparable
 	return false, &XPathError{
-		Code:    "XPTY0004",
+		Code: errCodeXPTY0004,
 		Message: fmt.Sprintf("cannot compare %s with %s", a.TypeName, b.TypeName),
 	}
 }
@@ -581,10 +581,10 @@ func compareDuration(op TokenType, a, b Duration) (bool, error) {
 	case TokenLt, TokenLe, TokenGt, TokenGe:
 		// Ordering is only defined for yearMonthDuration and dayTimeDuration (not mixed)
 		if aMonths != 0 && aSecs != 0 {
-			return false, &XPathError{Code: "XPTY0004", Message: "xs:duration values are not orderable"}
+			return false, &XPathError{Code: errCodeXPTY0004, Message: "xs:duration values are not orderable"}
 		}
 		if bMonths != 0 && bSecs != 0 {
-			return false, &XPathError{Code: "XPTY0004", Message: "xs:duration values are not orderable"}
+			return false, &XPathError{Code: errCodeXPTY0004, Message: "xs:duration values are not orderable"}
 		}
 		// Compare months-only or seconds-only
 		if aMonths != 0 || bMonths != 0 {
@@ -608,7 +608,7 @@ func compareQName(op TokenType, a, b QNameValue) (bool, error) {
 	case TokenNe:
 		return a.URI != b.URI || a.Local != b.Local, nil
 	default:
-		return false, &XPathError{Code: "XPTY0004", Message: "QName values only support eq/ne"}
+		return false, &XPathError{Code: errCodeXPTY0004, Message: "QName values only support eq/ne"}
 	}
 }
 

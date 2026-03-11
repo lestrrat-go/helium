@@ -75,7 +75,7 @@ func evalDateTimeArithmetic(ec *evalContext, op TokenType, la, ra AtomicValue) (
 
 	// Not a date/time/duration operation
 	if lDur || rDur || (lDT && !la.IsNumeric()) {
-		return nil, true, &XPathError{Code: "XPTY0004", Message: "incompatible types for arithmetic"}
+		return nil, true, &XPathError{Code: errCodeXPTY0004, Message: "incompatible types for arithmetic"}
 	}
 
 	return nil, false, nil
@@ -84,7 +84,7 @@ func evalDateTimeArithmetic(ec *evalContext, op TokenType, la, ra AtomicValue) (
 // arithmeticDurationDuration handles duration ± duration.
 func arithmeticDurationDuration(op TokenType, la, ra AtomicValue) (Sequence, bool, error) {
 	if op != TokenPlus && op != TokenMinus {
-		return nil, true, &XPathError{Code: "XPTY0004", Message: "invalid operator for duration arithmetic"}
+		return nil, true, &XPathError{Code: errCodeXPTY0004, Message: "invalid operator for duration arithmetic"}
 	}
 
 	// Only same-kind durations can be added/subtracted:
@@ -93,10 +93,10 @@ func arithmeticDurationDuration(op TokenType, la, ra AtomicValue) (Sequence, boo
 	// xs:duration ± anything → XPTY0004 (xs:duration is not directly arithmetic)
 	// mixing YMD and DTD → XPTY0004
 	if la.TypeName == TypeDuration || ra.TypeName == TypeDuration {
-		return nil, true, &XPathError{Code: "XPTY0004", Message: "xs:duration cannot be used in arithmetic"}
+		return nil, true, &XPathError{Code: errCodeXPTY0004, Message: "xs:duration cannot be used in arithmetic"}
 	}
 	if la.TypeName != ra.TypeName {
-		return nil, true, &XPathError{Code: "XPTY0004", Message: "cannot mix xs:yearMonthDuration and xs:dayTimeDuration in arithmetic"}
+		return nil, true, &XPathError{Code: errCodeXPTY0004, Message: "cannot mix xs:yearMonthDuration and xs:dayTimeDuration in arithmetic"}
 	}
 
 	ld := la.DurationVal()
@@ -149,12 +149,12 @@ func arithmeticDurationDuration(op TokenType, la, ra AtomicValue) (Sequence, boo
 // arithmeticDurationNumber handles duration * number and duration / number.
 func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, bool, error) {
 	if op != TokenStar && op != TokenDiv {
-		return nil, true, &XPathError{Code: "XPTY0004", Message: "invalid operator for duration*number"}
+		return nil, true, &XPathError{Code: errCodeXPTY0004, Message: "invalid operator for duration*number"}
 	}
 
 	// xs:duration (generic) does not support arithmetic — only YMD and DTD do
 	if dur.TypeName == TypeDuration {
-		return nil, true, &XPathError{Code: "XPTY0004", Message: "xs:duration cannot be used in arithmetic"}
+		return nil, true, &XPathError{Code: errCodeXPTY0004, Message: "xs:duration cannot be used in arithmetic"}
 	}
 
 	d := dur.DurationVal()
@@ -212,12 +212,12 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 // arithmeticDateTimeDuration handles date/time ± duration.
 func arithmeticDateTimeDuration(op TokenType, dt, dur AtomicValue) (Sequence, bool, error) {
 	if op != TokenPlus && op != TokenMinus {
-		return nil, true, &XPathError{Code: "XPTY0004", Message: "invalid operator for date/time ± duration"}
+		return nil, true, &XPathError{Code: errCodeXPTY0004, Message: "invalid operator for date/time ± duration"}
 	}
 
 	// xs:time can only be combined with xs:dayTimeDuration, not xs:yearMonthDuration
 	if dt.TypeName == TypeTime && (dur.TypeName == TypeYearMonthDuration || dur.TypeName == TypeDuration) {
-		return nil, true, &XPathError{Code: "XPTY0004", Message: "cannot combine xs:time with xs:yearMonthDuration"}
+		return nil, true, &XPathError{Code: errCodeXPTY0004, Message: "cannot combine xs:time with xs:yearMonthDuration"}
 	}
 
 	t := dt.TimeVal()
@@ -311,11 +311,11 @@ func arithmeticDateTimeDatetime(ec *evalContext, la, ra AtomicValue) (Sequence, 
 func arithmeticDurationDivDuration(la, ra AtomicValue) (Sequence, bool, error) {
 	// xs:duration (generic) does not support arithmetic
 	if la.TypeName == TypeDuration || ra.TypeName == TypeDuration {
-		return nil, true, &XPathError{Code: "XPTY0004", Message: "xs:duration cannot be used in arithmetic"}
+		return nil, true, &XPathError{Code: errCodeXPTY0004, Message: "xs:duration cannot be used in arithmetic"}
 	}
 	// Cannot mix YMD and DTD
 	if la.TypeName != ra.TypeName {
-		return nil, true, &XPathError{Code: "XPTY0004", Message: "cannot divide different duration subtypes"}
+		return nil, true, &XPathError{Code: errCodeXPTY0004, Message: "cannot divide different duration subtypes"}
 	}
 
 	ld := la.DurationVal()

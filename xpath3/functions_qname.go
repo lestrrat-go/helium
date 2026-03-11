@@ -25,7 +25,7 @@ func fnQName(_ context.Context, args []Sequence) (Sequence, error) {
 			return nil, err
 		}
 		if a.TypeName != TypeString && a.TypeName != TypeUntypedAtomic && a.TypeName != TypeAnyURI {
-			return nil, &XPathError{Code: "XPTY0004", Message: "fn:QName namespace argument must be a string"}
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:QName namespace argument must be a string"}
 		}
 	}
 	if len(args[1]) > 0 {
@@ -34,7 +34,7 @@ func fnQName(_ context.Context, args []Sequence) (Sequence, error) {
 			return nil, err
 		}
 		if a.TypeName != TypeString && a.TypeName != TypeUntypedAtomic {
-			return nil, &XPathError{Code: "XPTY0004", Message: "fn:QName QName argument must be a string"}
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:QName QName argument must be a string"}
 		}
 	}
 
@@ -77,7 +77,7 @@ func fnPrefixFromQName(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if a.TypeName != TypeQName {
-		return nil, &XPathError{Code: "XPTY0004", Message: "expected QName"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected QName"}
 	}
 	qv := a.QNameVal()
 	if qv.Prefix == "" {
@@ -95,7 +95,7 @@ func fnLocalNameFromQName(_ context.Context, args []Sequence) (Sequence, error) 
 		return nil, err
 	}
 	if a.TypeName != TypeQName {
-		return nil, &XPathError{Code: "XPTY0004", Message: "expected QName"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected QName"}
 	}
 	return SingleString(a.QNameVal().Local), nil
 }
@@ -109,7 +109,7 @@ func fnNamespaceURIFromQName(_ context.Context, args []Sequence) (Sequence, erro
 		return nil, err
 	}
 	if a.TypeName != TypeQName {
-		return nil, &XPathError{Code: "XPTY0004", Message: "expected QName"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected QName"}
 	}
 	return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: a.QNameVal().URI}), nil
 }
@@ -121,11 +121,11 @@ func fnNamespaceURIForPrefix(_ context.Context, args []Sequence) (Sequence, erro
 	}
 	ni, ok := args[1][0].(NodeItem)
 	if !ok {
-		return nil, &XPathError{Code: "XPTY0004", Message: "expected element node"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected element node"}
 	}
 	elem, ok := ni.Node.(*helium.Element)
 	if !ok {
-		return nil, &XPathError{Code: "XPTY0004", Message: "expected element node"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected element node"}
 	}
 	if ns := helium.LookupNSByPrefix(elem, prefix); ns != nil {
 		return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: ns.URI()}), nil
@@ -139,15 +139,15 @@ func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	qnameStr := seqToString(args[0])
 	if len(args[1]) == 0 {
-		return nil, &XPathError{Code: "XPTY0004", Message: "resolve-QName: element argument is empty"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "resolve-QName: element argument is empty"}
 	}
 	ni, ok := args[1][0].(NodeItem)
 	if !ok {
-		return nil, &XPathError{Code: "XPTY0004", Message: "resolve-QName: expected element node"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "resolve-QName: expected element node"}
 	}
 	elem, ok := ni.Node.(*helium.Element)
 	if !ok {
-		return nil, &XPathError{Code: "XPTY0004", Message: "resolve-QName: expected element node"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "resolve-QName: expected element node"}
 	}
 
 	prefix := ""
@@ -184,11 +184,11 @@ func fnInScopePrefixes(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	ni, ok := args[0][0].(NodeItem)
 	if !ok {
-		return nil, &XPathError{Code: "XPTY0004", Message: "expected element node"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected element node"}
 	}
 	elem, ok := ni.Node.(*helium.Element)
 	if !ok {
-		return nil, &XPathError{Code: "XPTY0004", Message: "expected element node"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected element node"}
 	}
 
 	// Collect in-scope prefixes by walking up the tree

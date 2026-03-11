@@ -91,11 +91,11 @@ func fnDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	d, ok := dateA.Value.(time.Time)
 	if !ok {
-		return nil, &XPathError{Code: "XPTY0004", Message: "first arg must be xs:date"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "first arg must be xs:date"}
 	}
 	t, ok := timeA.Value.(time.Time)
 	if !ok {
-		return nil, &XPathError{Code: "XPTY0004", Message: "second arg must be xs:time"}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "second arg must be xs:time"}
 	}
 
 	// Per XPath F&O 3.0 §5.2.1: determine timezone from arguments.
@@ -402,7 +402,7 @@ func getTargetTimezone(ctx context.Context, args []Sequence) (*time.Location, er
 	if len(args) > 1 && len(args[1]) > 0 {
 		d, ok := extractDuration(args[1])
 		if !ok {
-			return nil, &XPathError{Code: "XPTY0004", Message: "expected dayTimeDuration"}
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected dayTimeDuration"}
 		}
 		if err := validateTimezoneOffset(d); err != nil {
 			return nil, err

@@ -6,6 +6,8 @@ import (
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
+const errCodeXPTY0004 = "XPTY0004"
+
 // Sentinel errors for the xpath3 package.
 var (
 	ErrNotNodeSet               = errors.New("xpath3: result is not a node-set")
