@@ -10,6 +10,8 @@ type Expr interface {
 }
 
 // AxisType identifies one of the 13 XPath axes.
+// This is a type alias (not a defined type), so methods on ixpath.AxisType
+// (including String()) are inherited and available on xpath1.AxisType.
 type AxisType = ixpath.AxisType
 
 // AxisChild and the other AxisType constants identify the thirteen XPath axes.

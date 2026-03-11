@@ -111,7 +111,7 @@ func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) (
 	// All nodes belong to the same document within a single evaluation.
 	// Multi-document scenarios (fn:doc) are not yet supported; when added,
 	// the cache must be partitioned per document.
-	cache.BuildFrom(DocumentRoot(result[0]))
+	cache.BuildFrom(documentRootForCache(result))
 	sort.SliceStable(result, func(i, j int) bool {
 		return cache.Position(result[i]) < cache.Position(result[j])
 	})
@@ -149,12 +149,26 @@ func MergeNodeSets(a, b []helium.Node, cache *DocOrderCache, maxNodes int) ([]he
 		return nil, ErrNodeSetLimit
 	}
 	if len(result) > 0 {
-		cache.BuildFrom(DocumentRoot(result[0]))
+		cache.BuildFrom(documentRootForCache(result))
 	}
 	sort.SliceStable(result, func(i, j int) bool {
 		return cache.Position(result[i]) < cache.Position(result[j])
 	})
 	return result, nil
+}
+
+// documentRootForCache selects a cache root from the first node that can
+// reliably resolve to a document root. Namespace wrappers with nil Parent
+// cannot resolve to a document, so we skip them.
+func documentRootForCache(nodes []helium.Node) helium.Node {
+	for _, n := range nodes {
+		if n.Type() == helium.NamespaceNode && n.Parent() == nil {
+			continue
+		}
+		return DocumentRoot(n)
+	}
+	// All nodes are unrooted namespace wrappers; use the first one as-is.
+	return DocumentRoot(nodes[0])
 }
 
 // DocumentRoot returns the owning Document or the topmost ancestor.
