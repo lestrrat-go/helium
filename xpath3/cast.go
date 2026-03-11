@@ -198,7 +198,11 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		if err != nil {
 			return AtomicValue{}, err
 		}
-		return AtomicValue{TypeName: targetType, Value: collapseWhitespace(s)}, nil
+		s = collapseWhitespace(s)
+		if err := validateStringDerivedType(s, targetType); err != nil {
+			return AtomicValue{}, err
+		}
+		return AtomicValue{TypeName: targetType, Value: s}, nil
 	case TypeQName:
 		// QName → QName is handled by identity check above.
 		// String/untypedAtomic → QName requires namespace context and is
@@ -333,11 +337,13 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 		if !reGYear.MatchString(s) || !validateGregorianValue(TypeGYear, s) {
 			return AtomicValue{}, castError(s, targetType)
 		}
+		s = normalizeNegZeroYear(s)
 		return AtomicValue{TypeName: TypeGYear, Value: s}, nil
 	case TypeGYearMonth:
 		if !reGYearMonth.MatchString(s) || !validateGregorianValue(TypeGYearMonth, s) {
 			return AtomicValue{}, castError(s, targetType)
 		}
+		s = normalizeNegZeroYear(s)
 		return AtomicValue{TypeName: TypeGYearMonth, Value: s}, nil
 	case TypeNormalizedString:
 		// xs:normalizedString: replace #x9, #xA, #xD with #x20
@@ -347,12 +353,56 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 		TypeNMTOKEN, TypeNMTOKENS, TypeENTITY, TypeID, TypeIDREF, TypeIDREFS:
 		// xs:token and derived: normalize + collapse whitespace
 		s = collapseWhitespace(s)
+		if err := validateStringDerivedType(s, targetType); err != nil {
+			return AtomicValue{}, err
+		}
 		return AtomicValue{TypeName: targetType, Value: s}, nil
 	}
 	return AtomicValue{}, &XPathError{
 		Code:    "XPTY0004",
 		Message: "cannot cast string to " + targetType,
 	}
+}
+
+// normalizeNegZeroYear strips leading '-' from "-0000" years (e.g. "-0000-05" → "0000-05").
+// Per XSD, negative zero is identical to positive zero for year values.
+func normalizeNegZeroYear(s string) string {
+	if len(s) < 5 || s[0] != '-' {
+		return s
+	}
+	// Check if all year digits are zero: "-0000..." or "-00000..."
+	i := 1
+	for i < len(s) && s[i] == '0' {
+		i++
+	}
+	// i now points past the zeros; if it hits a non-digit boundary, year is all zeros
+	if i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		return s // non-zero year digit found
+	}
+	return s[1:] // strip the '-'
+}
+
+// validateStringDerivedType checks pattern constraints for string-derived types.
+func validateStringDerivedType(s, targetType string) error {
+	switch targetType {
+	case TypeName:
+		if !reName.MatchString(s) {
+			return castError(s, targetType)
+		}
+	case TypeNCName, TypeENTITY, TypeID, TypeIDREF:
+		if !reNCName.MatchString(s) {
+			return castError(s, targetType)
+		}
+	case TypeNMTOKEN:
+		if !reNMTOKEN.MatchString(s) {
+			return castError(s, targetType)
+		}
+	case TypeLanguage:
+		if !reLang.MatchString(s) {
+			return castError(s, targetType)
+		}
+	}
+	return nil
 }
 
 // integerTypeRange returns the min/max bounds for a derived integer type.
