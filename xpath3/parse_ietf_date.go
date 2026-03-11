@@ -62,6 +62,10 @@ func (p *ietfDateParser) parse() (time.Time, error) {
 		p.skipWS()
 		if p.pos < len(p.input) && p.input[p.pos] == ',' {
 			p.pos++ // skip comma
+			// Require at least one space after comma
+			if p.pos >= len(p.input) || (p.input[p.pos] != ' ' && p.input[p.pos] != '\t') {
+				return time.Time{}, fmt.Errorf("expected space after day-of-week comma")
+			}
 			p.skipWS()
 		}
 		p.skipWS()
@@ -78,9 +82,12 @@ func (p *ietfDateParser) parse() (time.Time, error) {
 
 // parseRFC parses: day [-] month [-] year time [timezone]
 func (p *ietfDateParser) parseRFC() (time.Time, error) {
-	day, err := p.readInt()
+	day, err := p.readIntN(1, 2)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("expected day: %w", err)
+		return time.Time{}, fmt.Errorf("expected day (1-2 digits): %w", err)
+	}
+	if !p.hasSep() {
+		return time.Time{}, fmt.Errorf("expected separator after day")
 	}
 	p.skipSep()
 
@@ -92,13 +99,15 @@ func (p *ietfDateParser) parseRFC() (time.Time, error) {
 	if err != nil {
 		return time.Time{}, err
 	}
+	if !p.hasSep() {
+		return time.Time{}, fmt.Errorf("expected separator after month")
+	}
 	p.skipSep()
 
-	year, err := p.readInt()
+	year, err := p.readYear()
 	if err != nil {
-		return time.Time{}, fmt.Errorf("expected year: %w", err)
+		return time.Time{}, err
 	}
-	year = normalizeYear(year)
 	p.skipWS()
 
 	hour, min, sec, frac, err := p.parseTime()
@@ -107,7 +116,19 @@ func (p *ietfDateParser) parseRFC() (time.Time, error) {
 	}
 
 	// Timezone may be immediately adjacent to time (no space)
-	loc := p.parseTZ()
+	loc, err := p.parseTZ()
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	// Optional comment, then check for trailing content
+	if err := p.skipComment(); err != nil {
+		return time.Time{}, err
+	}
+	p.skipWS()
+	if p.pos < len(p.input) {
+		return time.Time{}, fmt.Errorf("unexpected trailing content: %q", p.input[p.pos:])
+	}
 
 	if err := validateIETFDate(year, month, day, hour, min, sec); err != nil {
 		return time.Time{}, err
@@ -141,9 +162,9 @@ func (p *ietfDateParser) parseAsctime() (time.Time, error) {
 	}
 	p.skipSep()
 
-	day, err := p.readInt()
+	day, err := p.readIntN(1, 2)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("expected day: %w", err)
+		return time.Time{}, fmt.Errorf("expected day (1-2 digits): %w", err)
 	}
 	p.skipWS()
 
@@ -153,27 +174,40 @@ func (p *ietfDateParser) parseAsctime() (time.Time, error) {
 	}
 
 	p.skipWS()
-	// In asctime format, timezone can come before or after year
 	var loc *time.Location
 	var year int
 
 	if p.peekTZ() {
 		// timezone first, then year
-		loc = p.parseTZ()
+		loc, err = p.parseTZ()
+		if err != nil {
+			return time.Time{}, err
+		}
 		p.skipWS()
-		year, err = p.readInt()
+		year, err = p.readYear()
 		if err != nil {
 			return time.Time{}, fmt.Errorf("expected year: %w", err)
 		}
 	} else {
-		year, err = p.readInt()
+		year, err = p.readYear()
 		if err != nil {
 			return time.Time{}, fmt.Errorf("expected year: %w", err)
 		}
 		p.skipWS()
-		loc = p.parseTZ()
+		loc, err = p.parseTZ()
+		if err != nil {
+			return time.Time{}, err
+		}
 	}
-	year = normalizeYear(year)
+
+	// Optional comment, then check for trailing content
+	if err := p.skipComment(); err != nil {
+		return time.Time{}, err
+	}
+	p.skipWS()
+	if p.pos < len(p.input) {
+		return time.Time{}, fmt.Errorf("unexpected trailing content: %q", p.input[p.pos:])
+	}
 
 	if err := validateIETFDate(year, month, day, hour, min, sec); err != nil {
 		return time.Time{}, err
@@ -190,27 +224,26 @@ func (p *ietfDateParser) parseAsctime() (time.Time, error) {
 }
 
 func (p *ietfDateParser) parseTime() (hour, min, sec int, frac float64, err error) {
-	// Handle 24:00:00 as special case
-	hour, err = p.readInt()
+	hour, err = p.readIntN(1, 2)
 	if err != nil {
-		return 0, 0, 0, 0, fmt.Errorf("expected hour: %w", err)
+		return 0, 0, 0, 0, fmt.Errorf("expected hour (1-2 digits): %w", err)
 	}
 	if p.pos >= len(p.input) || p.input[p.pos] != ':' {
 		return 0, 0, 0, 0, fmt.Errorf("expected ':' after hour")
 	}
 	p.pos++ // skip ':'
 
-	min, err = p.readInt()
+	min, err = p.readIntN(2, 2)
 	if err != nil {
-		return 0, 0, 0, 0, fmt.Errorf("expected minute: %w", err)
+		return 0, 0, 0, 0, fmt.Errorf("expected minute (exactly 2 digits): %w", err)
 	}
 
 	// Seconds are optional
 	if p.pos < len(p.input) && p.input[p.pos] == ':' {
 		p.pos++ // skip ':'
-		sec, err = p.readInt()
+		sec, err = p.readIntN(2, 2)
 		if err != nil {
-			return 0, 0, 0, 0, fmt.Errorf("expected second: %w", err)
+			return 0, 0, 0, 0, fmt.Errorf("expected second (exactly 2 digits): %w", err)
 		}
 		// Fractional seconds
 		if p.pos < len(p.input) && p.input[p.pos] == '.' {
@@ -219,19 +252,20 @@ func (p *ietfDateParser) parseTime() (hour, min, sec int, frac float64, err erro
 			for p.pos < len(p.input) && p.input[p.pos] >= '0' && p.input[p.pos] <= '9' {
 				p.pos++
 			}
-			if p.pos > fracStart {
-				frac, _ = strconv.ParseFloat("0."+p.input[fracStart:p.pos], 64)
+			if p.pos == fracStart {
+				return 0, 0, 0, 0, fmt.Errorf("expected digits after decimal point")
 			}
+			frac, _ = strconv.ParseFloat("0."+p.input[fracStart:p.pos], 64)
 		}
 	}
 
 	return hour, min, sec, frac, nil
 }
 
-func (p *ietfDateParser) parseTZ() *time.Location {
+func (p *ietfDateParser) parseTZ() (*time.Location, error) {
 	p.skipWS()
 	if p.pos >= len(p.input) {
-		return time.UTC
+		return time.UTC, nil
 	}
 
 	// Check for +/- offset: +0500, -0530, +05:00, +05, -05, -05:
@@ -241,6 +275,7 @@ func (p *ietfDateParser) parseTZ() *time.Location {
 			sign = -1
 		}
 		p.pos++
+		// Read all contiguous digits and optional colon for the offset
 		numStart := p.pos
 		for p.pos < len(p.input) && (p.input[p.pos] >= '0' && p.input[p.pos] <= '9' || p.input[p.pos] == ':') {
 			p.pos++
@@ -248,42 +283,74 @@ func (p *ietfDateParser) parseTZ() *time.Location {
 		offsetStr := p.input[numStart:p.pos]
 		// Remove trailing colon (e.g., "-05:")
 		offsetStr = strings.TrimRight(offsetStr, ":")
-		offsetStr = strings.ReplaceAll(offsetStr, ":", "")
 		var h, m int
-		switch len(offsetStr) {
-		case 1, 2:
-			h, _ = strconv.Atoi(offsetStr)
-		case 3:
-			h, _ = strconv.Atoi(offsetStr[:1])
-			m, _ = strconv.Atoi(offsetStr[1:3])
-		case 4:
-			h, _ = strconv.Atoi(offsetStr[:2])
-			m, _ = strconv.Atoi(offsetStr[2:4])
+		if colonIdx := strings.IndexByte(offsetStr, ':'); colonIdx >= 0 {
+			// Format with colon: H:MM or HH:MM
+			hPart := offsetStr[:colonIdx]
+			mPart := offsetStr[colonIdx+1:]
+			if len(hPart) < 1 || len(hPart) > 2 {
+				return nil, fmt.Errorf("invalid timezone offset hours")
+			}
+			h, _ = strconv.Atoi(hPart)
+			if len(mPart) == 0 {
+				m = 0
+			} else if len(mPart) != 2 {
+				return nil, fmt.Errorf("timezone offset minutes must be 2 digits, got %d", len(mPart))
+			} else {
+				m, _ = strconv.Atoi(mPart)
+			}
+		} else {
+			// Compact format without colon: H, HH, HMM, HHMM
+			switch len(offsetStr) {
+			case 1, 2:
+				h, _ = strconv.Atoi(offsetStr)
+			case 3:
+				h, _ = strconv.Atoi(offsetStr[:1])
+				m, _ = strconv.Atoi(offsetStr[1:3])
+			case 4:
+				h, _ = strconv.Atoi(offsetStr[:2])
+				m, _ = strconv.Atoi(offsetStr[2:4])
+			default:
+				return nil, fmt.Errorf("invalid timezone offset: %q", offsetStr)
+			}
+		}
+		if h > 14 || (h == 14 && m > 0) {
+			return nil, fmt.Errorf("timezone offset hours out of range: %d", h)
+		}
+		if m > 59 {
+			return nil, fmt.Errorf("timezone offset minutes out of range: %d", m)
 		}
 		offset := sign * (h*3600 + m*60)
-		p.skipComment()
-		return time.FixedZone("", offset)
+		// Skip immediately adjacent comment (no space) like "+0500(EST)"
+		p.skipAdjacentComment()
+		return time.FixedZone("", offset), nil
 	}
 
 	// Named timezone
 	if p.peekAlpha() {
+		saved := p.pos
 		name, _ := p.readAlpha()
-		name = strings.ToUpper(name)
-		if offset, ok := ietfTimezones[name]; ok {
-			p.skipComment()
-			if offset == 0 && (name == "GMT" || name == "UTC" || name == "UT" || name == "Z") {
-				return time.FixedZone("", 0) // explicit UTC
+		nameUpper := strings.ToUpper(name)
+		if offset, ok := ietfTimezones[nameUpper]; ok {
+			// Named TZ must not be immediately followed by digits (e.g., "GMT2014")
+			if p.pos < len(p.input) && p.input[p.pos] >= '0' && p.input[p.pos] <= '9' {
+				p.pos = saved
+				return nil, fmt.Errorf("timezone name followed by digits without separator")
 			}
-			return time.FixedZone("", offset)
+			// Skip immediately adjacent comment
+			p.skipAdjacentComment()
+			return time.FixedZone("", offset), nil
 		}
+		// Unknown timezone name — reject
+		p.pos = saved
+		return nil, fmt.Errorf("unknown timezone: %q", name)
 	}
 
-	return time.UTC
+	return time.UTC, nil
 }
 
-// skipComment skips an optional RFC 822 comment in parentheses: "(EST)"
-func (p *ietfDateParser) skipComment() {
-	p.skipWS()
+// skipAdjacentComment skips a comment immediately adjacent to current position (no whitespace).
+func (p *ietfDateParser) skipAdjacentComment() {
 	if p.pos < len(p.input) && p.input[p.pos] == '(' {
 		depth := 1
 		p.pos++
@@ -297,6 +364,36 @@ func (p *ietfDateParser) skipComment() {
 			p.pos++
 		}
 	}
+}
+
+// skipComment skips an optional RFC 822 comment in parentheses: "(EST)".
+// Returns error if the comment is empty "()" or malformed.
+func (p *ietfDateParser) skipComment() error {
+	p.skipWS()
+	if p.pos < len(p.input) && p.input[p.pos] == '(' {
+		start := p.pos
+		depth := 1
+		p.pos++
+		contentStart := p.pos
+		for p.pos < len(p.input) && depth > 0 {
+			switch p.input[p.pos] {
+			case '(':
+				depth++
+			case ')':
+				depth--
+			}
+			p.pos++
+		}
+		if depth != 0 {
+			return fmt.Errorf("unclosed comment at position %d", start)
+		}
+		// Check for empty comment "()"
+		content := strings.TrimSpace(p.input[contentStart : p.pos-1])
+		if content == "" {
+			return fmt.Errorf("empty comment")
+		}
+	}
+	return nil
 }
 
 func (p *ietfDateParser) tryDayOfWeek() bool {
@@ -361,6 +458,19 @@ func (p *ietfDateParser) readInt() (int, error) {
 	return strconv.Atoi(p.input[start:p.pos])
 }
 
+// readIntN reads an integer with digit count in [minDigits, maxDigits].
+func (p *ietfDateParser) readIntN(minDigits, maxDigits int) (int, error) {
+	start := p.pos
+	for p.pos < len(p.input) && p.input[p.pos] >= '0' && p.input[p.pos] <= '9' {
+		p.pos++
+	}
+	n := p.pos - start
+	if n < minDigits || n > maxDigits {
+		return 0, fmt.Errorf("expected %d-%d digits at position %d, got %d", minDigits, maxDigits, start, n)
+	}
+	return strconv.Atoi(p.input[start:p.pos])
+}
+
 func (p *ietfDateParser) readAlpha() (string, error) {
 	start := p.pos
 	for p.pos < len(p.input) && unicode.IsLetter(rune(p.input[p.pos])) {
@@ -391,6 +501,9 @@ func (p *ietfDateParser) skipSep() {
 }
 
 func parseMonth(s string) (int, error) {
+	if len(s) != 3 {
+		return 0, fmt.Errorf("month abbreviation must be exactly 3 letters: %q", s)
+	}
 	m, ok := monthNames[strings.ToLower(s)]
 	if !ok {
 		return 0, fmt.Errorf("unknown month: %q", s)
@@ -398,13 +511,29 @@ func parseMonth(s string) (int, error) {
 	return m, nil
 }
 
+// readYear reads a year value, validates it has 2 or 4+ digits (not 3), and normalizes.
+func (p *ietfDateParser) readYear() (int, error) {
+	start := p.pos
+	for p.pos < len(p.input) && p.input[p.pos] >= '0' && p.input[p.pos] <= '9' {
+		p.pos++
+	}
+	n := p.pos - start
+	if n == 0 {
+		return 0, fmt.Errorf("expected year at position %d", start)
+	}
+	if n == 3 {
+		return 0, fmt.Errorf("year must be 2 or 4+ digits, got 3")
+	}
+	year, err := strconv.Atoi(p.input[start:p.pos])
+	if err != nil {
+		return 0, err
+	}
+	return normalizeYear(year), nil
+}
+
 func normalizeYear(y int) int {
 	if y < 100 {
-		// 2-digit year: per XPath 3.1 spec, adjusted to range 1970-2069
-		// (same as RFC 2822: 00-69 → 2000-2069, 70-99 → 1970-1999)
-		if y <= 69 {
-			return 2000 + y
-		}
+		// 2-digit year: per XPath 3.1 spec, always map to 1900+
 		return 1900 + y
 	}
 	return y
@@ -449,18 +578,9 @@ func daysInMonth(year, month int) int {
 }
 
 var monthNames = map[string]int{
-	"jan": 1, "january": 1,
-	"feb": 2, "february": 2,
-	"mar": 3, "march": 3,
-	"apr": 4, "april": 4,
-	"may": 5,
-	"jun": 6, "june": 6,
-	"jul": 7, "july": 7,
-	"aug": 8, "august": 8,
-	"sep": 9, "september": 9,
-	"oct": 10, "october": 10,
-	"nov": 11, "november": 11,
-	"dec": 12, "december": 12,
+	"jan": 1, "feb": 2, "mar": 3, "apr": 4,
+	"may": 5, "jun": 6, "jul": 7, "aug": 8,
+	"sep": 9, "oct": 10, "nov": 11, "dec": 12,
 }
 
 var dayOfWeekNames = map[string]bool{
