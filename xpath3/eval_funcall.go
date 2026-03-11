@@ -84,10 +84,9 @@ func evalDynamicFunctionCall(ec *evalContext, e DynamicFunctionCall) (Sequence, 
 		}
 		fixedArgs := make([]Sequence, len(args))
 		copy(fixedArgs, args)
+		// Per XPath 3.1, partial applications are anonymous functions
 		result := FunctionItem{
-			Arity:     len(placeholderIndices),
-			Name:      fi.Name,
-			Namespace: fi.Namespace,
+			Arity: len(placeholderIndices),
 			Invoke: func(ctx context.Context, partialArgs []Sequence) (Sequence, error) {
 				if len(partialArgs) != len(placeholderIndices) {
 					return nil, &XPathError{
@@ -258,9 +257,9 @@ func partialApply(ec *evalContext, e FunctionCall, fixedArgs []Sequence) (Sequen
 		return nil, err
 	}
 
+	// Per XPath 3.1, partial applications are anonymous functions
 	fi := FunctionItem{
 		Arity: len(placeholderIndices),
-		Name:  e.Name,
 		Invoke: func(ctx context.Context, partialArgs []Sequence) (Sequence, error) {
 			if len(partialArgs) != len(placeholderIndices) {
 				return nil, &XPathError{
