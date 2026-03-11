@@ -504,7 +504,7 @@ func qt3FormatSeq(seq xpath3.Sequence) string {
 //   - Resource URIs → local files via resourceMap
 func qt3Handler(resourceMap map[string]string) http.Handler {
 	dataDir := qt3TestDataDir()
-	fotsDir := filepath.Join(dataDir, "fn")
+	fotsDir := dataDir
 	// Build a path-based lookup from the resource map.
 	// resourceMap keys are full URIs (e.g., "http://www.w3.org/qt3/json/data004-json").
 	// We extract the URL path and map it to a local file.
