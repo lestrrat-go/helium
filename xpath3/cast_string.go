@@ -299,8 +299,8 @@ func formatXSDYear(year int) string {
 	return fmt.Sprintf("%04d", year)
 }
 
-// parseXPathDouble parses s as an xs:double using XSD 1.0 lexical rules.
-// Valid special values: "INF", "-INF", "NaN" — "+INF" is NOT valid.
+// parseXPathDouble parses s as an xs:double using XSD 1.1 lexical rules.
+// Valid special values: "INF", "+INF", "-INF", "NaN".
 func parseXPathDouble(s string) (float64, error) {
 	switch s {
 	case "INF", "+INF":
