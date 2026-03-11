@@ -286,12 +286,14 @@ func fnNormalizeUnicode(_ context.Context, args []Sequence) (Sequence, error) {
 		nf = norm.NFKD
 	case "FULLY-NORMALIZED":
 		// W3C Charmod Normalization: NFC + if the result starts with a
-		// composing character (combining mark or character that participates
-		// in canonical composition as a trailing element), prepend a space.
+		// composing character, prepend a space. A composing character is
+		// one that can be consumed by NFC composition with a preceding
+		// starter. We detect this by prepending a known starter and
+		// checking whether NFC composition changes the pair.
 		result := norm.NFC.String(s)
 		if len(result) > 0 {
 			r, _ := utf8.DecodeRuneInString(result)
-			if unicode.In(r, unicode.Mn, unicode.Mc, unicode.Me) {
+			if isComposingCharacter(r) {
 				result = " " + result
 			}
 		}
@@ -301,6 +303,16 @@ func fnNormalizeUnicode(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 
 	return SingleString(nf.String(s)), nil
+}
+
+// isComposingCharacter returns true if r is a character that could compose
+// with a preceding character under NFC. This includes characters with CCC > 0
+// and characters that appear as the trailing element of a canonical composition.
+// We use norm.NFC.BoundaryBefore: a rune that does NOT start a new boundary
+// can compose with a preceding character and is therefore "composing".
+func isComposingCharacter(r rune) bool {
+	p := norm.NFC.PropertiesString(string(r))
+	return !p.BoundaryBefore()
 }
 
 // xpathUpperCaser and xpathLowerCaser use golang.org/x/text/cases with
