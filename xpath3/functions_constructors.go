@@ -50,7 +50,6 @@ func init() {
 		{"int", TypeInt, -2147483648, 2147483647},
 		{"short", TypeShort, -32768, 32767},
 		{"byte", TypeByte, -128, 127},
-		{"unsignedLong", TypeUnsignedLong, 0, math.MaxInt64}, // XSD max is 18446744073709551615 but we use int64
 		{"unsignedInt", TypeUnsignedInt, 0, 4294967295},
 		{"unsignedShort", TypeUnsignedShort, 0, 65535},
 		{"unsignedByte", TypeUnsignedByte, 0, 255},
@@ -61,6 +60,9 @@ func init() {
 	} {
 		registerNS(NSXS, entry.name, 1, 1, makeXSIntegerRange(entry.typeName, entry.min, entry.max))
 	}
+
+	// xs:unsignedLong needs big.Int max since MaxUint64 exceeds int64
+	registerNS(NSXS, "unsignedLong", 1, 1, makeXSIntegerRangeBig(TypeUnsignedLong, big.NewInt(0), new(big.Int).SetUint64(math.MaxUint64)))
 
 	// Derived string types — cast to string, validate, store with derived type name
 	for _, entry := range []struct {
@@ -207,8 +209,11 @@ func makeXSQNameConstructor() func(context.Context, []Sequence) (Sequence, error
 
 // makeXSIntegerRange returns a constructor for a derived integer type with range validation.
 func makeXSIntegerRange(typeName string, minVal, maxVal int64) func(context.Context, []Sequence) (Sequence, error) {
-	minBig := big.NewInt(minVal)
-	maxBig := big.NewInt(maxVal)
+	return makeXSIntegerRangeBig(typeName, big.NewInt(minVal), big.NewInt(maxVal))
+}
+
+// makeXSIntegerRangeBig returns a constructor for a derived integer type with big.Int range validation.
+func makeXSIntegerRangeBig(typeName string, minBig, maxBig *big.Int) func(context.Context, []Sequence) (Sequence, error) {
 	return func(_ context.Context, args []Sequence) (Sequence, error) {
 		if len(args[0]) == 0 {
 			return nil, nil
