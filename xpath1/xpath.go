@@ -24,6 +24,8 @@ var ErrOpLimit = errors.New("xpath: operation limit exceeded")
 
 // ErrNodeSetLimit is returned when a node-set exceeds the maximum length
 // (10,000,000), matching libxml2's XPATH_MAX_NODESET_LENGTH.
+// This is an alias to the internal sentinel so that errors.Is works
+// consistently across xpath1 and xpath3.
 var ErrNodeSetLimit = ixpath.ErrNodeSetLimit
 
 // ErrUnknownFunction is returned when a function call references an

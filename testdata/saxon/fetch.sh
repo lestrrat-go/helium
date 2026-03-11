@@ -9,13 +9,21 @@ TARGET_DIR="$SCRIPT_DIR/source"
 SAXON_COMMIT_SHA="${SAXON_COMMIT_SHA:-28d25a31c7b29e263149ae7ccd2c991d56c57e8d}"
 
 if [ -d "$TARGET_DIR/.git" ]; then
-    echo "Saxon-HE already cloned at $TARGET_DIR, skipping."
-    exit 0
+    echo "Saxon-HE repo already exists at $TARGET_DIR."
+    cd "$TARGET_DIR"
+    CURRENT_SHA="$(git rev-parse HEAD)"
+    if [ "$CURRENT_SHA" = "$SAXON_COMMIT_SHA" ]; then
+        echo "Already at pinned commit $SAXON_COMMIT_SHA, nothing to do."
+        exit 0
+    fi
+    echo "At $CURRENT_SHA, updating to pinned commit $SAXON_COMMIT_SHA ..."
+    git fetch --all --tags --prune
+else
+    echo "Cloning Saxon-HE into $TARGET_DIR ..."
+    git clone https://github.com/Saxonica/Saxon-HE.git "$TARGET_DIR"
+    cd "$TARGET_DIR"
 fi
 
-echo "Cloning Saxon-HE into $TARGET_DIR ..."
-git clone https://github.com/Saxonica/Saxon-HE.git "$TARGET_DIR"
 echo "Checking out pinned commit $SAXON_COMMIT_SHA ..."
-cd "$TARGET_DIR"
 git checkout "$SAXON_COMMIT_SHA"
 echo "Done."
