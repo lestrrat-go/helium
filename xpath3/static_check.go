@@ -154,6 +154,18 @@ func checkPrefixes(node Expr, namespaces map[string]string) error {
 			}
 		}
 	case InlineFunctionExpr:
+		for _, param := range n.Params {
+			if param.TypeHint != nil {
+				if err := checkPrefixesInSequenceType(*param.TypeHint, namespaces); err != nil {
+					return err
+				}
+			}
+		}
+		if n.ReturnType != nil {
+			if err := checkPrefixesInSequenceType(*n.ReturnType, namespaces); err != nil {
+				return err
+			}
+		}
 		return checkPrefixes(n.Body, namespaces)
 	case LookupExpr:
 		if err := checkPrefixes(n.Expr, namespaces); err != nil {
@@ -236,6 +248,17 @@ func checkPrefixesInNodeTest(nt NodeTest, namespaces map[string]string) error {
 				return &XPathError{
 					Code:    "XPST0081",
 					Message: fmt.Sprintf("unprefixed type name %q requires a default element namespace", t.Name),
+				}
+			}
+		}
+		// XSD list types (NMTOKENS, IDREFS, ENTITIES) are not valid atomic/union
+		// types in SequenceType — they are list types (XPST0051).
+		if t.Prefix == "xs" || t.Prefix == "xsd" {
+			switch t.Name {
+			case "NMTOKENS", "IDREFS", "ENTITIES":
+				return &XPathError{
+					Code:    "XPST0051",
+					Message: fmt.Sprintf("xs:%s is a list type and cannot be used as an atomic type", t.Name),
 				}
 			}
 		}
