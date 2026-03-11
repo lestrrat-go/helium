@@ -49,6 +49,7 @@ const (
 type NameTest struct {
 	Prefix string
 	Local  string
+	URI    string // set for URIQualifiedNames (Q{uri}local)
 }
 
 func (NameTest) nodeTest() {}

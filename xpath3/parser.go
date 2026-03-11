@@ -1133,6 +1133,15 @@ func (p *parser) parseNodeTest(_ AxisType) (NodeTest, error) {
 		p.lexer.Backup()
 	}
 
+	// Check for URIQualifiedName: Q{uri}local
+	if strings.HasPrefix(tok.Value, "Q{") {
+		if idx := strings.Index(tok.Value, "}"); idx >= 0 {
+			uri := tok.Value[2:idx]
+			local := tok.Value[idx+1:]
+			return NameTest{URI: uri, Local: local}, nil
+		}
+	}
+
 	// Check for QName: prefix:local or prefix:*
 	if p.lexer.Peek().Type == TokenColon {
 		return p.parseQNameTest(tok.Value)

@@ -204,6 +204,9 @@ func matchNameTest(test NameTest, n helium.Node, axis AxisType, ec *evalContext)
 	}
 
 	if test.Local == "*" {
+		if test.URI != "" {
+			return ixpath.NodeNamespaceURI(n) == test.URI
+		}
 		if test.Prefix == "" {
 			return true
 		}
@@ -214,6 +217,9 @@ func matchNameTest(test NameTest, n helium.Node, axis AxisType, ec *evalContext)
 		return false
 	}
 
+	if test.URI != "" {
+		return ixpath.NodeNamespaceURI(n) == test.URI
+	}
 	if test.Prefix == "*" {
 		// *:local matches any namespace
 		return true

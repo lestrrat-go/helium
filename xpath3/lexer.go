@@ -262,7 +262,7 @@ func (l *lexer) tokenize() error {
 					l.pos++
 				}
 				if l.pos < len(l.input) {
-					uri := strings.TrimSpace(l.input[braceStart:l.pos])
+					uri := collapseWhitespace(l.input[braceStart:l.pos])
 					l.pos++ // consume '}'
 					local := l.scanNCName()
 					if uri == "" {
@@ -438,7 +438,7 @@ func (l *lexer) scanNameOrKeyword() {
 			l.emit(TokenName, name)
 			return
 		}
-		uri := strings.TrimSpace(l.input[braceStart:l.pos])
+		uri := collapseWhitespace(l.input[braceStart:l.pos])
 		l.pos++ // consume '}'
 		local := l.scanNCName()
 		if uri == "" {
