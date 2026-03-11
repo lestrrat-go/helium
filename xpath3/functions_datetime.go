@@ -101,8 +101,8 @@ func fnDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 	// Per XPath F&O 3.0 §5.2.1: determine timezone from arguments.
 	// If both have timezones, they must be equal. If one has a timezone, use it.
 	// If neither has a timezone, the result has none.
-	dateHasTZ := d.Location() != time.UTC
-	timeHasTZ := t.Location() != time.UTC
+	dateHasTZ := HasTimezone(d)
+	timeHasTZ := HasTimezone(t)
 	var loc *time.Location
 	switch {
 	case dateHasTZ && timeHasTZ:
@@ -117,7 +117,7 @@ func fnDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 	case timeHasTZ:
 		loc = t.Location()
 	default:
-		loc = time.UTC // no timezone
+		loc = noTZLocation // no timezone
 	}
 
 	combined := time.Date(d.Year(), d.Month(), d.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)
