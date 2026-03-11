@@ -873,7 +873,7 @@ func fnContainsToken(ctx context.Context, args []Sequence) (Sequence, error) {
 			return nil, err
 		}
 		s, _ := atomicToString(a)
-		for _, tok := range strings.Fields(s) {
+		for _, tok := range splitXMLWhitespace(s) {
 			if coll.compare(tok, token) == 0 {
 				return SingleBoolean(true), nil
 			}
