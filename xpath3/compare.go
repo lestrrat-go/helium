@@ -196,20 +196,14 @@ func comparisonFamily(typeName string) string {
 }
 
 // promoteForValueComparison applies type promotion rules for value comparison (eq/ne/lt/gt/le/ge).
-// Per XPath 3.1 Section 3.7.2.
+// Per XPath 3.1 Section 3.7.2: xs:untypedAtomic is always cast to xs:string.
+// This differs from general comparison where untypedAtomic is cast to the other operand's type.
 func promoteForValueComparison(a, b AtomicValue) (AtomicValue, AtomicValue) {
-	// untypedAtomic vs untypedAtomic → compare as string
-	if a.TypeName == TypeUntypedAtomic && b.TypeName == TypeUntypedAtomic {
-		return AtomicValue{TypeName: TypeString, Value: stringFromAtomic(a)},
-			AtomicValue{TypeName: TypeString, Value: stringFromAtomic(b)}
-	}
-	// untypedAtomic vs typed → cast untypedAtomic to the other's type
 	if a.TypeName == TypeUntypedAtomic {
-		return castUntypedForComparison(a, b)
+		a = AtomicValue{TypeName: TypeString, Value: stringFromAtomic(a)}
 	}
 	if b.TypeName == TypeUntypedAtomic {
-		cb, ca := castUntypedForComparison(b, a)
-		return ca, cb
+		b = AtomicValue{TypeName: TypeString, Value: stringFromAtomic(b)}
 	}
 	return a, b
 }
