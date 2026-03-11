@@ -15,8 +15,23 @@ func init() {
 }
 
 func fnEncodeForURI(_ context.Context, args []Sequence) (Sequence, error) {
-	s := seqToString(args[0])
+	s, err := coerceArgToStringOpt(args[0])
+	if err != nil {
+		return nil, err
+	}
 	return SingleString(encodeForURI(s)), nil
+}
+
+// coerceArgToStringOpt extracts a string from xs:string? argument, validating
+// both cardinality (0 or 1) and type (string-derived, anyURI, untypedAtomic).
+func coerceArgToStringOpt(seq Sequence) (string, error) {
+	if len(seq) == 0 {
+		return "", nil
+	}
+	if len(seq) > 1 {
+		return "", &XPathError{Code: "XPTY0004", Message: "expected xs:string?, got sequence of length > 1"}
+	}
+	return coerceArgToString(seq)
 }
 
 // encodeForURI percent-encodes all characters except unreserved characters
@@ -43,18 +58,31 @@ func isUnreservedChar(c byte) bool {
 }
 
 func fnIRIToURI(_ context.Context, args []Sequence) (Sequence, error) {
-	s := seqToString(args[0])
-	// Only escape non-ASCII and disallowed characters
+	s, err := coerceArgToStringOpt(args[0])
+	if err != nil {
+		return nil, err
+	}
+	// Per XPath F&O 3.0 §7.4.5: escape characters that are not allowed in URIs.
+	// Keep: unreserved, reserved, and already percent-encoded sequences.
+	// Escape: space, <, >, ", {, }, |, \, ^, `, non-ASCII (>0x7E), and control chars (<0x20).
 	var b strings.Builder
-	for _, r := range s {
-		if r > 0x7E || r < 0x20 {
-			b.WriteString(url.PathEscape(string(r)))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == '%' && i+2 < len(s) && isHexDigit(s[i+1]) && isHexDigit(s[i+2]) {
+			// Already percent-encoded: pass through
+			b.WriteByte(c)
+			continue
+		}
+		if c > 0x7E || c <= 0x20 || c == '"' || c == '<' || c == '>' ||
+			c == '{' || c == '}' || c == '|' || c == '\\' || c == '^' || c == '`' {
+			fmt.Fprintf(&b, "%%%02X", c)
 		} else {
-			b.WriteRune(r)
+			b.WriteByte(c)
 		}
 	}
 	return SingleString(b.String()), nil
 }
+
 
 func fnResolveURI(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
@@ -192,14 +220,18 @@ func unhexByte(c byte) int {
 
 
 func fnEscapeHTMLURI(_ context.Context, args []Sequence) (Sequence, error) {
-	s := seqToString(args[0])
-	// Only escape non-ASCII characters
+	s, err := coerceArgToStringOpt(args[0])
+	if err != nil {
+		return nil, err
+	}
+	// Per XPath F&O: escape non-ASCII and control characters, keep printable ASCII as-is
 	var b strings.Builder
-	for _, r := range s {
-		if r > 0x7E {
-			b.WriteString(url.PathEscape(string(r)))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c > 0x7E || c < 0x20 {
+			fmt.Fprintf(&b, "%%%02X", c)
 		} else {
-			b.WriteRune(r)
+			b.WriteByte(c)
 		}
 	}
 	return SingleString(b.String()), nil
