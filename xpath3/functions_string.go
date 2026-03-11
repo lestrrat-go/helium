@@ -101,7 +101,10 @@ func isValidXMLCodepoint(cp int) bool {
 }
 
 func fnStringToCodepoints(_ context.Context, args []Sequence) (Sequence, error) {
-	s := seqToString(args[0])
+	s, err := coerceArgToString(args[0])
+	if err != nil {
+		return nil, err
+	}
 	if s == "" {
 		return nil, nil
 	}
