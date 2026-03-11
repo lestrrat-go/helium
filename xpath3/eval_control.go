@@ -40,7 +40,7 @@ func evalUnaryLookupExpr(ec *evalContext, e UnaryLookupExpr) (Sequence, error) {
 		return lookupItem(ec, ec.contextItem, e.Key, e.All)
 	}
 	if ec.node == nil {
-		return nil, &XPathError{Code: "XPDY0002", Message: "context item is absent"}
+		return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 	}
 	return lookupItem(ec, NodeItem{Node: ec.node}, e.Key, e.All)
 }

@@ -48,7 +48,7 @@ func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil || (fc.contextItem == nil && fc.node == nil) {
-			return nil, &XPathError{Code: "XPDY0002", Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
 		s, ok := fc.contextStringValue()
 		if !ok {
@@ -238,12 +238,12 @@ func fnStringLength(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil {
-			return nil, &XPathError{Code: "XPDY0002", Message: "string-length: context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: "string-length: context item is absent"}
 		}
 		var ok bool
 		s, ok = fc.contextStringValue()
 		if !ok {
-			return nil, &XPathError{Code: "XPDY0002", Message: "string-length: context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: "string-length: context item is absent"}
 		}
 	} else {
 		if len(args[0]) > 1 {
@@ -263,7 +263,7 @@ func fnNormalizeSpace(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil || (fc.contextItem == nil && fc.node == nil) {
-			return nil, &XPathError{Code: "XPDY0002", Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
 		sv, ok := fc.contextStringValue()
 		if !ok {

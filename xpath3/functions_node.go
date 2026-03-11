@@ -89,14 +89,14 @@ func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil {
-			return nil, &XPathError{Code: "XPDY0002", Message: "data() requires a context item"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: "data() requires a context item"}
 		}
 		if fc.contextItem != nil {
 			args = []Sequence{{fc.contextItem}}
 		} else if fc.node != nil {
 			args = []Sequence{{NodeItem{Node: fc.node}}}
 		} else {
-			return nil, &XPathError{Code: "XPDY0002", Message: "data() requires a context item"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: "data() requires a context item"}
 		}
 	}
 	atoms, err := AtomizeSequence(args[0])
@@ -326,7 +326,7 @@ func fnLang(ctx context.Context, args []Sequence) (Sequence, error) {
 	} else {
 		fc := getFnContext(ctx)
 		if fc == nil || (fc.contextItem == nil && fc.node == nil) {
-			return nil, &XPathError{Code: "XPDY0002", Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
 		if fc.node == nil {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "context item is not a node for fn:lang"}
@@ -393,7 +393,7 @@ func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil || (fc.contextItem == nil && fc.node == nil) {
-			return nil, &XPathError{Code: "XPDY0002", Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
 		s, ok := fc.contextStringValue()
 		if !ok {
@@ -561,7 +561,7 @@ func nodeArgOrCtx(ctx context.Context, args []Sequence) (helium.Node, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil {
-			return nil, &XPathError{Code: "XPDY0002", Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
 		if fc.node == nil {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "context item is not a node"}

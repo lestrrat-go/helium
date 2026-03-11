@@ -51,13 +51,13 @@ func evalLocationPath(ec *evalContext, lp *LocationPath) (Sequence, error) {
 
 	if lp.Absolute {
 		if ec.node == nil {
-			return nil, &XPathError{Code: "XPDY0002", Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
 		root := ixpath.DocumentRoot(ec.node)
 		nodes = []helium.Node{root}
 	} else {
 		if ec.node == nil {
-			return nil, &XPathError{Code: "XPDY0002", Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
 		nodes = []helium.Node{ec.node}
 	}

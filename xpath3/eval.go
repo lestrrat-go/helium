@@ -173,12 +173,12 @@ func eval(ec *evalContext, expr Expr) (Sequence, error) {
 			return Sequence{ec.contextItem}, nil
 		}
 		if ec.node == nil {
-			return nil, &XPathError{Code: "XPDY0002", Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
 		return Sequence{NodeItem{Node: ec.node}}, nil
 	case RootExpr:
 		if ec.node == nil {
-			return nil, &XPathError{Code: "XPDY0002", Message: "context item is absent"}
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
 		return Sequence{NodeItem{Node: ixpath.DocumentRoot(ec.node)}}, nil
 	case SequenceExpr:
