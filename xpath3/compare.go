@@ -354,10 +354,15 @@ func compareAtomic(op TokenType, a, b AtomicValue) (bool, error) {
 		case TypeQName:
 			return compareQName(op, a.Value.(QNameValue), b.Value.(QNameValue))
 		case TypeGDay, TypeGMonth, TypeGMonthDay, TypeGYear, TypeGYearMonth:
-			sa := normalizeGTZ(stringFromAtomic(a))
-			sb := normalizeGTZ(stringFromAtomic(b))
-			cmp := strings.Compare(sa, sb)
-			return applyCompare(op, cmp), nil
+			ta, okA := parseGTypeToTime(a.TypeName, stringFromAtomic(a))
+			tb, okB := parseGTypeToTime(b.TypeName, stringFromAtomic(b))
+			if !okA || !okB {
+				// Fallback to string comparison
+				sa := normalizeGTZ(stringFromAtomic(a))
+				sb := normalizeGTZ(stringFromAtomic(b))
+				return applyCompare(op, strings.Compare(sa, sb)), nil
+			}
+			return compareTime(op, ta, tb), nil
 		}
 	}
 
@@ -424,6 +429,105 @@ func normalizeGTZ(s string) string {
 		return s[:len(s)-6] + "Z"
 	}
 	return s
+}
+
+// parseGTypeToTime converts a g* type string value into a time.Time using
+// reference dates from the XSD specification for comparison purposes.
+// Reference dates: gDay → 1972-12-DD, gMonth → 1972-MM-01,
+// gMonthDay → 1972-MM-DD, gYear → YYYY-01-01, gYearMonth → YYYY-MM-01.
+func parseGTypeToTime(typeName, s string) (time.Time, bool) {
+	// Extract timezone suffix
+	loc, rest := parseGTimezone(s)
+
+	switch typeName {
+	case TypeGDay:
+		// Format: ---DD
+		if len(rest) < 5 {
+			return time.Time{}, false
+		}
+		day := parseInt(rest[3:5])
+		return time.Date(1972, 12, day, 0, 0, 0, 0, loc), true
+	case TypeGMonth:
+		// Format: --MM
+		if len(rest) < 4 {
+			return time.Time{}, false
+		}
+		month := parseInt(rest[2:4])
+		return time.Date(1972, time.Month(month), 1, 0, 0, 0, 0, loc), true
+	case TypeGMonthDay:
+		// Format: --MM-DD
+		if len(rest) < 7 {
+			return time.Time{}, false
+		}
+		month := parseInt(rest[2:4])
+		day := parseInt(rest[5:7])
+		return time.Date(1972, time.Month(month), day, 0, 0, 0, 0, loc), true
+	case TypeGYear:
+		// Format: [-]YYYY
+		year, endIdx := parseGYear(rest)
+		_ = endIdx
+		return time.Date(year, 1, 1, 0, 0, 0, 0, loc), true
+	case TypeGYearMonth:
+		// Format: [-]YYYY-MM
+		year, endIdx := parseGYear(rest)
+		if endIdx+3 > len(rest) {
+			return time.Time{}, false
+		}
+		month := parseInt(rest[endIdx+1 : endIdx+3])
+		return time.Date(year, time.Month(month), 1, 0, 0, 0, 0, loc), true
+	}
+	return time.Time{}, false
+}
+
+// parseGTimezone extracts the timezone from a g* string value, returning the
+// location and the string with timezone removed.
+func parseGTimezone(s string) (*time.Location, string) {
+	if strings.HasSuffix(s, "Z") {
+		return time.UTC, s[:len(s)-1]
+	}
+	if len(s) >= 6 {
+		tz := s[len(s)-6:]
+		if (tz[0] == '+' || tz[0] == '-') && tz[3] == ':' {
+			hours := parseInt(tz[1:3])
+			mins := parseInt(tz[4:6])
+			offset := hours*3600 + mins*60
+			if tz[0] == '-' {
+				offset = -offset
+			}
+			return time.FixedZone("", offset), s[:len(s)-6]
+		}
+	}
+	// No timezone — use noTZLocation sentinel
+	return noTZLocation, s
+}
+
+// parseInt parses a string of digits as an int (no error handling — input is pre-validated by regex).
+func parseInt(s string) int {
+	n := 0
+	for _, c := range s {
+		n = n*10 + int(c-'0')
+	}
+	return n
+}
+
+// parseGYear parses the year from a g* value string, returning the year and
+// the index after the year digits.
+func parseGYear(s string) (int, int) {
+	neg := false
+	start := 0
+	if len(s) > 0 && s[0] == '-' {
+		neg = true
+		start = 1
+	}
+	end := start
+	for end < len(s) && s[end] >= '0' && s[end] <= '9' {
+		end++
+	}
+	year := parseInt(s[start:end])
+	if neg {
+		year = -year
+	}
+	return year, end
 }
 
 func compareTime(op TokenType, a, b time.Time) bool {
