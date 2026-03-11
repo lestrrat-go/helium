@@ -113,18 +113,17 @@ func fnStringToCodepoints(_ context.Context, args []Sequence) (Sequence, error) 
 	return result, nil
 }
 
-func fnCompare(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args) > 2 {
-		if err := validateCollation(seqToString(args[2])); err != nil {
-			return nil, err
-		}
+func fnCompare(ctx context.Context, args []Sequence) (Sequence, error) {
+	coll, err := getCollation(ctx, args, 2)
+	if err != nil {
+		return nil, err
 	}
 	if len(args[0]) == 0 || len(args[1]) == 0 {
 		return nil, nil
 	}
 	s1 := seqToString(args[0])
 	s2 := seqToString(args[1])
-	cmp := strings.Compare(s1, s2)
+	cmp := coll.compare(s1, s2)
 	return SingleInteger(int64(cmp)), nil
 }
 
@@ -332,38 +331,52 @@ func fnTranslate(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleString(b.String()), nil
 }
 
-func fnContains(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args) > 2 {
-		if err := validateCollation(seqToString(args[2])); err != nil {
-			return nil, err
-		}
+func fnContains(ctx context.Context, args []Sequence) (Sequence, error) {
+	coll, err := getCollation(ctx, args, 2)
+	if err != nil {
+		return nil, err
 	}
-	return SingleBoolean(strings.Contains(seqToString(args[0]), seqToString(args[1]))), nil
+	s := seqToString(args[0])
+	sub := seqToString(args[1])
+	if sub == "" {
+		return SingleBoolean(true), nil
+	}
+	pos, _ := coll.indexOf(s, sub)
+	return SingleBoolean(pos >= 0), nil
 }
 
-func fnStartsWith(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args) > 2 {
-		if err := validateCollation(seqToString(args[2])); err != nil {
-			return nil, err
-		}
+func fnStartsWith(ctx context.Context, args []Sequence) (Sequence, error) {
+	coll, err := getCollation(ctx, args, 2)
+	if err != nil {
+		return nil, err
 	}
-	return SingleBoolean(strings.HasPrefix(seqToString(args[0]), seqToString(args[1]))), nil
+	s := seqToString(args[0])
+	prefix := seqToString(args[1])
+	if prefix == "" {
+		return SingleBoolean(true), nil
+	}
+	ok, _ := coll.hasPrefix(s, prefix)
+	return SingleBoolean(ok), nil
 }
 
-func fnEndsWith(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args) > 2 {
-		if err := validateCollation(seqToString(args[2])); err != nil {
-			return nil, err
-		}
+func fnEndsWith(ctx context.Context, args []Sequence) (Sequence, error) {
+	coll, err := getCollation(ctx, args, 2)
+	if err != nil {
+		return nil, err
 	}
-	return SingleBoolean(strings.HasSuffix(seqToString(args[0]), seqToString(args[1]))), nil
+	s := seqToString(args[0])
+	suffix := seqToString(args[1])
+	if suffix == "" {
+		return SingleBoolean(true), nil
+	}
+	ok, _ := coll.hasSuffix(s, suffix)
+	return SingleBoolean(ok), nil
 }
 
-func fnSubstringBefore(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args) > 2 {
-		if err := validateCollation(seqToString(args[2])); err != nil {
-			return nil, err
-		}
+func fnSubstringBefore(ctx context.Context, args []Sequence) (Sequence, error) {
+	coll, err := getCollation(ctx, args, 2)
+	if err != nil {
+		return nil, err
 	}
 	s, err := coerceArgToString(args[0])
 	if err != nil {
@@ -373,26 +386,31 @@ func fnSubstringBefore(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	idx := strings.Index(s, sep)
-	if idx < 0 {
+	if sep == "" {
 		return SingleString(""), nil
 	}
-	return SingleString(s[:idx]), nil
+	pos, _ := coll.indexOf(s, sep)
+	if pos < 0 {
+		return SingleString(""), nil
+	}
+	return SingleString(s[:pos]), nil
 }
 
-func fnSubstringAfter(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args) > 2 {
-		if err := validateCollation(seqToString(args[2])); err != nil {
-			return nil, err
-		}
+func fnSubstringAfter(ctx context.Context, args []Sequence) (Sequence, error) {
+	coll, err := getCollation(ctx, args, 2)
+	if err != nil {
+		return nil, err
 	}
 	s := seqToString(args[0])
 	sep := seqToString(args[1])
-	idx := strings.Index(s, sep)
-	if idx < 0 {
+	if sep == "" {
+		return SingleString(s), nil
+	}
+	pos, matchLen := coll.indexOf(s, sep)
+	if pos < 0 {
 		return SingleString(""), nil
 	}
-	return SingleString(s[idx+len(sep):]), nil
+	return SingleString(s[pos+matchLen:]), nil
 }
 
 func fnMatches(_ context.Context, args []Sequence) (Sequence, error) {
@@ -409,14 +427,12 @@ func fnMatches(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleBoolean(re.MatchString(s)), nil
 }
 
-func fnCollationKey(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args) > 1 {
-		if err := validateCollation(seqToString(args[1])); err != nil {
-			return nil, err
-		}
+func fnCollationKey(ctx context.Context, args []Sequence) (Sequence, error) {
+	if _, err := getCollation(ctx, args, 1); err != nil {
+		return nil, err
 	}
 	s := seqToString(args[0])
-	// Only codepoint collation is supported; return string bytes as base64Binary
+	// Return string bytes as base64Binary
 	return SingleAtomic(AtomicValue{TypeName: TypeBase64Binary, Value: []byte(s)}), nil
 }
 
@@ -702,11 +718,10 @@ func stripFreeSpacing(pattern string) string {
 // fnContainsToken implements fn:contains-token($input, $token [, $collation])
 // Returns true if any string in $input, after tokenizing on whitespace,
 // matches $token (compared case-insensitively if collation is default).
-func fnContainsToken(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args) > 2 {
-		if err := validateCollation(seqToString(args[2])); err != nil {
-			return nil, err
-		}
+func fnContainsToken(ctx context.Context, args []Sequence) (Sequence, error) {
+	coll, err := getCollation(ctx, args, 2)
+	if err != nil {
+		return nil, err
 	}
 	token := seqToString(args[1])
 	token = strings.TrimSpace(token)
@@ -720,7 +735,7 @@ func fnContainsToken(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 		s, _ := atomicToString(a)
 		for _, tok := range strings.Fields(s) {
-			if tok == token {
+			if coll.compare(tok, token) == 0 {
 				return SingleBoolean(true), nil
 			}
 		}
@@ -728,18 +743,17 @@ func fnContainsToken(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleBoolean(false), nil
 }
 
-// codepointCollationURI is the default XPath collation URI.
-const codepointCollationURI = "http://www.w3.org/2005/xpath-functions/collation/codepoint"
-
-// ucaCollationURI is the Unicode Collation Algorithm base URI.
-const ucaCollationURI = "http://www.w3.org/2013/collation/UCA"
-
-// validateCollation checks that a collation URI is supported.
-// The codepoint collation and UCA base URI (treated as codepoint-order fallback)
-// are accepted. Any other URI returns FOCH0002.
-func validateCollation(uri string) error {
-	if uri == codepointCollationURI || strings.HasPrefix(uri, ucaCollationURI) {
-		return nil
+// getCollation resolves the collation from function arguments.
+// If a collation argument is provided, it resolves it using the base URI from the eval context.
+// Otherwise returns the default codepoint collation.
+func getCollation(ctx context.Context, args []Sequence, collationArgIdx int) (*collationImpl, error) {
+	if collationArgIdx >= len(args) {
+		return codepointCollation, nil
 	}
-	return &XPathError{Code: "FOCH0002", Message: fmt.Sprintf("unsupported collation: %s", uri)}
+	uri := seqToString(args[collationArgIdx])
+	baseURI := ""
+	if fc := getFnContext(ctx); fc != nil {
+		baseURI = fc.baseURI
+	}
+	return resolveCollation(uri, baseURI)
 }
