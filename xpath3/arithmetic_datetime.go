@@ -14,6 +14,16 @@ func isDateTimeType(typeName string) bool {
 	return typeName == TypeDate || typeName == TypeDateTime || typeName == TypeTime
 }
 
+// julianDayNumber computes a continuous day count for a Gregorian calendar date,
+// using the standard Julian Day Number algorithm. Works for negative years.
+func julianDayNumber(year, month, day int) int64 {
+	// Algorithm from Meeus, Astronomical Algorithms
+	a := int64(14-month) / 12
+	y := int64(year) + 4800 - a
+	m := int64(month) + 12*a - 3
+	return int64(day) + (153*m+2)/5 + 365*y + y/4 - y/100 + y/400 - 32045
+}
+
 // evalDateTimeArithmetic handles arithmetic involving durations and date/time values.
 // Returns (result, handled, error). If handled is false, the caller should fall through
 // to numeric arithmetic.
@@ -258,9 +268,20 @@ func arithmeticDateTimeDatetime(ec *evalContext, la, ra AtomicValue) (Sequence, 
 		tb = attachTimezone(tb, implicitTZ)
 	}
 
-	diff := ta.Sub(tb)
+	// Compute difference as total seconds to avoid time.Duration int64 overflow.
+	// Convert both to Julian Day Number and time-of-day seconds.
+	aDays := julianDayNumber(ta.Year(), int(ta.Month()), ta.Day())
+	bDays := julianDayNumber(tb.Year(), int(tb.Month()), tb.Day())
+	aSecs := float64(ta.Hour())*3600 + float64(ta.Minute())*60 + float64(ta.Second()) + float64(ta.Nanosecond())/1e9
+	bSecs := float64(tb.Hour())*3600 + float64(tb.Minute())*60 + float64(tb.Second()) + float64(tb.Nanosecond())/1e9
 
-	totalSecs := diff.Seconds()
+	// Also account for timezone offsets
+	_, aOff := ta.Zone()
+	_, bOff := tb.Zone()
+	aSecs -= float64(aOff)
+	bSecs -= float64(bOff)
+
+	totalSecs := float64(aDays-bDays)*86400 + (aSecs - bSecs)
 	negative := totalSecs < 0
 	if negative {
 		totalSecs = -totalSecs

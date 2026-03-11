@@ -68,6 +68,11 @@ func splitXSDYear(s string) (int, string, error) {
 	if neg {
 		year = -year
 	}
+	// Reject years outside Go's time.Time representable range.
+	// time.Date wraps silently for extreme years; cap at ±999,999,999.
+	if year > 999_999_999 || year < -999_999_999 {
+		return 0, "", fmt.Errorf("year %d out of representable range", year)
+	}
 	return year, s[i:], nil
 }
 
