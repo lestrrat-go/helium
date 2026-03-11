@@ -102,7 +102,9 @@ var (
 )
 ```
 
-All sentinel errors prefixed `xpath3:`. Wrap with `fmt.Errorf("%w: detail", ErrSomething)`.
+All sentinel errors prefixed `xpath3:` except `ErrNodeSetLimit` which uses `xpath:` prefix
+(shared sentinel from `internal/xpath`, aliased for `errors.Is` compatibility with `xpath1`).
+Wrap with `fmt.Errorf("%w: detail", ErrSomething)`.
 
 ## XPathError (structured)
 

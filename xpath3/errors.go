@@ -42,6 +42,9 @@ func (e *XPathError) Error() string {
 	if e == nil {
 		return ""
 	}
+	if e.Code == "" {
+		return e.Message
+	}
 	return e.Code + ": " + e.Message
 }
 
