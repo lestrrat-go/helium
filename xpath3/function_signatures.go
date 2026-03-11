@@ -55,13 +55,6 @@ func stFunc(params []SequenceType, ret SequenceType) SequenceType {
 	}
 }
 
-func stFuncAny() SequenceType {
-	return SequenceType{
-		ItemTest:   FunctionTest{AnyFunction: true},
-		Occurrence: OccurrenceExactlyOne,
-	}
-}
-
 func init() {
 	// Numeric functions — (xs:numeric?) as xs:numeric?
 	numQQ := []SequenceType{stAtomic(TypeNumeric, OccurrenceZeroOrOne)}
