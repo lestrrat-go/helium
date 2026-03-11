@@ -287,9 +287,20 @@ func fnLowerCase(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnTranslate(_ context.Context, args []Sequence) (Sequence, error) {
-	s := seqToString(args[0])
-	from := []rune(seqToString(args[1]))
-	to := []rune(seqToString(args[2]))
+	s, err := coerceArgToString(args[0])
+	if err != nil {
+		return nil, err
+	}
+	fromStr, err := coerceArgToStringRequired(args[1])
+	if err != nil {
+		return nil, err
+	}
+	toStr, err := coerceArgToStringRequired(args[2])
+	if err != nil {
+		return nil, err
+	}
+	from := []rune(fromStr)
+	to := []rune(toStr)
 
 	mapping := make(map[rune]rune, len(from))
 	remove := make(map[rune]bool)

@@ -196,6 +196,15 @@ func seqToStringErr(seq Sequence) (string, error) {
 	return atomicToString(a)
 }
 
+// coerceArgToStringRequired applies XPath 3.1 function coercion rules for xs:string params.
+// Like coerceArgToString but rejects empty sequences (for non-optional string parameters).
+func coerceArgToStringRequired(seq Sequence) (string, error) {
+	if len(seq) == 0 {
+		return "", &XPathError{Code: "XPTY0004", Message: "expected xs:string, got empty sequence"}
+	}
+	return coerceArgToString(seq)
+}
+
 // coerceArgToString applies XPath 3.1 function coercion rules for xs:string? params.
 // Accepts: empty sequence → "", xs:string/xs:anyURI → as-is, xs:untypedAtomic → cast.
 // Rejects all other types with XPTY0004.
