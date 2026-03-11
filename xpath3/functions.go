@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"strings"
 )
 
@@ -228,6 +229,34 @@ func coerceArgToString(seq Sequence) (string, error) {
 	default:
 		return "", &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("expected xs:string?, got %s", a.TypeName)}
 	}
+}
+
+// coerceArgToInteger applies XPath 3.1 function coercion rules for xs:integer params.
+// Accepts: xs:integer (and subtypes), xs:untypedAtomic (cast to integer).
+// Rejects all other types with XPTY0004.
+func coerceArgToInteger(seq Sequence) (int64, error) {
+	if len(seq) == 0 {
+		return 0, &XPathError{Code: "XPTY0004", Message: "expected xs:integer, got empty sequence"}
+	}
+	a, err := AtomizeItem(seq[0])
+	if err != nil {
+		return 0, err
+	}
+	if a.TypeName == TypeUntypedAtomic {
+		casted, cerr := castToInteger(a)
+		if cerr != nil {
+			return 0, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("cannot cast %s to xs:integer", a.TypeName)}
+		}
+		a = casted
+	}
+	if !isSubtypeOf(a.TypeName, TypeInteger) {
+		return 0, &XPathError{Code: "XPTY0004", Message: fmt.Sprintf("expected xs:integer, got %s", a.TypeName)}
+	}
+	n, ok := a.Value.(*big.Int)
+	if !ok {
+		return 0, fmt.Errorf("xpath3: internal error: expected *big.Int for %s", a.TypeName)
+	}
+	return n.Int64(), nil
 }
 
 // seqToDouble atomizes the first item to a float64.

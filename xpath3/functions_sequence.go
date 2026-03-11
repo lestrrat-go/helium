@@ -80,14 +80,11 @@ func fnInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnRemove(_ context.Context, args []Sequence) (Sequence, error) {
 	target := args[0]
-	if len(args[1]) == 0 {
-		return nil, fmt.Errorf("xpath3: fn:remove: position argument is an empty sequence")
-	}
-	a, err := AtomizeItem(args[1][0])
+	posVal, err := coerceArgToInteger(args[1])
 	if err != nil {
 		return nil, err
 	}
-	pos := int(a.ToFloat64())
+	pos := int(posVal)
 
 	if pos < 1 || pos > len(target) {
 		return target, nil
