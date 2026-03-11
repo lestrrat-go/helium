@@ -680,6 +680,14 @@ func compareNumeric(op TokenType, a, b AtomicValue) (bool, error) {
 		cmp := ar.Cmp(br)
 		return applyCompare(op, cmp), nil
 	}
+	// When one operand is xs:float and the other is decimal/integer,
+	// promote to xs:float (float32) per XPath type promotion rules.
+	// This avoids float32→float64 precision artifacts (e.g., float32(1.2) != float64(1.2)).
+	aIsFloat := a.TypeName == TypeFloat
+	bIsFloat := b.TypeName == TypeFloat
+	if (aIsFloat || bIsFloat) && a.TypeName != TypeDouble && b.TypeName != TypeDouble {
+		return compareFloats(op, float64(float32(a.ToFloat64())), float64(float32(b.ToFloat64()))), nil
+	}
 	// Otherwise → float64 (handles double, float, NaN, ±Inf)
 	return compareFloats(op, a.ToFloat64(), b.ToFloat64()), nil
 }
