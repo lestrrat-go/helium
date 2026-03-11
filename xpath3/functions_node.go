@@ -87,10 +87,16 @@ func fnNilled(ctx context.Context, args []Sequence) (Sequence, error) {
 func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
-		if fc == nil || fc.node == nil {
+		if fc == nil {
 			return nil, &XPathError{Code: "XPDY0002", Message: "data() requires a context item"}
 		}
-		args = []Sequence{{NodeItem{Node: fc.node}}}
+		if fc.contextItem != nil {
+			args = []Sequence{{fc.contextItem}}
+		} else if fc.node != nil {
+			args = []Sequence{{NodeItem{Node: fc.node}}}
+		} else {
+			return nil, &XPathError{Code: "XPDY0002", Message: "data() requires a context item"}
+		}
 	}
 	atoms, err := AtomizeSequence(args[0])
 	if err != nil {
