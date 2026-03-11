@@ -81,9 +81,32 @@ func evalConcatExpr(ec *evalContext, e ConcatExpr) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	ls := seqToString(left)
-	rs := seqToString(right)
+	ls, err := concatToString(left)
+	if err != nil {
+		return nil, err
+	}
+	rs, err := concatToString(right)
+	if err != nil {
+		return nil, err
+	}
 	return SingleString(ls + rs), nil
+}
+
+// concatToString converts a sequence to string for the || operator.
+// Raises FOTY0014 for function/map/array items that have no string value.
+func concatToString(seq Sequence) (string, error) {
+	if len(seq) == 0 {
+		return "", nil
+	}
+	switch seq[0].(type) {
+	case FunctionItem:
+		return "", &XPathError{Code: "FOTY0014", Message: "cannot get string value of function item"}
+	case MapItem:
+		return "", &XPathError{Code: "FOTY0014", Message: "cannot get string value of map item"}
+	case ArrayItem:
+		return "", &XPathError{Code: "FOTY0014", Message: "cannot get string value of array item"}
+	}
+	return seqToString(seq), nil
 }
 
 func evalSimpleMapExpr(ec *evalContext, e SimpleMapExpr) (Sequence, error) {
