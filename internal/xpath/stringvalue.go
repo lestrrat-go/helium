@@ -33,6 +33,8 @@ func StringValue(n helium.Node) string {
 }
 
 // CollectTextDescendants recursively collects text from Text and CDATA descendants.
+// Recursion depth is bounded by the document tree depth, which the parser already
+// caps (maxElemDepth, default 256 / huge-mode 2048). No additional guard needed.
 func CollectTextDescendants(n helium.Node, b *strings.Builder) {
 	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
 		switch c.Type() {
