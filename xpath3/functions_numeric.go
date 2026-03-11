@@ -138,7 +138,11 @@ func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		precision = int(pa.ToFloat64())
+		pa, err = CastAtomic(pa, TypeInteger)
+		if err != nil {
+			return nil, err
+		}
+		precision = int(pa.BigInt().Int64())
 	}
 	if isIntegerDerived(a.TypeName) {
 		if precision >= 0 {
@@ -152,6 +156,10 @@ func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	n := a.ToFloat64()
 	if math.IsNaN(n) || math.IsInf(n, 0) || n == 0 {
+		return SingleAtomic(a), nil
+	}
+	// Clamp precision for float64: beyond ~15 significant digits, no rounding effect
+	if precision > 308 {
 		return SingleAtomic(a), nil
 	}
 	scale := math.Pow(10, float64(precision))
