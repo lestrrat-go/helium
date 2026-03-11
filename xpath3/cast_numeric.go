@@ -91,7 +91,7 @@ func castToInteger(v AtomicValue) (AtomicValue, error) {
 	case TypeDouble, TypeFloat:
 		f := v.DoubleVal()
 		if math.IsNaN(f) || math.IsInf(f, 0) {
-			return AtomicValue{}, &XPathError{Code: "FOCA0002", Message: "cannot cast NaN/INF to xs:integer"}
+			return AtomicValue{}, &XPathError{Code: errCodeFOCA0002, Message: "cannot cast NaN/INF to xs:integer"}
 		}
 		bi, _ := new(big.Float).SetFloat64(f).Int(nil)
 		return AtomicValue{TypeName: TypeInteger, Value: bi}, nil
@@ -119,7 +119,7 @@ func castToDecimal(v AtomicValue) (AtomicValue, error) {
 	case TypeDouble, TypeFloat:
 		f := v.DoubleVal()
 		if math.IsNaN(f) || math.IsInf(f, 0) {
-			return AtomicValue{}, &XPathError{Code: "FOCA0002", Message: "cannot cast NaN/INF to xs:decimal"}
+			return AtomicValue{}, &XPathError{Code: errCodeFOCA0002, Message: "cannot cast NaN/INF to xs:decimal"}
 		}
 		r := new(big.Rat).SetFloat64(f)
 		return AtomicValue{TypeName: TypeDecimal, Value: r}, nil
