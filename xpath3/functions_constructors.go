@@ -462,18 +462,6 @@ func extractYearDigits(s string) string {
 	return y
 }
 
-func isAllZero(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, c := range s {
-		if c != '0' {
-			return false
-		}
-	}
-	return true
-}
-
 var reDateTimeStampTZ = regexp.MustCompile(`[+-]\d{2}:\d{2}$`)
 
 func makeXSDateTimeStamp() func(context.Context, []Sequence) (Sequence, error) {
