@@ -38,6 +38,7 @@ Explicit prefixed names + `Q{uri}local` names NEVER fall back to `fn:` on miss.
 
 Typed helper coercions for `xs:string?` + `xs:integer` enforce cardinality.
 Sequences with length `> 1` → `XPTY0004`; helpers do not truncate to first item.
+Signature-sensitive string/regex/URI builtin call sites + `||` string coercion also enforce single-item cardinality and propagate atomization/type errors.
 
 ## Functions by File
 

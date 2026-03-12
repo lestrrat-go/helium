@@ -330,6 +330,34 @@ func TestStringFunctions(t *testing.T) {
 	}
 }
 
+func TestStringFunctionsRejectMultiItemSequences(t *testing.T) {
+	doc := parseTestDoc(t)
+
+	tests := []struct {
+		name string
+		expr string
+		code string
+	}{
+		{name: "upper-case", expr: `upper-case(("a", "b"))`, code: "XPTY0004"},
+		{name: "substring source", expr: `substring(("abc", "def"), 2)`, code: "XPTY0004"},
+		{name: "substring position", expr: `substring("abc", (1, 2))`, code: "XPTY0004"},
+		{name: "resolve-uri", expr: `resolve-uri(("a", "b"), "http://example.com/")`, code: "XPTY0004"},
+		{name: "regex input", expr: `matches(("abc", "def"), "a")`, code: "XPTY0004"},
+		{name: "concat operator map", expr: `map{} || "x"`, code: "FOTY0014"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := xpath3.Evaluate(t.Context(), doc, tt.expr)
+			require.Error(t, err)
+
+			var xpErr *xpath3.XPathError
+			require.ErrorAs(t, err, &xpErr)
+			require.Equal(t, tt.code, xpErr.Code)
+		})
+	}
+}
+
 // --- Numeric functions ---
 
 func TestNumericFunctions(t *testing.T) {

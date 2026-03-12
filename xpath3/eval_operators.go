@@ -98,6 +98,9 @@ func concatToString(seq Sequence) (string, error) {
 	if len(seq) == 0 {
 		return "", nil
 	}
+	if len(seq) > 1 {
+		return "", &XPathError{Code: errCodeXPTY0004, Message: "cannot get string value of sequence of length > 1"}
+	}
 	switch seq[0].(type) {
 	case FunctionItem:
 		return "", &XPathError{Code: errCodeFOTY0014, Message: "cannot get string value of function item"}
@@ -106,7 +109,7 @@ func concatToString(seq Sequence) (string, error) {
 	case ArrayItem:
 		return "", &XPathError{Code: errCodeFOTY0014, Message: "cannot get string value of array item"}
 	}
-	return seqToString(seq), nil
+	return seqToStringErr(seq)
 }
 
 func evalSimpleMapExpr(ec *evalContext, e SimpleMapExpr) (Sequence, error) {
