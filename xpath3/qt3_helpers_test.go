@@ -124,6 +124,9 @@ func qt3DefaultBaseURI(tc qt3Test) string {
 		// Relative QT3 unparsed-text fixtures live under testdata/qt3ts/testdata/fn/.
 		return "http://www.w3.org/fots/fn/"
 	}
+	if qt3NeedsRelativeParseJSONFixtureBaseURI(tc.XPath) {
+		return "http://www.w3.org/fots/fn/"
+	}
 	if tc.NeedsHTTP {
 		return "http://www.w3.org/fots/"
 	}
@@ -142,6 +145,11 @@ func qt3NeedsRelativeUnparsedTextBaseURI(expr string) bool {
 	return strings.HasPrefix(rest, "(") ||
 		strings.HasPrefix(rest, "-lines(") ||
 		strings.HasPrefix(rest, "-available(")
+}
+
+func qt3NeedsRelativeParseJSONFixtureBaseURI(expr string) bool {
+	return strings.Contains(expr, "parse-json(unparsed-text('parse-json/") ||
+		strings.Contains(expr, `parse-json(unparsed-text("parse-json/`)
 }
 
 func qt3ParseDoc(t *testing.T, path string) helium.Node {
