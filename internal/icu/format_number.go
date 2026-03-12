@@ -1,6 +1,7 @@
 package icu
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 	"strings"
@@ -49,6 +50,7 @@ type ParsedPicture struct {
 	MaxFracDigits   int
 	MinFracDigits   int
 	GroupingSizes   []int // from right, repeating
+	FracGroupSizes  []int // from left
 	IsPercent       bool
 	IsPerMille      bool
 	HasDecimalPoint bool
@@ -66,8 +68,42 @@ func isPatternDigit(r rune, df DecimalFormat) bool {
 	return isMandatoryDigit(r, df.ZeroDigit) || r == df.Digit
 }
 
+func parseGroupedPart(part []rune, sep rune, df DecimalFormat) ([]int, int, int, error) {
+	if len(part) == 0 {
+		return nil, 0, 0, nil
+	}
+
+	var groups []int
+	currentGroupSize := 0
+	minDigits := 0
+	maxDigits := 0
+	prevSep := false
+	for i, r := range part {
+		switch {
+		case r == sep:
+			if i == 0 || i == len(part)-1 || prevSep {
+				return nil, 0, 0, fmt.Errorf("invalid grouping separator placement")
+			}
+			groups = append(groups, currentGroupSize)
+			currentGroupSize = 0
+			prevSep = true
+		case isPatternDigit(r, df):
+			if isMandatoryDigit(r, df.ZeroDigit) {
+				minDigits++
+			}
+			maxDigits++
+			currentGroupSize++
+			prevSep = false
+		default:
+			return nil, 0, 0, fmt.Errorf("invalid picture character %q", r)
+		}
+	}
+	groups = append(groups, currentGroupSize)
+	return groups, minDigits, maxDigits, nil
+}
+
 // ParsePicture parses a single picture sub-pattern into its components.
-func ParsePicture(pic string, df DecimalFormat) ParsedPicture {
+func ParsePicture(pic string, df DecimalFormat) (ParsedPicture, error) {
 	var pp ParsedPicture
 	runes := []rune(pic)
 
@@ -127,7 +163,7 @@ func ParsePicture(pic string, df DecimalFormat) ParsedPicture {
 
 	if numStart < 0 {
 		// No numeric characters found
-		return pp
+		return pp, nil
 	}
 
 	pp.Prefix = string(mantissaRunes[:numStart])
@@ -178,24 +214,12 @@ func ParsePicture(pic string, df DecimalFormat) ParsedPicture {
 	}
 
 	// Parse integer part: walk left-to-right, collect group sizes
-	pp.MinIntDigits = 0
-	pp.MaxIntDigits = 0
-	// Split integer part by grouping separator
-	var groups []int
-	currentGroupSize := 0
-	for _, r := range intPart {
-		if r == df.GroupingSeparator {
-			groups = append(groups, currentGroupSize)
-			currentGroupSize = 0
-		} else {
-			if isMandatoryDigit(r, df.ZeroDigit) {
-				pp.MinIntDigits++
-			}
-			pp.MaxIntDigits++
-			currentGroupSize++
-		}
+	groups, minIntDigits, maxIntDigits, err := parseGroupedPart(intPart, df.GroupingSeparator, df)
+	if err != nil {
+		return ParsedPicture{}, err
 	}
-	groups = append(groups, currentGroupSize) // last group
+	pp.MinIntDigits = minIntDigits
+	pp.MaxIntDigits = maxIntDigits
 	// minIntDigits stays 0 if only # digits — allows ".1" instead of "0.1"
 
 	// Convert to grouping sizes (from right)
@@ -208,16 +232,17 @@ func ParsePicture(pic string, df DecimalFormat) ParsedPicture {
 	}
 
 	// Parse fractional part
-	for _, r := range fracPart {
-		if isMandatoryDigit(r, df.ZeroDigit) {
-			pp.MinFracDigits++
-			pp.MaxFracDigits++
-		} else if r == df.Digit {
-			pp.MaxFracDigits++
-		}
+	fracGroups, minFracDigits, maxFracDigits, err := parseGroupedPart(fracPart, df.GroupingSeparator, df)
+	if err != nil {
+		return ParsedPicture{}, err
+	}
+	pp.MinFracDigits = minFracDigits
+	pp.MaxFracDigits = maxFracDigits
+	if len(fracGroups) > 1 {
+		pp.FracGroupSizes = fracGroups
 	}
 
-	return pp
+	return pp, nil
 }
 
 // FormatNumber formats a numeric value according to the given picture string
@@ -242,15 +267,24 @@ func FormatNumber(f float64, isNaN, isPosInf, isNegInf, negative bool, precise *
 		return df.NaN, nil
 	}
 	if isPosInf {
-		pp := ParsePicture(posPic, df)
+		pp, ppErr := ParsePicture(posPic, df)
+		if ppErr != nil {
+			return "", ppErr
+		}
 		return pp.Prefix + df.Infinity + pp.Suffix, nil
 	}
 	if isNegInf {
 		if negPic != "" {
-			pp := ParsePicture(negPic, df)
+			pp, ppErr := ParsePicture(negPic, df)
+			if ppErr != nil {
+				return "", ppErr
+			}
 			return pp.Prefix + df.Infinity + pp.Suffix, nil
 		}
-		pp := ParsePicture(posPic, df)
+		pp, ppErr := ParsePicture(posPic, df)
+		if ppErr != nil {
+			return "", ppErr
+		}
 		return string(df.MinusSign) + pp.Prefix + df.Infinity + pp.Suffix, nil
 	}
 
@@ -265,7 +299,10 @@ func FormatNumber(f float64, isNaN, isPosInf, isNegInf, negative bool, precise *
 		pic = posPic
 	}
 
-	pp := ParsePicture(pic, df)
+	pp, err := ParsePicture(pic, df)
+	if err != nil {
+		return "", err
+	}
 
 	// Apply multiplier to float
 	if pp.IsPercent {
@@ -339,6 +376,7 @@ func FormatFloat(f float64, pp ParsedPicture, df DecimalFormat) string {
 	if fracStr == "" {
 		return intStr
 	}
+	fracStr = applyFractionGrouping(fracStr, pp.FracGroupSizes, df)
 	return intStr + string(df.DecimalSeparator) + fracStr
 }
 
@@ -388,6 +426,7 @@ func FormatDecimalPrecise(r *big.Rat, pp ParsedPicture, df DecimalFormat) string
 	if fracStr == "" {
 		return intStr
 	}
+	fracStr = applyFractionGrouping(fracStr, pp.FracGroupSizes, df)
 	return intStr + string(df.DecimalSeparator) + fracStr
 }
 
@@ -678,6 +717,34 @@ func FormatRatFrac(frac *big.Rat, minDigits, maxDigits int, df DecimalFormat) st
 		end--
 	}
 	return string(digits[:end])
+}
+
+func applyFractionGrouping(frac string, groups []int, df DecimalFormat) string {
+	if len(groups) <= 1 || len(frac) == 0 {
+		return frac
+	}
+
+	runes := []rune(frac)
+	var b strings.Builder
+	pos := 0
+	for i, groupSize := range groups {
+		if pos >= len(runes) {
+			break
+		}
+		end := pos + groupSize
+		if end > len(runes) {
+			end = len(runes)
+		}
+		b.WriteString(string(runes[pos:end]))
+		pos = end
+		if pos < len(runes) && i < len(groups)-1 {
+			b.WriteRune(df.GroupingSeparator)
+		}
+	}
+	if pos < len(runes) {
+		b.WriteString(string(runes[pos:]))
+	}
+	return b.String()
 }
 
 // RatRoundHalfToEven rounds a *big.Rat to the given precision using

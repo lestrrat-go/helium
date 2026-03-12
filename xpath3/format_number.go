@@ -1,6 +1,7 @@
 package xpath3
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 
@@ -30,5 +31,9 @@ func formatNumber(a AtomicValue, picture string, df icu.DecimalFormat) (string, 
 		f = math.Abs(f)
 	}
 
-	return icu.FormatNumber(f, isNaN, isPosInf, isNegInf, negative, precise, picture, df)
+	result, err := icu.FormatNumber(f, isNaN, isPosInf, isNegInf, negative, precise, picture, df)
+	if err != nil {
+		return "", &XPathError{Code: errCodeFODF1310, Message: fmt.Sprintf("invalid picture: %q", picture)}
+	}
+	return result, nil
 }
