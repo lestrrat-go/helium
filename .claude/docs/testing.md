@@ -183,7 +183,7 @@ Old single file `qt3_generated_test.go` is auto-removed on regeneration.
 |---------------|---------|
 | `qt3Test` | Test case struct: Name, XPath, DocPath, Namespaces, DefaultLanguage, Skip, ExpectError, Assertions |
 | `qt3Assertion` | Assertion interface for result checking |
-| `qt3RunTests(t, []qt3Test)` | Table-driven runner: parse doc, build `xpath3.Context` options (timezone, language, namespaces, base URI, HTTP), compile XPath, evaluate, check assertions |
+| `qt3RunTests(t, []qt3Test)` | Table-driven runner: parse doc, build `xpath3.Context` options (timezone, language, namespaces, explicit base URI, default `/fots/fn/` base for `unparsed-text*()` fixtures, HTTP), compile XPath, evaluate, check assertions |
 | `qt3AssertEq(string)` | Assert result equals literal |
 | `qt3AssertStringValue(string)` | Assert string value of result |
 | `qt3AssertTrue()` / `qt3AssertFalse()` | Assert boolean result |

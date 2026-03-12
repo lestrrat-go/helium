@@ -77,9 +77,8 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 			}
 			if tc.BaseURI != "" {
 				opts = append(opts, xpath3.WithBaseURI(tc.BaseURI))
-			} else if tc.NeedsHTTP {
-				// Default base URI only for HTTP tests that need relative URI resolution
-				opts = append(opts, xpath3.WithBaseURI("http://www.w3.org/fots/"))
+			} else if baseURI := qt3DefaultBaseURI(tc); baseURI != "" {
+				opts = append(opts, xpath3.WithBaseURI(baseURI))
 			}
 			ctx = xpath3.NewContext(ctx, opts...)
 			var doc helium.Node
@@ -118,6 +117,31 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 func qt3TestDataDir() string {
 	_, f, _, _ := runtime.Caller(0)
 	return filepath.Join(filepath.Dir(f), "..", "testdata", "qt3ts", "testdata")
+}
+
+func qt3DefaultBaseURI(tc qt3Test) string {
+	if qt3NeedsRelativeUnparsedTextBaseURI(tc.XPath) {
+		// Relative QT3 unparsed-text fixtures live under testdata/qt3ts/testdata/fn/.
+		return "http://www.w3.org/fots/fn/"
+	}
+	if tc.NeedsHTTP {
+		return "http://www.w3.org/fots/"
+	}
+	return ""
+}
+
+func qt3NeedsRelativeUnparsedTextBaseURI(expr string) bool {
+	const name = "unparsed-text"
+
+	idx := strings.Index(expr, name)
+	if idx < 0 {
+		return false
+	}
+
+	rest := expr[idx+len(name):]
+	return strings.HasPrefix(rest, "(") ||
+		strings.HasPrefix(rest, "-lines(") ||
+		strings.HasPrefix(rest, "-available(")
 }
 
 func qt3ParseDoc(t *testing.T, path string) helium.Node {
