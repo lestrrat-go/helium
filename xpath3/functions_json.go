@@ -40,11 +40,11 @@ func fnParseJSON(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 
-	var raw any
 	dec := json.NewDecoder(strings.NewReader(s))
 	dec.UseNumber()
-	if err := dec.Decode(&raw); err != nil {
-		return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("invalid JSON: %v", err)}
+	item, err := parseJSONValue(dec, opts)
+	if err != nil {
+		return nil, err
 	}
 
 	// Check for trailing content after the JSON value
@@ -55,23 +55,6 @@ func fnParseJSON(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	if !errors.Is(err, io.EOF) {
 		return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("invalid trailing content: %v", err)}
-	}
-
-	// Handle duplicate keys if needed
-	if opts.duplicates == "reject" {
-		if err := checkDuplicateKeys(s); err != nil {
-			return nil, err
-		}
-	}
-
-	item, err := jsonToXDM(raw)
-	if err != nil {
-		return nil, err
-	}
-
-	// Validate string values don't contain control characters
-	if err := validateJSONResultStrings(item); err != nil {
-		return nil, err
 	}
 
 	return Sequence{item}, nil
@@ -166,6 +149,131 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 	}
 
 	return opts, nil
+}
+
+func parseJSONValue(dec *json.Decoder, opts jsonOptions) (Item, error) {
+	tok, err := dec.Token()
+	if err != nil {
+		return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("invalid JSON: %v", err)}
+	}
+	return parseJSONToken(tok, dec, opts)
+}
+
+func parseJSONToken(tok json.Token, dec *json.Decoder, opts jsonOptions) (Item, error) {
+	switch v := tok.(type) {
+	case json.Delim:
+		switch v {
+		case '{':
+			entries := make([]MapEntry, 0)
+			index := make(map[string]int)
+			for dec.More() {
+				keyTok, err := dec.Token()
+				if err != nil {
+					return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("invalid JSON: %v", err)}
+				}
+				key, ok := keyTok.(string)
+				if !ok {
+					return nil, &XPathError{Code: "FOJS0001", Message: "invalid JSON object key"}
+				}
+				if opts.escape {
+					key = escapeParsedJSONString(key)
+				}
+
+				valueItem, err := parseJSONValue(dec, opts)
+				if err != nil {
+					return nil, err
+				}
+				var value Sequence
+				if valueItem != nil {
+					value = Sequence{valueItem}
+				}
+
+				if prev, found := index[key]; found {
+					switch opts.duplicates {
+					case "reject":
+						return nil, &XPathError{Code: "FOJS0003", Message: fmt.Sprintf("duplicate key in JSON object: %q", key)}
+					case "use-first":
+						continue
+					case "use-last":
+						entries[prev].Value = value
+						continue
+					}
+				}
+
+				index[key] = len(entries)
+				entries = append(entries, MapEntry{
+					Key:   AtomicValue{TypeName: TypeString, Value: key},
+					Value: value,
+				})
+			}
+			endTok, err := dec.Token()
+			if err != nil {
+				return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("invalid JSON: %v", err)}
+			}
+			if end, ok := endTok.(json.Delim); !ok || end != '}' {
+				return nil, &XPathError{Code: "FOJS0001", Message: "invalid JSON: expected object close delimiter"}
+			}
+			return NewMap(entries), nil
+		case '[':
+			members := make([]Sequence, 0)
+			for dec.More() {
+				item, err := parseJSONValue(dec, opts)
+				if err != nil {
+					return nil, err
+				}
+				if item == nil {
+					members = append(members, nil)
+					continue
+				}
+				members = append(members, Sequence{item})
+			}
+			endTok, err := dec.Token()
+			if err != nil {
+				return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("invalid JSON: %v", err)}
+			}
+			if end, ok := endTok.(json.Delim); !ok || end != ']' {
+				return nil, &XPathError{Code: "FOJS0001", Message: "invalid JSON: expected array close delimiter"}
+			}
+			return NewArray(members), nil
+		default:
+			return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("unexpected JSON delimiter: %q", v)}
+		}
+	default:
+		if s, ok := v.(string); ok {
+			if opts.escape {
+				s = escapeParsedJSONString(s)
+			}
+			return AtomicValue{TypeName: TypeString, Value: s}, nil
+		}
+		return jsonToXDM(v)
+	}
+}
+
+func escapeParsedJSONString(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch r {
+		case '\\':
+			b.WriteString(`\\`)
+		case '\b':
+			b.WriteString(`\b`)
+		case '\f':
+			b.WriteString(`\f`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		default:
+			if (r >= 0x00 && r <= 0x1F) || (r >= 0x7F && r <= 0x9F) || !isValidXMLCodepoint(int(r)) {
+				fmt.Fprintf(&b, `\u%04x`, r)
+				continue
+			}
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // validateJSONString pre-validates JSON for issues Go's decoder doesn't catch.
