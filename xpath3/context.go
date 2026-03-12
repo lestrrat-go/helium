@@ -36,6 +36,8 @@ type Context struct {
 	opLimit          int
 	implicitTimezone *time.Location
 	defaultLanguage  string
+	defaultCollation string
+	defaultDecimal   *DecimalFormat
 	baseURI          string
 	uriResolver      URIResolver
 	httpClient       *http.Client
@@ -99,6 +101,19 @@ func WithImplicitTimezone(loc *time.Location) ContextOption {
 func WithDefaultLanguage(lang string) ContextOption {
 	return func(c *Context) {
 		c.defaultLanguage = lang
+	}
+}
+
+func WithDefaultCollation(uri string) ContextOption {
+	return func(c *Context) {
+		c.defaultCollation = uri
+	}
+}
+
+func WithDefaultDecimalFormat(df DecimalFormat) ContextOption {
+	return func(c *Context) {
+		cp := df
+		c.defaultDecimal = &cp
 	}
 }
 

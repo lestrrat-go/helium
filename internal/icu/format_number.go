@@ -50,6 +50,7 @@ type ParsedPicture struct {
 	MaxFracDigits   int
 	MinFracDigits   int
 	GroupingSizes   []int // from right, repeating
+	RepeatGrouping  bool
 	FracGroupSizes  []int // from left
 	IsPercent       bool
 	IsPerMille      bool
@@ -81,7 +82,7 @@ func parseGroupedPart(part []rune, sep rune, df DecimalFormat) ([]int, int, int,
 	for i, r := range part {
 		switch {
 		case r == sep:
-			if i == 0 || i == len(part)-1 || prevSep {
+			if i == len(part)-1 || prevSep {
 				return nil, 0, 0, fmt.Errorf("invalid grouping separator placement")
 			}
 			groups = append(groups, currentGroupSize)
@@ -102,6 +103,19 @@ func parseGroupedPart(part []rune, sep rune, df DecimalFormat) ([]int, int, int,
 	return groups, minDigits, maxDigits, nil
 }
 
+func shouldRepeatGrouping(groups []int) bool {
+	if len(groups) < 2 {
+		return false
+	}
+	repeated := groups[1]
+	for i := 2; i < len(groups); i++ {
+		if groups[i] != repeated {
+			return false
+		}
+	}
+	return groups[0] <= repeated
+}
+
 func hasInvalidLiteralChars(part []rune, df DecimalFormat) bool {
 	expSep := df.ExponentSeparator
 	if expSep == 0 {
@@ -111,8 +125,7 @@ func hasInvalidLiteralChars(part []rune, df DecimalFormat) bool {
 		if isPatternDigit(r, df) ||
 			r == df.DecimalSeparator ||
 			r == df.GroupingSeparator ||
-			r == df.PatternSeparator ||
-			r == expSep {
+			r == df.PatternSeparator {
 			return true
 		}
 	}
@@ -248,6 +261,7 @@ func ParsePicture(pic string, df DecimalFormat) (ParsedPicture, error) {
 	}
 	pp.MinIntDigits = minIntDigits
 	pp.MaxIntDigits = maxIntDigits
+	pp.RepeatGrouping = shouldRepeatGrouping(groups)
 	// minIntDigits stays 0 if only # digits — allows ".1" instead of "0.1"
 
 	// Convert to grouping sizes (from right)
@@ -385,7 +399,7 @@ func FormatFloat(f float64, pp ParsedPicture, df DecimalFormat) string {
 
 	// Format integer part
 	bigTrunc, _ := new(big.Float).SetFloat64(trunc).Int(nil)
-	intStr := FormatBigInt(bigTrunc, pp.MinIntDigits, pp.GroupingSizes, df)
+	intStr := FormatBigInt(bigTrunc, pp.MinIntDigits, pp.GroupingSizes, pp.RepeatGrouping, df)
 
 	if !pp.HasDecimalPoint && pp.MaxFracDigits == 0 {
 		if intStr == "" {
@@ -436,7 +450,7 @@ func FormatDecimalPrecise(r *big.Rat, pp ParsedPicture, df DecimalFormat) string
 	intPart := new(big.Int).Quo(rounded.Num(), rounded.Denom())
 	fracRat := new(big.Rat).Sub(rounded, new(big.Rat).SetInt(intPart))
 
-	intStr := FormatBigInt(intPart, pp.MinIntDigits, pp.GroupingSizes, df)
+	intStr := FormatBigInt(intPart, pp.MinIntDigits, pp.GroupingSizes, pp.RepeatGrouping, df)
 
 	if !pp.HasDecimalPoint && pp.MaxFracDigits == 0 {
 		if intStr == "" {
@@ -664,7 +678,7 @@ func formatExponentDigits(exp, minDigits int, df DecimalFormat) string {
 }
 
 // FormatBigInt formats an integer with minimum digits and grouping separators.
-func FormatBigInt(n *big.Int, minDigits int, groupingSizes []int, df DecimalFormat) string {
+func FormatBigInt(n *big.Int, minDigits int, groupingSizes []int, repeatGrouping bool, df DecimalFormat) string {
 	s := n.String()
 	if minDigits == 0 && s == "0" {
 		s = ""
@@ -679,8 +693,7 @@ func FormatBigInt(n *big.Int, minDigits int, groupingSizes []int, df DecimalForm
 	}
 
 	// Insert grouping separators from right
-	// groupingSizes[0] is the primary (rightmost) group size
-	// groupingSizes[last] repeats for all subsequent groups
+	// groupingSizes[0] is the primary (rightmost) group size.
 	var result []rune
 	runes := []rune(s)
 	groupIdx := 0
@@ -688,13 +701,15 @@ func FormatBigInt(n *big.Int, minDigits int, groupingSizes []int, df DecimalForm
 	groupSize := groupingSizes[0]
 
 	for i := len(runes) - 1; i >= 0; i-- {
-		if count > 0 && count == groupSize {
+		if groupSize > 0 && count > 0 && count == groupSize {
 			result = append(result, df.GroupingSeparator)
 			count = 0
 			if groupIdx+1 < len(groupingSizes) {
 				groupIdx++
+				groupSize = groupingSizes[groupIdx]
+			} else if !repeatGrouping {
+				groupSize = 0
 			}
-			groupSize = groupingSizes[groupIdx]
 		}
 		result = append(result, runes[i])
 		count++

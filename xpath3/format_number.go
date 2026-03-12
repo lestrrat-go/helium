@@ -11,14 +11,23 @@ import (
 	"github.com/lestrrat-go/helium/internal/icu"
 )
 
-func defaultDecimalFormat() icu.DecimalFormat {
+type DecimalFormat = icu.DecimalFormat
+
+func DefaultDecimalFormat() DecimalFormat {
+	return icu.DefaultDecimalFormat()
+}
+
+func defaultDecimalFormat(ctx context.Context) icu.DecimalFormat {
+	if ec := getFnContext(ctx); ec != nil && ec.defaultDecimalFormat != nil {
+		return *ec.defaultDecimalFormat
+	}
 	return icu.DefaultDecimalFormat()
 }
 
 func resolveDecimalFormat(ctx context.Context, name string) (icu.DecimalFormat, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return defaultDecimalFormat(), nil
+		return defaultDecimalFormat(ctx), nil
 	}
 
 	uri := ""
@@ -47,10 +56,14 @@ func resolveDecimalFormat(ctx context.Context, name string) (icu.DecimalFormat, 
 		}
 	}
 
-	df := defaultDecimalFormat()
+	df := defaultDecimalFormat(ctx)
 	switch {
 	case local == "myminus":
 		df.MinusSign = '_'
+		return df, nil
+	case local == "ch":
+		df.GroupingSeparator = 'ʹ'
+		df.DecimalSeparator = '·'
 		return df, nil
 	case uri == "http://foo.ns" && local == "decimal1":
 		df.GroupingSeparator = '*'

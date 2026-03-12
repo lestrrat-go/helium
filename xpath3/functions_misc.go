@@ -40,10 +40,14 @@ func fnStaticBaseURI(ctx context.Context, _ []Sequence) (Sequence, error) {
 	return nil, nil
 }
 
-func fnDefaultCollation(_ context.Context, _ []Sequence) (Sequence, error) {
+func fnDefaultCollation(ctx context.Context, _ []Sequence) (Sequence, error) {
+	uri := codepointCollationURI
+	if ec := getFnContext(ctx); ec != nil && ec.defaultCollation != "" {
+		uri = ec.defaultCollation
+	}
 	return SingleAtomic(AtomicValue{
 		TypeName: TypeAnyURI,
-		Value:    "http://www.w3.org/2005/xpath-functions/collation/codepoint",
+		Value:    uri,
 	}), nil
 }
 

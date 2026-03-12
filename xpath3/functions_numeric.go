@@ -211,7 +211,7 @@ func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 
-	df := defaultDecimalFormat()
+	df := defaultDecimalFormat(ctx)
 	if len(args) > 2 && len(args[2]) > 0 {
 		df, err = resolveDecimalFormat(ctx, seqToString(args[2]))
 		if err != nil {

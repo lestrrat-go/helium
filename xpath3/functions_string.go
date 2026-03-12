@@ -1130,13 +1130,18 @@ func fnContainsToken(ctx context.Context, args []Sequence) (Sequence, error) {
 // If a collation argument is provided, it resolves it using the base URI from the eval context.
 // Otherwise returns the default codepoint collation.
 func getCollation(ctx context.Context, args []Sequence, collationArgIdx int) (*collationImpl, error) {
-	if collationArgIdx >= len(args) {
-		return codepointCollation, nil
-	}
-	uri := seqToString(args[collationArgIdx])
 	baseURI := ""
 	if fc := getFnContext(ctx); fc != nil {
 		baseURI = fc.baseURI
+		if collationArgIdx >= len(args) || len(args[collationArgIdx]) == 0 {
+			if fc.defaultCollation != "" {
+				return resolveCollation(fc.defaultCollation, baseURI)
+			}
+			return codepointCollation, nil
+		}
+	} else if collationArgIdx >= len(args) || len(args[collationArgIdx]) == 0 {
+		return codepointCollation, nil
 	}
+	uri := seqToString(args[collationArgIdx])
 	return resolveCollation(uri, baseURI)
 }

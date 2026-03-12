@@ -17,25 +17,27 @@ const (
 
 // evalContext holds the evaluation state for an XPath 3.1 expression.
 type evalContext struct {
-	goCtx            context.Context
-	node             helium.Node
-	contextItem      Item // non-nil when context item is not a node (simple map over atomics)
-	position         int
-	size             int
-	vars             map[string]Sequence
-	namespaces       map[string]string
-	functions        map[string]Function
-	fnsNS            map[QualifiedName]Function
-	depth            int
-	opCount          *int // shared via pointer across copies; safe because eval is single-goroutine
-	opLimit          int
-	docOrder         *ixpath.DocOrderCache
-	maxNodes         int
-	currentTime      *time.Time     // set once at construction for stable fn:current-*
-	implicitTimezone *time.Location // for fn:adjust-*-to-timezone (1-arg form)
-	defaultLanguage  string         // for fn:default-language and formatting fallbacks
-	baseURI          string         // static base URI for resolving relative URIs
-	uriResolver      URIResolver    // custom URI resolver for fn:unparsed-text, fn:doc, etc.
+	goCtx                context.Context
+	node                 helium.Node
+	contextItem          Item // non-nil when context item is not a node (simple map over atomics)
+	position             int
+	size                 int
+	vars                 map[string]Sequence
+	namespaces           map[string]string
+	functions            map[string]Function
+	fnsNS                map[QualifiedName]Function
+	depth                int
+	opCount              *int // shared via pointer across copies; safe because eval is single-goroutine
+	opLimit              int
+	docOrder             *ixpath.DocOrderCache
+	maxNodes             int
+	currentTime          *time.Time     // set once at construction for stable fn:current-*
+	implicitTimezone     *time.Location // for fn:adjust-*-to-timezone (1-arg form)
+	defaultLanguage      string         // for fn:default-language and formatting fallbacks
+	defaultCollation     string         // for string functions without explicit collation
+	defaultDecimalFormat *DecimalFormat
+	baseURI              string      // static base URI for resolving relative URIs
+	uriResolver          URIResolver // custom URI resolver for fn:unparsed-text, fn:doc, etc.
 	// httpClient is intentionally stored here (not only in Context) so that
 	// built-in functions can access it through getFnContext without an extra
 	// indirection. It is pointer-sized and nil when unused, so copies via
@@ -65,6 +67,11 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 		ec.fnsNS = xctx.functionsNS
 		ec.implicitTimezone = xctx.implicitTimezone
 		ec.defaultLanguage = xctx.defaultLanguage
+		ec.defaultCollation = xctx.defaultCollation
+		if xctx.defaultDecimal != nil {
+			df := *xctx.defaultDecimal
+			ec.defaultDecimalFormat = &df
+		}
 		ec.baseURI = xctx.baseURI
 		ec.uriResolver = xctx.uriResolver
 		ec.httpClient = xctx.httpClient
