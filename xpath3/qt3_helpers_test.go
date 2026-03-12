@@ -120,7 +120,7 @@ func qt3TestDataDir() string {
 }
 
 func qt3DefaultBaseURI(tc qt3Test) string {
-	if qt3NeedsRelativeUnparsedTextBaseURI(tc.XPath) {
+	if qt3NeedsRelativeUnparsedTextBaseURI(tc.XPath) && (tc.NeedsHTTP || len(tc.ResourceMap) > 0) {
 		// Relative QT3 unparsed-text fixtures live under testdata/qt3ts/testdata/fn/.
 		return "http://www.w3.org/fots/fn/"
 	}
