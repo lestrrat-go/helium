@@ -33,6 +33,7 @@ type evalContext struct {
 	maxNodes         int
 	currentTime      *time.Time     // set once at construction for stable fn:current-*
 	implicitTimezone *time.Location // for fn:adjust-*-to-timezone (1-arg form)
+	defaultLanguage  string         // for fn:default-language and formatting fallbacks
 	baseURI          string         // static base URI for resolving relative URIs
 	uriResolver      URIResolver    // custom URI resolver for fn:unparsed-text, fn:doc, etc.
 	// httpClient is intentionally stored here (not only in Context) so that
@@ -63,6 +64,7 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 		ec.functions = xctx.functions
 		ec.fnsNS = xctx.functionsNS
 		ec.implicitTimezone = xctx.implicitTimezone
+		ec.defaultLanguage = xctx.defaultLanguage
 		ec.baseURI = xctx.baseURI
 		ec.uriResolver = xctx.uriResolver
 		ec.httpClient = xctx.httpClient
@@ -122,6 +124,13 @@ func (ec *evalContext) getImplicitTimezone() *time.Location {
 		return ec.implicitTimezone
 	}
 	return time.Local
+}
+
+func (ec *evalContext) getDefaultLanguage() string {
+	if ec.defaultLanguage != "" {
+		return ec.defaultLanguage
+	}
+	return "en"
 }
 
 func (ec *evalContext) withVar(name string, val Sequence) *evalContext {

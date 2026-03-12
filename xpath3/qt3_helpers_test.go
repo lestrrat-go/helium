@@ -27,17 +27,18 @@ type qt3Assertion func(t *testing.T, seq xpath3.Sequence)
 type qt3Check func(seq xpath3.Sequence) bool
 
 type qt3Test struct {
-	Name        string
-	XPath       string
-	DocPath     string            // relative to qt3TestDataDir(); empty = no context document
-	Namespaces  map[string]string
-	BaseURI     string            // static base URI for fn:unparsed-text etc.
-	NeedsHTTP   bool              // test requires HTTP client (e.g. fn:json-doc with URL)
-	ResourceMap map[string]string // URI → file path (relative to qt3TestDataDir()) for resource resolution
-	Skip        string
-	ExpectError bool
-	AcceptError bool // error is acceptable but not required (any-of with error + non-error)
-	Assertions  []qt3Assertion
+	Name            string
+	XPath           string
+	DocPath         string // relative to qt3TestDataDir(); empty = no context document
+	Namespaces      map[string]string
+	DefaultLanguage string
+	BaseURI         string            // static base URI for fn:unparsed-text etc.
+	NeedsHTTP       bool              // test requires HTTP client (e.g. fn:json-doc with URL)
+	ResourceMap     map[string]string // URI → file path (relative to qt3TestDataDir()) for resource resolution
+	Skip            string
+	ExpectError     bool
+	AcceptError     bool // error is acceptable but not required (any-of with error + non-error)
+	Assertions      []qt3Assertion
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -67,6 +68,9 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 			opts := []xpath3.ContextOption{
 				xpath3.WithImplicitTimezone(qt3ImplicitTZ),
 				xpath3.WithHTTPClient(httpClient),
+			}
+			if tc.DefaultLanguage != "" {
+				opts = append(opts, xpath3.WithDefaultLanguage(tc.DefaultLanguage))
 			}
 			if len(tc.Namespaces) > 0 {
 				opts = append(opts, xpath3.WithNamespaces(tc.Namespaces))

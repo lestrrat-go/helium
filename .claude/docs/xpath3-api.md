@@ -47,6 +47,7 @@ type Context struct {
     functionsNS      map[QualifiedName]Function
     opLimit          int
     implicitTimezone *time.Location
+    defaultLanguage  string
     baseURI          string
     uriResolver      URIResolver
     httpClient       *http.Client
@@ -60,6 +61,7 @@ func WithOpLimit(limit int) ContextOption
 func WithFunctions(fns map[string]Function) ContextOption     // defensively copied
 func WithFunctionsNS(fns map[QualifiedName]Function) ContextOption // defensively copied
 func WithImplicitTimezone(loc *time.Location) ContextOption
+func WithDefaultLanguage(lang string) ContextOption
 func WithBaseURI(uri string) ContextOption
 func WithURIResolver(r URIResolver) ContextOption
 func WithHTTPClient(client *http.Client) ContextOption

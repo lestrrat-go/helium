@@ -59,13 +59,13 @@ type staticBaseURI struct {
 }
 
 type environment struct {
-	Name          string          `xml:"name,attr"`
-	Ref           string          `xml:"ref,attr"`
-	Sources       []source        `xml:"source"`
-	Resources     []resource      `xml:"resource"`
-	Namespaces    []namespace     `xml:"namespace"`
-	Params        []param         `xml:"param"`
-	StaticBaseURI *staticBaseURI  `xml:"static-base-uri"`
+	Name          string         `xml:"name,attr"`
+	Ref           string         `xml:"ref,attr"`
+	Sources       []source       `xml:"source"`
+	Resources     []resource     `xml:"resource"`
+	Namespaces    []namespace    `xml:"namespace"`
+	Params        []param        `xml:"param"`
+	StaticBaseURI *staticBaseURI `xml:"static-base-uri"`
 }
 
 type resource struct {
@@ -164,6 +164,9 @@ func main() {
 			if !isXPathApplicable(mergedDeps) {
 				continue
 			}
+			if hasFeatureDependency(mergedDeps, "xpath-1.0-compatibility") {
+				continue
+			}
 
 			skipReason := getSkipReason(mergedDeps)
 			if skipReason == "" {
@@ -224,16 +227,17 @@ func main() {
 			}
 
 			allTests = append(allTests, generatedTest{
-				SetName:        tsRef.Name,
-				CaseName:       tc.Name,
-				XPath:          strings.TrimSpace(tc.Test),
-				ContextDocPath: contextDocPath,
-				Namespaces:     collectNamespaces(env),
-				BaseURI:        baseURI,
-				NeedsHTTP:      needsHTTP,
-				ResourceMap:    resMap,
-				Assertions:     assertions,
-				SkipReason:     skipReason,
+				SetName:         tsRef.Name,
+				CaseName:        tc.Name,
+				XPath:           strings.TrimSpace(tc.Test),
+				ContextDocPath:  contextDocPath,
+				Namespaces:      collectNamespaces(env),
+				DefaultLanguage: dependencyValue(mergedDeps, "default-language"),
+				BaseURI:         baseURI,
+				NeedsHTTP:       needsHTTP,
+				ResourceMap:     resMap,
+				Assertions:      assertions,
+				SkipReason:      skipReason,
 			})
 		}
 	}
@@ -552,6 +556,25 @@ func collectNamespaces(env *environment) map[string]string {
 	return ns
 }
 
+func dependencyValue(deps []dependency, typ string) string {
+	for _, d := range deps {
+		if d.Type != typ || d.Satisfied == "false" {
+			continue
+		}
+		return d.Value
+	}
+	return ""
+}
+
+func hasFeatureDependency(deps []dependency, value string) bool {
+	for _, d := range deps {
+		if d.Type == "feature" && d.Satisfied != "false" && d.Value == value {
+			return true
+		}
+	}
+	return false
+}
+
 // ──────────────────────────────────────────────────────────────────────
 // Assertion parsing
 // ──────────────────────────────────────────────────────────────────────
@@ -611,16 +634,17 @@ func convertAssertion(xa xmlAssertion) assertion {
 // ──────────────────────────────────────────────────────────────────────
 
 type generatedTest struct {
-	SetName        string
-	CaseName       string
-	XPath          string
-	ContextDocPath string
-	Namespaces     map[string]string
-	BaseURI        string
-	NeedsHTTP      bool
-	ResourceMap    map[string]string // URI → file path relative to testdata dir
-	Assertions     []assertion
-	SkipReason     string
+	SetName         string
+	CaseName        string
+	XPath           string
+	ContextDocPath  string
+	Namespaces      map[string]string
+	DefaultLanguage string
+	BaseURI         string
+	NeedsHTTP       bool
+	ResourceMap     map[string]string // URI → file path relative to testdata dir
+	Assertions      []assertion
+	SkipReason      string
 }
 
 func generateTestFile(tests []generatedTest) string {
@@ -663,6 +687,9 @@ func generateTestFile(tests []generatedTest) string {
 
 			if tc.ContextDocPath != "" {
 				fmt.Fprintf(&b, ", DocPath: %q", tc.ContextDocPath)
+			}
+			if tc.DefaultLanguage != "" {
+				fmt.Fprintf(&b, ", DefaultLanguage: %q", tc.DefaultLanguage)
 			}
 			if tc.BaseURI != "" {
 				fmt.Fprintf(&b, ", BaseURI: %q", tc.BaseURI)

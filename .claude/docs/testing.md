@@ -173,6 +173,7 @@ testdata/qt3ts/
 | `qt3_method_gen_test.go` | `method-*` serialization methods |
 
 Regenerate: `go run ./tools/qt3gen/`
+Tests with `feature="xpath-1.0-compatibility"` are omitted rather than generated.
 
 Old single file `qt3_generated_test.go` is auto-removed on regeneration.
 
@@ -180,9 +181,9 @@ Old single file `qt3_generated_test.go` is auto-removed on regeneration.
 
 | Type/Function | Purpose |
 |---------------|---------|
-| `qt3Test` | Test case struct: Name, XPath, DocPath, Namespaces, Skip, ExpectError, Assertions |
+| `qt3Test` | Test case struct: Name, XPath, DocPath, Namespaces, DefaultLanguage, Skip, ExpectError, Assertions |
 | `qt3Assertion` | Assertion interface for result checking |
-| `qt3RunTests(t, []qt3Test)` | Table-driven runner: parse doc, compile XPath, evaluate, check assertions |
+| `qt3RunTests(t, []qt3Test)` | Table-driven runner: parse doc, build `xpath3.Context` options (timezone, language, namespaces, base URI, HTTP), compile XPath, evaluate, check assertions |
 | `qt3AssertEq(string)` | Assert result equals literal |
 | `qt3AssertStringValue(string)` | Assert string value of result |
 | `qt3AssertTrue()` / `qt3AssertFalse()` | Assert boolean result |

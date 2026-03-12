@@ -1,6 +1,7 @@
 package xpath3_test
 
 import (
+	"context"
 	"math"
 	"testing"
 
@@ -77,6 +78,21 @@ func TestEvaluateConvenience(t *testing.T) {
 	n, ok := result.IsNumber()
 	require.True(t, ok)
 	require.Equal(t, 3.0, n)
+}
+
+func TestWithDefaultLanguage(t *testing.T) {
+	ctx := xpath3.NewContext(context.Background(),
+		xpath3.WithDefaultLanguage("fr-CA"),
+	)
+
+	result, err := xpath3.Evaluate(ctx, nil, `default-language()`)
+	require.NoError(t, err)
+
+	atomics, err := result.Atomics()
+	require.NoError(t, err)
+	require.Len(t, atomics, 1)
+	require.Equal(t, xpath3.TypeLanguage, atomics[0].TypeName)
+	require.Equal(t, "fr-CA", atomics[0].StringVal())
 }
 
 func TestResultIsNodeSet(t *testing.T) {

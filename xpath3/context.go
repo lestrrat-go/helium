@@ -35,6 +35,7 @@ type Context struct {
 	functionsNS      map[QualifiedName]Function
 	opLimit          int
 	implicitTimezone *time.Location
+	defaultLanguage  string
 	baseURI          string
 	uriResolver      URIResolver
 	httpClient       *http.Client
@@ -89,6 +90,15 @@ func WithFunctionsNS(fns map[QualifiedName]Function) ContextOption {
 func WithImplicitTimezone(loc *time.Location) ContextOption {
 	return func(c *Context) {
 		c.implicitTimezone = loc
+	}
+}
+
+// WithDefaultLanguage sets the dynamic default language used by
+// fn:default-language and formatting functions when no language argument
+// is supplied.
+func WithDefaultLanguage(lang string) ContextOption {
+	return func(c *Context) {
+		c.defaultLanguage = lang
 	}
 }
 
