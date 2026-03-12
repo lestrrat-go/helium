@@ -102,6 +102,23 @@ func parseGroupedPart(part []rune, sep rune, df DecimalFormat) ([]int, int, int,
 	return groups, minDigits, maxDigits, nil
 }
 
+func hasInvalidLiteralChars(part []rune, df DecimalFormat) bool {
+	expSep := df.ExponentSeparator
+	if expSep == 0 {
+		expSep = 'e'
+	}
+	for _, r := range part {
+		if isPatternDigit(r, df) ||
+			r == df.DecimalSeparator ||
+			r == df.GroupingSeparator ||
+			r == df.PatternSeparator ||
+			r == expSep {
+			return true
+		}
+	}
+	return false
+}
+
 // ParsePicture parses a single picture sub-pattern into its components.
 func ParsePicture(pic string, df DecimalFormat) (ParsedPicture, error) {
 	var pp ParsedPicture
@@ -189,9 +206,20 @@ func ParsePicture(pic string, df DecimalFormat) (ParsedPicture, error) {
 		}
 		if expEnd < len(expRunes) {
 			pp.Suffix = string(expRunes[expEnd:])
+			if hasInvalidLiteralChars(expRunes[expEnd:], df) {
+				return ParsedPicture{}, fmt.Errorf("invalid active character in picture suffix")
+			}
+			for _, r := range expRunes[expEnd:] {
+				if r == df.Percent || r == df.PerMille {
+					return ParsedPicture{}, fmt.Errorf("percent and per-mille are not allowed in exponent pictures")
+				}
+			}
 		}
 	} else if numEnd < len(mantissaRunes) {
 		pp.Suffix = string(mantissaRunes[numEnd:])
+		if hasInvalidLiteralChars(mantissaRunes[numEnd:], df) {
+			return ParsedPicture{}, fmt.Errorf("invalid active character in picture suffix")
+		}
 	}
 
 	// Parse the numeric part
