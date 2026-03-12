@@ -402,7 +402,7 @@ func applyJSONStringOptions(ctx context.Context, s string, opts jsonOptions) (st
 				if opts.fallback != nil {
 					return "", &XPathError{Code: errCodeFOJS0001, Message: "fallback cannot be used with escape=true() for escaped invalid characters"}
 				}
-				b.WriteString(raw)
+				b.WriteString(canonicalInvalidJSONEscape(raw))
 				continue
 			}
 			appendEscapedJSONStringRune(&b, r)
@@ -451,6 +451,17 @@ func appendEscapedJSONStringRune(b *strings.Builder, r rune) {
 			return
 		}
 		b.WriteRune(r)
+	}
+}
+
+func canonicalInvalidJSONEscape(raw string) string {
+	switch {
+	case strings.EqualFold(raw, `\u0008`):
+		return `\b`
+	case strings.EqualFold(raw, `\u000c`):
+		return `\f`
+	default:
+		return raw
 	}
 }
 
