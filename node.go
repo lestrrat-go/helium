@@ -176,12 +176,21 @@ func Walk(n Node, f WalkFunc) error {
 		return errors.New("nil node")
 	}
 
-	if err := f(n); err != nil {
-		return err
-	}
-	for chld := n.FirstChild(); chld != nil; chld = chld.NextSibling() {
-		if err := Walk(chld, f); err != nil {
+	stack := []Node{n}
+	for len(stack) > 0 {
+		cur := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		if err := f(cur); err != nil {
 			return err
+		}
+
+		var children []Node
+		for chld := cur.FirstChild(); chld != nil; chld = chld.NextSibling() {
+			children = append(children, chld)
+		}
+		for i := len(children) - 1; i >= 0; i-- {
+			stack = append(stack, children[i])
 		}
 	}
 	return nil
