@@ -370,11 +370,15 @@ func fnArraySort(ctx context.Context, args []Sequence) (Sequence, error) {
 	members := make([]Sequence, len(a.Members()))
 	copy(members, a.Members())
 
-	// Optional collation (2nd arg) — validate but we only support codepoint
+	// Optional collation (2nd arg)
+	var coll *collationImpl
 	if len(args) > 1 && len(args[1]) > 0 {
 		uri := seqToString(args[1])
-		if uri != "" && uri != codepointCollationURI {
-			return nil, &XPathError{Code: errCodeFOCH0002, Message: fmt.Sprintf("unsupported collation: %s", uri)}
+		if uri != "" {
+			coll, err = resolveCollation(uri, "")
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -437,20 +441,15 @@ func fnArraySort(ctx context.Context, args []Sequence) (Sequence, error) {
 				sortErr = errJ
 				return false
 			}
-			lt, err := ValueCompare(TokenLt, ai, aj)
+			cmp, err := valueCompareThreeWay(ai, aj, coll)
 			if err != nil {
 				sortErr = err
 				return false
 			}
-			if lt {
+			if cmp < 0 {
 				return true
 			}
-			gt, err := ValueCompare(TokenGt, ai, aj)
-			if err != nil {
-				sortErr = err
-				return false
-			}
-			if gt {
+			if cmp > 0 {
 				return false
 			}
 			// equal — continue to next element
