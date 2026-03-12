@@ -17,6 +17,7 @@ type evalContext struct {
     opLimit    int
     docOrder   *ixpath.DocOrderCache
     maxNodes   int
+    defaultLanguage string
 }
 
 func newEvalContext(ctx context.Context, node helium.Node) *evalContext
@@ -156,6 +157,7 @@ Supported casts per XPath 3.1 Section 18. All atomic types in `xpath3-types.md`.
 
 - Stateless between `Expression.Evaluate` calls
 - `evalContext` created fresh per call, discarded after
+- Default language comes from `WithDefaultLanguage`; built-ins fall back to `"en"` when unset
 - `DocOrderCache` lazy, O(n) build, O(1) lookup
 - Inline function closures capture variable map snapshot (value semantics)
 
