@@ -278,10 +278,29 @@ func ParsePicture(pic string, df DecimalFormat) (ParsedPicture, error) {
 	if err != nil {
 		return ParsedPicture{}, err
 	}
+	if len(fracPart) > 0 && fracPart[0] == df.GroupingSeparator {
+		return ParsedPicture{}, fmt.Errorf("invalid grouping separator placement")
+	}
+	seenOptionalFracDigit := false
+	for _, r := range fracPart {
+		switch {
+		case r == df.GroupingSeparator:
+			continue
+		case r == df.Digit:
+			seenOptionalFracDigit = true
+		case isMandatoryDigit(r, df.ZeroDigit):
+			if seenOptionalFracDigit {
+				return ParsedPicture{}, fmt.Errorf("mandatory fractional digit after optional digit")
+			}
+		}
+	}
 	pp.MinFracDigits = minFracDigits
 	pp.MaxFracDigits = maxFracDigits
 	if len(fracGroups) > 1 {
 		pp.FracGroupSizes = fracGroups
+	}
+	if pp.HasExponent && pp.MaxIntDigits+pp.MaxFracDigits == 0 {
+		return ParsedPicture{}, fmt.Errorf("exponent picture requires at least one digit")
 	}
 
 	return pp, nil
