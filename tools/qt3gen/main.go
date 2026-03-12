@@ -59,13 +59,36 @@ type staticBaseURI struct {
 }
 
 type environment struct {
-	Name          string         `xml:"name,attr"`
-	Ref           string         `xml:"ref,attr"`
-	Sources       []source       `xml:"source"`
-	Resources     []resource     `xml:"resource"`
-	Namespaces    []namespace    `xml:"namespace"`
-	Params        []param        `xml:"param"`
-	StaticBaseURI *staticBaseURI `xml:"static-base-uri"`
+	Name          string          `xml:"name,attr"`
+	Ref           string          `xml:"ref,attr"`
+	Sources       []source        `xml:"source"`
+	Resources     []resource      `xml:"resource"`
+	Namespaces    []namespace     `xml:"namespace"`
+	Collations    []collation     `xml:"collation"`
+	DecimalFormat []decimalFormat `xml:"decimal-format"`
+	Params        []param         `xml:"param"`
+	StaticBaseURI *staticBaseURI  `xml:"static-base-uri"`
+}
+
+type collation struct {
+	URI     string `xml:"uri,attr"`
+	Default string `xml:"default,attr"`
+}
+
+type decimalFormat struct {
+	Name              string     `xml:"name,attr"`
+	DecimalSeparator  string     `xml:"decimal-separator,attr"`
+	GroupingSeparator string     `xml:"grouping-separator,attr"`
+	Percent           string     `xml:"percent,attr"`
+	PerMille          string     `xml:"per-mille,attr"`
+	ZeroDigit         string     `xml:"zero-digit,attr"`
+	Digit             string     `xml:"digit,attr"`
+	PatternSeparator  string     `xml:"pattern-separator,attr"`
+	ExponentSeparator string     `xml:"exponent-separator,attr"`
+	Infinity          string     `xml:"infinity,attr"`
+	NaN               string     `xml:"NaN,attr"`
+	MinusSign         string     `xml:"minus-sign,attr"`
+	Attrs             []xml.Attr `xml:",any,attr"`
 }
 
 type resource struct {
@@ -227,17 +250,20 @@ func main() {
 			}
 
 			allTests = append(allTests, generatedTest{
-				SetName:         tsRef.Name,
-				CaseName:        tc.Name,
-				XPath:           strings.TrimSpace(tc.Test),
-				ContextDocPath:  contextDocPath,
-				Namespaces:      collectNamespaces(env),
-				DefaultLanguage: dependencyValue(mergedDeps, "default-language"),
-				BaseURI:         baseURI,
-				NeedsHTTP:       needsHTTP,
-				ResourceMap:     resMap,
-				Assertions:      assertions,
-				SkipReason:      skipReason,
+				SetName:          tsRef.Name,
+				CaseName:         tc.Name,
+				XPath:            strings.TrimSpace(tc.Test),
+				ContextDocPath:   contextDocPath,
+				Namespaces:       collectNamespaces(env),
+				DefaultLanguage:  dependencyValue(mergedDeps, "default-language"),
+				DefaultCollation: envDefaultCollation(env),
+				DefaultDecimal:   envDefaultDecimalFormat(env),
+				DecimalFormats:   envNamedDecimalFormats(env),
+				BaseURI:          baseURI,
+				NeedsHTTP:        needsHTTP,
+				ResourceMap:      resMap,
+				Assertions:       assertions,
+				SkipReason:       skipReason,
 			})
 		}
 	}
@@ -556,6 +582,109 @@ func collectNamespaces(env *environment) map[string]string {
 	return ns
 }
 
+func envDefaultCollation(env *environment) string {
+	if env == nil || len(env.Collations) == 0 {
+		return ""
+	}
+	for _, c := range env.Collations {
+		if c.Default == "true" {
+			return c.URI
+		}
+	}
+	if len(env.Collations) == 1 {
+		return env.Collations[0].URI
+	}
+	return ""
+}
+
+func envDefaultDecimalFormat(env *environment) *decimalFormat {
+	if env == nil {
+		return nil
+	}
+	for _, df := range env.DecimalFormat {
+		if strings.TrimSpace(df.Name) == "" {
+			cp := df
+			return &cp
+		}
+	}
+	return nil
+}
+
+type namedDecimalFormat struct {
+	URI    string
+	Name   string
+	Format decimalFormat
+}
+
+func envNamedDecimalFormats(env *environment) []namedDecimalFormat {
+	if env == nil || len(env.DecimalFormat) == 0 {
+		return nil
+	}
+
+	ns := collectNamespaces(env)
+	var out []namedDecimalFormat
+	for _, df := range env.DecimalFormat {
+		name := strings.TrimSpace(df.Name)
+		if name == "" {
+			continue
+		}
+		dfNS := make(map[string]string, len(ns))
+		for k, v := range ns {
+			dfNS[k] = v
+		}
+		for k, v := range decimalFormatNamespaces(df) {
+			dfNS[k] = v
+		}
+		uri, local, ok := resolveEnvQName(name, dfNS)
+		if !ok {
+			continue
+		}
+		out = append(out, namedDecimalFormat{
+			URI:    uri,
+			Name:   local,
+			Format: df,
+		})
+	}
+	return out
+}
+
+func decimalFormatNamespaces(df decimalFormat) map[string]string {
+	if len(df.Attrs) == 0 {
+		return nil
+	}
+	ns := make(map[string]string)
+	for _, attr := range df.Attrs {
+		switch {
+		case attr.Name.Space == "xmlns":
+			ns[attr.Name.Local] = attr.Value
+		case attr.Name.Space == "" && attr.Name.Local == "xmlns":
+			ns[""] = attr.Value
+		}
+	}
+	return ns
+}
+
+func resolveEnvQName(name string, ns map[string]string) (string, string, bool) {
+	if strings.HasPrefix(name, "Q{") {
+		end := strings.Index(name, "}")
+		if end < 0 || end == len(name)-1 {
+			return "", "", false
+		}
+		return name[2:end], name[end+1:], true
+	}
+
+	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		prefix := name[:idx]
+		uri := ns[prefix]
+		if uri == "" {
+			return "", "", false
+		}
+		return uri, name[idx+1:], true
+	}
+
+	return "", name, true
+}
+
 func dependencyValue(deps []dependency, typ string) string {
 	for _, d := range deps {
 		if d.Type != typ || d.Satisfied == "false" {
@@ -634,17 +763,20 @@ func convertAssertion(xa xmlAssertion) assertion {
 // ──────────────────────────────────────────────────────────────────────
 
 type generatedTest struct {
-	SetName         string
-	CaseName        string
-	XPath           string
-	ContextDocPath  string
-	Namespaces      map[string]string
-	DefaultLanguage string
-	BaseURI         string
-	NeedsHTTP       bool
-	ResourceMap     map[string]string // URI → file path relative to testdata dir
-	Assertions      []assertion
-	SkipReason      string
+	SetName          string
+	CaseName         string
+	XPath            string
+	ContextDocPath   string
+	Namespaces       map[string]string
+	DefaultLanguage  string
+	DefaultCollation string
+	DefaultDecimal   *decimalFormat
+	DecimalFormats   []namedDecimalFormat
+	BaseURI          string
+	NeedsHTTP        bool
+	ResourceMap      map[string]string // URI → file path relative to testdata dir
+	Assertions       []assertion
+	SkipReason       string
 }
 
 func generateTestFile(tests []generatedTest) string {
@@ -690,6 +822,22 @@ func generateTestFile(tests []generatedTest) string {
 			}
 			if tc.DefaultLanguage != "" {
 				fmt.Fprintf(&b, ", DefaultLanguage: %q", tc.DefaultLanguage)
+			}
+			if tc.DefaultCollation != "" {
+				fmt.Fprintf(&b, ", DefaultCollation: %q", tc.DefaultCollation)
+			}
+			if tc.DefaultDecimal != nil {
+				fmt.Fprintf(&b, ", DefaultDecimal: &%s", emitDecimalFormat(*tc.DefaultDecimal))
+			}
+			if len(tc.DecimalFormats) > 0 {
+				b.WriteString(", NamedDecimalFormats: []qt3NamedDecimalFormat{")
+				for i, df := range tc.DecimalFormats {
+					if i > 0 {
+						b.WriteString(", ")
+					}
+					fmt.Fprintf(&b, "{URI: %q, Name: %q, Format: %s}", df.URI, df.Name, emitDecimalFormat(df.Format))
+				}
+				b.WriteString("}")
 			}
 			if tc.BaseURI != "" {
 				fmt.Fprintf(&b, ", BaseURI: %q", tc.BaseURI)
@@ -873,6 +1021,44 @@ func emitCheck(a assertion) string {
 	default:
 		return "qt3CheckSkip()"
 	}
+}
+
+func emitDecimalFormat(df decimalFormat) string {
+	var parts []string
+	if df.DecimalSeparator != "" {
+		parts = append(parts, fmt.Sprintf("DecimalSeparator: %s", goStringLiteral(df.DecimalSeparator)))
+	}
+	if df.GroupingSeparator != "" {
+		parts = append(parts, fmt.Sprintf("GroupingSeparator: %s", goStringLiteral(df.GroupingSeparator)))
+	}
+	if df.Percent != "" {
+		parts = append(parts, fmt.Sprintf("Percent: %s", goStringLiteral(df.Percent)))
+	}
+	if df.PerMille != "" {
+		parts = append(parts, fmt.Sprintf("PerMille: %s", goStringLiteral(df.PerMille)))
+	}
+	if df.ZeroDigit != "" {
+		parts = append(parts, fmt.Sprintf("ZeroDigit: %s", goStringLiteral(df.ZeroDigit)))
+	}
+	if df.Digit != "" {
+		parts = append(parts, fmt.Sprintf("Digit: %s", goStringLiteral(df.Digit)))
+	}
+	if df.PatternSeparator != "" {
+		parts = append(parts, fmt.Sprintf("PatternSeparator: %s", goStringLiteral(df.PatternSeparator)))
+	}
+	if df.ExponentSeparator != "" {
+		parts = append(parts, fmt.Sprintf("ExponentSeparator: %s", goStringLiteral(df.ExponentSeparator)))
+	}
+	if df.Infinity != "" {
+		parts = append(parts, fmt.Sprintf("Infinity: %s", goStringLiteral(df.Infinity)))
+	}
+	if df.NaN != "" {
+		parts = append(parts, fmt.Sprintf("NaN: %s", goStringLiteral(df.NaN)))
+	}
+	if df.MinusSign != "" {
+		parts = append(parts, fmt.Sprintf("MinusSign: %s", goStringLiteral(df.MinusSign)))
+	}
+	return "qt3DecimalFormat{" + strings.Join(parts, ", ") + "}"
 }
 
 // ──────────────────────────────────────────────────────────────────────

@@ -692,7 +692,7 @@ func formatExponentDigits(exp, minDigits int, df DecimalFormat) string {
 	for len(digits) < minDigits {
 		digits = "0" + digits
 	}
-	s.WriteString(digits)
+	s.WriteString(localizeDigits(digits, df.ZeroDigit))
 	return s.String()
 }
 
@@ -708,7 +708,7 @@ func FormatBigInt(n *big.Int, minDigits int, groupingSizes []int, repeatGrouping
 	}
 
 	if len(groupingSizes) == 0 || len(s) == 0 {
-		return s
+		return localizeDigits(s, df.ZeroDigit)
 	}
 
 	// Insert grouping separators from right
@@ -738,12 +738,11 @@ func FormatBigInt(n *big.Int, minDigits int, groupingSizes []int, repeatGrouping
 	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
 		result[i], result[j] = result[j], result[i]
 	}
-	return string(result)
+	return localizeDigits(string(result), df.ZeroDigit)
 }
 
 // FormatFrac formats the fractional part of a float64.
 func FormatFrac(frac float64, minDigits, maxDigits int, df DecimalFormat) string {
-	_ = df
 	if maxDigits == 0 {
 		return ""
 	}
@@ -763,12 +762,11 @@ func FormatFrac(frac float64, minDigits, maxDigits int, df DecimalFormat) string
 	for end > minDigits && digits[end-1] == '0' {
 		end--
 	}
-	return string(digits[:end])
+	return localizeDigits(string(digits[:end]), df.ZeroDigit)
 }
 
 // FormatRatFrac formats the fractional part of a *big.Rat.
 func FormatRatFrac(frac *big.Rat, minDigits, maxDigits int, df DecimalFormat) string {
-	_ = df
 	if maxDigits == 0 {
 		return ""
 	}
@@ -788,7 +786,24 @@ func FormatRatFrac(frac *big.Rat, minDigits, maxDigits int, df DecimalFormat) st
 	for end > minDigits && digits[end-1] == '0' {
 		end--
 	}
-	return string(digits[:end])
+	return localizeDigits(string(digits[:end]), df.ZeroDigit)
+}
+
+func localizeDigits(s string, zeroDigit rune) string {
+	if s == "" || zeroDigit == '0' {
+		return s
+	}
+
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(zeroDigit + (r - '0'))
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 func applyFractionGrouping(frac string, groups []int, df DecimalFormat) string {

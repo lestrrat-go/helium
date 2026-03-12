@@ -60,6 +60,7 @@ XPath 3.1 expression parsing and evaluation.
 - `Result` — wraps `Sequence`; methods: `Nodes()`, `IsBoolean()`, `IsNumber()`, `IsString()`, `IsAtomic()`, `Atomics()`, `Sequence()`
 - `Context` — namespace bindings, variables (Sequence), custom functions, op limits
 - `WithNamespaces()`, `WithVariables()`, `WithOpLimit()`, `WithFunctions()`, `WithFunctionsNS()`
+- Context options also include `WithDefaultLanguage()`, `WithDefaultCollation()`, `WithDefaultDecimalFormat()`, `WithNamedDecimalFormats()`, `WithBaseURI()`, `WithURIResolver()`, `WithHTTPClient()`, `WithImplicitTimezone()`
 - XPath 3.1 features: FLWOR, quantified, if-then-else, try-catch, maps, arrays, inline functions, HOFs, arrow operator, simple map, string concat, value/general/node comparisons
 - Built-in functions: 100+ across fn:, math:, map:, array: namespaces
 - Type system: Sequence ([]Item), AtomicValue, NodeItem, MapItem, ArrayItem, FunctionItem

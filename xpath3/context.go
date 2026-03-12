@@ -38,6 +38,7 @@ type Context struct {
 	defaultLanguage  string
 	defaultCollation string
 	defaultDecimal   *DecimalFormat
+	decimalFormats   map[QualifiedName]DecimalFormat
 	baseURI          string
 	uriResolver      URIResolver
 	httpClient       *http.Client
@@ -114,6 +115,12 @@ func WithDefaultDecimalFormat(df DecimalFormat) ContextOption {
 	return func(c *Context) {
 		cp := df
 		c.defaultDecimal = &cp
+	}
+}
+
+func WithNamedDecimalFormats(dfs map[QualifiedName]DecimalFormat) ContextOption {
+	return func(c *Context) {
+		c.decimalFormats = maps.Clone(dfs)
 	}
 }
 

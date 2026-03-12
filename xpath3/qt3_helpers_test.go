@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -28,23 +29,84 @@ type qt3Assertion func(t *testing.T, seq xpath3.Sequence)
 type qt3Check func(seq xpath3.Sequence) bool
 
 type qt3Test struct {
-	Name            string
-	XPath           string
-	DocPath         string // relative to qt3TestDataDir(); empty = no context document
-	Namespaces      map[string]string
-	DefaultLanguage string
-	BaseURI         string            // static base URI for fn:unparsed-text etc.
-	NeedsHTTP       bool              // test requires HTTP client (e.g. fn:json-doc with URL)
-	ResourceMap     map[string]string // URI → file path (relative to qt3TestDataDir()) for resource resolution
-	Skip            string
-	ExpectError     bool
-	AcceptError     bool // error is acceptable but not required (any-of with error + non-error)
-	Assertions      []qt3Assertion
+	Name                string
+	XPath               string
+	DocPath             string // relative to qt3TestDataDir(); empty = no context document
+	Namespaces          map[string]string
+	DefaultLanguage     string
+	DefaultCollation    string
+	DefaultDecimal      *qt3DecimalFormat
+	NamedDecimalFormats []qt3NamedDecimalFormat
+	BaseURI             string            // static base URI for fn:unparsed-text etc.
+	NeedsHTTP           bool              // test requires HTTP client (e.g. fn:json-doc with URL)
+	ResourceMap         map[string]string // URI → file path (relative to qt3TestDataDir()) for resource resolution
+	Skip                string
+	ExpectError         bool
+	AcceptError         bool // error is acceptable but not required (any-of with error + non-error)
+	Assertions          []qt3Assertion
 }
 
-type qt3ContextOverride struct {
-	defaultCollation string
-	defaultDecimal   *xpath3.DecimalFormat
+type qt3DecimalFormat struct {
+	DecimalSeparator  string
+	GroupingSeparator string
+	Percent           string
+	PerMille          string
+	ZeroDigit         string
+	Digit             string
+	PatternSeparator  string
+	ExponentSeparator string
+	Infinity          string
+	NaN               string
+	MinusSign         string
+}
+
+type qt3NamedDecimalFormat struct {
+	URI    string
+	Name   string
+	Format qt3DecimalFormat
+}
+
+func (df qt3DecimalFormat) toXPath3() xpath3.DecimalFormat {
+	out := xpath3.DefaultDecimalFormat()
+	if df.DecimalSeparator != "" {
+		out.DecimalSeparator = qt3SingleRune(df.DecimalSeparator)
+	}
+	if df.GroupingSeparator != "" {
+		out.GroupingSeparator = qt3SingleRune(df.GroupingSeparator)
+	}
+	if df.Percent != "" {
+		out.Percent = qt3SingleRune(df.Percent)
+	}
+	if df.PerMille != "" {
+		out.PerMille = qt3SingleRune(df.PerMille)
+	}
+	if df.ZeroDigit != "" {
+		out.ZeroDigit = qt3SingleRune(df.ZeroDigit)
+	}
+	if df.Digit != "" {
+		out.Digit = qt3SingleRune(df.Digit)
+	}
+	if df.PatternSeparator != "" {
+		out.PatternSeparator = qt3SingleRune(df.PatternSeparator)
+	}
+	if df.ExponentSeparator != "" {
+		out.ExponentSeparator = qt3SingleRune(df.ExponentSeparator)
+	}
+	if df.Infinity != "" {
+		out.Infinity = df.Infinity
+	}
+	if df.NaN != "" {
+		out.NaN = df.NaN
+	}
+	if df.MinusSign != "" {
+		out.MinusSign = qt3SingleRune(df.MinusSign)
+	}
+	return out
+}
+
+func qt3SingleRune(s string) rune {
+	r, _ := utf8.DecodeRuneInString(s)
+	return r
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -75,12 +137,18 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 				xpath3.WithImplicitTimezone(qt3ImplicitTZ),
 				xpath3.WithHTTPClient(httpClient),
 			}
-			override := qt3ContextOverrideFor(tc)
-			if override.defaultDecimal != nil {
-				opts = append(opts, xpath3.WithDefaultDecimalFormat(*override.defaultDecimal))
+			if tc.DefaultDecimal != nil {
+				opts = append(opts, xpath3.WithDefaultDecimalFormat(tc.DefaultDecimal.toXPath3()))
 			}
-			if override.defaultCollation != "" {
-				opts = append(opts, xpath3.WithDefaultCollation(override.defaultCollation))
+			if len(tc.NamedDecimalFormats) > 0 {
+				dfs := make(map[xpath3.QualifiedName]xpath3.DecimalFormat, len(tc.NamedDecimalFormats))
+				for _, df := range tc.NamedDecimalFormats {
+					dfs[xpath3.QualifiedName{URI: df.URI, Name: df.Name}] = df.Format.toXPath3()
+				}
+				opts = append(opts, xpath3.WithNamedDecimalFormats(dfs))
+			}
+			if tc.DefaultCollation != "" {
+				opts = append(opts, xpath3.WithDefaultCollation(tc.DefaultCollation))
 			}
 			if tc.DefaultLanguage != "" {
 				opts = append(opts, xpath3.WithDefaultLanguage(tc.DefaultLanguage))
@@ -120,61 +188,6 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 				a(t, seq)
 			}
 		})
-	}
-}
-
-func qt3ContextOverrideFor(tc qt3Test) qt3ContextOverride {
-	df := xpath3.DecimalFormat{}
-	switch tc.Name {
-	case "numberformat09":
-		df = xpath3.DecimalFormat{DecimalSeparator: '|', GroupingSeparator: '.', Percent: '%', PerMille: '\u2030', ZeroDigit: '0', Digit: '#', PatternSeparator: ';', ExponentSeparator: 'e', Infinity: "Infinity", NaN: "NaN", MinusSign: '-'}
-		return qt3ContextOverride{defaultDecimal: &df}
-	case "numberformat11", "numberformat12", "numberformat13":
-		df = xpath3.DecimalFormat{DecimalSeparator: '.', GroupingSeparator: ',', Percent: '%', PerMille: '\u2030', ZeroDigit: '0', Digit: '!', PatternSeparator: '\\', ExponentSeparator: 'e', Infinity: "Infinity", NaN: "NaN", MinusSign: '-'}
-		return qt3ContextOverride{defaultDecimal: &df}
-	case "numberformat14":
-		df = xpath3.DefaultDecimalFormat()
-		df.Infinity = "off-the-scale"
-		return qt3ContextOverride{defaultDecimal: &df}
-	case "numberformat16":
-		df = xpath3.DefaultDecimalFormat()
-		df.PerMille = 'm'
-		return qt3ContextOverride{defaultDecimal: &df}
-	case "numberformat18":
-		df = xpath3.DefaultDecimalFormat()
-		df.MinusSign = '_'
-		return qt3ContextOverride{defaultDecimal: &df}
-	case "numberformat26":
-		df = xpath3.DefaultDecimalFormat()
-		df.GroupingSeparator = ' '
-		df.DecimalSeparator = ','
-		return qt3ContextOverride{defaultDecimal: &df}
-	case "numberformat32":
-		df = xpath3.DefaultDecimalFormat()
-		df.Percent = 'c'
-		return qt3ContextOverride{defaultDecimal: &df}
-	case "numberformat34":
-		df = xpath3.DefaultDecimalFormat()
-		df.Digit = '!'
-		df.ZeroDigit = '٠'
-		return qt3ContextOverride{defaultDecimal: &df}
-	case "numberformat40":
-		df = xpath3.DefaultDecimalFormat()
-		df.Infinity = "huge"
-		return qt3ContextOverride{defaultDecimal: &df}
-	case "numberformat70":
-		df = xpath3.DefaultDecimalFormat()
-		df.GroupingSeparator = '𚶱'
-		df.DecimalSeparator = '𚶰'
-		return qt3ContextOverride{defaultDecimal: &df}
-	case "numberformat71", "numberformat123":
-		df = xpath3.DefaultDecimalFormat()
-		df.ZeroDigit = '𐒠'
-		return qt3ContextOverride{defaultDecimal: &df}
-	case "fo-test-fn-compare-002", "fo-test-fn-compare-004":
-		return qt3ContextOverride{defaultCollation: "http://www.w3.org/2013/collation/UCA?lang=de;strength=primary"}
-	default:
-		return qt3ContextOverride{}
 	}
 }
 

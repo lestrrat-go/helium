@@ -30,20 +30,32 @@ func resolveDecimalFormat(ctx context.Context, name string) (icu.DecimalFormat, 
 		return defaultDecimalFormat(ctx), nil
 	}
 
-	uri := ""
-	local := name
+	qname, err := resolveDecimalFormatName(ctx, name)
+	if err != nil {
+		return icu.DecimalFormat{}, err
+	}
+	if ec := getFnContext(ctx); ec != nil && ec.decimalFormats != nil {
+		if df, ok := ec.decimalFormats[qname]; ok {
+			return df, nil
+		}
+	}
+	return icu.DecimalFormat{}, &XPathError{Code: errCodeFODF1280, Message: fmt.Sprintf("unknown decimal format: %s", name)}
+}
+
+func resolveDecimalFormatName(ctx context.Context, name string) (QualifiedName, error) {
 	if strings.HasPrefix(name, "Q{") {
 		end := strings.Index(name, "}")
 		if end < 0 || end == len(name)-1 {
-			return icu.DecimalFormat{}, &XPathError{Code: errCodeFODF1280, Message: fmt.Sprintf("unknown decimal format: %s", name)}
+			return QualifiedName{}, &XPathError{Code: errCodeFODF1280, Message: fmt.Sprintf("unknown decimal format: %s", name)}
 		}
-		uri = name[2:end]
-		local = name[end+1:]
-	} else if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		return QualifiedName{URI: name[2:end], Name: name[end+1:]}, nil
+	}
+
+	if idx := strings.IndexByte(name, ':'); idx >= 0 {
 		prefix := name[:idx]
-		local = name[idx+1:]
-		ec := getFnContext(ctx)
-		if ec != nil && ec.namespaces != nil {
+		local := name[idx+1:]
+		uri := ""
+		if ec := getFnContext(ctx); ec != nil && ec.namespaces != nil {
 			uri = ec.namespaces[prefix]
 		}
 		if uri == "" {
@@ -52,41 +64,12 @@ func resolveDecimalFormat(ctx context.Context, name string) (icu.DecimalFormat, 
 			}
 		}
 		if uri == "" {
-			return icu.DecimalFormat{}, &XPathError{Code: errCodeFODF1280, Message: fmt.Sprintf("unknown decimal format: %s", name)}
+			return QualifiedName{}, &XPathError{Code: errCodeFODF1280, Message: fmt.Sprintf("unknown decimal format: %s", name)}
 		}
+		return QualifiedName{URI: uri, Name: local}, nil
 	}
 
-	df := defaultDecimalFormat(ctx)
-	switch {
-	case local == "myminus":
-		df.MinusSign = '_'
-		return df, nil
-	case local == "ch":
-		df.GroupingSeparator = 'ʹ'
-		df.DecimalSeparator = '·'
-		return df, nil
-	case uri == "http://foo.ns" && local == "decimal1":
-		df.GroupingSeparator = '*'
-		df.DecimalSeparator = '!'
-		return df, nil
-	case local == "fortran":
-		df.ExponentSeparator = 'E'
-		return df, nil
-	case local == "two":
-		df.GroupingSeparator = '.'
-		df.DecimalSeparator = ','
-		return df, nil
-	case uri == "http://a.ns/" && local == "test":
-		df.GroupingSeparator = '.'
-		df.DecimalSeparator = ','
-		return df, nil
-	case uri == "http://b.ns/" && local == "one":
-		df.GroupingSeparator = '.'
-		df.DecimalSeparator = ','
-		return df, nil
-	default:
-		return icu.DecimalFormat{}, &XPathError{Code: errCodeFODF1280, Message: fmt.Sprintf("unknown decimal format: %s", name)}
-	}
+	return QualifiedName{Name: name}, nil
 }
 
 func formatNumber(a AtomicValue, picture string, df icu.DecimalFormat) (string, error) {
@@ -114,12 +97,52 @@ func formatNumber(a AtomicValue, picture string, df icu.DecimalFormat) (string, 
 			precise = new(big.Rat).Abs(precise)
 		}
 	}
+	if (a.TypeName == TypeDouble || a.TypeName == TypeFloat) && precise != nil {
+		precise = scaledFloatPrecise(a.TypeName, f, picture, negative, df, precise)
+	}
 
 	result, err := icu.FormatNumber(f, isNaN, isPosInf, isNegInf, negative, precise, picture, df)
 	if err != nil {
 		return "", &XPathError{Code: errCodeFODF1310, Message: fmt.Sprintf("invalid picture: %q", picture)}
 	}
 	return result, nil
+}
+
+func scaledFloatPrecise(typeName string, f float64, picture string, negative bool, df icu.DecimalFormat, precise *big.Rat) *big.Rat {
+	pp, err := icu.ParsePicture(selectedNumberPicture(picture, negative, df), df)
+	if err != nil || (!pp.IsPercent && !pp.IsPerMille) {
+		return precise
+	}
+
+	scaled := f
+	divisor := int64(100)
+	if pp.IsPercent {
+		scaled *= 100
+	} else {
+		scaled *= 1000
+		divisor = 1000
+	}
+	if math.IsNaN(scaled) || math.IsInf(scaled, 0) {
+		return nil
+	}
+
+	scaledLexical := formatXPathDouble(scaled)
+	if typeName == TypeFloat {
+		scaledLexical = formatXPathFloat(scaled)
+	}
+	scaledRat := parseCanonicalFloatRat(scaledLexical)
+	if scaledRat == nil {
+		return nil
+	}
+	return new(big.Rat).Quo(scaledRat, new(big.Rat).SetInt64(divisor))
+}
+
+func selectedNumberPicture(picture string, negative bool, df icu.DecimalFormat) string {
+	parts := strings.SplitN(picture, string(df.PatternSeparator), 3)
+	if negative && len(parts) > 1 {
+		return parts[1]
+	}
+	return parts[0]
 }
 
 func parseCanonicalFloatRat(s string) *big.Rat {

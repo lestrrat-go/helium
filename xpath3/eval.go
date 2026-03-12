@@ -36,6 +36,7 @@ type evalContext struct {
 	defaultLanguage      string         // for fn:default-language and formatting fallbacks
 	defaultCollation     string         // for string functions without explicit collation
 	defaultDecimalFormat *DecimalFormat
+	decimalFormats       map[QualifiedName]DecimalFormat
 	baseURI              string      // static base URI for resolving relative URIs
 	uriResolver          URIResolver // custom URI resolver for fn:unparsed-text, fn:doc, etc.
 	// httpClient is intentionally stored here (not only in Context) so that
@@ -72,6 +73,7 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 			df := *xctx.defaultDecimal
 			ec.defaultDecimalFormat = &df
 		}
+		ec.decimalFormats = xctx.decimalFormats
 		ec.baseURI = xctx.baseURI
 		ec.uriResolver = xctx.uriResolver
 		ec.httpClient = xctx.httpClient
