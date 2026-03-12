@@ -147,6 +147,25 @@ func TestResultIsNodeSet(t *testing.T) {
 	require.Len(t, nodes, 3)
 }
 
+func TestPrefixedFunctionMissingDoesNotFallBackToFnNamespace(t *testing.T) {
+	doc := parseTestDoc(t)
+	ctx := xpath3.NewContext(t.Context(),
+		xpath3.WithNamespaces(map[string]string{"p": "urn:other"}),
+	)
+
+	_, err := xpath3.Evaluate(ctx, doc, `p:count(/library/book)`)
+	require.Error(t, err)
+	require.ErrorIs(t, err, xpath3.ErrUnknownFunction)
+}
+
+func TestURIQualifiedFunctionMissingDoesNotFallBackToFnNamespace(t *testing.T) {
+	doc := parseTestDoc(t)
+
+	_, err := xpath3.Evaluate(t.Context(), doc, `Q{urn:other}substring("XPath", 2, 3)`)
+	require.Error(t, err)
+	require.ErrorIs(t, err, xpath3.ErrUnknownFunction)
+}
+
 func TestResultIsBoolean(t *testing.T) {
 	doc := parseTestDoc(t)
 	result, err := xpath3.Evaluate(t.Context(), doc, `count(/library/book) > 2`)
