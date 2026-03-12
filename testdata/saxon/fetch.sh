@@ -22,6 +22,7 @@ else
     echo "Cloning Saxon-HE into $TARGET_DIR ..."
     git clone --depth=1 --no-tags https://github.com/Saxonica/Saxon-HE.git "$TARGET_DIR"
     cd "$TARGET_DIR"
+    git fetch --depth=1 --no-tags origin "$SAXON_COMMIT_SHA"
 fi
 
 echo "Checking out pinned commit $SAXON_COMMIT_SHA ..."
