@@ -1,23 +1,10 @@
 package xpath
 
 import (
-	"fmt"
-	"math"
 	"strings"
-	"sync/atomic"
 
 	"github.com/lestrrat-go/helium"
 )
-
-const defaultMaxStringValueDepth int64 = 2048
-
-// MaxStringValueDepth controls the recursion limit used while computing a
-// node's XPath string-value. Callers may adjust it via Store().
-var MaxStringValueDepth = atomic.Int64{}
-
-func init() {
-	MaxStringValueDepth.Store(defaultMaxStringValueDepth)
-}
 
 // StringValue returns the XPath string-value of a node.
 // Rules are identical across XPath 1.0 and 3.1.
@@ -31,9 +18,7 @@ func StringValue(n helium.Node) string {
 		// XPath spec 5.2: string-value of element/document is the
 		// concatenation of string-values of all text node descendants.
 		var b strings.Builder
-		// In practice, this should never error since the parser already caps depth.
-		// If it does, we return the string collected so far.
-		_ = collectTextDescendants(n, &b, 0)
+		appendTextDescendants(&b, n)
 		return b.String()
 	case helium.TextNode, helium.CDATASectionNode:
 		return string(n.Content())
@@ -47,36 +32,23 @@ func StringValue(n helium.Node) string {
 	return ""
 }
 
-// collectTextDescendants recursively collects text from Text and CDATA descendants.
-// For parser-produced trees, depth is bounded by maxElemDepth (default 256 / huge-mode 2048).
-// A depth guard is included for programmatically constructed trees.
-func collectTextDescendants(n helium.Node, b *strings.Builder, depth int) error {
-	maxDepth := maxStringValueDepth()
-	if depth >= maxDepth {
-		return fmt.Errorf("exceeded max recursion depth of %d in collectTextDescendants", maxDepth)
-	}
-	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
-		switch c.Type() {
+// appendTextDescendants walks descendants iteratively so programmatically
+// constructed deep trees do not truncate string-value computation.
+func appendTextDescendants(b *strings.Builder, root helium.Node) {
+	stack := []helium.Node{root}
+	for len(stack) > 0 {
+		cur := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		switch cur.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
-			b.Write(c.Content())
-		default:
-			if err := collectTextDescendants(c, b, depth+1); err != nil {
-				return err
-			}
+			b.Write(cur.Content())
+		}
+
+		for child := cur.LastChild(); child != nil; child = child.PrevSibling() {
+			stack = append(stack, child)
 		}
 	}
-	return nil
-}
-
-func maxStringValueDepth() int {
-	maxDepth := MaxStringValueDepth.Load()
-	if maxDepth <= 0 {
-		maxDepth = defaultMaxStringValueDepth
-	}
-	if maxDepth > int64(math.MaxInt) {
-		return math.MaxInt
-	}
-	return int(maxDepth)
 }
 
 // LocalNameOf returns the local name of any node type.
