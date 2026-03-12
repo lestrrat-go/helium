@@ -418,19 +418,35 @@ func validateXPathRegex(pattern string, allowBackrefs bool) error {
 	runes := []rune(pattern)
 	inCharClass := 0
 	inQuantifier := false // true when inside a valid {n,m} quantifier
+	captureCount := 0
+	var groupStack []int
 	for i := 0; i < len(runes); i++ {
 		r := runes[i]
 
 		if r == '\\' && i+1 < len(runes) {
 			next := runes[i+1]
-			if next >= '0' && next <= '9' {
+			if inCharClass == 0 && next >= '0' && next <= '9' {
+				j := i + 1
+				for j < len(runes) && runes[j] >= '0' && runes[j] <= '9' {
+					j++
+				}
+				ref := 0
+				for _, digit := range runes[i+1 : j] {
+					ref = ref*10 + int(digit-'0')
+				}
 				if allowBackrefs {
-					i++
+					if ref == 0 || ref > captureCount || isOpenCaptureGroup(groupStack, ref) {
+						return &XPathError{
+							Code:    errCodeFORX0002,
+							Message: fmt.Sprintf("invalid back-reference \\%d in XPath regex", ref),
+						}
+					}
+					i = j - 1
 					continue
 				}
 				return &XPathError{
 					Code:    errCodeFORX0002,
-					Message: fmt.Sprintf("back-reference \\%c is not allowed in XPath regex", next),
+					Message: fmt.Sprintf("back-reference \\%d is not allowed in XPath regex", ref),
 				}
 			}
 			// \P{X} with invalid category — check for complement class
@@ -469,6 +485,23 @@ func validateXPathRegex(pattern string, allowBackrefs bool) error {
 			continue
 		}
 
+		if inCharClass == 0 && r == '(' {
+			groupNum := 0
+			if i+2 < len(runes) && runes[i+1] == '?' && runes[i+2] == ':' {
+				groupStack = append(groupStack, groupNum)
+				continue
+			}
+			captureCount++
+			groupStack = append(groupStack, captureCount)
+			continue
+		}
+		if inCharClass == 0 && r == ')' {
+			if len(groupStack) > 0 {
+				groupStack = groupStack[:len(groupStack)-1]
+			}
+			continue
+		}
+
 		// Unescaped '{' outside of a character class and outside of a valid
 		// quantifier context is invalid in XPath regex. Go's regexp accepts
 		// bare braces as literals. Inside character classes, '{' is literal.
@@ -498,6 +531,15 @@ func validateXPathRegex(pattern string, allowBackrefs bool) error {
 		}
 	}
 	return nil
+}
+
+func isOpenCaptureGroup(groupStack []int, ref int) bool {
+	for _, group := range groupStack {
+		if group == ref {
+			return true
+		}
+	}
+	return false
 }
 
 func hasXPathBackrefs(pattern string) bool {
