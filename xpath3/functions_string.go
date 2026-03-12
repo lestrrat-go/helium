@@ -949,6 +949,9 @@ func runeByteOffsets(s string) []int {
 func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 	// Check for 'q' flag early to skip validation for literal patterns
 	hasQ := strings.ContainsRune(flags, 'q')
+	if !hasQ && strings.ContainsRune(flags, 'x') {
+		pattern = stripFreeSpacing(pattern)
+	}
 	hasBackrefs := !hasQ && hasXPathBackrefs(pattern)
 	hasSubtraction := !hasQ && hasXPathCharClassSubtraction(pattern)
 	hasLargeQuantifier := !hasQ && hasLargeXPathQuantifier(pattern)
@@ -983,8 +986,7 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 			// do not add Go's (?s) since we expand '.' ourselves.
 			dotAll = true
 		case 'x':
-			// Free-spacing mode: strip unescaped whitespace and #-comments
-			pattern = stripFreeSpacing(pattern)
+			// Free-spacing normalization was applied before validation.
 		case 'q':
 			// Literal mode: quote the entire pattern, skip regex translation
 			literal = true
@@ -1029,6 +1031,7 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 func stripFreeSpacing(pattern string) string {
 	var b strings.Builder
 	runes := []rune(pattern)
+	inCharClass := 0
 	for i := 0; i < len(runes); i++ {
 		r := runes[i]
 		if r == '\\' && i+1 < len(runes) {
@@ -1037,7 +1040,15 @@ func stripFreeSpacing(pattern string) string {
 			b.WriteRune(runes[i])
 			continue
 		}
-		if unicode.IsSpace(r) {
+		switch r {
+		case '[':
+			inCharClass++
+		case ']':
+			if inCharClass > 0 {
+				inCharClass--
+			}
+		}
+		if inCharClass == 0 && unicode.IsSpace(r) {
 			continue
 		}
 		b.WriteRune(r)
