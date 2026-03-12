@@ -2,12 +2,22 @@ package xpath
 
 import (
 	"fmt"
+	"math"
 	"strings"
+	"sync/atomic"
 
 	"github.com/lestrrat-go/helium"
 )
 
-const maxCollectTextDescendantsDepth = 2048
+const defaultMaxStringValueDepth int64 = 2048
+
+// MaxStringValueDepth controls the recursion limit used while computing a
+// node's XPath string-value. Callers may adjust it via Store().
+var MaxStringValueDepth = atomic.Int64{}
+
+func init() {
+	MaxStringValueDepth.Store(defaultMaxStringValueDepth)
+}
 
 // StringValue returns the XPath string-value of a node.
 // Rules are identical across XPath 1.0 and 3.1.
@@ -41,8 +51,9 @@ func StringValue(n helium.Node) string {
 // For parser-produced trees, depth is bounded by maxElemDepth (default 256 / huge-mode 2048).
 // A depth guard is included for programmatically constructed trees.
 func collectTextDescendants(n helium.Node, b *strings.Builder, depth int) error {
-	if depth >= maxCollectTextDescendantsDepth {
-		return fmt.Errorf("exceeded max recursion depth of %d in collectTextDescendants", maxCollectTextDescendantsDepth)
+	maxDepth := maxStringValueDepth()
+	if depth >= maxDepth {
+		return fmt.Errorf("exceeded max recursion depth of %d in collectTextDescendants", maxDepth)
 	}
 	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
 		switch c.Type() {
@@ -55,6 +66,17 @@ func collectTextDescendants(n helium.Node, b *strings.Builder, depth int) error 
 		}
 	}
 	return nil
+}
+
+func maxStringValueDepth() int {
+	maxDepth := MaxStringValueDepth.Load()
+	if maxDepth <= 0 {
+		maxDepth = defaultMaxStringValueDepth
+	}
+	if maxDepth > int64(math.MaxInt) {
+		return math.MaxInt
+	}
+	return int(maxDepth)
 }
 
 // LocalNameOf returns the local name of any node type.
