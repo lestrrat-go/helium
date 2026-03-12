@@ -230,12 +230,6 @@ func validateXPathCharClassSubtraction(class string) error {
 					Message: fmt.Sprintf("invalid character class subtraction: %s", class),
 				}
 			}
-			if runes[1] == '^' {
-				return &XPathError{
-					Code:    errCodeFORX0002,
-					Message: fmt.Sprintf("invalid character class subtraction: %s", class),
-				}
-			}
 		}
 	}
 
@@ -870,7 +864,7 @@ func rejectPerlSpecific(pattern string) error {
 	for i := 0; i < len(runes); i++ {
 		if runes[i] == '\\' && i+1 < len(runes) {
 			switch runes[i+1] {
-			case 'b', 'B', 'A', 'Z', 'z':
+			case 'b', 'B', 'A', 'Z', 'z', 'x', 'u', 'U':
 				return &XPathError{
 					Code:    errCodeFORX0002,
 					Message: fmt.Sprintf("Perl-specific escape \\%c is not allowed in XPath regex", runes[i+1]),
