@@ -299,10 +299,9 @@ func ParsePicture(pic string, df DecimalFormat) (ParsedPicture, error) {
 	if len(fracGroups) > 1 {
 		pp.FracGroupSizes = fracGroups
 	}
-	if pp.HasExponent && pp.MaxIntDigits+pp.MaxFracDigits == 0 {
-		return ParsedPicture{}, fmt.Errorf("exponent picture requires at least one digit")
+	if pp.MaxIntDigits+pp.MaxFracDigits == 0 {
+		return ParsedPicture{}, fmt.Errorf("picture requires at least one digit")
 	}
-
 	return pp, nil
 }
 
