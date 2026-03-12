@@ -67,7 +67,7 @@ func WithNamespaces(ns map[string]string) ContextOption {
 // The map is defensively copied to prevent caller mutation from affecting evaluation.
 func WithVariables(vars map[string]Sequence) ContextOption {
 	return func(c *Context) {
-		c.variables = maps.Clone(vars)
+		c.variables = cloneVariableMap(vars)
 	}
 }
 
@@ -200,4 +200,15 @@ func withFnContext(ctx context.Context, ec *evalContext) context.Context {
 func getFnContext(ctx context.Context) *evalContext {
 	ec, _ := ctx.Value(fnContextKey{}).(*evalContext)
 	return ec
+}
+
+func cloneVariableMap(vars map[string]Sequence) map[string]Sequence {
+	if vars == nil {
+		return nil
+	}
+	cloned := make(map[string]Sequence, len(vars))
+	for name, seq := range vars {
+		cloned[name] = append(Sequence(nil), seq...)
+	}
+	return cloned
 }
