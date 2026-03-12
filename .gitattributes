@@ -1,2 +1,2 @@
-# Preserve exact bytes in unparsed-text test fixtures (BOM, CR/LF/NEL/LS, encodings).
-testdata/qt3ts/testdata/fn/unparsed-text/* -text
+# Preserve exact bytes in QT3 fixtures (BOM, CR/LF/NEL/LS, encodings).
+testdata/qt3ts/testdata/** -text

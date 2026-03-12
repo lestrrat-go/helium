@@ -8,6 +8,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func deepChainDepth(t *testing.T) int {
+	t.Helper()
+
+	if testing.Short() {
+		return 512
+	}
+	return 5000
+}
+
 func buildDeepChain(t *testing.T, depth int) (*helium.Document, *helium.Element, *helium.Element) {
 	t.Helper()
 
@@ -28,7 +37,7 @@ func buildDeepChain(t *testing.T, depth int) (*helium.Document, *helium.Element,
 }
 
 func TestTraverseAxisDescendant_DeepChain(t *testing.T) {
-	const depth = 100000
+	depth := deepChainDepth(t)
 
 	_, root, leaf := buildDeepChain(t, depth)
 
@@ -39,7 +48,7 @@ func TestTraverseAxisDescendant_DeepChain(t *testing.T) {
 }
 
 func TestTraverseAxisPreceding_DeepChain(t *testing.T) {
-	const depth = 100000
+	depth := deepChainDepth(t)
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 	root, err := doc.CreateElement("root")
