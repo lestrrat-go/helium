@@ -265,6 +265,7 @@ func qt3AssertStringValue(expected string) qt3Assertion {
 func qt3AssertStringValueNS(expected string) qt3Assertion {
 	return func(t *testing.T, seq xpath3.Sequence) {
 		t.Helper()
+		expected = strings.Join(strings.Fields(expected), " ")
 		got := strings.Join(strings.Fields(qt3StringValue(seq)), " ")
 		require.Equal(t, expected, got)
 	}
