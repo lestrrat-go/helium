@@ -759,6 +759,13 @@ func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	matchesEmpty, err := re.MatchString("")
+	if err != nil {
+		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
+	}
+	if matchesEmpty {
+		return nil, &XPathError{Code: errCodeFORX0003, Message: "analyze-string pattern matches zero-length string"}
+	}
 
 	doc := helium.NewDefaultDocument()
 	root, err := createAnalyzeStringElement(doc, "analyze-string-result")
