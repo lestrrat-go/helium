@@ -36,6 +36,7 @@ import (
 // ──────────────────────────────────────────────────────────────────────
 
 const qt3NS = "http://www.w3.org/2010/09/qt-fots-catalog"
+const qt3UnicodeVersion = "15.0"
 
 type catalog struct {
 	Environments []environment `xml:"environment"`
@@ -493,6 +494,9 @@ func getSkipReason(deps []dependency) string {
 		if d.Type == "xml-version" && d.Value == "1.1" {
 			return "requires XML 1.1"
 		}
+		if d.Type == "unicode-version" && d.Value != qt3UnicodeVersion && d.Satisfied != "false" {
+			return fmt.Sprintf("requires Unicode %s", d.Value)
+		}
 		if d.Type == "xsd-version" && d.Value == "1.0" && d.Satisfied != "false" {
 			return "requires XSD 1.0"
 		}
@@ -510,10 +514,6 @@ func getTestCaseSkipReason(setName, caseName string) string {
 		"fn-unparsed-text-available-010", "fn-unparsed-text-available-012",
 		"fn-unparsed-text-lines-012":
 		return "requires static typing"
-	// These tests have expected results tied to Unicode 7.0 case mappings.
-	// Go uses Unicode 15.0 which added U+03F3↔U+037F case pair in Unicode 9.0.
-	case "fn-upper-case-19", "fn-lower-case-19":
-		return "expected results differ in Unicode 15.0 vs 7.0"
 	}
 	return ""
 }
