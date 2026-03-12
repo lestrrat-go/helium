@@ -201,6 +201,9 @@ func qt3TestDataDir() string {
 }
 
 func qt3DefaultBaseURI(tc qt3Test) string {
+	if qt3NeedsParseXMLBaseURI(tc.XPath) {
+		return "http://www.w3.org/fots/fn/"
+	}
 	if qt3NeedsRelativeUnparsedTextBaseURI(tc.XPath) && (tc.NeedsHTTP || len(tc.ResourceMap) > 0) {
 		// Relative QT3 unparsed-text fixtures live under testdata/qt3ts/testdata/fn/.
 		return "http://www.w3.org/fots/fn/"
@@ -266,6 +269,11 @@ func qt3NeedsRelativeUnparsedTextBaseURI(expr string) bool {
 func qt3NeedsRelativeParseJSONFixtureBaseURI(expr string) bool {
 	return strings.Contains(expr, "parse-json(unparsed-text('parse-json/") ||
 		strings.Contains(expr, `parse-json(unparsed-text("parse-json/`)
+}
+
+func qt3NeedsParseXMLBaseURI(expr string) bool {
+	return strings.Contains(expr, "parse-xml(") ||
+		strings.Contains(expr, "parse-xml-fragment(")
 }
 
 func qt3ParseDoc(t *testing.T, path string) helium.Node {

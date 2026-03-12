@@ -154,6 +154,9 @@ func fnDocumentURI(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, nil
 	}
 	if doc, ok := n.(*helium.Document); ok {
+		if doc.HasProperty(helium.DocInternal) {
+			return nil, nil
+		}
 		if uri := doc.URL(); uri != "" {
 			return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: uri}), nil
 		}
@@ -441,30 +444,163 @@ func fnGenerateID(ctx context.Context, args []Sequence) (Sequence, error) {
 	return SingleString(fmt.Sprintf("id%p", n)), nil
 }
 
-func fnParseXML(_ context.Context, args []Sequence) (Sequence, error) {
+func fnParseXML(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
 	s := seqToString(args[0])
-	doc, err := helium.Parse(context.Background(), []byte(s))
+	parser := helium.NewParser()
+	if ec := getFnContext(ctx); ec != nil && ec.baseURI != "" {
+		parser.SetBaseURI(ec.baseURI)
+	}
+	doc, err := parser.Parse(ctx, []byte(s))
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFODC0006, Message: fmt.Sprintf("parse-xml: %v", err)}
 	}
+	doc.SetProperties(doc.Properties() | helium.DocInternal)
 	return Sequence{NodeItem{Node: doc}}, nil
 }
 
-func fnParseXMLFragment(_ context.Context, args []Sequence) (Sequence, error) {
+func fnParseXMLFragment(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
 	s := seqToString(args[0])
-	// Wrap in a root element to parse as fragment
-	wrapped := "<_fragment_>" + s + "</_fragment_>"
-	doc, err := helium.Parse(context.Background(), []byte(wrapped))
+
+	s, err := stripXMLTextDeclaration(s)
+	if err != nil {
+		return nil, err
+	}
+
+	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+	doc.SetProperties(doc.Properties() | helium.DocInternal)
+	if ec := getFnContext(ctx); ec != nil && ec.baseURI != "" {
+		doc.SetURL(ec.baseURI)
+	}
+
+	first, err := helium.ParseInNodeContext(ctx, doc, []byte(s))
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFODC0006, Message: fmt.Sprintf("parse-xml-fragment: %v", err)}
 	}
+
+	for cur := first; cur != nil; {
+		next := cur.NextSibling()
+		cur.SetPrevSibling(nil)
+		cur.SetNextSibling(nil)
+		if err := doc.AddChild(cur); err != nil {
+			return nil, &XPathError{Code: errCodeFODC0006, Message: fmt.Sprintf("parse-xml-fragment: %v", err)}
+		}
+		cur = next
+	}
+
 	return Sequence{NodeItem{Node: doc}}, nil
+}
+
+func stripXMLTextDeclaration(s string) (string, error) {
+	if !strings.HasPrefix(s, "<?xml") {
+		return s, nil
+	}
+
+	end := strings.Index(s, "?>")
+	if end < 0 {
+		return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
+	}
+
+	decl := s[len("<?xml"):end]
+	names, err := parseXMLPseudoAttributes(decl)
+	if err != nil {
+		return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
+	}
+
+	if len(names) == 0 {
+		return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
+	}
+
+	switch len(names) {
+	case 1:
+		if names[0] != "encoding" {
+			return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
+		}
+	case 2:
+		if names[0] != "version" || names[1] != "encoding" {
+			return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
+		}
+	default:
+		return "", &XPathError{Code: errCodeFODC0006, Message: "parse-xml-fragment: malformed text declaration"}
+	}
+
+	return s[end+2:], nil
+}
+
+func parseXMLPseudoAttributes(s string) ([]string, error) {
+	names := make([]string, 0, 2)
+	i := 0
+	for i < len(s) {
+		for i < len(s) && isXMLSpace(s[i]) {
+			i++
+		}
+		if i == len(s) {
+			return names, nil
+		}
+
+		start := i
+		for i < len(s) && isXMLNameChar(s[i]) {
+			i++
+		}
+		if start == i {
+			return nil, fmt.Errorf("expected name")
+		}
+		name := s[start:i]
+		switch name {
+		case "version", "encoding":
+		case "standalone":
+			return nil, fmt.Errorf("standalone not allowed")
+		default:
+			return nil, fmt.Errorf("unknown pseudo-attribute")
+		}
+		names = append(names, name)
+
+		for i < len(s) && isXMLSpace(s[i]) {
+			i++
+		}
+		if i == len(s) || s[i] != '=' {
+			return nil, fmt.Errorf("expected =")
+		}
+		i++
+		for i < len(s) && isXMLSpace(s[i]) {
+			i++
+		}
+		if i == len(s) || (s[i] != '\'' && s[i] != '"') {
+			return nil, fmt.Errorf("expected quoted value")
+		}
+		quote := s[i]
+		i++
+		start = i
+		for i < len(s) && s[i] != quote {
+			i++
+		}
+		if i == len(s) {
+			return nil, fmt.Errorf("unterminated value")
+		}
+		if start == i {
+			return nil, fmt.Errorf("empty value")
+		}
+		i++
+	}
+	return names, nil
+}
+
+func isXMLSpace(b byte) bool {
+	switch b {
+	case ' ', '\t', '\r', '\n':
+		return true
+	default:
+		return false
+	}
+}
+
+func isXMLNameChar(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || b == '-' || b == '_'
 }
 
 func fnID(ctx context.Context, args []Sequence) (Sequence, error) {
