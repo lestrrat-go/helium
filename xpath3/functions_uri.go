@@ -3,7 +3,6 @@ package xpath3
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
 )
 
@@ -123,45 +122,24 @@ func fnResolveURI(_ context.Context, args []Sequence) (Sequence, error) {
 		return SingleString(relative), nil
 	}
 
-	// Resolve IRI-aware: encode non-ASCII for Go's url.Parse, then decode back.
-	// Track whether inputs had non-ASCII chars so we know whether to decode back.
-	encodedBase := iriToURI(base)
-	encodedRel := iriToURI(relative)
-	hadNonASCII := encodedBase != base || encodedRel != relative
-
-	// Save original scheme case before Go lowercases it
-	origScheme := ""
-	if idx := strings.Index(encodedBase, ":"); idx > 0 {
-		origScheme = encodedBase[:idx]
-	}
-
-	baseURL, err := url.Parse(encodedBase)
+	parsedBase, err := parseURIReference(base)
 	if err != nil {
 		return nil, &XPathError{Code: "FORG0002", Message: "invalid base URI: " + base}
 	}
-	if baseURL.Scheme == "" {
+	if parsedBase.Scheme == "" {
 		return nil, &XPathError{Code: "FORG0002", Message: "base URI is not absolute: " + base}
 	}
-	if baseURL.Fragment != "" {
+	if parsedBase.Fragment != "" {
 		return nil, &XPathError{Code: "FORG0002", Message: "base URI must not contain a fragment: " + base}
 	}
-	relURL, err := url.Parse(encodedRel)
+	_, err = parseURIReference(relative)
 	if err != nil {
 		return nil, &XPathError{Code: "FORG0002", Message: "invalid relative URI: " + relative}
 	}
-
-	resolved := baseURL.ResolveReference(relURL)
-
-	result := resolved.String()
-	// Restore original scheme case (Go lowercases it)
-	if origScheme != "" && resolved.Scheme != origScheme {
-		result = origScheme + result[len(resolved.Scheme):]
+	result, err := resolveURIReference(base, relative)
+	if err != nil {
+		return nil, &XPathError{Code: "FORG0002", Message: "invalid relative URI: " + relative}
 	}
-	// Decode percent-encoded non-ASCII back to IRI form only if we encoded them
-	if hadNonASCII {
-		result = uriToIRI(result)
-	}
-
 	return SingleString(result), nil
 }
 

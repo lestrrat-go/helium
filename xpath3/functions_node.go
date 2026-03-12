@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"net/url"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -823,20 +822,23 @@ func resolveCollectionURI(ctx context.Context, uri, fnName string) (string, erro
 		return "", nil
 	}
 
-	ref, err := url.Parse(uri)
+	ref, err := parseURIReference(uri)
 	if err != nil {
 		return "", &XPathError{Code: errCodeFODC0004, Message: fmt.Sprintf("%s: invalid URI: %v", fnName, err)}
 	}
 	if ref.IsAbs() {
-		return ref.String(), nil
+		return uri, nil
 	}
 
-	if ec := getFnContext(ctx); ec != nil && ec.baseURI != "" {
-		base, berr := url.Parse(ec.baseURI)
-		if berr != nil {
-			return "", &XPathError{Code: errCodeFODC0004, Message: fmt.Sprintf("%s: invalid base URI: %v", fnName, berr)}
+	if baseURI := baseURIFromContext(ctx); baseURI != "" {
+		if _, err := parseURIReference(baseURI); err != nil {
+			return "", &XPathError{Code: errCodeFODC0004, Message: fmt.Sprintf("%s: invalid base URI: %v", fnName, err)}
 		}
-		return base.ResolveReference(ref).String(), nil
+		resolved, err := resolveURIReference(baseURI, uri)
+		if err != nil {
+			return "", &XPathError{Code: errCodeFODC0004, Message: fmt.Sprintf("%s: invalid base URI: %v", fnName, err)}
+		}
+		return resolved, nil
 	}
 
 	return uri, nil
@@ -852,26 +854,23 @@ func resolveDocURI(ctx context.Context, uri string) (string, error) {
 		return uri, nil
 	}
 
-	parsed, err := url.Parse(uri)
+	parsed, err := parseURIReference(uri)
 	if err != nil {
 		return "", &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: invalid URI: %s", uri)}
 	}
 
 	if parsed.Scheme != "" {
-		switch parsed.Scheme {
-		case "file", "http", "https":
-			return uri, nil
-		default:
+		if !isSupportedResourceScheme(parsed.Scheme) {
 			return "", &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: unsupported URI scheme: %s", parsed.Scheme)}
 		}
+		return uri, nil
 	}
 
 	// Relative URI — resolve against base URI
-	ec := getFnContext(ctx)
-	if ec != nil && ec.baseURI != "" {
-		base, berr := url.Parse(ec.baseURI)
-		if berr == nil {
-			return base.ResolveReference(parsed).String(), nil
+	if baseURI := baseURIFromContext(ctx); baseURI != "" {
+		resolved, err := resolveURIReference(baseURI, uri)
+		if err == nil {
+			return resolved, nil
 		}
 	}
 	return uri, nil

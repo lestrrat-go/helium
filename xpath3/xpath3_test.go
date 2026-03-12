@@ -44,6 +44,19 @@ func (r testURIResolver) ResolveURI(uri string) (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader(body)), nil
 }
 
+type testCollectionResolver struct {
+	sequences map[string]xpath3.Sequence
+	uris      map[string][]string
+}
+
+func (r testCollectionResolver) ResolveCollection(uri string) (xpath3.Sequence, error) {
+	return r.sequences[uri], nil
+}
+
+func (r testCollectionResolver) ResolveURICollection(uri string) ([]string, error) {
+	return r.uris[uri], nil
+}
+
 func parseTestDoc(t *testing.T) *helium.Document {
 	t.Helper()
 	doc, err := helium.Parse(t.Context(), []byte(testXML))
@@ -270,6 +283,40 @@ func TestJSONDocUsesURIResolverAndBaseURI(t *testing.T) {
 	)
 
 	result, err := xpath3.Evaluate(ctx, nil, `json-doc("data.json")?name`)
+	require.NoError(t, err)
+
+	s, ok := result.IsString()
+	require.True(t, ok)
+	require.Equal(t, "helium", s)
+}
+
+func TestDocUsesURIResolverAndBaseURI(t *testing.T) {
+	ctx := xpath3.NewContext(t.Context(),
+		xpath3.WithBaseURI("http://example.com/base/"),
+		xpath3.WithURIResolver(testURIResolver{
+			"http://example.com/base/data.xml": `<root><name>helium</name></root>`,
+		}),
+	)
+
+	result, err := xpath3.Evaluate(ctx, nil, `string(doc("data.xml")/root/name)`)
+	require.NoError(t, err)
+
+	s, ok := result.IsString()
+	require.True(t, ok)
+	require.Equal(t, "helium", s)
+}
+
+func TestCollectionUsesBaseURIResolution(t *testing.T) {
+	ctx := xpath3.NewContext(t.Context(),
+		xpath3.WithBaseURI("http://example.com/base/"),
+		xpath3.WithCollectionResolver(testCollectionResolver{
+			sequences: map[string]xpath3.Sequence{
+				"http://example.com/base/data": xpath3.SingleString("helium"),
+			},
+		}),
+	)
+
+	result, err := xpath3.Evaluate(ctx, nil, `collection("data")`)
 	require.NoError(t, err)
 
 	s, ok := result.IsString()
