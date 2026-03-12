@@ -119,14 +119,24 @@ func fnBaseURI(ctx context.Context, args []Sequence) (Sequence, error) {
 	if n == nil {
 		return nil, nil
 	}
+	if doc, ok := n.(*helium.Document); ok {
+		if uri := doc.URL(); uri != "" {
+			return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: uri}), nil
+		}
+	}
 	// Walk up looking for xml:base
 	for cur := n; cur != nil; cur = cur.Parent() {
 		if elem, ok := cur.(*helium.Element); ok {
 			for _, attr := range elem.Attributes() {
 				if attr.LocalName() == "base" && attr.URI() == helium.XMLNamespace {
-					return SingleString(attr.Value()), nil
+					return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: attr.Value()}), nil
 				}
 			}
+		}
+	}
+	if doc := n.OwnerDocument(); doc != nil {
+		if uri := doc.URL(); uri != "" {
+			return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: uri}), nil
 		}
 	}
 	return SingleString(""), nil

@@ -38,6 +38,8 @@ const errCodeFOTY0014 = "FOTY0014"
 const errCodeFOJS0001 = "FOJS0001"
 const errCodeFOJS0003 = "FOJS0003"
 const errCodeFOJS0005 = "FOJS0005"
+const errCodeFOJS0006 = "FOJS0006"
+const errCodeFOJS0007 = "FOJS0007"
 
 // Sentinel errors for the xpath3 package.
 var (

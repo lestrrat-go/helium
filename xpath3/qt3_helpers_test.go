@@ -208,6 +208,9 @@ func qt3DefaultBaseURI(tc qt3Test) string {
 	if qt3NeedsRelativeParseJSONFixtureBaseURI(tc.XPath) {
 		return "http://www.w3.org/fots/fn/"
 	}
+	if strings.Contains(tc.XPath, "static-base-uri()") {
+		return "http://www.w3.org/2010/09/qt-fots-catalog/"
+	}
 	if baseURI := qt3ResourceMapBaseURI(tc); baseURI != "" {
 		return baseURI
 	}
