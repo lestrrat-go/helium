@@ -13,7 +13,7 @@ func init() {
 }
 
 func fnError(_ context.Context, args []Sequence) (Sequence, error) {
-	code := "FOER0000"
+	code := errCodeFOER0000
 	msg := "error() called"
 	if len(args) > 0 && len(args[0]) > 0 {
 		a, err := AtomizeItem(args[0][0])

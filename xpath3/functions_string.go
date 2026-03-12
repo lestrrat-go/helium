@@ -720,20 +720,31 @@ func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 
-	// Build XML result
-	var b strings.Builder
-	b.WriteString(`<fn:analyze-string-result xmlns:fn="http://www.w3.org/2005/xpath-functions">`)
+	doc := helium.NewDefaultDocument()
+	root, err := createAnalyzeStringElement(doc, "analyze-string-result")
+	if err != nil {
+		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+	}
+	if err := root.DeclareNamespace("fn", NSFn); err != nil {
+		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+	}
+	if err := doc.SetDocumentElement(root); err != nil {
+		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+	}
 
 	pos := 0
 	matches := re.FindAllStringSubmatchIndex(s, -1)
 	for _, m := range matches {
 		start, end := m[0], m[1]
 		if start > pos {
-			b.WriteString("<fn:non-match>")
-			writeXMLEscaped(&b, s[pos:start])
-			b.WriteString("</fn:non-match>")
+			if err := appendAnalyzeStringTextElement(doc, root, "non-match", s[pos:start]); err != nil {
+				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+			}
 		}
-		b.WriteString("<fn:match>")
+		matchElem, err := createAnalyzeStringElement(doc, "match")
+		if err != nil {
+			return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+		}
 		// Check for groups
 		if len(m) > 2 {
 			groupPos := start
@@ -743,50 +754,71 @@ func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
 					continue
 				}
 				if gs > groupPos {
-					writeXMLEscaped(&b, s[groupPos:gs])
+					if err := matchElem.AppendText([]byte(s[groupPos:gs])); err != nil {
+						return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+					}
 				}
-				fmt.Fprintf(&b, `<fn:group nr="%d">`, g)
-				writeXMLEscaped(&b, s[gs:ge])
-				b.WriteString("</fn:group>")
+				groupElem, err := createAnalyzeStringElement(doc, "group")
+				if err != nil {
+					return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+				}
+				if err := groupElem.SetAttribute("nr", fmt.Sprintf("%d", g)); err != nil {
+					return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+				}
+				if err := groupElem.AppendText([]byte(s[gs:ge])); err != nil {
+					return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+				}
+				if err := matchElem.AddChild(groupElem); err != nil {
+					return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+				}
 				groupPos = ge
 			}
 			if groupPos < end {
-				writeXMLEscaped(&b, s[groupPos:end])
+				if err := matchElem.AppendText([]byte(s[groupPos:end])); err != nil {
+					return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+				}
 			}
 		} else {
-			writeXMLEscaped(&b, s[start:end])
+			if err := matchElem.AppendText([]byte(s[start:end])); err != nil {
+				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+			}
 		}
-		b.WriteString("</fn:match>")
+		if err := root.AddChild(matchElem); err != nil {
+			return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+		}
 		pos = end
 	}
 	if pos < len(s) {
-		b.WriteString("<fn:non-match>")
-		writeXMLEscaped(&b, s[pos:])
-		b.WriteString("</fn:non-match>")
+		if err := appendAnalyzeStringTextElement(doc, root, "non-match", s[pos:]); err != nil {
+			return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+		}
 	}
-	b.WriteString("</fn:analyze-string-result>")
 
-	// Parse the result XML into a document node
-	doc, parseErr := helium.Parse(context.Background(), []byte(b.String()))
-	if parseErr != nil {
-		return nil, &XPathError{Code: "FOER0000", Message: fmt.Sprintf("analyze-string: failed to build result: %v", parseErr)}
-	}
 	return Sequence{NodeItem{Node: doc}}, nil
 }
 
-func writeXMLEscaped(b *strings.Builder, s string) {
-	for _, r := range s {
-		switch r {
-		case '&':
-			b.WriteString("&amp;")
-		case '<':
-			b.WriteString("&lt;")
-		case '>':
-			b.WriteString("&gt;")
-		default:
-			b.WriteRune(r)
+func createAnalyzeStringElement(doc *helium.Document, localName string) (*helium.Element, error) {
+	elem, err := doc.CreateElement(localName)
+	if err != nil {
+		return nil, err
+	}
+	if err := elem.SetActiveNamespace("fn", NSFn); err != nil {
+		return nil, err
+	}
+	return elem, nil
+}
+
+func appendAnalyzeStringTextElement(doc *helium.Document, parent *helium.Element, localName, text string) error {
+	elem, err := createAnalyzeStringElement(doc, localName)
+	if err != nil {
+		return err
+	}
+	if text != "" {
+		if err := elem.AppendText([]byte(text)); err != nil {
+			return err
 		}
 	}
+	return parent.AddChild(elem)
 }
 
 // compileXPathRegex compiles an XPath regex pattern with flags.

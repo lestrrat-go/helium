@@ -17,6 +17,7 @@ const errCodeFOAY0001 = "FOAY0001"
 const errCodeFONS0004 = "FONS0004"
 const errCodeFORG0001 = "FORG0001"
 const errCodeFORG0006 = "FORG0006"
+const errCodeFOER0000 = "FOER0000"
 const errCodeFORX0002 = "FORX0002"
 const errCodeFOTY0014 = "FOTY0014"
 

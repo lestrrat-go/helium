@@ -41,7 +41,7 @@ Package-level `builtinFunctions3 map[QualifiedName]Function` populated in `init(
 `node-name`, `nilled`, `string`, `data`, `base-uri`, `document-uri`, `root`, `path`, `has-children`, `innermost`, `outermost`, `id`, `idref`, `lang`, `local-name`, `name`, `namespace-uri`, `number`, `generate-id`
 
 ### `functions_string.go`
-`codepoints-to-string`, `string-to-codepoints`, `compare`, `codepoint-equal`, `concat`, `string-join`, `substring`, `string-length`, `normalize-space`, `normalize-unicode`, `upper-case`, `lower-case`, `translate`, `contains`, `starts-with`, `ends-with`, `substring-before`, `substring-after`, `matches`, `replace`, `tokenize`, `analyze-string` (stub v1)
+`codepoints-to-string`, `string-to-codepoints`, `compare`, `codepoint-equal`, `concat`, `string-join`, `substring`, `string-length`, `normalize-space`, `normalize-unicode`, `upper-case`, `lower-case`, `translate`, `contains`, `starts-with`, `ends-with`, `substring-before`, `substring-after`, `matches`, `replace`, `tokenize`, `analyze-string` (partial; result DOM built with helium)
 
 Regex: use Go `regexp` package. Map XPath flags (`i`,`m`,`s`,`x`) to Go equivalents.
 
@@ -93,7 +93,6 @@ All delegate to Go `math` package.
 
 Return "not yet implemented" error:
 - `fn:format-number`, `fn:format-integer`
-- `fn:analyze-string` (returns XML fragment → needs DOM construction)
 - `fn:serialize` (needs helium serializer integration)
 
 ## FunctionItem Mechanics
