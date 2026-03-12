@@ -69,6 +69,30 @@ func translateXPathRegex(pattern string, dotAll, ignoreCase bool) (string, error
 				b.WriteString(xmlNameCharClassNeg)
 				i += 2
 				continue
+			case 'd':
+				b.WriteString(`\p{Nd}`)
+				i += 2
+				continue
+			case 'D':
+				b.WriteString(`[^\p{Nd}]`)
+				i += 2
+				continue
+			case 'w':
+				b.WriteString(`[^\p{P}\p{Z}\p{C}]`)
+				i += 2
+				continue
+			case 'W':
+				b.WriteString(`[\p{P}\p{Z}\p{C}]`)
+				i += 2
+				continue
+			case 's':
+				b.WriteString(`[\t\n\r ]`)
+				i += 2
+				continue
+			case 'S':
+				b.WriteString(`[^\t\n\r ]`)
+				i += 2
+				continue
 			default:
 				b.WriteRune(r)
 				b.WriteRune(next)
@@ -263,6 +287,22 @@ func translateClassContent(s string) (string, error) {
 				continue
 			case 'C':
 				b.WriteString(xmlNameCharRange)
+				i++
+				continue
+			case 'd':
+				b.WriteString(`\p{Nd}`)
+				i++
+				continue
+			case 'D':
+				b.WriteString(`\P{Nd}`)
+				i++
+				continue
+			case 'w':
+				b.WriteString(`\p{L}\p{M}\p{N}\p{S}`)
+				i++
+				continue
+			case 'W':
+				b.WriteString(`\p{P}\p{Z}\p{C}`)
 				i++
 				continue
 			}
