@@ -120,18 +120,33 @@ func axisDescendant(node helium.Node, maxNodes int) ([]helium.Node, error) {
 	return result, nil
 }
 
+func appendAxisNode(result *[]helium.Node, node helium.Node, maxNodes int) error {
+	*result = append(*result, node)
+	if len(*result) > maxNodes {
+		return ErrNodeSetLimit
+	}
+	return nil
+}
+
 func collectDescendants(node helium.Node, result *[]helium.Node, maxNodes int) error {
 	// In XPath, attributes have no children
 	if _, ok := node.(*helium.Attribute); ok {
 		return nil
 	}
-	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
-		*result = append(*result, c)
-		if len(*result) > maxNodes {
-			return ErrNodeSetLimit
-		}
-		if err := collectDescendants(c, result, maxNodes); err != nil {
+	var stack []helium.Node
+	for c := node.LastChild(); c != nil; c = c.PrevSibling() {
+		stack = append(stack, c)
+	}
+	for len(stack) > 0 {
+		last := len(stack) - 1
+		cur := stack[last]
+		stack = stack[:last]
+
+		if err := appendAxisNode(result, cur, maxNodes); err != nil {
 			return err
+		}
+		for child := cur.LastChild(); child != nil; child = child.PrevSibling() {
+			stack = append(stack, child)
 		}
 	}
 	return nil
@@ -139,7 +154,9 @@ func collectDescendants(node helium.Node, result *[]helium.Node, maxNodes int) e
 
 func axisDescendantOrSelf(node helium.Node, maxNodes int) ([]helium.Node, error) {
 	result := make([]helium.Node, 0, 1)
-	result = append(result, node)
+	if err := appendAxisNode(&result, node, maxNodes); err != nil {
+		return nil, err
+	}
 	if err := collectDescendants(node, &result, maxNodes); err != nil {
 		return nil, err
 	}
@@ -188,14 +205,18 @@ func axisPrecedingSibling(node helium.Node) []helium.Node {
 func axisFollowing(node helium.Node, maxNodes int) ([]helium.Node, error) {
 	var result []helium.Node
 	for s := node.NextSibling(); s != nil; s = s.NextSibling() {
-		result = append(result, s)
+		if err := appendAxisNode(&result, s, maxNodes); err != nil {
+			return nil, err
+		}
 		if err := collectDescendants(s, &result, maxNodes); err != nil {
 			return nil, err
 		}
 	}
 	for p := node.Parent(); p != nil; p = p.Parent() {
 		for s := p.NextSibling(); s != nil; s = s.NextSibling() {
-			result = append(result, s)
+			if err := appendAxisNode(&result, s, maxNodes); err != nil {
+				return nil, err
+			}
 			if err := collectDescendants(s, &result, maxNodes); err != nil {
 				return nil, err
 			}
@@ -210,27 +231,48 @@ func axisPreceding(node helium.Node, maxNodes int) ([]helium.Node, error) {
 		if err := collectDescendantsReverse(s, &result, maxNodes); err != nil {
 			return nil, err
 		}
-		result = append(result, s)
+		if err := appendAxisNode(&result, s, maxNodes); err != nil {
+			return nil, err
+		}
 	}
 	for p := node.Parent(); p != nil; p = p.Parent() {
 		for s := p.PrevSibling(); s != nil; s = s.PrevSibling() {
 			if err := collectDescendantsReverse(s, &result, maxNodes); err != nil {
 				return nil, err
 			}
-			result = append(result, s)
+			if err := appendAxisNode(&result, s, maxNodes); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return result, nil
 }
 
 func collectDescendantsReverse(node helium.Node, result *[]helium.Node, maxNodes int) error {
-	for c := node.LastChild(); c != nil; c = c.PrevSibling() {
-		if err := collectDescendantsReverse(c, result, maxNodes); err != nil {
-			return err
+	type frame struct {
+		node     helium.Node
+		expanded bool
+	}
+
+	var stack []frame
+	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
+		stack = append(stack, frame{node: c})
+	}
+	for len(stack) > 0 {
+		last := len(stack) - 1
+		cur := stack[last]
+		stack = stack[:last]
+
+		if cur.expanded {
+			if err := appendAxisNode(result, cur.node, maxNodes); err != nil {
+				return err
+			}
+			continue
 		}
-		*result = append(*result, c)
-		if len(*result) > maxNodes {
-			return ErrNodeSetLimit
+
+		stack = append(stack, frame{node: cur.node, expanded: true})
+		for child := cur.node.FirstChild(); child != nil; child = child.NextSibling() {
+			stack = append(stack, frame{node: child})
 		}
 	}
 	return nil
