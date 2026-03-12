@@ -9,7 +9,7 @@ import (
 	"unicode/utf8"
 )
 
-func fnFormatInteger(_ context.Context, args []Sequence) (Sequence, error) {
+func fnFormatInteger(ctx context.Context, args []Sequence) (Sequence, error) {
 	// format-integer($value, $picture [, $lang])
 	valSeq := args[0]
 	picSeq := args[1]
@@ -32,6 +32,9 @@ func fnFormatInteger(_ context.Context, args []Sequence) (Sequence, error) {
 	picture := picAtom.StringVal()
 
 	lang := "en"
+	if ec := getFnContext(ctx); ec != nil {
+		lang = ec.getDefaultLanguage()
+	}
 	if len(args) > 2 && len(args[2]) > 0 {
 		langAtom, err := AtomizeItem(args[2][0])
 		if err != nil {
@@ -49,13 +52,16 @@ func fnFormatInteger(_ context.Context, args []Sequence) (Sequence, error) {
 
 func formatIntegerPicture(n *big.Int, picture, lang string) (string, error) {
 	if picture == "" {
-		return "", &XPathError{Code: "FODF1310", Message: "empty picture string"}
+		return "", &XPathError{Code: errCodeFODF1310, Message: "empty picture string"}
 	}
 
 	// Split on ';' to get primary token and format modifier
 	primary, modifier := splitFormatModifier(picture)
 	if primary == "" {
-		return "", &XPathError{Code: "FODF1310", Message: "empty primary format token"}
+		return "", &XPathError{Code: errCodeFODF1310, Message: "empty primary format token"}
+	}
+	if modifier == "" && hasImplicitFormatModifier(primary) {
+		return "", &XPathError{Code: errCodeFODF1310, Message: fmt.Sprintf("invalid picture: %q", picture)}
 	}
 
 	if err := validateModifier(modifier); err != nil {
@@ -141,18 +147,33 @@ func classifyFormatToken(primary string) formatTokenKind {
 		return fmtTokenDecimal
 	}
 
-	// Check if this looks like a decimal picture (contains '#' or decimal digits)
+	// Mixed decimal-digit pictures with ASCII letters fall back to the default
+	// decimal token rather than being validated as decimal-digit patterns.
+	hasDecimalPattern := false
+	hasASCIILetter := false
 	for _, r := range runes {
 		if r == '#' {
-			return fmtTokenDecimal
+			hasDecimalPattern = true
+			continue
 		}
 		if r >= '0' && r <= '9' {
-			return fmtTokenDecimal
+			hasDecimalPattern = true
+			continue
 		}
 		// Check for Unicode decimal digits (Arabic-Indic, Devanagari, etc.)
 		if unicode.IsDigit(r) {
-			return fmtTokenDecimal
+			hasDecimalPattern = true
+			continue
 		}
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+			hasASCIILetter = true
+		}
+	}
+	if hasDecimalPattern {
+		if hasASCIILetter {
+			return fmtTokenUnknown
+		}
+		return fmtTokenDecimal
 	}
 
 	// Single character tokens
@@ -299,6 +320,27 @@ func splitFormatModifier(picture string) (string, string) {
 	return picture[:idx], picture[idx+1:]
 }
 
+func hasImplicitFormatModifier(primary string) bool {
+	if !containsDecimalPattern(primary) {
+		return false
+	}
+	for i, r := range primary {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+			return validateModifier(primary[i:]) == nil
+		}
+	}
+	return false
+}
+
+func containsDecimalPattern(primary string) bool {
+	for _, r := range primary {
+		if r == '#' || unicode.IsDigit(r) {
+			return true
+		}
+	}
+	return false
+}
+
 func parseModifier(mod string) (bool, string) {
 	if mod == "" {
 		return false, ""
@@ -339,11 +381,11 @@ func validateModifier(mod string) error {
 		case '(':
 			end := strings.Index(mod[i:], ")")
 			if end < 0 {
-				return &XPathError{Code: "FODF1310", Message: fmt.Sprintf("unclosed parenthesis in format modifier: %q", mod)}
+				return &XPathError{Code: errCodeFODF1310, Message: fmt.Sprintf("unclosed parenthesis in format modifier: %q", mod)}
 			}
 			i += end + 1
 		default:
-			return &XPathError{Code: "FODF1310", Message: fmt.Sprintf("invalid character in format modifier: %q", mod)}
+			return &XPathError{Code: errCodeFODF1310, Message: fmt.Sprintf("invalid character in format modifier: %q", mod)}
 		}
 	}
 	return nil
@@ -663,7 +705,7 @@ func formatIntegerDecimal(n *big.Int, picture string) (string, error) {
 			// This is a separator
 			if currentSize == 0 && len(groups) == 0 {
 				// Leading separator — error
-				return "", &XPathError{Code: "FODF1310", Message: fmt.Sprintf("invalid picture: %q", picture)}
+				return "", &XPathError{Code: errCodeFODF1310, Message: fmt.Sprintf("invalid picture: %q", picture)}
 			}
 			groups = append(groups, currentSize)
 			groupSeps = append(groupSeps, e.sep)
@@ -675,7 +717,7 @@ func formatIntegerDecimal(n *big.Int, picture string) (string, error) {
 	// Validate: no empty groups (adjacent separators or trailing separator)
 	for _, g := range groups {
 		if g == 0 {
-			return "", &XPathError{Code: "FODF1310", Message: fmt.Sprintf("invalid picture: %q", picture)}
+			return "", &XPathError{Code: errCodeFODF1310, Message: fmt.Sprintf("invalid picture: %q", picture)}
 		}
 	}
 
@@ -685,7 +727,7 @@ func formatIntegerDecimal(n *big.Int, picture string) (string, error) {
 		if e.isMand {
 			seenMandatory = true
 		} else if seenMandatory {
-			return "", &XPathError{Code: "FODF1310", Message: fmt.Sprintf("invalid picture: '#' after '0' in %q", picture)}
+			return "", &XPathError{Code: errCodeFODF1310, Message: fmt.Sprintf("invalid picture: '#' after '0' in %q", picture)}
 		}
 	}
 
