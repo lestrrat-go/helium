@@ -59,18 +59,33 @@ func (c *DocOrderCache) BuildFrom(root helium.Node) {
 }
 
 func (c *DocOrderCache) indexWalk(cur helium.Node, pos *int) {
-	c.positions[cur] = *pos
-	// Stride 2: each node occupies an even slot, leaving odd slots
-	// for virtual namespace nodes (position = parent + 1).
-	*pos += 2
-	if elem, ok := cur.(*helium.Element); ok {
-		for _, attr := range elem.Attributes() {
-			c.positions[helium.Node(attr)] = *pos
-			*pos += 2
-		}
+	if cur == nil {
+		return
 	}
-	for child := cur.FirstChild(); child != nil; child = child.NextSibling() {
-		c.indexWalk(child, pos)
+
+	stack := []helium.Node{cur}
+	for len(stack) > 0 {
+		n := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		c.positions[n] = *pos
+		// Stride 2: each node occupies an even slot, leaving odd slots
+		// for virtual namespace nodes (position = parent + 1).
+		*pos += 2
+		if elem, ok := n.(*helium.Element); ok {
+			for _, attr := range elem.Attributes() {
+				c.positions[helium.Node(attr)] = *pos
+				*pos += 2
+			}
+		}
+
+		var children []helium.Node
+		for child := n.FirstChild(); child != nil; child = child.NextSibling() {
+			children = append(children, child)
+		}
+		for i := len(children) - 1; i >= 0; i-- {
+			stack = append(stack, children[i])
+		}
 	}
 }
 
