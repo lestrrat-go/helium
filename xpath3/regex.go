@@ -152,10 +152,47 @@ func translateCharClass(runes []rune, start int) (string, int, error) {
 // translating embedded \p{} and \i/\c escapes.
 func processCharClass(runes []rune) (string, error) {
 	s := string(runes)
+	if err := validateXPathCharClassSubtraction(s); err != nil {
+		return "", err
+	}
 	// Character class subtraction [base-[subtract]] is not supported by Go's RE2.
 	// Pass through as-is — Go will interpret it differently but many tests still
 	// pass because Go's (incorrect) interpretation gives the expected result.
 	return translateClassContent(s)
+}
+
+func validateXPathCharClassSubtraction(class string) error {
+	if !strings.Contains(class, "-[") {
+		return nil
+	}
+
+	runes := []rune(class)
+	if len(runes) < 4 || runes[0] != '[' || runes[len(runes)-1] != ']' {
+		return nil
+	}
+
+	for i := 1; i < len(runes)-2; i++ {
+		if runes[i] == '\\' {
+			i++
+			continue
+		}
+		if runes[i] == '-' && runes[i+1] == '[' {
+			if i == 1 || (i == 2 && runes[1] == '^') {
+				return &XPathError{
+					Code:    errCodeFORX0002,
+					Message: fmt.Sprintf("invalid character class subtraction: %s", class),
+				}
+			}
+			if runes[1] == '^' {
+				return &XPathError{
+					Code:    errCodeFORX0002,
+					Message: fmt.Sprintf("invalid character class subtraction: %s", class),
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 // translateClassContent translates \p{}, \i, \c escapes inside a character class.
