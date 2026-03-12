@@ -516,15 +516,18 @@ func fnMatches(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnCollationKey(ctx context.Context, args []Sequence) (Sequence, error) {
-	if _, err := getCollation(ctx, args, 1); err != nil {
+	coll, err := getCollation(ctx, args, 1)
+	if err != nil {
 		return nil, err
 	}
 	s, err := coerceArgToString(args[0])
 	if err != nil {
 		return nil, err
 	}
-	// Return string bytes as base64Binary
-	return SingleAtomic(AtomicValue{TypeName: TypeBase64Binary, Value: []byte(s)}), nil
+	if coll.key == nil {
+		return SingleAtomic(AtomicValue{TypeName: TypeBase64Binary, Value: []byte(s)}), nil
+	}
+	return SingleAtomic(AtomicValue{TypeName: TypeBase64Binary, Value: coll.key(s)}), nil
 }
 
 func fnReplace(_ context.Context, args []Sequence) (Sequence, error) {
