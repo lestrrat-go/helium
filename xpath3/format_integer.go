@@ -970,9 +970,7 @@ func germanOrdinalWithSuffix(base, suffix string) string {
 	if sfx == "" {
 		return base
 	}
-	if strings.HasSuffix(base, "e") {
-		base = strings.TrimSuffix(base, "e")
-	}
+	base = strings.TrimSuffix(base, "e")
 	return base + sfx
 }
 
@@ -1117,17 +1115,6 @@ func italianWordToNumber(word string) int64 {
 		return n
 	}
 	return 0
-}
-
-func italianOrdinal(n int64) string {
-	ordinals := map[int64]string{
-		1: "primo", 2: "secondo", 3: "terzo", 4: "quarto", 5: "quinto",
-		6: "sesto", 7: "settimo", 8: "ottavo", 9: "nono", 10: "decimo",
-	}
-	if s, ok := ordinals[n]; ok {
-		return s
-	}
-	return fmt.Sprintf("%d°", n)
 }
 
 func italianOrdinalWithSuffix(n int64, suffix string) string {
