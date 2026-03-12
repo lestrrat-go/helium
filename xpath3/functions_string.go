@@ -10,6 +10,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/dlclark/regexp2"
 	"github.com/lestrrat-go/helium"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -504,7 +505,11 @@ func fnMatches(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	return SingleBoolean(re.MatchString(s)), nil
+	ok, err := re.MatchString(s)
+	if err != nil {
+		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
+	}
+	return SingleBoolean(ok), nil
 }
 
 func fnCollationKey(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -548,7 +553,11 @@ func fnReplace(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 
 	// XPath spec: error if pattern matches empty string
-	if re.MatchString("") {
+	matchesEmpty, err := re.MatchString("")
+	if err != nil {
+		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
+	}
+	if matchesEmpty {
 		return nil, &XPathError{Code: "FORX0003", Message: "replacement pattern matches zero-length string"}
 	}
 
@@ -564,7 +573,11 @@ func fnReplace(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 
-	return SingleString(re.ReplaceAllString(s, goRepl)), nil
+	replaced, err := re.ReplaceAllString(s, goRepl)
+	if err != nil {
+		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex replace failed: %v", err)}
+	}
+	return SingleString(replaced), nil
 }
 
 // translateXPathReplacement converts an XPath replacement string to Go regexp syntax.
@@ -671,11 +684,18 @@ func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 
 	// XPath spec: error if pattern matches zero-length string
-	if re.MatchString("") {
+	matchesEmpty, err := re.MatchString("")
+	if err != nil {
+		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
+	}
+	if matchesEmpty {
 		return nil, &XPathError{Code: "FORX0003", Message: "tokenize pattern matches zero-length string"}
 	}
 
-	parts := re.Split(s, -1)
+	parts, err := re.Split(s, -1)
+	if err != nil {
+		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex split failed: %v", err)}
+	}
 	result := make(Sequence, len(parts))
 	for i, p := range parts {
 		result[i] = AtomicValue{TypeName: TypeString, Value: p}
@@ -733,7 +753,10 @@ func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 
 	pos := 0
-	matches := re.FindAllStringSubmatchIndex(s, -1)
+	matches, err := re.FindAllStringSubmatchIndex(s, -1)
+	if err != nil {
+		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
+	}
 	for _, m := range matches {
 		start, end := m[0], m[1]
 		if start > pos {
@@ -824,9 +847,109 @@ func appendAnalyzeStringTextElement(doc *helium.Document, parent *helium.Element
 // compileXPathRegex compiles an XPath regex pattern with flags.
 // Maps XPath flags (i,m,s,x) to Go regexp equivalents.
 // Translates XPath/XML Schema regex features to Go-compatible patterns.
-func compileXPathRegex(pattern, flags string) (*regexp.Regexp, error) {
+type compiledXPathRegex struct {
+	std       *regexp.Regexp
+	backtrack *regexp2.Regexp
+	numGroups int
+}
+
+func (r *compiledXPathRegex) MatchString(s string) (bool, error) {
+	if r.backtrack != nil {
+		return r.backtrack.MatchString(s)
+	}
+	return r.std.MatchString(s), nil
+}
+
+func (r *compiledXPathRegex) ReplaceAllString(s, replacement string) (string, error) {
+	if r.backtrack != nil {
+		return r.backtrack.Replace(s, replacement, -1, -1)
+	}
+	return r.std.ReplaceAllString(s, replacement), nil
+}
+
+func (r *compiledXPathRegex) Split(s string, n int) ([]string, error) {
+	if r.backtrack == nil {
+		return r.std.Split(s, n), nil
+	}
+
+	offsets := runeByteOffsets(s)
+	var parts []string
+	last := 0
+	count := 0
+	match, err := r.backtrack.FindStringMatch(s)
+	for match != nil {
+		if n > 0 && count >= n-1 {
+			break
+		}
+		start := offsets[match.Index]
+		end := offsets[match.Index+match.Length]
+		parts = append(parts, s[last:start])
+		last = end
+		count++
+		match, err = r.backtrack.FindNextMatch(match)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	parts = append(parts, s[last:])
+	return parts, nil
+}
+
+func (r *compiledXPathRegex) FindAllStringSubmatchIndex(s string, n int) ([][]int, error) {
+	if r.backtrack == nil {
+		return r.std.FindAllStringSubmatchIndex(s, n), nil
+	}
+
+	offsets := runeByteOffsets(s)
+	var result [][]int
+	match, err := r.backtrack.FindStringMatch(s)
+	for match != nil {
+		groups := match.Groups()
+		entry := make([]int, 0, len(groups)*2)
+		for _, group := range groups {
+			if len(group.Captures) == 0 {
+				entry = append(entry, -1, -1)
+				continue
+			}
+			start := offsets[group.Index]
+			end := offsets[group.Index+group.Length]
+			entry = append(entry, start, end)
+		}
+		result = append(result, entry)
+		if n > 0 && len(result) >= n {
+			break
+		}
+		match, err = r.backtrack.FindNextMatch(match)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, err
+}
+
+func (r *compiledXPathRegex) NumSubexp() int {
+	if r.backtrack != nil {
+		return r.numGroups
+	}
+	return r.std.NumSubexp()
+}
+
+func runeByteOffsets(s string) []int {
+	offsets := make([]int, 0, utf8.RuneCountInString(s)+1)
+	for i := range s {
+		offsets = append(offsets, i)
+	}
+	offsets = append(offsets, len(s))
+	return offsets
+}
+
+func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 	// Check for 'q' flag early to skip validation for literal patterns
 	hasQ := strings.ContainsRune(flags, 'q')
+	hasBackrefs := !hasQ && hasXPathBackrefs(pattern)
 
 	if !hasQ {
 		// Reject Perl-specific constructs first
@@ -835,7 +958,7 @@ func compileXPathRegex(pattern, flags string) (*regexp.Regexp, error) {
 		}
 
 		// Validate XPath-specific regex restrictions before compilation
-		if err := validateXPathRegex(pattern); err != nil {
+		if err := validateXPathRegex(pattern, hasBackrefs); err != nil {
 			return nil, err
 		}
 	}
@@ -844,12 +967,15 @@ func compileXPathRegex(pattern, flags string) (*regexp.Regexp, error) {
 	prefix.WriteString("(?")
 	dotAll := false
 	literal := false
+	var re2Opts regexp2.RegexOptions = regexp2.RE2
 	for _, f := range flags {
 		switch f {
 		case 'i':
 			prefix.WriteRune('i')
+			re2Opts |= regexp2.IgnoreCase
 		case 'm':
 			prefix.WriteRune('m')
+			re2Opts |= regexp2.Multiline
 		case 's':
 			// Handled by translateXPathRegex dotAll parameter;
 			// do not add Go's (?s) since we expand '.' ourselves.
@@ -880,11 +1006,21 @@ func compileXPathRegex(pattern, flags string) (*regexp.Regexp, error) {
 		prefix.WriteRune(')')
 		pattern = prefix.String() + pattern
 	}
+	if hasBackrefs {
+		re, err := regexp2.Compile(pattern, re2Opts)
+		if err != nil {
+			return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("invalid regular expression: %s", err)}
+		}
+		return &compiledXPathRegex{
+			backtrack: re,
+			numGroups: len(re.GetGroupNumbers()) - 1,
+		}, nil
+	}
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("invalid regular expression: %s", err)}
 	}
-	return re, nil
+	return &compiledXPathRegex{std: re}, nil
 }
 
 // stripFreeSpacing removes unescaped whitespace from a regex pattern (x flag).

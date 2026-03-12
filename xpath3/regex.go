@@ -414,7 +414,7 @@ var unicodeBlocks = map[string]string{
 // validateXPathRegex checks for patterns that Go's regexp accepts but
 // the XPath/XML Schema regex spec forbids. This must be called before
 // regexp.Compile to reject invalid patterns with FORX0002.
-func validateXPathRegex(pattern string) error {
+func validateXPathRegex(pattern string, allowBackrefs bool) error {
 	runes := []rune(pattern)
 	inCharClass := 0
 	inQuantifier := false // true when inside a valid {n,m} quantifier
@@ -423,10 +423,11 @@ func validateXPathRegex(pattern string) error {
 
 		if r == '\\' && i+1 < len(runes) {
 			next := runes[i+1]
-			// Back-references (\0, \1, \2, ...) are not allowed in XPath regex
-			// (only in replacement strings for fn:replace). \0 is also not a
-			// valid escape in XML Schema regex.
 			if next >= '0' && next <= '9' {
+				if allowBackrefs {
+					i++
+					continue
+				}
 				return &XPathError{
 					Code:    errCodeFORX0002,
 					Message: fmt.Sprintf("back-reference \\%c is not allowed in XPath regex", next),
@@ -497,6 +498,27 @@ func validateXPathRegex(pattern string) error {
 		}
 	}
 	return nil
+}
+
+func hasXPathBackrefs(pattern string) bool {
+	runes := []rune(pattern)
+	inCharClass := 0
+	for i := 0; i < len(runes)-1; i++ {
+		switch runes[i] {
+		case '[':
+			inCharClass++
+		case ']':
+			if inCharClass > 0 {
+				inCharClass--
+			}
+		case '\\':
+			if inCharClass == 0 && runes[i+1] >= '1' && runes[i+1] <= '9' {
+				return true
+			}
+			i++
+		}
+	}
+	return false
 }
 
 // isValidQuantifierBrace checks whether '{' at position i is part of a
