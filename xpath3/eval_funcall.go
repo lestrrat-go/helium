@@ -212,26 +212,18 @@ func evalInlineFunctionExpr(ec *evalContext, e InlineFunctionExpr) (Sequence, er
 			if len(args) != len(e.Params) {
 				return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("inline function requires %d arguments, got %d", len(e.Params), len(args))}
 			}
-			innerCtx := &evalContext{
-				goCtx:       ctx,
-				node:        ec.node,
-				position:    ec.position,
-				size:        ec.size,
-				vars:        closedVars,
-				namespaces:  ec.namespaces,
-				functions:   ec.functions,
-				fnsNS:       ec.fnsNS,
-				opCount:     ec.opCount,
-				opLimit:     ec.opLimit,
-				docOrder:    ec.docOrder,
-				maxNodes:    ec.maxNodes,
-				currentTime: ec.currentTime,
-			}
+			innerCtx := *ec
+			innerCtx.goCtx = ctx
+			innerCtx.node = nil
+			innerCtx.contextItem = nil
+			innerCtx.position = 0
+			innerCtx.size = 0
+			innerCtx.vars = closedVars
 			for i, param := range e.Params {
 				arg := args[i]
 				// Apply function coercion rules if type specified
 				if param.TypeHint != nil {
-					coerced, ok := coerceToSequenceType(arg, *param.TypeHint, innerCtx)
+					coerced, ok := coerceToSequenceType(arg, *param.TypeHint, &innerCtx)
 					if !ok {
 						return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("inline function parameter $%s: value does not match required type %v", param.Name, *param.TypeHint)}
 					}
@@ -239,13 +231,13 @@ func evalInlineFunctionExpr(ec *evalContext, e InlineFunctionExpr) (Sequence, er
 				}
 				innerCtx.vars = scopeWithBindings(innerCtx.vars, map[string]Sequence{param.Name: arg})
 			}
-			result, err := eval(innerCtx, e.Body)
+			result, err := eval(&innerCtx, e.Body)
 			if err != nil {
 				return nil, err
 			}
 			// Apply function coercion rules for return type if specified
 			if e.ReturnType != nil {
-				coerced, ok := coerceToSequenceType(result, *e.ReturnType, innerCtx)
+				coerced, ok := coerceToSequenceType(result, *e.ReturnType, &innerCtx)
 				if !ok {
 					return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("inline function return value does not match required type %v", *e.ReturnType)}
 				}

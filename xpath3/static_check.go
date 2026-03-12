@@ -28,198 +28,251 @@ var knownXSTypeNames = map[string]struct{}{
 	"NMTOKENS": {}, "IDREFS": {}, "ENTITIES": {},
 }
 
-// checkPrefixes walks the AST and validates that all namespace prefixes
-// are bound. This catches XPST0081 static errors even in unreachable branches
-// (e.g., "if (true()) then 1 else $unbound:var").
-func checkPrefixes(node Expr, namespaces map[string]string) error {
+type prefixCheck func(map[string]string) error
+
+type prefixValidationPlan []prefixCheck
+
+func (p prefixValidationPlan) Validate(namespaces map[string]string) error {
+	for _, check := range p {
+		if err := check(namespaces); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func buildPrefixValidationPlan(node Expr) prefixValidationPlan {
+	var plan prefixValidationPlan
+	appendPrefixChecks(&plan, node)
+	return plan
+}
+
+func appendPrefixChecks(plan *prefixValidationPlan, node Expr) {
 	if node == nil {
-		return nil
+		return
 	}
 
 	switch n := node.(type) {
 	case VariableExpr:
-		return validatePrefix(n.Prefix, namespaces)
+		addPrefixCheck(plan, n.Prefix)
 	case FunctionCall:
-		if err := validatePrefix(n.Prefix, namespaces); err != nil {
-			return err
-		}
+		addPrefixCheck(plan, n.Prefix)
 		for _, arg := range n.Args {
-			if err := checkPrefixes(arg, namespaces); err != nil {
-				return err
-			}
+			appendPrefixChecks(plan, arg)
 		}
 	case NamedFunctionRef:
-		return validatePrefix(n.Prefix, namespaces)
+		addPrefixCheck(plan, n.Prefix)
 	case CastExpr:
-		if err := validatePrefix(n.Type.Prefix, namespaces); err != nil {
-			return err
-		}
-		return checkPrefixes(n.Expr, namespaces)
+		addPrefixCheck(plan, n.Type.Prefix)
+		appendPrefixChecks(plan, n.Expr)
 	case CastableExpr:
-		if err := validatePrefix(n.Type.Prefix, namespaces); err != nil {
-			return err
-		}
-		return checkPrefixes(n.Expr, namespaces)
+		addPrefixCheck(plan, n.Type.Prefix)
+		appendPrefixChecks(plan, n.Expr)
 	case InstanceOfExpr:
-		if err := checkPrefixesInSequenceType(n.Type, namespaces); err != nil {
-			return err
-		}
-		return checkPrefixes(n.Expr, namespaces)
+		appendSequenceTypePrefixChecks(plan, n.Type)
+		appendPrefixChecks(plan, n.Expr)
 	case TreatAsExpr:
-		if err := checkPrefixesInSequenceType(n.Type, namespaces); err != nil {
-			return err
-		}
-		return checkPrefixes(n.Expr, namespaces)
+		appendSequenceTypePrefixChecks(plan, n.Type)
+		appendPrefixChecks(plan, n.Expr)
 	case LocationPath:
 		for i := range n.Steps {
-			if err := checkPrefixesInStep(&n.Steps[i], namespaces); err != nil {
-				return err
-			}
+			appendStepPrefixChecks(plan, &n.Steps[i])
 		}
 	case PathExpr:
-		if err := checkPrefixes(n.Filter, namespaces); err != nil {
-			return err
-		}
+		appendPrefixChecks(plan, n.Filter)
 		if n.Path != nil {
 			for i := range n.Path.Steps {
-				if err := checkPrefixesInStep(&n.Path.Steps[i], namespaces); err != nil {
-					return err
-				}
+				appendStepPrefixChecks(plan, &n.Path.Steps[i])
 			}
 		}
 	case PathStepExpr:
-		if err := checkPrefixes(n.Left, namespaces); err != nil {
-			return err
-		}
-		return checkPrefixes(n.Right, namespaces)
+		appendPrefixChecks(plan, n.Left)
+		appendPrefixChecks(plan, n.Right)
 	case FilterExpr:
-		if err := checkPrefixes(n.Expr, namespaces); err != nil {
-			return err
-		}
+		appendPrefixChecks(plan, n.Expr)
 		for _, pred := range n.Predicates {
-			if err := checkPrefixes(pred, namespaces); err != nil {
-				return err
-			}
+			appendPrefixChecks(plan, pred)
 		}
 	case BinaryExpr:
-		if err := checkPrefixes(n.Left, namespaces); err != nil {
-			return err
-		}
-		return checkPrefixes(n.Right, namespaces)
+		appendPrefixChecks(plan, n.Left)
+		appendPrefixChecks(plan, n.Right)
 	case UnaryExpr:
-		return checkPrefixes(n.Operand, namespaces)
+		appendPrefixChecks(plan, n.Operand)
 	case ConcatExpr:
-		if err := checkPrefixes(n.Left, namespaces); err != nil {
-			return err
-		}
-		return checkPrefixes(n.Right, namespaces)
+		appendPrefixChecks(plan, n.Left)
+		appendPrefixChecks(plan, n.Right)
 	case SimpleMapExpr:
-		if err := checkPrefixes(n.Left, namespaces); err != nil {
-			return err
-		}
-		return checkPrefixes(n.Right, namespaces)
+		appendPrefixChecks(plan, n.Left)
+		appendPrefixChecks(plan, n.Right)
 	case RangeExpr:
-		if err := checkPrefixes(n.Start, namespaces); err != nil {
-			return err
-		}
-		return checkPrefixes(n.End, namespaces)
+		appendPrefixChecks(plan, n.Start)
+		appendPrefixChecks(plan, n.End)
 	case UnionExpr:
-		if err := checkPrefixes(n.Left, namespaces); err != nil {
-			return err
-		}
-		return checkPrefixes(n.Right, namespaces)
+		appendPrefixChecks(plan, n.Left)
+		appendPrefixChecks(plan, n.Right)
 	case IntersectExceptExpr:
-		if err := checkPrefixes(n.Left, namespaces); err != nil {
-			return err
-		}
-		return checkPrefixes(n.Right, namespaces)
+		appendPrefixChecks(plan, n.Left)
+		appendPrefixChecks(plan, n.Right)
 	case IfExpr:
-		if err := checkPrefixes(n.Cond, namespaces); err != nil {
-			return err
-		}
-		if err := checkPrefixes(n.Then, namespaces); err != nil {
-			return err
-		}
-		return checkPrefixes(n.Else, namespaces)
+		appendPrefixChecks(plan, n.Cond)
+		appendPrefixChecks(plan, n.Then)
+		appendPrefixChecks(plan, n.Else)
 	case FLWORExpr:
 		for _, clause := range n.Clauses {
-			if err := checkPrefixesInFLWORClause(clause, namespaces); err != nil {
-				return err
-			}
+			appendFLWORClausePrefixChecks(plan, clause)
 		}
-		return checkPrefixes(n.Return, namespaces)
+		appendPrefixChecks(plan, n.Return)
 	case QuantifiedExpr:
 		for _, b := range n.Bindings {
-			if err := checkPrefixesInVarName(b.Var, namespaces); err != nil {
-				return err
-			}
-			if err := checkPrefixes(b.Domain, namespaces); err != nil {
-				return err
-			}
+			addVarNamePrefixCheck(plan, b.Var)
+			appendPrefixChecks(plan, b.Domain)
 		}
-		return checkPrefixes(n.Satisfies, namespaces)
+		appendPrefixChecks(plan, n.Satisfies)
 	case TryCatchExpr:
-		if err := checkPrefixes(n.Try, namespaces); err != nil {
-			return err
-		}
+		appendPrefixChecks(plan, n.Try)
 		for _, c := range n.Catches {
-			if err := checkPrefixes(c.Expr, namespaces); err != nil {
-				return err
-			}
+			appendPrefixChecks(plan, c.Expr)
 		}
 	case DynamicFunctionCall:
-		if err := checkPrefixes(n.Func, namespaces); err != nil {
-			return err
-		}
+		appendPrefixChecks(plan, n.Func)
 		for _, arg := range n.Args {
-			if err := checkPrefixes(arg, namespaces); err != nil {
-				return err
-			}
+			appendPrefixChecks(plan, arg)
 		}
 	case InlineFunctionExpr:
 		for _, param := range n.Params {
 			if param.TypeHint != nil {
-				if err := checkPrefixesInSequenceType(*param.TypeHint, namespaces); err != nil {
-					return err
-				}
+				appendSequenceTypePrefixChecks(plan, *param.TypeHint)
 			}
 		}
 		if n.ReturnType != nil {
-			if err := checkPrefixesInSequenceType(*n.ReturnType, namespaces); err != nil {
-				return err
-			}
+			appendSequenceTypePrefixChecks(plan, *n.ReturnType)
 		}
-		return checkPrefixes(n.Body, namespaces)
+		appendPrefixChecks(plan, n.Body)
 	case LookupExpr:
-		if err := checkPrefixes(n.Expr, namespaces); err != nil {
-			return err
-		}
-		return checkPrefixes(n.Key, namespaces)
+		appendPrefixChecks(plan, n.Expr)
+		appendPrefixChecks(plan, n.Key)
 	case UnaryLookupExpr:
-		return checkPrefixes(n.Key, namespaces)
+		appendPrefixChecks(plan, n.Key)
 	case MapConstructorExpr:
 		for _, p := range n.Pairs {
-			if err := checkPrefixes(p.Key, namespaces); err != nil {
-				return err
-			}
-			if err := checkPrefixes(p.Value, namespaces); err != nil {
-				return err
-			}
+			appendPrefixChecks(plan, p.Key)
+			appendPrefixChecks(plan, p.Value)
 		}
 	case ArrayConstructorExpr:
 		for _, item := range n.Items {
-			if err := checkPrefixes(item, namespaces); err != nil {
-				return err
-			}
+			appendPrefixChecks(plan, item)
 		}
 	case SequenceExpr:
 		for _, item := range n.Items {
-			if err := checkPrefixes(item, namespaces); err != nil {
-				return err
-			}
+			appendPrefixChecks(plan, item)
 		}
 	}
-	return nil
+}
+
+func appendStepPrefixChecks(plan *prefixValidationPlan, s *Step) {
+	appendNodeTestPrefixChecks(plan, s.NodeTest)
+	for _, pred := range s.Predicates {
+		appendPrefixChecks(plan, pred)
+	}
+}
+
+func appendNodeTestPrefixChecks(plan *prefixValidationPlan, nt NodeTest) {
+	if nt == nil {
+		return
+	}
+	switch t := nt.(type) {
+	case NameTest:
+		addPrefixCheck(plan, t.Prefix)
+	case AtomicOrUnionType:
+		addAtomicOrUnionTypeCheck(plan, t)
+	case DocumentTest:
+		appendNodeTestPrefixChecks(plan, t.Inner)
+	case FunctionTest:
+		for _, pt := range t.ParamTypes {
+			appendSequenceTypePrefixChecks(plan, pt)
+		}
+		appendSequenceTypePrefixChecks(plan, t.ReturnType)
+	case MapTest:
+		appendNodeTestPrefixChecks(plan, t.KeyType)
+		appendSequenceTypePrefixChecks(plan, t.ValType)
+	case ArrayTest:
+		appendSequenceTypePrefixChecks(plan, t.MemberType)
+	}
+}
+
+func appendSequenceTypePrefixChecks(plan *prefixValidationPlan, st SequenceType) {
+	appendNodeTestPrefixChecks(plan, st.ItemTest)
+}
+
+func appendFLWORClausePrefixChecks(plan *prefixValidationPlan, clause FLWORClause) {
+	switch c := clause.(type) {
+	case ForClause:
+		addVarNamePrefixCheck(plan, c.Var)
+		if c.PosVar != "" {
+			addVarNamePrefixCheck(plan, c.PosVar)
+		}
+		appendPrefixChecks(plan, c.Expr)
+	case LetClause:
+		addVarNamePrefixCheck(plan, c.Var)
+		appendPrefixChecks(plan, c.Expr)
+	}
+}
+
+func addPrefixCheck(plan *prefixValidationPlan, prefix string) {
+	if prefix == "" || prefix == "*" {
+		return
+	}
+	p := prefix
+	*plan = append(*plan, func(namespaces map[string]string) error {
+		return validatePrefix(p, namespaces)
+	})
+}
+
+func addVarNamePrefixCheck(plan *prefixValidationPlan, varName string) {
+	if strings.HasPrefix(varName, "Q{") {
+		return
+	}
+	if idx := strings.IndexByte(varName, ':'); idx >= 0 {
+		addPrefixCheck(plan, varName[:idx])
+	}
+}
+
+func addAtomicOrUnionTypeCheck(plan *prefixValidationPlan, t AtomicOrUnionType) {
+	prefix := t.Prefix
+	name := t.Name
+	*plan = append(*plan, func(namespaces map[string]string) error {
+		if prefix == "" {
+			if namespaces == nil || namespaces[""] == "" {
+				return &XPathError{
+					Code:    errCodeXPST0081,
+					Message: fmt.Sprintf("unprefixed type name %q requires a default element namespace", name),
+				}
+			}
+		}
+		if prefix == "xs" || prefix == "xsd" {
+			switch name {
+			case "NMTOKENS", "IDREFS", "ENTITIES":
+				return &XPathError{
+					Code:    "XPST0051",
+					Message: fmt.Sprintf("xs:%s is a list type and cannot be used as an atomic type", name),
+				}
+			}
+			if _, ok := knownXSTypeNames[name]; !ok {
+				return &XPathError{
+					Code:    "XPST0051",
+					Message: fmt.Sprintf("unknown type xs:%s", name),
+				}
+			}
+		}
+		return validatePrefix(prefix, namespaces)
+	})
+}
+
+// checkPrefixes walks the AST and validates that all namespace prefixes
+// are bound. This catches XPST0081 static errors even in unreachable branches
+// (e.g., "if (true()) then 1 else $unbound:var").
+func checkPrefixes(node Expr, namespaces map[string]string) error {
+	return buildPrefixValidationPlan(node).Validate(namespaces)
 }
 
 // validatePrefix checks if a non-empty prefix is bound in user namespaces or defaultPrefixNS.
