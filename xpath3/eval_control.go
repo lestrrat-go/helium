@@ -127,13 +127,11 @@ func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 					return nil, err
 				}
 				for i, item := range domain {
-					bindings := map[string]Sequence{
-						c.Var: Sequence{item},
-					}
+					scope := scopeWithBinding(tup.scope, c.Var, Sequence{item})
 					if c.PosVar != "" {
-						bindings[c.PosVar] = Sequence{AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(i + 1))}}
+						scope = scopeWithBinding(scope, c.PosVar, Sequence{AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(i + 1))}})
 					}
-					newTuples = append(newTuples, flworTuple{scope: scopeWithBindings(tup.scope, bindings)})
+					newTuples = append(newTuples, flworTuple{scope: scope})
 				}
 			}
 			tuples = newTuples
@@ -144,7 +142,7 @@ func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 				if err != nil {
 					return nil, err
 				}
-				tuples[i].scope = scopeWithBindings(tuples[i].scope, map[string]Sequence{c.Var: val})
+				tuples[i].scope = scopeWithBinding(tuples[i].scope, c.Var, val)
 			}
 		}
 	}
@@ -189,7 +187,7 @@ func evalQuantifiedBindings(ec *evalContext, e QuantifiedExpr, idx int) (Sequenc
 		return nil, err
 	}
 	for _, item := range domain {
-		subCtx := ec.withScope(scopeWithBindings(ec.vars, map[string]Sequence{binding.Var: Sequence{item}}))
+		subCtx := ec.withScope(scopeWithBinding(ec.vars, binding.Var, Sequence{item}))
 		result, err := evalQuantifiedBindings(subCtx, e, idx+1)
 		if err != nil {
 			return nil, err

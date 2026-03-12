@@ -50,17 +50,34 @@ type evalContext struct {
 }
 
 type variableScope struct {
-	parent *variableScope
-	values map[string]Sequence
+	parent      *variableScope
+	name        string
+	value       Sequence
+	singleValue bool
+	values      map[string]Sequence
 }
 
 func newVariableScope(vars map[string]Sequence) *variableScope {
 	return scopeWithBindings(nil, vars)
 }
 
+func scopeWithBinding(parent *variableScope, name string, value Sequence) *variableScope {
+	return &variableScope{
+		parent:      parent,
+		name:        name,
+		value:       value,
+		singleValue: true,
+	}
+}
+
 func scopeWithBindings(parent *variableScope, bindings map[string]Sequence) *variableScope {
 	if len(bindings) == 0 {
 		return parent
+	}
+	if len(bindings) == 1 {
+		for name, value := range bindings {
+			return scopeWithBinding(parent, name, value)
+		}
 	}
 	values := make(map[string]Sequence, len(bindings))
 	for name, seq := range bindings {
@@ -71,6 +88,12 @@ func scopeWithBindings(parent *variableScope, bindings map[string]Sequence) *var
 
 func (s *variableScope) Lookup(name string) (Sequence, bool) {
 	for scope := s; scope != nil; scope = scope.parent {
+		if scope.singleValue {
+			if scope.name == name {
+				return scope.value, true
+			}
+			continue
+		}
 		if seq, ok := scope.values[name]; ok {
 			return seq, true
 		}
@@ -177,7 +200,7 @@ func (ec *evalContext) getDefaultLanguage() string {
 
 func (ec *evalContext) withVar(name string, val Sequence) *evalContext {
 	cp := *ec
-	cp.vars = scopeWithBindings(ec.vars, map[string]Sequence{name: val})
+	cp.vars = scopeWithBinding(ec.vars, name, val)
 	return &cp
 }
 

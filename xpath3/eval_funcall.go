@@ -90,7 +90,7 @@ func evalDynamicFunctionCall(ec *evalContext, e DynamicFunctionCall) (Sequence, 
 			Invoke: func(ctx context.Context, partialArgs []Sequence) (Sequence, error) {
 				if len(partialArgs) != len(placeholderIndices) {
 					return nil, &XPathError{
-						Code: errCodeXPTY0004,
+						Code:    errCodeXPTY0004,
 						Message: fmt.Sprintf("arity mismatch: expected %d arguments, got %d", len(placeholderIndices), len(partialArgs)),
 					}
 				}
@@ -229,7 +229,7 @@ func evalInlineFunctionExpr(ec *evalContext, e InlineFunctionExpr) (Sequence, er
 					}
 					arg = coerced
 				}
-				innerCtx.vars = scopeWithBindings(innerCtx.vars, map[string]Sequence{param.Name: arg})
+				innerCtx.vars = scopeWithBinding(innerCtx.vars, param.Name, arg)
 			}
 			result, err := eval(&innerCtx, e.Body)
 			if err != nil {
@@ -276,7 +276,7 @@ func partialApply(ec *evalContext, e FunctionCall, fixedArgs []Sequence) (Sequen
 		Invoke: func(ctx context.Context, partialArgs []Sequence) (Sequence, error) {
 			if len(partialArgs) != len(placeholderIndices) {
 				return nil, &XPathError{
-					Code: errCodeXPTY0004,
+					Code:    errCodeXPTY0004,
 					Message: fmt.Sprintf("arity mismatch in partial application: expected %d arguments, got %d", len(placeholderIndices), len(partialArgs)),
 				}
 			}
