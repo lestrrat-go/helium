@@ -61,6 +61,49 @@ func TestStringValue_ElementWithCDATA(t *testing.T) {
 	require.Equal(t, "before cdata content", ixpath.StringValue(root))
 }
 
+func TestStringValue_MixedContent(t *testing.T) {
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+
+	comment, err := doc.CreateComment([]byte("ignored document comment"))
+	require.NoError(t, err)
+	require.NoError(t, doc.AddChild(comment))
+
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	require.NoError(t, doc.AddChild(root))
+
+	text1, err := doc.CreateText([]byte("alpha"))
+	require.NoError(t, err)
+	require.NoError(t, root.AddChild(text1))
+
+	comment, err = doc.CreateComment([]byte("ignored element comment"))
+	require.NoError(t, err)
+	require.NoError(t, root.AddChild(comment))
+
+	child, err := doc.CreateElement("child")
+	require.NoError(t, err)
+	require.NoError(t, root.AddChild(child))
+
+	text2, err := doc.CreateText([]byte("beta"))
+	require.NoError(t, err)
+	require.NoError(t, child.AddChild(text2))
+
+	pi, err := doc.CreatePI("target", "ignored processing instruction")
+	require.NoError(t, err)
+	require.NoError(t, child.AddChild(pi))
+
+	cdata, err := doc.CreateCDATASection([]byte("gamma"))
+	require.NoError(t, err)
+	require.NoError(t, child.AddChild(cdata))
+
+	text3, err := doc.CreateText([]byte("delta"))
+	require.NoError(t, err)
+	require.NoError(t, root.AddChild(text3))
+
+	require.Equal(t, "alphabetagammadelta", ixpath.StringValue(root))
+	require.Equal(t, "alphabetagammadelta", ixpath.StringValue(doc))
+}
+
 func TestStringValue_Attribute(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 	root, err := doc.CreateElement("root")
