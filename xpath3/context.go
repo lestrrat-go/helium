@@ -105,12 +105,18 @@ func WithDefaultLanguage(lang string) ContextOption {
 	}
 }
 
+// WithDefaultCollation sets the default collation URI used by string
+// comparison and ordering operations when no explicit collation argument is
+// supplied. Use a URI understood by the evaluator's collation registry.
 func WithDefaultCollation(uri string) ContextOption {
 	return func(c *Context) {
 		c.defaultCollation = uri
 	}
 }
 
+// WithDefaultDecimalFormat sets the unnamed decimal format used by
+// fn:format-number and related formatting features when no named decimal
+// format is requested. The DecimalFormat value is copied before storage.
 func WithDefaultDecimalFormat(df DecimalFormat) ContextOption {
 	return func(c *Context) {
 		cp := df
@@ -118,6 +124,9 @@ func WithDefaultDecimalFormat(df DecimalFormat) ContextOption {
 	}
 }
 
+// WithNamedDecimalFormats registers named decimal formats keyed by expanded
+// QName. These formats are used when a formatting expression references a
+// specific decimal format name. The map is defensively copied before storage.
 func WithNamedDecimalFormats(dfs map[QualifiedName]DecimalFormat) ContextOption {
 	return func(c *Context) {
 		c.decimalFormats = maps.Clone(dfs)
