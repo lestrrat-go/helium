@@ -950,6 +950,7 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 	// Check for 'q' flag early to skip validation for literal patterns
 	hasQ := strings.ContainsRune(flags, 'q')
 	hasBackrefs := !hasQ && hasXPathBackrefs(pattern)
+	hasSubtraction := !hasQ && hasXPathCharClassSubtraction(pattern)
 
 	if !hasQ {
 		// Reject Perl-specific constructs first
@@ -1006,7 +1007,7 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 		prefix.WriteRune(')')
 		pattern = prefix.String() + pattern
 	}
-	if hasBackrefs {
+	if hasBackrefs || hasSubtraction {
 		re, err := regexp2.Compile(pattern, re2Opts)
 		if err != nil {
 			return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("invalid regular expression: %s", err)}

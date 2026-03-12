@@ -563,6 +563,28 @@ func hasXPathBackrefs(pattern string) bool {
 	return false
 }
 
+func hasXPathCharClassSubtraction(pattern string) bool {
+	runes := []rune(pattern)
+	inCharClass := 0
+	for i := 0; i < len(runes)-1; i++ {
+		switch runes[i] {
+		case '\\':
+			i++
+		case '[':
+			inCharClass++
+		case ']':
+			if inCharClass > 0 {
+				inCharClass--
+			}
+		case '-':
+			if inCharClass > 0 && runes[i+1] == '[' {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // isValidQuantifierBrace checks whether '{' at position i is part of a
 // valid quantifier {n}, {n,}, or {n,m}. The '{' must be preceded by a
 // quantifiable atom (not at the start) and its content must match the
