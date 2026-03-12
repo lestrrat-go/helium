@@ -345,6 +345,9 @@ func fnArrayForEachPair(ctx context.Context, args []Sequence) (Sequence, error) 
 	if err != nil {
 		return nil, err
 	}
+	if fi.Arity >= 0 && fi.Arity != 2 {
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("array:for-each-pair callback must have arity 2, got %d", fi.Arity)}
+	}
 	size := a1.Size()
 	if a2.Size() < size {
 		size = a2.Size()
