@@ -60,7 +60,11 @@ var traceWriter io.Writer = os.Stderr
 func fnTrace(_ context.Context, args []Sequence) (Sequence, error) {
 	label := ""
 	if len(args) > 1 {
-		label = seqToString(args[1])
+		var err error
+		label, err = coerceArgToStringRequired(args[1])
+		if err != nil {
+			return nil, err
+		}
 	}
 	if label != "" {
 		_, _ = fmt.Fprintf(traceWriter, "[trace] %s: ", label)

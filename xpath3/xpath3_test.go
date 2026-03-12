@@ -236,6 +236,7 @@ func TestPublicStringArgsRejectMultiItemSequence(t *testing.T) {
 		{"format-number", `format-number(1, "0", ("fmt", "other"))`},
 		{"map-merge", `map:merge((map{"a": 1}), map{"duplicates": ("use-first", "reject")})`},
 		{"error-description", `error((), ("a", "b"))`},
+		{"trace-label", `trace(1, ("a", "b"))`},
 	}
 
 	for _, tc := range tests {
@@ -260,6 +261,7 @@ func TestPublicStringArgsPreserveAtomizationErrors(t *testing.T) {
 		{"parse-json", `parse-json(map{})`},
 		{"unparsed-text", `unparsed-text(map{})`},
 		{"parse-xml", `parse-xml(map{})`},
+		{"trace-label", `trace(1, map{})`},
 	}
 
 	for _, tc := range tests {
