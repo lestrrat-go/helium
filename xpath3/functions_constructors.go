@@ -142,68 +142,11 @@ func makeXSQNameConstructor() func(context.Context, []Sequence) (Sequence, error
 		if err != nil {
 			return nil, err
 		}
-		// If already a QName, return as-is
-		if a.TypeName == TypeQName {
-			return SingleAtomic(a), nil
-		}
-		// Only string and untypedAtomic can be cast to QName
-		if a.TypeName != TypeString && a.TypeName != TypeUntypedAtomic {
-			return nil, &XPathError{
-				Code:    errCodeXPTY0004,
-				Message: fmt.Sprintf("cannot cast %s to %s", a.TypeName, TypeQName),
-			}
-		}
-		s, err := atomicToString(a)
+		result, err := castToQName(a, getFnContext(ctx))
 		if err != nil {
 			return nil, err
 		}
-		s = strings.TrimSpace(s)
-
-		prefix := ""
-		local := s
-		if idx := strings.IndexByte(s, ':'); idx >= 0 {
-			prefix = s[:idx]
-			local = s[idx+1:]
-		}
-
-		uri := ""
-		if prefix != "" {
-			// Look up the prefix in the evaluation context's namespace bindings
-			resolved := false
-			ec := getFnContext(ctx)
-			if ec != nil && ec.namespaces != nil {
-				if ns, ok := ec.namespaces[prefix]; ok {
-					uri = ns
-					resolved = true
-				}
-			}
-			if !resolved {
-				// Fall back to default prefix mappings
-				if ns, ok := defaultPrefixNS[prefix]; ok {
-					uri = ns
-					resolved = true
-				}
-			}
-			if !resolved {
-				return nil, &XPathError{
-					Code:    errCodeFONS0004,
-					Message: fmt.Sprintf("no namespace binding for prefix %q", prefix),
-				}
-			}
-		} else {
-			// No prefix: check default namespace in context
-			ec := getFnContext(ctx)
-			if ec != nil && ec.namespaces != nil {
-				if ns, ok := ec.namespaces[""]; ok {
-					uri = ns
-				}
-			}
-		}
-
-		return SingleAtomic(AtomicValue{
-			TypeName: TypeQName,
-			Value:    QNameValue{Prefix: prefix, Local: local, URI: uri},
-		}), nil
+		return SingleAtomic(result), nil
 	}
 }
 
