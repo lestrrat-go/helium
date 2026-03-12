@@ -520,8 +520,6 @@ func getTestCaseSkipReason(setName, caseName string) string {
 
 func getTestSetSkipReason(name string) string {
 	switch name {
-	case "fn-doc", "fn-doc-available":
-		return "requires URI resolution"
 	case "fn-json-to-xml", "fn-xml-to-json":
 		return "requires fn:json-to-xml / fn:xml-to-json"
 	case "fn-serialize":

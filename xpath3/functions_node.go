@@ -438,7 +438,7 @@ func fnParseXML(_ context.Context, args []Sequence) (Sequence, error) {
 	s := seqToString(args[0])
 	doc, err := helium.Parse(context.Background(), []byte(s))
 	if err != nil {
-		return nil, &XPathError{Code: "FODC0006", Message: fmt.Sprintf("parse-xml: %v", err)}
+		return nil, &XPathError{Code: errCodeFODC0006, Message: fmt.Sprintf("parse-xml: %v", err)}
 	}
 	return Sequence{NodeItem{Node: doc}}, nil
 }
@@ -452,7 +452,7 @@ func fnParseXMLFragment(_ context.Context, args []Sequence) (Sequence, error) {
 	wrapped := "<_fragment_>" + s + "</_fragment_>"
 	doc, err := helium.Parse(context.Background(), []byte(wrapped))
 	if err != nil {
-		return nil, &XPathError{Code: "FODC0006", Message: fmt.Sprintf("parse-xml-fragment: %v", err)}
+		return nil, &XPathError{Code: errCodeFODC0006, Message: fmt.Sprintf("parse-xml-fragment: %v", err)}
 	}
 	return Sequence{NodeItem{Node: doc}}, nil
 }
@@ -537,7 +537,10 @@ func fnDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
-	uri := seqToString(args[0])
+	uri, err := docURIArg(args[0], "fn:doc")
+	if err != nil {
+		return nil, err
+	}
 	doc, err := loadDoc(ctx, uri)
 	if err != nil {
 		return nil, err
@@ -549,14 +552,17 @@ func fnDocAvailable(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return SingleBoolean(false), nil
 	}
-	uri := seqToString(args[0])
-	_, err := loadDoc(ctx, uri)
+	uri, err := docURIArg(args[0], "fn:doc-available")
+	if err != nil {
+		return nil, err
+	}
+	_, err = loadDoc(ctx, uri)
 	return SingleBoolean(err == nil), nil
 }
 
 func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 	if strings.Contains(uri, "#") {
-		return nil, &XPathError{Code: "FODC0005", Message: "fn:doc: URI must not contain a fragment identifier"}
+		return nil, &XPathError{Code: errCodeFODC0005, Message: "fn:doc: URI must not contain a fragment identifier"}
 	}
 
 	resolved, err := resolveDocURI(ctx, uri)
@@ -575,6 +581,13 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 	}
 	doc.SetURL(resolved)
 	return doc, nil
+}
+
+func docURIArg(seq Sequence, fnName string) (string, error) {
+	if len(seq) > 1 {
+		return "", &XPathError{Code: errCodeXPTY0004, Message: fnName + ": expected xs:string?, got sequence of length > 1"}
+	}
+	return coerceArgToString(seq)
 }
 
 func resolveDocURI(ctx context.Context, uri string) (string, error) {
