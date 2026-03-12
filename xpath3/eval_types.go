@@ -396,7 +396,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 			}
 			// If the function has typed parameters, check subtype relationship
 			// Function subtyping: contravariant in parameters, covariant in return type
-			if v.ParamTypes != nil && len(t.ParamTypes) > 0 {
+			if len(v.ParamTypes) > 0 && len(t.ParamTypes) > 0 {
 				for i, testParam := range t.ParamTypes {
 					// Contravariant: the function's declared param type must be a supertype
 					// of (or same as) the test's param type. In practice, this means the
