@@ -66,6 +66,12 @@ Misc: `adjust-dateTime-to-timezone`, `adjust-date-to-timezone`, `adjust-time-to-
 ### `functions_uri.go`
 `resolve-uri`, `encode-for-uri`, `iri-to-uri`, `escape-html-uri`, `base-uri`, `document-uri`
 
+### `functions_json.go`
+`parse-json`, `json-doc`, `json-to-xml`, `xml-to-json`, `serialize`
+
+`json-doc` uses same URI resolution/resource-loading stack as `doc` + `unparsed-text`:
+`WithBaseURI` → relative resolution, `WithURIResolver` → first fetch hook, `WithHTTPClient` → HTTP fallback.
+
 ### `functions_qname.go`
 `QName`, `resolve-QName`, `prefix-from-QName`, `local-name-from-QName`, `namespace-uri-from-QName`, `namespace-uri-for-prefix`, `in-scope-prefixes`
 

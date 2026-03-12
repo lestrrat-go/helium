@@ -2,8 +2,10 @@ package xpath3_test
 
 import (
 	"context"
+	"io"
 	"math"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -31,6 +33,16 @@ const testXML = `<library>
     <price>24.99</price>
   </book>
 </library>`
+
+type testURIResolver map[string]string
+
+func (r testURIResolver) ResolveURI(uri string) (io.ReadCloser, error) {
+	body, ok := r[uri]
+	if !ok {
+		return nil, io.EOF
+	}
+	return io.NopCloser(strings.NewReader(body)), nil
+}
 
 func parseTestDoc(t *testing.T) *helium.Document {
 	t.Helper()
@@ -145,6 +157,22 @@ func TestResultIsNodeSet(t *testing.T) {
 	nodes, err := result.Nodes()
 	require.NoError(t, err)
 	require.Len(t, nodes, 3)
+}
+
+func TestJSONDocUsesURIResolverAndBaseURI(t *testing.T) {
+	ctx := xpath3.NewContext(t.Context(),
+		xpath3.WithBaseURI("http://example.com/base/"),
+		xpath3.WithURIResolver(testURIResolver{
+			"http://example.com/base/data.json": `{"name":"helium"}`,
+		}),
+	)
+
+	result, err := xpath3.Evaluate(ctx, nil, `json-doc("data.json")?name`)
+	require.NoError(t, err)
+
+	s, ok := result.IsString()
+	require.True(t, ok)
+	require.Equal(t, "helium", s)
 }
 
 func TestResultIsBoolean(t *testing.T) {
