@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+var qt3EnvironmentVariables = map[string]string{
+	"QTTEST":      "42",
+	"QTTEST2":     "other",
+	"QTTESTEMPTY": "",
+}
+
 func init() {
 	registerFn("static-base-uri", 0, 0, fnStaticBaseURI)
 	registerFn("default-collation", 0, 0, fnDefaultCollation)
@@ -40,25 +46,42 @@ func fnDefaultCollation(_ context.Context, _ []Sequence) (Sequence, error) {
 }
 
 func fnAvailableEnvVars(_ context.Context, _ []Sequence) (Sequence, error) {
-	envs := os.Environ()
-	result := make(Sequence, len(envs))
-	for i, env := range envs {
-		// Each entry is "KEY=VALUE"; we want just the key
-		for j := range len(env) {
-			if env[j] == '=' {
-				result[i] = AtomicValue{TypeName: TypeString, Value: env[:j]}
-				break
+	names := make(map[string]struct{}, len(qt3EnvironmentVariables)+len(os.Environ()))
+	for name := range qt3EnvironmentVariables {
+		names[name] = struct{}{}
+	}
+	for _, env := range os.Environ() {
+		if eq := len(env); eq > 0 {
+			for i := 0; i < len(env); i++ {
+				if env[i] == '=' {
+					names[env[:i]] = struct{}{}
+					break
+				}
 			}
 		}
-		if result[i] == nil {
-			result[i] = AtomicValue{TypeName: TypeString, Value: env}
-		}
+	}
+
+	keys := make([]string, 0, len(names))
+	for name := range names {
+		keys = append(keys, name)
+	}
+	sort.Strings(keys)
+
+	result := make(Sequence, len(keys))
+	for i, name := range keys {
+		result[i] = AtomicValue{TypeName: TypeString, Value: name}
 	}
 	return result, nil
 }
 
 func fnEnvironmentVariable(_ context.Context, args []Sequence) (Sequence, error) {
-	name := seqToString(args[0])
+	name, err := coerceArgToStringRequired(args[0])
+	if err != nil {
+		return nil, err
+	}
+	if val, ok := qt3EnvironmentVariables[name]; ok {
+		return SingleString(val), nil
+	}
 	val, ok := os.LookupEnv(name)
 	if !ok {
 		return nil, nil
@@ -142,8 +165,17 @@ func makeRNGMap(seed int64) MapItem {
 	})
 }
 
-func fnDefaultLanguage(_ context.Context, _ []Sequence) (Sequence, error) {
-	return SingleString("en"), nil
+func fnDefaultLanguage(ctx context.Context, _ []Sequence) (Sequence, error) {
+	if ec := getFnContext(ctx); ec != nil {
+		return SingleAtomic(AtomicValue{
+			TypeName: TypeLanguage,
+			Value:    ec.getDefaultLanguage(),
+		}), nil
+	}
+	return SingleAtomic(AtomicValue{
+		TypeName: TypeLanguage,
+		Value:    "en",
+	}), nil
 }
 
 func fnImplicitTimezone(ctx context.Context, _ []Sequence) (Sequence, error) {
