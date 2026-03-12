@@ -184,7 +184,7 @@ func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleAtomic(makeFloatResult(a.TypeName, math.RoundToEven(n*scale)/scale)), nil
 }
 
-func fnFormatNumber(_ context.Context, args []Sequence) (Sequence, error) {
+func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
@@ -194,8 +194,14 @@ func fnFormatNumber(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	picture := seqToString(args[1])
 
-	// Default decimal format
 	df := defaultDecimalFormat()
+	if len(args) > 2 && len(args[2]) > 0 {
+		var err error
+		df, err = resolveDecimalFormat(ctx, seqToString(args[2]))
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	result, err := formatNumber(a, picture, df)
 	if err != nil {
