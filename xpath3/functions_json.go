@@ -358,9 +358,12 @@ func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("json-doc: error reading %s: %v", uri, err)}
 	}
 
-	// Delegate to parse-json logic
-	jsonStr := string(body)
-	return fnParseJSON(ctx, []Sequence{{AtomicValue{TypeName: TypeString, Value: jsonStr}}})
+	// Delegate to parse-json logic, preserving any caller-supplied options.
+	parseArgs := []Sequence{{AtomicValue{TypeName: TypeString, Value: string(body)}}}
+	if len(args) > 1 {
+		parseArgs = append(parseArgs, args[1])
+	}
+	return fnParseJSON(ctx, parseArgs)
 }
 
 func fnSerialize(_ context.Context, args []Sequence) (Sequence, error) {
