@@ -677,12 +677,59 @@ func fnElementWithID(ctx context.Context, args []Sequence) (Sequence, error) {
 	return fnID(ctx, args)
 }
 
-func fnCollection(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, &XPathError{Code: errCodeFODC0002, Message: "fn:collection: not supported"}
+func fnCollection(ctx context.Context, args []Sequence) (Sequence, error) {
+	uri, hasURI, err := collectionURIArg(args, "fn:collection")
+	if err != nil {
+		return nil, err
+	}
+	if hasURI {
+		uri, err = resolveCollectionURI(ctx, uri, "fn:collection")
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		uri = ""
+	}
+
+	ec := getFnContext(ctx)
+	if ec == nil || ec.collectionResolver == nil {
+		return nil, &XPathError{Code: errCodeFODC0002, Message: "fn:collection: no collection resolver configured"}
+	}
+	seq, err := ec.collectionResolver.ResolveCollection(uri)
+	if err != nil {
+		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:collection: cannot resolve collection: %v", err)}
+	}
+	return seq, nil
 }
 
-func fnURICollection(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, &XPathError{Code: errCodeFODC0002, Message: "fn:uri-collection: not supported"}
+func fnURICollection(ctx context.Context, args []Sequence) (Sequence, error) {
+	uri, hasURI, err := collectionURIArg(args, "fn:uri-collection")
+	if err != nil {
+		return nil, err
+	}
+	if hasURI {
+		uri, err = resolveCollectionURI(ctx, uri, "fn:uri-collection")
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		uri = ""
+	}
+
+	ec := getFnContext(ctx)
+	if ec == nil || ec.collectionResolver == nil {
+		return nil, &XPathError{Code: errCodeFODC0002, Message: "fn:uri-collection: no collection resolver configured"}
+	}
+	uris, err := ec.collectionResolver.ResolveURICollection(uri)
+	if err != nil {
+		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:uri-collection: cannot resolve collection: %v", err)}
+	}
+
+	result := make(Sequence, 0, len(uris))
+	for _, uri := range uris {
+		result = append(result, AtomicValue{TypeName: TypeAnyURI, Value: uri})
+	}
+	return result, nil
 }
 
 func fnDoc(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -748,6 +795,41 @@ func docURIArg(seq Sequence, fnName string) (string, error) {
 		return "", &XPathError{Code: errCodeXPTY0004, Message: fnName + ": expected xs:string?, got sequence of length > 1"}
 	}
 	return coerceArgToString(seq)
+}
+
+func collectionURIArg(args []Sequence, fnName string) (string, bool, error) {
+	if len(args) == 0 || len(args[0]) == 0 {
+		return "", false, nil
+	}
+	uri, err := docURIArg(args[0], fnName)
+	if err != nil {
+		return "", false, err
+	}
+	return uri, true, nil
+}
+
+func resolveCollectionURI(ctx context.Context, uri, fnName string) (string, error) {
+	if uri == "" {
+		return "", nil
+	}
+
+	ref, err := url.Parse(uri)
+	if err != nil {
+		return "", &XPathError{Code: errCodeFODC0004, Message: fmt.Sprintf("%s: invalid URI: %v", fnName, err)}
+	}
+	if ref.IsAbs() {
+		return ref.String(), nil
+	}
+
+	if ec := getFnContext(ctx); ec != nil && ec.baseURI != "" {
+		base, berr := url.Parse(ec.baseURI)
+		if berr != nil {
+			return "", &XPathError{Code: errCodeFODC0004, Message: fmt.Sprintf("%s: invalid base URI: %v", fnName, berr)}
+		}
+		return base.ResolveReference(ref).String(), nil
+	}
+
+	return uri, nil
 }
 
 func resolveDocURI(ctx context.Context, uri string) (string, error) {

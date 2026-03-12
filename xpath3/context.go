@@ -27,21 +27,29 @@ type URIResolver interface {
 	ResolveURI(uri string) (io.ReadCloser, error)
 }
 
+// CollectionResolver resolves fn:collection and fn:uri-collection lookups.
+// The empty string identifies the default collection.
+type CollectionResolver interface {
+	ResolveCollection(uri string) (Sequence, error)
+	ResolveURICollection(uri string) ([]string, error)
+}
+
 // Context holds XPath evaluation settings provided by the caller.
 type Context struct {
-	namespaces       map[string]string
-	variables        map[string]Sequence
-	functions        map[string]Function
-	functionsNS      map[QualifiedName]Function
-	opLimit          int
-	implicitTimezone *time.Location
-	defaultLanguage  string
-	defaultCollation string
-	defaultDecimal   *DecimalFormat
-	decimalFormats   map[QualifiedName]DecimalFormat
-	baseURI          string
-	uriResolver      URIResolver
-	httpClient       *http.Client
+	namespaces         map[string]string
+	variables          map[string]Sequence
+	functions          map[string]Function
+	functionsNS        map[QualifiedName]Function
+	opLimit            int
+	implicitTimezone   *time.Location
+	defaultLanguage    string
+	defaultCollation   string
+	defaultDecimal     *DecimalFormat
+	decimalFormats     map[QualifiedName]DecimalFormat
+	baseURI            string
+	uriResolver        URIResolver
+	collectionResolver CollectionResolver
+	httpClient         *http.Client
 }
 
 // ContextOption configures a Context.
@@ -146,6 +154,14 @@ func WithBaseURI(uri string) ContextOption {
 func WithURIResolver(r URIResolver) ContextOption {
 	return func(c *Context) {
 		c.uriResolver = r
+	}
+}
+
+// WithCollectionResolver sets a custom resolver for fn:collection and
+// fn:uri-collection.
+func WithCollectionResolver(r CollectionResolver) ContextOption {
+	return func(c *Context) {
+		c.collectionResolver = r
 	}
 }
 

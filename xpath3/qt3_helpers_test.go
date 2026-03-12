@@ -39,6 +39,12 @@ type qt3SourceDoc struct {
 	URI     string
 }
 
+type qt3Collection struct {
+	URI        string
+	SourceDocs []qt3SourceDoc
+	Query      string
+}
+
 type qt3Test struct {
 	Name                string
 	XPath               string
@@ -50,6 +56,7 @@ type qt3Test struct {
 	NamedDecimalFormats []qt3NamedDecimalFormat
 	Params              []qt3Param
 	SourceDocs          []qt3SourceDoc
+	Collections         []qt3Collection
 	BaseURI             string            // static base URI for fn:unparsed-text etc.
 	NeedsHTTP           bool              // test requires HTTP client (e.g. fn:json-doc with URL)
 	ResourceMap         map[string]string // URI → file path (relative to qt3TestDataDir()) for resource resolution
@@ -77,6 +84,27 @@ type qt3NamedDecimalFormat struct {
 	URI    string
 	Name   string
 	Format qt3DecimalFormat
+}
+
+type qt3CollectionResolver struct {
+	collections    map[string]xpath3.Sequence
+	uriCollections map[string][]string
+}
+
+func (r *qt3CollectionResolver) ResolveCollection(uri string) (xpath3.Sequence, error) {
+	seq, ok := r.collections[uri]
+	if !ok {
+		return nil, fmt.Errorf("collection %q not found", uri)
+	}
+	return append(xpath3.Sequence(nil), seq...), nil
+}
+
+func (r *qt3CollectionResolver) ResolveURICollection(uri string) ([]string, error) {
+	uris, ok := r.uriCollections[uri]
+	if !ok {
+		return nil, fmt.Errorf("uri-collection %q not found", uri)
+	}
+	return append([]string(nil), uris...), nil
 }
 
 func (df qt3DecimalFormat) toXPath3() xpath3.DecimalFormat {
@@ -185,6 +213,9 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 			for _, src := range tc.SourceDocs {
 				sourceDoc := qt3ParseDocSource(t, src)
 				vars[src.Name] = xpath3.Sequence{xpath3.NodeItem{Node: sourceDoc}}
+			}
+			if resolver := qt3BuildCollectionResolver(t, ctx, tc, opts, doc, vars); resolver != nil {
+				opts = append(opts, xpath3.WithCollectionResolver(resolver))
 			}
 			if len(tc.Params) > 0 {
 				for _, param := range tc.Params {
@@ -358,9 +389,79 @@ func qt3ParseDocSource(t *testing.T, src qt3SourceDoc) helium.Node {
 	t.Helper()
 	doc := qt3ParseDoc(t, filepath.Join(qt3TestDataDir(), src.DocPath))
 	if src.URI != "" {
-		doc.OwnerDocument().SetURL(src.URI)
+		if document, ok := doc.(*helium.Document); ok {
+			document.SetURL(src.URI)
+		} else if owner := doc.OwnerDocument(); owner != nil {
+			owner.SetURL(src.URI)
+		}
 	}
 	return doc
+}
+
+func qt3BuildCollectionResolver(t *testing.T, ctx context.Context, tc qt3Test, opts []xpath3.ContextOption, doc helium.Node, vars map[string]xpath3.Sequence) xpath3.CollectionResolver {
+	t.Helper()
+	if len(tc.Collections) == 0 {
+		return nil
+	}
+
+	resolver := &qt3CollectionResolver{
+		collections:    make(map[string]xpath3.Sequence, len(tc.Collections)),
+		uriCollections: make(map[string][]string, len(tc.Collections)),
+	}
+
+	queryOpts := append([]xpath3.ContextOption{}, opts...)
+	if len(vars) > 0 {
+		queryOpts = append(queryOpts, xpath3.WithVariables(vars))
+	}
+	queryCtx := xpath3.NewContext(ctx, queryOpts...)
+
+	for _, col := range tc.Collections {
+		if len(col.SourceDocs) > 0 {
+			seq := make(xpath3.Sequence, 0, len(col.SourceDocs))
+			uris := make([]string, 0, len(col.SourceDocs))
+			for _, src := range col.SourceDocs {
+				sourceDoc := qt3ParseDocSource(t, src)
+				seq = append(seq, xpath3.NodeItem{Node: sourceDoc})
+				if src.URI != "" {
+					uris = append(uris, src.URI)
+				}
+			}
+			resolver.collections[col.URI] = seq
+			resolver.uriCollections[col.URI] = uris
+			continue
+		}
+
+		if col.Query == "" {
+			resolver.collections[col.URI] = nil
+			resolver.uriCollections[col.URI] = nil
+			continue
+		}
+
+		expr, err := xpath3.Compile(col.Query)
+		require.NoError(t, err, "compile collection %q query: %s", col.URI, col.Query)
+		result, err := expr.Evaluate(queryCtx, doc)
+		require.NoError(t, err, "eval collection %q query: %s", col.URI, col.Query)
+		resolver.collections[col.URI] = result.Sequence()
+		resolver.uriCollections[col.URI] = qt3CollectionURIs(t, col.URI, result.Sequence())
+	}
+
+	return resolver
+}
+
+func qt3CollectionURIs(t *testing.T, uri string, seq xpath3.Sequence) []string {
+	t.Helper()
+	uris := make([]string, 0, len(seq))
+	for _, item := range seq {
+		av, err := xpath3.AtomizeItem(item)
+		require.NoError(t, err, "atomize collection %q member", uri)
+		if av.TypeName != xpath3.TypeAnyURI {
+			continue
+		}
+		s, err := xpath3.AtomicToString(av)
+		require.NoError(t, err, "stringify collection %q URI member", uri)
+		uris = append(uris, s)
+	}
+	return uris
 }
 
 // ──────────────────────────────────────────────────────────────────────

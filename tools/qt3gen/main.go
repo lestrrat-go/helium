@@ -63,6 +63,7 @@ type environment struct {
 	Name          string          `xml:"name,attr"`
 	Ref           string          `xml:"ref,attr"`
 	Sources       []source        `xml:"source"`
+	Collections   []collection    `xml:"collection"`
 	Resources     []resource      `xml:"resource"`
 	Namespaces    []namespace     `xml:"namespace"`
 	Collations    []collation     `xml:"collation"`
@@ -104,6 +105,12 @@ type source struct {
 	Validation string `xml:"validation,attr"`
 }
 
+type collection struct {
+	URI     string   `xml:"uri,attr"`
+	Sources []source `xml:"source"`
+	Query   string   `xml:"query"`
+}
+
 type namespace struct {
 	Prefix string `xml:"prefix,attr"`
 	URI    string `xml:"uri,attr"`
@@ -120,6 +127,12 @@ type sourceBinding struct {
 	Name string
 	File string
 	URI  string
+}
+
+type collectionBinding struct {
+	URI        string
+	SourceDocs []sourceBinding
+	Query      string
 }
 
 type testCase struct {
@@ -231,6 +244,14 @@ func main() {
 						docFiles[resolvedPath] = true
 					}
 				}
+				for _, col := range env.Collections {
+					for _, src := range col.Sources {
+						if src.File == "" {
+							continue
+						}
+						docFiles[resolveEnvSourcePath(envIsGlobal, tsDir, src.File)] = true
+					}
+				}
 			}
 
 			assertions := parseResultAssertions(tc)
@@ -243,7 +264,7 @@ func main() {
 			// Detect resource environments (e.g., fn:json-doc/doc tests with URI-mapped files)
 			needsHTTP := false
 			var resMap map[string]string
-			if env != nil && (len(env.Resources) > 0 || len(env.Sources) > 0) {
+			if env != nil && (len(env.Resources) > 0 || len(env.Sources) > 0 || len(env.Collections) > 0) {
 				resMap = make(map[string]string)
 				for _, res := range env.Resources {
 					if res.File != "" && res.URI != "" {
@@ -255,6 +276,17 @@ func main() {
 				}
 				for _, src := range env.Sources {
 					if src.File != "" && src.URI != "" {
+						needsHTTP = true
+						srcPath := resolveEnvSourcePath(envIsGlobal, tsDir, src.File)
+						resourceFiles[srcPath] = true
+						resMap[src.URI] = srcPath
+					}
+				}
+				for _, col := range env.Collections {
+					for _, src := range col.Sources {
+						if src.File == "" || src.URI == "" {
+							continue
+						}
 						needsHTTP = true
 						srcPath := resolveEnvSourcePath(envIsGlobal, tsDir, src.File)
 						resourceFiles[srcPath] = true
@@ -277,6 +309,7 @@ func main() {
 				DefaultDecimal:   envDefaultDecimalFormat(env),
 				DecimalFormats:   envNamedDecimalFormats(env),
 				Params:           envParams(env),
+				Collections:      envCollections(env, envIsGlobal, tsDir),
 				VariableSources:  envVariableSources(env, envIsGlobal, tsDir),
 				BaseURI:          baseURI,
 				NeedsHTTP:        needsHTTP,
@@ -488,8 +521,6 @@ func getSkipReason(deps []dependency) string {
 				return "requires XQuery load-xquery-module"
 			case "remote_http":
 				return "requires remote HTTP access"
-			case "non_empty_sequence_collection":
-				return "requires non-empty sequence collection"
 			case "staticTyping":
 				return "requires static typing"
 			}
@@ -586,6 +617,31 @@ func envVariableSources(env *environment, envIsGlobal bool, tsDir string) []sour
 			File: resolveEnvSourcePath(envIsGlobal, tsDir, src.File),
 			URI:  src.URI,
 		})
+	}
+	return out
+}
+
+func envCollections(env *environment, envIsGlobal bool, tsDir string) []collectionBinding {
+	if env == nil {
+		return nil
+	}
+
+	var out []collectionBinding
+	for _, col := range env.Collections {
+		binding := collectionBinding{
+			URI:   col.URI,
+			Query: strings.TrimSpace(col.Query),
+		}
+		for _, src := range col.Sources {
+			if src.File == "" {
+				continue
+			}
+			binding.SourceDocs = append(binding.SourceDocs, sourceBinding{
+				File: resolveEnvSourcePath(envIsGlobal, tsDir, src.File),
+				URI:  src.URI,
+			})
+		}
+		out = append(out, binding)
 	}
 	return out
 }
@@ -801,6 +857,7 @@ type generatedTest struct {
 	DefaultDecimal   *decimalFormat
 	DecimalFormats   []namedDecimalFormat
 	Params           []param
+	Collections      []collectionBinding
 	VariableSources  []sourceBinding
 	BaseURI          string
 	NeedsHTTP        bool
@@ -888,6 +945,34 @@ func generateTestFile(tests []generatedTest) string {
 					fmt.Fprintf(&b, "{Name: %q, DocPath: %q", src.Name, src.File)
 					if src.URI != "" {
 						fmt.Fprintf(&b, ", URI: %q", src.URI)
+					}
+					b.WriteString("}")
+				}
+				b.WriteString("}")
+			}
+			if len(tc.Collections) > 0 {
+				b.WriteString(", Collections: []qt3Collection{")
+				for i, col := range tc.Collections {
+					if i > 0 {
+						b.WriteString(", ")
+					}
+					fmt.Fprintf(&b, "{URI: %q", col.URI)
+					if len(col.SourceDocs) > 0 {
+						b.WriteString(", SourceDocs: []qt3SourceDoc{")
+						for j, src := range col.SourceDocs {
+							if j > 0 {
+								b.WriteString(", ")
+							}
+							fmt.Fprintf(&b, "{DocPath: %q", src.File)
+							if src.URI != "" {
+								fmt.Fprintf(&b, ", URI: %q", src.URI)
+							}
+							b.WriteString("}")
+						}
+						b.WriteString("}")
+					}
+					if col.Query != "" {
+						fmt.Fprintf(&b, ", Query: %q", col.Query)
 					}
 					b.WriteString("}")
 				}

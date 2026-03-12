@@ -40,6 +40,7 @@ type evalContext struct {
 	docCache             map[string]helium.Node
 	baseURI              string      // static base URI for resolving relative URIs
 	uriResolver          URIResolver // custom URI resolver for fn:unparsed-text, fn:doc, etc.
+	collectionResolver   CollectionResolver
 	// httpClient is intentionally stored here (not only in Context) so that
 	// built-in functions can access it through getFnContext without an extra
 	// indirection. It is pointer-sized and nil when unused, so copies via
@@ -78,6 +79,7 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 		ec.decimalFormats = xctx.decimalFormats
 		ec.baseURI = xctx.baseURI
 		ec.uriResolver = xctx.uriResolver
+		ec.collectionResolver = xctx.collectionResolver
 		ec.httpClient = xctx.httpClient
 	}
 	return ec
