@@ -159,22 +159,15 @@ func resolveUnparsedTextURI(ctx context.Context, href string) (string, error) {
 
 	// Empty href → use static base URI
 	if href == "" {
-		ec := getFnContext(ctx)
-		if ec != nil && ec.baseURI != "" {
-			return ec.baseURI, nil
+		if baseURI := baseURIFromContext(ctx); baseURI != "" {
+			return baseURI, nil
 		}
 		return "", &XPathError{Code: "FOUT1170", Message: "fn:unparsed-text: empty href and no base URI available"}
 	}
 
-	// Validate the URI
-	parsed, err := url.Parse(href)
+	parsed, err := parseURIReference(href)
 	if err != nil {
 		return "", &XPathError{Code: "FOUT1170", Message: fmt.Sprintf("fn:unparsed-text: invalid URI: %s", href)}
-	}
-
-	// Reject invalid %-encoding
-	if err := validatePercentEncoding(href); err != nil {
-		return "", &XPathError{Code: "FOUT1170", Message: fmt.Sprintf("fn:unparsed-text: invalid URI: %s", err)}
 	}
 
 	// Reject URIs with only a scheme but no valid structure like ":/"
@@ -183,32 +176,24 @@ func resolveUnparsedTextURI(ctx context.Context, href string) (string, error) {
 	}
 
 	// Reject Windows-style paths like "C:\..."
-	if len(parsed.Scheme) == 1 && parsed.Scheme[0] >= 'A' && parsed.Scheme[0] <= 'Z' {
+	if isWindowsDriveScheme(parsed) {
 		return "", &XPathError{Code: "FOUT1170", Message: fmt.Sprintf("fn:unparsed-text: unsupported URI scheme: %s", href)}
 	}
 
 	// If it's an absolute URI with a scheme, use it directly
 	if parsed.Scheme != "" {
 		// Reject unknown/unsupported schemes
-		switch parsed.Scheme {
-		case "file", "http", "https":
-			// supported
-		default:
+		if !isSupportedResourceScheme(parsed.Scheme) {
 			return "", &XPathError{Code: "FOUT1170", Message: fmt.Sprintf("fn:unparsed-text: unsupported URI scheme: %s", parsed.Scheme)}
 		}
 		return href, nil
 	}
 
 	// Relative URI — resolve against base URI
-	ec := getFnContext(ctx)
-	if ec != nil && ec.baseURI != "" {
-		baseURL, err := url.Parse(ec.baseURI)
+	if baseURI := baseURIFromContext(ctx); baseURI != "" {
+		resolved, err := resolveURIReference(baseURI, href)
 		if err == nil {
-			ref, err := url.Parse(href)
-			if err == nil {
-				resolved := baseURL.ResolveReference(ref)
-				return resolved.String(), nil
-			}
+			return resolved, nil
 		}
 	}
 
