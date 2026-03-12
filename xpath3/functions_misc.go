@@ -26,6 +26,8 @@ func init() {
 	registerFn("implicit-timezone", 0, 0, fnImplicitTimezone)
 	registerFn("default-language", 0, 0, fnDefaultLanguage)
 	registerFn("random-number-generator", 0, 1, fnRandomNumberGenerator)
+	registerFn("load-xquery-module", 1, 2, fnLoadXQueryModule)
+	registerFn("transform", 1, 1, fnTransform)
 }
 
 func fnStaticBaseURI(ctx context.Context, _ []Sequence) (Sequence, error) {
@@ -192,4 +194,12 @@ func fnImplicitTimezone(ctx context.Context, _ []Sequence) (Sequence, error) {
 		d.Negative = true
 	}
 	return SingleAtomic(AtomicValue{TypeName: TypeDayTimeDuration, Value: d}), nil
+}
+
+func fnLoadXQueryModule(_ context.Context, _ []Sequence) (Sequence, error) {
+	return nil, &XPathError{Code: errCodeFOER0000, Message: "fn:load-xquery-module is not implemented"}
+}
+
+func fnTransform(_ context.Context, _ []Sequence) (Sequence, error) {
+	return nil, &XPathError{Code: errCodeFOER0000, Message: "fn:transform is not implemented"}
 }

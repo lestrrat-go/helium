@@ -18,6 +18,7 @@ func init() {
 	registerNS(NSArray, "tail", 1, 1, fnArrayTail)
 	registerNS(NSArray, "reverse", 1, 1, fnArrayReverse)
 	registerNS(NSArray, "join", 1, 1, fnArrayJoin)
+	registerNS(NSArray, "flatten", 1, 1, fnArrayFlatten)
 	registerNS(NSArray, "flat-map", 2, 2, fnArrayFlatMap)
 	registerNS(NSArray, "filter", 2, 2, fnArrayFilter)
 	registerNS(NSArray, "fold-left", 3, 3, fnArrayFoldLeft)
@@ -214,6 +215,27 @@ func fnArrayJoin(_ context.Context, args []Sequence) (Sequence, error) {
 		allMembers = append(allMembers, a.Members()...)
 	}
 	return Sequence{NewArray(allMembers)}, nil
+}
+
+func fnArrayFlatten(_ context.Context, args []Sequence) (Sequence, error) {
+	var result Sequence
+	for _, item := range args[0] {
+		flattenArrayItem(&result, item)
+	}
+	return result, nil
+}
+
+func flattenArrayItem(dst *Sequence, item Item) {
+	arr, ok := item.(ArrayItem)
+	if !ok {
+		*dst = append(*dst, item)
+		return
+	}
+	for _, member := range arr.Members() {
+		for _, child := range member {
+			flattenArrayItem(dst, child)
+		}
+	}
 }
 
 func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {

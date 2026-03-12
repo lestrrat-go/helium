@@ -133,7 +133,7 @@ func fnApply(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "apply() second argument must be array"}
 	}
 	if fi.Arity >= 0 && arr.Size() != fi.Arity {
-		return nil, &XPathError{Code: "FOAP0001", Message: fmt.Sprintf("fn:apply: function has arity %d but array has %d members", fi.Arity, arr.Size())}
+		return nil, &XPathError{Code: errCodeFOAP0001, Message: fmt.Sprintf("fn:apply: function has arity %d but array has %d members", fi.Arity, arr.Size())}
 	}
 	fnArgs := make([]Sequence, arr.Size())
 	for i := range fnArgs {
@@ -146,45 +146,101 @@ func fnApply(ctx context.Context, args []Sequence) (Sequence, error) {
 	return fi.Invoke(ctx, fnArgs)
 }
 
-func fnFunctionLookup(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 || len(args[1]) == 0 {
-		return nil, nil
-	}
-	a, err := AtomizeItem(args[0][0])
+func fnFunctionLookup(ctx context.Context, args []Sequence) (Sequence, error) {
+	nameArg, err := extractSingleAtomicArg(args[0], "function-lookup()")
 	if err != nil {
 		return nil, err
 	}
-	if a.TypeName != TypeQName {
+	if nameArg.TypeName != TypeQName {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "function-lookup() first argument must be QName"}
 	}
-	qv := a.QNameVal()
-	arityA, err := AtomizeItem(args[1][0])
+	arityArg, err := extractSingleAtomicArg(args[1], "function-lookup()")
 	if err != nil {
 		return nil, err
 	}
-	arity := int(arityA.ToFloat64())
+	arityArg, err = coerceToInteger(arityArg)
+	if err != nil {
+		return nil, err
+	}
+	arityBig := arityArg.BigInt()
+	if !arityBig.IsInt64() {
+		return nil, nil
+	}
+	arity := int(arityBig.Int64())
+	if arity < 0 {
+		return nil, nil
+	}
 
-	qn := QualifiedName{URI: qv.URI, Name: qv.Local}
-	fn, ok := builtinFunctions3[qn]
+	fi, ok := lookupFunctionItem(ctx, nameArg.QNameVal(), arity)
 	if !ok {
-		// Try fn: namespace if URI is empty
-		if qv.URI == "" {
-			qn.URI = NSFn
-			fn, ok = builtinFunctions3[qn]
+		return nil, nil
+	}
+	return Sequence{fi}, nil
+}
+
+func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (FunctionItem, bool) {
+	var (
+		fn Function
+		ok bool
+	)
+
+	if ec := getFnContext(ctx); ec != nil {
+		if qv.URI == "" && ec.functions != nil {
+			fn, ok = ec.functions[qv.Local]
+			if ok && checkArity(fn, qv.Local, arity) != nil {
+				ok = false
+			}
 		}
-		if !ok {
-			return nil, nil
+		if !ok && ec.fnsNS != nil {
+			fn, ok = ec.fnsNS[QualifiedName{URI: qv.URI, Name: qv.Local}]
+			if ok && checkArity(fn, qv.Local, arity) != nil {
+				ok = false
+			}
 		}
+	}
+	if !ok {
+		fn, ok = builtinFunctions3[QualifiedName{URI: qv.URI, Name: qv.Local}]
+		if ok && checkArity(fn, qv.Local, arity) != nil {
+			ok = false
+		}
+	}
+	if !ok {
+		return FunctionItem{}, false
+	}
+
+	capturedCtx := ctx
+	if ec := getFnContext(ctx); ec != nil {
+		capturedCtx = withFnContext(ec.goCtx, ec)
+	}
+
+	var paramTypes []SequenceType
+	var returnType *SequenceType
+	if sig := lookupFunctionSignature(qv.URI, qv.Local, arity); sig != nil {
+		paramTypes = sig.ParamTypes
+		returnType = sig.ReturnType
 	}
 
 	fi := FunctionItem{
-		Arity: arity,
-		Name:  qv.Local,
+		Arity:      arity,
+		Name:       qv.Local,
+		Namespace:  qv.URI,
+		ParamTypes: paramTypes,
+		ReturnType: returnType,
 		Invoke: func(ctx context.Context, callArgs []Sequence) (Sequence, error) {
+			if len(callArgs) != arity {
+				return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("fn:%s requires %d arguments, got %d", qv.Local, arity, len(callArgs))}
+			}
 			return fn.Call(ctx, callArgs)
 		},
 	}
-	return Sequence{fi}, nil
+	_ = capturedCtx
+	fi.Invoke = func(_ context.Context, callArgs []Sequence) (Sequence, error) {
+		if len(callArgs) != arity {
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("fn:%s requires %d arguments, got %d", qv.Local, arity, len(callArgs))}
+		}
+		return fn.Call(capturedCtx, callArgs)
+	}
+	return fi, true
 }
 
 func fnFunctionArity(_ context.Context, args []Sequence) (Sequence, error) {

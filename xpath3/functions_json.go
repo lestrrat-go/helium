@@ -10,11 +10,14 @@ import (
 	"net/url"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/lestrrat-go/helium"
 )
 
 func init() {
 	registerFn("parse-json", 1, 2, fnParseJSON)
 	registerFn("json-doc", 1, 2, fnJSONDoc)
+	registerFn("json-to-xml", 1, 2, fnJSONToXML)
 	registerFn("serialize", 1, 2, fnSerialize)
 }
 
@@ -479,6 +482,49 @@ func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 		parseArgs = append(parseArgs, args[1])
 	}
 	return fnParseJSON(ctx, parseArgs)
+}
+
+func fnJSONToXML(ctx context.Context, args []Sequence) (Sequence, error) {
+	parsed, err := fnParseJSON(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+
+	rootName := "null"
+	if len(parsed) == 1 {
+		switch parsed[0].(type) {
+		case MapItem:
+			rootName = "map"
+		case ArrayItem:
+			rootName = "array"
+		case AtomicValue:
+			av := parsed[0].(AtomicValue)
+			switch av.TypeName {
+			case TypeString:
+				rootName = "string"
+			case TypeBoolean:
+				rootName = "boolean"
+			default:
+				rootName = "number"
+			}
+		}
+	}
+
+	doc := helium.NewDefaultDocument()
+	root, err := doc.CreateElement(rootName)
+	if err != nil {
+		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
+	}
+	if err := root.DeclareNamespace("", NSFn); err != nil {
+		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
+	}
+	if err := root.SetActiveNamespace("", NSFn); err != nil {
+		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
+	}
+	if err := doc.SetDocumentElement(root); err != nil {
+		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
+	}
+	return Sequence{NodeItem{Node: doc}}, nil
 }
 
 func fnSerialize(_ context.Context, args []Sequence) (Sequence, error) {
