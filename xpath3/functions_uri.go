@@ -83,21 +83,30 @@ func fnIRIToURI(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleString(b.String()), nil
 }
 
-
 func fnResolveURI(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
-	relative := seqToString(args[0])
+	relative, err := coerceArgToString(args[0])
+	if err != nil {
+		return nil, err
+	}
 	if relative == "" {
 		if len(args) >= 2 {
-			return SingleString(seqToString(args[1])), nil
+			base, err := coerceArgToString(args[1])
+			if err != nil {
+				return nil, err
+			}
+			return SingleString(base), nil
 		}
 		return SingleString(""), nil
 	}
 	base := ""
 	if len(args) >= 2 {
-		base = seqToString(args[1])
+		base, err = coerceArgToString(args[1])
+		if err != nil {
+			return nil, err
+		}
 	}
 	if base == "" {
 		return SingleString(relative), nil
@@ -217,7 +226,6 @@ func unhexByte(c byte) int {
 		return -1
 	}
 }
-
 
 func fnEscapeHTMLURI(_ context.Context, args []Sequence) (Sequence, error) {
 	s, err := coerceArgToStringOpt(args[0])

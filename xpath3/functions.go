@@ -256,6 +256,34 @@ func coerceArgToInteger(seq Sequence) (int64, error) {
 	return n.Int64(), nil
 }
 
+// coerceArgToDoubleRequired applies XPath 3.1 function coercion rules for xs:double params.
+// Accepts any numeric type and xs:untypedAtomic after casting. Rejects empty and multi-item sequences.
+func coerceArgToDoubleRequired(seq Sequence) (float64, error) {
+	a, err := extractSingleAtomicArg(seq, "xs:double")
+	if err != nil {
+		if xpErr, ok := err.(*XPathError); ok {
+			switch {
+			case strings.Contains(xpErr.Message, "empty sequence"):
+				return 0, &XPathError{Code: errCodeXPTY0004, Message: "expected xs:double, got empty sequence"}
+			case strings.Contains(xpErr.Message, "length > 1"):
+				return 0, &XPathError{Code: errCodeXPTY0004, Message: "expected xs:double, got sequence of length > 1"}
+			}
+		}
+		return 0, err
+	}
+	if a.TypeName == TypeUntypedAtomic {
+		casted, cerr := CastAtomic(a, TypeDouble)
+		if cerr != nil {
+			return 0, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:double", a.TypeName)}
+		}
+		a = casted
+	}
+	if !isSubtypeOf(a.TypeName, TypeNumeric) {
+		return 0, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected xs:double, got %s", a.TypeName)}
+	}
+	return a.ToFloat64(), nil
+}
+
 // extractSingleAtomicArg enforces that seq contains exactly one item and atomizes it.
 // Used for function parameters typed as xs:anyAtomicType (not optional).
 func extractSingleAtomicArg(seq Sequence, fnName string) (AtomicValue, error) {
