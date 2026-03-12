@@ -1117,9 +1117,7 @@ func preprocessXMLJSONNumber(s string) string {
 	if strings.HasPrefix(s, ".") {
 		s = "0" + s
 	}
-	if strings.HasSuffix(s, ".") {
-		s = strings.TrimSuffix(s, ".")
-	}
+	s = strings.TrimSuffix(s, ".")
 	if s == "" {
 		s = "0"
 	}
