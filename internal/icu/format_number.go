@@ -467,6 +467,10 @@ func adjustMantissaPP(pp ParsedPicture, m int) ParsedPicture {
 		// Show leading zero when pattern had integer digit placeholders
 		if pp.MaxIntDigits > 0 {
 			r.MinIntDigits = 1
+		} else if pp.MaxFracDigits > 0 && r.MinFracDigits == 0 {
+			// With pictures like ".#e0", rounding can carry into the integer part;
+			// keep one fractional digit in that case.
+			r.MinFracDigits = 1
 		}
 	}
 
