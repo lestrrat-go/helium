@@ -3,6 +3,7 @@ package xpath3_test
 import (
 	"context"
 	"math"
+	"math/big"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -605,6 +606,25 @@ func TestContextVariables(t *testing.T) {
 	n, ok := result.IsNumber()
 	require.True(t, ok)
 	require.Equal(t, 1.0, n)
+}
+
+func TestWithVariablesCopiesSequences(t *testing.T) {
+	seq := xpath3.SingleInteger(1)
+	ctx := xpath3.NewContext(t.Context(),
+		xpath3.WithVariables(map[string]xpath3.Sequence{
+			"x": seq,
+		}),
+	)
+
+	seq[0] = xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)}
+
+	result, err := xpath3.Evaluate(ctx, nil, `$x`)
+	require.NoError(t, err)
+
+	atomics, err := result.Atomics()
+	require.NoError(t, err)
+	require.Len(t, atomics, 1)
+	require.Equal(t, int64(1), atomics[0].IntegerVal())
 }
 
 // --- Context with namespaces ---
