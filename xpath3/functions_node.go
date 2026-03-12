@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/enum"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -456,17 +457,72 @@ func fnParseXMLFragment(_ context.Context, args []Sequence) (Sequence, error) {
 	return Sequence{NodeItem{Node: doc}}, nil
 }
 
-func fnID(_ context.Context, _ []Sequence) (Sequence, error) {
-	// Requires DTD/schema info for ID attribute detection
-	return nil, nil
+func fnID(ctx context.Context, args []Sequence) (Sequence, error) {
+	doc, err := resolveIDLookupDocument(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+
+	tokens, err := idLookupTokens(args[0])
+	if err != nil {
+		return nil, err
+	}
+	if len(tokens) == 0 {
+		return nil, nil
+	}
+
+	nodes := make([]helium.Node, 0, len(tokens))
+	for _, token := range tokens {
+		if elem := doc.GetElementByID(token); elem != nil {
+			nodes = append(nodes, elem)
+		}
+	}
+	return sequenceFromDocOrderedNodes(ctx, nodes)
 }
 
-func fnIDRef(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, nil
+func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
+	doc, err := resolveIDLookupDocument(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+
+	tokens, err := idLookupTokens(args[0])
+	if err != nil {
+		return nil, err
+	}
+	if len(tokens) == 0 {
+		return nil, nil
+	}
+
+	wanted := make(map[string]struct{}, len(tokens))
+	for _, token := range tokens {
+		wanted[token] = struct{}{}
+	}
+
+	var nodes []helium.Node
+	_ = helium.Walk(doc, func(n helium.Node) error {
+		elem, ok := n.(*helium.Element)
+		if !ok {
+			return nil
+		}
+		for _, attr := range elem.Attributes() {
+			if attr.AType() != enum.AttrIDRef && attr.AType() != enum.AttrIDRefs {
+				continue
+			}
+			for _, token := range strings.Fields(attr.Value()) {
+				if _, ok := wanted[token]; ok {
+					nodes = append(nodes, attr)
+					break
+				}
+			}
+		}
+		return nil
+	})
+	return sequenceFromDocOrderedNodes(ctx, nodes)
 }
 
-func fnElementWithID(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, nil
+func fnElementWithID(ctx context.Context, args []Sequence) (Sequence, error) {
+	return fnID(ctx, args)
 }
 
 func fnCollection(_ context.Context, _ []Sequence) (Sequence, error) {
@@ -554,6 +610,82 @@ func resolveDocURI(ctx context.Context, uri string) (string, error) {
 		}
 	}
 	return uri, nil
+}
+
+func resolveIDLookupDocument(ctx context.Context, args []Sequence) (*helium.Document, error) {
+	var node helium.Node
+	if len(args) > 1 {
+		if len(args[1]) != 1 {
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:id second argument must be a single node"}
+		}
+		ni, ok := args[1][0].(NodeItem)
+		if !ok {
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:id second argument must be a node"}
+		}
+		node = ni.Node
+	} else {
+		fc := getFnContext(ctx)
+		switch {
+		case fc == nil || (fc.node == nil && fc.contextItem == nil):
+			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+		case fc.node != nil:
+			node = fc.node
+		default:
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "context item is not a node"}
+		}
+	}
+
+	root := ixpath.DocumentRoot(node)
+	doc, ok := root.(*helium.Document)
+	if !ok {
+		return nil, &XPathError{Code: errCodeFODC0001, Message: "fn:id requires a node whose root is a document node"}
+	}
+	return doc, nil
+}
+
+func idLookupTokens(seq Sequence) ([]string, error) {
+	atoms, err := AtomizeSequence(seq)
+	if err != nil {
+		return nil, err
+	}
+
+	var tokens []string
+	for _, atom := range atoms {
+		s, err := atomicToString(atom)
+		if err != nil {
+			return nil, err
+		}
+		for _, token := range strings.Fields(s) {
+			if isValidNCName(token) {
+				tokens = append(tokens, token)
+			}
+		}
+	}
+	return tokens, nil
+}
+
+func sequenceFromDocOrderedNodes(ctx context.Context, nodes []helium.Node) (Sequence, error) {
+	if len(nodes) == 0 {
+		return nil, nil
+	}
+
+	cache := &ixpath.DocOrderCache{}
+	maxNodes := maxNodeSetLength
+	if fc := getFnContext(ctx); fc != nil {
+		cache = fc.docOrder
+		maxNodes = fc.maxNodes
+	}
+
+	deduped, err := ixpath.DeduplicateNodes(nodes, cache, maxNodes)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(Sequence, 0, len(deduped))
+	for _, node := range deduped {
+		result = append(result, NodeItem{Node: node})
+	}
+	return result, nil
 }
 
 // nodeArgOrCtx extracts a node from the first argument or falls back to the context node.
