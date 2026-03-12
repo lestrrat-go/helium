@@ -22,6 +22,24 @@ type Item interface {
 // Sequence is an ordered collection of items.
 type Sequence []Item
 
+func cloneSequence(seq Sequence) Sequence {
+	if seq == nil {
+		return nil
+	}
+	return append(Sequence(nil), seq...)
+}
+
+func cloneSequences(seqs []Sequence) []Sequence {
+	if seqs == nil {
+		return nil
+	}
+	cloned := make([]Sequence, len(seqs))
+	for i, seq := range seqs {
+		cloned[i] = cloneSequence(seq)
+	}
+	return cloned
+}
+
 // --- NodeItem ---
 
 // NodeItem wraps a helium.Node as an XPath item.
@@ -327,8 +345,8 @@ func HasTimezone(t time.Time) bool {
 }
 
 type Duration struct {
-	Months   int     // total months (years*12 + months)
-	Seconds  float64 // total seconds (days*86400 + hours*3600 + minutes*60 + seconds)
+	Months   int      // total months (years*12 + months)
+	Seconds  float64  // total seconds (days*86400 + hours*3600 + minutes*60 + seconds)
 	FracSec  *big.Rat // exact fractional seconds component (the part after decimal in 'S'), nil if integer
 	Negative bool
 }
@@ -440,7 +458,7 @@ func NewMap(entries []MapEntry) MapItem {
 		index:   make(map[mapKey]int, len(entries)),
 	}
 	for i, e := range entries {
-		m.entries[i] = mapEntry{key: e.Key, value: e.Value}
+		m.entries[i] = mapEntry{key: e.Key, value: cloneSequence(e.Value)}
 		m.index[normalizeMapKey(e.Key)] = i
 	}
 	return m
@@ -452,7 +470,7 @@ func (m MapItem) Get(key AtomicValue) (Sequence, bool) {
 	if !ok {
 		return nil, false
 	}
-	return m.entries[idx].value, true
+	return cloneSequence(m.entries[idx].value), true
 }
 
 // Put returns a new map with the given key-value pair added or replaced.
@@ -464,9 +482,9 @@ func (m MapItem) Put(key AtomicValue, value Sequence) MapItem {
 	maps.Copy(newIndex, m.index)
 
 	if idx, ok := newIndex[nk]; ok {
-		newEntries[idx] = mapEntry{key: key, value: value}
+		newEntries[idx] = mapEntry{key: key, value: cloneSequence(value)}
 	} else {
-		newEntries = append(newEntries, mapEntry{key: key, value: value})
+		newEntries = append(newEntries, mapEntry{key: key, value: cloneSequence(value)})
 		newIndex[nk] = len(newEntries) - 1
 	}
 	return MapItem{entries: newEntries, index: newIndex}
@@ -544,7 +562,7 @@ func MergeMaps(maps []MapItem, policy MergePolicy) (MapItem, error) {
 				case MergeUseFirst:
 					continue
 				case MergeUseLast:
-					allEntries[idx] = e
+					allEntries[idx] = mapEntry{key: e.key, value: cloneSequence(e.value)}
 					continue
 				case MergeReject:
 					return MapItem{}, &XPathError{
@@ -555,13 +573,13 @@ func MergeMaps(maps []MapItem, policy MergePolicy) (MapItem, error) {
 					// Combine: concatenate values
 					allEntries[idx] = mapEntry{
 						key:   allEntries[idx].key,
-						value: append(allEntries[idx].value, e.value...),
+						value: append(cloneSequence(allEntries[idx].value), e.value...),
 					}
 					continue
 				}
 			}
 			seen[nk] = len(allEntries)
-			allEntries = append(allEntries, e)
+			allEntries = append(allEntries, mapEntry{key: e.key, value: cloneSequence(e.value)})
 		}
 	}
 
@@ -583,7 +601,7 @@ func (ArrayItem) itemTag() {}
 
 // NewArray creates an ArrayItem from a slice of Sequence members.
 func NewArray(members []Sequence) ArrayItem {
-	return ArrayItem{members: members}
+	return ArrayItem{members: cloneSequences(members)}
 }
 
 // Get returns the member at the given 1-based index.
@@ -594,7 +612,7 @@ func (a ArrayItem) Get(index int) (Sequence, error) {
 			Message: fmt.Sprintf("array index %d out of bounds (size %d)", index, len(a.members)),
 		}
 	}
-	return a.members[index-1], nil
+	return cloneSequence(a.members[index-1]), nil
 }
 
 // Size returns the number of members.
@@ -612,7 +630,7 @@ func (a ArrayItem) Put(index int, value Sequence) (ArrayItem, error) {
 	}
 	newMembers := make([]Sequence, len(a.members))
 	copy(newMembers, a.members)
-	newMembers[index-1] = value
+	newMembers[index-1] = cloneSequence(value)
 	return ArrayItem{members: newMembers}, nil
 }
 
@@ -620,13 +638,13 @@ func (a ArrayItem) Put(index int, value Sequence) (ArrayItem, error) {
 func (a ArrayItem) Append(value Sequence) ArrayItem {
 	newMembers := make([]Sequence, len(a.members)+1)
 	copy(newMembers, a.members)
-	newMembers[len(a.members)] = value
+	newMembers[len(a.members)] = cloneSequence(value)
 	return ArrayItem{members: newMembers}
 }
 
 // Members returns all members.
 func (a ArrayItem) Members() []Sequence {
-	return a.members
+	return cloneSequences(a.members)
 }
 
 // SubArray returns a new array from start to end (1-based, inclusive).

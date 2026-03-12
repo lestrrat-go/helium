@@ -77,6 +77,7 @@ Produced by: inline functions, named refs (`fn#2`), partial application.
 ## MapItem
 
 Immutable. `Put` returns new map (copy-on-write).
+Construction + outward-facing accessors clone `Sequence` values. Caller mutation MUST NOT change stored contents.
 
 ```go
 type MapItem struct {
@@ -105,6 +106,7 @@ Map key normalization:
 ## ArrayItem
 
 Immutable. 1-based indexing.
+Construction + outward-facing accessors clone member sequences. Caller mutation MUST NOT change stored contents.
 
 ```go
 type ArrayItem struct { members []Sequence }
