@@ -28,13 +28,48 @@ var knownXSTypeNames = map[string]struct{}{
 	"NMTOKENS": {}, "IDREFS": {}, "ENTITIES": {},
 }
 
-type prefixCheck func(map[string]string) error
+type atomicTypeRequirement struct {
+	prefix string
+	name   string
+}
 
-type prefixValidationPlan []prefixCheck
+type prefixValidationPlan struct {
+	prefixes    []string
+	atomicTypes []atomicTypeRequirement
+}
 
 func (p prefixValidationPlan) Validate(namespaces map[string]string) error {
-	for _, check := range p {
-		if err := check(namespaces); err != nil {
+	for _, prefix := range p.prefixes {
+		if err := validatePrefix(prefix, namespaces); err != nil {
+			return err
+		}
+	}
+	for _, req := range p.atomicTypes {
+		if req.prefix == "" {
+			if namespaces == nil || namespaces[""] == "" {
+				return &XPathError{
+					Code:    errCodeXPST0081,
+					Message: fmt.Sprintf("unprefixed type name %q requires a default element namespace", req.name),
+				}
+			}
+			continue
+		}
+		if req.prefix == "xs" || req.prefix == "xsd" {
+			switch req.name {
+			case "NMTOKENS", "IDREFS", "ENTITIES":
+				return &XPathError{
+					Code:    "XPST0051",
+					Message: fmt.Sprintf("xs:%s is a list type and cannot be used as an atomic type", req.name),
+				}
+			}
+			if _, ok := knownXSTypeNames[req.name]; !ok {
+				return &XPathError{
+					Code:    "XPST0051",
+					Message: fmt.Sprintf("unknown type xs:%s", req.name),
+				}
+			}
+		}
+		if err := validatePrefix(req.prefix, namespaces); err != nil {
 			return err
 		}
 	}
@@ -42,12 +77,25 @@ func (p prefixValidationPlan) Validate(namespaces map[string]string) error {
 }
 
 func buildPrefixValidationPlan(node Expr) prefixValidationPlan {
-	var plan prefixValidationPlan
-	appendPrefixChecks(&plan, node)
-	return plan
+	builder := prefixPlanBuilder{
+		seenPrefixes:    make(map[string]struct{}),
+		seenAtomicTypes: make(map[atomicTypeRequirement]struct{}),
+	}
+	appendPrefixChecks(&builder, node)
+	return prefixValidationPlan{
+		prefixes:    builder.prefixes,
+		atomicTypes: builder.atomicTypes,
+	}
 }
 
-func appendPrefixChecks(plan *prefixValidationPlan, node Expr) {
+type prefixPlanBuilder struct {
+	prefixes        []string
+	atomicTypes     []atomicTypeRequirement
+	seenPrefixes    map[string]struct{}
+	seenAtomicTypes map[atomicTypeRequirement]struct{}
+}
+
+func appendPrefixChecks(plan *prefixPlanBuilder, node Expr) {
 	if node == nil {
 		return
 	}
@@ -169,14 +217,14 @@ func appendPrefixChecks(plan *prefixValidationPlan, node Expr) {
 	}
 }
 
-func appendStepPrefixChecks(plan *prefixValidationPlan, s *Step) {
+func appendStepPrefixChecks(plan *prefixPlanBuilder, s *Step) {
 	appendNodeTestPrefixChecks(plan, s.NodeTest)
 	for _, pred := range s.Predicates {
 		appendPrefixChecks(plan, pred)
 	}
 }
 
-func appendNodeTestPrefixChecks(plan *prefixValidationPlan, nt NodeTest) {
+func appendNodeTestPrefixChecks(plan *prefixPlanBuilder, nt NodeTest) {
 	if nt == nil {
 		return
 	}
@@ -200,11 +248,11 @@ func appendNodeTestPrefixChecks(plan *prefixValidationPlan, nt NodeTest) {
 	}
 }
 
-func appendSequenceTypePrefixChecks(plan *prefixValidationPlan, st SequenceType) {
+func appendSequenceTypePrefixChecks(plan *prefixPlanBuilder, st SequenceType) {
 	appendNodeTestPrefixChecks(plan, st.ItemTest)
 }
 
-func appendFLWORClausePrefixChecks(plan *prefixValidationPlan, clause FLWORClause) {
+func appendFLWORClausePrefixChecks(plan *prefixPlanBuilder, clause FLWORClause) {
 	switch c := clause.(type) {
 	case ForClause:
 		addVarNamePrefixCheck(plan, c.Var)
@@ -218,17 +266,18 @@ func appendFLWORClausePrefixChecks(plan *prefixValidationPlan, clause FLWORClaus
 	}
 }
 
-func addPrefixCheck(plan *prefixValidationPlan, prefix string) {
+func addPrefixCheck(plan *prefixPlanBuilder, prefix string) {
 	if prefix == "" || prefix == "*" {
 		return
 	}
-	p := prefix
-	*plan = append(*plan, func(namespaces map[string]string) error {
-		return validatePrefix(p, namespaces)
-	})
+	if _, ok := plan.seenPrefixes[prefix]; ok {
+		return
+	}
+	plan.seenPrefixes[prefix] = struct{}{}
+	plan.prefixes = append(plan.prefixes, prefix)
 }
 
-func addVarNamePrefixCheck(plan *prefixValidationPlan, varName string) {
+func addVarNamePrefixCheck(plan *prefixPlanBuilder, varName string) {
 	if strings.HasPrefix(varName, "Q{") {
 		return
 	}
@@ -237,35 +286,13 @@ func addVarNamePrefixCheck(plan *prefixValidationPlan, varName string) {
 	}
 }
 
-func addAtomicOrUnionTypeCheck(plan *prefixValidationPlan, t AtomicOrUnionType) {
-	prefix := t.Prefix
-	name := t.Name
-	*plan = append(*plan, func(namespaces map[string]string) error {
-		if prefix == "" {
-			if namespaces == nil || namespaces[""] == "" {
-				return &XPathError{
-					Code:    errCodeXPST0081,
-					Message: fmt.Sprintf("unprefixed type name %q requires a default element namespace", name),
-				}
-			}
-		}
-		if prefix == "xs" || prefix == "xsd" {
-			switch name {
-			case "NMTOKENS", "IDREFS", "ENTITIES":
-				return &XPathError{
-					Code:    "XPST0051",
-					Message: fmt.Sprintf("xs:%s is a list type and cannot be used as an atomic type", name),
-				}
-			}
-			if _, ok := knownXSTypeNames[name]; !ok {
-				return &XPathError{
-					Code:    "XPST0051",
-					Message: fmt.Sprintf("unknown type xs:%s", name),
-				}
-			}
-		}
-		return validatePrefix(prefix, namespaces)
-	})
+func addAtomicOrUnionTypeCheck(plan *prefixPlanBuilder, t AtomicOrUnionType) {
+	req := atomicTypeRequirement{prefix: t.Prefix, name: t.Name}
+	if _, ok := plan.seenAtomicTypes[req]; ok {
+		return
+	}
+	plan.seenAtomicTypes[req] = struct{}{}
+	plan.atomicTypes = append(plan.atomicTypes, req)
 }
 
 // validatePrefix checks if a non-empty prefix is bound in user namespaces or defaultPrefixNS.
