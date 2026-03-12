@@ -253,9 +253,10 @@ func parseDatePresentation(rest string) (dtPresentation, dtWidth) {
 
 	// Parse format part
 	if formatPart != "" {
-		// Check for modifier suffix: ;o, ;t, ;c
-		semiIdx := strings.Index(formatPart, ";")
-		if semiIdx >= 0 {
+		// Only the final ';' introduces a presentation modifier; earlier
+		// semicolons remain part of the decimal picture as grouping separators.
+		semiIdx := strings.LastIndex(formatPart, ";")
+		if semiIdx >= 0 && isDatePresentationModifier(formatPart[semiIdx+1:]) {
 			modPart := formatPart[semiIdx+1:]
 			formatPart = formatPart[:semiIdx]
 			for _, c := range modPart {
@@ -264,6 +265,8 @@ func parseDatePresentation(rest string) (dtPresentation, dtWidth) {
 					p.ordinal = true
 				case 't':
 					p.isTraditional = true
+				case 'c':
+					// Calendar modifier is accepted but not otherwise interpreted here.
 				}
 			}
 		}
@@ -296,6 +299,20 @@ func parseDatePresentation(rest string) (dtPresentation, dtWidth) {
 	}
 
 	return p, w
+}
+
+func isDatePresentationModifier(mod string) bool {
+	if mod == "" {
+		return false
+	}
+	for _, r := range mod {
+		switch r {
+		case 'o', 't', 'c':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func parseSimpleInt(s string) int {
