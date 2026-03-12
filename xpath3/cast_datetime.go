@@ -18,7 +18,7 @@ func castToGType(v AtomicValue, targetType string, format func(time.Time) string
 		return CastFromString(v.StringVal(), targetType)
 	}
 	return AtomicValue{}, &XPathError{
-		Code: errCodeXPTY0004,
+		Code:    errCodeXPTY0004,
 		Message: fmt.Sprintf("cannot cast %s to %s", v.TypeName, targetType),
 	}
 }
@@ -32,12 +32,14 @@ func formatXSDTimezone(t time.Time) string {
 	if offset == 0 {
 		return "Z"
 	}
+	sign := '+'
+	if offset < 0 {
+		sign = '-'
+		offset = -offset
+	}
 	h := offset / 3600
 	m := (offset % 3600) / 60
-	if m < 0 {
-		m = -m
-	}
-	return fmt.Sprintf("%+03d:%02d", h, m)
+	return fmt.Sprintf("%c%02d:%02d", sign, h, m)
 }
 
 // splitXSDYear splits an XSD date/dateTime string into the year (as int) and
@@ -345,55 +347,116 @@ func parseXSDDuration(s string) (Duration, error) {
 	}
 	i++
 
+	seenComponent := false
+	seenTimeComponent := false
+	sawTimeMarker := false
+	lastOrder := 0
+	used := map[byte]struct{}{}
+
 	inTime := false
 	for i < len(s) {
 		if s[i] == 'T' {
+			if inTime || sawTimeMarker {
+				return Duration{}, fmt.Errorf("invalid duration: %q", s)
+			}
+			if i == len(s)-1 {
+				return Duration{}, fmt.Errorf("invalid duration: %q", s)
+			}
 			inTime = true
+			sawTimeMarker = true
 			i++
 			continue
 		}
 
 		numStart := i
-		for i < len(s) && (s[i] >= '0' && s[i] <= '9' || s[i] == '.') {
+		dotPos := -1
+		for i < len(s) && ((s[i] >= '0' && s[i] <= '9') || s[i] == '.') {
+			if s[i] == '.' {
+				if dotPos >= 0 {
+					return Duration{}, fmt.Errorf("invalid duration: %q", s)
+				}
+				dotPos = i
+			}
 			i++
 		}
 		if i == numStart || i >= len(s) {
+			return Duration{}, fmt.Errorf("invalid duration: %q", s)
+		}
+		if dotPos == numStart || dotPos == i-1 {
 			return Duration{}, fmt.Errorf("invalid duration: %q", s)
 		}
 
 		numStr := s[numStart:i]
 		designator := s[i]
 		i++
+		key := designator
+		if inTime && designator == 'M' {
+			key = 'm'
+		}
+		if _, exists := used[key]; exists {
+			return Duration{}, fmt.Errorf("invalid duration: %q", s)
+		}
+		used[key] = struct{}{}
 
 		if !inTime {
+			if dotPos >= 0 {
+				return Duration{}, fmt.Errorf("invalid duration: %q", s)
+			}
 			n, err := strconv.Atoi(numStr)
 			if err != nil {
 				return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
 			}
 			switch designator {
 			case 'Y':
+				if lastOrder >= 1 {
+					return Duration{}, fmt.Errorf("invalid duration: %q", s)
+				}
+				lastOrder = 1
 				if n > math.MaxInt/12 {
 					return Duration{}, fmt.Errorf("duration overflow: %sY", numStr)
 				}
 				d.Months += n * 12
 			case 'M':
+				if lastOrder >= 2 {
+					return Duration{}, fmt.Errorf("invalid duration: %q", s)
+				}
+				lastOrder = 2
 				d.Months += n
 			case 'D':
+				if lastOrder >= 3 {
+					return Duration{}, fmt.Errorf("invalid duration: %q", s)
+				}
+				lastOrder = 3
 				d.Seconds += float64(n) * 86400
 			default:
 				return Duration{}, fmt.Errorf("invalid duration designator: %c", designator)
 			}
 		} else {
+			if designator != 'S' && dotPos >= 0 {
+				return Duration{}, fmt.Errorf("invalid duration: %q", s)
+			}
 			f, err := strconv.ParseFloat(numStr, 64)
 			if err != nil {
 				return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
 			}
 			switch designator {
 			case 'H':
+				if lastOrder >= 4 {
+					return Duration{}, fmt.Errorf("invalid duration: %q", s)
+				}
+				lastOrder = 4
 				d.Seconds += f * 3600
 			case 'M':
+				if lastOrder >= 5 {
+					return Duration{}, fmt.Errorf("invalid duration: %q", s)
+				}
+				lastOrder = 5
 				d.Seconds += f * 60
 			case 'S':
+				if lastOrder >= 6 {
+					return Duration{}, fmt.Errorf("invalid duration: %q", s)
+				}
+				lastOrder = 6
 				d.Seconds += f
 				// Store exact fractional seconds as big.Rat to avoid float64 precision loss
 				if strings.ContainsRune(numStr, '.') {
@@ -407,7 +470,12 @@ func parseXSDDuration(s string) (Duration, error) {
 			default:
 				return Duration{}, fmt.Errorf("invalid duration designator: %c", designator)
 			}
+			seenTimeComponent = true
 		}
+		seenComponent = true
+	}
+	if !seenComponent || (sawTimeMarker && !seenTimeComponent) {
+		return Duration{}, fmt.Errorf("invalid duration: %q", s)
 	}
 
 	return d, nil
@@ -418,7 +486,8 @@ func parseXSDDuration(s string) (Duration, error) {
 // yearMonthDuration → "P0M", dayTimeDuration → "PT0S", duration → "PT0S".
 func formatDuration(d Duration, typeName string) string {
 	var b strings.Builder
-	if d.Negative {
+	isZero := d.Months == 0 && d.Seconds == 0
+	if d.Negative && !isZero {
 		b.WriteByte('-')
 	}
 	b.WriteByte('P')

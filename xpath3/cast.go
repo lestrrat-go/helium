@@ -139,8 +139,10 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		}
 		if v.TypeName == TypeDateTime {
 			t := v.TimeVal()
-			_, offset := t.Zone()
-			loc := time.FixedZone("", offset)
+			loc := t.Location()
+			if !HasTimezone(t) {
+				loc = noTZLocation
+			}
 			return AtomicValue{TypeName: TypeTime, Value: time.Date(0, 1, 1, t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)}, nil
 		}
 	case TypeDayTimeDuration:
@@ -180,11 +182,11 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		})
 	case TypeGYear:
 		return castToGType(v, targetType, func(t time.Time) string {
-			return fmt.Sprintf("%04d%s", t.Year(), formatXSDTimezone(t))
+			return fmt.Sprintf("%s%s", formatXSDYear(t.Year()), formatXSDTimezone(t))
 		})
 	case TypeGYearMonth:
 		return castToGType(v, targetType, func(t time.Time) string {
-			return fmt.Sprintf("%04d-%02d%s", t.Year(), t.Month(), formatXSDTimezone(t))
+			return fmt.Sprintf("%s-%02d%s", formatXSDYear(t.Year()), t.Month(), formatXSDTimezone(t))
 		})
 	case TypeNormalizedString:
 		s, err := atomicToString(v)
