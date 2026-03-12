@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -127,10 +128,42 @@ func qt3DefaultBaseURI(tc qt3Test) string {
 	if qt3NeedsRelativeParseJSONFixtureBaseURI(tc.XPath) {
 		return "http://www.w3.org/fots/fn/"
 	}
+	if baseURI := qt3ResourceMapBaseURI(tc); baseURI != "" {
+		return baseURI
+	}
 	if tc.NeedsHTTP {
 		return "http://www.w3.org/fots/"
 	}
 	return ""
+}
+
+func qt3ResourceMapBaseURI(tc qt3Test) string {
+	if !tc.NeedsHTTP || len(tc.ResourceMap) == 0 {
+		return ""
+	}
+
+	baseDir := ""
+	for uri, relPath := range tc.ResourceMap {
+		if strings.Contains(uri, "://") {
+			return ""
+		}
+		dir := path.Dir(relPath)
+		if dir == "." || dir == "" {
+			return ""
+		}
+		if baseDir == "" {
+			baseDir = dir
+			continue
+		}
+		if baseDir != dir {
+			return ""
+		}
+	}
+
+	if baseDir == "" {
+		return ""
+	}
+	return "http://www.w3.org/fots/" + strings.Trim(baseDir, "/") + "/"
 }
 
 func qt3NeedsRelativeUnparsedTextBaseURI(expr string) bool {

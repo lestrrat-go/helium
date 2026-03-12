@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"net/url"
 	"strings"
 	"unicode/utf8"
 )
@@ -447,6 +448,15 @@ func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 	ec := getFnContext(ctx)
 	if ec == nil || ec.httpClient == nil {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: "json-doc: no HTTP client configured for URI: " + uri}
+	}
+	if ec.baseURI != "" && !strings.Contains(uri, "://") {
+		baseURL, err := url.Parse(ec.baseURI)
+		if err == nil {
+			refURL, err := url.Parse(uri)
+			if err == nil {
+				uri = baseURL.ResolveReference(refURL).String()
+			}
+		}
 	}
 
 	resp, err := ec.httpClient.Get(uri)
