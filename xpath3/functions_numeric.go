@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/big"
 
@@ -186,17 +187,32 @@ func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
-		return nil, nil
+		return SingleDouble(math.NaN()), nil
+	}
+	if len(args[0]) != 1 {
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "format-number() first argument must be a singleton numeric value"}
 	}
 	a, err := AtomizeItem(args[0][0])
 	if err != nil {
 		return nil, err
 	}
-	picture := seqToString(args[1])
+	if a.TypeName == TypeUntypedAtomic {
+		a, err = CastAtomic(a, TypeDouble)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if !isSubtypeOf(a.TypeName, TypeNumeric) {
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("format-number() first argument must be numeric, got %s", a.TypeName)}
+	}
+
+	picture, err := coerceArgToStringRequired(args[1])
+	if err != nil {
+		return nil, err
+	}
 
 	df := defaultDecimalFormat()
 	if len(args) > 2 && len(args[2]) > 0 {
-		var err error
 		df, err = resolveDecimalFormat(ctx, seqToString(args[2]))
 		if err != nil {
 			return nil, err

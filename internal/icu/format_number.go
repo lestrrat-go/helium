@@ -310,6 +310,12 @@ func FormatNumber(f float64, isNaN, isPosInf, isNegInf, negative bool, precise *
 	} else if pp.IsPerMille {
 		f *= 1000
 	}
+	if math.IsInf(f, 0) {
+		if negative && negPic == "" {
+			return string(df.MinusSign) + pp.Prefix + df.Infinity + pp.Suffix, nil
+		}
+		return pp.Prefix + df.Infinity + pp.Suffix, nil
+	}
 
 	// Use big.Rat for precise formatting if provided
 	var result string
