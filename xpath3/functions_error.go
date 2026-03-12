@@ -13,15 +13,15 @@ func init() {
 }
 
 func fnError(_ context.Context, args []Sequence) (Sequence, error) {
-	code := errCodeFOER0000
+	code := QNameValue{Prefix: "err", URI: NSErr, Local: errCodeFOER0000}
 	msg := "error() called"
-	if len(args) > 0 && len(args[0]) > 0 {
-		a, err := AtomizeItem(args[0][0])
-		if err == nil {
-			s, _ := atomicToString(a)
-			if s != "" {
-				code = s
-			}
+	if len(args) > 0 {
+		qv, hasCode, err := coerceErrorCode(args[0])
+		if err != nil {
+			return nil, err
+		}
+		if hasCode {
+			code = qv
 		}
 	}
 	if len(args) > 1 {
@@ -31,7 +31,26 @@ func fnError(_ context.Context, args []Sequence) (Sequence, error) {
 			return nil, err
 		}
 	}
-	return nil, &XPathError{Code: code, Message: msg}
+	return nil, &XPathError{Code: code.Local, Message: msg, codeQName: code}
+}
+
+func coerceErrorCode(seq Sequence) (QNameValue, bool, error) {
+	switch len(seq) {
+	case 0:
+		return QNameValue{}, false, nil
+	case 1:
+	default:
+		return QNameValue{}, false, &XPathError{Code: errCodeXPTY0004, Message: "fn:error code argument must be xs:QName?"}
+	}
+
+	a, err := AtomizeItem(seq[0])
+	if err != nil {
+		return QNameValue{}, false, err
+	}
+	if a.TypeName != TypeQName {
+		return QNameValue{}, false, &XPathError{Code: errCodeXPTY0004, Message: "fn:error code argument must be xs:QName?"}
+	}
+	return a.QNameVal(), true, nil
 }
 
 // traceWriter is the destination for fn:trace output. Default is stderr.

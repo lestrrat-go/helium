@@ -848,6 +848,33 @@ func TestTryCatch(t *testing.T) {
 	require.Equal(t, "caught", s)
 }
 
+func TestTryCatchMatchesCustomQNameError(t *testing.T) {
+	doc := parseTestDoc(t)
+	result, err := xpath3.Evaluate(t.Context(), doc, `
+		try { error(QName("urn:test-errors", "t:oops"), "boom") }
+		catch Q{urn:test-errors}oops {
+			(prefix-from-QName($err:code), local-name-from-QName($err:code), string(namespace-uri-from-QName($err:code)))
+		}`)
+	require.NoError(t, err)
+
+	atomics, err := result.Atomics()
+	require.NoError(t, err)
+	require.Len(t, atomics, 3)
+	require.Equal(t, "t", atomics[0].StringVal())
+	require.Equal(t, "oops", atomics[1].StringVal())
+	require.Equal(t, "urn:test-errors", atomics[2].StringVal())
+}
+
+func TestErrorRejectsNonQNameCode(t *testing.T) {
+	doc := parseTestDoc(t)
+	_, err := xpath3.Evaluate(t.Context(), doc, `error("oops")`)
+	require.Error(t, err)
+
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, "XPTY0004", xpErr.Code)
+}
+
 // --- Context with variables ---
 
 func TestContextVariables(t *testing.T) {

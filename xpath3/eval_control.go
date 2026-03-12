@@ -246,15 +246,16 @@ func catchMatchesError(catch CatchClause, xpErr *XPathError) bool {
 	if len(catch.Codes) == 0 {
 		return true // wildcard catch (*)
 	}
+	errQName := xpErr.qname()
 	for _, code := range catch.Codes {
-		if catchCodeMatches(code, xpErr.Code) {
+		if catchCodeMatches(code, errQName) {
 			return true
 		}
 	}
 	return false
 }
 
-// catchCodeMatches compares a catch clause code against an XPath error code.
+// catchCodeMatches compares a catch clause code against an XPath error QName.
 // The catch code may be:
 //   - "*" — matches anything
 //   - "err:FOAR0002" or "FOAR0002" — matches specific error code
@@ -262,7 +263,7 @@ func catchMatchesError(catch CatchClause, xpErr *XPathError) bool {
 //   - "*:FOAR0002" — matches any namespace with that local name
 //   - "Q{http://...}FOAR0002" — matches by URI + local name
 //   - "Q{http://...}*" — matches any code in that namespace
-func catchCodeMatches(catchCode, errCode string) bool {
+func catchCodeMatches(catchCode string, errQName QNameValue) bool {
 	if catchCode == "*" {
 		return true
 	}
@@ -273,13 +274,9 @@ func catchCodeMatches(catchCode, errCode string) bool {
 			uri := catchCode[2:idx]
 			local := catchCode[idx+1:]
 			if local == "*" {
-				return uri == NSErr // Q{err-ns}* matches all XPath errors
+				return errQName.URI == uri
 			}
-			// Q{err-ns}CODE matches if the URI is the error namespace and local matches
-			if uri == NSErr {
-				return local == errCode
-			}
-			return false
+			return errQName.URI == uri && errQName.Local == local
 		}
 	}
 
@@ -294,23 +291,31 @@ func catchCodeMatches(catchCode, errCode string) bool {
 	// Wildcard forms
 	if catchLocal == "*" {
 		// prefix:* — for err:*, matches all XPath errors
-		return catchPrefix == "" || catchPrefix == "err"
+		return catchPrefix == "" || (catchPrefix == "err" && errQName.URI == NSErr)
 	}
 	if catchPrefix == "*" {
-		return catchLocal == errCode // *:CODE matches the bare code
+		return catchLocal == errQName.Local // *:CODE matches the bare code
+	}
+	if catchPrefix == "err" {
+		return errQName.URI == NSErr && catchLocal == errQName.Local
+	}
+	if catchPrefix != "" {
+		return false
 	}
 
 	// Compare the local part of the catch code against the error code
-	return catchLocal == errCode
+	return catchLocal == errQName.Local
 }
 
 // buildCatchContext creates an eval context with standard $err:* variables.
 func buildCatchContext(ec *evalContext, xpErr *XPathError) *evalContext {
-	// $err:code should be a QName, but for practical purposes store as string
-	// with the err: prefix to match test expectations
+	errQName := xpErr.qname()
+	if errQName.Local == "" {
+		errQName = QNameValue{Prefix: "err", URI: NSErr, Local: errCodeFOER0000}
+	}
 	errQN := SingleAtomic(AtomicValue{
 		TypeName: TypeQName,
-		Value:    QNameValue{Prefix: "err", URI: NSErr, Local: xpErr.Code},
+		Value:    errQName,
 	})
 	ctx := ec.withVar("err:code", errQN)
 	ctx = ctx.withVar("err:description", SingleString(xpErr.Message))

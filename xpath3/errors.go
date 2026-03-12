@@ -70,18 +70,20 @@ var (
 // XPathError is a structured error with an XPath error code.
 // Codes are stored without namespace prefix (e.g. "XPTY0004", not "err:XPTY0004").
 type XPathError struct {
-	Code    string // e.g. "XPTY0004", "FOER0000" (without err: prefix)
-	Message string
+	Code      string // e.g. "XPTY0004", "FOER0000" (without err: prefix)
+	Message   string
+	codeQName QNameValue
 }
 
 func (e *XPathError) Error() string {
 	if e == nil {
 		return "<nil XPathError>"
 	}
-	if e.Code == "" {
+	code := e.displayCode()
+	if code == "" {
 		return e.Message
 	}
-	return e.Code + ": " + e.Message
+	return code + ": " + e.Message
 }
 
 // Is supports errors.Is matching by code.
@@ -90,7 +92,42 @@ func (e *XPathError) Is(target error) bool {
 		return false
 	}
 	if t, ok := target.(*XPathError); ok {
-		return e.Code == t.Code
+		actual := e.qname()
+		want := t.qname()
+		if want.Local == "" {
+			return false
+		}
+		if want.URI != "" {
+			return actual.URI == want.URI && actual.Local == want.Local
+		}
+		return actual.Local == want.Local
 	}
 	return false
+}
+
+func (e *XPathError) qname() QNameValue {
+	if e == nil {
+		return QNameValue{}
+	}
+	if e.codeQName.Local != "" {
+		return e.codeQName
+	}
+	if e.Code == "" {
+		return QNameValue{}
+	}
+	return QNameValue{Prefix: "err", URI: NSErr, Local: e.Code}
+}
+
+func (e *XPathError) displayCode() string {
+	qv := e.qname()
+	if qv.Local == "" {
+		return ""
+	}
+	if qv.URI == "" || qv.URI == NSErr {
+		return qv.Local
+	}
+	if qv.Prefix != "" {
+		return qv.Prefix + ":" + qv.Local
+	}
+	return "Q{" + qv.URI + "}" + qv.Local
 }
