@@ -268,8 +268,7 @@ func translateClassContent(s string) (string, error) {
 					}
 					if end >= 0 {
 						propName := string(runes[i+3 : end])
-						neg := next == 'P'
-						replacement, err := translateUnicodeProperty(propName, neg)
+						replacement, err := translateUnicodePropertyInCharClass(propName, next == 'P')
 						if err != nil {
 							return "", err
 						}
@@ -328,20 +327,11 @@ func translateUnicodeProperty(name string, neg bool) (string, error) {
 	// Check if it's an IsBlockName
 	if strings.HasPrefix(name, "Is") {
 		blockName := name[2:]
-		if rng, ok := unicodeBlocks[blockName]; ok {
+		if rng, ok := lookupUnicodeBlockRange(blockName); ok {
 			if neg {
 				return "[^" + rng + "]", nil
 			}
 			return "[" + rng + "]", nil
-		}
-		// Try case-insensitive lookup
-		for k, v := range unicodeBlocks {
-			if strings.EqualFold(k, blockName) {
-				if neg {
-					return "[^" + v + "]", nil
-				}
-				return "[" + v + "]", nil
-			}
 		}
 		return "", &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("unknown Unicode block: Is%s", blockName)}
 	}
@@ -352,6 +342,73 @@ func translateUnicodeProperty(name string, neg bool) (string, error) {
 	}
 
 	return "", &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("unknown Unicode property: %s", name)}
+}
+
+func translateUnicodePropertyInCharClass(name string, neg bool) (string, error) {
+	if strings.HasPrefix(name, "Is") {
+		blockName := name[2:]
+		rng, ok := lookupUnicodeBlockRange(blockName)
+		if !ok {
+			return "", &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("unknown Unicode block: Is%s", blockName)}
+		}
+		if !neg {
+			return rng, nil
+		}
+		low, high, err := parseUnicodeBlockRange(rng)
+		if err != nil {
+			return "", err
+		}
+		return complementUnicodeRange(low, high), nil
+	}
+
+	return translateUnicodeProperty(name, neg)
+}
+
+func lookupUnicodeBlockRange(blockName string) (string, bool) {
+	if rng, ok := unicodeBlocks[blockName]; ok {
+		return rng, true
+	}
+	for k, v := range unicodeBlocks {
+		if strings.EqualFold(k, blockName) {
+			return v, true
+		}
+	}
+	return "", false
+}
+
+func parseUnicodeBlockRange(rng string) (int64, int64, error) {
+	parts := strings.SplitN(rng, "-", 2)
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("invalid unicode block range: %s", rng)
+	}
+	low, err := parseUnicodeEscape(parts[0])
+	if err != nil {
+		return 0, 0, err
+	}
+	high, err := parseUnicodeEscape(parts[1])
+	if err != nil {
+		return 0, 0, err
+	}
+	return low, high, nil
+}
+
+func parseUnicodeEscape(s string) (int64, error) {
+	if !strings.HasPrefix(s, `\x{`) || !strings.HasSuffix(s, "}") {
+		return 0, fmt.Errorf("invalid unicode escape: %s", s)
+	}
+	return strconv.ParseInt(s[3:len(s)-1], 16, 64)
+}
+
+func complementUnicodeRange(low, high int64) string {
+	const maxCodepoint = 0x10FFFF
+	var parts []string
+	if low > 0 {
+		parts = append(parts, fmt.Sprintf(`\x{0000}-\x{%X}`, low-1))
+	}
+	if high < maxCodepoint {
+		parts = append(parts, fmt.Sprintf(`\x{%X}-\x{%X}`, high+1, maxCodepoint))
+	}
+	return strings.Join(parts, "")
 }
 
 // goSupportedScripts lists script names supported by Go's regexp engine.
