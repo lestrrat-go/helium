@@ -234,16 +234,24 @@ func evalNodeComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
 // Atomizes both sides and returns true if any pair of atomic values
 // satisfies the operator.
 func GeneralCompare(op TokenType, left, right Sequence) (bool, error) {
-	leftAtoms, err := AtomizeSequence(left)
-	if err != nil {
-		return false, err
-	}
-	rightAtoms, err := AtomizeSequence(right)
-	if err != nil {
-		return false, err
-	}
-	for _, la := range leftAtoms {
-		for _, ra := range rightAtoms {
+	leftIter := newAtomicSequenceIter(left)
+	rightAtoms := newCachedAtomicSequence(right)
+	for {
+		la, ok, err := leftIter.Next()
+		if err != nil {
+			return false, err
+		}
+		if !ok {
+			return false, nil
+		}
+		for i := 0; ; i++ {
+			ra, ok, err := rightAtoms.At(i)
+			if err != nil {
+				return false, err
+			}
+			if !ok {
+				break
+			}
 			pa, pb, err := promoteForGeneralComparison(la, ra)
 			if err != nil {
 				return false, err
@@ -257,7 +265,78 @@ func GeneralCompare(op TokenType, left, right Sequence) (bool, error) {
 			}
 		}
 	}
-	return false, nil
+}
+
+type atomicSeqFrame struct {
+	seq   Sequence
+	index int
+}
+
+type atomicSequenceIter struct {
+	stack []atomicSeqFrame
+}
+
+func newAtomicSequenceIter(seq Sequence) *atomicSequenceIter {
+	return &atomicSequenceIter{
+		stack: []atomicSeqFrame{{seq: seq}},
+	}
+}
+
+func (it *atomicSequenceIter) Next() (AtomicValue, bool, error) {
+	for len(it.stack) > 0 {
+		top := &it.stack[len(it.stack)-1]
+		if top.index >= len(top.seq) {
+			it.stack = it.stack[:len(it.stack)-1]
+			continue
+		}
+
+		item := top.seq[top.index]
+		top.index++
+
+		if arr, ok := item.(ArrayItem); ok {
+			members := arr.Members()
+			for i := len(members) - 1; i >= 0; i-- {
+				it.stack = append(it.stack, atomicSeqFrame{seq: members[i]})
+			}
+			continue
+		}
+
+		atom, err := AtomizeItem(item)
+		if err != nil {
+			return AtomicValue{}, false, err
+		}
+		return atom, true, nil
+	}
+
+	return AtomicValue{}, false, nil
+}
+
+type cachedAtomicSequence struct {
+	iter      *atomicSequenceIter
+	cache     []AtomicValue
+	exhausted bool
+}
+
+func newCachedAtomicSequence(seq Sequence) *cachedAtomicSequence {
+	return &cachedAtomicSequence{iter: newAtomicSequenceIter(seq)}
+}
+
+func (s *cachedAtomicSequence) At(idx int) (AtomicValue, bool, error) {
+	for len(s.cache) <= idx && !s.exhausted {
+		atom, ok, err := s.iter.Next()
+		if err != nil {
+			return AtomicValue{}, false, err
+		}
+		if !ok {
+			s.exhausted = true
+			break
+		}
+		s.cache = append(s.cache, atom)
+	}
+	if idx < len(s.cache) {
+		return s.cache[idx], true, nil
+	}
+	return AtomicValue{}, false, nil
 }
 
 // ValueCompare performs a value comparison between two atomic values.
