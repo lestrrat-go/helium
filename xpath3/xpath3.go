@@ -11,8 +11,9 @@ import (
 
 // Expression is a compiled XPath 3.1 expression, reusable across evaluations.
 type Expression struct {
-	source string
-	ast    Expr
+	source     string
+	ast        Expr
+	prefixPlan prefixValidationPlan
 }
 
 // Compile parses an XPath 3.1 expression string into a reusable Expression.
@@ -21,7 +22,11 @@ func Compile(expr string) (*Expression, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Expression{source: expr, ast: ast}, nil
+	return &Expression{
+		source:     expr,
+		ast:        ast,
+		prefixPlan: buildPrefixValidationPlan(ast),
+	}, nil
 }
 
 // MustCompile is like Compile but panics on error.
@@ -40,7 +45,7 @@ func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, e
 	ec := newEvalContext(ctx, node)
 
 	// Static analysis: validate all namespace prefixes in the AST
-	if err := checkPrefixes(e.ast, ec.namespaces); err != nil {
+	if err := e.prefixPlan.Validate(ec.namespaces); err != nil {
 		return nil, err
 	}
 
