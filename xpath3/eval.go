@@ -22,7 +22,7 @@ type evalContext struct {
 	contextItem          Item // non-nil when context item is not a node (simple map over atomics)
 	position             int
 	size                 int
-	vars                 map[string]Sequence
+	vars                 *variableScope
 	namespaces           map[string]string
 	functions            map[string]Function
 	fnsNS                map[QualifiedName]Function
@@ -49,6 +49,35 @@ type evalContext struct {
 	httpClient *http.Client
 }
 
+type variableScope struct {
+	parent *variableScope
+	values map[string]Sequence
+}
+
+func newVariableScope(vars map[string]Sequence) *variableScope {
+	return scopeWithBindings(nil, vars)
+}
+
+func scopeWithBindings(parent *variableScope, bindings map[string]Sequence) *variableScope {
+	if len(bindings) == 0 {
+		return parent
+	}
+	values := make(map[string]Sequence, len(bindings))
+	for name, seq := range bindings {
+		values[name] = seq
+	}
+	return &variableScope{parent: parent, values: values}
+}
+
+func (s *variableScope) Lookup(name string) (Sequence, bool) {
+	for scope := s; scope != nil; scope = scope.parent {
+		if seq, ok := scope.values[name]; ok {
+			return seq, true
+		}
+	}
+	return nil, false
+}
+
 func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 	opCount := 0
 	now := time.Now()
@@ -65,7 +94,7 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 	}
 	if xctx := GetContext(ctx); xctx != nil {
 		ec.namespaces = xctx.namespaces
-		ec.vars = xctx.variables
+		ec.vars = newVariableScope(xctx.variables)
 		ec.opLimit = xctx.opLimit
 		ec.functions = xctx.functions
 		ec.fnsNS = xctx.functionsNS
@@ -147,20 +176,14 @@ func (ec *evalContext) getDefaultLanguage() string {
 }
 
 func (ec *evalContext) withVar(name string, val Sequence) *evalContext {
-	newVars := make(map[string]Sequence, len(ec.vars)+1)
-	for k, v := range ec.vars {
-		newVars[k] = v
-	}
-	newVars[name] = val
 	cp := *ec
-	cp.vars = newVars
+	cp.vars = scopeWithBindings(ec.vars, map[string]Sequence{name: val})
 	return &cp
 }
 
-// withVars returns a shallow copy using the given vars map.
-func (ec *evalContext) withVars(vars map[string]Sequence) *evalContext {
+func (ec *evalContext) withScope(scope *variableScope) *evalContext {
 	cp := *ec
-	cp.vars = vars
+	cp.vars = scope
 	return &cp
 }
 
