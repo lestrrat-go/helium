@@ -895,45 +895,85 @@ func int64ToGermanWords(n int64) string {
 }
 
 func applyOrdinalWordsDe(words, caseStyle, suffix string) string {
-	n := germanWordToNumber(strings.ToLower(words))
-	if suffix != "" {
-		return applyCase(germanOrdinalWithSuffix(n, suffix), caseStyle)
+	base := germanOrdinalWord(strings.ToLower(words))
+	if suffix == "" || suffix == "%spellout-ordinal" {
+		return applyCase(base, caseStyle)
 	}
-	return applyCase(germanOrdinal(n), caseStyle)
+	return applyCase(germanOrdinalWithSuffix(base, suffix), caseStyle)
 }
 
-func germanWordToNumber(word string) int64 {
-	germanNumbers := map[string]int64{
-		"eins": 1, "zwei": 2, "drei": 3, "vier": 4, "fünf": 5,
-		"sechs": 6, "sieben": 7, "acht": 8, "neun": 9, "zehn": 10,
+func germanOrdinalWord(words string) string {
+	irregulars := map[string]string{
+		"null":   "nullte",
+		"ein":    "erste",
+		"eins":   "erste",
+		"drei":   "dritte",
+		"sieben": "siebte",
+		"acht":   "achte",
 	}
-	if n, ok := germanNumbers[word]; ok {
-		return n
+	if ordinal, ok := irregulars[words]; ok {
+		return ordinal
 	}
-	return 0
+
+	if n, ok := germanWordToNumber(words); ok && n < 20 {
+		return words + "te"
+	}
+	return words + "ste"
 }
 
-func germanOrdinal(n int64) string {
-	ordinals := map[int64]string{
-		1: "erster", 2: "zweiter", 3: "dritter", 4: "vierter", 5: "fünfter",
-		6: "sechster", 7: "siebter", 8: "achter", 9: "neunter", 10: "zehnter",
+func germanWordToNumber(word string) (int64, bool) {
+	units := map[string]int64{
+		"null": 0, "ein": 1, "eins": 1, "zwei": 2, "drei": 3, "vier": 4,
+		"fünf": 5, "sechs": 6, "sieben": 7, "acht": 8, "neun": 9, "zehn": 10,
+		"elf": 11, "zwölf": 12, "dreizehn": 13, "vierzehn": 14, "fünfzehn": 15,
+		"sechzehn": 16, "siebzehn": 17, "achtzehn": 18, "neunzehn": 19,
 	}
-	if s, ok := ordinals[n]; ok {
-		return s
+	if n, ok := units[word]; ok {
+		return n, true
 	}
-	return fmt.Sprintf("%d.", n)
+
+	tens := []struct {
+		word string
+		val  int64
+	}{
+		{"zwanzig", 20},
+		{"dreißig", 30},
+		{"vierzig", 40},
+		{"fünfzig", 50},
+		{"sechzig", 60},
+		{"siebzig", 70},
+		{"achtzig", 80},
+		{"neunzig", 90},
+	}
+	for _, ten := range tens {
+		if word == ten.word {
+			return ten.val, true
+		}
+		if !strings.HasSuffix(word, ten.word) {
+			continue
+		}
+		prefix := strings.TrimSuffix(word, ten.word)
+		prefix = strings.TrimSuffix(prefix, "und")
+		if prefix == "" {
+			return ten.val, true
+		}
+		if unit, ok := units[prefix]; ok && unit > 0 && unit < 10 {
+			return ten.val + unit, true
+		}
+	}
+
+	return 0, false
 }
 
-func germanOrdinalWithSuffix(n int64, suffix string) string {
+func germanOrdinalWithSuffix(base, suffix string) string {
 	sfx := strings.TrimPrefix(suffix, "-")
-	stems := map[int64]string{
-		1: "erst", 2: "zweit", 3: "dritt", 4: "viert", 5: "fünft",
-		6: "sechst", 7: "siebt", 8: "acht", 9: "neunt", 10: "zehnt",
+	if sfx == "" {
+		return base
 	}
-	if stem, ok := stems[n]; ok {
-		return stem + sfx
+	if strings.HasSuffix(base, "e") {
+		base = strings.TrimSuffix(base, "e")
 	}
-	return fmt.Sprintf("%d.", n)
+	return base + sfx
 }
 
 func intToFrenchWords(n *big.Int) string {
@@ -1024,11 +1064,48 @@ func int64ToItalianWords(n int64) string {
 
 func applyOrdinalWordsIt(words, caseStyle, suffix string) string {
 	lower := strings.ToLower(words)
-	n := italianWordToNumber(lower)
-	if suffix != "" {
+	switch suffix {
+	case "", "%spellout-ordinal", "%spellout-ordinal-masculine", "-o":
+		return applyCase(italianOrdinalWord(lower, false), caseStyle)
+	case "%spellout-ordinal-feminine", "-a":
+		return applyCase(italianOrdinalWord(lower, true), caseStyle)
+	default:
+		n := italianWordToNumber(lower)
+		if n == 0 {
+			return applyCase(italianOrdinalWord(lower, false), caseStyle)
+		}
 		return applyCase(italianOrdinalWithSuffix(n, suffix), caseStyle)
 	}
-	return applyCase(italianOrdinal(n), caseStyle)
+}
+
+func italianOrdinalWord(words string, feminine bool) string {
+	n := italianWordToNumber(words)
+	if n != 0 {
+		if feminine {
+			if s, ok := map[int64]string{
+				1: "prima", 2: "seconda", 3: "terza", 4: "quarta", 5: "quinta",
+				6: "sesta", 7: "settima", 8: "ottava", 9: "nona", 10: "decima",
+			}[n]; ok {
+				return s
+			}
+		} else {
+			if s, ok := map[int64]string{
+				1: "primo", 2: "secondo", 3: "terzo", 4: "quarto", 5: "quinto",
+				6: "sesto", 7: "settimo", 8: "ottavo", 9: "nono", 10: "decimo",
+			}[n]; ok {
+				return s
+			}
+		}
+	}
+
+	stem := strings.TrimRight(words, "aeiou")
+	if stem == "" {
+		stem = words
+	}
+	if feminine {
+		return stem + "esima"
+	}
+	return stem + "esimo"
 }
 
 func italianWordToNumber(word string) int64 {

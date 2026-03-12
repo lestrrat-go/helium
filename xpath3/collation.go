@@ -88,8 +88,11 @@ var htmlASCIICaseInsensitiveCollation = &collationImpl{
 
 // makeUCACollation creates a collation based on the Unicode Collation Algorithm
 // with optional parameters parsed from the URI query string.
-func makeUCACollation(params string) *collationImpl {
-	opts := parseUCAParams(params)
+func makeUCACollation(params string) (*collationImpl, error) {
+	opts, err := parseUCAParams(params)
+	if err != nil {
+		return nil, err
+	}
 	if opts.caseLevel || opts.backwards {
 		tagParts := []string{"und-u"}
 		if opts.backwards {
@@ -160,7 +163,7 @@ func makeUCACollation(params string) *collationImpl {
 			return ucaHasSuffix(cmp, s, suffix, numeric)
 		},
 		key: key,
-	}
+	}, nil
 }
 
 type ucaParams struct {
@@ -173,25 +176,51 @@ type ucaParams struct {
 	alternate   string
 	caseLevel   bool
 	backwards   bool
+	fallbackNo  bool
 }
 
-func parseUCAParams(query string) ucaParams {
+func parseUCAParams(query string) (ucaParams, error) {
 	p := ucaParams{tag: language.Und, strength: "tertiary"}
+	var unsupported bool
+	var invalid bool
+	var hasRegionalLang bool
 
 	if query == "" {
-		return p
+		return p, nil
 	}
 
 	params := strings.Split(query, ";")
 	for _, param := range params {
+		if param == "" {
+			continue
+		}
 		kv := strings.SplitN(param, "=", 2)
 		if len(kv) != 2 {
+			invalid = true
 			continue
 		}
 		key, val := kv[0], kv[1]
 		switch key {
+		case "fallback":
+			switch val {
+			case "no":
+				p.fallbackNo = true
+			case "yes", "unknown":
+				// Unknown fallback values are implementation-defined unless
+				// fallback=no explicitly requests strict rejection.
+			default:
+				invalid = true
+			}
 		case "lang":
-			p.tag = language.Make(val)
+			tag, err := language.Parse(val)
+			if err != nil {
+				invalid = true
+				continue
+			}
+			p.tag = tag
+			if _, conf := tag.Region(); conf != language.No {
+				hasRegionalLang = true
+			}
 		case "strength":
 			p.strength = val
 			switch val {
@@ -203,27 +232,75 @@ func parseUCAParams(query string) ucaParams {
 				p.ignoreCase = true
 			case "tertiary":
 				// default strength, no options needed
+			default:
+				unsupported = true
 			}
 		case "alternate":
-			if val == "blanked" || val == "shifted" {
+			switch val {
+			case "non-ignorable":
+				p.alternate = ""
+			case "blanked", "shifted":
 				p.alternate = val
+				unsupported = true
+			default:
+				invalid = true
 			}
 		case "caseFirst":
 			if val == "upper" || val == "lower" {
 				p.caseFirst = val
+			} else {
+				invalid = true
 			}
 		case "caseLevel":
-			p.caseLevel = val == "yes"
+			switch val {
+			case "yes":
+				p.caseLevel = true
+				unsupported = true
+			case "no":
+				p.caseLevel = false
+			default:
+				invalid = true
+			}
 		case "backwards":
-			p.backwards = val == "yes"
+			switch val {
+			case "yes":
+				p.backwards = true
+			case "no":
+				p.backwards = false
+			default:
+				invalid = true
+			}
 		case "numeric":
-			if val == "yes" {
+			switch val {
+			case "yes":
 				p.collateOpts = append(p.collateOpts, collate.Numeric)
 				p.numeric = true
+			case "no":
+				p.numeric = false
+			default:
+				invalid = true
 			}
+		case "normalization":
+			switch val {
+			case "yes", "no":
+				if val == "yes" {
+					unsupported = true
+				}
+			default:
+				invalid = true
+			}
+		case "reorder", "maxVariable", "version", "keyword", "hiraganaQuaternary":
+			unsupported = true
+		default:
+			invalid = true
 		}
 	}
-	return p
+
+	if p.fallbackNo && (invalid || unsupported || hasRegionalLang) {
+		return ucaParams{}, &XPathError{Code: errCodeFOCH0002, Message: "unsupported collation"}
+	}
+
+	return p, nil
 }
 
 func (p ucaParams) ignoreVariableRunes() bool {
@@ -538,7 +615,7 @@ func resolveCollation(uri, baseURI string) (*collationImpl, error) {
 		if idx := strings.Index(uri, "?"); idx >= 0 {
 			params = uri[idx+1:]
 		}
-		return makeUCACollation(params), nil
+		return makeUCACollation(params)
 	default:
 		return nil, &XPathError{Code: errCodeFOCH0002, Message: fmt.Sprintf("unsupported collation: %s", uri)}
 	}

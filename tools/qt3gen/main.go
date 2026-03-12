@@ -488,12 +488,8 @@ func getSkipReason(deps []dependency) string {
 				return "requires XSLT transform"
 			case "fn-load-xquery-module":
 				return "requires XQuery load-xquery-module"
-			case "fn-format-integer-CLDR":
-				return "requires CLDR format-integer"
 			case "remote_http":
 				return "requires remote HTTP access"
-			case "non_unicode_codepoint_collation":
-				return "requires non-Unicode codepoint collation"
 			case "non_empty_sequence_collection":
 				return "requires non-empty sequence collection"
 			case "staticTyping":
