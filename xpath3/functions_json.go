@@ -257,33 +257,6 @@ func parseJSONToken(ctx context.Context, tok json.Token, dec *json.Decoder, opts
 	}
 }
 
-func escapeParsedJSONString(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		switch r {
-		case '\\':
-			b.WriteString(`\\`)
-		case '\b':
-			b.WriteString(`\b`)
-		case '\f':
-			b.WriteString(`\f`)
-		case '\n':
-			b.WriteString(`\n`)
-		case '\r':
-			b.WriteString(`\r`)
-		case '\t':
-			b.WriteString(`\t`)
-		default:
-			if (r >= 0x00 && r <= 0x1F) || (r >= 0x7F && r <= 0x9F) || !isValidXMLCodepoint(int(r)) {
-				fmt.Fprintf(&b, `\u%04x`, r)
-				continue
-			}
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
-
 func preprocessJSONStringLiterals(s string) (string, map[rune]string, error) {
 	var b strings.Builder
 	invalidEsc := make(map[rune]string)
