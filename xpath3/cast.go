@@ -37,7 +37,7 @@ func isAbstractCastTarget(typeName string) bool {
 func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 	if isAbstractCastTarget(targetType) {
 		return AtomicValue{}, &XPathError{
-			Code:    "XPST0080",
+			Code:    errCodeXPST0080,
 			Message: "cannot cast to abstract type " + targetType,
 		}
 	}
@@ -324,28 +324,33 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 		if !reGDay.MatchString(s) || !validateGregorianValue(TypeGDay, s) {
 			return AtomicValue{}, castError(s, targetType)
 		}
+		s = normalizeZeroTimezoneLexical(s)
 		return AtomicValue{TypeName: TypeGDay, Value: s}, nil
 	case TypeGMonth:
 		if !reGMonth.MatchString(s) || !validateGregorianValue(TypeGMonth, s) {
 			return AtomicValue{}, castError(s, targetType)
 		}
+		s = normalizeZeroTimezoneLexical(s)
 		return AtomicValue{TypeName: TypeGMonth, Value: s}, nil
 	case TypeGMonthDay:
 		if !reGMonthDay.MatchString(s) || !validateGregorianValue(TypeGMonthDay, s) {
 			return AtomicValue{}, castError(s, targetType)
 		}
+		s = normalizeZeroTimezoneLexical(s)
 		return AtomicValue{TypeName: TypeGMonthDay, Value: s}, nil
 	case TypeGYear:
 		if !reGYear.MatchString(s) || !validateGregorianValue(TypeGYear, s) {
 			return AtomicValue{}, castError(s, targetType)
 		}
 		s = normalizeNegZeroYear(s)
+		s = normalizeZeroTimezoneLexical(s)
 		return AtomicValue{TypeName: TypeGYear, Value: s}, nil
 	case TypeGYearMonth:
 		if !reGYearMonth.MatchString(s) || !validateGregorianValue(TypeGYearMonth, s) {
 			return AtomicValue{}, castError(s, targetType)
 		}
 		s = normalizeNegZeroYear(s)
+		s = normalizeZeroTimezoneLexical(s)
 		return AtomicValue{TypeName: TypeGYearMonth, Value: s}, nil
 	case TypeNormalizedString:
 		// xs:normalizedString: replace #x9, #xA, #xD with #x20
@@ -382,6 +387,15 @@ func normalizeNegZeroYear(s string) string {
 		return s // non-zero year digit found
 	}
 	return s[1:] // strip the '-'
+}
+
+func normalizeZeroTimezoneLexical(s string) string {
+	switch {
+	case strings.HasSuffix(s, "+00:00"), strings.HasSuffix(s, "-00:00"):
+		return s[:len(s)-6] + "Z"
+	default:
+		return s
+	}
 }
 
 // validateStringDerivedType checks pattern constraints for string-derived types.

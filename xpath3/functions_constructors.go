@@ -116,12 +116,12 @@ func init() {
 // makeXSConstructor returns a constructor function for a base XSD type.
 func makeXSConstructor(targetType string) func(context.Context, []Sequence) (Sequence, error) {
 	return func(_ context.Context, args []Sequence) (Sequence, error) {
-		if len(args[0]) == 0 {
-			return nil, nil
-		}
-		a, err := AtomizeItem(args[0][0])
+		a, empty, err := atomizeConstructorArg(args[0], targetType)
 		if err != nil {
 			return nil, err
+		}
+		if empty {
+			return nil, nil
 		}
 		result, err := CastAtomic(a, targetType)
 		if err != nil {
@@ -135,12 +135,12 @@ func makeXSConstructor(targetType string) func(context.Context, []Sequence) (Seq
 // prefixes using the namespace context from the evaluator.
 func makeXSQNameConstructor() func(context.Context, []Sequence) (Sequence, error) {
 	return func(ctx context.Context, args []Sequence) (Sequence, error) {
-		if len(args[0]) == 0 {
-			return nil, nil
-		}
-		a, err := AtomizeItem(args[0][0])
+		a, empty, err := atomizeConstructorArg(args[0], TypeQName)
 		if err != nil {
 			return nil, err
+		}
+		if empty {
+			return nil, nil
 		}
 		result, err := castToQName(a, getFnContext(ctx))
 		if err != nil {
@@ -158,12 +158,12 @@ func makeXSIntegerRange(typeName string, minVal, maxVal int64) func(context.Cont
 // makeXSIntegerRangeBig returns a constructor for a derived integer type with big.Int range validation.
 func makeXSIntegerRangeBig(typeName string, minBig, maxBig *big.Int) func(context.Context, []Sequence) (Sequence, error) {
 	return func(_ context.Context, args []Sequence) (Sequence, error) {
-		if len(args[0]) == 0 {
-			return nil, nil
-		}
-		a, err := AtomizeItem(args[0][0])
+		a, empty, err := atomizeConstructorArg(args[0], typeName)
 		if err != nil {
 			return nil, err
+		}
+		if empty {
+			return nil, nil
 		}
 		iv, err := CastAtomic(a, TypeInteger)
 		if err != nil {
@@ -192,12 +192,12 @@ var (
 // makeXSStringRestriction returns a constructor for a derived string type.
 func makeXSStringRestriction(typeName string, validate *regexp.Regexp) func(context.Context, []Sequence) (Sequence, error) {
 	return func(_ context.Context, args []Sequence) (Sequence, error) {
-		if len(args[0]) == 0 {
-			return nil, nil
-		}
-		a, err := AtomizeItem(args[0][0])
+		a, empty, err := atomizeConstructorArg(args[0], typeName)
 		if err != nil {
 			return nil, err
+		}
+		if empty {
+			return nil, nil
 		}
 		s, err := atomicToString(a)
 		if err != nil {
@@ -265,12 +265,12 @@ var (
 // makeXSGregorian returns a constructor for xs:gDay, xs:gMonth, xs:gMonthDay, xs:gYear, xs:gYearMonth.
 func makeXSGregorian(typeName string, _ *regexp.Regexp) func(context.Context, []Sequence) (Sequence, error) {
 	return func(_ context.Context, args []Sequence) (Sequence, error) {
-		if len(args[0]) == 0 {
-			return nil, nil
-		}
-		a, err := AtomizeItem(args[0][0])
+		a, empty, err := atomizeConstructorArg(args[0], typeName)
 		if err != nil {
 			return nil, err
+		}
+		if empty {
+			return nil, nil
 		}
 		result, err := CastAtomic(a, typeName)
 		if err != nil {
@@ -308,13 +308,13 @@ func validateGregorianValue(typeName, s string) bool {
 	case TypeGYear:
 		// XSD 1.1: year 0000 is valid
 		y := extractYearDigits(s)
-		if len(y) > 9 {
+		if !hasValidGregorianYearDigits(y) {
 			return false
 		}
 	case TypeGYearMonth:
 		// XSD 1.1: year 0000 is valid, validate month 01-12
 		y := extractYearDigits(s)
-		if len(y) > 9 {
+		if !hasValidGregorianYearDigits(y) {
 			return false
 		}
 		month := extractGYearMonthMonth(s)
@@ -400,16 +400,23 @@ func extractYearDigits(s string) string {
 	return y
 }
 
+func hasValidGregorianYearDigits(y string) bool {
+	if len(y) < 4 || len(y) > 9 {
+		return false
+	}
+	return len(y) == 4 || y[0] != '0'
+}
+
 var reDateTimeStampTZ = regexp.MustCompile(`[+-]\d{2}:\d{2}$`)
 
 func makeXSDateTimeStamp() func(context.Context, []Sequence) (Sequence, error) {
 	return func(_ context.Context, args []Sequence) (Sequence, error) {
-		if len(args[0]) == 0 {
-			return nil, nil
-		}
-		a, err := AtomizeItem(args[0][0])
+		a, empty, err := atomizeConstructorArg(args[0], TypeDateTimeStamp)
 		if err != nil {
 			return nil, err
+		}
+		if empty {
+			return nil, nil
 		}
 		// Cast to dateTime first
 		dt, err := CastAtomic(a, TypeDateTime)
@@ -426,6 +433,23 @@ func makeXSDateTimeStamp() func(context.Context, []Sequence) (Sequence, error) {
 		}
 		return SingleAtomic(AtomicValue{TypeName: TypeDateTimeStamp, Value: dt.Value}), nil
 	}
+}
+
+func atomizeConstructorArg(seq Sequence, typeName string) (AtomicValue, bool, error) {
+	if len(seq) == 0 {
+		return AtomicValue{}, true, nil
+	}
+	if len(seq) > 1 {
+		return AtomicValue{}, false, &XPathError{
+			Code:    errCodeXPTY0004,
+			Message: fmt.Sprintf("%s constructor requires a singleton argument", typeName),
+		}
+	}
+	a, err := AtomizeItem(seq[0])
+	if err != nil {
+		return AtomicValue{}, false, err
+	}
+	return a, false, nil
 }
 
 func fnXSError(_ context.Context, args []Sequence) (Sequence, error) {

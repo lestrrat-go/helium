@@ -15,6 +15,13 @@ func evalInstanceOfExpr(ec *evalContext, e InstanceOfExpr) (Sequence, error) {
 }
 
 func evalCastExpr(ec *evalContext, e CastExpr) (Sequence, error) {
+	targetType := resolveAtomicTypeName(e.Type, ec)
+	if isAbstractCastTarget(targetType) {
+		return nil, &XPathError{
+			Code:    errCodeXPST0080,
+			Message: fmt.Sprintf("cannot use abstract type %s as cast target", targetType),
+		}
+	}
 	seq, err := eval(ec, e.Expr)
 	if err != nil {
 		return nil, err
@@ -32,7 +39,6 @@ func evalCastExpr(ec *evalContext, e CastExpr) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	targetType := resolveAtomicTypeName(e.Type, ec)
 	// xs:QName cast from string requires namespace context
 	if targetType == TypeQName {
 		result, err := castToQName(av, ec)
@@ -64,7 +70,7 @@ func evalCastableExpr(ec *evalContext, e CastableExpr) (Sequence, error) {
 	// Abstract types raise a static error even for castable (XPST0080)
 	if isAbstractCastTarget(targetType) {
 		return nil, &XPathError{
-			Code:    "XPST0080",
+			Code:    errCodeXPST0080,
 			Message: fmt.Sprintf("cannot use abstract type %s as castable target", targetType),
 		}
 	}
@@ -105,7 +111,7 @@ func evalTreatAsExpr(ec *evalContext, e TreatAsExpr) (Sequence, error) {
 		return nil, err
 	}
 	if !matchesSequenceType(seq, e.Type, ec) {
-		return nil, &XPathError{Code: "XPDY0050", Message: fmt.Sprintf("treat as: sequence does not match required type %v (actual length %d)", e.Type, len(seq))}
+		return nil, &XPathError{Code: errCodeXPDY0050, Message: fmt.Sprintf("treat as: sequence does not match required type %v (actual length %d)", e.Type, len(seq))}
 	}
 	return seq, nil
 }
@@ -668,7 +674,7 @@ func castToQName(v AtomicValue, ec *evalContext) (AtomicValue, error) {
 	// Only string and untypedAtomic can be cast to QName
 	if v.TypeName != TypeString && v.TypeName != TypeUntypedAtomic {
 		return AtomicValue{}, &XPathError{
-			Code: errCodeXPTY0004,
+			Code:    errCodeXPTY0004,
 			Message: fmt.Sprintf("cannot cast %s to %s", v.TypeName, TypeQName),
 		}
 	}
