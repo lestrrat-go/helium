@@ -196,6 +196,71 @@ func TestIntegerCoercionRejectsMultiItemSequence(t *testing.T) {
 	require.Equal(t, "XPTY0004", xpErr.Code)
 }
 
+func TestPublicStringArgsRejectMultiItemSequence(t *testing.T) {
+	doc := parseTestDoc(t)
+
+	tests := []struct {
+		name string
+		expr string
+	}{
+		{"parse-json", `parse-json(("{}", "{}"))`},
+		{"json-doc", `json-doc(("data.json", "other.json"))`},
+		{"json-to-xml", `json-to-xml(('{"a":1}', '{"b":2}'))`},
+		{"unparsed-text", `unparsed-text(("a.txt", "b.txt"))`},
+		{"unparsed-text-available", `unparsed-text-available(("a.txt", "b.txt"))`},
+		{"unparsed-text-lines", `unparsed-text-lines(("a.txt", "b.txt"))`},
+		{"QName", `QName("urn:test", ("p:name", "q:name"))`},
+		{"namespace-uri-for-prefix", `namespace-uri-for-prefix(("xml", "p"), /library/book[1])`},
+		{"resolve-QName", `resolve-QName(("xml:lang", "p:name"), /library/book[1])`},
+		{"lang", `lang(("en", "fr"), /library/book[1])`},
+		{"parse-xml", `parse-xml(("<root/>", "<other/>"))`},
+		{"parse-xml-fragment", `parse-xml-fragment(("<a/>", "<b/>"))`},
+		{"parse-ietf-date", `parse-ietf-date(("Wed, 06 Jun 1994 07:29:35 GMT", "Thu, 07 Jun 1994 07:29:35 GMT"))`},
+		{"contains-token", `contains-token(("a b"), ("a", "b"))`},
+		{"sort", `sort((2, 1), ("http://www.w3.org/2005/xpath-functions/collation/codepoint", "dup"))`},
+		{"array-sort", `array:sort([2, 1], ("http://www.w3.org/2005/xpath-functions/collation/codepoint", "dup"))`},
+		{"distinct-values-collation", `distinct-values((1, 2), ("http://www.w3.org/2005/xpath-functions/collation/codepoint", "dup"))`},
+		{"format-number", `format-number(1, "0", ("fmt", "other"))`},
+		{"map-merge", `map:merge((map{"a": 1}), map{"duplicates": ("use-first", "reject")})`},
+		{"error-description", `error((), ("a", "b"))`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := xpath3.Evaluate(t.Context(), doc, tc.expr)
+			require.Error(t, err)
+
+			var xpErr *xpath3.XPathError
+			require.ErrorAs(t, err, &xpErr)
+			require.Equal(t, "XPTY0004", xpErr.Code)
+		})
+	}
+}
+
+func TestPublicStringArgsPreserveAtomizationErrors(t *testing.T) {
+	doc := parseTestDoc(t)
+
+	tests := []struct {
+		name string
+		expr string
+	}{
+		{"parse-json", `parse-json(map{})`},
+		{"unparsed-text", `unparsed-text(map{})`},
+		{"parse-xml", `parse-xml(map{})`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := xpath3.Evaluate(t.Context(), doc, tc.expr)
+			require.Error(t, err)
+
+			var xpErr *xpath3.XPathError
+			require.ErrorAs(t, err, &xpErr)
+			require.Equal(t, "FOTY0013", xpErr.Code)
+		})
+	}
+}
+
 func TestJSONDocUsesURIResolverAndBaseURI(t *testing.T) {
 	ctx := xpath3.NewContext(t.Context(),
 		xpath3.WithBaseURI("http://example.com/base/"),

@@ -63,7 +63,10 @@ func validateCollationArg(args []Sequence, idx int) error {
 	if len(args) <= idx || len(args[idx]) == 0 {
 		return nil
 	}
-	uri := seqToString(args[idx])
+	uri, err := coerceArgToString(args[idx])
+	if err != nil {
+		return err
+	}
 	if uri != codepointCollationURI {
 		return &XPathError{
 			Code:    errCodeFOCH0002,

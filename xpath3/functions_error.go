@@ -25,7 +25,11 @@ func fnError(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 	if len(args) > 1 {
-		msg = seqToString(args[1])
+		var err error
+		msg, err = coerceArgToStringRequired(args[1])
+		if err != nil {
+			return nil, err
+		}
 	}
 	return nil, &XPathError{Code: code, Message: msg}
 }

@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -18,28 +19,14 @@ func init() {
 }
 
 func fnQName(_ context.Context, args []Sequence) (Sequence, error) {
-	// Validate argument types: $paramURI as xs:string?, $paramQName as xs:string
-	if len(args[0]) > 0 {
-		a, err := AtomizeItem(args[0][0])
-		if err != nil {
-			return nil, err
-		}
-		if a.TypeName != TypeString && a.TypeName != TypeUntypedAtomic && a.TypeName != TypeAnyURI {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:QName namespace argument must be a string"}
-		}
+	uri, err := coerceQNameString(args[0], true, true, "fn:QName namespace argument must be a string")
+	if err != nil {
+		return nil, err
 	}
-	if len(args[1]) > 0 {
-		a, err := AtomizeItem(args[1][0])
-		if err != nil {
-			return nil, err
-		}
-		if a.TypeName != TypeString && a.TypeName != TypeUntypedAtomic {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:QName QName argument must be a string"}
-		}
+	qname, err := coerceQNameString(args[1], false, false, "fn:QName QName argument must be a string")
+	if err != nil {
+		return nil, err
 	}
-
-	uri := seqToString(args[0])
-	qname := seqToString(args[1])
 	prefix := ""
 	local := qname
 	if idx := strings.IndexByte(qname, ':'); idx >= 0 {
@@ -115,7 +102,10 @@ func fnNamespaceURIFromQName(_ context.Context, args []Sequence) (Sequence, erro
 }
 
 func fnNamespaceURIForPrefix(_ context.Context, args []Sequence) (Sequence, error) {
-	prefix := seqToString(args[0])
+	prefix, err := coerceQNameString(args[0], true, false, "fn:namespace-uri-for-prefix prefix argument must be a string")
+	if err != nil {
+		return nil, err
+	}
 	if len(args[1]) == 0 {
 		return nil, nil
 	}
@@ -137,7 +127,10 @@ func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
-	qnameStr := seqToString(args[0])
+	qnameStr, err := coerceQNameString(args[0], false, false, "resolve-QName: QName argument must be a string")
+	if err != nil {
+		return nil, err
+	}
 	if len(args[1]) == 0 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "resolve-QName: element argument is empty"}
 	}
@@ -176,6 +169,39 @@ func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
 		TypeName: TypeQName,
 		Value:    QNameValue{Prefix: prefix, Local: local, URI: uri},
 	}), nil
+}
+
+func coerceQNameString(seq Sequence, allowEmpty, allowAnyURI bool, message string) (string, error) {
+	switch len(seq) {
+	case 0:
+		if allowEmpty {
+			return "", nil
+		}
+		return "", &XPathError{Code: errCodeXPTY0004, Message: message}
+	case 1:
+	default:
+		return "", &XPathError{Code: errCodeXPTY0004, Message: message}
+	}
+
+	a, err := AtomizeItem(seq[0])
+	if err != nil {
+		return "", err
+	}
+	switch a.TypeName {
+	case TypeString, TypeUntypedAtomic:
+	case TypeAnyURI:
+		if !allowAnyURI {
+			return "", &XPathError{Code: errCodeXPTY0004, Message: message}
+		}
+	default:
+		return "", &XPathError{Code: errCodeXPTY0004, Message: message}
+	}
+
+	s, ok := a.Value.(string)
+	if !ok {
+		return "", fmt.Errorf("xpath3: internal error: expected string for %s", a.TypeName)
+	}
+	return s, nil
 }
 
 func fnInScopePrefixes(_ context.Context, args []Sequence) (Sequence, error) {

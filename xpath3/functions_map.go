@@ -48,7 +48,10 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 		if ok {
 			key := AtomicValue{TypeName: TypeString, Value: "duplicates"}
 			if val, found := optMap.Get(key); found {
-				s := seqToString(val)
+				s, err := coerceArgToStringRequired(val)
+				if err != nil {
+					return nil, err
+				}
 				switch s {
 				case "use-first":
 					duplicates = MergeUseFirst

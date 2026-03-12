@@ -17,7 +17,10 @@ func fnParseIETFDate(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
-	s := seqToString(args[0])
+	s, err := coerceArgToString(args[0])
+	if err != nil {
+		return nil, err
+	}
 	t, err := parseIETFDate(s)
 	if err != nil {
 		return nil, &XPathError{

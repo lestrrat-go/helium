@@ -335,7 +335,11 @@ func fnOutermost(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnLang(ctx context.Context, args []Sequence) (Sequence, error) {
-	langArg := strings.ToLower(seqToString(args[0]))
+	langArg, err := coerceArgToString(args[0])
+	if err != nil {
+		return nil, err
+	}
+	langArg = strings.ToLower(langArg)
 	var n helium.Node
 	if len(args) > 1 {
 		nodes, ok := NodesFrom(args[1])
@@ -454,7 +458,10 @@ func fnParseXML(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
-	s := seqToString(args[0])
+	s, err := coerceArgToString(args[0])
+	if err != nil {
+		return nil, err
+	}
 	parser := helium.NewParser()
 	if ec := getFnContext(ctx); ec != nil && ec.baseURI != "" {
 		parser.SetBaseURI(ec.baseURI)
@@ -471,9 +478,12 @@ func fnParseXMLFragment(ctx context.Context, args []Sequence) (Sequence, error) 
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
-	s := seqToString(args[0])
+	s, err := coerceArgToString(args[0])
+	if err != nil {
+		return nil, err
+	}
 
-	s, err := stripXMLTextDeclaration(s)
+	s, err = stripXMLTextDeclaration(s)
 	if err != nil {
 		return nil, err
 	}

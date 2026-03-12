@@ -1208,7 +1208,10 @@ func fnContainsToken(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	token := seqToString(args[1])
+	token, err := coerceArgToStringRequired(args[1])
+	if err != nil {
+		return nil, err
+	}
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return SingleBoolean(false), nil
@@ -1244,6 +1247,9 @@ func getCollation(ctx context.Context, args []Sequence, collationArgIdx int) (*c
 	} else if collationArgIdx >= len(args) || len(args[collationArgIdx]) == 0 {
 		return codepointCollation, nil
 	}
-	uri := seqToString(args[collationArgIdx])
+	uri, err := coerceArgToString(args[collationArgIdx])
+	if err != nil {
+		return nil, err
+	}
 	return resolveCollation(uri, baseURI)
 }

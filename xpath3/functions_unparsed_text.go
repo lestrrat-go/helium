@@ -27,10 +27,16 @@ func fnUnparsedText(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
-	href := seqToString(args[0])
+	href, err := coerceArgToString(args[0])
+	if err != nil {
+		return nil, err
+	}
 	encoding := ""
 	if len(args) > 1 {
-		encoding = seqToString(args[1])
+		encoding, err = coerceArgToString(args[1])
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	text, err := loadUnparsedText(ctx, href, encoding)
@@ -44,13 +50,19 @@ func fnUnparsedTextAvailable(ctx context.Context, args []Sequence) (Sequence, er
 	if len(args[0]) == 0 {
 		return SingleBoolean(false), nil
 	}
-	href := seqToString(args[0])
+	href, err := coerceArgToString(args[0])
+	if err != nil {
+		return nil, err
+	}
 	encoding := ""
 	if len(args) > 1 {
-		encoding = seqToString(args[1])
+		encoding, err = coerceArgToString(args[1])
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	_, err := loadUnparsedText(ctx, href, encoding)
+	_, err = loadUnparsedText(ctx, href, encoding)
 	return SingleBoolean(err == nil), nil
 }
 
@@ -58,10 +70,16 @@ func fnUnparsedTextLines(ctx context.Context, args []Sequence) (Sequence, error)
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
-	href := seqToString(args[0])
+	href, err := coerceArgToString(args[0])
+	if err != nil {
+		return nil, err
+	}
 	encoding := ""
 	if len(args) > 1 {
-		encoding = seqToString(args[1])
+		encoding, err = coerceArgToString(args[1])
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	text, err := loadUnparsedText(ctx, href, encoding)

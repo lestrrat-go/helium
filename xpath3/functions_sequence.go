@@ -517,9 +517,11 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 	// Optional collation (2nd argument)
 	var coll *collationImpl
 	if len(args) >= 2 && len(args[1]) > 0 {
-		uri := seqToString(args[1])
+		uri, err := coerceArgToString(args[1])
+		if err != nil {
+			return nil, err
+		}
 		if uri != "" {
-			var err error
 			coll, err = resolveCollation(uri, "")
 			if err != nil {
 				return nil, err

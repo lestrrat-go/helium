@@ -35,7 +35,10 @@ func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
-	s := seqToString(args[0])
+	s, err := coerceArgToString(args[0])
+	if err != nil {
+		return nil, err
+	}
 
 	opts, err := parseJSONOptions(args)
 	if err != nil {
@@ -402,7 +405,10 @@ func applyJSONStringOptions(ctx context.Context, s string, opts jsonOptions) (st
 			if err != nil {
 				return "", err
 			}
-			repl = seqToString(seq)
+			repl, err = seqToStringErr(seq)
+			if err != nil {
+				return "", err
+			}
 		}
 		b.WriteString(repl)
 	}
@@ -474,7 +480,10 @@ func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
-	uri := seqToString(args[0])
+	uri, err := coerceArgToString(args[0])
+	if err != nil {
+		return nil, err
+	}
 
 	resolvedURI, err := resolveUnparsedTextURI(ctx, uri)
 	if err != nil {
@@ -503,7 +512,10 @@ func fnJSONToXML(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 
-	s := seqToString(args[0])
+	s, err := coerceArgToString(args[0])
+	if err != nil {
+		return nil, err
+	}
 	s = strings.TrimPrefix(s, "\uFEFF")
 	s, invalidEsc, err := preprocessJSONStringLiterals(s)
 	if err != nil {
