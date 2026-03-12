@@ -2,8 +2,10 @@ package xpath3_test
 
 import (
 	"context"
+	"io"
 	"math"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -31,6 +33,16 @@ const testXML = `<library>
     <price>24.99</price>
   </book>
 </library>`
+
+type testURIResolver map[string]string
+
+func (r testURIResolver) ResolveURI(uri string) (io.ReadCloser, error) {
+	body, ok := r[uri]
+	if !ok {
+		return nil, io.EOF
+	}
+	return io.NopCloser(strings.NewReader(body)), nil
+}
 
 func parseTestDoc(t *testing.T) *helium.Document {
 	t.Helper()
@@ -164,6 +176,51 @@ func TestURIQualifiedFunctionMissingDoesNotFallBackToFnNamespace(t *testing.T) {
 	_, err := xpath3.Evaluate(t.Context(), doc, `Q{urn:other}substring("XPath", 2, 3)`)
 	require.Error(t, err)
 	require.ErrorIs(t, err, xpath3.ErrUnknownFunction)
+}
+
+func TestStringCoercionRejectsMultiItemSequence(t *testing.T) {
+	_, err := xpath3.Evaluate(t.Context(), nil, `string-to-codepoints(("ab", "cd"))`)
+	require.Error(t, err)
+
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, "XPTY0004", xpErr.Code)
+}
+
+func TestIntegerCoercionRejectsMultiItemSequence(t *testing.T) {
+	_, err := xpath3.Evaluate(t.Context(), nil, `remove((1, 2, 3), (2, 3))`)
+	require.Error(t, err)
+
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, "XPTY0004", xpErr.Code)
+}
+
+func TestJSONDocUsesURIResolverAndBaseURI(t *testing.T) {
+	ctx := xpath3.NewContext(t.Context(),
+		xpath3.WithBaseURI("http://example.com/base/"),
+		xpath3.WithURIResolver(testURIResolver{
+			"http://example.com/base/data.json": `{"name":"helium"}`,
+		}),
+	)
+
+	result, err := xpath3.Evaluate(ctx, nil, `json-doc("data.json")?name`)
+	require.NoError(t, err)
+
+	s, ok := result.IsString()
+	require.True(t, ok)
+	require.Equal(t, "helium", s)
+}
+
+func TestEmptySequenceResultIsNodeSet(t *testing.T) {
+	doc := parseTestDoc(t)
+	result, err := xpath3.Evaluate(t.Context(), doc, `/library/missing`)
+	require.NoError(t, err)
+	require.True(t, result.IsNodeSet())
+
+	nodes, err := result.Nodes()
+	require.NoError(t, err)
+	require.Empty(t, nodes)
 }
 
 func TestResultIsBoolean(t *testing.T) {

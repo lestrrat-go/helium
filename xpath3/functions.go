@@ -199,8 +199,12 @@ func coerceArgToStringRequired(seq Sequence) (string, error) {
 // Accepts: empty sequence → "", xs:string/xs:anyURI → as-is, xs:untypedAtomic → cast.
 // Rejects all other types with XPTY0004.
 func coerceArgToString(seq Sequence) (string, error) {
-	if len(seq) == 0 {
+	switch len(seq) {
+	case 0:
 		return "", nil
+	case 1:
+	default:
+		return "", &XPathError{Code: errCodeXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
 	}
 	a, err := AtomizeItem(seq[0])
 	if err != nil {
@@ -224,8 +228,12 @@ func coerceArgToString(seq Sequence) (string, error) {
 // Accepts: xs:integer (and subtypes), xs:untypedAtomic (cast to integer).
 // Rejects all other types with XPTY0004.
 func coerceArgToInteger(seq Sequence) (int64, error) {
-	if len(seq) == 0 {
+	switch len(seq) {
+	case 0:
 		return 0, &XPathError{Code: errCodeXPTY0004, Message: "expected xs:integer, got empty sequence"}
+	case 1:
+	default:
+		return 0, &XPathError{Code: errCodeXPTY0004, Message: "expected xs:integer, got sequence of length > 1"}
 	}
 	a, err := AtomizeItem(seq[0])
 	if err != nil {
