@@ -60,7 +60,7 @@ Regex: use Go `regexp` package. Map XPath flags (`i`,`m`,`s`,`x`) to Go equivale
 ### `functions_datetime.go`
 Constructors: `dateTime`
 Accessors: `year-from-dateTime`, `month-from-dateTime`, `day-from-dateTime`, `hours-from-dateTime`, `minutes-from-dateTime`, `seconds-from-dateTime`, `timezone-from-dateTime`, (same for date/time variants), `years-from-duration`, `months-from-duration`, `days-from-duration`, `hours-from-duration`, `minutes-from-duration`, `seconds-from-duration`
-Formatting: `format-date`, `format-dateTime`, `format-time` (stub v1)
+Formatting: `format-date`, `format-dateTime`, `format-time`
 Misc: `adjust-dateTime-to-timezone`, `adjust-date-to-timezone`, `adjust-time-to-timezone`
 
 ### `functions_uri.go`
@@ -92,7 +92,7 @@ All delegate to Go `math` package.
 ## Stubs (v1)
 
 Return "not yet implemented" error:
-- `fn:format-number`, `fn:format-date`, `fn:format-dateTime`, `fn:format-time`, `fn:format-integer`
+- `fn:format-number`, `fn:format-integer`
 - `fn:analyze-string` (returns XML fragment → needs DOM construction)
 - `fn:serialize` (needs helium serializer integration)
 

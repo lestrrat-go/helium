@@ -10,19 +10,19 @@ import (
 	"unicode/utf8"
 )
 
-func fnFormatDateTime(_ context.Context, args []Sequence) (Sequence, error) {
-	return formatDateTimeCommon(args, TypeDateTime)
+func fnFormatDateTime(ctx context.Context, args []Sequence) (Sequence, error) {
+	return formatDateTimeCommon(ctx, args, TypeDateTime)
 }
 
-func fnFormatDate(_ context.Context, args []Sequence) (Sequence, error) {
-	return formatDateTimeCommon(args, TypeDate)
+func fnFormatDate(ctx context.Context, args []Sequence) (Sequence, error) {
+	return formatDateTimeCommon(ctx, args, TypeDate)
 }
 
-func fnFormatTime(_ context.Context, args []Sequence) (Sequence, error) {
-	return formatDateTimeCommon(args, TypeTime)
+func fnFormatTime(ctx context.Context, args []Sequence) (Sequence, error) {
+	return formatDateTimeCommon(ctx, args, TypeTime)
 }
 
-func formatDateTimeCommon(args []Sequence, typeName string) (Sequence, error) {
+func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return SingleString(""), nil
 	}
@@ -49,6 +49,9 @@ func formatDateTimeCommon(args []Sequence, typeName string) (Sequence, error) {
 	picture := picAtom.StringVal()
 
 	lang := "en"
+	if ec := getFnContext(ctx); ec != nil {
+		lang = ec.getDefaultLanguage()
+	}
 	if len(args) > 2 && len(args[2]) > 0 {
 		langAtom, err := AtomizeItem(args[2][0])
 		if err != nil {
@@ -57,6 +60,25 @@ func formatDateTimeCommon(args []Sequence, typeName string) (Sequence, error) {
 		lang = langAtom.StringVal()
 		if lang == "" {
 			return nil, &XPathError{Code: "FOFD1340", Message: "format-dateTime: language argument must not be empty"}
+		}
+	}
+
+	if len(args) > 4 && len(args[4]) > 0 {
+		placeAtom, err := AtomizeItem(args[4][0])
+		if err != nil {
+			return nil, err
+		}
+		place := placeAtom.StringVal()
+		if place != "" {
+			loc, err := time.LoadLocation(place)
+			if err != nil {
+				return nil, &XPathError{Code: "FOFD1340", Message: fmt.Sprintf("format-dateTime: invalid place: %s", place)}
+			}
+			if t.Location() == noTZLocation {
+				t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)
+			} else {
+				t = t.In(loc)
+			}
 		}
 	}
 
@@ -631,6 +653,19 @@ func formatTimezone(t time.Time, comp byte, p dtPresentation) string {
 		return fmt.Sprintf("%s%02d:%02d", sign, h, m)
 	case "0101":
 		return fmt.Sprintf("%s%02d%02d", sign, h, m)
+	case "N", "n", "Nn":
+		name, _ := t.Zone()
+		if name == "" {
+			return fmt.Sprintf("%s%02d:%02d", sign, h, m)
+		}
+		switch format {
+		case "N":
+			return strings.ToUpper(name)
+		case "n":
+			return strings.ToLower(name)
+		default:
+			return name
+		}
 	case "Z":
 		if offset == 0 {
 			return "Z"
