@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"strconv"
 	"strings"
 
 	"github.com/lestrrat-go/helium/internal/icu"
@@ -88,10 +89,17 @@ func formatNumber(a AtomicValue, picture string, df icu.DecimalFormat) (string, 
 		precise = new(big.Rat).SetInt(a.BigInt())
 	} else if a.TypeName == TypeDecimal {
 		precise = new(big.Rat).Set(a.BigRat())
+	} else if (a.TypeName == TypeDouble || a.TypeName == TypeFloat) && !isNaN && !isPosInf && !isNegInf {
+		if s, err := atomicToString(a); err == nil {
+			precise = parseCanonicalFloatRat(s)
+		}
 	}
 
 	if negative {
 		f = math.Abs(f)
+		if precise != nil {
+			precise = new(big.Rat).Abs(precise)
+		}
 	}
 
 	result, err := icu.FormatNumber(f, isNaN, isPosInf, isNegInf, negative, precise, picture, df)
@@ -99,4 +107,34 @@ func formatNumber(a AtomicValue, picture string, df icu.DecimalFormat) (string, 
 		return "", &XPathError{Code: errCodeFODF1310, Message: fmt.Sprintf("invalid picture: %q", picture)}
 	}
 	return result, nil
+}
+
+func parseCanonicalFloatRat(s string) *big.Rat {
+	if idx := strings.IndexAny(s, "eE"); idx >= 0 {
+		mantissa := parseCanonicalFloatRat(s[:idx])
+		if mantissa == nil {
+			return nil
+		}
+		exp, err := strconv.Atoi(s[idx+1:])
+		if err != nil {
+			return nil
+		}
+		scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(absInt(exp))), nil)
+		if exp >= 0 {
+			return mantissa.Mul(mantissa, new(big.Rat).SetInt(scale))
+		}
+		return mantissa.Quo(mantissa, new(big.Rat).SetInt(scale))
+	}
+
+	if r, ok := new(big.Rat).SetString(s); ok {
+		return r
+	}
+	return nil
+}
+
+func absInt(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
