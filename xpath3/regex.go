@@ -152,6 +152,9 @@ func translateCharClass(runes []rune, start int) (string, int, error) {
 // translating embedded \p{} and \i/\c escapes.
 func processCharClass(runes []rune) (string, error) {
 	s := string(runes)
+	if err := validateXPathCharClassStructure(s); err != nil {
+		return "", err
+	}
 	if err := validateXPathCharClassSubtraction(s); err != nil {
 		return "", err
 	}
@@ -159,6 +162,26 @@ func processCharClass(runes []rune) (string, error) {
 	// Pass through as-is — Go will interpret it differently but many tests still
 	// pass because Go's (incorrect) interpretation gives the expected result.
 	return translateClassContent(s)
+}
+
+func validateXPathCharClassStructure(class string) error {
+	runes := []rune(class)
+	if len(runes) < 2 || runes[0] != '[' || runes[len(runes)-1] != ']' {
+		return nil
+	}
+
+	first := 1
+	if first < len(runes)-1 && runes[first] == '^' {
+		first++
+	}
+	if first >= len(runes)-1 || runes[first] == ']' {
+		return &XPathError{
+			Code:    errCodeFORX0002,
+			Message: fmt.Sprintf("invalid character class: %s", class),
+		}
+	}
+
+	return nil
 }
 
 func validateXPathCharClassSubtraction(class string) error {
@@ -520,9 +543,15 @@ func validateXPathRegex(pattern string, allowBackrefs bool) error {
 			inCharClass++
 			continue
 		}
-		if r == ']' && inCharClass > 0 {
-			inCharClass--
-			continue
+		if r == ']' {
+			if inCharClass > 0 {
+				inCharClass--
+				continue
+			}
+			return &XPathError{
+				Code:    errCodeFORX0002,
+				Message: "unescaped ']' outside character class is not allowed in XPath regex",
+			}
 		}
 
 		if inCharClass == 0 && r == '(' {
@@ -568,6 +597,12 @@ func validateXPathRegex(pattern string, allowBackrefs bool) error {
 				}
 			}
 			continue
+		}
+	}
+	if inCharClass > 0 {
+		return &XPathError{
+			Code:    errCodeFORX0002,
+			Message: "unterminated character class in XPath regex",
 		}
 	}
 	return nil
