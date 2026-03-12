@@ -9271,57 +9271,57 @@ func TestQT3_fn_parse_json(t *testing.T) {
 func TestQT3_fn_parse_xml(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
-		{Name: "parse-xml-001", XPath: "parse-xml(unparsed-text(\"../docs/atomic.xml\"))", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertType("document-node(element(*,xs:untyped))")}},
-		{Name: "parse-xml-002", XPath: "parse-xml(unparsed-text(\"../docs/atomic.xml\"),'###/atomic.xml')", Skip: "requires fn:parse-xml", ExpectError: true},
-		{Name: "parse-xml-003", XPath: "parse-xml(unparsed-text(\"../docs/atomic.xml\"),'file:/test/fots/../docs/atomic.xml')", Skip: "requires fn:parse-xml", ExpectError: true},
-		{Name: "parse-xml-004", XPath: "parse-xml(\"<a>Test123\")", Skip: "requires fn:parse-xml", ExpectError: true},
-		{Name: "parse-xml-005", XPath: "parse-xml(\"<?xml version='1.0' encoding='iso-8859-1'?><a>foo</a>\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "parse-xml-006", XPath: "parse-xml(\"<?xml version='1.0' encoding='iso-8859-1'?><!DOCTYPE a [<!ELEMENT a (#PCDATA)>]><a>foo</a>\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "parse-xml-007", XPath: "base-uri(parse-xml(\"<a>foo</a>\")) eq static-base-uri()", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "parse-xml-008", XPath: "parse-xml(\"<!DOCTYPE a SYSTEM 'parse-xml/a.dtd'><a>foo</a>\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "parse-xml-009", XPath: "parse-xml(\"<?xml version='1.0' encoding='iso-8859-1'?><!DOCTYPE a SYSTEM 'parse-xml/a.dtd'><a>foo</a>\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "parse-xml-001", XPath: "parse-xml(unparsed-text(\"../docs/atomic.xml\"))", Assertions: []qt3Assertion{qt3AssertType("document-node(element(*,xs:untyped))")}},
+		{Name: "parse-xml-002", XPath: "parse-xml(unparsed-text(\"../docs/atomic.xml\"),'###/atomic.xml')", ExpectError: true},
+		{Name: "parse-xml-003", XPath: "parse-xml(unparsed-text(\"../docs/atomic.xml\"),'file:/test/fots/../docs/atomic.xml')", ExpectError: true},
+		{Name: "parse-xml-004", XPath: "parse-xml(\"<a>Test123\")", ExpectError: true},
+		{Name: "parse-xml-005", XPath: "parse-xml(\"<?xml version='1.0' encoding='iso-8859-1'?><a>foo</a>\")", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "parse-xml-006", XPath: "parse-xml(\"<?xml version='1.0' encoding='iso-8859-1'?><!DOCTYPE a [<!ELEMENT a (#PCDATA)>]><a>foo</a>\")", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "parse-xml-007", XPath: "base-uri(parse-xml(\"<a>foo</a>\")) eq static-base-uri()", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "parse-xml-008", XPath: "parse-xml(\"<!DOCTYPE a SYSTEM 'parse-xml/a.dtd'><a>foo</a>\")", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "parse-xml-009", XPath: "parse-xml(\"<?xml version='1.0' encoding='iso-8859-1'?><!DOCTYPE a SYSTEM 'parse-xml/a.dtd'><a>foo</a>\")", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "parse-xml-010", XPath: `parse-xml("<!DOCTYPE a [<!ELEMENT a (#PCDATA)><!ENTITY foo SYSTEM 'parse-xml/foo.entity'>]><a>" ||
-            codepoints-to-string(38) || "foo;</a>")`, Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "parse-xml-011", XPath: "document-uri(parse-xml(\"<a>foo</a>\"))", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertEmpty()}},
-		{Name: "parse-xml-012", XPath: "parse-xml(\"<a>foo</a>\") is parse-xml(\"<a>foo</a>\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue(), qt3CheckFalse())}},
-		{Name: "parse-xml-013", XPath: "parse-xml(\"<!DOCTYPE a [<!ELEMENT a (#PCDATA)>]><a><b/></a>\")", Skip: "requires fn:parse-xml", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
-		{Name: "parse-xml-014", XPath: "parse-xml(\"<a>foo</a>\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertType("document-node()")}},
-		{Name: "parse-xml-015", XPath: "parse-xml(\"<p:a/>\")", Skip: "requires fn:parse-xml", ExpectError: true},
-		{Name: "parse-xml-016", XPath: "parse-xml(())", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertEmpty()}},
-		{Name: "parse-xml-017", XPath: "parse-xml(\"<a/>\"[current-date() lt xs:date('1900-01-01')])", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertEmpty()}},
+            codepoints-to-string(38) || "foo;</a>")`, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "parse-xml-011", XPath: "document-uri(parse-xml(\"<a>foo</a>\"))", Assertions: []qt3Assertion{qt3AssertEmpty()}},
+		{Name: "parse-xml-012", XPath: "parse-xml(\"<a>foo</a>\") is parse-xml(\"<a>foo</a>\")", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue(), qt3CheckFalse())}},
+		{Name: "parse-xml-013", XPath: "parse-xml(\"<!DOCTYPE a [<!ELEMENT a (#PCDATA)>]><a><b/></a>\")", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
+		{Name: "parse-xml-014", XPath: "parse-xml(\"<a>foo</a>\")", Assertions: []qt3Assertion{qt3AssertType("document-node()")}},
+		{Name: "parse-xml-015", XPath: "parse-xml(\"<p:a/>\")", ExpectError: true},
+		{Name: "parse-xml-016", XPath: "parse-xml(())", Assertions: []qt3Assertion{qt3AssertEmpty()}},
+		{Name: "parse-xml-017", XPath: "parse-xml(\"<a/>\"[current-date() lt xs:date('1900-01-01')])", Assertions: []qt3Assertion{qt3AssertEmpty()}},
 	})
 }
 
 func TestQT3_fn_parse_xml_fragment(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
-		{Name: "parse-xml-fragment-001", XPath: "parse-xml-fragment(unparsed-text(\"../docs/atomic.xml\"))/*", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertType("element(*,xs:untyped)")}},
-		{Name: "parse-xml-fragment-002", XPath: "parse-xml-fragment(unparsed-text(\"../docs/atomic.xml\"),'###/atomic.xml')", Skip: "requires fn:parse-xml", ExpectError: true},
-		{Name: "parse-xml-fragment-003", XPath: "parse-xml-fragment(unparsed-text(\"../docs/atomic.xml\"),'file:/test/fots/../docs/atomic.xml')", Skip: "requires fn:parse-xml", ExpectError: true},
-		{Name: "parse-xml-fragment-004", XPath: "parse-xml-fragment(\"<a>Test123\")", Skip: "requires fn:parse-xml", ExpectError: true},
-		{Name: "parse-xml-fragment-005", XPath: "parse-xml-fragment(\"\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertStringValue("")}},
-		{Name: "parse-xml-fragment-006", XPath: "parse-xml-fragment(\"vanessa\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertStringValue("vanessa")}},
-		{Name: "parse-xml-fragment-007", XPath: "parse-xml-fragment(\"<a/><b/><c/>\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "parse-xml-fragment-008", XPath: "parse-xml-fragment(\"  \")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertStringValue("  ")}},
-		{Name: "parse-xml-fragment-009", XPath: "parse-xml-fragment(\"<a> </a> <b> </b>\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "parse-xml-fragment-010", XPath: "parse-xml-fragment(\"<a/><!--comment--><?PI?><b/>\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "parse-xml-fragment-011", XPath: "string(parse-xml-fragment(codepoints-to-string((38, 108, 116, 59))))", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertEq("\"<\"")}},
-		{Name: "parse-xml-fragment-012", XPath: "string(parse-xml-fragment(codepoints-to-string((38, 35, 51, 56, 59))))", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertEq("\"&\"")}},
-		{Name: "parse-xml-fragment-013", XPath: "parse-xml-fragment(\"<?xml version='1.0' encoding='utf-8'?><a/>\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "parse-xml-fragment-014", XPath: "parse-xml-fragment(\"<?xml version='1.0' encoding='utf-8'?>\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertStringValue("")}},
-		{Name: "parse-xml-fragment-015", XPath: "parse-xml-fragment(\"<?xml version='1.0' encoding='utf-8'?>abc\")", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertStringValue("abc")}},
-		{Name: "parse-xml-fragment-016", XPath: "parse-xml-fragment(\"<?xml version='1.0'?><a/>\")", Skip: "requires fn:parse-xml", ExpectError: true},
-		{Name: "parse-xml-fragment-017", XPath: "parse-xml-fragment(\"<?xml version='1.0' encoding='utf-8' standalone='yes'?><a/>\")", Skip: "requires fn:parse-xml", ExpectError: true},
-		{Name: "parse-xml-fragment-018", XPath: "parse-xml-fragment(\"<a>\")", Skip: "requires fn:parse-xml", ExpectError: true},
-		{Name: "parse-xml-fragment-019", XPath: "parse-xml-fragment(\"<p:a/>\")", Skip: "requires fn:parse-xml", ExpectError: true},
+		{Name: "parse-xml-fragment-001", XPath: "parse-xml-fragment(unparsed-text(\"../docs/atomic.xml\"))/*", Assertions: []qt3Assertion{qt3AssertType("element(*,xs:untyped)")}},
+		{Name: "parse-xml-fragment-002", XPath: "parse-xml-fragment(unparsed-text(\"../docs/atomic.xml\"),'###/atomic.xml')", ExpectError: true},
+		{Name: "parse-xml-fragment-003", XPath: "parse-xml-fragment(unparsed-text(\"../docs/atomic.xml\"),'file:/test/fots/../docs/atomic.xml')", ExpectError: true},
+		{Name: "parse-xml-fragment-004", XPath: "parse-xml-fragment(\"<a>Test123\")", ExpectError: true},
+		{Name: "parse-xml-fragment-005", XPath: "parse-xml-fragment(\"\")", Assertions: []qt3Assertion{qt3AssertStringValue("")}},
+		{Name: "parse-xml-fragment-006", XPath: "parse-xml-fragment(\"vanessa\")", Assertions: []qt3Assertion{qt3AssertStringValue("vanessa")}},
+		{Name: "parse-xml-fragment-007", XPath: "parse-xml-fragment(\"<a/><b/><c/>\")", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+		{Name: "parse-xml-fragment-008", XPath: "parse-xml-fragment(\"  \")", Assertions: []qt3Assertion{qt3AssertStringValue("  ")}},
+		{Name: "parse-xml-fragment-009", XPath: "parse-xml-fragment(\"<a> </a> <b> </b>\")", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+		{Name: "parse-xml-fragment-010", XPath: "parse-xml-fragment(\"<a/><!--comment--><?PI?><b/>\")", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+		{Name: "parse-xml-fragment-011", XPath: "string(parse-xml-fragment(codepoints-to-string((38, 108, 116, 59))))", Assertions: []qt3Assertion{qt3AssertEq("\"<\"")}},
+		{Name: "parse-xml-fragment-012", XPath: "string(parse-xml-fragment(codepoints-to-string((38, 35, 51, 56, 59))))", Assertions: []qt3Assertion{qt3AssertEq("\"&\"")}},
+		{Name: "parse-xml-fragment-013", XPath: "parse-xml-fragment(\"<?xml version='1.0' encoding='utf-8'?><a/>\")", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "parse-xml-fragment-014", XPath: "parse-xml-fragment(\"<?xml version='1.0' encoding='utf-8'?>\")", Assertions: []qt3Assertion{qt3AssertStringValue("")}},
+		{Name: "parse-xml-fragment-015", XPath: "parse-xml-fragment(\"<?xml version='1.0' encoding='utf-8'?>abc\")", Assertions: []qt3Assertion{qt3AssertStringValue("abc")}},
+		{Name: "parse-xml-fragment-016", XPath: "parse-xml-fragment(\"<?xml version='1.0'?><a/>\")", ExpectError: true},
+		{Name: "parse-xml-fragment-017", XPath: "parse-xml-fragment(\"<?xml version='1.0' encoding='utf-8' standalone='yes'?><a/>\")", ExpectError: true},
+		{Name: "parse-xml-fragment-018", XPath: "parse-xml-fragment(\"<a>\")", ExpectError: true},
+		{Name: "parse-xml-fragment-019", XPath: "parse-xml-fragment(\"<p:a/>\")", ExpectError: true},
 		{Name: "parse-xml-fragment-020", XPath: `parse-xml-fragment("<!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.0 Transitional//EN'
-                                           'http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'><html/>")`, Skip: "requires fn:parse-xml", ExpectError: true},
-		{Name: "parse-xml-fragment-021", XPath: "string-to-codepoints(parse-xml-fragment(\"a\"||codepoints-to-string((13, 10))||\"b\"))", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertStringValue("97 10 98")}},
-		{Name: "parse-xml-fragment-022", XPath: "parse-xml-fragment(\"<a/>\")/..", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertEmpty()}},
+                                           'http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'><html/>")`, ExpectError: true},
+		{Name: "parse-xml-fragment-021", XPath: "string-to-codepoints(parse-xml-fragment(\"a\"||codepoints-to-string((13, 10))||\"b\"))", Assertions: []qt3Assertion{qt3AssertStringValue("97 10 98")}},
+		{Name: "parse-xml-fragment-022", XPath: "parse-xml-fragment(\"<a/>\")/..", Assertions: []qt3Assertion{qt3AssertEmpty()}},
 		{Name: "parse-xml-fragment-022-st", XPath: "parse-xml-fragment(\"<a/>\")/..", Skip: "requires static typing", ExpectError: true},
-		{Name: "parse-xml-fragment-023", XPath: "parse-xml-fragment(\"<a/>\") instance of document-node()", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "parse-xml-fragment-024", XPath: "parse-xml-fragment(())", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertEmpty()}},
-		{Name: "parse-xml-fragment-025", XPath: "parse-xml-fragment(\"<a/>\"[current-date() lt xs:date('1900-01-01')])", Skip: "requires fn:parse-xml", Assertions: []qt3Assertion{qt3AssertEmpty()}},
+		{Name: "parse-xml-fragment-023", XPath: "parse-xml-fragment(\"<a/>\") instance of document-node()", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "parse-xml-fragment-024", XPath: "parse-xml-fragment(())", Assertions: []qt3Assertion{qt3AssertEmpty()}},
+		{Name: "parse-xml-fragment-025", XPath: "parse-xml-fragment(\"<a/>\"[current-date() lt xs:date('1900-01-01')])", Assertions: []qt3Assertion{qt3AssertEmpty()}},
 	})
 }
 
@@ -9486,51 +9486,51 @@ func TestQT3_fn_QName(t *testing.T) {
 func TestQT3_fn_random_number_generator(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
-		{Name: "fn-random-number-generator-1", XPath: "fn:random-number-generator()", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertType("map(xs:string, item())")}},
-		{Name: "fn-random-number-generator-2", XPath: "fn:random-number-generator()?number", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("xs:double")}},
-		{Name: "fn-random-number-generator-3", XPath: "random-number-generator()?number ge 0", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-random-number-generator-4", XPath: "let $r := random-number-generator()?number return ($r ge 0 and $r lt 1)", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-random-number-generator-5", XPath: "let $r := random-number-generator()?number return ($r lt 0 or $r ge 1)", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-random-number-generator-6", XPath: "fn:random-number-generator()?next()", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertType("map(xs:string, item())")}},
-		{Name: "fn-random-number-generator-7", XPath: "fn:random-number-generator()?next()?number", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("xs:double")}},
-		{Name: "fn-random-number-generator-8", XPath: "let $r := fn:random-number-generator()?next()?number return ($r ge 0 and $r lt 1)", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-random-number-generator-9", XPath: "let $r := fn:random-number-generator()?next()?number return ($r lt 0 or $r ge 1)", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-random-number-generator-10", XPath: "fn:random-number-generator(23482)", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertType("map(xs:string, item())")}},
-		{Name: "fn-random-number-generator-11", XPath: "fn:random-number-generator(0000)?number", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("xs:double")}},
-		{Name: "fn-random-number-generator-12", XPath: "random-number-generator(3147)?number ge 0", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-random-number-generator-13", XPath: "let $r := random-number-generator(\"random\")?number return ($r ge 0 and $r lt 1)", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-random-number-generator-14", XPath: "fn:random-number-generator(0000)?next()", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertType("map(xs:string, item())")}},
-		{Name: "fn-random-number-generator-15", XPath: "fn:random-number-generator()?next()?number", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("xs:double")}},
-		{Name: "fn-random-number-generator-16", XPath: "let $r := fn:random-number-generator()?next()?number return ($r ge 0 and $r lt 1)", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-random-number-generator-17", XPath: "fn:random-number-generator()?permute(1 to 100)", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-random-number-generator-18", XPath: "fn:random-number-generator()?permute((\"a\",\"b\",\"c\",\"d\",\"e\",\"f\",\"g\"))", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-random-number-generator-19", XPath: "subsequence(fn:random-number-generator()?permute((\"a\",\"b\",\"c\",\"d\",\"e\",\"f\",\"g\")),2,5)", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("xs:string*"), qt3AssertSkip()}},
-		{Name: "fn-random-number-generator-20", XPath: "fn:random-number-generator()?permute((\"a\",\"b\",\"c\",\"d\",\"e\",\"f\",\"g\")) => subsequence(2,5)", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("xs:string*"), qt3AssertSkip()}},
-		{Name: "fn-random-number-generator-23", XPath: "let $G := fn:random-number-generator(fn:current-dateTime()) return deep-equal($G?permute(1 to 100), $G?next()?permute(1 to 100))", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-random-number-generator-24", XPath: "deep-equal(fn:random-number-generator(fn:current-dateTime())?permute(1 to 100), fn:random-number-generator(fn:current-dateTime())?permute(1 to 100))", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-random-number-generator-25", XPath: "deep-equal(fn:random-number-generator()?permute(1 to 100), fn:random-number-generator()?permute(1 to 100))", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-random-number-generator-26", XPath: "deep-equal(fn:random-number-generator(0)?permute(1 to 100), fn:random-number-generator(1)?permute(1 to 100))", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-random-number-generator-27", XPath: "fn:random-number-generator(xs:double('NaN'))?permute(1)", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertEq("1")}},
-		{Name: "fn-random-number-generator-28", XPath: "fn:random-number-generator('a')?permute((1 to 100)[. lt 0])", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertEmpty()}},
-		{Name: "fn-random-number-generator-29", XPath: "map:keys(fn:random-number-generator('a'))", Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "fn-random-number-generator-30", XPath: "fn:random-number-generator('a')?next => fn:apply([]) => fn:apply([\"number\"])", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("xs:double")}},
-		{Name: "fn-random-number-generator-32", XPath: "fn:random-number-generator( () )", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertType("map(xs:string, item())")}},
-		{Name: "fn-random-number-generator-33", XPath: "fn:random-number-generator( () )?number", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("xs:double")}},
+		{Name: "fn-random-number-generator-1", XPath: "fn:random-number-generator()", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertType("map(xs:string, item())")}},
+		{Name: "fn-random-number-generator-2", XPath: "fn:random-number-generator()?number", Assertions: []qt3Assertion{qt3AssertType("xs:double")}},
+		{Name: "fn-random-number-generator-3", XPath: "random-number-generator()?number ge 0", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-random-number-generator-4", XPath: "let $r := random-number-generator()?number return ($r ge 0 and $r lt 1)", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-random-number-generator-5", XPath: "let $r := random-number-generator()?number return ($r lt 0 or $r ge 1)", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-random-number-generator-6", XPath: "fn:random-number-generator()?next()", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertType("map(xs:string, item())")}},
+		{Name: "fn-random-number-generator-7", XPath: "fn:random-number-generator()?next()?number", Assertions: []qt3Assertion{qt3AssertType("xs:double")}},
+		{Name: "fn-random-number-generator-8", XPath: "let $r := fn:random-number-generator()?next()?number return ($r ge 0 and $r lt 1)", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-random-number-generator-9", XPath: "let $r := fn:random-number-generator()?next()?number return ($r lt 0 or $r ge 1)", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-random-number-generator-10", XPath: "fn:random-number-generator(23482)", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertType("map(xs:string, item())")}},
+		{Name: "fn-random-number-generator-11", XPath: "fn:random-number-generator(0000)?number", Assertions: []qt3Assertion{qt3AssertType("xs:double")}},
+		{Name: "fn-random-number-generator-12", XPath: "random-number-generator(3147)?number ge 0", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-random-number-generator-13", XPath: "let $r := random-number-generator(\"random\")?number return ($r ge 0 and $r lt 1)", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-random-number-generator-14", XPath: "fn:random-number-generator(0000)?next()", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertType("map(xs:string, item())")}},
+		{Name: "fn-random-number-generator-15", XPath: "fn:random-number-generator()?next()?number", Assertions: []qt3Assertion{qt3AssertType("xs:double")}},
+		{Name: "fn-random-number-generator-16", XPath: "let $r := fn:random-number-generator()?next()?number return ($r ge 0 and $r lt 1)", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-random-number-generator-17", XPath: "fn:random-number-generator()?permute(1 to 100)", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-random-number-generator-18", XPath: "fn:random-number-generator()?permute((\"a\",\"b\",\"c\",\"d\",\"e\",\"f\",\"g\"))", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-random-number-generator-19", XPath: "subsequence(fn:random-number-generator()?permute((\"a\",\"b\",\"c\",\"d\",\"e\",\"f\",\"g\")),2,5)", Assertions: []qt3Assertion{qt3AssertType("xs:string*"), qt3AssertSkip()}},
+		{Name: "fn-random-number-generator-20", XPath: "fn:random-number-generator()?permute((\"a\",\"b\",\"c\",\"d\",\"e\",\"f\",\"g\")) => subsequence(2,5)", Assertions: []qt3Assertion{qt3AssertType("xs:string*"), qt3AssertSkip()}},
+		{Name: "fn-random-number-generator-23", XPath: "let $G := fn:random-number-generator(fn:current-dateTime()) return deep-equal($G?permute(1 to 100), $G?next()?permute(1 to 100))", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-random-number-generator-24", XPath: "deep-equal(fn:random-number-generator(fn:current-dateTime())?permute(1 to 100), fn:random-number-generator(fn:current-dateTime())?permute(1 to 100))", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-random-number-generator-25", XPath: "deep-equal(fn:random-number-generator()?permute(1 to 100), fn:random-number-generator()?permute(1 to 100))", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-random-number-generator-26", XPath: "deep-equal(fn:random-number-generator(0)?permute(1 to 100), fn:random-number-generator(1)?permute(1 to 100))", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-random-number-generator-27", XPath: "fn:random-number-generator(xs:double('NaN'))?permute(1)", Assertions: []qt3Assertion{qt3AssertEq("1")}},
+		{Name: "fn-random-number-generator-28", XPath: "fn:random-number-generator('a')?permute((1 to 100)[. lt 0])", Assertions: []qt3Assertion{qt3AssertEmpty()}},
+		{Name: "fn-random-number-generator-29", XPath: "map:keys(fn:random-number-generator('a'))", Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+		{Name: "fn-random-number-generator-30", XPath: "fn:random-number-generator('a')?next => fn:apply([]) => fn:apply([\"number\"])", Assertions: []qt3Assertion{qt3AssertType("xs:double")}},
+		{Name: "fn-random-number-generator-32", XPath: "fn:random-number-generator( () )", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertType("map(xs:string, item())")}},
+		{Name: "fn-random-number-generator-33", XPath: "fn:random-number-generator( () )?number", Assertions: []qt3Assertion{qt3AssertType("xs:double")}},
 		{Name: "fn-random-number-generator-34", XPath: `random-number-generator()?number eq
-              random-number-generator( () )?number`, Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-random-number-generator-35", XPath: "fn:random-number-generator()?next", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("function(*)"), qt3AssertType("function() as map(xs:string, item())")}},
-		{Name: "fn-random-number-generator-36", XPath: "fn:random-number-generator( () )?next", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("function(*)"), qt3AssertType("function() as map(xs:string, item())")}},
-		{Name: "fn-random-number-generator-37", XPath: "fn:random-number-generator( 0 )?next", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("function(*)"), qt3AssertType("function() as map(xs:string, item())")}},
-		{Name: "fn-random-number-generator-38", XPath: "fn:random-number-generator( () )?next()", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertType("map(xs:string, item())")}},
+              random-number-generator( () )?number`, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-random-number-generator-35", XPath: "fn:random-number-generator()?next", Assertions: []qt3Assertion{qt3AssertType("function(*)"), qt3AssertType("function() as map(xs:string, item())")}},
+		{Name: "fn-random-number-generator-36", XPath: "fn:random-number-generator( () )?next", Assertions: []qt3Assertion{qt3AssertType("function(*)"), qt3AssertType("function() as map(xs:string, item())")}},
+		{Name: "fn-random-number-generator-37", XPath: "fn:random-number-generator( 0 )?next", Assertions: []qt3Assertion{qt3AssertType("function(*)"), qt3AssertType("function() as map(xs:string, item())")}},
+		{Name: "fn-random-number-generator-38", XPath: "fn:random-number-generator( () )?next()", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertType("map(xs:string, item())")}},
 		{Name: "fn-random-number-generator-39", XPath: `fn:random-number-generator()?next()?number eq
-              fn:random-number-generator( () )?next()?number`, Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-random-number-generator-40", XPath: "fn:random-number-generator()?permute", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("function(*)"), qt3AssertType("function(item()*) as item()*")}},
-		{Name: "fn-random-number-generator-41", XPath: "fn:random-number-generator( () )?permute", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("function(*)"), qt3AssertType("function(item()*) as item()*")}},
-		{Name: "fn-random-number-generator-42", XPath: "fn:random-number-generator( 0 )?permute", Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertType("function(*)"), qt3AssertType("function(item()*) as item()*")}},
+              fn:random-number-generator( () )?next()?number`, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-random-number-generator-40", XPath: "fn:random-number-generator()?permute", Assertions: []qt3Assertion{qt3AssertType("function(*)"), qt3AssertType("function(item()*) as item()*")}},
+		{Name: "fn-random-number-generator-41", XPath: "fn:random-number-generator( () )?permute", Assertions: []qt3Assertion{qt3AssertType("function(*)"), qt3AssertType("function(item()*) as item()*")}},
+		{Name: "fn-random-number-generator-42", XPath: "fn:random-number-generator( 0 )?permute", Assertions: []qt3Assertion{qt3AssertType("function(*)"), qt3AssertType("function(item()*) as item()*")}},
 		{Name: "fn-random-number-generator-43", XPath: `deep-equal(fn:random-number-generator()?permute(1 to 100),
-                         fn:random-number-generator( () )?permute(1 to 100))`, Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertTrue()}},
+                         fn:random-number-generator( () )?permute(1 to 100))`, Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-random-number-generator-44", XPath: `fold-left(1 to 10, random-number-generator(), 
-                function($z, $i){ head($z)('next')(), tail($z), head($z)('number')}) => tail()`, Skip: "requires fn:random-number-generator", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertType("xs:double+"), qt3AssertSkip()}},
+                function($z, $i){ head($z)('next')(), tail($z), head($z)('number')}) => tail()`, Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertType("xs:double+"), qt3AssertSkip()}},
 	})
 }
 
@@ -10365,165 +10365,165 @@ func TestQT3_fn_seconds_from_time(t *testing.T) {
 func TestQT3_fn_serialize(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
-		{Name: "serialize-xml-001", XPath: "serialize(.)", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-002", XPath: "serialize((.//@*)[1])", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-003b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-004b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-005b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-006b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-007b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-007c", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-008b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-008-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "serialize-xml-009b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-010", XPath: "serialize(name#1)", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-011", XPath: "serialize((//@*:attr)[1])", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-012", XPath: "serialize((//namespace::*)[1])", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-014b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-015b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-016b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-017b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-018b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-019b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-020b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-021b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-022b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-023b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-024b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-025b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-026b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-027b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-028b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-029b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-030b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-031b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-032b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-032-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-033b", XPath: "serialize(1 to 10, $params/*)", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-034b", XPath: "serialize(./doc/x/text(), $params/*)", DocPath: "fn/serialize/serialize-034-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-001", XPath: "serialize(.)", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-002", XPath: "serialize((.//@*)[1])", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
+		{Name: "serialize-xml-003b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-004b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-005b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+		{Name: "serialize-xml-006b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-007b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+		{Name: "serialize-xml-007c", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-008b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-008-src.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+		{Name: "serialize-xml-009b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+		{Name: "serialize-xml-010", XPath: "serialize(name#1)", ExpectError: true},
+		{Name: "serialize-xml-011", XPath: "serialize((//@*:attr)[1])", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
+		{Name: "serialize-xml-012", XPath: "serialize((//namespace::*)[1])", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
+		{Name: "serialize-xml-014b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+		{Name: "serialize-xml-015b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+		{Name: "serialize-xml-016b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+		{Name: "serialize-xml-017b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+		{Name: "serialize-xml-018b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+		{Name: "serialize-xml-019b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+		{Name: "serialize-xml-020b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+		{Name: "serialize-xml-021b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+		{Name: "serialize-xml-022b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+		{Name: "serialize-xml-023b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+		{Name: "serialize-xml-024b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+		{Name: "serialize-xml-025b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+		{Name: "serialize-xml-026b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-027b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-028b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-029b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-030b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-031b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-032b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-032-src.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-033b", XPath: "serialize(1 to 10, $params/*)", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-034b", XPath: "serialize(./doc/x/text(), $params/*)", DocPath: "fn/serialize/serialize-034-src.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-035b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-035-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-036b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-035-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "serialize-xml-101", XPath: "serialize(., map{})", DocPath: "docs/atomic.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-101", XPath: "serialize(., map{})", DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-102", XPath: `let $params := map {
             "method" : "xml",
             "indent" : "yes"
             }          
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires serialization", ExpectError: true},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", ExpectError: true},
 		{Name: "serialize-xml-103", XPath: `let $params := map {
             "method" : "xml",
             "indent" : true() 
             }          
-          return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+          return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-104", XPath: `let $params := map { "indent" : true() }          
-          return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+          return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-105", XPath: `let $params := map {
             "use-character-maps" : true(),
             "indent" : true() 
             }          
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires serialization", ExpectError: true},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", ExpectError: true},
 		{Name: "serialize-xml-106", XPath: `let $params := map {
             "method" : "xml",
             "indent" : true(),
             "cdata-section-elements" : 
                 (QName("http://www.saxonica.com", "a"), QName("http://www.saxonica.com", "b"), QName("", "c"))
             }          
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-106a", XPath: `let $params := map {
             "method" : "xml",
             "indent" : true(),
             "cdata-section-elements" : 
                 [QName("http://www.saxonica.com", "a"), QName("http://www.saxonica.com", "b"), QName("", "c")] 
             }          
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-107", XPath: `let $params := map {
             "method" : "xml",
             "indent" : true(),
             "xindent" : true() 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-107a", XPath: `let $params := map {
             "method" : "xml",
             "indent" : true(),
             QName("http://vendor.example.com/","xindent") : true() 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-108", XPath: `let $params := map {
             "method" : "xml",
             "indent" : true(),
             "suppress-indentation" : QName("","p") 
             }
-            return serialize(., $params)`, DocPath: "fn/serialize/serialize-008-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "fn/serialize/serialize-008-src.xml", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "serialize-xml-109", XPath: `let $params := map {
             "method" : "xml",
             "indent" : "maybe",
             "suppress-indentation" : "p" 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires serialization", ExpectError: true},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", ExpectError: true},
 		{Name: "serialize-xml-110", XPath: `let $params := map {
             "method" : "xml",
             "cdata-section-elements" : 
             (QName("", "b"), QName("http://www.example.org/ns/p", "b")),
             "suppress-indentation" : QName("", "para")
             }
-            return serialize(., $params)`, DocPath: "fn/serialize/serialize-110-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "fn/serialize/serialize-110-src.xml", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "serialize-xml-119", XPath: `let $params := map {
             "indent" : true(),
             "indent" : true() 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-120b", XPath: "serialize(., map { QName(\"\",\"indent\") : true(), \"omit-xml-declaration\" : true() })", DocPath: "fn/serialize/serialize-xml-120-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
+		{Name: "serialize-xml-120b", XPath: "serialize(., map { QName(\"\",\"indent\") : true(), \"omit-xml-declaration\" : true() })", DocPath: "fn/serialize/serialize-xml-120-src.xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-123", XPath: `let $params := map {
             "use-character-maps" : map { "$$":"£" } 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires serialization", ExpectError: true},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
 		{Name: "serialize-xml-124", XPath: `let $params := map {
             "use-character-maps" : map { "$":"£", "$":"€" } 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires serialization", ExpectError: true},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
 		{Name: "serialize-xml-125", XPath: `let $params := map {
             QName("http://example.com/xslt-xquery-serialization","indent-spaces") : "3",
             QName("http://example.com/xslt-xquery-serialization","indent-spaces") : "2" 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires serialization", ExpectError: true},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
 		{Name: "serialize-xml-126", XPath: `let $params := map {
             "indent" : true(),
             QName("http://example.com/xslt-xquery-serialization","indent-spaces") : "2" 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-127", XPath: `let $params := map { "omit-xml-declaration" : true() }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-127a", XPath: `let $params := map { }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-128", XPath: `let $params := map { "omit-xml-declaration" : false() }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-129", XPath: `let $params := map { 
             "omit-xml-declaration" : false(),
             "standalone" : false() 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-130", XPath: `let $params := map {
             "omit-xml-declaration" : false(),
             "standalone" : true() 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-131", XPath: `let $params := map {
             "omit-xml-declaration" : false(),
             "standalone" : () 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-131a", XPath: `let $params := map {
             "omit-xml-declaration" : false(),
             "standalone" : " omit " 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires serialization", ExpectError: true},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
 		{Name: "serialize-xml-132", XPath: `let $params := map {
             "use-character-maps" : map { "$":"£" } 
             }
-            return serialize(., $params)`, DocPath: "fn/serialize/serialize-032-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "fn/serialize/serialize-032-src.xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-133", XPath: `let $params := map {
             "method" : "xml",
             "item-separator" : "|" 
             }
-            return serialize(1 to 10, $params)`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-134b", XPath: "serialize(./doc/x/text(), map {\"method\" : \"xml\", \"omit-xml-declaration\" : true(), \"item-separator\" : \"==\" })", DocPath: "fn/serialize/serialize-034-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(1 to 10, $params)`, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-134b", XPath: "serialize(./doc/x/text(), map {\"method\" : \"xml\", \"omit-xml-declaration\" : true(), \"item-separator\" : \"==\" })", DocPath: "fn/serialize/serialize-034-src.xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-135", XPath: `let $params := map {
             "method" : "xml",
             "version" : "1.1",
@@ -10537,51 +10537,51 @@ func TestQT3_fn_serialize(t *testing.T) {
             "undeclare-prefixes" : false()
             }
             return serialize(., $params)`, DocPath: "fn/serialize/serialize-035-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "serialize-xml-137b", XPath: "serialize(., ())", DocPath: "fn/serialize/serialize-xml-137-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-138b", XPath: "serialize(., parse-json('{\"method\" : \"xml\", \"indent\" : true, \"use-character-maps\" : { \"x\" : \"j\", \"m\" : \"so\", \"l\" : \"n\" } }'))", DocPath: "fn/serialize/serialize-xml-138-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-139b", XPath: "serialize(., map { 'use-character-maps' : map { QName(\"http://example.org\",\"xyz\") : \"abc\" } })", DocPath: "fn/serialize/serialize-xml-138-src.xml", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-140b", XPath: "serialize(., map {'use-character-maps' : map {'x': xs:untypedAtomic('j'), 'm':$e/e, 'l':'n'}})", DocPath: "fn/serialize/serialize-xml-138-src.xml", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-141b", XPath: "serialize(., map {'use-character-maps' : map {'x': xs:untypedAtomic('j'), 'm':'so', 'l': xs:QName('n')}})", DocPath: "fn/serialize/serialize-xml-138-src.xml", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-xml-142b", XPath: "serialize(./x/*, map {'method' : 'xml', 'indent' : xs:untypedAtomic('false'), 'item-separator' : xs:untypedAtomic('  ') })", DocPath: "fn/serialize/serialize-xml-142-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-html-001b", XPath: "serialize(., map { \"method\" : \"html\", \"html-version\" : 5.0 } )", DocPath: "fn/serialize/serialize-html-001-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
-		{Name: "serialize-html-002b", XPath: "serialize(., map { \"method\" : \"html\", \"html-version\" : 5 } )", DocPath: "fn/serialize/serialize-html-001-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
+		{Name: "serialize-xml-137b", XPath: "serialize(., ())", DocPath: "fn/serialize/serialize-xml-137-src.xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-138b", XPath: "serialize(., parse-json('{\"method\" : \"xml\", \"indent\" : true, \"use-character-maps\" : { \"x\" : \"j\", \"m\" : \"so\", \"l\" : \"n\" } }'))", DocPath: "fn/serialize/serialize-xml-138-src.xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-139b", XPath: "serialize(., map { 'use-character-maps' : map { QName(\"http://example.org\",\"xyz\") : \"abc\" } })", DocPath: "fn/serialize/serialize-xml-138-src.xml", ExpectError: true},
+		{Name: "serialize-xml-140b", XPath: "serialize(., map {'use-character-maps' : map {'x': xs:untypedAtomic('j'), 'm':$e/e, 'l':'n'}})", DocPath: "fn/serialize/serialize-xml-138-src.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+		{Name: "serialize-xml-141b", XPath: "serialize(., map {'use-character-maps' : map {'x': xs:untypedAtomic('j'), 'm':'so', 'l': xs:QName('n')}})", DocPath: "fn/serialize/serialize-xml-138-src.xml", ExpectError: true},
+		{Name: "serialize-xml-142b", XPath: "serialize(./x/*, map {'method' : 'xml', 'indent' : xs:untypedAtomic('false'), 'item-separator' : xs:untypedAtomic('  ') })", DocPath: "fn/serialize/serialize-xml-142-src.xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-html-001b", XPath: "serialize(., map { \"method\" : \"html\", \"html-version\" : 5.0 } )", DocPath: "fn/serialize/serialize-html-001-src.xml", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
+		{Name: "serialize-html-002b", XPath: "serialize(., map { \"method\" : \"html\", \"html-version\" : 5 } )", DocPath: "fn/serialize/serialize-html-001-src.xml", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
 		{Name: "serialize-json-001", XPath: `let $params := map {
             "method" : "json"
             }       
-            return serialize([ ], $params)`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertType("xs:string"), qt3AssertSkip()}},
+            return serialize([ ], $params)`, Assertions: []qt3Assertion{qt3AssertType("xs:string"), qt3AssertSkip()}},
 		{Name: "serialize-json-002", XPath: `let $params := map {
             "method" : "json"
             },
             $arg := array { 1, 2 , (3,4,5), 6 }
-            return serialize($arg, $params)`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertType("xs:string"), qt3AssertSkip()}},
+            return serialize($arg, $params)`, Assertions: []qt3Assertion{qt3AssertType("xs:string"), qt3AssertSkip()}},
 		{Name: "serialize-json-003", XPath: `let $params := map {
             "method" : "json"
             },   
             $arg := [1, 2 , [3,4,5], 6]        
-            return serialize($arg, $params)`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertType("xs:string"), qt3AssertSkip()}},
+            return serialize($arg, $params)`, Assertions: []qt3Assertion{qt3AssertType("xs:string"), qt3AssertSkip()}},
 		{Name: "serialize-json-004", XPath: `let $params := map {
             "method" : "json",
             "indent" : true() 
             }          
-            return serialize($params, $params)`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertType("xs:string"), qt3AssertSkip(), qt3AssertSkip()}},
+            return serialize($params, $params)`, Assertions: []qt3Assertion{qt3AssertType("xs:string"), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "serialize-json-005", XPath: `let $params := map {
             "method" : "json",
             "indent" : true() 
             },         
             $arg := parse-json('{"abc":true}')
-            return serialize($arg, $params)`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertType("xs:string"), qt3AssertSkip()}},
+            return serialize($arg, $params)`, Assertions: []qt3Assertion{qt3AssertType("xs:string"), qt3AssertSkip()}},
 		{Name: "serialize-json-006", XPath: `let $params := map {
             "method" : "json"
             }       
-            return serialize((), $params)`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertType("xs:string"), qt3AssertSkip()}},
+            return serialize((), $params)`, Assertions: []qt3Assertion{qt3AssertType("xs:string"), qt3AssertSkip()}},
 		{Name: "serialize-json-007", XPath: `let $params := map {
             "method" : "json",
             "item-separator" : "|" 
             }
-            return serialize(1 to 10, $params)`, Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-json-008b", XPath: "serialize(./doc/comment(), map { \"method\" : \"json\", \"json-node-output-method\" : \"xml\" })", DocPath: "fn/serialize/serialize-json-008-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-json-009b", XPath: "serialize(array{./doc/node(), $doc}, map { \"method\" : \"json\", \"json-node-output-method\" : \"xml\" })", DocPath: "fn/serialize/serialize-json-009-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-json-010", XPath: "serialize(map { xs:QName(\"foo\") : 1, \"foo\" : 2 }, map { 'method' : 'json' })", Skip: "requires serialization", ExpectError: true},
+            return serialize(1 to 10, $params)`, ExpectError: true},
+		{Name: "serialize-json-008b", XPath: "serialize(./doc/comment(), map { \"method\" : \"json\", \"json-node-output-method\" : \"xml\" })", DocPath: "fn/serialize/serialize-json-008-src.xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-json-009b", XPath: "serialize(array{./doc/node(), $doc}, map { \"method\" : \"json\", \"json-node-output-method\" : \"xml\" })", DocPath: "fn/serialize/serialize-json-009-src.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-json-010", XPath: "serialize(map { xs:QName(\"foo\") : 1, \"foo\" : 2 }, map { 'method' : 'json' })", ExpectError: true},
 		{Name: "serialize-json-011", XPath: `serialize(
             map { 
               QName("", "foo") : 1, 
@@ -10591,55 +10591,55 @@ func TestQT3_fn_serialize(t *testing.T) {
               'method' : 'json', 
               'allow-duplicate-names' : true()
             }
-          )`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "serialize-json-101", XPath: "serialize(map{}, map{'method':'json'})", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-json-102", XPath: "serialize((), map{'method':'json'})", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-json-103", XPath: "serialize(12.5, map{'method':'json'})", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-json-104", XPath: "normalize-space(serialize(true(), map{'method':'json'}))", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("true")}},
-		{Name: "serialize-json-105", XPath: "normalize-space(serialize(false(), map{'method':'json'}))", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("false")}},
-		{Name: "serialize-json-106", XPath: "serialize(map{'abc':23}, map{'method':'json'})", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-json-107", XPath: "let $r := serialize(map{'abc':23, 'xyz':49}, map{'method':'json'}) return\n            translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertType("xs:string"), qt3AssertCount(1), qt3AssertSkip()}},
-		{Name: "serialize-json-108", XPath: "let $r := serialize(parse-json('[1, 2, 3, \"four\", true, false, null]'),\n            map{'method':'json'}) return translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[1,2,3,\"four\",true,false,null]")}},
-		{Name: "serialize-json-109", XPath: "let $r := serialize([1, 2, 3, \"four\", true(), false()], map{'method':'json'}) return\n            translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[1,2,3,\"four\",true,false]")}},
-		{Name: "serialize-json-110", XPath: "let $r := serialize(parse-json('[[1, 2], [3, 4], [5, 6], [7], [], [null]]'),\n            map{'method':'json'}) return translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[[1,2],[3,4],[5,6],[7],[],[null]]")}},
-		{Name: "serialize-json-111", XPath: "let $r := serialize(map{\"abc\":array{1 to 10}}, map{'method':'json'}) return translate($r,'\n            \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("{\"abc\":[1,2,3,4,5,6,7,8,9,10]}")}},
-		{Name: "serialize-json-112", XPath: "let $r := serialize([map{\"abc\":1},map{\"def\":2},map{\"ghi\":3}], map{'method':'json'})\n            return translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[{\"abc\":1},{\"def\":2},{\"ghi\":3}]")}},
-		{Name: "serialize-json-113", XPath: "let $r :=\n            serialize(map{\"abc\": map{\"abc\":map{\"abc\":1}, \"def\": map{\"def\":2}}},\n            map{'method':'json'}) return translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertType("xs:string"), qt3AssertSkip(), qt3AssertSkip()}},
+          )`, Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
+		{Name: "serialize-json-101", XPath: "serialize(map{}, map{'method':'json'})", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-json-102", XPath: "serialize((), map{'method':'json'})", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-json-103", XPath: "serialize(12.5, map{'method':'json'})", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-json-104", XPath: "normalize-space(serialize(true(), map{'method':'json'}))", Assertions: []qt3Assertion{qt3AssertStringValue("true")}},
+		{Name: "serialize-json-105", XPath: "normalize-space(serialize(false(), map{'method':'json'}))", Assertions: []qt3Assertion{qt3AssertStringValue("false")}},
+		{Name: "serialize-json-106", XPath: "serialize(map{'abc':23}, map{'method':'json'})", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-json-107", XPath: "let $r := serialize(map{'abc':23, 'xyz':49}, map{'method':'json'}) return\n            translate($r,' \t\n\r', '')", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertType("xs:string"), qt3AssertCount(1), qt3AssertSkip()}},
+		{Name: "serialize-json-108", XPath: "let $r := serialize(parse-json('[1, 2, 3, \"four\", true, false, null]'),\n            map{'method':'json'}) return translate($r,' \t\n\r', '')", Assertions: []qt3Assertion{qt3AssertStringValue("[1,2,3,\"four\",true,false,null]")}},
+		{Name: "serialize-json-109", XPath: "let $r := serialize([1, 2, 3, \"four\", true(), false()], map{'method':'json'}) return\n            translate($r,' \t\n\r', '')", Assertions: []qt3Assertion{qt3AssertStringValue("[1,2,3,\"four\",true,false]")}},
+		{Name: "serialize-json-110", XPath: "let $r := serialize(parse-json('[[1, 2], [3, 4], [5, 6], [7], [], [null]]'),\n            map{'method':'json'}) return translate($r,' \t\n\r', '')", Assertions: []qt3Assertion{qt3AssertStringValue("[[1,2],[3,4],[5,6],[7],[],[null]]")}},
+		{Name: "serialize-json-111", XPath: "let $r := serialize(map{\"abc\":array{1 to 10}}, map{'method':'json'}) return translate($r,'\n            \t\n\r', '')", Assertions: []qt3Assertion{qt3AssertStringValue("{\"abc\":[1,2,3,4,5,6,7,8,9,10]}")}},
+		{Name: "serialize-json-112", XPath: "let $r := serialize([map{\"abc\":1},map{\"def\":2},map{\"ghi\":3}], map{'method':'json'})\n            return translate($r,' \t\n\r', '')", Assertions: []qt3Assertion{qt3AssertStringValue("[{\"abc\":1},{\"def\":2},{\"ghi\":3}]")}},
+		{Name: "serialize-json-113", XPath: "let $r :=\n            serialize(map{\"abc\": map{\"abc\":map{\"abc\":1}, \"def\": map{\"def\":2}}},\n            map{'method':'json'}) return translate($r,' \t\n\r', '')", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertType("xs:string"), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "serialize-json-114", XPath: `let $r := serialize('𝄞', map{'method':'json', 'encoding':'ISO-8859-1'}) return
-            translate(normalize-space($r), 'abcdef', 'ABCDEF')`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("\"\\uD834\\uDD1E\"")}},
+            translate(normalize-space($r), 'abcdef', 'ABCDEF')`, Assertions: []qt3Assertion{qt3AssertStringValue("\"\\uD834\\uDD1E\"")}},
 		{Name: "serialize-json-115", XPath: `let $r := serialize('
 ', map{'method':'json'}) return
-            translate(normalize-space($r), 'abcdef', 'ABCDEF')`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("\"\\n\"")}},
+            translate(normalize-space($r), 'abcdef', 'ABCDEF')`, Assertions: []qt3Assertion{qt3AssertStringValue("\"\\n\"")}},
 		{Name: "serialize-json-116", XPath: `serialize([map{"abc":map{"abc":1}},map{"def":map{"def":2}},map{"ghi":map{"ghi":3}}],
-            map{'method':'json', "indent":false()})`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[{\"abc\":{\"abc\":1}},{\"def\":{\"def\":2}},{\"ghi\":{\"ghi\":3}}]")}},
+            map{'method':'json', "indent":false()})`, Assertions: []qt3Assertion{qt3AssertStringValue("[{\"abc\":{\"abc\":1}},{\"def\":{\"def\":2}},{\"ghi\":{\"ghi\":3}}]")}},
 		{Name: "serialize-json-117", XPath: `let $r :=
             serialize([map{"abc":map{"abc":1}},map{"def":map{"def":2}},map{"ghi":map{"ghi":3}}],
-            map{'method':'json', "indent":true()}) return translate($r, codepoints-to-string((32, 9, 10, 13)), '')`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[{\"abc\":{\"abc\":1}},{\"def\":{\"def\":2}},{\"ghi\":{\"ghi\":3}}]")}},
-		{Name: "serialize-json-118", XPath: "parse-json(serialize(12.34, map{'method':'json'}))", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "serialize-json-119", XPath: "parse-json(serialize(12.34e-30, map{'method':'json'}))", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "serialize-json-120", XPath: "serialize(\"abc\"\"def\", map{'method':'json'})", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "serialize-json-121", XPath: "serialize(\"abc\\\\def\", map{'method':'json'})", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "serialize-json-122", XPath: "let $r := serialize([number('NaN'), number('INF'), number('-INF')],\n            map{'method':'json'}) return translate($r,' \t\n\r', '')", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-json-123", XPath: "let $r := serialize([0,0,xs:untypedAtomic(\"abcd\")], map{'method':'json'}) return\n            translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[0,0,\"abcd\"]")}},
-		{Name: "serialize-json-124", XPath: "let $r := serialize(map{1:\"a\",2:\"b\",4:\"d\",10:\"j\",7:\"g\"}, map{'method':'json'}) return\n            translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertType("xs:string"), qt3AssertCount(1), qt3AssertSkip()}},
-		{Name: "serialize-json-125", XPath: "let $r := serialize([0,0,xs:date('2011-04-06')], map{'method':'json'}) \n            return translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("[0,0,\"2011-04-06\"]")}},
-		{Name: "serialize-json-126", XPath: "let $r := serialize(map{\"a\":xs:date('2011-04-06')}, map{'method':'json'}) \n            return translate($r,' \t\n\r', '')", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("{\"a\":\"2011-04-06\"}")}},
+            map{'method':'json', "indent":true()}) return translate($r, codepoints-to-string((32, 9, 10, 13)), '')`, Assertions: []qt3Assertion{qt3AssertStringValue("[{\"abc\":{\"abc\":1}},{\"def\":{\"def\":2}},{\"ghi\":{\"ghi\":3}}]")}},
+		{Name: "serialize-json-118", XPath: "parse-json(serialize(12.34, map{'method':'json'}))", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
+		{Name: "serialize-json-119", XPath: "parse-json(serialize(12.34e-30, map{'method':'json'}))", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
+		{Name: "serialize-json-120", XPath: "serialize(\"abc\"\"def\", map{'method':'json'})", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
+		{Name: "serialize-json-121", XPath: "serialize(\"abc\\\\def\", map{'method':'json'})", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
+		{Name: "serialize-json-122", XPath: "let $r := serialize([number('NaN'), number('INF'), number('-INF')],\n            map{'method':'json'}) return translate($r,' \t\n\r', '')", ExpectError: true},
+		{Name: "serialize-json-123", XPath: "let $r := serialize([0,0,xs:untypedAtomic(\"abcd\")], map{'method':'json'}) return\n            translate($r,' \t\n\r', '')", Assertions: []qt3Assertion{qt3AssertStringValue("[0,0,\"abcd\"]")}},
+		{Name: "serialize-json-124", XPath: "let $r := serialize(map{1:\"a\",2:\"b\",4:\"d\",10:\"j\",7:\"g\"}, map{'method':'json'}) return\n            translate($r,' \t\n\r', '')", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertType("xs:string"), qt3AssertCount(1), qt3AssertSkip()}},
+		{Name: "serialize-json-125", XPath: "let $r := serialize([0,0,xs:date('2011-04-06')], map{'method':'json'}) \n            return translate($r,' \t\n\r', '')", Assertions: []qt3Assertion{qt3AssertStringValue("[0,0,\"2011-04-06\"]")}},
+		{Name: "serialize-json-126", XPath: "let $r := serialize(map{\"a\":xs:date('2011-04-06')}, map{'method':'json'}) \n            return translate($r,' \t\n\r', '')", Assertions: []qt3Assertion{qt3AssertStringValue("{\"a\":\"2011-04-06\"}")}},
 		{Name: "serialize-json-127", XPath: `let $r := serialize(map{"a":doc($uri)}, map{'method':'json'}) 
-            return translate($r, codepoints-to-string((32, 9, 10, 13)), '')`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("{\"a\":\"<a>text<\\/a>\"}")}},
-		{Name: "serialize-json-128", XPath: "serialize(map{\"uri\":xs:anyURI('http://www.w3.org/')}, map{'method':'json'})", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("{\"uri\":\"http:\\/\\/www.w3.org\\/\"}")}},
-		{Name: "serialize-json-130", XPath: "let $r := serialize((1, 2, 3, \"four\", true(), false()), map{'method':'json'}) return\n            translate($r,' \t\n\r', '')", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-json-131", XPath: "let $r := serialize(map{\"abc\":(1 to 10)}, map{'method':'json'}) return translate($r,'\n            \t\n\r', '')", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-json-132", XPath: "let $r := serialize((map{\"abc\":1},map{\"def\":2},map{\"ghi\":3}), map{'method':'json'})\n            return translate($r,' \t\n\r', '')", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-json-133", XPath: "serialize([1,2,3], map{'method':'json', \"indent\":23})", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-json-134", XPath: "serialize([1,2,3], map{'method':'json', \"indent\":\"true\"})", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-json-135", XPath: "serialize([1,2,3], map{'method':'json', \"indent\":(true(),false())})", Skip: "requires serialization", ExpectError: true},
-		{Name: "serialize-adaptive-001", XPath: "serialize((1,2,3), map{'method':'adaptive', 'item-separator':';'})", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("1;2;3")}},
+            return translate($r, codepoints-to-string((32, 9, 10, 13)), '')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("{\"a\":\"<a>text<\\/a>\"}")}},
+		{Name: "serialize-json-128", XPath: "serialize(map{\"uri\":xs:anyURI('http://www.w3.org/')}, map{'method':'json'})", Assertions: []qt3Assertion{qt3AssertStringValue("{\"uri\":\"http:\\/\\/www.w3.org\\/\"}")}},
+		{Name: "serialize-json-130", XPath: "let $r := serialize((1, 2, 3, \"four\", true(), false()), map{'method':'json'}) return\n            translate($r,' \t\n\r', '')", ExpectError: true},
+		{Name: "serialize-json-131", XPath: "let $r := serialize(map{\"abc\":(1 to 10)}, map{'method':'json'}) return translate($r,'\n            \t\n\r', '')", ExpectError: true},
+		{Name: "serialize-json-132", XPath: "let $r := serialize((map{\"abc\":1},map{\"def\":2},map{\"ghi\":3}), map{'method':'json'})\n            return translate($r,' \t\n\r', '')", ExpectError: true},
+		{Name: "serialize-json-133", XPath: "serialize([1,2,3], map{'method':'json', \"indent\":23})", ExpectError: true},
+		{Name: "serialize-json-134", XPath: "serialize([1,2,3], map{'method':'json', \"indent\":\"true\"})", ExpectError: true},
+		{Name: "serialize-json-135", XPath: "serialize([1,2,3], map{'method':'json', \"indent\":(true(),false())})", ExpectError: true},
+		{Name: "serialize-adaptive-001", XPath: "serialize((1,2,3), map{'method':'adaptive', 'item-separator':';'})", Assertions: []qt3Assertion{qt3AssertStringValue("1;2;3")}},
 		{Name: "serialize-adaptive-002", XPath: `serialize((parse-xml('<a/>'), parse-xml('<b/>')),
-            map{'method':'adaptive', 'item-separator':';', 'indent':false(), 'omit-xml-declaration':true()})`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("<a/>;<b/>")}},
+            map{'method':'adaptive', 'item-separator':';', 'indent':false(), 'omit-xml-declaration':true()})`, Assertions: []qt3Assertion{qt3AssertStringValue("<a/>;<b/>")}},
 		{Name: "serialize-adaptive-003", XPath: `serialize((parse-xml('<a x="1"/>')/a/@x, parse-xml('<b y="2"/>')/b/@y),
-            map{'method':'adaptive', 'item-separator':';', 'indent':false(), 'omit-xml-declaration':true()})`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("x=\"1\";y=\"2\"")}},
+            map{'method':'adaptive', 'item-separator':';', 'indent':false(), 'omit-xml-declaration':true()})`, Assertions: []qt3Assertion{qt3AssertStringValue("x=\"1\";y=\"2\"")}},
 		{Name: "serialize-adaptive-004", XPath: `serialize((map{1:true(), 2:false()}, map{8:80, 9:90}),
-            map{'method':'adaptive', 'item-separator':';', 'indent':false(), 'omit-xml-declaration':true()})`, Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertStringValue("map{1:true(),2:false()};map{8:80,9:90}")}},
+            map{'method':'adaptive', 'item-separator':';', 'indent':false(), 'omit-xml-declaration':true()})`, Assertions: []qt3Assertion{qt3AssertStringValue("map{1:true(),2:false()};map{8:80,9:90}")}},
 	})
 }
 

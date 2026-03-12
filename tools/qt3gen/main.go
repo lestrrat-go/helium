@@ -519,14 +519,6 @@ func getTestCaseSkipReason(setName, caseName string) string {
 }
 
 func getTestSetSkipReason(name string) string {
-	switch name {
-	case "fn-serialize":
-		return "requires serialization"
-	case "fn-parse-xml", "fn-parse-xml-fragment":
-		return "requires fn:parse-xml"
-	case "fn-random-number-generator":
-		return "requires fn:random-number-generator"
-	}
 	return ""
 }
 
