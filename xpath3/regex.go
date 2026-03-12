@@ -16,8 +16,8 @@ import (
 //   - \c / \C → XML NameChar / negated
 //   - Character class subtraction [a-z-[aeiou]] → expanded
 //   - Rejects Perl-specific constructs (\b, \B, etc.) not in XPath
-func translateXPathRegex(pattern string, dotAll ...bool) (string, error) {
-	isDotAll := len(dotAll) > 0 && dotAll[0]
+func translateXPathRegex(pattern string, dotAll, ignoreCase bool) (string, error) {
+	isDotAll := dotAll
 	var b strings.Builder
 	runes := []rune(pattern)
 	i := 0
@@ -40,6 +40,9 @@ func translateXPathRegex(pattern string, dotAll ...bool) (string, error) {
 					replacement, err := translateUnicodeProperty(propName, neg)
 					if err != nil {
 						return "", err
+					}
+					if ignoreCase {
+						replacement = "(?-i:" + replacement + ")"
 					}
 					b.WriteString(replacement)
 					i = end + 1
@@ -271,16 +274,16 @@ func isGoSupportedProperty(name string) bool {
 }
 
 // XML NameStartChar as a character class (for use outside [])
-const xmlNameStartCharClass = `[a-zA-Z_\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}]`
-const xmlNameStartCharClassNeg = `[^a-zA-Z_\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}]`
+const xmlNameStartCharClass = `[a-zA-Z_:\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}]`
+const xmlNameStartCharClassNeg = `[^a-zA-Z_:\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}]`
 
 // XML NameStartChar range (for use inside [])
-const xmlNameStartCharRange = `a-zA-Z_\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}`
+const xmlNameStartCharRange = `a-zA-Z_:\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}`
 
 // XML NameChar = NameStartChar + extras
-const xmlNameCharClass = `[a-zA-Z_\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}\-.0-9\x{B7}\x{300}-\x{36F}\x{203F}-\x{2040}]`
-const xmlNameCharClassNeg = `[^a-zA-Z_\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}\-.0-9\x{B7}\x{300}-\x{36F}\x{203F}-\x{2040}]`
-const xmlNameCharRange = `a-zA-Z_\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}\-.0-9\x{B7}\x{300}-\x{36F}\x{203F}-\x{2040}`
+const xmlNameCharClass = `[a-zA-Z_:\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}\-.0-9\x{B7}\x{300}-\x{36F}\x{203F}-\x{2040}]`
+const xmlNameCharClassNeg = `[^a-zA-Z_:\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}\-.0-9\x{B7}\x{300}-\x{36F}\x{203F}-\x{2040}]`
+const xmlNameCharRange = `a-zA-Z_:\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}\-.0-9\x{B7}\x{300}-\x{36F}\x{203F}-\x{2040}`
 
 // unicodeBlocks maps Unicode block names (without "Is" prefix) to character ranges.
 // Based on Unicode 6.0 block definitions used in XML Schema regex.
@@ -433,22 +436,15 @@ func validateXPathRegex(pattern string, allowBackrefs bool) error {
 				}
 			}
 			if inCharClass == 0 && next >= '1' && next <= '9' {
-				j := i + 1
-				for j < len(runes) && runes[j] >= '0' && runes[j] <= '9' {
-					j++
-				}
-				ref := 0
-				for _, digit := range runes[i+1 : j] {
-					ref = ref*10 + int(digit-'0')
-				}
+				ref, validEnd, end := longestClosedXPathBackref(runes, i+1, captureCount, groupStack)
 				if allowBackrefs {
-					if ref == 0 || ref > captureCount || isOpenCaptureGroup(groupStack, ref) {
+					if validEnd < 0 {
 						return &XPathError{
 							Code:    errCodeFORX0002,
-							Message: fmt.Sprintf("invalid back-reference \\%d in XPath regex", ref),
+							Message: fmt.Sprintf("invalid back-reference \\%s in XPath regex", string(runes[i+1:end])),
 						}
 					}
-					i = j - 1
+					i = end - 1
 					continue
 				}
 				return &XPathError{
@@ -547,6 +543,82 @@ func isOpenCaptureGroup(groupStack []int, ref int) bool {
 		}
 	}
 	return false
+}
+
+func longestClosedXPathBackref(runes []rune, start, captureCount int, groupStack []int) (int, int, int) {
+	ref := 0
+	validEnd := -1
+	end := start
+	value := 0
+	for end < len(runes) && runes[end] >= '0' && runes[end] <= '9' {
+		value = value*10 + int(runes[end]-'0')
+		if value > 0 && value <= captureCount && !isOpenCaptureGroup(groupStack, value) {
+			ref = value
+			validEnd = end + 1
+		}
+		end++
+	}
+	return ref, validEnd, end
+}
+
+func normalizeXPathBackrefs(pattern string) string {
+	var b strings.Builder
+	runes := []rune(pattern)
+	inCharClass := 0
+	captureCount := 0
+	var groupStack []int
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+		if r == '\\' && i+1 < len(runes) {
+			next := runes[i+1]
+			if inCharClass == 0 && next >= '1' && next <= '9' {
+				ref, validEnd, end := longestClosedXPathBackref(runes, i+1, captureCount, groupStack)
+				if validEnd >= 0 {
+					suffix := string(runes[validEnd:end])
+					if suffix == "" {
+						b.WriteRune('\\')
+						b.WriteString(strconv.Itoa(ref))
+					} else {
+						b.WriteString("(?:\\")
+						b.WriteString(strconv.Itoa(ref))
+						b.WriteByte(')')
+						b.WriteString(suffix)
+					}
+					i = end - 1
+					continue
+				}
+			}
+			b.WriteRune(r)
+			i++
+			b.WriteRune(runes[i])
+			continue
+		}
+
+		switch r {
+		case '[':
+			inCharClass++
+		case ']':
+			if inCharClass > 0 {
+				inCharClass--
+			}
+		case '(':
+			if inCharClass == 0 {
+				groupNum := 0
+				if i+2 >= len(runes) || runes[i+1] != '?' || runes[i+2] != ':' {
+					captureCount++
+					groupNum = captureCount
+				}
+				groupStack = append(groupStack, groupNum)
+			}
+		case ')':
+			if inCharClass == 0 && len(groupStack) > 0 {
+				groupStack = groupStack[:len(groupStack)-1]
+			}
+		}
+
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 func hasXPathBackrefs(pattern string) bool {

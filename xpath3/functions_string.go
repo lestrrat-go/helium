@@ -325,7 +325,7 @@ func fnNormalizeUnicode(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 		return SingleString(result), nil
 	default:
-		return nil, &XPathError{Code: "FOCH0003", Message: fmt.Sprintf("unsupported normalization form: %s", formName)}
+		return nil, &XPathError{Code: errCodeFOCH0003, Message: fmt.Sprintf("unsupported normalization form: %s", formName)}
 	}
 
 	return SingleString(nf.String(s)), nil
@@ -501,6 +501,9 @@ func fnMatches(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 		flags = seqToString(args[2])
 	}
+	if shouldUseXPathEmptyLineMatcher(pattern, flags) {
+		return SingleBoolean(matchesXPathEmptyLine(s)), nil
+	}
 	re, err := compileXPathRegex(pattern, flags)
 	if err != nil {
 		return nil, err
@@ -558,7 +561,7 @@ func fnReplace(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
 	}
 	if matchesEmpty {
-		return nil, &XPathError{Code: "FORX0003", Message: "replacement pattern matches zero-length string"}
+		return nil, &XPathError{Code: errCodeFORX0003, Message: "replacement pattern matches zero-length string"}
 	}
 
 	var goRepl string
@@ -592,7 +595,7 @@ func translateXPathReplacement(repl string, numGroups int) (string, error) {
 		switch ch {
 		case '\\':
 			if i+1 >= len(repl) {
-				return "", &XPathError{Code: "FORX0004", Message: "invalid replacement string: trailing backslash"}
+				return "", &XPathError{Code: errCodeFORX0004, Message: "invalid replacement string: trailing backslash"}
 			}
 			next := repl[i+1]
 			switch next {
@@ -603,11 +606,11 @@ func translateXPathReplacement(repl string, numGroups int) (string, error) {
 				b.WriteString("$$") // Go's literal $
 				i++
 			default:
-				return "", &XPathError{Code: "FORX0004", Message: fmt.Sprintf("invalid replacement string: \\%c", next)}
+				return "", &XPathError{Code: errCodeFORX0004, Message: fmt.Sprintf("invalid replacement string: \\%c", next)}
 			}
 		case '$':
 			if i+1 >= len(repl) || repl[i+1] < '0' || repl[i+1] > '9' {
-				return "", &XPathError{Code: "FORX0004", Message: "invalid replacement string: $ not followed by digit"}
+				return "", &XPathError{Code: errCodeFORX0004, Message: "invalid replacement string: $ not followed by digit"}
 			}
 			// Collect digits after $, but only consume as many as form a
 			// valid group number (≤ numGroups). Remaining digits are literal.
@@ -689,7 +692,7 @@ func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
 	}
 	if matchesEmpty {
-		return nil, &XPathError{Code: "FORX0003", Message: "tokenize pattern matches zero-length string"}
+		return nil, &XPathError{Code: errCodeFORX0003, Message: "tokenize pattern matches zero-length string"}
 	}
 
 	parts, err := re.Split(s, -1)
@@ -726,6 +729,20 @@ func splitXMLWhitespace(s string) []string {
 		tokens = append(tokens, s[start:])
 	}
 	return tokens
+}
+
+func shouldUseXPathEmptyLineMatcher(pattern, flags string) bool {
+	if strings.ContainsRune(flags, 'q') || !strings.ContainsRune(flags, 'm') {
+		return false
+	}
+	if strings.ContainsRune(flags, 'x') {
+		pattern = stripFreeSpacing(pattern)
+	}
+	return pattern == "^$"
+}
+
+func matchesXPathEmptyLine(s string) bool {
+	return s == "" || strings.HasPrefix(s, "\n") || strings.Contains(s, "\n\n")
 }
 
 func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
@@ -972,10 +989,12 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 	prefix.WriteString("(?")
 	dotAll := false
 	literal := false
+	ignoreCase := false
 	var re2Opts regexp2.RegexOptions = regexp2.RE2
 	for _, f := range flags {
 		switch f {
 		case 'i':
+			ignoreCase = true
 			prefix.WriteRune('i')
 			re2Opts |= regexp2.IgnoreCase
 		case 'm':
@@ -991,15 +1010,18 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 			// Literal mode: quote the entire pattern, skip regex translation
 			literal = true
 		default:
-			return nil, &XPathError{Code: "FORX0001", Message: fmt.Sprintf("invalid regex flag: %c", f)}
+			return nil, &XPathError{Code: errCodeFORX0001, Message: fmt.Sprintf("invalid regex flag: %c", f)}
 		}
 	}
 
 	if literal {
 		pattern = regexp.QuoteMeta(pattern)
 	} else {
+		if hasBackrefs {
+			pattern = normalizeXPathBackrefs(pattern)
+		}
 		// Translate XPath/XML Schema regex features to Go-compatible patterns
-		translated, err := translateXPathRegex(pattern, dotAll)
+		translated, err := translateXPathRegex(pattern, dotAll, ignoreCase)
 		if err != nil {
 			return nil, err
 		}
@@ -1035,8 +1057,18 @@ func stripFreeSpacing(pattern string) string {
 	for i := 0; i < len(runes); i++ {
 		r := runes[i]
 		if r == '\\' && i+1 < len(runes) {
+			next := i + 1
+			if inCharClass == 0 && unicode.IsSpace(runes[next]) {
+				for next < len(runes) && unicode.IsSpace(runes[next]) {
+					next++
+				}
+				if next >= len(runes) {
+					b.WriteRune(r)
+					break
+				}
+			}
 			b.WriteRune(r)
-			i++
+			i = next
 			b.WriteRune(runes[i])
 			continue
 		}
