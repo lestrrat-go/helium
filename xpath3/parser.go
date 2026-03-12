@@ -1082,6 +1082,11 @@ func (p *parser) parseStep() (Step, error) {
 	if err != nil {
 		return Step{}, err
 	}
+	if axis == AxisChild {
+		if _, ok := nodeTest.(NamespaceNodeTest); ok {
+			axis = AxisNamespace
+		}
+	}
 
 	var predicates []Expr
 	for p.lexer.Peek().Type == TokenLBracket {

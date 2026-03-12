@@ -214,6 +214,17 @@ func TestParseAST(t *testing.T) {
 		require.Equal(t, "a", nt0.Local)
 	})
 
+	t.Run("namespace-node shorthand axis", func(t *testing.T) {
+		expr, err := xpath3.Parse("namespace-node()")
+		require.NoError(t, err)
+		lp, ok := expr.(*xpath3.LocationPath)
+		require.True(t, ok, "expected LocationPath, got %T", expr)
+		require.Len(t, lp.Steps, 1)
+		require.Equal(t, xpath3.AxisNamespace, lp.Steps[0].Axis)
+		_, ok = lp.Steps[0].NodeTest.(xpath3.NamespaceNodeTest)
+		require.True(t, ok)
+	})
+
 	t.Run("binary expr structure", func(t *testing.T) {
 		expr, err := xpath3.Parse("1 + 2")
 		require.NoError(t, err)

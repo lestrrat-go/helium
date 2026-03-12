@@ -207,7 +207,7 @@ func evalNodeComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	}
 	switch e.Op {
 	case TokenIs:
-		return SingleBoolean(ln.Node == rn.Node), nil
+		return SingleBoolean(sameNode(ln.Node, rn.Node)), nil
 	case TokenNodePre:
 		lp := ec.docOrder.Position(ln.Node)
 		rp := ec.docOrder.Position(rn.Node)

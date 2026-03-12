@@ -214,6 +214,12 @@ func buildNodePath(n helium.Node) string {
 			parts = append(parts, fmt.Sprintf("comment()[%d]", pos))
 		case helium.ProcessingInstructionNode:
 			parts = append(parts, fmt.Sprintf("processing-instruction(%s)[1]", cur.Name()))
+		case helium.NamespaceNode:
+			if cur.Name() == "" {
+				parts = append(parts, fmt.Sprintf(`namespace::*[Q{%s}local-name()=""]`, NSFn))
+			} else {
+				parts = append(parts, "namespace::"+cur.Name())
+			}
 		}
 	}
 	// Reverse
@@ -441,7 +447,7 @@ func fnGenerateID(ctx context.Context, args []Sequence) (Sequence, error) {
 	if n == nil {
 		return SingleString(""), nil
 	}
-	return SingleString(fmt.Sprintf("id%p", n)), nil
+	return SingleString(stableNodeID(n)), nil
 }
 
 func fnParseXML(ctx context.Context, args []Sequence) (Sequence, error) {

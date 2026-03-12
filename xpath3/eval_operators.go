@@ -221,18 +221,19 @@ func evalIntersectExceptExpr(ec *evalContext, e IntersectExceptExpr) (Sequence, 
 	if !ok1 || !ok2 {
 		return nil, ErrUnionNotNodeSet
 	}
-	rightSet := make(map[helium.Node]struct{}, len(rightNodes))
+	rightSet := make(map[nodeIdentityKey]struct{}, len(rightNodes))
 	for _, n := range rightNodes {
-		rightSet[n] = struct{}{}
+		rightSet[makeNodeIdentityKey(n)] = struct{}{}
 	}
-	seen := make(map[helium.Node]struct{})
+	seen := make(map[nodeIdentityKey]struct{})
 	var result []helium.Node
 	for _, n := range leftNodes {
-		if _, dup := seen[n]; dup {
+		key := makeNodeIdentityKey(n)
+		if _, dup := seen[key]; dup {
 			continue
 		}
-		seen[n] = struct{}{}
-		_, inRight := rightSet[n]
+		seen[key] = struct{}{}
+		_, inRight := rightSet[key]
 		if e.Op == TokenIntersect && inRight {
 			result = append(result, n)
 		} else if e.Op == TokenExcept && !inRight {

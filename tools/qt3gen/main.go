@@ -476,8 +476,6 @@ func getSkipReason(deps []dependency) string {
 			switch d.Value {
 			case "schemaImport", "schemaValidation", "schemaAware":
 				return "requires XML Schema support"
-			case "namespace-axis":
-				return "requires namespace axis"
 			case "moduleImport":
 				return "requires XQuery module import"
 			case "collection-stability":
