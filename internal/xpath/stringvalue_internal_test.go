@@ -8,12 +8,6 @@ import (
 )
 
 func TestStringValue_DepthGuardReturnsPartialString(t *testing.T) {
-	oldMaxDepth := maxCollectTextDescendantsDepth
-	maxCollectTextDescendantsDepth = 2
-	t.Cleanup(func() {
-		maxCollectTextDescendantsDepth = oldMaxDepth
-	})
-
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 	root, err := doc.CreateElement("root")
 	require.NoError(t, err)
@@ -23,17 +17,17 @@ func TestStringValue_DepthGuardReturnsPartialString(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, root.AddChild(prefix))
 
-	level1, err := doc.CreateElement("level1")
-	require.NoError(t, err)
-	require.NoError(t, root.AddChild(level1))
-
-	level2, err := doc.CreateElement("level2")
-	require.NoError(t, err)
-	require.NoError(t, level1.AddChild(level2))
+	parent := root
+	for range maxCollectTextDescendantsDepth {
+		child, childErr := doc.CreateElement("level")
+		require.NoError(t, childErr)
+		require.NoError(t, parent.AddChild(child))
+		parent = child
+	}
 
 	leaf, err := doc.CreateText([]byte("leaf"))
 	require.NoError(t, err)
-	require.NoError(t, level2.AddChild(leaf))
+	require.NoError(t, parent.AddChild(leaf))
 
 	require.Equal(t, "prefix", StringValue(root))
 }

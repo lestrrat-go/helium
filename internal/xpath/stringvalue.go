@@ -7,7 +7,7 @@ import (
 	"github.com/lestrrat-go/helium"
 )
 
-var maxCollectTextDescendantsDepth = 2048
+const maxCollectTextDescendantsDepth = 2048
 
 // StringValue returns the XPath string-value of a node.
 // Rules are identical across XPath 1.0 and 3.1.
