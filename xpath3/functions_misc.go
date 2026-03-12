@@ -107,7 +107,7 @@ func fnCurrentTime(ctx context.Context, _ []Sequence) (Sequence, error) {
 
 func currentTimeFromCtx(ctx context.Context) time.Time {
 	if ec := getFnContext(ctx); ec != nil {
-		return ec.getCurrentTime()
+		return ec.getCurrentTime().In(ec.getImplicitTimezone())
 	}
 	return time.Now()
 }

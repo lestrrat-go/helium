@@ -59,7 +59,7 @@ func evalValueComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	}
 	la := leftAtoms[0]
 	ra := rightAtoms[0]
-	result, err := ValueCompare(e.Op, la, ra)
+	result, err := ValueCompareWithImplicitTimezone(e.Op, la, ra, ec.getImplicitTimezone())
 	if err != nil {
 		return nil, err
 	}
@@ -147,13 +147,21 @@ func GeneralCompare(op TokenType, left, right Sequence) (bool, error) {
 
 // ValueCompare performs a value comparison between two atomic values.
 func ValueCompare(op TokenType, a, b AtomicValue) (bool, error) {
+	return ValueCompareWithImplicitTimezone(op, a, b, nil)
+}
+
+func ValueCompareWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitTZ *time.Location) (bool, error) {
 	pa, pb := promoteForValueComparison(a, b)
-	return compareAtomic(op, pa, pb)
+	return compareAtomicWithImplicitTimezone(op, pa, pb, implicitTZ)
 }
 
 // valueCompareThreeWay compares two atomic values and returns -1, 0, or 1.
 // If coll is non-nil, it is used for string comparisons instead of codepoint order.
 func valueCompareThreeWay(a, b AtomicValue, coll *collationImpl) (int, error) {
+	return valueCompareThreeWayWithImplicitTimezone(a, b, coll, nil)
+}
+
+func valueCompareThreeWayWithImplicitTimezone(a, b AtomicValue, coll *collationImpl, implicitTZ *time.Location) (int, error) {
 	pa, pb := promoteForValueComparison(a, b)
 
 	// If both are strings and a collation is provided, use it
@@ -166,14 +174,14 @@ func valueCompareThreeWay(a, b AtomicValue, coll *collationImpl) (int, error) {
 	}
 
 	// Fall back to standard comparison
-	less, err := compareAtomic(TokenLt, pa, pb)
+	less, err := compareAtomicWithImplicitTimezone(TokenLt, pa, pb, implicitTZ)
 	if err != nil {
 		return 0, err
 	}
 	if less {
 		return -1, nil
 	}
-	greater, err := compareAtomic(TokenGt, pa, pb)
+	greater, err := compareAtomicWithImplicitTimezone(TokenGt, pa, pb, implicitTZ)
 	if err != nil {
 		return 0, err
 	}
@@ -303,6 +311,10 @@ func stringFromAtomic(a AtomicValue) string {
 // compareAtomic compares two (already promoted) atomic values.
 // Returns XPTY0004 if types are not comparable.
 func compareAtomic(op TokenType, a, b AtomicValue) (bool, error) {
+	return compareAtomicWithImplicitTimezone(op, a, b, nil)
+}
+
+func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitTZ *time.Location) (bool, error) {
 	// Map general comparison operators to value comparison operators
 	op = normalizeCompareOp(op)
 
@@ -332,15 +344,15 @@ func compareAtomic(op TokenType, a, b AtomicValue) (bool, error) {
 		case TypeDate:
 			ta := a.Value.(time.Time)
 			tb := b.Value.(time.Time)
-			return compareDate(op, ta, tb), nil
+			return compareDate(op, ta, tb, implicitTZ), nil
 		case TypeDateTime:
 			ta := a.Value.(time.Time)
 			tb := b.Value.(time.Time)
-			return compareTime(op, ta, tb), nil
+			return compareTime(op, applyImplicitTZ(ta, implicitTZ), applyImplicitTZ(tb, implicitTZ)), nil
 		case TypeTime:
 			ta := a.Value.(time.Time)
 			tb := b.Value.(time.Time)
-			return compareTimeOfDay(op, ta, tb), nil
+			return compareTimeOfDay(op, ta, tb, implicitTZ), nil
 		case TypeYearMonthDuration, TypeDayTimeDuration:
 			return compareDuration(op, a.DurationVal(), b.DurationVal())
 		case TypeDuration:
@@ -364,7 +376,7 @@ func compareAtomic(op TokenType, a, b AtomicValue) (bool, error) {
 				sb := normalizeGTZ(stringFromAtomic(b))
 				return applyCompare(op, strings.Compare(sa, sb)), nil
 			}
-			return compareTime(op, ta, tb), nil
+			return compareTime(op, applyImplicitTZ(ta, implicitTZ), applyImplicitTZ(tb, implicitTZ)), nil
 		}
 	}
 
@@ -389,15 +401,15 @@ func compareAtomic(op TokenType, a, b AtomicValue) (bool, error) {
 
 	// Types are not comparable
 	return false, &XPathError{
-		Code: errCodeXPTY0004,
+		Code:    errCodeXPTY0004,
 		Message: fmt.Sprintf("cannot compare %s with %s", a.TypeName, b.TypeName),
 	}
 }
 
 // compareDate compares xs:date values by their UTC instants.
 // Applies implicit timezone for values without explicit timezone.
-func compareDate(op TokenType, a, b time.Time) bool {
-	return compareTime(op, applyImplicitTZ(a), applyImplicitTZ(b))
+func compareDate(op TokenType, a, b time.Time, implicitTZ *time.Location) bool {
+	return compareTime(op, applyImplicitTZ(a, implicitTZ), applyImplicitTZ(b, implicitTZ))
 }
 
 // compareTimeOfDay compares xs:time values per XPath F&O 3.0 §10.4.4:
@@ -406,9 +418,9 @@ func compareDate(op TokenType, a, b time.Time) bool {
 // then compared as UTC instants. This correctly handles date-wrap from timezone offsets.
 // When a time has no explicit timezone (Location == time.UTC), the implicit
 // timezone is applied per spec.
-func compareTimeOfDay(op TokenType, a, b time.Time) bool {
-	ra := timeToReferenceDateTime(applyImplicitTZ(a))
-	rb := timeToReferenceDateTime(applyImplicitTZ(b))
+func compareTimeOfDay(op TokenType, a, b time.Time, implicitTZ *time.Location) bool {
+	ra := timeToReferenceDateTime(applyImplicitTZ(a, implicitTZ))
+	rb := timeToReferenceDateTime(applyImplicitTZ(b, implicitTZ))
 	return compareTime(op, ra, rb)
 }
 
@@ -423,13 +435,15 @@ func timeToReferenceDateTime(t time.Time) time.Time {
 // applyImplicitTZ applies the system's implicit timezone to a time that has
 // no explicit timezone (Location == time.UTC). Times with explicit timezones
 // (Location is a FixedZone) are returned as-is.
-func applyImplicitTZ(t time.Time) time.Time {
-	if t.Location() != time.UTC {
+func applyImplicitTZ(t time.Time, implicitTZ *time.Location) time.Time {
+	if HasTimezone(t) {
 		return t // has explicit timezone
 	}
-	// No timezone — apply implicit timezone (system local).
-	// Use time.Local directly rather than time.Now().Zone() for consistency.
-	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.Local)
+	loc := implicitTZ
+	if loc == nil {
+		loc = time.Local
+	}
+	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)
 }
 
 // normalizeGTZ normalizes timezone suffixes in g* type string values

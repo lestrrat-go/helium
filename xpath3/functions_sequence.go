@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/big"
 	"sort"
+	"time"
 
 	"github.com/lestrrat-go/helium"
 )
@@ -188,20 +189,33 @@ func fnExactlyOne(_ context.Context, args []Sequence) (Sequence, error) {
 	return args[0], nil
 }
 
-func fnDeepEqual(_ context.Context, args []Sequence) (Sequence, error) {
-	eq, err := deepEqualSequence(args[0], args[1])
+type deepEqualOptions struct {
+	coll       *collationImpl
+	implicitTZ *time.Location
+}
+
+func fnDeepEqual(ctx context.Context, args []Sequence) (Sequence, error) {
+	coll, err := getCollation(ctx, args, 2)
+	if err != nil {
+		return nil, err
+	}
+	opts := deepEqualOptions{coll: coll}
+	if ec := getFnContext(ctx); ec != nil {
+		opts.implicitTZ = ec.getImplicitTimezone()
+	}
+	eq, err := deepEqualSequence(args[0], args[1], opts)
 	if err != nil {
 		return nil, err
 	}
 	return SingleBoolean(eq), nil
 }
 
-func deepEqualSequence(a, b Sequence) (bool, error) {
+func deepEqualSequence(a, b Sequence, opts deepEqualOptions) (bool, error) {
 	if len(a) != len(b) {
 		return false, nil
 	}
 	for i := range a {
-		eq, err := deepEqualItem(a[i], b[i])
+		eq, err := deepEqualItem(a[i], b[i], opts)
 		if err != nil {
 			return false, err
 		}
@@ -212,14 +226,14 @@ func deepEqualSequence(a, b Sequence) (bool, error) {
 	return true, nil
 }
 
-func deepEqualItem(a, b Item) (bool, error) {
+func deepEqualItem(a, b Item, opts deepEqualOptions) (bool, error) {
 	switch av := a.(type) {
 	case AtomicValue:
 		bv, ok := b.(AtomicValue)
 		if !ok {
 			return false, nil
 		}
-		return deepEqualAtomic(av, bv)
+		return deepEqualAtomic(av, bv, opts)
 	case NodeItem:
 		bv, ok := b.(NodeItem)
 		if !ok {
@@ -231,13 +245,13 @@ func deepEqualItem(a, b Item) (bool, error) {
 		if !ok {
 			return false, nil
 		}
-		return deepEqualMap(av, bv)
+		return deepEqualMap(av, bv, opts)
 	case ArrayItem:
 		bv, ok := b.(ArrayItem)
 		if !ok {
 			return false, nil
 		}
-		return deepEqualArray(av, bv)
+		return deepEqualArray(av, bv, opts)
 	case FunctionItem:
 		if _, ok := b.(FunctionItem); ok {
 			return false, &XPathError{Code: "FOTY0015", Message: "deep-equal: cannot compare function items"}
@@ -248,7 +262,7 @@ func deepEqualItem(a, b Item) (bool, error) {
 	}
 }
 
-func deepEqualAtomic(a, b AtomicValue) (bool, error) {
+func deepEqualAtomic(a, b AtomicValue, opts deepEqualOptions) (bool, error) {
 	// NaN equals NaN for deep-equal purposes
 	if a.TypeName == TypeDouble || a.TypeName == TypeFloat {
 		af := a.ToFloat64()
@@ -259,7 +273,12 @@ func deepEqualAtomic(a, b AtomicValue) (bool, error) {
 			}
 		}
 	}
-	eq, err := ValueCompare(TokenEq, a, b)
+	aStr := isStringDerived(a.TypeName) || a.TypeName == TypeAnyURI
+	bStr := isStringDerived(b.TypeName) || b.TypeName == TypeAnyURI
+	if opts.coll != nil && aStr && bStr {
+		return opts.coll.compare(stringFromAtomic(a), stringFromAtomic(b)) == 0, nil
+	}
+	eq, err := ValueCompareWithImplicitTimezone(TokenEq, a, b, opts.implicitTZ)
 	if err != nil {
 		// Incomparable types are not deep-equal
 		return false, nil
@@ -339,7 +358,7 @@ func deepEqualChildren(a, b helium.Node) bool {
 	return ac == nil && bc == nil
 }
 
-func deepEqualMap(a, b MapItem) (bool, error) {
+func deepEqualMap(a, b MapItem, opts deepEqualOptions) (bool, error) {
 	if a.Size() != b.Size() {
 		return false, nil
 	}
@@ -353,7 +372,7 @@ func deepEqualMap(a, b MapItem) (bool, error) {
 		// Try exact lookup first (fast path)
 		if bVal, ok := b.Get(ak); ok {
 			aVal, _ := a.Get(ak)
-			eq, err := deepEqualSequence(aVal, bVal)
+			eq, err := deepEqualSequence(aVal, bVal, opts)
 			if err != nil {
 				return false, err
 			}
@@ -361,7 +380,7 @@ func deepEqualMap(a, b MapItem) (bool, error) {
 				// Mark the matching b key as used
 				for j, bk := range bKeys {
 					if !bUsed[j] {
-						if keyEq, _ := deepEqualAtomic(ak, bk); keyEq {
+						if sameMapKey(ak, bk) {
 							bUsed[j] = true
 							break
 						}
@@ -377,12 +396,11 @@ func deepEqualMap(a, b MapItem) (bool, error) {
 				if bUsed[j] {
 					continue
 				}
-				keyEq, _ := deepEqualAtomic(ak, bk)
-				if !keyEq {
+				if !sameMapKey(ak, bk) {
 					continue
 				}
 				bVal, _ := b.Get(bk)
-				eq, err := deepEqualSequence(aVal, bVal)
+				eq, err := deepEqualSequence(aVal, bVal, opts)
 				if err != nil {
 					return false, err
 				}
@@ -400,14 +418,18 @@ func deepEqualMap(a, b MapItem) (bool, error) {
 	return true, nil
 }
 
-func deepEqualArray(a, b ArrayItem) (bool, error) {
+func sameMapKey(a, b AtomicValue) bool {
+	return normalizeMapKey(a) == normalizeMapKey(b)
+}
+
+func deepEqualArray(a, b ArrayItem, opts deepEqualOptions) (bool, error) {
 	if a.Size() != b.Size() {
 		return false, nil
 	}
 	for i := 0; i < a.Size(); i++ {
 		am, _ := a.Get(i + 1)
 		bm, _ := b.Get(i + 1)
-		eq, err := deepEqualSequence(am, bm)
+		eq, err := deepEqualSequence(am, bm, opts)
 		if err != nil {
 			return false, err
 		}

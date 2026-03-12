@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"time"
 )
 
 func init() {
@@ -473,12 +474,20 @@ func sumDurations(seq Sequence, family string) (Sequence, error) {
 	}), nil
 }
 
-func fnDistinctValues(_ context.Context, args []Sequence) (Sequence, error) {
+func fnDistinctValues(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
 	if err := validateCollationArg(args, 1); err != nil {
 		return nil, err
+	}
+	coll, err := getCollation(ctx, args, 1)
+	if err != nil {
+		return nil, err
+	}
+	var implicitTZ *time.Location
+	if ec := getFnContext(ctx); ec != nil {
+		implicitTZ = ec.getImplicitTimezone()
 	}
 	var result []AtomicValue
 	seenNaN := false
@@ -505,7 +514,7 @@ func fnDistinctValues(_ context.Context, args []Sequence) (Sequence, error) {
 			if isAtomicNaN(existing) {
 				continue
 			}
-			eq, err := ValueCompare(TokenEq, a, existing)
+			eq, err := distinctValueEqual(a, existing, coll, implicitTZ)
 			if err != nil {
 				// Incomparable types are considered distinct
 				continue
@@ -524,6 +533,17 @@ func fnDistinctValues(_ context.Context, args []Sequence) (Sequence, error) {
 		seq[i] = a
 	}
 	return seq, nil
+}
+
+func distinctValueEqual(a, b AtomicValue, coll *collationImpl, implicitTZ *time.Location) (bool, error) {
+	if coll != nil {
+		aStr := isStringDerived(a.TypeName) || a.TypeName == TypeAnyURI
+		bStr := isStringDerived(b.TypeName) || b.TypeName == TypeAnyURI
+		if aStr && bStr {
+			return coll.compare(stringFromAtomic(a), stringFromAtomic(b)) == 0, nil
+		}
+	}
+	return ValueCompareWithImplicitTimezone(TokenEq, a, b, implicitTZ)
 }
 
 // isAtomicNaN returns true if the atomic value is a float or double NaN.
