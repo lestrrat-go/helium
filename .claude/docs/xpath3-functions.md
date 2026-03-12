@@ -35,6 +35,9 @@ Package-level `builtinFunctions3 map[QualifiedName]Function` populated in `init(
 
 `fn:` is default → `string()` and `fn:string()` resolve to same function.
 
+Typed helper coercions for `xs:string?` + `xs:integer` enforce cardinality.
+Sequences with length `> 1` → `XPTY0004`; helpers do not truncate to first item.
+
 ## Functions by File
 
 ### `functions_node.go`

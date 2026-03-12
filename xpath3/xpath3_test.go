@@ -147,6 +147,24 @@ func TestResultIsNodeSet(t *testing.T) {
 	require.Len(t, nodes, 3)
 }
 
+func TestStringCoercionRejectsMultiItemSequence(t *testing.T) {
+	_, err := xpath3.Evaluate(t.Context(), nil, `string-to-codepoints(("ab", "cd"))`)
+	require.Error(t, err)
+
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, "XPTY0004", xpErr.Code)
+}
+
+func TestIntegerCoercionRejectsMultiItemSequence(t *testing.T) {
+	_, err := xpath3.Evaluate(t.Context(), nil, `remove((1, 2, 3), (2, 3))`)
+	require.Error(t, err)
+
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, "XPTY0004", xpErr.Code)
+}
+
 func TestResultIsBoolean(t *testing.T) {
 	doc := parseTestDoc(t)
 	result, err := xpath3.Evaluate(t.Context(), doc, `count(/library/book) > 2`)
