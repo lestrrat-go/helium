@@ -800,6 +800,22 @@ func TestRegexFunctions(t *testing.T) {
 	})
 }
 
+func BenchmarkMatchesLiteralRegex(b *testing.B) {
+	doc, err := helium.Parse(b.Context(), []byte(testXML))
+	require.NoError(b, err)
+
+	expr := xpath3.MustCompile(`matches("hello world", "^hello")`)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		result, err := expr.Evaluate(b.Context(), doc)
+		require.NoError(b, err)
+		value, ok := result.IsBoolean()
+		require.True(b, ok)
+		require.True(b, value)
+	}
+}
+
 // --- Union / intersect / except ---
 
 func TestSetOperations(t *testing.T) {
