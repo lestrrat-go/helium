@@ -426,7 +426,13 @@ func validateXPathRegex(pattern string, allowBackrefs bool) error {
 
 		if r == '\\' && i+1 < len(runes) {
 			next := runes[i+1]
-			if inCharClass == 0 && next >= '0' && next <= '9' {
+			if next == '0' {
+				return &XPathError{
+					Code:    errCodeFORX0002,
+					Message: "back-reference \\0 is not allowed in XPath regex",
+				}
+			}
+			if inCharClass == 0 && next >= '1' && next <= '9' {
 				j := i + 1
 				for j < len(runes) && runes[j] >= '0' && runes[j] <= '9' {
 					j++
