@@ -193,7 +193,7 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 
 func evalInlineFunctionExpr(ec *evalContext, e InlineFunctionExpr) (Sequence, error) {
 	// Capture current variable scope snapshot
-	closedVars := copyVars(ec.vars)
+	closedVars := ec.vars
 	// Collect parameter types for subtype checking
 	var paramTypes []SequenceType
 	for _, p := range e.Params {
@@ -218,7 +218,7 @@ func evalInlineFunctionExpr(ec *evalContext, e InlineFunctionExpr) (Sequence, er
 			innerCtx.contextItem = nil
 			innerCtx.position = 0
 			innerCtx.size = 0
-			innerCtx.vars = copyVars(closedVars)
+			innerCtx.vars = closedVars
 			for i, param := range e.Params {
 				arg := args[i]
 				// Apply function coercion rules if type specified
@@ -229,7 +229,7 @@ func evalInlineFunctionExpr(ec *evalContext, e InlineFunctionExpr) (Sequence, er
 					}
 					arg = coerced
 				}
-				innerCtx.vars[param.Name] = arg
+				innerCtx.vars = scopeWithBindings(innerCtx.vars, map[string]Sequence{param.Name: arg})
 			}
 			result, err := eval(&innerCtx, e.Body)
 			if err != nil {

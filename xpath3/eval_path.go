@@ -24,7 +24,7 @@ func evalLiteral(e LiteralExpr) (Sequence, error) {
 
 func evalVariable(ec *evalContext, e VariableExpr) (Sequence, error) {
 	if ec.vars != nil {
-		if v, ok := ec.vars[e.Name]; ok {
+		if v, ok := ec.vars.Lookup(e.Name); ok {
 			return v, nil
 		}
 	}

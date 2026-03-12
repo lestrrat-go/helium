@@ -114,37 +114,37 @@ func lookupItem(ec *evalContext, item Item, keyExpr Expr, all bool) (Sequence, e
 
 func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 	// Build tuples by processing clauses
-	tuples := []flworTuple{{vars: copyVars(ec.vars)}}
+	tuples := []flworTuple{{scope: ec.vars}}
 
 	for _, clause := range e.Clauses {
 		switch c := clause.(type) {
 		case ForClause:
 			var newTuples []flworTuple
 			for _, tup := range tuples {
-				subCtx := ec.withVars(tup.vars)
+				subCtx := ec.withScope(tup.scope)
 				domain, err := eval(subCtx, c.Expr)
 				if err != nil {
 					return nil, err
 				}
 				for i, item := range domain {
-					newVars := copyVars(tup.vars)
-					newVars[c.Var] = Sequence{item}
-					if c.PosVar != "" {
-						newVars[c.PosVar] = Sequence{AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(i + 1))}}
+					bindings := map[string]Sequence{
+						c.Var: Sequence{item},
 					}
-					newTuples = append(newTuples, flworTuple{vars: newVars})
+					if c.PosVar != "" {
+						bindings[c.PosVar] = Sequence{AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(i + 1))}}
+					}
+					newTuples = append(newTuples, flworTuple{scope: scopeWithBindings(tup.scope, bindings)})
 				}
 			}
 			tuples = newTuples
 		case LetClause:
 			for i := range tuples {
-				subCtx := ec.withVars(tuples[i].vars)
+				subCtx := ec.withScope(tuples[i].scope)
 				val, err := eval(subCtx, c.Expr)
 				if err != nil {
 					return nil, err
 				}
-				tuples[i].vars = copyVars(tuples[i].vars)
-				tuples[i].vars[c.Var] = val
+				tuples[i].scope = scopeWithBindings(tuples[i].scope, map[string]Sequence{c.Var: val})
 			}
 		}
 	}
@@ -152,7 +152,7 @@ func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 	// Evaluate return expression for each tuple
 	var result Sequence
 	for _, tup := range tuples {
-		retCtx := ec.withVars(tup.vars)
+		retCtx := ec.withScope(tup.scope)
 		r, err := eval(retCtx, e.Return)
 		if err != nil {
 			return nil, err
@@ -163,15 +163,7 @@ func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 }
 
 type flworTuple struct {
-	vars map[string]Sequence
-}
-
-func copyVars(m map[string]Sequence) map[string]Sequence {
-	cp := make(map[string]Sequence, len(m))
-	for k, v := range m {
-		cp[k] = v
-	}
-	return cp
+	scope *variableScope
 }
 
 func evalQuantifiedExpr(ec *evalContext, e QuantifiedExpr) (Sequence, error) {
@@ -197,7 +189,7 @@ func evalQuantifiedBindings(ec *evalContext, e QuantifiedExpr, idx int) (Sequenc
 		return nil, err
 	}
 	for _, item := range domain {
-		subCtx := ec.withVar(binding.Var, Sequence{item})
+		subCtx := ec.withScope(scopeWithBindings(ec.vars, map[string]Sequence{binding.Var: Sequence{item}}))
 		result, err := evalQuantifiedBindings(subCtx, e, idx+1)
 		if err != nil {
 			return nil, err
