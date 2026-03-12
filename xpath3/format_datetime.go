@@ -51,6 +51,7 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 	if ec := getFnContext(ctx); ec != nil {
 		lang = ec.getDefaultLanguage()
 	}
+	calendar := ""
 	if len(args) > 2 && len(args[2]) > 0 {
 		lang, err = coerceArgToString(args[2])
 		if err != nil {
@@ -61,7 +62,11 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 		}
 	}
 	if len(args) > 3 && len(args[3]) > 0 {
-		if _, err := coerceArgToString(args[3]); err != nil {
+		calendar, err = coerceArgToString(args[3])
+		if err != nil {
+			return nil, err
+		}
+		if err := validateCalendarName(calendar); err != nil {
 			return nil, err
 		}
 	}
@@ -84,7 +89,7 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 		}
 	}
 
-	result, err := formatDateTimePicture(t, picture, lang, typeName)
+	result, err := formatDateTimePicture(t, picture, lang, calendar, typeName)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +97,7 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 }
 
 // formatDateTimePicture formats a time.Time value using an XPath picture string.
-func formatDateTimePicture(t time.Time, picture, lang, typeName string) (string, error) {
+func formatDateTimePicture(t time.Time, picture, lang, calendar, typeName string) (string, error) {
 	var b strings.Builder
 	i := 0
 	runes := []rune(picture)
@@ -117,7 +122,7 @@ func formatDateTimePicture(t time.Time, picture, lang, typeName string) (string,
 				return "", &XPathError{Code: errCodeFOFD1340, Message: "unclosed '[' in picture string"}
 			}
 			component := string(runes[i+1 : end])
-			formatted, err := formatComponent(t, component, lang, typeName)
+			formatted, err := formatComponent(t, component, lang, calendar, typeName)
 			if err != nil {
 				return "", err
 			}
@@ -141,7 +146,7 @@ func formatDateTimePicture(t time.Time, picture, lang, typeName string) (string,
 }
 
 // formatComponent handles a single [component] specifier.
-func formatComponent(t time.Time, spec, lang, typeName string) (string, error) {
+func formatComponent(t time.Time, spec, lang, calendar, typeName string) (string, error) {
 	// Strip whitespace within the spec
 	spec = stripSpaces(spec)
 
@@ -177,7 +182,7 @@ func formatComponent(t time.Time, spec, lang, typeName string) (string, error) {
 	case 'd':
 		value = int64(t.YearDay())
 	case 'F':
-		return formatDayOfWeek(t, presentation, lang), nil
+		return formatDayOfWeek(t, presentation, width, lang), nil
 	case 'H':
 		value = int64(t.Hour())
 	case 'h':
@@ -200,10 +205,13 @@ func formatComponent(t time.Time, spec, lang, typeName string) (string, error) {
 		_, w := t.ISOWeek()
 		value = int64(w)
 	case 'w':
-		// Week of month: (day-1)/7 + 1
-		value = int64((t.Day()-1)/7 + 1)
+		if isISOCalendar(calendar) {
+			value = int64(isoWeekOfMonth(t))
+		} else {
+			value = int64((t.Day()-1)/7 + 1)
+		}
 	case 'E':
-		value = int64(t.Year())
+		return formatEra(t.Year(), presentation), nil
 	case 'C':
 		return "ISO", nil
 	default:
@@ -227,6 +235,7 @@ type dtPresentation struct {
 	format        string // the format token (e.g., "01", "1", "Nn", "n", "N", "I", etc.)
 	ordinal       bool
 	isTraditional bool
+	implicit      bool
 }
 
 type dtWidth struct {
@@ -235,7 +244,7 @@ type dtWidth struct {
 }
 
 func parseDatePresentation(rest string) (dtPresentation, dtWidth) {
-	p := dtPresentation{format: "1"}
+	p := dtPresentation{format: "1", implicit: true}
 	w := dtWidth{minWidth: -1, maxWidth: -1}
 
 	if rest == "" {
@@ -270,8 +279,34 @@ func parseDatePresentation(rest string) (dtPresentation, dtWidth) {
 				}
 			}
 		}
+		if semiIdx < 0 {
+			suffixStart := len(formatPart)
+			for suffixStart > 0 {
+				switch formatPart[suffixStart-1] {
+				case 'o', 't', 'c':
+					suffixStart--
+				default:
+					goto suffixDone
+				}
+			}
+		suffixDone:
+			if suffixStart < len(formatPart) && suffixStart > 0 {
+				modPart := formatPart[suffixStart:]
+				formatPart = formatPart[:suffixStart]
+				for _, c := range modPart {
+					switch c {
+					case 'o':
+						p.ordinal = true
+					case 't':
+						p.isTraditional = true
+					case 'c':
+					}
+				}
+			}
+		}
 		if formatPart != "" {
 			p.format = formatPart
+			p.implicit = false
 		}
 	}
 
@@ -329,29 +364,40 @@ func parseSimpleInt(s string) int {
 
 func formatDateTimeValue(value int64, comp byte, p dtPresentation, w dtWidth, lang string) string {
 	format := p.format
+	numericValue := normalizeDateNumericValue(value, comp, w)
 
 	switch format {
 	case "N", "n", "Nn":
 		// Named format (for months and days)
-		return formatNamedValue(value, comp, format, lang)
+		return formatNamedValue(value, comp, format, w, lang)
+	case "A":
+		return formatAlpha(new(big.Int).SetInt64(numericValue), true)
+	case "a":
+		return formatAlpha(new(big.Int).SetInt64(numericValue), false)
 	case "I", "i":
 		// Roman numerals
-		n := new(big.Int).SetInt64(value)
-		return formatRoman(n, format == "I")
+		n := new(big.Int).SetInt64(numericValue)
+		return applyTextWidth(formatRoman(n, format == "I"), w)
 	case "W", "w", "Ww":
-		n := new(big.Int).SetInt64(value)
+		n := new(big.Int).SetInt64(numericValue)
+		style := "lower"
 		switch format {
 		case "W":
-			return formatWords(n, lang, "upper")
+			style = "upper"
 		case "w":
-			return formatWords(n, lang, "lower")
+			style = "lower"
 		case "Ww":
-			return formatWords(n, lang, "title")
+			style = "title"
 		}
+		result := formatWords(n, lang, style)
+		if p.ordinal {
+			result = applyOrdinalWords(result, lang, style, "")
+		}
+		return result
 	}
 
 	// Decimal number formatting
-	result := formatDateDecimal(value, format, w, comp)
+	result := formatDateDecimal(numericValue, p, w, comp)
 
 	if p.ordinal {
 		n := new(big.Int).SetInt64(value)
@@ -361,7 +407,8 @@ func formatDateTimeValue(value int64, comp byte, p dtPresentation, w dtWidth, la
 	return result
 }
 
-func formatDateDecimal(value int64, format string, w dtWidth, comp byte) string {
+func formatDateDecimal(value int64, p dtPresentation, w dtWidth, comp byte) string {
+	format := p.format
 	// Determine min digits from format token
 	minDigits := 0
 	digitSigns := 0
@@ -383,7 +430,10 @@ func formatDateDecimal(value int64, format string, w dtWidth, comp byte) string 
 	}
 
 	// Apply width constraints
-	if w.minWidth > 0 && w.minWidth > minDigits {
+	if p.implicit && (comp == 'm' || comp == 's') && w.minWidth < 0 {
+		minDigits = 2
+	}
+	if w.minWidth > 0 {
 		minDigits = w.minWidth
 	}
 
@@ -424,6 +474,35 @@ func formatDateDecimal(value int64, format string, w dtWidth, comp byte) string 
 		s = "-" + s
 	}
 
+	return s
+}
+
+func normalizeDateNumericValue(value int64, comp byte, w dtWidth) int64 {
+	if comp != 'Y' && comp != 'E' {
+		return value
+	}
+
+	if value < 0 {
+		value = -value
+	}
+
+	if w.maxWidth > 0 {
+		mod := int64(1)
+		for i := 0; i < w.maxWidth; i++ {
+			mod *= 10
+		}
+		value %= mod
+	}
+	return value
+}
+
+func applyTextWidth(s string, w dtWidth) string {
+	if w.minWidth <= 0 {
+		return s
+	}
+	for utf8.RuneCountInString(s) < w.minWidth {
+		s += " "
+	}
 	return s
 }
 
@@ -470,20 +549,18 @@ func applyDateGrouping(s string, formatRunes []rune, zeroDigit rune) string {
 	return string(result)
 }
 
-func formatNamedValue(value int64, comp byte, format, lang string) string {
-	_ = lang // TODO: only English names are supported; lang parameter is accepted but ignored
+func formatNamedValue(value int64, comp byte, format string, w dtWidth, lang string) string {
 	var name string
 
 	switch comp {
 	case 'M':
 		if value >= 1 && value <= 12 {
-			months := []string{"January", "February", "March", "April", "May", "June",
-				"July", "August", "September", "October", "November", "December"}
+			months := monthNamesForLang(lang)
 			name = months[value-1]
 		}
 	case 'F':
 		if value >= 0 && value <= 6 {
-			days := []string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
+			days := dayNamesForLang(lang)
 			name = days[value]
 		}
 	default:
@@ -493,6 +570,7 @@ func formatNamedValue(value int64, comp byte, format, lang string) string {
 	if name == "" {
 		return fmt.Sprintf("%d", value)
 	}
+	name = applyNameWidth(name, comp, w)
 
 	switch format {
 	case "N":
@@ -506,20 +584,56 @@ func formatNamedValue(value int64, comp byte, format, lang string) string {
 	return name
 }
 
-func formatDayOfWeek(t time.Time, p dtPresentation, lang string) string {
+func monthNamesForLang(lang string) []string {
+	switch strings.ToLower(lang) {
+	case "de":
+		return []string{"Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"}
+	default:
+		return []string{"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"}
+	}
+}
+
+func dayNamesForLang(lang string) []string {
+	switch strings.ToLower(lang) {
+	case "de":
+		return []string{"Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"}
+	default:
+		return []string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
+	}
+}
+
+func applyNameWidth(name string, comp byte, w dtWidth) string {
+	if w.maxWidth <= 0 && w.minWidth <= 0 {
+		return name
+	}
+	target := w.maxWidth
+	if w.minWidth > 0 {
+		target = w.minWidth
+	}
+	if target <= 0 {
+		return name
+	}
+	runes := []rune(name)
+	if len(runes) <= target {
+		return name
+	}
+	return string(runes[:target])
+}
+
+func formatDayOfWeek(t time.Time, p dtPresentation, w dtWidth, lang string) string {
 	dow := int64(t.Weekday()) // 0=Sunday, 1=Monday, ..., 6=Saturday
 	format := p.format
 
 	switch format {
 	case "N", "n", "Nn":
-		return formatNamedValue(dow, 'F', format, lang)
+		return formatNamedValue(dow, 'F', format, w, lang)
 	default:
 		// Numeric day of week: 1=Monday, ..., 7=Sunday per ISO
 		isoDow := int64(t.Weekday())
 		if isoDow == 0 {
 			isoDow = 7
 		}
-		return fmt.Sprintf("%d", isoDow)
+		return formatDateTimeValue(isoDow, 'F', p, w, lang)
 	}
 }
 
@@ -643,25 +757,146 @@ func formatFractionalSeconds(t time.Time, p dtPresentation, w dtWidth) string {
 }
 
 func formatTimezone(t time.Time, comp byte, p dtPresentation) string {
-	_, offset := t.Zone()
-
 	// Check if the time has no explicit timezone
-	if t.Location() == time.UTC {
-		// No explicit timezone
+	if !HasTimezone(t) {
+		if p.format == "Z" && !p.implicit {
+			return "J"
+		}
 		return ""
 	}
+	_, offset := t.Zone()
 
-	if offset == 0 {
-		if comp == 'Z' {
-			switch p.format {
-			case "01:01", "0101":
-				return "+00:00"
-			case "Z":
-				return "Z"
-			default:
-				return "Z"
-			}
+	if p.format == "N" || p.format == "n" || p.format == "Nn" {
+		if name := formatTimezoneName(t, p.format); name != "" {
+			return name
 		}
+	}
+	if p.format == "Z" && !p.implicit {
+		if code, ok := militaryTimezoneCode(offset); ok {
+			return code
+		}
+	}
+
+	spec := parseTimezonePicture(comp, p)
+	return renderTimezoneOffset(offset, spec)
+}
+
+func isoWeekOfMonth(t time.Time) int {
+	loc := t.Location()
+	dayStart := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc)
+	weekStart := isoWeekStart(dayStart)
+	monthWeek1 := isoMonthWeekOneStart(dayStart)
+	if weekStart.Before(monthWeek1) {
+		prevMonth := time.Date(t.Year(), t.Month(), 0, 0, 0, 0, 0, loc)
+		return isoWeekOfMonth(prevMonth)
+	}
+	return int(weekStart.Sub(monthWeek1)/(7*24*time.Hour)) + 1
+}
+
+func formatEra(year int, p dtPresentation) string {
+	era := "AD"
+	if year < 0 {
+		era = "BC"
+	}
+	switch p.format {
+	case "n":
+		return strings.ToLower(era)
+	case "Nn":
+		return strings.ToUpper(era[:1]) + strings.ToLower(era[1:])
+	default:
+		return era
+	}
+}
+
+type timezonePicture struct {
+	prefix       string
+	hourWidth    int
+	minuteWidth  int
+	separator    string
+	showMinutes  bool
+	zeroAsZ      bool
+	militaryCode bool
+	zeroDigit    rune
+}
+
+func parseTimezonePicture(comp byte, p dtPresentation) timezonePicture {
+	spec := timezonePicture{
+		hourWidth:   2,
+		minuteWidth: 2,
+		separator:   ":",
+		showMinutes: true,
+		zeroDigit:   '0',
+	}
+	if comp == 'z' {
+		spec.prefix = "GMT"
+	}
+	if p.implicit {
+		return spec
+	}
+
+	format := p.format
+	if strings.HasSuffix(format, "t") {
+		spec.zeroAsZ = true
+		format = strings.TrimSuffix(format, "t")
+	} else if p.isTraditional {
+		spec.zeroAsZ = true
+	}
+	if format == "Z" {
+		spec.militaryCode = true
+		return spec
+	}
+	if format == "N" || format == "n" || format == "Nn" {
+		return spec
+	}
+
+	formatRunes := []rune(format)
+	firstNonDigit := len(formatRunes)
+	for i, r := range formatRunes {
+		if !unicode.IsDigit(r) {
+			firstNonDigit = i
+			break
+		}
+		spec.zeroDigit = unicodeDigitZero(r)
+	}
+	prefixDigits := formatRunes[:firstNonDigit]
+	if len(prefixDigits) > 0 {
+		if firstNonDigit == len(formatRunes) && len(prefixDigits) > 2 {
+			spec.hourWidth = len(prefixDigits) - 2
+			spec.minuteWidth = 2
+			spec.separator = ""
+			spec.showMinutes = true
+			return spec
+		}
+		spec.hourWidth = len(prefixDigits)
+	}
+	restRunes := formatRunes[firstNonDigit:]
+	if len(restRunes) == 0 {
+		spec.showMinutes = false
+		return spec
+	}
+
+	sepEnd := 0
+	for sepEnd < len(restRunes) && !unicode.IsDigit(restRunes[sepEnd]) {
+		sepEnd++
+	}
+	spec.separator = string(restRunes[:sepEnd])
+	spec.showMinutes = true
+	if sepEnd < len(restRunes) {
+		spec.minuteWidth = len(restRunes[sepEnd:])
+	}
+	if spec.minuteWidth == 0 {
+		spec.minuteWidth = 2
+	}
+	return spec
+}
+
+func renderTimezoneOffset(offset int, spec timezonePicture) string {
+	if spec.militaryCode {
+		if code, ok := militaryTimezoneCode(offset); ok {
+			return code
+		}
+	}
+	if spec.zeroAsZ && offset == 0 {
 		return "Z"
 	}
 
@@ -670,35 +905,146 @@ func formatTimezone(t time.Time, comp byte, p dtPresentation) string {
 		sign = "-"
 		offset = -offset
 	}
-	h := offset / 3600
-	m := (offset % 3600) / 60
+	hours := offset / 3600
+	minutes := (offset % 3600) / 60
 
-	format := p.format
+	hourFmt := fmt.Sprintf("%%0%dd", spec.hourWidth)
+	body := sign + fmt.Sprintf(hourFmt, hours)
+	if spec.showMinutes {
+		minuteFmt := fmt.Sprintf("%%0%dd", spec.minuteWidth)
+		body += spec.separator + fmt.Sprintf(minuteFmt, minutes)
+	} else if minutes != 0 {
+		minuteFmt := fmt.Sprintf("%%0%dd", spec.minuteWidth)
+		body += ":" + fmt.Sprintf(minuteFmt, minutes)
+	}
+	if spec.zeroDigit != '0' {
+		body = translateDigits(body, spec.zeroDigit)
+	}
+	return spec.prefix + body
+}
+
+func formatTimezoneName(t time.Time, format string) string {
+	name, _ := t.Zone()
+	if name == "" {
+		return ""
+	}
 	switch format {
-	case "01:01", "1:01":
-		return fmt.Sprintf("%s%02d:%02d", sign, h, m)
-	case "0101":
-		return fmt.Sprintf("%s%02d%02d", sign, h, m)
-	case "N", "n", "Nn":
-		name, _ := t.Zone()
-		if name == "" {
-			return fmt.Sprintf("%s%02d:%02d", sign, h, m)
-		}
-		switch format {
-		case "N":
-			return strings.ToUpper(name)
-		case "n":
-			return strings.ToLower(name)
-		default:
-			return name
-		}
-	case "Z":
-		if offset == 0 {
-			return "Z"
-		}
-		return fmt.Sprintf("%s%02d:%02d", sign, h, m)
+	case "N":
+		return strings.ToUpper(name)
+	case "n":
+		return strings.ToLower(name)
 	default:
-		return fmt.Sprintf("%s%02d:%02d", sign, h, m)
+		return name
+	}
+}
+
+func militaryTimezoneCode(offset int) (string, bool) {
+	if offset%3600 != 0 {
+		return "", false
+	}
+	hours := offset / 3600
+	switch {
+	case hours == 0:
+		return "Z", true
+	case hours >= 1 && hours <= 12:
+		letters := "ABCDEFGHIKLM"
+		return string(letters[hours-1]), true
+	case hours <= -1 && hours >= -12:
+		letters := "NOPQRSTUVWXY"
+		return string(letters[-hours-1]), true
+	default:
+		return "", false
+	}
+}
+
+func isISOCalendar(calendar string) bool {
+	switch calendar {
+	case "ISO", "Q{}ISO":
+		return true
+	default:
+		return false
+	}
+}
+
+func validateCalendarName(calendar string) error {
+	if calendar == "" {
+		return nil
+	}
+	if isKnownCalendarName(calendar) {
+		return nil
+	}
+	if strings.HasPrefix(calendar, "Q{") {
+		end := strings.Index(calendar, "}")
+		if end < 0 || end == len(calendar)-1 {
+			return &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid calendar: %s", calendar)}
+		}
+		uri := calendar[2:end]
+		local := calendar[end+1:]
+		if !isNCName(local) {
+			return &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid calendar: %s", calendar)}
+		}
+		if uri == "" && !isKnownCalendarName(local) {
+			return &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid calendar: %s", calendar)}
+		}
+		return nil
+	}
+	if strings.Contains(calendar, ":") {
+		parts := strings.Split(calendar, ":")
+		if len(parts) != 2 || !isNCName(parts[0]) || !isNCName(parts[1]) {
+			return &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid calendar: %s", calendar)}
+		}
+		return nil
+	}
+	if !isKnownCalendarName(calendar) {
+		return &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid calendar: %s", calendar)}
+	}
+	return nil
+}
+
+func isNCName(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		if i == 0 {
+			if !unicode.IsLetter(r) && r != '_' {
+				return false
+			}
+			continue
+		}
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '-' && r != '.' {
+			return false
+		}
+	}
+	return true
+}
+
+func isoWeekStart(t time.Time) time.Time {
+	weekday := int(t.Weekday())
+	if weekday == 0 {
+		weekday = 7
+	}
+	return t.AddDate(0, 0, -(weekday - 1))
+}
+
+func isoMonthWeekOneStart(t time.Time) time.Time {
+	loc := t.Location()
+	first := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, loc)
+	firstWeekday := int(first.Weekday())
+	if firstWeekday == 0 {
+		firstWeekday = 7
+	}
+	offsetToThursday := (4 - firstWeekday + 7) % 7
+	firstThursday := first.AddDate(0, 0, offsetToThursday)
+	return isoWeekStart(firstThursday)
+}
+
+func isKnownCalendarName(calendar string) bool {
+	switch calendar {
+	case "ISO", "CB":
+		return true
+	default:
+		return false
 	}
 }
 

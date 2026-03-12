@@ -715,6 +715,11 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 	if err != nil {
 		return nil, err
 	}
+	if ec := getFnContext(ctx); ec != nil {
+		if doc, ok := ec.docCache[resolved]; ok {
+			return doc, nil
+		}
+	}
 
 	data, err := readUnparsedTextURI(ctx, resolved)
 	if err != nil {
@@ -726,6 +731,9 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: cannot parse document: %v", err)}
 	}
 	doc.SetURL(resolved)
+	if ec := getFnContext(ctx); ec != nil {
+		ec.docCache[resolved] = doc
+	}
 	return doc, nil
 }
 

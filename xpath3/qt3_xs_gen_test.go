@@ -191,8 +191,8 @@ func TestQT3_xs_numeric(t *testing.T) {
 		{Name: "xs-numeric-017", XPath: "xs:short(256) cast as xs:numeric", Assertions: []qt3Assertion{qt3AssertEq("256"), qt3AssertType("xs:short")}},
 		{Name: "xs-numeric-018", XPath: "true() cast as xs:numeric", Assertions: []qt3Assertion{qt3AssertEq("1e0"), qt3AssertType("xs:double")}},
 		{Name: "xs-numeric-019", XPath: "let $f := function($n as xs:numeric) as xs:numeric { $n+1 } return $f(255)", Assertions: []qt3Assertion{qt3AssertEq("256"), qt3AssertType("xs:integer")}},
-		{Name: "xs-numeric-021", XPath: "/*/*:float instance of element(*, xs:numeric)", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "xs-numeric-022", XPath: "/*/*:decimal/@*:attr instance of attribute(*, xs:numeric)", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "xs-numeric-021", XPath: "/*/*:float instance of element(*, xs:numeric)", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "xs-numeric-022", XPath: "/*/*:decimal/@*:attr instance of attribute(*, xs:numeric)", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires XML Schema support", Assertions: []qt3Assertion{qt3AssertTrue()}},
 	})
 }
 

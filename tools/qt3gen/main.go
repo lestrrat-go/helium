@@ -100,6 +100,7 @@ type resource struct {
 type source struct {
 	Role       string `xml:"role,attr"`
 	File       string `xml:"file,attr"`
+	URI        string `xml:"uri,attr"`
 	Validation string `xml:"validation,attr"`
 }
 
@@ -230,14 +231,14 @@ func main() {
 				baseURI = env.StaticBaseURI.URI
 			}
 
-			// Detect resource environments (e.g., fn:json-doc tests with URI-mapped files)
+			// Detect resource environments (e.g., fn:json-doc/doc tests with URI-mapped files)
 			needsHTTP := false
 			var resMap map[string]string
-			if env != nil && len(env.Resources) > 0 {
-				needsHTTP = true
+			if env != nil && (len(env.Resources) > 0 || len(env.Sources) > 0) {
 				resMap = make(map[string]string)
 				for _, res := range env.Resources {
 					if res.File != "" && res.URI != "" {
+						needsHTTP = true
 						var resPath string
 						if envIsGlobal {
 							resPath = res.File
@@ -247,6 +248,22 @@ func main() {
 						resourceFiles[resPath] = true
 						resMap[res.URI] = resPath
 					}
+				}
+				for _, src := range env.Sources {
+					if src.File != "" && src.URI != "" {
+						needsHTTP = true
+						var srcPath string
+						if envIsGlobal {
+							srcPath = src.File
+						} else {
+							srcPath = filepath.Join(tsDir, src.File)
+						}
+						resourceFiles[srcPath] = true
+						resMap[src.URI] = srcPath
+					}
+				}
+				if len(resMap) == 0 {
+					resMap = nil
 				}
 			}
 
@@ -260,6 +277,7 @@ func main() {
 				DefaultCollation: envDefaultCollation(env),
 				DefaultDecimal:   envDefaultDecimalFormat(env),
 				DecimalFormats:   envNamedDecimalFormats(env),
+				Params:           envParams(env),
 				BaseURI:          baseURI,
 				NeedsHTTP:        needsHTTP,
 				ResourceMap:      resMap,
@@ -458,8 +476,6 @@ func getSkipReason(deps []dependency) string {
 			switch d.Value {
 			case "schemaImport", "schemaValidation", "schemaAware":
 				return "requires XML Schema support"
-			case "serialization":
-				return "requires serialization"
 			case "namespace-axis":
 				return "requires namespace axis"
 			case "moduleImport":
@@ -551,9 +567,6 @@ func checkEnvironmentSupport(env *environment) string {
 			return "requires variable-bound source documents"
 		}
 	}
-	if len(env.Params) > 0 {
-		return "requires external parameters"
-	}
 	return ""
 }
 
@@ -600,6 +613,15 @@ type namedDecimalFormat struct {
 	URI    string
 	Name   string
 	Format decimalFormat
+}
+
+func envParams(env *environment) []param {
+	if env == nil || len(env.Params) == 0 {
+		return nil
+	}
+	out := make([]param, len(env.Params))
+	copy(out, env.Params)
+	return out
 }
 
 func envNamedDecimalFormats(env *environment) []namedDecimalFormat {
@@ -758,6 +780,7 @@ type generatedTest struct {
 	DefaultCollation string
 	DefaultDecimal   *decimalFormat
 	DecimalFormats   []namedDecimalFormat
+	Params           []param
 	BaseURI          string
 	NeedsHTTP        bool
 	ResourceMap      map[string]string // URI → file path relative to testdata dir
@@ -822,6 +845,16 @@ func generateTestFile(tests []generatedTest) string {
 						b.WriteString(", ")
 					}
 					fmt.Fprintf(&b, "{URI: %q, Name: %q, Format: %s}", df.URI, df.Name, emitDecimalFormat(df.Format))
+				}
+				b.WriteString("}")
+			}
+			if len(tc.Params) > 0 {
+				b.WriteString(", Params: []qt3Param{")
+				for i, p := range tc.Params {
+					if i > 0 {
+						b.WriteString(", ")
+					}
+					fmt.Fprintf(&b, "{Name: %q, Select: %q}", p.Name, p.Select)
 				}
 				b.WriteString("}")
 			}

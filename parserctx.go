@@ -13,10 +13,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/lestrrat-go/helium/enum"
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/sax"
-	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/pdebug"
 	"github.com/lestrrat-go/strcursor"
 )
@@ -101,14 +101,14 @@ type parserCtx struct {
 
 	nsTab       nsStack
 	nsNrTab     []int // number of ns bindings pushed per element (parallel to nodeTab)
-	doc     *Document
-	nodeTab nodeStack
+	doc         *Document
+	nodeTab     nodeStack
 	elemidx     int
 	sizeentcopy int64 // cumulative entity expansion bytes (non-entity-specific)
 	inputSize   int64 // total input document size
 	maxAmpl     int   // max amplification factor (default 5, 0 = disabled via ParseHuge)
 	// nbentities int
-	inputTab   inputStack
+	inputTab     inputStack
 	stopped      bool
 	disableSAX   bool  // suppress SAX callbacks after fatal error in recover mode
 	recoverErr   error // first fatal error saved during recovery
@@ -1353,7 +1353,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 	// via lookupNamespace
 	nsuri := pctx.lookupNamespace(prefix)
 	if prefix != "" && nsuri == "" {
-		return pctx.namespaceError(ctx, errors.New("namespace '" + prefix + "' not found"))
+		return pctx.namespaceError(ctx, errors.New("namespace '"+prefix+"' not found"))
 	}
 	if nsuri != "" {
 		if err := elem.SetActiveNamespace(prefix, nsuri); err != nil {
@@ -1409,7 +1409,7 @@ func (pctx *parserCtx) parseEndTag(ctx context.Context) error {
 
 		e := pctx.peekNode()
 		if !cur.ConsumeString(e.Name()) {
-			return pctx.error(ctx, errors.New("expected end tag '" + e.Name() + "'"))
+			return pctx.error(ctx, errors.New("expected end tag '"+e.Name()+"'"))
 		}
 
 		// [NS 9] ETag ::= '</' QName S? '>'
@@ -2521,7 +2521,7 @@ func (pctx *parserCtx) parseName(ctx context.Context) (name string, err error) {
 
 	// first letter
 	c := cur.Peek()
-	if c == ' ' || c == '>' || c == '/' || /* accelerators */ (!unicode.IsLetter(c) && c != '_' && c != ':') {
+	if c == ' ' || c == '>' || c == '/' || (c != ':' && !isValidNameStartChar(c)) {
 		err = pctx.error(ctx, fmt.Errorf("invalid first letter '%c'", c))
 		return
 	}
@@ -2529,11 +2529,11 @@ func (pctx *parserCtx) parseName(ctx context.Context) (name string, err error) {
 
 	i := 2
 	for c = cur.PeekN(i); c != 0x0; c = cur.PeekN(i) {
-		if c == ' ' || c == '>' || c == '/' { /* accelerator */
+		if c == ' ' || c == '>' || c == '/' {
 			i--
 			break
 		}
-		if !unicode.IsLetter(c) && !unicode.IsDigit(c) && c != '.' && c != '-' && c != '_' && c != ':' /* && !isCombining(c) && !isExtender(c) */ {
+		if c != ':' && !isValidNameChar(c) {
 			i--
 			break
 		}
@@ -2585,7 +2585,7 @@ func (pctx *parserCtx) parseQName(ctx context.Context) (local string, prefix str
 		if cur.Peek() != ':' {
 			v, err = pctx.parseName(ctx)
 			if err != nil {
-				err = pctx.error(ctx, errors.New("failed to parse QName '" + v + "'"))
+				err = pctx.error(ctx, errors.New("failed to parse QName '"+v+"'"))
 				return
 			}
 			local = v
@@ -2629,13 +2629,11 @@ func (pctx *parserCtx) parseQName(ctx context.Context) (local string, prefix str
 }
 
 func isNameStartChar(r rune) bool {
-	return unicode.IsLetter(r) || r == '_' || r == ':'
+	return r == ':' || isValidNameStartChar(r)
 }
 
 func isNameChar(r rune) bool {
-	return r == '.' || r == '-' || r == '_' || r == ':' ||
-		unicode.IsLetter(r) || unicode.IsDigit(r) ||
-		unicode.In(r, unicode.Extender)
+	return r == ':' || isValidNameChar(r)
 }
 
 /**
@@ -2707,7 +2705,7 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 	defer releaseBuffer(buf)
 
 	var c rune
-	if c = cur.Peek(); c == ' ' || c == '>' || c == '/' || c == ':' || !isNameStartChar(c) {
+	if c = cur.Peek(); c == ' ' || c == '>' || c == '/' || c == ':' || !isValidNameStartChar(c) {
 		err = pctx.error(ctx, errors.New("invalid name start char"))
 		return
 	}
@@ -2717,7 +2715,7 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 	// see how much more we got here
 	i := 2
 	for c = cur.PeekN(i); c != 0x0; c = cur.PeekN(i) {
-		if !unicode.IsLetter(c) && !unicode.IsDigit(c) && c != '_' && c != '-' && c != '.' {
+		if c == ':' || !isValidNameChar(c) {
 			i--
 			break
 		}
@@ -3527,7 +3525,7 @@ func (pctx *parserCtx) parseElementDecl(ctx context.Context) (enum.ElementType, 
 	}
 
 	if pctx.currentInputID() != startInput {
-		return enum.UndefinedElementType, pctx.error(ctx, 
+		return enum.UndefinedElementType, pctx.error(ctx,
 			fmt.Errorf("%w: element declaration doesn't start and stop in the same entity", ErrEntityBoundary))
 	}
 
@@ -3775,7 +3773,7 @@ func (pctx *parserCtx) parseElementChildrenContentDeclPriv(ctx context.Context, 
 		}
 		pctx.skipBlanks(ctx)
 		var err error
-		retelem, err = pctx.parseElementChildrenContentDeclPriv(ctx, depth + 1)
+		retelem, err = pctx.parseElementChildrenContentDeclPriv(ctx, depth+1)
 		if err != nil {
 			return nil, pctx.error(ctx, err)
 		}
@@ -3880,7 +3878,7 @@ LOOP:
 			pctx.skipBlanks(ctx)
 			// recurse
 			var err error
-			last, err = pctx.parseElementChildrenContentDeclPriv(ctx, depth + 1)
+			last, err = pctx.parseElementChildrenContentDeclPriv(ctx, depth+1)
 			if err != nil {
 				return nil, pctx.error(ctx, err)
 			}

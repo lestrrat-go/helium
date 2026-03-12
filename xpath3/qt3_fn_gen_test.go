@@ -1160,26 +1160,26 @@ func TestQT3_fn_collection(t *testing.T) {
 		{Name: "fn-collection-1", XPath: "fn:collection(\"argument1\",\"argument2\")", ExpectError: true},
 		{Name: "fn-collection-2", XPath: "fn:collection(\"thisfileshouldnotexists\")", ExpectError: true},
 		{Name: "fn-collection-3", XPath: "fn:collection(\"invalidURI%gg\")", ExpectError: true},
-		{Name: "fn-collection-4", XPath: "count(fn:collection($collection-uri))", BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertEq("2")}},
+		{Name: "fn-collection-4", XPath: "count(fn:collection($collection-uri))", Params: []qt3Param{{Name: "collection-uri", Select: "'http://www.w3.org/2010/09/qt-fots-catalog/collection1'"}}, BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertEq("2")}},
 		{Name: "fn-collection-4d", XPath: "count(fn:collection())", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertEq("2")}},
-		{Name: "fn-collection-5", XPath: "count(fn:collection($collection-uri))", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertEq("3")}},
+		{Name: "fn-collection-5", XPath: "count(fn:collection($collection-uri))", Params: []qt3Param{{Name: "collection-uri", Select: "'http://www.w3.org/2010/09/qt-fots-catalog/collection2'"}}, Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertEq("3")}},
 		{Name: "fn-collection-5d", XPath: "count(fn:collection())", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertEq("3")}},
-		{Name: "fn-collection-7", XPath: "distinct-values(fn:collection($collection-uri)//*[text()[contains(.,\"TCP/IP\")]]/normalize-space())", Skip: "requires external parameters", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
-		{Name: "fn-collection-8", XPath: "for $d in fn:collection($collection-uri) return ($d//title)[1]", BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
+		{Name: "fn-collection-7", XPath: "distinct-values(fn:collection($collection-uri)//*[text()[contains(.,\"TCP/IP\")]]/normalize-space())", Params: []qt3Param{{Name: "collection-uri", Select: "'http://www.w3.org/2010/09/qt-fots-catalog/collection2'"}}, AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
+		{Name: "fn-collection-8", XPath: "for $d in fn:collection($collection-uri) return ($d//title)[1]", Params: []qt3Param{{Name: "collection-uri", Select: "'http://www.w3.org/2010/09/qt-fots-catalog/collection1'"}}, BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
 		{Name: "K2-SeqCollectionFunc-1", XPath: "collection(\"http:\\\\invalidURI\\someURI%gg\")", ExpectError: true},
 		{Name: "K2-SeqCollectionFunc-2", XPath: "collection(\":/\")", ExpectError: true},
 		{Name: "collection-001", XPath: "collection()", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
 		{Name: "collection-002", XPath: "collection(())", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
 		{Name: "collection-003", XPath: "collection() | collection(())", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
 		{Name: "collection-004", XPath: "collection() | collection(())", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
-		{Name: "collection-005", XPath: "collection(\"http://www.w3.org/2010/09/qt-fots-catalog/collection1\")", BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", Skip: "requires external parameters", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
-		{Name: "collection-006", XPath: "collection(\"collection1\")", BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", Skip: "requires external parameters", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
+		{Name: "collection-005", XPath: "collection(\"http://www.w3.org/2010/09/qt-fots-catalog/collection1\")", Params: []qt3Param{{Name: "collection-uri", Select: "'http://www.w3.org/2010/09/qt-fots-catalog/collection1'"}}, BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
+		{Name: "collection-006", XPath: "collection(\"collection1\")", Params: []qt3Param{{Name: "collection-uri", Select: "'http://www.w3.org/2010/09/qt-fots-catalog/collection1'"}}, BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
 		{Name: "collection-007", XPath: `collection("http://www.w3.org/2010/09/qt-fots-catalog/collection1") |
-         collection("collection1")`, BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", Skip: "requires external parameters", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
+         collection("collection1")`, Params: []qt3Param{{Name: "collection-uri", Select: "'http://www.w3.org/2010/09/qt-fots-catalog/collection1'"}}, BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
 		{Name: "collection-008", XPath: `collection("http://www.w3.org/2010/09/qt-fots-catalog/collection1") |
-         collection("collection1")`, BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
+         collection("collection1")`, Params: []qt3Param{{Name: "collection-uri", Select: "'http://www.w3.org/2010/09/qt-fots-catalog/collection1'"}}, BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
 		{Name: "collection-009", XPath: `let $c := collection("http://www.w3.org/2010/09/qt-fots-catalog/collection1") return $c
-         | (for $doc in $c return doc(document-uri($doc)))`, BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", Skip: "requires external parameters", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
+         | (for $doc in $c return doc(document-uri($doc)))`, Params: []qt3Param{{Name: "collection-uri", Select: "'http://www.w3.org/2010/09/qt-fots-catalog/collection1'"}}, BaseURI: "http://www.w3.org/2010/09/qt-fots-catalog/", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
 		{Name: "collection-010", XPath: "collection(\"collection/one/\")", Skip: "requires directory as collection URI", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
 		{Name: "collection-900", XPath: "collection(\"nonexistent\")", ExpectError: true},
 		{Name: "collection-901", XPath: "collection()", ExpectError: true},
@@ -2275,31 +2275,31 @@ func TestQT3_fn_doc(t *testing.T) {
 		{Name: "fn-doc-2", XPath: "fn:doc(\"argument1\",\"argument2\")", ExpectError: true},
 		{Name: "fn-doc-3", XPath: "fn:doc(\"thisfileshouldnotexists.xml\")", ExpectError: true},
 		{Name: "fn-doc-4", XPath: "fn:doc(())", Assertions: []qt3Assertion{qt3AssertEmpty()}},
-		{Name: "fn-doc-5", XPath: "fn:doc($uri) is fn:doc($uri)", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-doc-6", XPath: "fn:doc($works) is fn:doc($staff)", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-doc-7", XPath: "fn:doc($uri)//day/string()", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertDeepEq("\"Monday\", \"Tuesday\"")}},
-		{Name: "fn-doc-15", XPath: "fn:count(fn:nilled(fn:doc($uri)))", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertEq("0")}},
-		{Name: "fn-doc-16", XPath: "fn:count(fn:node-name(fn:doc($uri)))", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertEq("0")}},
+		{Name: "fn-doc-5", XPath: "fn:doc($uri) is fn:doc($uri)", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-doc-6", XPath: "fn:doc($works) is fn:doc($staff)", Params: []qt3Param{{Name: "works", Select: "'http://www.w3.org/fots/docs/works.xml'"}, {Name: "staff", Select: "'http://www.w3.org/fots/docs/staff.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/staff.xml": "docs/staff.xml", "http://www.w3.org/fots/docs/works.xml": "docs/works.xml"}, Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-doc-7", XPath: "fn:doc($uri)//day/string()", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AssertDeepEq("\"Monday\", \"Tuesday\"")}},
+		{Name: "fn-doc-15", XPath: "fn:count(fn:nilled(fn:doc($uri)))", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AssertEq("0")}},
+		{Name: "fn-doc-16", XPath: "fn:count(fn:node-name(fn:doc($uri)))", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AssertEq("0")}},
 		{Name: "fn-doc-17", XPath: "fn:doc(\"%gg\")", ExpectError: true},
-		{Name: "fn-doc-18", XPath: "fn:not(fn:doc($uri) is fn:doc($uri))", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-doc-19", XPath: "(fn:doc($uri) is fn:doc($uri)) and fn:true()", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-doc-20", XPath: "(fn:doc($uri) is fn:doc($uri)) and fn:false()", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "fn-doc-21", XPath: "(fn:doc($uri) is fn:doc($uri)) or fn:true()", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-doc-22", XPath: "(fn:doc($uri) is fn:doc($uri)) or fn:false()", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-doc-24", XPath: "fn:doc($uri)", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-doc-25", XPath: "fn:doc($uri)", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-doc-26", XPath: "fn:doc($uri)", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-doc-27", XPath: "fn:doc($uri)", Skip: "requires external parameters", ExpectError: true},
-		{Name: "fn-doc-28", XPath: "fn:doc($uri)", Skip: "requires external parameters", ExpectError: true},
-		{Name: "fn-doc-29", XPath: "fn:doc($uri)", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-doc-30", XPath: "local-name(fn:doc($uri)/*)", Skip: "requires external parameters", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("schema"))}},
-		{Name: "fn-doc-31", XPath: "local-name(fn:doc($uri)/*)", Skip: "requires external parameters", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("schema"))}},
+		{Name: "fn-doc-18", XPath: "fn:not(fn:doc($uri) is fn:doc($uri))", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-doc-19", XPath: "(fn:doc($uri) is fn:doc($uri)) and fn:true()", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-doc-20", XPath: "(fn:doc($uri) is fn:doc($uri)) and fn:false()", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-doc-21", XPath: "(fn:doc($uri) is fn:doc($uri)) or fn:true()", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-doc-22", XPath: "(fn:doc($uri) is fn:doc($uri)) or fn:false()", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-doc-24", XPath: "fn:doc($uri)", Params: []qt3Param{{Name: "uri", Select: "'id/SpaceBracket.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"id/SpaceBracket.xml": "fn/id/SpaceBracket.xml"}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-doc-25", XPath: "fn:doc($uri)", Params: []qt3Param{{Name: "uri", Select: "'id/HighUnicode.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"id/HighUnicode.xml": "fn/id/HighUnicode.xml"}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-doc-26", XPath: "fn:doc($uri)", Params: []qt3Param{{Name: "uri", Select: "'id/HighUnicode2.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"id/HighUnicode2.xml": "fn/id/HighUnicode2.xml"}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-doc-27", XPath: "fn:doc($uri)", Params: []qt3Param{{Name: "uri", Select: "'id/BCisInvalid.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"id/BCisInvalid.xml": "fn/id/BCisInvalid.xml"}, ExpectError: true},
+		{Name: "fn-doc-28", XPath: "fn:doc($uri)", Params: []qt3Param{{Name: "uri", Select: "'id/InvalidUmlaut.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"id/InvalidUmlaut.xml": "fn/id/InvalidUmlaut.xml"}, ExpectError: true},
+		{Name: "fn-doc-29", XPath: "fn:doc($uri)", Params: []qt3Param{{Name: "uri", Select: "'id/NamespaceSuppliedInternally.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"id/NamespaceSuppliedInternally.xml": "fn/id/NamespaceSuppliedInternally.xml"}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-doc-30", XPath: "local-name(fn:doc($uri)/*)", Params: []qt3Param{{Name: "uri", Select: "'id/XMLIdDuplicated.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"id/XMLIdDuplicated.xml": "fn/id/XMLIdDuplicated.xml"}, AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("schema"))}},
+		{Name: "fn-doc-31", XPath: "local-name(fn:doc($uri)/*)", Params: []qt3Param{{Name: "uri", Select: "'id/InvalidXMLId.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"id/InvalidXMLId.xml": "fn/id/InvalidXMLId.xml"}, AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("schema"))}},
 		{Name: "K2-SeqDocFunc-14", XPath: "doc(':/')", ExpectError: true},
-		{Name: "fn-doc-32", XPath: "normalize-space(string(fn:doc($uri))), normalize-space(string(exactly-one(fn:doc($uri)/*)))", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertDeepEq("\"Everyday Italian Giada De Laurentiis\", \"Everyday Italian Giada De Laurentiis\"")}},
-		{Name: "fn-doc-34", XPath: "doc($uri)", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-doc-32", XPath: "normalize-space(string(fn:doc($uri))), normalize-space(string(exactly-one(fn:doc($uri)/*)))", Params: []qt3Param{{Name: "uri", Select: "'id/Books2.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"id/Books2.xml": "fn/id/Books2.xml"}, Assertions: []qt3Assertion{qt3AssertDeepEq("\"Everyday Italian Giada De Laurentiis\", \"Everyday Italian Giada De Laurentiis\"")}},
+		{Name: "fn-doc-34", XPath: "doc($uri)", Params: []qt3Param{{Name: "uri", Select: "'id/0x010D.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"id/0x010D.xml": "fn/id/0x010D.xml"}, Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-doc-35", XPath: "doc('id/badxml.xml')", ExpectError: true},
-		{Name: "fn-doc-36", XPath: "count(doc($uri)//text())", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertEq("9")}},
-		{Name: "fn-doc-37", XPath: "let $result := id(\"idABC\", doc($uri)) return $result", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckEmpty(), qt3CheckSkip())}},
+		{Name: "fn-doc-36", XPath: "count(doc($uri)//text())", Params: []qt3Param{{Name: "uri", Select: "'id/builtinEntities.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"id/builtinEntities.xml": "fn/id/builtinEntities.xml"}, Assertions: []qt3Assertion{qt3AssertEq("9")}},
+		{Name: "fn-doc-37", XPath: "let $result := id(\"idABC\", doc($uri)) return $result", Params: []qt3Param{{Name: "uri", Select: "'id/XMLIdWhitespace.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"id/XMLIdWhitespace.xml": "fn/id/XMLIdWhitespace.xml"}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckEmpty(), qt3CheckSkip())}},
 		{Name: "K2-SeqDocFunc-1", XPath: "empty(fn:doc(()))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "K2-SeqDocFunc-3", XPath: "fn:doc(xs:untypedAtomic(\"file:///example.com/does/not/exist/xqts-testing.xml\"))", ExpectError: true},
 		{Name: "K2-SeqDocFunc-4", XPath: "doc(\"/example.com/example.org/does/not/exist/doesNotExist/works-mod.xml\")", ExpectError: true},
@@ -2318,8 +2318,8 @@ func TestQT3_fn_doc_available(t *testing.T) {
 	qt3RunTests(t, []qt3Test{
 		{Name: "fn-doc-available-1", XPath: "fn:doc-available(\"http://example.com\",\"string 2\")", ExpectError: true},
 		{Name: "fn-doc-available-2", XPath: "fn:doc-available(xs:integer(2))", ExpectError: true},
-		{Name: "fn-doc-available-3", XPath: "fn:doc-available($uri)", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckFalse(), qt3CheckTrue())}},
-		{Name: "fn-doc-available-4", XPath: "fn:doc-available($uri)", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue(), qt3CheckFalse())}},
+		{Name: "fn-doc-available-3", XPath: "fn:doc-available($uri)", Params: []qt3Param{{Name: "uri", Select: "'id/XMLIdDuplicated.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"id/XMLIdDuplicated.xml": "fn/id/XMLIdDuplicated.xml"}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckFalse(), qt3CheckTrue())}},
+		{Name: "fn-doc-available-4", XPath: "fn:doc-available($uri)", Params: []qt3Param{{Name: "uri", Select: "'id/InvalidXMLId.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"id/InvalidXMLId.xml": "fn/id/InvalidXMLId.xml"}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue(), qt3CheckFalse())}},
 		{Name: "fn-doc-available-5", XPath: "fn:doc-available(document-uri(/))", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-doc-available-6", XPath: "fn:doc-available(\"file:///a/b/c/wefdobqciyvdsoihnfcpinads.xml\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "fn-doc-available-7", XPath: "fn:doc-available(())", Assertions: []qt3Assertion{qt3AssertFalse()}},
@@ -2338,28 +2338,28 @@ func TestQT3_fn_doc_available(t *testing.T) {
 func TestQT3_fn_document_uri(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
-		{Name: "fn-document-uri-12", XPath: "fn:contains(fn:document-uri(fn:doc($uri)),$uri) or (fn:document-uri(fn:doc($uri)) = \"\")", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue(), qt3CheckFalse())}},
+		{Name: "fn-document-uri-12", XPath: "fn:contains(fn:document-uri(fn:doc($uri)),$uri) or (fn:document-uri(fn:doc($uri)) = \"\")", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue(), qt3CheckFalse())}},
 		{Name: "fn-document-uri-13", XPath: "fn:count(fn:document-uri(/works[1]/employee[1]))", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertEq("0")}},
 		{Name: "fn-document-uri-14", XPath: "fn:count(fn:document-uri(/works[1]/employee[1]/@name))", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertEq("0")}},
-		{Name: "fn-document-uri-15", XPath: "fn:string-length(fn:string(fn:contains(fn:document-uri(fn:doc($uri)),$uri)))", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckEq("4"), qt3CheckEq("5"))}},
-		{Name: "fn-document-uri-16", XPath: "fn:upper-case(fn:string(fn:contains(fn:document-uri(fn:doc($uri)),$uri)))", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("TRUE"), qt3CheckStringValue("FALSE"))}},
-		{Name: "fn-document-uri-17", XPath: "fn:lower-case(fn:string(fn:contains(fn:document-uri(fn:doc($uri)),$uri)))", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("true"), qt3CheckStringValue("false"))}},
-		{Name: "fn-document-uri-18", XPath: "fn:concat(fn:string(fn:contains(fn:document-uri(fn:doc($uri)),$uri)),\" A String\")", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("true A String"), qt3CheckStringValue("false A String"))}},
-		{Name: "fn-document-uri-19", XPath: "fn:string-join((fn:string(fn:contains(fn:document-uri(fn:doc($uri)),$uri)),\" A String\"),\"\")", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("true A String"), qt3CheckStringValue("false A String"))}},
+		{Name: "fn-document-uri-15", XPath: "fn:string-length(fn:string(fn:contains(fn:document-uri(fn:doc($uri)),$uri)))", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckEq("4"), qt3CheckEq("5"))}},
+		{Name: "fn-document-uri-16", XPath: "fn:upper-case(fn:string(fn:contains(fn:document-uri(fn:doc($uri)),$uri)))", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("TRUE"), qt3CheckStringValue("FALSE"))}},
+		{Name: "fn-document-uri-17", XPath: "fn:lower-case(fn:string(fn:contains(fn:document-uri(fn:doc($uri)),$uri)))", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("true"), qt3CheckStringValue("false"))}},
+		{Name: "fn-document-uri-18", XPath: "fn:concat(fn:string(fn:contains(fn:document-uri(fn:doc($uri)),$uri)),\" A String\")", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("true A String"), qt3CheckStringValue("false A String"))}},
+		{Name: "fn-document-uri-19", XPath: "fn:string-join((fn:string(fn:contains(fn:document-uri(fn:doc($uri)),$uri)),\" A String\"),\"\")", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("true A String"), qt3CheckStringValue("false A String"))}},
 		{Name: "fn-document-uri-20", XPath: "fn:substring-before(fn:string(fn:contains(fn:document-uri(/),\"works-mod\")),\"e\")", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertStringValue("tru")}},
 		{Name: "fn-document-uri-21", XPath: "fn:substring-after(fn:string(fn:contains(fn:document-uri(/),\"works-mod\")),\"t\")", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertStringValue("rue")}},
-		{Name: "fn-document-uri-28", XPath: "fn:contains((fn:doc($uri))/document-uri(),$uri) or ((fn:doc($uri))/document-uri() = \"\")", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue(), qt3CheckFalse())}},
+		{Name: "fn-document-uri-28", XPath: "fn:contains((fn:doc($uri))/document-uri(),$uri) or ((fn:doc($uri))/document-uri() = \"\")", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue(), qt3CheckFalse())}},
 		{Name: "fn-document-uri-29", XPath: "fn:count((/works[1]/employee[1])/document-uri())", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertEq("0")}},
 		{Name: "fn-document-uri-30", XPath: "fn:count((/works[1]/employee[1]/@name)/document-uri())", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertEq("0")}},
-		{Name: "fn-document-uri-31", XPath: "fn:string-length(fn:string(fn:contains((fn:doc($uri))/document-uri(),$uri)))", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckEq("4"), qt3CheckEq("5"))}},
-		{Name: "fn-document-uri-32", XPath: "fn:upper-case(fn:string(fn:contains((fn:doc($uri))/document-uri(),$uri)))", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("TRUE"), qt3CheckStringValue("FALSE"))}},
-		{Name: "fn-document-uri-33", XPath: "fn:lower-case(fn:string(fn:contains((fn:doc($uri))/document-uri(),$uri)))", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("true"), qt3CheckStringValue("false"))}},
-		{Name: "fn-document-uri-34", XPath: "fn:concat(fn:string(fn:contains((fn:doc($uri))/document-uri(),$uri)),\" A String\")", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("true A String"), qt3CheckStringValue("false A String"))}},
-		{Name: "fn-document-uri-35", XPath: "fn:string-join((fn:string(fn:contains((fn:doc($uri))/document-uri(),$uri)),\" A String\"),\"\")", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("true A String"), qt3CheckStringValue("false A String"))}},
+		{Name: "fn-document-uri-31", XPath: "fn:string-length(fn:string(fn:contains((fn:doc($uri))/document-uri(),$uri)))", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckEq("4"), qt3CheckEq("5"))}},
+		{Name: "fn-document-uri-32", XPath: "fn:upper-case(fn:string(fn:contains((fn:doc($uri))/document-uri(),$uri)))", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("TRUE"), qt3CheckStringValue("FALSE"))}},
+		{Name: "fn-document-uri-33", XPath: "fn:lower-case(fn:string(fn:contains((fn:doc($uri))/document-uri(),$uri)))", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("true"), qt3CheckStringValue("false"))}},
+		{Name: "fn-document-uri-34", XPath: "fn:concat(fn:string(fn:contains((fn:doc($uri))/document-uri(),$uri)),\" A String\")", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("true A String"), qt3CheckStringValue("false A String"))}},
+		{Name: "fn-document-uri-35", XPath: "fn:string-join((fn:string(fn:contains((fn:doc($uri))/document-uri(),$uri)),\" A String\"),\"\")", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("true A String"), qt3CheckStringValue("false A String"))}},
 		{Name: "fn-document-uri-36", XPath: "fn:substring-before(fn:string(fn:contains((/)/document-uri(),\"works-mod\")),\"e\")", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertStringValue("tru")}},
 		{Name: "fn-document-uri-37", XPath: "fn:substring-after(fn:string(fn:contains((/)/document-uri(),\"works-mod\")),\"t\")", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertStringValue("rue")}},
 		{Name: "K-DocumentURIFunc-1", XPath: "document-uri((), \"wrong param\")", ExpectError: true},
-		{Name: "K-DocumentURIFunc-2a", XPath: "ends-with(document-uri(),\"works-mod.xml\")", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "K-DocumentURIFunc-2a", XPath: "ends-with(document-uri(),\"works-mod.xml\")", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml"}, Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "K-DocumentURIFunc-3", XPath: "empty(document-uri(()))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 	})
 }
@@ -3190,15 +3190,15 @@ func TestQT3_fn_for_each_pair(t *testing.T) {
 func TestQT3_fn_format_date(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
-		{Name: "format-date-001a", XPath: "format-date($d,\"[Y]-[M01]-[D]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("2003-09-7")}},
-		{Name: "format-date-001b", XPath: "format-date($d,\"[M]-[D]-[Y]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9-7-2003")}},
-		{Name: "format-date-001c", XPath: "format-date($d,\"[D]-[M]-[Y]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("7-9-2003")}},
-		{Name: "format-date-001d", XPath: "format-date($d,\"[D1] [MI] [Y]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("7 IX 2003")}},
-		{Name: "format-date-001e", XPath: "format-date($d,\"[[[Y]-[M01]-[D01]]]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("[2003-09-07]")}},
-		{Name: "format-date-001f", XPath: "format-date($d,\"[[[Y0001]-[M01]-[D01]]]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("[2003-09-07]")}},
-		{Name: "format-date-001g", XPath: "format-date($d,\"([Y01]-[M01]-[D01])\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("(03-09-07)")}},
+		{Name: "format-date-001a", XPath: "format-date($d,\"[Y]-[M01]-[D]\")", Params: []qt3Param{{Name: "d", Select: "xs:date('2003-09-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("2003-09-7")}},
+		{Name: "format-date-001b", XPath: "format-date($d,\"[M]-[D]-[Y]\")", Params: []qt3Param{{Name: "d", Select: "xs:date('2003-09-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9-7-2003")}},
+		{Name: "format-date-001c", XPath: "format-date($d,\"[D]-[M]-[Y]\")", Params: []qt3Param{{Name: "d", Select: "xs:date('2003-09-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("7-9-2003")}},
+		{Name: "format-date-001d", XPath: "format-date($d,\"[D1] [MI] [Y]\")", Params: []qt3Param{{Name: "d", Select: "xs:date('2003-09-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("7 IX 2003")}},
+		{Name: "format-date-001e", XPath: "format-date($d,\"[[[Y]-[M01]-[D01]]]\")", Params: []qt3Param{{Name: "d", Select: "xs:date('2003-09-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("[2003-09-07]")}},
+		{Name: "format-date-001f", XPath: "format-date($d,\"[[[Y0001]-[M01]-[D01]]]\")", Params: []qt3Param{{Name: "d", Select: "xs:date('2003-09-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("[2003-09-07]")}},
+		{Name: "format-date-001g", XPath: "format-date($d,\"([Y01]-[M01]-[D01])\")", Params: []qt3Param{{Name: "d", Select: "xs:date('2003-09-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("(03-09-07)")}},
 		{Name: "format-date-005", XPath: `string-join( for $i in 1 to 100 return format-date($t + xs:yearMonthDuration('P1Y')*$i,
-         '[YI]'), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`MCMLI MCMLII MCMLIII MCMLIV MCMLV MCMLVI MCMLVII MCMLVIII
+         '[YI]'), ' ')`, Params: []qt3Param{{Name: "t", Select: "xs:date('1950-01-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`MCMLI MCMLII MCMLIII MCMLIV MCMLV MCMLVI MCMLVII MCMLVIII
             MCMLIX MCMLX MCMLXI MCMLXII MCMLXIII MCMLXIV MCMLXV MCMLXVI MCMLXVII MCMLXVIII
             MCMLXIX MCMLXX MCMLXXI MCMLXXII MCMLXXIII MCMLXXIV MCMLXXV MCMLXXVI MCMLXXVII
             MCMLXXVIII MCMLXXIX MCMLXXX MCMLXXXI MCMLXXXII MCMLXXXIII MCMLXXXIV MCMLXXXV
@@ -3210,7 +3210,7 @@ func TestQT3_fn_format_date(t *testing.T) {
             MMXXXIX MMXL MMXLI MMXLII MMXLIII MMXLIV MMXLV MMXLVI MMXLVII MMXLVIII MMXLIX
             MML`)}},
 		{Name: "format-date-006", XPath: `string-join( for $i in 1 to 100 return format-date($t +
-         xs:yearMonthDuration('P17Y')*$i, '[Yi,4-4]'), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`dcccxvii dcccxxxiv dcccli dccclxviii dccclxxxv cmii cmxix
+         xs:yearMonthDuration('P17Y')*$i, '[Yi,4-4]'), ' ')`, Params: []qt3Param{{Name: "t", Select: "xs:date('0800-01-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`dcccxvii dcccxxxiv dcccli dccclxviii dccclxxxv cmii cmxix
             cmxxxvi cmliii cmlxx cmlxxxvii miv mxxi mxxxviii mlv mlxxii mlxxxix mcvi
             mcxxiii mcxl mclvii mclxxiv mcxci mccviii mccxxv mccxlii mcclix mcclxxvi
             mccxciii mcccx mcccxxvii mcccxliv mccclxi mccclxxviii mcccxcv mcdxii mcdxxix
@@ -3222,14 +3222,14 @@ func TestQT3_fn_format_date(t *testing.T) {
             mmccxxviii mmccxlv mmcclxii mmcclxxix mmccxcvi mmcccxiii mmcccxxx mmcccxlvii
             mmccclxiv mmccclxxxi mmcccxcviii mmcdxv mmcdxxxii mmcdxlix mmcdlxvi mmcdlxxxiii
             mmd`)}},
-		{Name: "format-date-007a", XPath: "format-date($d,\"[Y๐๐๐๑]-[M๐๑]-[D๑]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("๒๐๐๓-๐๙-๗")}},
-		{Name: "format-date-007b", XPath: "format-date($d,\"[M๑]-[D๑]-[Y๐๐๐๑]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("๙-๗-๒๐๐๓")}},
-		{Name: "format-date-007c", XPath: "format-date($d,\"([Y๐๑]-[M๐๑]-[D๐๑])\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("(๐๓-๐๙-๐๗)")}},
-		{Name: "format-date-008a", XPath: "format-date($d,\"[Y𐒠𐒠𐒠𐒡]-[M𐒠𐒡]-[D𐒡]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("𐒢𐒠𐒠𐒣-𐒠𐒩-𐒧")}},
-		{Name: "format-date-008b", XPath: "format-date($d,\"[M𐒡]-[D𐒡]-[Y𐒠𐒠𐒠𐒡]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("𐒩-𐒧-𐒢𐒠𐒠𐒣")}},
-		{Name: "format-date-008c", XPath: "format-date($d,\"([Y𐒠𐒡]-[M𐒠𐒡]-[D𐒠𐒡])\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("(𐒠𐒣-𐒠𐒩-𐒠𐒧)")}},
+		{Name: "format-date-007a", XPath: "format-date($d,\"[Y๐๐๐๑]-[M๐๑]-[D๑]\")", Params: []qt3Param{{Name: "d", Select: "xs:date('2003-09-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("๒๐๐๓-๐๙-๗")}},
+		{Name: "format-date-007b", XPath: "format-date($d,\"[M๑]-[D๑]-[Y๐๐๐๑]\")", Params: []qt3Param{{Name: "d", Select: "xs:date('2003-09-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("๙-๗-๒๐๐๓")}},
+		{Name: "format-date-007c", XPath: "format-date($d,\"([Y๐๑]-[M๐๑]-[D๐๑])\")", Params: []qt3Param{{Name: "d", Select: "xs:date('2003-09-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("(๐๓-๐๙-๐๗)")}},
+		{Name: "format-date-008a", XPath: "format-date($d,\"[Y𐒠𐒠𐒠𐒡]-[M𐒠𐒡]-[D𐒡]\")", Params: []qt3Param{{Name: "d", Select: "xs:date('2003-09-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("𐒢𐒠𐒠𐒣-𐒠𐒩-𐒧")}},
+		{Name: "format-date-008b", XPath: "format-date($d,\"[M𐒡]-[D𐒡]-[Y𐒠𐒠𐒠𐒡]\")", Params: []qt3Param{{Name: "d", Select: "xs:date('2003-09-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("𐒩-𐒧-𐒢𐒠𐒠𐒣")}},
+		{Name: "format-date-008c", XPath: "format-date($d,\"([Y𐒠𐒡]-[M𐒠𐒡]-[D𐒠𐒡])\")", Params: []qt3Param{{Name: "d", Select: "xs:date('2003-09-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("(𐒠𐒣-𐒠𐒩-𐒠𐒧)")}},
 		{Name: "format-date-009", XPath: `for $i in 1 to 48, $d in $t + xs:yearMonthDuration('P1M')*$i 
-        return concat("[", $d, ":", format-date($d, '[W]', (), 'ISO', ()), "]")`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+        return concat("[", $d, ":", format-date($d, '[W]', (), 'ISO', ()), "]")`, Params: []qt3Param{{Name: "t", Select: "xs:date('2004-04-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             [2004-05-01:18] [2004-06-01:23] [2004-07-01:27] [2004-08-01:31] [2004-09-01:36] [2004-10-01:40] [2004-11-01:45] 
             [2004-12-01:49] [2005-01-01:53] [2005-02-01:5] [2005-03-01:9] [2005-04-01:13] [2005-05-01:17] [2005-06-01:22] 
             [2005-07-01:26] [2005-08-01:31] [2005-09-01:35] [2005-10-01:39] [2005-11-01:44] [2005-12-01:48] [2006-01-01:52] 
@@ -3239,7 +3239,7 @@ func TestQT3_fn_format_date(t *testing.T) {
             [2007-11-01:44] [2007-12-01:48] [2008-01-01:1] [2008-02-01:5] [2008-03-01:9] [2008-04-01:14]
          `)}},
 		{Name: "format-date-010", XPath: `for $i in 1 to 48, $d in $t + xs:yearMonthDuration('P1M')*$i 
-            return concat("[", $d, ":", format-date($d, '[F01]', (), 'Q{}ISO', ()), ']')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+            return concat("[", $d, ":", format-date($d, '[F01]', (), 'Q{}ISO', ()), ']')`, Params: []qt3Param{{Name: "t", Select: "xs:date('2003-12-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             [2004-01-01:04] [2004-02-01:07] [2004-03-01:01] [2004-04-01:04] [2004-05-01:06] [2004-06-01:02] 
             [2004-07-01:04] [2004-08-01:07] [2004-09-01:03] [2004-10-01:05] [2004-11-01:01] [2004-12-01:03] 
             [2005-01-01:06] [2005-02-01:02] [2005-03-01:02] [2005-04-01:05] [2005-05-01:07] [2005-06-01:03] 
@@ -3250,7 +3250,7 @@ func TestQT3_fn_format_date(t *testing.T) {
             [2007-07-01:07] [2007-08-01:03] [2007-09-01:06] [2007-10-01:01] [2007-11-01:04] [2007-12-01:06]             
          `)}},
 		{Name: "format-date-011", XPath: `for $i in 1 to 48, $d in $t + xs:dayTimeDuration('P3D')*$i 
-        return concat("[", $d, ":", format-date($d, '[w]', (), 'ISO', ()), ']')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+        return concat("[", $d, ":", format-date($d, '[w]', (), 'ISO', ()), ']')`, Params: []qt3Param{{Name: "t", Select: "xs:date('2005-12-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             [2005-12-04:1] [2005-12-07:2] [2005-12-10:2] [2005-12-13:3] [2005-12-16:3] [2005-12-19:4] [2005-12-22:4] 
             [2005-12-25:4] [2005-12-28:5] [2005-12-31:5] [2006-01-03:1] [2006-01-06:1] [2006-01-09:2] [2006-01-12:2] 
             [2006-01-15:2] [2006-01-18:3] [2006-01-21:3] [2006-01-24:4] [2006-01-27:4] [2006-01-30:5] [2006-02-02:1] 
@@ -3259,29 +3259,29 @@ func TestQT3_fn_format_date(t *testing.T) {
             [2006-03-19:3] [2006-03-22:4] [2006-03-25:4] [2006-03-28:5] [2006-03-31:5] [2006-04-03:1] [2006-04-06:1] 
             [2006-04-09:1] [2006-04-12:2] [2006-04-15:2] [2006-04-18:3] [2006-04-21:3] [2006-04-24:4]            
          `)}},
-		{Name: "format-date-013a", XPath: "format-date($t, '[Y,4-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("0985")}},
-		{Name: "format-date-013b", XPath: "format-date($t, '[Y,3-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
-		{Name: "format-date-013c", XPath: "format-date($t, '[Y,2-5]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
-		{Name: "format-date-013d", XPath: "format-date($t, '[Y,2-2]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("85")}},
-		{Name: "format-date-013e", XPath: "format-date($t, '[Y,2-*]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
-		{Name: "format-date-013f", XPath: "format-date($t, '[Y,*-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
-		{Name: "format-date-013g", XPath: "format-date($t, '[Y,3]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
-		{Name: "format-date-013h", XPath: "format-date($t, '[M,4-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("0003")}},
-		{Name: "format-date-013i", XPath: "format-date($t, '[M,1-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("3")}},
-		{Name: "format-date-013j", XPath: "format-date($t, '[M,2-5]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("03")}},
-		{Name: "format-date-013k", XPath: "format-date($t, '[M,2-2]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("03")}},
-		{Name: "format-date-013L", XPath: "format-date($t, '[M,1-*]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("3")}},
-		{Name: "format-date-013m", XPath: "format-date($t, '[M,*-2]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("3")}},
-		{Name: "format-date-013n", XPath: "format-date($t, '[M,3]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("003")}},
+		{Name: "format-date-013a", XPath: "format-date($t, '[Y,4-4]')", Params: []qt3Param{{Name: "t", Select: "xs:date('0985-03-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("0985")}},
+		{Name: "format-date-013b", XPath: "format-date($t, '[Y,3-4]')", Params: []qt3Param{{Name: "t", Select: "xs:date('0985-03-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
+		{Name: "format-date-013c", XPath: "format-date($t, '[Y,2-5]')", Params: []qt3Param{{Name: "t", Select: "xs:date('0985-03-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
+		{Name: "format-date-013d", XPath: "format-date($t, '[Y,2-2]')", Params: []qt3Param{{Name: "t", Select: "xs:date('0985-03-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("85")}},
+		{Name: "format-date-013e", XPath: "format-date($t, '[Y,2-*]')", Params: []qt3Param{{Name: "t", Select: "xs:date('0985-03-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
+		{Name: "format-date-013f", XPath: "format-date($t, '[Y,*-4]')", Params: []qt3Param{{Name: "t", Select: "xs:date('0985-03-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
+		{Name: "format-date-013g", XPath: "format-date($t, '[Y,3]')", Params: []qt3Param{{Name: "t", Select: "xs:date('0985-03-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
+		{Name: "format-date-013h", XPath: "format-date($t, '[M,4-4]')", Params: []qt3Param{{Name: "t", Select: "xs:date('0985-03-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("0003")}},
+		{Name: "format-date-013i", XPath: "format-date($t, '[M,1-4]')", Params: []qt3Param{{Name: "t", Select: "xs:date('0985-03-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("3")}},
+		{Name: "format-date-013j", XPath: "format-date($t, '[M,2-5]')", Params: []qt3Param{{Name: "t", Select: "xs:date('0985-03-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("03")}},
+		{Name: "format-date-013k", XPath: "format-date($t, '[M,2-2]')", Params: []qt3Param{{Name: "t", Select: "xs:date('0985-03-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("03")}},
+		{Name: "format-date-013L", XPath: "format-date($t, '[M,1-*]')", Params: []qt3Param{{Name: "t", Select: "xs:date('0985-03-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("3")}},
+		{Name: "format-date-013m", XPath: "format-date($t, '[M,*-2]')", Params: []qt3Param{{Name: "t", Select: "xs:date('0985-03-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("3")}},
+		{Name: "format-date-013n", XPath: "format-date($t, '[M,3]')", Params: []qt3Param{{Name: "t", Select: "xs:date('0985-03-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("003")}},
 		{Name: "format-date-014", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[Z]'), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`-14:00 -13:30 -13:00 -12:30 -12:00 -11:30 -11:00 -10:30 -10:00
+         $z*xs:dayTimeDuration('PT30M')), '[Z]'), ' ')`, Params: []qt3Param{{Name: "t", Select: "xs:date('1985-03-01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`-14:00 -13:30 -13:00 -12:30 -12:00 -11:30 -11:00 -10:30 -10:00
             -09:30 -09:00 -08:30 -08:00 -07:30 -07:00 -06:30 -06:00 -05:30 -05:00 -04:30
             -04:00 -03:30 -03:00 -02:30 -02:00 -01:30 -01:00 -00:30 +00:00 +00:30 +01:00
             +01:30 +02:00 +02:30 +03:00 +03:30 +04:00 +04:30 +05:00 +05:30 +06:00 +06:30
             +07:00 +07:30 +08:00 +08:30 +09:00 +09:30 +10:00 +10:30 +11:00 +11:30 +12:00
             +12:30 +13:00 +13:30 +14:00`)}},
 		{Name: "format-date-015", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[z0]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`GMT-14; GMT-13:30; GMT-13; GMT-12:30; GMT-12; GMT-11:30; GMT-11;
+         $z*xs:dayTimeDuration('PT30M')), '[z0]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:date('1985-03-01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`GMT-14; GMT-13:30; GMT-13; GMT-12:30; GMT-12; GMT-11:30; GMT-11;
             GMT-10:30; GMT-10; GMT-9:30; GMT-9; GMT-8:30; GMT-8; GMT-7:30; GMT-7; GMT-6:30; GMT-6;
             GMT-5:30; GMT-5; GMT-4:30; GMT-4; GMT-3:30; GMT-3; GMT-2:30; GMT-2; GMT-1:30; GMT-1;
             GMT-0:30; GMT+0; GMT+0:30; GMT+1; GMT+1:30; GMT+2; GMT+2:30; GMT+3; GMT+3:30; GMT+4;
@@ -3289,7 +3289,7 @@ func TestQT3_fn_format_date(t *testing.T) {
             GMT+9:30; GMT+10; GMT+10:30; GMT+11; GMT+11:30; GMT+12; GMT+12:30; GMT+13; GMT+13:30;
             GMT+14`)}},
 		{Name: "format-date-016", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         $z*xs:dayTimeDuration('PT30M')), '[z]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:date('1985-03-01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
          	GMT-14:00; GMT-13:30; GMT-13:00; GMT-12:30; GMT-12:00; GMT-11:30; GMT-11:00;
 			GMT-10:30; GMT-10:00; GMT-09:30; GMT-09:00; GMT-08:30; GMT-08:00; GMT-07:30;
 			GMT-07:00; GMT-06:30; GMT-06:00; GMT-05:30; GMT-05:00; GMT-04:30; GMT-04:00;
@@ -3301,14 +3301,14 @@ func TestQT3_fn_format_date(t *testing.T) {
 			GMT+14:00
 		 `)}},
 		{Name: "format-date-017", XPath: `string-join( for $z in -12 to +12 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT1H')), '[ZZ]'), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         $z*xs:dayTimeDuration('PT1H')), '[ZZ]'), ' ')`, Params: []qt3Param{{Name: "t", Select: "xs:date('1985-03-01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
          	Y X W V U T S R Q P O N Z A B C D E F G H I K L M
 		 `)}},
-		{Name: "format-date-018", XPath: "format-date(xs:date('1987-12-13'), '[ZZ]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("J")}},
+		{Name: "format-date-018", XPath: "format-date(xs:date('1987-12-13'), '[ZZ]')", Params: []qt3Param{{Name: "t", Select: "xs:date('1985-03-01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("J")}},
 		{Name: "format-date-019", XPath: "format-date(xs:date('1987-12-13+05:30'), '[ZZ]')", Assertions: []qt3Assertion{qt3AssertStringValue("+05:30")}},
 		{Name: "format-date-020", XPath: "format-date(xs:date('1987-12-13+13:00'), '[ZZ]')", Assertions: []qt3Assertion{qt3AssertStringValue("+13:00")}},
 		{Name: "format-date-021", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[z00~00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         $z*xs:dayTimeDuration('PT30M')), '[z00~00]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:date('1985-03-01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
          	GMT-14~00; GMT-13~30; GMT-13~00; GMT-12~30; GMT-12~00; GMT-11~30; GMT-11~00; GMT-10~30; 
          	GMT-10~00; GMT-09~30; GMT-09~00; GMT-08~30; GMT-08~00; GMT-07~30; GMT-07~00; GMT-06~30; 
          	GMT-06~00; GMT-05~30; GMT-05~00; GMT-04~30; GMT-04~00; GMT-03~30; GMT-03~00; GMT-02~30; 
@@ -3318,9 +3318,9 @@ func TestQT3_fn_format_date(t *testing.T) {
          	GMT+10~00; GMT+10~30; GMT+11~00; GMT+11~30; GMT+12~00; GMT+12~30; GMT+13~00; GMT+13~30; 
          	GMT+14~00
 		 `)}},
-		{Name: "format-date-022", XPath: "format-date(xs:date('2012-05-18+05:30'), '[Z٠٠:٠٠]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("+٠٥:٣٠")}},
+		{Name: "format-date-022", XPath: "format-date(xs:date('2012-05-18+05:30'), '[Z٠٠:٠٠]')", Params: []qt3Param{{Name: "t", Select: "xs:date('1985-03-01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("+٠٥:٣٠")}},
 		{Name: "format-date-023", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[Z0:01]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         $z*xs:dayTimeDuration('PT30M')), '[Z0:01]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:date('1985-03-01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
          	-14:00; -13:30; -13:00; -12:30; -12:00; -11:30; -11:00; -10:30; -10:00; -9:30; -9:00;
          	-8:30; -8:00; -7:30; -7:00; -6:30; -6:00; -5:30; -5:00; -4:30; -4:00; -3:30; -3:00;
          	-2:30; -2:00; -1:30; -1:00; -0:30; +0:00; +0:30; +1:00; +1:30; +2:00; +2:30; +3:00;
@@ -3328,7 +3328,7 @@ func TestQT3_fn_format_date(t *testing.T) {
          	+9:30; +10:00; +10:30; +11:00; +11:30; +12:00; +12:30; +13:00; +13:30; +14:00
 		 `)}},
 		{Name: "format-date-024", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[Z999]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         $z*xs:dayTimeDuration('PT30M')), '[Z999]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:date('1985-03-01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
          	-1400; -1330; -1300; -1230; -1200; -1130; -1100; -1030; -1000; -930; -900; -830; 
          	-800; -730; -700; -630; -600; -530; -500; -430; -400; -330; -300; -230; -200; 
          	-130; -100; -030; +000; +030; +100; +130; +200; +230; +300; +330; +400; +430; 
@@ -3336,7 +3336,7 @@ func TestQT3_fn_format_date(t *testing.T) {
          	+1130; +1200; +1230; +1300; +1330; +1400
 		 `)}},
 		{Name: "format-date-025", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[Z99]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         $z*xs:dayTimeDuration('PT30M')), '[Z99]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:date('1985-03-01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
          	-14; -13:30; -13; -12:30; -12; -11:30; -11; -10:30; -10; -09:30; -09; -08:30; -08;
          	-07:30; -07; -06:30; -06; -05:30; -05; -04:30; -04; -03:30; -03; -02:30; -02; -01:30;
          	-01; -00:30; +00; +00:30; +01; +01:30; +02; +02:30; +03; +03:30; +04; +04:30; +05;
@@ -3344,14 +3344,14 @@ func TestQT3_fn_format_date(t *testing.T) {
          	+12; +12:30; +13; +13:30; +14
 		 `)}},
 		{Name: "format-date-026", XPath: `string-join( for $z in -28 to +28 return format-date(adjust-date-to-timezone($t,
-         $z*xs:dayTimeDuration('PT30M')), '[Z0t]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         $z*xs:dayTimeDuration('PT30M')), '[Z0t]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:date('1985-03-01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
          	-14; -13:30; -13; -12:30; -12; -11:30; -11; -10:30; -10; -9:30; -9; -8:30; -8;
          	-7:30; -7; -6:30; -6; -5:30; -5; -4:30; -4; -3:30; -3; -2:30; -2; -1:30; -1; -0:30;
          	Z; +0:30; +1; +1:30; +2; +2:30; +3; +3:30; +4; +4:30; +5; +5:30; +6; +6:30; +7;
          	+7:30; +8; +8:30; +9; +9:30; +10; +10:30; +11; +11:30; +12; +12:30; +13;
          	+13:30; +14
 		 `)}},
-		{Name: "format-date-027", XPath: "format-date(xs:date('2012-05-18+05:30'), '[Z𐒡:𐒠𐒡]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("+𐒥:𐒣𐒠")}},
+		{Name: "format-date-027", XPath: "format-date(xs:date('2012-05-18+05:30'), '[Z𐒡:𐒠𐒡]')", Params: []qt3Param{{Name: "t", Select: "xs:date('1985-03-01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("+𐒥:𐒣𐒠")}},
 		{Name: "format-date-028", XPath: "format-date(xs:date('2012-05-18'), '[ D 01 ] [M 0 1] [ Y 0 0 0 1 ]')", Assertions: []qt3Assertion{qt3AssertStringValue("18 05 2012")}},
 		{Name: "format-date-029", XPath: "format-date(xs:date('2012-05-18'), '[Y9;999]')", Assertions: []qt3Assertion{qt3AssertStringValue("2;012")}},
 		{Name: "format-date-030", XPath: "format-date(xs:date('2012-05-18'), '[Y9,999,*]')", Assertions: []qt3Assertion{qt3AssertStringValue("2,012")}},
@@ -3384,80 +3384,80 @@ func TestQT3_fn_format_date(t *testing.T) {
 		{Name: "format-date-809err", XPath: "format-date(xs:date(\"2012-05-18\"),\"[Y999#]\")", ExpectError: true},
 		{Name: "format-date-810err", XPath: "format-date(xs:date(\"2012-05-18\"),\"[Y##9#]\")", ExpectError: true},
 		{Name: "format-date-en101", XPath: `for $i in 1 to 12 return let $d2 := $d + xs:yearMonthDuration('P1M')*$i return
-         format-date($d2, '[MN]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         format-date($d2, '[MN]', 'en', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             JANUARY FEBRUARY MARCH APRIL MAY JUNE JULY AUGUST SEPTEMBER OCTOBER NOVEMBER DECEMBER
          `)}},
 		{Name: "format-date-en102", XPath: `for $i in 1 to 12 return let $d2 := $d + xs:yearMonthDuration('P1M')*$i return
-         format-date($d2, '[Mn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         format-date($d2, '[Mn]', 'en', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             january february march april may june july august september october november december
          `)}},
 		{Name: "format-date-en103", XPath: `for $i in 1 to 12 
         return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
-        return format-date($d2, '[MNn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+        return format-date($d2, '[MNn]', 'en', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             January February March April May June July August September October November December
          `)}},
 		{Name: "format-date-en104", XPath: `for $i in 1 to 12 
         return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
-        return format-date($d2, '[MN,3-3]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS("JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC")}},
+        return format-date($d2, '[MN,3-3]', 'en', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS("JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC")}},
 		{Name: "format-date-en105", XPath: `for $i in 1 to 12 
         return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
-        return format-date($d2, '[Mn,3-3]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS("jan feb mar apr may jun jul aug sep oct nov dec")}},
+        return format-date($d2, '[Mn,3-3]', 'en', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS("jan feb mar apr may jun jul aug sep oct nov dec")}},
 		{Name: "format-date-en106", XPath: `for $i in 1 to 12 
         return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
-        return format-date($d2, '[MNn,3-3]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec")}},
+        return format-date($d2, '[MNn,3-3]', 'en', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec")}},
 		{Name: "format-date-en111", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[FN]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         format-date($d2, '[FN]', 'en', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
              MONDAY TUESDAY WEDNESDAY THURSDAY FRIDAY SATURDAY SUNDAY
          `)}},
 		{Name: "format-date-en112", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[Fn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         format-date($d2, '[Fn]', 'en', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
              monday tuesday wednesday thursday friday saturday sunday
          `)}},
 		{Name: "format-date-en113", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[FNn]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         format-date($d2, '[FNn]', 'en', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             Monday Tuesday Wednesday Thursday Friday Saturday Sunday
          `)}},
 		{Name: "format-date-en114", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[FN,3-3]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("MON TUE WED THU FRI SAT SUN")}},
+         format-date($d2, '[FN,3-3]', 'en', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("MON TUE WED THU FRI SAT SUN")}},
 		{Name: "format-date-en115", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[Fn,3-3]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("mon tue wed thu fri sat sun")}},
+         format-date($d2, '[Fn,3-3]', 'en', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("mon tue wed thu fri sat sun")}},
 		{Name: "format-date-en116", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[FNn,3-3]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("Mon Tue Wed Thu Fri Sat Sun")}},
+         format-date($d2, '[FNn,3-3]', 'en', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("Mon Tue Wed Thu Fri Sat Sun")}},
 		{Name: "format-date-en117", XPath: `for $i in 1 to 7 
       	return let $d2 := $d + xs:dayTimeDuration('P1D')*$i 
       	return let $abb := format-date($d2, '[FNn,3-4]', 'en', (), ()) 
         return let $expected := ('Mon', 'Tues', 'Weds', 'Thur', 'Fri', 'Sat', 'Sun') 
         return (
          	substring($abb, 1, 3), 
-         	starts-with($expected[$i], $abb) and string-length($abb) le 4 and string-length($abb) ge 3)`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         	starts-with($expected[$i], $abb) and string-length($abb) le 4 and string-length($abb) ge 3)`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             Mon true Tue true Wed true Thu true Fri true Sat true Sun true
          `)}},
 		{Name: "format-date-en118", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return let $abb :=
          format-date($d2, '[FNn,3-5]', 'en', (), ()) return let $expected := ('Mon', 'Tues', 'Weds',
          'Thurs', 'Fri', 'Sat', 'Sun') return (substring($abb, 1, 3), starts-with($expected[$i],
-         $abb) and string-length($abb) le 5 and string-length($abb) ge 3)`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         $abb) and string-length($abb) le 5 and string-length($abb) ge 3)`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             Mon true Tue true Wed true Thu true Fri true Sat true Sun true
          `)}},
 		{Name: "format-date-en121", XPath: `for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[D1o]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         format-date($d2, '[D1o]', 'en', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             1st 2nd 3rd 4th 5th 6th 7th 8th 9th 10th 11th 12th 13th 14th 15th
             16th 17th 18th 19th 20th 21st 22nd 23rd 24th 25th 26th 27th 28th 29th 30th
             31st
          `)}},
 		{Name: "format-date-en122", XPath: `for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i return
-         format-date($d2, '[Y1o]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         format-date($d2, '[Y1o]', 'en', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('1990-12-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             1990th 1991st 1992nd 1993rd 1994th 1995th 1996th 1997th 1998th 1999th
             2000th 2001st 2002nd 2003rd 2004th 2005th 2006th 2007th 2008th 2009th 2010th 2011th
             2012th 2013th 2014th 2015th 2016th 2017th 2018th 2019th 2020th
          `)}},
 		{Name: "format-date-en122b", XPath: `for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i return
-         format-date($d2, '[Y0001o]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         format-date($d2, '[Y0001o]', 'en', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('1990-12-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             1990th 1991st 1992nd 1993rd 1994th 1995th 1996th 1997th 1998th 1999th
             2000th 2001st 2002nd 2003rd 2004th 2005th 2006th 2007th 2008th 2009th 2010th 2011th
             2012th 2013th 2014th 2015th 2016th 2017th 2018th 2019th 2020th
          `)}},
 		{Name: "format-date-en123", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i
-         return format-date($d2, '[DW]', 'en', (), ()), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValueNS(`
+         return format-date($d2, '[DW]', 'en', (), ()), ' ')`, Params: []qt3Param{{Name: "d", Select: "xs:date('1990-12-01')"}}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValueNS(`
                ONE TWO THREE FOUR FIVE SIX SEVEN EIGHT NINE TEN ELEVEN
                 TWELVE THIRTEEN FOURTEEN FIFTEEN SIXTEEN SEVENTEEN EIGHTEEN NINETEEN TWENTY
                 TWENTY ONE TWENTY TWO TWENTY THREE TWENTY FOUR TWENTY FIVE TWENTY SIX TWENTY
@@ -3469,7 +3469,7 @@ func TestQT3_fn_format_date(t *testing.T) {
                TWENTY-SEVEN TWENTY-EIGHT TWENTY-NINE THIRTY THIRTY-ONE
             `))}},
 		{Name: "format-date-en124", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i
-         return format-date($d2, '[Dw]', 'en', (), ()), ' ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValueNS(`
+         return format-date($d2, '[Dw]', 'en', (), ()), ' ')`, Params: []qt3Param{{Name: "d", Select: "xs:date('1990-12-01')"}}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValueNS(`
                one two three four five six seven eight nine ten eleven
                twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty
                twenty one twenty two twenty three twenty four twenty five twenty six twenty
@@ -3481,7 +3481,7 @@ func TestQT3_fn_format_date(t *testing.T) {
                twenty-seven twenty-eight twenty-nine thirty thirty-one
             `))}},
 		{Name: "format-date-en125", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i
-         return format-date($d2, '[DWw]', 'en', (), ()), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValueNS(`
+         return format-date($d2, '[DWw]', 'en', (), ()), '; ')`, Params: []qt3Param{{Name: "d", Select: "xs:date('1990-12-01')"}}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValueNS(`
                One; Two; Three; Four; Five; Six; Seven; Eight; Nine; Ten; Eleven;
                Twelve; Thirteen; Fourteen; Fifteen; Sixteen; Seventeen; Eighteen; Nineteen; Twenty;
                Twenty One; Twenty Two; Twenty Three; Twenty Four; Twenty Five; Twenty Six; Twenty
@@ -3495,7 +3495,7 @@ func TestQT3_fn_format_date(t *testing.T) {
 		{Name: "format-date-en126", XPath: `string-join( 
             for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i
               return replace(format-date($d2, '[YW]', 'en', (), ()), ' AND ', ' '),
-            '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValueNS(`
+            '; ')`, Params: []qt3Param{{Name: "d", Select: "xs:date('1990-12-01')"}}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValueNS(`
                ONE THOUSAND NINE HUNDRED NINETY; ONE THOUSAND NINE HUNDRED
                NINETY ONE; ONE THOUSAND NINE HUNDRED NINETY TWO; ONE THOUSAND NINE HUNDRED
                NINETY THREE; ONE THOUSAND NINE HUNDRED NINETY FOUR; ONE THOUSAND NINE HUNDRED
@@ -3523,7 +3523,7 @@ func TestQT3_fn_format_date(t *testing.T) {
                TWENTY
             `))}},
 		{Name: "format-date-en127", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i
-         return replace(format-date($d2, '[Yw]', 'en', (), ()), ' and ', ' '), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValueNS(`
+         return replace(format-date($d2, '[Yw]', 'en', (), ()), ' and ', ' '), '; ')`, Params: []qt3Param{{Name: "d", Select: "xs:date('1990-12-01')"}}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValueNS(`
                one thousand nine hundred ninety; one thousand nine hundred
                ninety one; one thousand nine hundred ninety two; one thousand nine hundred
                ninety three; one thousand nine hundred ninety four; one thousand nine hundred
@@ -3551,7 +3551,7 @@ func TestQT3_fn_format_date(t *testing.T) {
                twenty
             `))}},
 		{Name: "format-date-en128", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i
-         return replace(format-date($d2, '[YWw]', 'en', (), ()), ' [Aa]nd ', ' '), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValueNS(`
+         return replace(format-date($d2, '[YWw]', 'en', (), ()), ' [Aa]nd ', ' '), '; ')`, Params: []qt3Param{{Name: "d", Select: "xs:date('1990-12-01')"}}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValueNS(`
                One Thousand Nine Hundred Ninety; One Thousand Nine Hundred
                Ninety One; One Thousand Nine Hundred Ninety Two; One Thousand Nine Hundred
                Ninety Three; One Thousand Nine Hundred Ninety Four; One Thousand Nine Hundred
@@ -3579,7 +3579,7 @@ func TestQT3_fn_format_date(t *testing.T) {
                Twenty
             `))}},
 		{Name: "format-date-en129", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i
-         return translate(format-date($d2, '[DWo]', 'en', (), ()), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         return translate(format-date($d2, '[DWo]', 'en', (), ()), '- ', ''), '; ')`, Params: []qt3Param{{Name: "d", Select: "xs:date('1990-12-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             FIRST; SECOND; THIRD; FOURTH; FIFTH; SIXTH; SEVENTH; EIGHTH; NINTH;
             TENTH; ELEVENTH; TWELFTH; THIRTEENTH; FOURTEENTH; FIFTEENTH; SIXTEENTH; SEVENTEENTH;
             EIGHTEENTH; NINETEENTH; TWENTIETH; TWENTYFIRST; TWENTYSECOND; TWENTYTHIRD; TWENTYFOURTH;
@@ -3587,7 +3587,7 @@ func TestQT3_fn_format_date(t *testing.T) {
             THIRTYFIRST
          `)}},
 		{Name: "format-date-en130", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i
-         return translate(format-date($d2, '[Dwo]', 'en', (), ()), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         return translate(format-date($d2, '[Dwo]', 'en', (), ()), '- ', ''), '; ')`, Params: []qt3Param{{Name: "d", Select: "xs:date('1990-12-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             first; second; third; fourth; fifth; sixth; seventh; eighth; ninth;
             tenth; eleventh; twelfth; thirteenth; fourteenth; fifteenth; sixteenth; seventeenth;
             eighteenth; nineteenth; twentieth; twentyfirst; twentysecond; twentythird; twentyfourth;
@@ -3595,7 +3595,7 @@ func TestQT3_fn_format_date(t *testing.T) {
             thirtyfirst
          `)}},
 		{Name: "format-date-en131", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i
-         return translate(format-date($d2, '[DWwo]', 'en', (), ()), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         return translate(format-date($d2, '[DWwo]', 'en', (), ()), '- ', ''), '; ')`, Params: []qt3Param{{Name: "d", Select: "xs:date('1990-12-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             First; Second; Third; Fourth; Fifth; Sixth; Seventh; Eighth; Ninth;
             Tenth; Eleventh; Twelfth; Thirteenth; Fourteenth; Fifteenth; Sixteenth; Seventeenth;
             Eighteenth; Nineteenth; Twentieth; TwentyFirst; TwentySecond; TwentyThird; TwentyFourth;
@@ -3603,7 +3603,7 @@ func TestQT3_fn_format_date(t *testing.T) {
             ThirtyFirst
          `)}},
 		{Name: "format-date-en132", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i
-         return translate(replace(format-date($d2, '[YWo]', 'en', (), ()), ' AND ', ' '), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`ONETHOUSANDNINEHUNDREDNINETIETH;
+         return translate(replace(format-date($d2, '[YWo]', 'en', (), ()), ' AND ', ' '), '- ', ''), '; ')`, Params: []qt3Param{{Name: "d", Select: "xs:date('1990-12-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`ONETHOUSANDNINEHUNDREDNINETIETH;
             ONETHOUSANDNINEHUNDREDNINETYFIRST; ONETHOUSANDNINEHUNDREDNINETYSECOND;
             ONETHOUSANDNINEHUNDREDNINETYTHIRD; ONETHOUSANDNINEHUNDREDNINETYFOURTH;
             ONETHOUSANDNINEHUNDREDNINETYFIFTH; ONETHOUSANDNINEHUNDREDNINETYSIXTH;
@@ -3616,7 +3616,7 @@ func TestQT3_fn_format_date(t *testing.T) {
             TWOTHOUSANDSIXTEENTH; TWOTHOUSANDSEVENTEENTH; TWOTHOUSANDEIGHTEENTH;
             TWOTHOUSANDNINETEENTH; TWOTHOUSANDTWENTIETH`)}},
 		{Name: "format-date-en133", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i
-         return translate(replace(format-date($d2, '[Ywo]', 'en', (), ()), ' and ', ' '), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`onethousandninehundredninetieth;
+         return translate(replace(format-date($d2, '[Ywo]', 'en', (), ()), ' and ', ' '), '- ', ''), '; ')`, Params: []qt3Param{{Name: "d", Select: "xs:date('1990-12-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`onethousandninehundredninetieth;
             onethousandninehundredninetyfirst; onethousandninehundredninetysecond;
             onethousandninehundredninetythird; onethousandninehundredninetyfourth;
             onethousandninehundredninetyfifth; onethousandninehundredninetysixth;
@@ -3629,7 +3629,7 @@ func TestQT3_fn_format_date(t *testing.T) {
             twothousandsixteenth; twothousandseventeenth; twothousandeighteenth;
             twothousandnineteenth; twothousandtwentieth`)}},
 		{Name: "format-date-en134", XPath: `string-join( for $i in 0 to 30 return let $d2 := $d + xs:yearMonthDuration('P1Y')*$i
-         return translate(replace(format-date($d2, '[YWwo]', 'en', (), ()), ' [Aa]nd ', ' '), '- ', ''), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`OneThousandNineHundredNinetieth;
+         return translate(replace(format-date($d2, '[YWwo]', 'en', (), ()), ' [Aa]nd ', ' '), '- ', ''), '; ')`, Params: []qt3Param{{Name: "d", Select: "xs:date('1990-12-01')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`OneThousandNineHundredNinetieth;
             OneThousandNineHundredNinetyFirst; OneThousandNineHundredNinetySecond;
             OneThousandNineHundredNinetyThird; OneThousandNineHundredNinetyFourth;
             OneThousandNineHundredNinetyFifth; OneThousandNineHundredNinetySixth;
@@ -3641,54 +3641,54 @@ func TestQT3_fn_format_date(t *testing.T) {
             TwoThousandThirteenth; TwoThousandFourteenth; TwoThousandFifteenth;
             TwoThousandSixteenth; TwoThousandSeventeenth; TwoThousandEighteenth;
             TwoThousandNineteenth; TwoThousandTwentieth`)}},
-		{Name: "format-date-en141", XPath: "format-date($d1, '[Y][EN]', 'en', (), ()), format-date($d2, '[Y][EN]', 'en', (), ())", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckDeepEq("\"1990AD\", \"55BC\""), qt3CheckDeepEq("\"1990CE\", \"55BCE\""), qt3CheckDeepEq("\"1990A.D.\", \"55B.C.\""), qt3CheckDeepEq("\"1990C.E.\", \"55B.C.E.\""))}},
-		{Name: "format-date-en151", XPath: "format-date($b, '[MNn]', 'xib', (), ())", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "format-date-en152", XPath: "format-date($b, '[M01]', 'en', 'CB', ())", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "format-date-en153", XPath: "format-date($b, '[M01]', 'en', 'Q{http://calendar.example.com/non-existent-calendar}CB', ())", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertType("xs:string")}},
-		{Name: "format-date-en155", XPath: "format-date($b, '[M01]', 'en', 'Q{}ZODIAC', ())", Skip: "requires external parameters", ExpectError: true},
-		{Name: "format-date-en156", XPath: "format-date($b, '[M01]', 'en', 'ZODIAC', ())", Skip: "requires external parameters", ExpectError: true},
-		{Name: "format-date-en157", XPath: "format-date($b, '[M01]', 'en', ':w', ())", Skip: "requires external parameters", ExpectError: true},
-		{Name: "format-date-en158", XPath: "format-date($b, '[M01]', 'en', 'Q{}1', ())", Skip: "requires external parameters", ExpectError: true},
+		{Name: "format-date-en141", XPath: "format-date($d1, '[Y][EN]', 'en', (), ()), format-date($d2, '[Y][EN]', 'en', (), ())", Params: []qt3Param{{Name: "d1", Select: "xs:date('1990-12-01')"}, {Name: "d2", Select: "xs:date('-0055-12-01')"}}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckDeepEq("\"1990AD\", \"55BC\""), qt3CheckDeepEq("\"1990CE\", \"55BCE\""), qt3CheckDeepEq("\"1990A.D.\", \"55B.C.\""), qt3CheckDeepEq("\"1990C.E.\", \"55B.C.E.\""))}},
+		{Name: "format-date-en151", XPath: "format-date($b, '[MNn]', 'xib', (), ())", Params: []qt3Param{{Name: "b", Select: "xs:date('2006-03-01')"}}, Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
+		{Name: "format-date-en152", XPath: "format-date($b, '[M01]', 'en', 'CB', ())", Params: []qt3Param{{Name: "b", Select: "xs:date('2006-03-01')"}}, Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
+		{Name: "format-date-en153", XPath: "format-date($b, '[M01]', 'en', 'Q{http://calendar.example.com/non-existent-calendar}CB', ())", Params: []qt3Param{{Name: "b", Select: "xs:date('2006-03-01')"}}, Assertions: []qt3Assertion{qt3AssertType("xs:string")}},
+		{Name: "format-date-en155", XPath: "format-date($b, '[M01]', 'en', 'Q{}ZODIAC', ())", Params: []qt3Param{{Name: "b", Select: "xs:date('2006-03-01')"}}, ExpectError: true},
+		{Name: "format-date-en156", XPath: "format-date($b, '[M01]', 'en', 'ZODIAC', ())", Params: []qt3Param{{Name: "b", Select: "xs:date('2006-03-01')"}}, ExpectError: true},
+		{Name: "format-date-en157", XPath: "format-date($b, '[M01]', 'en', ':w', ())", Params: []qt3Param{{Name: "b", Select: "xs:date('2006-03-01')"}}, ExpectError: true},
+		{Name: "format-date-en158", XPath: "format-date($b, '[M01]', 'en', 'Q{}1', ())", Params: []qt3Param{{Name: "b", Select: "xs:date('2006-03-01')"}}, ExpectError: true},
 		{Name: "format-date-de101", XPath: `for $i in 1 to 12 return let $d2 := $d + xs:yearMonthDuration('P1M')*$i return
-         format-date($d2, '[MN]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         format-date($d2, '[MN]', 'de', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             JANUAR FEBRUAR MÄRZ APRIL MAI JUNI JULI AUGUST SEPTEMBER OKTOBER NOVEMBER DEZEMBER
          `)}},
 		{Name: "format-date-de102", XPath: `for $i in 1 to 12 return let $d2 := $d + xs:yearMonthDuration('P1M')*$i return
-         format-date($d2, '[Mn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         format-date($d2, '[Mn]', 'de', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             januar februar märz april mai juni juli august september oktober november dezember
          `)}},
 		{Name: "format-date-de103", XPath: `for $i in 1 to 12 
          return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
-         return format-date($d2, '[MNn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         return format-date($d2, '[MNn]', 'de', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             Januar Februar März April Mai Juni Juli August September Oktober November Dezember
          `)}},
 		{Name: "format-date-de104", XPath: `for $i in 1 to 12 
          return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
-         return format-date($d2, '[MN,3-3]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS("JAN FEB MÄR APR MAI JUN JUL AUG SEP OKT NOV DEZ")}},
+         return format-date($d2, '[MN,3-3]', 'de', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS("JAN FEB MÄR APR MAI JUN JUL AUG SEP OKT NOV DEZ")}},
 		{Name: "format-date-de105", XPath: `for $i in 1 to 12 
          return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
-         return format-date($d2, '[Mn,3-3]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS("jan feb mär apr mai jun jul aug sep okt nov dez")}},
+         return format-date($d2, '[Mn,3-3]', 'de', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS("jan feb mär apr mai jun jul aug sep okt nov dez")}},
 		{Name: "format-date-de106", XPath: `for $i in 1 to 12 
          return let $d2 := $d + xs:yearMonthDuration('P1M')*$i 
-         return format-date($d2, '[MNn,3-3]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS("Jan Feb Mär Apr Mai Jun Jul Aug Sep Okt Nov Dez")}},
+         return format-date($d2, '[MNn,3-3]', 'de', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS("Jan Feb Mär Apr Mai Jun Jul Aug Sep Okt Nov Dez")}},
 		{Name: "format-date-de111", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[FN]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         format-date($d2, '[FN]', 'de', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             MONTAG DIENSTAG MITTWOCH DONNERSTAG FREITAG SAMSTAG SONNTAG
          `)}},
 		{Name: "format-date-de112", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[Fn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         format-date($d2, '[Fn]', 'de', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             montag dienstag mittwoch donnerstag freitag samstag sonntag
          `)}},
 		{Name: "format-date-de113", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[FNn]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+         format-date($d2, '[FNn]', 'de', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             Montag Dienstag Mittwoch Donnerstag Freitag Samstag Sonntag
          `)}},
 		{Name: "format-date-de114", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[FN,2-2]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("MO DI MI DO FR SA SO")}},
+         format-date($d2, '[FN,2-2]', 'de', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("MO DI MI DO FR SA SO")}},
 		{Name: "format-date-de115", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[Fn,2-2]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("mo di mi do fr sa so")}},
+         format-date($d2, '[Fn,2-2]', 'de', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("mo di mi do fr sa so")}},
 		{Name: "format-date-de116", XPath: `for $i in 1 to 7 return let $d2 := $d + xs:dayTimeDuration('P1D')*$i return
-         format-date($d2, '[FNn,2-2]', 'de', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("Mo Di Mi Do Fr Sa So")}},
+         format-date($d2, '[FNn,2-2]', 'de', (), ())`, Params: []qt3Param{{Name: "d", Select: "xs:date('2003-12-07')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("Mo Di Mi Do Fr Sa So")}},
 		{Name: "format-date-inpt-er1", XPath: "format-date('abc', '[bla]', 'en', (), ())", ExpectError: true},
 		{Name: "format-date-inpt-er2", XPath: "format-date(current-date(), '[bla]', 'en', (), (), 6)", ExpectError: true},
 		{Name: "format-date-inpt-er3", XPath: "format-date(current-date(), '[bla]', 'en', (), 5)", ExpectError: true},
@@ -3700,57 +3700,57 @@ func TestQT3_fn_format_date(t *testing.T) {
 func TestQT3_fn_format_dateTime(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
-		{Name: "format-dateTime-001a", XPath: "format-dateTime($d,\"[Y]-[M01]-[D]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("2003-09-7")}},
-		{Name: "format-dateTime-001b", XPath: "format-dateTime($d,\"[M]-[D]-[Y]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9-7-2003")}},
-		{Name: "format-dateTime-001c", XPath: "format-dateTime($d,\"[D]-[M]-[Y]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("7-9-2003")}},
-		{Name: "format-dateTime-001d", XPath: "format-dateTime($d,\"[D1] [MI] [Y]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("7 IX 2003")}},
-		{Name: "format-dateTime-001e", XPath: "format-dateTime($d,\"[[[Y]-[M01]-[D01]]]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("[2003-09-07]")}},
-		{Name: "format-dateTime-001f", XPath: "format-dateTime($d,\"[[[Y0001]-[M01]-[D01]]]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("[2003-09-07]")}},
-		{Name: "format-dateTime-001g", XPath: "format-dateTime($d,\"([Y01]-[M01]-[D01])\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("(03-09-07)")}},
-		{Name: "format-dateTime-002a", XPath: "format-dateTime($t,\"[H01]:[m01]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("09:15")}},
-		{Name: "format-dateTime-002b", XPath: "format-dateTime($t,\"[H]:[m]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15")}},
-		{Name: "format-dateTime-002c", XPath: "format-dateTime($t,\"[H01]:[m01]:[s01]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("09:15:06")}},
-		{Name: "format-dateTime-002d", XPath: "format-dateTime($t,\"[H]:[m]:[s]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06")}},
-		{Name: "format-dateTime-002e", XPath: "format-dateTime($t,\"[H]:[m]:[s1]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:6")}},
-		{Name: "format-dateTime-002f", XPath: "format-dateTime($t,\"[H]:[m]:[s01]:[f001]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06:456")}},
-		{Name: "format-dateTime-002g", XPath: "format-dateTime($t,\"[H]:[m]:[s].[f,1-1]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.4")}},
-		{Name: "format-dateTime-002h", XPath: "format-dateTime($t,\"[H]:[m]:[s].[f1,1-1]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.4")}},
-		{Name: "format-dateTime-002i", XPath: "format-dateTime($t,\"[H]:[m]:[s].[f01]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.45")}},
-		{Name: "format-dateTime-002j", XPath: "format-dateTime($t,\"[H]:[m]:[s].[f001]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.456")}},
-		{Name: "format-dateTime-003a", XPath: "format-dateTime($t,\"[Y]-[M01]-[D]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("2003-09-7")}},
-		{Name: "format-dateTime-003b", XPath: "format-dateTime($t,\"[M]-[D]-[Y]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9-7-2003")}},
-		{Name: "format-dateTime-003c", XPath: "format-dateTime($t,\"[D]-[M]-[Y]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("7-9-2003")}},
-		{Name: "format-dateTime-003d", XPath: "format-dateTime($t,\"[D1] [MI] [Y]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("7 IX 2003")}},
-		{Name: "format-dateTime-003e", XPath: "format-dateTime($t,\"[[[Y]-[M01]-[D01]]]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("[2003-09-07]")}},
-		{Name: "format-dateTime-003f", XPath: "format-dateTime($t,\"[[[Y0001]-[M01]-[D01]]]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("[2003-09-07]")}},
-		{Name: "format-dateTime-003g", XPath: "format-dateTime($t,\"([Y01]-[M01]-[D01])\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("(03-09-07)")}},
-		{Name: "format-dateTime-003h", XPath: "format-dateTime($t,\"[H01]:[m01]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("09:15")}},
-		{Name: "format-dateTime-003i", XPath: "format-dateTime($t,\"[H]:[m]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15")}},
-		{Name: "format-dateTime-003j", XPath: "format-dateTime($t,\"[H01]:[m01]:[s01]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("09:15:06")}},
-		{Name: "format-dateTime-003k", XPath: "format-dateTime($t,\"[H]:[m]:[s]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06")}},
-		{Name: "format-dateTime-003L", XPath: "format-dateTime($t,\"[H]:[m]:[s1]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:6")}},
-		{Name: "format-dateTime-003m", XPath: "format-dateTime($t,\"[H]:[m]:[s].[f,1-1]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.4")}},
-		{Name: "format-dateTime-003n", XPath: "format-dateTime($t,\"[H]:[m]:[s].[f1,1-1]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.4")}},
-		{Name: "format-dateTime-003p", XPath: "format-dateTime($t,\"[H]:[m]:[s].[f01]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.45")}},
-		{Name: "format-dateTime-003q", XPath: "format-dateTime($t,\"[H]:[m]:[s].[f001]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.456")}},
-		{Name: "format-dateTime-003r", XPath: "format-dateTime($t,'[Y0001]-[M01]-[D01]T[H01]:[m01]:[s01].[f001]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("2003-09-07T09:15:06.456")}},
+		{Name: "format-dateTime-001a", XPath: "format-dateTime($d,\"[Y]-[M01]-[D]\")", Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2003-09-07T12:00:00')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("2003-09-7")}},
+		{Name: "format-dateTime-001b", XPath: "format-dateTime($d,\"[M]-[D]-[Y]\")", Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2003-09-07T12:00:00')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9-7-2003")}},
+		{Name: "format-dateTime-001c", XPath: "format-dateTime($d,\"[D]-[M]-[Y]\")", Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2003-09-07T12:00:00')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("7-9-2003")}},
+		{Name: "format-dateTime-001d", XPath: "format-dateTime($d,\"[D1] [MI] [Y]\")", Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2003-09-07T12:00:00')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("7 IX 2003")}},
+		{Name: "format-dateTime-001e", XPath: "format-dateTime($d,\"[[[Y]-[M01]-[D01]]]\")", Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2003-09-07T12:00:00')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("[2003-09-07]")}},
+		{Name: "format-dateTime-001f", XPath: "format-dateTime($d,\"[[[Y0001]-[M01]-[D01]]]\")", Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2003-09-07T12:00:00')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("[2003-09-07]")}},
+		{Name: "format-dateTime-001g", XPath: "format-dateTime($d,\"([Y01]-[M01]-[D01])\")", Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2003-09-07T12:00:00')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("(03-09-07)")}},
+		{Name: "format-dateTime-002a", XPath: "format-dateTime($t,\"[H01]:[m01]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2011-07-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("09:15")}},
+		{Name: "format-dateTime-002b", XPath: "format-dateTime($t,\"[H]:[m]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2011-07-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15")}},
+		{Name: "format-dateTime-002c", XPath: "format-dateTime($t,\"[H01]:[m01]:[s01]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2011-07-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("09:15:06")}},
+		{Name: "format-dateTime-002d", XPath: "format-dateTime($t,\"[H]:[m]:[s]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2011-07-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06")}},
+		{Name: "format-dateTime-002e", XPath: "format-dateTime($t,\"[H]:[m]:[s1]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2011-07-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:6")}},
+		{Name: "format-dateTime-002f", XPath: "format-dateTime($t,\"[H]:[m]:[s01]:[f001]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2011-07-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06:456")}},
+		{Name: "format-dateTime-002g", XPath: "format-dateTime($t,\"[H]:[m]:[s].[f,1-1]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2011-07-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.4")}},
+		{Name: "format-dateTime-002h", XPath: "format-dateTime($t,\"[H]:[m]:[s].[f1,1-1]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2011-07-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.4")}},
+		{Name: "format-dateTime-002i", XPath: "format-dateTime($t,\"[H]:[m]:[s].[f01]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2011-07-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.45")}},
+		{Name: "format-dateTime-002j", XPath: "format-dateTime($t,\"[H]:[m]:[s].[f001]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2011-07-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.456")}},
+		{Name: "format-dateTime-003a", XPath: "format-dateTime($t,\"[Y]-[M01]-[D]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-09-07T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("2003-09-7")}},
+		{Name: "format-dateTime-003b", XPath: "format-dateTime($t,\"[M]-[D]-[Y]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-09-07T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9-7-2003")}},
+		{Name: "format-dateTime-003c", XPath: "format-dateTime($t,\"[D]-[M]-[Y]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-09-07T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("7-9-2003")}},
+		{Name: "format-dateTime-003d", XPath: "format-dateTime($t,\"[D1] [MI] [Y]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-09-07T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("7 IX 2003")}},
+		{Name: "format-dateTime-003e", XPath: "format-dateTime($t,\"[[[Y]-[M01]-[D01]]]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-09-07T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("[2003-09-07]")}},
+		{Name: "format-dateTime-003f", XPath: "format-dateTime($t,\"[[[Y0001]-[M01]-[D01]]]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-09-07T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("[2003-09-07]")}},
+		{Name: "format-dateTime-003g", XPath: "format-dateTime($t,\"([Y01]-[M01]-[D01])\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-09-07T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("(03-09-07)")}},
+		{Name: "format-dateTime-003h", XPath: "format-dateTime($t,\"[H01]:[m01]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-09-07T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("09:15")}},
+		{Name: "format-dateTime-003i", XPath: "format-dateTime($t,\"[H]:[m]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-09-07T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15")}},
+		{Name: "format-dateTime-003j", XPath: "format-dateTime($t,\"[H01]:[m01]:[s01]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-09-07T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("09:15:06")}},
+		{Name: "format-dateTime-003k", XPath: "format-dateTime($t,\"[H]:[m]:[s]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-09-07T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06")}},
+		{Name: "format-dateTime-003L", XPath: "format-dateTime($t,\"[H]:[m]:[s1]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-09-07T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:6")}},
+		{Name: "format-dateTime-003m", XPath: "format-dateTime($t,\"[H]:[m]:[s].[f,1-1]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-09-07T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.4")}},
+		{Name: "format-dateTime-003n", XPath: "format-dateTime($t,\"[H]:[m]:[s].[f1,1-1]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-09-07T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.4")}},
+		{Name: "format-dateTime-003p", XPath: "format-dateTime($t,\"[H]:[m]:[s].[f01]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-09-07T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.45")}},
+		{Name: "format-dateTime-003q", XPath: "format-dateTime($t,\"[H]:[m]:[s].[f001]\")", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-09-07T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.456")}},
+		{Name: "format-dateTime-003r", XPath: "format-dateTime($t,'[Y0001]-[M01]-[D01]T[H01]:[m01]:[s01].[f001]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-09-07T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("2003-09-07T09:15:06.456")}},
 		{Name: "format-dateTime-004", XPath: `for $i in 1 to 24 return
-        format-dateTime($t + xs:dayTimeDuration('PT1H')*$i, '[h].[m]')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`10.15 11.15 12.15 1.15 2.15 3.15 4.15 5.15 6.15 7.15 8.15 9.15 10.15 11.15 12.15 
+        format-dateTime($t + xs:dayTimeDuration('PT1H')*$i, '[h].[m]')`, Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-09-07T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`10.15 11.15 12.15 1.15 2.15 3.15 4.15 5.15 6.15 7.15 8.15 9.15 10.15 11.15 12.15 
          1.15 2.15 3.15 4.15 5.15 6.15 7.15 8.15 9.15`)}},
 		{Name: "format-dateTime-005", XPath: `string-join(
           for $i in 1 to 100 return
-          format-dateTime($t + xs:yearMonthDuration('P1Y')*$i, '[YI]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+          format-dateTime($t + xs:yearMonthDuration('P1Y')*$i, '[YI]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:dateTime('1950-01-01T12:00:00')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             MCMLI; MCMLII; MCMLIII; MCMLIV; MCMLV; MCMLVI; MCMLVII; MCMLVIII; MCMLIX; MCMLX;             MCMLXI; MCMLXII; MCMLXIII; MCMLXIV; MCMLXV; MCMLXVI; MCMLXVII; MCMLXVIII;             MCMLXIX; MCMLXX; MCMLXXI; MCMLXXII; MCMLXXIII; MCMLXXIV; MCMLXXV; MCMLXXVI;             MCMLXXVII; MCMLXXVIII; MCMLXXIX; MCMLXXX; MCMLXXXI; MCMLXXXII; MCMLXXXIII;             MCMLXXXIV; MCMLXXXV; MCMLXXXVI; MCMLXXXVII; MCMLXXXVIII; MCMLXXXIX; MCMXC;             MCMXCI; MCMXCII; MCMXCIII; MCMXCIV; MCMXCV; MCMXCVI; MCMXCVII; MCMXCVIII;             MCMXCIX; MM; MMI; MMII; MMIII; MMIV; MMV; MMVI; MMVII; MMVIII; MMIX; MMX; MMXI; MMXII;             MMXIII; MMXIV; MMXV; MMXVI; MMXVII; MMXVIII; MMXIX; MMXX; MMXXI; MMXXII; MMXXIII; MMXXIV; MMXXV;             MMXXVI; MMXXVII; MMXXVIII; MMXXIX; MMXXX; MMXXXI; MMXXXII; MMXXXIII; MMXXXIV; MMXXXV;             MMXXXVI; MMXXXVII; MMXXXVIII; MMXXXIX; MMXL; MMXLI; MMXLII; MMXLIII; MMXLIV; MMXLV; MMXLVI;             MMXLVII; MMXLVIII; MMXLIX; MML
         `)}},
 		{Name: "format-dateTime-006", XPath: `string-join(
           for $i in 1 to 100 return
-          format-dateTime($t + xs:yearMonthDuration('P17Y')*$i, '[Yi,3-3]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+          format-dateTime($t + xs:yearMonthDuration('P17Y')*$i, '[Yi,3-3]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0800-01-01T12:00:00')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
 dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii; cmlxx; cmlxxxvii; iv ; xxi; xxxviii; lv ; lxxii; lxxxix; cvi; cxxiii; cxl; clvii; clxxiv; cxci; ccviii; ccxxv; ccxlii; cclix; cclxxvi; ccxciii; cccx; cccxxvii; cccxliv; ccclxi; ccclxxviii; cccxcv; cdxii; cdxxix; cdxlvi; cdlxiii; cdlxxx; cdxcvii; dxiv; dxxxi; dxlviii; dlxv; dlxxxii; dxcix; dcxvi; dcxxxiii; dcl; dclxvii; dclxxxiv; dcci; dccxviii; dccxxxv; dcclii; dcclxix; dcclxxxvi; dccciii; dcccxx; dcccxxxvii; dcccliv; dccclxxi; dccclxxxviii; cmv; cmxxii; cmxxxix; cmlvi; cmlxxiii; cmxc; vii; xxiv; xli; lviii; lxxv; xcii; cix; cxxvi; cxliii; clx; clxxvii; cxciv; ccxi; ccxxviii; ccxlv; cclxii; cclxxix; ccxcvi; cccxiii; cccxxx; cccxlvii; ccclxiv; ccclxxxi; cccxcviii; cdxv; cdxxxii; cdxlix; cdlxvi; cdlxxxiii; d
          `)}},
-		{Name: "format-dateTime-006a", XPath: "format-dateTime($t, '[Yi,4-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("miv ")}},
+		{Name: "format-dateTime-006a", XPath: "format-dateTime($t, '[Yi,4-4]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('1004-01-01T12:00:00')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("miv ")}},
 		{Name: "format-dateTime-009", XPath: `for $i in 1 to 48,
                 $d in $t + xs:yearMonthDuration('P1M')*$i
-            return concat("[", $d, ": ", format-dateTime($d, '[W]', (), 'ISO', ()), "]")`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+            return concat("[", $d, ": ", format-dateTime($d, '[W]', (), 'ISO', ()), "]")`, Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-12-01T12:00:00')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             [2004-01-01T12:00:00: 1] [2004-02-01T12:00:00: 5] [2004-03-01T12:00:00: 10] [2004-04-01T12:00:00: 14] 
             [2004-05-01T12:00:00: 18] [2004-06-01T12:00:00: 23] [2004-07-01T12:00:00: 27] [2004-08-01T12:00:00: 31] 
             [2004-09-01T12:00:00: 36] [2004-10-01T12:00:00: 40] [2004-11-01T12:00:00: 45] [2004-12-01T12:00:00: 49] 
@@ -3766,7 +3766,7 @@ dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii
         `)}},
 		{Name: "format-dateTime-010", XPath: `for $i in 1 to 48,
                 $d in $t + xs:yearMonthDuration('P1M')*$i
-            return concat("[", $d, ": ", format-dateTime($d, '[F01]', (), 'ISO', ()))`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+            return concat("[", $d, ": ", format-dateTime($d, '[F01]', (), 'ISO', ()))`, Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2003-12-01T12:00:00')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             [2004-01-01T12:00:00: 04 [2004-02-01T12:00:00: 07 [2004-03-01T12:00:00: 01 [2004-04-01T12:00:00: 04 
             [2004-05-01T12:00:00: 06 [2004-06-01T12:00:00: 02 [2004-07-01T12:00:00: 04 [2004-08-01T12:00:00: 07 
             [2004-09-01T12:00:00: 03 [2004-10-01T12:00:00: 05 [2004-11-01T12:00:00: 01 [2004-12-01T12:00:00: 03 
@@ -3782,7 +3782,7 @@ dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii
          `)}},
 		{Name: "format-dateTime-011", XPath: `for $i in 1 to 48,
                 $d in $t + xs:yearMonthDuration('P1M')*$i
-            return concat("[", $d, ": ", format-dateTime($d, '[w]', (), 'ISO', ()))`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+            return concat("[", $d, ": ", format-dateTime($d, '[w]', (), 'ISO', ()))`, Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2005-12-01T12:00:00')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             [2006-01-01T12:00:00: 5 [2006-02-01T12:00:00: 1 [2006-03-01T12:00:00: 1 [2006-04-01T12:00:00: 5 
             [2006-05-01T12:00:00: 1 [2006-06-01T12:00:00: 1 [2006-07-01T12:00:00: 5 [2006-08-01T12:00:00: 1 
             [2006-09-01T12:00:00: 5 [2006-10-01T12:00:00: 4 [2006-11-01T12:00:00: 1 [2006-12-01T12:00:00: 5 
@@ -3797,37 +3797,37 @@ dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii
             [2009-09-01T12:00:00: 1 [2009-10-01T12:00:00: 1 [2009-11-01T12:00:00: 5 [2009-12-01T12:00:00: 1
          `)}},
 		{Name: "format-dateTime-012", XPath: `for $i in 1 to 60 return
-            format-dateTime($t + xs:dayTimeDuration('PT61S')*$i, '[mA].[sa]')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+            format-dateTime($t + xs:dayTimeDuration('PT61S')*$i, '[mA].[sa]')`, Params: []qt3Param{{Name: "t", Select: "xs:dateTime('2011-07-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             P.g Q.h R.i S.j T.k U.l V.m W.n X.o Y.p Z.q AA.r AB.s AC.t AD.u AE.v AF.w AG.x AH.y AI.z AJ.aa 
             AK.ab AL.ac AM.ad AN.ae AO.af AP.ag AQ.ah AR.ai AS.aj AT.ak AU.al AV.am AW.an AX.ao AY.ap AZ.aq 
             BA.ar BB.as BC.at BD.au BE.av BF.aw BG.ax 
             0.ay A.az B.ba C.bb D.bc E.bd F.be G.bf H.bg J.0 K.a L.b M.c N.d O.e P.f
          `)}},
-		{Name: "format-dateTime-013a", XPath: "format-dateTime($t, '[Y,4-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("0985")}},
-		{Name: "format-dateTime-013b", XPath: "format-dateTime($t, '[Y,3-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
-		{Name: "format-dateTime-013c", XPath: "format-dateTime($t, '[Y,2-5]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
-		{Name: "format-dateTime-013d", XPath: "format-dateTime($t, '[Y,2-2]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("85")}},
-		{Name: "format-dateTime-013e", XPath: "format-dateTime($t, '[Y,2-*]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
-		{Name: "format-dateTime-013f", XPath: "format-dateTime($t, '[Y,*-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
-		{Name: "format-dateTime-013g", XPath: "format-dateTime($t, '[Y,3]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
-		{Name: "format-dateTime-013h", XPath: "format-dateTime($t, '[M,4-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("0003")}},
-		{Name: "format-dateTime-013i", XPath: "format-dateTime($t, '[M,1-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("3")}},
-		{Name: "format-dateTime-013j", XPath: "format-dateTime($t, '[M,2-5]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("03")}},
-		{Name: "format-dateTime-013k", XPath: "format-dateTime($t, '[M,2-2]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("03")}},
-		{Name: "format-dateTime-013L", XPath: "format-dateTime($t, '[M,1-*]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("3")}},
-		{Name: "format-dateTime-013m", XPath: "format-dateTime($t, '[M,*-2]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("3")}},
-		{Name: "format-dateTime-013n", XPath: "format-dateTime($t, '[M,3]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("003")}},
-		{Name: "format-dateTime-013p", XPath: "format-dateTime($t, '[f,4-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("4560")}},
-		{Name: "format-dateTime-013q", XPath: "format-dateTime($t, '[f,1-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("456")}},
-		{Name: "format-dateTime-013r", XPath: "format-dateTime($t, '[f,2-5]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("456")}},
-		{Name: "format-dateTime-013s", XPath: "format-dateTime($t, '[f,2-2]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("45")}},
-		{Name: "format-dateTime-013t", XPath: "format-dateTime($t, '[f,1-*]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("456")}},
-		{Name: "format-dateTime-013u", XPath: "format-dateTime($t, '[f,*-2]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("45")}},
-		{Name: "format-dateTime-013v", XPath: "format-dateTime($t, '[f,3]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("456")}},
+		{Name: "format-dateTime-013a", XPath: "format-dateTime($t, '[Y,4-4]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("0985")}},
+		{Name: "format-dateTime-013b", XPath: "format-dateTime($t, '[Y,3-4]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
+		{Name: "format-dateTime-013c", XPath: "format-dateTime($t, '[Y,2-5]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
+		{Name: "format-dateTime-013d", XPath: "format-dateTime($t, '[Y,2-2]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("85")}},
+		{Name: "format-dateTime-013e", XPath: "format-dateTime($t, '[Y,2-*]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
+		{Name: "format-dateTime-013f", XPath: "format-dateTime($t, '[Y,*-4]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
+		{Name: "format-dateTime-013g", XPath: "format-dateTime($t, '[Y,3]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("985")}},
+		{Name: "format-dateTime-013h", XPath: "format-dateTime($t, '[M,4-4]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("0003")}},
+		{Name: "format-dateTime-013i", XPath: "format-dateTime($t, '[M,1-4]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("3")}},
+		{Name: "format-dateTime-013j", XPath: "format-dateTime($t, '[M,2-5]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("03")}},
+		{Name: "format-dateTime-013k", XPath: "format-dateTime($t, '[M,2-2]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("03")}},
+		{Name: "format-dateTime-013L", XPath: "format-dateTime($t, '[M,1-*]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("3")}},
+		{Name: "format-dateTime-013m", XPath: "format-dateTime($t, '[M,*-2]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("3")}},
+		{Name: "format-dateTime-013n", XPath: "format-dateTime($t, '[M,3]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("003")}},
+		{Name: "format-dateTime-013p", XPath: "format-dateTime($t, '[f,4-4]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("4560")}},
+		{Name: "format-dateTime-013q", XPath: "format-dateTime($t, '[f,1-4]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("456")}},
+		{Name: "format-dateTime-013r", XPath: "format-dateTime($t, '[f,2-5]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("456")}},
+		{Name: "format-dateTime-013s", XPath: "format-dateTime($t, '[f,2-2]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("45")}},
+		{Name: "format-dateTime-013t", XPath: "format-dateTime($t, '[f,1-*]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("456")}},
+		{Name: "format-dateTime-013u", XPath: "format-dateTime($t, '[f,*-2]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("45")}},
+		{Name: "format-dateTime-013v", XPath: "format-dateTime($t, '[f,3]')", Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("456")}},
 		{Name: "format-dateTime-014", XPath: `string-join(
                for $z in -28 to +28
                return format-dateTime(adjust-dateTime-to-timezone(
-                   $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][Z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+                   $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][Z]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             0715-14:00; 0745-13:30; 0815-13:00; 0845-12:30; 0915-12:00; 0945-11:30; 1015-11:00; 1045-10:30; 1115-10:00; 
             1145-09:30; 1215-09:00; 1245-08:30; 0115-08:00; 0145-07:30; 0215-07:00; 0245-06:30; 0315-06:00; 0345-05:30;
             0415-05:00; 0445-04:30; 0515-04:00; 0545-03:30; 0615-03:00; 0645-02:30; 0715-02:00; 0745-01:30; 0815-01:00;
@@ -3839,7 +3839,7 @@ dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii
 		{Name: "format-dateTime-015", XPath: `string-join(
                for $z in -28 to +28
                return format-dateTime(adjust-dateTime-to-timezone(
-                          $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z0]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+                          $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z0]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             0715GMT-14; 0745GMT-13:30; 0815GMT-13; 0845GMT-12:30; 0915GMT-12; 0945GMT-11:30; 1015GMT-11; 1045GMT-10:30;
             1115GMT-10; 1145GMT-9:30; 1215GMT-9; 1245GMT-8:30; 0115GMT-8; 0145GMT-7:30; 0215GMT-7; 0245GMT-6:30; 0315GMT-6;
             0345GMT-5:30; 0415GMT-5; 0445GMT-4:30; 0515GMT-4; 0545GMT-3:30; 0615GMT-3; 0645GMT-2:30; 0715GMT-2; 0745GMT-1:30;
@@ -3851,7 +3851,7 @@ dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii
 		{Name: "format-dateTime-016", XPath: `string-join(
                for $z in -28 to +28
                return format-dateTime(adjust-dateTime-to-timezone(
-               $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z00:00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+               $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z00:00]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00;            
              1045GMT-10:30; 1115GMT-10:00; 1145GMT-09:30; 1215GMT-09:00; 1245GMT-08:30; 0115GMT-08:00; 0145GMT-07:30;             
              0215GMT-07:00; 0245GMT-06:30; 0315GMT-06:00; 0345GMT-05:30; 0415GMT-05:00; 0445GMT-04:30; 0515GMT-04:00;             
@@ -3863,7 +3863,7 @@ dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii
         `)}},
 		{Name: "format-dateTime-017", XPath: `string-join(
                for $z in -28 to +28
-               return format-dateTime(adjust-dateTime-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+               return format-dateTime(adjust-dateTime-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z00]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
              0715GMT-14; 0745GMT-13:30; 0815GMT-13; 0845GMT-12:30; 0915GMT-12; 0945GMT-11:30; 1015GMT-11; 1045GMT-10:30; 
              1115GMT-10; 1145GMT-09:30; 1215GMT-09; 1245GMT-08:30; 0115GMT-08; 0145GMT-07:30; 0215GMT-07; 0245GMT-06:30;
              0315GMT-06; 0345GMT-05:30; 0415GMT-05; 0445GMT-04:30; 0515GMT-04; 0545GMT-03:30; 0615GMT-03; 0645GMT-02:30;
@@ -3874,7 +3874,7 @@ dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii
          `)}},
 		{Name: "format-dateTime-018", XPath: `string-join(
                for $z in -28 to +28
-               return format-dateTime(adjust-dateTime-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z00]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+               return format-dateTime(adjust-dateTime-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z00]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:dateTime('0985-03-01T09:15:06.456Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             0715GMT-14; 0745GMT-13:30; 0815GMT-13; 0845GMT-12:30; 0915GMT-12; 0945GMT-11:30; 1015GMT-11; 1045GMT-10:30;
             1115GMT-10; 1145GMT-09:30; 1215GMT-09; 1245GMT-08:30; 0115GMT-08; 0145GMT-07:30; 0215GMT-07; 0245GMT-06:30; 0315GMT-06;
             0345GMT-05:30; 0415GMT-05; 0445GMT-04:30; 0515GMT-04; 0545GMT-03:30; 0615GMT-03; 0645GMT-02:30; 0715GMT-02; 0745GMT-01:30;
@@ -3893,18 +3893,18 @@ dcccxvii; dcccxxxiv; dcccli; dccclxviii; dccclxxxv; cmii; cmxix; cmxxxvi; cmliii
 		{Name: "format-dateTime-019h", XPath: "format-dateTime(xs:dateTime('2015-08-15T12:00:00Z'), '[D] [MNn] [Y0001] @ [H01]:[m01] [ZN]', 'en', (), 'Europe/Paris')", Assertions: []qt3Assertion{qt3AssertEq("'15 August 2015 @ 14:00 CEST'")}},
 		{Name: "format-dateTime-801err", XPath: "format-dateTime(current-dateTime(), '[bla]', 'en', (), ())", ExpectError: true},
 		{Name: "format-dateTime-en141", XPath: `format-dateTime($d1, '[Y][EN]', 'en', (), ()),
-        format-dateTime($d2, '[Y][EN]', 'en', (), ())`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckDeepEq("\"1990AD\", \"55BC\""), qt3CheckDeepEq("\"1990CE\", \"55BCE\""), qt3CheckDeepEq("\"1990A.D.\", \"55B.C.\""), qt3CheckDeepEq("\"1990C.E.\", \"55B.C.E.\""))}},
+        format-dateTime($d2, '[Y][EN]', 'en', (), ())`, Params: []qt3Param{{Name: "d1", Select: "xs:dateTime('1990-12-01T12:00:00')"}, {Name: "d2", Select: "xs:dateTime('-0055-12-01T12:00:00')"}}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckDeepEq("\"1990AD\", \"55BC\""), qt3CheckDeepEq("\"1990CE\", \"55BCE\""), qt3CheckDeepEq("\"1990A.D.\", \"55B.C.\""), qt3CheckDeepEq("\"1990C.E.\", \"55B.C.E.\""))}},
 		{Name: "format-dateTime-en142", XPath: `for $i in 0 to 23 return
         let $t := $b + xs:dayTimeDuration('PT1H')*$i return
-        translate(format-dateTime($t, '[h]~[m][P]', 'en', (), ()), '.- ', '')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+        translate(format-dateTime($t, '[h]~[m][P]', 'en', (), ()), '.- ', '')`, Params: []qt3Param{{Name: "b", Select: "xs:dateTime('2011-07-01T00:10:00')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
          12~10am 1~10am 2~10am 3~10am 4~10am 5~10am 6~10am 7~10am 8~10am 9~10am 10~10am 11~10am 12~10pm 
          1~10pm 2~10pm 3~10pm 4~10pm 5~10pm 6~10pm 7~10pm 8~10pm 9~10pm 10~10pm 11~10pm
          `)}},
 		{Name: "format-dateTime-en143", XPath: `for $i in 0 to 1 return
         let $t := $b + xs:dayTimeDuration('PT12H')*$i return
-        translate(format-dateTime($t, '[h]~[m][P]', 'en', (), ()), '.- ', '')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("12~00am 12~00pm")}},
-		{Name: "format-dateTime-en151", XPath: "format-dateTime($b, '[MNn]', 'xib', (), ())", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "format-dateTime-en152", XPath: "format-dateTime($b, '[M01]', 'en', 'CB', ())", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
+        translate(format-dateTime($t, '[h]~[m][P]', 'en', (), ()), '.- ', '')`, Params: []qt3Param{{Name: "b", Select: "xs:dateTime('2011-07-01T00:00:00')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("12~00am 12~00pm")}},
+		{Name: "format-dateTime-en151", XPath: "format-dateTime($b, '[MNn]', 'xib', (), ())", Params: []qt3Param{{Name: "b", Select: "xs:dateTime('2006-03-01T12:00:00')"}}, Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
+		{Name: "format-dateTime-en152", XPath: "format-dateTime($b, '[M01]', 'en', 'CB', ())", Params: []qt3Param{{Name: "b", Select: "xs:dateTime('2006-03-01T12:00:00')"}}, Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "format-dateTime-inpt-er1", XPath: "format-dateTime('abc', '[bla]', 'en', (), ())", ExpectError: true},
 		{Name: "format-dateTime-inpt-er2", XPath: "format-dateTime(current-dateTime(), '[bla]', 'en', (), (), 6)", ExpectError: true},
 		{Name: "format-dateTime-inpt-er3", XPath: "format-dateTime(current-dateTime(), '[bla]', 'en', (), 5)", ExpectError: true},
@@ -4281,33 +4281,33 @@ func TestQT3_fn_format_number(t *testing.T) {
 func TestQT3_fn_format_time(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
-		{Name: "format-time-002a", XPath: "format-time($t,\"[H01]:[m01]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("09:15")}},
-		{Name: "format-time-002b", XPath: "format-time($t,\"[H]:[m]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15")}},
-		{Name: "format-time-002c", XPath: "format-time($t,\"[H01]:[m01]:[s01]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("09:15:06")}},
-		{Name: "format-time-002d", XPath: "format-time($t,\"[H]:[m]:[s]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06")}},
-		{Name: "format-time-002e", XPath: "format-time($t,\"[H]:[m]:[s1]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:6")}},
-		{Name: "format-time-002f", XPath: "format-time($t,\"[H]:[m]:[s01]:[f001]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06:456")}},
-		{Name: "format-time-002g", XPath: "format-time($t,\"[H]:[m]:[s].[f,1-1]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.4")}},
-		{Name: "format-time-002h", XPath: "format-time($t,\"[H]:[m]:[s].[f1,1-1]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.4")}},
-		{Name: "format-time-002i", XPath: "format-time($t,\"[H]:[m]:[s].[f01]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.45")}},
-		{Name: "format-time-002j", XPath: "format-time($t,\"[H]:[m]:[s].[f001]\")", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.456")}},
+		{Name: "format-time-002a", XPath: "format-time($t,\"[H01]:[m01]\")", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("09:15")}},
+		{Name: "format-time-002b", XPath: "format-time($t,\"[H]:[m]\")", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15")}},
+		{Name: "format-time-002c", XPath: "format-time($t,\"[H01]:[m01]:[s01]\")", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("09:15:06")}},
+		{Name: "format-time-002d", XPath: "format-time($t,\"[H]:[m]:[s]\")", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06")}},
+		{Name: "format-time-002e", XPath: "format-time($t,\"[H]:[m]:[s1]\")", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:6")}},
+		{Name: "format-time-002f", XPath: "format-time($t,\"[H]:[m]:[s01]:[f001]\")", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06:456")}},
+		{Name: "format-time-002g", XPath: "format-time($t,\"[H]:[m]:[s].[f,1-1]\")", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.4")}},
+		{Name: "format-time-002h", XPath: "format-time($t,\"[H]:[m]:[s].[f1,1-1]\")", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.4")}},
+		{Name: "format-time-002i", XPath: "format-time($t,\"[H]:[m]:[s].[f01]\")", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.45")}},
+		{Name: "format-time-002j", XPath: "format-time($t,\"[H]:[m]:[s].[f001]\")", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("9:15:06.456")}},
 		{Name: "format-time-004", XPath: `for $i in 1 to 24 return
-        format-time($t + xs:dayTimeDuration('PT1H')*$i, '[h].[m]')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+        format-time($t + xs:dayTimeDuration('PT1H')*$i, '[h].[m]')`, Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
          10.15 11.15 12.15 1.15 2.15 3.15 4.15 5.15 6.15 7.15 8.15 9.15 10.15 11.15 
          12.15 1.15 2.15 3.15 4.15 5.15 6.15 7.15 8.15 9.15
          `)}},
-		{Name: "format-time-013n", XPath: "format-time($t, '[m,3]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("015")}},
-		{Name: "format-time-013p", XPath: "format-time($t, '[f,4-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("4560")}},
-		{Name: "format-time-013q", XPath: "format-time($t, '[f,1-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("456")}},
-		{Name: "format-time-013r", XPath: "format-time($t, '[f,2-5]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("456")}},
-		{Name: "format-time-013s", XPath: "format-time($t, '[f,2-2]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("45")}},
-		{Name: "format-time-013t", XPath: "format-time($t, '[f,1-*]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("456")}},
-		{Name: "format-time-013u", XPath: "format-time($t, '[f,*-2]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("45")}},
-		{Name: "format-time-013v", XPath: "format-time($t, '[f,3]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("456")}},
+		{Name: "format-time-013n", XPath: "format-time($t, '[m,3]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("015")}},
+		{Name: "format-time-013p", XPath: "format-time($t, '[f,4-4]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("4560")}},
+		{Name: "format-time-013q", XPath: "format-time($t, '[f,1-4]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("456")}},
+		{Name: "format-time-013r", XPath: "format-time($t, '[f,2-5]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("456")}},
+		{Name: "format-time-013s", XPath: "format-time($t, '[f,2-2]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("45")}},
+		{Name: "format-time-013t", XPath: "format-time($t, '[f,1-*]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("456")}},
+		{Name: "format-time-013u", XPath: "format-time($t, '[f,*-2]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("45")}},
+		{Name: "format-time-013v", XPath: "format-time($t, '[f,3]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("456")}},
 		{Name: "format-time-014", XPath: `string-join(
                for $z in -28 to +28
                return format-time(adjust-time-to-timezone(
-               $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][Z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+               $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][Z]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
              0715-14:00; 0745-13:30; 0815-13:00; 0845-12:30; 0915-12:00; 0945-11:30; 1015-11:00; 1045-10:30; 1115-10:00; 
              1145-09:30; 1215-09:00; 1245-08:30; 0115-08:00; 0145-07:30; 0215-07:00; 0245-06:30; 0315-06:00; 0345-05:30; 
              0415-05:00; 0445-04:30; 0515-04:00; 0545-03:30; 0615-03:00; 0645-02:30; 0715-02:00; 0745-01:30; 0815-01:00; 
@@ -4319,7 +4319,7 @@ func TestQT3_fn_format_time(t *testing.T) {
 		{Name: "format-time-015", XPath: `string-join(
                for $z in -28 to +28
                return format-time(adjust-time-to-timezone(
-                        $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+                        $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
             0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00; 1045GMT-10:30;
             1115GMT-10:00; 1145GMT-09:30; 1215GMT-09:00; 1245GMT-08:30; 0115GMT-08:00; 0145GMT-07:30; 0215GMT-07:00; 0245GMT-06:30;
             0315GMT-06:00; 0345GMT-05:30; 0415GMT-05:00; 0445GMT-04:30; 0515GMT-04:00; 0545GMT-03:30; 0615GMT-03:00; 0645GMT-02:30;
@@ -4332,7 +4332,7 @@ func TestQT3_fn_format_time(t *testing.T) {
 		{Name: "format-time-016", XPath: `string-join(
                for $z in -28 to +28
                return format-time(adjust-time-to-timezone(
-                        $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z,6-6]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+                        $t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z,6-6]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
              0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00; 1045GMT-10:30;
             1115GMT-10:00; 1145GMT-09:30; 1215GMT-09:00; 1245GMT-08:30; 0115GMT-08:00; 0145GMT-07:30; 0215GMT-07:00; 0245GMT-06:30;
             0315GMT-06:00; 0345GMT-05:30; 0415GMT-05:00; 0445GMT-04:30; 0515GMT-04:00; 0545GMT-03:30; 0615GMT-03:00; 0645GMT-02:30;
@@ -4344,7 +4344,7 @@ func TestQT3_fn_format_time(t *testing.T) {
         `)}},
 		{Name: "format-time-017", XPath: `string-join(
                for $z in -28 to +28
-               return format-time(adjust-time-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z,5-6]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+               return format-time(adjust-time-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z,5-6]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
              0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00; 1045GMT-10:30;
             1115GMT-10:00; 1145GMT-09:30; 1215GMT-09:00; 1245GMT-08:30; 0115GMT-08:00; 0145GMT-07:30; 0215GMT-07:00; 0245GMT-06:30;
             0315GMT-06:00; 0345GMT-05:30; 0415GMT-05:00; 0445GMT-04:30; 0515GMT-04:00; 0545GMT-03:30; 0615GMT-03:00; 0645GMT-02:30;
@@ -4356,7 +4356,7 @@ func TestQT3_fn_format_time(t *testing.T) {
          `)}},
 		{Name: "format-time-018", XPath: `string-join(
                for $z in -28 to +28
-               return format-time(adjust-time-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z,2-6]'), '; ')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValueNS(`
+               return format-time(adjust-time-to-timezone($t, $z*xs:dayTimeDuration('PT30M')), '[h01][m01][z,2-6]'), '; ')`, Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.456Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValueNS(`
               0715GMT-14:00; 0745GMT-13:30; 0815GMT-13:00; 0845GMT-12:30; 0915GMT-12:00; 0945GMT-11:30; 1015GMT-11:00; 1045GMT-10:30;
             1115GMT-10:00; 1145GMT-09:30; 1215GMT-09:00; 1245GMT-08:30; 0115GMT-08:00; 0145GMT-07:30; 0215GMT-07:00; 0245GMT-06:30;
             0315GMT-06:00; 0345GMT-05:30; 0415GMT-05:00; 0445GMT-04:30; 0515GMT-04:00; 0545GMT-03:30; 0615GMT-03:00; 0645GMT-02:30;
@@ -4370,20 +4370,20 @@ func TestQT3_fn_format_time(t *testing.T) {
 		{Name: "format-time-020", XPath: "format-time(xs:time('09:15:06.456'),\"[H٠]:[m٠]:[s٠٠]:[f٠٠٠]\")", Assertions: []qt3Assertion{qt3AssertStringValue("٩:١٥:٠٦:٤٥٦")}},
 		{Name: "format-time-021", XPath: "format-time(xs:time('09:15:06.456'),\"[Pn]/[PNn]/[PN]\")", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("am/Am/AM"), qt3CheckStringValue("a.m./A.M./A.M."))}},
 		{Name: "format-time-022", XPath: "format-time(xs:time('15:15:06.456'),\"[Pn]/[PNn]/[PN]\")", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckStringValue("pm/Pm/PM"), qt3CheckStringValue("p.m./P.M./P.M."))}},
-		{Name: "format-time-023p", XPath: "format-time($t, '[f,4-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("0060")}},
-		{Name: "format-time-023q", XPath: "format-time($t, '[f,1-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("006")}},
-		{Name: "format-time-023r", XPath: "format-time($t, '[f,2-5]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("006")}},
-		{Name: "format-time-023s", XPath: "format-time($t, '[f,2-2]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("00")}},
-		{Name: "format-time-023t", XPath: "format-time($t, '[f,1-*]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("006")}},
-		{Name: "format-time-023u", XPath: "format-time($t, '[f,*-2]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("0")}},
-		{Name: "format-time-023v", XPath: "format-time($t, '[f,3]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("006")}},
-		{Name: "format-time-024p", XPath: "format-time($t, '[f,4-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("1000")}},
-		{Name: "format-time-024q", XPath: "format-time($t, '[f,1-4]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
-		{Name: "format-time-024r", XPath: "format-time($t, '[f,2-5]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("10")}},
-		{Name: "format-time-024s", XPath: "format-time($t, '[f,2-2]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("10")}},
-		{Name: "format-time-024t", XPath: "format-time($t, '[f,1-*]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
-		{Name: "format-time-024u", XPath: "format-time($t, '[f,*-2]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
-		{Name: "format-time-024v", XPath: "format-time($t, '[f,3]')", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("100")}},
+		{Name: "format-time-023p", XPath: "format-time($t, '[f,4-4]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.006')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("0060")}},
+		{Name: "format-time-023q", XPath: "format-time($t, '[f,1-4]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.006')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("006")}},
+		{Name: "format-time-023r", XPath: "format-time($t, '[f,2-5]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.006')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("006")}},
+		{Name: "format-time-023s", XPath: "format-time($t, '[f,2-2]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.006')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("00")}},
+		{Name: "format-time-023t", XPath: "format-time($t, '[f,1-*]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.006')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("006")}},
+		{Name: "format-time-023u", XPath: "format-time($t, '[f,*-2]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.006')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("0")}},
+		{Name: "format-time-023v", XPath: "format-time($t, '[f,3]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.006')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("006")}},
+		{Name: "format-time-024p", XPath: "format-time($t, '[f,4-4]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.100')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("1000")}},
+		{Name: "format-time-024q", XPath: "format-time($t, '[f,1-4]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.100')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
+		{Name: "format-time-024r", XPath: "format-time($t, '[f,2-5]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.100')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("10")}},
+		{Name: "format-time-024s", XPath: "format-time($t, '[f,2-2]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.100')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("10")}},
+		{Name: "format-time-024t", XPath: "format-time($t, '[f,1-*]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.100')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
+		{Name: "format-time-024u", XPath: "format-time($t, '[f,*-2]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.100')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
+		{Name: "format-time-024v", XPath: "format-time($t, '[f,3]')", Params: []qt3Param{{Name: "t", Select: "xs:time('09:15:06.100')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("100")}},
 		{Name: "format-time-809err", XPath: "format-time(current-time(), '[Y]', 'en', (), ())", ExpectError: true},
 		{Name: "format-time-810err", XPath: "format-time(current-time(), '[M]', 'en', (), ())", ExpectError: true},
 		{Name: "format-time-811err", XPath: "format-time(current-time(), '[d]', 'en', (), ())", ExpectError: true},
@@ -4437,32 +4437,32 @@ func TestQT3_fn_function_lookup(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
 		{Name: "fn-function-lookup-001", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'node-name'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-002", XPath: "/root/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'node-name'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("root")}},
+		{Name: "fn-function-lookup-002", XPath: "/root/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'node-name'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("root")}},
 		{Name: "fn-function-lookup-003", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'node-name'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-004", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'node-name'), 1)(/root)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("root")}},
+		{Name: "fn-function-lookup-004", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'node-name'), 1)(/root)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("root")}},
 		{Name: "fn-function-lookup-005", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'nilled'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-006", XPath: "/root/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'nilled'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("false")}},
+		{Name: "fn-function-lookup-006", XPath: "/root/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'nilled'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("false")}},
 		{Name: "fn-function-lookup-007", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'nilled'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-008", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'nilled'), 1)(/root)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("false")}},
+		{Name: "fn-function-lookup-008", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'nilled'), 1)(/root)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("false")}},
 		{Name: "fn-function-lookup-009", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'string'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-010", XPath: "/root/child/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'string'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
+		{Name: "fn-function-lookup-010", XPath: "/root/child/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'string'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
 		{Name: "fn-function-lookup-011", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'string'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-012", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'string'), 1)(1)", Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
 		{Name: "fn-function-lookup-013", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'data'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-014", XPath: "/root/child/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'data'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
+		{Name: "fn-function-lookup-014", XPath: "/root/child/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'data'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
 		{Name: "fn-function-lookup-015", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'data'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-016", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'data'), 1)(/root/child[1])", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
+		{Name: "fn-function-lookup-016", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'data'), 1)(/root/child[1])", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
 		{Name: "fn-function-lookup-017", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'base-uri'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-018", XPath: `let $baseUriFn := /root/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'base-uri'), 0)
-      return /root/extra/$baseUriFn()`, DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertEq("\"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml\"")}},
+      return /root/extra/$baseUriFn()`, DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertEq("\"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml\"")}},
 		{Name: "fn-function-lookup-019", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'base-uri'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-020", XPath: `let $baseUriFn := function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'base-uri'), 1)
-      return $baseUriFn(/root)`, DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("http://www.w3.org/fots/fn/function-lookup/function-lookup.xml")}},
+      return $baseUriFn(/root)`, DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("http://www.w3.org/fots/fn/function-lookup/function-lookup.xml")}},
 		{Name: "fn-function-lookup-021", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'document-uri'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-022", XPath: `let $fn := /function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'document-uri'), 0)
-      return parse-xml('<a/>')!$fn()`, DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+      return parse-xml('<a/>')!$fn()`, DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-function-lookup-023", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'document-uri'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-024", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'document-uri'), 1)(/)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-function-lookup-024", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'document-uri'), 1)(/)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-function-lookup-025", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'error'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-026", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'error'), 0)()", ExpectError: true},
 		{Name: "fn-function-lookup-027", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'error'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
@@ -4488,7 +4488,7 @@ func TestQT3_fn_function_lookup(t *testing.T) {
 		{Name: "fn-function-lookup-047", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'round-half-to-even'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-048", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'round-half-to-even'), 2)(1.1, 0)", Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
 		{Name: "fn-function-lookup-049", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'number'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-050", XPath: "/root/child/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'number'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
+		{Name: "fn-function-lookup-050", XPath: "/root/child/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'number'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
 		{Name: "fn-function-lookup-051", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'number'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-052", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'number'), 1)('1')", Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
 		{Name: "fn-function-lookup-053", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'format-integer'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
@@ -4548,11 +4548,11 @@ func TestQT3_fn_function_lookup(t *testing.T) {
 		{Name: "fn-function-lookup-107", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'substring'), 3))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-108", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'substring'), 3)('string', 1e0, 1e0)", Assertions: []qt3Assertion{qt3AssertStringValue("s")}},
 		{Name: "fn-function-lookup-109", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'string-length'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-110", XPath: "/root/child/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'string-length'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
+		{Name: "fn-function-lookup-110", XPath: "/root/child/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'string-length'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
 		{Name: "fn-function-lookup-111", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'string-length'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-112", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'string-length'), 1)('string')", Assertions: []qt3Assertion{qt3AssertStringValue("6")}},
 		{Name: "fn-function-lookup-113", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'normalize-space'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-114", XPath: "/root/child/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'normalize-space'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
+		{Name: "fn-function-lookup-114", XPath: "/root/child/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'normalize-space'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("1")}},
 		{Name: "fn-function-lookup-115", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'normalize-space'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-116", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'normalize-space'), 1)(' string ')", Assertions: []qt3Assertion{qt3AssertStringValue("string")}},
 		{Name: "fn-function-lookup-117", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'normalize-unicode'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
@@ -4688,7 +4688,7 @@ func TestQT3_fn_function_lookup(t *testing.T) {
 		{Name: "fn-function-lookup-247", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'format-time'), 5))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-248", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'format-time'), 5)(xs:time('00:00:00Z'), '[H01]', 'en', (), ())", Assertions: []qt3Assertion{qt3AssertStringValue("00")}},
 		{Name: "fn-function-lookup-249", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'resolve-QName'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-250", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'resolve-QName'), 2)('ns:local', /root/*[2])", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("ns:local")}},
+		{Name: "fn-function-lookup-250", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'resolve-QName'), 2)('ns:local', /root/*[2])", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("ns:local")}},
 		{Name: "fn-function-lookup-251", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'QName'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-252", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'QName'), 2)('http://www.example.org/', 'ns:local')", Assertions: []qt3Assertion{qt3AssertStringValue("ns:local")}},
 		{Name: "fn-function-lookup-253", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'prefix-from-QName'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
@@ -4698,37 +4698,37 @@ func TestQT3_fn_function_lookup(t *testing.T) {
 		{Name: "fn-function-lookup-257", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'namespace-uri-from-QName'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-258", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'namespace-uri-from-QName'), 1)(fn:QName('http://www.example.org', 'foo:bar'))", Assertions: []qt3Assertion{qt3AssertStringValue("http://www.example.org")}},
 		{Name: "fn-function-lookup-259", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'namespace-uri-for-prefix'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-260", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'namespace-uri-for-prefix'), 2)('ns', /root/*[2])", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("http://www.example.org/")}},
+		{Name: "fn-function-lookup-260", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'namespace-uri-for-prefix'), 2)('ns', /root/*[2])", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("http://www.example.org/")}},
 		{Name: "fn-function-lookup-261", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'in-scope-prefixes'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-262", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'in-scope-prefixes'), 1)(/root)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("xml")}},
+		{Name: "fn-function-lookup-262", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'in-scope-prefixes'), 1)(/root)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("xml")}},
 		{Name: "fn-function-lookup-263", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'name'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-264", XPath: "/root/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'name'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("root")}},
+		{Name: "fn-function-lookup-264", XPath: "/root/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'name'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("root")}},
 		{Name: "fn-function-lookup-265", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'name'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-266", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'name'), 1)(/root)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("root")}},
+		{Name: "fn-function-lookup-266", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'name'), 1)(/root)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("root")}},
 		{Name: "fn-function-lookup-267", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'local-name'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-268", XPath: "/root/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'local-name'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("root")}},
+		{Name: "fn-function-lookup-268", XPath: "/root/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'local-name'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("root")}},
 		{Name: "fn-function-lookup-269", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'local-name'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-270", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'local-name'), 1)(/root)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("root")}},
+		{Name: "fn-function-lookup-270", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'local-name'), 1)(/root)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("root")}},
 		{Name: "fn-function-lookup-271", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'namespace-uri'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-272", XPath: "/root/*[2]/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'namespace-uri'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("http://www.example.org/")}},
+		{Name: "fn-function-lookup-272", XPath: "/root/*[2]/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'namespace-uri'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("http://www.example.org/")}},
 		{Name: "fn-function-lookup-273", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'namespace-uri'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-274", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'namespace-uri'), 1)(/root/*[2])", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("http://www.example.org/")}},
+		{Name: "fn-function-lookup-274", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'namespace-uri'), 1)(/root/*[2])", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("http://www.example.org/")}},
 		{Name: "fn-function-lookup-275", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'lang'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-276", XPath: "/root/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'lang'), 1)('en')", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-function-lookup-276", XPath: "/root/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'lang'), 1)('en')", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "fn-function-lookup-277", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'lang'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-278", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'lang'), 2)('en', /root)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-function-lookup-278", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'lang'), 2)('en', /root)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "fn-function-lookup-279", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'root'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-280", XPath: "/root/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'root'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertType("document-node()")}},
+		{Name: "fn-function-lookup-280", XPath: "/root/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'root'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertType("document-node()")}},
 		{Name: "fn-function-lookup-281", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'root'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-282", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'root'), 1)(())", Assertions: []qt3Assertion{qt3AssertEmpty()}},
 		{Name: "fn-function-lookup-283", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'path'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-284", XPath: "/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'path'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("/")}},
+		{Name: "fn-function-lookup-284", XPath: "/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'path'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("/")}},
 		{Name: "fn-function-lookup-285", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'path'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-286", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'path'), 1)(/)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("/")}},
+		{Name: "fn-function-lookup-286", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'path'), 1)(/)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertStringValue("/")}},
 		{Name: "fn-function-lookup-287", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'has-children'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-288", XPath: "/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'has-children'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-function-lookup-288", XPath: "/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'has-children'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-289", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'has-children'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-290", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'has-children'), 1)(/)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-function-lookup-290", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'has-children'), 1)(/)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-291", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'innermost'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-292", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'innermost'), 1)(())", Assertions: []qt3Assertion{qt3AssertEmpty()}},
 		{Name: "fn-function-lookup-293", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'outermost'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
@@ -4788,45 +4788,45 @@ func TestQT3_fn_function_lookup(t *testing.T) {
 		{Name: "fn-function-lookup-347", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'sum'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-348", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'sum'), 2)((1, 2), 0)", Assertions: []qt3Assertion{qt3AssertStringValue("3")}},
 		{Name: "fn-function-lookup-349", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'id'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-350", XPath: "/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'id'), 1)(('id1', 'id2'))", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertEmpty()}},
+		{Name: "fn-function-lookup-350", XPath: "/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'id'), 1)(('id1', 'id2'))", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertEmpty()}},
 		{Name: "fn-function-lookup-351", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'id'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-352", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'id'), 2)(('id1', 'id2'), /)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertEmpty()}},
+		{Name: "fn-function-lookup-352", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'id'), 2)(('id1', 'id2'), /)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertEmpty()}},
 		{Name: "fn-function-lookup-353", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'element-with-id'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-354", XPath: "/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'element-with-id'), 1)(('id1', 'id2'))", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertEmpty()}},
+		{Name: "fn-function-lookup-354", XPath: "/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'element-with-id'), 1)(('id1', 'id2'))", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertEmpty()}},
 		{Name: "fn-function-lookup-355", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'element-with-id'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-356", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'element-with-id'), 2)(('id1', 'id2'), /)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertEmpty()}},
+		{Name: "fn-function-lookup-356", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'element-with-id'), 2)(('id1', 'id2'), /)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertEmpty()}},
 		{Name: "fn-function-lookup-357", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'idref'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-358", XPath: "/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'idref'), 1)(('id1', 'id2'))", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertEmpty()}},
+		{Name: "fn-function-lookup-358", XPath: "/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'idref'), 1)(('id1', 'id2'))", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertEmpty()}},
 		{Name: "fn-function-lookup-359", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'idref'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-360", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'idref'), 2)(('id1', 'id2'), /)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertEmpty()}},
+		{Name: "fn-function-lookup-360", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'idref'), 2)(('id1', 'id2'), /)", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertEmpty()}},
 		{Name: "fn-function-lookup-361", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'generate-id'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-362", XPath: "/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'generate-id'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertType("xs:string")}},
+		{Name: "fn-function-lookup-362", XPath: "/function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'generate-id'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertType("xs:string")}},
 		{Name: "fn-function-lookup-363", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'generate-id'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-364", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'generate-id'), 1)(())", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertType("xs:string"), qt3AssertEq("\"\"")}},
+		{Name: "fn-function-lookup-364", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'generate-id'), 1)(())", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertType("xs:string"), qt3AssertEq("\"\"")}},
 		{Name: "fn-function-lookup-365", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'doc'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-366", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'doc'), 1)('http://www.w3.org/fots/fn/function-lookup/function-lookup.xml')", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertType("document-node()")}},
+		{Name: "fn-function-lookup-366", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'doc'), 1)('http://www.w3.org/fots/fn/function-lookup/function-lookup.xml')", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertType("document-node()")}},
 		{Name: "fn-function-lookup-367", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'doc-available'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-368", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'doc-available'), 1)('http://www.example.org/unknown-document')", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-function-lookup-368", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'doc-available'), 1)('http://www.example.org/unknown-document')", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "fn-function-lookup-369", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'collection'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-370", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'collection'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertType("node()+")}},
+		{Name: "fn-function-lookup-370", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'collection'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertType("node()+")}},
 		{Name: "fn-function-lookup-371", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'collection'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-372", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'collection'), 1)(())", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertType("node()+")}},
+		{Name: "fn-function-lookup-372", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'collection'), 1)(())", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertType("node()+")}},
 		{Name: "fn-function-lookup-373", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'uri-collection'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-374", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'uri-collection'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertType("xs:anyURI+")}},
+		{Name: "fn-function-lookup-374", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'uri-collection'), 0)()", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertType("xs:anyURI+")}},
 		{Name: "fn-function-lookup-375", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'uri-collection'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-376", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'uri-collection'), 1)(())", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertType("xs:anyURI+")}},
+		{Name: "fn-function-lookup-376", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'uri-collection'), 1)(())", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Skip: "requires non-empty sequence collection", Assertions: []qt3Assertion{qt3AssertType("xs:anyURI+")}},
 		{Name: "fn-function-lookup-377", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'unparsed-text'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-378", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'unparsed-text'), 1)('http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt')", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertType("xs:string")}},
+		{Name: "fn-function-lookup-378", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'unparsed-text'), 1)('http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt')", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertType("xs:string")}},
 		{Name: "fn-function-lookup-379", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'unparsed-text'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-380", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'unparsed-text'), 2)('http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt', 'utf-8')", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertType("xs:string")}},
+		{Name: "fn-function-lookup-380", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'unparsed-text'), 2)('http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt', 'utf-8')", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertType("xs:string")}},
 		{Name: "fn-function-lookup-381", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'unparsed-text-lines'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-382", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'unparsed-text-lines'), 1)('http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt')", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertType("xs:string+")}},
+		{Name: "fn-function-lookup-382", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'unparsed-text-lines'), 1)('http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt')", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertType("xs:string+")}},
 		{Name: "fn-function-lookup-383", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'unparsed-text-lines'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-384", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'unparsed-text-lines'), 2)('http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt', 'utf-8')", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertType("xs:string+")}},
+		{Name: "fn-function-lookup-384", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'unparsed-text-lines'), 2)('http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt', 'utf-8')", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertType("xs:string+")}},
 		{Name: "fn-function-lookup-385", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'unparsed-text-available'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-386", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'unparsed-text-available'), 1)('http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt')", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-function-lookup-386", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'unparsed-text-available'), 1)('http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt')", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-387", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'unparsed-text-available'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-388", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'unparsed-text-available'), 2)('http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt', 'utf-8')", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-function-lookup-388", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'unparsed-text-available'), 2)('http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt', 'utf-8')", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-389", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'environment-variable'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-390", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'environment-variable'), 1)('should-not-exist')", Assertions: []qt3Assertion{qt3AssertEmpty()}},
 		{Name: "fn-function-lookup-391", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions', 'available-environment-variables'), 0))", Assertions: []qt3Assertion{qt3AssertTrue()}},
@@ -5110,7 +5110,7 @@ string')`, Assertions: []qt3Assertion{qt3AssertStringValue("normalized string")}
 		{Name: "fn-function-lookup-797", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions/array', 'sort'), 1))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-798", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions/array', 'sort'), 1)([\"Red\", \"green\", \"blUE\", \"PINK\", \"ORanGE\"])", Assertions: []qt3Assertion{qt3AssertDeepEq("[\"ORanGE\", \"PINK\", \"Red\", \"blUE\", \"green\"]")}},
 		{Name: "fn-function-lookup-799", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions/array', 'sort'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-function-lookup-800", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions/array', 'sort'), 2)([\"Red\", \"green\", \"blUE\", \"PINK\", \"ORanGE\"], \"http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind\")", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertDeepEq("[\"blUE\", \"green\", \"ORanGE\", \"PINK\", \"Red\"]")}},
+		{Name: "fn-function-lookup-800", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions/array', 'sort'), 2)([\"Red\", \"green\", \"blUE\", \"PINK\", \"ORanGE\"], \"http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind\")", DocPath: "fn/function-lookup/function-lookup.xml", DefaultCollation: "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/function-lookup/function-lookup.xml": "fn/function-lookup/function-lookup.xml", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/qt3/json/data001-json": "fn/json-to-xml/data001.json"}, Assertions: []qt3Assertion{qt3AssertDeepEq("[\"blUE\", \"green\", \"ORanGE\", \"PINK\", \"Red\"]")}},
 		{Name: "fn-function-lookup-801", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions/array', 'sort'), 3))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-function-lookup-802", XPath: "function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions/array', 'sort'), 3)([\"Red\", \"green\", \"blUE\", \"PINK\", \"ORanGE\"], \"http://www.w3.org/2005/xpath-functions/collation/codepoint\", fn:string#1)", Assertions: []qt3Assertion{qt3AssertDeepEq("[\"ORanGE\", \"PINK\", \"Red\", \"blUE\", \"green\"]")}},
 		{Name: "fn-function-lookup-803", XPath: "exists(function-lookup(fn:QName('http://www.w3.org/2005/xpath-functions/array', 'subarray'), 2))", Assertions: []qt3Assertion{qt3AssertTrue()}},
@@ -6395,12 +6395,12 @@ func TestQT3_fn_local_name(t *testing.T) {
 	qt3RunTests(t, []qt3Test{
 		{Name: "fn-local-name-1a", XPath: "fn:local-name()", ExpectError: true},
 		{Name: "fn-local-name-2", XPath: "(1 to 100)[fn:local-name()]", ExpectError: true},
-		{Name: "fn-local-name-3", XPath: "fn:local-name(/*, /*)", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
-		{Name: "fn-local-name-4", XPath: "fn:local-name(())", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertEq("\"\"")}},
-		{Name: "fn-local-name-5", XPath: "fn:local-name((//text())[1])", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertEq("\"\"")}},
-		{Name: "fn-local-name-8a", XPath: "fn:count(fn:local-name(/))", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertEq("1")}},
-		{Name: "fn-local-name-11a", XPath: "fn:local-name(/*)", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertStringValue("root")}},
-		{Name: "fn-local-name-13a", XPath: "fn:local-name((//@*:attr)[1])", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertStringValue("attr")}},
+		{Name: "fn-local-name-3", XPath: "fn:local-name(/*, /*)", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
+		{Name: "fn-local-name-4", XPath: "fn:local-name(())", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertEq("\"\"")}},
+		{Name: "fn-local-name-5", XPath: "fn:local-name((//text())[1])", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertEq("\"\"")}},
+		{Name: "fn-local-name-8a", XPath: "fn:count(fn:local-name(/))", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertEq("1")}},
+		{Name: "fn-local-name-11a", XPath: "fn:local-name(/*)", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertStringValue("root")}},
+		{Name: "fn-local-name-13a", XPath: "fn:local-name((//@*:attr)[1])", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertStringValue("attr")}},
 		{Name: "fn-local-name-51", XPath: "fn:string-length(fn:local-name(()))", Assertions: []qt3Assertion{qt3AssertEq("0")}},
 		{Name: "fn-local-name-52", XPath: "(fn:local-name(./works[1]/employee[1]))", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertStringValue("employee")}},
 		{Name: "fn-local-name-53", XPath: "(fn:local-name(./works[1]/employee[1]/@name))", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertStringValue("name")}},
@@ -6464,8 +6464,8 @@ func TestQT3_fn_local_name_from_QName(t *testing.T) {
 		{Name: "LocalNameFromQNameFunc019", XPath: "fn:local-name-from-QName( if( true() ) then fn:QName(\"http://www.example.com/QNameXSD\", exactly-one(xs:string((/root/elemQN)[1]))) else fn:QName(\"http://www.example.com/QNameXSD\", exactly-one(xs:string((/root/@attrQN)[1]))) )", DocPath: "docs/QName-source.xml", Namespaces: map[string]string{"": "http://www.example.com/QNameXSD"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertStringValue("bar")}},
 		{Name: "LocalNameFromQNameFunc020", XPath: "fn:local-name-from-QName( if( false() ) then fn:QName(\"http://www.example.com/QNameXSD\", exactly-one(xs:string((/root/elemQN)[1]))) else fn:QName(\"http://www.example.com/QNameXSD\", exactly-one(xs:string((/root/@attrQN)[1]))) )", DocPath: "docs/QName-source.xml", Namespaces: map[string]string{"": "http://www.example.com/QNameXSD"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertStringValue("bar")}},
 		{Name: "LocalNameFromQNameFunc021", XPath: "fn:local-name-from-QName( if( true() ) then (/root/elemStr)[1] else (/root/elemQN)[1] )", DocPath: "docs/QName-source.xml", Namespaces: map[string]string{"": "http://www.example.com/QNameXSD"}, Skip: "requires XML Schema support", ExpectError: true},
-		{Name: "fn-local-name-from-qname-022", XPath: "fn:local-name-from-QName(node-name(/*))", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertStringValue("root"), qt3AssertType("xs:NCName")}},
-		{Name: "fn-local-name-from-qname-023", XPath: "fn:local-name-from-QName(node-name((//@*)[1]))", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertStringValue("attr"), qt3AssertType("xs:NCName")}},
+		{Name: "fn-local-name-from-qname-022", XPath: "fn:local-name-from-QName(node-name(/*))", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertStringValue("root"), qt3AssertType("xs:NCName")}},
+		{Name: "fn-local-name-from-qname-023", XPath: "fn:local-name-from-QName(node-name((//@*)[1]))", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertStringValue("attr"), qt3AssertType("xs:NCName")}},
 		{Name: "fn-local-name-from-qname-024", XPath: "fn:local-name-from-QName(node-name(/*))", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertStringValue("works")}},
 		{Name: "K-LocalNameFromQNameFunc-1", XPath: "local-name-from-QName()", ExpectError: true},
 		{Name: "K-LocalNameFromQNameFunc-2", XPath: "local-name-from-QName(1, 2)", ExpectError: true},
@@ -8649,14 +8649,14 @@ func TestQT3_fn_not(t *testing.T) {
 		{Name: "fn-not-19", XPath: "fn:concat(xs:string(fn:not(\"true\")),xs:string(fn:not(\"true\")))", Assertions: []qt3Assertion{qt3AssertEq("'falsefalse'")}},
 		{Name: "fn-not-20", XPath: "fn:contains(xs:string(fn:not(\"true\")),xs:string(fn:not(\"true\")))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-not-21", XPath: "fn:string-length(xs:string(fn:not(\"true\")))", Assertions: []qt3Assertion{qt3AssertEq("5")}},
-		{Name: "fn-not-22", XPath: "not(//banana)", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-not-23", XPath: "not(//*)", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-not-22", XPath: "not(//banana)", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-not-23", XPath: "not(//*)", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "fn-not-24", XPath: "not(xs:double('NaN'))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-not-25", XPath: "not(xs:float('NaN'))", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-not-26", XPath: "not(\"\")", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-not-27", XPath: "not((true(), false()))", ExpectError: true},
-		{Name: "fn-not-28", XPath: "not((23, /))", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
-		{Name: "fn-not-29", XPath: "not((/, 23))", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-not-28", XPath: "not((23, /))", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
+		{Name: "fn-not-29", XPath: "not((/, 23))", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "K-NotFunc-1", XPath: "not()", ExpectError: true},
 		{Name: "K-NotFunc-2", XPath: "not(1, 2, 3, 4, 5, 6)", ExpectError: true},
 		{Name: "K-NotFunc-3", XPath: "not(false() and false())", Assertions: []qt3Assertion{qt3AssertTrue()}},
@@ -8915,124 +8915,124 @@ func TestQT3_fn_parse_ietf_date(t *testing.T) {
 	qt3RunTests(t, []qt3Test{
 		{Name: "parse-ietf-date-0", XPath: `if (parse-ietf-date("Wed, 20 Aug 2014 19:36:01 GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-1", XPath: `if (parse-ietf-date("  Wed, 20 Aug 2014 19:36:01 GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-2", XPath: `if (parse-ietf-date("Wed, 20 Aug 2014 19:36:01 GMT    ") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-3", XPath: `if (parse-ietf-date("Wed 20 Aug 2014 19:36:01 GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-4", XPath: `if (parse-ietf-date("Wednesday 20 Aug 2014 19:36:01 GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-5", XPath: `if (parse-ietf-date("Wed, 20 Aug 2014 19:36:01.25 GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01.25Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-6", XPath: `if (parse-ietf-date("Wed, 20 Aug 2014 19:36:01.299 GMT") = xs:dateTime($d))
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "'2014-08-20T19:36:01.299Z'"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-7", XPath: `if (parse-ietf-date("wed, 20 aug 2014 19:36:01 gmt") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-8", XPath: `if (parse-ietf-date("WED, 20 AUG 2014 19:36:01 GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-9", XPath: `if (parse-ietf-date("Wed, 20 Aug 2014 19:36 GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:00Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-10", XPath: `if (parse-ietf-date("WED, 20 AUG 2014 19:36:01") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-11", XPath: `if (parse-ietf-date("Wed, 20 Aug 2014 19:36") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:00Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-12", XPath: `if (parse-ietf-date("Wed, 20 Aug 2014 19:36:01GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-13", XPath: `if (parse-ietf-date("Wed, 20 Aug 2014 19:36GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:00Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-14", XPath: `if (parse-ietf-date(" 20 Aug 2014 19:36:01 GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-15", XPath: `if (parse-ietf-date("Tue, 9 Sep 2014 19:36:01 GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-09-09T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-16", XPath: `if (parse-ietf-date("Tue,  9 Sep 2014 19:36:01 GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-09-09T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-17", XPath: `if (parse-ietf-date("Tue, 09 Sep 2014 19:36:01 GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-09-09T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-18", XPath: `if (parse-ietf-date("Mon 8 Sep 2014 19:36:01 GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-09-08T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-19", XPath: `if (parse-ietf-date("Aug-20 19:36 2014") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:00Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-20", XPath: `if (parse-ietf-date("Aug 20 19:36 2014") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:00Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-21", XPath: `if (parse-ietf-date("Wed, 20 - Aug - 2014 19:36") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:00Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-22", XPath: `if (parse-ietf-date("Wed, 20- Aug- 2014 19:36") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:00Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-23", XPath: `if (parse-ietf-date("Wed, 20 -Aug -2014 19:36") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:00Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-24", XPath: `if (parse-ietf-date("Sun, 20 Aug 2014 19:36:01 GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-25", XPath: `if (parse-ietf-date("Mon, 20 Aug 2014 19:36:01 GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-26", XPath: `if (parse-ietf-date("Tuesday, 20 Aug 2014 19:36:01 GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-27", XPath: `if (parse-ietf-date("Thursday, 20 Aug 2014 19:36:01 GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-28", XPath: `if (parse-ietf-date("FRI, 20 Aug 2014 19:36:01 GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-29", XPath: `if (parse-ietf-date("SAT, 20 Aug 2014 19:36:01 GMT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-30", XPath: `if (parse-ietf-date("Wed, 20 Aug 2014 19:36:01 UT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-31", XPath: `if (parse-ietf-date("Wed, 20 Aug 2014 19:36:01 UTC") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-32", XPath: `if (parse-ietf-date("Wed, 20 Aug 2014 14:36:01 EST") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-33", XPath: `if (parse-ietf-date("Wed, 20 Aug 2014 15:36:01 EDT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-34", XPath: `if (parse-ietf-date("Wed, 20 Aug 2014 13:36:01 CST") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-35", XPath: `if (parse-ietf-date("Wed, 20 Aug 2014 14:36:01 CDT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-36", XPath: `if (parse-ietf-date("Wed, 20 Aug 2014 12:36:01 MST") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-37", XPath: `if (parse-ietf-date("Wed, 20 Aug 2014 13:36:01 MDT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-38", XPath: `if (parse-ietf-date("Wed, 20 Aug 2014 11:36:01 PST") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-39", XPath: `if (parse-ietf-date("Wed, 20 Aug 2014 12:36:01 PDT") = $d)
 	  then "pass"
-	  else "fail"`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
+	  else "fail"`, Params: []qt3Param{{Name: "d", Select: "xs:dateTime('2014-08-20T19:36:01Z')"}}, Assertions: []qt3Assertion{qt3AssertStringValue("pass")}},
 		{Name: "parse-ietf-date-40", XPath: "parse-ietf-date(())", Assertions: []qt3Assertion{qt3AssertEmpty()}},
 		{Name: "parse-ietf-date-41", XPath: "parse-ietf-date(\"20 Aug 14 19:36:01\")", Assertions: []qt3Assertion{qt3AssertType("xs:dateTime"), qt3AssertEq("xs:dateTime('1914-08-20T19:36:01Z')")}},
 		{Name: "parse-ietf-date-42", XPath: "parse-ietf-date(\"Wed, 20 Aug 2014 14:36:01 -05:00(EST)\")", Assertions: []qt3Assertion{qt3AssertType("xs:dateTime"), qt3AssertEq("xs:dateTime('2014-08-20T19:36:01Z')")}},
@@ -9442,8 +9442,8 @@ func TestQT3_fn_prefix_from_QName(t *testing.T) {
 		{Name: "fn-prefix-from-qname-18", XPath: "fn:ends-with(fn:prefix-from-QName(xs:QName(\"foo:bar\")),\"f\")", Namespaces: map[string]string{"foo": "http://example.org"}, Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "fn-prefix-from-qname-19", XPath: "fn:contains(fn:prefix-from-QName(xs:QName(\"foo:bar\")),\"f\")", Namespaces: map[string]string{"foo": "http://example.org"}, Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-prefix-from-qname-20", XPath: "fn:prefix-from-QName(xs:QName(\"foo:bar\"))", Namespaces: map[string]string{"FOO": "http://example.org", "foo": "http://example.org"}, Assertions: []qt3Assertion{qt3AssertStringValue("foo")}},
-		{Name: "fn-prefix-from-qname-21", XPath: "fn:prefix-from-QName(node-name(/*))", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertStringValue("atomic"), qt3AssertType("xs:NCName")}},
-		{Name: "fn-prefix-from-qname-22", XPath: "fn:prefix-from-QName(node-name((//@*)[1]))", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertStringValue("atomic"), qt3AssertType("xs:NCName")}},
+		{Name: "fn-prefix-from-qname-21", XPath: "fn:prefix-from-QName(node-name(/*))", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertStringValue("atomic"), qt3AssertType("xs:NCName")}},
+		{Name: "fn-prefix-from-qname-22", XPath: "fn:prefix-from-QName(node-name((//@*)[1]))", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertStringValue("atomic"), qt3AssertType("xs:NCName")}},
 		{Name: "fn-prefix-from-qname-23", XPath: "fn:prefix-from-QName(node-name(/*))", DocPath: "docs/works-mod.xml", Assertions: []qt3Assertion{qt3AssertEmpty()}},
 		{Name: "K-PrefixFromQName-1", XPath: "prefix-from-QName()", ExpectError: true},
 		{Name: "K-PrefixFromQName-2", XPath: "prefix-from-QName(1, 2)", ExpectError: true},
@@ -10365,8 +10365,8 @@ func TestQT3_fn_seconds_from_time(t *testing.T) {
 func TestQT3_fn_serialize(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
-		{Name: "serialize-xml-001", XPath: "serialize(.)", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-002", XPath: "serialize((.//@*)[1])", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
+		{Name: "serialize-xml-001", XPath: "serialize(.)", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-002", XPath: "serialize((.//@*)[1])", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
 		{Name: "serialize-xml-003b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-004b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-005b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
@@ -10376,8 +10376,8 @@ func TestQT3_fn_serialize(t *testing.T) {
 		{Name: "serialize-xml-008b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-008-src.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "serialize-xml-009b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
 		{Name: "serialize-xml-010", XPath: "serialize(name#1)", ExpectError: true},
-		{Name: "serialize-xml-011", XPath: "serialize((//@*:attr)[1])", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
-		{Name: "serialize-xml-012", XPath: "serialize((//namespace::*)[1])", DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
+		{Name: "serialize-xml-011", XPath: "serialize((//@*:attr)[1])", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
+		{Name: "serialize-xml-012", XPath: "serialize((//namespace::*)[1])", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
 		{Name: "serialize-xml-014b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
 		{Name: "serialize-xml-015b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
 		{Name: "serialize-xml-016b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
@@ -10399,52 +10399,52 @@ func TestQT3_fn_serialize(t *testing.T) {
 		{Name: "serialize-xml-032b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-032-src.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-033b", XPath: "serialize(1 to 10, $params/*)", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-034b", XPath: "serialize(./doc/x/text(), $params/*)", DocPath: "fn/serialize/serialize-034-src.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-035b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-035-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-036b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-035-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "serialize-xml-101", XPath: "serialize(., map{})", DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-035b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-035-src.xml", Skip: "requires XML 1.1", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-036b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-035-src.xml", Skip: "requires XML 1.1", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
+		{Name: "serialize-xml-101", XPath: "serialize(., map{})", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-102", XPath: `let $params := map {
             "method" : "xml",
             "indent" : "yes"
             }          
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", ExpectError: true},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Skip: "requires schema-validated source", ExpectError: true},
 		{Name: "serialize-xml-103", XPath: `let $params := map {
             "method" : "xml",
             "indent" : true() 
             }          
-          return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
+          return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-104", XPath: `let $params := map { "indent" : true() }          
-          return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
+          return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-105", XPath: `let $params := map {
             "use-character-maps" : true(),
             "indent" : true() 
             }          
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", ExpectError: true},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Skip: "requires schema-validated source", ExpectError: true},
 		{Name: "serialize-xml-106", XPath: `let $params := map {
             "method" : "xml",
             "indent" : true(),
             "cdata-section-elements" : 
                 (QName("http://www.saxonica.com", "a"), QName("http://www.saxonica.com", "b"), QName("", "c"))
             }          
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-106a", XPath: `let $params := map {
             "method" : "xml",
             "indent" : true(),
             "cdata-section-elements" : 
                 [QName("http://www.saxonica.com", "a"), QName("http://www.saxonica.com", "b"), QName("", "c")] 
             }          
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-107", XPath: `let $params := map {
             "method" : "xml",
             "indent" : true(),
             "xindent" : true() 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-107a", XPath: `let $params := map {
             "method" : "xml",
             "indent" : true(),
             QName("http://vendor.example.com/","xindent") : true() 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-108", XPath: `let $params := map {
             "method" : "xml",
             "indent" : true(),
@@ -10456,7 +10456,7 @@ func TestQT3_fn_serialize(t *testing.T) {
             "indent" : "maybe",
             "suppress-indentation" : "p" 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Skip: "requires schema-validated source", ExpectError: true},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Skip: "requires schema-validated source", ExpectError: true},
 		{Name: "serialize-xml-110", XPath: `let $params := map {
             "method" : "xml",
             "cdata-section-elements" : 
@@ -10468,52 +10468,52 @@ func TestQT3_fn_serialize(t *testing.T) {
             "indent" : true(),
             "indent" : true() 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
 		{Name: "serialize-xml-120b", XPath: "serialize(., map { QName(\"\",\"indent\") : true(), \"omit-xml-declaration\" : true() })", DocPath: "fn/serialize/serialize-xml-120-src.xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-123", XPath: `let $params := map {
             "use-character-maps" : map { "$$":"£" } 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
 		{Name: "serialize-xml-124", XPath: `let $params := map {
             "use-character-maps" : map { "$":"£", "$":"€" } 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
 		{Name: "serialize-xml-125", XPath: `let $params := map {
             QName("http://example.com/xslt-xquery-serialization","indent-spaces") : "3",
             QName("http://example.com/xslt-xquery-serialization","indent-spaces") : "2" 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
 		{Name: "serialize-xml-126", XPath: `let $params := map {
             "indent" : true(),
             QName("http://example.com/xslt-xquery-serialization","indent-spaces") : "2" 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-127", XPath: `let $params := map { "omit-xml-declaration" : true() }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-127a", XPath: `let $params := map { }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-128", XPath: `let $params := map { "omit-xml-declaration" : false() }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-129", XPath: `let $params := map { 
             "omit-xml-declaration" : false(),
             "standalone" : false() 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-130", XPath: `let $params := map {
             "omit-xml-declaration" : false(),
             "standalone" : true() 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-131", XPath: `let $params := map {
             "omit-xml-declaration" : false(),
             "standalone" : () 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-131a", XPath: `let $params := map {
             "omit-xml-declaration" : false(),
             "standalone" : " omit " 
             }
-            return serialize(., $params)`, DocPath: "docs/atomic.xml", Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
+            return serialize(., $params)`, DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
 		{Name: "serialize-xml-132", XPath: `let $params := map {
             "use-character-maps" : map { "$":"£" } 
             }
@@ -10529,14 +10529,14 @@ func TestQT3_fn_serialize(t *testing.T) {
             "version" : "1.1",
             "undeclare-prefixes" : true()
             }
-            return serialize(., $params)`, DocPath: "fn/serialize/serialize-035-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "fn/serialize/serialize-035-src.xml", Skip: "requires XML 1.1", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-136", XPath: `let $params := map {
             "method" : "xml",
             "version" : "1.1",
             "omit-xml-declaration" : false(),
             "undeclare-prefixes" : false()
             }
-            return serialize(., $params)`, DocPath: "fn/serialize/serialize-035-src.xml", Skip: "requires serialization", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
+            return serialize(., $params)`, DocPath: "fn/serialize/serialize-035-src.xml", Skip: "requires XML 1.1", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "serialize-xml-137b", XPath: "serialize(., ())", DocPath: "fn/serialize/serialize-xml-137-src.xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-138b", XPath: "serialize(., parse-json('{\"method\" : \"xml\", \"indent\" : true, \"use-character-maps\" : { \"x\" : \"j\", \"m\" : \"so\", \"l\" : \"n\" } }'))", DocPath: "fn/serialize/serialize-xml-138-src.xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-139b", XPath: "serialize(., map { 'use-character-maps' : map { QName(\"http://example.org\",\"xyz\") : \"abc\" } })", DocPath: "fn/serialize/serialize-xml-138-src.xml", ExpectError: true},
@@ -10625,7 +10625,7 @@ func TestQT3_fn_serialize(t *testing.T) {
 		{Name: "serialize-json-125", XPath: "let $r := serialize([0,0,xs:date('2011-04-06')], map{'method':'json'}) \n            return translate($r,' \t\n\r', '')", Assertions: []qt3Assertion{qt3AssertStringValue("[0,0,\"2011-04-06\"]")}},
 		{Name: "serialize-json-126", XPath: "let $r := serialize(map{\"a\":xs:date('2011-04-06')}, map{'method':'json'}) \n            return translate($r,' \t\n\r', '')", Assertions: []qt3Assertion{qt3AssertStringValue("{\"a\":\"2011-04-06\"}")}},
 		{Name: "serialize-json-127", XPath: `let $r := serialize(map{"a":doc($uri)}, map{'method':'json'}) 
-            return translate($r, codepoints-to-string((32, 9, 10, 13)), '')`, Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertStringValue("{\"a\":\"<a>text<\\/a>\"}")}},
+            return translate($r, codepoints-to-string((32, 9, 10, 13)), '')`, Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/serialize-json/doc001.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/serialize-json/doc001.xml": "fn/serialize/doc001.xml"}, Assertions: []qt3Assertion{qt3AssertStringValue("{\"a\":\"<a>text<\\/a>\"}")}},
 		{Name: "serialize-json-128", XPath: "serialize(map{\"uri\":xs:anyURI('http://www.w3.org/')}, map{'method':'json'})", Assertions: []qt3Assertion{qt3AssertStringValue("{\"uri\":\"http:\\/\\/www.w3.org\\/\"}")}},
 		{Name: "serialize-json-130", XPath: "let $r := serialize((1, 2, 3, \"four\", true(), false()), map{'method':'json'}) return\n            translate($r,' \t\n\r', '')", ExpectError: true},
 		{Name: "serialize-json-131", XPath: "let $r := serialize(map{\"abc\":(1 to 10)}, map{'method':'json'}) return translate($r,'\n            \t\n\r', '')", ExpectError: true},
@@ -11792,18 +11792,18 @@ func TestQT3_fn_trace(t *testing.T) {
 func TestQT3_fn_transform(t *testing.T) {
 	t.Parallel()
 	qt3RunTests(t, []qt3Test{
-		{Name: "fn-transform-1", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"source-node\" : fn:doc($uri)})return $result?output", DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-transform-1a", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"source-node\" : fn:doc($uri), \"delivery-format\" : \"serialized\"})return $result?output instance of xs:string", DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-transform-1b", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"source-node\" : fn:doc($uri), \"delivery-format\" : \"document\"})return $result?output instance of node()", DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-transform-1c", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"source-node\" : fn:doc($uri)})return $result(\"output\")", DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-transform-1d", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"source-node\" : fn:doc($uri), \"delivery-format\" : \"serialized\"})return $result(\"output\") instance of xs:string", DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-transform-1e", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"source-node\" : fn:doc($uri), \"delivery-format\" : \"document\"})return $result(\"output\") instance of node()", DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-transform-1", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"source-node\" : fn:doc($uri)})return $result?output", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-transform-1a", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"source-node\" : fn:doc($uri), \"delivery-format\" : \"serialized\"})return $result?output instance of xs:string", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-transform-1b", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"source-node\" : fn:doc($uri), \"delivery-format\" : \"document\"})return $result?output instance of node()", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-transform-1c", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"source-node\" : fn:doc($uri)})return $result(\"output\")", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-transform-1d", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"source-node\" : fn:doc($uri), \"delivery-format\" : \"serialized\"})return $result(\"output\") instance of xs:string", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-transform-1e", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"source-node\" : fn:doc($uri), \"delivery-format\" : \"document\"})return $result(\"output\") instance of node()", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-transform-3", XPath: `let $in := parse-xml("<dummy/>"),
                         $style := doc($variable-uri) return (
-                    transform(map{"source-node":$in, "stylesheet-node":$style, "stylesheet-params": map { QName("","v"): "2" } } ) )?output`, DocPath: "fn/transform/variable.xsl", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
+                    transform(map{"source-node":$in, "stylesheet-node":$style, "stylesheet-params": map { QName("","v"): "2" } } ) )?output`, DocPath: "fn/transform/variable.xsl", Params: []qt3Param{{Name: "variable-uri", Select: "'http://www.w3.org/fots/fn/transform/variable.xsl'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/transform/variable.xsl": "fn/transform/variable.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-3a", XPath: `let $in := parse-xml("<dummy/>"),
                         $style := doc($variable-uri) return (
-                    transform(map{"source-node":$in, "stylesheet-node":$style, "stylesheet-params": map { QName("","v"): "2" } } ) )("output")`, DocPath: "fn/transform/variable.xsl", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
+                    transform(map{"source-node":$in, "stylesheet-node":$style, "stylesheet-params": map { QName("","v"): "2" } } ) )("output")`, DocPath: "fn/transform/variable.xsl", Params: []qt3Param{{Name: "variable-uri", Select: "'http://www.w3.org/fots/fn/transform/variable.xsl'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/transform/variable.xsl": "fn/transform/variable.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-4", XPath: `let $in := xs:string("<books>
     <book>
         <title>XSLT Programmer?s Reference</title>
@@ -12031,9 +12031,9 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style }
                             </out>
                         </xsl:template>
                     </xsl:stylesheet>")
-                    return (transform(map{"source-node":$in, "stylesheet-node":$style, "stylesheet-params": map { QName("","v"): "2", QName("","w"): "3", QName("","y"): "5", QName("","x"): "4" } } ) )("output")`, DocPath: "fn/transform/variable.xsl", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "fn-transform-16", XPath: "fn:transform(map {\"stylesheet-location\" : $render, \"source-node\" : fn:doc($uri), \"delivery-format\" : \"document\", \"base-output-uri\" : $base-uri})($base-uri)", DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-transform-17", XPath: "fn:transform(map {\"stylesheet-location\" : $render, \"source-node\" : fn:doc($uri), \"delivery-format\" : \"document\", \"base-output-uri\" : $base-uri})", DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+                    return (transform(map{"source-node":$in, "stylesheet-node":$style, "stylesheet-params": map { QName("","v"): "2", QName("","w"): "3", QName("","y"): "5", QName("","x"): "4" } } ) )("output")`, DocPath: "fn/transform/variable.xsl", Params: []qt3Param{{Name: "variable-uri", Select: "'http://www.w3.org/fots/fn/transform/variable.xsl'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/transform/variable.xsl": "fn/transform/variable.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
+		{Name: "fn-transform-16", XPath: "fn:transform(map {\"stylesheet-location\" : $render, \"source-node\" : fn:doc($uri), \"delivery-format\" : \"document\", \"base-output-uri\" : $base-uri})($base-uri)", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-transform-17", XPath: "fn:transform(map {\"stylesheet-location\" : $render, \"source-node\" : fn:doc($uri), \"delivery-format\" : \"document\", \"base-output-uri\" : $base-uri})", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-18", XPath: `let $xsl  :="<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'>
                     <xsl:template name='main'>
                     <x><xsl:value-of select='static-base-uri()'/></x>
@@ -12043,8 +12043,8 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style }
             fn:transform(map {"stylesheet-text" : $xsl, "initial-template" : QName('','main'), "stylesheet-base-uri": "http://www.example.com"})?output`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-transform-20", XPath: `fn:transform(map {"stylesheet-location" : "http://www.w3.org/fots/fn/transform/staticbaseuri.xsl", 
                                 "initial-template" : QName('','main'), 
-                                "stylesheet-base-uri": "http://www.example.com"})("output")`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
-		{Name: "fn-transform-21", XPath: "fn:transform(map {\"stylesheet-location\" : \"http://www.w3.org/fots/fn/transform/staticbaseuri.xsl\", \"initial-template\" : QName('','main')})(\"output\")", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
+                                "stylesheet-base-uri": "http://www.example.com"})("output")`, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/transform/staticbaseuri.xsl": "fn/transform/staticbaseuri.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
+		{Name: "fn-transform-21", XPath: "fn:transform(map {\"stylesheet-location\" : \"http://www.w3.org/fots/fn/transform/staticbaseuri.xsl\", \"initial-template\" : QName('','main')})(\"output\")", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/transform/staticbaseuri.xsl": "fn/transform/staticbaseuri.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-transform-22", XPath: `let $xsl  :="<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'>
                     <xsl:include href='transform/staticbaseuri.xsl'/>
                     </xsl:stylesheet>"
@@ -12072,14 +12072,14 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style }
             return let $output2 := fn:transform(map {"stylesheet-text" : $xsl, "source-node" : parse-xml("<doc2/>"), "cache":false()})?output//x/string()
             return trace($output1,'output1') eq trace($output2,'output2')`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "fn-transform-28", XPath: `fn:transform(map {"stylesheet-location" : $render, "source-node" : fn:doc($uri), "delivery-format" : "serialized",
-            "serialization-params" : map { "indent": false() } })`, DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+            "serialization-params" : map { "indent": false() } })`, DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-29", XPath: `fn:transform(map {"stylesheet-location" : $render, "source-node" : fn:doc($uri), "delivery-format" : "serialized",
-            "serialization-params" : map { "indent": true() } })`, DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+            "serialization-params" : map { "indent": true() } })`, DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-30", XPath: `let $out1 := fn:transform(map {"stylesheet-location" : $render, "source-node" : fn:doc($uri), "delivery-format" : "serialized",
             "serialization-params" : map { "indent":true() } })("output"),
             $out2 := fn:transform(map {"stylesheet-location" : $render, "source-node" : fn:doc($uri), "delivery-format" : "serialized",
             "serialization-params" : map { "indent":false() } })("output")
-            return $out1 eq $out2`, DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertFalse()}},
+            return $out1 eq $out2`, DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "fn-transform-31", XPath: `let $in := xs:string("<books>
     <book>
         <title>XSLT Programmer?s Reference</title>
@@ -12156,15 +12156,15 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style, 
             "delivery-format" : "document"})?*`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-35", XPath: `fn:transform(map {"stylesheet-location" : $render, "source-node" : fn:doc($uri),
             "base-output-uri" : resolve-uri("transform/sandbox/fn-transform-35.xml", static-base-uri()),
-            "delivery-format" : "serialized"})`, DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+            "delivery-format" : "serialized"})`, DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-36", XPath: `fn:transform(map {"stylesheet-location" : $render, "source-node" : fn:doc($uri),
             "base-output-uri" : resolve-uri("transform/sandbox/fn-transform-36.xml", static-base-uri()),
             "delivery-format" : "serialized", "serialization-params" : map { "indent": true() }
-            })`, DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+            })`, DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-36a", XPath: `fn:transform(map {"stylesheet-location" : $render, "source-node" : fn:doc($uri),
             "base-output-uri" : resolve-uri("transform/sandbox/fn-transform-36a.xml", static-base-uri()),
             "delivery-format" : "serialized", "serialization-params" : map { "indent": false() }
-            })`, DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+            })`, DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-37", XPath: `let $xsl  :="<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='3.0'>
                                                 <xsl:template match='/'> <xsl:for-each select='//section'>
                                                 <xsl:result-document href='section{position()}-page.html'> <!-- instructions content here -->
@@ -12194,8 +12194,8 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style, 
 		{Name: "fn-transform-40", XPath: `fn:transform(map {"stylesheet-node" : $onedoc, "source-node" : $sections,
             "base-output-uri" : resolve-uri("transform/sandbox/fn-transform-40/output.html",
             static-base-uri()), "delivery-format" : "serialized"})`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-transform-41", XPath: "fn:transform(map {\"stylesheet-node\" : $staticbaseuri, \"initial-template\" : QName('','main'), \"stylesheet-base-uri\": \"http://www.example.com\"})(\"output\")", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
-		{Name: "fn-transform-42", XPath: "fn:transform(map {\"stylesheet-node\" : $staticbaseuri, \"initial-template\" : QName('','main')})(\"output\")", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-transform-41", XPath: "fn:transform(map {\"stylesheet-node\" : $staticbaseuri, \"initial-template\" : QName('','main'), \"stylesheet-base-uri\": \"http://www.example.com\"})(\"output\")", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/transform/staticbaseuri.xsl": "fn/transform/staticbaseuri.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
+		{Name: "fn-transform-42", XPath: "fn:transform(map {\"stylesheet-node\" : $staticbaseuri, \"initial-template\" : QName('','main')})(\"output\")", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/transform/staticbaseuri.xsl": "fn/transform/staticbaseuri.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-transform-43", XPath: `fn:transform(map {"stylesheet-node":$multipledocs, "source-node":$sections,
             "base-output-uri" : resolve-uri("transform/sandbox/fn-transform-43/output.html",
             static-base-uri()), "delivery-format":"serialized"})`, Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
@@ -12219,7 +12219,7 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style, 
             => map:remove(resolve-uri("transform/sandbox/fn-transform-44/output.xml", static-base-uri()))`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-45", XPath: `fn:transform(map {"stylesheet-location" : $render, "source-node" : fn:doc($uri),
             "base-output-uri" : resolve-uri("transform/sandbox/fn-transform-45.xml", static-base-uri()),
-            "delivery-format" : "serialized"})`, DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+            "delivery-format" : "serialized"})`, DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-46", XPath: `fn:transform(map {"stylesheet-node":$multipledocs2, "source-node":$sections,
             "delivery-format":"serialized"})`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-47", XPath: `fn:transform(map {"stylesheet-node":$multipledocs2, "source-node":$sections,
@@ -12462,7 +12462,7 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style, 
             "initial-template": fn:QName('','main'),
             "delivery-format" : "serialized",
             "serialization-params": map{'cdata-section-elements': (QName('http://www.w3.org/fots/fn/transform/myfunctions','c'), QName('', 'c'))}
-            })`, DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+            })`, DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-66", XPath: `let $xsl :="<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform'
             xmlns:xs='http://www.w3.org/2001/XMLSchema'
             xmlns:my='http://www.w3.org/fots/fn/transform/myfunctions' version='3.0'>
@@ -12481,7 +12481,7 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style, 
             "initial-template": fn:QName('','main'),
             "delivery-format" : "serialized",
             "serialization-params": map{'suppress-indentation': (QName('http://www.w3.org/fots/fn/transform/myfunctions','c'), QName('', 'c'))}
-            })`, DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+            })`, DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-67", XPath: `let $xsl :="<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform'
             xmlns:xs='http://www.w3.org/2001/XMLSchema'
             xmlns:my='http://www.w3.org/fots/fn/transform/myfunctions' version='2.0'>
@@ -12498,7 +12498,7 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style, 
             "initial-template": fn:QName('','main'),
             "delivery-format" : "serialized",
             "serialization-params": map{'use-character-maps': map{'*':'(star)'}}
-            })`, DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
+            })`, DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-68", XPath: `let $xsl  := "<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform'
             xmlns:xs='http://www.w3.org/2001/XMLSchema'
             xmlns:saxon='http://saxon.sf.net/'
@@ -12729,7 +12729,7 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style, 
               "stylesheet-node": $stylesheet,
               "xslt-version": 2.0
            })?output`, Skip: "requires XSLT transform", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
-		{Name: "fn-transform-83", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"initial-match-selection\" : fn:doc($uri)})return $result?output", DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-transform-83", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"initial-match-selection\" : fn:doc($uri)})return $result?output", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-transform-84", XPath: `let $xsl  := "<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' xmlns:xs='http://www.w3.org/2001/XMLSchema'
             version='3.0'> 
             <xsl:template match='.' as='xs:integer'>
@@ -12739,7 +12739,7 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style, 
         transform(map{"stylesheet-text":$xsl,
             "delivery-format" : "raw",
             "initial-match-selection": 1 to 5
-            })?output`, DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            })?output`, DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-transform-85", XPath: `let $xsl  := "<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform'
             version='1.0'> 
             <xsl:template match='/'>
@@ -12801,7 +12801,7 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style, 
                              "base-output-uri" : "http://example.com/",
                              "source-node"     : parse-xml('<a><b>89</b></a>')
                             })`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-transform-err-1", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render})return $result(\"output\")", DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", ExpectError: true},
+		{Name: "fn-transform-err-1", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render})return $result(\"output\")", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", ExpectError: true},
 		{Name: "fn-transform-err-2", XPath: `let $xsl  :="<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='3.0'
                                                                  xmlns:app='http://www.example.com'>
                                                 <xsl:template name='app:main' > <xsl:for-each select='section'>
@@ -12814,7 +12814,7 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style, 
                                                    </doc>"
                     return
 
-            let $result := fn:transform(map {"stylesheet-text": $xsl,"stylesheet-location" : $render, "source-node":fn:parse-xml($xml)})return $result?output`, DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", ExpectError: true},
+            let $result := fn:transform(map {"stylesheet-text": $xsl,"stylesheet-location" : $render, "source-node":fn:parse-xml($xml)})return $result?output`, DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", ExpectError: true},
 		{Name: "fn-transform-err-3", XPath: `let $xsl  :="<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='3.0'
                                                                  xmlns:app='http://www.example.com'>
                                                 <xsl:template name='app:main' > <xsl:for-each select='section'>
@@ -12823,7 +12823,7 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style, 
                                                 </xsl:template> </xsl:stylesheet>"
                     return
 
-            let $result := fn:transform(map {"stylesheet-text": $xsl,"stylesheet-node" : fn:doc($render), "source-node" : fn:doc($uri)})return $result?output`, DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", ExpectError: true},
+            let $result := fn:transform(map {"stylesheet-text": $xsl,"stylesheet-node" : fn:doc($render), "source-node" : fn:doc($uri)})return $result?output`, DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", ExpectError: true},
 		{Name: "fn-transform-err-4", XPath: `let $xsl  :="<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='2.0'>
                 <xsl:template match='/'>
                     <out>
@@ -12919,12 +12919,12 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style, 
             transform(map{"stylesheet-text":$xsl, "source-node":parse-xml("<doc>this</doc>"),
             "initial-function": fn:QName('http://www.w3.org/fots/fn/transform/myfunctions','user-function')
             })`, Skip: "requires XSLT transform", ExpectError: true},
-		{Name: "fn-transform-err-17", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"initial-match-selection\" : fn:doc($uri), \"source-node\" : fn:doc($uri)})return $result?output", DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", ExpectError: true},
+		{Name: "fn-transform-err-17", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"initial-match-selection\" : fn:doc($uri), \"source-node\" : fn:doc($uri)})return $result?output", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", ExpectError: true},
 		{Name: "fn-transform-err-18", XPath: `let $result := fn:transform(map {"stylesheet-location" : $render, 
                                                "source-node" : fn:doc($uri), 
                                                "stylesheet-params" : map{ "debug": true()}
-                                          }) return $result?output`, DocPath: "docs/works-mod.xml", Skip: "requires XSLT transform", ExpectError: true},
-		{Name: "fn-transform-901", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"source-node\" : fn:doc($uri)})return $result(\"output\")", DocPath: "docs/works-mod.xml", Skip: "requires external parameters", ExpectError: true},
+                                          }) return $result?output`, DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", ExpectError: true},
+		{Name: "fn-transform-901", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"source-node\" : fn:doc($uri)})return $result(\"output\")", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, ExpectError: true},
 		{Name: "fn-transform-902", XPath: `let $xsl  :="<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='3.0'>
                 <xsl:param name='static-param' static='yes' select='&quot;success&quot;'/>
                 <xsl:template match='/'>
@@ -13155,7 +13155,7 @@ func TestQT3_fn_unparsed_text(t *testing.T) {
 		{Name: "fn-unparsed-text-050", XPath: "string-length(fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines.txt\"))", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/invalid-xml.xml": "fn/unparsed-text/invalid-xml.xml", "http://www.w3.org/fots/unparsed-text/non-xml-character.txt": "fn/unparsed-text/non-xml-character.txt", "http://www.w3.org/fots/unparsed-text/text-plain-iso-8859-1.txt": "fn/unparsed-text/text-plain-iso-8859-1.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom-lines.txt": "fn/unparsed-text/text-plain-utf-16be-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom.txt": "fn/unparsed-text/text-plain-utf-16be-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom-lines.txt": "fn/unparsed-text/text-plain-utf-16le-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom.txt": "fn/unparsed-text/text-plain-utf-16le-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines.txt": "fn/unparsed-text/text-plain-utf-8-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom.txt": "fn/unparsed-text/text-plain-utf-8-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-invalid.txt": "fn/unparsed-text/text-plain-utf-8-bom-invalid.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-lines.txt": "fn/unparsed-text/text-plain-utf-8-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/fots/unparsed-text/text-with-surrogates.txt": "fn/unparsed-text/text-with-surrogates.txt", "http://www.w3.org/fots/unparsed-text/text-xml-iso-8859-1.xml": "fn/unparsed-text/text-xml-iso-8859-1.xml", "http://www.w3.org/fots/unparsed-text/text-xml-unknown-encoding.xml": "fn/unparsed-text/text-xml-unknown-encoding.xml", "http://www.w3.org/fots/unparsed-text/text-xml-utf-16.xml": "fn/unparsed-text/text-xml-utf-16.xml", "http://www.w3.org/fots/unparsed-text/text-xml-utf-8.xml": "fn/unparsed-text/text-xml-utf-8.xml", "http://www.w3.org/fots/unparsed-text/unknown-encoding.txt": "fn/unparsed-text/unknown-encoding.txt"}, Assertions: []qt3Assertion{qt3AssertStringValue("400")}},
 		{Name: "fn-unparsed-text-051", XPath: "string-length(fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom-lines.txt\"))", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/invalid-xml.xml": "fn/unparsed-text/invalid-xml.xml", "http://www.w3.org/fots/unparsed-text/non-xml-character.txt": "fn/unparsed-text/non-xml-character.txt", "http://www.w3.org/fots/unparsed-text/text-plain-iso-8859-1.txt": "fn/unparsed-text/text-plain-iso-8859-1.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom-lines.txt": "fn/unparsed-text/text-plain-utf-16be-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom.txt": "fn/unparsed-text/text-plain-utf-16be-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom-lines.txt": "fn/unparsed-text/text-plain-utf-16le-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom.txt": "fn/unparsed-text/text-plain-utf-16le-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines.txt": "fn/unparsed-text/text-plain-utf-8-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom.txt": "fn/unparsed-text/text-plain-utf-8-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-invalid.txt": "fn/unparsed-text/text-plain-utf-8-bom-invalid.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-lines.txt": "fn/unparsed-text/text-plain-utf-8-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/fots/unparsed-text/text-with-surrogates.txt": "fn/unparsed-text/text-with-surrogates.txt", "http://www.w3.org/fots/unparsed-text/text-xml-iso-8859-1.xml": "fn/unparsed-text/text-xml-iso-8859-1.xml", "http://www.w3.org/fots/unparsed-text/text-xml-unknown-encoding.xml": "fn/unparsed-text/text-xml-unknown-encoding.xml", "http://www.w3.org/fots/unparsed-text/text-xml-utf-16.xml": "fn/unparsed-text/text-xml-utf-16.xml", "http://www.w3.org/fots/unparsed-text/text-xml-utf-8.xml": "fn/unparsed-text/text-xml-utf-8.xml", "http://www.w3.org/fots/unparsed-text/unknown-encoding.txt": "fn/unparsed-text/unknown-encoding.txt"}, Assertions: []qt3Assertion{qt3AssertStringValue("400")}},
 		{Name: "fn-unparsed-text-052", XPath: "string-length(fn:unparsed-text(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom-lines.txt\"))", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/invalid-xml.xml": "fn/unparsed-text/invalid-xml.xml", "http://www.w3.org/fots/unparsed-text/non-xml-character.txt": "fn/unparsed-text/non-xml-character.txt", "http://www.w3.org/fots/unparsed-text/text-plain-iso-8859-1.txt": "fn/unparsed-text/text-plain-iso-8859-1.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom-lines.txt": "fn/unparsed-text/text-plain-utf-16be-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom.txt": "fn/unparsed-text/text-plain-utf-16be-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom-lines.txt": "fn/unparsed-text/text-plain-utf-16le-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom.txt": "fn/unparsed-text/text-plain-utf-16le-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines.txt": "fn/unparsed-text/text-plain-utf-8-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom.txt": "fn/unparsed-text/text-plain-utf-8-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-invalid.txt": "fn/unparsed-text/text-plain-utf-8-bom-invalid.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-lines.txt": "fn/unparsed-text/text-plain-utf-8-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/fots/unparsed-text/text-with-surrogates.txt": "fn/unparsed-text/text-with-surrogates.txt", "http://www.w3.org/fots/unparsed-text/text-xml-iso-8859-1.xml": "fn/unparsed-text/text-xml-iso-8859-1.xml", "http://www.w3.org/fots/unparsed-text/text-xml-unknown-encoding.xml": "fn/unparsed-text/text-xml-unknown-encoding.xml", "http://www.w3.org/fots/unparsed-text/text-xml-utf-16.xml": "fn/unparsed-text/text-xml-utf-16.xml", "http://www.w3.org/fots/unparsed-text/text-xml-utf-8.xml": "fn/unparsed-text/text-xml-utf-8.xml", "http://www.w3.org/fots/unparsed-text/unknown-encoding.txt": "fn/unparsed-text/unknown-encoding.txt"}, Assertions: []qt3Assertion{qt3AssertStringValue("400")}},
-		{Name: "fn-unparsed-text-053", XPath: "fn:unparsed-text($href)", Skip: "requires external parameters", ExpectError: true},
+		{Name: "fn-unparsed-text-053", XPath: "fn:unparsed-text($href)", Params: []qt3Param{{Name: "href", Select: "'unparsed-text/text-plain-utf-8.txt'"}}, ExpectError: true},
 		{Name: "fn-unparsed-text-054", XPath: `for $t1 in unparsed-text('http://date.jsontest.com') return
          every $i in 1 to 50 satisfies (parse-xml('<a><b><c>' || $i || '</c></b></a>')//c (:waste some time:) and 
                 unparsed-text(translate(concat('http://date.jsontest.com', $i), '0123456789', '')) eq $t1)`, Skip: "requires remote HTTP access", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue())}},
@@ -13259,7 +13259,7 @@ func TestQT3_fn_unparsed_text_available(t *testing.T) {
 		{Name: "fn-unparsed-text-available-049", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines.txt\")", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/invalid-xml.xml": "fn/unparsed-text/invalid-xml.xml", "http://www.w3.org/fots/unparsed-text/non-xml-character.txt": "fn/unparsed-text/non-xml-character.txt", "http://www.w3.org/fots/unparsed-text/text-plain-iso-8859-1.txt": "fn/unparsed-text/text-plain-iso-8859-1.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom-lines.txt": "fn/unparsed-text/text-plain-utf-16be-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom.txt": "fn/unparsed-text/text-plain-utf-16be-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom-lines.txt": "fn/unparsed-text/text-plain-utf-16le-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom.txt": "fn/unparsed-text/text-plain-utf-16le-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines.txt": "fn/unparsed-text/text-plain-utf-8-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom.txt": "fn/unparsed-text/text-plain-utf-8-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-invalid.txt": "fn/unparsed-text/text-plain-utf-8-bom-invalid.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-lines.txt": "fn/unparsed-text/text-plain-utf-8-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/fots/unparsed-text/text-xml-iso-8859-1.xml": "fn/unparsed-text/text-xml-iso-8859-1.xml", "http://www.w3.org/fots/unparsed-text/text-xml-utf-16.xml": "fn/unparsed-text/text-xml-utf-16.xml", "http://www.w3.org/fots/unparsed-text/text-xml-utf-8.xml": "fn/unparsed-text/text-xml-utf-8.xml", "http://www.w3.org/fots/unparsed-text/unknown-encoding.txt": "fn/unparsed-text/unknown-encoding.txt"}, Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-unparsed-text-available-050", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom-lines.txt\")", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/invalid-xml.xml": "fn/unparsed-text/invalid-xml.xml", "http://www.w3.org/fots/unparsed-text/non-xml-character.txt": "fn/unparsed-text/non-xml-character.txt", "http://www.w3.org/fots/unparsed-text/text-plain-iso-8859-1.txt": "fn/unparsed-text/text-plain-iso-8859-1.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom-lines.txt": "fn/unparsed-text/text-plain-utf-16be-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom.txt": "fn/unparsed-text/text-plain-utf-16be-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom-lines.txt": "fn/unparsed-text/text-plain-utf-16le-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom.txt": "fn/unparsed-text/text-plain-utf-16le-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines.txt": "fn/unparsed-text/text-plain-utf-8-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom.txt": "fn/unparsed-text/text-plain-utf-8-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-invalid.txt": "fn/unparsed-text/text-plain-utf-8-bom-invalid.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-lines.txt": "fn/unparsed-text/text-plain-utf-8-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/fots/unparsed-text/text-xml-iso-8859-1.xml": "fn/unparsed-text/text-xml-iso-8859-1.xml", "http://www.w3.org/fots/unparsed-text/text-xml-utf-16.xml": "fn/unparsed-text/text-xml-utf-16.xml", "http://www.w3.org/fots/unparsed-text/text-xml-utf-8.xml": "fn/unparsed-text/text-xml-utf-8.xml", "http://www.w3.org/fots/unparsed-text/unknown-encoding.txt": "fn/unparsed-text/unknown-encoding.txt"}, Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-unparsed-text-available-051", XPath: "fn:unparsed-text-available(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom-lines.txt\")", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/invalid-xml.xml": "fn/unparsed-text/invalid-xml.xml", "http://www.w3.org/fots/unparsed-text/non-xml-character.txt": "fn/unparsed-text/non-xml-character.txt", "http://www.w3.org/fots/unparsed-text/text-plain-iso-8859-1.txt": "fn/unparsed-text/text-plain-iso-8859-1.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom-lines.txt": "fn/unparsed-text/text-plain-utf-16be-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom.txt": "fn/unparsed-text/text-plain-utf-16be-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom-lines.txt": "fn/unparsed-text/text-plain-utf-16le-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom.txt": "fn/unparsed-text/text-plain-utf-16le-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines.txt": "fn/unparsed-text/text-plain-utf-8-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom.txt": "fn/unparsed-text/text-plain-utf-8-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-invalid.txt": "fn/unparsed-text/text-plain-utf-8-bom-invalid.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-lines.txt": "fn/unparsed-text/text-plain-utf-8-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/fots/unparsed-text/text-xml-iso-8859-1.xml": "fn/unparsed-text/text-xml-iso-8859-1.xml", "http://www.w3.org/fots/unparsed-text/text-xml-utf-16.xml": "fn/unparsed-text/text-xml-utf-16.xml", "http://www.w3.org/fots/unparsed-text/text-xml-utf-8.xml": "fn/unparsed-text/text-xml-utf-8.xml", "http://www.w3.org/fots/unparsed-text/unknown-encoding.txt": "fn/unparsed-text/unknown-encoding.txt"}, Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-unparsed-text-available-052", XPath: "fn:unparsed-text-available($href)", Skip: "requires external parameters", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "fn-unparsed-text-available-052", XPath: "fn:unparsed-text-available($href)", Params: []qt3Param{{Name: "href", Select: "'unparsed-text/text-plain-utf-8.txt'"}}, Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "fn-unparsed-text-available-053", XPath: "fn:unparsed-text-available(\"x\"[current-date() lt xs:date('1900-01-01')])", Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "fn-unparsed-text-available-054", XPath: "fn:unparsed-text-available(\"x\"[current-date() lt xs:date('1900-01-01')], \"utf-8\")", Assertions: []qt3Assertion{qt3AssertFalse()}},
 	})
@@ -13361,7 +13361,7 @@ func TestQT3_fn_unparsed_text_lines(t *testing.T) {
 		{Name: "fn-unparsed-text-lines-052", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom-lines.txt\") ! string-length(.)", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/invalid-xml.xml": "fn/unparsed-text/invalid-xml.xml", "http://www.w3.org/fots/unparsed-text/non-xml-character.txt": "fn/unparsed-text/non-xml-character.txt", "http://www.w3.org/fots/unparsed-text/text-plain-iso-8859-1.txt": "fn/unparsed-text/text-plain-iso-8859-1.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom-lines.txt": "fn/unparsed-text/text-plain-utf-16be-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom.txt": "fn/unparsed-text/text-plain-utf-16be-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom-lines.txt": "fn/unparsed-text/text-plain-utf-16le-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom.txt": "fn/unparsed-text/text-plain-utf-16le-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines-2.txt": "fn/unparsed-text/text-plain-utf-8-bom-lines-2.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines-3.txt": "fn/unparsed-text/text-plain-utf-8-bom-lines-3.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines.txt": "fn/unparsed-text/text-plain-utf-8-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom.txt": "fn/unparsed-text/text-plain-utf-8-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-invalid.txt": "fn/unparsed-text/text-plain-utf-8-bom-invalid.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-lines.txt": "fn/unparsed-text/text-plain-utf-8-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/fots/unparsed-text/text-xml-iso-8859-1.xml": "fn/unparsed-text/text-xml-iso-8859-1.xml", "http://www.w3.org/fots/unparsed-text/text-xml-utf-16.xml": "fn/unparsed-text/text-xml-utf-16.xml", "http://www.w3.org/fots/unparsed-text/text-xml-utf-8.xml": "fn/unparsed-text/text-xml-utf-8.xml", "http://www.w3.org/fots/unparsed-text/unknown-encoding.txt": "fn/unparsed-text/unknown-encoding.txt"}, AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckDeepEq("(53, 54, 179, 77, 32)"))}},
 		{Name: "fn-unparsed-text-lines-053", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines-2.txt\") ! string-length(.)", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/invalid-xml.xml": "fn/unparsed-text/invalid-xml.xml", "http://www.w3.org/fots/unparsed-text/non-xml-character.txt": "fn/unparsed-text/non-xml-character.txt", "http://www.w3.org/fots/unparsed-text/text-plain-iso-8859-1.txt": "fn/unparsed-text/text-plain-iso-8859-1.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom-lines.txt": "fn/unparsed-text/text-plain-utf-16be-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom.txt": "fn/unparsed-text/text-plain-utf-16be-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom-lines.txt": "fn/unparsed-text/text-plain-utf-16le-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom.txt": "fn/unparsed-text/text-plain-utf-16le-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines-2.txt": "fn/unparsed-text/text-plain-utf-8-bom-lines-2.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines-3.txt": "fn/unparsed-text/text-plain-utf-8-bom-lines-3.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines.txt": "fn/unparsed-text/text-plain-utf-8-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom.txt": "fn/unparsed-text/text-plain-utf-8-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-invalid.txt": "fn/unparsed-text/text-plain-utf-8-bom-invalid.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-lines.txt": "fn/unparsed-text/text-plain-utf-8-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/fots/unparsed-text/text-xml-iso-8859-1.xml": "fn/unparsed-text/text-xml-iso-8859-1.xml", "http://www.w3.org/fots/unparsed-text/text-xml-utf-16.xml": "fn/unparsed-text/text-xml-utf-16.xml", "http://www.w3.org/fots/unparsed-text/text-xml-utf-8.xml": "fn/unparsed-text/text-xml-utf-8.xml", "http://www.w3.org/fots/unparsed-text/unknown-encoding.txt": "fn/unparsed-text/unknown-encoding.txt"}, Assertions: []qt3Assertion{qt3AssertDeepEq("(50, 0, 0, 50, 0, 0)")}},
 		{Name: "fn-unparsed-text-lines-054", XPath: "fn:unparsed-text-lines(\"http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines-3.txt\") ! string-length(.)", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/unparsed-text/invalid-xml.xml": "fn/unparsed-text/invalid-xml.xml", "http://www.w3.org/fots/unparsed-text/non-xml-character.txt": "fn/unparsed-text/non-xml-character.txt", "http://www.w3.org/fots/unparsed-text/text-plain-iso-8859-1.txt": "fn/unparsed-text/text-plain-iso-8859-1.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom-lines.txt": "fn/unparsed-text/text-plain-utf-16be-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16be-bom.txt": "fn/unparsed-text/text-plain-utf-16be-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom-lines.txt": "fn/unparsed-text/text-plain-utf-16le-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-16le-bom.txt": "fn/unparsed-text/text-plain-utf-16le-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines-2.txt": "fn/unparsed-text/text-plain-utf-8-bom-lines-2.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines-3.txt": "fn/unparsed-text/text-plain-utf-8-bom-lines-3.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom-lines.txt": "fn/unparsed-text/text-plain-utf-8-bom-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-bom.txt": "fn/unparsed-text/text-plain-utf-8-bom.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-invalid.txt": "fn/unparsed-text/text-plain-utf-8-bom-invalid.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8-lines.txt": "fn/unparsed-text/text-plain-utf-8-lines.txt", "http://www.w3.org/fots/unparsed-text/text-plain-utf-8.txt": "fn/unparsed-text/text-plain-utf-8.txt", "http://www.w3.org/fots/unparsed-text/text-xml-iso-8859-1.xml": "fn/unparsed-text/text-xml-iso-8859-1.xml", "http://www.w3.org/fots/unparsed-text/text-xml-utf-16.xml": "fn/unparsed-text/text-xml-utf-16.xml", "http://www.w3.org/fots/unparsed-text/text-xml-utf-8.xml": "fn/unparsed-text/text-xml-utf-8.xml", "http://www.w3.org/fots/unparsed-text/unknown-encoding.txt": "fn/unparsed-text/unknown-encoding.txt"}, Assertions: []qt3Assertion{qt3AssertDeepEq("(46, 0, 20)")}},
-		{Name: "fn-unparsed-text-lines-055", XPath: "fn:unparsed-text-lines($href)", Skip: "requires external parameters", ExpectError: true},
+		{Name: "fn-unparsed-text-lines-055", XPath: "fn:unparsed-text-lines($href)", Params: []qt3Param{{Name: "href", Select: "'unparsed-text/text-plain-utf-8.txt'"}}, ExpectError: true},
 	})
 }
 

@@ -28,6 +28,11 @@ type qt3Assertion func(t *testing.T, seq xpath3.Sequence)
 // qt3Check returns true if a result sequence satisfies a condition (for any-of).
 type qt3Check func(seq xpath3.Sequence) bool
 
+type qt3Param struct {
+	Name   string
+	Select string
+}
+
 type qt3Test struct {
 	Name                string
 	XPath               string
@@ -37,6 +42,7 @@ type qt3Test struct {
 	DefaultCollation    string
 	DefaultDecimal      *qt3DecimalFormat
 	NamedDecimalFormats []qt3NamedDecimalFormat
+	Params              []qt3Param
 	BaseURI             string            // static base URI for fn:unparsed-text etc.
 	NeedsHTTP           bool              // test requires HTTP client (e.g. fn:json-doc with URL)
 	ResourceMap         map[string]string // URI → file path (relative to qt3TestDataDir()) for resource resolution
@@ -161,11 +167,27 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 			} else if baseURI := qt3DefaultBaseURI(tc); baseURI != "" {
 				opts = append(opts, xpath3.WithBaseURI(baseURI))
 			}
-			ctx = xpath3.NewContext(ctx, opts...)
 			var doc helium.Node
 			if tc.DocPath != "" {
 				doc = qt3ParseDoc(t, filepath.Join(qt3TestDataDir(), tc.DocPath))
 			}
+			if len(tc.Params) > 0 {
+				vars := make(map[string]xpath3.Sequence, len(tc.Params))
+				for _, param := range tc.Params {
+					paramOpts := append([]xpath3.ContextOption{}, opts...)
+					if len(vars) > 0 {
+						paramOpts = append(paramOpts, xpath3.WithVariables(vars))
+					}
+					paramCtx := xpath3.NewContext(ctx, paramOpts...)
+					compiledParam, err := xpath3.Compile(param.Select)
+					require.NoError(t, err, "compile param $%s: %s", param.Name, param.Select)
+					result, err := compiledParam.Evaluate(paramCtx, doc)
+					require.NoError(t, err, "eval param $%s: %s", param.Name, param.Select)
+					vars[param.Name] = result.Sequence()
+				}
+				opts = append(opts, xpath3.WithVariables(vars))
+			}
+			ctx = xpath3.NewContext(ctx, opts...)
 			compiled, err := xpath3.Compile(tc.XPath)
 			if err != nil {
 				if tc.ExpectError || tc.AcceptError {
@@ -233,8 +255,8 @@ func qt3ResourceMapBaseURI(tc qt3Test) string {
 		if strings.Contains(uri, "://") {
 			return ""
 		}
-		dir := path.Dir(relPath)
-		if dir == "." || dir == "" {
+		dir := qt3RelativeResourceBase(relPath, uri)
+		if dir == "" {
 			return ""
 		}
 		if baseDir == "" {
@@ -250,6 +272,33 @@ func qt3ResourceMapBaseURI(tc qt3Test) string {
 		return ""
 	}
 	return "http://www.w3.org/fots/" + strings.Trim(baseDir, "/") + "/"
+}
+
+func qt3RelativeResourceBase(relPath, uri string) string {
+	relDir := path.Dir(filepath.ToSlash(relPath))
+	uriDir := path.Dir(uri)
+	if relDir == "." || relDir == "" {
+		return ""
+	}
+	if uriDir == "." || uriDir == "" {
+		return relDir
+	}
+
+	relParts := strings.Split(relDir, "/")
+	uriParts := strings.Split(uriDir, "/")
+	if len(uriParts) > len(relParts) {
+		return ""
+	}
+	for i := 1; i <= len(uriParts); i++ {
+		if relParts[len(relParts)-i] != uriParts[len(uriParts)-i] {
+			return ""
+		}
+	}
+	baseParts := relParts[:len(relParts)-len(uriParts)]
+	if len(baseParts) == 0 {
+		return ""
+	}
+	return strings.Join(baseParts, "/")
 }
 
 func qt3NeedsRelativeUnparsedTextBaseURI(expr string) bool {
@@ -486,7 +535,8 @@ func qt3CheckStringValue(expected string) qt3Check {
 func qt3CheckStringValueNS(expected string) qt3Check {
 	return func(seq xpath3.Sequence) bool {
 		got := strings.Join(strings.Fields(qt3StringValue(seq)), " ")
-		return got == expected
+		want := strings.Join(strings.Fields(expected), " ")
+		return got == want
 	}
 }
 

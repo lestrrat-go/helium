@@ -37,6 +37,7 @@ type evalContext struct {
 	defaultCollation     string         // for string functions without explicit collation
 	defaultDecimalFormat *DecimalFormat
 	decimalFormats       map[QualifiedName]DecimalFormat
+	docCache             map[string]helium.Node
 	baseURI              string      // static base URI for resolving relative URIs
 	uriResolver          URIResolver // custom URI resolver for fn:unparsed-text, fn:doc, etc.
 	// httpClient is intentionally stored here (not only in Context) so that
@@ -59,6 +60,7 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 		docOrder:    &ixpath.DocOrderCache{},
 		maxNodes:    maxNodeSetLength,
 		currentTime: &now,
+		docCache:    make(map[string]helium.Node),
 	}
 	if xctx := GetContext(ctx); xctx != nil {
 		ec.namespaces = xctx.namespaces
