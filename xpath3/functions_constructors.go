@@ -320,7 +320,7 @@ var (
 )
 
 // makeXSGregorian returns a constructor for xs:gDay, xs:gMonth, xs:gMonthDay, xs:gYear, xs:gYearMonth.
-func makeXSGregorian(typeName string, re *regexp.Regexp) func(context.Context, []Sequence) (Sequence, error) {
+func makeXSGregorian(typeName string, _ *regexp.Regexp) func(context.Context, []Sequence) (Sequence, error) {
 	return func(_ context.Context, args []Sequence) (Sequence, error) {
 		if len(args[0]) == 0 {
 			return nil, nil
@@ -329,18 +329,11 @@ func makeXSGregorian(typeName string, re *regexp.Regexp) func(context.Context, [
 		if err != nil {
 			return nil, err
 		}
-		s, err := atomicToString(a)
+		result, err := CastAtomic(a, typeName)
 		if err != nil {
 			return nil, err
 		}
-		s = strings.TrimSpace(s)
-		if !re.MatchString(s) || !validateGregorianValue(typeName, s) {
-			return nil, &XPathError{
-				Code:    errCodeFORG0001,
-				Message: fmt.Sprintf("cannot cast %q to %s", s, typeName),
-			}
-		}
-		return SingleAtomic(AtomicValue{TypeName: typeName, Value: s}), nil
+		return SingleAtomic(result), nil
 	}
 }
 
