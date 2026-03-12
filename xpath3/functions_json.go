@@ -92,53 +92,77 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 
 	// Parse "liberal" option — must be xs:boolean
 	liberalKey := AtomicValue{TypeName: TypeString, Value: "liberal"}
-	if v, found := m.Get(liberalKey); found && len(v) > 0 {
-		if av, ok := v[0].(AtomicValue); ok {
-			if b, ok := av.Value.(bool); ok {
-				opts.liberal = b
-			} else {
-				return opts, &XPathError{Code: "FOJS0005",
-					Message: "option 'liberal' must be xs:boolean, got " + av.TypeName}
-			}
+	if v, found := m.Get(liberalKey); found {
+		if len(v) != 1 {
+			return opts, &XPathError{Code: "FOJS0005", Message: "option 'liberal' must be a single xs:boolean"}
+		}
+		av, ok := v[0].(AtomicValue)
+		if !ok {
+			return opts, &XPathError{Code: "FOJS0005", Message: "option 'liberal' must be xs:boolean"}
+		}
+		if b, ok := av.Value.(bool); ok {
+			opts.liberal = b
+		} else {
+			return opts, &XPathError{Code: "FOJS0005",
+				Message: "option 'liberal' must be xs:boolean, got " + av.TypeName}
 		}
 	}
 
 	// Parse "duplicates" option
 	dupKey := AtomicValue{TypeName: TypeString, Value: "duplicates"}
-	if v, found := m.Get(dupKey); found && len(v) > 0 {
-		if av, ok := v[0].(AtomicValue); ok {
-			s, _ := atomicToString(av)
-			switch s {
-			case "reject", "use-first", "use-last":
-				opts.duplicates = s
-			default:
-				return opts, &XPathError{Code: "FOJS0005",
-					Message: fmt.Sprintf("invalid value for 'duplicates' option: %q", s)}
-			}
+	if v, found := m.Get(dupKey); found {
+		if len(v) != 1 {
+			return opts, &XPathError{Code: "FOJS0005", Message: "option 'duplicates' must be a single string"}
+		}
+		av, ok := v[0].(AtomicValue)
+		if !ok {
+			return opts, &XPathError{Code: "FOJS0005", Message: "option 'duplicates' must be a string"}
+		}
+		s, _ := atomicToString(av)
+		switch s {
+		case "reject", "use-first", "use-last":
+			opts.duplicates = s
+		default:
+			return opts, &XPathError{Code: "FOJS0005",
+				Message: fmt.Sprintf("invalid value for 'duplicates' option: %q", s)}
 		}
 	}
 
 	// Parse "escape" option — must be xs:boolean
 	escKey := AtomicValue{TypeName: TypeString, Value: "escape"}
-	if v, found := m.Get(escKey); found && len(v) > 0 {
-		if av, ok := v[0].(AtomicValue); ok {
-			if b, ok := av.Value.(bool); ok {
-				opts.escape = b
-			} else {
-				return opts, &XPathError{Code: "FOJS0005",
-					Message: "option 'escape' must be xs:boolean, got " + av.TypeName}
-			}
+	if v, found := m.Get(escKey); found {
+		if len(v) != 1 {
+			return opts, &XPathError{Code: "FOJS0005", Message: "option 'escape' must be a single xs:boolean"}
+		}
+		av, ok := v[0].(AtomicValue)
+		if !ok {
+			return opts, &XPathError{Code: "FOJS0005", Message: "option 'escape' must be xs:boolean"}
+		}
+		if b, ok := av.Value.(bool); ok {
+			opts.escape = b
+		} else {
+			return opts, &XPathError{Code: "FOJS0005",
+				Message: "option 'escape' must be xs:boolean, got " + av.TypeName}
 		}
 	}
 
 	// Parse "fallback" option — must be a function item
 	fbKey := AtomicValue{TypeName: TypeString, Value: "fallback"}
-	if v, found := m.Get(fbKey); found && len(v) > 0 {
-		if _, ok := v[0].(FunctionItem); !ok {
+	if v, found := m.Get(fbKey); found {
+		if len(v) != 1 {
+			return opts, &XPathError{Code: "FOJS0005",
+				Message: "option 'fallback' must be a single function item"}
+		}
+		fi, ok := v[0].(FunctionItem)
+		if !ok {
 			return opts, &XPathError{Code: "FOJS0005",
 				Message: "option 'fallback' must be a function item"}
 		}
-		// We accept the function but don't use it yet
+		if fi.Arity != 1 {
+			return opts, &XPathError{Code: "FOJS0005",
+				Message: fmt.Sprintf("option 'fallback' must have arity 1, got %d", fi.Arity)}
+		}
+		// We accept the function but don't use it yet.
 	}
 
 	return opts, nil
