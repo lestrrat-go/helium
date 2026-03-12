@@ -128,6 +128,33 @@ func TestMapItem(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, "found", v[0].(xpath3.AtomicValue).StringVal())
 	})
+
+	t.Run("constructor clones value sequences", func(t *testing.T) {
+		value := xpath3.SingleString("original")
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: strKey("a"), Value: value},
+		})
+
+		value[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
+
+		got, ok := m.Get(strKey("a"))
+		require.True(t, ok)
+		require.Equal(t, "original", got[0].(xpath3.AtomicValue).StringVal())
+	})
+
+	t.Run("get returns cloned value sequence", func(t *testing.T) {
+		m := xpath3.NewMap([]xpath3.MapEntry{
+			{Key: strKey("a"), Value: xpath3.SingleString("original")},
+		})
+
+		got, ok := m.Get(strKey("a"))
+		require.True(t, ok)
+		got[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
+
+		again, ok := m.Get(strKey("a"))
+		require.True(t, ok)
+		require.Equal(t, "original", again[0].(xpath3.AtomicValue).StringVal())
+	})
 }
 
 func TestMergeMaps(t *testing.T) {
@@ -242,6 +269,40 @@ func TestArrayItem(t *testing.T) {
 		require.Len(t, flat, 4)
 		require.Equal(t, int64(1), flat[0].(xpath3.AtomicValue).IntegerVal())
 		require.Equal(t, int64(4), flat[3].(xpath3.AtomicValue).IntegerVal())
+	})
+
+	t.Run("constructor clones member sequences", func(t *testing.T) {
+		member := xpath3.SingleString("original")
+		a := xpath3.NewArray([]xpath3.Sequence{member})
+
+		member[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
+
+		got, err := a.Get(1)
+		require.NoError(t, err)
+		require.Equal(t, "original", got[0].(xpath3.AtomicValue).StringVal())
+	})
+
+	t.Run("get returns cloned member sequence", func(t *testing.T) {
+		a := xpath3.NewArray([]xpath3.Sequence{xpath3.SingleString("original")})
+
+		got, err := a.Get(1)
+		require.NoError(t, err)
+		got[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
+
+		again, err := a.Get(1)
+		require.NoError(t, err)
+		require.Equal(t, "original", again[0].(xpath3.AtomicValue).StringVal())
+	})
+
+	t.Run("members returns cloned sequences", func(t *testing.T) {
+		a := xpath3.NewArray([]xpath3.Sequence{xpath3.SingleString("original")})
+
+		members := a.Members()
+		members[0][0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
+
+		again, err := a.Get(1)
+		require.NoError(t, err)
+		require.Equal(t, "original", again[0].(xpath3.AtomicValue).StringVal())
 	})
 }
 
