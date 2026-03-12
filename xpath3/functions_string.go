@@ -844,7 +844,7 @@ func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 
-	return Sequence{NodeItem{Node: doc}}, nil
+	return Sequence{NodeItem{Node: root}}, nil
 }
 
 func createAnalyzeStringElement(doc *helium.Document, localName string) (*helium.Element, error) {
