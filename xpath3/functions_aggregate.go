@@ -165,21 +165,32 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func avgDurations(seq Sequence, family string) (Sequence, error) {
-	var totalMonths int
+	totalMonths := new(big.Int)
 	var totalSeconds float64
 	for _, item := range seq {
 		a, _ := AtomizeItem(item)
 		d := a.DurationVal()
 		if d.Negative {
-			totalMonths -= d.Months
+			totalMonths.Sub(totalMonths, big.NewInt(int64(d.Months)))
 			totalSeconds -= d.Seconds
 		} else {
-			totalMonths += d.Months
+			totalMonths.Add(totalMonths, big.NewInt(int64(d.Months)))
 			totalSeconds += d.Seconds
 		}
 	}
+	if !totalMonths.IsInt64() {
+		return nil, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
+	}
 	count := len(seq)
-	avgMonths := totalMonths / count
+	avgMonthsBig := new(big.Int).Quo(totalMonths, big.NewInt(int64(count)))
+	if !avgMonthsBig.IsInt64() {
+		return nil, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
+	}
+	avgMonths64 := avgMonthsBig.Int64()
+	if int64(int(avgMonths64)) != avgMonths64 {
+		return nil, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
+	}
+	avgMonths := int(avgMonths64)
 	avgSeconds := totalSeconds / float64(count)
 	negative := avgMonths < 0 || avgSeconds < 0
 	if negative {

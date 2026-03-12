@@ -15,6 +15,12 @@ import (
 // Per XPath 3.1 Section 3.7.1: atomize both operands, then existentially
 // quantify — true if ANY pair satisfies the value comparison.
 func evalGeneralComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
+	if result, ok, err := evalGeneralComparisonAgainstRange(ec, e); ok {
+		if err != nil {
+			return nil, err
+		}
+		return SingleBoolean(result), nil
+	}
 	left, err := eval(ec, e.Left)
 	if err != nil {
 		return nil, err
@@ -28,6 +34,115 @@ func evalGeneralComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
 		return nil, err
 	}
 	return SingleBoolean(result), nil
+}
+
+func evalGeneralComparisonAgainstRange(ec *evalContext, e BinaryExpr) (bool, bool, error) {
+	if re, ok := e.Right.(RangeExpr); ok {
+		return compareSingletonAgainstRange(ec, e.Op, e.Left, re, false)
+	}
+	if re, ok := e.Left.(RangeExpr); ok {
+		return compareSingletonAgainstRange(ec, e.Op, e.Right, re, true)
+	}
+	return false, false, nil
+}
+
+func compareSingletonAgainstRange(ec *evalContext, op TokenType, singletonExpr Expr, rangeExpr RangeExpr, rangeOnLeft bool) (bool, bool, error) {
+	singletonSeq, err := eval(ec, singletonExpr)
+	if err != nil {
+		return false, true, err
+	}
+	if len(singletonSeq) == 0 {
+		return false, true, nil
+	}
+	singletonAtoms, err := AtomizeSequence(singletonSeq)
+	if err != nil {
+		return false, true, err
+	}
+	if len(singletonAtoms) != 1 {
+		return false, false, nil
+	}
+	singletonInt, err := coerceToInteger(singletonAtoms[0])
+	if err != nil {
+		return false, false, nil
+	}
+	start, end, empty, err := evalRangeBounds(ec, rangeExpr)
+	if err != nil {
+		return false, true, err
+	}
+	if empty {
+		return false, true, nil
+	}
+	return compareRangeBounds(op, singletonInt.BigInt(), start, end, rangeOnLeft), true, nil
+}
+
+func evalRangeBounds(ec *evalContext, e RangeExpr) (*big.Int, *big.Int, bool, error) {
+	startSeq, err := eval(ec, e.Start)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	endSeq, err := eval(ec, e.End)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	if len(startSeq) == 0 || len(endSeq) == 0 {
+		return nil, nil, true, nil
+	}
+	startAtoms, err := AtomizeSequence(startSeq)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	endAtoms, err := AtomizeSequence(endSeq)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	if len(startAtoms) != 1 || len(endAtoms) != 1 {
+		return nil, nil, false, &XPathError{Code: errCodeXPTY0004, Message: "range bounds must be singletons"}
+	}
+	startInt, err := coerceToInteger(startAtoms[0])
+	if err != nil {
+		return nil, nil, false, err
+	}
+	endInt, err := coerceToInteger(endAtoms[0])
+	if err != nil {
+		return nil, nil, false, err
+	}
+	start := startInt.BigInt()
+	end := endInt.BigInt()
+	if start.Cmp(end) > 0 {
+		return nil, nil, true, nil
+	}
+	return start, end, false, nil
+}
+
+func compareRangeBounds(op TokenType, singleton, start, end *big.Int, rangeOnLeft bool) bool {
+	switch op {
+	case TokenEquals:
+		return singleton.Cmp(start) >= 0 && singleton.Cmp(end) <= 0
+	case TokenNotEquals:
+		return start.Cmp(end) != 0 || singleton.Cmp(start) != 0
+	case TokenLess:
+		if rangeOnLeft {
+			return start.Cmp(singleton) < 0
+		}
+		return singleton.Cmp(end) < 0
+	case TokenLessEq:
+		if rangeOnLeft {
+			return start.Cmp(singleton) <= 0
+		}
+		return singleton.Cmp(end) <= 0
+	case TokenGreater:
+		if rangeOnLeft {
+			return end.Cmp(singleton) > 0
+		}
+		return singleton.Cmp(start) > 0
+	case TokenGreaterEq:
+		if rangeOnLeft {
+			return end.Cmp(singleton) >= 0
+		}
+		return singleton.Cmp(start) >= 0
+	default:
+		return false
+	}
 }
 
 // evalValueComparison implements value comparison (eq ne lt le gt ge).
