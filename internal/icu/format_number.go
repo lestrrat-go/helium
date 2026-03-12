@@ -117,10 +117,6 @@ func shouldRepeatGrouping(groups []int) bool {
 }
 
 func hasInvalidLiteralChars(part []rune, df DecimalFormat) bool {
-	expSep := df.ExponentSeparator
-	if expSep == 0 {
-		expSep = 'e'
-	}
 	for _, r := range part {
 		if isPatternDigit(r, df) ||
 			r == df.DecimalSeparator ||
