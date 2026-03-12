@@ -198,23 +198,39 @@ func validateXPathCharClassStructure(class string) error {
 	if first < len(runes)-1 && runes[first] == '^' {
 		first++
 	}
-	if first >= len(runes)-1 || runes[first] == ']' || runes[first] == '[' {
+	if first >= len(runes)-1 {
 		return &XPathError{
 			Code:    errCodeFORX0002,
 			Message: fmt.Sprintf("invalid character class: %s", class),
 		}
 	}
-	for i := first + 1; i < len(runes)-1; i++ {
+
+	prevRaw := rune(0)
+	for i := first; i < len(runes)-1; {
 		if runes[i] == '\\' {
-			i++
+			if i+1 >= len(runes)-1 {
+				return &XPathError{
+					Code:    errCodeFORX0002,
+					Message: fmt.Sprintf("invalid character class: %s", class),
+				}
+			}
+			i += 2
 			continue
 		}
-		if runes[i] == '[' && runes[i-1] != '-' {
+		if i == first && (runes[i] == ']' || runes[i] == '[') {
 			return &XPathError{
 				Code:    errCodeFORX0002,
 				Message: fmt.Sprintf("invalid character class: %s", class),
 			}
 		}
+		if runes[i] == '[' && prevRaw != '-' {
+			return &XPathError{
+				Code:    errCodeFORX0002,
+				Message: fmt.Sprintf("invalid character class: %s", class),
+			}
+		}
+		prevRaw = runes[i]
+		i++
 	}
 
 	return nil
