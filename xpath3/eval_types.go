@@ -1,6 +1,7 @@
 package xpath3
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
@@ -139,6 +140,14 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 	if matchesSequenceType(seq, st, ec) {
 		return seq, true
 	}
+	if len(seq) == 1 {
+		if fnTest, ok := st.ItemTest.(FunctionTest); ok {
+			adapted, ok := coerceFunctionItem(seq[0], fnTest, ec)
+			if ok {
+				return Sequence{adapted}, true
+			}
+		}
+	}
 	// Try to coerce each item
 	var targetType string
 	switch t := st.ItemTest.(type) {
@@ -217,6 +226,73 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 		}
 	}
 	return result, true
+}
+
+func coerceFunctionItem(item Item, target FunctionTest, ec *evalContext) (Item, bool) {
+	if target.AnyFunction {
+		return nil, false
+	}
+
+	actual, ok := item.(FunctionItem)
+	if !ok {
+		return nil, false
+	}
+	if actual.Arity >= 0 && actual.Arity != len(target.ParamTypes) {
+		return nil, false
+	}
+
+	paramTypes := append([]SequenceType(nil), target.ParamTypes...)
+	returnType := target.ReturnType
+
+	return FunctionItem{
+		Arity:      len(paramTypes),
+		Name:       actual.Name,
+		Namespace:  actual.Namespace,
+		ParamTypes: paramTypes,
+		ReturnType: &returnType,
+		Invoke: func(ctx context.Context, args []Sequence) (Sequence, error) {
+			if len(args) != len(paramTypes) {
+				return nil, &XPathError{
+					Code:    errCodeXPTY0004,
+					Message: fmt.Sprintf("arity mismatch: expected %d arguments, got %d", len(paramTypes), len(args)),
+				}
+			}
+
+			invokeCtx := ec
+			if fnCtx := getFnContext(ctx); fnCtx != nil {
+				invokeCtx = fnCtx
+			}
+
+			callArgs := make([]Sequence, len(args))
+			copy(callArgs, args)
+			if len(actual.ParamTypes) > 0 {
+				for i, arg := range args {
+					coerced, ok := coerceToSequenceType(arg, actual.ParamTypes[i], invokeCtx)
+					if !ok {
+						return nil, &XPathError{
+							Code:    errCodeXPTY0004,
+							Message: fmt.Sprintf("function argument %d does not match required type %v", i+1, actual.ParamTypes[i]),
+						}
+					}
+					callArgs[i] = coerced
+				}
+			}
+
+			result, err := actual.Invoke(ctx, callArgs)
+			if err != nil {
+				return nil, err
+			}
+
+			coercedResult, ok := coerceToSequenceType(result, target.ReturnType, invokeCtx)
+			if !ok {
+				return nil, &XPathError{
+					Code:    errCodeXPTY0004,
+					Message: fmt.Sprintf("function result does not match required type %v", target.ReturnType),
+				}
+			}
+			return coercedResult, nil
+		},
+	}, true
 }
 
 func matchesSequenceType(seq Sequence, st SequenceType, ec *evalContext) bool {

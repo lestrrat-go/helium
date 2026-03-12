@@ -522,6 +522,20 @@ func TestHOFFunctions(t *testing.T) {
 		require.Equal(t, int64(10), av.IntegerVal())
 	})
 
+	t.Run("for-each function coercion", func(t *testing.T) {
+		result, err := xpath3.Evaluate(t.Context(), doc, `let $f := function($ff as (function(item()) as item()), $s as xs:string){$ff($ff($s))} return
+			for-each((upper-case#1, lower-case#1, normalize-space#1, concat(?, '!')), $f(?, ' Say NO! '))`)
+		require.NoError(t, err)
+
+		atomics, err := result.Atomics()
+		require.NoError(t, err)
+		require.Len(t, atomics, 4)
+		require.Equal(t, " SAY NO! ", atomics[0].StringVal())
+		require.Equal(t, " say no! ", atomics[1].StringVal())
+		require.Equal(t, "Say NO!", atomics[2].StringVal())
+		require.Equal(t, " Say NO! !!", atomics[3].StringVal())
+	})
+
 	t.Run("filter", func(t *testing.T) {
 		result, err := xpath3.Evaluate(t.Context(), doc, `filter((1, 2, 3, 4, 5), function($x) { $x > 3 })`)
 		require.NoError(t, err)

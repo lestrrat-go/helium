@@ -146,6 +146,7 @@ func TestParseXPath3Extensions(t *testing.T) {
 		{"instance of node", "$x instance of node()"},
 		{"instance of element", "$x instance of element()"},
 		{"instance of item", "$x instance of item()"},
+		{"instance of parenthesized function type", "$x instance of (function(item()) as item())"},
 
 		// Cast/castable/treat
 		{"cast as", "$x cast as xs:double"},
@@ -295,6 +296,23 @@ func TestParseAST(t *testing.T) {
 		io, ok := expr.(xpath3.InstanceOfExpr)
 		require.True(t, ok, "expected InstanceOfExpr, got %T", expr)
 		require.Equal(t, xpath3.OccurrenceZeroOrOne, io.Type.Occurrence)
+	})
+
+	t.Run("parenthesized function type structure", func(t *testing.T) {
+		expr, err := xpath3.Parse("$x instance of (function(item()) as item())")
+		require.NoError(t, err)
+		io, ok := expr.(xpath3.InstanceOfExpr)
+		require.True(t, ok, "expected InstanceOfExpr, got %T", expr)
+
+		fnType, ok := io.Type.ItemTest.(xpath3.FunctionTest)
+		require.True(t, ok, "expected FunctionTest, got %T", io.Type.ItemTest)
+		require.False(t, fnType.AnyFunction)
+		require.Len(t, fnType.ParamTypes, 1)
+
+		_, ok = fnType.ParamTypes[0].ItemTest.(xpath3.AnyItemTest)
+		require.True(t, ok, "expected AnyItemTest, got %T", fnType.ParamTypes[0].ItemTest)
+		_, ok = fnType.ReturnType.ItemTest.(xpath3.AnyItemTest)
+		require.True(t, ok, "expected AnyItemTest, got %T", fnType.ReturnType.ItemTest)
 	})
 
 	t.Run("cast as structure", func(t *testing.T) {

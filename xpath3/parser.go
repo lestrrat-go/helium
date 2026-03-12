@@ -1822,6 +1822,18 @@ func (p *parser) parseSequenceType() (SequenceType, error) {
 func (p *parser) parseItemType() (NodeTest, error) {
 	tok := p.lexer.Peek()
 
+	if tok.Type == TokenLParen {
+		p.lexer.Next()
+		itemType, err := p.parseItemType()
+		if err != nil {
+			return nil, err
+		}
+		if err := p.expectToken(TokenRParen); err != nil {
+			return nil, fmt.Errorf("%w: ')' after parenthesized item type", ErrExpectedToken)
+		}
+		return itemType, nil
+	}
+
 	if tok.Type == TokenName {
 		// Could be: item(), node(), element(), attribute(), xs:integer, etc.
 		if p.lexer.PeekAt(1).Type == TokenLParen {
