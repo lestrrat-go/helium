@@ -101,17 +101,6 @@ func resolveFunctionByURI(ec *evalContext, uri, name string, arity int) (Functio
 		return fn, nil
 	}
 
-	// If no explicit URI matched, try fn: namespace as default
-	if uri != NSFn {
-		qn = QualifiedName{URI: NSFn, Name: name}
-		if fn, ok := builtinFunctions3[qn]; ok {
-			if err := checkArity(fn, name, arity); err != nil {
-				return nil, err
-			}
-			return fn, nil
-		}
-	}
-
 	return nil, fmt.Errorf("%w: %s#%d", ErrUnknownFunction, name, arity)
 }
 

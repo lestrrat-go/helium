@@ -34,6 +34,7 @@ Package-level `builtinFunctions3 map[QualifiedName]Function` populated in `init(
 | `xs:` | `http://www.w3.org/2001/XMLSchema` |
 
 `fn:` is default → `string()` and `fn:string()` resolve to same function.
+Explicit prefixed names + `Q{uri}local` names NEVER fall back to `fn:` on miss.
 
 ## Functions by File
 
