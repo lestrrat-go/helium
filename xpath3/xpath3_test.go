@@ -96,6 +96,46 @@ func TestWithDefaultLanguage(t *testing.T) {
 	require.Equal(t, "fr-CA", atomics[0].StringVal())
 }
 
+func TestInlineFunctionPreservesDefaultLanguage(t *testing.T) {
+	ctx := xpath3.NewContext(t.Context(),
+		xpath3.WithDefaultLanguage("fr-CA"),
+	)
+
+	result, err := xpath3.Evaluate(ctx, nil, `let $f := function() { default-language() } return $f()`)
+	require.NoError(t, err)
+
+	atomics, err := result.Atomics()
+	require.NoError(t, err)
+	require.Len(t, atomics, 1)
+	require.Equal(t, "fr-CA", atomics[0].StringVal())
+}
+
+func TestPrefixedVariableRequiresDeclaredNamespace(t *testing.T) {
+	ctx := xpath3.NewContext(t.Context(),
+		xpath3.WithVariables(map[string]xpath3.Sequence{
+			"p:v": xpath3.SingleInteger(1),
+		}),
+	)
+
+	_, err := xpath3.Evaluate(ctx, nil, `$p:v`)
+	require.Error(t, err)
+
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, "XPST0081", xpErr.Code)
+}
+
+func TestInlineFunctionDoesNotInheritFocus(t *testing.T) {
+	doc := parseTestDoc(t)
+
+	_, err := xpath3.Evaluate(t.Context(), doc, `let $f := function() { boolean(.) } return $f()`)
+	require.Error(t, err)
+
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, "XPDY0002", xpErr.Code)
+}
+
 func TestResultIsNodeSet(t *testing.T) {
 	doc := parseTestDoc(t)
 	result, err := xpath3.Evaluate(t.Context(), doc, `/library/book`)
