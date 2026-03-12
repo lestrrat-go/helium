@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"regexp"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 
@@ -965,6 +966,13 @@ type compiledXPathRegex struct {
 	numGroups int
 }
 
+type xpathRegexCacheKey struct {
+	pattern string
+	flags   string
+}
+
+var compiledXPathRegexCache sync.Map
+
 func (r *compiledXPathRegex) MatchString(s string) (bool, error) {
 	if r.backtrack != nil {
 		return r.backtrack.MatchString(s)
@@ -1059,6 +1067,11 @@ func runeByteOffsets(s string) []int {
 }
 
 func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
+	cacheKey := xpathRegexCacheKey{pattern: pattern, flags: flags}
+	if cached, ok := compiledXPathRegexCache.Load(cacheKey); ok {
+		return cached.(*compiledXPathRegex), nil
+	}
+
 	// Check for 'q' flag early to skip validation for literal patterns
 	hasQ := strings.ContainsRune(flags, 'q')
 	if !hasQ && strings.ContainsRune(flags, 'x') {
@@ -1132,16 +1145,20 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 		if err != nil {
 			return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("invalid regular expression: %s", err)}
 		}
-		return &compiledXPathRegex{
+		compiled := &compiledXPathRegex{
 			backtrack: re,
 			numGroups: len(re.GetGroupNumbers()) - 1,
-		}, nil
+		}
+		actual, _ := compiledXPathRegexCache.LoadOrStore(cacheKey, compiled)
+		return actual.(*compiledXPathRegex), nil
 	}
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("invalid regular expression: %s", err)}
 	}
-	return &compiledXPathRegex{std: re}, nil
+	compiled := &compiledXPathRegex{std: re}
+	actual, _ := compiledXPathRegexCache.LoadOrStore(cacheKey, compiled)
+	return actual.(*compiledXPathRegex), nil
 }
 
 // stripFreeSpacing removes unescaped whitespace from a regex pattern (x flag).

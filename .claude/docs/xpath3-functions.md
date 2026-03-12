@@ -49,6 +49,7 @@ Signature-sensitive string/regex/URI builtin call sites + `||` string coercion a
 `codepoints-to-string`, `string-to-codepoints`, `compare`, `codepoint-equal`, `concat`, `string-join`, `substring`, `string-length`, `normalize-space`, `normalize-unicode`, `upper-case`, `lower-case`, `translate`, `contains`, `starts-with`, `ends-with`, `substring-before`, `substring-after`, `matches`, `replace`, `tokenize`, `analyze-string` (partial; result DOM built with helium)
 
 Regex: use Go `regexp` package. Map XPath flags (`i`,`m`,`s`,`x`) to Go equivalents.
+Compiled regexes are cached by pattern + flags pair so repeated literal calls do not repay translation/compilation cost.
 
 ### `functions_numeric.go`
 `abs`, `ceiling`, `floor`, `round`, `round-half-to-even`, `format-integer` (stub v1), `format-number` (stub v1)
