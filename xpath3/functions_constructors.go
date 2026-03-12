@@ -238,10 +238,12 @@ func makeXSIntegerRangeBig(typeName string, minBig, maxBig *big.Int) func(contex
 }
 
 var (
-	reNCName  = regexp.MustCompile(`^[a-zA-Z_][\w.-]*$`)
-	reName    = regexp.MustCompile(`^[a-zA-Z_:][\w.:-]*$`)
-	reNMTOKEN = regexp.MustCompile(`^[\w.:-]+$`)
-	reLang    = regexp.MustCompile(`(?i)^[a-z]{1,8}(-[a-z0-9]{1,8})*$`)
+	xmlNCNameStartCharRange = strings.ReplaceAll(xmlNameStartCharRange, ":", "")
+	xmlNCNameCharRange      = strings.ReplaceAll(xmlNameCharRange, ":", "")
+	reNCName                = regexp.MustCompile(`^[` + xmlNCNameStartCharRange + `][` + xmlNCNameCharRange + `]*$`)
+	reName                  = regexp.MustCompile(`^[` + xmlNameStartCharRange + `][` + xmlNameCharRange + `]*$`)
+	reNMTOKEN               = regexp.MustCompile(`^[` + xmlNameCharRange + `]+$`)
+	reLang                  = regexp.MustCompile(`(?i)^[a-z]{1,8}(-[a-z0-9]{1,8})*$`)
 )
 
 // makeXSStringRestriction returns a constructor for a derived string type.
