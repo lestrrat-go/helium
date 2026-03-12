@@ -436,9 +436,9 @@ func validateXPathRegex(pattern string, allowBackrefs bool) error {
 				}
 			}
 			if inCharClass == 0 && next >= '1' && next <= '9' {
-				ref, validEnd, end := longestClosedXPathBackref(runes, i+1, captureCount, groupStack)
+				ref, validEnd, end, invalid := resolveXPathBackref(runes, i+1, captureCount, groupStack)
 				if allowBackrefs {
-					if validEnd < 0 {
+					if invalid || validEnd < 0 {
 						return &XPathError{
 							Code:    errCodeFORX0002,
 							Message: fmt.Sprintf("invalid back-reference \\%s in XPath regex", string(runes[i+1:end])),
@@ -545,20 +545,32 @@ func isOpenCaptureGroup(groupStack []int, ref int) bool {
 	return false
 }
 
-func longestClosedXPathBackref(runes []rune, start, captureCount int, groupStack []int) (int, int, int) {
+func resolveXPathBackref(runes []rune, start, captureCount int, groupStack []int) (int, int, int, bool) {
 	ref := 0
 	validEnd := -1
 	end := start
 	value := 0
 	for end < len(runes) && runes[end] >= '0' && runes[end] <= '9' {
 		value = value*10 + int(runes[end]-'0')
-		if value > 0 && value <= captureCount && !isOpenCaptureGroup(groupStack, value) {
-			ref = value
-			validEnd = end + 1
-		}
 		end++
 	}
-	return ref, validEnd, end
+
+	if value > 0 && value <= captureCount {
+		if isOpenCaptureGroup(groupStack, value) {
+			return 0, -1, end, true
+		}
+		return value, end, end, false
+	}
+
+	value = 0
+	for i := start; i < end; i++ {
+		value = value*10 + int(runes[i]-'0')
+		if value > 0 && value <= captureCount && !isOpenCaptureGroup(groupStack, value) {
+			ref = value
+			validEnd = i + 1
+		}
+	}
+	return ref, validEnd, end, false
 }
 
 func normalizeXPathBackrefs(pattern string) string {
@@ -572,7 +584,7 @@ func normalizeXPathBackrefs(pattern string) string {
 		if r == '\\' && i+1 < len(runes) {
 			next := runes[i+1]
 			if inCharClass == 0 && next >= '1' && next <= '9' {
-				ref, validEnd, end := longestClosedXPathBackref(runes, i+1, captureCount, groupStack)
+				ref, validEnd, end, _ := resolveXPathBackref(runes, i+1, captureCount, groupStack)
 				if validEnd >= 0 {
 					suffix := string(runes[validEnd:end])
 					if suffix == "" {
