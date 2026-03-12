@@ -161,19 +161,6 @@ func registerNS(uri, name string, min, max int, fn func(context.Context, []Seque
 	}
 }
 
-// seqToString atomizes the first item to a string, or returns "".
-func seqToString(seq Sequence) string {
-	if len(seq) == 0 {
-		return ""
-	}
-	a, err := AtomizeItem(seq[0])
-	if err != nil {
-		return ""
-	}
-	s, _ := atomicToString(a)
-	return s
-}
-
 // seqToStringErr atomizes the first item to a string, propagating errors.
 func seqToStringErr(seq Sequence) (string, error) {
 	if len(seq) == 0 {
