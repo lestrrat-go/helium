@@ -3,6 +3,7 @@ package xpath3
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -580,6 +581,48 @@ func hasXPathCharClassSubtraction(pattern string) bool {
 			if inCharClass > 0 && runes[i+1] == '[' {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func hasLargeXPathQuantifier(pattern string) bool {
+	runes := []rune(pattern)
+	inCharClass := 0
+	for i := 0; i < len(runes); i++ {
+		switch runes[i] {
+		case '\\':
+			i++
+		case '[':
+			inCharClass++
+		case ']':
+			if inCharClass > 0 {
+				inCharClass--
+			}
+		case '{':
+			if inCharClass > 0 || !isValidQuantifierBrace(runes, i) {
+				continue
+			}
+			end := findClosingBrace(runes, i+1)
+			if end < 0 {
+				continue
+			}
+			if quantifierExceedsRE2Limit(string(runes[i+1 : end])) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func quantifierExceedsRE2Limit(content string) bool {
+	for _, part := range strings.Split(content, ",") {
+		if part == "" {
+			continue
+		}
+		n, err := strconv.ParseUint(part, 10, 64)
+		if err != nil || n > 1000 {
+			return true
 		}
 	}
 	return false
