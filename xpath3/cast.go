@@ -100,7 +100,7 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		return AtomicValue{TypeName: TypeUntypedAtomic, Value: s}, nil
 	case TypeAnyURI:
 		if v.TypeName == TypeString {
-			return AtomicValue{TypeName: TypeAnyURI, Value: v.StringVal()}, nil
+			return AtomicValue{TypeName: TypeAnyURI, Value: collapseWhitespace(v.StringVal())}, nil
 		}
 	case TypeBase64Binary:
 		return castToBase64Binary(v)
@@ -209,13 +209,13 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		// handled by evalCastExpr or the xs:QName constructor function.
 		// If we reach here without context, report an appropriate error.
 		return AtomicValue{}, &XPathError{
-			Code: errCodeXPTY0004,
+			Code:    errCodeXPTY0004,
 			Message: fmt.Sprintf("cannot cast %s to %s (requires namespace context)", v.TypeName, TypeQName),
 		}
 	}
 
 	return AtomicValue{}, &XPathError{
-		Code: errCodeXPTY0004,
+		Code:    errCodeXPTY0004,
 		Message: fmt.Sprintf("cannot cast %s to %s", v.TypeName, targetType),
 	}
 }
@@ -263,7 +263,7 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 			return AtomicValue{}, castError(s, targetType)
 		}
 	case TypeAnyURI:
-		return AtomicValue{TypeName: TypeAnyURI, Value: s}, nil
+		return AtomicValue{TypeName: TypeAnyURI, Value: collapseWhitespace(s)}, nil
 	case TypeDate:
 		t, err := parseXSDDate(s)
 		if err != nil {
@@ -359,7 +359,7 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 		return AtomicValue{TypeName: targetType, Value: s}, nil
 	}
 	return AtomicValue{}, &XPathError{
-		Code: errCodeXPTY0004,
+		Code:    errCodeXPTY0004,
 		Message: "cannot cast string to " + targetType,
 	}
 }
