@@ -76,7 +76,7 @@ type XPathError struct {
 
 func (e *XPathError) Error() string {
 	if e == nil {
-		return ""
+		return "<nil XPathError>"
 	}
 	if e.Code == "" {
 		return e.Message
