@@ -333,6 +333,8 @@ func deepEqualNode(a, b helium.Node) bool {
 			return false
 		}
 		return aa.LocalName() == ba.LocalName() && aa.URI() == ba.URI() && aa.Value() == ba.Value()
+	case helium.NamespaceNode:
+		return a.Name() == b.Name() && string(a.Content()) == string(b.Content())
 	case helium.TextNode, helium.CDATASectionNode:
 		return string(a.Content()) == string(b.Content())
 	case helium.CommentNode:

@@ -647,7 +647,7 @@ func TestQT3_op_concatenate(t *testing.T) {
 		{Name: "sequenceexpressionhc6", XPath: "count((15 to 10))", Assertions: []qt3Assertion{qt3AssertEq("0")}},
 		{Name: "sequenceexpressionhc7", XPath: "fn:reverse(10 to 15)", Assertions: []qt3Assertion{qt3AssertDeepEq("15, 14, 13, 12, 11, 10")}},
 		{Name: "sequenceexpressionhc8", XPath: "//empnum", DocPath: "docs/works.xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "sequenceexpressionhc9", XPath: "($works//empnum,$staff//empname)", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "sequenceexpressionhc9", XPath: "($works//empnum,$staff//empname)", SourceDocs: []qt3SourceDoc{{Name: "works", DocPath: "docs/works.xml"}, {Name: "staff", DocPath: "docs/staff.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "constSeq-1", XPath: "(1, 1 + 1, 3, 4, 5)", Assertions: []qt3Assertion{qt3AssertDeepEq("1, 2, 3, 4, 5")}},
 		{Name: "constSeq-2", XPath: "(1, 3 - 1, 3, 4, 5)", Assertions: []qt3Assertion{qt3AssertDeepEq("1, 2 ,3, 4, 5")}},
 		{Name: "constSeq-3", XPath: "(1, 2 * 1, 3, 4, 5)", Assertions: []qt3Assertion{qt3AssertDeepEq("1, 2, 3, 4, 5")}},
@@ -1849,9 +1849,9 @@ func TestQT3_op_is_same_node(t *testing.T) {
 		{Name: "nodeexpression4", XPath: "count(() is (/staff[1]/employee[1]/empnum[1]))", DocPath: "docs/staff.xml", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckEq("0"))}},
 		{Name: "nodeexpression9", XPath: "count(/works[1]/employee[1]/empnum[1] is ())", DocPath: "docs/works.xml", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckEq("0"))}},
 		{Name: "nodeexpression11", XPath: "/works[1]/employee[1]/empnum[1] is /works[1]/employee[1]/empnum[1]", DocPath: "docs/works.xml", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "nodeexpression12", XPath: "$works/works[1]/employee[1]/empnum[1] is $staff/staff[1]/employee[1]/empnum[1]", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "nodeexpression12", XPath: "$works/works[1]/employee[1]/empnum[1] is $staff/staff[1]/employee[1]/empnum[1]", SourceDocs: []qt3SourceDoc{{Name: "works", DocPath: "docs/works.xml"}, {Name: "staff", DocPath: "docs/staff.xml"}}, Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "nodeexpression13", XPath: "count((/staff[1]/employee[1]/empnum[1]) is ())", DocPath: "docs/staff.xml", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckEq("0"))}},
-		{Name: "nodeexpression15", XPath: "($staff/staff[1]/employee[1]/empnum[1]) is $works/works[1]/employee[1]/empnum[1]", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertFalse()}},
+		{Name: "nodeexpression15", XPath: "($staff/staff[1]/employee[1]/empnum[1]) is $works/works[1]/employee[1]/empnum[1]", SourceDocs: []qt3SourceDoc{{Name: "works", DocPath: "docs/works.xml"}, {Name: "staff", DocPath: "docs/staff.xml"}}, Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "nodeexpression16", XPath: "(/staff[1]/employee[1]/empnum[1]) is (/staff[1]/employee[1]/empnum[1])", DocPath: "docs/staff.xml", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "nodeexpressionhc1", XPath: "fn:not((/staff[1]/employee[1]/empnum[1]) is (/staff[1]/employee[1]/empnum[1]))", DocPath: "docs/staff.xml", Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "nodeexpressionhc2", XPath: "((/staff[1]/employee[1]/empnum[1]) is (/staff[1]/employee[1]/empnum[1])) lt ((/staff[1]/employee[1]/empnum[1]) is (/staff[1]/employee[1]/empnum[1]))", DocPath: "docs/staff.xml", Assertions: []qt3Assertion{qt3AssertFalse()}},
@@ -1962,14 +1962,14 @@ func TestQT3_op_node_after(t *testing.T) {
 		{Name: "nodeexpression36", XPath: "count(() >> (/staff[1]/employee[1]/empnum[1]))", DocPath: "docs/staff.xml", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckEq("0"))}},
 		{Name: "nodeexpression41", XPath: "count(/works[1]/employee[1]/empnum[1] >> ())", DocPath: "docs/works.xml", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckEq("0"))}},
 		{Name: "nodeexpression43", XPath: "/works[1]/employee[1]/empnum[1] >> /works[1]/employee[1]/empnum[1]", DocPath: "docs/works.xml", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "nodeexpression44", XPath: "$works/works[1]/employee[1]/empnum[1] >> ($staff/staff[1]/employee[1]/empnum[1])", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckFalse(), qt3CheckTrue())}},
+		{Name: "nodeexpression44", XPath: "$works/works[1]/employee[1]/empnum[1] >> ($staff/staff[1]/employee[1]/empnum[1])", SourceDocs: []qt3SourceDoc{{Name: "works", DocPath: "docs/works.xml"}, {Name: "staff", DocPath: "docs/staff.xml"}}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckFalse(), qt3CheckTrue())}},
 		{Name: "nodeexpression45", XPath: "count((/staff[1]/employee[1]/empnum[1]) >> ())", DocPath: "docs/staff.xml", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckEq("0"))}},
 		{Name: "nodeexpression47", XPath: `(($works/works[1]/employee[1]/empnum[1] >> $staff/staff[1]/employee[1]/empnum[1]) 
          and ($works/works[1]/employee[2]/empnum[1] >> $staff/staff[1]/employee[2]/empnum[1]) 
          and ($works/works[1]/employee[3]/empnum[1] >> $staff/staff[1]/employee[3]/empnum[1])) 
          or (($works/works[1]/employee[1]/empnum[1] << $staff/staff[1]/employee[1]/empnum[1]) 
          and ($works/works[1]/employee[2]/empnum[1] << $staff/staff[1]/employee[2]/empnum[1]) 
-         and ($works/works[1]/employee[3]/empnum[1] << $staff/staff[1]/employee[3]/empnum[1]))`, Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
+         and ($works/works[1]/employee[3]/empnum[1] << $staff/staff[1]/employee[3]/empnum[1]))`, SourceDocs: []qt3SourceDoc{{Name: "works", DocPath: "docs/works.xml"}, {Name: "staff", DocPath: "docs/staff.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "nodeexpression48", XPath: "(/staff[1]/employee[1]/empnum[1]) >> (/staff[1]/employee[1]/empnum[1])", DocPath: "docs/staff.xml", Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "nodeexpressionhc11", XPath: "fn:not((/staff[1]/employee[1]/empnum[1]) >> (/staff[1]/employee[1]/empnum[1]))", DocPath: "docs/staff.xml", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "nodeexpressionhc12", XPath: `((/staff[1]/employee[1]/empnum[1]) >> (/staff[1]/employee[1]/empnum[1])) 
@@ -2003,14 +2003,14 @@ func TestQT3_op_node_before(t *testing.T) {
 		{Name: "nodeexpression20", XPath: "count(() << /staff[1]/employee[1]/empnum[1])", DocPath: "docs/staff.xml", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckEq("0"))}},
 		{Name: "nodeexpression25", XPath: "count(/works[1]/employee[1]/empnum[1] << ())", DocPath: "docs/works.xml", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckEq("0"))}},
 		{Name: "nodeexpression27", XPath: "/works[1]/employee[1]/empnum[1] << /works[1]/employee[1]/empnum[1]", DocPath: "docs/works.xml", Assertions: []qt3Assertion{qt3AssertFalse()}},
-		{Name: "nodeexpression28", XPath: "$works/works[1]/employee[1]/empnum[1] << $staff/staff[1]/employee[1]/empnum[1]", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue(), qt3CheckFalse())}},
+		{Name: "nodeexpression28", XPath: "$works/works[1]/employee[1]/empnum[1] << $staff/staff[1]/employee[1]/empnum[1]", SourceDocs: []qt3SourceDoc{{Name: "works", DocPath: "docs/works.xml"}, {Name: "staff", DocPath: "docs/staff.xml"}}, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckTrue(), qt3CheckFalse())}},
 		{Name: "nodeexpression29", XPath: "count((/staff[1]/employee[1]/empnum[1]) << ())", DocPath: "docs/staff.xml", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckEq("0"))}},
 		{Name: "nodeexpression31", XPath: `(($works/works[1]/employee[1]/empnum[1] << $staff/staff[1]/employee[1]/empnum[1]) 
          and ($works/works[1]/employee[1]/empnum[1] << $staff/staff[1]/employee[2]/empnum[1]) 
          and ($works/works[1]/employee[1]/empnum[1] << $staff/staff[1]/employee[3]/empnum[1])) 
          or (($works/works[1]/employee[1]/empnum[1] >> $staff/staff[1]/employee[1]/empnum[1]) 
          and ($works/works[1]/employee[1]/empnum[1] >> $staff/staff[1]/employee[2]/empnum[1]) 
-         and ($works/works[1]/employee[1]/empnum[1] >> $staff/staff[1]/employee[3]/empnum[1]))`, Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
+         and ($works/works[1]/employee[1]/empnum[1] >> $staff/staff[1]/employee[3]/empnum[1]))`, SourceDocs: []qt3SourceDoc{{Name: "works", DocPath: "docs/works.xml"}, {Name: "staff", DocPath: "docs/staff.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "nodeexpression32", XPath: "(/staff[1]/employee[1]/empnum[1]) << (/staff[1]/employee[1]/empnum[1])", DocPath: "docs/staff.xml", Assertions: []qt3Assertion{qt3AssertFalse()}},
 		{Name: "nodeexpressionhc6", XPath: "fn:not((/staff[1]/employee[1]/empnum[1]) << (/staff[1]/employee[1]/empnum[1]))", DocPath: "docs/staff.xml", Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "nodeexpressionhc7", XPath: `((/staff[1]/employee[1]/empnum[1]) << (/staff[1]/employee[1]/empnum[1])) 

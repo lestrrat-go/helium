@@ -116,6 +116,12 @@ type param struct {
 	Declared string `xml:"declared,attr"`
 }
 
+type sourceBinding struct {
+	Name string
+	File string
+	URI  string
+}
+
 type testCase struct {
 	Name         string       `xml:"name,attr"`
 	Test         string       `xml:"test"`
@@ -213,13 +219,16 @@ func main() {
 			var contextDocPath string
 			if env != nil {
 				for _, src := range env.Sources {
-					if src.Role == "." && src.File != "" {
-						if envIsGlobal {
-							contextDocPath = src.File
-						} else {
-							contextDocPath = filepath.Join(tsDir, src.File)
-						}
+					if src.File == "" {
+						continue
+					}
+					resolvedPath := resolveEnvSourcePath(envIsGlobal, tsDir, src.File)
+					if src.Role == "." {
+						contextDocPath = resolvedPath
 						docFiles[contextDocPath] = true
+					}
+					if strings.HasPrefix(src.Role, "$") {
+						docFiles[resolvedPath] = true
 					}
 				}
 			}
@@ -239,12 +248,7 @@ func main() {
 				for _, res := range env.Resources {
 					if res.File != "" && res.URI != "" {
 						needsHTTP = true
-						var resPath string
-						if envIsGlobal {
-							resPath = res.File
-						} else {
-							resPath = filepath.Join(tsDir, res.File)
-						}
+						resPath := resolveEnvSourcePath(envIsGlobal, tsDir, res.File)
 						resourceFiles[resPath] = true
 						resMap[res.URI] = resPath
 					}
@@ -252,12 +256,7 @@ func main() {
 				for _, src := range env.Sources {
 					if src.File != "" && src.URI != "" {
 						needsHTTP = true
-						var srcPath string
-						if envIsGlobal {
-							srcPath = src.File
-						} else {
-							srcPath = filepath.Join(tsDir, src.File)
-						}
+						srcPath := resolveEnvSourcePath(envIsGlobal, tsDir, src.File)
 						resourceFiles[srcPath] = true
 						resMap[src.URI] = srcPath
 					}
@@ -278,6 +277,7 @@ func main() {
 				DefaultDecimal:   envDefaultDecimalFormat(env),
 				DecimalFormats:   envNamedDecimalFormats(env),
 				Params:           envParams(env),
+				VariableSources:  envVariableSources(env, envIsGlobal, tsDir),
 				BaseURI:          baseURI,
 				NeedsHTTP:        needsHTTP,
 				ResourceMap:      resMap,
@@ -557,11 +557,37 @@ func checkEnvironmentSupport(env *environment) string {
 		if src.Validation == "strict" || src.Validation == "lax" {
 			return "requires schema-validated source"
 		}
-		if src.Role != "." && src.Role != "" {
-			return "requires variable-bound source documents"
+		if src.Role != "." && src.Role != "" && !strings.HasPrefix(src.Role, "$") {
+			return fmt.Sprintf("requires source role %q", src.Role)
 		}
 	}
 	return ""
+}
+
+func resolveEnvSourcePath(envIsGlobal bool, tsDir, file string) string {
+	if envIsGlobal {
+		return file
+	}
+	return filepath.Join(tsDir, file)
+}
+
+func envVariableSources(env *environment, envIsGlobal bool, tsDir string) []sourceBinding {
+	if env == nil {
+		return nil
+	}
+
+	var out []sourceBinding
+	for _, src := range env.Sources {
+		if src.File == "" || !strings.HasPrefix(src.Role, "$") {
+			continue
+		}
+		out = append(out, sourceBinding{
+			Name: strings.TrimPrefix(src.Role, "$"),
+			File: resolveEnvSourcePath(envIsGlobal, tsDir, src.File),
+			URI:  src.URI,
+		})
+	}
+	return out
 }
 
 func collectNamespaces(env *environment) map[string]string {
@@ -775,6 +801,7 @@ type generatedTest struct {
 	DefaultDecimal   *decimalFormat
 	DecimalFormats   []namedDecimalFormat
 	Params           []param
+	VariableSources  []sourceBinding
 	BaseURI          string
 	NeedsHTTP        bool
 	ResourceMap      map[string]string // URI → file path relative to testdata dir
@@ -849,6 +876,20 @@ func generateTestFile(tests []generatedTest) string {
 						b.WriteString(", ")
 					}
 					fmt.Fprintf(&b, "{Name: %q, Select: %q}", p.Name, p.Select)
+				}
+				b.WriteString("}")
+			}
+			if len(tc.VariableSources) > 0 {
+				b.WriteString(", SourceDocs: []qt3SourceDoc{")
+				for i, src := range tc.VariableSources {
+					if i > 0 {
+						b.WriteString(", ")
+					}
+					fmt.Fprintf(&b, "{Name: %q, DocPath: %q", src.Name, src.File)
+					if src.URI != "" {
+						fmt.Fprintf(&b, ", URI: %q", src.URI)
+					}
+					b.WriteString("}")
 				}
 				b.WriteString("}")
 			}

@@ -33,6 +33,12 @@ type qt3Param struct {
 	Select string
 }
 
+type qt3SourceDoc struct {
+	Name    string
+	DocPath string
+	URI     string
+}
+
 type qt3Test struct {
 	Name                string
 	XPath               string
@@ -43,6 +49,7 @@ type qt3Test struct {
 	DefaultDecimal      *qt3DecimalFormat
 	NamedDecimalFormats []qt3NamedDecimalFormat
 	Params              []qt3Param
+	SourceDocs          []qt3SourceDoc
 	BaseURI             string            // static base URI for fn:unparsed-text etc.
 	NeedsHTTP           bool              // test requires HTTP client (e.g. fn:json-doc with URL)
 	ResourceMap         map[string]string // URI → file path (relative to qt3TestDataDir()) for resource resolution
@@ -171,8 +178,15 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 			if tc.DocPath != "" {
 				doc = qt3ParseDoc(t, filepath.Join(qt3TestDataDir(), tc.DocPath))
 			}
+			var vars map[string]xpath3.Sequence
+			if len(tc.SourceDocs) > 0 || len(tc.Params) > 0 {
+				vars = make(map[string]xpath3.Sequence, len(tc.SourceDocs)+len(tc.Params))
+			}
+			for _, src := range tc.SourceDocs {
+				sourceDoc := qt3ParseDocSource(t, src)
+				vars[src.Name] = xpath3.Sequence{xpath3.NodeItem{Node: sourceDoc}}
+			}
 			if len(tc.Params) > 0 {
-				vars := make(map[string]xpath3.Sequence, len(tc.Params))
 				for _, param := range tc.Params {
 					paramOpts := append([]xpath3.ContextOption{}, opts...)
 					if len(vars) > 0 {
@@ -185,6 +199,8 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 					require.NoError(t, err, "eval param $%s: %s", param.Name, param.Select)
 					vars[param.Name] = result.Sequence()
 				}
+			}
+			if len(vars) > 0 {
 				opts = append(opts, xpath3.WithVariables(vars))
 			}
 			ctx = xpath3.NewContext(ctx, opts...)
@@ -334,6 +350,15 @@ func qt3ParseDoc(t *testing.T, path string) helium.Node {
 	absPath, err := filepath.Abs(path)
 	if err == nil {
 		doc.SetURL(absPath)
+	}
+	return doc
+}
+
+func qt3ParseDocSource(t *testing.T, src qt3SourceDoc) helium.Node {
+	t.Helper()
+	doc := qt3ParseDoc(t, filepath.Join(qt3TestDataDir(), src.DocPath))
+	if src.URI != "" {
+		doc.OwnerDocument().SetURL(src.URI)
 	}
 	return doc
 }

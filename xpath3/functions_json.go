@@ -1226,7 +1226,7 @@ func parseEscapedUnicodeSequence(s string) (string, string, int, error) {
 		if cp2 < 0xDC00 || cp2 > 0xDFFF {
 			return "", "", 0, &XPathError{Code: errCodeFOJS0007, Message: "xml-to-json: invalid surrogate pair"}
 		}
-		r := rune(((cp-0xD800)<<10)+(cp2-0xDC00) + 0x10000)
+		r := rune(((cp - 0xD800) << 10) + (cp2 - 0xDC00) + 0x10000)
 		return encoded + s[6:12], string(r), 12, nil
 	case cp >= 0xDC00 && cp <= 0xDFFF:
 		return "", "", 0, &XPathError{Code: errCodeFOJS0007, Message: "xml-to-json: invalid low surrogate"}
@@ -1319,6 +1319,8 @@ type serializeOptions struct {
 	encoding            string
 }
 
+const serializeParamsNS = "http://www.w3.org/2010/xslt-xquery-serialization"
+
 func parseSerializeOptions(args []Sequence) (serializeOptions, error) {
 	opts := serializeOptions{
 		method:        "adaptive",
@@ -1329,10 +1331,20 @@ func parseSerializeOptions(args []Sequence) (serializeOptions, error) {
 	}
 
 	m, ok := args[1][0].(MapItem)
+	if ok {
+		return parseSerializeOptionsMap(opts, m)
+	}
+	if len(args[1]) != 1 {
+		return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options must be a singleton"}
+	}
+	node, ok := args[1][0].(NodeItem)
 	if !ok {
 		return opts, nil
 	}
+	return parseSerializeOptionsNode(opts, node.Node)
+}
 
+func parseSerializeOptionsMap(opts serializeOptions, m MapItem) (serializeOptions, error) {
 	readString := func(name string) (string, bool, error) {
 		v, found := m.Get(AtomicValue{TypeName: TypeString, Value: name})
 		if !found {
@@ -1422,6 +1434,224 @@ func parseSerializeOptions(args []Sequence) (serializeOptions, error) {
 	}
 
 	return opts, nil
+}
+
+func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeOptions, error) {
+	elem, ok := n.(*helium.Element)
+	if !ok {
+		return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options node must be an element"}
+	}
+	if elem.URI() != serializeParamsNS || elem.LocalName() != "serialization-parameters" {
+		return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options root must be output:serialization-parameters"}
+	}
+	if len(elem.Attributes()) != 0 {
+		return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options root must not have attributes"}
+	}
+
+	seen := make(map[string]struct{})
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		switch child.Type() {
+		case helium.TextNode, helium.CDATASectionNode:
+			if strings.TrimSpace(string(child.Content())) == "" {
+				continue
+			}
+			return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options root must not contain text"}
+		case helium.CommentNode, helium.ProcessingInstructionNode:
+			continue
+		case helium.ElementNode:
+		default:
+			return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options root has invalid child node"}
+		}
+
+		param := child.(*helium.Element)
+		if param.URI() == "" {
+			return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options parameters must be namespace-qualified"}
+		}
+
+		key := param.URI() + "|" + param.LocalName()
+		if _, exists := seen[key]; exists {
+			return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options parameter must not appear more than once"}
+		}
+		seen[key] = struct{}{}
+
+		if param.URI() != serializeParamsNS {
+			if _, err := readSerializeParamValue(param); err != nil {
+				return opts, err
+			}
+			continue
+		}
+
+		switch param.LocalName() {
+		case "method":
+			value, err := readSerializeParamValue(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.method = value
+		case "item-separator":
+			value, err := readSerializeParamValue(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.itemSeparator = value
+		case "indent":
+			value, err := readSerializeParamYesNo(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.indent = value
+		case "omit-xml-declaration":
+			value, err := readSerializeParamYesNo(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.omitXMLDeclaration = value
+		case "allow-duplicate-names":
+			value, err := readSerializeParamYesNo(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.allowDuplicateNames = value
+		case "encoding":
+			value, err := readSerializeParamValue(param)
+			if err != nil {
+				return opts, err
+			}
+			opts.encoding = value
+		case "byte-order-mark", "cdata-section-elements", "doctype-public", "doctype-system",
+			"json-node-output-method", "media-type", "normalization-form",
+			"suppress-indentation", "version":
+			if _, err := readSerializeParamValue(param); err != nil {
+				return opts, err
+			}
+		case "standalone":
+			if _, err := readSerializeParamStandalone(param); err != nil {
+				return opts, err
+			}
+		case "use-character-maps":
+			if err := validateSerializeCharacterMapsElement(param); err != nil {
+				return opts, err
+			}
+		default:
+			return opts, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("unsupported serialize parameter %q", param.LocalName())}
+		}
+	}
+
+	return opts, nil
+}
+
+func readSerializeParamValue(elem *helium.Element) (string, error) {
+	if hasNonWhitespaceContent(elem) {
+		return "", &XPathError{Code: errCodeXPTY0004, Message: "serialize parameter must not have child content"}
+	}
+	attrs := elem.Attributes()
+	if len(attrs) != 1 {
+		return "", &XPathError{Code: errCodeXPTY0004, Message: "serialize parameter must have exactly one value attribute"}
+	}
+	attr := attrs[0]
+	if attr.URI() != "" || attr.LocalName() != "value" {
+		return "", &XPathError{Code: errCodeXPTY0004, Message: "serialize parameter must use an unqualified value attribute"}
+	}
+	return attr.Value(), nil
+}
+
+func readSerializeParamYesNo(elem *helium.Element) (bool, error) {
+	value, err := readSerializeParamValue(elem)
+	if err != nil {
+		return false, err
+	}
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "yes", "true", "1":
+		return true, nil
+	case "no", "false", "0":
+		return false, nil
+	default:
+		return false, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize parameter %q must be yes/no", elem.LocalName())}
+	}
+}
+
+func readSerializeParamStandalone(elem *helium.Element) (string, error) {
+	value, err := readSerializeParamValue(elem)
+	if err != nil {
+		return "", err
+	}
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "yes", "no", "omit":
+		return value, nil
+	default:
+		return "", &XPathError{Code: errCodeXPTY0004, Message: "serialize parameter \"standalone\" must be yes/no/omit"}
+	}
+}
+
+func validateSerializeCharacterMapsElement(elem *helium.Element) error {
+	if len(elem.Attributes()) != 0 {
+		return &XPathError{Code: errCodeXPTY0004, Message: "serialize parameter use-character-maps must not have attributes"}
+	}
+	seen := make(map[string]struct{})
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		switch child.Type() {
+		case helium.TextNode, helium.CDATASectionNode:
+			if strings.TrimSpace(string(child.Content())) == "" {
+				continue
+			}
+			return &XPathError{Code: errCodeXPTY0004, Message: "use-character-maps must not contain text"}
+		case helium.CommentNode, helium.ProcessingInstructionNode:
+			continue
+		case helium.ElementNode:
+		default:
+			return &XPathError{Code: errCodeXPTY0004, Message: "use-character-maps has invalid child node"}
+		}
+
+		charMap := child.(*helium.Element)
+		if charMap.URI() != serializeParamsNS || charMap.LocalName() != "character-map" {
+			return &XPathError{Code: errCodeXPTY0004, Message: "use-character-maps children must be output:character-map"}
+		}
+		if hasNonWhitespaceContent(charMap) {
+			return &XPathError{Code: errCodeXPTY0004, Message: "character-map must not have child content"}
+		}
+
+		var character, mapString string
+		for _, attr := range charMap.Attributes() {
+			if attr.URI() != "" {
+				return &XPathError{Code: errCodeXPTY0004, Message: "character-map attributes must be unqualified"}
+			}
+			switch attr.LocalName() {
+			case "character":
+				character = attr.Value()
+			case "map-string":
+				mapString = attr.Value()
+			default:
+				return &XPathError{Code: errCodeXPTY0004, Message: "character-map has unsupported attribute"}
+			}
+		}
+		if character == "" || mapString == "" {
+			return &XPathError{Code: errCodeXPTY0004, Message: "character-map requires character and map-string"}
+		}
+		if utf8.RuneCountInString(character) != 1 {
+			return &XPathError{Code: errCodeXPTY0004, Message: "character-map character must be a single character"}
+		}
+		if _, exists := seen[character]; exists {
+			return &XPathError{Code: errCodeXPTY0004, Message: "character-map entries must be unique"}
+		}
+		seen[character] = struct{}{}
+	}
+	return nil
+}
+
+func hasNonWhitespaceContent(elem *helium.Element) bool {
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		switch child.Type() {
+		case helium.TextNode, helium.CDATASectionNode:
+			if strings.TrimSpace(string(child.Content())) != "" {
+				return true
+			}
+		case helium.CommentNode, helium.ProcessingInstructionNode:
+			continue
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 func validateSerializeCharacterMaps(v Sequence) error {

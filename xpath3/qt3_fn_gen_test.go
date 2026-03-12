@@ -5548,53 +5548,53 @@ func TestQT3_fn_innermost(t *testing.T) {
                                     fn:dateTime( fn:current-date(),
                                                  fn:current-time() ))
                                then .
-                               else 1 )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires static typing", ExpectError: true},
+                               else 1 )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Skip: "requires static typing", ExpectError: true},
 		{Name: "fn-innermost-009", XPath: `( fn:innermost( if (current-date() eq xs:date('1900-01-01'))
                                  then .
                                  else 1 ),
               fn:innermost( if (current-date() eq xs:date('1900-01-01'))
                                  then 1
-                                 else . ) )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+                                 else . ) )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, ExpectError: true},
 		{Name: "fn-innermost-010", XPath: `fn:innermost( if ( fn:current-dateTime() eq
                                     fn:dateTime( fn:current-date(),
                                                  fn:current-time() ))
                                then .
-                               else fn:dateTime#2 )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires static typing", ExpectError: true},
+                               else fn:dateTime#2 )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Skip: "requires static typing", ExpectError: true},
 		{Name: "fn-innermost-011", XPath: `( fn:innermost( if (current-date() eq xs:date('1900-01-01'))
                                  then .
                                  else fn:dateTime#2 ),
               fn:innermost( if (current-date() eq xs:date('1900-01-01'))
                                  then fn:dateTime#2
-                                 else . ) )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", ExpectError: true},
-		{Name: "fn-innermost-012", XPath: "fn:innermost( / )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(1)}},
-		{Name: "fn-innermost-013", XPath: "fn:deep-equal(fn:innermost( / ), / )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-innermost-014", XPath: "fn:innermost( //*/@* )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(7)}},
-		{Name: "fn-innermost-015", XPath: "fn:innermost( //*/@* ) ! string()", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertDeepEq("('0a','00a','000a','01a','010a','02a','020a')")}},
-		{Name: "fn-innermost-016", XPath: "deep-equal(fn:innermost( //*/@* ), //*/@*)", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-innermost-017", XPath: "fn:innermost( //*/namespace::* )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(69)}},
-		{Name: "fn-innermost-018", XPath: "fn:innermost( //*/namespace::* )[position() le 2] ! local-name()", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-innermost-019", XPath: "fn:innermost( //*/namespace::* )[position() = (7 to 9)] ! local-name()", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-innermost-020", XPath: "fn:innermost( //*/namespace::* )[position() = (16 to 19)] ! local-name()", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-innermost-021", XPath: "fn:innermost( //*/namespace::* )[position() = (66 to 69)] ! local-name()", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
+                                 else . ) )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, ExpectError: true},
+		{Name: "fn-innermost-012", XPath: "fn:innermost( / )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(1)}},
+		{Name: "fn-innermost-013", XPath: "fn:deep-equal(fn:innermost( / ), / )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-innermost-014", XPath: "fn:innermost( //*/@* )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(7)}},
+		{Name: "fn-innermost-015", XPath: "fn:innermost( //*/@* ) ! string()", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertDeepEq("('0a','00a','000a','01a','010a','02a','020a')")}},
+		{Name: "fn-innermost-016", XPath: "deep-equal(fn:innermost( //*/@* ), //*/@*)", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-innermost-017", XPath: "fn:innermost( //*/namespace::* )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(69)}},
+		{Name: "fn-innermost-018", XPath: "fn:innermost( //*/namespace::* )[position() le 2] ! local-name()", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-innermost-019", XPath: "fn:innermost( //*/namespace::* )[position() = (7 to 9)] ! local-name()", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-innermost-020", XPath: "fn:innermost( //*/namespace::* )[position() = (16 to 19)] ! local-name()", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-innermost-021", XPath: "fn:innermost( //*/namespace::* )[position() = (66 to 69)] ! local-name()", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-innermost-022", XPath: `fn:deep-equal( fn:innermost( //*/namespace::* ),
-                           //*/namespace::* )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-innermost-023", XPath: "fn:innermost( //processing-instruction() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(7)}},
-		{Name: "fn-innermost-024", XPath: "fn:innermost( //processing-instruction() ) ! local-name()", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertDeepEq("('level-0','level-00','level-000','level-01','level-010','level-02','level-020')")}},
+                           //*/namespace::* )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-innermost-023", XPath: "fn:innermost( //processing-instruction() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(7)}},
+		{Name: "fn-innermost-024", XPath: "fn:innermost( //processing-instruction() ) ! local-name()", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertDeepEq("('level-0','level-00','level-000','level-01','level-010','level-02','level-020')")}},
 		{Name: "fn-innermost-025", XPath: `fn:deep-equal( fn:innermost( //processing-instruction() ), 
-                          //processing-instruction() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-innermost-026", XPath: "fn:innermost( //comment() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(7)}},
-		{Name: "fn-innermost-027", XPath: "fn:innermost( //comment() ) ! string()", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertDeepEq("('0c','00c','000c','01c','010c','02c','020c')")}},
+                          //processing-instruction() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-innermost-026", XPath: "fn:innermost( //comment() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(7)}},
+		{Name: "fn-innermost-027", XPath: "fn:innermost( //comment() ) ! string()", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertDeepEq("('0c','00c','000c','01c','010c','02c','020c')")}},
 		{Name: "fn-innermost-028", XPath: `fn:deep-equal( fn:innermost( //comment() ),
-                           //comment() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-innermost-029", XPath: "fn:innermost( //text() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(14)}},
-		{Name: "fn-innermost-030", XPath: "fn:innermost( //text() ) ! string()", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertDeepEq(`('0t',' ',
+                           //comment() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-innermost-029", XPath: "fn:innermost( //text() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(14)}},
+		{Name: "fn-innermost-030", XPath: "fn:innermost( //text() ) ! string()", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertDeepEq(`('0t',' ',
                          '00t',' ','000t',' ',
                          '01t',' ','010t',' ',
                          '02t',' ','020t',' ')`)}},
 		{Name: "fn-innermost-031", XPath: `fn:deep-equal( fn:innermost( //text() ),
-                           //text() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-innermost-032", XPath: "fn:innermost( //* )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(14)}},
-		{Name: "fn-innermost-033", XPath: "fn:innermost( //* ) ! local-name(.)", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertDeepEq(`('empty-level-0',   'non-empty-level-0',
+                           //text() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-innermost-032", XPath: "fn:innermost( //* )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(14)}},
+		{Name: "fn-innermost-033", XPath: "fn:innermost( //* ) ! local-name(.)", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertDeepEq(`('empty-level-0',   'non-empty-level-0',
                          'empty-level-00',  'non-empty-level-00',
                          'empty-level-000', 'non-empty-level-000',
                          'empty-level-01',  'non-empty-level-01',
@@ -5603,47 +5603,47 @@ func TestQT3_fn_innermost(t *testing.T) {
                          'empty-level-020', 'non-empty-level-020')`)}},
 		{Name: "fn-innermost-034", XPath: `fn:deep-equal( fn:innermost( //* ), 
                            let $nodes := //*
-                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-innermost-035", XPath: "fn:innermost( //node() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(35)}},
+                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-innermost-035", XPath: "fn:innermost( //node() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(35)}},
 		{Name: "fn-innermost-036", XPath: `fn:deep-equal( fn:innermost( //node() ), 
                            let $nodes := //node()
-                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-innermost-037", XPath: "fn:innermost( /root/node() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(8)}},
+                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-innermost-037", XPath: "fn:innermost( /root/node() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(8)}},
 		{Name: "fn-innermost-038", XPath: `fn:deep-equal( fn:innermost( /root/node() ), 
                            let $nodes := /root/node()
-                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-innermost-039", XPath: "fn:innermost( /root/descendant::node() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(35)}},
+                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-innermost-039", XPath: "fn:innermost( /root/descendant::node() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(35)}},
 		{Name: "fn-innermost-040", XPath: `fn:deep-equal( fn:innermost( /root/descendant::node() ), 
                            let $nodes := /root/descendant::node()
-                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-innermost-041", XPath: "fn:innermost( /root/level[1]/level[1]/ancestor::node() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(1)}},
+                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-innermost-041", XPath: "fn:innermost( /root/level[1]/level[1]/ancestor::node() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(1)}},
 		{Name: "fn-innermost-042", XPath: `fn:deep-equal( fn:innermost( /root/level[1]/level[1]/ancestor::node() ), 
                            let $nodes := /root/level[1]/level[1]/ancestor::node()
-                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-innermost-043", XPath: "fn:innermost( /root/level[1]/level[last()]/preceding-sibling::node() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(5)}},
+                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-innermost-043", XPath: "fn:innermost( /root/level[1]/level[last()]/preceding-sibling::node() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(5)}},
 		{Name: "fn-innermost-044", XPath: `fn:deep-equal( fn:innermost( /root/level[1]/level[last()]/preceding-sibling::node() ), 
                            let $nodes := /root/level[1]/level[last()]/preceding-sibling::node()
-                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-innermost-045", XPath: "fn:innermost( /root/level[1]/level[last()]/preceding::node() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(10)}},
+                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-innermost-045", XPath: "fn:innermost( /root/level[1]/level[last()]/preceding::node() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(10)}},
 		{Name: "fn-innermost-046", XPath: `fn:deep-equal( fn:innermost( /root/level[1]/level[last()]/preceding::node() ), 
                            let $nodes := /root/level[1]/level[last()]/preceding::node()
-                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-innermost-047", XPath: "fn:innermost( /root/level[1]/following-sibling::node() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(2)}},
+                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-innermost-047", XPath: "fn:innermost( /root/level[1]/following-sibling::node() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(2)}},
 		{Name: "fn-innermost-048", XPath: `fn:deep-equal( fn:innermost( /root/level[1]/following-sibling::node() ), 
                            let $nodes := /root/level[1]/following-sibling::node()
-                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-innermost-049", XPath: "fn:innermost( /root/level[1]/level[1]/following::node() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(20)}},
+                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-innermost-049", XPath: "fn:innermost( /root/level[1]/level[1]/following::node() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(20)}},
 		{Name: "fn-innermost-050", XPath: `fn:deep-equal( fn:innermost( /root/level[1]/level[1]/following::node() ), 
                            let $nodes := /root/level[1]/level[1]/following::node()
-                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-innermost-051", XPath: "fn:innermost( /root/node()/.. )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(1)}},
+                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-innermost-051", XPath: "fn:innermost( /root/node()/.. )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(1)}},
 		{Name: "fn-innermost-052", XPath: `fn:deep-equal( fn:innermost( /root/node()/.. ), 
                            let $nodes := /root/node()/..
-                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-innermost-053", XPath: "fn:innermost( ($doc1//node(), $doc2//node()) )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(26)}},
+                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-innermost-053", XPath: "fn:innermost( ($doc1//node(), $doc2//node()) )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(26)}},
 		{Name: "fn-innermost-054", XPath: `fn:deep-equal( fn:innermost( ($doc1//node(), $doc2//node()) ),
                            let $nodes := ($doc1//node(), $doc2//node())
-                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
+                           return $nodes except $nodes/ancestor::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
 		{Name: "fn-innermost-059", XPath: "innermost(parse-xml('<a><b/></a>')//*)!name()", Assertions: []qt3Assertion{qt3AssertCount(1), qt3AssertEq("'b'")}},
 	})
 }
@@ -8817,96 +8817,96 @@ func TestQT3_fn_outermost(t *testing.T) {
                                     fn:dateTime( fn:current-date(),
                                                  fn:current-time() ))
                                then .
-                               else 1 )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires static typing", ExpectError: true},
+                               else 1 )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Skip: "requires static typing", ExpectError: true},
 		{Name: "fn-outermost-009", XPath: `( fn:outermost( if (current-date() eq xs:date('1900-01-01'))
                                  then .
                                  else 1 ),
               fn:outermost( if (current-date() eq xs:date('1900-01-01'))
                                  then 1
-                                 else . ) )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+                                 else . ) )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, ExpectError: true},
 		{Name: "fn-outermost-010", XPath: `fn:outermost( if ( fn:current-dateTime() eq
                                     fn:dateTime( fn:current-date(),
                                                  fn:current-time() ))
                                then .
-                               else fn:dateTime#2 )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires static typing", ExpectError: true},
+                               else fn:dateTime#2 )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Skip: "requires static typing", ExpectError: true},
 		{Name: "fn-outermost-011", XPath: `( fn:outermost( if (current-date() eq xs:date('1900-01-01'))
                                  then .
                                  else fn:dateTime#2 ),
               fn:outermost( if (current-date() eq xs:date('1900-01-01'))
                                  then fn:dateTime#2
-                                 else . ) )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", ExpectError: true},
-		{Name: "fn-outermost-012", XPath: "fn:outermost( / )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(1)}},
-		{Name: "fn-outermost-013", XPath: "fn:deep-equal(fn:outermost( / ), / )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-outermost-014", XPath: "fn:outermost( //*/@* )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(7)}},
-		{Name: "fn-outermost-015", XPath: "fn:outermost( //*/@* ) ! string()", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertDeepEq("('0a','00a','000a','01a','010a','02a','020a')")}},
-		{Name: "fn-outermost-016", XPath: "deep-equal(fn:outermost( //*/@* ), //*/@*)", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-outermost-017", XPath: "fn:outermost( //*/namespace::* )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(69)}},
-		{Name: "fn-outermost-018", XPath: "fn:outermost( //*/namespace::* )[position() le 2] ! local-name()", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-outermost-019", XPath: "fn:outermost( //*/namespace::* )[position() = (7 to 9)] ! local-name()", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-outermost-020", XPath: "fn:outermost( //*/namespace::* )[position() = (16 to 19)] ! local-name()", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-outermost-021", XPath: "fn:outermost( //*/namespace::* )[position() = (66 to 69)] ! local-name()", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
+                                 else . ) )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, ExpectError: true},
+		{Name: "fn-outermost-012", XPath: "fn:outermost( / )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(1)}},
+		{Name: "fn-outermost-013", XPath: "fn:deep-equal(fn:outermost( / ), / )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-outermost-014", XPath: "fn:outermost( //*/@* )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(7)}},
+		{Name: "fn-outermost-015", XPath: "fn:outermost( //*/@* ) ! string()", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertDeepEq("('0a','00a','000a','01a','010a','02a','020a')")}},
+		{Name: "fn-outermost-016", XPath: "deep-equal(fn:outermost( //*/@* ), //*/@*)", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-outermost-017", XPath: "fn:outermost( //*/namespace::* )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(69)}},
+		{Name: "fn-outermost-018", XPath: "fn:outermost( //*/namespace::* )[position() le 2] ! local-name()", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-outermost-019", XPath: "fn:outermost( //*/namespace::* )[position() = (7 to 9)] ! local-name()", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-outermost-020", XPath: "fn:outermost( //*/namespace::* )[position() = (16 to 19)] ! local-name()", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-outermost-021", XPath: "fn:outermost( //*/namespace::* )[position() = (66 to 69)] ! local-name()", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-outermost-022", XPath: `fn:deep-equal( fn:outermost( //*/namespace::* ),
-                           //*/namespace::* )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-outermost-023", XPath: "fn:outermost( //processing-instruction() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(7)}},
-		{Name: "fn-outermost-024", XPath: "fn:outermost( //processing-instruction() ) ! local-name()", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertDeepEq("('level-0','level-00','level-000','level-01','level-010','level-02','level-020')")}},
+                           //*/namespace::* )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-outermost-023", XPath: "fn:outermost( //processing-instruction() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(7)}},
+		{Name: "fn-outermost-024", XPath: "fn:outermost( //processing-instruction() ) ! local-name()", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertDeepEq("('level-0','level-00','level-000','level-01','level-010','level-02','level-020')")}},
 		{Name: "fn-outermost-025", XPath: `fn:deep-equal( fn:outermost( //processing-instruction() ), 
-                          //processing-instruction() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-outermost-026", XPath: "fn:outermost( //comment() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(7)}},
-		{Name: "fn-outermost-027", XPath: "fn:outermost( //comment() ) ! string()", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertDeepEq("('0c','00c','000c','01c','010c','02c','020c')")}},
+                          //processing-instruction() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-outermost-026", XPath: "fn:outermost( //comment() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(7)}},
+		{Name: "fn-outermost-027", XPath: "fn:outermost( //comment() ) ! string()", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertDeepEq("('0c','00c','000c','01c','010c','02c','020c')")}},
 		{Name: "fn-outermost-028", XPath: `fn:deep-equal( fn:outermost( //comment() ),
-                           //comment() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-outermost-029", XPath: "fn:outermost( //text() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(14)}},
-		{Name: "fn-outermost-030", XPath: "fn:outermost( //text() ) ! string()", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertDeepEq(`('0t',' ',
+                           //comment() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-outermost-029", XPath: "fn:outermost( //text() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(14)}},
+		{Name: "fn-outermost-030", XPath: "fn:outermost( //text() ) ! string()", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertDeepEq(`('0t',' ',
                          '00t',' ','000t',' ',
                          '01t',' ','010t',' ',
                          '02t',' ','020t',' ')`)}},
 		{Name: "fn-outermost-031", XPath: `fn:deep-equal( fn:outermost( //text() ),
-                           //text() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-outermost-032", XPath: "fn:outermost( //* )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(1)}},
-		{Name: "fn-outermost-033", XPath: "fn:outermost( //* ) ! local-name(.)", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertEq("('root')")}},
+                           //text() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-outermost-032", XPath: "fn:outermost( //* )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(1)}},
+		{Name: "fn-outermost-033", XPath: "fn:outermost( //* ) ! local-name(.)", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertEq("('root')")}},
 		{Name: "fn-outermost-034", XPath: `fn:deep-equal( fn:outermost( //* ), 
                            let $nodes := //*
-                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-outermost-035", XPath: "fn:outermost( //node() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(1)}},
+                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-outermost-035", XPath: "fn:outermost( //node() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(1)}},
 		{Name: "fn-outermost-036", XPath: `fn:deep-equal( fn:outermost( //node() ), 
                            let $nodes := //node()
-                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-outermost-037", XPath: "fn:outermost( /root/node() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(8)}},
+                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-outermost-037", XPath: "fn:outermost( /root/node() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(8)}},
 		{Name: "fn-outermost-038", XPath: `fn:deep-equal( fn:outermost( /root/node() ), 
                            let $nodes := /root/node()
-                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-outermost-039", XPath: "fn:outermost( /root/descendant::node() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(8)}},
+                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-outermost-039", XPath: "fn:outermost( /root/descendant::node() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(8)}},
 		{Name: "fn-outermost-040", XPath: `fn:deep-equal( fn:outermost( /root/descendant::node() ), 
                            let $nodes := /root/descendant::node()
-                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-outermost-041", XPath: "fn:outermost( /root/level[1]/level[1]/ancestor::node() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(1)}},
+                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-outermost-041", XPath: "fn:outermost( /root/level[1]/level[1]/ancestor::node() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(1)}},
 		{Name: "fn-outermost-042", XPath: `fn:deep-equal( fn:outermost( /root/level[1]/level[1]/ancestor::node() ), 
                            let $nodes := /root/level[1]/level[1]/ancestor::node()
-                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-outermost-043", XPath: "fn:outermost( /root/level[1]/level[last()]/preceding-sibling::node() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(5)}},
+                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-outermost-043", XPath: "fn:outermost( /root/level[1]/level[last()]/preceding-sibling::node() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(5)}},
 		{Name: "fn-outermost-044", XPath: `fn:deep-equal( fn:outermost( /root/level[1]/level[last()]/preceding-sibling::node() ), 
                            let $nodes := /root/level[1]/level[last()]/preceding-sibling::node()
-                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-outermost-045", XPath: "fn:outermost( /root/level[1]/level[last()]/preceding::node() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(10)}},
+                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-outermost-045", XPath: "fn:outermost( /root/level[1]/level[last()]/preceding::node() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(10)}},
 		{Name: "fn-outermost-046", XPath: `fn:deep-equal( fn:outermost( /root/level[1]/level[last()]/preceding::node() ), 
                            let $nodes := /root/level[1]/level[last()]/preceding::node()
-                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-outermost-047", XPath: "fn:outermost( /root/level[1]/following-sibling::node() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(2)}},
+                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-outermost-047", XPath: "fn:outermost( /root/level[1]/following-sibling::node() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(2)}},
 		{Name: "fn-outermost-048", XPath: `fn:deep-equal( fn:outermost( /root/level[1]/following-sibling::node() ), 
                            let $nodes := /root/level[1]/following-sibling::node()
-                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-outermost-049", XPath: "fn:outermost( /root/level[1]/level[1]/following::node() )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(2)}},
+                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-outermost-049", XPath: "fn:outermost( /root/level[1]/level[1]/following::node() )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(2)}},
 		{Name: "fn-outermost-050", XPath: `fn:deep-equal( fn:outermost( /root/level[1]/level[1]/following::node() ), 
                            let $nodes := /root/level[1]/level[1]/following::node()
-                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-outermost-051", XPath: "fn:outermost( /root/node()/.. )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(1)}},
+                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-outermost-051", XPath: "fn:outermost( /root/node()/.. )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(1)}},
 		{Name: "fn-outermost-052", XPath: `fn:deep-equal( fn:outermost( /root/node()/.. ), 
                            let $nodes := /root/node()/..
-                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
-		{Name: "fn-outermost-053", XPath: "fn:outermost( ($doc1//node(), $doc2//node()) )", DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertCount(2)}},
+                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
+		{Name: "fn-outermost-053", XPath: "fn:outermost( ($doc1//node(), $doc2//node()) )", DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertCount(2)}},
 		{Name: "fn-outermost-054", XPath: `fn:deep-equal( fn:outermost( ($doc1//node(), $doc2//node()) ),
                            let $nodes := ($doc1//node(), $doc2//node())
-                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertTrue()}},
+                           return $nodes except $nodes/descendant::node() )`, DocPath: "fn/innermost/innermost.xml", SourceDocs: []qt3SourceDoc{{Name: "doc1", DocPath: "fn/innermost/doc1.xml"}, {Name: "doc2", DocPath: "fn/innermost/doc2.xml"}}, Assertions: []qt3Assertion{qt3AssertTrue()}},
 	})
 }
 
@@ -10367,40 +10367,40 @@ func TestQT3_fn_serialize(t *testing.T) {
 	qt3RunTests(t, []qt3Test{
 		{Name: "serialize-xml-001", XPath: "serialize(.)", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-002", XPath: "serialize((.//@*)[1])", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
-		{Name: "serialize-xml-003b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-004b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-005b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
-		{Name: "serialize-xml-006b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-007b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
-		{Name: "serialize-xml-007c", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-008b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-008-src.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
-		{Name: "serialize-xml-009b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+		{Name: "serialize-xml-003b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-003.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-004b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-004.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-005b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-005.xml"}}, ExpectError: true},
+		{Name: "serialize-xml-006b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-006.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-007b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-007.xml"}}, ExpectError: true},
+		{Name: "serialize-xml-007c", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-007c.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-008b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-008-src.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-008.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+		{Name: "serialize-xml-009b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-009.xml"}}, ExpectError: true},
 		{Name: "serialize-xml-010", XPath: "serialize(name#1)", ExpectError: true},
 		{Name: "serialize-xml-011", XPath: "serialize((//@*:attr)[1])", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
 		{Name: "serialize-xml-012", XPath: "serialize((//namespace::*)[1])", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Namespaces: map[string]string{"atomic": "http://www.w3.org/XQueryTest"}, Skip: "requires schema-validated source", ExpectError: true},
-		{Name: "serialize-xml-014b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
-		{Name: "serialize-xml-015b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
-		{Name: "serialize-xml-016b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
-		{Name: "serialize-xml-017b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
-		{Name: "serialize-xml-018b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
-		{Name: "serialize-xml-019b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
-		{Name: "serialize-xml-020b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
-		{Name: "serialize-xml-021b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
-		{Name: "serialize-xml-022b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
-		{Name: "serialize-xml-023b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
-		{Name: "serialize-xml-024b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
-		{Name: "serialize-xml-025b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", ExpectError: true},
-		{Name: "serialize-xml-026b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-027b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-028b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-029b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-030b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-031b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-032b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-032-src.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-033b", XPath: "serialize(1 to 10, $params/*)", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-034b", XPath: "serialize(./doc/x/text(), $params/*)", DocPath: "fn/serialize/serialize-034-src.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-035b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-035-src.xml", Skip: "requires XML 1.1", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-xml-036b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-035-src.xml", Skip: "requires XML 1.1", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
+		{Name: "serialize-xml-014b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-014.xml"}}, ExpectError: true},
+		{Name: "serialize-xml-015b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-015.xml"}}, ExpectError: true},
+		{Name: "serialize-xml-016b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-016.xml"}}, ExpectError: true},
+		{Name: "serialize-xml-017b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-017.xml"}}, ExpectError: true},
+		{Name: "serialize-xml-018b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-018.xml"}}, ExpectError: true},
+		{Name: "serialize-xml-019b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-019.xml"}}, ExpectError: true},
+		{Name: "serialize-xml-020b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-020.xml"}}, ExpectError: true},
+		{Name: "serialize-xml-021b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-021.xml"}}, ExpectError: true},
+		{Name: "serialize-xml-022b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-022.xml"}}, ExpectError: true},
+		{Name: "serialize-xml-023b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-023.xml"}}, ExpectError: true},
+		{Name: "serialize-xml-024b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-024.xml"}}, ExpectError: true},
+		{Name: "serialize-xml-025b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-025.xml"}}, ExpectError: true},
+		{Name: "serialize-xml-026b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-026.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-027b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-027.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-028b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-028.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-029b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-029.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-030b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-030.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-031b", XPath: "serialize(., $params/*)", DocPath: "docs/atomic.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-031.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-032b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-032-src.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-032.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-033b", XPath: "serialize(1 to 10, $params/*)", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-033.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-034b", XPath: "serialize(./doc/x/text(), $params/*)", DocPath: "fn/serialize/serialize-034-src.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-034.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-035b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-035-src.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-035.xml"}}, Skip: "requires XML 1.1", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-xml-036b", XPath: "serialize(., $params/*)", DocPath: "fn/serialize/serialize-035-src.xml", SourceDocs: []qt3SourceDoc{{Name: "params", DocPath: "fn/serialize/params-036.xml"}}, Skip: "requires XML 1.1", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "serialize-xml-101", XPath: "serialize(., map{})", DocPath: "docs/atomic.xml", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/atomic.xml": "docs/atomic.xml"}, Skip: "requires schema-validated source", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-102", XPath: `let $params := map {
             "method" : "xml",
@@ -10540,7 +10540,7 @@ func TestQT3_fn_serialize(t *testing.T) {
 		{Name: "serialize-xml-137b", XPath: "serialize(., ())", DocPath: "fn/serialize/serialize-xml-137-src.xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-138b", XPath: "serialize(., parse-json('{\"method\" : \"xml\", \"indent\" : true, \"use-character-maps\" : { \"x\" : \"j\", \"m\" : \"so\", \"l\" : \"n\" } }'))", DocPath: "fn/serialize/serialize-xml-138-src.xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-xml-139b", XPath: "serialize(., map { 'use-character-maps' : map { QName(\"http://example.org\",\"xyz\") : \"abc\" } })", DocPath: "fn/serialize/serialize-xml-138-src.xml", ExpectError: true},
-		{Name: "serialize-xml-140b", XPath: "serialize(., map {'use-character-maps' : map {'x': xs:untypedAtomic('j'), 'm':$e/e, 'l':'n'}})", DocPath: "fn/serialize/serialize-xml-138-src.xml", Skip: "requires variable-bound source documents", ExpectError: true},
+		{Name: "serialize-xml-140b", XPath: "serialize(., map {'use-character-maps' : map {'x': xs:untypedAtomic('j'), 'm':$e/e, 'l':'n'}})", DocPath: "fn/serialize/serialize-xml-138-src.xml", SourceDocs: []qt3SourceDoc{{Name: "e", DocPath: "fn/serialize/serialize-xml-140-src.xml"}}, ExpectError: true},
 		{Name: "serialize-xml-141b", XPath: "serialize(., map {'use-character-maps' : map {'x': xs:untypedAtomic('j'), 'm':'so', 'l': xs:QName('n')}})", DocPath: "fn/serialize/serialize-xml-138-src.xml", ExpectError: true},
 		{Name: "serialize-xml-142b", XPath: "serialize(./x/*, map {'method' : 'xml', 'indent' : xs:untypedAtomic('false'), 'item-separator' : xs:untypedAtomic('  ') })", DocPath: "fn/serialize/serialize-xml-142-src.xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-html-001b", XPath: "serialize(., map { \"method\" : \"html\", \"html-version\" : 5.0 } )", DocPath: "fn/serialize/serialize-html-001-src.xml", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
@@ -10580,7 +10580,7 @@ func TestQT3_fn_serialize(t *testing.T) {
             }
             return serialize(1 to 10, $params)`, ExpectError: true},
 		{Name: "serialize-json-008b", XPath: "serialize(./doc/comment(), map { \"method\" : \"json\", \"json-node-output-method\" : \"xml\" })", DocPath: "fn/serialize/serialize-json-008-src.xml", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "serialize-json-009b", XPath: "serialize(array{./doc/node(), $doc}, map { \"method\" : \"json\", \"json-node-output-method\" : \"xml\" })", DocPath: "fn/serialize/serialize-json-009-src.xml", Skip: "requires variable-bound source documents", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "serialize-json-009b", XPath: "serialize(array{./doc/node(), $doc}, map { \"method\" : \"json\", \"json-node-output-method\" : \"xml\" })", DocPath: "fn/serialize/serialize-json-009-src.xml", SourceDocs: []qt3SourceDoc{{Name: "doc", DocPath: "fn/serialize/serialize-json-009-doc.xml"}}, Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "serialize-json-010", XPath: "serialize(map { xs:QName(\"foo\") : 1, \"foo\" : 2 }, map { 'method' : 'json' })", ExpectError: true},
 		{Name: "serialize-json-011", XPath: `serialize(
             map { 
@@ -12015,7 +12015,7 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style }
                          => map:remove("http://www.w3.org/fots/fn/transform/output-doc.xml")`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-14", XPath: `fn:transform(map {"stylesheet-node":$multipledocs, "source-node":$sections, "base-output-uri": "http://www.w3.org/fots/fn/transform/output-doc.xml"})
             => map:remove("http://www.w3.org/fots/fn/transform/output-doc.xml")
-            => map:keys()`, Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            => map:keys()`, SourceDocs: []qt3SourceDoc{{Name: "multipledocs", DocPath: "fn/transform/multipledocs.xsl"}, {Name: "sections", DocPath: "fn/transform/sections.xml"}}, Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-transform-15", XPath: `let $in := parse-xml("<dummy/>")/*,
                         $style := parse-xml("<xsl:stylesheet version='1.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'>
                         <xsl:param name='v'/>
@@ -12043,16 +12043,16 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style }
             fn:transform(map {"stylesheet-text" : $xsl, "initial-template" : QName('','main'), "stylesheet-base-uri": "http://www.example.com"})?output`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-transform-20", XPath: `fn:transform(map {"stylesheet-location" : "http://www.w3.org/fots/fn/transform/staticbaseuri.xsl", 
                                 "initial-template" : QName('','main'), 
-                                "stylesheet-base-uri": "http://www.example.com"})("output")`, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/transform/staticbaseuri.xsl": "fn/transform/staticbaseuri.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
-		{Name: "fn-transform-21", XPath: "fn:transform(map {\"stylesheet-location\" : \"http://www.w3.org/fots/fn/transform/staticbaseuri.xsl\", \"initial-template\" : QName('','main')})(\"output\")", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/transform/staticbaseuri.xsl": "fn/transform/staticbaseuri.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
+                                "stylesheet-base-uri": "http://www.example.com"})("output")`, SourceDocs: []qt3SourceDoc{{Name: "staticbaseuri", DocPath: "fn/transform/staticbaseuri.xsl", URI: "http://www.w3.org/fots/fn/transform/staticbaseuri.xsl"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/transform/staticbaseuri.xsl": "fn/transform/staticbaseuri.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
+		{Name: "fn-transform-21", XPath: "fn:transform(map {\"stylesheet-location\" : \"http://www.w3.org/fots/fn/transform/staticbaseuri.xsl\", \"initial-template\" : QName('','main')})(\"output\")", SourceDocs: []qt3SourceDoc{{Name: "staticbaseuri", DocPath: "fn/transform/staticbaseuri.xsl", URI: "http://www.w3.org/fots/fn/transform/staticbaseuri.xsl"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/transform/staticbaseuri.xsl": "fn/transform/staticbaseuri.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-transform-22", XPath: `let $xsl  :="<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'>
                     <xsl:include href='transform/staticbaseuri.xsl'/>
                     </xsl:stylesheet>"
             return
             fn:transform(map {"stylesheet-text" : $xsl, "initial-template" : QName('','main'), "stylesheet-base-uri": string(static-base-uri())})?output`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-transform-23", XPath: "fn:transform(map {\"stylesheet-node\" : $include, \"source-node\" : $works, \"stylesheet-base-uri\": string(base-uri($include))})(\"output\")", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-transform-24", XPath: "fn:transform(map {\"stylesheet-node\" : $include, \"source-node\" : $works})(\"output\")", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-transform-25", XPath: "fn:transform(map {\"stylesheet-location\" : \"transform/render.xsl\", \"source-node\" : $works})(\"output\")", Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-transform-23", XPath: "fn:transform(map {\"stylesheet-node\" : $include, \"source-node\" : $works, \"stylesheet-base-uri\": string(base-uri($include))})(\"output\")", SourceDocs: []qt3SourceDoc{{Name: "works", DocPath: "docs/works-mod.xml"}, {Name: "render", DocPath: "fn/transform/render.xsl"}, {Name: "include", DocPath: "fn/transform/include.xsl"}}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-transform-24", XPath: "fn:transform(map {\"stylesheet-node\" : $include, \"source-node\" : $works})(\"output\")", SourceDocs: []qt3SourceDoc{{Name: "works", DocPath: "docs/works-mod.xml"}, {Name: "render", DocPath: "fn/transform/render.xsl"}, {Name: "include", DocPath: "fn/transform/include.xsl"}}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-transform-25", XPath: "fn:transform(map {\"stylesheet-location\" : \"transform/render.xsl\", \"source-node\" : $works})(\"output\")", SourceDocs: []qt3SourceDoc{{Name: "works", DocPath: "docs/works-mod.xml"}, {Name: "render", DocPath: "fn/transform/render.xsl"}, {Name: "include", DocPath: "fn/transform/include.xsl"}}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-transform-26", XPath: `let $xsl  :="<xsl:stylesheet version='3.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'>
                 <xsl:variable name='dateTime' static='yes' select='current-dateTime()'/>
                 <xsl:template match='/'>
@@ -12153,7 +12153,7 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style, 
             => map:remove(resolve-uri("transform/sandbox/fn-transform-33.xml", static-base-uri()))`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-34", XPath: `fn:transform(map {"stylesheet-node" : $render, "source-node" : $works,
             "base-output-uri" : resolve-uri("transform/sandbox/fn-transform-34.xml", static-base-uri()),
-            "delivery-format" : "document"})?*`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
+            "delivery-format" : "document"})?*`, SourceDocs: []qt3SourceDoc{{Name: "works", DocPath: "docs/works-mod.xml"}, {Name: "render", DocPath: "fn/transform/render.xsl"}, {Name: "include", DocPath: "fn/transform/include.xsl"}}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-35", XPath: `fn:transform(map {"stylesheet-location" : $render, "source-node" : fn:doc($uri),
             "base-output-uri" : resolve-uri("transform/sandbox/fn-transform-35.xml", static-base-uri()),
             "delivery-format" : "serialized"})`, DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
@@ -12188,17 +12188,17 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style, 
             => map:remove(resolve-uri("transform/sandbox/fn-transform-37/output.html", static-base-uri()))`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-38", XPath: `let $res := fn:transform(map {"stylesheet-node":$multipledocs, "source-node":$sections,
             "base-output-uri" : resolve-uri("transform/sandbox/fn-transform-38/output.html",
-            static-base-uri()), "delivery-format":"serialized"}) return map:keys($res)`, Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+            static-base-uri()), "delivery-format":"serialized"}) return map:keys($res)`, SourceDocs: []qt3SourceDoc{{Name: "multipledocs", DocPath: "fn/transform/multipledocs.xsl"}, {Name: "sections", DocPath: "fn/transform/sections.xml"}}, Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-39", XPath: `let $res := fn:transform(map {"stylesheet-node":$multipledocs2, "source-node":$sections,
-            "delivery-format":"serialized"}) return map:keys($res)`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+            "delivery-format":"serialized"}) return map:keys($res)`, SourceDocs: []qt3SourceDoc{{Name: "multipledocs2", DocPath: "fn/transform/multipledocs2.xsl"}, {Name: "sections", DocPath: "fn/transform/sections.xml"}}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-40", XPath: `fn:transform(map {"stylesheet-node" : $onedoc, "source-node" : $sections,
             "base-output-uri" : resolve-uri("transform/sandbox/fn-transform-40/output.html",
-            static-base-uri()), "delivery-format" : "serialized"})`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
-		{Name: "fn-transform-41", XPath: "fn:transform(map {\"stylesheet-node\" : $staticbaseuri, \"initial-template\" : QName('','main'), \"stylesheet-base-uri\": \"http://www.example.com\"})(\"output\")", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/transform/staticbaseuri.xsl": "fn/transform/staticbaseuri.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
-		{Name: "fn-transform-42", XPath: "fn:transform(map {\"stylesheet-node\" : $staticbaseuri, \"initial-template\" : QName('','main')})(\"output\")", NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/transform/staticbaseuri.xsl": "fn/transform/staticbaseuri.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
+            static-base-uri()), "delivery-format" : "serialized"})`, SourceDocs: []qt3SourceDoc{{Name: "onedoc", DocPath: "fn/transform/onedoc.xsl"}, {Name: "sections", DocPath: "fn/transform/sections.xml"}}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
+		{Name: "fn-transform-41", XPath: "fn:transform(map {\"stylesheet-node\" : $staticbaseuri, \"initial-template\" : QName('','main'), \"stylesheet-base-uri\": \"http://www.example.com\"})(\"output\")", SourceDocs: []qt3SourceDoc{{Name: "staticbaseuri", DocPath: "fn/transform/staticbaseuri.xsl", URI: "http://www.w3.org/fots/fn/transform/staticbaseuri.xsl"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/transform/staticbaseuri.xsl": "fn/transform/staticbaseuri.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
+		{Name: "fn-transform-42", XPath: "fn:transform(map {\"stylesheet-node\" : $staticbaseuri, \"initial-template\" : QName('','main')})(\"output\")", SourceDocs: []qt3SourceDoc{{Name: "staticbaseuri", DocPath: "fn/transform/staticbaseuri.xsl", URI: "http://www.w3.org/fots/fn/transform/staticbaseuri.xsl"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/fn/transform/staticbaseuri.xsl": "fn/transform/staticbaseuri.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-transform-43", XPath: `fn:transform(map {"stylesheet-node":$multipledocs, "source-node":$sections,
             "base-output-uri" : resolve-uri("transform/sandbox/fn-transform-43/output.html",
-            static-base-uri()), "delivery-format":"serialized"})`, Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+            static-base-uri()), "delivery-format":"serialized"})`, SourceDocs: []qt3SourceDoc{{Name: "multipledocs", DocPath: "fn/transform/multipledocs.xsl"}, {Name: "sections", DocPath: "fn/transform/sections.xml"}}, Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-44", XPath: `let $xsl  :="<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='3.0'>
                                                 <xsl:template match='/'> <xsl:for-each select='//section'>
                                                 <xsl:result-document href='section{position()}.xml'> <!-- instructions content here -->
@@ -12221,9 +12221,9 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style, 
             "base-output-uri" : resolve-uri("transform/sandbox/fn-transform-45.xml", static-base-uri()),
             "delivery-format" : "serialized"})`, DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertType("map(*)"), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-46", XPath: `fn:transform(map {"stylesheet-node":$multipledocs2, "source-node":$sections,
-            "delivery-format":"serialized"})`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+            "delivery-format":"serialized"})`, SourceDocs: []qt3SourceDoc{{Name: "multipledocs2", DocPath: "fn/transform/multipledocs2.xsl"}, {Name: "sections", DocPath: "fn/transform/sections.xml"}}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-47", XPath: `fn:transform(map {"stylesheet-node":$multipledocs2, "source-node":$sections,
-            "delivery-format":"document"})`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+            "delivery-format":"document"})`, SourceDocs: []qt3SourceDoc{{Name: "multipledocs2", DocPath: "fn/transform/multipledocs2.xsl"}, {Name: "sections", DocPath: "fn/transform/sections.xml"}}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-48", XPath: `let $xsl  :="<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='2.0'>
                 <xsl:template name='main'>
                     <out>
@@ -12701,34 +12701,34 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style, 
               "source-node": $in, 
               "stylesheet-node": $stylesheet,
               "xslt-version": 3.0
-           })?output`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+           })?output`, SourceDocs: []qt3SourceDoc{{Name: "stylesheet", DocPath: "fn/transform/variable-with-context.xsl"}}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-82b", XPath: `let $in := parse-xml("<dummy/>")
            return transform(map{
               "source-node": $in/*, 
               "stylesheet-node": $stylesheet,
               "xslt-version": 3.0
-           })?output`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+           })?output`, SourceDocs: []qt3SourceDoc{{Name: "stylesheet", DocPath: "fn/transform/variable-with-context.xsl"}}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-82c", XPath: `let $in := parse-xml("<dummy/>")
            return transform(map{
               "source-node": $in,
               "global-context-item": $in/*,
               "stylesheet-node": $stylesheet,
               "xslt-version": 3.0
-           })?output`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+           })?output`, SourceDocs: []qt3SourceDoc{{Name: "stylesheet", DocPath: "fn/transform/variable-with-context.xsl"}}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-82d", XPath: `let $in := parse-xml("<dummy/>")
            return transform(map{
               "source-node": $in/*,
               "global-context-item": $in,
               "stylesheet-node": $stylesheet,
               "xslt-version": 3.0
-           })?output`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
+           })?output`, SourceDocs: []qt3SourceDoc{{Name: "stylesheet", DocPath: "fn/transform/variable-with-context.xsl"}}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip(), qt3AssertSkip(), qt3AssertSkip()}},
 		{Name: "fn-transform-82e", XPath: `let $in := parse-xml("<dummy/>")
            return transform(map{
               "source-node": $in/*,
               "global-context-item": $in/*,
               "stylesheet-node": $stylesheet,
               "xslt-version": 2.0
-           })?output`, Skip: "requires XSLT transform", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
+           })?output`, SourceDocs: []qt3SourceDoc{{Name: "stylesheet", DocPath: "fn/transform/variable-with-context.xsl"}}, Skip: "requires XSLT transform", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip(), qt3CheckSkip())}},
 		{Name: "fn-transform-83", XPath: "let $result := fn:transform(map {\"stylesheet-location\" : $render, \"initial-match-selection\" : fn:doc($uri)})return $result?output", DocPath: "docs/works-mod.xml", Params: []qt3Param{{Name: "uri", Select: "'http://www.w3.org/fots/docs/works-mod.xml'"}, {Name: "render", Select: "'http://www.w3.org/fots/fn/transform/render.xsl'"}, {Name: "base-uri", Select: "'http://www.w3.org/fots/fn/transform/output-doc.xml'"}}, NeedsHTTP: true, ResourceMap: map[string]string{"http://www.w3.org/fots/docs/works-mod.xml": "docs/works-mod.xml", "http://www.w3.org/fots/fn/transform/render.xsl": "fn/transform/render.xsl"}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-transform-84", XPath: `let $xsl  := "<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' xmlns:xs='http://www.w3.org/2001/XMLSchema'
             version='3.0'> 
@@ -12860,7 +12860,7 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style, 
                                 "initial-template" : QName("", "main"),
                                 "base-output-uri" : "fn/transform/output.xml", 
                                 "delivery-format" : "serialized"})
-                          ?*`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
+                          ?*`, SourceDocs: []qt3SourceDoc{{Name: "sbu", DocPath: "fn/transform/staticbaseuri.xsl"}, {Name: "sections", DocPath: "fn/transform/sections.xml"}}, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-transform-err-9", XPath: `let $xsl  :="<xsl:stylesheet version='2.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'>
                     <xsl:include href='transform/staticbaseuri.xsl'/>
                     </xsl:stylesheet>"
@@ -12874,15 +12874,15 @@ return transform(map{"source-node":fn:parse-xml($in), "stylesheet-text":$style, 
             "stylesheet-base-uri": "transform/include.xsl"
             })?output`, Skip: "requires XSLT transform", Assertions: []qt3Assertion{qt3AssertSkip()}},
 		{Name: "fn-transform-err-10", XPath: `let $res := fn:transform(map {"stylesheet-node":$multipledocs, "source-node":$sections,
-            "delivery-format":"serialized"}) return map:keys($res)[.!='output']!tokenize(., '/')[last()]`, Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Skip: "requires XSLT transform", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
+            "delivery-format":"serialized"}) return map:keys($res)[.!='output']!tokenize(., '/')[last()]`, SourceDocs: []qt3SourceDoc{{Name: "multipledocs", DocPath: "fn/transform/multipledocs.xsl"}, {Name: "sections", DocPath: "fn/transform/sections.xml"}}, Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Skip: "requires XSLT transform", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
 		{Name: "fn-transform-err-11", XPath: `let $res := fn:transform(map {"stylesheet-node":$multipledocs, "source-node":$sections,
-            "delivery-format":"serialized"}) return map:keys($res)[.!='output']!tokenize(., '/')[last()]`, Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Skip: "requires XSLT transform", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
+            "delivery-format":"serialized"}) return map:keys($res)[.!='output']!tokenize(., '/')[last()]`, SourceDocs: []qt3SourceDoc{{Name: "multipledocs", DocPath: "fn/transform/multipledocs.xsl"}, {Name: "sections", DocPath: "fn/transform/sections.xml"}}, Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Skip: "requires XSLT transform", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
 		{Name: "fn-transform-err-12", XPath: `let $res := fn:transform(map {"stylesheet-node":$multipledocs, "source-node":$sections,
-            "delivery-format":"document"}) return map:keys($res)[.!='output']!tokenize(., '/')[last()]`, Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Skip: "requires XSLT transform", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
+            "delivery-format":"document"}) return map:keys($res)[.!='output']!tokenize(., '/')[last()]`, SourceDocs: []qt3SourceDoc{{Name: "multipledocs", DocPath: "fn/transform/multipledocs.xsl"}, {Name: "sections", DocPath: "fn/transform/sections.xml"}}, Namespaces: map[string]string{"map": "http://www.w3.org/2005/xpath-functions/map"}, Skip: "requires XSLT transform", AcceptError: true, Assertions: []qt3Assertion{qt3AnyOf(qt3CheckSkip())}},
 		{Name: "fn-transform-err-13", XPath: `fn:transform(map {"stylesheet-node":$multipledocs2, "source-node":$sections,
-            "delivery-format":"doc"})("output")`, Skip: "requires XSLT transform", ExpectError: true},
+            "delivery-format":"doc"})("output")`, SourceDocs: []qt3SourceDoc{{Name: "multipledocs2", DocPath: "fn/transform/multipledocs2.xsl"}, {Name: "sections", DocPath: "fn/transform/sections.xml"}}, Skip: "requires XSLT transform", ExpectError: true},
 		{Name: "fn-transform-err-14", XPath: `fn:transform(map {"stylesheet-node":$multipledocs2, "source-node":$sections,
-            "delivery-format":"raw"})("output")`, Skip: "requires XSLT transform", ExpectError: true},
+            "delivery-format":"raw"})("output")`, SourceDocs: []qt3SourceDoc{{Name: "multipledocs2", DocPath: "fn/transform/multipledocs2.xsl"}, {Name: "sections", DocPath: "fn/transform/sections.xml"}}, Skip: "requires XSLT transform", ExpectError: true},
 		{Name: "fn-transform-err-15", XPath: `let $xsl  :="<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='3.0'>
                 <xsl:template name='main'>
                 <xsl:param name='param1' select='&quot;old1&quot;'/>
