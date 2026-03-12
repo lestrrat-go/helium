@@ -90,6 +90,18 @@ var htmlASCIICaseInsensitiveCollation = &collationImpl{
 // with optional parameters parsed from the URI query string.
 func makeUCACollation(params string) *collationImpl {
 	opts := parseUCAParams(params)
+	if opts.caseLevel || opts.backwards {
+		tagParts := []string{"und-u"}
+		if opts.backwards {
+			tagParts = append(tagParts, "kb-true")
+		}
+		if opts.caseLevel {
+			tagParts = append(tagParts, "kc-true")
+		}
+		if extraTag, err := language.Parse(strings.Join(tagParts, "-")); err == nil {
+			opts.collateOpts = append(opts.collateOpts, collate.OptionsFromTag(extraTag))
+		}
+	}
 
 	cl := collate.New(opts.tag, opts.collateOpts...)
 	numeric := opts.numeric
@@ -107,7 +119,7 @@ func makeUCACollation(params string) *collationImpl {
 		buf := &collate.Buffer{}
 		return append([]byte(nil), cl.KeyFromString(buf, normalize(s))...)
 	}
-	if opts.caseFirst != "" && !opts.ignoreCase {
+	if opts.caseFirst != "" && (!opts.ignoreCase || opts.caseLevel) {
 		caseBlindOpts := append([]collate.Option(nil), opts.collateOpts...)
 		caseBlindOpts = append(caseBlindOpts, collate.IgnoreCase)
 		caseBlind := collate.New(opts.tag, caseBlindOpts...)
@@ -159,6 +171,8 @@ type ucaParams struct {
 	caseFirst   string
 	strength    string
 	alternate   string
+	caseLevel   bool
+	backwards   bool
 }
 
 func parseUCAParams(query string) ucaParams {
@@ -198,6 +212,10 @@ func parseUCAParams(query string) ucaParams {
 			if val == "upper" || val == "lower" {
 				p.caseFirst = val
 			}
+		case "caseLevel":
+			p.caseLevel = val == "yes"
+		case "backwards":
+			p.backwards = val == "yes"
 		case "numeric":
 			if val == "yes" {
 				p.collateOpts = append(p.collateOpts, collate.Numeric)
