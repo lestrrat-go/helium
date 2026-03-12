@@ -518,6 +518,8 @@ var unicodeBlocks = map[string]string{
 	"MathematicalAlphanumericSymbols":      `\x{1D400}-\x{1D7FF}`,
 	"CJKUnifiedIdeographsExtensionB":       `\x{20000}-\x{2A6DF}`,
 	"CJKCompatibilityIdeographsSupplement": `\x{2F800}-\x{2FA1F}`,
+	"SupplementaryPrivateUseArea-A":        `\x{F0000}-\x{FFFFD}`,
+	"SupplementaryPrivateUseArea-B":        `\x{100000}-\x{10FFFD}`,
 	"Tags":                                 `\x{E0000}-\x{E007F}`,
 }
 
