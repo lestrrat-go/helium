@@ -282,8 +282,7 @@ func translateClassContent(s string) (string, error) {
 				i++
 				continue
 			case 'I':
-				// Inside a class, negation needs special handling
-				b.WriteString(xmlNameStartCharRange)
+				b.WriteString(xmlNameStartCharRangeNeg)
 				i++
 				continue
 			case 'c':
@@ -291,7 +290,7 @@ func translateClassContent(s string) (string, error) {
 				i++
 				continue
 			case 'C':
-				b.WriteString(xmlNameCharRange)
+				b.WriteString(xmlNameCharRangeNeg)
 				i++
 				continue
 			case 'd':
@@ -403,12 +402,146 @@ func complementUnicodeRange(low, high int64) string {
 	const maxCodepoint = 0x10FFFF
 	var parts []string
 	if low > 0 {
-		parts = append(parts, fmt.Sprintf(`\x{0000}-\x{%X}`, low-1))
+		parts = append(parts, formatRuneRange(0, low-1))
 	}
 	if high < maxCodepoint {
-		parts = append(parts, fmt.Sprintf(`\x{%X}-\x{%X}`, high+1, maxCodepoint))
+		parts = append(parts, formatRuneRange(high+1, maxCodepoint))
 	}
 	return strings.Join(parts, "")
+}
+
+func complementClassRanges(spec string) (string, error) {
+	ranges, err := parseClassRanges(spec)
+	if err != nil {
+		return "", err
+	}
+	if len(ranges) == 0 {
+		return formatRuneRange(0, 0x10FFFF), nil
+	}
+
+	ranges = mergeClassRanges(ranges)
+	var parts []string
+	var cursor int64
+	for _, rng := range ranges {
+		if cursor < rng.low {
+			parts = append(parts, formatRuneRange(cursor, rng.low-1))
+		}
+		if rng.high+1 > cursor {
+			cursor = rng.high + 1
+		}
+	}
+	if cursor <= 0x10FFFF {
+		parts = append(parts, formatRuneRange(cursor, 0x10FFFF))
+	}
+	return strings.Join(parts, ""), nil
+}
+
+type classRange struct {
+	low  int64
+	high int64
+}
+
+func parseClassRanges(spec string) ([]classRange, error) {
+	runes := []rune(spec)
+	var ranges []classRange
+	for i := 0; i < len(runes); {
+		low, next, err := parseClassRune(runes, i)
+		if err != nil {
+			return nil, err
+		}
+		i = next
+
+		high := low
+		if i < len(runes)-1 && runes[i] == '-' {
+			high, i, err = parseClassRune(runes, i+1)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		ranges = append(ranges, classRange{low: low, high: high})
+	}
+	return ranges, nil
+}
+
+func parseClassRune(runes []rune, start int) (int64, int, error) {
+	if start >= len(runes) {
+		return 0, start, fmt.Errorf("unexpected end of character class range")
+	}
+	if runes[start] != '\\' {
+		return int64(runes[start]), start + 1, nil
+	}
+	if start+1 >= len(runes) {
+		return 0, start, fmt.Errorf("dangling escape in character class range")
+	}
+	if runes[start+1] != 'x' {
+		return int64(runes[start+1]), start + 2, nil
+	}
+	if start+2 >= len(runes) || runes[start+2] != '{' {
+		return 0, start, fmt.Errorf("invalid hex escape in character class range")
+	}
+
+	end := -1
+	for i := start + 3; i < len(runes); i++ {
+		if runes[i] == '}' {
+			end = i
+			break
+		}
+	}
+	if end < 0 {
+		return 0, start, fmt.Errorf("unterminated hex escape in character class range")
+	}
+
+	value, err := strconv.ParseInt(string(runes[start+3:end]), 16, 64)
+	if err != nil {
+		return 0, start, err
+	}
+	return value, end + 1, nil
+}
+
+func mergeClassRanges(ranges []classRange) []classRange {
+	if len(ranges) == 0 {
+		return nil
+	}
+
+	merged := make([]classRange, 0, len(ranges))
+	for _, rng := range ranges {
+		inserted := false
+		for i := range merged {
+			if rng.high+1 < merged[i].low {
+				merged = append(merged[:i], append([]classRange{rng}, merged[i:]...)...)
+				inserted = true
+				break
+			}
+			if rng.low <= merged[i].high+1 && rng.high+1 >= merged[i].low {
+				if rng.low < merged[i].low {
+					merged[i].low = rng.low
+				}
+				if rng.high > merged[i].high {
+					merged[i].high = rng.high
+				}
+				for i+1 < len(merged) && merged[i+1].low <= merged[i].high+1 {
+					if merged[i+1].high > merged[i].high {
+						merged[i].high = merged[i+1].high
+					}
+					merged = append(merged[:i+1], merged[i+2:]...)
+				}
+				inserted = true
+				break
+			}
+		}
+		if !inserted {
+			merged = append(merged, rng)
+		}
+	}
+	return merged
+}
+
+func formatRuneRange(low, high int64) string {
+	if low == high {
+		return fmt.Sprintf(`\x{%X}`, low)
+	}
+	return fmt.Sprintf(`\x{%X}-\x{%X}`, low, high)
 }
 
 // goSupportedScripts lists script names supported by Go's regexp engine.
@@ -443,10 +576,22 @@ const xmlNameStartCharClassNeg = `[^a-zA-Z_:\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{
 // XML NameStartChar range (for use inside [])
 const xmlNameStartCharRange = `a-zA-Z_:\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}`
 
+var xmlNameStartCharRangeNeg = mustComplementClassRanges(xmlNameStartCharRange)
+
 // XML NameChar = NameStartChar + extras
 const xmlNameCharClass = `[a-zA-Z_:\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}\-.0-9\x{B7}\x{300}-\x{36F}\x{203F}-\x{2040}]`
 const xmlNameCharClassNeg = `[^a-zA-Z_:\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}\-.0-9\x{B7}\x{300}-\x{36F}\x{203F}-\x{2040}]`
 const xmlNameCharRange = `a-zA-Z_:\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}\-.0-9\x{B7}\x{300}-\x{36F}\x{203F}-\x{2040}`
+
+var xmlNameCharRangeNeg = mustComplementClassRanges(xmlNameCharRange)
+
+func mustComplementClassRanges(spec string) string {
+	complement, err := complementClassRanges(spec)
+	if err != nil {
+		panic(err)
+	}
+	return complement
+}
 
 // unicodeBlocks maps Unicode block names (without "Is" prefix) to character ranges.
 // Based on Unicode 6.0 block definitions used in XML Schema regex.
