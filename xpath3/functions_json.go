@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"math/big"
-	"net/url"
 	"strings"
 	"unicode/utf8"
 
@@ -477,32 +476,13 @@ func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	uri := seqToString(args[0])
 
-	ec := getFnContext(ctx)
-	if ec == nil || ec.httpClient == nil {
-		return nil, &XPathError{Code: errCodeFODC0002, Message: "json-doc: no HTTP client configured for URI: " + uri}
-	}
-	if ec.baseURI != "" && !strings.Contains(uri, "://") {
-		baseURL, err := url.Parse(ec.baseURI)
-		if err == nil {
-			refURL, err := url.Parse(uri)
-			if err == nil {
-				uri = baseURL.ResolveReference(refURL).String()
-			}
-		}
-	}
-
-	resp, err := ec.httpClient.Get(uri)
+	resolvedURI, err := resolveUnparsedTextURI(ctx, uri)
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("json-doc: failed to fetch %s: %v", uri, err)}
+		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("json-doc: cannot resolve URI: %v", err)}
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != 200 {
-		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("json-doc: HTTP %d for %s", resp.StatusCode, uri)}
-	}
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := readUnparsedTextURI(ctx, resolvedURI)
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("json-doc: error reading %s: %v", uri, err)}
+		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("json-doc: cannot retrieve resource: %v", err)}
 	}
 
 	// Delegate to parse-json logic, preserving any caller-supplied options.
