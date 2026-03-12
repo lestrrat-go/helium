@@ -42,37 +42,39 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 
 	t := valAtom.TimeVal()
 
-	picAtom, err := AtomizeItem(args[1][0])
+	picture, err := coerceArgToStringRequired(args[1])
 	if err != nil {
 		return nil, err
 	}
-	picture := picAtom.StringVal()
 
 	lang := "en"
 	if ec := getFnContext(ctx); ec != nil {
 		lang = ec.getDefaultLanguage()
 	}
 	if len(args) > 2 && len(args[2]) > 0 {
-		langAtom, err := AtomizeItem(args[2][0])
+		lang, err = coerceArgToString(args[2])
 		if err != nil {
 			return nil, err
 		}
-		lang = langAtom.StringVal()
 		if lang == "" {
-			return nil, &XPathError{Code: "FOFD1340", Message: "format-dateTime: language argument must not be empty"}
+			return nil, &XPathError{Code: errCodeFOFD1340, Message: "format-dateTime: language argument must not be empty"}
+		}
+	}
+	if len(args) > 3 && len(args[3]) > 0 {
+		if _, err := coerceArgToString(args[3]); err != nil {
+			return nil, err
 		}
 	}
 
 	if len(args) > 4 && len(args[4]) > 0 {
-		placeAtom, err := AtomizeItem(args[4][0])
+		place, err := coerceArgToString(args[4])
 		if err != nil {
 			return nil, err
 		}
-		place := placeAtom.StringVal()
 		if place != "" {
 			loc, err := time.LoadLocation(place)
 			if err != nil {
-				return nil, &XPathError{Code: "FOFD1340", Message: fmt.Sprintf("format-dateTime: invalid place: %s", place)}
+				return nil, &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid place: %s", place)}
 			}
 			if t.Location() == noTZLocation {
 				t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)
@@ -112,7 +114,7 @@ func formatDateTimePicture(t time.Time, picture, lang, typeName string) (string,
 				}
 			}
 			if end < 0 {
-				return "", &XPathError{Code: "FOFD1340", Message: "unclosed '[' in picture string"}
+				return "", &XPathError{Code: errCodeFOFD1340, Message: "unclosed '[' in picture string"}
 			}
 			component := string(runes[i+1 : end])
 			formatted, err := formatComponent(t, component, lang, typeName)
@@ -144,7 +146,7 @@ func formatComponent(t time.Time, spec, lang, typeName string) (string, error) {
 	spec = stripSpaces(spec)
 
 	if len(spec) == 0 {
-		return "", &XPathError{Code: "FOFD1340", Message: "empty component specifier"}
+		return "", &XPathError{Code: errCodeFOFD1340, Message: "empty component specifier"}
 	}
 
 	// First character is the component letter
@@ -205,7 +207,7 @@ func formatComponent(t time.Time, spec, lang, typeName string) (string, error) {
 	case 'C':
 		return "ISO", nil
 	default:
-		return "", &XPathError{Code: "FOFD1340", Message: fmt.Sprintf("unknown component specifier: %c", compChar)}
+		return "", &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("unknown component specifier: %c", compChar)}
 	}
 
 	return formatDateTimeValue(value, compChar, presentation, width, lang), nil
@@ -345,6 +347,7 @@ func formatDateTimeValue(value int64, comp byte, p dtPresentation, w dtWidth, la
 func formatDateDecimal(value int64, format string, w dtWidth, comp byte) string {
 	// Determine min digits from format token
 	minDigits := 0
+	digitSigns := 0
 	zeroDigit := '0'
 
 	runes := []rune(format)
@@ -352,6 +355,9 @@ func formatDateDecimal(value int64, format string, w dtWidth, comp byte) string 
 		if unicode.IsDigit(r) {
 			zeroDigit = unicodeDigitZero(r)
 			minDigits++
+			digitSigns++
+		} else if r == '#' {
+			digitSigns++
 		}
 	}
 
@@ -366,6 +372,9 @@ func formatDateDecimal(value int64, format string, w dtWidth, comp byte) string 
 
 	// For year with max width, truncate
 	maxWidth := w.maxWidth
+	if maxWidth < 0 && (comp == 'Y' || comp == 'E') && digitSigns > 1 {
+		maxWidth = digitSigns
+	}
 
 	abs := value
 	neg := false
@@ -688,14 +697,14 @@ func validateComponentForType(comp byte, typeName string) error {
 		case 'H', 'h', 'P', 'm', 's', 'f', 'Z', 'z':
 			return nil
 		default:
-			return &XPathError{Code: "FOFD1350", Message: fmt.Sprintf("component [%c] is not available for xs:time", comp)}
+			return &XPathError{Code: errCodeFOFD1350, Message: fmt.Sprintf("component [%c] is not available for xs:time", comp)}
 		}
 	case TypeDate:
 		switch comp {
 		case 'Y', 'M', 'D', 'd', 'F', 'W', 'w', 'E', 'C', 'Z', 'z':
 			return nil
 		default:
-			return &XPathError{Code: "FOFD1350", Message: fmt.Sprintf("component [%c] is not available for xs:date", comp)}
+			return &XPathError{Code: errCodeFOFD1350, Message: fmt.Sprintf("component [%c] is not available for xs:date", comp)}
 		}
 	}
 	// xs:dateTime allows all components
@@ -713,7 +722,7 @@ func validateDateFormatToken(comp byte, p dtPresentation, w dtWidth) error {
 		if unicode.IsDigit(r) {
 			z := unicodeDigitZero(r)
 			if hasDigit && z != firstZero {
-				return &XPathError{Code: "FOFD1340", Message: "mixed Unicode digit families in format token"}
+				return &XPathError{Code: errCodeFOFD1340, Message: "mixed Unicode digit families in format token"}
 			}
 			firstZero = z
 			hasDigit = true
@@ -729,7 +738,7 @@ func validateDateFormatToken(comp byte, p dtPresentation, w dtWidth) error {
 				seenDigit = true
 			} else if r == '#' {
 				if seenDigit {
-					return &XPathError{Code: "FOFD1340", Message: "# after digit in format token"}
+					return &XPathError{Code: errCodeFOFD1340, Message: "# after digit in format token"}
 				}
 			}
 		}
@@ -741,7 +750,7 @@ func validateDateFormatToken(comp byte, p dtPresentation, w dtWidth) error {
 				seenHash = true
 			} else if unicode.IsDigit(r) {
 				if seenHash {
-					return &XPathError{Code: "FOFD1340", Message: "# before digit in fractional seconds format"}
+					return &XPathError{Code: errCodeFOFD1340, Message: "# before digit in fractional seconds format"}
 				}
 			}
 		}
@@ -749,13 +758,13 @@ func validateDateFormatToken(comp byte, p dtPresentation, w dtWidth) error {
 
 	// Validate width modifier
 	if w.minWidth == 0 {
-		return &XPathError{Code: "FOFD1340", Message: "minimum width cannot be zero"}
+		return &XPathError{Code: errCodeFOFD1340, Message: "minimum width cannot be zero"}
 	}
 	if w.maxWidth == 0 {
-		return &XPathError{Code: "FOFD1340", Message: "maximum width cannot be zero"}
+		return &XPathError{Code: errCodeFOFD1340, Message: "maximum width cannot be zero"}
 	}
 	if w.minWidth > 0 && w.maxWidth > 0 && w.minWidth > w.maxWidth {
-		return &XPathError{Code: "FOFD1340", Message: "minimum width exceeds maximum width"}
+		return &XPathError{Code: errCodeFOFD1340, Message: "minimum width exceeds maximum width"}
 	}
 
 	return nil
