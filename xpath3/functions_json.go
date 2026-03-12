@@ -22,9 +22,11 @@ type jsonOptions struct {
 	liberal    bool
 	duplicates string // "reject", "use-first", "use-last" (default)
 	escape     bool
+	fallback   *FunctionItem
+	invalidEsc map[rune]string
 }
 
-func fnParseJSON(_ context.Context, args []Sequence) (Sequence, error) {
+func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
@@ -35,14 +37,15 @@ func fnParseJSON(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 
-	// Pre-validate the JSON string for issues Go's decoder doesn't catch
-	if err := validateJSONString(s); err != nil {
+	s, invalidEsc, err := preprocessJSONStringLiterals(s)
+	if err != nil {
 		return nil, err
 	}
+	opts.invalidEsc = invalidEsc
 
 	dec := json.NewDecoder(strings.NewReader(s))
 	dec.UseNumber()
-	item, err := parseJSONValue(dec, opts)
+	item, err := parseJSONValue(ctx, dec, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -51,10 +54,13 @@ func fnParseJSON(_ context.Context, args []Sequence) (Sequence, error) {
 	var extra json.Token
 	extra, err = dec.Token()
 	if err == nil {
-		return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("unexpected trailing content after JSON value: %v", extra)}
+		return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("unexpected trailing content after JSON value: %v", extra)}
 	}
 	if !errors.Is(err, io.EOF) {
-		return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("invalid trailing content: %v", err)}
+		return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid trailing content: %v", err)}
+	}
+	if item == nil {
+		return nil, nil
 	}
 
 	return Sequence{item}, nil
@@ -77,16 +83,16 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 	liberalKey := AtomicValue{TypeName: TypeString, Value: "liberal"}
 	if v, found := m.Get(liberalKey); found {
 		if len(v) != 1 {
-			return opts, &XPathError{Code: "FOJS0005", Message: "option 'liberal' must be a single xs:boolean"}
+			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'liberal' must be a single xs:boolean"}
 		}
 		av, ok := v[0].(AtomicValue)
 		if !ok {
-			return opts, &XPathError{Code: "FOJS0005", Message: "option 'liberal' must be xs:boolean"}
+			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'liberal' must be xs:boolean"}
 		}
 		if b, ok := av.Value.(bool); ok {
 			opts.liberal = b
 		} else {
-			return opts, &XPathError{Code: "FOJS0005",
+			return opts, &XPathError{Code: errCodeFOJS0005,
 				Message: "option 'liberal' must be xs:boolean, got " + av.TypeName}
 		}
 	}
@@ -95,18 +101,18 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 	dupKey := AtomicValue{TypeName: TypeString, Value: "duplicates"}
 	if v, found := m.Get(dupKey); found {
 		if len(v) != 1 {
-			return opts, &XPathError{Code: "FOJS0005", Message: "option 'duplicates' must be a single string"}
+			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'duplicates' must be a single string"}
 		}
 		av, ok := v[0].(AtomicValue)
 		if !ok {
-			return opts, &XPathError{Code: "FOJS0005", Message: "option 'duplicates' must be a string"}
+			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'duplicates' must be a string"}
 		}
 		s, _ := atomicToString(av)
 		switch s {
 		case "reject", "use-first", "use-last":
 			opts.duplicates = s
 		default:
-			return opts, &XPathError{Code: "FOJS0005",
+			return opts, &XPathError{Code: errCodeFOJS0005,
 				Message: fmt.Sprintf("invalid value for 'duplicates' option: %q", s)}
 		}
 	}
@@ -115,16 +121,16 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 	escKey := AtomicValue{TypeName: TypeString, Value: "escape"}
 	if v, found := m.Get(escKey); found {
 		if len(v) != 1 {
-			return opts, &XPathError{Code: "FOJS0005", Message: "option 'escape' must be a single xs:boolean"}
+			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'escape' must be a single xs:boolean"}
 		}
 		av, ok := v[0].(AtomicValue)
 		if !ok {
-			return opts, &XPathError{Code: "FOJS0005", Message: "option 'escape' must be xs:boolean"}
+			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'escape' must be xs:boolean"}
 		}
 		if b, ok := av.Value.(bool); ok {
 			opts.escape = b
 		} else {
-			return opts, &XPathError{Code: "FOJS0005",
+			return opts, &XPathError{Code: errCodeFOJS0005,
 				Message: "option 'escape' must be xs:boolean, got " + av.TypeName}
 		}
 	}
@@ -133,33 +139,33 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 	fbKey := AtomicValue{TypeName: TypeString, Value: "fallback"}
 	if v, found := m.Get(fbKey); found {
 		if len(v) != 1 {
-			return opts, &XPathError{Code: "FOJS0005",
+			return opts, &XPathError{Code: errCodeFOJS0005,
 				Message: "option 'fallback' must be a single function item"}
 		}
 		fi, ok := v[0].(FunctionItem)
 		if !ok {
-			return opts, &XPathError{Code: "FOJS0005",
+			return opts, &XPathError{Code: errCodeFOJS0005,
 				Message: "option 'fallback' must be a function item"}
 		}
 		if fi.Arity != 1 {
-			return opts, &XPathError{Code: "FOJS0005",
+			return opts, &XPathError{Code: errCodeFOJS0005,
 				Message: fmt.Sprintf("option 'fallback' must have arity 1, got %d", fi.Arity)}
 		}
-		// We accept the function but don't use it yet.
+		opts.fallback = &fi
 	}
 
 	return opts, nil
 }
 
-func parseJSONValue(dec *json.Decoder, opts jsonOptions) (Item, error) {
+func parseJSONValue(ctx context.Context, dec *json.Decoder, opts jsonOptions) (Item, error) {
 	tok, err := dec.Token()
 	if err != nil {
-		return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("invalid JSON: %v", err)}
+		return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid JSON: %v", err)}
 	}
-	return parseJSONToken(tok, dec, opts)
+	return parseJSONToken(ctx, tok, dec, opts)
 }
 
-func parseJSONToken(tok json.Token, dec *json.Decoder, opts jsonOptions) (Item, error) {
+func parseJSONToken(ctx context.Context, tok json.Token, dec *json.Decoder, opts jsonOptions) (Item, error) {
 	switch v := tok.(type) {
 	case json.Delim:
 		switch v {
@@ -169,17 +175,18 @@ func parseJSONToken(tok json.Token, dec *json.Decoder, opts jsonOptions) (Item, 
 			for dec.More() {
 				keyTok, err := dec.Token()
 				if err != nil {
-					return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("invalid JSON: %v", err)}
+					return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid JSON: %v", err)}
 				}
 				key, ok := keyTok.(string)
 				if !ok {
-					return nil, &XPathError{Code: "FOJS0001", Message: "invalid JSON object key"}
+					return nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON object key"}
 				}
-				if opts.escape {
-					key = escapeParsedJSONString(key)
+				key, err = applyJSONStringOptions(ctx, key, opts)
+				if err != nil {
+					return nil, err
 				}
 
-				valueItem, err := parseJSONValue(dec, opts)
+				valueItem, err := parseJSONValue(ctx, dec, opts)
 				if err != nil {
 					return nil, err
 				}
@@ -191,7 +198,7 @@ func parseJSONToken(tok json.Token, dec *json.Decoder, opts jsonOptions) (Item, 
 				if prev, found := index[key]; found {
 					switch opts.duplicates {
 					case "reject":
-						return nil, &XPathError{Code: "FOJS0003", Message: fmt.Sprintf("duplicate key in JSON object: %q", key)}
+						return nil, &XPathError{Code: errCodeFOJS0003, Message: fmt.Sprintf("duplicate key in JSON object: %q", key)}
 					case "use-first":
 						continue
 					case "use-last":
@@ -208,16 +215,16 @@ func parseJSONToken(tok json.Token, dec *json.Decoder, opts jsonOptions) (Item, 
 			}
 			endTok, err := dec.Token()
 			if err != nil {
-				return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("invalid JSON: %v", err)}
+				return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid JSON: %v", err)}
 			}
 			if end, ok := endTok.(json.Delim); !ok || end != '}' {
-				return nil, &XPathError{Code: "FOJS0001", Message: "invalid JSON: expected object close delimiter"}
+				return nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON: expected object close delimiter"}
 			}
 			return NewMap(entries), nil
 		case '[':
 			members := make([]Sequence, 0)
 			for dec.More() {
-				item, err := parseJSONValue(dec, opts)
+				item, err := parseJSONValue(ctx, dec, opts)
 				if err != nil {
 					return nil, err
 				}
@@ -229,19 +236,20 @@ func parseJSONToken(tok json.Token, dec *json.Decoder, opts jsonOptions) (Item, 
 			}
 			endTok, err := dec.Token()
 			if err != nil {
-				return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("invalid JSON: %v", err)}
+				return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid JSON: %v", err)}
 			}
 			if end, ok := endTok.(json.Delim); !ok || end != ']' {
-				return nil, &XPathError{Code: "FOJS0001", Message: "invalid JSON: expected array close delimiter"}
+				return nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON: expected array close delimiter"}
 			}
 			return NewArray(members), nil
 		default:
-			return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("unexpected JSON delimiter: %q", v)}
+			return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("unexpected JSON delimiter: %q", v)}
 		}
 	default:
 		if s, ok := v.(string); ok {
-			if opts.escape {
-				s = escapeParsedJSONString(s)
+			s, err := applyJSONStringOptions(ctx, s, opts)
+			if err != nil {
+				return nil, err
 			}
 			return AtomicValue{TypeName: TypeString, Value: s}, nil
 		}
@@ -276,96 +284,174 @@ func escapeParsedJSONString(s string) string {
 	return b.String()
 }
 
-// validateJSONString pre-validates JSON for issues Go's decoder doesn't catch.
-func validateJSONString(s string) *XPathError {
-	// Check for invalid escape sequences in JSON strings
+func preprocessJSONStringLiterals(s string) (string, map[rune]string, error) {
+	var b strings.Builder
+	invalidEsc := make(map[rune]string)
 	inString := false
-	escaped := false
-	i := 0
-	for i < len(s) {
+	for i := 0; i < len(s); {
 		r, size := utf8.DecodeRuneInString(s[i:])
-		if escaped {
-			escaped = false
-			if inString {
-				switch r {
-				case '"', '\\', '/', 'b', 'f', 'n', 'r', 't':
-					// valid escapes
-				case 'u':
-					// validate 4 hex digits and check for surrogates
-					if i+size+4 > len(s) {
-						return &XPathError{Code: "FOJS0001", Message: "invalid JSON: incomplete \\u escape"}
-					}
-					hex := s[i+size : i+size+4]
-					var cp uint32
-					for _, c := range hex {
-						cp <<= 4
-						switch {
-						case c >= '0' && c <= '9':
-							cp += uint32(c - '0')
-						case c >= 'a' && c <= 'f':
-							cp += uint32(c-'a') + 10
-						case c >= 'A' && c <= 'F':
-							cp += uint32(c-'A') + 10
-						default:
-							return &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("invalid JSON: invalid hex digit in \\u escape: %c", c)}
-						}
-					}
-					// Check for lone surrogates
-					if cp >= 0xD800 && cp <= 0xDBFF {
-						// High surrogate — check for low surrogate pair
-						afterHex := i + size + 4
-						if afterHex+6 <= len(s) && s[afterHex] == '\\' && s[afterHex+1] == 'u' {
-							hex2 := s[afterHex+2 : afterHex+6]
-							var cp2 uint32
-							valid := true
-							for _, c := range hex2 {
-								cp2 <<= 4
-								switch {
-								case c >= '0' && c <= '9':
-									cp2 += uint32(c - '0')
-								case c >= 'a' && c <= 'f':
-									cp2 += uint32(c-'a') + 10
-								case c >= 'A' && c <= 'F':
-									cp2 += uint32(c-'A') + 10
-								default:
-									valid = false
-								}
-							}
-							if !valid || cp2 < 0xDC00 || cp2 > 0xDFFF {
-								return &XPathError{Code: "FOJS0001", Message: "invalid JSON: lone high surrogate in \\u escape"}
-							}
-							// Skip past the low surrogate
-							i = afterHex + 6
-							continue
-						}
-						return &XPathError{Code: "FOJS0001", Message: "invalid JSON: lone high surrogate in \\u escape"}
-					}
-					if cp >= 0xDC00 && cp <= 0xDFFF {
-						return &XPathError{Code: "FOJS0001", Message: "invalid JSON: lone low surrogate in \\u escape"}
-					}
-					// Check for \u0000 (null character not valid in XPath strings)
-					if cp == 0 {
-						return &XPathError{Code: "FOJS0001", Message: "invalid JSON: null character (\\u0000) not valid in XPath strings"}
-					}
-				default:
-					return &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("invalid JSON: invalid escape sequence \\%c", r)}
-				}
-			}
+		if !inString {
+			b.WriteString(s[i : i+size])
 			i += size
+			if r == '"' {
+				inString = true
+			}
 			continue
 		}
 
-		if r == '\\' && inString {
-			escaped = true
+		switch r {
+		case '"':
+			inString = false
+			b.WriteRune(r)
 			i += size
+		case '\\':
+			if i+1 >= len(s) {
+				return "", nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON: trailing backslash in string"}
+			}
+			next := s[i+1]
+			switch next {
+			case '"', '\\', '/', 'n', 'r', 't':
+				b.WriteString(s[i : i+2])
+				i += 2
+			case 'b', 'f':
+				ph := nextJSONPlaceholderRune(s, invalidEsc)
+				invalidEsc[ph] = s[i : i+2]
+				b.WriteRune(ph)
+				i += 2
+			case 'u':
+				if i+6 > len(s) {
+					return "", nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON: incomplete \\u escape"}
+				}
+				escapeText := s[i : i+6]
+				cp, err := parseJSONHexEscape(s[i+2 : i+6])
+				if err != nil {
+					return "", nil, err
+				}
+				switch {
+				case cp >= 0xD800 && cp <= 0xDBFF:
+					if i+12 <= len(s) && s[i+6] == '\\' && s[i+7] == 'u' {
+						cp2, err := parseJSONHexEscape(s[i+8 : i+12])
+						if err == nil && cp2 >= 0xDC00 && cp2 <= 0xDFFF {
+							b.WriteString(s[i : i+12])
+							i += 12
+							continue
+						}
+					}
+					ph := nextJSONPlaceholderRune(s, invalidEsc)
+					invalidEsc[ph] = escapeText
+					b.WriteRune(ph)
+					i += 6
+				case cp >= 0xDC00 && cp <= 0xDFFF, !isValidXMLCodepoint(int(cp)):
+					ph := nextJSONPlaceholderRune(s, invalidEsc)
+					invalidEsc[ph] = escapeText
+					b.WriteRune(ph)
+					i += 6
+				default:
+					b.WriteString(escapeText)
+					i += 6
+				}
+			default:
+				return "", nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid JSON: invalid escape sequence \\%c", next)}
+			}
+		default:
+			if r < 0x20 {
+				return "", nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON: unescaped control character in string"}
+			}
+			b.WriteString(s[i : i+size])
+			i += size
+		}
+	}
+	return b.String(), invalidEsc, nil
+}
+
+func parseJSONHexEscape(hex string) (uint32, error) {
+	var cp uint32
+	for _, c := range hex {
+		cp <<= 4
+		switch {
+		case c >= '0' && c <= '9':
+			cp += uint32(c - '0')
+		case c >= 'a' && c <= 'f':
+			cp += uint32(c-'a') + 10
+		case c >= 'A' && c <= 'F':
+			cp += uint32(c-'A') + 10
+		default:
+			return 0, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid JSON: invalid hex digit in \\u escape: %c", c)}
+		}
+	}
+	return cp, nil
+}
+
+func nextJSONPlaceholderRune(source string, used map[rune]string) rune {
+	for r := rune(0xF0000); r <= 0xFFFFD; r++ {
+		if _, exists := used[r]; exists {
 			continue
 		}
-		if r == '"' {
-			inString = !inString
+		if !strings.ContainsRune(source, r) {
+			return r
 		}
-		i += size
 	}
-	return nil
+	panic("exhausted JSON placeholder runes")
+}
+
+func applyJSONStringOptions(ctx context.Context, s string, opts jsonOptions) (string, error) {
+	if opts.escape {
+		var b strings.Builder
+		for _, r := range s {
+			if raw, found := opts.invalidEsc[r]; found {
+				if opts.fallback != nil {
+					return "", &XPathError{Code: errCodeFOJS0001, Message: "fallback cannot be used with escape=true() for escaped invalid characters"}
+				}
+				b.WriteString(raw)
+				continue
+			}
+			appendEscapedJSONStringRune(&b, r)
+		}
+		return b.String(), nil
+	}
+
+	var b strings.Builder
+	for _, r := range s {
+		raw, found := opts.invalidEsc[r]
+		if !found {
+			b.WriteRune(r)
+			continue
+		}
+
+		repl := string(rune(0xFFFD))
+		if opts.fallback != nil {
+			seq, err := opts.fallback.Invoke(ctx, []Sequence{{AtomicValue{TypeName: TypeString, Value: raw}}})
+			if err != nil {
+				return "", err
+			}
+			repl = seqToString(seq)
+		}
+		b.WriteString(repl)
+	}
+	return b.String(), nil
+}
+
+func appendEscapedJSONStringRune(b *strings.Builder, r rune) {
+	switch r {
+	case '\\':
+		b.WriteString(`\\`)
+	case '\b':
+		b.WriteString(`\b`)
+	case '\f':
+		b.WriteString(`\f`)
+	case '\n':
+		b.WriteString(`\n`)
+	case '\r':
+		b.WriteString(`\r`)
+	case '\t':
+		b.WriteString(`\t`)
+	default:
+		if (r >= 0x00 && r <= 0x1F) || !isValidXMLCodepoint(int(r)) {
+			fmt.Fprintf(b, `\u%04x`, r)
+			return
+		}
+		b.WriteRune(r)
+	}
 }
 
 func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -453,7 +539,7 @@ func jsonToXDM(v any) (Item, error) {
 		if strings.ContainsAny(s, ".eE") {
 			f, err := val.Float64()
 			if err != nil {
-				return nil, &XPathError{Code: "FOJS0001", Message: "invalid JSON number: " + s}
+				return nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON number: " + s}
 			}
 			return AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}, nil
 		}
@@ -461,7 +547,7 @@ func jsonToXDM(v any) (Item, error) {
 		if !ok {
 			f, err := val.Float64()
 			if err != nil {
-				return nil, &XPathError{Code: "FOJS0001", Message: "invalid JSON number: " + s}
+				return nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON number: " + s}
 			}
 			return AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}, nil
 		}
@@ -502,6 +588,6 @@ func jsonToXDM(v any) (Item, error) {
 		}
 		return NewMap(entries), nil
 	default:
-		return nil, &XPathError{Code: "FOJS0001", Message: fmt.Sprintf("unexpected JSON type: %T", v)}
+		return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("unexpected JSON type: %T", v)}
 	}
 }
