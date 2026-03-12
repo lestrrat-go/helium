@@ -147,6 +147,17 @@ func TestResultIsNodeSet(t *testing.T) {
 	require.Len(t, nodes, 3)
 }
 
+func TestEmptySequenceResultIsNodeSet(t *testing.T) {
+	doc := parseTestDoc(t)
+	result, err := xpath3.Evaluate(t.Context(), doc, `/library/missing`)
+	require.NoError(t, err)
+	require.True(t, result.IsNodeSet())
+
+	nodes, err := result.Nodes()
+	require.NoError(t, err)
+	require.Empty(t, nodes)
+}
+
 func TestResultIsBoolean(t *testing.T) {
 	doc := parseTestDoc(t)
 	result, err := xpath3.Evaluate(t.Context(), doc, `count(/library/book) > 2`)

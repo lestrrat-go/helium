@@ -28,7 +28,7 @@ func (e *Expression) String() string
 type Result struct { seq Sequence }
 
 func (r *Result) Sequence() Sequence
-func (r *Result) IsNodeSet() bool
+func (r *Result) IsNodeSet() bool                  // true for empty sequence + all-node sequences
 func (r *Result) Nodes() ([]helium.Node, error)     // ErrNotNodeSet if non-nodes present
 func (r *Result) IsAtomic() bool
 func (r *Result) Atomics() ([]AtomicValue, error)

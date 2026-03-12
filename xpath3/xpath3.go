@@ -73,9 +73,6 @@ func (r *Result) Sequence() Sequence {
 
 // IsNodeSet returns true if the result consists entirely of nodes.
 func (r *Result) IsNodeSet() bool {
-	if len(r.seq) == 0 {
-		return false
-	}
 	for _, item := range r.seq {
 		if _, ok := item.(NodeItem); !ok {
 			return false
