@@ -382,7 +382,7 @@ func (p *parser) parseArrowTarget() (Expr, string, string, error) {
 	tok := p.lexer.Peek()
 	if tok.Type == TokenVariableRef {
 		p.lexer.Next()
-		return VariableExpr{Name: tok.Value}, "", "", nil
+		return variableExprFromToken(tok.Value), "", "", nil
 	}
 	if tok.Type == TokenLParen {
 		expr, err := p.parseParenExpr()
@@ -655,7 +655,7 @@ func (p *parser) parsePrimaryExpr() (Expr, error) {
 	switch tok.Type {
 	case TokenVariableRef:
 		p.lexer.Next()
-		return VariableExpr{Name: tok.Value}, nil
+		return variableExprFromToken(tok.Value), nil
 
 	case TokenLParen:
 		return p.parseParenExprOrEmpty()
@@ -2019,6 +2019,17 @@ func splitQName(qname string) (string, string) {
 		}
 	}
 	return "", qname
+}
+
+func variableExprFromToken(name string) VariableExpr {
+	if strings.HasPrefix(name, "Q{") {
+		return VariableExpr{Name: name}
+	}
+	prefix := ""
+	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		prefix = name[:idx]
+	}
+	return VariableExpr{Prefix: prefix, Name: name}
 }
 
 // expectToken consumes the next token if it matches the expected type, or returns an error.
