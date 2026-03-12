@@ -191,15 +191,18 @@ func fnInScopePrefixes(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected element node"}
 	}
 
-	// Collect in-scope prefixes by walking up the tree
-	prefixes := make(map[string]bool)
-	prefixes["xml"] = true
+	// Walk from the context element outward so namespace undeclarations mask
+	// ancestor bindings for the same prefix.
+	prefixes := map[string]bool{"xml": true}
+	resolved := map[string]bool{"xml": true}
 	for cur := elem; cur != nil; {
 		for _, ns := range cur.Namespaces() {
 			prefix := ns.Prefix()
-			if !prefixes[prefix] {
-				prefixes[prefix] = true
+			if _, ok := resolved[prefix]; ok {
+				continue
 			}
+			prefixes[prefix] = ns.URI() != ""
+			resolved[prefix] = true
 		}
 		p := cur.Parent()
 		if p == nil {
@@ -213,7 +216,10 @@ func fnInScopePrefixes(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 
 	result := make(Sequence, 0, len(prefixes))
-	for prefix := range prefixes {
+	for prefix, active := range prefixes {
+		if !active {
+			continue
+		}
 		result = append(result, AtomicValue{TypeName: TypeString, Value: prefix})
 	}
 	return result, nil
