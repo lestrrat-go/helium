@@ -118,7 +118,7 @@ func currentTimeFromCtx(ctx context.Context) time.Time {
 	return time.Now()
 }
 
-func fnRandomNumberGenerator(_ context.Context, args []Sequence) (Sequence, error) {
+func fnRandomNumberGenerator(ctx context.Context, args []Sequence) (Sequence, error) {
 	var seed int64
 	if len(args) > 0 && len(args[0]) > 0 {
 		a, err := AtomizeItem(args[0][0])
@@ -131,7 +131,7 @@ func fnRandomNumberGenerator(_ context.Context, args []Sequence) (Sequence, erro
 			seed = seed*31 + int64(c)
 		}
 	} else {
-		seed = time.Now().UnixNano()
+		seed = currentTimeFromCtx(ctx).UnixNano()
 	}
 	return Sequence{makeRNGMap(seed)}, nil
 }
