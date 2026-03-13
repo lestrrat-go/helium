@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<root xml:base="http://www.w3.org/fots/fn/function-lookup/function-lookup.xml">
+  <child>1</child>
+  <ns:element xmlns:ns="http://www.example.org/" />
+  <extra xml:base="http://www.w3.org/fots/fn/function-lookup/extra.xml"/>
+</root>

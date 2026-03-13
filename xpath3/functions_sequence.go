@@ -1,0 +1,631 @@
+package xpath3
+
+import (
+	"context"
+	"fmt"
+	"math"
+	"math/big"
+	"sort"
+	"time"
+
+	"github.com/lestrrat-go/helium"
+)
+
+func init() {
+	registerFn("empty", 1, 1, fnEmpty)
+	registerFn("exists", 1, 1, fnExists)
+	registerFn("head", 1, 1, fnHead)
+	registerFn("tail", 1, 1, fnTail)
+	registerFn("insert-before", 3, 3, fnInsertBefore)
+	registerFn("remove", 2, 2, fnRemove)
+	registerFn("reverse", 1, 1, fnReverse)
+	registerFn("subsequence", 2, 3, fnSubsequence)
+	registerFn("unordered", 1, 1, fnUnordered)
+	registerFn("zero-or-one", 1, 1, fnZeroOrOne)
+	registerFn("one-or-more", 1, 1, fnOneOrMore)
+	registerFn("exactly-one", 1, 1, fnExactlyOne)
+	registerFn("deep-equal", 2, 3, fnDeepEqual)
+	registerFn("index-of", 2, 3, fnIndexOf)
+	registerFn("last", 0, 0, fnLast)
+	registerFn("position", 0, 0, fnPosition)
+	registerFn("sort", 1, 3, fnSort)
+	registerFn("flatten", 1, 1, fnFlatten)
+}
+
+func fnEmpty(_ context.Context, args []Sequence) (Sequence, error) {
+	return SingleBoolean(len(args[0]) == 0), nil
+}
+
+func fnExists(_ context.Context, args []Sequence) (Sequence, error) {
+	return SingleBoolean(len(args[0]) > 0), nil
+}
+
+func fnHead(_ context.Context, args []Sequence) (Sequence, error) {
+	if len(args[0]) == 0 {
+		return nil, nil
+	}
+	return Sequence{args[0][0]}, nil
+}
+
+func fnTail(_ context.Context, args []Sequence) (Sequence, error) {
+	if len(args[0]) <= 1 {
+		return nil, nil
+	}
+	return args[0][1:], nil
+}
+
+func fnInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
+	target := args[0]
+	if len(args[1]) == 0 {
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:insert-before: position argument is an empty sequence"}
+	}
+	a, err := AtomizeItem(args[1][0])
+	if err != nil {
+		return nil, err
+	}
+	pos := int(a.ToFloat64())
+	inserts := args[2]
+
+	if pos < 1 {
+		pos = 1
+	}
+	if pos > len(target)+1 {
+		pos = len(target) + 1
+	}
+
+	result := make(Sequence, 0, len(target)+len(inserts))
+	result = append(result, target[:pos-1]...)
+	result = append(result, inserts...)
+	result = append(result, target[pos-1:]...)
+	return result, nil
+}
+
+func fnRemove(_ context.Context, args []Sequence) (Sequence, error) {
+	target := args[0]
+	posVal, err := coerceArgToInteger(args[1])
+	if err != nil {
+		return nil, err
+	}
+	pos := int(posVal)
+
+	if pos < 1 || pos > len(target) {
+		return target, nil
+	}
+
+	result := make(Sequence, 0, len(target)-1)
+	result = append(result, target[:pos-1]...)
+	result = append(result, target[pos:]...)
+	return result, nil
+}
+
+func fnReverse(_ context.Context, args []Sequence) (Sequence, error) {
+	seq := args[0]
+	result := make(Sequence, len(seq))
+	for i, item := range seq {
+		result[len(seq)-1-i] = item
+	}
+	return result, nil
+}
+
+func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
+	seq := args[0]
+	a, err := AtomizeItem(args[1][0])
+	if err != nil {
+		return nil, err
+	}
+	if !isSubtypeOf(a.TypeName, TypeNumeric) {
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: starting position must be numeric"}
+	}
+	startF := math.Round(a.ToFloat64())
+
+	hasLength := len(args) > 2
+	var lengthF float64
+	if hasLength {
+		la, err := AtomizeItem(args[2][0])
+		if err != nil {
+			return nil, err
+		}
+		if !isSubtypeOf(la.TypeName, TypeNumeric) {
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: length must be numeric"}
+		}
+		lengthF = math.Round(la.ToFloat64())
+	}
+
+	// Handle NaN start or NaN length
+	if math.IsNaN(startF) {
+		return nil, nil
+	}
+	if hasLength && math.IsNaN(lengthF) {
+		return nil, nil
+	}
+
+	// Compute end position: startF + lengthF (only when length is given)
+	var endF float64
+	if hasLength {
+		endF = startF + lengthF
+		// -INF + INF = NaN → empty result
+		if math.IsNaN(endF) {
+			return nil, nil
+		}
+	}
+
+	// Items at position p where startF <= p (and p < endF if length given)
+	var result Sequence
+	for i, item := range seq {
+		p := float64(i + 1)
+		if p < startF {
+			continue
+		}
+		if hasLength && p >= endF {
+			break
+		}
+		result = append(result, item)
+	}
+	return result, nil
+}
+
+func fnUnordered(_ context.Context, args []Sequence) (Sequence, error) {
+	return args[0], nil
+}
+
+func fnZeroOrOne(_ context.Context, args []Sequence) (Sequence, error) {
+	if len(args[0]) > 1 {
+		return nil, &XPathError{Code: "FORG0003", Message: fmt.Sprintf("zero-or-one() called with sequence of length %d", len(args[0]))}
+	}
+	return args[0], nil
+}
+
+func fnOneOrMore(_ context.Context, args []Sequence) (Sequence, error) {
+	if len(args[0]) == 0 {
+		return nil, &XPathError{Code: "FORG0004", Message: "one-or-more() called with empty sequence"}
+	}
+	return args[0], nil
+}
+
+func fnExactlyOne(_ context.Context, args []Sequence) (Sequence, error) {
+	if len(args[0]) != 1 {
+		return nil, &XPathError{Code: "FORG0005", Message: fmt.Sprintf("exactly-one() called with sequence of length %d", len(args[0]))}
+	}
+	return args[0], nil
+}
+
+type deepEqualOptions struct {
+	coll       *collationImpl
+	implicitTZ *time.Location
+}
+
+func fnDeepEqual(ctx context.Context, args []Sequence) (Sequence, error) {
+	coll, err := getCollation(ctx, args, 2)
+	if err != nil {
+		return nil, err
+	}
+	opts := deepEqualOptions{coll: coll}
+	if ec := getFnContext(ctx); ec != nil {
+		opts.implicitTZ = ec.getImplicitTimezone()
+	}
+	eq, err := deepEqualSequence(args[0], args[1], opts)
+	if err != nil {
+		return nil, err
+	}
+	return SingleBoolean(eq), nil
+}
+
+func deepEqualSequence(a, b Sequence, opts deepEqualOptions) (bool, error) {
+	if len(a) != len(b) {
+		return false, nil
+	}
+	for i := range a {
+		eq, err := deepEqualItem(a[i], b[i], opts)
+		if err != nil {
+			return false, err
+		}
+		if !eq {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func deepEqualItem(a, b Item, opts deepEqualOptions) (bool, error) {
+	switch av := a.(type) {
+	case AtomicValue:
+		bv, ok := b.(AtomicValue)
+		if !ok {
+			return false, nil
+		}
+		return deepEqualAtomic(av, bv, opts)
+	case NodeItem:
+		bv, ok := b.(NodeItem)
+		if !ok {
+			return false, nil
+		}
+		return deepEqualNode(av.Node, bv.Node), nil
+	case MapItem:
+		bv, ok := b.(MapItem)
+		if !ok {
+			return false, nil
+		}
+		return deepEqualMap(av, bv, opts)
+	case ArrayItem:
+		bv, ok := b.(ArrayItem)
+		if !ok {
+			return false, nil
+		}
+		return deepEqualArray(av, bv, opts)
+	case FunctionItem:
+		if _, ok := b.(FunctionItem); ok {
+			return false, &XPathError{Code: "FOTY0015", Message: "deep-equal: cannot compare function items"}
+		}
+		return false, nil
+	default:
+		return false, nil
+	}
+}
+
+func deepEqualAtomic(a, b AtomicValue, opts deepEqualOptions) (bool, error) {
+	// NaN equals NaN for deep-equal purposes
+	if a.TypeName == TypeDouble || a.TypeName == TypeFloat {
+		af := a.ToFloat64()
+		if b.TypeName == TypeDouble || b.TypeName == TypeFloat {
+			bf := b.ToFloat64()
+			if af != af && bf != bf { // both NaN
+				return true, nil
+			}
+		}
+	}
+	aStr := isStringDerived(a.TypeName) || a.TypeName == TypeAnyURI
+	bStr := isStringDerived(b.TypeName) || b.TypeName == TypeAnyURI
+	if opts.coll != nil && aStr && bStr {
+		return opts.coll.compare(stringFromAtomic(a), stringFromAtomic(b)) == 0, nil
+	}
+	eq, err := ValueCompareWithImplicitTimezone(TokenEq, a, b, opts.implicitTZ)
+	if err != nil {
+		// Incomparable types are not deep-equal
+		return false, nil
+	}
+	return eq, nil
+}
+
+func deepEqualNode(a, b helium.Node) bool {
+	if a.Type() != b.Type() {
+		return false
+	}
+	switch a.Type() {
+	case helium.DocumentNode:
+		return deepEqualChildren(a, b)
+	case helium.ElementNode:
+		ae, aOK := a.(*helium.Element)
+		be, bOK := b.(*helium.Element)
+		if !aOK || !bOK {
+			return false
+		}
+		// Compare expanded name (local name + namespace URI)
+		if ae.LocalName() != be.LocalName() || ae.URI() != be.URI() {
+			return false
+		}
+		// Compare attributes (order-independent)
+		aAttrs := ae.Attributes()
+		bAttrs := be.Attributes()
+		if len(aAttrs) != len(bAttrs) {
+			return false
+		}
+		for _, aa := range aAttrs {
+			found := false
+			for _, ba := range bAttrs {
+				if aa.LocalName() == ba.LocalName() && aa.URI() == ba.URI() {
+					if aa.Value() != ba.Value() {
+						return false
+					}
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false
+			}
+		}
+		// Compare children
+		return deepEqualChildren(a, b)
+	case helium.AttributeNode:
+		aa, aOK := a.(*helium.Attribute)
+		ba, bOK := b.(*helium.Attribute)
+		if !aOK || !bOK {
+			return false
+		}
+		return aa.LocalName() == ba.LocalName() && aa.URI() == ba.URI() && aa.Value() == ba.Value()
+	case helium.NamespaceNode:
+		return a.Name() == b.Name() && string(a.Content()) == string(b.Content())
+	case helium.TextNode, helium.CDATASectionNode:
+		return string(a.Content()) == string(b.Content())
+	case helium.CommentNode:
+		return string(a.Content()) == string(b.Content())
+	case helium.ProcessingInstructionNode:
+		return a.Name() == b.Name() && string(a.Content()) == string(b.Content())
+	default:
+		return false
+	}
+}
+
+func deepEqualChildren(a, b helium.Node) bool {
+	// Collect significant children (skip whitespace-only text between elements? No — deep-equal compares all children)
+	ac := a.FirstChild()
+	bc := b.FirstChild()
+	for ac != nil && bc != nil {
+		if !deepEqualNode(ac, bc) {
+			return false
+		}
+		ac = ac.NextSibling()
+		bc = bc.NextSibling()
+	}
+	return ac == nil && bc == nil
+}
+
+func deepEqualMap(a, b MapItem, opts deepEqualOptions) (bool, error) {
+	if a.Size() != b.Size() {
+		return false, nil
+	}
+	// For each key in a, find a matching key in b using deep-equal comparison
+	// (handles cross-type numeric keys like xs:integer(1) == xs:double(1.0))
+	aKeys := a.Keys()
+	bKeys := b.Keys()
+	bUsed := make([]bool, len(bKeys))
+	for _, ak := range aKeys {
+		found := false
+		// Try exact lookup first (fast path)
+		if bVal, ok := b.Get(ak); ok {
+			aVal, _ := a.Get(ak)
+			eq, err := deepEqualSequence(aVal, bVal, opts)
+			if err != nil {
+				return false, err
+			}
+			if eq {
+				// Mark the matching b key as used
+				for j, bk := range bKeys {
+					if !bUsed[j] {
+						if sameMapKey(ak, bk) {
+							bUsed[j] = true
+							break
+						}
+					}
+				}
+				found = true
+			}
+		}
+		if !found {
+			// Slow path: compare keys by value (cross-type)
+			aVal, _ := a.Get(ak)
+			for j, bk := range bKeys {
+				if bUsed[j] {
+					continue
+				}
+				if !sameMapKey(ak, bk) {
+					continue
+				}
+				bVal, _ := b.Get(bk)
+				eq, err := deepEqualSequence(aVal, bVal, opts)
+				if err != nil {
+					return false, err
+				}
+				if eq {
+					bUsed[j] = true
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func sameMapKey(a, b AtomicValue) bool {
+	return normalizeMapKey(a) == normalizeMapKey(b)
+}
+
+func deepEqualArray(a, b ArrayItem, opts deepEqualOptions) (bool, error) {
+	am0, bm0 := a.members0(), b.members0()
+	if len(am0) != len(bm0) {
+		return false, nil
+	}
+	for i := range am0 {
+		am, bm := am0[i], bm0[i]
+		eq, err := deepEqualSequence(am, bm, opts)
+		if err != nil {
+			return false, err
+		}
+		if !eq {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func fnIndexOf(_ context.Context, args []Sequence) (Sequence, error) {
+	if len(args[1]) == 0 {
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "index-of: search value must not be empty sequence"}
+	}
+	search, err := AtomizeItem(args[1][0])
+	if err != nil {
+		return nil, err
+	}
+	// Validate optional collation argument (3rd arg)
+	if len(args) > 2 {
+		if len(args[2]) == 0 {
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "collation argument must not be empty"}
+		}
+		collA, err := AtomizeItem(args[2][0])
+		if err != nil {
+			return nil, err
+		}
+		coll := collA.StringVal()
+		if coll != codepointCollationURI {
+			return nil, &XPathError{Code: errCodeFOCH0002, Message: "unsupported collation: " + coll}
+		}
+	}
+	// Per spec: untypedAtomic values are cast to xs:string for comparison
+	if search.TypeName == TypeUntypedAtomic {
+		search = AtomicValue{TypeName: TypeString, Value: search.StringVal()}
+	}
+
+	// Atomize sequence to handle arrays (XPath 3.1: atomizing flattens arrays)
+	atoms, err := AtomizeSequence(args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	var result Sequence
+	for i, a := range atoms {
+		if a.TypeName == TypeUntypedAtomic {
+			a = AtomicValue{TypeName: TypeString, Value: a.StringVal()}
+		}
+		eq, err := compareAtomic(TokenEq, a, search)
+		if err != nil {
+			continue // incomparable types are silently skipped
+		}
+		if eq {
+			result = append(result, AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(i + 1))})
+		}
+	}
+	return result, nil
+}
+
+func fnLast(ctx context.Context, _ []Sequence) (Sequence, error) {
+	fc := getFnContext(ctx)
+	if fc == nil || (fc.node == nil && fc.contextItem == nil) {
+		return nil, &XPathError{Code: errCodeXPDY0002, Message: "last() requires a focus (context item)"}
+	}
+	return SingleInteger(int64(fc.size)), nil
+}
+
+func fnPosition(ctx context.Context, _ []Sequence) (Sequence, error) {
+	fc := getFnContext(ctx)
+	if fc == nil || (fc.node == nil && fc.contextItem == nil) {
+		return nil, &XPathError{Code: errCodeXPDY0002, Message: "position() requires a focus (context item)"}
+	}
+	return SingleInteger(int64(fc.position)), nil
+}
+
+// fnSort implements fn:sort($input [, $collation [, $key]])
+func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
+	input := args[0]
+	if len(input) <= 1 {
+		return input, nil
+	}
+
+	// Optional collation (2nd argument)
+	var coll *collationImpl
+	if len(args) >= 2 && len(args[1]) > 0 {
+		uri, err := coerceArgToString(args[1])
+		if err != nil {
+			return nil, err
+		}
+		if uri != "" {
+			coll, err = resolveCollation(uri, "")
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// Optional key function (3rd argument)
+	var keyFn *FunctionItem
+	if len(args) >= 3 && len(args[2]) > 0 {
+		fi, err := extractFunctionItem(args[2])
+		if err != nil {
+			return nil, err
+		}
+		keyFn = &fi
+	}
+
+	// Compute sort keys
+	type sortPair struct {
+		item Item
+		key  Sequence
+	}
+	pairs := make([]sortPair, len(input))
+	for i, item := range input {
+		if keyFn != nil {
+			k, err := keyFn.Invoke(ctx, []Sequence{{item}})
+			if err != nil {
+				return nil, err
+			}
+			pairs[i] = sortPair{item: item, key: k}
+		} else {
+			// Default key: fn:data() semantics (atomize, flattening arrays)
+			atoms, err := AtomizeSequence(Sequence{item})
+			if err != nil {
+				pairs[i] = sortPair{item: item, key: nil}
+			} else {
+				key := make(Sequence, len(atoms))
+				for k, a := range atoms {
+					key[k] = a
+				}
+				pairs[i] = sortPair{item: item, key: key}
+			}
+		}
+	}
+
+	// Stable sort using comparison — compare key sequences lexicographically
+	var sortErr error
+	sort.SliceStable(pairs, func(i, j int) bool {
+		if sortErr != nil {
+			return false
+		}
+		ki := pairs[i].key
+		kj := pairs[j].key
+		minLen := len(ki)
+		if len(kj) < minLen {
+			minLen = len(kj)
+		}
+		for idx := 0; idx < minLen; idx++ {
+			ai, err1 := AtomizeItem(ki[idx])
+			aj, err2 := AtomizeItem(kj[idx])
+			if err1 != nil || err2 != nil {
+				return false
+			}
+			cmp, err := valueCompareThreeWay(ai, aj, coll)
+			if err != nil {
+				sortErr = err
+				return false
+			}
+			if cmp < 0 {
+				return true
+			}
+			if cmp > 0 {
+				return false
+			}
+			// Equal — continue to next key component
+		}
+		// All compared items equal; shorter key comes first
+		return len(ki) < len(kj)
+	})
+	if sortErr != nil {
+		return nil, sortErr
+	}
+
+	result := make(Sequence, len(pairs))
+	for i, p := range pairs {
+		result[i] = p.item
+	}
+	return result, nil
+}
+
+func fnFlatten(_ context.Context, args []Sequence) (Sequence, error) {
+	var result Sequence
+	flattenItems(args[0], &result)
+	return result, nil
+}
+
+func flattenItems(seq Sequence, result *Sequence) {
+	for _, item := range seq {
+		if arr, ok := item.(ArrayItem); ok {
+			for _, m := range arr.members0() {
+				flattenItems(m, result)
+			}
+		} else {
+			*result = append(*result, item)
+		}
+	}
+}

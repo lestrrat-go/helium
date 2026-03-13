@@ -3,10 +3,12 @@ module github.com/lestrrat-go/helium
 go 1.25.7
 
 require (
+	github.com/dlclark/regexp2 v1.11.5
 	github.com/lestrrat-go/pdebug v0.0.0-20210111095411-35b07dbf089b
 	github.com/lestrrat-go/strcursor v0.0.0-20230223230220-c1a91b69c459
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/text v0.26.0
+	golang.org/x/net v0.51.0
+	golang.org/x/text v0.34.0
 )
 
 require (

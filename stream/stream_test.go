@@ -10,6 +10,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type countingWriter struct {
+	buf    bytes.Buffer
+	writes int
+}
+
+func (w *countingWriter) Write(p []byte) (int, error) {
+	w.writes++
+	return w.buf.Write(p)
+}
+
+func (w *countingWriter) WriteByte(b byte) error {
+	w.writes++
+	return w.buf.WriteByte(b)
+}
+
+func (w *countingWriter) WriteString(s string) (int, error) {
+	w.writes++
+	return w.buf.WriteString(s)
+}
+
 func TestStartDocument(t *testing.T) {
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
@@ -106,6 +126,17 @@ func TestElementWithEscaping(t *testing.T) {
 	require.NoError(t, w.WriteString("a < b & c > d"))
 	require.NoError(t, w.EndElement())
 	require.Equal(t, `<root>a &lt; b &amp; c &gt; d</root>`, buf.String())
+}
+
+func TestWriteStringBatchesPlainText(t *testing.T) {
+	out := &countingWriter{}
+	w := stream.NewWriter(out)
+
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.WriteString(strings.Repeat("a", 64)))
+	require.NoError(t, w.EndElement())
+
+	require.Equal(t, 7, out.writes)
 }
 
 func TestNestedElements(t *testing.T) {

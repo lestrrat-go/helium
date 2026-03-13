@@ -4,6 +4,10 @@
 
 Go libxml2 implementation.
 
+## XPath 3.1 — XSD Version
+
+The xpath3 package targets **XSD 1.1 only**. This means `+INF` is a valid lexical form for xs:double and xs:float, and xs:dateTimeStamp is a recognized type. QT3 tests with `dependency type="xsd-version" value="1.0"` are skipped.
+
 ## Pre-Read Rules
 
 Read the linked doc BEFORE working in that area. No exceptions.
@@ -19,6 +23,15 @@ Read the linked doc BEFORE working in that area. No exceptions.
 | DOM node hierarchy, struct fields, namespace/attr storage | `.claude/docs/node-types.md` |
 | XSD/RELAX NG/Schematron compile→validate flow | `.claude/docs/validation-pipeline.md` |
 | heliumlint CLI flags, pipeline, exit codes | `.claude/docs/heliumlint.md` |
+| XPath 3.1 design overview, constraints, sub-doc index | `.claude/docs/xpath3-design.md` |
+| XPath 3.1 architecture, file layout, internal/xpath | `.claude/docs/xpath3-architecture.md` |
+| XPath 3.1 public API, Context, Result, errors | `.claude/docs/xpath3-api.md` |
+| XPath 3.1 Item/Sequence/Map/Array type system | `.claude/docs/xpath3-types.md` |
+| XPath 3.1 lexer, parser, AST nodes | `.claude/docs/xpath3-parser.md` |
+| XPath 3.1 evaluator, comparison, casting | `.claude/docs/xpath3-eval.md` |
+| XPath 3.1 function system, built-in categories | `.claude/docs/xpath3-functions.md` |
+| XPath 3.1 phased tasks, dependencies, risks | `.claude/docs/xpath3-tasks.md` |
+| Saxon-HE source layout (reference) | `.claude/docs/saxon-layout.md` |
 
 ## Cache Maintenance
 
@@ -38,3 +51,12 @@ These docs cache repository state. Still read source before modifying code.
 | `node-types.md` | Node type, struct field, or tree operation changes |
 | `validation-pipeline.md` | Compile/validate phase, data model, or backtracking changes |
 | `heliumlint.md` | CLI flag, pipeline, or exit code changes |
+| `xpath3-design.md` | Design constraints, sub-doc structure changes |
+| `xpath3-architecture.md` | Package layout, file additions/removals, import graph changes |
+| `xpath3-api.md` | Public API, Context, Result, error type changes |
+| `xpath3-types.md` | Item/Sequence/AtomicValue/Map/Array type changes |
+| `xpath3-parser.md` | Lexer, parser, AST node, token type changes |
+| `xpath3-eval.md` | Evaluator, comparison, casting logic changes |
+| `xpath3-functions.md` | Function registry, built-in function additions/changes |
+| `xpath3-tasks.md` | Task completion, dependency, or risk changes |
+| `saxon-layout.md` | Reference layout updates |

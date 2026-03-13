@@ -8,6 +8,7 @@ shim           → helium, stream, internal/encoding
 xinclude       → helium, xpointer
                   → xpath1 (via xpointer)
                   → internal/encoding
+xpath3         → helium, internal/xpath
 xsd            → helium, xpath1
 relaxng        → helium
 schematron     → helium, xpath1
@@ -30,7 +31,7 @@ sink, enum, internal/bitset, internal/stack, internal/cliutil
 helium (root) → sax, enum, internal/*
 
 ## Processing layer (depends on root)
-c14n, xpath1, html, catalog, relaxng, stream
+c14n, xpath1, xpath3, html, catalog, relaxng, stream
 
 ## Composition layer (depends on processing)
 xsd (root + xpath1), xpointer (root + xpath1), schematron (root + xpath1), xinclude (root + xpointer), shim (root + stream)

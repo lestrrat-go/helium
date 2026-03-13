@@ -1,0 +1,32 @@
+package examples_test
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath3"
+)
+
+func Example_xpath3_find() {
+	doc, err := helium.Parse(context.Background(), []byte(`<catalog><book id="1">Go</book><book id="2">XML</book><magazine/></catalog>`))
+	if err != nil {
+		fmt.Printf("failed to parse: %s\n", err)
+		return
+	}
+
+	nodes, err := xpath3.Find(context.Background(), doc, "//book")
+	if err != nil {
+		fmt.Printf("xpath error: %s\n", err)
+		return
+	}
+
+	fmt.Printf("found %d nodes\n", len(nodes))
+	for _, n := range nodes {
+		fmt.Printf("  %s: %s\n", n.Name(), string(n.Content()))
+	}
+	// Output:
+	// found 2 nodes
+	//   book: Go
+	//   book: XML
+}

@@ -4,66 +4,17 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"sort"
 	"strconv"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
 const (
-	maxRecursionDepth = 5000
-	maxNodeSetLength  = 10_000_000
+	maxRecursionDepth = ixpath.DefaultMaxRecursionDepth
+	maxNodeSetLength  = ixpath.DefaultMaxNodeSetLength
 )
-
-// docOrderCache caches document-order positions for all nodes in a document.
-// Built lazily on first use and shared across the entire evaluation tree.
-type docOrderCache struct {
-	positions map[helium.Node]int
-}
-
-func (c *docOrderCache) position(n helium.Node) int {
-	if c.positions == nil {
-		return -1
-	}
-	// Namespace nodes are not in the document tree. Position them
-	// right after their parent element so they sort correctly.
-	if n.Type() == helium.NamespaceNode {
-		parent := n.Parent()
-		if parent == nil {
-			return 0
-		}
-		return c.position(parent)
-	}
-	pos, ok := c.positions[n]
-	if !ok {
-		return -1
-	}
-	return pos
-}
-
-func (c *docOrderCache) buildFrom(root helium.Node) {
-	if c.positions != nil {
-		return
-	}
-	c.positions = make(map[helium.Node]int)
-	pos := 0
-	c.indexWalk(root, &pos)
-}
-
-func (c *docOrderCache) indexWalk(cur helium.Node, pos *int) {
-	c.positions[cur] = *pos
-	*pos++
-	if elem, ok := cur.(*helium.Element); ok {
-		for _, attr := range elem.Attributes() {
-			c.positions[helium.Node(attr)] = *pos
-			*pos++
-		}
-	}
-	for child := cur.FirstChild(); child != nil; child = child.NextSibling() {
-		c.indexWalk(child, pos)
-	}
-}
 
 // evalContext holds the evaluation state for an XPath expression.
 type evalContext struct {
@@ -78,7 +29,7 @@ type evalContext struct {
 	depth       int
 	opCount     *int // shared across the entire evaluation tree
 	opLimit     int  // 0 = unlimited
-	docOrder    *docOrderCache
+	docOrder    *ixpath.DocOrderCache
 }
 
 func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
@@ -89,7 +40,7 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 		position: 1,
 		size:     1,
 		opCount:  &opCount,
-		docOrder: &docOrderCache{},
+		docOrder: &ixpath.DocOrderCache{},
 	}
 	// Pull config from context.Context if present.
 	if xctx := GetContext(ctx); xctx != nil {
@@ -217,7 +168,7 @@ func evalLocationPath(ctx *evalContext, lp *LocationPath) (*Result, error) {
 	var nodes []helium.Node
 
 	if lp.Absolute {
-		root := documentRoot(ctx.node)
+		root := ixpath.DocumentRoot(ctx.node)
 		nodes = []helium.Node{root}
 	} else {
 		nodes = []helium.Node{ctx.node}
@@ -259,7 +210,7 @@ func evalStepWithPredicates(ctx *evalContext, nodes []helium.Node, step Step) ([
 		}
 		allFiltered = append(allFiltered, matched...)
 	}
-	return deduplicateNodes(allFiltered, ctx.docOrder)
+	return ixpath.DeduplicateNodes(allFiltered, ctx.docOrder, maxNodeSetLength)
 }
 
 // evalStepNoPredicates evaluates one location step that has no predicates.
@@ -275,7 +226,7 @@ func evalStepNoPredicates(ctx *evalContext, nodes []helium.Node, step Step) ([]h
 		}
 		next = append(next, filterByNodeTest(candidates, step.NodeTest, step.Axis, ctx)...)
 	}
-	return deduplicateNodes(next, ctx.docOrder)
+	return ixpath.DeduplicateNodes(next, ctx.docOrder, maxNodeSetLength)
 }
 
 // filterByNodeTest returns only those nodes that match the given node test.
@@ -287,49 +238,6 @@ func filterByNodeTest(candidates []helium.Node, nt NodeTest, axis AxisType, ctx 
 		}
 	}
 	return matched
-}
-
-// deduplicateNodes removes duplicate nodes and sorts in document order.
-func deduplicateNodes(nodes []helium.Node, cache *docOrderCache) ([]helium.Node, error) {
-	if len(nodes) <= 1 {
-		return nodes, nil
-	}
-	seen := make(map[helium.Node]bool, len(nodes))
-	nsKeys := make(map[nsNodeKey]bool)
-	result := make([]helium.Node, 0, len(nodes))
-	for _, n := range nodes {
-		if seen[n] {
-			continue
-		}
-		if n.Type() == helium.NamespaceNode {
-			key := nsNodeKey{parent: n.Parent(), prefix: n.Name()}
-			if nsKeys[key] {
-				continue
-			}
-			nsKeys[key] = true
-		}
-		seen[n] = true
-		result = append(result, n)
-	}
-	if len(result) > maxNodeSetLength {
-		return nil, ErrNodeSetLimit
-	}
-	cache.buildFrom(documentRoot(result[0]))
-	sort.SliceStable(result, func(i, j int) bool {
-		return cache.position(result[i]) < cache.position(result[j])
-	})
-	return result, nil
-}
-
-func documentRoot(n helium.Node) helium.Node {
-	if doc := n.OwnerDocument(); doc != nil {
-		return doc
-	}
-	// Walk up parent chain
-	for n.Parent() != nil {
-		n = n.Parent()
-	}
-	return n
 }
 
 func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ctx *evalContext) bool {
@@ -356,14 +264,12 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ctx *evalContext) 
 func matchNameTest(test NameTest, n helium.Node, axis AxisType, ctx *evalContext) bool {
 	switch axis {
 	case AxisAttribute:
-		// Use type assertion because Attribute.Type() may not be set correctly
 		if _, ok := n.(*helium.Attribute); !ok {
 			return false
 		}
 	case AxisNamespace:
 		return matchNameTestNamespaceAxis(test, n)
 	default:
-		// For principal node type of other axes: element
 		if n.Type() != helium.ElementNode {
 			return false
 		}
@@ -390,12 +296,10 @@ func matchNameTestByLocalAndPrefix(test NameTest, n helium.Node, ctx *evalContex
 		if test.Prefix == "" {
 			return true
 		}
-		// prefix:* — match namespace
 		return matchPrefix(test.Prefix, n, ctx)
 	}
 
-	// Match local name
-	if localNameOf(n) != test.Local {
+	if ixpath.LocalNameOf(n) != test.Local {
 		return false
 	}
 
@@ -407,47 +311,13 @@ func matchNameTestByLocalAndPrefix(test NameTest, n helium.Node, ctx *evalContex
 }
 
 func matchPrefix(prefix string, n helium.Node, ctx *evalContext) bool {
-	// Resolve prefix to URI via context namespaces
 	if ctx.namespaces != nil {
 		uri, ok := ctx.namespaces[prefix]
 		if ok {
-			return nodeNamespaceURI(n) == uri
+			return ixpath.NodeNamespaceURI(n) == uri
 		}
 	}
-	// Fall back to node's own prefix
-	return nodePrefix(n) == prefix
-}
-
-func localNameOf(n helium.Node) string {
-	switch v := n.(type) {
-	case *helium.Element:
-		return v.LocalName()
-	case *helium.Attribute:
-		// Attribute.Name() returns prefix:local, LocalName returns just local
-		return v.LocalName()
-	default:
-		return n.Name()
-	}
-}
-
-func nodePrefix(n helium.Node) string {
-	type prefixer interface {
-		Prefix() string
-	}
-	if p, ok := n.(prefixer); ok {
-		return p.Prefix()
-	}
-	return ""
-}
-
-func nodeNamespaceURI(n helium.Node) string {
-	type urier interface {
-		URI() string
-	}
-	if u, ok := n.(urier); ok {
-		return u.URI()
-	}
-	return ""
+	return ixpath.NodePrefix(n) == prefix
 }
 
 func matchTypeTest(test TypeTest, n helium.Node) bool {
@@ -563,21 +433,19 @@ func compareResults(op TokenType, left, right *Result) bool {
 
 // compareNodeSet handles comparisons where the left operand is a node-set.
 func compareNodeSet(op TokenType, leftNodes []helium.Node, right *Result) bool {
-	// Node-set vs node-set
 	if right.Type == NodeSetResult {
 		for _, ln := range leftNodes {
-			lv := stringValue(ln)
+			lv := ixpath.StringValue(ln)
 			for _, rn := range right.NodeSet {
-				if compareStrings(op, lv, stringValue(rn)) {
+				if compareStrings(op, lv, ixpath.StringValue(rn)) {
 					return true
 				}
 			}
 		}
 		return false
 	}
-	// Node-set vs scalar
 	for _, ln := range leftNodes {
-		if compareWithScalar(op, stringValue(ln), right) {
+		if compareWithScalar(op, ixpath.StringValue(ln), right) {
 			return true
 		}
 	}
@@ -588,7 +456,7 @@ func compareNodeSet(op TokenType, leftNodes []helium.Node, right *Result) bool {
 func compareNodeSetRight(op TokenType, left *Result, rightNodes []helium.Node) bool {
 	rev := reverseOp(op)
 	for _, rn := range rightNodes {
-		if compareWithScalar(rev, stringValue(rn), left) {
+		if compareWithScalar(rev, ixpath.StringValue(rn), left) {
 			return true
 		}
 	}
@@ -600,14 +468,12 @@ func compareScalars(op TokenType, left, right *Result) bool {
 	if op == TokenEquals || op == TokenNotEquals {
 		return compareScalarsEqNe(op, left, right)
 	}
-	// Relational: always compare as numbers
 	return compareNumbers(op, resultToNumber(left), resultToNumber(right))
 }
 
 // compareScalarsEqNe compares two scalar results for equality or inequality
 // according to XPath 1.0 type coercion rules.
 func compareScalarsEqNe(op TokenType, left, right *Result) bool {
-	// If either is boolean, compare as booleans
 	if left.Type == BooleanResult || right.Type == BooleanResult {
 		lb := resultToBoolean(left)
 		rb := resultToBoolean(right)
@@ -616,7 +482,6 @@ func compareScalarsEqNe(op TokenType, left, right *Result) bool {
 		}
 		return lb != rb
 	}
-	// If either is number, compare as numbers
 	if left.Type == NumberResult || right.Type == NumberResult {
 		ln := resultToNumber(left)
 		rn := resultToNumber(right)
@@ -625,7 +490,6 @@ func compareScalarsEqNe(op TokenType, left, right *Result) bool {
 		}
 		return ln != rn
 	}
-	// Compare as strings
 	ls := resultToString(left)
 	rs := resultToString(right)
 	if op == TokenEquals {
@@ -644,7 +508,6 @@ func compareWithScalar(op TokenType, nodeStr string, scalar *Result) bool {
 		if op == TokenNotEquals {
 			return nb != scalar.Bool
 		}
-		// Relational with boolean: convert both to number
 		var ln, rn float64
 		if nb {
 			ln = 1
@@ -656,7 +519,7 @@ func compareWithScalar(op TokenType, nodeStr string, scalar *Result) bool {
 	case NumberResult:
 		nn := stringToNumber(nodeStr)
 		return compareNumbers(op, nn, scalar.Number)
-	default: // StringResult
+	default:
 		if op == TokenEquals || op == TokenNotEquals {
 			return compareStrings(op, nodeStr, scalar.String)
 		}
@@ -798,8 +661,7 @@ func evalUnionExpr(ctx *evalContext, e UnionExpr) (*Result, error) {
 	if left.Type != NodeSetResult || right.Type != NodeSetResult {
 		return nil, ErrUnionNotNodeSet
 	}
-	// Merge and deduplicate, preserving document order
-	merged, err := mergeNodeSets(left.NodeSet, right.NodeSet, ctx.docOrder)
+	merged, err := ixpath.MergeNodeSets(left.NodeSet, right.NodeSet, ctx.docOrder, maxNodeSetLength)
 	if err != nil {
 		return nil, err
 	}
@@ -825,7 +687,7 @@ func evalPathExpr(ctx *evalContext, e PathExpr) (*Result, error) {
 		if err != nil {
 			return nil, err
 		}
-		result, err = mergeNodeSets(result, subResult.NodeSet, ctx.docOrder)
+		result, err = ixpath.MergeNodeSets(result, subResult.NodeSet, ctx.docOrder, maxNodeSetLength)
 		if err != nil {
 			return nil, err
 		}
@@ -833,41 +695,24 @@ func evalPathExpr(ctx *evalContext, e PathExpr) (*Result, error) {
 	return &Result{Type: NodeSetResult, NodeSet: result}, nil
 }
 
-// stringValue returns the string-value of a node per XPath spec.
-func stringValue(n helium.Node) string {
-	// Check Attribute by type assertion first since etype may not be set
-	if attr, ok := n.(*helium.Attribute); ok {
-		return attr.Value()
-	}
-	switch n.Type() {
-	case helium.DocumentNode, helium.ElementNode:
-		// XPath spec 5.2: string-value of element/document is the
-		// concatenation of string-values of all text node descendants.
-		var b strings.Builder
-		collectTextDescendants(n, &b)
-		return b.String()
-	case helium.TextNode, helium.CDATASectionNode:
-		return string(n.Content())
-	case helium.CommentNode:
-		return string(n.Content())
-	case helium.ProcessingInstructionNode:
-		return string(n.Content())
-	case helium.NamespaceNode:
-		return string(n.Content())
-	}
-	return ""
+// documentRoot returns the owning Document or the topmost ancestor.
+func documentRoot(n helium.Node) helium.Node {
+	return ixpath.DocumentRoot(n)
 }
 
-// collectTextDescendants recursively collects text from Text and CDATA descendants.
-func collectTextDescendants(n helium.Node, b *strings.Builder) {
-	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
-		switch c.Type() {
-		case helium.TextNode, helium.CDATASectionNode:
-			b.Write(c.Content())
-		default:
-			collectTextDescendants(c, b)
-		}
-	}
+// stringValue returns the string-value of a node per XPath spec.
+func stringValue(n helium.Node) string {
+	return ixpath.StringValue(n)
+}
+
+// localNameOf returns the local name of any node type.
+func localNameOf(n helium.Node) string {
+	return ixpath.LocalNameOf(n)
+}
+
+// nodeNamespaceURI returns the namespace URI of any node type.
+func nodeNamespaceURI(n helium.Node) string {
+	return ixpath.NodeNamespaceURI(n)
 }
 
 // resultToString converts any Result to a string per XPath spec.
@@ -886,7 +731,7 @@ func resultToString(r *Result) string {
 		if len(r.NodeSet) == 0 {
 			return ""
 		}
-		return stringValue(r.NodeSet[0])
+		return ixpath.StringValue(r.NodeSet[0])
 	}
 	return ""
 }
@@ -1008,65 +853,13 @@ func trimNumberTrailingZeros(s string) string {
 		return s
 	}
 
-	// Walk backwards past trailing zeros.
 	end := len(mantissa)
 	for end > dotIdx+1 && mantissa[end-1] == '0' {
 		end--
 	}
-	// If only the dot remains, remove it too.
 	if mantissa[end-1] == '.' {
 		end--
 	}
 
 	return mantissa[:end] + exponent
 }
-
-// nsNodeKey identifies a namespace node by its parent element and prefix.
-// NamespaceNodeWrapper objects are created fresh each time the namespace axis
-// is traversed, so pointer-based identity fails for deduplication. We use
-// value-based identity (parent pointer + prefix string) instead.
-type nsNodeKey struct {
-	parent helium.Node
-	prefix string
-}
-
-// mergeNodeSets merges two node sets, deduplicating by identity,
-// and sorting in document order.
-func mergeNodeSets(a, b []helium.Node, cache *docOrderCache) ([]helium.Node, error) {
-	seen := make(map[helium.Node]bool, len(a)+len(b))
-	nsKeys := make(map[nsNodeKey]bool)
-	var result []helium.Node
-
-	addNode := func(n helium.Node) {
-		if seen[n] {
-			return
-		}
-		if n.Type() == helium.NamespaceNode {
-			key := nsNodeKey{parent: n.Parent(), prefix: n.Name()}
-			if nsKeys[key] {
-				return
-			}
-			nsKeys[key] = true
-		}
-		seen[n] = true
-		result = append(result, n)
-	}
-
-	for _, n := range a {
-		addNode(n)
-	}
-	for _, n := range b {
-		addNode(n)
-	}
-	if len(result) > maxNodeSetLength {
-		return nil, ErrNodeSetLimit
-	}
-	if len(result) > 0 {
-		cache.buildFrom(documentRoot(result[0]))
-	}
-	sort.SliceStable(result, func(i, j int) bool {
-		return cache.position(result[i]) < cache.position(result[j])
-	})
-	return result, nil
-}
-

@@ -1,0 +1,733 @@
+package xpath3
+
+import (
+	"context"
+	"encoding/hex"
+	"fmt"
+	"maps"
+	"math"
+	"math/big"
+	"strings"
+	"time"
+
+	"github.com/lestrrat-go/helium"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
+)
+
+// Item is the interface implemented by all XPath 3.1 item types.
+type Item interface {
+	itemTag()
+}
+
+// Sequence is an ordered collection of items.
+type Sequence []Item
+
+func cloneSequence(seq Sequence) Sequence {
+	if seq == nil {
+		return nil
+	}
+	return append(Sequence(nil), seq...)
+}
+
+func cloneSequences(seqs []Sequence) []Sequence {
+	if seqs == nil {
+		return nil
+	}
+	cloned := make([]Sequence, len(seqs))
+	for i, seq := range seqs {
+		cloned[i] = cloneSequence(seq)
+	}
+	return cloned
+}
+
+// --- NodeItem ---
+
+// NodeItem wraps a helium.Node as an XPath item.
+type NodeItem struct {
+	Node helium.Node
+}
+
+func (NodeItem) itemTag() {}
+
+// --- AtomicValue ---
+
+// Atomic type name constants matching XSD types.
+const (
+	TypeString            = "xs:string"
+	TypeInteger           = "xs:integer"
+	TypeDecimal           = "xs:decimal"
+	TypeDouble            = "xs:double"
+	TypeFloat             = "xs:float"
+	TypeBoolean           = "xs:boolean"
+	TypeDate              = "xs:date"
+	TypeDateTime          = "xs:dateTime"
+	TypeTime              = "xs:time"
+	TypeDuration          = "xs:duration"
+	TypeDayTimeDuration   = "xs:dayTimeDuration"
+	TypeYearMonthDuration = "xs:yearMonthDuration"
+	TypeAnyURI            = "xs:anyURI"
+	TypeQName             = "xs:QName"
+	TypeBase64Binary      = "xs:base64Binary"
+	TypeHexBinary         = "xs:hexBinary"
+	TypeUntypedAtomic     = "xs:untypedAtomic"
+	TypeAnyAtomicType     = "xs:anyAtomicType"
+
+	// Derived integer types
+	TypeLong               = "xs:long"
+	TypeInt                = "xs:int"
+	TypeShort              = "xs:short"
+	TypeByte               = "xs:byte"
+	TypeUnsignedLong       = "xs:unsignedLong"
+	TypeUnsignedInt        = "xs:unsignedInt"
+	TypeUnsignedShort      = "xs:unsignedShort"
+	TypeUnsignedByte       = "xs:unsignedByte"
+	TypeNonNegativeInteger = "xs:nonNegativeInteger"
+	TypeNonPositiveInteger = "xs:nonPositiveInteger"
+	TypePositiveInteger    = "xs:positiveInteger"
+	TypeNegativeInteger    = "xs:negativeInteger"
+
+	// Derived string types
+	TypeNormalizedString = "xs:normalizedString"
+	TypeToken            = "xs:token"
+	TypeLanguage         = "xs:language"
+	TypeName             = "xs:Name"
+	TypeNCName           = "xs:NCName"
+	TypeNMTOKEN          = "xs:NMTOKEN"
+	TypeNMTOKENS         = "xs:NMTOKENS"
+	TypeENTITY           = "xs:ENTITY"
+	TypeID               = "xs:ID"
+	TypeIDREF            = "xs:IDREF"
+	TypeIDREFS           = "xs:IDREFS"
+	TypeENTITIES         = "xs:ENTITIES"
+
+	// Gregorian date part types
+	TypeGDay       = "xs:gDay"
+	TypeGMonth     = "xs:gMonth"
+	TypeGMonthDay  = "xs:gMonthDay"
+	TypeGYear      = "xs:gYear"
+	TypeGYearMonth = "xs:gYearMonth"
+
+	// Other derived types
+	TypeDateTimeStamp = "xs:dateTimeStamp"
+	TypeError         = "xs:error"
+	TypeNumeric       = "xs:numeric"
+)
+
+// isSubtypeOf returns true if actualType is the same as or a subtype of targetType
+// per the XSD type hierarchy.
+func isSubtypeOf(actualType, targetType string) bool {
+	if actualType == targetType {
+		return true
+	}
+	// xs:numeric is a union of xs:integer, xs:decimal, xs:float, xs:double
+	if targetType == TypeNumeric {
+		return isSubtypeOf(actualType, TypeDecimal) ||
+			actualType == TypeFloat || actualType == TypeDouble
+	}
+	// Walk up the type hierarchy
+	cur := actualType
+	for {
+		parent, ok := xsdTypeParent[cur]
+		if !ok {
+			return false
+		}
+		if parent == targetType {
+			return true
+		}
+		cur = parent
+	}
+}
+
+// xsdTypeParent maps each derived XSD type to its parent (base) type.
+var xsdTypeParent = map[string]string{
+	// Numeric hierarchy
+	TypeByte:               TypeShort,
+	TypeShort:              TypeInt,
+	TypeInt:                TypeLong,
+	TypeLong:               TypeInteger,
+	TypeUnsignedByte:       TypeUnsignedShort,
+	TypeUnsignedShort:      TypeUnsignedInt,
+	TypeUnsignedInt:        TypeUnsignedLong,
+	TypeUnsignedLong:       TypeNonNegativeInteger,
+	TypePositiveInteger:    TypeNonNegativeInteger,
+	TypeNonNegativeInteger: TypeInteger,
+	TypeNegativeInteger:    TypeNonPositiveInteger,
+	TypeNonPositiveInteger: TypeInteger,
+	TypeInteger:            TypeDecimal,
+	TypeDecimal:            TypeAnyAtomicType,
+	TypeFloat:              TypeAnyAtomicType,
+	TypeDouble:             TypeAnyAtomicType,
+	// Duration hierarchy
+	TypeDayTimeDuration:   TypeDuration,
+	TypeYearMonthDuration: TypeDuration,
+	TypeDuration:          TypeAnyAtomicType,
+	// Date/time hierarchy
+	TypeDateTimeStamp: TypeDateTime,
+	TypeDateTime:      TypeAnyAtomicType,
+	TypeDate:          TypeAnyAtomicType,
+	TypeTime:          TypeAnyAtomicType,
+	// String hierarchy
+	TypeNormalizedString: TypeString,
+	TypeToken:            TypeNormalizedString,
+	TypeLanguage:         TypeToken,
+	TypeNMTOKEN:          TypeToken,
+	TypeName:             TypeToken,
+	TypeNCName:           TypeName,
+	TypeID:               TypeNCName,
+	TypeIDREF:            TypeNCName,
+	TypeENTITY:           TypeNCName,
+	TypeString:           TypeAnyAtomicType,
+	// Other types
+	TypeBoolean:       TypeAnyAtomicType,
+	TypeAnyURI:        TypeAnyAtomicType,
+	TypeQName:         TypeAnyAtomicType,
+	TypeBase64Binary:  TypeAnyAtomicType,
+	TypeHexBinary:     TypeAnyAtomicType,
+	TypeUntypedAtomic: TypeAnyAtomicType,
+	// Gregorian types
+	TypeGDay:       TypeAnyAtomicType,
+	TypeGMonth:     TypeAnyAtomicType,
+	TypeGMonthDay:  TypeAnyAtomicType,
+	TypeGYear:      TypeAnyAtomicType,
+	TypeGYearMonth: TypeAnyAtomicType,
+}
+
+// AtomicValue represents an XSD atomic value with its type name.
+type AtomicValue struct {
+	TypeName string // e.g. "xs:string", "xs:integer"
+	Value    any    // Go native backing value (see type table in design doc)
+}
+
+func (AtomicValue) itemTag() {}
+
+// StringVal returns the backing string value. Panics if not a string-backed type.
+func (a AtomicValue) StringVal() string {
+	return a.Value.(string)
+}
+
+// IntegerVal returns the backing int64 value. Panics if the value exceeds int64 range.
+func (a AtomicValue) IntegerVal() int64 {
+	return a.Value.(*big.Int).Int64()
+}
+
+// BigInt returns the backing *big.Int value.
+func (a AtomicValue) BigInt() *big.Int {
+	return a.Value.(*big.Int)
+}
+
+// BigRat returns the backing *big.Rat value.
+func (a AtomicValue) BigRat() *big.Rat {
+	return a.Value.(*big.Rat)
+}
+
+// DoubleVal returns the backing float64 value (extracts from *FloatValue).
+func (a AtomicValue) DoubleVal() float64 {
+	return a.Value.(*FloatValue).Float64()
+}
+
+// FloatVal returns the backing *FloatValue.
+func (a AtomicValue) FloatVal() *FloatValue {
+	return a.Value.(*FloatValue)
+}
+
+// BooleanVal returns the backing bool value.
+func (a AtomicValue) BooleanVal() bool {
+	return a.Value.(bool)
+}
+
+// TimeVal returns the backing time.Time value.
+func (a AtomicValue) TimeVal() time.Time {
+	return a.Value.(time.Time)
+}
+
+// DurationVal returns the backing Duration value.
+func (a AtomicValue) DurationVal() Duration {
+	return a.Value.(Duration)
+}
+
+// BytesVal returns the backing []byte value.
+func (a AtomicValue) BytesVal() []byte {
+	return a.Value.([]byte)
+}
+
+// QNameVal returns the backing QNameValue.
+func (a AtomicValue) QNameVal() QNameValue {
+	return a.Value.(QNameValue)
+}
+
+// IsNumeric returns true if the type is xs:integer (or derived), xs:decimal, xs:double, or xs:float.
+func (a AtomicValue) IsNumeric() bool {
+	if isIntegerDerived(a.TypeName) {
+		return true
+	}
+	switch a.TypeName {
+	case TypeDecimal, TypeDouble, TypeFloat:
+		return true
+	}
+	return false
+}
+
+// ToFloat64 converts any numeric atomic value to float64.
+func (a AtomicValue) ToFloat64() float64 {
+	if isIntegerDerived(a.TypeName) {
+		n, ok := a.Value.(*big.Int)
+		if !ok {
+			return 0
+		}
+		f, _ := new(big.Float).SetInt(n).Float64()
+		return f
+	}
+	switch a.TypeName {
+	case TypeDouble, TypeFloat:
+		return a.Value.(*FloatValue).Float64()
+	case TypeDecimal:
+		r, ok := a.Value.(*big.Rat)
+		if !ok {
+			return 0
+		}
+		f, _ := r.Float64()
+		return f
+	}
+	return 0
+}
+
+// String returns a human-readable representation.
+func (a AtomicValue) String() string {
+	return fmt.Sprintf("%s(%v)", a.TypeName, a.Value)
+}
+
+// DecimalToString returns the canonical XSD decimal string for a *big.Rat.
+func DecimalToString(r *big.Rat) string {
+	if r.IsInt() {
+		return r.Num().String()
+	}
+	// Use enough precision for exact representation, then trim trailing zeros
+	n, exact := r.FloatPrec()
+	if !exact {
+		// Not exactly representable in decimal; use high precision
+		s := r.FloatString(20)
+		s = strings.TrimRight(s, "0")
+		if strings.HasSuffix(s, ".") {
+			s += "0"
+		}
+		return s
+	}
+	s := r.FloatString(n)
+	s = strings.TrimRight(s, "0")
+	if strings.HasSuffix(s, ".") {
+		s += "0"
+	}
+	return s
+}
+
+// --- Supporting Types ---
+
+// QNameValue holds the components of an xs:QName value.
+type QNameValue struct {
+	Prefix string
+	Local  string
+	URI    string
+}
+
+// Duration represents an XSD duration (used for xs:duration, xs:dayTimeDuration,
+// xs:yearMonthDuration).
+// noTZLocation is a sentinel timezone used for XSD date/time values parsed
+// without an explicit timezone. Go's time.UTC cannot be used as a sentinel
+// because time.Parse returns time.UTC for inputs without a timezone suffix,
+// making it impossible to distinguish "12:00:00" (no TZ) from "12:00:00Z" (explicit UTC).
+// This location has offset 0 but is a distinct pointer from time.UTC.
+var noTZLocation = time.FixedZone("noTZ", 0)
+
+// HasTimezone returns true if the time value has an explicit timezone
+// (i.e., was NOT parsed from a timezone-less XSD lexical form).
+func HasTimezone(t time.Time) bool {
+	return t.Location() != noTZLocation
+}
+
+type Duration struct {
+	Months   int      // total months (years*12 + months)
+	Seconds  float64  // total seconds (days*86400 + hours*3600 + minutes*60 + seconds)
+	FracSec  *big.Rat // exact fractional seconds component (the part after decimal in 'S'), nil if integer
+	Negative bool
+}
+
+// --- FunctionItem ---
+
+// FunctionItem represents a callable function value (inline, named ref, partial application).
+type FunctionItem struct {
+	Arity      int
+	Name       string // empty for anonymous
+	Namespace  string // namespace URI (empty for anonymous or default)
+	Invoke     func(ctx context.Context, args []Sequence) (Sequence, error)
+	ParamTypes []SequenceType // parameter type annotations (nil if untyped)
+	ReturnType *SequenceType  // return type annotation (nil if untyped)
+}
+
+func (FunctionItem) itemTag() {}
+
+// --- MapItem ---
+
+// MapItem is an immutable key-value map. Put returns a new map (copy-on-write).
+type MapItem struct {
+	entries []mapEntry
+	index   map[mapKey]int // index into entries
+}
+
+func (MapItem) itemTag() {}
+
+// MapEntry is a public key-value pair for constructing maps.
+type MapEntry struct {
+	Key   AtomicValue
+	Value Sequence
+}
+
+type mapEntry struct {
+	key   AtomicValue
+	value Sequence
+}
+
+// mapKey is the normalized key used for O(1) lookup in the index map.
+// time.Time is normalized to UTC RFC3339Nano string, []byte to hex string.
+type mapKey struct {
+	typeName string
+	value    any // only types with Go map equality: string, int64, float64, bool
+}
+
+func normalizeMapKey(key AtomicValue) mapKey {
+	// Per XPath 3.1 spec, map keys use value-based equality (eq operator semantics).
+	// Numerics that compare equal are the same key: xs:integer(1), xs:double(1.0e0),
+	// xs:float(1.0), and xs:decimal(1.0) all refer to the same map entry.
+	// xs:string and xs:untypedAtomic are compared as strings.
+	// xs:anyURI promotes to xs:string for comparison.
+	tn := key.TypeName
+
+	// Normalize string-like types: xs:untypedAtomic and xs:anyURI promote to xs:string
+	if tn == TypeUntypedAtomic || tn == TypeAnyURI {
+		return mapKey{typeName: TypeString, value: key.Value}
+	}
+
+	// Normalize all numeric types to a common representation using exact
+	// rational arithmetic so that precision is not lost across types.
+	if key.IsNumeric() {
+		f := key.ToFloat64()
+		if math.IsNaN(f) {
+			return mapKey{typeName: "numeric", value: "NaN"}
+		}
+		if math.IsInf(f, 1) {
+			return mapKey{typeName: "numeric", value: "+Inf"}
+		}
+		if math.IsInf(f, -1) {
+			return mapKey{typeName: "numeric", value: "-Inf"}
+		}
+		// Convert to big.Rat for exact comparison across numeric types
+		var r *big.Rat
+		switch key.TypeName {
+		case TypeDecimal:
+			r = new(big.Rat).Set(key.BigRat())
+		case TypeInteger:
+			r = new(big.Rat).SetInt(key.BigInt())
+		default: // float, double
+			r = new(big.Rat).SetFloat64(f)
+		}
+		return mapKey{typeName: "numeric", value: r.RatString()}
+	}
+
+	// Normalize duration types: xs:duration, xs:yearMonthDuration, xs:dayTimeDuration
+	// that have equal values should be the same key
+	if tn == TypeDuration || tn == TypeYearMonthDuration || tn == TypeDayTimeDuration {
+		tn = TypeDuration
+	}
+
+	switch v := key.Value.(type) {
+	case time.Time:
+		return mapKey{typeName: tn, value: v.UTC().Format(time.RFC3339Nano)}
+	case []byte:
+		return mapKey{typeName: tn, value: hex.EncodeToString(v)}
+	case QNameValue:
+		// QName equality is based on URI and local name, not prefix
+		return mapKey{typeName: tn, value: v.URI + "\x00" + v.Local}
+	default:
+		return mapKey{typeName: tn, value: key.Value}
+	}
+}
+
+// NewMap creates a MapItem from a slice of MapEntry.
+func NewMap(entries []MapEntry) MapItem {
+	m := MapItem{
+		entries: make([]mapEntry, len(entries)),
+		index:   make(map[mapKey]int, len(entries)),
+	}
+	for i, e := range entries {
+		m.entries[i] = mapEntry{key: e.Key, value: cloneSequence(e.Value)}
+		m.index[normalizeMapKey(e.Key)] = i
+	}
+	return m
+}
+
+// Get returns the value associated with key, or (nil, false) if not found.
+func (m MapItem) Get(key AtomicValue) (Sequence, bool) {
+	idx, ok := m.index[normalizeMapKey(key)]
+	if !ok {
+		return nil, false
+	}
+	return cloneSequence(m.entries[idx].value), true
+}
+
+// Put returns a new map with the given key-value pair added or replaced.
+func (m MapItem) Put(key AtomicValue, value Sequence) MapItem {
+	nk := normalizeMapKey(key)
+	newEntries := make([]mapEntry, len(m.entries))
+	copy(newEntries, m.entries)
+	newIndex := make(map[mapKey]int, len(m.index)+1)
+	maps.Copy(newIndex, m.index)
+
+	if idx, ok := newIndex[nk]; ok {
+		newEntries[idx] = mapEntry{key: key, value: cloneSequence(value)}
+	} else {
+		newEntries = append(newEntries, mapEntry{key: key, value: cloneSequence(value)})
+		newIndex[nk] = len(newEntries) - 1
+	}
+	return MapItem{entries: newEntries, index: newIndex}
+}
+
+// Contains returns true if the map contains the given key.
+func (m MapItem) Contains(key AtomicValue) bool {
+	_, ok := m.index[normalizeMapKey(key)]
+	return ok
+}
+
+// Keys returns all keys in insertion order.
+func (m MapItem) Keys() []AtomicValue {
+	keys := make([]AtomicValue, len(m.entries))
+	for i, e := range m.entries {
+		keys[i] = e.key
+	}
+	return keys
+}
+
+// Size returns the number of entries.
+func (m MapItem) Size() int {
+	return len(m.entries)
+}
+
+// ForEach calls fn for each entry in insertion order. Stops on first error.
+func (m MapItem) ForEach(fn func(AtomicValue, Sequence) error) error {
+	for _, e := range m.entries {
+		if err := fn(e.key, e.value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Remove returns a new map with the given key removed.
+func (m MapItem) Remove(key AtomicValue) MapItem {
+	nk := normalizeMapKey(key)
+	idx, ok := m.index[nk]
+	if !ok {
+		return m
+	}
+	newEntries := make([]mapEntry, 0, len(m.entries)-1)
+	newIndex := make(map[mapKey]int, len(m.index)-1)
+	for i, e := range m.entries {
+		if i == idx {
+			continue
+		}
+		newIndex[normalizeMapKey(e.key)] = len(newEntries)
+		newEntries = append(newEntries, e)
+	}
+	return MapItem{entries: newEntries, index: newIndex}
+}
+
+// MergePolicy controls how duplicate keys are handled in MergeMaps.
+type MergePolicy int
+
+const (
+	MergeUseFirst MergePolicy = iota
+	MergeUseLast
+	MergeReject
+	MergeCombine
+)
+
+// MergeMaps merges multiple maps according to the given policy.
+func MergeMaps(maps []MapItem, policy MergePolicy) (MapItem, error) {
+	var allEntries []mapEntry
+	seen := map[mapKey]int{}
+
+	for _, m := range maps {
+		for _, e := range m.entries {
+			nk := normalizeMapKey(e.key)
+			if idx, ok := seen[nk]; ok {
+				switch policy {
+				case MergeUseFirst:
+					continue
+				case MergeUseLast:
+					allEntries[idx] = mapEntry{key: e.key, value: cloneSequence(e.value)}
+					continue
+				case MergeReject:
+					return MapItem{}, &XPathError{
+						Code:    "FOJS0003",
+						Message: fmt.Sprintf("duplicate key in map merge: %v", e.key.Value),
+					}
+				case MergeCombine:
+					// Combine: concatenate values
+					allEntries[idx] = mapEntry{
+						key:   allEntries[idx].key,
+						value: append(cloneSequence(allEntries[idx].value), e.value...),
+					}
+					continue
+				}
+			}
+			seen[nk] = len(allEntries)
+			allEntries = append(allEntries, mapEntry{key: e.key, value: cloneSequence(e.value)})
+		}
+	}
+
+	newIndex := make(map[mapKey]int, len(allEntries))
+	for i, e := range allEntries {
+		newIndex[normalizeMapKey(e.key)] = i
+	}
+	return MapItem{entries: allEntries, index: newIndex}, nil
+}
+
+// --- ArrayItem ---
+
+// ArrayItem is an immutable indexed sequence of members. Uses 1-based indexing.
+type ArrayItem struct {
+	members []Sequence
+}
+
+func (ArrayItem) itemTag() {}
+
+// NewArray creates an ArrayItem from a slice of Sequence members.
+func NewArray(members []Sequence) ArrayItem {
+	return ArrayItem{members: cloneSequences(members)}
+}
+
+// Get returns the member at the given 1-based index.
+func (a ArrayItem) Get(index int) (Sequence, error) {
+	if index < 1 || index > len(a.members) {
+		return nil, &XPathError{
+			Code:    errCodeFOAY0001,
+			Message: fmt.Sprintf("array index %d out of bounds (size %d)", index, len(a.members)),
+		}
+	}
+	return cloneSequence(a.members[index-1]), nil
+}
+
+// Size returns the number of members.
+func (a ArrayItem) Size() int {
+	return len(a.members)
+}
+
+// Put returns a new array with the member at the given 1-based index replaced.
+func (a ArrayItem) Put(index int, value Sequence) (ArrayItem, error) {
+	if index < 1 || index > len(a.members) {
+		return ArrayItem{}, &XPathError{
+			Code:    errCodeFOAY0001,
+			Message: fmt.Sprintf("array index %d out of bounds (size %d)", index, len(a.members)),
+		}
+	}
+	newMembers := make([]Sequence, len(a.members))
+	copy(newMembers, a.members)
+	newMembers[index-1] = cloneSequence(value)
+	return ArrayItem{members: newMembers}, nil
+}
+
+// Append returns a new array with the value appended.
+func (a ArrayItem) Append(value Sequence) ArrayItem {
+	newMembers := make([]Sequence, len(a.members)+1)
+	copy(newMembers, a.members)
+	newMembers[len(a.members)] = cloneSequence(value)
+	return ArrayItem{members: newMembers}
+}
+
+// Members returns all members (defensively cloned).
+func (a ArrayItem) Members() []Sequence {
+	return cloneSequences(a.members)
+}
+
+// members0 returns the underlying members slice without cloning.
+// Callers must not mutate the returned slices.
+func (a ArrayItem) members0() []Sequence {
+	return a.members
+}
+
+// get0 returns the member at the given 1-based index without cloning.
+// Callers must not mutate the returned sequence.
+func (a ArrayItem) get0(index int) (Sequence, error) {
+	if index < 1 || index > len(a.members) {
+		return nil, &XPathError{
+			Code:    errCodeFOAY0001,
+			Message: fmt.Sprintf("array index %d out of bounds (size %d)", index, len(a.members)),
+		}
+	}
+	return a.members[index-1], nil
+}
+
+// SubArray returns a new array from start to end (1-based, inclusive).
+func (a ArrayItem) SubArray(start, length int) (ArrayItem, error) {
+	if start < 1 || length < 0 || start+length-1 > len(a.members) {
+		return ArrayItem{}, &XPathError{
+			Code:    errCodeFOAY0001,
+			Message: fmt.Sprintf("array subarray(%d, %d) out of bounds (size %d)", start, length, len(a.members)),
+		}
+	}
+	newMembers := make([]Sequence, length)
+	copy(newMembers, a.members[start-1:start-1+length])
+	return ArrayItem{members: newMembers}, nil
+}
+
+// Flatten returns all members concatenated into a single sequence.
+// Nested arrays are recursively flattened per XPath 3.1 spec.
+func (a ArrayItem) Flatten() Sequence {
+	var result Sequence
+	for _, m := range a.members {
+		for _, item := range m {
+			if nested, ok := item.(ArrayItem); ok {
+				result = append(result, nested.Flatten()...)
+			} else {
+				result = append(result, item)
+			}
+		}
+	}
+	return result
+}
+
+// --- Atomization ---
+
+// AtomizeItem converts a single item to an atomic value per XPath 3.1 Section 2.6.2.
+func AtomizeItem(item Item) (AtomicValue, error) {
+	switch v := item.(type) {
+	case AtomicValue:
+		return v, nil
+	case NodeItem:
+		return AtomicValue{
+			TypeName: TypeUntypedAtomic,
+			Value:    ixpath.StringValue(v.Node),
+		}, nil
+	case ArrayItem:
+		// XPath 3.1: atomizing an array atomizes each member and concatenates
+		if v.Size() == 0 {
+			return AtomicValue{}, &XPathError{
+				Code:    "FOTY0013",
+				Message: "cannot atomize empty array to single atomic value",
+			}
+		}
+		if v.Size() == 1 {
+			member, _ := v.Get(1)
+			if len(member) == 1 {
+				return AtomizeItem(member[0])
+			}
+		}
+		return AtomicValue{}, &XPathError{
+			Code:    "FOTY0013",
+			Message: "cannot atomize array with multiple members to single atomic value",
+		}
+	default:
+		return AtomicValue{}, &XPathError{
+			Code:    "FOTY0013",
+			Message: fmt.Sprintf("cannot atomize %T", item),
+		}
+	}
+}

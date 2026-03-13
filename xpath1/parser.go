@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
 const maxParseDepth = 5000
@@ -488,7 +490,7 @@ func (p *parser) parseStep() (Step, error) {
 		// Check if this is an axis specifier (Name '::')
 		p.lexer.Next()
 		if p.lexer.Peek().Type == TokenColonColon {
-			if a, ok := axisFromName(tok.Value); ok {
+			if a, ok := ixpath.AxisFromName(tok.Value); ok {
 				axis = a
 				p.lexer.Next() // consume '::'
 			} else {

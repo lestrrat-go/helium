@@ -1,0 +1,221 @@
+package xpath3
+
+import (
+	"context"
+	"io"
+	"maps"
+	"net/http"
+	"time"
+)
+
+type contextKey struct{}
+
+// fnContextKey is used exclusively by the unexported withFnContext/getFnContext
+// pair to pass evalContext to built-in function implementations. It is never
+// exposed to external callers.
+type fnContextKey struct{}
+
+// QualifiedName identifies a function in a specific namespace.
+type QualifiedName struct {
+	URI  string
+	Name string
+}
+
+// URIResolver resolves URIs to readable content for fn:unparsed-text and fn:doc.
+// The resolved URI is the absolute URI after base URI resolution.
+type URIResolver interface {
+	ResolveURI(uri string) (io.ReadCloser, error)
+}
+
+// CollectionResolver resolves fn:collection and fn:uri-collection lookups.
+// The empty string identifies the default collection.
+type CollectionResolver interface {
+	ResolveCollection(uri string) (Sequence, error)
+	ResolveURICollection(uri string) ([]string, error)
+}
+
+// Context holds XPath evaluation settings provided by the caller.
+type Context struct {
+	namespaces         map[string]string
+	variables          map[string]Sequence
+	varScope           *variableScope // prebuilt from variables, reused across evaluations
+	functions          map[string]Function
+	functionsNS        map[QualifiedName]Function
+	opLimit            int
+	implicitTimezone   *time.Location
+	defaultLanguage    string
+	defaultCollation   string
+	defaultDecimal     *DecimalFormat
+	decimalFormats     map[QualifiedName]DecimalFormat
+	baseURI            string
+	uriResolver        URIResolver
+	collectionResolver CollectionResolver
+	httpClient         *http.Client
+}
+
+// ContextOption configures a Context.
+type ContextOption func(*Context)
+
+// WithNamespaces binds namespace prefixes to URIs for the evaluation.
+// The map is defensively copied to prevent caller mutation from affecting evaluation.
+func WithNamespaces(ns map[string]string) ContextOption {
+	return func(c *Context) {
+		c.namespaces = maps.Clone(ns)
+	}
+}
+
+// WithVariables binds variable names to pre-constructed Sequence values.
+// The map is defensively copied to prevent caller mutation from affecting evaluation.
+func WithVariables(vars map[string]Sequence) ContextOption {
+	return func(c *Context) {
+		c.variables = cloneVariableMap(vars)
+	}
+}
+
+// WithOpLimit sets the maximum number of operations before the evaluator
+// returns ErrOpLimit. Zero means unlimited.
+func WithOpLimit(limit int) ContextOption {
+	return func(c *Context) {
+		c.opLimit = limit
+	}
+}
+
+// WithFunctions registers user-defined functions by local name.
+// The map is defensively copied to prevent caller mutation from affecting evaluation.
+func WithFunctions(fns map[string]Function) ContextOption {
+	return func(c *Context) {
+		c.functions = maps.Clone(fns)
+	}
+}
+
+// WithFunctionsNS registers user-defined functions by qualified name.
+// The map is defensively copied to prevent caller mutation from affecting evaluation.
+func WithFunctionsNS(fns map[QualifiedName]Function) ContextOption {
+	return func(c *Context) {
+		c.functionsNS = maps.Clone(fns)
+	}
+}
+
+// WithImplicitTimezone sets the implicit timezone for the dynamic context.
+// This is used by functions like fn:adjust-dateTime-to-timezone when called
+// with a single argument. If not set, the system local timezone is used.
+func WithImplicitTimezone(loc *time.Location) ContextOption {
+	return func(c *Context) {
+		c.implicitTimezone = loc
+	}
+}
+
+// WithDefaultLanguage sets the dynamic default language used by
+// fn:default-language and formatting functions when no language argument
+// is supplied.
+func WithDefaultLanguage(lang string) ContextOption {
+	return func(c *Context) {
+		c.defaultLanguage = lang
+	}
+}
+
+// WithDefaultCollation sets the default collation URI used by string
+// comparison and ordering operations when no explicit collation argument is
+// supplied. Use a URI understood by the evaluator's collation registry.
+func WithDefaultCollation(uri string) ContextOption {
+	return func(c *Context) {
+		c.defaultCollation = uri
+	}
+}
+
+// WithDefaultDecimalFormat sets the unnamed decimal format used by
+// fn:format-number and related formatting features when no named decimal
+// format is requested. The DecimalFormat value is copied before storage.
+func WithDefaultDecimalFormat(df DecimalFormat) ContextOption {
+	return func(c *Context) {
+		cp := df
+		c.defaultDecimal = &cp
+	}
+}
+
+// WithNamedDecimalFormats registers named decimal formats keyed by expanded
+// QName. These formats are used when a formatting expression references a
+// specific decimal format name. The map is defensively copied before storage.
+func WithNamedDecimalFormats(dfs map[QualifiedName]DecimalFormat) ContextOption {
+	return func(c *Context) {
+		c.decimalFormats = maps.Clone(dfs)
+	}
+}
+
+// WithBaseURI sets the static base URI for the evaluation context.
+// This is used for resolving relative URIs in fn:unparsed-text, fn:doc, etc.
+func WithBaseURI(uri string) ContextOption {
+	return func(c *Context) {
+		c.baseURI = uri
+	}
+}
+
+// WithURIResolver sets a custom URI resolver for functions that load external
+// resources such as fn:unparsed-text and fn:doc.
+func WithURIResolver(r URIResolver) ContextOption {
+	return func(c *Context) {
+		c.uriResolver = r
+	}
+}
+
+// WithCollectionResolver sets a custom resolver for fn:collection and
+// fn:uri-collection.
+func WithCollectionResolver(r CollectionResolver) ContextOption {
+	return func(c *Context) {
+		c.collectionResolver = r
+	}
+}
+
+// WithHTTPClient sets the HTTP client used for fetching http:// and https://
+// resources in fn:unparsed-text and similar functions. If not set, HTTP URIs
+// are not supported (unless a URIResolver handles them).
+func WithHTTPClient(client *http.Client) ContextOption {
+	return func(c *Context) {
+		c.httpClient = client
+	}
+}
+
+// NewContext creates a new context.Context carrying XPath evaluation settings.
+func NewContext(ctx context.Context, opts ...ContextOption) context.Context {
+	c := &Context{}
+	for _, opt := range opts {
+		opt(c)
+	}
+	// Prebuild immutable variable scope for reuse across evaluations.
+	// The variables map was defensively copied by WithVariables, so the
+	// scope can safely be shared.
+	if len(c.variables) > 0 {
+		c.varScope = newVariableScope(c.variables)
+	}
+	return context.WithValue(ctx, contextKey{}, c)
+}
+
+// GetContext retrieves the XPath Context from a context.Context, or nil if absent.
+func GetContext(ctx context.Context) *Context {
+	v, _ := ctx.Value(contextKey{}).(*Context)
+	return v
+}
+
+// withFnContext stores the evalContext in a context.Context so built-in
+// functions can access the evaluation state (position, size, context node).
+func withFnContext(ctx context.Context, ec *evalContext) context.Context {
+	return context.WithValue(ctx, fnContextKey{}, ec)
+}
+
+// getFnContext retrieves the evalContext stashed by the evaluator.
+// Returns nil if not in an evaluation.
+func getFnContext(ctx context.Context) *evalContext {
+	ec, _ := ctx.Value(fnContextKey{}).(*evalContext)
+	return ec
+}
+
+func cloneVariableMap(vars map[string]Sequence) map[string]Sequence {
+	if vars == nil {
+		return nil
+	}
+	cloned := make(map[string]Sequence, len(vars))
+	for name, seq := range vars {
+		cloned[name] = append(Sequence(nil), seq...)
+	}
+	return cloned
+}
