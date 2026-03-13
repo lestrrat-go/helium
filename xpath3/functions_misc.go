@@ -186,8 +186,8 @@ func fnDefaultLanguage(ctx context.Context, _ []Sequence) (Sequence, error) {
 
 func fnImplicitTimezone(ctx context.Context, _ []Sequence) (Sequence, error) {
 	var offset int
-	if ec := getFnContext(ctx); ec != nil && ec.implicitTimezone != nil {
-		_, offset = time.Now().In(ec.implicitTimezone).Zone()
+	if ec := getFnContext(ctx); ec != nil {
+		_, offset = ec.getCurrentTime().In(ec.getImplicitTimezone()).Zone()
 	} else {
 		_, offset = time.Now().Zone()
 	}
