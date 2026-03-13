@@ -187,7 +187,28 @@ func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
-		return SingleDouble(math.NaN()), nil
+		// Per F&O: empty sequence is treated as NaN for formatting, result is xs:string
+		a := AtomicValue{TypeName: TypeDouble, Value: NewDouble(math.NaN())}
+		picture, err := coerceArgToStringRequired(args[1])
+		if err != nil {
+			return nil, err
+		}
+		df := defaultDecimalFormat(ctx)
+		if len(args) > 2 && len(args[2]) > 0 {
+			formatName, fErr := coerceArgToString(args[2])
+			if fErr != nil {
+				return nil, fErr
+			}
+			df, err = resolveDecimalFormat(ctx, formatName)
+			if err != nil {
+				return nil, err
+			}
+		}
+		s, err := formatNumber(a, picture, df)
+		if err != nil {
+			return nil, err
+		}
+		return SingleString(s), nil
 	}
 	if len(args[0]) != 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "format-number() first argument must be a singleton numeric value"}

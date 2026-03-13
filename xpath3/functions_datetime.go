@@ -51,28 +51,58 @@ func init() {
 	registerFn("format-time", 2, 5, fnFormatTime)
 }
 
-func extractTime(seq Sequence) (time.Time, bool) {
+func extractTime(seq Sequence, allowedTypes ...string) (time.Time, bool, error) {
 	if len(seq) == 0 {
-		return time.Time{}, false
+		return time.Time{}, false, nil
 	}
 	a, err := AtomizeItem(seq[0])
 	if err != nil {
-		return time.Time{}, false
+		return time.Time{}, false, err
 	}
 	t, ok := a.Value.(time.Time)
-	return t, ok
+	if !ok {
+		return time.Time{}, false, &XPathError{Code: errCodeXPTY0004, Message: "expected " + allowedTypes[0] + ", got " + a.TypeName}
+	}
+	if len(allowedTypes) > 0 {
+		matched := false
+		for _, at := range allowedTypes {
+			if isSubtypeOf(a.TypeName, at) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return time.Time{}, false, &XPathError{Code: errCodeXPTY0004, Message: "expected " + allowedTypes[0] + ", got " + a.TypeName}
+		}
+	}
+	return t, true, nil
 }
 
-func extractDuration(seq Sequence) (Duration, bool) {
+func extractDuration(seq Sequence, allowedTypes ...string) (Duration, bool, error) {
 	if len(seq) == 0 {
-		return Duration{}, false
+		return Duration{}, false, nil
 	}
 	a, err := AtomizeItem(seq[0])
 	if err != nil {
-		return Duration{}, false
+		return Duration{}, false, err
 	}
 	d, ok := a.Value.(Duration)
-	return d, ok
+	if !ok {
+		return Duration{}, false, &XPathError{Code: errCodeXPTY0004, Message: "expected duration type, got " + a.TypeName}
+	}
+	if len(allowedTypes) > 0 {
+		matched := false
+		for _, at := range allowedTypes {
+			if isSubtypeOf(a.TypeName, at) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return Duration{}, false, &XPathError{Code: errCodeXPTY0004, Message: "expected " + allowedTypes[0] + ", got " + a.TypeName}
+		}
+	}
+	return d, true, nil
 }
 
 // --- Constructors ---
@@ -90,12 +120,12 @@ func fnDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	d, ok := dateA.Value.(time.Time)
-	if !ok {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "first arg must be xs:date"}
+	if !ok || dateA.TypeName != TypeDate {
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "first arg must be xs:date, got " + dateA.TypeName}
 	}
 	t, ok := timeA.Value.(time.Time)
-	if !ok {
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: "second arg must be xs:time"}
+	if !ok || timeA.TypeName != TypeTime {
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "second arg must be xs:time, got " + timeA.TypeName}
 	}
 
 	// Per XPath F&O 3.0 §5.2.1: determine timezone from arguments.
@@ -127,7 +157,10 @@ func fnDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 // --- dateTime accessors ---
 
 func fnYearFromDateTime(_ context.Context, args []Sequence) (Sequence, error) {
-	t, ok := extractTime(args[0])
+	t, ok, err := extractTime(args[0], TypeDateTime)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
@@ -135,7 +168,10 @@ func fnYearFromDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnMonthFromDateTime(_ context.Context, args []Sequence) (Sequence, error) {
-	t, ok := extractTime(args[0])
+	t, ok, err := extractTime(args[0], TypeDateTime)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
@@ -143,7 +179,10 @@ func fnMonthFromDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnDayFromDateTime(_ context.Context, args []Sequence) (Sequence, error) {
-	t, ok := extractTime(args[0])
+	t, ok, err := extractTime(args[0], TypeDateTime)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
@@ -151,7 +190,10 @@ func fnDayFromDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnHoursFromDateTime(_ context.Context, args []Sequence) (Sequence, error) {
-	t, ok := extractTime(args[0])
+	t, ok, err := extractTime(args[0], TypeDateTime)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
@@ -159,7 +201,10 @@ func fnHoursFromDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnMinutesFromDateTime(_ context.Context, args []Sequence) (Sequence, error) {
-	t, ok := extractTime(args[0])
+	t, ok, err := extractTime(args[0], TypeDateTime)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
@@ -167,7 +212,10 @@ func fnMinutesFromDateTime(_ context.Context, args []Sequence) (Sequence, error)
 }
 
 func fnSecondsFromDateTime(_ context.Context, args []Sequence) (Sequence, error) {
-	t, ok := extractTime(args[0])
+	t, ok, err := extractTime(args[0], TypeDateTime)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
@@ -176,7 +224,10 @@ func fnSecondsFromDateTime(_ context.Context, args []Sequence) (Sequence, error)
 }
 
 func fnTimezoneFromDateTime(_ context.Context, args []Sequence) (Sequence, error) {
-	t, ok := extractTime(args[0])
+	t, ok, err := extractTime(args[0], TypeDateTime)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
@@ -193,10 +244,13 @@ func fnTimezoneFromDateTime(_ context.Context, args []Sequence) (Sequence, error
 	return SingleAtomic(AtomicValue{TypeName: TypeDayTimeDuration, Value: d}), nil
 }
 
-// --- date accessors (reuse dateTime extractors) ---
+// --- date accessors ---
 
 func fnYearFromDate(_ context.Context, args []Sequence) (Sequence, error) {
-	t, ok := extractTime(args[0])
+	t, ok, err := extractTime(args[0], TypeDate)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
@@ -204,7 +258,10 @@ func fnYearFromDate(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnMonthFromDate(_ context.Context, args []Sequence) (Sequence, error) {
-	t, ok := extractTime(args[0])
+	t, ok, err := extractTime(args[0], TypeDate)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
@@ -212,39 +269,101 @@ func fnMonthFromDate(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnDayFromDate(_ context.Context, args []Sequence) (Sequence, error) {
-	t, ok := extractTime(args[0])
+	t, ok, err := extractTime(args[0], TypeDate)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
 	return SingleInteger(int64(t.Day())), nil
 }
 
-func fnTimezoneFromDate(ctx context.Context, args []Sequence) (Sequence, error) {
-	return fnTimezoneFromDateTime(ctx, args)
+func fnTimezoneFromDate(_ context.Context, args []Sequence) (Sequence, error) {
+	t, ok, err := extractTime(args[0], TypeDate)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, nil
+	}
+	if !HasTimezone(t) {
+		return nil, nil
+	}
+	_, offset := t.Zone()
+	secs := float64(offset)
+	neg := secs < 0
+	if neg {
+		secs = -secs
+	}
+	d := Duration{Seconds: secs, Negative: neg}
+	return SingleAtomic(AtomicValue{TypeName: TypeDayTimeDuration, Value: d}), nil
 }
 
 // --- time accessors ---
 
-func fnHoursFromTime(ctx context.Context, args []Sequence) (Sequence, error) {
-	return fnHoursFromDateTime(ctx, args)
+func fnHoursFromTime(_ context.Context, args []Sequence) (Sequence, error) {
+	t, ok, err := extractTime(args[0], TypeTime)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, nil
+	}
+	return SingleInteger(int64(t.Hour())), nil
 }
 
-func fnMinutesFromTime(ctx context.Context, args []Sequence) (Sequence, error) {
-	return fnMinutesFromDateTime(ctx, args)
+func fnMinutesFromTime(_ context.Context, args []Sequence) (Sequence, error) {
+	t, ok, err := extractTime(args[0], TypeTime)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, nil
+	}
+	return SingleInteger(int64(t.Minute())), nil
 }
 
-func fnSecondsFromTime(ctx context.Context, args []Sequence) (Sequence, error) {
-	return fnSecondsFromDateTime(ctx, args)
+func fnSecondsFromTime(_ context.Context, args []Sequence) (Sequence, error) {
+	t, ok, err := extractTime(args[0], TypeTime)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, nil
+	}
+	sec := float64(t.Second()) + float64(t.Nanosecond())/1e9
+	return SingleDouble(sec), nil
 }
 
-func fnTimezoneFromTime(ctx context.Context, args []Sequence) (Sequence, error) {
-	return fnTimezoneFromDateTime(ctx, args)
+func fnTimezoneFromTime(_ context.Context, args []Sequence) (Sequence, error) {
+	t, ok, err := extractTime(args[0], TypeTime)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, nil
+	}
+	if !HasTimezone(t) {
+		return nil, nil
+	}
+	_, offset := t.Zone()
+	secs := float64(offset)
+	neg := secs < 0
+	if neg {
+		secs = -secs
+	}
+	d := Duration{Seconds: secs, Negative: neg}
+	return SingleAtomic(AtomicValue{TypeName: TypeDayTimeDuration, Value: d}), nil
 }
 
 // --- duration accessors ---
 
 func fnYearsFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
-	d, ok := extractDuration(args[0])
+	d, ok, err := extractDuration(args[0], TypeDuration)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
@@ -256,7 +375,10 @@ func fnYearsFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnMonthsFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
-	d, ok := extractDuration(args[0])
+	d, ok, err := extractDuration(args[0], TypeDuration)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
@@ -268,7 +390,10 @@ func fnMonthsFromDuration(_ context.Context, args []Sequence) (Sequence, error) 
 }
 
 func fnDaysFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
-	d, ok := extractDuration(args[0])
+	d, ok, err := extractDuration(args[0], TypeDuration)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
@@ -280,7 +405,10 @@ func fnDaysFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnHoursFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
-	d, ok := extractDuration(args[0])
+	d, ok, err := extractDuration(args[0], TypeDuration)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
@@ -292,7 +420,10 @@ func fnHoursFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnMinutesFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
-	d, ok := extractDuration(args[0])
+	d, ok, err := extractDuration(args[0], TypeDuration)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
@@ -304,7 +435,10 @@ func fnMinutesFromDuration(_ context.Context, args []Sequence) (Sequence, error)
 }
 
 func fnSecondsFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
-	d, ok := extractDuration(args[0])
+	d, ok, err := extractDuration(args[0], TypeDuration)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
@@ -324,7 +458,10 @@ func fnSecondsFromDuration(_ context.Context, args []Sequence) (Sequence, error)
 // --- timezone adjustment ---
 
 func fnAdjustDateTimeToTimezone(ctx context.Context, args []Sequence) (Sequence, error) {
-	t, ok := extractTime(args[0])
+	t, ok, err := extractTime(args[0], TypeDateTime)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
@@ -348,7 +485,10 @@ func fnAdjustDateTimeToTimezone(ctx context.Context, args []Sequence) (Sequence,
 }
 
 func fnAdjustDateToTimezone(ctx context.Context, args []Sequence) (Sequence, error) {
-	t, ok := extractTime(args[0])
+	t, ok, err := extractTime(args[0], TypeDate)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
@@ -373,7 +513,10 @@ func fnAdjustDateToTimezone(ctx context.Context, args []Sequence) (Sequence, err
 }
 
 func fnAdjustTimeToTimezone(ctx context.Context, args []Sequence) (Sequence, error) {
-	t, ok := extractTime(args[0])
+	t, ok, err := extractTime(args[0], TypeTime)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
@@ -400,7 +543,10 @@ func fnAdjustTimeToTimezone(ctx context.Context, args []Sequence) (Sequence, err
 // or falls back to the implicit timezone from the dynamic context.
 func getTargetTimezone(ctx context.Context, args []Sequence) (*time.Location, error) {
 	if len(args) > 1 && len(args[1]) > 0 {
-		d, ok := extractDuration(args[1])
+		d, ok, err := extractDuration(args[1], TypeDayTimeDuration)
+		if err != nil {
+			return nil, err
+		}
 		if !ok {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected dayTimeDuration"}
 		}

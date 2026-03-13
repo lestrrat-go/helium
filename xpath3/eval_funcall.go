@@ -153,7 +153,7 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 		return nil, err
 	}
 	minArity := fn.MinArity()
-	ns := resolvePrefix(ec, e.Prefix)
+	ns, _ := resolvePrefix(ec, e.Prefix)
 	// Per XPath 3.1 Section 3.1.6: if the function is focus-dependent,
 	// the dynamic context (including focus) is fixed at reference creation time.
 	capturedCtx := withFnContext(ec.goCtx, ec)
@@ -263,7 +263,7 @@ func partialApply(ec *evalContext, e FunctionCall, fixedArgs []Sequence) (Sequen
 	}
 
 	// Look up type signature for type checking placeholder arguments
-	ns := resolvePrefix(ec, e.Prefix)
+	ns, _ := resolvePrefix(ec, e.Prefix)
 	var paramTypes []SequenceType
 	if sig := lookupFunctionSignature(ns, e.Name, len(e.Args)); sig != nil {
 		paramTypes = sig.ParamTypes

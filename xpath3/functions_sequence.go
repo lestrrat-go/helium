@@ -57,7 +57,7 @@ func fnTail(_ context.Context, args []Sequence) (Sequence, error) {
 func fnInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
 	target := args[0]
 	if len(args[1]) == 0 {
-		return nil, fmt.Errorf("xpath3: fn:insert-before: position argument is an empty sequence")
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:insert-before: position argument is an empty sequence"}
 	}
 	a, err := AtomizeItem(args[1][0])
 	if err != nil {

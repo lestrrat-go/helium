@@ -243,6 +243,11 @@ func evalIntersectExceptExpr(ec *evalContext, e IntersectExceptExpr) (Sequence, 
 			result = append(result, n)
 		}
 	}
+	// XPath requires intersect/except results in document order
+	result, err = ixpath.DeduplicateNodes(result, ec.docOrder, ec.maxNodes)
+	if err != nil {
+		return nil, err
+	}
 	seq := make(Sequence, len(result))
 	for i, n := range result {
 		seq[i] = NodeItem{Node: n}

@@ -75,7 +75,10 @@ func resolveFunction(ec *evalContext, prefix, name string, arity int) (Function,
 	}
 
 	// Resolve prefix to namespace URI
-	uri := resolvePrefix(ec, prefix)
+	uri, err := resolvePrefix(ec, prefix)
+	if err != nil {
+		return nil, err
+	}
 
 	return resolveFunctionByURI(ec, uri, name, arity)
 }
@@ -104,21 +107,21 @@ func resolveFunctionByURI(ec *evalContext, uri, name string, arity int) (Functio
 	return nil, fmt.Errorf("%w: %s#%d", ErrUnknownFunction, name, arity)
 }
 
-func resolvePrefix(ec *evalContext, prefix string) string {
+func resolvePrefix(ec *evalContext, prefix string) (string, error) {
 	if prefix == "" {
-		return NSFn
+		return NSFn, nil
 	}
 	// Check user-provided namespace bindings
 	if ec.namespaces != nil {
 		if uri, ok := ec.namespaces[prefix]; ok {
-			return uri
+			return uri, nil
 		}
 	}
 	// Check default prefix mappings
 	if uri, ok := defaultPrefixNS[prefix]; ok {
-		return uri
+		return uri, nil
 	}
-	return prefix
+	return "", &XPathError{Code: errCodeFONS0004, Message: "undeclared namespace prefix: " + prefix}
 }
 
 func checkArity(fn Function, name string, arity int) error {

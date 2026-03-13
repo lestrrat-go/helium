@@ -118,27 +118,17 @@ func fnBaseURI(ctx context.Context, args []Sequence) (Sequence, error) {
 	if n == nil {
 		return nil, nil
 	}
-	if doc, ok := n.(*helium.Document); ok {
-		if uri := doc.URL(); uri != "" {
-			return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: uri}), nil
-		}
+	var doc *helium.Document
+	if d, ok := n.(*helium.Document); ok {
+		doc = d
+	} else {
+		doc = n.OwnerDocument()
 	}
-	// Walk up looking for xml:base
-	for cur := n; cur != nil; cur = cur.Parent() {
-		if elem, ok := cur.(*helium.Element); ok {
-			for _, attr := range elem.Attributes() {
-				if attr.LocalName() == "base" && attr.URI() == helium.XMLNamespace {
-					return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: attr.Value()}), nil
-				}
-			}
-		}
+	base := helium.NodeGetBase(doc, n)
+	if base == "" {
+		return nil, nil
 	}
-	if doc := n.OwnerDocument(); doc != nil {
-		if uri := doc.URL(); uri != "" {
-			return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: uri}), nil
-		}
-	}
-	return SingleString(""), nil
+	return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: base}), nil
 }
 
 func fnDocumentURI(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -279,7 +269,7 @@ func fnHasChildren(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 }
 
-func fnInnermost(_ context.Context, args []Sequence) (Sequence, error) {
+func fnInnermost(ctx context.Context, args []Sequence) (Sequence, error) {
 	nodes, ok := NodesFrom(args[0])
 	if !ok {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "innermost() requires node-set"}
@@ -299,16 +289,16 @@ func fnInnermost(_ context.Context, args []Sequence) (Sequence, error) {
 			ancestors[p] = true
 		}
 	}
-	var result Sequence
+	var result []helium.Node
 	for _, n := range nodes {
 		if !ancestors[n] {
-			result = append(result, NodeItem{Node: n})
+			result = append(result, n)
 		}
 	}
-	return result, nil
+	return sequenceFromDocOrderedNodes(ctx, result)
 }
 
-func fnOutermost(_ context.Context, args []Sequence) (Sequence, error) {
+func fnOutermost(ctx context.Context, args []Sequence) (Sequence, error) {
 	nodes, ok := NodesFrom(args[0])
 	if !ok {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "outermost() requires node-set"}
@@ -317,7 +307,7 @@ func fnOutermost(_ context.Context, args []Sequence) (Sequence, error) {
 	for _, n := range nodes {
 		nodeSet[n] = true
 	}
-	var result Sequence
+	var result []helium.Node
 	for _, n := range nodes {
 		isOuter := true
 		for p := n.Parent(); p != nil; p = p.Parent() {
@@ -327,10 +317,10 @@ func fnOutermost(_ context.Context, args []Sequence) (Sequence, error) {
 			}
 		}
 		if isOuter {
-			result = append(result, NodeItem{Node: n})
+			result = append(result, n)
 		}
 	}
-	return result, nil
+	return sequenceFromDocOrderedNodes(ctx, result)
 }
 
 func fnLang(ctx context.Context, args []Sequence) (Sequence, error) {
