@@ -16,6 +16,8 @@ Module-wide rules for Go `context.Context` + package-specific payload objects.
 ## Exposure Rules
 
 - Keep payload type, option type, constructor, accessor, helper pair unexported by default.
+- Prefer exported direct mutators on `context.Context` over exporting payload type or option type.
+- If callers only need to set package-scoped values, export helpers like `WithX(ctx, value) context.Context`.
 - Export initializer only when external callers must attach package payload before calling API that accepts `context.Context`.
 - Export accessor only when external callers or sibling packages must inspect/merge payload already attached to `context.Context`.
 - Export payload type only when exported accessor returns it or callers must mutate/read it directly.
@@ -25,6 +27,7 @@ Module-wide rules for Go `context.Context` + package-specific payload objects.
 ## Carrier Pattern
 
 - Prefer initializer-style carrier helpers, e.g. `WithXPathContext(parent, opts ...XPathContextOption) context.Context`.
+- Prefer simpler direct mutators when possible, e.g. `WithXPathNamespaces(parent, ns) context.Context`.
 - Use descriptive accessor helpers, e.g. `GetXPathContext(ctx context.Context) *XPathContext`.
 - Accept parent stdlib context as first parameter.
 - Return derived context from `context.WithValue(parent, contextKey{}, payload)`.
@@ -50,6 +53,7 @@ Module-wide rules for Go `context.Context` + package-specific payload objects.
 - Wrap existing `ctx`; NEVER replace with `context.Background()` or `context.TODO()` in library path.
 - Add package payload only at boundary where caller config enters package.
 - Allow multiple packages to attach independent payloads to same stdlib context.
+- Prefer chaining direct mutators over constructing/exporting mutable payload objects.
 
 ## Internal Extra State
 
@@ -60,15 +64,19 @@ Module-wide rules for Go `context.Context` + package-specific payload objects.
 
 ## Current Repo Pattern
 
-- `xpath1.NewContext` + `xpath3.NewContext` are public because callers/examples must attach XPath settings to incoming `context.Context`.
-- `xpath1.GetContext` is used by `schematron` to merge prior XPath variables into derived rule evaluation contexts.
+- `xpath1` now uses direct mutators such as `WithNamespaces(ctx, ns)` and `WithAdditionalVariables(ctx, vars)`.
+- `xpath1` keeps `FunctionContext` + `GetFunctionContext(ctx)` public because custom function implementations need read-only evaluation state.
+- `xpath1` hides its eval-config carrier and getter.
+- `xpath3.NewContext` remains public and still uses exported payload/accessor pattern.
 - `xpath3` internal function-evaluation state already follows unexported helper pattern: `withFnContext` + `getFnContext`.
+- Future refactors should prefer `WithX(ctx, value)` style mutators when callers do not need raw payload access.
 - Treat public carrier/accessor APIs as exception driven by caller need, not default style.
 
 ## Naming
 
 - Unexported default: `xpathContext`, `withXPathContext`, `getXPathContext`, `xpathContextOption`.
 - Exported exception: `XPathContext`, `WithXPathContext`, `GetXPathContext`, `XPathContextOption`.
+- Preferred exported mutator style: `WithXPathNamespaces`, `WithXPathVariables`, `WithXPathFunction`.
 - Mutators: `WithX`.
 - Internal helper keys: `<name>ContextKey`.
 
@@ -100,6 +108,7 @@ func GetXPathContext(ctx context.Context) *XPathContext {
 ## Anti-Patterns
 
 - `type Context struct { ... }`
+- Exporting payload type when direct `WithX(ctx, value)` helpers would suffice
 - `type XPathContext struct { parent context.Context }`
 - `type XPathContext struct { context.Context }`
 - `func NewContext(...) *Context`

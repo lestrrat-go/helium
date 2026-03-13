@@ -17,8 +17,8 @@ type idcTable struct {
 
 // idcEntry holds a single key-sequence value and the node that produced it.
 type idcEntry struct {
-	values []string       // one value per field
-	node   helium.Node    // the node selected by the selector
+	values []string        // one value per field
+	node   helium.Node     // the node selected by the selector
 	elem   *helium.Element // the element (for line number reporting)
 }
 
@@ -36,7 +36,7 @@ func validateIDConstraints(ctx context.Context, elem *helium.Element, edecl *Ele
 
 	for _, idc := range edecl.IDCs {
 		// Use the schema's namespace context for XPath evaluation.
-		nsCtx := xpath1.NewContext(ctx, xpath1.WithNamespaces(idc.Namespaces))
+		nsCtx := xpath1.WithAdditionalNamespaces(ctx, idc.Namespaces)
 		table, err := evaluateIDC(nsCtx, elem, idc)
 		if err != nil {
 			continue

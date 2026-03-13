@@ -121,9 +121,7 @@ func parseNSFile(t *testing.T, path string) []string {
 func evaluateNodeSet(t *testing.T, doc *helium.Document, expr string, nss map[string]string) []helium.Node {
 	t.Helper()
 
-	ctx := xpath1.NewContext(t.Context(),
-		xpath1.WithNamespaces(nss),
-	)
+	ctx := xpath1.WithNamespaces(t.Context(), nss)
 
 	result, err := xpath1.Evaluate(ctx, doc, expr)
 	require.NoError(t, err, "evaluating xpath: %s", expr)

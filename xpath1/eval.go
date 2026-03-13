@@ -43,12 +43,12 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 		docOrder: &ixpath.DocOrderCache{},
 	}
 	// Pull config from context.Context if present.
-	if xctx := GetContext(ctx); xctx != nil {
-		ectx.namespaces = xctx.namespaces
-		ectx.variables = xctx.variables
-		ectx.opLimit = xctx.opLimit
-		ectx.functions = xctx.functions
-		ectx.functionsNS = xctx.functionsNS
+	if cfg := getEvalConfig(ctx); cfg != nil {
+		ectx.namespaces = cfg.namespaces
+		ectx.variables = cfg.variables
+		ectx.opLimit = cfg.opLimit
+		ectx.functions = cfg.functions
+		ectx.functionsNS = cfg.functionsNS
 	}
 	return ectx
 }

@@ -15,9 +15,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 	var out strings.Builder
 	valid := true
 
-	xctx := xpath1.NewContext(ctx,
-		xpath1.WithNamespaces(schema.namespaces),
-	)
+	xctx := xpath1.WithNamespaces(ctx, schema.namespaces)
 
 	for _, pat := range schema.patterns {
 		for _, r := range pat.rules {
@@ -39,23 +37,12 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 				// reference previously registered variables, matching
 				// libxml2's xmlSchematronRegisterVariables behavior.
 				ruleCtx := xctx
-				if len(r.lets) > 0 {
-					parentXCtx := xpath1.GetContext(xctx)
-					vars := make(map[string]any)
-					if parentXCtx != nil {
-						for k, v := range parentXCtx.Variables() {
-							vars[k] = v
-						}
-					}
-					ruleCtx = xpath1.NewContext(ctx,
-						xpath1.WithNamespaces(schema.namespaces),
-						xpath1.WithVariables(vars),
-					)
-					for _, lb := range r.lets {
-						letResult, err := lb.expr.Evaluate(ruleCtx, node)
-						if err == nil {
-							vars[lb.name] = xpathResultToValue(letResult)
-						}
+				for _, lb := range r.lets {
+					letResult, err := lb.expr.Evaluate(ruleCtx, node)
+					if err == nil {
+						ruleCtx = xpath1.WithAdditionalVariables(ruleCtx, map[string]any{
+							lb.name: xpathResultToValue(letResult),
+						})
 					}
 				}
 

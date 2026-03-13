@@ -39,11 +39,12 @@ XPath 1.0 expression parsing and evaluation.
 - **Expression.Evaluate(ctx, Node) → (*Result, error)**
 - **Find(ctx, Node, string) → ([]Node, error)** — convenience: compile+evaluate→node-set
 - **Evaluate(ctx, Node, string) → (*Result, error)** — convenience: compile+evaluate
-- **NewContext(ctx, ...ContextOption) → context.Context** — embed xpath config in context.Context
+- **WithNamespaces(ctx, ns) → context.Context** / **WithVariables(ctx, vars) → context.Context** / **WithOpLimit(ctx, n) → context.Context** — attach XPath evaluation settings to `context.Context`
+- **WithFunction(ctx, name, fn) → context.Context** / **WithFunctionNS(ctx, uri, name, fn) → context.Context** — register custom functions on `context.Context`
+- **WithFunctions(ctx, fns) → context.Context** / **WithFunctionsNS(ctx, fns) → context.Context** — bulk function registration
 - `Result` types: NodeSetResult, BooleanResult, NumberResult, StringResult
-- `Context` — namespace bindings, variables, custom functions, op limits
-- `NewContext(ctx, opts)` with WithNamespaces(), WithVariables(), WithOpLimit()
-- `Context.RegisterFunction(name, fn)` / `RegisterFunctionNS(uri, name, fn)` — custom functions (unqualified names cannot override built-ins)
+- `FunctionContext` — read-only custom-function evaluation state; retrieve via `GetFunctionContext(ctx)`
+- Merge helpers: `WithAdditionalNamespaces(ctx, ns)`, `WithAdditionalVariables(ctx, vars)`
 - Limits: recursion 5000, node-set 10M, configurable op limit
 - Files: `xpath.go` (API), `parser.go`, `lexer.go`, `eval.go`, `expr.go`, `axes.go`, `functions.go`, `token.go`
 - Imports: helium

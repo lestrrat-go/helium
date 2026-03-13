@@ -431,11 +431,9 @@ func TestEvalVariable(t *testing.T) {
 	doc := parseXML(t, `<root><a/><b/></root>`)
 	expr, err := xpath1.Compile("$x + 1")
 	require.NoError(t, err)
-	ctx := xpath1.NewContext(t.Context(),
-		xpath1.WithVariables(map[string]any{
-			"x": float64(41),
-		}),
-	)
+	ctx := xpath1.WithVariables(t.Context(), map[string]any{
+		"x": float64(41),
+	})
 	r, err := expr.Evaluate(ctx, doc)
 	require.NoError(t, err)
 	require.Equal(t, 42.0, r.Number)
@@ -597,23 +595,17 @@ func TestOpLimit(t *testing.T) {
 	require.NoError(t, err)
 
 	// With a very small op limit, evaluation should fail
-	_, err = compiled.Evaluate(xpath1.NewContext(t.Context(),
-		xpath1.WithOpLimit(1),
-	), doc)
+	_, err = compiled.Evaluate(xpath1.WithOpLimit(t.Context(), 1), doc)
 	require.Error(t, err)
 	require.True(t, errors.Is(err, xpath1.ErrOpLimit))
 
 	// With a generous limit, it should succeed
-	r, err := compiled.Evaluate(xpath1.NewContext(t.Context(),
-		xpath1.WithOpLimit(10000),
-	), doc)
+	r, err := compiled.Evaluate(xpath1.WithOpLimit(t.Context(), 10000), doc)
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 5)
 
 	// Without limit (zero), it should succeed
-	r, err = compiled.Evaluate(xpath1.NewContext(t.Context(),
-		xpath1.WithOpLimit(0),
-	), doc)
+	r, err = compiled.Evaluate(xpath1.WithOpLimit(t.Context(), 0), doc)
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 5)
 }
@@ -624,12 +616,12 @@ func TestOpLimitFunctionCalls(t *testing.T) {
 	require.NoError(t, err)
 
 	// concat counts as 1 function-call op; limit of 0 means unlimited
-	r, err := compiled.Evaluate(xpath1.NewContext(t.Context(), xpath1.WithOpLimit(0)), doc)
+	r, err := compiled.Evaluate(xpath1.WithOpLimit(t.Context(), 0), doc)
 	require.NoError(t, err)
 	require.Equal(t, "abc", r.String)
 
 	// With limit too low for the function call
-	_, err = compiled.Evaluate(xpath1.NewContext(t.Context(), xpath1.WithOpLimit(0)), doc)
+	_, err = compiled.Evaluate(xpath1.WithOpLimit(t.Context(), 0), doc)
 	require.NoError(t, err) // 0 = unlimited
 }
 
@@ -671,16 +663,14 @@ func TestCustomFunctionUnqualified(t *testing.T) {
 	compiled, err := xpath1.Compile("double(number(/root/n))")
 	require.NoError(t, err)
 
-	ctx := xpath1.NewContext(t.Context(),
-		xpath1.WithFunctions(map[string]xpath1.Function{
-			"double": xpath1.FunctionFunc(func(_ context.Context, args []*xpath1.Result) (*xpath1.Result, error) {
-				if len(args) != 1 {
-					return nil, errDoubleOneArg
-				}
-				return &xpath1.Result{Type: xpath1.NumberResult, Number: args[0].Number * 2}, nil
-			}),
+	ctx := xpath1.WithFunctions(t.Context(), map[string]xpath1.Function{
+		"double": xpath1.FunctionFunc(func(_ context.Context, args []*xpath1.Result) (*xpath1.Result, error) {
+			if len(args) != 1 {
+				return nil, errDoubleOneArg
+			}
+			return &xpath1.Result{Type: xpath1.NumberResult, Number: args[0].Number * 2}, nil
 		}),
-	)
+	})
 
 	r, err := compiled.Evaluate(ctx, doc)
 	require.NoError(t, err)
@@ -693,19 +683,17 @@ func TestCustomFunctionNamespaced(t *testing.T) {
 	compiled, err := xpath1.Compile("ext:hello('world')")
 	require.NoError(t, err)
 
-	ctx := xpath1.NewContext(t.Context(),
-		xpath1.WithNamespaces(map[string]string{
-			"ext": "urn:test:ext",
+	ctx := xpath1.WithNamespaces(t.Context(), map[string]string{
+		"ext": "urn:test:ext",
+	})
+	ctx = xpath1.WithFunctionsNS(ctx, map[xpath1.QualifiedName]xpath1.Function{
+		{URI: "urn:test:ext", Name: "hello"}: xpath1.FunctionFunc(func(_ context.Context, args []*xpath1.Result) (*xpath1.Result, error) {
+			if len(args) != 1 {
+				return nil, errHelloOneArg
+			}
+			return &xpath1.Result{Type: xpath1.StringResult, String: "Hello, " + args[0].String + "!"}, nil
 		}),
-		xpath1.WithFunctionsNS(map[xpath1.QualifiedName]xpath1.Function{
-			{URI: "urn:test:ext", Name: "hello"}: xpath1.FunctionFunc(func(_ context.Context, args []*xpath1.Result) (*xpath1.Result, error) {
-				if len(args) != 1 {
-					return nil, errHelloOneArg
-				}
-				return &xpath1.Result{Type: xpath1.StringResult, String: "Hello, " + args[0].String + "!"}, nil
-			}),
-		}),
-	)
+	})
 
 	r, err := compiled.Evaluate(ctx, doc)
 	require.NoError(t, err)
@@ -729,7 +717,7 @@ func TestCustomFunctionNamespacedUnresolvedPrefix(t *testing.T) {
 	require.NoError(t, err)
 
 	// No namespace binding for "ext"
-	_, err = compiled.Evaluate(xpath1.NewContext(t.Context()), doc)
+	_, err = compiled.Evaluate(t.Context(), doc)
 	require.Error(t, err)
 	require.True(t, errors.Is(err, xpath1.ErrUnknownFunctionNamespace))
 }
@@ -740,11 +728,9 @@ func TestCustomFunctionNamespacedNotFound(t *testing.T) {
 	require.NoError(t, err)
 
 	// Namespace is bound but no function registered
-	ctx := xpath1.NewContext(t.Context(),
-		xpath1.WithNamespaces(map[string]string{
-			"ext": "urn:test:ext",
-		}),
-	)
+	ctx := xpath1.WithNamespaces(t.Context(), map[string]string{
+		"ext": "urn:test:ext",
+	})
 	_, err = compiled.Evaluate(ctx, doc)
 	require.Error(t, err)
 	require.True(t, errors.Is(err, xpath1.ErrUnknownFunction))
@@ -756,13 +742,11 @@ func TestCustomFunctionBuiltinNotOverridden(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a custom "count" that returns 999 -- should not override built-in
-	ctx := xpath1.NewContext(t.Context(),
-		xpath1.WithFunctions(map[string]xpath1.Function{
-			"count": xpath1.FunctionFunc(func(_ context.Context, _ []*xpath1.Result) (*xpath1.Result, error) {
-				return &xpath1.Result{Type: xpath1.NumberResult, Number: 999}, nil
-			}),
+	ctx := xpath1.WithFunctions(t.Context(), map[string]xpath1.Function{
+		"count": xpath1.FunctionFunc(func(_ context.Context, _ []*xpath1.Result) (*xpath1.Result, error) {
+			return &xpath1.Result{Type: xpath1.NumberResult, Number: 999}, nil
 		}),
-	)
+	})
 
 	r, err := compiled.Evaluate(ctx, doc)
 	require.NoError(t, err)
@@ -774,18 +758,16 @@ func TestCustomFunctionContextValues(t *testing.T) {
 	compiled, err := xpath1.Compile("/root/*[mypos()]")
 	require.NoError(t, err)
 
-	ctx := xpath1.NewContext(t.Context(),
-		xpath1.WithFunctions(map[string]xpath1.Function{
-			"mypos": xpath1.FunctionFunc(func(ctx context.Context, _ []*xpath1.Result) (*xpath1.Result, error) {
-				fctx := xpath1.GetFunctionContext(ctx)
-				// Return true only for position 2
-				return &xpath1.Result{
-					Type: xpath1.BooleanResult,
-					Bool: fctx.Position() == 2,
-				}, nil
-			}),
+	ctx := xpath1.WithFunctions(t.Context(), map[string]xpath1.Function{
+		"mypos": xpath1.FunctionFunc(func(ctx context.Context, _ []*xpath1.Result) (*xpath1.Result, error) {
+			fctx := xpath1.GetFunctionContext(ctx)
+			// Return true only for position 2
+			return &xpath1.Result{
+				Type: xpath1.BooleanResult,
+				Bool: fctx.Position() == 2,
+			}, nil
 		}),
-	)
+	})
 
 	r, err := compiled.Evaluate(ctx, doc)
 	require.NoError(t, err)
@@ -793,36 +775,20 @@ func TestCustomFunctionContextValues(t *testing.T) {
 	require.Equal(t, "b", r.NodeSet[0].Name())
 }
 
-func TestRegisterFunctionHelper(t *testing.T) {
-	xctx := &xpath1.Context{}
-
-	// Registering a new function should succeed
-	err := xctx.RegisterFunction("myfunc", xpath1.FunctionFunc(func(_ context.Context, _ []*xpath1.Result) (*xpath1.Result, error) {
-		return &xpath1.Result{Type: xpath1.BooleanResult, Bool: true}, nil
-	}))
-	require.NoError(t, err)
-
-	// Verify the function was registered by evaluating it
+func TestWithFunctionHelper(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
 	compiled, cErr := xpath1.Compile("myfunc()")
 	require.NoError(t, cErr)
-	ctx := xpath1.NewContext(t.Context(),
-		xpath1.WithFunctions(xctx.Functions()),
-	)
+	ctx := xpath1.WithFunction(t.Context(), "myfunc", xpath1.FunctionFunc(func(_ context.Context, _ []*xpath1.Result) (*xpath1.Result, error) {
+		return &xpath1.Result{Type: xpath1.BooleanResult, Bool: true}, nil
+	}))
 	r, rErr := compiled.Evaluate(ctx, doc)
 	require.NoError(t, rErr)
 	require.True(t, r.Bool)
-
-	// Registering a built-in name should fail
-	err = xctx.RegisterFunction("count", xpath1.FunctionFunc(func(_ context.Context, _ []*xpath1.Result) (*xpath1.Result, error) {
-		return nil, nil
-	}))
-	require.Error(t, err)
 }
 
-func TestRegisterFunctionNSHelper(t *testing.T) {
-	xctx := &xpath1.Context{}
-	xctx.RegisterFunctionNS("urn:test", "myfunc", xpath1.FunctionFunc(func(_ context.Context, _ []*xpath1.Result) (*xpath1.Result, error) {
+func TestWithFunctionNSHelper(t *testing.T) {
+	ctx := xpath1.WithFunctionNS(t.Context(), "urn:test", "myfunc", xpath1.FunctionFunc(func(_ context.Context, _ []*xpath1.Result) (*xpath1.Result, error) {
 		return &xpath1.Result{Type: xpath1.BooleanResult, Bool: true}, nil
 	}))
 
@@ -830,12 +796,9 @@ func TestRegisterFunctionNSHelper(t *testing.T) {
 	doc := parseXML(t, `<root/>`)
 	compiled, cErr := xpath1.Compile("t:myfunc()")
 	require.NoError(t, cErr)
-	ctx := xpath1.NewContext(t.Context(),
-		xpath1.WithNamespaces(map[string]string{
-			"t": "urn:test",
-		}),
-		xpath1.WithFunctionsNS(xctx.FunctionsNS()),
-	)
+	ctx = xpath1.WithNamespaces(ctx, map[string]string{
+		"t": "urn:test",
+	})
 	r, rErr := compiled.Evaluate(ctx, doc)
 	require.NoError(t, rErr)
 	require.True(t, r.Bool)
@@ -847,16 +810,14 @@ func TestCustomFunctionWithPathExpr(t *testing.T) {
 	compiled, err := xpath1.Compile("ext:identity(/root/a)/b")
 	require.NoError(t, err)
 
-	ctx := xpath1.NewContext(t.Context(),
-		xpath1.WithNamespaces(map[string]string{
-			"ext": "urn:test:ext",
+	ctx := xpath1.WithNamespaces(t.Context(), map[string]string{
+		"ext": "urn:test:ext",
+	})
+	ctx = xpath1.WithFunctionsNS(ctx, map[xpath1.QualifiedName]xpath1.Function{
+		{URI: "urn:test:ext", Name: "identity"}: xpath1.FunctionFunc(func(_ context.Context, args []*xpath1.Result) (*xpath1.Result, error) {
+			return args[0], nil
 		}),
-		xpath1.WithFunctionsNS(map[xpath1.QualifiedName]xpath1.Function{
-			{URI: "urn:test:ext", Name: "identity"}: xpath1.FunctionFunc(func(_ context.Context, args []*xpath1.Result) (*xpath1.Result, error) {
-				return args[0], nil
-			}),
-		}),
-	)
+	})
 
 	r, err := compiled.Evaluate(ctx, doc)
 	require.NoError(t, err)
