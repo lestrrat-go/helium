@@ -20,14 +20,6 @@ func parseURIReference(raw string) (*url.URL, error) {
 	return url.Parse(raw)
 }
 
-func isWindowsDriveScheme(parsed *url.URL) bool {
-	if len(parsed.Scheme) != 1 {
-		return false
-	}
-	b := parsed.Scheme[0]
-	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z')
-}
-
 func isSupportedResourceScheme(scheme string) bool {
 	switch scheme {
 	case "file", "http", "https":
