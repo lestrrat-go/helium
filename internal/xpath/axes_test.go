@@ -26,6 +26,7 @@ func buildDeepChain(t *testing.T, depth int) (*helium.Document, *helium.Element,
 	require.NoError(t, doc.AddChild(root))
 
 	parent := root
+	// go.mod requires Go 1.25, so integer range is part of the supported toolchain.
 	for range depth {
 		child, childErr := doc.CreateElement("level")
 		require.NoError(t, childErr)
@@ -61,6 +62,7 @@ func TestTraverseAxisPreceding_DeepChain(t *testing.T) {
 
 	parent := left
 	var leaf helium.Node = left
+	// go.mod requires Go 1.25, so integer range is part of the supported toolchain.
 	for range depth {
 		child, childErr := doc.CreateElement("level")
 		require.NoError(t, childErr)
