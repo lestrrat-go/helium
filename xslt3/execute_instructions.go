@@ -1532,9 +1532,40 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *NextMatchInst) e
 }
 
 func (ec *execContext) execApplyImports(ctx context.Context, inst *ApplyImportsInst) error {
-	// xsl:apply-imports: apply templates from imported stylesheets
-	// Simplified: same as built-in rules for now
-	return ec.applyBuiltinRules(ctx, ec.currentNode, ec.currentMode)
+	// xsl:apply-imports: find a matching template with lower import precedence
+	// than the currently executing template.
+	if ec.currentTemplate == nil {
+		return nil
+	}
+
+	node := ec.currentNode
+	mode := ec.currentMode
+	maxPrec := ec.currentTemplate.ImportPrec
+
+	templates := ec.stylesheet.modeTemplates[mode]
+	for _, tmpl := range templates {
+		if tmpl.ImportPrec >= maxPrec {
+			continue
+		}
+		if tmpl.Match != nil && tmpl.Match.matchPattern(ec, node) {
+			// Set with-param values
+			var pv map[string]xpath3.Sequence
+			if len(inst.Params) > 0 {
+				pv = make(map[string]xpath3.Sequence, len(inst.Params))
+				for _, wp := range inst.Params {
+					val, err := ec.evaluateWithParam(ctx, wp)
+					if err != nil {
+						return err
+					}
+					pv[wp.Name] = val
+				}
+			}
+			return ec.executeTemplate(ctx, tmpl, node, mode, pv)
+		}
+	}
+
+	// No imported template found, use built-in rules
+	return ec.applyBuiltinRules(ctx, node, mode)
 }
 
 func (ec *execContext) execWherePopulated(ctx context.Context, inst *WherePopulatedInst) error {
