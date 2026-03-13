@@ -68,6 +68,8 @@ func (ec *execContext) executeInstruction(ctx context.Context, inst Instruction)
 		return ec.execApplyImports(ctx, v)
 	case *WherePopulatedInst:
 		return ec.execWherePopulated(ctx, v)
+	case *OnEmptyInst:
+		return ec.execOnEmpty(ctx, v)
 	case *TryCatchInst:
 		return ec.execTryCatch(ctx, v)
 	case *ForEachGroupInst:
@@ -135,23 +137,8 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 	for i, node := range nodes {
 		ec.position = i + 1
 
-		// Push param values if any
-		if len(paramValues) > 0 {
-			ec.pushVarScope()
-			for name, val := range paramValues {
-				ec.setVar(name, val)
-			}
-		}
-
-		if err := ec.applyTemplates(ctx, node, mode); err != nil {
-			if len(paramValues) > 0 {
-				ec.popVarScope()
-			}
+		if err := ec.applyTemplates(ctx, node, mode, paramValues); err != nil {
 			return err
-		}
-
-		if len(paramValues) > 0 {
-			ec.popVarScope()
 		}
 	}
 
@@ -803,6 +790,13 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *Liter
 		if err := elem.SetActiveNamespace(inst.Prefix, inst.Namespace); err != nil {
 			return err
 		}
+		// Ensure the namespace declaration is present for serialization.
+		// SetActiveNamespace only sets n.ns; we also need it in nsDefs.
+		if !hasNsDecl(elem, inst.Prefix, inst.Namespace) && !ec.isNSDeclaredInScope(inst.Prefix, inst.Namespace) {
+			if err := elem.DeclareNamespace(inst.Prefix, inst.Namespace); err != nil {
+				return err
+			}
+		}
 	}
 
 	// Evaluate and set attributes
@@ -812,6 +806,12 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *Liter
 			return err
 		}
 		if attr.Namespace != "" {
+			// Ensure the attribute's namespace is declared on the element
+			if !hasNsDecl(elem, attr.Prefix, attr.Namespace) && !ec.isNSDeclaredInScope(attr.Prefix, attr.Namespace) {
+				if err := elem.DeclareNamespace(attr.Prefix, attr.Namespace); err != nil {
+					return err
+				}
+			}
 			ns, err := ec.resultDoc.CreateNamespace(attr.Prefix, attr.Namespace)
 			if err != nil {
 				return err
@@ -843,6 +843,17 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *Liter
 	}
 
 	return nil
+}
+
+// hasNsDecl checks if an element already has a namespace declaration
+// with the given prefix and URI in its nsDefs.
+func hasNsDecl(elem *helium.Element, prefix, uri string) bool {
+	for _, ns := range elem.Namespaces() {
+		if ns.Prefix() == prefix && ns.URI() == uri {
+			return true
+		}
+	}
+	return false
 }
 
 // isNSDeclaredInScope checks if a namespace prefix→URI binding is already
@@ -1457,8 +1468,17 @@ func (ec *execContext) execWherePopulated(ctx context.Context, inst *WherePopula
 
 	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 
-	// Check if anything was produced
-	if tmpRoot.FirstChild() == nil {
+	// Check if anything "populated" was produced per XSLT 3.0 semantics.
+	// An element is populated if it has at least one child element or non-empty text node.
+	// Comments, PIs, attributes, and namespace nodes do not count.
+	populated := false
+	for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
+		if isPopulated(child) {
+			populated = true
+			break
+		}
+	}
+	if !populated {
 		return nil
 	}
 
@@ -1469,6 +1489,92 @@ func (ec *execContext) execWherePopulated(ctx context.Context, inst *WherePopula
 			return copyErr
 		}
 		if err := ec.addNode(copied); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// isPopulated checks if a node is "populated" per XSLT 3.0 xsl:where-populated semantics.
+// An element is populated if it has at least one child element or non-empty text node.
+// A text node is populated if its content has non-zero length.
+// Comments, PIs, and other node types are not considered populated.
+func isPopulated(node helium.Node) bool {
+	switch node.Type() {
+	case helium.ElementNode:
+		elem := node.(*helium.Element)
+		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+			switch child.Type() {
+			case helium.ElementNode:
+				return true
+			case helium.TextNode:
+				if len(child.Content()) > 0 {
+					return true
+				}
+			}
+		}
+		return false
+	case helium.TextNode:
+		return len(node.Content()) > 0
+	default:
+		return false
+	}
+}
+
+func (ec *execContext) execOnEmpty(ctx context.Context, inst *OnEmptyInst) error {
+	// xsl:on-empty fires only if the current output container has no significant content.
+	out := ec.currentOutput()
+	current := out.current
+	if current == nil {
+		return nil
+	}
+
+	// Check if the current container has any populated children
+	elem, ok := current.(*helium.Element)
+	if !ok {
+		return nil
+	}
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		if isPopulated(child) {
+			return nil // has significant content, on-empty does not fire
+		}
+	}
+
+	// Container is empty — execute on-empty body
+	if inst.Select != nil {
+		xpathCtx := ec.newXPathContext(ec.contextNode)
+		result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		for _, item := range result.Sequence() {
+			switch v := item.(type) {
+			case xpath3.NodeItem:
+				copied, copyErr := helium.CopyNode(v.Node, ec.resultDoc)
+				if copyErr != nil {
+					return copyErr
+				}
+				if err := ec.addNode(copied); err != nil {
+					return err
+				}
+			case xpath3.AtomicValue:
+				s, sErr := xpath3.AtomicToString(v)
+				if sErr != nil {
+					return sErr
+				}
+				text, tErr := ec.resultDoc.CreateText([]byte(s))
+				if tErr != nil {
+					return tErr
+				}
+				if err := ec.addNode(text); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	for _, child := range inst.Body {
+		if err := ec.executeInstruction(ctx, child); err != nil {
 			return err
 		}
 	}

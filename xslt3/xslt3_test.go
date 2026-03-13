@@ -213,6 +213,7 @@ func runTestCase(t *testing.T, tc *helium.Element, tsDir string, environments ma
 	// Find <test> element
 	var stylesheetFile string
 	var initialTemplate string
+	var testParams map[string]string
 	for child := tc.FirstChild(); child != nil; child = child.NextSibling() {
 		testElem, ok := child.(*helium.Element)
 		if !ok || testElem.LocalName() != "test" {
@@ -234,6 +235,19 @@ func runTestCase(t *testing.T, tc *helium.Element, tsDir string, environments ma
 			case "initial-template":
 				n, _ := sElem.GetAttribute("name")
 				initialTemplate = n
+			case "param":
+				pName, _ := sElem.GetAttribute("name")
+				pSelect, _ := sElem.GetAttribute("select")
+				if pName != "" && pSelect != "" {
+					// Only pass string literal params (surrounded by quotes)
+					// Non-string params (numbers, etc.) are handled by stylesheet defaults
+					if len(pSelect) >= 2 && pSelect[0] == '\'' && pSelect[len(pSelect)-1] == '\'' {
+						if testParams == nil {
+							testParams = make(map[string]string)
+						}
+						testParams[pName] = pSelect[1 : len(pSelect)-1]
+					}
+				}
 			}
 		}
 	}
@@ -297,6 +311,9 @@ func runTestCase(t *testing.T, tc *helium.Element, tsDir string, environments ma
 	var transformOpts []xslt3.TransformOption
 	if initialTemplate != "" {
 		transformOpts = append(transformOpts, xslt3.WithInitialTemplate(initialTemplate))
+	}
+	for pName, pVal := range testParams {
+		transformOpts = append(transformOpts, xslt3.WithParameter(pName, pVal))
 	}
 	resultDoc, err := xslt3.Transform(ctx, sourceDoc, ss, transformOpts...)
 	if err != nil {
@@ -476,12 +493,95 @@ func findChildEnvRef(tc *helium.Element) string {
 }
 
 // xmlEqual compares two XML strings for semantic equality.
-// Collapses whitespace inside tags to single space, removes whitespace
-// between tags, and handles attribute order differences by parsing.
+// Handles whitespace normalization and attribute/namespace declaration order.
 func xmlEqual(actual, expected string) bool {
 	a := normalizeXMLString(actual)
 	e := normalizeXMLString(expected)
-	return a == e
+	if a == e {
+		return true
+	}
+	// Try DOM-based comparison to handle attribute/namespace order
+	return domEqual(actual, expected)
+}
+
+// domEqual parses both strings as XML and compares the DOM trees.
+func domEqual(a, b string) bool {
+	// Wrap in root element if needed for fragments
+	wrapA := a
+	wrapB := b
+	if !strings.HasPrefix(strings.TrimSpace(a), "<?xml") {
+		wrapA = "<?xml version=\"1.0\"?>" + a
+	}
+	if !strings.HasPrefix(strings.TrimSpace(b), "<?xml") {
+		wrapB = "<?xml version=\"1.0\"?>" + b
+	}
+
+	docA, errA := helium.Parse(nil, []byte(wrapA))
+	docB, errB := helium.Parse(nil, []byte(wrapB))
+	if errA != nil || errB != nil {
+		return false
+	}
+	return nodesEqual(docA.DocumentElement(), docB.DocumentElement())
+}
+
+func nodesEqual(a, b helium.Node) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	if a.Type() != b.Type() {
+		return false
+	}
+	switch a.Type() {
+	case helium.ElementNode:
+		ea := a.(*helium.Element)
+		eb := b.(*helium.Element)
+		if ea.LocalName() != eb.LocalName() || ea.URI() != eb.URI() {
+			return false
+		}
+		// Compare attributes (order-independent)
+		attrsA := collectAttrs(ea)
+		attrsB := collectAttrs(eb)
+		if len(attrsA) != len(attrsB) {
+			return false
+		}
+		for k, v := range attrsA {
+			if attrsB[k] != v {
+				return false
+			}
+		}
+		// Compare children
+		childA := ea.FirstChild()
+		childB := eb.FirstChild()
+		for childA != nil && childB != nil {
+			if !nodesEqual(childA, childB) {
+				return false
+			}
+			childA = childA.NextSibling()
+			childB = childB.NextSibling()
+		}
+		return childA == nil && childB == nil
+	case helium.TextNode:
+		return string(a.Content()) == string(b.Content())
+	case helium.CommentNode:
+		return string(a.Content()) == string(b.Content())
+	case helium.ProcessingInstructionNode:
+		return a.Name() == b.Name() && string(a.Content()) == string(b.Content())
+	default:
+		return string(a.Content()) == string(b.Content())
+	}
+}
+
+// collectAttrs returns a map of {ns}local → value for all attributes on an element.
+func collectAttrs(e *helium.Element) map[string]string {
+	attrs := make(map[string]string)
+	for _, attr := range e.Attributes() {
+		key := "{" + attr.URI() + "}" + attr.LocalName()
+		attrs[key] = attr.Value()
+	}
+	return attrs
 }
 
 // normalizeXMLString normalizes an XML string for comparison.
