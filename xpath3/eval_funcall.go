@@ -156,7 +156,9 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 	ns, _ := resolvePrefix(ec, e.Prefix)
 	// Per XPath 3.1 Section 3.1.6: if the function is focus-dependent,
 	// the dynamic context (including focus) is fixed at reference creation time.
-	capturedCtx := withFnContext(ec.goCtx, ec)
+	// Capture the evalContext snapshot for focus/variables, but use the caller's
+	// context.Context at invocation time for cancellation propagation.
+	capturedEC := ec
 	// Populate type signature from built-in registry
 	var paramTypes []SequenceType
 	var returnType *SequenceType
@@ -184,7 +186,8 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 					}
 				}
 			}
-			return fn.Call(capturedCtx, args)
+			// Use caller's ctx for cancellation, captured ec for focus/eval state
+			return fn.Call(withFnContext(ctx, capturedEC), args)
 		},
 	}
 	return Sequence{fi}, nil
@@ -211,7 +214,13 @@ func evalInlineFunctionExpr(ec *evalContext, e InlineFunctionExpr) (Sequence, er
 			if len(args) != len(e.Params) {
 				return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("inline function requires %d arguments, got %d", len(e.Params), len(args))}
 			}
-			innerCtx := *ec
+			// Use caller's evalContext for mutable state (opCount, docOrder, docCache)
+			// if available, otherwise fall back to the captured context.
+			baseEC := ec
+			if callerEC := getFnContext(ctx); callerEC != nil {
+				baseEC = callerEC
+			}
+			innerCtx := *baseEC
 			innerCtx.goCtx = ctx
 			innerCtx.node = nil
 			innerCtx.contextItem = nil
