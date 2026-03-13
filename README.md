@@ -208,6 +208,46 @@ func Example_xpath_find() {
 source: [examples/xpath_find_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xpath_find_example_test.go)
 <!-- END INCLUDE -->
 
+# XPath 3.1
+
+<!-- INCLUDE(examples/xpath3_find_example_test.go) -->
+```go
+package examples_test
+
+import (
+  "context"
+  "fmt"
+
+  "github.com/lestrrat-go/helium"
+  "github.com/lestrrat-go/helium/xpath3"
+)
+
+func Example_xpath3_find() {
+  doc, err := helium.Parse(context.Background(), []byte(`<catalog><book id="1">Go</book><book id="2">XML</book><magazine/></catalog>`))
+  if err != nil {
+    fmt.Printf("failed to parse: %s\n", err)
+    return
+  }
+
+  nodes, err := xpath3.Find(context.Background(), doc, "//book")
+  if err != nil {
+    fmt.Printf("xpath error: %s\n", err)
+    return
+  }
+
+  fmt.Printf("found %d nodes\n", len(nodes))
+  for _, n := range nodes {
+    fmt.Printf("  %s: %s\n", n.Name(), string(n.Content()))
+  }
+  // Output:
+  // found 2 nodes
+  //   book: Go
+  //   book: XML
+}
+```
+source: [examples/xpath3_find_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xpath3_find_example_test.go)
+<!-- END INCLUDE -->
+
 # XInclude
 
 <!-- INCLUDE(examples/xinclude_process_example_test.go) -->
