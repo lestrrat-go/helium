@@ -114,6 +114,7 @@ Multiple files: highest exit code wins.
 ## Command Layout
 
 - `helium lint ...` — supported form
+- sibling command: `helium xpath ...`
 - sibling command: `helium xsd validate ...`
 
 ## Differences from xmllint

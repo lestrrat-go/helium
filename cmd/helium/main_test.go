@@ -18,6 +18,10 @@ func TestRunLintVersion(t *testing.T) {
 	require.Equal(t, ExitOK, run([]string{"lint", "--version"}))
 }
 
+func TestRunXPathNoArgs(t *testing.T) {
+	require.Equal(t, ExitErr, run([]string{"xpath"}))
+}
+
 func TestRunXSDNoArgs(t *testing.T) {
 	require.Equal(t, ExitErr, run([]string{"xsd"}))
 }

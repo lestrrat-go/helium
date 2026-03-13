@@ -545,12 +545,13 @@ source: [examples/schematron_validate_example_test.go](https://github.com/lestrr
 # `helium` CLI
 
 The command-line interface is exposed as `helium`.
-Currently implemented subcommands: `lint`, `xsd validate`.
+Currently implemented subcommands: `lint`, `xpath`, `xsd validate`.
 Use `helium lint` in place of the old `heliumlint` command.
 
 | Command | Purpose |
 |---------|---------|
 | `helium lint` | Parse and lint XML documents |
+| `helium xpath` | Evaluate XPath expressions against XML input |
 | `helium xsd validate` | Validate XML documents against an XML Schema |
 
 # Current status

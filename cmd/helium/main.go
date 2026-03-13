@@ -18,6 +18,8 @@ func run(args []string) int {
 	switch args[0] {
 	case "lint":
 		return Run("helium lint", args[1:])
+	case "xpath":
+		return RunXPath("helium xpath", args[1:])
 	case "xsd":
 		return runXSD(args[1:])
 	default:
@@ -48,6 +50,7 @@ func showUsage() {
 
 Available commands:
   lint    Parse and lint XML documents
+  xpath   Evaluate XPath expressions
   xsd     XML Schema operations
 
 Planned commands:
