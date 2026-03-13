@@ -471,7 +471,7 @@ func Example_relaxng_validate() {
     return
   }
 
-  grammar, err := relaxng.Compile(schemaDoc)
+  grammar, err := relaxng.Compile(context.Background(), schemaDoc)
   if err != nil {
     fmt.Printf("schema compile failed: %s\n", err)
     return
