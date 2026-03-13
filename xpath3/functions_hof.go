@@ -128,6 +128,9 @@ func fnApply(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(args[1]) != 1 {
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "apply() second argument must be a single array"}
+	}
 	arr, ok := args[1][0].(ArrayItem)
 	if !ok {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "apply() second argument must be array"}

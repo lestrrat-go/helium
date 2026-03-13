@@ -894,6 +894,16 @@ func TestErrorRejectsNonQNameCode(t *testing.T) {
 	require.Equal(t, "XPTY0004", xpErr.Code)
 }
 
+func TestApplyRejectsEmptyArrayArgument(t *testing.T) {
+	doc := parseTestDoc(t)
+	_, err := xpath3.Evaluate(t.Context(), doc, `apply(function($x) { $x }, ())`)
+	require.Error(t, err)
+
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, "XPTY0004", xpErr.Code)
+}
+
 // --- Context with variables ---
 
 func TestContextVariables(t *testing.T) {
