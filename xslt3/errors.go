@@ -24,11 +24,13 @@ const (
 	errCodeXTSE0580 = "XTSE0580" // invalid attribute value template
 	errCodeXTSE0620 = "XTSE0620" // cannot write to output
 	errCodeXTSE0680 = "XTSE0680" // invalid xsl:number
+	errCodeXTRE0540 = "XTRE0540" // attribute after child content
 	errCodeXTDE0820 = "XTDE0820" // dynamic type error in template match
 	errCodeXTDE0830 = "XTDE0830" // no matching template rule
 	errCodeXTDE0835 = "XTDE0835" // xsl:message terminate=yes
 	errCodeXTDE0045 = "XTDE0045" // evaluation error in AVT
 	errCodeXTDE0060 = "XTDE0060" // invalid call-template target
+	errCodeXTDE0410 = "XTDE0410" // duplicate parameter
 	errCodeXTDE0160 = "XTDE0160" // multiple output documents same URI
 	errCodeXTDE0430 = "XTDE0430" // variable type error
 	errCodeXTDE0560 = "XTDE0560" // copy-of type error

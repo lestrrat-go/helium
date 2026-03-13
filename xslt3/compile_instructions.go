@@ -210,12 +210,12 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesI
 }
 
 func (c *compiler) compileCallTemplate(elem *helium.Element) (*CallTemplateInst, error) {
-	name := getAttr(elem,"name")
+	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:call-template requires name attribute")
 	}
 
-	inst := &CallTemplateInst{Name: name}
+	inst := &CallTemplateInst{Name: resolveQName(name, c.nsBindings)}
 
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)

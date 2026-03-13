@@ -258,8 +258,9 @@ func (ec *execContext) evaluateBody(ctx context.Context, body []Instruction) (xp
 		return nil, err
 	}
 
-	// Push a new output frame
-	ec.outputStack = append(ec.outputStack, &outputFrame{doc: tmpDoc, current: tmpRoot})
+	// Push a new output frame with capture mode enabled
+	frame := &outputFrame{doc: tmpDoc, current: tmpRoot, captureItems: true}
+	ec.outputStack = append(ec.outputStack, frame)
 	defer func() {
 		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 	}()
@@ -268,6 +269,20 @@ func (ec *execContext) evaluateBody(ctx context.Context, body []Instruction) (xp
 		if err := ec.executeInstruction(ctx, inst); err != nil {
 			return nil, err
 		}
+	}
+
+	// If we captured atomic items via xsl:sequence, return them directly
+	if len(frame.pendingItems) > 0 {
+		// If there are also DOM children, merge them
+		if tmpRoot.FirstChild() != nil {
+			var seq xpath3.Sequence
+			for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
+				seq = append(seq, xpath3.NodeItem{Node: child})
+			}
+			seq = append(seq, frame.pendingItems...)
+			return seq, nil
+		}
+		return frame.pendingItems, nil
 	}
 
 	// Collect children as sequence or text value

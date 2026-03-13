@@ -838,8 +838,13 @@ func (d *Writer) dumpNsList(out io.Writer, nslist []*Namespace) error {
 }
 
 func (d *Writer) dumpNs(out io.Writer, ns *Namespace) error {
-	if ns.href == "" {
-		// no op
+	if ns.href == "" && ns.prefix != "" {
+		// Prefixed namespace with empty URI — skip (invalid)
+		return nil
+	}
+	if ns.href == "" && ns.prefix == "" {
+		// xmlns="" — namespace undeclaration; emit it
+		_, _ = io.WriteString(out, ` xmlns=""`)
 		return nil
 	}
 

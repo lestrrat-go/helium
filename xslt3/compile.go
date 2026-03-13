@@ -30,6 +30,24 @@ func getAttr(elem *helium.Element, name string) string {
 	return v
 }
 
+// resolveQName resolves a QName (prefix:local or just local) to an expanded name.
+// If the QName has a prefix, it is resolved using the given namespace bindings
+// and the result is returned in Clark notation: {uri}local.
+// If no prefix, the name is returned as-is.
+func resolveQName(qname string, nsBindings map[string]string) string {
+	idx := strings.IndexByte(qname, ':')
+	if idx < 0 {
+		return qname
+	}
+	prefix := qname[:idx]
+	local := qname[idx+1:]
+	if uri, ok := nsBindings[prefix]; ok {
+		return "{" + uri + "}" + local
+	}
+	// prefix not found; return as-is
+	return qname
+}
+
 // compileXPath compiles an XPath expression with the given namespace bindings.
 func compileXPath(expr string, nsBindings map[string]string) (*xpath3.Expression, error) {
 	compiled, err := xpath3.Compile(expr)
@@ -215,7 +233,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		tmpl.Match = p
 	}
 
-	tmpl.Name = getAttr(elem,"name")
+	tmpl.Name = resolveQName(getAttr(elem, "name"), c.nsBindings)
 	tmpl.Mode = getAttr(elem,"mode")
 
 	if prio := getAttr(elem,"priority"); prio != "" {

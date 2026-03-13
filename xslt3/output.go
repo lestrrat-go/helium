@@ -5,12 +5,15 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/stream"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 // outputFrame represents the current output target during transformation.
 type outputFrame struct {
-	doc     *helium.Document // result document being built
-	current helium.Node      // current insertion point
+	doc          *helium.Document // result document being built
+	current      helium.Node      // current insertion point
+	captureItems bool             // when true, xsl:sequence adds to pendingItems instead of DOM
+	pendingItems xpath3.Sequence  // captured items from xsl:sequence
 }
 
 // serializeResult writes the result document to a writer according to the
