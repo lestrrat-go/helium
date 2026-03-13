@@ -1825,6 +1825,12 @@ func (p *parser) parseSequenceType() (SequenceType, error) {
 
 // parseItemType parses an item type within a sequence type.
 func (p *parser) parseItemType() (NodeTest, error) {
+	p.depth++
+	if p.depth > maxParseDepth {
+		return nil, ErrExprTooDeep
+	}
+	defer func() { p.depth-- }()
+
 	tok := p.lexer.Peek()
 
 	if tok.Type == TokenLParen {
