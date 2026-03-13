@@ -11,13 +11,23 @@ import (
 )
 
 type countingWriter struct {
-	bytes.Buffer
+	buf    bytes.Buffer
 	writes int
 }
 
 func (w *countingWriter) Write(p []byte) (int, error) {
 	w.writes++
-	return w.Buffer.Write(p)
+	return w.buf.Write(p)
+}
+
+func (w *countingWriter) WriteByte(b byte) error {
+	w.writes++
+	return w.buf.WriteByte(b)
+}
+
+func (w *countingWriter) WriteString(s string) (int, error) {
+	w.writes++
+	return w.buf.WriteString(s)
 }
 
 func TestStartDocument(t *testing.T) {
@@ -126,7 +136,7 @@ func TestWriteStringBatchesPlainText(t *testing.T) {
 	require.NoError(t, w.WriteString(strings.Repeat("a", 64)))
 	require.NoError(t, w.EndElement())
 
-	require.Less(t, out.writes, 10)
+	require.Equal(t, 7, out.writes)
 }
 
 func TestNestedElements(t *testing.T) {

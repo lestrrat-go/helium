@@ -84,8 +84,8 @@ func WithIndent(indent string) Option {
 	return func(w *Writer) { w.indent = indent }
 }
 
-// WithQuoteChar sets the attribute value quote character. Must be '”' or '\”;
-// any other value is silently ignored. Default is '”'.
+// WithQuoteChar sets the attribute value quote character. Must be '"' or '\''.
+// Any other value is silently ignored. The default is '"'.
 func WithQuoteChar(q byte) Option {
 	return func(w *Writer) {
 		if q == '\'' || q == '"' {
