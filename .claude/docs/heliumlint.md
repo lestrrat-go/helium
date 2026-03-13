@@ -23,7 +23,7 @@ Multiple files: highest exit code wins.
 1. READ   — os.ReadFile(filename) or io.ReadAll(os.Stdin)
 2. PARSE  — parser.Parse() with parseOptions (repeated cfg.repeat times)
 3. XINCLUDE — xinclude.Process() if --xinclude
-4. SCHEMA — xsd.CompileFile() + xsd.Validate() if --schema
+4. SCHEMA — xsd.CompileFile(ctx, ...) + xsd.Validate() if --schema
 5. DTD    — check DTD validation result if --valid
 6. XPATH  — xpath.Evaluate() if --xpath (bypasses output)
 7. OUTPUT — C14N mode OR standard dump (unless --noout)

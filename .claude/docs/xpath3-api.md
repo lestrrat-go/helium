@@ -40,45 +40,34 @@ func (r *Result) IsString() (string, bool)
 ## Context
 
 ```go
-type Context struct {
-    namespaces       map[string]string
-    variables        map[string]Sequence
-    functions        map[string]Function
-    functionsNS      map[QualifiedName]Function
-    opLimit          int
-    implicitTimezone *time.Location
-    defaultLanguage  string
-    defaultCollation string
-    defaultDecimal   *DecimalFormat
-    decimalFormats   map[QualifiedName]DecimalFormat
-    baseURI          string
-    uriResolver      URIResolver
-    httpClient       *http.Client
-}
-
-type ContextOption func(*Context)
-
-func WithNamespaces(ns map[string]string) ContextOption       // defensively copied
-func WithVariables(vars map[string]Sequence) ContextOption    // defensively copied
-func WithOpLimit(limit int) ContextOption
-func WithFunctions(fns map[string]Function) ContextOption     // defensively copied
-func WithFunctionsNS(fns map[QualifiedName]Function) ContextOption // defensively copied
-func WithImplicitTimezone(loc *time.Location) ContextOption
-func WithDefaultLanguage(lang string) ContextOption
-func WithDefaultCollation(uri string) ContextOption
-func WithDefaultDecimalFormat(df DecimalFormat) ContextOption
-func WithNamedDecimalFormats(dfs map[QualifiedName]DecimalFormat) ContextOption // defensively copied
-func WithBaseURI(uri string) ContextOption
-func WithURIResolver(r URIResolver) ContextOption
-func WithHTTPClient(client *http.Client) ContextOption
-
-func NewContext(ctx context.Context, opts ...ContextOption) context.Context
-func GetContext(ctx context.Context) *Context
+func WithNamespaces(ctx context.Context, ns map[string]string) context.Context
+func WithAdditionalNamespaces(ctx context.Context, ns map[string]string) context.Context
+func WithVariables(ctx context.Context, vars map[string]Sequence) context.Context
+func WithAdditionalVariables(ctx context.Context, vars map[string]Sequence) context.Context
+func WithOpLimit(ctx context.Context, limit int) context.Context
+func WithFunctions(ctx context.Context, fns map[string]Function) context.Context
+func WithFunction(ctx context.Context, name string, fn Function) context.Context
+func WithFunctionsNS(ctx context.Context, fns map[QualifiedName]Function) context.Context
+func WithFunctionNS(ctx context.Context, uri, name string, fn Function) context.Context
+func WithImplicitTimezone(ctx context.Context, loc *time.Location) context.Context
+func WithDefaultLanguage(ctx context.Context, lang string) context.Context
+func WithDefaultCollation(ctx context.Context, uri string) context.Context
+func WithDefaultDecimalFormat(ctx context.Context, df DecimalFormat) context.Context
+func WithNamedDecimalFormats(ctx context.Context, dfs map[QualifiedName]DecimalFormat) context.Context
+func WithBaseURI(ctx context.Context, uri string) context.Context
+func WithURIResolver(ctx context.Context, r URIResolver) context.Context
+func WithCollectionResolver(ctx context.Context, r CollectionResolver) context.Context
+func WithHTTPClient(ctx context.Context, client *http.Client) context.Context
 
 type QualifiedName struct { URI, Name string }
 
 type URIResolver interface {
     ResolveURI(uri string) (io.ReadCloser, error)
+}
+
+type CollectionResolver interface {
+    ResolveCollection(uri string) (Sequence, error)
+    ResolveURICollection(uri string) ([]string, error)
 }
 ```
 

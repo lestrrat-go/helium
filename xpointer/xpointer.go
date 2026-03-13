@@ -114,7 +114,7 @@ func evaluatePart(ctx context.Context, doc *helium.Document, p xptrPart, nsMap m
 // findWithContext compiles an XPath expression and evaluates it with
 // namespace bindings, returning a node-set.
 func findWithContext(ctx context.Context, node helium.Node, expr string, nsMap map[string]string) ([]helium.Node, error) {
-	xctx := xpath1.NewContext(ctx, xpath1.WithNamespaces(nsMap))
+	xctx := xpath1.WithAdditionalNamespaces(ctx, nsMap)
 	r, err := xpath1.Evaluate(xctx, node, expr)
 	if err != nil {
 		return nil, fmt.Errorf("xpointer: XPath evaluation failed: %w", err)

@@ -26,11 +26,9 @@ func Example_xpath_with_namespaces() {
 	//
 	// This decoupling is important because XPath matches by namespace URI,
 	// not by prefix — documents may use any prefix for a given namespace.
-	ctx := xpath1.NewContext(context.Background(),
-		xpath1.WithNamespaces(map[string]string{
-			"x": "http://example.com/ns",
-		}),
-	)
+	ctx := xpath1.WithNamespaces(context.Background(), map[string]string{
+		"x": "http://example.com/ns",
+	})
 
 	// Evaluate with explicit namespace bindings via context.Context.
 	r, err := xpath1.Evaluate(ctx, doc, "//x:item")

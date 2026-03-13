@@ -5,7 +5,7 @@ package xpath1
 import (
 	"context"
 	"errors"
-	"fmt"
+	"maps"
 
 	helium "github.com/lestrrat-go/helium"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
@@ -132,28 +132,11 @@ type FunctionContext interface {
 	Variable(name string) (any, bool)
 }
 
-type contextKey struct{}
+type evalConfigKey struct{}
 type functionContextKey struct{}
 
-// NewContext stores an xpath.Context inside a context.Context and returns it.
-// ctx must not be nil, following Go's standard context.Context convention.
-func NewContext(ctx context.Context, opts ...ContextOption) context.Context {
-	c := &Context{}
-	for _, opt := range opts {
-		opt(c)
-	}
-	return context.WithValue(ctx, contextKey{}, c)
-}
-
-// GetContext retrieves the xpath.Context from a context.Context.
-// Returns nil if none is set.
-func GetContext(ctx context.Context) *Context {
-	c, _ := ctx.Value(contextKey{}).(*Context)
-	return c
-}
-
-// WithFunctionContext stores a FunctionContext in a context.Context.
-func WithFunctionContext(ctx context.Context, fctx FunctionContext) context.Context {
+// withFunctionContext stores a FunctionContext in a context.Context.
+func withFunctionContext(ctx context.Context, fctx FunctionContext) context.Context {
 	return context.WithValue(ctx, functionContextKey{}, fctx)
 }
 
@@ -164,10 +147,7 @@ func GetFunctionContext(ctx context.Context) FunctionContext {
 	return fctx
 }
 
-// Context carries namespace bindings, variable bindings, and custom function
-// registrations for expression evaluation.
-// (libxml2: xmlXPathContext)
-type Context struct {
+type evalConfig struct {
 	namespaces  map[string]string          // prefix -> URI
 	variables   map[string]any             // name -> value ([]helium.Node, string, float64, bool)
 	opLimit     int                        // 0 = unlimited (default); matches libxml2's opLimit
@@ -175,83 +155,120 @@ type Context struct {
 	functionsNS map[QualifiedName]Function // namespace-qualified custom functions
 }
 
-// ContextOption configures a Context during construction.
-type ContextOption func(*Context)
-
-// WithNamespaces sets namespace prefix->URI bindings on the context.
-func WithNamespaces(ns map[string]string) ContextOption {
-	return func(c *Context) {
-		c.namespaces = ns
+func getEvalConfig(ctx context.Context) *evalConfig {
+	if ctx == nil {
+		return nil
 	}
+	c, _ := ctx.Value(evalConfigKey{}).(*evalConfig)
+	return c
 }
 
-// WithVariables sets variable name->value bindings on the context.
-func WithVariables(vars map[string]any) ContextOption {
-	return func(c *Context) {
-		c.variables = vars
+func deriveEvalConfig(ctx context.Context) *evalConfig {
+	if c := getEvalConfig(ctx); c != nil {
+		return c.clone()
 	}
+	return &evalConfig{}
 }
 
-// WithOpLimit sets the operation counter limit (0 = unlimited).
-func WithOpLimit(limit int) ContextOption {
-	return func(c *Context) {
+func withEvalConfig(ctx context.Context, cfg *evalConfig) context.Context {
+	return context.WithValue(ctx, evalConfigKey{}, cfg)
+}
+
+func updateEvalConfig(ctx context.Context, fn func(*evalConfig)) context.Context {
+	cfg := deriveEvalConfig(ctx)
+	fn(cfg)
+	return withEvalConfig(ctx, cfg)
+}
+
+func (c *evalConfig) clone() *evalConfig {
+	if c == nil {
+		return &evalConfig{}
+	}
+	cp := *c
+	cp.namespaces = maps.Clone(c.namespaces)
+	cp.variables = maps.Clone(c.variables)
+	cp.functions = maps.Clone(c.functions)
+	cp.functionsNS = maps.Clone(c.functionsNS)
+	return &cp
+}
+
+// WithNamespaces sets namespace prefix->URI bindings on the returned context.
+func WithNamespaces(ctx context.Context, ns map[string]string) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
+		c.namespaces = maps.Clone(ns)
+	})
+}
+
+// WithAdditionalNamespaces merges namespace prefix->URI bindings into the returned context.
+func WithAdditionalNamespaces(ctx context.Context, ns map[string]string) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
+		if c.namespaces == nil {
+			c.namespaces = make(map[string]string, len(ns))
+		}
+		for k, v := range ns {
+			c.namespaces[k] = v
+		}
+	})
+}
+
+// WithVariables sets variable name->value bindings on the returned context.
+func WithVariables(ctx context.Context, vars map[string]any) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
+		c.variables = maps.Clone(vars)
+	})
+}
+
+// WithAdditionalVariables merges variable name->value bindings into the returned context.
+func WithAdditionalVariables(ctx context.Context, vars map[string]any) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
+		if c.variables == nil {
+			c.variables = make(map[string]any, len(vars))
+		}
+		for k, v := range vars {
+			c.variables[k] = v
+		}
+	})
+}
+
+// WithOpLimit sets the operation counter limit (0 = unlimited) on the returned context.
+func WithOpLimit(ctx context.Context, limit int) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.opLimit = limit
-	}
+	})
 }
 
-// WithFunctions sets unqualified custom function registrations.
-func WithFunctions(fns map[string]Function) ContextOption {
-	return func(c *Context) {
-		c.functions = fns
-	}
+// WithFunction registers an unqualified custom XPath function on the returned context.
+func WithFunction(ctx context.Context, name string, fn Function) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
+		if c.functions == nil {
+			c.functions = make(map[string]Function)
+		}
+		c.functions[name] = fn
+	})
 }
 
-// WithFunctionsNS sets namespace-qualified custom function registrations.
-func WithFunctionsNS(fns map[QualifiedName]Function) ContextOption {
-	return func(c *Context) {
-		c.functionsNS = fns
-	}
+// WithFunctions sets unqualified custom function registrations on the returned context.
+func WithFunctions(ctx context.Context, fns map[string]Function) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
+		c.functions = maps.Clone(fns)
+	})
 }
 
-// Namespaces returns the namespace prefix->URI bindings.
-func (c *Context) Namespaces() map[string]string {
-	return c.namespaces
+// WithFunctionNS registers a namespace-qualified custom XPath function on the returned context.
+func WithFunctionNS(ctx context.Context, uri, name string, fn Function) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
+		if c.functionsNS == nil {
+			c.functionsNS = make(map[QualifiedName]Function)
+		}
+		c.functionsNS[QualifiedName{URI: uri, Name: name}] = fn
+	})
 }
 
-// Variables returns the variable name->value bindings.
-func (c *Context) Variables() map[string]any {
-	return c.variables
-}
-
-// Functions returns the unqualified custom function registrations.
-func (c *Context) Functions() map[string]Function {
-	return c.functions
-}
-
-// FunctionsNS returns the namespace-qualified custom function registrations.
-func (c *Context) FunctionsNS() map[QualifiedName]Function {
-	return c.functionsNS
-}
-
-// RegisterFunction registers an unqualified custom XPath function.
-// Returns an error if the name conflicts with a built-in function.
-func (c *Context) RegisterFunction(name string, fn Function) error {
-	if _, ok := builtinFunctions[name]; ok {
-		return fmt.Errorf("cannot override built-in function %q: %w", name, ErrUnknownFunction)
-	}
-	if c.functions == nil {
-		c.functions = make(map[string]Function)
-	}
-	c.functions[name] = fn
-	return nil
-}
-
-// RegisterFunctionNS registers a namespace-qualified custom XPath function.
-func (c *Context) RegisterFunctionNS(uri, name string, fn Function) {
-	if c.functionsNS == nil {
-		c.functionsNS = make(map[QualifiedName]Function)
-	}
-	c.functionsNS[QualifiedName{URI: uri, Name: name}] = fn
+// WithFunctionsNS sets namespace-qualified custom function registrations on the returned context.
+func WithFunctionsNS(ctx context.Context, fns map[QualifiedName]Function) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
+		c.functionsNS = maps.Clone(fns)
+	})
 }
 
 // Expression is a compiled XPath expression, reusable across evaluations.
@@ -280,8 +297,8 @@ func MustCompile(expr string) *Expression {
 }
 
 // Evaluate evaluates the compiled expression against the given context node.
-// The context.Context may carry an xpath.Context (created via NewContext)
-// with namespace bindings, variable bindings, and custom functions.
+// The context.Context may carry xpath1 evaluation settings attached via
+// WithNamespaces, WithVariables, WithFunction(s), or WithOpLimit.
 // (libxml2: xmlXPathCompiledEval)
 func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, error) {
 	ectx := newEvalContext(ctx, node)

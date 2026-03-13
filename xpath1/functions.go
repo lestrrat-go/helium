@@ -12,34 +12,34 @@ import (
 
 // sentinel errors for XPath built-in function argument validation.
 var (
-	errLastNoArgs           = errors.New("last() takes no arguments")
-	errPositionNoArgs       = errors.New("position() takes no arguments")
-	errCountOneArg          = errors.New("count() takes exactly 1 argument")
-	errCountNodeSet         = errors.New("count() argument must be a node-set")
-	errIDOneArg             = errors.New("id() takes exactly 1 argument")
-	errExpected01Args       = errors.New("expected 0 or 1 arguments")
-	errArgMustBeNodeSet     = errors.New("argument must be a node-set")
-	errStringArgs           = errors.New("string() takes 0 or 1 arguments")
-	errConcatArgs           = errors.New("concat() requires at least 2 arguments")
-	errStartsWithArgs       = errors.New("starts-with() takes exactly 2 arguments")
-	errContainsArgs         = errors.New("contains() takes exactly 2 arguments")
-	errSubstringBeforeArgs  = errors.New("substring-before() takes exactly 2 arguments")
-	errSubstringAfterArgs   = errors.New("substring-after() takes exactly 2 arguments")
-	errSubstringArgs        = errors.New("substring() takes 2 or 3 arguments")
-	errStringLengthArgs     = errors.New("string-length() takes 0 or 1 arguments")
-	errNormalizeSpaceArgs   = errors.New("normalize-space() takes 0 or 1 arguments")
-	errTranslateArgs        = errors.New("translate() takes exactly 3 arguments")
-	errBooleanOneArg        = errors.New("boolean() takes exactly 1 argument")
-	errNotOneArg            = errors.New("not() takes exactly 1 argument")
-	errTrueNoArgs           = errors.New("true() takes no arguments")
-	errFalseNoArgs          = errors.New("false() takes no arguments")
-	errLangOneArg           = errors.New("lang() takes exactly 1 argument")
-	errNumberArgs           = errors.New("number() takes 0 or 1 arguments")
-	errSumOneArg            = errors.New("sum() takes exactly 1 argument")
-	errSumNodeSet           = errors.New("sum() argument must be a node-set")
-	errFloorOneArg          = errors.New("floor() takes exactly 1 argument")
-	errCeilingOneArg        = errors.New("ceiling() takes exactly 1 argument")
-	errRoundOneArg          = errors.New("round() takes exactly 1 argument")
+	errLastNoArgs          = errors.New("last() takes no arguments")
+	errPositionNoArgs      = errors.New("position() takes no arguments")
+	errCountOneArg         = errors.New("count() takes exactly 1 argument")
+	errCountNodeSet        = errors.New("count() argument must be a node-set")
+	errIDOneArg            = errors.New("id() takes exactly 1 argument")
+	errExpected01Args      = errors.New("expected 0 or 1 arguments")
+	errArgMustBeNodeSet    = errors.New("argument must be a node-set")
+	errStringArgs          = errors.New("string() takes 0 or 1 arguments")
+	errConcatArgs          = errors.New("concat() requires at least 2 arguments")
+	errStartsWithArgs      = errors.New("starts-with() takes exactly 2 arguments")
+	errContainsArgs        = errors.New("contains() takes exactly 2 arguments")
+	errSubstringBeforeArgs = errors.New("substring-before() takes exactly 2 arguments")
+	errSubstringAfterArgs  = errors.New("substring-after() takes exactly 2 arguments")
+	errSubstringArgs       = errors.New("substring() takes 2 or 3 arguments")
+	errStringLengthArgs    = errors.New("string-length() takes 0 or 1 arguments")
+	errNormalizeSpaceArgs  = errors.New("normalize-space() takes 0 or 1 arguments")
+	errTranslateArgs       = errors.New("translate() takes exactly 3 arguments")
+	errBooleanOneArg       = errors.New("boolean() takes exactly 1 argument")
+	errNotOneArg           = errors.New("not() takes exactly 1 argument")
+	errTrueNoArgs          = errors.New("true() takes no arguments")
+	errFalseNoArgs         = errors.New("false() takes no arguments")
+	errLangOneArg          = errors.New("lang() takes exactly 1 argument")
+	errNumberArgs          = errors.New("number() takes 0 or 1 arguments")
+	errSumOneArg           = errors.New("sum() takes exactly 1 argument")
+	errSumNodeSet          = errors.New("sum() argument must be a node-set")
+	errFloorOneArg         = errors.New("floor() takes exactly 1 argument")
+	errCeilingOneArg       = errors.New("ceiling() takes exactly 1 argument")
+	errRoundOneArg         = errors.New("round() takes exactly 1 argument")
 )
 
 type builtinFunction struct {
@@ -129,7 +129,7 @@ func evalFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, error) {
 
 	// Stash the evalContext as FunctionContext in the context.Context
 	// so functions can retrieve it via GetFunctionContext.
-	fctx := WithFunctionContext(ctx.goCtx, ctx)
+	fctx := withFunctionContext(ctx.goCtx, ctx)
 	return fn.Eval(fctx, args) //nolint:wrapcheck
 }
 
@@ -161,7 +161,7 @@ func evalNamespacedFunctionCall(ctx *evalContext, fc FunctionCall) (*Result, err
 
 	// Stash the evalContext as FunctionContext in the context.Context
 	// so functions can retrieve it via GetFunctionContext.
-	fctx := WithFunctionContext(ctx.goCtx, ctx)
+	fctx := withFunctionContext(ctx.goCtx, ctx)
 	return fn.Eval(fctx, args) //nolint:wrapcheck
 }
 

@@ -183,7 +183,7 @@ func TestGoldenFiles(t *testing.T) {
 			// Compile schema.
 			xsdFilename := "./test/schemas/" + tc.xsdBase
 			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-			schema, err := xsd.CompileFile(tc.xsdPath, xsd.WithSchemaFilename(xsdFilename), xsd.WithCompileErrorHandler(collector))
+			schema, err := xsd.CompileFile(t.Context(), tc.xsdPath, xsd.WithSchemaFilename(xsdFilename), xsd.WithCompileErrorHandler(collector))
 			require.NoError(t, err, "schema compilation failed for %s", tc.xsdPath)
 			_ = collector.Close()
 			compileWarnings, compileErrors := partitionCompileErrors(collector.Errors())
@@ -244,7 +244,7 @@ func TestXsiNil(t *testing.T) {
 	schemaDoc, err := helium.Parse(t.Context(), []byte(schemaSrc))
 	require.NoError(t, err)
 
-	schema, err := xsd.Compile(schemaDoc)
+	schema, err := xsd.Compile(t.Context(), schemaDoc)
 	require.NoError(t, err)
 
 	t.Run("nillable element with xsi:nil=true validates", func(t *testing.T) {
@@ -357,7 +357,7 @@ func TestDefaultFixedValidation(t *testing.T) {
 		xsdDoc, err := helium.Parse(t.Context(), []byte(xsdStr))
 		require.NoError(t, err, "XSD parse failed")
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		schema, err := xsd.Compile(xsdDoc, xsd.WithCompileErrorHandler(collector))
+		schema, err := xsd.Compile(t.Context(), xsdDoc, xsd.WithCompileErrorHandler(collector))
 		require.NoError(t, err, "schema compilation failed")
 		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
@@ -439,7 +439,7 @@ func TestMultipleAttributeErrors(t *testing.T) {
 		xsdDoc, err := helium.Parse(t.Context(), []byte(xsdStr))
 		require.NoError(t, err, "XSD parse failed")
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		schema, err := xsd.Compile(xsdDoc, xsd.WithCompileErrorHandler(collector))
+		schema, err := xsd.Compile(t.Context(), xsdDoc, xsd.WithCompileErrorHandler(collector))
 		require.NoError(t, err, "schema compilation failed")
 		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
@@ -512,7 +512,7 @@ func TestRedefine(t *testing.T) {
 	compileAndValidate := func(t *testing.T, xsdPath, xmlStr string) error {
 		t.Helper()
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		schema, err := xsd.CompileFile(xsdPath, xsd.WithCompileErrorHandler(collector))
+		schema, err := xsd.CompileFile(t.Context(), xsdPath, xsd.WithCompileErrorHandler(collector))
 		require.NoError(t, err, "schema compilation failed")
 		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
@@ -722,7 +722,7 @@ func TestFacetConsistency(t *testing.T) {
 		xsdDoc, err := helium.Parse(t.Context(), []byte(xsdStr))
 		require.NoError(t, err, "XSD parse failed")
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		_, err = xsd.Compile(xsdDoc, xsd.WithSchemaFilename("test.xsd"), xsd.WithCompileErrorHandler(collector))
+		_, err = xsd.Compile(t.Context(), xsdDoc, xsd.WithSchemaFilename("test.xsd"), xsd.WithCompileErrorHandler(collector))
 		require.NoError(t, err, "schema compilation failed")
 		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())

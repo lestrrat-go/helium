@@ -39,8 +39,8 @@ func MustCompile(expr string) *Expression {
 }
 
 // Evaluate evaluates the compiled expression against the given context node.
-// The context.Context may carry an xpath3.Context (created via NewContext)
-// with namespace bindings, variable bindings, and custom functions.
+// The context.Context may carry XPath 3.1 evaluation settings attached via
+// WithNamespaces, WithVariables, WithFunction(s), and related mutators.
 func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, error) {
 	ec := newEvalContext(ctx, node)
 

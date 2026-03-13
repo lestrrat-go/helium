@@ -1,7 +1,6 @@
 package relaxng
 
 import (
-	"context"
 	"fmt"
 
 	helium "github.com/lestrrat-go/helium"
@@ -188,7 +187,7 @@ func (c *compiler) addPatternError(p *pattern, msg string) {
 	} else {
 		formatted = rngParserError(msg)
 	}
-	c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(formatted, helium.ErrorLevelFatal))
+	c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(formatted, helium.ErrorLevelFatal))
 	c.errorCount++
 }
 
@@ -202,7 +201,7 @@ func (c *compiler) addPatternWarning(p *pattern, msg string) {
 	} else {
 		formatted = fmt.Sprintf("Relax-NG parser warning : %s\n", msg)
 	}
-	c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(formatted, helium.ErrorLevelWarning))
+	c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(formatted, helium.ErrorLevelWarning))
 }
 
 // patternElemName returns the XML element name for a pattern kind.

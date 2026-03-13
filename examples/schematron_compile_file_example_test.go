@@ -26,7 +26,7 @@ func Example_schematron_compile_file() {
 		return
 	}
 
-	schema, err := schematron.CompileFile(f.Name())
+	schema, err := schematron.CompileFile(context.Background(), f.Name())
 	if err != nil {
 		fmt.Printf("compile failed: %s\n", err)
 		return

@@ -63,11 +63,9 @@ func TestEvalLiteral(t *testing.T) {
 
 func TestEvalVariable(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
-	ctx := xpath3.NewContext(t.Context(),
-		xpath3.WithVariables(map[string]xpath3.Sequence{
-			"x": xpath3.SingleInteger(42),
-		}),
-	)
+	ctx := xpath3.WithVariables(t.Context(), map[string]xpath3.Sequence{
+		"x": xpath3.SingleInteger(42),
+	})
 	seq := evalExprCtx(t, ctx, doc, "$x")
 	require.Len(t, seq, 1)
 	av := seq[0].(xpath3.AtomicValue)
@@ -306,15 +304,13 @@ func TestEvalSimpleMap(t *testing.T) {
 
 func TestEvalFLWOR(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
-	ctx := xpath3.NewContext(t.Context(),
-		xpath3.WithVariables(map[string]xpath3.Sequence{
-			"items": {
-				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(1)},
-				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)},
-				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(3)},
-			},
-		}),
-	)
+	ctx := xpath3.WithVariables(t.Context(), map[string]xpath3.Sequence{
+		"items": {
+			xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(1)},
+			xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)},
+			xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(3)},
+		},
+	})
 
 	t.Run("simple for", func(t *testing.T) {
 		seq := evalExprCtx(t, ctx, doc, "for $x in $items return $x")
@@ -331,15 +327,13 @@ func TestEvalFLWOR(t *testing.T) {
 
 func TestEvalQuantified(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
-	ctx := xpath3.NewContext(t.Context(),
-		xpath3.WithVariables(map[string]xpath3.Sequence{
-			"nums": {
-				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(1)},
-				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)},
-				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(3)},
-			},
-		}),
-	)
+	ctx := xpath3.WithVariables(t.Context(), map[string]xpath3.Sequence{
+		"nums": {
+			xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(1)},
+			xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)},
+			xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(3)},
+		},
+	})
 
 	t.Run("some", func(t *testing.T) {
 		seq := evalExprCtx(t, ctx, doc, "some $x in $nums satisfies $x = 2")
@@ -534,11 +528,9 @@ func TestEvalUserFunction(t *testing.T) {
 		},
 	}
 
-	ctx := xpath3.NewContext(t.Context(),
-		xpath3.WithFunctions(map[string]xpath3.Function{
-			"myfunc": fn,
-		}),
-	)
+	ctx := xpath3.WithFunctions(t.Context(), map[string]xpath3.Function{
+		"myfunc": fn,
+	})
 
 	parsed := mustParseExpr(t, `myfunc("arg")`)
 	result, err := xpath3.EvalForTesting(ctx, doc, parsed)

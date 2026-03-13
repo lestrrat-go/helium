@@ -26,7 +26,7 @@ func Example_relaxng_compile_file() {
 		return
 	}
 
-	grammar, err := relaxng.CompileFile(f.Name())
+	grammar, err := relaxng.CompileFile(context.Background(), f.Name())
 	if err != nil {
 		fmt.Printf("compile failed: %s\n", err)
 		return

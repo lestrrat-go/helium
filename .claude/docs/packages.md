@@ -39,11 +39,12 @@ XPath 1.0 expression parsing and evaluation.
 - **Expression.Evaluate(ctx, Node) → (*Result, error)**
 - **Find(ctx, Node, string) → ([]Node, error)** — convenience: compile+evaluate→node-set
 - **Evaluate(ctx, Node, string) → (*Result, error)** — convenience: compile+evaluate
-- **NewContext(ctx, ...ContextOption) → context.Context** — embed xpath config in context.Context
+- **WithNamespaces(ctx, ns) → context.Context** / **WithVariables(ctx, vars) → context.Context** / **WithOpLimit(ctx, n) → context.Context** — attach XPath evaluation settings to `context.Context`
+- **WithFunction(ctx, name, fn) → context.Context** / **WithFunctionNS(ctx, uri, name, fn) → context.Context** — register custom functions on `context.Context`
+- **WithFunctions(ctx, fns) → context.Context** / **WithFunctionsNS(ctx, fns) → context.Context** — bulk function registration
 - `Result` types: NodeSetResult, BooleanResult, NumberResult, StringResult
-- `Context` — namespace bindings, variables, custom functions, op limits
-- `NewContext(ctx, opts)` with WithNamespaces(), WithVariables(), WithOpLimit()
-- `Context.RegisterFunction(name, fn)` / `RegisterFunctionNS(uri, name, fn)` — custom functions (unqualified names cannot override built-ins)
+- `FunctionContext` — read-only custom-function evaluation state; retrieve via `GetFunctionContext(ctx)`
+- Merge helpers: `WithAdditionalNamespaces(ctx, ns)`, `WithAdditionalVariables(ctx, vars)`
 - Limits: recursion 5000, node-set 10M, configurable op limit
 - Files: `xpath.go` (API), `parser.go`, `lexer.go`, `eval.go`, `expr.go`, `axes.go`, `functions.go`, `token.go`
 - Imports: helium
@@ -56,11 +57,12 @@ XPath 3.1 expression parsing and evaluation.
 - **Expression.Evaluate(ctx, Node) → (*Result, error)**
 - **Find(ctx, Node, string) → ([]Node, error)** — convenience: compile+evaluate→node-set
 - **Evaluate(ctx, Node, string) → (*Result, error)** — convenience: compile+evaluate
-- **NewContext(ctx, ...ContextOption) → context.Context** — embed xpath3 config in context.Context
+- **WithNamespaces(ctx, ns) → context.Context** / **WithVariables(ctx, vars) → context.Context** / **WithOpLimit(ctx, n) → context.Context** — attach XPath 3.1 evaluation settings to `context.Context`
+- **WithFunction(ctx, name, fn) → context.Context** / **WithFunctionNS(ctx, uri, name, fn) → context.Context** — register custom functions on `context.Context`
+- **WithFunctions(ctx, fns) → context.Context** / **WithFunctionsNS(ctx, fns) → context.Context** — bulk function registration
 - `Result` — wraps `Sequence`; methods: `Nodes()`, `IsBoolean()`, `IsNumber()`, `IsString()`, `IsAtomic()`, `Atomics()`, `Sequence()`
-- `Context` — namespace bindings, variables (Sequence), custom functions, op limits
-- `WithNamespaces()`, `WithVariables()`, `WithOpLimit()`, `WithFunctions()`, `WithFunctionsNS()`
-- Context options also include `WithDefaultLanguage()`, `WithDefaultCollation()`, `WithDefaultDecimalFormat()`, `WithNamedDecimalFormats()`, `WithBaseURI()`, `WithURIResolver()`, `WithHTTPClient()`, `WithImplicitTimezone()`
+- Merge helpers: `WithAdditionalNamespaces(ctx, ns)`, `WithAdditionalVariables(ctx, vars)`
+- Direct mutators also include `WithDefaultLanguage(ctx, lang)`, `WithDefaultCollation(ctx, uri)`, `WithDefaultDecimalFormat(ctx, df)`, `WithNamedDecimalFormats(ctx, dfs)`, `WithBaseURI(ctx, uri)`, `WithURIResolver(ctx, r)`, `WithCollectionResolver(ctx, r)`, `WithHTTPClient(ctx, client)`, `WithImplicitTimezone(ctx, loc)`
 - XPath 3.1 features: FLWOR, quantified, if-then-else, try-catch, maps, arrays, inline functions, HOFs, arrow operator, simple map, string concat, value/general/node comparisons
 - Built-in functions: 100+ across fn:, math:, map:, array: namespaces
 - Type system: Sequence ([]Item), AtomicValue, NodeItem, MapItem, ArrayItem, FunctionItem
@@ -73,7 +75,7 @@ XPath 3.1 expression parsing and evaluation.
 
 XML Schema (XSD) 1.0 compilation and validation.
 
-- **Compile(*Document, ...CompileOption) → (*Schema, error)** / **CompileFile(path, ...CompileOption) → (*Schema, error)**
+- **Compile(ctx, *Document, ...CompileOption) → (*Schema, error)** / **CompileFile(ctx, path, ...CompileOption) → (*Schema, error)**
 - **Validate(*Document, *Schema, ...ValidateOption) → error**
 - `Schema.LookupElement(local, ns)`, `Schema.LookupType(local, ns)`, `Schema.TargetNamespace()`
 - Supports: complex/simple types, sequences, choices, all, groups, attribute groups, substitution groups, import/include, IDC (xs:unique/key/keyref)
@@ -86,7 +88,7 @@ XML Schema (XSD) 1.0 compilation and validation.
 
 RELAX NG schema compilation and validation.
 
-- **Compile(*Document, ...CompileOption) → (*Grammar, error)** / **CompileFile(path, ...CompileOption) → (*Grammar, error)**
+- **Compile(ctx, *Document, ...CompileOption) → (*Grammar, error)** / **CompileFile(ctx, path, ...CompileOption) → (*Grammar, error)**
 - **Validate(*Document, *Grammar, ...ValidateOption) → error**
 - Pattern-based: element, attribute, group, choice, interleave, optional, zeroOrMore, oneOrMore, ref, data, value, list, mixed, notAllowed
 - Supports: include with override, externalRef, parentRef, anyName/nsName/ncName, data types
@@ -135,7 +137,7 @@ XPointer expression evaluation with scheme cascading.
 
 Schematron schema compilation and validation.
 
-- **Compile(*Document, ...CompileOption) → (*Schema, error)** / **CompileFile(path, ...CompileOption) → (*Schema, error)**
+- **Compile(ctx, *Document, ...CompileOption) → (*Schema, error)** / **CompileFile(ctx, path, ...CompileOption) → (*Schema, error)**
 - **Validate(*Document, *Schema, ...ValidateOption) → error**
 - Supports: schema, pattern, rule, assert, report, let, name, value-of
 - Variable bindings via `<let>` and `<param>`
@@ -146,7 +148,7 @@ Schematron schema compilation and validation.
 
 OASIS XML Catalog resolution for public/system IDs and URIs.
 
-- **Load(path, ...LoadOption) → (*Catalog, error)**
+- **Load(ctx, path, ...LoadOption) → (*Catalog, error)**
 - **Catalog.Resolve(pubID, sysID) → string** — resolve external identifier
 - **Catalog.ResolveURI(uri) → string** — resolve URI reference
 - Catalog chaining via nextCatalog; URN urn:publicid: support
@@ -169,7 +171,7 @@ Streaming XML writer (no DOM needed).
 SAX2 event-driven parsing interface definitions.
 
 - `SAX2Handler` interface — callbacks: StartDocument, EndDocument, StartElement, EndElement, Characters, Comment, PI, CData, DTD events, entity/notation/element/attribute declarations
-- `Context` interface — parser state passed to handlers; GetLocator() for line/col
+- `WithDocumentLocator(ctx, loc)` / `GetDocumentLocator(ctx)` — attach or read the current document locator on callback `context.Context`
 - Files: `sax.go`
 - Imports: helium (node types)
 

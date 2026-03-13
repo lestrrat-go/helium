@@ -256,6 +256,8 @@ func parseArgs(args []string) (*config, []string) {
 }
 
 func run() int {
+	ctx := context.Background()
+
 	cfg, files := parseArgs(os.Args[1:])
 	if cfg == nil {
 		showUsage()
@@ -290,7 +292,7 @@ func run() int {
 	var cat *catalog.Catalog
 	if cfg.catalogs && !cfg.noCatalogs {
 		var err error
-		cat, err = loadCatalogFromEnv()
+		cat, err = loadCatalogFromEnv(ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "heliumlint: %s\n", err)
 		}
@@ -304,7 +306,7 @@ func run() int {
 			t0 = time.Now()
 		}
 		var err error
-		schema, err = compileSchema(cfg)
+		schema, err = compileSchema(ctx, cfg)
 		if cfg.timing {
 			fmt.Fprintf(os.Stderr, "Compiling schema took %s\n", time.Since(t0))
 		}
@@ -326,7 +328,6 @@ func run() int {
 		out = f
 	}
 
-	ctx := context.Background()
 	exitCode := exitOK
 	for _, input := range inputs {
 		code := processInput(ctx, cfg, input, cat, schema, out)
@@ -337,7 +338,7 @@ func run() int {
 	return exitCode
 }
 
-func loadCatalogFromEnv() (*catalog.Catalog, error) {
+func loadCatalogFromEnv(ctx context.Context) (*catalog.Catalog, error) {
 	envFiles := os.Getenv("XML_CATALOG_FILES")
 	if envFiles == "" {
 		return nil, nil
@@ -347,7 +348,7 @@ func loadCatalogFromEnv() (*catalog.Catalog, error) {
 		if f == "" {
 			continue
 		}
-		c, err := catalog.Load(f)
+		c, err := catalog.Load(ctx, f)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "heliumlint: failed to load catalog %s: %s\n", f, err)
 			continue
@@ -357,8 +358,8 @@ func loadCatalogFromEnv() (*catalog.Catalog, error) {
 	return nil, nil
 }
 
-func compileSchema(cfg *config) (*xsd.Schema, error) {
-	schema, err := xsd.CompileFile(cfg.schemaFile)
+func compileSchema(ctx context.Context, cfg *config) (*xsd.Schema, error) {
+	schema, err := xsd.CompileFile(ctx, cfg.schemaFile)
 	if err != nil {
 		return nil, fmt.Errorf("heliumlint: failed to compile schema: %w", err)
 	}

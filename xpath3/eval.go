@@ -115,24 +115,24 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 		currentTime: &now,
 		docCache:    make(map[string]helium.Node),
 	}
-	if xctx := GetContext(ctx); xctx != nil {
-		ec.namespaces = xctx.namespaces
-		ec.vars = xctx.varScope
-		ec.opLimit = xctx.opLimit
-		ec.functions = xctx.functions
-		ec.fnsNS = xctx.functionsNS
-		ec.implicitTimezone = xctx.implicitTimezone
-		ec.defaultLanguage = xctx.defaultLanguage
-		ec.defaultCollation = xctx.defaultCollation
-		if xctx.defaultDecimal != nil {
-			df := *xctx.defaultDecimal
+	if cfg := getEvalConfig(ctx); cfg != nil {
+		ec.namespaces = cfg.namespaces
+		ec.vars = cfg.varScope
+		ec.opLimit = cfg.opLimit
+		ec.functions = cfg.functions
+		ec.fnsNS = cfg.functionsNS
+		ec.implicitTimezone = cfg.implicitTimezone
+		ec.defaultLanguage = cfg.defaultLanguage
+		ec.defaultCollation = cfg.defaultCollation
+		if cfg.defaultDecimal != nil {
+			df := *cfg.defaultDecimal
 			ec.defaultDecimalFormat = &df
 		}
-		ec.decimalFormats = xctx.decimalFormats
-		ec.baseURI = xctx.baseURI
-		ec.uriResolver = xctx.uriResolver
-		ec.collectionResolver = xctx.collectionResolver
-		ec.httpClient = xctx.httpClient
+		ec.decimalFormats = cfg.decimalFormats
+		ec.baseURI = cfg.baseURI
+		ec.uriResolver = cfg.uriResolver
+		ec.collectionResolver = cfg.collectionResolver
+		ec.httpClient = cfg.httpClient
 	}
 	return ec
 }

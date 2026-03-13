@@ -25,7 +25,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 		schemaDOC, err := helium.Parse(t.Context(), []byte(schemaXML))
 		require.NoError(t, err)
 
-		schema, err := xsd.Compile(schemaDOC)
+		schema, err := xsd.Compile(t.Context(), schemaDOC)
 		require.NoError(t, err)
 
 		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
@@ -64,7 +64,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 		schemaDOC, err := helium.Parse(t.Context(), []byte(schemaXML))
 		require.NoError(t, err)
 
-		schema, err := xsd.Compile(schemaDOC)
+		schema, err := xsd.Compile(t.Context(), schemaDOC)
 		require.NoError(t, err)
 
 		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
@@ -96,7 +96,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 		schemaDOC, err := helium.Parse(t.Context(), []byte(schemaXML))
 		require.NoError(t, err)
 
-		schema, err := xsd.Compile(schemaDOC)
+		schema, err := xsd.Compile(t.Context(), schemaDOC)
 		require.NoError(t, err)
 
 		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
@@ -124,7 +124,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 		schemaDOC, err := helium.Parse(t.Context(), []byte(schemaXML))
 		require.NoError(t, err)
 
-		schema, err := xsd.Compile(schemaDOC)
+		schema, err := xsd.Compile(t.Context(), schemaDOC)
 		require.NoError(t, err)
 
 		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
@@ -152,7 +152,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 		schemaDOC, err := helium.Parse(t.Context(), []byte(schemaXML))
 		require.NoError(t, err)
 
-		schema, err := xsd.Compile(schemaDOC)
+		schema, err := xsd.Compile(t.Context(), schemaDOC)
 		require.NoError(t, err)
 
 		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
@@ -188,7 +188,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 		schemaDOC, err := helium.Parse(t.Context(), []byte(schemaXML))
 		require.NoError(t, err)
 
-		schema, err := xsd.Compile(schemaDOC)
+		schema, err := xsd.Compile(t.Context(), schemaDOC)
 		require.NoError(t, err)
 
 		doc, err := helium.Parse(t.Context(), []byte(instanceXML))
@@ -214,7 +214,7 @@ func TestAbstractTypeValidation(t *testing.T) {
 		schemaDOC, err := helium.Parse(t.Context(), []byte(schemaXML))
 		require.NoError(t, err)
 
-		schema, err := xsd.Compile(schemaDOC)
+		schema, err := xsd.Compile(t.Context(), schemaDOC)
 		require.NoError(t, err)
 
 		doc, err := helium.Parse(t.Context(), []byte(instanceXML))

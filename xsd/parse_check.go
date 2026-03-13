@@ -1,7 +1,6 @@
 package xsd
 
 import (
-	"context"
 	"fmt"
 	"math/big"
 	"sort"
@@ -21,35 +20,35 @@ func (c *compiler) checkGlobalElement(elem *helium.Element) {
 
 	// name is required for global elements.
 	if name == "" {
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 			"The attribute 'name' is required but missing."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 
 	// ref is not allowed at global level.
 	if getAttr(elem, "ref") != "" {
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 			"The attribute 'ref' is not allowed."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 
 	// minOccurs is not allowed at global level.
 	if getAttr(elem, "minOccurs") != "" {
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 			"The attribute 'minOccurs' is not allowed."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 
 	// maxOccurs is not allowed at global level.
 	if getAttr(elem, "maxOccurs") != "" {
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 			"The attribute 'maxOccurs' is not allowed."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 
 	// form is not allowed at global level.
 	if getAttr(elem, "form") != "" {
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 			"The attribute 'form' is not allowed."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
@@ -57,7 +56,7 @@ func (c *compiler) checkGlobalElement(elem *helium.Element) {
 	// Validate 'final' attribute value.
 	if v := getAttr(elem, "final"); v != "" {
 		if !isValidFinal(v) {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "final",
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "final",
 				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction))'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
@@ -66,7 +65,7 @@ func (c *compiler) checkGlobalElement(elem *helium.Element) {
 	// Validate 'block' attribute value.
 	if v := getAttr(elem, "block"); v != "" {
 		if !isValidBlock(v) {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "block",
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "block",
 				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | substitution))'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
@@ -74,7 +73,7 @@ func (c *compiler) checkGlobalElement(elem *helium.Element) {
 
 	// default and fixed are mutually exclusive.
 	if getAttr(elem, "default") != "" && getAttr(elem, "fixed") != "" {
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 			"The attributes 'default' and 'fixed' are mutually exclusive."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
@@ -87,12 +86,12 @@ func (c *compiler) checkGlobalElement(elem *helium.Element) {
 			}
 			ce := child.(*helium.Element)
 			if isXSDElement(ce, "complexType") {
-				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "element",
+				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "element",
 					"The attribute 'type' and the <complexType> child are mutually exclusive."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
 			if isXSDElement(ce, "simpleType") {
-				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "element",
+				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "element",
 					"The attribute 'type' and the <simpleType> child are mutually exclusive."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
@@ -124,7 +123,7 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 		if maxOcc != "" && maxOcc != "unbounded" {
 			maxVal := parseOccurs(maxOcc, 1)
 			if maxVal < 1 {
-				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
+				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
 					"The value must be greater than or equal to 1."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
@@ -135,7 +134,7 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 			minVal := parseOccurs(minOcc, 1)
 			maxVal := parseOccurs(maxOcc, 1)
 			if minVal > maxVal {
-				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "minOccurs",
+				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "minOccurs",
 					"The value must not be greater than the value of 'maxOccurs'."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
@@ -143,7 +142,7 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 
 		// ref and name are mutually exclusive.
 		if name != "" {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 				"The attributes 'ref' and 'name' are mutually exclusive."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
@@ -152,7 +151,7 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 		notAllowedWithRef := []string{"abstract", "block", "default", "final", "fixed", "form", "nillable", "substitutionGroup", "type"}
 		for _, attr := range notAllowedWithRef {
 			if getAttr(elem, attr) != "" {
-				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", attr,
+				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", attr,
 					"Only the attributes 'minOccurs', 'maxOccurs' and 'id' are allowed in addition to 'ref'."), helium.ErrorLevelFatal))
 				c.errorCount++
 				break // only report first
@@ -166,7 +165,7 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 			}
 			ce := child.(*helium.Element)
 			if isXSDElement(ce, "complexType") || isXSDElement(ce, "simpleType") {
-				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "element",
+				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "element",
 					"The content is not valid. Expected is (annotation?)."), helium.ErrorLevelFatal))
 				c.errorCount++
 				break // only report first
@@ -181,7 +180,7 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 		if maxOcc != "" && maxOcc != "unbounded" {
 			maxVal := parseOccurs(maxOcc, 1)
 			if maxVal < 1 {
-				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
+				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
 					"The value must be greater than or equal to 1."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
@@ -191,7 +190,7 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 		localNotAllowed := []string{"abstract", "substitutionGroup", "final"}
 		for _, attr := range localNotAllowed {
 			if getAttr(elem, attr) != "" {
-				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
+				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 					"The attribute '"+attr+"' is not allowed."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
@@ -199,14 +198,14 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 
 		// Validate 'block' attribute value.
 		if v := getAttr(elem, "block"); v != "" && !isValidBlock(v) {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "block",
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "block",
 				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | substitution))'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 
 		// default and fixed mutually exclusive.
 		if getAttr(elem, "default") != "" && getAttr(elem, "fixed") != "" {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 				"The attributes 'default' and 'fixed' are mutually exclusive."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
@@ -220,13 +219,13 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 			ce := child.(*helium.Element)
 			if isXSDElement(ce, "complexType") {
 				if hasType {
-					c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "element",
+					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "element",
 						"The attribute 'type' and the <complexType> child are mutually exclusive."), helium.ErrorLevelFatal))
 					c.errorCount++
 				}
 			} else if isXSDElement(ce, "simpleType") {
 				if hasType {
-					c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "element",
+					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "element",
 						"The content is not valid. Expected is (annotation?, ((simpleType | complexType)?, (unique | key | keyref)*))."), helium.ErrorLevelFatal))
 					c.errorCount++
 				}
@@ -247,21 +246,21 @@ func (c *compiler) checkAttributeUse(elem *helium.Element) {
 	if ref != "" {
 		// ref and name are mutually exclusive.
 		if getAttr(elem, "name") != "" {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
 				"The attribute 'name' is not allowed."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 
 		// type not allowed with ref.
 		if getAttr(elem, "type") != "" {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
 				"The attribute 'type' is not allowed."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 
 		// form not allowed with ref.
 		if getAttr(elem, "form") != "" {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
 				"The attribute 'form' is not allowed."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
@@ -273,7 +272,7 @@ func (c *compiler) checkAttributeUse(elem *helium.Element) {
 			}
 			ce := child.(*helium.Element)
 			if isXSDElement(ce, "simpleType") {
-				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "attribute",
+				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "attribute",
 					"The content is not valid. Expected is (annotation?)."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
@@ -281,7 +280,7 @@ func (c *compiler) checkAttributeUse(elem *helium.Element) {
 	} else {
 		// Attribute name must not be "xmlns".
 		if getAttr(elem, "name") == "xmlns" {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "attribute", "name",
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "attribute", "name",
 				"The value of the attribute must not match 'xmlns'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
@@ -290,7 +289,7 @@ func (c *compiler) checkAttributeUse(elem *helium.Element) {
 		form := getAttr(elem, "form")
 		if form == "qualified" || (form == "" && c.schema.attrFormQualified) {
 			if c.schema.targetNamespace == "http://www.w3.org/2001/XMLSchema-instance" {
-				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
+				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
 					"The target namespace must not match 'http://www.w3.org/2001/XMLSchema-instance'."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
@@ -298,7 +297,7 @@ func (c *compiler) checkAttributeUse(elem *helium.Element) {
 
 		// default and fixed are mutually exclusive.
 		if getAttr(elem, "default") != "" && getAttr(elem, "fixed") != "" {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
 				"The attributes 'default' and 'fixed' are mutually exclusive."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
@@ -307,7 +306,7 @@ func (c *compiler) checkAttributeUse(elem *helium.Element) {
 		if getAttr(elem, "default") != "" {
 			use := getAttr(elem, "use")
 			if use != "" && use != "optional" {
-				c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
+				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
 					"The value of the attribute 'use' must be 'optional' if the attribute 'default' is present."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
@@ -321,7 +320,7 @@ func (c *compiler) checkAttributeUse(elem *helium.Element) {
 				}
 				ce := child.(*helium.Element)
 				if isXSDElement(ce, "simpleType") {
-					c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "attribute",
+					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "attribute",
 						"The attribute 'type' and the <simpleType> child are mutually exclusive."), helium.ErrorLevelFatal))
 					c.errorCount++
 				}
@@ -347,7 +346,7 @@ func (c *compiler) checkAnnotation(elem *helium.Element) {
 		if name == "id" {
 			continue
 		}
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "annotation",
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "annotation",
 			"The attribute '"+name+"' is not allowed."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
@@ -364,7 +363,7 @@ func (c *compiler) checkAnnotation(elem *helium.Element) {
 		}
 	}
 	if hasInvalidContent {
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "annotation",
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "annotation",
 			"The content is not valid. Expected is (appinfo | documentation)*."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
@@ -397,7 +396,7 @@ func (c *compiler) checkAppinfo(elem *helium.Element) {
 		if name == "source" {
 			continue
 		}
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "appinfo",
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "appinfo",
 			"The attribute '"+name+"' is not allowed."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
@@ -424,14 +423,14 @@ func (c *compiler) checkDocumentation(elem *helium.Element) {
 		if name == "source" {
 			continue
 		}
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "documentation",
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "documentation",
 			"The attribute '"+name+"' is not allowed."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 
 	// Validate xml:lang value after attribute checks.
 	if langValue != "" && !languageRegex.MatchString(langValue) {
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "documentation",
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "documentation",
 			"{http://www.w3.org/XML/1998/namespace}lang",
 			"'"+langValue+"' is not a valid value of the atomic type 'xs:language'."), helium.ErrorLevelFatal))
 		c.errorCount++
@@ -521,7 +520,7 @@ func (c *compiler) checkUPA(td *TypeDef, src typeDefSource) {
 		if !src.isLocal {
 			component = td.Name.Local
 		}
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, src.line, "complexType", component,
 			"The content model is not determinist."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
@@ -927,17 +926,17 @@ func (c *compiler) checkFacetConsistency() {
 // both specified on the same type definition.
 func (c *compiler) checkFacetMutualExclusion(fs *FacetSet, line int, component string) {
 	if fs.Length != nil && (fs.MinLength != nil || fs.MaxLength != nil) {
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 			"It is an error for both 'length' and either of 'minLength' or 'maxLength' to be specified on the same type definition."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 	if fs.MaxInclusive != nil && fs.MaxExclusive != nil {
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 			"It is an error for both 'maxInclusive' and 'maxExclusive' to be specified."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 	if fs.MinInclusive != nil && fs.MinExclusive != nil {
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 			"It is an error for both 'minInclusive' and 'minExclusive' to be specified."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
@@ -946,39 +945,39 @@ func (c *compiler) checkFacetMutualExclusion(fs *FacetSet, line int, component s
 // checkFacetSameTypeConsistency checks consistency of facets within the same type.
 func (c *compiler) checkFacetSameTypeConsistency(fs *FacetSet, line int, component string) {
 	if fs.MinLength != nil && fs.MaxLength != nil && *fs.MinLength > *fs.MaxLength {
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 			"It is an error for the value of 'minLength' to be greater than the value of 'maxLength'."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 	if fs.MinInclusive != nil && fs.MaxInclusive != nil {
 		if compareDecimal(*fs.MinInclusive, *fs.MaxInclusive) > 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				"It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinExclusive != nil && fs.MaxExclusive != nil {
 		if compareDecimal(*fs.MinExclusive, *fs.MaxExclusive) >= 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				"It is an error for the value of 'minExclusive' to be greater than or equal to the value of 'maxExclusive'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.FractionDigits != nil && fs.TotalDigits != nil && *fs.FractionDigits > *fs.TotalDigits {
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 			"It is an error for the value of 'fractionDigits' to be greater than the value of 'totalDigits'."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 	if fs.MinExclusive != nil && fs.MaxInclusive != nil {
 		if compareDecimal(*fs.MinExclusive, *fs.MaxInclusive) >= 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				"It is an error for the value of 'minExclusive' to be greater than or equal to the value of 'maxInclusive'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinInclusive != nil && fs.MaxExclusive != nil {
 		if compareDecimal(*fs.MinInclusive, *fs.MaxExclusive) >= 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				"It is an error for the value of 'minInclusive' to be greater than or equal to the value of 'maxExclusive'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
@@ -995,29 +994,29 @@ func (c *compiler) checkFacetBaseRestriction(td *TypeDef, fs *FacetSet, line int
 
 	// Length facets.
 	if fs.MinLength != nil && base.MinLength != nil && *fs.MinLength < *base.MinLength {
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 			fmt.Sprintf("The 'minLength' value '%d' is less than the 'minLength' value of the base type '%d'.", *fs.MinLength, *base.MinLength)), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 	if fs.MaxLength != nil && base.MaxLength != nil && *fs.MaxLength > *base.MaxLength {
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 			fmt.Sprintf("The 'maxLength' value '%d' is greater than the 'maxLength' value of the base type '%d'.", *fs.MaxLength, *base.MaxLength)), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 	if fs.Length != nil && base.Length != nil && *fs.Length != *base.Length {
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 			fmt.Sprintf("The 'length' value '%d' does not match the 'length' value of the base type '%d'.", *fs.Length, *base.Length)), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 
 	// Digit facets.
 	if fs.TotalDigits != nil && base.TotalDigits != nil && *fs.TotalDigits > *base.TotalDigits {
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 			fmt.Sprintf("The 'totalDigits' value '%d' is greater than the 'totalDigits' value of the base type '%d'.", *fs.TotalDigits, *base.TotalDigits)), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 	if fs.FractionDigits != nil && base.FractionDigits != nil && *fs.FractionDigits > *base.FractionDigits {
-		c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 			fmt.Sprintf("The 'fractionDigits' value '%d' is greater than the 'fractionDigits' value of the base type '%d'.", *fs.FractionDigits, *base.FractionDigits)), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
@@ -1025,112 +1024,112 @@ func (c *compiler) checkFacetBaseRestriction(td *TypeDef, fs *FacetSet, line int
 	// Inclusive/exclusive boundary facets vs base.
 	if fs.MaxInclusive != nil && base.MaxInclusive != nil {
 		if compareDecimal(*fs.MaxInclusive, *base.MaxInclusive) > 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'maxInclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MaxInclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MaxInclusive != nil && base.MaxExclusive != nil {
 		if compareDecimal(*fs.MaxInclusive, *base.MaxExclusive) >= 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'maxInclusive' value '%s' must be less than the 'maxExclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MaxExclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MaxInclusive != nil && base.MinInclusive != nil {
 		if compareDecimal(*fs.MaxInclusive, *base.MinInclusive) < 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'maxInclusive' value '%s' is less than the 'minInclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MinInclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MaxInclusive != nil && base.MinExclusive != nil {
 		if compareDecimal(*fs.MaxInclusive, *base.MinExclusive) <= 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'maxInclusive' value '%s' must be greater than the 'minExclusive' value of the base type '%s'.", *fs.MaxInclusive, *base.MinExclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MaxExclusive != nil && base.MaxExclusive != nil {
 		if compareDecimal(*fs.MaxExclusive, *base.MaxExclusive) > 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'maxExclusive' value '%s' is greater than the 'maxExclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MaxExclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MaxExclusive != nil && base.MaxInclusive != nil {
 		if compareDecimal(*fs.MaxExclusive, *base.MaxInclusive) > 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'maxExclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MaxInclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MaxExclusive != nil && base.MinInclusive != nil {
 		if compareDecimal(*fs.MaxExclusive, *base.MinInclusive) <= 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'maxExclusive' value '%s' must be greater than the 'minInclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MinInclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MaxExclusive != nil && base.MinExclusive != nil {
 		if compareDecimal(*fs.MaxExclusive, *base.MinExclusive) <= 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'maxExclusive' value '%s' must be greater than the 'minExclusive' value of the base type '%s'.", *fs.MaxExclusive, *base.MinExclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinInclusive != nil && base.MinInclusive != nil {
 		if compareDecimal(*fs.MinInclusive, *base.MinInclusive) < 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'minInclusive' value '%s' is less than the 'minInclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MinInclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinInclusive != nil && base.MinExclusive != nil {
 		if compareDecimal(*fs.MinInclusive, *base.MinExclusive) <= 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'minInclusive' value '%s' must be greater than the 'minExclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MinExclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinInclusive != nil && base.MaxInclusive != nil {
 		if compareDecimal(*fs.MinInclusive, *base.MaxInclusive) > 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'minInclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MaxInclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinInclusive != nil && base.MaxExclusive != nil {
 		if compareDecimal(*fs.MinInclusive, *base.MaxExclusive) >= 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'minInclusive' value '%s' must be less than the 'maxExclusive' value of the base type '%s'.", *fs.MinInclusive, *base.MaxExclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinExclusive != nil && base.MinExclusive != nil {
 		if compareDecimal(*fs.MinExclusive, *base.MinExclusive) < 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'minExclusive' value '%s' is less than the 'minExclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MinExclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinExclusive != nil && base.MinInclusive != nil {
 		if compareDecimal(*fs.MinExclusive, *base.MinInclusive) < 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'minExclusive' value '%s' is less than the 'minInclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MinInclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinExclusive != nil && base.MaxInclusive != nil {
 		if compareDecimal(*fs.MinExclusive, *base.MaxInclusive) > 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'minExclusive' value '%s' is greater than the 'maxInclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MaxInclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 	if fs.MinExclusive != nil && base.MaxExclusive != nil {
 		if compareDecimal(*fs.MinExclusive, *base.MaxExclusive) >= 0 {
-			c.errorHandler.Handle(context.TODO(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaComponentError(c.filename, line, "simpleType", component,
 				fmt.Sprintf("The 'minExclusive' value '%s' must be less than the 'maxExclusive' value of the base type '%s'.", *fs.MinExclusive, *base.MaxExclusive)), helium.ErrorLevelFatal))
 			c.errorCount++
 		}

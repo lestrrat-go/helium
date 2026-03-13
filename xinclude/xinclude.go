@@ -260,7 +260,7 @@ func (p *processor) processInclude(ctx context.Context, inc *helium.Element) err
 }
 
 func (p *processor) includeXML(ctx context.Context, inc *helium.Element, uri string, _ string) error {
-	doc, err := p.loadXMLDoc(uri, false)
+	doc, err := p.loadXMLDoc(ctx, uri, false)
 	if err != nil {
 		return err
 	}
@@ -332,7 +332,7 @@ func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Elem
 		// current document (via base URI) to avoid seeing nodes that were
 		// inserted by previous XInclude processing in this pass.
 		if p.baseURI != "" {
-			doc, err = p.loadXMLDoc(p.baseURI, true)
+			doc, err = p.loadXMLDoc(ctx, p.baseURI, true)
 			if err != nil {
 				return err
 			}
@@ -340,7 +340,7 @@ func (p *processor) includeXMLWithXPointer(ctx context.Context, inc *helium.Elem
 			doc = inc.OwnerDocument()
 		}
 	} else {
-		doc, err = p.loadXMLDoc(uri, true)
+		doc, err = p.loadXMLDoc(ctx, uri, true)
 		if err != nil {
 			return err
 		}
@@ -494,7 +494,7 @@ func (p *processor) mergeEntities(src, dst *helium.Document) {
 	merge(srcExt)
 }
 
-func (p *processor) loadXMLDoc(uri string, substituteEntities bool) (*helium.Document, error) {
+func (p *processor) loadXMLDoc(ctx context.Context, uri string, substituteEntities bool) (*helium.Document, error) {
 	cacheKey := uri
 	if substituteEntities {
 		cacheKey = uri + "\x00noent"
@@ -506,7 +506,7 @@ func (p *processor) loadXMLDoc(uri string, substituteEntities bool) (*helium.Doc
 		}
 		// Re-parse from cached bytes: each inclusion needs independent
 		// nodes since they get moved into the target document tree.
-		return p.parseXMLData(entry.data, uri, substituteEntities)
+		return p.parseXMLData(ctx, entry.data, uri, substituteEntities)
 	}
 
 	rc, err := p.resolver.Resolve(uri, p.baseURI)
@@ -524,7 +524,7 @@ func (p *processor) loadXMLDoc(uri string, substituteEntities bool) (*helium.Doc
 		return nil, wrapErr
 	}
 
-	doc, err := p.parseXMLData(data, uri, substituteEntities)
+	doc, err := p.parseXMLData(ctx, data, uri, substituteEntities)
 	if err != nil {
 		p.docCache[cacheKey] = docCacheEntry{err: err}
 		return nil, err
@@ -535,7 +535,7 @@ func (p *processor) loadXMLDoc(uri string, substituteEntities bool) (*helium.Doc
 	return doc, nil
 }
 
-func (p *processor) parseXMLData(data []byte, uri string, substituteEntities bool) (*helium.Document, error) {
+func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, substituteEntities bool) (*helium.Document, error) {
 	parser := helium.NewParser()
 	opts := helium.ParseDTDLoad
 	if substituteEntities {
@@ -543,7 +543,7 @@ func (p *processor) parseXMLData(data []byte, uri string, substituteEntities boo
 	}
 	parser.SetOption(opts)
 	parser.SetBaseURI(uri)
-	doc, err := parser.Parse(context.Background(), data)
+	doc, err := parser.Parse(ctx, data)
 	if err != nil {
 		return nil, fmt.Errorf("xi:include: error parsing %q: %w", uri, err)
 	}

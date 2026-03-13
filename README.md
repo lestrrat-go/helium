@@ -521,7 +521,7 @@ func Example_schematron_validate() {
     return
   }
 
-  schema, err := schematron.Compile(schemaDoc)
+  schema, err := schematron.Compile(context.Background(), schemaDoc)
   if err != nil {
     fmt.Printf("schema compile failed: %s\n", err)
     return

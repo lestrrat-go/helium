@@ -278,7 +278,7 @@ found:
 		return nil, err
 	}
 	innerCtx := withParserCtx(ctx, newctx)
-	innerCtx = sax.SetDocumentLocatorValue(innerCtx, newctx)
+	innerCtx = sax.WithDocumentLocator(innerCtx, newctx)
 	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
 	if err := newctx.parseContent(innerCtx); err != nil {
 		if !errors.Is(err, errParserStopped) {

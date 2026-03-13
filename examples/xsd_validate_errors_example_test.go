@@ -30,7 +30,7 @@ func Example_xsd_validate_errors() {
 		fmt.Printf("failed to parse schema: %s\n", err)
 		return
 	}
-	schema, err := xsd.Compile(schemaDoc)
+	schema, err := xsd.Compile(context.Background(), schemaDoc)
 	if err != nil {
 		fmt.Printf("failed to compile schema: %s\n", err)
 		return

@@ -27,6 +27,7 @@ type qt3Assertion func(t *testing.T, seq xpath3.Sequence)
 
 // qt3Check returns true if a result sequence satisfies a condition (for any-of).
 type qt3Check func(seq xpath3.Sequence) bool
+type qt3ContextMutator func(context.Context) context.Context
 
 type qt3Param struct {
 	Name   string
@@ -107,6 +108,13 @@ func (r *qt3CollectionResolver) ResolveURICollection(uri string) ([]string, erro
 	return append([]string(nil), uris...), nil
 }
 
+func qt3ApplyContext(ctx context.Context, muts []qt3ContextMutator) context.Context {
+	for _, mut := range muts {
+		ctx = mut(ctx)
+	}
+	return ctx
+}
+
 func (df qt3DecimalFormat) toXPath3() xpath3.DecimalFormat {
 	out := xpath3.DefaultDecimalFormat()
 	if df.DecimalSeparator != "" {
@@ -174,33 +182,36 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 			ctx := t.Context()
 			// QT3 test suite expects implicit timezone of -05:00 (PT5H).
 			qt3ImplicitTZ := time.FixedZone("", -5*3600)
-			opts := []xpath3.ContextOption{
-				xpath3.WithImplicitTimezone(qt3ImplicitTZ),
-				xpath3.WithHTTPClient(httpClient),
+			opts := []qt3ContextMutator{
+				func(ctx context.Context) context.Context { return xpath3.WithImplicitTimezone(ctx, qt3ImplicitTZ) },
+				func(ctx context.Context) context.Context { return xpath3.WithHTTPClient(ctx, httpClient) },
 			}
 			if tc.DefaultDecimal != nil {
-				opts = append(opts, xpath3.WithDefaultDecimalFormat(tc.DefaultDecimal.toXPath3()))
+				df := tc.DefaultDecimal.toXPath3()
+				opts = append(opts, func(ctx context.Context) context.Context { return xpath3.WithDefaultDecimalFormat(ctx, df) })
 			}
 			if len(tc.NamedDecimalFormats) > 0 {
 				dfs := make(map[xpath3.QualifiedName]xpath3.DecimalFormat, len(tc.NamedDecimalFormats))
 				for _, df := range tc.NamedDecimalFormats {
 					dfs[xpath3.QualifiedName{URI: df.URI, Name: df.Name}] = df.Format.toXPath3()
 				}
-				opts = append(opts, xpath3.WithNamedDecimalFormats(dfs))
+				opts = append(opts, func(ctx context.Context) context.Context { return xpath3.WithNamedDecimalFormats(ctx, dfs) })
 			}
 			if tc.DefaultCollation != "" {
-				opts = append(opts, xpath3.WithDefaultCollation(tc.DefaultCollation))
+				opts = append(opts, func(ctx context.Context) context.Context {
+					return xpath3.WithDefaultCollation(ctx, tc.DefaultCollation)
+				})
 			}
 			if tc.DefaultLanguage != "" {
-				opts = append(opts, xpath3.WithDefaultLanguage(tc.DefaultLanguage))
+				opts = append(opts, func(ctx context.Context) context.Context { return xpath3.WithDefaultLanguage(ctx, tc.DefaultLanguage) })
 			}
 			if len(tc.Namespaces) > 0 {
-				opts = append(opts, xpath3.WithNamespaces(tc.Namespaces))
+				opts = append(opts, func(ctx context.Context) context.Context { return xpath3.WithNamespaces(ctx, tc.Namespaces) })
 			}
 			if tc.BaseURI != "" {
-				opts = append(opts, xpath3.WithBaseURI(tc.BaseURI))
+				opts = append(opts, func(ctx context.Context) context.Context { return xpath3.WithBaseURI(ctx, tc.BaseURI) })
 			} else if baseURI := qt3DefaultBaseURI(tc); baseURI != "" {
-				opts = append(opts, xpath3.WithBaseURI(baseURI))
+				opts = append(opts, func(ctx context.Context) context.Context { return xpath3.WithBaseURI(ctx, baseURI) })
 			}
 			var doc helium.Node
 			if tc.DocPath != "" {
@@ -215,15 +226,15 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 				vars[src.Name] = xpath3.Sequence{xpath3.NodeItem{Node: sourceDoc}}
 			}
 			if resolver := qt3BuildCollectionResolver(t, ctx, tc, opts, doc, vars); resolver != nil {
-				opts = append(opts, xpath3.WithCollectionResolver(resolver))
+				opts = append(opts, func(ctx context.Context) context.Context { return xpath3.WithCollectionResolver(ctx, resolver) })
 			}
 			if len(tc.Params) > 0 {
 				for _, param := range tc.Params {
-					paramOpts := append([]xpath3.ContextOption{}, opts...)
+					paramOpts := append([]qt3ContextMutator{}, opts...)
 					if len(vars) > 0 {
-						paramOpts = append(paramOpts, xpath3.WithVariables(vars))
+						paramOpts = append(paramOpts, func(ctx context.Context) context.Context { return xpath3.WithVariables(ctx, vars) })
 					}
-					paramCtx := xpath3.NewContext(ctx, paramOpts...)
+					paramCtx := qt3ApplyContext(ctx, paramOpts)
 					compiledParam, err := xpath3.Compile(param.Select)
 					require.NoError(t, err, "compile param $%s: %s", param.Name, param.Select)
 					result, err := compiledParam.Evaluate(paramCtx, doc)
@@ -232,9 +243,9 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 				}
 			}
 			if len(vars) > 0 {
-				opts = append(opts, xpath3.WithVariables(vars))
+				opts = append(opts, func(ctx context.Context) context.Context { return xpath3.WithVariables(ctx, vars) })
 			}
-			ctx = xpath3.NewContext(ctx, opts...)
+			ctx = qt3ApplyContext(ctx, opts)
 			compiled, err := xpath3.Compile(tc.XPath)
 			if err != nil {
 				if tc.ExpectError || tc.AcceptError {
@@ -398,7 +409,7 @@ func qt3ParseDocSource(t *testing.T, src qt3SourceDoc) helium.Node {
 	return doc
 }
 
-func qt3BuildCollectionResolver(t *testing.T, ctx context.Context, tc qt3Test, opts []xpath3.ContextOption, doc helium.Node, vars map[string]xpath3.Sequence) xpath3.CollectionResolver {
+func qt3BuildCollectionResolver(t *testing.T, ctx context.Context, tc qt3Test, opts []qt3ContextMutator, doc helium.Node, vars map[string]xpath3.Sequence) xpath3.CollectionResolver {
 	t.Helper()
 	if len(tc.Collections) == 0 {
 		return nil
@@ -409,11 +420,11 @@ func qt3BuildCollectionResolver(t *testing.T, ctx context.Context, tc qt3Test, o
 		uriCollections: make(map[string][]string, len(tc.Collections)),
 	}
 
-	queryOpts := append([]xpath3.ContextOption{}, opts...)
+	queryOpts := append([]qt3ContextMutator{}, opts...)
 	if len(vars) > 0 {
-		queryOpts = append(queryOpts, xpath3.WithVariables(vars))
+		queryOpts = append(queryOpts, func(ctx context.Context) context.Context { return xpath3.WithVariables(ctx, vars) })
 	}
-	queryCtx := xpath3.NewContext(ctx, queryOpts...)
+	queryCtx := qt3ApplyContext(ctx, queryOpts)
 
 	for _, col := range tc.Collections {
 		if len(col.SourceDocs) > 0 {

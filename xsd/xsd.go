@@ -15,12 +15,15 @@ import (
 
 // Compile compiles an XSD document into a Schema.
 // (libxml2: xmlSchemaNewParserCtxt + xmlSchemaParse)
-func Compile(doc *helium.Document, opts ...CompileOption) (*Schema, error) {
+func Compile(ctx context.Context, doc *helium.Document, opts ...CompileOption) (*Schema, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	cfg := &compileConfig{}
 	for _, o := range opts {
 		o(cfg)
 	}
-	schema, err := compileSchema(doc, "", cfg)
+	schema, err := compileSchema(ctx, doc, "", cfg)
 	if cfg.errorHandler != nil {
 		if cl, ok := cfg.errorHandler.(io.Closer); ok {
 			_ = cl.Close()
@@ -30,7 +33,10 @@ func Compile(doc *helium.Document, opts ...CompileOption) (*Schema, error) {
 }
 
 // CompileFile reads and compiles an XSD file into a Schema.
-func CompileFile(path string, opts ...CompileOption) (*Schema, error) {
+func CompileFile(ctx context.Context, path string, opts ...CompileOption) (*Schema, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	cfg := &compileConfig{}
 	for _, o := range opts {
 		o(cfg)
@@ -39,12 +45,12 @@ func CompileFile(path string, opts ...CompileOption) (*Schema, error) {
 	if err != nil {
 		return nil, fmt.Errorf("xsd: failed to read %q: %w", path, err)
 	}
-	doc, err := helium.Parse(context.Background(), data)
+	doc, err := helium.Parse(ctx, data)
 	if err != nil {
 		return nil, fmt.Errorf("xsd: failed to parse %q: %w", path, err)
 	}
 	baseDir := filepath.Dir(path)
-	schema, compileErr := compileSchema(doc, baseDir, cfg)
+	schema, compileErr := compileSchema(ctx, doc, baseDir, cfg)
 	if cfg.errorHandler != nil {
 		if cl, ok := cfg.errorHandler.(io.Closer); ok {
 			_ = cl.Close()
