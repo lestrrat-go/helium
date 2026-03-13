@@ -211,6 +211,10 @@ func (ec *evalContext) withScope(scope *variableScope) *evalContext {
 }
 
 func (ec *evalContext) countOps(n int) error {
+	// Check context cancellation on every op count call
+	if err := ec.goCtx.Err(); err != nil {
+		return err
+	}
 	if ec.opLimit <= 0 {
 		return nil
 	}

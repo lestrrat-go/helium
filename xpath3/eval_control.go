@@ -123,6 +123,9 @@ func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 	tuples := []flworTuple{{scope: ec.vars}}
 
 	for _, clause := range e.Clauses {
+		if err := ec.countOps(len(tuples)); err != nil {
+			return nil, err
+		}
 		switch c := clause.(type) {
 		case ForClause:
 			var newTuples []flworTuple
