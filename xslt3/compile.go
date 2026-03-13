@@ -63,6 +63,7 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 			modeTemplates:  make(map[string][]*Template),
 			keys:           make(map[string]*KeyDef),
 			outputs:        make(map[string]*OutputDef),
+			functions:      make(map[xpath3.QualifiedName]*XSLFunction),
 			namespaces:     make(map[string]string),
 		},
 		nsBindings:    make(map[string]string),
@@ -95,6 +96,12 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 			for _, prefix := range strings.Fields(erp) {
 				c.stylesheet.excludePrefixes[prefix] = struct{}{}
 			}
+		}
+	}
+	// extension-element-prefixes are also excluded from output
+	if eep := getAttr(root, "extension-element-prefixes"); eep != "" {
+		for _, prefix := range strings.Fields(eep) {
+			c.stylesheet.excludePrefixes[prefix] = struct{}{}
 		}
 	}
 
@@ -177,6 +184,10 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 			c.compileSpaceHandling(elem, true)
 		case "preserve-space":
 			c.compileSpaceHandling(elem, false)
+		case "function":
+			if err := c.compileFunction(elem); err != nil {
+				return err
+			}
 		case "decimal-format", "namespace-alias", "attribute-set":
 			// TODO: implement in later phases
 		default:
@@ -229,10 +240,18 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 	c.stylesheet.templates = append(c.stylesheet.templates, tmpl)
 
 	if tmpl.Name != "" {
-		if _, exists := c.stylesheet.namedTemplates[tmpl.Name]; exists {
-			return staticError(errCodeXTSE0080, "duplicate template name %q", tmpl.Name)
+		if existing, exists := c.stylesheet.namedTemplates[tmpl.Name]; exists {
+			// Same import precedence = error; different = higher precedence wins
+			if existing.ImportPrec == tmpl.ImportPrec {
+				return staticError(errCodeXTSE0080, "duplicate template name %q", tmpl.Name)
+			}
+			if tmpl.ImportPrec > existing.ImportPrec {
+				c.stylesheet.namedTemplates[tmpl.Name] = tmpl
+			}
+			// else keep existing (higher precedence)
+		} else {
+			c.stylesheet.namedTemplates[tmpl.Name] = tmpl
 		}
-		c.stylesheet.namedTemplates[tmpl.Name] = tmpl
 	}
 
 	if tmpl.Match != nil {
@@ -276,9 +295,9 @@ func (c *compiler) compileTemplateBody(elem *helium.Element) ([]Instruction, []*
 				body = append(body, inst)
 			}
 		case *helium.Text:
-			inParams = false
 			text := string(v.Content())
 			if strings.TrimSpace(text) != "" {
+				inParams = false
 				body = append(body, &LiteralTextInst{Value: text})
 			}
 		case *helium.CDATASection:
@@ -423,6 +442,45 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 	return nil
 }
 
+func (c *compiler) compileFunction(elem *helium.Element) error {
+	name := getAttr(elem, "name")
+	if name == "" {
+		return staticError(errCodeXTSE0110, "xsl:function requires name attribute")
+	}
+
+	// Resolve the prefixed name to a QualifiedName
+	var qn xpath3.QualifiedName
+	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		prefix := name[:idx]
+		local := name[idx+1:]
+		uri := c.nsBindings[prefix]
+		if uri == "" {
+			uri = c.stylesheet.namespaces[prefix]
+		}
+		if uri == "" {
+			return staticError(errCodeXTSE0010, "unresolved namespace prefix %q in xsl:function name %q", prefix, name)
+		}
+		qn = xpath3.QualifiedName{URI: uri, Name: local}
+	} else {
+		return staticError(errCodeXTSE0010, "xsl:function name %q must have a namespace prefix", name)
+	}
+
+	// Compile function body (params + instructions)
+	body, params, err := c.compileTemplateBody(elem)
+	if err != nil {
+		return err
+	}
+
+	fn := &XSLFunction{
+		Name:   qn,
+		Params: params,
+		Body:   body,
+	}
+
+	c.stylesheet.functions[qn] = fn
+	return nil
+}
+
 func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) {
 	elements := getAttr(elem,"elements")
 	if elements == "" {
@@ -510,10 +568,6 @@ func (c *compiler) loadExternalStylesheet(href string, isImport bool) error {
 		return fmt.Errorf("cannot parse %q: %w", uri, err)
 	}
 
-	if isImport {
-		c.importPrec++
-	}
-
 	savedBase := c.baseURI
 	c.baseURI = uri
 	defer func() { c.baseURI = savedBase }()
@@ -524,7 +578,17 @@ func (c *compiler) loadExternalStylesheet(href string, isImport bool) error {
 	}
 
 	c.collectNamespaces(importedRoot)
-	return c.compileTopLevel(importedRoot)
+	if err := c.compileTopLevel(importedRoot); err != nil {
+		return err
+	}
+
+	// Increment import precedence AFTER compiling the imported stylesheet.
+	// This ensures imported templates have lower precedence than the
+	// importing stylesheet's own templates.
+	if isImport {
+		c.importPrec++
+	}
+	return nil
 }
 
 // compileSimplified compiles a simplified stylesheet (literal result element
@@ -537,6 +601,7 @@ func compileSimplified(doc *helium.Document, root *helium.Element, cfg *compileC
 			modeTemplates:  make(map[string][]*Template),
 			keys:           make(map[string]*KeyDef),
 			outputs:        make(map[string]*OutputDef),
+			functions:      make(map[xpath3.QualifiedName]*XSLFunction),
 			namespaces:     make(map[string]string),
 		},
 		nsBindings:    make(map[string]string),

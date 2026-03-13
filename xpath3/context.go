@@ -50,6 +50,8 @@ type evalConfig struct {
 	uriResolver        URIResolver
 	collectionResolver CollectionResolver
 	httpClient         *http.Client
+	position           int // initial context position (0 = use default 1)
+	size               int // initial context size (0 = use default 1)
 }
 
 func getEvalConfig(ctx context.Context) *evalConfig {
@@ -263,6 +265,22 @@ func WithCollectionResolver(ctx context.Context, r CollectionResolver) context.C
 func WithHTTPClient(ctx context.Context, client *http.Client) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.httpClient = client
+	})
+}
+
+// WithPosition sets the initial context position for the evaluation.
+// This is used by XSLT to pass the current position from xsl:for-each.
+func WithPosition(ctx context.Context, pos int) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
+		c.position = pos
+	})
+}
+
+// WithSize sets the initial context size for the evaluation.
+// This is used by XSLT to pass the current size from xsl:for-each.
+func WithSize(ctx context.Context, size int) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
+		c.size = size
 	})
 }
 

@@ -109,15 +109,21 @@ func (ec *execContext) newXPathContext(node helium.Node) context.Context {
 	vars := ec.collectAllVars()
 	ctx := context.Background()
 	ctx = withExecContext(ctx, ec)
-
-	opts := []xpath3.ContextOption{
-		xpath3.WithVariables(vars),
-		xpath3.WithFunctions(ec.xsltFunctions()),
+	ctx = xpath3.WithVariables(ctx, vars)
+	ctx = xpath3.WithFunctions(ctx, ec.xsltFunctions())
+	if fnsNS := ec.xsltFunctionsNS(); len(fnsNS) > 0 {
+		ctx = xpath3.WithFunctionsNS(ctx, fnsNS)
 	}
 	if len(ec.stylesheet.namespaces) > 0 {
-		opts = append(opts, xpath3.WithNamespaces(ec.stylesheet.namespaces))
+		ctx = xpath3.WithNamespaces(ctx, ec.stylesheet.namespaces)
 	}
-	return xpath3.NewContext(ctx, opts...)
+	if ec.position > 0 {
+		ctx = xpath3.WithPosition(ctx, ec.position)
+	}
+	if ec.size > 0 {
+		ctx = xpath3.WithSize(ctx, ec.size)
+	}
+	return ctx
 }
 
 func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
