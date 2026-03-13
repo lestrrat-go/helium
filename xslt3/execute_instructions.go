@@ -1465,8 +1465,19 @@ func (ec *execContext) execPerformSort(ctx context.Context, inst *PerformSortIns
 			return nil
 		}
 		nodes = ns
+	} else if len(inst.Body) > 0 {
+		// Body acts as sequence constructor: evaluate to get the items to sort
+		seq, err := ec.evaluateBody(ctx, inst.Body)
+		if err != nil {
+			return err
+		}
+		ns, ok := xpath3.NodesFrom(seq)
+		if !ok {
+			return nil
+		}
+		nodes = ns
 	} else {
-		nodes = selectDefaultNodes(ec.contextNode)
+		return nil
 	}
 
 	if len(inst.Sort) > 0 {
@@ -1489,28 +1500,13 @@ func (ec *execContext) execPerformSort(ctx context.Context, inst *PerformSortIns
 		ec.size = savedSize
 	}()
 
-	if len(inst.Body) == 0 {
-		// No body: copy sorted nodes to output (xsl:perform-sort as sequence constructor)
-		for _, node := range nodes {
-			if err := ec.copyNodeToOutput(node); err != nil {
-				return err
-			}
-		}
-	} else {
-		for i, node := range nodes {
-			ec.position = i + 1
-			ec.currentNode = node
-			ec.contextNode = node
-			ec.pushVarScope()
-			for _, child := range inst.Body {
-				if err := ec.executeInstruction(ctx, child); err != nil {
-					ec.popVarScope()
-					return err
-				}
-			}
-			ec.popVarScope()
+	// Output sorted nodes
+	for _, node := range nodes {
+		if err := ec.copyNodeToOutput(node); err != nil {
+			return err
 		}
 	}
+
 	return nil
 }
 
