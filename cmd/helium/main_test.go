@@ -26,12 +26,20 @@ func TestRunRelaxNGNoArgs(t *testing.T) {
 	require.Equal(t, ExitErr, run([]string{"relaxng"}))
 }
 
+func TestRunSchematronNoArgs(t *testing.T) {
+	require.Equal(t, ExitErr, run([]string{"schematron"}))
+}
+
 func TestRunXSDNoArgs(t *testing.T) {
 	require.Equal(t, ExitErr, run([]string{"xsd"}))
 }
 
 func TestRunRelaxNGUnknownSubcommand(t *testing.T) {
 	require.Equal(t, ExitErr, run([]string{"relaxng", "compile"}))
+}
+
+func TestRunSchematronUnknownSubcommand(t *testing.T) {
+	require.Equal(t, ExitErr, run([]string{"schematron", "compile"}))
 }
 
 func TestRunXSDUnknownSubcommand(t *testing.T) {

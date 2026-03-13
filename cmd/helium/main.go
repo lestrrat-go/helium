@@ -20,6 +20,8 @@ func run(args []string) int {
 		return Run("helium lint", args[1:])
 	case "relaxng":
 		return runRelaxNG(args[1:])
+	case "schematron":
+		return runSchematron(args[1:])
 	case "xpath":
 		return RunXPath("helium xpath", args[1:])
 	case "xsd":
@@ -47,6 +49,22 @@ func runRelaxNG(args []string) int {
 	}
 }
 
+func runSchematron(args []string) int {
+	if len(args) == 0 {
+		showSchematronUsage()
+		return ExitErr
+	}
+
+	switch args[0] {
+	case "validate":
+		return RunSchematronValidate("helium schematron validate", args[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "helium schematron: unknown subcommand %q\n", args[0])
+		showSchematronUsage()
+		return ExitErr
+	}
+}
+
 func runXSD(args []string) int {
 	if len(args) == 0 {
 		showXSDUsage()
@@ -69,6 +87,7 @@ func showUsage() {
 Available commands:
   lint    Parse and lint XML documents
   relaxng RELAX NG operations
+  schematron Schematron operations
   xpath   Evaluate XPath expressions
   xsd     XML Schema operations
 
@@ -88,4 +107,11 @@ func showRelaxNGUsage() {
 
 Available commands:
   validate    Validate XML documents against a RELAX NG schema`)
+}
+
+func showSchematronUsage() {
+	fmt.Fprintln(os.Stderr, `Usage: helium schematron <command> [options]
+
+Available commands:
+  validate    Validate XML documents against a Schematron schema`)
 }

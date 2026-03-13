@@ -10,6 +10,7 @@ Unified CLI entrypoint. Primary file: `cmd/helium/main.go`.
 | `helium xpath` | Evaluate XPath expression against XML input |
 | `helium xsd validate` | Validate XML against XSD schema |
 | `helium relaxng validate` | Validate XML against RELAX NG schema |
+| `helium schematron validate` | Validate XML against Schematron schema |
 
 ## Exit Codes
 
@@ -30,6 +31,7 @@ Multiple XML inputs → highest exit code wins.
 - `helium xpath` → first positional arg always expression, XML from file args or stdin when none
 - `helium xsd validate` → first positional arg schema path, XML from file args or stdin when none
 - `helium relaxng validate` → first positional arg schema path, XML from file args or stdin when none
+- `helium schematron validate` → first positional arg schema path, XML from file args or stdin when none
 - TTY + missing required XML input → usage + `ExitErr`
 
 ## `helium lint`
@@ -102,6 +104,16 @@ Primary file: `cmd/helium/relaxng_validate.go`
 - Schema path mandatory positional arg
 - Grammar compiled once with `relaxng.CompileFile()`
 - Each XML input parsed with `helium.NewParser()` + validated with `relaxng.Validate()`
+
+## `helium schematron validate`
+
+Primary file: `cmd/helium/schematron_validate.go`
+
+- Usage: `helium schematron validate [--timing] SCHEMA [XMLfiles ...]`
+- Schema path mandatory positional arg
+- Schema compiled once with `schematron.CompileFile()` + `schematron.WithSchemaFilename()`
+- Each XML input parsed with `helium.NewParser()` + validated with `schematron.Validate()`
+- Validation passes `schematron.WithFilename(input.name)` so error output names the current XML source
 
 ## Planned Commands
 

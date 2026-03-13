@@ -3,7 +3,7 @@
 Arrows show "imports" direction. Indented items are transitive.
 
 ```
-cmd/helium     → helium, c14n, relaxng, xsd, xinclude, xpath1, xpath3, catalog, internal/cliutil
+cmd/helium     → helium, c14n, relaxng, schematron, xsd, xinclude, xpath1, xpath3, catalog, internal/cliutil
 shim           → helium, stream, internal/encoding
 xinclude       → helium, xpointer
                   → xpath1 (via xpointer)

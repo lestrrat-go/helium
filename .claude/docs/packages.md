@@ -253,11 +253,12 @@ Platform-specific TTY handling for CLI commands.
 
 Unified CLI entrypoint + lint implementation.
 
-- Subcommands: `lint`, `xpath`, `xsd validate`, `relaxng validate`
+- Subcommands: `lint`, `xpath`, `xsd validate`, `relaxng validate`, `schematron validate`
 - Planned subcommands listed in usage: `xslt`
 - Lint behavior: parse args, detect stdin/TTY, process XML, run XInclude/XSD/XPath/C14N, emit xmllint-style exit codes
 - XPath behavior: mandatory positional expr, default engine `3`, `--engine 1|3`, XML from file args or stdin, type-aware result output for xpath1/xpath3
 - RELAX NG behavior: compile grammar from mandatory positional schema path, parse XML input(s), validate via `relaxng.Validate`, return schema/validation exit codes
+- Schematron behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via `schematron.Validate`, return schema/validation exit codes
 - XSD behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via `xsd.Validate`, return schema/validation exit codes
-- Files: `main.go`, `lint.go`, `xpath.go`, `relaxng_validate.go`, `xsd_validate.go`
-- Imports: helium, c14n/, relaxng/, xsd/, xinclude/, xpath1/, xpath3/, catalog/, internal/cliutil/
+- Files: `main.go`, `lint.go`, `xpath.go`, `relaxng_validate.go`, `schematron_validate.go`, `xsd_validate.go`
+- Imports: helium, c14n/, relaxng/, schematron/, xsd/, xinclude/, xpath1/, xpath3/, catalog/, internal/cliutil/
