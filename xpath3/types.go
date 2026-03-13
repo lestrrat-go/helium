@@ -642,9 +642,27 @@ func (a ArrayItem) Append(value Sequence) ArrayItem {
 	return ArrayItem{members: newMembers}
 }
 
-// Members returns all members.
+// Members returns all members (defensively cloned).
 func (a ArrayItem) Members() []Sequence {
 	return cloneSequences(a.members)
+}
+
+// members0 returns the underlying members slice without cloning.
+// Callers must not mutate the returned slices.
+func (a ArrayItem) members0() []Sequence {
+	return a.members
+}
+
+// get0 returns the member at the given 1-based index without cloning.
+// Callers must not mutate the returned sequence.
+func (a ArrayItem) get0(index int) (Sequence, error) {
+	if index < 1 || index > len(a.members) {
+		return nil, &XPathError{
+			Code:    errCodeFOAY0001,
+			Message: fmt.Sprintf("array index %d out of bounds (size %d)", index, len(a.members)),
+		}
+	}
+	return a.members[index-1], nil
 }
 
 // SubArray returns a new array from start to end (1-based, inclusive).

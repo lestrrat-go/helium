@@ -444,11 +444,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 				return false
 			}
 			// Check all members match return type
-			for i := 1; i <= v.Size(); i++ {
-				member, err := v.Get(i)
-				if err != nil {
-					return false
-				}
+			for _, member := range v.members0() {
 				if !matchesSequenceType(member, t.ReturnType, ec) {
 					return false
 				}
@@ -485,11 +481,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 			return true
 		}
 		// Typed array test: check all members match member type
-		for i := 1; i <= a.Size(); i++ {
-			member, err := a.Get(i)
-			if err != nil {
-				return false
-			}
+		for _, member := range a.members0() {
 			if !matchesSequenceType(member, t.MemberType, ec) {
 				return false
 			}

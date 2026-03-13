@@ -81,8 +81,7 @@ func AtomizeSequence(seq Sequence) ([]AtomicValue, error) {
 	for _, item := range seq {
 		// XPath 3.1: atomizing an array flattens its members
 		if arr, ok := item.(ArrayItem); ok {
-			for i := 1; i <= arr.Size(); i++ {
-				member, _ := arr.Get(i)
+			for _, member := range arr.members0() {
 				atoms, err := AtomizeSequence(member)
 				if err != nil {
 					return nil, err

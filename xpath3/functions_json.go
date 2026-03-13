@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/unparsedtext"
 )
 
 func init() {
@@ -485,11 +486,12 @@ func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 
-	resolvedURI, err := resolveUnparsedTextURI(ctx, uri)
+	cfg := unparsedTextConfig(ctx)
+	resolvedURI, err := unparsedtext.ResolveURI(cfg, uri)
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("json-doc: cannot resolve URI: %v", err)}
 	}
-	body, err := readUnparsedTextURI(ctx, resolvedURI)
+	body, err := unparsedtext.ReadURI(cfg, resolvedURI)
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("json-doc: cannot retrieve resource: %v", err)}
 	}
@@ -611,7 +613,7 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 			return nil, err
 		}
 	case ArrayItem:
-		for _, member := range v.Members() {
+		for _, member := range v.members0() {
 			child, err := buildJSONToXMLTree(doc, jsonSequenceToItem(member), opts, false)
 			if err != nil {
 				return nil, err
@@ -1735,7 +1737,7 @@ func serializeAdaptiveMap(m MapItem, opts serializeOptions) (string, error) {
 
 func serializeAdaptiveArray(a ArrayItem, opts serializeOptions) (string, error) {
 	parts := make([]string, 0, a.Size())
-	for _, member := range a.Members() {
+	for _, member := range a.members0() {
 		text, err := serializeAdaptiveSequence(member, serializeOptions{method: "adaptive", itemSeparator: ","})
 		if err != nil {
 			return "", err
@@ -1761,7 +1763,7 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 		return serializeJSONAtomic(v, opts)
 	case ArrayItem:
 		parts := make([]string, 0, v.Size())
-		for _, member := range v.Members() {
+		for _, member := range v.members0() {
 			if len(member) == 0 {
 				parts = append(parts, "null")
 				continue

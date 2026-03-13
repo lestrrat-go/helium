@@ -282,7 +282,7 @@ func (it *atomicSequenceIter) Next() (AtomicValue, bool, error) {
 		top.index++
 
 		if arr, ok := item.(ArrayItem); ok {
-			members := arr.Members()
+			members := arr.members0()
 			for i := len(members) - 1; i >= 0; i-- {
 				it.stack = append(it.stack, atomicSeqFrame{seq: members[i]})
 			}

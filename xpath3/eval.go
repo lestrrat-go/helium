@@ -117,7 +117,7 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 	}
 	if xctx := GetContext(ctx); xctx != nil {
 		ec.namespaces = xctx.namespaces
-		ec.vars = newVariableScope(xctx.variables)
+		ec.vars = xctx.varScope
 		ec.opLimit = xctx.opLimit
 		ec.functions = xctx.functions
 		ec.fnsNS = xctx.functionsNS
@@ -211,6 +211,10 @@ func (ec *evalContext) withScope(scope *variableScope) *evalContext {
 }
 
 func (ec *evalContext) countOps(n int) error {
+	// Check context cancellation on every op count call
+	if err := ec.goCtx.Err(); err != nil {
+		return err
+	}
 	if ec.opLimit <= 0 {
 		return nil
 	}

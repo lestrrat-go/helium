@@ -243,6 +243,11 @@ func evalIntersectExceptExpr(ec *evalContext, e IntersectExceptExpr) (Sequence, 
 			result = append(result, n)
 		}
 	}
+	// XPath requires intersect/except results in document order
+	result, err = ixpath.DeduplicateNodes(result, ec.docOrder, ec.maxNodes)
+	if err != nil {
+		return nil, err
+	}
 	seq := make(Sequence, len(result))
 	for i, n := range result {
 		seq[i] = NodeItem{Node: n}
@@ -340,10 +345,11 @@ func evalPathExpr(ec *evalContext, e PathExpr) (Sequence, error) {
 			return nil, err
 		}
 		subNodes, _ := NodesFrom(subResult)
-		result, err = ixpath.MergeNodeSets(result, subNodes, ec.docOrder, ec.maxNodes)
-		if err != nil {
-			return nil, err
-		}
+		result = append(result, subNodes...)
+	}
+	result, err = ixpath.DeduplicateNodes(result, ec.docOrder, ec.maxNodes)
+	if err != nil {
+		return nil, err
 	}
 	seq := make(Sequence, len(result))
 	for i, n := range result {
@@ -378,10 +384,7 @@ func evalPathStepExpr(ec *evalContext, e PathStepExpr) (Sequence, error) {
 		if isNodeResult {
 			rNodes, nok := NodesFrom(r)
 			if nok {
-				allNodes, err = ixpath.MergeNodeSets(allNodes, rNodes, ec.docOrder, ec.maxNodes)
-				if err != nil {
-					return nil, err
-				}
+				allNodes = append(allNodes, rNodes...)
 				continue
 			}
 			// First non-node result — switch to item mode
@@ -396,6 +399,10 @@ func evalPathStepExpr(ec *evalContext, e PathStepExpr) (Sequence, error) {
 	}
 
 	if isNodeResult {
+		allNodes, err = ixpath.DeduplicateNodes(allNodes, ec.docOrder, ec.maxNodes)
+		if err != nil {
+			return nil, err
+		}
 		seq := make(Sequence, len(allNodes))
 		for i, n := range allNodes {
 			seq[i] = NodeItem{Node: n}

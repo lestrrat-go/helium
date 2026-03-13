@@ -38,6 +38,7 @@ type CollectionResolver interface {
 type Context struct {
 	namespaces         map[string]string
 	variables          map[string]Sequence
+	varScope           *variableScope // prebuilt from variables, reused across evaluations
 	functions          map[string]Function
 	functionsNS        map[QualifiedName]Function
 	opLimit            int
@@ -179,6 +180,12 @@ func NewContext(ctx context.Context, opts ...ContextOption) context.Context {
 	c := &Context{}
 	for _, opt := range opts {
 		opt(c)
+	}
+	// Prebuild immutable variable scope for reuse across evaluations.
+	// The variables map was defensively copied by WithVariables, so the
+	// scope can safely be shared.
+	if len(c.variables) > 0 {
+		c.varScope = newVariableScope(c.variables)
 	}
 	return context.WithValue(ctx, contextKey{}, c)
 }
