@@ -626,7 +626,12 @@ func (p *parser) parsePostfixOps(expr Expr) (Expr, error) {
 			if err != nil {
 				return nil, err
 			}
-			expr = FilterExpr{Expr: expr, Predicates: []Expr{pred}}
+			if fe, ok := expr.(FilterExpr); ok {
+				fe.Predicates = append(fe.Predicates, pred)
+				expr = fe
+			} else {
+				expr = FilterExpr{Expr: expr, Predicates: []Expr{pred}}
+			}
 		case TokenLParen:
 			// Dynamic function call: expr(args)
 			args, err := p.parseArgumentList()
