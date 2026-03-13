@@ -548,17 +548,10 @@ The command-line interface is exposed as `helium`.
 Currently implemented subcommands: `lint`, `xsd validate`.
 Use `helium lint` in place of the old `heliumlint` command.
 
-```
-helium lint xmlfile ...
-```
-
-```
-cat xmlfile | helium lint
-```
-
-```
-helium xsd validate --schema schema.xsd xmlfile ...
-```
+| Command | Purpose |
+|---------|---------|
+| `helium lint` | Parse and lint XML documents |
+| `helium xsd validate` | Validate XML documents against an XML Schema |
 
 # Current status
 
