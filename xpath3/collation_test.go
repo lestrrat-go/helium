@@ -64,7 +64,7 @@ func TestQT3CaseblindCollation(t *testing.T) {
 	})
 
 	t.Run("default collation", func(t *testing.T) {
-		ctx := xpath3.NewContext(t.Context(), xpath3.WithDefaultCollation(qt3CaseblindCollationURI))
+		ctx := xpath3.WithDefaultCollation(t.Context(), qt3CaseblindCollationURI)
 		seq := evalExprCtx(t, ctx, doc, `compare("a", "A")`)
 		require.Len(t, seq, 1)
 		require.Equal(t, int64(0), seq[0].(xpath3.AtomicValue).IntegerVal())

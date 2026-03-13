@@ -34,8 +34,7 @@ type CollectionResolver interface {
 	ResolveURICollection(uri string) ([]string, error)
 }
 
-// Context holds XPath evaluation settings provided by the caller.
-type Context struct {
+type evalConfig struct {
 	namespaces         map[string]string
 	variables          map[string]Sequence
 	varScope           *variableScope // prebuilt from variables, reused across evaluations
@@ -53,147 +52,218 @@ type Context struct {
 	httpClient         *http.Client
 }
 
-// ContextOption configures a Context.
-type ContextOption func(*Context)
+func getEvalConfig(ctx context.Context) *evalConfig {
+	if ctx == nil {
+		return nil
+	}
+	cfg, _ := ctx.Value(contextKey{}).(*evalConfig)
+	return cfg
+}
+
+func deriveEvalConfig(ctx context.Context) *evalConfig {
+	if cfg := getEvalConfig(ctx); cfg != nil {
+		return cfg.clone()
+	}
+	return &evalConfig{}
+}
+
+func withEvalConfig(ctx context.Context, cfg *evalConfig) context.Context {
+	cfg.rebuildVariableScope()
+	return context.WithValue(ctx, contextKey{}, cfg)
+}
+
+func updateEvalConfig(ctx context.Context, fn func(*evalConfig)) context.Context {
+	cfg := deriveEvalConfig(ctx)
+	fn(cfg)
+	return withEvalConfig(ctx, cfg)
+}
+
+func (c *evalConfig) clone() *evalConfig {
+	if c == nil {
+		return &evalConfig{}
+	}
+	cp := *c
+	cp.namespaces = maps.Clone(c.namespaces)
+	cp.variables = cloneVariableMap(c.variables)
+	cp.functions = maps.Clone(c.functions)
+	cp.functionsNS = maps.Clone(c.functionsNS)
+	if c.defaultDecimal != nil {
+		df := *c.defaultDecimal
+		cp.defaultDecimal = &df
+	}
+	cp.decimalFormats = maps.Clone(c.decimalFormats)
+	return &cp
+}
+
+func (c *evalConfig) rebuildVariableScope() {
+	if len(c.variables) == 0 {
+		c.varScope = nil
+		return
+	}
+	c.varScope = newVariableScope(c.variables)
+}
 
 // WithNamespaces binds namespace prefixes to URIs for the evaluation.
 // The map is defensively copied to prevent caller mutation from affecting evaluation.
-func WithNamespaces(ns map[string]string) ContextOption {
-	return func(c *Context) {
+func WithNamespaces(ctx context.Context, ns map[string]string) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.namespaces = maps.Clone(ns)
-	}
+	})
+}
+
+// WithAdditionalNamespaces merges namespace prefixes into the returned context.
+func WithAdditionalNamespaces(ctx context.Context, ns map[string]string) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
+		if c.namespaces == nil {
+			c.namespaces = make(map[string]string, len(ns))
+		}
+		for k, v := range ns {
+			c.namespaces[k] = v
+		}
+	})
 }
 
 // WithVariables binds variable names to pre-constructed Sequence values.
 // The map is defensively copied to prevent caller mutation from affecting evaluation.
-func WithVariables(vars map[string]Sequence) ContextOption {
-	return func(c *Context) {
+func WithVariables(ctx context.Context, vars map[string]Sequence) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.variables = cloneVariableMap(vars)
-	}
+	})
+}
+
+// WithAdditionalVariables merges variable bindings into the returned context.
+func WithAdditionalVariables(ctx context.Context, vars map[string]Sequence) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
+		if c.variables == nil {
+			c.variables = make(map[string]Sequence, len(vars))
+		}
+		for name, seq := range vars {
+			c.variables[name] = append(Sequence(nil), seq...)
+		}
+	})
 }
 
 // WithOpLimit sets the maximum number of operations before the evaluator
 // returns ErrOpLimit. Zero means unlimited.
-func WithOpLimit(limit int) ContextOption {
-	return func(c *Context) {
+func WithOpLimit(ctx context.Context, limit int) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.opLimit = limit
-	}
+	})
 }
 
 // WithFunctions registers user-defined functions by local name.
 // The map is defensively copied to prevent caller mutation from affecting evaluation.
-func WithFunctions(fns map[string]Function) ContextOption {
-	return func(c *Context) {
+func WithFunctions(ctx context.Context, fns map[string]Function) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.functions = maps.Clone(fns)
-	}
+	})
+}
+
+// WithFunction registers a single user-defined function by local name.
+func WithFunction(ctx context.Context, name string, fn Function) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
+		if c.functions == nil {
+			c.functions = make(map[string]Function)
+		}
+		c.functions[name] = fn
+	})
 }
 
 // WithFunctionsNS registers user-defined functions by qualified name.
 // The map is defensively copied to prevent caller mutation from affecting evaluation.
-func WithFunctionsNS(fns map[QualifiedName]Function) ContextOption {
-	return func(c *Context) {
+func WithFunctionsNS(ctx context.Context, fns map[QualifiedName]Function) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.functionsNS = maps.Clone(fns)
-	}
+	})
+}
+
+// WithFunctionNS registers a single user-defined function by qualified name.
+func WithFunctionNS(ctx context.Context, uri, name string, fn Function) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
+		if c.functionsNS == nil {
+			c.functionsNS = make(map[QualifiedName]Function)
+		}
+		c.functionsNS[QualifiedName{URI: uri, Name: name}] = fn
+	})
 }
 
 // WithImplicitTimezone sets the implicit timezone for the dynamic context.
 // This is used by functions like fn:adjust-dateTime-to-timezone when called
 // with a single argument. If not set, the system local timezone is used.
-func WithImplicitTimezone(loc *time.Location) ContextOption {
-	return func(c *Context) {
+func WithImplicitTimezone(ctx context.Context, loc *time.Location) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.implicitTimezone = loc
-	}
+	})
 }
 
 // WithDefaultLanguage sets the dynamic default language used by
 // fn:default-language and formatting functions when no language argument
 // is supplied.
-func WithDefaultLanguage(lang string) ContextOption {
-	return func(c *Context) {
+func WithDefaultLanguage(ctx context.Context, lang string) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.defaultLanguage = lang
-	}
+	})
 }
 
 // WithDefaultCollation sets the default collation URI used by string
 // comparison and ordering operations when no explicit collation argument is
 // supplied. Use a URI understood by the evaluator's collation registry.
-func WithDefaultCollation(uri string) ContextOption {
-	return func(c *Context) {
+func WithDefaultCollation(ctx context.Context, uri string) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.defaultCollation = uri
-	}
+	})
 }
 
 // WithDefaultDecimalFormat sets the unnamed decimal format used by
 // fn:format-number and related formatting features when no named decimal
 // format is requested. The DecimalFormat value is copied before storage.
-func WithDefaultDecimalFormat(df DecimalFormat) ContextOption {
-	return func(c *Context) {
+func WithDefaultDecimalFormat(ctx context.Context, df DecimalFormat) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
 		cp := df
 		c.defaultDecimal = &cp
-	}
+	})
 }
 
 // WithNamedDecimalFormats registers named decimal formats keyed by expanded
 // QName. These formats are used when a formatting expression references a
 // specific decimal format name. The map is defensively copied before storage.
-func WithNamedDecimalFormats(dfs map[QualifiedName]DecimalFormat) ContextOption {
-	return func(c *Context) {
+func WithNamedDecimalFormats(ctx context.Context, dfs map[QualifiedName]DecimalFormat) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.decimalFormats = maps.Clone(dfs)
-	}
+	})
 }
 
 // WithBaseURI sets the static base URI for the evaluation context.
 // This is used for resolving relative URIs in fn:unparsed-text, fn:doc, etc.
-func WithBaseURI(uri string) ContextOption {
-	return func(c *Context) {
+func WithBaseURI(ctx context.Context, uri string) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.baseURI = uri
-	}
+	})
 }
 
 // WithURIResolver sets a custom URI resolver for functions that load external
 // resources such as fn:unparsed-text and fn:doc.
-func WithURIResolver(r URIResolver) ContextOption {
-	return func(c *Context) {
+func WithURIResolver(ctx context.Context, r URIResolver) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.uriResolver = r
-	}
+	})
 }
 
 // WithCollectionResolver sets a custom resolver for fn:collection and
 // fn:uri-collection.
-func WithCollectionResolver(r CollectionResolver) ContextOption {
-	return func(c *Context) {
+func WithCollectionResolver(ctx context.Context, r CollectionResolver) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.collectionResolver = r
-	}
+	})
 }
 
 // WithHTTPClient sets the HTTP client used for fetching http:// and https://
 // resources in fn:unparsed-text and similar functions. If not set, HTTP URIs
 // are not supported (unless a URIResolver handles them).
-func WithHTTPClient(client *http.Client) ContextOption {
-	return func(c *Context) {
+func WithHTTPClient(ctx context.Context, client *http.Client) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.httpClient = client
-	}
-}
-
-// NewContext creates a new context.Context carrying XPath evaluation settings.
-func NewContext(ctx context.Context, opts ...ContextOption) context.Context {
-	c := &Context{}
-	for _, opt := range opts {
-		opt(c)
-	}
-	// Prebuild immutable variable scope for reuse across evaluations.
-	// The variables map was defensively copied by WithVariables, so the
-	// scope can safely be shared.
-	if len(c.variables) > 0 {
-		c.varScope = newVariableScope(c.variables)
-	}
-	return context.WithValue(ctx, contextKey{}, c)
-}
-
-// GetContext retrieves the XPath Context from a context.Context, or nil if absent.
-func GetContext(ctx context.Context) *Context {
-	v, _ := ctx.Value(contextKey{}).(*Context)
-	return v
+	})
 }
 
 // withFnContext stores the evalContext in a context.Context so built-in

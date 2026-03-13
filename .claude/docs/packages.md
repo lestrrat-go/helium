@@ -57,11 +57,12 @@ XPath 3.1 expression parsing and evaluation.
 - **Expression.Evaluate(ctx, Node) → (*Result, error)**
 - **Find(ctx, Node, string) → ([]Node, error)** — convenience: compile+evaluate→node-set
 - **Evaluate(ctx, Node, string) → (*Result, error)** — convenience: compile+evaluate
-- **NewContext(ctx, ...ContextOption) → context.Context** — embed xpath3 config in context.Context
+- **WithNamespaces(ctx, ns) → context.Context** / **WithVariables(ctx, vars) → context.Context** / **WithOpLimit(ctx, n) → context.Context** — attach XPath 3.1 evaluation settings to `context.Context`
+- **WithFunction(ctx, name, fn) → context.Context** / **WithFunctionNS(ctx, uri, name, fn) → context.Context** — register custom functions on `context.Context`
+- **WithFunctions(ctx, fns) → context.Context** / **WithFunctionsNS(ctx, fns) → context.Context** — bulk function registration
 - `Result` — wraps `Sequence`; methods: `Nodes()`, `IsBoolean()`, `IsNumber()`, `IsString()`, `IsAtomic()`, `Atomics()`, `Sequence()`
-- `Context` — namespace bindings, variables (Sequence), custom functions, op limits
-- `WithNamespaces()`, `WithVariables()`, `WithOpLimit()`, `WithFunctions()`, `WithFunctionsNS()`
-- Context options also include `WithDefaultLanguage()`, `WithDefaultCollation()`, `WithDefaultDecimalFormat()`, `WithNamedDecimalFormats()`, `WithBaseURI()`, `WithURIResolver()`, `WithHTTPClient()`, `WithImplicitTimezone()`
+- Merge helpers: `WithAdditionalNamespaces(ctx, ns)`, `WithAdditionalVariables(ctx, vars)`
+- Direct mutators also include `WithDefaultLanguage(ctx, lang)`, `WithDefaultCollation(ctx, uri)`, `WithDefaultDecimalFormat(ctx, df)`, `WithNamedDecimalFormats(ctx, dfs)`, `WithBaseURI(ctx, uri)`, `WithURIResolver(ctx, r)`, `WithCollectionResolver(ctx, r)`, `WithHTTPClient(ctx, client)`, `WithImplicitTimezone(ctx, loc)`
 - XPath 3.1 features: FLWOR, quantified, if-then-else, try-catch, maps, arrays, inline functions, HOFs, arrow operator, simple map, string concat, value/general/node comparisons
 - Built-in functions: 100+ across fn:, math:, map:, array: namespaces
 - Type system: Sequence ([]Item), AtomicValue, NodeItem, MapItem, ArrayItem, FunctionItem

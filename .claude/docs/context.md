@@ -67,7 +67,8 @@ Module-wide rules for Go `context.Context` + package-specific payload objects.
 - `xpath1` now uses direct mutators such as `WithNamespaces(ctx, ns)` and `WithAdditionalVariables(ctx, vars)`.
 - `xpath1` keeps `FunctionContext` + `GetFunctionContext(ctx)` public because custom function implementations need read-only evaluation state.
 - `xpath1` hides its eval-config carrier and getter.
-- `xpath3.NewContext` remains public and still uses exported payload/accessor pattern.
+- `xpath3` now also uses direct mutators such as `WithNamespaces(ctx, ns)` and `WithDefaultLanguage(ctx, lang)`.
+- `xpath3` hides its eval-config carrier and getter.
 - `xpath3` internal function-evaluation state already follows unexported helper pattern: `withFnContext` + `getFnContext`.
 - Future refactors should prefer `WithX(ctx, value)` style mutators when callers do not need raw payload access.
 - Treat public carrier/accessor APIs as exception driven by caller need, not default style.

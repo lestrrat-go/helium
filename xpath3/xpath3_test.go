@@ -108,9 +108,7 @@ func TestEvaluateConvenience(t *testing.T) {
 }
 
 func TestWithDefaultLanguage(t *testing.T) {
-	ctx := xpath3.NewContext(context.Background(),
-		xpath3.WithDefaultLanguage("fr-CA"),
-	)
+	ctx := xpath3.WithDefaultLanguage(context.Background(), "fr-CA")
 
 	result, err := xpath3.Evaluate(ctx, nil, `default-language()`)
 	require.NoError(t, err)
@@ -123,9 +121,7 @@ func TestWithDefaultLanguage(t *testing.T) {
 }
 
 func TestInlineFunctionPreservesDefaultLanguage(t *testing.T) {
-	ctx := xpath3.NewContext(t.Context(),
-		xpath3.WithDefaultLanguage("fr-CA"),
-	)
+	ctx := xpath3.WithDefaultLanguage(t.Context(), "fr-CA")
 
 	result, err := xpath3.Evaluate(ctx, nil, `let $f := function() { default-language() } return $f()`)
 	require.NoError(t, err)
@@ -137,11 +133,9 @@ func TestInlineFunctionPreservesDefaultLanguage(t *testing.T) {
 }
 
 func TestPrefixedVariableRequiresDeclaredNamespace(t *testing.T) {
-	ctx := xpath3.NewContext(t.Context(),
-		xpath3.WithVariables(map[string]xpath3.Sequence{
-			"p:v": xpath3.SingleInteger(1),
-		}),
-	)
+	ctx := xpath3.WithVariables(t.Context(), map[string]xpath3.Sequence{
+		"p:v": xpath3.SingleInteger(1),
+	})
 
 	_, err := xpath3.Evaluate(ctx, nil, `$p:v`)
 	require.Error(t, err)
@@ -175,9 +169,7 @@ func TestResultIsNodeSet(t *testing.T) {
 
 func TestPrefixedFunctionMissingDoesNotFallBackToFnNamespace(t *testing.T) {
 	doc := parseTestDoc(t)
-	ctx := xpath3.NewContext(t.Context(),
-		xpath3.WithNamespaces(map[string]string{"p": "urn:other"}),
-	)
+	ctx := xpath3.WithNamespaces(t.Context(), map[string]string{"p": "urn:other"})
 
 	_, err := xpath3.Evaluate(ctx, doc, `p:count(/library/book)`)
 	require.Error(t, err)
@@ -278,12 +270,10 @@ func TestPublicStringArgsPreserveAtomizationErrors(t *testing.T) {
 }
 
 func TestJSONDocUsesURIResolverAndBaseURI(t *testing.T) {
-	ctx := xpath3.NewContext(t.Context(),
-		xpath3.WithBaseURI("http://example.com/base/"),
-		xpath3.WithURIResolver(testURIResolver{
-			"http://example.com/base/data.json": `{"name":"helium"}`,
-		}),
-	)
+	ctx := xpath3.WithBaseURI(t.Context(), "http://example.com/base/")
+	ctx = xpath3.WithURIResolver(ctx, testURIResolver{
+		"http://example.com/base/data.json": `{"name":"helium"}`,
+	})
 
 	result, err := xpath3.Evaluate(ctx, nil, `json-doc("data.json")?name`)
 	require.NoError(t, err)
@@ -294,12 +284,10 @@ func TestJSONDocUsesURIResolverAndBaseURI(t *testing.T) {
 }
 
 func TestDocUsesURIResolverAndBaseURI(t *testing.T) {
-	ctx := xpath3.NewContext(t.Context(),
-		xpath3.WithBaseURI("http://example.com/base/"),
-		xpath3.WithURIResolver(testURIResolver{
-			"http://example.com/base/data.xml": `<root><name>helium</name></root>`,
-		}),
-	)
+	ctx := xpath3.WithBaseURI(t.Context(), "http://example.com/base/")
+	ctx = xpath3.WithURIResolver(ctx, testURIResolver{
+		"http://example.com/base/data.xml": `<root><name>helium</name></root>`,
+	})
 
 	result, err := xpath3.Evaluate(ctx, nil, `string(doc("data.xml")/root/name)`)
 	require.NoError(t, err)
@@ -311,12 +299,10 @@ func TestDocUsesURIResolverAndBaseURI(t *testing.T) {
 
 func TestNodeComparisonAfterPrimaryDocOrderBuild(t *testing.T) {
 	doc := parseTestDoc(t)
-	ctx := xpath3.NewContext(t.Context(),
-		xpath3.WithBaseURI("http://example.com/base/"),
-		xpath3.WithURIResolver(testURIResolver{
-			"http://example.com/base/other.xml": `<other><item id="1"/><item id="2"/></other>`,
-		}),
-	)
+	ctx := xpath3.WithBaseURI(t.Context(), "http://example.com/base/")
+	ctx = xpath3.WithURIResolver(ctx, testURIResolver{
+		"http://example.com/base/other.xml": `<other><item id="1"/><item id="2"/></other>`,
+	})
 
 	result, err := xpath3.Evaluate(ctx, doc, `let $warm := (/library | /library/book[1]) return doc("other.xml")/other/item[1] << doc("other.xml")/other/item[2]`)
 	require.NoError(t, err)
@@ -327,14 +313,12 @@ func TestNodeComparisonAfterPrimaryDocOrderBuild(t *testing.T) {
 }
 
 func TestCollectionUsesBaseURIResolution(t *testing.T) {
-	ctx := xpath3.NewContext(t.Context(),
-		xpath3.WithBaseURI("http://example.com/base/"),
-		xpath3.WithCollectionResolver(testCollectionResolver{
-			sequences: map[string]xpath3.Sequence{
-				"http://example.com/base/data": xpath3.SingleString("helium"),
-			},
-		}),
-	)
+	ctx := xpath3.WithBaseURI(t.Context(), "http://example.com/base/")
+	ctx = xpath3.WithCollectionResolver(ctx, testCollectionResolver{
+		sequences: map[string]xpath3.Sequence{
+			"http://example.com/base/data": xpath3.SingleString("helium"),
+		},
+	})
 
 	result, err := xpath3.Evaluate(ctx, nil, `collection("data")`)
 	require.NoError(t, err)
@@ -909,11 +893,9 @@ func TestApplyRejectsEmptyArrayArgument(t *testing.T) {
 
 func TestContextVariables(t *testing.T) {
 	doc := parseTestDoc(t)
-	ctx := xpath3.NewContext(t.Context(),
-		xpath3.WithVariables(map[string]xpath3.Sequence{
-			"threshold": xpath3.SingleDouble(30.0),
-		}),
-	)
+	ctx := xpath3.WithVariables(t.Context(), map[string]xpath3.Sequence{
+		"threshold": xpath3.SingleDouble(30.0),
+	})
 	result, err := xpath3.Evaluate(ctx, doc, `count(/library/book[price > $threshold])`)
 	require.NoError(t, err)
 	n, ok := result.IsNumber()
@@ -923,11 +905,9 @@ func TestContextVariables(t *testing.T) {
 
 func TestWithVariablesCopiesSequences(t *testing.T) {
 	seq := xpath3.SingleInteger(1)
-	ctx := xpath3.NewContext(t.Context(),
-		xpath3.WithVariables(map[string]xpath3.Sequence{
-			"x": seq,
-		}),
-	)
+	ctx := xpath3.WithVariables(t.Context(), map[string]xpath3.Sequence{
+		"x": seq,
+	})
 
 	seq[0] = xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)}
 
@@ -947,11 +927,9 @@ func TestContextNamespaces(t *testing.T) {
 	doc, err := helium.Parse(t.Context(), []byte(xmlNS))
 	require.NoError(t, err)
 
-	ctx := xpath3.NewContext(t.Context(),
-		xpath3.WithNamespaces(map[string]string{
-			"e": "http://example.com",
-		}),
-	)
+	ctx := xpath3.WithNamespaces(t.Context(), map[string]string{
+		"e": "http://example.com",
+	})
 	nodes, err := xpath3.Find(ctx, doc, `/root/e:item`)
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -961,9 +939,7 @@ func TestContextNamespaces(t *testing.T) {
 
 func TestOpLimit(t *testing.T) {
 	doc := parseTestDoc(t)
-	ctx := xpath3.NewContext(t.Context(),
-		xpath3.WithOpLimit(1),
-	)
+	ctx := xpath3.WithOpLimit(t.Context(), 1)
 	// Op counting triggers on location path node traversal
 	_, err := xpath3.Evaluate(ctx, doc, `/library/book/title`)
 	require.Error(t, err)

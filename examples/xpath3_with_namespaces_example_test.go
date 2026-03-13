@@ -17,11 +17,9 @@ func Example_xpath3_with_namespaces() {
 		return
 	}
 
-	ctx := xpath3.NewContext(context.Background(),
-		xpath3.WithNamespaces(map[string]string{
-			"x": "http://example.com/ns",
-		}),
-	)
+	ctx := xpath3.WithNamespaces(context.Background(), map[string]string{
+		"x": "http://example.com/ns",
+	})
 
 	r, err := xpath3.Evaluate(ctx, doc, "//x:item")
 	if err != nil {

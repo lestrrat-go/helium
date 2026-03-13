@@ -168,7 +168,7 @@
 ### 5.1 Public API [Simple]
 - Create `xpath3/xpath3.go`
 - `Compile`, `MustCompile`, `Evaluate`, `Find`
-- `Expression`, `Result`, `Context`, all `ContextOption` constructors
+- `Expression`, `Result`, direct `WithX(ctx, value)` context mutators
 - All error variables
 - Deps: all Phase 1–4 tasks
 
