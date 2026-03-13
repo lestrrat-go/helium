@@ -118,6 +118,9 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 	if len(inst.Params) > 0 {
 		paramValues = make(map[string]xpath3.Sequence, len(inst.Params))
 		for _, wp := range inst.Params {
+			if _, dup := paramValues[wp.Name]; dup {
+				return dynamicError(errCodeXTDE0410, "duplicate parameter %q in xsl:apply-templates", wp.Name)
+			}
 			val, err := ec.evaluateWithParam(ctx, wp)
 			if err != nil {
 				return err
@@ -179,6 +182,9 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 	// Set with-param values (override template's default param values)
 	paramOverrides := make(map[string]xpath3.Sequence)
 	for _, wp := range inst.Params {
+		if _, dup := paramOverrides[wp.Name]; dup {
+			return dynamicError(errCodeXTDE0410, "duplicate parameter %q in xsl:call-template", wp.Name)
+		}
 		val, err := ec.evaluateWithParam(ctx, wp)
 		if err != nil {
 			return err
@@ -299,12 +305,14 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 		return err
 	}
 
+	hasNS := false
 	if inst.Namespace != nil {
 		nsURI, err := inst.Namespace.evaluate(ctx, ec.contextNode)
 		if err != nil {
 			return err
 		}
 		if nsURI != "" {
+			hasNS = true
 			if err := elem.DeclareNamespace(prefix, nsURI); err != nil {
 				return err
 			}
@@ -315,12 +323,21 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 	} else if prefix != "" {
 		// Resolve prefix from stylesheet namespaces
 		if uri := ec.resolvePrefix(prefix); uri != "" {
+			hasNS = true
 			if err := elem.DeclareNamespace(prefix, uri); err != nil {
 				return err
 			}
 			if err := elem.SetActiveNamespace(prefix, uri); err != nil {
 				return err
 			}
+		}
+	}
+
+	// If this element has no namespace but there's a default namespace in scope,
+	// we need to undeclare it with xmlns=""
+	if !hasNS && prefix == "" && ec.hasDefaultNSInScope() {
+		if err := elem.DeclareNamespace("", ""); err != nil {
+			return err
 		}
 	}
 
@@ -372,6 +389,11 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 		return dynamicError(errCodeXTDE0820, "xsl:attribute must be added to an element")
 	}
 
+	// XTRE0540: cannot add attribute after child content has been added
+	if elem.FirstChild() != nil {
+		return dynamicError(errCodeXTRE0540, "cannot add attribute to element after children have been added")
+	}
+
 	if inst.Namespace != nil {
 		nsURI, err := inst.Namespace.evaluate(ctx, ec.contextNode)
 		if err != nil {
@@ -384,6 +406,8 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 				prefix = name[:idx]
 				localName = name[idx+1:]
 			}
+			// Remove existing attribute with same expanded name to allow replacement
+			elem.RemoveAttributeNS(localName, nsURI)
 			ns, err := ec.resultDoc.CreateNamespace(prefix, nsURI)
 			if err != nil {
 				return err
@@ -397,6 +421,8 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 		prefix := name[:idx]
 		localName := name[idx+1:]
 		if uri := ec.resolvePrefix(prefix); uri != "" {
+			// Remove existing attribute with same expanded name to allow replacement
+			elem.RemoveAttributeNS(localName, uri)
 			ns, err := ec.resultDoc.CreateNamespace(prefix, uri)
 			if err != nil {
 				return err
@@ -405,6 +431,8 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 		}
 	}
 
+	// Remove existing attribute with same name to allow replacement
+	elem.RemoveAttribute(name)
 	return elem.SetAttribute(name, value)
 }
 
@@ -425,11 +453,41 @@ func (ec *execContext) execComment(ctx context.Context, inst *CommentInst) error
 		value = stringifySequence(val)
 	}
 
+	// Sanitize comment content per XSLT 3.0 spec §11.1:
+	// Replace any occurrence of "--" with "- -" and ensure the value
+	// doesn't end with "-" (add a trailing space if so).
+	value = sanitizeComment(value)
+
 	comment, err := ec.resultDoc.CreateComment([]byte(value))
 	if err != nil {
 		return err
 	}
 	return ec.addNode(comment)
+}
+
+// sanitizeComment replaces "--" sequences with "- -" and ensures the
+// value does not end with "-", per XSLT comment construction rules.
+func sanitizeComment(s string) string {
+	var sb strings.Builder
+	sb.Grow(len(s))
+	prevDash := false
+	for i := 0; i < len(s); i++ {
+		if s[i] == '-' {
+			if prevDash {
+				sb.WriteByte(' ')
+			}
+			sb.WriteByte('-')
+			prevDash = true
+		} else {
+			sb.WriteByte(s[i])
+			prevDash = false
+		}
+	}
+	result := sb.String()
+	if len(result) > 0 && result[len(result)-1] == '-' {
+		result += " "
+	}
+	return result
 }
 
 func (ec *execContext) execPI(ctx context.Context, inst *PIInst) error {
@@ -797,6 +855,11 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *Liter
 				return err
 			}
 		}
+	} else if inst.Prefix == "" && ec.hasDefaultNSInScope() {
+		// No namespace on this LRE but default namespace in scope — undeclare it
+		if err := elem.DeclareNamespace("", ""); err != nil {
+			return err
+		}
 	}
 
 	// Evaluate and set attributes
@@ -874,6 +937,29 @@ func (ec *execContext) isNSDeclaredInScope(prefix, uri string) bool {
 	return false
 }
 
+// hasDefaultNSInScope returns true if there is a default namespace (xmlns="...")
+// with a non-empty URI declared on any ancestor in the result tree.
+func (ec *execContext) hasDefaultNSInScope() bool {
+	out := ec.currentOutput()
+	for node := out.current; node != nil; node = node.Parent() {
+		elem, ok := node.(*helium.Element)
+		if !ok {
+			continue
+		}
+		// Check the element's own namespace (if default, i.e. no prefix)
+		if elem.Prefix() == "" && elem.URI() != "" {
+			return true
+		}
+		// Check namespace declarations
+		for _, ns := range elem.Namespaces() {
+			if ns.Prefix() == "" && ns.URI() != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error {
 	var value string
 	if inst.Select != nil {
@@ -897,7 +983,8 @@ func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error
 		if err != nil {
 			return err
 		}
-		terminate = termStr == "yes"
+		termStr = strings.TrimSpace(termStr)
+		terminate = termStr == "yes" || termStr == "true" || termStr == "1"
 	}
 
 	if ec.msgHandler != nil {
@@ -1327,6 +1414,14 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 	result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
 	if err != nil {
 		return err
+	}
+
+	out := ec.currentOutput()
+
+	// In capture mode, accumulate items directly instead of writing to DOM
+	if out.captureItems {
+		out.pendingItems = append(out.pendingItems, result.Sequence()...)
+		return nil
 	}
 
 	for _, item := range result.Sequence() {
