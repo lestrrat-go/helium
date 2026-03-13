@@ -545,7 +545,7 @@ source: [examples/schematron_validate_example_test.go](https://github.com/lestrr
 # `helium` CLI
 
 The command-line interface is exposed as `helium`.
-Currently implemented subcommand: `lint`.
+Currently implemented subcommands: `lint`, `xsd validate`.
 Use `helium lint` in place of the old `heliumlint` command.
 
 ```
@@ -554,6 +554,10 @@ helium lint xmlfile ...
 
 ```
 cat xmlfile | helium lint
+```
+
+```
+helium xsd validate --schema schema.xsd xmlfile ...
 ```
 
 # Current status

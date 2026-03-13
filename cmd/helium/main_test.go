@@ -17,3 +17,11 @@ func TestRunUnknownSubcommand(t *testing.T) {
 func TestRunLintVersion(t *testing.T) {
 	require.Equal(t, ExitOK, run([]string{"lint", "--version"}))
 }
+
+func TestRunXSDNoArgs(t *testing.T) {
+	require.Equal(t, ExitErr, run([]string{"xsd"}))
+}
+
+func TestRunXSDUnknownSubcommand(t *testing.T) {
+	require.Equal(t, ExitErr, run([]string{"xsd", "compile"}))
+}

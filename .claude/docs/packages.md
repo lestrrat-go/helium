@@ -253,8 +253,9 @@ Platform-specific TTY handling for CLI commands.
 
 Unified CLI entrypoint + lint implementation.
 
-- Subcommands: `lint`
-- Planned subcommands listed in usage: `xsd`, `xslt`
+- Subcommands: `lint`, `xsd validate`
+- Planned subcommands listed in usage: `xslt`
 - Lint behavior: parse args, detect stdin/TTY, process XML, run XInclude/XSD/XPath/C14N, emit xmllint-style exit codes
-- Files: `main.go`, `lint.go`
+- XSD behavior: compile schema from `--schema`, parse XML input(s), validate via `xsd.Validate`, return schema/validation exit codes
+- Files: `main.go`, `lint.go`, `xsd_validate.go`
 - Imports: helium, c14n/, xsd/, xinclude/, xpath1/, catalog/, internal/cliutil/

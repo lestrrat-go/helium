@@ -18,9 +18,27 @@ func run(args []string) int {
 	switch args[0] {
 	case "lint":
 		return Run("helium lint", args[1:])
+	case "xsd":
+		return runXSD(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "helium: unknown subcommand %q\n", args[0])
 		showUsage()
+		return ExitErr
+	}
+}
+
+func runXSD(args []string) int {
+	if len(args) == 0 {
+		showXSDUsage()
+		return ExitErr
+	}
+
+	switch args[0] {
+	case "validate":
+		return RunXSDValidate("helium xsd validate", args[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "helium xsd: unknown subcommand %q\n", args[0])
+		showXSDUsage()
 		return ExitErr
 	}
 }
@@ -30,8 +48,15 @@ func showUsage() {
 
 Available commands:
   lint    Parse and lint XML documents
+  xsd     XML Schema operations
 
 Planned commands:
-  xsd
   xslt`)
+}
+
+func showXSDUsage() {
+	fmt.Fprintln(os.Stderr, `Usage: helium xsd <command> [options]
+
+Available commands:
+  validate    Validate XML documents against an XML Schema`)
 }
