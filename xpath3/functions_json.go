@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/unparsedtext"
 )
 
 func init() {
@@ -485,11 +486,12 @@ func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 
-	resolvedURI, err := resolveUnparsedTextURI(ctx, uri)
+	cfg := unparsedTextConfig(ctx)
+	resolvedURI, err := unparsedtext.ResolveURI(cfg, uri)
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("json-doc: cannot resolve URI: %v", err)}
 	}
-	body, err := readUnparsedTextURI(ctx, resolvedURI)
+	body, err := unparsedtext.ReadURI(cfg, resolvedURI)
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("json-doc: cannot retrieve resource: %v", err)}
 	}

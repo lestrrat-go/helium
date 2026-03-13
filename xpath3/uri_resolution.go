@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 )
 
@@ -64,6 +65,25 @@ func resolveURIReference(base, ref string) (string, error) {
 		result = uriToIRI(result)
 	}
 	return result, nil
+}
+
+func validatePercentEncoding(uri string) error {
+	for i := 0; i < len(uri); i++ {
+		if uri[i] == '%' {
+			if i+2 >= len(uri) {
+				return fmt.Errorf("incomplete percent-encoding at position %d", i)
+			}
+			if !isHexDigit(uri[i+1]) || !isHexDigit(uri[i+2]) {
+				return fmt.Errorf("invalid percent-encoding %%%c%c", uri[i+1], uri[i+2])
+			}
+			i += 2
+		}
+	}
+	return nil
+}
+
+func isHexDigit(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
 }
 
 func indexScheme(raw string) int {

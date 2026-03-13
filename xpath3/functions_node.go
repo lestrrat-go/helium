@@ -8,6 +8,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/unparsedtext"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -773,7 +774,7 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 		}
 	}
 
-	data, err := readUnparsedTextURI(ctx, resolved)
+	data, err := unparsedtext.ReadURI(unparsedTextConfig(ctx), resolved)
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: cannot retrieve resource: %v", err)}
 	}
