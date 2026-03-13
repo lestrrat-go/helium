@@ -183,11 +183,14 @@ type LiteralAttribute struct {
 
 // NumberInst represents xsl:number.
 type NumberInst struct {
-	Level   string             // "single", "multiple", "any"
-	Count   *Pattern
-	From    *Pattern
-	Value   *xpath3.Expression
-	Format  *AVT
+	Level             string             // "single", "multiple", "any"
+	Count             *Pattern
+	From              *Pattern
+	Value             *xpath3.Expression
+	Format            *AVT
+	GroupingSeparator *AVT
+	GroupingSize      *AVT
+	Ordinal           *AVT
 }
 
 func (*NumberInst) instructionTag() {}

@@ -2,7 +2,6 @@ package xslt3
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -945,7 +944,24 @@ func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
 		}
 	}
 
-	text, err := ec.resultDoc.CreateText([]byte(formatNumberList(nums, format)))
+	groupSep := ""
+	if inst.GroupingSeparator != nil {
+		var err error
+		groupSep, err = inst.GroupingSeparator.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+	}
+	groupSize := 0
+	if inst.GroupingSize != nil {
+		gsStr, err := inst.GroupingSize.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		groupSize, _ = strconv.Atoi(gsStr)
+	}
+
+	text, err := ec.resultDoc.CreateText([]byte(formatNumberList(nums, format, groupSep, groupSize)))
 	if err != nil {
 		return err
 	}
@@ -1116,7 +1132,7 @@ func (ec *execContext) hasFromAncestor(inst *NumberInst, node helium.Node) bool 
 
 // formatNumberList formats a list of numbers according to an XSLT format string.
 // The format string is parsed into prefix, (format-token, separator)* pairs, and suffix.
-func formatNumberList(nums []int, format string) string {
+func formatNumberList(nums []int, format string, groupSep string, groupSize int) string {
 	if len(nums) == 0 {
 		return ""
 	}
@@ -1194,7 +1210,7 @@ func formatNumberList(nums []int, format string) string {
 		if tokIdx >= len(tokens) {
 			tokIdx = len(tokens) - 1
 		}
-		buf.WriteString(formatSingleNumber(num, tokens[tokIdx].format))
+		buf.WriteString(formatSingleNumber(num, tokens[tokIdx].format, groupSep, groupSize))
 	}
 	buf.WriteString(suffix)
 	return buf.String()
@@ -1204,25 +1220,49 @@ func isAlphanumeric(r rune) bool {
 	return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
 }
 
-func formatSingleNumber(num int, token string) string {
-	switch token {
-	case "1":
-		return strconv.Itoa(num)
-	case "01":
-		return fmt.Sprintf("%02d", num)
-	case "001":
-		return fmt.Sprintf("%03d", num)
-	case "a":
+func formatSingleNumber(num int, token string, groupSep string, groupSize int) string {
+	switch {
+	case token == "a":
 		return toLowerAlpha(num)
-	case "A":
+	case token == "A":
 		return toUpperAlpha(num)
-	case "i":
+	case token == "i":
 		return strings.ToLower(toRoman(num))
-	case "I":
+	case token == "I":
 		return toRoman(num)
 	default:
-		return strconv.Itoa(num)
+		// Numeric format: determine minimum width from token (e.g., "001" = width 3)
+		minWidth := len(token)
+		s := strconv.Itoa(num)
+		// Pad with leading zeros to meet minimum width
+		for len(s) < minWidth {
+			s = "0" + s
+		}
+		// Apply grouping separator
+		if groupSep != "" && groupSize > 0 {
+			s = applyGroupingSeparator(s, groupSep, groupSize)
+		}
+		return s
 	}
+}
+
+func applyGroupingSeparator(s string, sep string, size int) string {
+	// Insert separator from right to left every 'size' digits
+	if size <= 0 || sep == "" {
+		return s
+	}
+	var result []byte
+	for i, j := len(s)-1, 0; i >= 0; i, j = i-1, j+1 {
+		if j > 0 && j%size == 0 {
+			result = append(result, []byte(sep)...)
+		}
+		result = append(result, s[i])
+	}
+	// Reverse
+	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
+		result[i], result[j] = result[j], result[i]
+	}
+	return string(result)
 }
 
 func toLowerAlpha(n int) string {

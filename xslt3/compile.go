@@ -448,6 +448,9 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 		return staticError(errCodeXTSE0110, "xsl:function requires name attribute")
 	}
 
+	// Collect namespace declarations from this element
+	c.collectNamespaces(elem)
+
 	// Resolve the prefixed name to a QualifiedName
 	var qn xpath3.QualifiedName
 	if idx := strings.IndexByte(name, ':'); idx >= 0 {

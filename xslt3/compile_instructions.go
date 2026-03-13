@@ -622,6 +622,30 @@ func (c *compiler) compileNumber(elem *helium.Element) (*NumberInst, error) {
 		inst.Format = avt
 	}
 
+	if gs := getAttr(elem, "grouping-separator"); gs != "" {
+		avt, err := compileAVT(gs, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.GroupingSeparator = avt
+	}
+
+	if gsz := getAttr(elem, "grouping-size"); gsz != "" {
+		avt, err := compileAVT(gsz, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.GroupingSize = avt
+	}
+
+	if ord := getAttr(elem, "ordinal"); ord != "" {
+		avt, err := compileAVT(ord, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.Ordinal = avt
+	}
+
 	return inst, nil
 }
 
