@@ -22,8 +22,16 @@ func TestRunXPathNoArgs(t *testing.T) {
 	require.Equal(t, ExitErr, run([]string{"xpath"}))
 }
 
+func TestRunRelaxNGNoArgs(t *testing.T) {
+	require.Equal(t, ExitErr, run([]string{"relaxng"}))
+}
+
 func TestRunXSDNoArgs(t *testing.T) {
 	require.Equal(t, ExitErr, run([]string{"xsd"}))
+}
+
+func TestRunRelaxNGUnknownSubcommand(t *testing.T) {
+	require.Equal(t, ExitErr, run([]string{"relaxng", "compile"}))
 }
 
 func TestRunXSDUnknownSubcommand(t *testing.T) {

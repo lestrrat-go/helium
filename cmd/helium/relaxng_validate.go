@@ -9,33 +9,33 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/cliutil"
-	"github.com/lestrrat-go/helium/xsd"
+	"github.com/lestrrat-go/helium/relaxng"
 )
 
-type xsdValidateConfig struct {
+type relaxNGValidateConfig struct {
 	schemaFile string
 	timing     bool
 	version    bool
 }
 
-type xsdValidateInput struct {
+type relaxNGValidateInput struct {
 	name  string
 	stdin bool
 }
 
-type xsdValidateCommand struct {
+type relaxNGValidateCommand struct {
 	prog     string
 	stdin    io.Reader
 	stderr   io.Writer
 	stdinTTY bool
 }
 
-func RunXSDValidate(prog string, args []string) int {
-	return newXSDValidateCommand(prog).run(args)
+func RunRelaxNGValidate(prog string, args []string) int {
+	return newRelaxNGValidateCommand(prog).run(args)
 }
 
-func newXSDValidateCommand(prog string) *xsdValidateCommand {
-	return &xsdValidateCommand{
+func newRelaxNGValidateCommand(prog string) *relaxNGValidateCommand {
+	return &relaxNGValidateCommand{
 		prog:     prog,
 		stdin:    os.Stdin,
 		stderr:   os.Stderr,
@@ -43,7 +43,7 @@ func newXSDValidateCommand(prog string) *xsdValidateCommand {
 	}
 }
 
-func (c *xsdValidateCommand) run(args []string) int {
+func (c *relaxNGValidateCommand) run(args []string) int {
 	ctx := context.Background()
 
 	cfg, files := c.parseArgs(args)
@@ -57,14 +57,14 @@ func (c *xsdValidateCommand) run(args []string) int {
 		return ExitOK
 	}
 
-	var inputs []xsdValidateInput
+	var inputs []relaxNGValidateInput
 	switch {
 	case len(files) > 0:
 		for _, f := range files {
-			inputs = append(inputs, xsdValidateInput{name: f})
+			inputs = append(inputs, relaxNGValidateInput{name: f})
 		}
 	case !c.stdinTTY:
-		inputs = append(inputs, xsdValidateInput{name: "-", stdin: true})
+		inputs = append(inputs, relaxNGValidateInput{name: "-", stdin: true})
 	default:
 		c.showUsage()
 		return ExitErr
@@ -74,7 +74,7 @@ func (c *xsdValidateCommand) run(args []string) int {
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	schema, err := xsd.CompileFile(ctx, cfg.schemaFile)
+	grammar, err := relaxng.CompileFile(ctx, cfg.schemaFile)
 	if cfg.timing {
 		fmt.Fprintf(c.stderr, "Compiling schema took %s\n", time.Since(t0))
 	}
@@ -85,7 +85,7 @@ func (c *xsdValidateCommand) run(args []string) int {
 
 	exitCode := ExitOK
 	for _, input := range inputs {
-		code := c.processInput(ctx, cfg, input, schema)
+		code := c.processInput(ctx, cfg, input, grammar)
 		if code != ExitOK {
 			exitCode = code
 		}
@@ -93,20 +93,20 @@ func (c *xsdValidateCommand) run(args []string) int {
 	return exitCode
 }
 
-func (c *xsdValidateCommand) showVersion() {
+func (c *relaxNGValidateCommand) showVersion() {
 	fmt.Fprintf(c.stderr, "%s: using helium version %s\n", c.prog, helium.Version)
 }
 
-func (c *xsdValidateCommand) showUsage() {
+func (c *relaxNGValidateCommand) showUsage() {
 	fmt.Fprintf(c.stderr, `Usage : %s [options] SCHEMA [XMLfiles ...]
-	Validate XML files against an XML Schema
+	Validate XML files against a RELAX NG schema
 	--timing : print timing information to stderr
 	--version : display the version of the XML library used
 `, c.prog)
 }
 
-func (c *xsdValidateCommand) parseArgs(args []string) (*xsdValidateConfig, []string) {
-	cfg := &xsdValidateConfig{}
+func (c *relaxNGValidateCommand) parseArgs(args []string) (*relaxNGValidateConfig, []string) {
+	cfg := &relaxNGValidateConfig{}
 	var positional []string
 
 	for i := 0; i < len(args); i++ {
@@ -138,7 +138,7 @@ func (c *xsdValidateCommand) parseArgs(args []string) (*xsdValidateConfig, []str
 	return cfg, positional[1:]
 }
 
-func (c *xsdValidateCommand) processInput(ctx context.Context, cfg *xsdValidateConfig, input xsdValidateInput, schema *xsd.Schema) int {
+func (c *relaxNGValidateCommand) processInput(ctx context.Context, cfg *relaxNGValidateConfig, input relaxNGValidateInput, grammar *relaxng.Grammar) int {
 	var buf []byte
 	var err error
 	if input.stdin {
@@ -172,7 +172,7 @@ func (c *xsdValidateCommand) processInput(ctx context.Context, cfg *xsdValidateC
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	err = xsd.Validate(ctx, doc, schema)
+	err = relaxng.Validate(doc, grammar)
 	if cfg.timing {
 		fmt.Fprintf(c.stderr, "Validating took %s\n", time.Since(t0))
 	}

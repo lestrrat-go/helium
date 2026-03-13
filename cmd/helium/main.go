@@ -18,6 +18,8 @@ func run(args []string) int {
 	switch args[0] {
 	case "lint":
 		return Run("helium lint", args[1:])
+	case "relaxng":
+		return runRelaxNG(args[1:])
 	case "xpath":
 		return RunXPath("helium xpath", args[1:])
 	case "xsd":
@@ -25,6 +27,22 @@ func run(args []string) int {
 	default:
 		fmt.Fprintf(os.Stderr, "helium: unknown subcommand %q\n", args[0])
 		showUsage()
+		return ExitErr
+	}
+}
+
+func runRelaxNG(args []string) int {
+	if len(args) == 0 {
+		showRelaxNGUsage()
+		return ExitErr
+	}
+
+	switch args[0] {
+	case "validate":
+		return RunRelaxNGValidate("helium relaxng validate", args[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "helium relaxng: unknown subcommand %q\n", args[0])
+		showRelaxNGUsage()
 		return ExitErr
 	}
 }
@@ -50,6 +68,7 @@ func showUsage() {
 
 Available commands:
   lint    Parse and lint XML documents
+  relaxng RELAX NG operations
   xpath   Evaluate XPath expressions
   xsd     XML Schema operations
 
@@ -62,4 +81,11 @@ func showXSDUsage() {
 
 Available commands:
   validate    Validate XML documents against an XML Schema`)
+}
+
+func showRelaxNGUsage() {
+	fmt.Fprintln(os.Stderr, `Usage: helium relaxng <command> [options]
+
+Available commands:
+  validate    Validate XML documents against a RELAX NG schema`)
 }
