@@ -6,6 +6,11 @@ import (
 	"strings"
 )
 
+var (
+	maxArrayIndex = big.NewInt(int64(^uint(0) >> 1))
+	minArrayIndex = big.NewInt(-int64(^uint(0)>>1) - 1)
+)
+
 // atomicToInteger extracts an int from an AtomicValue that is an integer type.
 // Returns (index, true) if the value is xs:integer or derived, (0, false) otherwise.
 func atomicToInteger(a AtomicValue) (int, bool) {
@@ -17,6 +22,17 @@ func atomicToInteger(a AtomicValue) (int, bool) {
 		return 0, false
 	}
 	return int(n.Int64()), true
+}
+
+func checkedArrayIndex(a AtomicValue) (int, error) {
+	n, ok := a.Value.(*big.Int)
+	if !ok {
+		return 0, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("array lookup key must be xs:integer, got %s", a.TypeName)}
+	}
+	if n.Cmp(minArrayIndex) < 0 || n.Cmp(maxArrayIndex) > 0 {
+		return 0, &XPathError{Code: errCodeFOAY0001, Message: "array index out of range"}
+	}
+	return int(n.Int64()), nil
 }
 
 func evalLookupExpr(ec *evalContext, e LookupExpr) (Sequence, error) {
@@ -96,9 +112,12 @@ func lookupItem(ec *evalContext, item Item, keyExpr Expr, all bool) (Sequence, e
 			if err != nil {
 				return nil, err
 			}
-			idx, ok := atomicToInteger(ka)
-			if !ok {
+			if !isIntegerDerived(ka.TypeName) {
 				return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("array lookup key must be xs:integer, got %s", ka.TypeName)}
+			}
+			idx, err := checkedArrayIndex(ka)
+			if err != nil {
+				return nil, err
 			}
 			member, err := v.Get(idx)
 			if err != nil {

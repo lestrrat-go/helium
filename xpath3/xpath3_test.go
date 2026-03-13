@@ -1098,3 +1098,13 @@ func TestArrayLookup(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, 20.0, n)
 }
+
+func TestArrayLookupRejectsOversizedIndex(t *testing.T) {
+	doc := parseTestDoc(t)
+	_, err := xpath3.Evaluate(t.Context(), doc, `[10, 20, 30]?9999999999999999999999999`)
+	require.Error(t, err)
+
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, "FOAY0001", xpErr.Code)
+}
