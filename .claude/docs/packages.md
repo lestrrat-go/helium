@@ -137,7 +137,7 @@ XPointer expression evaluation with scheme cascading.
 
 Schematron schema compilation and validation.
 
-- **Compile(*Document, ...CompileOption) → (*Schema, error)** / **CompileFile(path, ...CompileOption) → (*Schema, error)**
+- **Compile(ctx, *Document, ...CompileOption) → (*Schema, error)** / **CompileFile(ctx, path, ...CompileOption) → (*Schema, error)**
 - **Validate(*Document, *Schema, ...ValidateOption) → error**
 - Supports: schema, pattern, rule, assert, report, let, name, value-of
 - Variable bindings via `<let>` and `<param>`
