@@ -6,10 +6,15 @@ import (
 	helium "github.com/lestrrat-go/helium"
 )
 
-// DocOrderCache caches document-order positions for all nodes in a document.
-// Built lazily on first use and shared across an entire evaluation.
-type DocOrderCache struct {
+type docIndex struct {
+	order     int
 	positions map[helium.Node]int
+}
+
+// DocOrderCache caches document-order positions for nodes grouped by
+// document root. Built lazily on first use and shared across an evaluation.
+type DocOrderCache struct {
+	documents map[helium.Node]docIndex
 }
 
 // Position returns the document-order position of a node, or -1 if unknown.
@@ -23,9 +28,6 @@ type DocOrderCache struct {
 // are deduplicated by {parent, prefix} in DeduplicateNodes/MergeNodeSets,
 // so duplicates from different union branches are already eliminated.
 func (c *DocOrderCache) Position(n helium.Node) int {
-	if c.positions == nil {
-		return -1
-	}
 	if n.Type() == helium.NamespaceNode {
 		parent := n.Parent()
 		if parent == nil {
@@ -40,7 +42,12 @@ func (c *DocOrderCache) Position(n helium.Node) int {
 		// left by stride-2 indexing in indexWalk.
 		return parentPos + 1
 	}
-	pos, ok := c.positions[n]
+	root := DocumentRoot(n)
+	index, ok := c.documents[root]
+	if !ok {
+		return -1
+	}
+	pos, ok := index.positions[n]
 	if !ok {
 		return -1
 	}
@@ -48,17 +55,25 @@ func (c *DocOrderCache) Position(n helium.Node) int {
 }
 
 // BuildFrom populates the cache by walking the tree rooted at root.
-// No-op if already populated.
+// No-op if that root is already indexed.
 func (c *DocOrderCache) BuildFrom(root helium.Node) {
-	if c.positions != nil {
+	root = DocumentRoot(root)
+	if c.documents == nil {
+		c.documents = make(map[helium.Node]docIndex)
+	}
+	if _, ok := c.documents[root]; ok {
 		return
 	}
-	c.positions = make(map[helium.Node]int)
+	positions := make(map[helium.Node]int)
 	pos := 0
-	c.indexWalk(root, &pos)
+	c.indexWalk(root, positions, &pos)
+	c.documents[root] = docIndex{
+		order:     len(c.documents),
+		positions: positions,
+	}
 }
 
-func (c *DocOrderCache) indexWalk(cur helium.Node, pos *int) {
+func (c *DocOrderCache) indexWalk(cur helium.Node, positions map[helium.Node]int, pos *int) {
 	if cur == nil {
 		return
 	}
@@ -68,13 +83,13 @@ func (c *DocOrderCache) indexWalk(cur helium.Node, pos *int) {
 		n := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 
-		c.positions[n] = *pos
+		positions[n] = *pos
 		// Stride 2: each node occupies an even slot, leaving odd slots
 		// for virtual namespace nodes (position = parent + 1).
 		*pos += 2
 		if elem, ok := n.(*helium.Element); ok {
 			for _, attr := range elem.Attributes() {
-				c.positions[helium.Node(attr)] = *pos
+				positions[helium.Node(attr)] = *pos
 				*pos += 2
 			}
 		}
@@ -87,6 +102,43 @@ func (c *DocOrderCache) indexWalk(cur helium.Node, pos *int) {
 			stack = append(stack, children[i])
 		}
 	}
+}
+
+// Compare returns the relative document order of a and b.
+// A negative result means a comes before b, a positive result means a comes
+// after b, and zero means their indexed positions are equal or unknown.
+func (c *DocOrderCache) Compare(a, b helium.Node) int {
+	ra := DocumentRoot(a)
+	rb := DocumentRoot(b)
+	if ra == rb {
+		pa := c.Position(a)
+		pb := c.Position(b)
+		switch {
+		case pa < pb:
+			return -1
+		case pa > pb:
+			return 1
+		default:
+			return 0
+		}
+	}
+
+	ia, oka := c.documents[ra]
+	ib, okb := c.documents[rb]
+	switch {
+	case !oka || !okb:
+		return 0
+	case ia.order < ib.order:
+		return -1
+	case ia.order > ib.order:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func (c *DocOrderCache) Less(a, b helium.Node) bool {
+	return c.Compare(a, b) < 0
 }
 
 // NSNodeKey identifies a namespace node by its parent element and prefix.
@@ -103,54 +155,53 @@ func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) (
 	if len(nodes) <= 1 {
 		return nodes, nil
 	}
-	seen := make(map[helium.Node]bool, len(nodes))
-	nsKeys := make(map[NSNodeKey]bool)
+	seen := make(map[helium.Node]struct{}, len(nodes))
+	nsKeys := make(map[NSNodeKey]struct{})
 	result := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
-		if seen[n] {
+		if _, ok := seen[n]; ok {
 			continue
 		}
 		if n.Type() == helium.NamespaceNode {
 			key := NSNodeKey{Parent: n.Parent(), Prefix: n.Name()}
-			if nsKeys[key] {
+			if _, ok := nsKeys[key]; ok {
 				continue
 			}
-			nsKeys[key] = true
+			nsKeys[key] = struct{}{}
 		}
-		seen[n] = true
+		seen[n] = struct{}{}
 		result = append(result, n)
 	}
 	if len(result) > maxNodes {
 		return nil, ErrNodeSetLimit
 	}
-	// All nodes belong to the same document within a single evaluation.
-	// Multi-document scenarios (fn:doc) are not yet supported; when added,
-	// the cache must be partitioned per document.
-	cache.BuildFrom(documentRootForCache(result))
+	for _, n := range result {
+		cache.BuildFrom(n)
+	}
 	sort.SliceStable(result, func(i, j int) bool {
-		return cache.Position(result[i]) < cache.Position(result[j])
+		return cache.Less(result[i], result[j])
 	})
 	return result, nil
 }
 
 // MergeNodeSets merges two node slices, deduplicates, and sorts by document order.
 func MergeNodeSets(a, b []helium.Node, cache *DocOrderCache, maxNodes int) ([]helium.Node, error) {
-	seen := make(map[helium.Node]bool, len(a)+len(b))
-	nsKeys := make(map[NSNodeKey]bool)
+	seen := make(map[helium.Node]struct{}, len(a)+len(b))
+	nsKeys := make(map[NSNodeKey]struct{})
 	var result []helium.Node
 
 	addNode := func(n helium.Node) {
-		if seen[n] {
+		if _, ok := seen[n]; ok {
 			return
 		}
 		if n.Type() == helium.NamespaceNode {
 			key := NSNodeKey{Parent: n.Parent(), Prefix: n.Name()}
-			if nsKeys[key] {
+			if _, ok := nsKeys[key]; ok {
 				return
 			}
-			nsKeys[key] = true
+			nsKeys[key] = struct{}{}
 		}
-		seen[n] = true
+		seen[n] = struct{}{}
 		result = append(result, n)
 	}
 
@@ -163,27 +214,13 @@ func MergeNodeSets(a, b []helium.Node, cache *DocOrderCache, maxNodes int) ([]he
 	if len(result) > maxNodes {
 		return nil, ErrNodeSetLimit
 	}
-	if len(result) > 0 {
-		cache.BuildFrom(documentRootForCache(result))
+	for _, n := range result {
+		cache.BuildFrom(n)
 	}
 	sort.SliceStable(result, func(i, j int) bool {
-		return cache.Position(result[i]) < cache.Position(result[j])
+		return cache.Less(result[i], result[j])
 	})
 	return result, nil
-}
-
-// documentRootForCache selects a cache root from the first node that can
-// reliably resolve to a document root. Namespace wrappers with nil Parent
-// cannot resolve to a document, so we skip them.
-func documentRootForCache(nodes []helium.Node) helium.Node {
-	for _, n := range nodes {
-		if n.Type() == helium.NamespaceNode && n.Parent() == nil {
-			continue
-		}
-		return DocumentRoot(n)
-	}
-	// All nodes are unrooted namespace wrappers; use the first one as-is.
-	return DocumentRoot(nodes[0])
 }
 
 // DocumentRoot returns the owning Document or the topmost ancestor.
