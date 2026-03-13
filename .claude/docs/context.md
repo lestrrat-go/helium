@@ -33,6 +33,7 @@ Module-wide rules for Go `context.Context` + package-specific payload objects.
 - Return derived context from `context.WithValue(parent, contextKey{}, payload)`.
 - Keep payload type descriptive: `type XPathContext struct { ... }`.
 - Keep carrier key package-private: `type contextKey struct{}`.
+- ALWAYS use empty-struct key types for `context.WithValue`.
 - Use one unique key type per stored payload kind.
 - Return `nil` from getter when payload absent or wrong type.
 - NEVER panic on missing payload.
@@ -80,6 +81,7 @@ Module-wide rules for Go `context.Context` + package-specific payload objects.
 - Preferred exported mutator style: `WithXPathNamespaces`, `WithXPathVariables`, `WithXPathFunction`.
 - Mutators: `WithX`.
 - Internal helper keys: `<name>ContextKey`.
+- Key declarations: `type <name>ContextKey struct{}`. Do not use `int`, `string`, aliases, or `iota`-backed keys.
 
 ## Reference Shape
 

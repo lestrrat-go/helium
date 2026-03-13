@@ -171,7 +171,7 @@ Streaming XML writer (no DOM needed).
 SAX2 event-driven parsing interface definitions.
 
 - `SAX2Handler` interface — callbacks: StartDocument, EndDocument, StartElement, EndElement, Characters, Comment, PI, CData, DTD events, entity/notation/element/attribute declarations
-- `Context` interface — parser state passed to handlers; GetLocator() for line/col
+- `WithDocumentLocator(ctx, loc)` / `GetDocumentLocator(ctx)` — attach or read the current document locator on callback `context.Context`
 - Files: `sax.go`
 - Imports: helium (node types)
 
