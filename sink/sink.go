@@ -41,6 +41,8 @@ type Sink[T any] struct {
 	handler Handler[T]
 	done    chan struct{}
 	once    sync.Once
+	mu      sync.RWMutex
+	closed  bool
 }
 
 // New creates a Sink that delivers items to handler in a background
@@ -67,10 +69,16 @@ func (s *Sink[T]) Handle(ctx context.Context, data T) {
 	if s == nil {
 		return
 	}
+	s.mu.RLock()
+	if s.closed {
+		s.mu.RUnlock()
+		return
+	}
 	select {
 	case s.ch <- data:
 	case <-ctx.Done():
 	}
+	s.mu.RUnlock()
 }
 
 // Close stops the sink and waits for all buffered items to be processed.
@@ -79,9 +87,18 @@ func (s *Sink[T]) Close() error {
 	if s == nil {
 		return nil
 	}
-	s.once.Do(func() { close(s.ch) })
+	s.shutdown()
 	<-s.done
 	return nil
+}
+
+func (s *Sink[T]) shutdown() {
+	s.once.Do(func() {
+		s.mu.Lock()
+		s.closed = true
+		close(s.ch)
+		s.mu.Unlock()
+	})
 }
 
 func (s *Sink[T]) start(ctx context.Context) {
@@ -95,7 +112,7 @@ func (s *Sink[T]) start(ctx context.Context) {
 			s.handler.Handle(ctx, data)
 		case <-ctx.Done():
 			// context cancelled — drain remaining buffered items
-			s.once.Do(func() { close(s.ch) })
+			s.shutdown()
 			for data := range s.ch {
 				s.handler.Handle(ctx, data)
 			}

@@ -71,6 +71,51 @@ func TestSinkCloseMultipleTimes(t *testing.T) {
 	require.NoError(t, s.Close())
 }
 
+func TestSinkCloseWhileHandleBlockedDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	handlerStarted := make(chan struct{})
+	releaseHandler := make(chan struct{})
+
+	s := sink.New[string](ctx, sink.HandlerFunc[string](func(_ context.Context, v string) {
+		if v != "first" {
+			return
+		}
+		close(handlerStarted)
+		<-releaseHandler
+	}), sink.WithBufferSize(1))
+
+	s.Handle(ctx, "first")
+	<-handlerStarted
+	s.Handle(ctx, "second")
+
+	handleCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	panicCh := make(chan any, 1)
+	handleDone := make(chan struct{})
+	go func() {
+		defer close(handleDone)
+		defer func() {
+			panicCh <- recover()
+		}()
+		s.Handle(handleCtx, "third")
+	}()
+
+	closeDone := make(chan error, 1)
+	go func() {
+		closeDone <- s.Close()
+	}()
+
+	cancel()
+	<-handleDone
+	close(releaseHandler)
+
+	require.NoError(t, <-closeDone)
+	require.Nil(t, <-panicCh)
+}
+
 func TestSinkNilReceiver(t *testing.T) {
 	t.Parallel()
 
