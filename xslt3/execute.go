@@ -172,9 +172,19 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		return nil, err
 	}
 
-	// Apply templates to the document root
-	if err := ec.applyTemplates(ctx, source, ""); err != nil {
-		return nil, err
+	// Either call the initial-template or apply templates to the document root
+	if cfg != nil && cfg.initialTemplate != "" {
+		tmpl := ec.stylesheet.namedTemplates[cfg.initialTemplate]
+		if tmpl == nil {
+			return nil, dynamicError(errCodeXTDE0820, "initial template %q not found", cfg.initialTemplate)
+		}
+		if err := ec.executeTemplate(ctx, tmpl, source, ""); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := ec.applyTemplates(ctx, source, ""); err != nil {
+			return nil, err
+		}
 	}
 
 	return resultDoc, nil

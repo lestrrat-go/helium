@@ -294,8 +294,11 @@ func runTestCase(t *testing.T, tc *helium.Element, tsDir string, environments ma
 	}
 
 	// Transform
-	_ = initialTemplate // TODO: support initial-template
-	resultDoc, err := xslt3.Transform(ctx, sourceDoc, ss)
+	var transformOpts []xslt3.TransformOption
+	if initialTemplate != "" {
+		transformOpts = append(transformOpts, xslt3.WithInitialTemplate(initialTemplate))
+	}
+	resultDoc, err := xslt3.Transform(ctx, sourceDoc, ss, transformOpts...)
 	if err != nil {
 		if expectedResult.expectError {
 			return testPass

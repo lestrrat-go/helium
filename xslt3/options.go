@@ -36,8 +36,9 @@ func WithURIResolver(r URIResolver) CompileOption {
 type TransformOption func(*transformConfig)
 
 type transformConfig struct {
-	params     map[string]string
-	msgHandler func(msg string, terminate bool)
+	params          map[string]string
+	msgHandler      func(msg string, terminate bool)
+	initialTemplate string
 }
 
 // WithParameter sets a global stylesheet parameter value.
@@ -47,6 +48,14 @@ func WithParameter(name, value string) TransformOption {
 			c.params = make(map[string]string)
 		}
 		c.params[name] = value
+	}
+}
+
+// WithInitialTemplate sets the initial named template to call instead of
+// applying templates to the source document.
+func WithInitialTemplate(name string) TransformOption {
+	return func(c *transformConfig) {
+		c.initialTemplate = name
 	}
 }
 

@@ -676,6 +676,15 @@ func (c *compiler) compileMessage(elem *helium.Element) (*MessageInst, error) {
 		inst.Terminate = avt
 	}
 
+	errorCodeAttr := getAttr(elem, "error-code")
+	if errorCodeAttr != "" {
+		avt, err := compileAVT(errorCodeAttr, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.ErrorCode = avt
+	}
+
 	return inst, nil
 }
 
