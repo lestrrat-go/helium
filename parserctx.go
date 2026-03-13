@@ -5282,6 +5282,7 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 	// Enrich context with the new parserCtx for SAX callbacks.
 	innerCtx := withParserCtx(ctx, newctx)
 	innerCtx = sax.SetDocumentLocatorValue(innerCtx, newctx)
+	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
 
 	bcur := newctx.getByteCursor()
 	if bcur != nil && bcur.HasPrefix(xmlDeclHint) {
@@ -5388,6 +5389,7 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	// Enrich context with the new parserCtx for SAX callbacks.
 	innerCtx := withParserCtx(ctx, newctx)
 	innerCtx = sax.SetDocumentLocatorValue(innerCtx, newctx)
+	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
 	if err := newctx.parseContent(innerCtx); err != nil {
 		return nil, err
 	}
