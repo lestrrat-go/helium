@@ -1118,7 +1118,7 @@ func (p *parser) parseNodeTest(_ AxisType) (NodeTest, error) {
 				p.lexer.Next()
 				return NameTest{Prefix: "*", Local: local.Value}, nil
 			}
-			return nil, fmt.Errorf("expected local name after *")
+			return nil, fmt.Errorf("%w: local name after '*:'", ErrExpectedToken)
 		}
 		return NameTest{Local: "*"}, nil
 	}
@@ -1244,9 +1244,9 @@ func (p *parser) parseElementOrAttributeTest(isElement bool) (NodeTest, bool, er
 	}
 	if err := p.expectToken(TokenRParen); err != nil {
 		if isElement {
-			return nil, true, fmt.Errorf("expected ')' after element(")
+			return nil, true, fmt.Errorf("%w: ')' after element(", ErrExpectedToken)
 		}
-		return nil, true, fmt.Errorf("expected ')' after attribute(")
+		return nil, true, fmt.Errorf("%w: ')' after attribute(", ErrExpectedToken)
 	}
 
 	if isElement {
@@ -1268,7 +1268,7 @@ func (p *parser) parseDocumentNodeTest() (NodeTest, bool, error) {
 		inner = nt
 	}
 	if err := p.expectToken(TokenRParen); err != nil {
-		return nil, true, fmt.Errorf("expected ')' after document-node(")
+		return nil, true, fmt.Errorf("%w: ')' after document-node(", ErrExpectedToken)
 	}
 	return DocumentTest{Inner: inner}, true, nil
 }
@@ -1279,9 +1279,9 @@ func (p *parser) parseSchemaTest(isElement bool) (NodeTest, bool, error) {
 	name := p.scanQName()
 	if err := p.expectToken(TokenRParen); err != nil {
 		if isElement {
-			return nil, true, fmt.Errorf("expected ')' after schema-element(")
+			return nil, true, fmt.Errorf("%w: ')' after schema-element(", ErrExpectedToken)
 		}
-		return nil, true, fmt.Errorf("expected ')' after schema-attribute(")
+		return nil, true, fmt.Errorf("%w: ')' after schema-attribute(", ErrExpectedToken)
 	}
 	if isElement {
 		return SchemaElementTest{Name: name}, true, nil
@@ -1620,7 +1620,7 @@ func (p *parser) parseFunctionKeyword() (Expr, error) {
 	if p.lexer.Peek().Type == TokenStar {
 		p.lexer.Next()
 		if err := p.expectToken(TokenRParen); err != nil {
-			return nil, fmt.Errorf("expected ')' after function(*")
+			return nil, fmt.Errorf("%w: ')' after function(*", ErrExpectedToken)
 		}
 		// This is a FunctionTest, not an expression — should only appear in sequence types.
 		// Return a dummy expression; the parser will handle this in sequence type context.
@@ -1652,14 +1652,14 @@ func (p *parser) parseFunctionKeyword() (Expr, error) {
 		}
 	}
 	if err := p.expectToken(TokenRParen); err != nil {
-		return nil, fmt.Errorf("expected ')' in inline function parameters")
+		return nil, fmt.Errorf("%w: ')' in inline function parameters", ErrExpectedToken)
 	}
 
 	// Check for duplicate parameter names (XQST0039)
 	seen := make(map[string]bool, len(params))
 	for _, param := range params {
 		if seen[param.Name] {
-			return nil, fmt.Errorf("XQST0039: duplicate parameter name $%s in inline function", param.Name)
+			return nil, &XPathError{Code: "XQST0039", Message: fmt.Sprintf("duplicate parameter name $%s in inline function", param.Name)}
 		}
 		seen[param.Name] = true
 	}
@@ -1873,7 +1873,7 @@ func (p *parser) parseItemType() (NodeTest, error) {
 		if p.lexer.Peek().Type == TokenStar {
 			p.lexer.Next()
 			if err := p.expectToken(TokenRParen); err != nil {
-				return nil, fmt.Errorf("expected ')' after function(*")
+				return nil, fmt.Errorf("%w: ')' after function(*", ErrExpectedToken)
 			}
 			return FunctionTest{AnyFunction: true}, nil
 		}
@@ -1893,7 +1893,7 @@ func (p *parser) parseItemType() (NodeTest, error) {
 			}
 		}
 		if err := p.expectToken(TokenRParen); err != nil {
-			return nil, fmt.Errorf("expected ')' in function type test")
+			return nil, fmt.Errorf("%w: ')' in function type test", ErrExpectedToken)
 		}
 		var returnType SequenceType
 		if p.lexer.Peek().Type == TokenAs {
@@ -1917,7 +1917,7 @@ func (p *parser) parseItemType() (NodeTest, error) {
 		if p.lexer.Peek().Type == TokenStar {
 			p.lexer.Next() // consume *
 			if err := p.expectToken(TokenRParen); err != nil {
-				return nil, fmt.Errorf("expected ')' after map(*")
+				return nil, fmt.Errorf("%w: ')' after map(*", ErrExpectedToken)
 			}
 			return MapTest{AnyType: true}, nil
 		}
@@ -1936,7 +1936,7 @@ func (p *parser) parseItemType() (NodeTest, error) {
 			return nil, err
 		}
 		if err := p.expectToken(TokenRParen); err != nil {
-			return nil, fmt.Errorf("expected ')' after map type test")
+			return nil, fmt.Errorf("%w: ')' after map type test", ErrExpectedToken)
 		}
 		return MapTest{KeyType: keyType, ValType: valType}, nil
 	}
@@ -1951,7 +1951,7 @@ func (p *parser) parseItemType() (NodeTest, error) {
 		if p.lexer.Peek().Type == TokenStar {
 			p.lexer.Next() // consume *
 			if err := p.expectToken(TokenRParen); err != nil {
-				return nil, fmt.Errorf("expected ')' after array(*")
+				return nil, fmt.Errorf("%w: ')' after array(*", ErrExpectedToken)
 			}
 			return ArrayTest{AnyType: true}, nil
 		}
@@ -1961,7 +1961,7 @@ func (p *parser) parseItemType() (NodeTest, error) {
 			return nil, err
 		}
 		if err := p.expectToken(TokenRParen); err != nil {
-			return nil, fmt.Errorf("expected ')' after array type test")
+			return nil, fmt.Errorf("%w: ')' after array type test", ErrExpectedToken)
 		}
 		return ArrayTest{MemberType: memberType}, nil
 	}
