@@ -2,6 +2,7 @@ package xpath3_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"math/big"
@@ -1107,4 +1108,31 @@ func TestArrayLookupRejectsOversizedIndex(t *testing.T) {
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
 	require.Equal(t, "FOAY0001", xpErr.Code)
+}
+
+func TestConcurrentEvaluate(t *testing.T) {
+	t.Parallel()
+	doc := parseTestDoc(t)
+	expr := xpath3.MustCompile(`count(/library/book)`)
+
+	const goroutines = 8
+	errs := make(chan error, goroutines)
+	for range goroutines {
+		go func() {
+			r, err := expr.Evaluate(t.Context(), doc)
+			if err != nil {
+				errs <- err
+				return
+			}
+			n, ok := r.IsNumber()
+			if !ok || n != 3 {
+				errs <- fmt.Errorf("expected 3, got %v (ok=%v)", n, ok)
+				return
+			}
+			errs <- nil
+		}()
+	}
+	for range goroutines {
+		require.NoError(t, <-errs)
+	}
 }
