@@ -29,7 +29,7 @@ func Example_xsd_schema_lookup() {
 		return
 	}
 
-	schema, err := xsd.Compile(schemaDoc)
+	schema, err := xsd.Compile(context.Background(), schemaDoc)
 	if err != nil {
 		fmt.Printf("failed to compile schema: %s\n", err)
 		return

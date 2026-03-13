@@ -15,22 +15,16 @@ func Example_xpath_context_options() {
 		return
 	}
 
-	ctx := xpath1.NewContext(context.Background(),
-		xpath1.WithVariables(map[string]any{
-			"minPrice": float64(40),
-		}),
-	)
-
-	xctx := xpath1.GetContext(ctx)
-	if err := xctx.RegisterFunction("discount", xpath1.FunctionFunc(func(_ context.Context, args []*xpath1.Result) (*xpath1.Result, error) {
+	ctx := context.Background()
+	ctx = xpath1.WithVariables(ctx, map[string]any{
+		"minPrice": float64(40),
+	})
+	ctx = xpath1.WithFunction(ctx, "discount", xpath1.FunctionFunc(func(_ context.Context, args []*xpath1.Result) (*xpath1.Result, error) {
 		return &xpath1.Result{
 			Type:   xpath1.NumberResult,
 			Number: args[0].Number * 0.9,
 		}, nil
-	})); err != nil {
-		fmt.Printf("failed to register function: %s\n", err)
-		return
-	}
+	}))
 
 	r, err := xpath1.Evaluate(ctx, doc, `count(/catalog/book[number(@price) >= $minPrice])`)
 	if err != nil {
