@@ -139,7 +139,7 @@ func fnArrayRemove(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 		positions[pos] = struct{}{}
 	}
-	members := a.Members()
+	members := a.members0()
 	var result []Sequence
 	for i, m := range members {
 		if _, skip := positions[i+1]; !skip {
@@ -155,7 +155,7 @@ func fnArrayInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	pos := int(seqToDouble(args[1]))
-	members := a.Members()
+	members := a.members0()
 	if pos < 1 || pos > len(members)+1 {
 		return nil, &XPathError{Code: errCodeFOAY0001, Message: "array index out of bounds"}
 	}
@@ -197,7 +197,7 @@ func fnArrayReverse(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	members := a.Members()
+	members := a.members0()
 	reversed := make([]Sequence, len(members))
 	for i, m := range members {
 		reversed[len(members)-1-i] = m
@@ -212,7 +212,7 @@ func fnArrayJoin(_ context.Context, args []Sequence) (Sequence, error) {
 		if !ok {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "array:join requires sequence of arrays"}
 		}
-		allMembers = append(allMembers, a.Members()...)
+		allMembers = append(allMembers, a.members0()...)
 	}
 	return Sequence{NewArray(allMembers)}, nil
 }
@@ -231,7 +231,7 @@ func flattenArrayItem(dst *Sequence, item Item) {
 		*dst = append(*dst, item)
 		return
 	}
-	for _, member := range arr.Members() {
+	for _, member := range arr.members0() {
 		for _, child := range member {
 			flattenArrayItem(dst, child)
 		}
@@ -248,7 +248,7 @@ func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	var allMembers []Sequence
-	for _, m := range a.Members() {
+	for _, m := range a.members0() {
 		r, err := fi.Invoke(ctx, []Sequence{m})
 		if err != nil {
 			return nil, err
@@ -256,7 +256,7 @@ func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {
 		// Each result should be an array; collect members
 		for _, item := range r {
 			if ra, ok := item.(ArrayItem); ok {
-				allMembers = append(allMembers, ra.Members()...)
+				allMembers = append(allMembers, ra.members0()...)
 			} else {
 				allMembers = append(allMembers, Sequence{item})
 			}
@@ -275,7 +275,7 @@ func fnArrayFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	var result []Sequence
-	for _, m := range a.Members() {
+	for _, m := range a.members0() {
 		r, err := fi.Invoke(ctx, []Sequence{m})
 		if err != nil {
 			return nil, err
@@ -305,7 +305,7 @@ func fnArrayFoldLeft(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, m := range a.Members() {
+	for _, m := range a.members0() {
 		acc, err = fi.Invoke(ctx, []Sequence{acc, m})
 		if err != nil {
 			return nil, err
@@ -324,7 +324,7 @@ func fnArrayFoldRight(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	members := a.Members()
+	members := a.members0()
 	for i := len(members) - 1; i >= 0; i-- {
 		acc, err = fi.Invoke(ctx, []Sequence{members[i], acc})
 		if err != nil {
@@ -344,7 +344,7 @@ func fnArrayForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	var results []Sequence
-	for _, m := range a.Members() {
+	for _, m := range a.members0() {
 		r, err := fi.Invoke(ctx, []Sequence{m})
 		if err != nil {
 			return nil, err
@@ -376,8 +376,8 @@ func fnArrayForEachPair(ctx context.Context, args []Sequence) (Sequence, error) 
 	}
 	var results []Sequence
 	for i := 1; i <= size; i++ {
-		m1, _ := a1.Get(i)
-		m2, _ := a2.Get(i)
+		m1, _ := a1.get0(i)
+		m2, _ := a2.get0(i)
 		r, err := fi.Invoke(ctx, []Sequence{m1, m2})
 		if err != nil {
 			return nil, err
@@ -392,8 +392,9 @@ func fnArraySort(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	members := make([]Sequence, len(a.Members()))
-	copy(members, a.Members())
+	src := a.members0()
+	members := make([]Sequence, len(src))
+	copy(members, src)
 
 	// Optional collation (2nd arg)
 	var coll *collationImpl

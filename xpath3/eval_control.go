@@ -81,7 +81,7 @@ func lookupItem(ec *evalContext, item Item, keyExpr Expr, all bool) (Sequence, e
 	case ArrayItem:
 		if all {
 			var result Sequence
-			for _, m := range v.Members() {
+			for _, m := range v.members0() {
 				result = append(result, m...)
 			}
 			return result, nil
@@ -106,7 +106,7 @@ func lookupItem(ec *evalContext, item Item, keyExpr Expr, all bool) (Sequence, e
 			if err != nil {
 				return nil, err
 			}
-			member, err := v.Get(idx)
+			member, err := v.get0(idx)
 			if err != nil {
 				return nil, err
 			}

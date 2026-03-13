@@ -425,12 +425,12 @@ func sameMapKey(a, b AtomicValue) bool {
 }
 
 func deepEqualArray(a, b ArrayItem, opts deepEqualOptions) (bool, error) {
-	if a.Size() != b.Size() {
+	am0, bm0 := a.members0(), b.members0()
+	if len(am0) != len(bm0) {
 		return false, nil
 	}
-	for i := 0; i < a.Size(); i++ {
-		am, _ := a.Get(i + 1)
-		bm, _ := b.Get(i + 1)
+	for i := range am0 {
+		am, bm := am0[i], bm0[i]
 		eq, err := deepEqualSequence(am, bm, opts)
 		if err != nil {
 			return false, err
@@ -621,7 +621,7 @@ func fnFlatten(_ context.Context, args []Sequence) (Sequence, error) {
 func flattenItems(seq Sequence, result *Sequence) {
 	for _, item := range seq {
 		if arr, ok := item.(ArrayItem); ok {
-			for _, m := range arr.Members() {
+			for _, m := range arr.members0() {
 				flattenItems(m, result)
 			}
 		} else {

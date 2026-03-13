@@ -611,7 +611,7 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 			return nil, err
 		}
 	case ArrayItem:
-		for _, member := range v.Members() {
+		for _, member := range v.members0() {
 			child, err := buildJSONToXMLTree(doc, jsonSequenceToItem(member), opts, false)
 			if err != nil {
 				return nil, err
@@ -1735,7 +1735,7 @@ func serializeAdaptiveMap(m MapItem, opts serializeOptions) (string, error) {
 
 func serializeAdaptiveArray(a ArrayItem, opts serializeOptions) (string, error) {
 	parts := make([]string, 0, a.Size())
-	for _, member := range a.Members() {
+	for _, member := range a.members0() {
 		text, err := serializeAdaptiveSequence(member, serializeOptions{method: "adaptive", itemSeparator: ","})
 		if err != nil {
 			return "", err
@@ -1761,7 +1761,7 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 		return serializeJSONAtomic(v, opts)
 	case ArrayItem:
 		parts := make([]string, 0, v.Size())
-		for _, member := range v.Members() {
+		for _, member := range v.members0() {
 			if len(member) == 0 {
 				parts = append(parts, "null")
 				continue
