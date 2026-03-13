@@ -1,6 +1,7 @@
 package catalog_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -33,7 +34,7 @@ func TestCatalogExternalSubset(t *testing.T) {
 <!DOCTYPE doc SYSTEM "http://example.com/test.dtd">
 <doc/>`
 
-	cat, err := catalog.Load(catPath)
+	cat, err := catalog.Load(context.Background(), catPath)
 	require.NoError(t, err)
 
 	p := helium.NewParser()
@@ -79,7 +80,7 @@ func TestCatalogPublicIDResolution(t *testing.T) {
 <!DOCTYPE item PUBLIC "-//TEST//DTD Item 1.0//EN" "http://bogus.example.com/item.dtd">
 <item/>`
 
-	cat, err := catalog.Load(catPath)
+	cat, err := catalog.Load(context.Background(), catPath)
 	require.NoError(t, err)
 
 	p := helium.NewParser()

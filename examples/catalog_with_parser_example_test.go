@@ -33,7 +33,7 @@ func Example_catalog_with_parser() {
 		return
 	}
 
-	cat, err := catalog.Load(catalogPath)
+	cat, err := catalog.Load(context.Background(), catalogPath)
 	if err != nil {
 		fmt.Printf("failed to load catalog: %s\n", err)
 		return

@@ -148,7 +148,7 @@ Schematron schema compilation and validation.
 
 OASIS XML Catalog resolution for public/system IDs and URIs.
 
-- **Load(path, ...LoadOption) → (*Catalog, error)**
+- **Load(ctx, path, ...LoadOption) → (*Catalog, error)**
 - **Catalog.Resolve(pubID, sysID) → string** — resolve external identifier
 - **Catalog.ResolveURI(uri) → string** — resolve URI reference
 - Catalog chaining via nextCatalog; URN urn:publicid: support

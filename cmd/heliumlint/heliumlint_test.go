@@ -840,7 +840,7 @@ func TestCatalogLoading(t *testing.T) {
 	t.Setenv("XML_CATALOG_FILES", catFile)
 
 	// Load catalog the same way run() does
-	cat, err := loadCatalogFromEnv()
+	cat, err := loadCatalogFromEnv(t.Context())
 	require.NoError(t, err)
 	require.NotNil(t, cat)
 

@@ -1,6 +1,7 @@
 package catalog_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -23,7 +24,7 @@ func loadTestCatalog(t *testing.T, name string) *catalog.Catalog {
 	if _, err := os.Stat(dir); err != nil {
 		t.Skipf("testdata/libxml2-compat/catalogs not found; run testdata/libxml2/generate.sh first")
 	}
-	cat, err := catalog.Load(filepath.Join(dir, name))
+	cat, err := catalog.Load(context.Background(), filepath.Join(dir, name))
 	require.NoError(t, err, "loading catalog %s", name)
 	return cat
 }
@@ -264,7 +265,7 @@ func TestResolveURI(t *testing.T) {
 }
 
 func TestLoadError(t *testing.T) {
-	_, err := catalog.Load("/nonexistent/catalog.xml")
+	_, err := catalog.Load(context.Background(), "/nonexistent/catalog.xml")
 	require.Error(t, err)
 }
 

@@ -1,6 +1,7 @@
 package examples_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,7 +37,7 @@ func Example_catalog_load() {
 
 	// catalog.Load parses the catalog XML and returns a Catalog object
 	// that can resolve identifiers.
-	cat, err := catalog.Load(catalogPath)
+	cat, err := catalog.Load(context.Background(), catalogPath)
 	if err != nil {
 		fmt.Printf("failed to load catalog: %s\n", err)
 		return

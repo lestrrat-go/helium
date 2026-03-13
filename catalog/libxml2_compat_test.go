@@ -1,6 +1,7 @@
 package catalog_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -50,7 +51,7 @@ func TestLibxml2Compat(t *testing.T) {
 		}
 
 		t.Run(base, func(t *testing.T) {
-			cat, err := catalog.Load(xmlPath)
+			cat, err := catalog.Load(context.Background(), xmlPath)
 			require.NoError(t, err, "loading catalog %s", xmlPath)
 
 			scriptData, err := os.ReadFile(scriptPath)

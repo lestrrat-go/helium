@@ -13,15 +13,20 @@ import (
 
 // loader implements icatalog.Loader using helium's parser.
 type loader struct {
+	ctx          context.Context
 	errorHandler helium.ErrorHandler
 }
 
 func (l loader) Load(filename string) (*icatalog.Catalog, error) {
-	return loadInternal(filename, l.errorHandler)
+	return loadInternal(l.ctx, filename, l.errorHandler)
 }
 
 // Load parses an OASIS XML Catalog file and returns a Catalog.
-func Load(filename string, opts ...LoadOption) (*Catalog, error) {
+func Load(ctx context.Context, filename string, opts ...LoadOption) (*Catalog, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	var cfg loadConfig
 	for _, o := range opts {
 		o(&cfg)
@@ -34,7 +39,7 @@ func Load(filename string, opts ...LoadOption) (*Catalog, error) {
 		eh = helium.NilErrorHandler{}
 	}
 
-	ic, err := loadInternal(filename, eh)
+	ic, err := loadInternal(ctx, filename, eh)
 	if err != nil {
 		closeHandler(eh)
 		return nil, err
@@ -44,7 +49,7 @@ func Load(filename string, opts ...LoadOption) (*Catalog, error) {
 	return &Catalog{cat: ic}, nil
 }
 
-func loadInternal(filename string, eh helium.ErrorHandler) (*icatalog.Catalog, error) {
+func loadInternal(ctx context.Context, filename string, eh helium.ErrorHandler) (*icatalog.Catalog, error) {
 	absPath, err := filepath.Abs(filename)
 	if err != nil {
 		return nil, fmt.Errorf("catalog: failed to resolve path %q: %w", filename, err)
@@ -55,12 +60,12 @@ func loadInternal(filename string, eh helium.ErrorHandler) (*icatalog.Catalog, e
 		return nil, fmt.Errorf("catalog: failed to read %q: %w", absPath, err)
 	}
 
-	return loadFromBytes(data, absPath, eh)
+	return loadFromBytes(ctx, data, absPath, eh)
 }
 
-func loadFromBytes(data []byte, baseURI string, eh helium.ErrorHandler) (*icatalog.Catalog, error) {
+func loadFromBytes(ctx context.Context, data []byte, baseURI string, eh helium.ErrorHandler) (*icatalog.Catalog, error) {
 	p := helium.NewParser()
-	doc, err := p.Parse(context.Background(), data)
+	doc, err := p.Parse(ctx, data)
 	if err != nil {
 		return nil, fmt.Errorf("catalog: failed to parse %q: %w", baseURI, err)
 	}
@@ -78,14 +83,13 @@ func loadFromBytes(data []byte, baseURI string, eh helium.ErrorHandler) (*icatal
 	cat := &icatalog.Catalog{
 		Prefer:  icatalog.PreferPublic, // default per OASIS spec
 		BaseURI: baseURI,
-		Loader:  loader{errorHandler: eh},
+		Loader:  loader{ctx: ctx, errorHandler: eh},
 	}
 
 	if v := getAttr(root, "prefer"); v != "" {
 		cat.Prefer = icatalog.ParsePrefer(v)
 	}
 
-	ctx := context.Background()
 	parseEntries(ctx, root, cat.Prefer, baseURI, &cat.Entries, eh)
 
 	return cat, nil
