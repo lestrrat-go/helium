@@ -13,12 +13,15 @@ import (
 
 // Compile compiles a RELAX NG document into a Grammar.
 // (libxml2: xmlRelaxNGNewParserCtxt + xmlRelaxNGParse)
-func Compile(doc *helium.Document, opts ...CompileOption) (*Grammar, error) {
+func Compile(ctx context.Context, doc *helium.Document, opts ...CompileOption) (*Grammar, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	cfg := &compileConfig{}
 	for _, o := range opts {
 		o(cfg)
 	}
-	grammar, err := compileSchema(doc, "", cfg)
+	grammar, err := compileSchema(ctx, doc, "", cfg)
 	if cfg.errorHandler != nil {
 		if cl, ok := cfg.errorHandler.(io.Closer); ok {
 			_ = cl.Close()
@@ -28,7 +31,10 @@ func Compile(doc *helium.Document, opts ...CompileOption) (*Grammar, error) {
 }
 
 // CompileFile reads and compiles a RELAX NG file into a Grammar.
-func CompileFile(path string, opts ...CompileOption) (*Grammar, error) {
+func CompileFile(ctx context.Context, path string, opts ...CompileOption) (*Grammar, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	cfg := &compileConfig{}
 	for _, o := range opts {
 		o(cfg)
@@ -47,7 +53,7 @@ func CompileFile(path string, opts ...CompileOption) (*Grammar, error) {
 		closeHandler()
 		return nil, err
 	}
-	doc, err := helium.Parse(context.Background(), data)
+	doc, err := helium.Parse(ctx, data)
 	if err != nil {
 		var pe helium.ErrParseError
 		if errors.As(err, &pe) {
@@ -58,7 +64,7 @@ func CompileFile(path string, opts ...CompileOption) (*Grammar, error) {
 			errs := formatXMLParseError(filename, pe)
 			errs += rngParserError("xmlRelaxNGParse: could not load " + filename)
 			if cfg.errorHandler != nil {
-				cfg.errorHandler.Handle(context.TODO(), helium.NewLeveledError(errs, helium.ErrorLevelFatal))
+				cfg.errorHandler.Handle(ctx, helium.NewLeveledError(errs, helium.ErrorLevelFatal))
 			}
 			closeHandler()
 			return &Grammar{}, nil
@@ -68,7 +74,7 @@ func CompileFile(path string, opts ...CompileOption) (*Grammar, error) {
 	}
 	doc.SetURL(path)
 	baseDir := filepath.Dir(path)
-	grammar, compileErr := compileSchema(doc, baseDir, cfg)
+	grammar, compileErr := compileSchema(ctx, doc, baseDir, cfg)
 	closeHandler()
 	return grammar, compileErr
 }

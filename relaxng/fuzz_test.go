@@ -25,7 +25,7 @@ func FuzzCompile(f *testing.F) {
 		if err != nil {
 			return
 		}
-		_, _ = relaxng.Compile(doc)
+		_, _ = relaxng.Compile(t.Context(), doc)
 	})
 }
 
@@ -49,7 +49,7 @@ func FuzzValidate(f *testing.F) {
 			return
 		}
 
-		grammar, err := relaxng.Compile(schemaDom)
+		grammar, err := relaxng.Compile(t.Context(), schemaDom)
 		if err != nil {
 			return
 		}

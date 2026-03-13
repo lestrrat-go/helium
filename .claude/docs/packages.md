@@ -88,7 +88,7 @@ XML Schema (XSD) 1.0 compilation and validation.
 
 RELAX NG schema compilation and validation.
 
-- **Compile(*Document, ...CompileOption) → (*Grammar, error)** / **CompileFile(path, ...CompileOption) → (*Grammar, error)**
+- **Compile(ctx, *Document, ...CompileOption) → (*Grammar, error)** / **CompileFile(ctx, path, ...CompileOption) → (*Grammar, error)**
 - **Validate(*Document, *Grammar, ...ValidateOption) → error**
 - Pattern-based: element, attribute, group, choice, interleave, optional, zeroOrMore, oneOrMore, ref, data, value, list, mixed, notAllowed
 - Supports: include with override, externalRef, parentRef, anyName/nsName/ncName, data types
