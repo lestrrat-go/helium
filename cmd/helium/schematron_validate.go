@@ -76,10 +76,10 @@ func (c *schematronValidateCommand) run(args []string) int {
 	}
 	schema, err := schematron.CompileFile(ctx, cfg.schemaFile, schematron.WithSchemaFilename(cfg.schemaFile))
 	if cfg.timing {
-		fmt.Fprintf(c.stderr, "Compiling schema took %s\n", time.Since(t0))
+		_, _ = fmt.Fprintf(c.stderr, "Compiling schema took %s\n", time.Since(t0))
 	}
 	if err != nil {
-		fmt.Fprintf(c.stderr, "%s: failed to compile schema: %s\n", c.prog, err)
+		_, _ = fmt.Fprintf(c.stderr, "%s: failed to compile schema: %s\n", c.prog, err)
 		return ExitSchemaComp
 	}
 
@@ -94,11 +94,11 @@ func (c *schematronValidateCommand) run(args []string) int {
 }
 
 func (c *schematronValidateCommand) showVersion() {
-	fmt.Fprintf(c.stderr, "%s: using helium version %s\n", c.prog, helium.Version)
+	_, _ = fmt.Fprintf(c.stderr, "%s: using helium version %s\n", c.prog, helium.Version)
 }
 
 func (c *schematronValidateCommand) showUsage() {
-	fmt.Fprintf(c.stderr, `Usage : %s [options] SCHEMA [XMLfiles ...]
+	_, _ = fmt.Fprintf(c.stderr, `Usage : %s [options] SCHEMA [XMLfiles ...]
 	Validate XML files against a Schematron schema
 	--timing : print timing information to stderr
 	--version : display the version of the XML library used
@@ -118,7 +118,7 @@ func (c *schematronValidateCommand) parseArgs(args []string) (*schematronValidat
 			cfg.timing = true
 		default:
 			if len(arg) > 0 && arg[0] == '-' {
-				fmt.Fprintf(c.stderr, "%s: unrecognized option %s\n", c.prog, arg)
+				_, _ = fmt.Fprintf(c.stderr, "%s: unrecognized option %s\n", c.prog, arg)
 				return nil, nil
 			}
 			positional = append(positional, arg)
@@ -130,7 +130,7 @@ func (c *schematronValidateCommand) parseArgs(args []string) (*schematronValidat
 	}
 
 	if len(positional) == 0 {
-		fmt.Fprintf(c.stderr, "%s: schema is required\n", c.prog)
+		_, _ = fmt.Fprintf(c.stderr, "%s: schema is required\n", c.prog)
 		return nil, nil
 	}
 
@@ -147,7 +147,7 @@ func (c *schematronValidateCommand) processInput(ctx context.Context, cfg *schem
 		buf, err = os.ReadFile(input.name)
 	}
 	if err != nil {
-		fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 		return ExitReadFile
 	}
 
@@ -162,10 +162,10 @@ func (c *schematronValidateCommand) processInput(ctx context.Context, cfg *schem
 	}
 	doc, err := p.Parse(ctx, buf)
 	if cfg.timing {
-		fmt.Fprintf(c.stderr, "Parsing took %s\n", time.Since(t0))
+		_, _ = fmt.Fprintf(c.stderr, "Parsing took %s\n", time.Since(t0))
 	}
 	if err != nil {
-		fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 		return ExitErr
 	}
 
@@ -174,10 +174,10 @@ func (c *schematronValidateCommand) processInput(ctx context.Context, cfg *schem
 	}
 	err = schematron.Validate(ctx, doc, schema, schematron.WithFilename(input.name))
 	if cfg.timing {
-		fmt.Fprintf(c.stderr, "Validating took %s\n", time.Since(t0))
+		_, _ = fmt.Fprintf(c.stderr, "Validating took %s\n", time.Since(t0))
 	}
 	if err != nil {
-		fmt.Fprint(c.stderr, err)
+		_, _ = fmt.Fprint(c.stderr, err)
 		return ExitValidation
 	}
 	return ExitOK

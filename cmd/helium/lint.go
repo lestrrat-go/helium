@@ -116,7 +116,7 @@ func (c *command) run(args []string) int {
 		var err error
 		cat, err = c.loadCatalogFromEnv(ctx)
 		if err != nil {
-			fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 		}
 	}
 
@@ -130,19 +130,19 @@ func (c *command) run(args []string) int {
 		var err error
 		schema, err = c.compileSchema(ctx, cfg)
 		if cfg.timing {
-			fmt.Fprintf(c.stderr, "Compiling schema took %s\n", time.Since(t0))
+			_, _ = fmt.Fprintf(c.stderr, "Compiling schema took %s\n", time.Since(t0))
 		}
 		if err != nil {
-			fmt.Fprintf(c.stderr, "%s\n", err)
+			_, _ = fmt.Fprintf(c.stderr, "%s\n", err)
 			return ExitSchemaComp
 		}
 	}
 
-	var out io.Writer = c.stdout
+	out := c.stdout
 	if cfg.outputFile != "" {
 		f, err := os.Create(cfg.outputFile) //nolint:gosec // CLI output path is user supplied
 		if err != nil {
-			fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 			return ExitErr
 		}
 		defer func() { _ = f.Close() }()
@@ -160,11 +160,11 @@ func (c *command) run(args []string) int {
 }
 
 func (c *command) showVersion() {
-	fmt.Fprintf(c.stderr, "%s: using helium version %s\n", c.prog, helium.Version)
+	_, _ = fmt.Fprintf(c.stderr, "%s: using helium version %s\n", c.prog, helium.Version)
 }
 
 func (c *command) showUsage() {
-	fmt.Fprintf(c.stderr, `Usage : %s [options] XMLfiles ...
+	_, _ = fmt.Fprintf(c.stderr, `Usage : %s [options] XMLfiles ...
 	Parse the XML files and output the result of the parsing
 	--version : display the version of the XML library used
 	--recover : output what was parsable on broken XML documents
@@ -277,14 +277,14 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 		case "--schema":
 			i++
 			if i >= len(args) {
-				fmt.Fprintf(c.stderr, "%s: --schema requires an argument\n", c.prog)
+				_, _ = fmt.Fprintf(c.stderr, "%s: --schema requires an argument\n", c.prog)
 				return nil, nil
 			}
 			cfg.schemaFile = args[i] //nolint:gosec // bounds checked above
 		case "--xpath":
 			i++
 			if i >= len(args) {
-				fmt.Fprintf(c.stderr, "%s: --xpath requires an argument\n", c.prog)
+				_, _ = fmt.Fprintf(c.stderr, "%s: --xpath requires an argument\n", c.prog)
 				return nil, nil
 			}
 			cfg.xpathExpr = args[i] //nolint:gosec // bounds checked above
@@ -292,51 +292,51 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 		case "--output":
 			i++
 			if i >= len(args) {
-				fmt.Fprintf(c.stderr, "%s: --output requires an argument\n", c.prog)
+				_, _ = fmt.Fprintf(c.stderr, "%s: --output requires an argument\n", c.prog)
 				return nil, nil
 			}
 			cfg.outputFile = args[i] //nolint:gosec // bounds checked above
 		case "--encode":
 			i++
 			if i >= len(args) {
-				fmt.Fprintf(c.stderr, "%s: --encode requires an argument\n", c.prog)
+				_, _ = fmt.Fprintf(c.stderr, "%s: --encode requires an argument\n", c.prog)
 				return nil, nil
 			}
 			cfg.encode = args[i] //nolint:gosec // bounds checked above
 		case "--pretty":
 			i++
 			if i >= len(args) {
-				fmt.Fprintf(c.stderr, "%s: --pretty requires an argument\n", c.prog)
+				_, _ = fmt.Fprintf(c.stderr, "%s: --pretty requires an argument\n", c.prog)
 				return nil, nil
 			}
 			n, err := strconv.Atoi(args[i]) //nolint:gosec // bounds checked above
 			if err != nil {
-				fmt.Fprintf(c.stderr, "%s: --pretty: invalid argument %q\n", c.prog, args[i]) //nolint:gosec // bounds checked above
+				_, _ = fmt.Fprintf(c.stderr, "%s: --pretty: invalid argument %q\n", c.prog, args[i]) //nolint:gosec // bounds checked above
 				return nil, nil
 			}
 			cfg.pretty = n
 		case "--path":
 			i++
 			if i >= len(args) {
-				fmt.Fprintf(c.stderr, "%s: --path requires an argument\n", c.prog)
+				_, _ = fmt.Fprintf(c.stderr, "%s: --path requires an argument\n", c.prog)
 				return nil, nil
 			}
 			cfg.pathDirs = args[i] //nolint:gosec // bounds checked above
 		case "--repeat":
 			i++
 			if i >= len(args) {
-				fmt.Fprintf(c.stderr, "%s: --repeat requires an argument\n", c.prog)
+				_, _ = fmt.Fprintf(c.stderr, "%s: --repeat requires an argument\n", c.prog)
 				return nil, nil
 			}
 			n, err := strconv.Atoi(args[i]) //nolint:gosec // bounds checked above
 			if err != nil || n < 1 {
-				fmt.Fprintf(c.stderr, "%s: --repeat: invalid argument %q\n", c.prog, args[i]) //nolint:gosec // bounds checked above
+				_, _ = fmt.Fprintf(c.stderr, "%s: --repeat: invalid argument %q\n", c.prog, args[i]) //nolint:gosec // bounds checked above
 				return nil, nil
 			}
 			cfg.repeat = n
 		default:
 			if strings.HasPrefix(arg, "--") {
-				fmt.Fprintf(c.stderr, "%s: unrecognized option %s\n", c.prog, arg) //nolint:gosec // CLI diagnostic output
+				_, _ = fmt.Fprintf(c.stderr, "%s: unrecognized option %s\n", c.prog, arg) //nolint:gosec // CLI diagnostic output
 				return nil, nil
 			}
 			files = append(files, arg)
@@ -358,7 +358,7 @@ func (c *command) loadCatalogFromEnv(ctx context.Context) (*catalog.Catalog, err
 		}
 		cat, err := catalog.Load(ctx, f)
 		if err != nil {
-			fmt.Fprintf(c.stderr, "%s: failed to load catalog %s: %s\n", c.prog, f, err)
+			_, _ = fmt.Fprintf(c.stderr, "%s: failed to load catalog %s: %s\n", c.prog, f, err)
 			continue
 		}
 		return cat, nil
@@ -383,7 +383,7 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 		buf, err = os.ReadFile(input.name)
 	}
 	if err != nil {
-		fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 		return ExitReadFile
 	}
 
@@ -405,10 +405,10 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 
 		doc, err = p.Parse(ctx, buf)
 		if cfg.timing {
-			fmt.Fprintf(c.stderr, "Parsing took %s\n", time.Since(t0))
+			_, _ = fmt.Fprintf(c.stderr, "Parsing took %s\n", time.Since(t0))
 		}
 		if err != nil {
-			fmt.Fprintf(c.stderr, "%s\n", err)
+			_, _ = fmt.Fprintf(c.stderr, "%s\n", err)
 			if doc == nil {
 				return ExitErr
 			}
@@ -431,10 +431,10 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 		}
 		_, xiErr := xinclude.Process(ctx, doc, xiOpts...)
 		if cfg.timing {
-			fmt.Fprintf(c.stderr, "XInclude took %s\n", time.Since(t0))
+			_, _ = fmt.Fprintf(c.stderr, "XInclude took %s\n", time.Since(t0))
 		}
 		if xiErr != nil {
-			fmt.Fprintf(c.stderr, "%s\n", xiErr)
+			_, _ = fmt.Fprintf(c.stderr, "%s\n", xiErr)
 		}
 	}
 
@@ -445,10 +445,10 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 		}
 		err := xsd.Validate(ctx, doc, schema)
 		if cfg.timing {
-			fmt.Fprintf(c.stderr, "Validating took %s\n", time.Since(t0))
+			_, _ = fmt.Fprintf(c.stderr, "Validating took %s\n", time.Since(t0))
 		}
 		if err != nil {
-			fmt.Fprint(c.stderr, err)
+			_, _ = fmt.Fprint(c.stderr, err)
 			return ExitValidation
 		}
 	}
@@ -482,10 +482,10 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 		}
 		cErr := c14n.Canonicalize(out, doc, mode, c14n.WithComments())
 		if cfg.timing {
-			fmt.Fprintf(c.stderr, "Saving took %s\n", time.Since(t0))
+			_, _ = fmt.Fprintf(c.stderr, "Saving took %s\n", time.Since(t0))
 		}
 		if cErr != nil {
-			fmt.Fprintf(c.stderr, "%s\n", cErr)
+			_, _ = fmt.Fprintf(c.stderr, "%s\n", cErr)
 			return ExitErr
 		}
 		return ExitOK
@@ -502,13 +502,13 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 	d := helium.NewWriter(opts...)
 	if dErr := d.WriteDoc(out, doc); dErr != nil {
 		if cfg.timing {
-			fmt.Fprintf(c.stderr, "Saving took %s\n", time.Since(t0))
+			_, _ = fmt.Fprintf(c.stderr, "Saving took %s\n", time.Since(t0))
 		}
-		fmt.Fprintf(c.stderr, "%s\n", dErr)
+		_, _ = fmt.Fprintf(c.stderr, "%s\n", dErr)
 		return ExitErr
 	}
 	if cfg.timing {
-		fmt.Fprintf(c.stderr, "Saving took %s\n", time.Since(t0))
+		_, _ = fmt.Fprintf(c.stderr, "Saving took %s\n", time.Since(t0))
 	}
 	return ExitOK
 }
@@ -516,13 +516,13 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 func (c *command) evalXPath(ctx context.Context, cfg *config, doc *helium.Document, out io.Writer) int {
 	expr, err := xpath1.Compile(cfg.xpathExpr)
 	if err != nil {
-		fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 		return ExitXPath
 	}
 
 	res, err := expr.Evaluate(ctx, doc)
 	if err != nil {
-		fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 		return ExitXPath
 	}
 
@@ -532,40 +532,40 @@ func (c *command) evalXPath(ctx context.Context, cfg *config, doc *helium.Docume
 			switch n.Type() {
 			case helium.AttributeNode:
 				attr := n.(*helium.Attribute) //nolint:forcetypeassert // node type checked above
-				fmt.Fprintf(out, " %s=%q\n", attr.Name(), attr.Value())
+				_, _ = fmt.Fprintf(out, " %s=%q\n", attr.Name(), attr.Value())
 			case helium.NamespaceDeclNode, helium.NamespaceNode:
 				ns, ok := n.(interface {
 					Prefix() string
 					URI() string
 				})
 				if !ok {
-					fmt.Fprintf(c.stderr, "%s: unexpected namespace node type %T\n", c.prog, n)
+					_, _ = fmt.Fprintf(c.stderr, "%s: unexpected namespace node type %T\n", c.prog, n)
 					return ExitErr
 				}
 				if ns.Prefix() == "" {
-					fmt.Fprintf(out, " xmlns=%q\n", ns.URI())
+					_, _ = fmt.Fprintf(out, " xmlns=%q\n", ns.URI())
 				} else {
-					fmt.Fprintf(out, " xmlns:%s=%q\n", ns.Prefix(), ns.URI())
+					_, _ = fmt.Fprintf(out, " xmlns:%s=%q\n", ns.Prefix(), ns.URI())
 				}
 			default:
 				d := helium.NewWriter()
 				if err := d.WriteNode(out, n); err != nil {
-					fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+					_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 					return ExitErr
 				}
-				fmt.Fprintln(out)
+				_, _ = fmt.Fprintln(out)
 			}
 		}
 	case xpath1.BooleanResult:
 		if res.Bool {
-			fmt.Fprintln(out, "true")
+			_, _ = fmt.Fprintln(out, "true")
 		} else {
-			fmt.Fprintln(out, "false")
+			_, _ = fmt.Fprintln(out, "false")
 		}
 	case xpath1.NumberResult:
-		fmt.Fprintf(out, "%g\n", res.Number)
+		_, _ = fmt.Fprintf(out, "%g\n", res.Number)
 	default:
-		fmt.Fprintln(out, res.String)
+		_, _ = fmt.Fprintln(out, res.String)
 	}
 
 	return ExitOK

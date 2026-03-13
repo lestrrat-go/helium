@@ -79,11 +79,11 @@ func (c *xpathCommand) run(args []string) int {
 }
 
 func (c *xpathCommand) showVersion() {
-	fmt.Fprintf(c.stderr, "%s: using helium version %s\n", c.prog, helium.Version)
+	_, _ = fmt.Fprintf(c.stderr, "%s: using helium version %s\n", c.prog, helium.Version)
 }
 
 func (c *xpathCommand) showUsage() {
-	fmt.Fprintf(c.stderr, `Usage : %s [options] EXPR [XMLfiles ...]
+	_, _ = fmt.Fprintf(c.stderr, `Usage : %s [options] EXPR [XMLfiles ...]
 	Evaluate an XPath expression against XML input
 	--engine N : XPath engine version (1 or 3, default 3)
 	--version : display the version of the XML library used
@@ -102,13 +102,13 @@ func (c *xpathCommand) parseArgs(args []string) (*xpathConfig, []string) {
 		case "--engine":
 			i++
 			if i >= len(args) {
-				fmt.Fprintf(c.stderr, "%s: --engine requires an argument\n", c.prog)
+				_, _ = fmt.Fprintf(c.stderr, "%s: --engine requires an argument\n", c.prog)
 				return nil, nil
 			}
 			cfg.engine = args[i] //nolint:gosec // bounds checked above
 		default:
 			if strings.HasPrefix(arg, "-") {
-				fmt.Fprintf(c.stderr, "%s: unrecognized option %s\n", c.prog, arg)
+				_, _ = fmt.Fprintf(c.stderr, "%s: unrecognized option %s\n", c.prog, arg)
 				return nil, nil
 			}
 			positional = append(positional, arg)
@@ -120,16 +120,16 @@ func (c *xpathCommand) parseArgs(args []string) (*xpathConfig, []string) {
 	}
 
 	if cfg.engine != "1" && cfg.engine != "3" {
-		fmt.Fprintf(c.stderr, "%s: unsupported engine %q\n", c.prog, cfg.engine)
+		_, _ = fmt.Fprintf(c.stderr, "%s: unsupported engine %q\n", c.prog, cfg.engine)
 		return nil, nil
 	}
 
 	if len(positional) == 0 {
-		fmt.Fprintf(c.stderr, "%s: expression is required\n", c.prog)
+		_, _ = fmt.Fprintf(c.stderr, "%s: expression is required\n", c.prog)
 		return nil, nil
 	}
 	if positional[0] == "" {
-		fmt.Fprintf(c.stderr, "%s: expression must not be empty\n", c.prog)
+		_, _ = fmt.Fprintf(c.stderr, "%s: expression must not be empty\n", c.prog)
 		return nil, nil
 	}
 
@@ -146,7 +146,7 @@ func (c *xpathCommand) processInput(ctx context.Context, cfg *xpathConfig, input
 		buf, err = os.ReadFile(input.name)
 	}
 	if err != nil {
-		fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 		return ExitReadFile
 	}
 
@@ -157,7 +157,7 @@ func (c *xpathCommand) processInput(ctx context.Context, cfg *xpathConfig, input
 
 	doc, err := p.Parse(ctx, buf)
 	if err != nil {
-		fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 		return ExitErr
 	}
 
@@ -170,13 +170,13 @@ func (c *xpathCommand) processInput(ctx context.Context, cfg *xpathConfig, input
 func (c *xpathCommand) evalXPath1(ctx context.Context, cfg *xpathConfig, doc *helium.Document) int {
 	expr, err := xpath1.Compile(cfg.expr)
 	if err != nil {
-		fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 		return ExitXPath
 	}
 
 	res, err := expr.Evaluate(ctx, doc)
 	if err != nil {
-		fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 		return ExitXPath
 	}
 
@@ -193,14 +193,14 @@ func (c *xpathCommand) printXPath1Result(res *xpath1.Result) int {
 		}
 	case xpath1.BooleanResult:
 		if res.Bool {
-			fmt.Fprintln(c.stdout, "true")
+			_, _ = fmt.Fprintln(c.stdout, "true")
 		} else {
-			fmt.Fprintln(c.stdout, "false")
+			_, _ = fmt.Fprintln(c.stdout, "false")
 		}
 	case xpath1.NumberResult:
-		fmt.Fprintf(c.stdout, "%g\n", res.Number)
+		_, _ = fmt.Fprintf(c.stdout, "%g\n", res.Number)
 	default:
-		fmt.Fprintln(c.stdout, res.String)
+		_, _ = fmt.Fprintln(c.stdout, res.String)
 	}
 	return ExitOK
 }
@@ -208,13 +208,13 @@ func (c *xpathCommand) printXPath1Result(res *xpath1.Result) int {
 func (c *xpathCommand) evalXPath3(ctx context.Context, cfg *xpathConfig, doc *helium.Document) int {
 	expr, err := xpath3.Compile(cfg.expr)
 	if err != nil {
-		fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 		return ExitXPath
 	}
 
 	res, err := expr.Evaluate(ctx, doc)
 	if err != nil {
-		fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 		return ExitXPath
 	}
 
@@ -229,20 +229,20 @@ func (c *xpathCommand) evalXPath3(ctx context.Context, cfg *xpathConfig, doc *he
 
 	if b, ok := res.IsBoolean(); ok {
 		if b {
-			fmt.Fprintln(c.stdout, "true")
+			_, _ = fmt.Fprintln(c.stdout, "true")
 		} else {
-			fmt.Fprintln(c.stdout, "false")
+			_, _ = fmt.Fprintln(c.stdout, "false")
 		}
 		return ExitOK
 	}
 
 	if n, ok := res.IsNumber(); ok {
-		fmt.Fprintf(c.stdout, "%g\n", n)
+		_, _ = fmt.Fprintf(c.stdout, "%g\n", n)
 		return ExitOK
 	}
 
 	if s, ok := res.IsString(); ok {
-		fmt.Fprintln(c.stdout, s)
+		_, _ = fmt.Fprintln(c.stdout, s)
 		return ExitOK
 	}
 
@@ -253,9 +253,9 @@ func (c *xpathCommand) evalXPath3(ctx context.Context, cfg *xpathConfig, doc *he
 				return code
 			}
 		case xpath3.AtomicValue:
-			fmt.Fprintln(c.stdout, formatXPath3Atomic(v))
+			_, _ = fmt.Fprintln(c.stdout, formatXPath3Atomic(v))
 		default:
-			fmt.Fprintln(c.stdout, item)
+			_, _ = fmt.Fprintln(c.stdout, item)
 		}
 	}
 
@@ -266,28 +266,28 @@ func (c *xpathCommand) printXPathNode(n helium.Node) int {
 	switch n.Type() {
 	case helium.AttributeNode:
 		attr := n.(*helium.Attribute) //nolint:forcetypeassert // node type checked above
-		fmt.Fprintf(c.stdout, " %s=%q\n", attr.Name(), attr.Value())
+		_, _ = fmt.Fprintf(c.stdout, " %s=%q\n", attr.Name(), attr.Value())
 	case helium.NamespaceDeclNode, helium.NamespaceNode:
 		ns, ok := n.(interface {
 			Prefix() string
 			URI() string
 		})
 		if !ok {
-			fmt.Fprintf(c.stderr, "%s: unexpected namespace node type %T\n", c.prog, n)
+			_, _ = fmt.Fprintf(c.stderr, "%s: unexpected namespace node type %T\n", c.prog, n)
 			return ExitErr
 		}
 		if ns.Prefix() == "" {
-			fmt.Fprintf(c.stdout, " xmlns=%q\n", ns.URI())
+			_, _ = fmt.Fprintf(c.stdout, " xmlns=%q\n", ns.URI())
 		} else {
-			fmt.Fprintf(c.stdout, " xmlns:%s=%q\n", ns.Prefix(), ns.URI())
+			_, _ = fmt.Fprintf(c.stdout, " xmlns:%s=%q\n", ns.Prefix(), ns.URI())
 		}
 	default:
 		d := helium.NewWriter()
 		if err := d.WriteNode(c.stdout, n); err != nil {
-			fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 			return ExitErr
 		}
-		fmt.Fprintln(c.stdout)
+		_, _ = fmt.Fprintln(c.stdout)
 	}
 	return ExitOK
 }
