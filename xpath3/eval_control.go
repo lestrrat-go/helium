@@ -11,19 +11,6 @@ var (
 	minArrayIndex = big.NewInt(-int64(^uint(0)>>1) - 1)
 )
 
-// atomicToInteger extracts an int from an AtomicValue that is an integer type.
-// Returns (index, true) if the value is xs:integer or derived, (0, false) otherwise.
-func atomicToInteger(a AtomicValue) (int, bool) {
-	if !isIntegerDerived(a.TypeName) {
-		return 0, false
-	}
-	n, ok := a.Value.(*big.Int)
-	if !ok {
-		return 0, false
-	}
-	return int(n.Int64()), true
-}
-
 func checkedArrayIndex(a AtomicValue) (int, error) {
 	n, ok := a.Value.(*big.Int)
 	if !ok {
