@@ -179,6 +179,9 @@ func appendPrefixChecks(plan *prefixPlanBuilder, node Expr) {
 	case TryCatchExpr:
 		appendPrefixChecks(plan, n.Try)
 		for _, c := range n.Catches {
+			for _, code := range c.Codes {
+				addCatchCodePrefixCheck(plan, code)
+			}
 			appendPrefixChecks(plan, c.Expr)
 		}
 	case DynamicFunctionCall:
@@ -188,6 +191,7 @@ func appendPrefixChecks(plan *prefixPlanBuilder, node Expr) {
 		}
 	case InlineFunctionExpr:
 		for _, param := range n.Params {
+			addVarNamePrefixCheck(plan, param.Name)
 			if param.TypeHint != nil {
 				appendSequenceTypePrefixChecks(plan, *param.TypeHint)
 			}
@@ -233,6 +237,16 @@ func appendNodeTestPrefixChecks(plan *prefixPlanBuilder, nt NodeTest) {
 		addPrefixCheck(plan, t.Prefix)
 	case AtomicOrUnionType:
 		addAtomicOrUnionTypeCheck(plan, t)
+	case ElementTest:
+		addQNameStringPrefixCheck(plan, t.Name)
+		addQNameStringPrefixCheck(plan, t.TypeName)
+	case AttributeTest:
+		addQNameStringPrefixCheck(plan, t.Name)
+		addQNameStringPrefixCheck(plan, t.TypeName)
+	case SchemaElementTest:
+		addQNameStringPrefixCheck(plan, t.Name)
+	case SchemaAttributeTest:
+		addQNameStringPrefixCheck(plan, t.Name)
 	case DocumentTest:
 		appendNodeTestPrefixChecks(plan, t.Inner)
 	case FunctionTest:
@@ -283,6 +297,32 @@ func addVarNamePrefixCheck(plan *prefixPlanBuilder, varName string) {
 	}
 	if idx := strings.IndexByte(varName, ':'); idx >= 0 {
 		addPrefixCheck(plan, varName[:idx])
+	}
+}
+
+// addQNameStringPrefixCheck extracts the prefix from a "prefix:local" QName string
+// and adds it to the prefix validation plan. Handles Q{uri}local and empty strings.
+func addQNameStringPrefixCheck(plan *prefixPlanBuilder, qname string) {
+	if qname == "" || qname == "*" {
+		return
+	}
+	addVarNamePrefixCheck(plan, qname)
+}
+
+// addCatchCodePrefixCheck extracts the prefix from a catch error code
+// and adds it to the prefix validation plan. Handles wildcards and Q{uri} forms.
+func addCatchCodePrefixCheck(plan *prefixPlanBuilder, code string) {
+	if code == "" || code == "*" {
+		return
+	}
+	if strings.HasPrefix(code, "Q{") {
+		return // URIQualifiedName, no prefix to validate
+	}
+	if idx := strings.IndexByte(code, ':'); idx >= 0 {
+		prefix := code[:idx]
+		if prefix != "*" {
+			addPrefixCheck(plan, prefix)
+		}
 	}
 }
 
