@@ -5,12 +5,17 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 
 	"golang.org/x/text/collate"
 	"golang.org/x/text/language"
 )
+
+// ucaCollationCache caches resolved UCA collations by their full URI.
+// Each cached collationImpl uses sync.Pool internally for goroutine safety.
+var ucaCollationCache sync.Map // map[string]*collationImpl
 
 // collationImpl provides string comparison operations for a specific collation.
 type collationImpl struct {
@@ -88,6 +93,8 @@ var htmlASCIICaseInsensitiveCollation = &collationImpl{
 
 // makeUCACollation creates a collation based on the Unicode Collation Algorithm
 // with optional parameters parsed from the URI query string.
+// The returned collationImpl uses sync.Pool internally so it is safe for
+// concurrent use and can be cached across evaluations.
 func makeUCACollation(params string) (*collationImpl, error) {
 	opts, err := parseUCAParams(params)
 	if err != nil {
@@ -106,7 +113,13 @@ func makeUCACollation(params string) (*collationImpl, error) {
 		}
 	}
 
-	cl := collate.New(opts.tag, opts.collateOpts...)
+	// Pool of collators — each goroutine borrows one, uses it, returns it.
+	mainPool := &sync.Pool{
+		New: func() any {
+			return collate.New(opts.tag, opts.collateOpts...)
+		},
+	}
+
 	numeric := opts.numeric
 	ignoreVariables := opts.ignoreVariableRunes()
 	normalize := func(s string) string {
@@ -116,21 +129,34 @@ func makeUCACollation(params string) (*collationImpl, error) {
 		return projectVariableRunes(s).value
 	}
 	cmp := func(a, b string) int {
-		return cl.CompareString(normalize(a), normalize(b))
+		cl := mainPool.Get().(*collate.Collator)
+		r := cl.CompareString(normalize(a), normalize(b))
+		mainPool.Put(cl)
+		return r
 	}
 	key := func(s string) []byte {
+		cl := mainPool.Get().(*collate.Collator)
 		buf := &collate.Buffer{}
-		return append([]byte(nil), cl.KeyFromString(buf, normalize(s))...)
+		k := append([]byte(nil), cl.KeyFromString(buf, normalize(s))...)
+		mainPool.Put(cl)
+		return k
 	}
 	if opts.caseFirst != "" && (!opts.ignoreCase || opts.caseLevel) {
 		caseBlindOpts := append([]collate.Option(nil), opts.collateOpts...)
 		caseBlindOpts = append(caseBlindOpts, collate.IgnoreCase)
-		caseBlind := collate.New(opts.tag, caseBlindOpts...)
+		caseBlindPool := &sync.Pool{
+			New: func() any {
+				return collate.New(opts.tag, caseBlindOpts...)
+			},
+		}
+		caseFirst := opts.caseFirst
 		key = func(s string) []byte {
 			s = normalize(s)
+			cl := caseBlindPool.Get().(*collate.Collator)
 			buf := &collate.Buffer{}
-			base := append([]byte(nil), caseBlind.KeyFromString(buf, s)...)
-			caseKey := buildCaseFirstKey(s, opts.caseFirst)
+			base := append([]byte(nil), cl.KeyFromString(buf, s)...)
+			caseBlindPool.Put(cl)
+			caseKey := buildCaseFirstKey(s, caseFirst)
 			if len(caseKey) == 0 {
 				return base
 			}
@@ -611,11 +637,19 @@ func resolveCollation(uri, baseURI string) (*collationImpl, error) {
 	case uri == caseblindCollationURI:
 		return htmlASCIICaseInsensitiveCollation, nil
 	case strings.HasPrefix(uri, ucaCollationURI):
+		if cached, ok := ucaCollationCache.Load(uri); ok {
+			return cached.(*collationImpl), nil
+		}
 		params := ""
 		if idx := strings.Index(uri, "?"); idx >= 0 {
 			params = uri[idx+1:]
 		}
-		return makeUCACollation(params)
+		cl, err := makeUCACollation(params)
+		if err != nil {
+			return nil, err
+		}
+		ucaCollationCache.Store(uri, cl)
+		return cl, nil
 	default:
 		return nil, &XPathError{Code: errCodeFOCH0002, Message: fmt.Sprintf("unsupported collation: %s", uri)}
 	}
