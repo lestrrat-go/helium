@@ -2595,9 +2595,6 @@ func (pctx *parserCtx) parseQName(ctx context.Context) (local string, prefix str
 		if cur.Peek() != ':' {
 			v, err = pctx.parseName(ctx)
 			if err != nil {
-				if errors.Is(err, errInvalidUTF8Name) {
-					return "", "", err
-				}
 				err = pctx.error(ctx, errors.New("failed to parse QName '"+v+"'"))
 				return
 			}
