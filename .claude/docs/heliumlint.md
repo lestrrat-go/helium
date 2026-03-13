@@ -1,19 +1,20 @@
-# heliumlint
+# helium lint
 
-CLI tool for parsing, validating, and processing XML. Matches xmllint conventions.
+Unified CLI lint subcommand. Matches previous lint behavior + xmllint-style flags.
 
-File: `cmd/heliumlint/heliumlint.go`
+Primary entrypoint: `cmd/helium/main.go`
+Lint implementation: `cmd/helium/lint.go`
 
 ## Exit Codes
 
 | Code | Constant | Meaning |
 |------|----------|---------|
-| 0 | exitOK | Success |
-| 1 | exitErr | Generic error |
-| 3 | exitValidation | Validation failed (DTD/Schema) |
-| 4 | exitReadFile | File read error |
-| 5 | exitSchemaComp | Schema compilation error |
-| 10 | exitXPath | XPath evaluation error |
+| 0 | `ExitOK` | Success |
+| 1 | `ExitErr` | Generic error |
+| 3 | `ExitValidation` | Validation failed (DTD/Schema) |
+| 4 | `ExitReadFile` | File read error |
+| 5 | `ExitSchemaComp` | Schema compilation error |
+| 10 | `ExitXPath` | XPath evaluation error |
 
 Multiple files: highest exit code wins.
 
@@ -106,9 +107,13 @@ Multiple files: highest exit code wins.
 
 ## Input Handling
 
-- File args: `heliumlint file1.xml file2.xml` — each processed sequentially
+- File args: `helium lint file1.xml file2.xml` — each processed sequentially
 - Stdin: detected when piped (not TTY) and no file args
 - TTY with no args: shows usage, exits with code 1
+
+## Command Layout
+
+- `helium lint ...` — supported form
 
 ## Differences from xmllint
 

@@ -245,14 +245,16 @@ Generic stack with capacity shrinking.
 
 ## internal/cliutil/
 
-Platform-specific TTY handling for heliumlint.
+Platform-specific TTY handling for CLI commands.
 
 - Files: `tty_posix.go`, `tty_windows.go`, `tty_bsd.go`
 
-## cmd/heliumlint/
+## cmd/helium/
 
-CLI tool for parsing, validating, processing XML with libxml2-compatible flags.
+Unified CLI entrypoint + lint implementation.
 
-- Flags: --recover, --noent, --loaddtd, --valid, --noblanks, --noout, --format, --c14n, --c14n11, --exc-c14n, --xinclude, --schema, --xpath, --catalogs, etc.
-- Files: `heliumlint.go`
+- Subcommands: `lint`
+- Planned subcommands listed in usage: `xsd`, `xslt`
+- Lint behavior: parse args, detect stdin/TTY, process XML, run XInclude/XSD/XPath/C14N, emit xmllint-style exit codes
+- Files: `main.go`, `lint.go`
 - Imports: helium, c14n/, xsd/, xinclude/, xpath1/, catalog/, internal/cliutil/

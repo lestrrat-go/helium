@@ -542,14 +542,18 @@ func Example_schematron_validate() {
 source: [examples/schematron_validate_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/schematron_validate_example_test.go)
 <!-- END INCLUDE -->
 
-# `heliumlint`
+# `helium` CLI
+
+The command-line interface is exposed as `helium`.
+Currently implemented subcommand: `lint`.
+Use `helium lint` in place of the old `heliumlint` command.
 
 ```
-heliumlint xmlfile ...
+helium lint xmlfile ...
 ```
 
 ```
-cat xmlfile | heliumlint
+cat xmlfile | helium lint
 ```
 
 # Current status
@@ -632,4 +636,3 @@ Please keep pull requests focused and small enough to review quickly.
 
 For usage questions, design discussion, or "is this approach reasonable?" questions,
 please open a GitHub Discussion first.
-
