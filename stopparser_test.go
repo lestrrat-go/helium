@@ -47,11 +47,14 @@ func newStopParserEntityHandler(seen *[]string, resolve sax.ResolveEntityFunc) s
 	}))
 	wrapper.SetOnStartElementNS(sax.StartElementNSFunc(func(ctx context.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
 		*seen = append(*seen, localname)
+		if err := tb.StartElementNS(ctx, localname, prefix, uri, namespaces, attrs); err != nil {
+			return err
+		}
 		if localname == "stop" {
 			helium.StopParser(ctx)
 			return nil
 		}
-		return tb.StartElementNS(ctx, localname, prefix, uri, namespaces, attrs)
+		return nil
 	}))
 	wrapper.SetOnEndElementNS(sax.EndElementNSFunc(func(ctx context.Context, localname, prefix, uri string) error {
 		return tb.EndElementNS(ctx, localname, prefix, uri)

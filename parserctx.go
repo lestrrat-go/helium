@@ -46,6 +46,8 @@ const (
 	psMisc
 )
 
+var errInvalidUTF8Name = errors.New("invalid UTF-8 sequence in name")
+
 const MaxNameLength = 50000
 
 const (
@@ -2521,7 +2523,11 @@ func (pctx *parserCtx) parseName(ctx context.Context) (name string, err error) {
 
 	// first letter
 	c := cur.Peek()
-	if c == utf8.RuneError || c == ' ' || c == '>' || c == '/' || (c != ':' && !isValidNameStartChar(c)) {
+	if c == utf8.RuneError {
+		err = pctx.error(ctx, errInvalidUTF8Name)
+		return
+	}
+	if c == ' ' || c == '>' || c == '/' || (c != ':' && !isValidNameStartChar(c)) {
 		err = pctx.error(ctx, fmt.Errorf("invalid first letter '%c'", c))
 		return
 	}
@@ -2533,7 +2539,11 @@ func (pctx *parserCtx) parseName(ctx context.Context) (name string, err error) {
 			i--
 			break
 		}
-		if c == utf8.RuneError || (c != ':' && !isValidNameChar(c)) {
+		if c == utf8.RuneError {
+			err = pctx.error(ctx, errInvalidUTF8Name)
+			return
+		}
+		if c != ':' && !isValidNameChar(c) {
 			i--
 			break
 		}
@@ -2585,6 +2595,9 @@ func (pctx *parserCtx) parseQName(ctx context.Context) (local string, prefix str
 		if cur.Peek() != ':' {
 			v, err = pctx.parseName(ctx)
 			if err != nil {
+				if errors.Is(err, errInvalidUTF8Name) {
+					return "", "", err
+				}
 				err = pctx.error(ctx, errors.New("failed to parse QName '"+v+"'"))
 				return
 			}
@@ -2705,7 +2718,11 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 	defer releaseBuffer(buf)
 
 	var c rune
-	if c = cur.Peek(); c == utf8.RuneError || c == ' ' || c == '>' || c == '/' || c == ':' || !isValidNameStartChar(c) {
+	if c = cur.Peek(); c == utf8.RuneError {
+		err = pctx.error(ctx, errInvalidUTF8Name)
+		return
+	}
+	if c == ' ' || c == '>' || c == '/' || c == ':' || !isValidNameStartChar(c) {
 		err = pctx.error(ctx, errors.New("invalid name start char"))
 		return
 	}
@@ -2715,7 +2732,11 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 	// see how much more we got here
 	i := 2
 	for c = cur.PeekN(i); c != 0x0; c = cur.PeekN(i) {
-		if c == utf8.RuneError || c == ':' || !isValidNameChar(c) {
+		if c == utf8.RuneError {
+			err = pctx.error(ctx, errInvalidUTF8Name)
+			return
+		}
+		if c == ':' || !isValidNameChar(c) {
 			i--
 			break
 		}

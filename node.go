@@ -176,18 +176,34 @@ func Walk(n Node, f WalkFunc) error {
 		return errors.New("nil node")
 	}
 
-	stack := []Node{n}
+	type walkFrame struct {
+		node        Node
+		entered     bool
+		activeChild Node
+	}
+
+	stack := []walkFrame{{node: n}}
 	for len(stack) > 0 {
-		cur := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-
-		if err := f(cur); err != nil {
-			return err
+		top := &stack[len(stack)-1]
+		if !top.entered {
+			if err := f(top.node); err != nil {
+				return err
+			}
+			top.entered = true
+			top.activeChild = top.node.FirstChild()
+			continue
 		}
 
-		for chld := cur.LastChild(); chld != nil; chld = chld.PrevSibling() {
-			stack = append(stack, chld)
+		if top.activeChild == nil {
+			stack = stack[:len(stack)-1]
+			if len(stack) > 0 {
+				parent := &stack[len(stack)-1]
+				parent.activeChild = parent.activeChild.NextSibling()
+			}
+			continue
 		}
+
+		stack = append(stack, walkFrame{node: top.activeChild})
 	}
 	return nil
 }

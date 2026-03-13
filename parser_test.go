@@ -148,6 +148,32 @@ func TestParseBad(t *testing.T) {
 	}
 }
 
+func TestParseRejectsInvalidUTF8InName(t *testing.T) {
+	t.Run("element name start", func(t *testing.T) {
+		input := append([]byte(`<?xml version="1.0"?><`), byte(0xff))
+		input = append(input, []byte(`root/>`)...)
+
+		_, err := helium.Parse(t.Context(), input)
+		require.ErrorContains(t, err, "invalid UTF-8 sequence in name")
+	})
+
+	t.Run("element name continuation", func(t *testing.T) {
+		input := append([]byte(`<?xml version="1.0"?><ro`), byte(0xff))
+		input = append(input, []byte(`ot/>`)...)
+
+		_, err := helium.Parse(t.Context(), input)
+		require.ErrorContains(t, err, "invalid UTF-8 sequence in name")
+	})
+
+	t.Run("attribute name continuation", func(t *testing.T) {
+		input := append([]byte(`<?xml version="1.0"?><root a`), byte(0xff))
+		input = append(input, []byte(`ttr="value"/></root>`)...)
+
+		_, err := helium.Parse(t.Context(), input)
+		require.ErrorContains(t, err, "invalid UTF-8 sequence in name")
+	})
+}
+
 func TestParseNamespace(t *testing.T) {
 	const input = `<?xml version="1.0"?>
 <helium:root xmlns:helium="https://github.com/lestrrat-go/helium">
