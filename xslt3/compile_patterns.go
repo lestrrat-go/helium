@@ -224,6 +224,10 @@ func matchStepsUpward(ctx *execContext, steps []xpath3.Step, absolute bool, node
 
 // nodeMatchesStep checks if a node matches a single step's node test and predicates.
 func nodeMatchesStep(ctx *execContext, step xpath3.Step, node helium.Node) bool {
+	// Document nodes are only matched by the root pattern "/", never by steps.
+	if node.Type() == helium.DocumentNode {
+		return false
+	}
 	if !nodeMatchesTest(ctx, step.NodeTest, node) {
 		return false
 	}
@@ -318,14 +322,19 @@ func matchNameTest(ctx *execContext, nt xpath3.NameTest, node helium.Node) bool 
 // evaluatePredicate evaluates a pattern predicate against a node.
 func evaluatePredicate(ctx *execContext, pred xpath3.Expr, node helium.Node) bool {
 	xpathCtx := ctx.newXPathContext(node)
-	expr := &xpath3.Expression{}
-	// We need to compile and evaluate the predicate expression
-	// For now, use string representation - this is a simplification
-	_ = expr
-	_ = xpathCtx
-	_ = pred
-	// TODO: implement predicate evaluation in patterns
-	return true
+	result, err := xpath3.EvaluateExpr(xpathCtx, pred, node)
+	if err != nil {
+		return false
+	}
+	// Numeric predicates: compare to position
+	if f, ok := result.IsNumber(); ok {
+		return int(f) == 1 // in pattern matching, position is always 1 for the candidate
+	}
+	b, err := xpath3.EBV(result.Sequence())
+	if err != nil {
+		return false
+	}
+	return b
 }
 
 // matchByEvaluation matches complex patterns by evaluating from document root.

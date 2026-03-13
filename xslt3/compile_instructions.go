@@ -235,6 +235,14 @@ func (c *compiler) compileValueOf(elem *helium.Element) (*ValueOfInst, error) {
 		inst.Select = expr
 	}
 
+	if sep := getAttr(elem, "separator"); sep != "" {
+		avt, err := compileAVT(sep, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.Separator = avt
+	}
+
 	// Check for body content (XSLT 2.0+)
 	if selectAttr == "" {
 		body, err := c.compileChildren(elem)

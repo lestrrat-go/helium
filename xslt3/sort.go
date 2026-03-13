@@ -101,6 +101,15 @@ func sortNodes(ctx context.Context, ec *execContext, nodes []helium.Node, sortKe
 				return nil, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", err)
 			}
 			keys[i][ki] = stringifyResult(result)
+			// Auto-detect numeric type when data-type not explicitly set
+			if types[ki] == "text" && sk.DataType == nil {
+				seq := result.Sequence()
+				if len(seq) == 1 {
+					if av, ok := seq[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
+						types[ki] = "number"
+					}
+				}
+			}
 		}
 	}
 

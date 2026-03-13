@@ -192,3 +192,107 @@ func (ec *execContext) fnUnparsedEntityURI(_ context.Context, args []xpath3.Sequ
 	return xpath3.SingleString(""), nil
 }
 
+// xslUserFunc wraps an xsl:function for use as an xpath3.Function.
+type xslUserFunc struct {
+	def *XSLFunction
+	ec  *execContext
+}
+
+func (f *xslUserFunc) MinArity() int { return len(f.def.Params) }
+func (f *xslUserFunc) MaxArity() int { return len(f.def.Params) }
+
+func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	// Retrieve the XSLT exec context from the context.Context
+	ec := f.ec
+	if ecFromCtx := getExecContext(ctx); ecFromCtx != nil {
+		ec = ecFromCtx
+	}
+
+	// Recursion depth check
+	ec.depth++
+	if ec.depth > maxRecursionDepth {
+		ec.depth--
+		return nil, dynamicError(errCodeXTDE0820, "recursion depth exceeded in xsl:function %s", f.def.Name.Name)
+	}
+	defer func() { ec.depth-- }()
+
+	// Save and restore execution state
+	savedContext := ec.contextNode
+	savedCurrent := ec.currentNode
+	savedPos := ec.position
+	savedSize := ec.size
+	defer func() {
+		ec.contextNode = savedContext
+		ec.currentNode = savedCurrent
+		ec.position = savedPos
+		ec.size = savedSize
+	}()
+
+	// Push new variable scope for parameters
+	ec.pushVarScope()
+	defer ec.popVarScope()
+
+	// Bind parameters
+	for i, param := range f.def.Params {
+		if i < len(args) {
+			ec.setVar(param.Name, args[i])
+		} else if param.Select != nil {
+			xpathCtx := ec.newXPathContext(ec.contextNode)
+			result, err := param.Select.Evaluate(xpathCtx, ec.contextNode)
+			if err != nil {
+				return nil, err
+			}
+			ec.setVar(param.Name, result.Sequence())
+		} else {
+			ec.setVar(param.Name, xpath3.EmptySequence())
+		}
+	}
+
+	// Execute the function body, collecting result into a temporary document
+	tmpDoc := helium.NewDefaultDocument()
+	tmpRoot, _ := tmpDoc.CreateElement("_xsl_fn_result")
+	_ = tmpDoc.SetDocumentElement(tmpRoot)
+
+	ec.outputStack = append(ec.outputStack, &outputFrame{current: tmpRoot, doc: tmpDoc})
+	defer func() {
+		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+	}()
+
+	for _, inst := range f.def.Body {
+		if err := ec.executeInstruction(ctx, inst); err != nil {
+			return nil, err
+		}
+	}
+
+	// Collect results from the temporary tree
+	return ec.collectSequenceFromNode(tmpRoot), nil
+}
+
+// collectSequenceFromNode converts children of a node to an XPath sequence.
+func (ec *execContext) collectSequenceFromNode(node helium.Node) xpath3.Sequence {
+	var seq xpath3.Sequence
+	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		switch child.Type() {
+		case helium.TextNode, helium.CDATASectionNode:
+			text := string(child.Content())
+			seq = append(seq, xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: text})
+		default:
+			seq = append(seq, xpath3.NodeItem{Node: child})
+		}
+	}
+	return seq
+}
+
+// xsltFunctionsNS returns user-defined xsl:function definitions as xpath3 functions
+// keyed by qualified name.
+func (ec *execContext) xsltFunctionsNS() map[xpath3.QualifiedName]xpath3.Function {
+	if len(ec.stylesheet.functions) == 0 {
+		return nil
+	}
+	fns := make(map[xpath3.QualifiedName]xpath3.Function, len(ec.stylesheet.functions))
+	for qn, def := range ec.stylesheet.functions {
+		fns[qn] = &xslUserFunc{def: def, ec: ec}
+	}
+	return fns
+}
+

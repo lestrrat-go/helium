@@ -2,6 +2,8 @@ package xslt3
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -235,13 +237,23 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error {
 	var value string
 
+	// Determine separator (default " " in XSLT 2.0+)
+	separator := " "
+	if inst.Separator != nil {
+		var err error
+		separator, err = inst.Separator.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+	}
+
 	if inst.Select != nil {
 		xpathCtx := ec.newXPathContext(ec.contextNode)
 		result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
 		if err != nil {
 			return err
 		}
-		value = stringifyResult(result)
+		value = stringifyResultWithSep(result, separator)
 	} else if len(inst.Body) > 0 {
 		val, err := ec.evaluateBody(ctx, inst.Body)
 		if err != nil {
@@ -893,37 +905,37 @@ func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error
 }
 
 func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
-	// Simple implementation for level=single
 	node := ec.contextNode
-	if node == nil || node.Type() != helium.ElementNode {
+	if node == nil {
 		return nil
 	}
 
-	var num int
+	var nums []int
+
 	if inst.Value != nil {
+		// value attribute: evaluate expression and use result directly
 		xpathCtx := ec.newXPathContext(node)
 		result, err := inst.Value.Evaluate(xpathCtx, node)
 		if err != nil {
 			return err
 		}
 		if f, ok := result.IsNumber(); ok {
-			num = int(f)
+			nums = []int{int(math.Round(f))}
 		}
 	} else {
-		// Count preceding siblings of same type
-		num = 1
-		for sib := node.PrevSibling(); sib != nil; sib = sib.PrevSibling() {
-			if sib.Type() == helium.ElementNode {
-				sibElem := sib.(*helium.Element)
-				nodeElem := node.(*helium.Element)
-				if sibElem.Name() == nodeElem.Name() {
-					num++
-				}
-			}
+		switch inst.Level {
+		case "single":
+			nums = ec.numberSingle(inst, node)
+		case "multiple":
+			nums = ec.numberMultiple(inst, node)
+		case "any":
+			nums = ec.numberAny(inst, node)
+		default:
+			nums = ec.numberSingle(inst, node)
 		}
 	}
 
-	// Format the number
+	// Format the number list
 	format := "1"
 	if inst.Format != nil {
 		var err error
@@ -932,25 +944,324 @@ func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
 			return err
 		}
 	}
-	_ = format // TODO: full format string support
 
-	value := strings.TrimSpace(strings.Replace(format, "1", "", 1))
-	_ = value
-	text, err := ec.resultDoc.CreateText([]byte(formatNumber(num, format)))
+	text, err := ec.resultDoc.CreateText([]byte(formatNumberList(nums, format)))
 	if err != nil {
 		return err
 	}
 	return ec.addNode(text)
 }
 
-// formatNumber formats a number according to a simple format string.
-func formatNumber(num int, format string) string {
-	// Very basic implementation: just use decimal
-	return strings.Replace(format, "1", intToString(num), 1)
+// numberNodeMatches tests if a node matches the count pattern.
+// If no count pattern, matches nodes with the same type and name as the context node.
+func (ec *execContext) numberNodeMatches(inst *NumberInst, target helium.Node, contextNode helium.Node) bool {
+	if inst.Count != nil {
+		return inst.Count.matchPattern(ec, target)
+	}
+	// Default: same node type and expanded name
+	if target.Type() != contextNode.Type() {
+		return false
+	}
+	if target.Type() == helium.ElementNode {
+		te := target.(*helium.Element)
+		ce := contextNode.(*helium.Element)
+		return te.LocalName() == ce.LocalName() && te.URI() == ce.URI()
+	}
+	return target.Name() == contextNode.Name()
 }
 
-func intToString(n int) string {
-	return strconv.Itoa(n)
+// numberFromMatches tests if a node matches the from pattern.
+func (ec *execContext) numberFromMatches(inst *NumberInst, node helium.Node) bool {
+	if inst.From == nil {
+		return false
+	}
+	return inst.From.matchPattern(ec, node)
+}
+
+// numberSingle implements level="single": find the first ancestor-or-self that
+// matches the count pattern, then count preceding siblings that match.
+func (ec *execContext) numberSingle(inst *NumberInst, node helium.Node) []int {
+	// Find the first ancestor-or-self that matches count
+	target := ec.numberFindAncestorOrSelf(inst, node)
+	if target == nil {
+		return nil
+	}
+
+	// Count preceding siblings that match count pattern
+	count := 1
+	for sib := target.PrevSibling(); sib != nil; sib = sib.PrevSibling() {
+		if ec.numberNodeMatches(inst, sib, node) {
+			count++
+		}
+	}
+	return []int{count}
+}
+
+// numberMultiple implements level="multiple": find all ancestors-or-self that match
+// count (stopping at from), and for each count preceding siblings.
+func (ec *execContext) numberMultiple(inst *NumberInst, node helium.Node) []int {
+	var ancestors []helium.Node
+	for n := node; n != nil; n = n.Parent() {
+		if ec.numberFromMatches(inst, n) {
+			break
+		}
+		if ec.numberNodeMatches(inst, n, node) {
+			ancestors = append(ancestors, n)
+		}
+		if n.Type() == helium.DocumentNode {
+			break
+		}
+	}
+
+	// Reverse to get document order (outermost first)
+	for i, j := 0, len(ancestors)-1; i < j; i, j = i+1, j-1 {
+		ancestors[i], ancestors[j] = ancestors[j], ancestors[i]
+	}
+
+	nums := make([]int, len(ancestors))
+	for i, anc := range ancestors {
+		count := 1
+		for sib := anc.PrevSibling(); sib != nil; sib = sib.PrevSibling() {
+			if ec.numberNodeMatches(inst, sib, node) {
+				count++
+			}
+		}
+		nums[i] = count
+	}
+	return nums
+}
+
+// numberAny implements level="any": count all matching nodes in document order
+// that precede (or are) the context node, going back to the nearest from match.
+// The from node itself is included in the count if it matches count.
+func (ec *execContext) numberAny(inst *NumberInst, node helium.Node) []int {
+	count := 0
+	cur := node
+	for cur != nil {
+		if ec.numberNodeMatches(inst, cur, ec.contextNode) {
+			count++
+		}
+		if ec.numberFromMatches(inst, cur) {
+			break
+		}
+		cur = ec.prevInDocOrder(cur)
+	}
+	if count == 0 {
+		return nil
+	}
+	return []int{count}
+}
+
+// prevInDocOrder returns the previous node in document order.
+func (ec *execContext) prevInDocOrder(node helium.Node) helium.Node {
+	// Previous sibling's deepest last descendant
+	if prev := node.PrevSibling(); prev != nil {
+		return ec.lastDescendant(prev)
+	}
+	// Otherwise, parent
+	parent := node.Parent()
+	if parent == nil || parent.Type() == helium.DocumentNode {
+		return nil
+	}
+	return parent
+}
+
+// lastDescendant returns the deepest last descendant of node (or node itself if leaf).
+func (ec *execContext) lastDescendant(node helium.Node) helium.Node {
+	if node.Type() == helium.ElementNode {
+		elem := node.(*helium.Element)
+		if last := elem.LastChild(); last != nil {
+			return ec.lastDescendant(last)
+		}
+	}
+	return node
+}
+
+// numberFindAncestorOrSelf finds the first ancestor-or-self that matches
+// the count pattern. If from is specified, the matching ancestor must be a
+// descendant of a from-matching node.
+func (ec *execContext) numberFindAncestorOrSelf(inst *NumberInst, node helium.Node) helium.Node {
+	for n := node; n != nil; n = n.Parent() {
+		if n.Type() == helium.DocumentNode {
+			return nil
+		}
+		if ec.numberNodeMatches(inst, n, node) {
+			// If from is specified, verify there's a from-matching ancestor
+			if inst.From != nil {
+				if !ec.hasFromAncestor(inst, n) {
+					return nil
+				}
+			}
+			return n
+		}
+	}
+	return nil
+}
+
+// hasFromAncestor checks if any ancestor of node matches the from pattern.
+func (ec *execContext) hasFromAncestor(inst *NumberInst, node helium.Node) bool {
+	for n := node.Parent(); n != nil; n = n.Parent() {
+		if ec.numberFromMatches(inst, n) {
+			return true
+		}
+	}
+	// Also check preceding siblings of ancestors (from can match a sibling, not just ancestor)
+	for n := node.PrevSibling(); n != nil; n = n.PrevSibling() {
+		if ec.numberFromMatches(inst, n) {
+			return true
+		}
+	}
+	return false
+}
+
+// formatNumberList formats a list of numbers according to an XSLT format string.
+// The format string is parsed into prefix, (format-token, separator)* pairs, and suffix.
+func formatNumberList(nums []int, format string) string {
+	if len(nums) == 0 {
+		return ""
+	}
+
+	// Parse format string into tokens
+	type fmtToken struct {
+		format    string // e.g. "1", "a", "A", "i", "I"
+		separator string // separator BEFORE this format token
+	}
+
+	runes := []rune(format)
+	var prefix, suffix string
+	var tokens []fmtToken
+
+	i := 0
+	// Extract prefix (leading non-alphanumeric)
+	for i < len(runes) && !isAlphanumeric(runes[i]) {
+		i++
+	}
+	prefix = string(runes[:i])
+
+	for i < len(runes) {
+		// Read format token (alphanumeric sequence)
+		start := i
+		for i < len(runes) && isAlphanumeric(runes[i]) {
+			i++
+		}
+		if start == i {
+			break
+		}
+		fmtStr := string(runes[start:i])
+
+		// Read separator (non-alphanumeric sequence)
+		sepStart := i
+		for i < len(runes) && !isAlphanumeric(runes[i]) {
+			i++
+		}
+		sep := string(runes[sepStart:i])
+
+		// If no more format tokens follow, this separator is suffix
+		if i >= len(runes) {
+			tokens = append(tokens, fmtToken{format: fmtStr})
+			suffix = sep
+		} else {
+			tokens = append(tokens, fmtToken{format: fmtStr, separator: sep})
+		}
+	}
+
+	if len(tokens) == 0 {
+		tokens = []fmtToken{{format: "1"}}
+	}
+
+	// Default separator between levels is "."
+	defaultSep := "."
+	if len(tokens) > 1 {
+		defaultSep = tokens[0].separator
+		if defaultSep == "" {
+			defaultSep = "."
+		}
+	}
+
+	var buf strings.Builder
+	buf.WriteString(prefix)
+	for idx, num := range nums {
+		if idx > 0 {
+			// Use the separator from the token, or default
+			if idx < len(tokens) && tokens[idx-1].separator != "" {
+				buf.WriteString(tokens[idx-1].separator)
+			} else {
+				buf.WriteString(defaultSep)
+			}
+		}
+		// Pick format token: if more numbers than tokens, use the last token
+		tokIdx := idx
+		if tokIdx >= len(tokens) {
+			tokIdx = len(tokens) - 1
+		}
+		buf.WriteString(formatSingleNumber(num, tokens[tokIdx].format))
+	}
+	buf.WriteString(suffix)
+	return buf.String()
+}
+
+func isAlphanumeric(r rune) bool {
+	return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+}
+
+func formatSingleNumber(num int, token string) string {
+	switch token {
+	case "1":
+		return strconv.Itoa(num)
+	case "01":
+		return fmt.Sprintf("%02d", num)
+	case "001":
+		return fmt.Sprintf("%03d", num)
+	case "a":
+		return toLowerAlpha(num)
+	case "A":
+		return toUpperAlpha(num)
+	case "i":
+		return strings.ToLower(toRoman(num))
+	case "I":
+		return toRoman(num)
+	default:
+		return strconv.Itoa(num)
+	}
+}
+
+func toLowerAlpha(n int) string {
+	if n <= 0 {
+		return strconv.Itoa(n)
+	}
+	var buf []byte
+	for n > 0 {
+		n--
+		buf = append([]byte{byte('a' + n%26)}, buf...)
+		n /= 26
+	}
+	return string(buf)
+}
+
+func toUpperAlpha(n int) string {
+	return strings.ToUpper(toLowerAlpha(n))
+}
+
+func toRoman(n int) string {
+	if n <= 0 || n >= 4000 {
+		return strconv.Itoa(n)
+	}
+	vals := []struct {
+		val int
+		sym string
+	}{
+		{1000, "M"}, {900, "CM"}, {500, "D"}, {400, "CD"},
+		{100, "C"}, {90, "XC"}, {50, "L"}, {40, "XL"},
+		{10, "X"}, {9, "IX"}, {5, "V"}, {4, "IV"}, {1, "I"},
+	}
+	var buf strings.Builder
+	for _, v := range vals {
+		for n >= v.val {
+			buf.WriteString(v.sym)
+			n -= v.val
+		}
+	}
+	return buf.String()
 }
 
 func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceInst) error {
@@ -1025,18 +1336,27 @@ func (ec *execContext) execPerformSort(ctx context.Context, inst *PerformSortIns
 		ec.size = savedSize
 	}()
 
-	for i, node := range nodes {
-		ec.position = i + 1
-		ec.currentNode = node
-		ec.contextNode = node
-		ec.pushVarScope()
-		for _, child := range inst.Body {
-			if err := ec.executeInstruction(ctx, child); err != nil {
-				ec.popVarScope()
+	if len(inst.Body) == 0 {
+		// No body: copy sorted nodes to output (xsl:perform-sort as sequence constructor)
+		for _, node := range nodes {
+			if err := ec.copyNodeToOutput(node); err != nil {
 				return err
 			}
 		}
-		ec.popVarScope()
+	} else {
+		for i, node := range nodes {
+			ec.position = i + 1
+			ec.currentNode = node
+			ec.contextNode = node
+			ec.pushVarScope()
+			for _, child := range inst.Body {
+				if err := ec.executeInstruction(ctx, child); err != nil {
+					ec.popVarScope()
+					return err
+				}
+			}
+			ec.popVarScope()
+		}
 	}
 	return nil
 }

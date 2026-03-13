@@ -205,6 +205,10 @@ func runTestCase(t *testing.T, tc *helium.Element, tsDir string, environments ma
 		// Look for environment element inside test-case
 		envRef = findChildEnvRef(tc)
 	}
+	// Also check for inline environment with source content directly
+	if envRef == "" {
+		sourceData = findInlineSourceContent(tc, tsDir)
+	}
 
 	// Find <test> element
 	var stylesheetFile string
@@ -221,6 +225,10 @@ func runTestCase(t *testing.T, tc *helium.Element, tsDir string, environments ma
 			}
 			switch sElem.LocalName() {
 			case "stylesheet":
+				role, _ := sElem.GetAttribute("role")
+				if role == "secondary" {
+					continue
+				}
 				f, _ := sElem.GetAttribute("file")
 				stylesheetFile = f
 			case "initial-template":
@@ -399,6 +407,51 @@ func featureSupported(feature string) bool {
 		return false
 	}
 	return true
+}
+
+// findInlineSourceContent extracts source data from an inline <environment>
+// element in the test-case that has no ref/name attributes.
+func findInlineSourceContent(tc *helium.Element, tsDir string) []byte {
+	for child := tc.FirstChild(); child != nil; child = child.NextSibling() {
+		elem, ok := child.(*helium.Element)
+		if !ok || elem.LocalName() != "environment" {
+			continue
+		}
+		// Only handle environments without ref/name (truly inline)
+		if _, hasRef := elem.GetAttribute("ref"); hasRef {
+			continue
+		}
+		for sc := elem.FirstChild(); sc != nil; sc = sc.NextSibling() {
+			src, ok := sc.(*helium.Element)
+			if !ok || src.LocalName() != "source" {
+				continue
+			}
+			role, _ := src.GetAttribute("role")
+			if role != "." {
+				continue
+			}
+			// Check for file reference
+			if f, hasFile := src.GetAttribute("file"); hasFile {
+				data, err := os.ReadFile(filepath.Join(tsDir, f))
+				if err == nil {
+					return data
+				}
+			}
+			// Check for inline <content>
+			for cc := src.FirstChild(); cc != nil; cc = cc.NextSibling() {
+				cElem, ok := cc.(*helium.Element)
+				if !ok || cElem.LocalName() != "content" {
+					continue
+				}
+				var buf bytes.Buffer
+				for tc := cElem.FirstChild(); tc != nil; tc = tc.NextSibling() {
+					buf.Write(tc.Content())
+				}
+				return buf.Bytes()
+			}
+		}
+	}
+	return nil
 }
 
 func findChildEnvRef(tc *helium.Element) string {

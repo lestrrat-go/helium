@@ -133,6 +133,12 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 		ec.uriResolver = cfg.uriResolver
 		ec.collectionResolver = cfg.collectionResolver
 		ec.httpClient = cfg.httpClient
+		if cfg.position > 0 {
+			ec.position = cfg.position
+		}
+		if cfg.size > 0 {
+			ec.size = cfg.size
+		}
 	}
 	return ec
 }

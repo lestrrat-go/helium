@@ -123,19 +123,27 @@ func (a *AVT) evaluate(ctx context.Context, node helium.Node) (string, error) {
 
 // stringifyResult converts an xpath3.Result to its string representation.
 func stringifyResult(r *xpath3.Result) string {
-	return stringifySequence(r.Sequence())
+	return stringifySequenceWithSep(r.Sequence(), " ")
+}
+
+func stringifyResultWithSep(r *xpath3.Result, sep string) string {
+	return stringifySequenceWithSep(r.Sequence(), sep)
 }
 
 // stringifySequence converts a Sequence to its string representation
 // by atomizing each item and joining with spaces.
 func stringifySequence(seq xpath3.Sequence) string {
+	return stringifySequenceWithSep(seq, " ")
+}
+
+func stringifySequenceWithSep(seq xpath3.Sequence, sep string) string {
 	if len(seq) == 0 {
 		return ""
 	}
 	var sb strings.Builder
 	for i, item := range seq {
 		if i > 0 {
-			sb.WriteByte(' ')
+			sb.WriteString(sep)
 		}
 		av, err := xpath3.AtomizeItem(item)
 		if err != nil {

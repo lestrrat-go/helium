@@ -20,11 +20,19 @@ type Stylesheet struct {
 	globalParams   []*Param
 	keys           map[string]*KeyDef
 	outputs        map[string]*OutputDef // "" = default output
+	functions      map[xpath3.QualifiedName]*XSLFunction // xsl:function defs
 	stripSpace     []NameTest
 	preserveSpace  []NameTest
 	namespaces      map[string]string    // prefix -> URI from stylesheet
 	excludePrefixes map[string]struct{} // prefixes excluded from output
 	baseURI         string
+}
+
+// XSLFunction is a compiled xsl:function.
+type XSLFunction struct {
+	Name   xpath3.QualifiedName
+	Params []*Param
+	Body   []Instruction
 }
 
 // Template is a compiled xsl:template.
