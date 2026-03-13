@@ -16,6 +16,7 @@ Read the linked doc BEFORE working in that area. No exceptions.
 |---------|-----|
 | Package purpose, API, files | `.claude/docs/packages.md` |
 | Cross-package imports | `.claude/docs/dependencies.md` |
+| Working with `context.Context`, package `Context` payloads, carrier/accessor patterns | `.claude/docs/context.md` |
 | Feature status, test counts, known gaps, ParseOption support | `.claude/docs/libxml2-parity.md` |
 | Writing/running tests, golden files, test data, helpers | `.claude/docs/testing.md` |
 | Error types, format strings, ErrorHandler, ValidateError | `.claude/docs/error-formatting.md` |
@@ -44,6 +45,7 @@ These docs cache repository state. Still read source before modifying code.
 |-----|----------------|
 | `packages.md` | Public API, package, or key file changes |
 | `dependencies.md` | Inter-package import changes |
+| `context.md` | `context.Context` conventions, package `Context` payload pattern, `NewContext`/`GetContext` guidance changes |
 | `libxml2-parity.md` | Test count, parser limitation, feature, or ParseOption changes |
 | `testing.md` | Test data layout, helper, env var, or test pattern changes |
 | `error-formatting.md` | Error format, error type, or ErrorHandler changes |
