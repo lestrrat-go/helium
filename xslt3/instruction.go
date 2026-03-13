@@ -200,6 +200,7 @@ type MessageInst struct {
 	Select    *xpath3.Expression
 	Body      []Instruction
 	Terminate *AVT // defaults to "no"
+	ErrorCode *AVT // defaults to "XTMM9000"
 }
 
 func (*MessageInst) instructionTag() {}

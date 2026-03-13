@@ -894,8 +894,15 @@ func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error
 	}
 
 	if terminate {
+		errorCode := "XTMM9000"
+		if inst.ErrorCode != nil {
+			ec, err := inst.ErrorCode.evaluate(ctx, ec.contextNode)
+			if err == nil && ec != "" {
+				errorCode = ec
+			}
+		}
 		return &XSLTError{
-			Code:    errCodeXTDE0835,
+			Code:    errorCode,
 			Message: value,
 			Cause:   ErrTerminated,
 		}
