@@ -228,8 +228,28 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		tmpl.Priority = tmpl.Match.Alternatives[0].priority
 	}
 
+	// Handle exclude-result-prefixes on xsl:template
+	savedExcludes := c.localExcludes
+	if erp := getAttr(elem, "exclude-result-prefixes"); erp != "" {
+		newExcludes := make(map[string]struct{})
+		for k, v := range c.localExcludes {
+			newExcludes[k] = v
+		}
+		if erp == "#all" {
+			for prefix := range c.stylesheet.namespaces {
+				newExcludes[prefix] = struct{}{}
+			}
+		} else {
+			for _, prefix := range strings.Fields(erp) {
+				newExcludes[prefix] = struct{}{}
+			}
+		}
+		c.localExcludes = newExcludes
+	}
+
 	// Compile template body: first xsl:param elements, then instructions
 	body, params, err := c.compileTemplateBody(elem)
+	c.localExcludes = savedExcludes
 	if err != nil {
 		return err
 	}

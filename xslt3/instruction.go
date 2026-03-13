@@ -258,6 +258,15 @@ type WherePopulatedInst struct {
 
 func (*WherePopulatedInst) instructionTag() {}
 
+// OnEmptyInst represents xsl:on-empty.
+// Executes its body/select only if the current output container has no significant content.
+type OnEmptyInst struct {
+	Body   []Instruction
+	Select *xpath3.Expression
+}
+
+func (*OnEmptyInst) instructionTag() {}
+
 // TryCatchInst represents xsl:try/xsl:catch.
 type TryCatchInst struct {
 	Try   []Instruction

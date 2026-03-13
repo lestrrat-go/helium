@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 // compileInstruction compiles a single element into an Instruction.
@@ -109,11 +110,21 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (Instruction, er
 		}
 		return &WherePopulatedInst{Body: body}, nil
 	case "on-empty":
-		body, err := c.compileChildren(elem)
-		if err != nil {
-			return nil, err
+		inst := &OnEmptyInst{}
+		if sel := getAttr(elem, "select"); sel != "" {
+			expr, err := xpath3.Compile(sel)
+			if err != nil {
+				return nil, err
+			}
+			inst.Select = expr
+		} else {
+			body, err := c.compileChildren(elem)
+			if err != nil {
+				return nil, err
+			}
+			inst.Body = body
 		}
-		return &SequenceInst{Body: body}, nil
+		return inst, nil
 	case "try":
 		return c.compileTry(elem)
 	case "for-each-group":
@@ -964,20 +975,34 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 		Namespaces: make(map[string]string),
 	}
 
-	// Collect element-level xsl:exclude-result-prefixes (cumulative with parent)
+	// Collect element-level xsl:exclude-result-prefixes and
+	// xsl:extension-element-prefixes (cumulative with parent)
 	savedExcludes := c.localExcludes
-	if erp, ok := elem.GetAttributeNS("exclude-result-prefixes", NSXSLT); ok {
-		// Copy parent excludes and add new ones
+	needNewExcludes := false
+	if _, ok := elem.GetAttributeNS("exclude-result-prefixes", NSXSLT); ok {
+		needNewExcludes = true
+	}
+	if _, ok := elem.GetAttributeNS("extension-element-prefixes", NSXSLT); ok {
+		needNewExcludes = true
+	}
+	if needNewExcludes {
 		newExcludes := make(map[string]struct{})
 		for k, v := range c.localExcludes {
 			newExcludes[k] = v
 		}
-		if erp == "#all" {
-			for prefix := range c.stylesheet.namespaces {
-				newExcludes[prefix] = struct{}{}
+		if erp, ok := elem.GetAttributeNS("exclude-result-prefixes", NSXSLT); ok {
+			if erp == "#all" {
+				for prefix := range c.stylesheet.namespaces {
+					newExcludes[prefix] = struct{}{}
+				}
+			} else {
+				for _, prefix := range strings.Fields(erp) {
+					newExcludes[prefix] = struct{}{}
+				}
 			}
-		} else {
-			for _, prefix := range strings.Fields(erp) {
+		}
+		if eep, ok := elem.GetAttributeNS("extension-element-prefixes", NSXSLT); ok {
+			for _, prefix := range strings.Fields(eep) {
 				newExcludes[prefix] = struct{}{}
 			}
 		}

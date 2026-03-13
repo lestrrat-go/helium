@@ -294,7 +294,12 @@ func (ec *execContext) evaluateBody(ctx context.Context, body []Instruction) (xp
 }
 
 // applyTemplates matches and executes templates for a node.
-func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mode string) error {
+func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mode string, paramValues ...map[string]xpath3.Sequence) error {
+	// Strip whitespace-only text nodes per xsl:strip-space
+	if ec.shouldStripWhitespace(node) {
+		return nil
+	}
+
 	ec.depth++
 	if ec.depth > maxRecursionDepth {
 		ec.depth--
@@ -308,10 +313,16 @@ func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mod
 		mode = ec.stylesheet.defaultMode
 	}
 
+	// Collect param values if any
+	var pv map[string]xpath3.Sequence
+	if len(paramValues) > 0 {
+		pv = paramValues[0]
+	}
+
 	// Find best matching template
 	tmpl := ec.findBestTemplate(node, mode)
 	if tmpl != nil {
-		return ec.executeTemplate(ctx, tmpl, node, mode)
+		return ec.executeTemplate(ctx, tmpl, node, mode, pv)
 	}
 
 	// Use built-in template rules
@@ -332,7 +343,7 @@ func (ec *execContext) findBestTemplate(node helium.Node, mode string) *Template
 // executeTemplate executes a template with the given node as context.
 const maxRecursionDepth = 1000
 
-func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node helium.Node, mode string) error {
+func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node helium.Node, mode string, paramOverrides ...map[string]xpath3.Sequence) error {
 	// Save and restore context
 	savedCurrent := ec.currentNode
 	savedContext := ec.contextNode
@@ -358,8 +369,20 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 	ec.pushVarScope()
 	defer ec.popVarScope()
 
-	// Set default param values
+	// Collect param overrides
+	var po map[string]xpath3.Sequence
+	if len(paramOverrides) > 0 {
+		po = paramOverrides[0]
+	}
+
+	// Set param values: use with-param overrides when available, else defaults
 	for _, p := range tmpl.Params {
+		if po != nil {
+			if val, ok := po[p.Name]; ok {
+				ec.setVar(p.Name, val)
+				continue
+			}
+		}
 		if p.Select != nil {
 			xpathCtx := ec.newXPathContext(node)
 			result, err := p.Select.Evaluate(xpathCtx, node)
@@ -400,6 +423,10 @@ func (ec *execContext) applyBuiltinRules(ctx context.Context, node helium.Node, 
 		}
 		return nil
 	case helium.TextNode, helium.CDATASectionNode:
+		// Check strip-space: skip whitespace-only text nodes if parent is stripped
+		if ec.shouldStripWhitespace(node) {
+			return nil
+		}
 		// Built-in rule: copy text to output
 		text, err := ec.resultDoc.CreateText(node.Content())
 		if err != nil {
@@ -421,6 +448,92 @@ func (ec *execContext) applyBuiltinRules(ctx context.Context, node helium.Node, 
 		// Other node types: do nothing
 		return nil
 	}
+}
+
+// shouldStripWhitespace returns true if a text node is whitespace-only
+// and its parent element matches a strip-space pattern.
+func (ec *execContext) shouldStripWhitespace(node helium.Node) bool {
+	content := node.Content()
+	// Check if whitespace-only
+	for _, b := range content {
+		if b != ' ' && b != '\t' && b != '\n' && b != '\r' {
+			return false
+		}
+	}
+	// Check parent element against strip/preserve space rules
+	parent := node.Parent()
+	if parent == nil || parent.Type() != helium.ElementNode {
+		return false
+	}
+	elem := parent.(*helium.Element)
+	return ec.isElementStripped(elem)
+}
+
+// isElementStripped checks if an element matches strip-space rules.
+// preserve-space overrides strip-space for the same element.
+func (ec *execContext) isElementStripped(elem *helium.Element) bool {
+	ss := ec.stylesheet
+	if len(ss.stripSpace) == 0 {
+		return false
+	}
+
+	stripped := false
+	stripPriority := -1
+	for _, nt := range ss.stripSpace {
+		if matchSpaceNameTest(nt, elem, ss.namespaces) {
+			p := nameTestPriority(nt)
+			if p > stripPriority {
+				stripPriority = p
+				stripped = true
+			}
+		}
+	}
+
+	if !stripped {
+		return false
+	}
+
+	// Check if preserve-space overrides
+	for _, nt := range ss.preserveSpace {
+		if matchSpaceNameTest(nt, elem, ss.namespaces) {
+			p := nameTestPriority(nt)
+			if p >= stripPriority {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// matchSpaceNameTest checks if an element matches a strip/preserve-space NameTest pattern.
+func matchSpaceNameTest(nt NameTest, elem *helium.Element, nsBindings map[string]string) bool {
+	if nt.Local == "*" && nt.Prefix == "" {
+		return true // "*" matches all
+	}
+	if nt.Local == "*" && nt.Prefix != "" {
+		// "prefix:*" matches elements in that namespace
+		nsURI := nsBindings[nt.Prefix]
+		return elem.URI() == nsURI
+	}
+	if nt.Prefix != "" {
+		// "prefix:local" matches specific element in namespace
+		nsURI := nsBindings[nt.Prefix]
+		return elem.LocalName() == nt.Local && elem.URI() == nsURI
+	}
+	// "local" matches elements with that local name (no namespace)
+	return elem.LocalName() == nt.Local && elem.URI() == ""
+}
+
+// nameTestPriority returns the priority of a NameTest for conflict resolution.
+// Specific names > prefix:* > *
+func nameTestPriority(nt NameTest) int {
+	if nt.Local == "*" && nt.Prefix == "" {
+		return 0 // "*"
+	}
+	if nt.Local == "*" {
+		return 1 // "prefix:*"
+	}
+	return 2 // specific name
 }
 
 // selectDefaultNodes returns the default node-set for apply-templates
