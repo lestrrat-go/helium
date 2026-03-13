@@ -706,7 +706,7 @@ func TestSchemaValidation(t *testing.T) {
 			cfg, files := parseArgs([]string{"--schema", xsdFile, "--noout", xmlFile})
 			require.NotNil(t, cfg)
 
-			schema, err := compileSchema(cfg)
+			schema, err := compileSchema(t.Context(), cfg)
 			require.NoError(t, err)
 
 			var out strings.Builder
@@ -806,7 +806,7 @@ func TestSchemaValidQuiet(t *testing.T) {
 	require.NotNil(t, cfg)
 	require.True(t, cfg.quiet)
 
-	schema, err := compileSchema(cfg)
+	schema, err := compileSchema(t.Context(), cfg)
 	require.NoError(t, err)
 
 	var out strings.Builder

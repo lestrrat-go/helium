@@ -75,7 +75,7 @@ XPath 3.1 expression parsing and evaluation.
 
 XML Schema (XSD) 1.0 compilation and validation.
 
-- **Compile(*Document, ...CompileOption) → (*Schema, error)** / **CompileFile(path, ...CompileOption) → (*Schema, error)**
+- **Compile(ctx, *Document, ...CompileOption) → (*Schema, error)** / **CompileFile(ctx, path, ...CompileOption) → (*Schema, error)**
 - **Validate(*Document, *Schema, ...ValidateOption) → error**
 - `Schema.LookupElement(local, ns)`, `Schema.LookupType(local, ns)`, `Schema.TargetNamespace()`
 - Supports: complex/simple types, sequences, choices, all, groups, attribute groups, substitution groups, import/include, IDC (xs:unique/key/keyref)

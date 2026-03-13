@@ -26,7 +26,7 @@ func FuzzCompile(f *testing.F) {
 		if err != nil {
 			return
 		}
-		_, _ = xsd.Compile(doc)
+		_, _ = xsd.Compile(t.Context(), doc)
 	})
 }
 
@@ -50,7 +50,7 @@ func FuzzValidate(f *testing.F) {
 			return
 		}
 
-		schema, err := xsd.Compile(schemaDom)
+		schema, err := xsd.Compile(t.Context(), schemaDom)
 		if err != nil {
 			return
 		}

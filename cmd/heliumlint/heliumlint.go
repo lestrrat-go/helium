@@ -306,7 +306,7 @@ func run() int {
 			t0 = time.Now()
 		}
 		var err error
-		schema, err = compileSchema(cfg)
+		schema, err = compileSchema(ctx, cfg)
 		if cfg.timing {
 			fmt.Fprintf(os.Stderr, "Compiling schema took %s\n", time.Since(t0))
 		}
@@ -358,8 +358,8 @@ func loadCatalogFromEnv(ctx context.Context) (*catalog.Catalog, error) {
 	return nil, nil
 }
 
-func compileSchema(cfg *config) (*xsd.Schema, error) {
-	schema, err := xsd.CompileFile(cfg.schemaFile)
+func compileSchema(ctx context.Context, cfg *config) (*xsd.Schema, error) {
+	schema, err := xsd.CompileFile(ctx, cfg.schemaFile)
 	if err != nil {
 		return nil, fmt.Errorf("heliumlint: failed to compile schema: %w", err)
 	}
