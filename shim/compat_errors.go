@@ -45,6 +45,12 @@ func mapErrorMessage(pe helium.ErrParseError) string {
 	}
 
 	switch {
+	case strings.HasPrefix(raw, "invalid name start char"):
+		if tag := extractEndElement(pe.Line); tag != "" {
+			return fmt.Sprintf("unexpected end element </%s>", tag)
+		}
+		return "expected element name after <"
+
 	case strings.HasPrefix(raw, "failed to parse QName"):
 		return "expected attribute name in element"
 

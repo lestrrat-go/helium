@@ -2720,7 +2720,7 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 		return
 	}
 	if c == ' ' || c == '>' || c == '/' || c == ':' || !isValidNameStartChar(c) {
-		err = pctx.error(ctx, errors.New("invalid name start char"))
+		err = pctx.error(ctx, fmt.Errorf("invalid name start char %q (U+%04X)", c, c))
 		return
 	}
 	_, _ = buf.WriteRune(c)
