@@ -71,7 +71,7 @@ func TestSinkCloseMultipleTimes(t *testing.T) {
 	require.NoError(t, s.Close())
 }
 
-func TestSinkCloseWhileHandleBlockedDoesNotPanic(t *testing.T) {
+func TestSinkCloseWhileHandleBlockedUnblocksHandle(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -90,9 +90,6 @@ func TestSinkCloseWhileHandleBlockedDoesNotPanic(t *testing.T) {
 	<-handlerStarted
 	s.Handle(ctx, "second")
 
-	handleCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	panicCh := make(chan any, 1)
 	handleDone := make(chan struct{})
 	go func() {
@@ -100,7 +97,7 @@ func TestSinkCloseWhileHandleBlockedDoesNotPanic(t *testing.T) {
 		defer func() {
 			panicCh <- recover()
 		}()
-		s.Handle(handleCtx, "third")
+		s.Handle(ctx, "third")
 	}()
 
 	closeDone := make(chan error, 1)
@@ -108,7 +105,6 @@ func TestSinkCloseWhileHandleBlockedDoesNotPanic(t *testing.T) {
 		closeDone <- s.Close()
 	}()
 
-	cancel()
 	<-handleDone
 	close(releaseHandler)
 

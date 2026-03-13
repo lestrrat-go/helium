@@ -40,9 +40,11 @@ type Sink[T any] struct {
 	ch      chan T
 	handler Handler[T]
 	done    chan struct{}
+	closing chan struct{}
 	once    sync.Once
 	mu      sync.RWMutex
 	closed  bool
+	senders sync.WaitGroup
 }
 
 // New creates a Sink that delivers items to handler in a background
@@ -57,13 +59,14 @@ func New[T any](ctx context.Context, handler Handler[T], options ...Option) *Sin
 		ch:      make(chan T, cfg.bufSize),
 		handler: handler,
 		done:    make(chan struct{}),
+		closing: make(chan struct{}),
 	}
 	go s.start(ctx)
 	return s
 }
 
 // Handle sends data to the sink for async processing. If the buffer is full,
-// Handle blocks until space is available or ctx is cancelled.
+// Handle blocks until space is available, ctx is cancelled, or the sink closes.
 // Safe to call on a nil receiver (no-op).
 func (s *Sink[T]) Handle(ctx context.Context, data T) {
 	if s == nil {
@@ -74,11 +77,17 @@ func (s *Sink[T]) Handle(ctx context.Context, data T) {
 		s.mu.RUnlock()
 		return
 	}
+	s.senders.Add(1)
+	ch := s.ch
+	closing := s.closing
+	s.mu.RUnlock()
+	defer s.senders.Done()
+
 	select {
-	case s.ch <- data:
+	case <-closing:
+	case ch <- data:
 	case <-ctx.Done():
 	}
-	s.mu.RUnlock()
 }
 
 // Close stops the sink and waits for all buffered items to be processed.
@@ -96,8 +105,10 @@ func (s *Sink[T]) shutdown() {
 	s.once.Do(func() {
 		s.mu.Lock()
 		s.closed = true
-		close(s.ch)
+		close(s.closing)
 		s.mu.Unlock()
+		s.senders.Wait()
+		close(s.ch)
 	})
 }
 
