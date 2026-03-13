@@ -64,6 +64,7 @@ type Writer struct {
 	out        io.Writer
 	indent     string // indent string per level; empty = no indentation
 	quoteChar  byte   // attribute quote character ('"' or '\'')
+	singleByte [1]byte
 	state      writerState
 	elemStack  []elementEntry
 	nsStack    []nsScope
@@ -83,7 +84,7 @@ func WithIndent(indent string) Option {
 	return func(w *Writer) { w.indent = indent }
 }
 
-// WithQuoteChar sets the attribute value quote character. Must be '”' or '\'';
+// WithQuoteChar sets the attribute value quote character. Must be '”' or '\”;
 // any other value is silently ignored. Default is '”'.
 func WithQuoteChar(q byte) Option {
 	return func(w *Writer) {
@@ -143,43 +144,58 @@ func (w *Writer) writeEscaped(s string, escape escapeMode) {
 		_, w.err = io.WriteString(w.out, s)
 		return
 	}
+	start := 0
 	for i := 0; i < len(s); i++ {
+		replacement := ""
+		writeRawByte := false
 		switch s[i] {
 		case '&':
-			w.writeStr("&amp;")
+			replacement = "&amp;"
 		case '<':
-			w.writeStr("&lt;")
+			replacement = "&lt;"
 		case '>':
-			w.writeStr("&gt;")
+			replacement = "&gt;"
 		case '\r':
-			w.writeStr("&#13;")
+			replacement = "&#13;"
 		case '"':
 			if escape == escapeAttr && w.quoteChar == '"' {
-				w.writeStr("&quot;")
+				replacement = "&quot;"
 			} else {
-				w.writeByte('"')
+				writeRawByte = true
 			}
 		case '\'':
 			if escape == escapeAttr && w.quoteChar == '\'' {
-				w.writeStr("&apos;")
+				replacement = "&apos;"
 			} else {
-				w.writeByte('\'')
+				writeRawByte = true
 			}
 		case '\n':
 			if escape == escapeAttr {
-				w.writeStr("&#10;")
+				replacement = "&#10;"
 			} else {
-				w.writeByte('\n')
+				writeRawByte = true
 			}
 		case '\t':
 			if escape == escapeAttr {
-				w.writeStr("&#9;")
+				replacement = "&#9;"
 			} else {
-				w.writeByte('\t')
+				writeRawByte = true
 			}
 		default:
+			continue
+		}
+		if start < i {
+			w.writeStr(s[start:i])
+		}
+		if replacement != "" {
+			w.writeStr(replacement)
+		} else if writeRawByte {
 			w.writeByte(s[i])
 		}
+		start = i + 1
+	}
+	if start < len(s) {
+		w.writeStr(s[start:])
 	}
 }
 
@@ -188,7 +204,12 @@ func (w *Writer) writeByte(b byte) {
 	if !w.ensureWritable() {
 		return
 	}
-	_, w.err = w.out.Write([]byte{b})
+	if bw, ok := w.out.(io.ByteWriter); ok {
+		w.err = bw.WriteByte(b)
+		return
+	}
+	w.singleByte[0] = b
+	_, w.err = w.out.Write(w.singleByte[:])
 }
 
 // writeIndent writes a newline followed by indent*depth.
