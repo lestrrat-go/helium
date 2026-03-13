@@ -118,59 +118,79 @@ func lookupItem(ec *evalContext, item Item, keyExpr Expr, all bool) (Sequence, e
 	}
 }
 
+// tupleConsumer receives completed variable scopes from the FLWOR clause
+// pipeline. Each call to ConsumeTuple represents one binding tuple that
+// has passed through all clauses.
+type tupleConsumer interface {
+	ConsumeTuple(scope *variableScope) error
+}
+
+// tupleConsumerFunc adapts a plain function to the tupleConsumer interface.
+type tupleConsumerFunc func(scope *variableScope) error
+
+func (f tupleConsumerFunc) ConsumeTuple(scope *variableScope) error {
+	return f(scope)
+}
+
 func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
-	// Build tuples by processing clauses
-	tuples := []flworTuple{{scope: ec.vars}}
-
-	for _, clause := range e.Clauses {
-		if err := ec.countOps(len(tuples)); err != nil {
-			return nil, err
-		}
-		switch c := clause.(type) {
-		case ForClause:
-			var newTuples []flworTuple
-			for _, tup := range tuples {
-				subCtx := ec.withScope(tup.scope)
-				domain, err := eval(subCtx, c.Expr)
-				if err != nil {
-					return nil, err
-				}
-				for i, item := range domain {
-					scope := scopeWithBinding(tup.scope, c.Var, Sequence{item})
-					if c.PosVar != "" {
-						scope = scopeWithBinding(scope, c.PosVar, Sequence{AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(i + 1))}})
-					}
-					newTuples = append(newTuples, flworTuple{scope: scope})
-				}
-			}
-			tuples = newTuples
-		case LetClause:
-			for i := range tuples {
-				subCtx := ec.withScope(tuples[i].scope)
-				val, err := eval(subCtx, c.Expr)
-				if err != nil {
-					return nil, err
-				}
-				tuples[i].scope = scopeWithBinding(tuples[i].scope, c.Var, val)
-			}
-		}
-	}
-
-	// Evaluate return expression for each tuple
 	var result Sequence
-	for _, tup := range tuples {
-		retCtx := ec.withScope(tup.scope)
+	consumer := tupleConsumerFunc(func(scope *variableScope) error {
+		retCtx := ec.withScope(scope)
 		r, err := eval(retCtx, e.Return)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		result = append(result, r...)
+		return nil
+	})
+
+	if err := iterateFLWORClauses(ec, e.Clauses, 0, ec.vars, consumer); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
 
-type flworTuple struct {
-	scope *variableScope
+// iterateFLWORClauses processes clauses[i..] recursively, streaming each
+// completed scope to the consumer instead of materializing all tuples.
+func iterateFLWORClauses(ec *evalContext, clauses []FLWORClause, i int, scope *variableScope, consumer tupleConsumer) error {
+	if i >= len(clauses) {
+		return consumer.ConsumeTuple(scope)
+	}
+
+	if err := ec.countOps(1); err != nil {
+		return err
+	}
+
+	switch c := clauses[i].(type) {
+	case ForClause:
+		subCtx := ec.withScope(scope)
+		domain, err := eval(subCtx, c.Expr)
+		if err != nil {
+			return err
+		}
+		for pos, item := range domain {
+			inner := scopeWithBinding(scope, c.Var, Sequence{item})
+			if c.PosVar != "" {
+				inner = scopeWithBinding(inner, c.PosVar, Sequence{AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(pos + 1))}})
+			}
+			if err := iterateFLWORClauses(ec, clauses, i+1, inner, consumer); err != nil {
+				return err
+			}
+		}
+		return nil
+
+	case LetClause:
+		subCtx := ec.withScope(scope)
+		val, err := eval(subCtx, c.Expr)
+		if err != nil {
+			return err
+		}
+		inner := scopeWithBinding(scope, c.Var, val)
+		return iterateFLWORClauses(ec, clauses, i+1, inner, consumer)
+
+	default:
+		return iterateFLWORClauses(ec, clauses, i+1, scope, consumer)
+	}
 }
 
 func evalQuantifiedExpr(ec *evalContext, e QuantifiedExpr) (Sequence, error) {
