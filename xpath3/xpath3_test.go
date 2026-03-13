@@ -308,6 +308,23 @@ func TestDocUsesURIResolverAndBaseURI(t *testing.T) {
 	require.Equal(t, "helium", s)
 }
 
+func TestNodeComparisonAfterPrimaryDocOrderBuild(t *testing.T) {
+	doc := parseTestDoc(t)
+	ctx := xpath3.NewContext(t.Context(),
+		xpath3.WithBaseURI("http://example.com/base/"),
+		xpath3.WithURIResolver(testURIResolver{
+			"http://example.com/base/other.xml": `<other><item id="1"/><item id="2"/></other>`,
+		}),
+	)
+
+	result, err := xpath3.Evaluate(ctx, doc, `let $warm := (/library | /library/book[1]) return doc("other.xml")/other/item[1] << doc("other.xml")/other/item[2]`)
+	require.NoError(t, err)
+
+	value, ok := result.IsBoolean()
+	require.True(t, ok)
+	require.True(t, value)
+}
+
 func TestCollectionUsesBaseURIResolution(t *testing.T) {
 	ctx := xpath3.NewContext(t.Context(),
 		xpath3.WithBaseURI("http://example.com/base/"),

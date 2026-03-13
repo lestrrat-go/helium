@@ -151,3 +151,17 @@ func TestDeduplicateNodes_ExceedsLimit(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, ixpath.ErrNodeSetLimit)
 }
+
+func TestDocOrderCache_BuildFromMultipleDocuments(t *testing.T) {
+	doc1, root1, _ := buildDoc(t)
+	doc2, root2, child2 := buildDoc(t)
+
+	cache := &ixpath.DocOrderCache{}
+	cache.BuildFrom(doc1)
+	cache.BuildFrom(doc2)
+
+	require.NotEqual(t, -1, cache.Position(root1))
+	require.NotEqual(t, -1, cache.Position(root2))
+	require.NotEqual(t, -1, cache.Position(child2))
+	require.Less(t, cache.Compare(root2, child2), 0)
+}

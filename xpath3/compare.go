@@ -7,8 +7,6 @@ import (
 	"math/big"
 	"strings"
 	"time"
-
-	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
 // evalGeneralComparison implements general comparison (= != < <= > >=).
@@ -209,23 +207,13 @@ func evalNodeComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	case TokenIs:
 		return SingleBoolean(sameNode(ln.Node, rn.Node)), nil
 	case TokenNodePre:
-		lp := ec.docOrder.Position(ln.Node)
-		rp := ec.docOrder.Position(rn.Node)
-		if lp < 0 || rp < 0 {
-			ec.docOrder.BuildFrom(ixpath.DocumentRoot(ln.Node))
-			lp = ec.docOrder.Position(ln.Node)
-			rp = ec.docOrder.Position(rn.Node)
-		}
-		return SingleBoolean(lp < rp), nil
+		ec.docOrder.BuildFrom(ln.Node)
+		ec.docOrder.BuildFrom(rn.Node)
+		return SingleBoolean(ec.docOrder.Compare(ln.Node, rn.Node) < 0), nil
 	case TokenNodeFol:
-		lp := ec.docOrder.Position(ln.Node)
-		rp := ec.docOrder.Position(rn.Node)
-		if lp < 0 || rp < 0 {
-			ec.docOrder.BuildFrom(ixpath.DocumentRoot(ln.Node))
-			lp = ec.docOrder.Position(ln.Node)
-			rp = ec.docOrder.Position(rn.Node)
-		}
-		return SingleBoolean(lp > rp), nil
+		ec.docOrder.BuildFrom(ln.Node)
+		ec.docOrder.BuildFrom(rn.Node)
+		return SingleBoolean(ec.docOrder.Compare(ln.Node, rn.Node) > 0), nil
 	}
 	return nil, fmt.Errorf("%w: %s", ErrUnsupportedBinaryOp, e.Op)
 }
