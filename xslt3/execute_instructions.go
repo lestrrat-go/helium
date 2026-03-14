@@ -1055,11 +1055,15 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *Liter
 		return err
 	}
 
-	// Execute body in element context
+	// Execute body in element context with a new variable scope
 	out := ec.currentOutput()
 	savedCurrent := out.current
 	out.current = elem
-	defer func() { out.current = savedCurrent }()
+	ec.pushVarScope()
+	defer func() {
+		ec.popVarScope()
+		out.current = savedCurrent
+	}()
 
 	for _, child := range inst.Body {
 		if err := ec.executeInstruction(ctx, child); err != nil {
