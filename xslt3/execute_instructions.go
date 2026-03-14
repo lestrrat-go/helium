@@ -12,6 +12,17 @@ import (
 
 // executeInstruction dispatches execution of a compiled XSLT instruction.
 func (ec *execContext) executeInstruction(ctx context.Context, inst Instruction) error {
+	// Apply per-instruction xpath-default-namespace if set
+	if h, ok := inst.(interface{ xpathNSIsSet() bool }); ok && h.xpathNSIsSet() {
+		savedNS := ec.xpathDefaultNS
+		savedHas := ec.hasXPathDefaultNS
+		ec.xpathDefaultNS = inst.(xpathNSHolder).getXPathDefaultNS()
+		ec.hasXPathDefaultNS = true
+		defer func() {
+			ec.xpathDefaultNS = savedNS
+			ec.hasXPathDefaultNS = savedHas
+		}()
+	}
 	switch v := inst.(type) {
 	case *ApplyTemplatesInst:
 		return ec.execApplyTemplates(ctx, v)
@@ -678,30 +689,57 @@ func (ec *execContext) execIf(ctx context.Context, inst *IfInst) error {
 
 func (ec *execContext) execChoose(ctx context.Context, inst *ChooseInst) error {
 	for _, when := range inst.When {
+		// Apply per-when xpath-default-namespace
+		savedNS := ec.xpathDefaultNS
+		savedHas := ec.hasXPathDefaultNS
+		if when.HasXPathDefaultNS {
+			ec.xpathDefaultNS = when.XPathDefaultNS
+			ec.hasXPathDefaultNS = true
+		}
 		xpathCtx := ec.newXPathContext(ec.contextNode)
 		result, err := when.Test.Evaluate(xpathCtx, ec.contextNode)
 		if err != nil {
+			ec.xpathDefaultNS = savedNS
+			ec.hasXPathDefaultNS = savedHas
 			return err
 		}
 		b, err := xpath3.EBV(result.Sequence())
 		if err != nil {
+			ec.xpathDefaultNS = savedNS
+			ec.hasXPathDefaultNS = savedHas
 			return err
 		}
 		if b {
 			for _, child := range when.Body {
 				if err := ec.executeInstruction(ctx, child); err != nil {
+					ec.xpathDefaultNS = savedNS
+					ec.hasXPathDefaultNS = savedHas
 					return err
 				}
 			}
+			ec.xpathDefaultNS = savedNS
+			ec.hasXPathDefaultNS = savedHas
 			return nil
 		}
+		ec.xpathDefaultNS = savedNS
+		ec.hasXPathDefaultNS = savedHas
 	}
 	// otherwise
+	savedNS := ec.xpathDefaultNS
+	savedHas := ec.hasXPathDefaultNS
+	if inst.HasOtherwiseXPNS {
+		ec.xpathDefaultNS = inst.OtherwiseXPNS
+		ec.hasXPathDefaultNS = true
+	}
 	for _, child := range inst.Otherwise {
 		if err := ec.executeInstruction(ctx, child); err != nil {
+			ec.xpathDefaultNS = savedNS
+			ec.hasXPathDefaultNS = savedHas
 			return err
 		}
 	}
+	ec.xpathDefaultNS = savedNS
+	ec.hasXPathDefaultNS = savedHas
 	return nil
 }
 

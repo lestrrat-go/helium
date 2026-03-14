@@ -9,6 +9,21 @@ type Instruction interface {
 	instructionTag()
 }
 
+// xpathNSHolder is implemented by instructions that may carry a
+// per-instruction xpath-default-namespace override.
+type xpathNSHolder interface {
+	getXPathDefaultNS() string
+}
+
+// xpathNS is embedded in instructions that support xpath-default-namespace.
+type xpathNS struct {
+	XPathDefaultNS    string
+	HasXPathDefaultNS bool // true when xpath-default-namespace is explicitly set
+}
+
+func (x xpathNS) getXPathDefaultNS() string { return x.XPathDefaultNS }
+func (x xpathNS) xpathNSIsSet() bool        { return x.HasXPathDefaultNS }
+
 // ApplyTemplatesInst represents xsl:apply-templates.
 type ApplyTemplatesInst struct {
 	Select *xpath3.Expression // nil = "child::node()"
@@ -37,6 +52,7 @@ type WithParam struct {
 
 // ValueOfInst represents xsl:value-of.
 type ValueOfInst struct {
+	xpathNS
 	Select    *xpath3.Expression
 	Separator *AVT // default " " for 3.0, absent for 1.0
 	Body      []Instruction
@@ -98,6 +114,7 @@ func (*PIInst) instructionTag() {}
 
 // IfInst represents xsl:if.
 type IfInst struct {
+	xpathNS
 	Test *xpath3.Expression
 	Body []Instruction
 }
@@ -106,20 +123,25 @@ func (*IfInst) instructionTag() {}
 
 // ChooseInst represents xsl:choose.
 type ChooseInst struct {
-	When      []*WhenClause
-	Otherwise []Instruction
+	xpathNS
+	When              []*WhenClause
+	Otherwise         []Instruction
+	OtherwiseXPNS     string // xpath-default-namespace on xsl:otherwise
+	HasOtherwiseXPNS  bool
 }
 
 func (*ChooseInst) instructionTag() {}
 
 // WhenClause is one xsl:when branch in xsl:choose.
 type WhenClause struct {
+	xpathNS
 	Test *xpath3.Expression
 	Body []Instruction
 }
 
 // ForEachInst represents xsl:for-each.
 type ForEachInst struct {
+	xpathNS
 	Select *xpath3.Expression
 	Sort   []*SortKey
 	Body   []Instruction
