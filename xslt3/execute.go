@@ -32,6 +32,8 @@ type execContext struct {
 	xpathDefaultNS    string                     // current xpath-default-namespace
 	hasXPathDefaultNS bool                       // true when xpathDefaultNS is explicitly set
 	tunnelParams      map[string]xpath3.Sequence // tunnel parameters passed through apply-templates
+	currentGroup      xpath3.Sequence            // current-group() value during for-each-group
+	currentGroupKey   xpath3.Sequence            // current-grouping-key() value during for-each-group
 	depth             int                        // recursion depth
 	outputStack       []*outputFrame
 	keyTables         map[string]*keyTable
