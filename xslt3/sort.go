@@ -431,10 +431,18 @@ func sortNodes1(ctx context.Context, ec *execContext, nodes []helium.Node, sk *S
 		return nil, err
 	}
 
-	evalState := ec.sortXPathEvalState()
+	// Set position/size so position() works in sort key expressions.
+	// We bypass the EvalState optimization here because it doesn't
+	// support per-item position/size updates.
+	savedPos := ec.position
+	savedSize := ec.size
+	ec.size = len(nodes)
+	defer func() { ec.position = savedPos; ec.size = savedSize }()
+
 	entries := make([]keyedNode1, len(nodes))
 	for i, node := range nodes {
-		sv, err := evaluateSortKey(ctx, ec, sk, node, &dtMode, evalState)
+		ec.position = i + 1
+		sv, err := evaluateSortKey(ctx, ec, sk, node, &dtMode, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -513,10 +521,15 @@ func sortNodesN(ctx context.Context, ec *execContext, nodes []helium.Node, sortK
 		return nil, err
 	}
 
-	evalState := ec.sortXPathEvalState()
+	savedPos := ec.position
+	savedSize := ec.size
+	ec.size = len(nodes)
+	defer func() { ec.position = savedPos; ec.size = savedSize }()
+
 	entries := make(keyedNodes, len(nodes))
 	for i, node := range nodes {
-		keys, err := extractSortValues(ctx, ec, sortKeys, node, dtModes, evalState)
+		ec.position = i + 1
+		keys, err := extractSortValues(ctx, ec, sortKeys, node, dtModes, nil)
 		if err != nil {
 			return nil, err
 		}
