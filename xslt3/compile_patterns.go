@@ -91,17 +91,39 @@ func computeDefaultPriority(expr xpath3.Expr) float64 {
 		steps = e.Steps
 	case *xpath3.LocationPath:
 		steps = e.Steps
+	case xpath3.RootExpr, *xpath3.RootExpr:
+		// "/" matches document nodes; default priority is -0.5
+		return -0.5
 	default:
 		return 0.5
 	}
 	if len(steps) == 0 {
+		// Absolute path with no steps is "/" — document root, priority -0.5
+		if isAbsolute(expr) {
+			return -0.5
+		}
 		return 0.5
 	}
 	// Per XSLT 3.0 §6.4: path patterns with multiple steps get priority 0.5
 	if len(steps) > 1 {
 		return 0.5
 	}
-	return stepPriority(steps[len(steps)-1])
+	lastStep := steps[0]
+	// A step with predicates gets priority 0.5 (more specific)
+	if len(lastStep.Predicates) > 0 {
+		return 0.5
+	}
+	return stepPriority(lastStep)
+}
+
+func isAbsolute(expr xpath3.Expr) bool {
+	switch e := expr.(type) {
+	case xpath3.LocationPath:
+		return e.Absolute
+	case *xpath3.LocationPath:
+		return e.Absolute
+	}
+	return false
 }
 
 func stepPriority(step xpath3.Step) float64 {
@@ -123,6 +145,11 @@ func stepPriority(step xpath3.Step) float64 {
 			return -0.25
 		}
 		return 0
+	case xpath3.DocumentTest:
+		if nt.Inner == nil {
+			return -0.5
+		}
+		return 0.5
 	default:
 		return 0.5
 	}
@@ -228,8 +255,19 @@ func matchStepsUpward(ctx *execContext, steps []xpath3.Step, absolute bool, node
 
 // nodeMatchesStep checks if a node matches a single step's node test and predicates.
 func nodeMatchesStep(ctx *execContext, step xpath3.Step, node helium.Node) bool {
-	// Document nodes are only matched by the root pattern "/", never by steps.
+	// Document nodes are only matched by "/" or document-node() patterns.
 	if node.Type() == helium.DocumentNode {
+		if _, ok := step.NodeTest.(xpath3.DocumentTest); !ok {
+			return false
+		}
+	}
+	// Attribute nodes are only matched by the attribute axis (e.g., @*, attribute::node()).
+	// The default child axis does not include attributes.
+	if node.Type() == helium.AttributeNode && step.Axis != xpath3.AxisAttribute {
+		return false
+	}
+	// Conversely, the attribute axis only matches attribute nodes.
+	if node.Type() != helium.AttributeNode && step.Axis == xpath3.AxisAttribute {
 		return false
 	}
 	if !nodeMatchesTest(ctx, step.NodeTest, node) {
@@ -260,6 +298,8 @@ func nodeMatchesTest(ctx *execContext, test xpath3.NodeTest, node helium.Node) b
 		}
 		pi, ok := node.(*helium.ProcessingInstruction)
 		return ok && pi.Name() == nt.Target
+	case xpath3.DocumentTest:
+		return matchDocumentTest(ctx, nt, node)
 	default:
 		return false
 	}
@@ -321,6 +361,35 @@ func matchNameTest(ctx *execContext, nt xpath3.NameTest, node helium.Node) bool 
 		expectedURI = ctx.resolvePrefix(nt.Prefix)
 	}
 	return nodeLocal == nt.Local && nodeURI == expectedURI
+}
+
+// matchDocumentTest checks if a node matches a document-node() test.
+func matchDocumentTest(ctx *execContext, dt xpath3.DocumentTest, node helium.Node) bool {
+	if node.Type() != helium.DocumentNode {
+		return false
+	}
+	if dt.Inner == nil {
+		return true
+	}
+	// document-node(element(name)) — check that the document has a single
+	// element child matching the inner test.
+	doc, ok := node.(*helium.Document)
+	if !ok {
+		return false
+	}
+	var docElem helium.Node
+	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Type() == helium.ElementNode {
+			if docElem != nil {
+				return false // more than one element child
+			}
+			docElem = child
+		}
+	}
+	if docElem == nil {
+		return false
+	}
+	return nodeMatchesTest(ctx, dt.Inner, docElem)
 }
 
 // evaluatePredicate evaluates a pattern predicate against a node.
