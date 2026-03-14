@@ -58,10 +58,9 @@ func (ec *execContext) fnDocument(ctx context.Context, args []xpath3.Sequence) (
 		return nil, err
 	}
 
-	// Empty string means the stylesheet document itself
+	// Empty string means the stylesheet document itself (XSLT spec §14.1)
 	if uri == "" {
-		// Return the stylesheet source document
-		return xpath3.SingleNode(ec.sourceDoc), nil
+		return xpath3.SingleNode(ec.stylesheet.sourceDoc), nil
 	}
 
 	// Check cache
@@ -69,7 +68,11 @@ func (ec *execContext) fnDocument(ctx context.Context, args []xpath3.Sequence) (
 		return xpath3.SingleNode(doc), nil
 	}
 
-	// Load and parse
+	// TODO(xslt3): use the configured URIResolver (WithURIResolver) instead of
+	// os.ReadFile. The resolver is available at compile time (c.resolver) but is
+	// not yet wired into the runtime execContext. Relative URIs should also be
+	// resolved against the stylesheet base URI per the XSLT spec. This is a
+	// known limitation — non-filesystem URIs will fail here.
 	data, err := os.ReadFile(uri)
 	if err != nil {
 		return nil, dynamicError("FODC0002", "cannot load document %q: %v", uri, err)

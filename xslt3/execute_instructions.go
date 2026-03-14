@@ -1012,7 +1012,7 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *Liter
 		}
 		// Ensure the namespace declaration is present for serialization.
 		// SetActiveNamespace only sets n.ns; we also need it in nsDefs.
-		if !hasNsDecl(elem, inst.Prefix, inst.Namespace) && !ec.isNSDeclaredInScope(inst.Prefix, inst.Namespace) {
+		if !hasNSDecl(elem, inst.Prefix, inst.Namespace) && !ec.isNSDeclaredInScope(inst.Prefix, inst.Namespace) {
 			if err := elem.DeclareNamespace(inst.Prefix, inst.Namespace); err != nil {
 				return err
 			}
@@ -1032,7 +1032,7 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *Liter
 		}
 		if attr.Namespace != "" {
 			// Ensure the attribute's namespace is declared on the element
-			if !hasNsDecl(elem, attr.Prefix, attr.Namespace) && !ec.isNSDeclaredInScope(attr.Prefix, attr.Namespace) {
+			if !hasNSDecl(elem, attr.Prefix, attr.Namespace) && !ec.isNSDeclaredInScope(attr.Prefix, attr.Namespace) {
 				if err := elem.DeclareNamespace(attr.Prefix, attr.Namespace); err != nil {
 					return err
 				}
@@ -1072,17 +1072,6 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *Liter
 	}
 
 	return nil
-}
-
-// hasNsDecl checks if an element already has a namespace declaration
-// with the given prefix and URI in its nsDefs.
-func hasNsDecl(elem *helium.Element, prefix, uri string) bool {
-	for _, ns := range elem.Namespaces() {
-		if ns.Prefix() == prefix && ns.URI() == uri {
-			return true
-		}
-	}
-	return false
 }
 
 // isNSDeclaredInScope checks if a namespace prefix→URI binding is already
@@ -1975,8 +1964,14 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 	return nil
 }
 
+// TODO(xslt3): implement proper xsl:for-each-group grouping semantics.
+// Currently this is a stub that iterates the selected sequence without
+// performing any grouping (group-by, group-adjacent, group-starting-with,
+// group-ending-with). The current-group() and current-grouping-key()
+// functions are not populated. This is a known limitation of the initial
+// XSLT 3.0 implementation — callers relying on grouping will get
+// ungrouped iteration, which produces incorrect output silently.
 func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupInst) error {
-	// Basic stub: just iterate without actual grouping
 	xpathCtx := ec.newXPathContext(ec.contextNode)
 	result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
 	if err != nil {
