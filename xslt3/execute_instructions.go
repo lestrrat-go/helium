@@ -278,17 +278,16 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error {
 	var value string
 
-	// Determine separator (default " " in XSLT 2.0+)
-	separator := " "
-	if inst.Separator != nil {
-		var err error
-		separator, err = inst.Separator.evaluate(ctx, ec.contextNode)
-		if err != nil {
-			return err
-		}
-	}
-
 	if inst.Select != nil {
+		// Default separator for select is " "
+		separator := " "
+		if inst.Separator != nil {
+			var err error
+			separator, err = inst.Separator.evaluate(ctx, ec.contextNode)
+			if err != nil {
+				return err
+			}
+		}
 		xpathCtx := ec.newXPathContext(ec.contextNode)
 		result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
 		if err != nil {
@@ -296,11 +295,20 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 		}
 		value = stringifyResultWithSep(result, separator)
 	} else if len(inst.Body) > 0 {
+		// Default separator for body content is "" (zero-length string)
+		separator := ""
+		if inst.Separator != nil {
+			var err error
+			separator, err = inst.Separator.evaluate(ctx, ec.contextNode)
+			if err != nil {
+				return err
+			}
+		}
 		val, err := ec.evaluateBody(ctx, inst.Body)
 		if err != nil {
 			return err
 		}
-		value = stringifySequence(val)
+		value = stringifySequenceWithSep(val, separator)
 	}
 
 	if value == "" {
