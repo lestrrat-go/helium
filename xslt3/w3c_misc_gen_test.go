@@ -4613,8 +4613,7 @@ func TestW3C_seqtor(t *testing.T) {
 }
 
 func TestW3C_unicode_90(t *testing.T) {
-	t.Parallel()
-	w3cRunTests(t, []w3cTest{
+	w3cRunHeavyTests(t, []w3cTest{
 		{Name: "unicode90-001", StylesheetPath: "tests/misc/unicode-90/unicode90-001.xsl", Params: map[string]string{"regex": "'\\d'"}, Assertions: []w3cAssertion{w3cAssertXPath("/count = 370")}},
 		{Name: "unicode90-002", StylesheetPath: "tests/misc/unicode-90/unicode90-001.xsl", Params: map[string]string{"regex": "'\\D'"}, Assertions: []w3cAssertion{w3cAssertXPath("/count = 63084")}},
 		{Name: "unicode90-003", StylesheetPath: "tests/misc/unicode-90/unicode90-001.xsl", Params: map[string]string{"regex": "'\\w'"}, Assertions: []w3cAssertion{w3cAssertXPath("/count = 54516")}},
