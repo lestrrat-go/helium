@@ -103,7 +103,7 @@ func (ec *execContext) fnDocument(ctx context.Context, args []xpath3.Sequence) (
 }
 
 // key(name, value, doc?) looks up nodes by key.
-func (ec *execContext) fnKey(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+func (ec *execContext) fnKey(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 	if len(args) < 2 {
 		return nil, dynamicError(errCodeXTDE1170, "key() requires at least 2 arguments")
 	}
@@ -124,14 +124,19 @@ func (ec *execContext) fnKey(_ context.Context, args []xpath3.Sequence) (xpath3.
 		return xpath3.EmptySequence(), nil
 	}
 
-	// Determine the document root for key lookup. When the 3rd argument
-	// is provided, use the document containing that node.
+	// Determine the document root for key lookup.
+	// Default: use the document containing the context node (per XSLT spec §16.3).
+	// When the 3rd argument is provided, use that node's document.
 	var root helium.Node = ec.sourceDoc
 	if len(args) >= 3 && len(args[2]) > 0 {
 		ni, ok := args[2][0].(xpath3.NodeItem)
 		if ok {
 			root = documentRoot(ni.Node)
 		}
+	} else if xpathNode := xpath3.FnContextNode(ctx); xpathNode != nil {
+		root = documentRoot(xpathNode)
+	} else if ec.contextNode != nil {
+		root = documentRoot(ec.contextNode)
 	}
 
 	// When the second argument is a sequence, look up each value and
