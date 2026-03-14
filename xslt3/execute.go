@@ -24,6 +24,7 @@ type execContext struct {
 	globalVars      map[string]xpath3.Sequence
 	currentMode     string
 	currentTemplate *Template // currently executing template (for next-match)
+	tunnelParams    map[string]xpath3.Sequence // tunnel parameters passed through apply-templates
 	depth           int      // recursion depth
 	outputStack     []*outputFrame
 	keyTables       map[string]*keyTable
@@ -366,6 +367,7 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 	savedPos := ec.position
 	savedSize := ec.size
 	savedTemplate := ec.currentTemplate
+	savedTunnel := ec.tunnelParams
 	ec.currentNode = node
 	ec.contextNode = node
 	ec.currentMode = mode
@@ -379,6 +381,7 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 		ec.currentTemplate = savedTemplate
 		ec.position = savedPos
 		ec.size = savedSize
+		ec.tunnelParams = savedTunnel
 	}()
 
 	ec.pushVarScope()
@@ -390,14 +393,24 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 		po = paramOverrides[0]
 	}
 
-	// Set param values: use with-param overrides when available, else defaults
+	// Set param values: use with-param overrides when available, else defaults.
+	// Tunnel params receive from ec.tunnelParams, not from regular param overrides.
 	for _, p := range tmpl.Params {
-		if po != nil {
+		if p.Tunnel {
+			// Tunnel param: receive from tunnel context
+			if ec.tunnelParams != nil {
+				if val, ok := ec.tunnelParams[p.Name]; ok {
+					ec.setVar(p.Name, val)
+					continue
+				}
+			}
+		} else if po != nil {
 			if val, ok := po[p.Name]; ok {
 				ec.setVar(p.Name, val)
 				continue
 			}
 		}
+		// Use default value
 		if p.Select != nil {
 			xpathCtx := ec.newXPathContext(node)
 			result, err := p.Select.Evaluate(xpathCtx, node)

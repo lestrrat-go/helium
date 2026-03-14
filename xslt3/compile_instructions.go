@@ -802,6 +802,10 @@ func (c *compiler) compileWithParam(elem *helium.Element) (*WithParam, error) {
 
 	wp := &WithParam{Name: name}
 
+	if tunnelAttr := getAttr(elem, "tunnel"); tunnelAttr == "yes" {
+		wp.Tunnel = true
+	}
+
 	selectAttr := getAttr(elem,"select")
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)

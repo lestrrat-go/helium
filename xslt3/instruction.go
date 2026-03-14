@@ -32,6 +32,7 @@ type WithParam struct {
 	Name   string
 	Select *xpath3.Expression
 	Body   []Instruction
+	Tunnel bool
 }
 
 // ValueOfInst represents xsl:value-of.
@@ -141,6 +142,7 @@ type ParamInst struct {
 	Select   *xpath3.Expression
 	Body     []Instruction
 	Required bool
+	Tunnel   bool
 }
 
 func (*ParamInst) instructionTag() {}

@@ -113,20 +113,43 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 		mode = ec.currentMode
 	}
 
-	// Process with-param values
+	// Process with-param values, separating tunnel from regular params
 	var paramValues map[string]xpath3.Sequence
+	var newTunnelParams map[string]xpath3.Sequence
 	if len(inst.Params) > 0 {
-		paramValues = make(map[string]xpath3.Sequence, len(inst.Params))
 		for _, wp := range inst.Params {
-			if _, dup := paramValues[wp.Name]; dup {
-				return dynamicError(errCodeXTDE0410, "duplicate parameter %q in xsl:apply-templates", wp.Name)
-			}
 			val, err := ec.evaluateWithParam(ctx, wp)
 			if err != nil {
 				return err
 			}
-			paramValues[wp.Name] = val
+			if wp.Tunnel {
+				if newTunnelParams == nil {
+					newTunnelParams = make(map[string]xpath3.Sequence)
+				}
+				newTunnelParams[wp.Name] = val
+			} else {
+				if paramValues == nil {
+					paramValues = make(map[string]xpath3.Sequence)
+				}
+				if _, dup := paramValues[wp.Name]; dup {
+					return dynamicError(errCodeXTDE0410, "duplicate parameter %q in xsl:apply-templates", wp.Name)
+				}
+				paramValues[wp.Name] = val
+			}
 		}
+	}
+
+	// Merge new tunnel params with existing tunnel params (new values override)
+	savedTunnel := ec.tunnelParams
+	if newTunnelParams != nil {
+		merged := make(map[string]xpath3.Sequence)
+		for k, v := range ec.tunnelParams {
+			merged[k] = v
+		}
+		for k, v := range newTunnelParams {
+			merged[k] = v
+		}
+		ec.tunnelParams = merged
 	}
 
 	savedPos := ec.position
@@ -135,6 +158,7 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 	defer func() {
 		ec.position = savedPos
 		ec.size = savedSize
+		ec.tunnelParams = savedTunnel
 	}()
 
 	for i, node := range nodes {
@@ -179,25 +203,50 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 	ec.pushVarScope()
 	defer ec.popVarScope()
 
-	// Set with-param values (override template's default param values)
+	// Separate tunnel from regular with-param values
 	paramOverrides := make(map[string]xpath3.Sequence)
+	savedTunnel := ec.tunnelParams
+	hasTunnelOverrides := false
 	for _, wp := range inst.Params {
-		if _, dup := paramOverrides[wp.Name]; dup {
-			return dynamicError(errCodeXTDE0410, "duplicate parameter %q in xsl:call-template", wp.Name)
-		}
 		val, err := ec.evaluateWithParam(ctx, wp)
 		if err != nil {
 			return err
 		}
-		paramOverrides[wp.Name] = val
+		if wp.Tunnel {
+			if !hasTunnelOverrides {
+				// Copy existing tunnel params before modifying
+				merged := make(map[string]xpath3.Sequence)
+				for k, v := range ec.tunnelParams {
+					merged[k] = v
+				}
+				ec.tunnelParams = merged
+				hasTunnelOverrides = true
+			}
+			ec.tunnelParams[wp.Name] = val
+		} else {
+			if _, dup := paramOverrides[wp.Name]; dup {
+				return dynamicError(errCodeXTDE0410, "duplicate parameter %q in xsl:call-template", wp.Name)
+			}
+			paramOverrides[wp.Name] = val
+		}
 	}
+	defer func() { ec.tunnelParams = savedTunnel }()
 
-	// Set template params with defaults, then override
+	// Set template params with defaults, overrides, or tunnel values
 	for _, p := range tmpl.Params {
-		if val, ok := paramOverrides[p.Name]; ok {
+		if p.Tunnel {
+			// Tunnel param: receive from tunnel context
+			if ec.tunnelParams != nil {
+				if val, ok := ec.tunnelParams[p.Name]; ok {
+					ec.setVar(p.Name, val)
+					continue
+				}
+			}
+		} else if val, ok := paramOverrides[p.Name]; ok {
 			ec.setVar(p.Name, val)
 			continue
 		}
+		// Use default value
 		if p.Select != nil {
 			xpathCtx := ec.newXPathContext(ec.contextNode)
 			result, err := p.Select.Evaluate(xpathCtx, ec.contextNode)
@@ -1550,6 +1599,30 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *NextMatchInst) e
 	node := ec.currentNode
 	mode := ec.currentMode
 
+	// Process with-param (tunnel and regular)
+	var pv map[string]xpath3.Sequence
+	savedTunnel := ec.tunnelParams
+	if len(inst.Params) > 0 {
+		for _, wp := range inst.Params {
+			val, err := ec.evaluateWithParam(ctx, wp)
+			if err != nil {
+				return err
+			}
+			if wp.Tunnel {
+				if ec.tunnelParams == nil {
+					ec.tunnelParams = make(map[string]xpath3.Sequence)
+				}
+				ec.tunnelParams[wp.Name] = val
+			} else {
+				if pv == nil {
+					pv = make(map[string]xpath3.Sequence)
+				}
+				pv[wp.Name] = val
+			}
+		}
+	}
+	defer func() { ec.tunnelParams = savedTunnel }()
+
 	templates := ec.stylesheet.modeTemplates[mode]
 	foundCurrent := false
 	for _, tmpl := range templates {
@@ -1558,12 +1631,12 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *NextMatchInst) e
 			continue
 		}
 		if foundCurrent && tmpl.Match != nil && tmpl.Match.matchPattern(ec, node) {
-			return ec.executeTemplate(ctx, tmpl, node, mode)
+			return ec.executeTemplate(ctx, tmpl, node, mode, pv)
 		}
 	}
 
 	// No next match found — apply built-in rules
-	return ec.applyBuiltinRules(ctx, node, mode)
+	return ec.applyBuiltinRules(ctx, node, mode, pv)
 }
 
 func (ec *execContext) execApplyImports(ctx context.Context, inst *ApplyImportsInst) error {
@@ -1577,44 +1650,42 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *ApplyImportsI
 	mode := ec.currentMode
 	maxPrec := ec.currentTemplate.ImportPrec
 
+	// Process with-param (tunnel and regular)
+	var pv map[string]xpath3.Sequence
+	savedTunnel := ec.tunnelParams
+	if len(inst.Params) > 0 {
+		for _, wp := range inst.Params {
+			val, err := ec.evaluateWithParam(ctx, wp)
+			if err != nil {
+				return err
+			}
+			if wp.Tunnel {
+				if ec.tunnelParams == nil {
+					ec.tunnelParams = make(map[string]xpath3.Sequence)
+				}
+				ec.tunnelParams[wp.Name] = val
+			} else {
+				if pv == nil {
+					pv = make(map[string]xpath3.Sequence)
+				}
+				pv[wp.Name] = val
+			}
+		}
+	}
+	defer func() { ec.tunnelParams = savedTunnel }()
+
 	templates := ec.stylesheet.modeTemplates[mode]
 	for _, tmpl := range templates {
 		if tmpl.ImportPrec >= maxPrec {
 			continue
 		}
 		if tmpl.Match != nil && tmpl.Match.matchPattern(ec, node) {
-			// Set with-param values
-			var pv map[string]xpath3.Sequence
-			if len(inst.Params) > 0 {
-				pv = make(map[string]xpath3.Sequence, len(inst.Params))
-				for _, wp := range inst.Params {
-					val, err := ec.evaluateWithParam(ctx, wp)
-					if err != nil {
-						return err
-					}
-					pv[wp.Name] = val
-				}
-			}
 			return ec.executeTemplate(ctx, tmpl, node, mode, pv)
 		}
 	}
 
-	// No imported template found, use built-in rules (forwarding params)
-	var pv map[string]xpath3.Sequence
-	if len(inst.Params) > 0 {
-		pv = make(map[string]xpath3.Sequence, len(inst.Params))
-		for _, wp := range inst.Params {
-			val, err := ec.evaluateWithParam(ctx, wp)
-			if err != nil {
-				return err
-			}
-			pv[wp.Name] = val
-		}
-	}
-	if pv != nil {
-		return ec.applyBuiltinRules(ctx, node, mode, pv)
-	}
-	return ec.applyBuiltinRules(ctx, node, mode)
+	// No imported template found, use built-in rules
+	return ec.applyBuiltinRules(ctx, node, mode, pv)
 }
 
 func (ec *execContext) execWherePopulated(ctx context.Context, inst *WherePopulatedInst) error {

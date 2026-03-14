@@ -356,6 +356,7 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
 	p := &Param{
 		Name:     name,
 		Required: getAttr(elem,"required") == "yes",
+		Tunnel:   getAttr(elem, "tunnel") == "yes",
 	}
 
 	selectAttr := getAttr(elem,"select")
