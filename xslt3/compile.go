@@ -148,14 +148,20 @@ func (c *compiler) collectNamespaces(elem *helium.Element) {
 
 // compileTopLevel processes all top-level elements in the stylesheet.
 func (c *compiler) compileTopLevel(root *helium.Element) error {
-	// First pass: imports (must come first)
+	// First pass: imports and includes (must come before templates so that
+	// import precedence is properly assigned before any template registration).
 	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := child.(*helium.Element)
 		if !ok || elem.URI() != NSXSLT {
 			continue
 		}
-		if elem.LocalName() == "import" {
+		switch elem.LocalName() {
+		case "import":
 			if err := c.compileImport(elem); err != nil {
+				return err
+			}
+		case "include":
+			if err := c.compileInclude(elem); err != nil {
 				return err
 			}
 		}
@@ -172,12 +178,8 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 		}
 
 		switch elem.LocalName() {
-		case "import":
-			// Already processed
-		case "include":
-			if err := c.compileInclude(elem); err != nil {
-				return err
-			}
+		case "import", "include":
+			// Already processed in pass 1
 		case "template":
 			if err := c.compileTemplate(elem); err != nil {
 				return err
@@ -619,16 +621,21 @@ func (c *compiler) loadExternalStylesheet(href string, isImport bool) error {
 		return staticError(errCodeXTSE0010, "imported document %q is not a stylesheet", uri)
 	}
 
-	c.collectNamespaces(importedRoot)
-	if err := c.compileTopLevel(importedRoot); err != nil {
-		return err
-	}
-
-	// Increment import precedence AFTER compiling the imported stylesheet.
-	// This ensures imported templates have lower precedence than the
-	// importing stylesheet's own templates.
 	if isImport {
+		// For imports: the imported stylesheet gets current (lower) precedence.
+		// After compiling, increment so the importing module's remaining
+		// templates get a higher precedence.
+		c.collectNamespaces(importedRoot)
+		if err := c.compileTopLevel(importedRoot); err != nil {
+			return err
+		}
 		c.importPrec++
+	} else {
+		// Include: same precedence as the including module.
+		c.collectNamespaces(importedRoot)
+		if err := c.compileTopLevel(importedRoot); err != nil {
+			return err
+		}
 	}
 	return nil
 }
