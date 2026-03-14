@@ -88,10 +88,11 @@ func (c *DocOrderCache) indexWalk(cur helium.Node, positions map[helium.Node]int
 		// for virtual namespace nodes (position = parent + 1).
 		*pos += 2
 		if elem, ok := n.(*helium.Element); ok {
-			for _, attr := range elem.Attributes() {
+			elem.ForEachAttribute(func(attr *helium.Attribute) bool {
 				positions[helium.Node(attr)] = *pos
 				*pos += 2
-			}
+				return true
+			})
 		}
 
 		var children []helium.Node
