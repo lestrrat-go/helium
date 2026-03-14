@@ -436,7 +436,7 @@ func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []Instru
 			}
 			s, err := xpath3.AtomicToString(item.(xpath3.AtomicValue))
 			if err != nil {
-				sb.WriteString(fmt.Sprint(item))
+				_, _ = fmt.Fprint(&sb, item)
 			} else {
 				sb.WriteString(s)
 			}
