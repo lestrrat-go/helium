@@ -645,6 +645,75 @@ func (ec *execContext) findBestTemplate(node helium.Node, mode string) *Template
 	return nil
 }
 
+// findAtomicTemplate finds a template matching an atomic value.
+// XSLT 3.0 patterns like ".[. instance of xs:integer]" can match atomic items.
+func (ec *execContext) findAtomicTemplate(item xpath3.Item, mode string) *Template {
+	templates := ec.stylesheet.modeTemplates[mode]
+	for _, tmpl := range templates {
+		if tmpl.Match != nil && ec.matchAtomicPattern(tmpl.Match, item) {
+			return tmpl
+		}
+	}
+	if mode != "#all" {
+		for _, tmpl := range ec.stylesheet.modeTemplates["#all"] {
+			if tmpl.Match != nil && ec.matchAtomicPattern(tmpl.Match, item) {
+				return tmpl
+			}
+		}
+	}
+	return nil
+}
+
+// matchAtomicPattern checks if an atomic item matches a pattern.
+func (ec *execContext) matchAtomicPattern(p *Pattern, item xpath3.Item) bool {
+	for _, alt := range p.Alternatives {
+		compiled := xpath3.CompileExpr(alt.expr)
+		// Evaluate the pattern as a boolean predicate with the item as context
+		ctx := ec.newXPathContext(nil)
+		ctx = xpath3.WithContextItem(ctx, item)
+		result, err := compiled.Evaluate(ctx, nil)
+		if err != nil {
+			continue
+		}
+		// The pattern ".[. instance of xs:integer]" evaluates to the item
+		// itself when matched, or empty when not. Use EBV to check.
+		ebv, ebvErr := xpath3.EBV(result.Sequence())
+		if ebvErr == nil && ebv {
+			return true
+		}
+	}
+	return false
+}
+
+// executeAtomicTemplate executes a template with an atomic item as context.
+func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *Template, item xpath3.Item, mode string) error {
+	savedContext := ec.contextNode
+	savedCurrent := ec.currentNode
+	savedMode := ec.currentMode
+	savedItem := ec.contextItem
+	savedTemplate := ec.currentTemplate
+	ec.contextItem = item
+	ec.currentMode = mode
+	ec.currentTemplate = tmpl
+	defer func() {
+		ec.contextNode = savedContext
+		ec.currentNode = savedCurrent
+		ec.currentMode = savedMode
+		ec.contextItem = savedItem
+		ec.currentTemplate = savedTemplate
+	}()
+
+	ec.pushVarScope()
+	defer ec.popVarScope()
+
+	for _, bodyInst := range tmpl.Body {
+		if err := ec.executeInstruction(ctx, bodyInst); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // executeTemplate executes a template with the given node as context.
 const maxRecursionDepth = 1000
 

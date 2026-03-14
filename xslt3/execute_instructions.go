@@ -200,8 +200,15 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 		}
 	}
 
-	// XSLT 3.0: built-in template for atomic values — output string value
+	// XSLT 3.0: process atomic values — try template matching first,
+	// then fall back to built-in text output
 	for _, item := range atomicItems {
+		if tmpl := ec.findAtomicTemplate(item, mode); tmpl != nil {
+			if err := ec.executeAtomicTemplate(ctx, tmpl, item, mode); err != nil {
+				return err
+			}
+			continue
+		}
 		av, err := xpath3.AtomizeItem(item)
 		if err != nil {
 			continue
