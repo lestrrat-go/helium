@@ -38,13 +38,14 @@ type XSLFunction struct {
 
 // Template is a compiled xsl:template.
 type Template struct {
-	Match      *Pattern
-	Name       string
-	Mode       string // "" = default, "#all" = all modes
-	Priority   float64
-	ImportPrec int
-	Params     []*Param
-	Body       []Instruction
+	Match          *Pattern
+	Name           string
+	Mode           string // "" = default, "#all" = all modes
+	Priority       float64
+	ImportPrec     int
+	Params         []*Param
+	Body           []Instruction
+	XPathDefaultNS string // xpath-default-namespace (inherited or explicit)
 }
 
 // Variable is a compiled xsl:variable.

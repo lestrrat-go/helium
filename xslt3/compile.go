@@ -16,13 +16,14 @@ import (
 
 // compiler holds state during stylesheet compilation.
 type compiler struct {
-	stylesheet    *Stylesheet
-	nsBindings    map[string]string
-	importPrec    int
-	importStack   map[string]struct{} // circular import detection
-	baseURI       string
-	resolver      URIResolver
-	localExcludes map[string]struct{} // accumulated LRE-level exclude-result-prefixes
+	stylesheet     *Stylesheet
+	nsBindings     map[string]string
+	xpathDefaultNS string // current xpath-default-namespace
+	importPrec     int
+	importStack    map[string]struct{} // circular import detection
+	baseURI        string
+	resolver       URIResolver
+	localExcludes  map[string]struct{} // accumulated LRE-level exclude-result-prefixes
 }
 
 // getAttr returns the value of an attribute or "" if not found.
@@ -109,6 +110,11 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 
 	// Collect namespace declarations from root
 	c.collectNamespaces(root)
+
+	// Read xpath-default-namespace from stylesheet root
+	if xdn := getAttr(root, "xpath-default-namespace"); xdn != "" {
+		c.xpathDefaultNS = xdn
+	}
 
 	// Read version
 	c.stylesheet.version = getAttr(root, "version")
@@ -242,9 +248,17 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 	// Collect namespace declarations from this template
 	c.collectNamespaces(elem)
 
+	// Inherit or override xpath-default-namespace
+	savedXPathDefaultNS := c.xpathDefaultNS
+	if xdn := getAttr(elem, "xpath-default-namespace"); xdn != "" {
+		c.xpathDefaultNS = xdn
+	}
+	tmpl.XPathDefaultNS = c.xpathDefaultNS
+	defer func() { c.xpathDefaultNS = savedXPathDefaultNS }()
+
 	matchAttr := getAttr(elem, "match")
 	if matchAttr != "" {
-		p, err := compilePattern(matchAttr, c.nsBindings)
+		p, err := compilePattern(matchAttr, c.nsBindings, c.xpathDefaultNS)
 		if err != nil {
 			return err
 		}
@@ -319,7 +333,23 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 			}
 			c.stylesheet.modeTemplates[""] = append(c.stylesheet.modeTemplates[""], tmpl)
 		} else {
-			c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], tmpl)
+			// XSLT 2.0+: mode can be a whitespace-separated list of mode names.
+			// Each mode name can be a QName, "#default", or "#all".
+			modes := strings.Fields(mode)
+			if len(modes) <= 1 {
+				// Single mode (or empty = default mode)
+				if mode == "#default" {
+					mode = ""
+				}
+				c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], tmpl)
+			} else {
+				for _, m := range modes {
+					if m == "#default" {
+						m = ""
+					}
+					c.stylesheet.modeTemplates[m] = append(c.stylesheet.modeTemplates[m], tmpl)
+				}
+			}
 		}
 	}
 
@@ -449,7 +479,7 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 		return staticError(errCodeXTSE0110, "xsl:key requires use attribute")
 	}
 
-	matchPat, err := compilePattern(matchAttr, c.nsBindings)
+	matchPat, err := compilePattern(matchAttr, c.nsBindings, c.xpathDefaultNS)
 	if err != nil {
 		return err
 	}

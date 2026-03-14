@@ -246,6 +246,13 @@ func matchNameTest(test NameTest, n helium.Node, axis AxisType, ec *evalContext)
 	if test.Prefix != "" {
 		return matchPrefix(test.Prefix, n, ec)
 	}
+	// Check for default element namespace (xpath-default-namespace).
+	// Only applies to element axis, not attributes.
+	if axis != AxisAttribute && ec.namespaces != nil {
+		if defNS, ok := ec.namespaces[""]; ok {
+			return ixpath.NodeNamespaceURI(n) == defNS
+		}
+	}
 	return true
 }
 

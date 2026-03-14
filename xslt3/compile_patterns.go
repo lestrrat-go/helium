@@ -9,8 +9,9 @@ import (
 
 // Pattern is a compiled XSLT match pattern.
 type Pattern struct {
-	Alternatives []*PatternAlt
-	source       string
+	Alternatives   []*PatternAlt
+	source         string
+	xpathDefaultNS string // xpath-default-namespace at compile site
 }
 
 // PatternAlt is one alternative in a union pattern (separated by |).
@@ -21,9 +22,9 @@ type PatternAlt struct {
 
 // compilePattern compiles an XSLT match pattern string.
 // XSLT patterns are a restricted subset of XPath expressions.
-func compilePattern(s string, nsBindings map[string]string) (*Pattern, error) {
+func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS string) (*Pattern, error) {
 	alts := splitPatternUnion(s)
-	p := &Pattern{source: s}
+	p := &Pattern{source: s, xpathDefaultNS: xpathDefaultNS}
 	for _, alt := range alts {
 		alt = strings.TrimSpace(alt)
 		if alt == "" {
@@ -145,11 +146,43 @@ func stepPriority(step xpath3.Step) float64 {
 			return -0.25
 		}
 		return 0
+	case xpath3.ElementTest:
+		if nt.Name == "" || nt.Name == "*" {
+			return -0.5 // element() or element(*)
+		}
+		return 0 // element(specific-name)
+	case xpath3.AttributeTest:
+		if nt.Name == "" || nt.Name == "*" {
+			return -0.5 // attribute() or attribute(*)
+		}
+		return 0 // attribute(specific-name)
 	case xpath3.DocumentTest:
 		if nt.Inner == nil {
 			return -0.5
 		}
+		// Priority of document-node(test) derives from the inner test
+		return nodeTestPriority(nt.Inner)
+	default:
 		return 0.5
+	}
+}
+
+// nodeTestPriority computes the default priority for a node test used inside
+// document-node() or similar container tests.
+func nodeTestPriority(test xpath3.NodeTest) float64 {
+	switch nt := test.(type) {
+	case xpath3.ElementTest:
+		if nt.Name == "" || nt.Name == "*" {
+			return -0.5
+		}
+		return 0
+	case xpath3.AttributeTest:
+		if nt.Name == "" || nt.Name == "*" {
+			return -0.5
+		}
+		return 0
+	case xpath3.TypeTest:
+		return -0.5
 	default:
 		return 0.5
 	}
@@ -157,6 +190,11 @@ func stepPriority(step xpath3.Step) float64 {
 
 // matchPattern tests whether a node matches the pattern.
 func (p *Pattern) matchPattern(ctx *execContext, node helium.Node) bool {
+	// Temporarily set xpath-default-namespace from pattern's compile-time value
+	saved := ctx.xpathDefaultNS
+	ctx.xpathDefaultNS = p.xpathDefaultNS
+	defer func() { ctx.xpathDefaultNS = saved }()
+
 	for _, alt := range p.Alternatives {
 		if matchPatternAlt(ctx, alt, node) {
 			return true
@@ -298,6 +336,10 @@ func nodeMatchesTest(ctx *execContext, test xpath3.NodeTest, node helium.Node) b
 		}
 		pi, ok := node.(*helium.ProcessingInstruction)
 		return ok && pi.Name() == nt.Target
+	case xpath3.ElementTest:
+		return matchElementTest(ctx, nt, node)
+	case xpath3.AttributeTest:
+		return matchAttributeTest(ctx, nt, node)
 	case xpath3.DocumentTest:
 		return matchDocumentTest(ctx, nt, node)
 	default:
@@ -359,8 +401,62 @@ func matchNameTest(ctx *execContext, nt xpath3.NameTest, node helium.Node) bool 
 	expectedURI := ""
 	if nt.Prefix != "" && ctx != nil {
 		expectedURI = ctx.resolvePrefix(nt.Prefix)
+	} else if nt.Prefix == "" && ctx != nil && node.Type() == helium.ElementNode {
+		// Unprefixed element names use xpath-default-namespace
+		expectedURI = ctx.xpathDefaultNS
 	}
 	return nodeLocal == nt.Local && nodeURI == expectedURI
+}
+
+// matchElementTest checks if a node matches an element() test.
+func matchElementTest(ctx *execContext, et xpath3.ElementTest, node helium.Node) bool {
+	if node.Type() != helium.ElementNode {
+		return false
+	}
+	if et.Name == "" || et.Name == "*" {
+		return true
+	}
+	elem, ok := node.(*helium.Element)
+	if !ok {
+		return false
+	}
+	// Check local name match (may contain prefix:local)
+	name := et.Name
+	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		prefix := name[:idx]
+		local := name[idx+1:]
+		uri := ""
+		if ctx != nil {
+			uri = ctx.resolvePrefix(prefix)
+		}
+		return elem.LocalName() == local && elem.URI() == uri
+	}
+	return elem.LocalName() == name
+}
+
+// matchAttributeTest checks if a node matches an attribute() test.
+func matchAttributeTest(ctx *execContext, at xpath3.AttributeTest, node helium.Node) bool {
+	if node.Type() != helium.AttributeNode {
+		return false
+	}
+	if at.Name == "" || at.Name == "*" {
+		return true
+	}
+	attr, ok := node.(*helium.Attribute)
+	if !ok {
+		return false
+	}
+	name := at.Name
+	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		prefix := name[:idx]
+		local := name[idx+1:]
+		uri := ""
+		if ctx != nil {
+			uri = ctx.resolvePrefix(prefix)
+		}
+		return attr.LocalName() == local && attr.URI() == uri
+	}
+	return attr.LocalName() == name
 }
 
 // matchDocumentTest checks if a node matches a document-node() test.
