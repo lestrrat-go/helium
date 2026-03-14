@@ -387,7 +387,7 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 		return staticError(errCodeXTSE0110, "xsl:variable requires name attribute")
 	}
 
-	v := &Variable{Name: name}
+	v := &Variable{Name: name, As: getAttr(elem, "as")}
 
 	selectAttr := getAttr(elem,"select")
 	if selectAttr != "" {
