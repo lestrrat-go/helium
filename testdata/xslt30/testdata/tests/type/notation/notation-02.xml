@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:noNamespaceSchemaLocation="noNamespaceNotation.xsd">
+	<sub filetype="mp3" name="a">
+		<subinner>notation mp3 test1</subinner>
+	</sub>
+	<sub filetype="mp3" name="b">
+		<subinner>notation mp3 test2</subinner>
+	</sub>
+	<sub filetype="rar" name="c">
+		<subinner>notation rar test</subinner>
+	</sub>
+	<sub filetype="wav" name="d">
+		<subinner>notation wav test</subinner>
+	</sub>
+	<sub filetype="rmi" name="e">
+		<subinner>notation rmi test</subinner>
+	</sub>
+</doc>

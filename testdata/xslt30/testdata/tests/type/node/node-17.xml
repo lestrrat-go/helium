@@ -1,0 +1,17 @@
+<?xml version="1.0"?> 
+<doc>
+  <!-- This is the 1st comment -->
+  text-in-doc
+  <inner>
+    inner-text
+    <!-- This is the 2nd comment -->
+    <sub>subtext</sub>
+  </inner>
+  text-in-doc2
+  <more>
+    inner-text
+    <!-- This is the 3rd comment -->
+    <sub>subtext</sub>
+  </more>
+  text-in-doc3
+</doc>

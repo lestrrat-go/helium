@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Root>
+    <EmployeePersonal>
+        <Employee>
+            <ID>21234</ID>
+            <Name>Jim Carrey</Name>
+            <Age>43</Age>
+            <City>Chicago</City>
+            <State>IL</State>
+        </Employee>
+        <Employee>
+            <ID>41876</ID>
+            <Name>Edward Norton</Name>
+            <Age>33</Age>
+            <City>New York</City>
+            <State>NY</State>
+        </Employee>
+        <Employee>
+            <ID>51239</ID>
+            <Name>Eli Roth</Name>
+            <Age>46</Age>
+            <City>Los Angeles</City>
+            <State>CA</State>
+        </Employee>
+    </EmployeePersonal>
+    <EmployeeEmployment>
+        <Empl>
+            <Emplid>21234</Emplid>
+            <Title>HR Partner</Title>
+            <HireDate>2008-12-29</HireDate>
+        </Empl>
+        <Empl>
+            <Emplid>41876</Emplid>
+            <Title>Comp Partner</Title>
+            <HireDate>1999-07-09</HireDate>
+        </Empl>
+        <Empl>
+            <Emplid>51239</Emplid>
+            <Title>Programmer</Title>
+            <HireDate>2004-12-06</HireDate>
+        </Empl>
+    </EmployeeEmployment>
+</Root>

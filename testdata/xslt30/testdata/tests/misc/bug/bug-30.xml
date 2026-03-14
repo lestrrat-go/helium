@@ -1,0 +1,25 @@
+<AAA> 
+          <BBB> 
+               <CCC>c11</CCC> 
+               <CCC>c12</CCC> 
+               <CCC>c13</CCC> 
+           </BBB> 
+          <BBB> 
+               <CCC>c21</CCC> 
+               <CCC>c22</CCC> 
+               <CCC>c23</CCC> 
+           </BBB> 
+          <BBB> 
+               <DDD> 
+                    <EEE>e1 </EEE> 
+                    <EEE>e2 </EEE> 
+                    <EEE>e3 </EEE> 
+                </DDD> 
+               <DDD> 
+                    <EEE>e1 </EEE> 
+                    <EEE>e2 </EEE> 
+                    <EEE>e3 </EEE> 
+                </DDD> 
+           </BBB> 
+      </AAA> 
+

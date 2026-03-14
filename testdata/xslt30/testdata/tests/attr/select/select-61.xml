@@ -1,0 +1,15 @@
+<?xml version="1.0"?>  
+<!DOCTYPE doc
+[  
+<!ELEMENT doc ANY>
+<!ELEMENT A ANY>
+<!ELEMENT K ANY>
+<!ENTITY eacute "&#233;">
+]>
+<doc>
+  <A>adresse1 <K>AFTER</K></A>
+  <A>ad&eacute;resse2 <K>after</K></A>
+  <A>adresse3 </A>
+  <A><K>BEFORE </K>adresse4</A>
+  <A><K>before </K>ad&eacute;resse5</A>
+</doc>

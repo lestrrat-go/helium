@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<doc att="doc_attribute">
+<item>
+	<?PI name="processing-instruction1"?>
+	<empty>
+		<sub-empty>This text should not appear</sub-empty>
+	</empty>
+</item>
+<inner att="inner_attribute">Text in inner element 
+	<sub-inner xmlns:one="http://example.org">Text in sub-inner element</sub-inner>
+</inner>
+<item1/>
+<item1>Text in last item<!--Comment 2-->
+	<sub-empty>This text should not appear</sub-empty>	
+</item1>
+</doc>

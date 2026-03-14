@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<docs>
+  <doc xmlns:ext="http://somebody.elses.extension">
+    <section xmlns:foo="http://foo.com">
+      <inner xmlns:whiz="http://whiz.com/special/page" att="view"><!-- Inner comment -->inner
+text<?s-pi side ?></inner>
+    </section>
+  </doc>
+</docs>

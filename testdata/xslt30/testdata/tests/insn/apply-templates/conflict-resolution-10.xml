@@ -1,0 +1,16 @@
+<?xml version= "1.0" encoding='ISO-8859-1'?>
+<planche no="21" date="30/06/2002" type="CRE">
+ <titre>Good morning daddy !</titre>
+ <images>
+  <bart type="enfant">bart2.jpg</bart>
+  <homer type="parent">homer1.jpg</homer>
+  <lisa type="enfant">lisa.gif</lisa>
+  <marge type="parent">marge.gif</marge>
+ </images>
+ <dialogues>
+  <bart type="enfant">Hello dad! How are you?</bart>
+  <homer type="parent">I am <i>hungry!</i></homer>
+  <lisa type="enfant">Hello mam! How are you?</lisa>
+  <marge type="parent">I am <i>angry!</i></marge>
+ </dialogues>
+</planche>

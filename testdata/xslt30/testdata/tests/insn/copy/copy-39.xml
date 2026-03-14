@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<docs>
+  <d level="1">D1</d>
+  <doc2>
+    <a level="2">
+      <b level="3">3-B2</b>
+      <c level="3">3-C3</c>
+      <d level="3">D3</d>
+    </a>
+    <d level="2">D2</d>
+  </doc2>
+</docs>

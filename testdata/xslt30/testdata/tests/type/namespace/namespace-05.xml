@@ -1,0 +1,244 @@
+<?xml version="1.0"?>
+<!--This is my first attempt at creating a xml document -->
+<Family_Geneologies>
+<Family Surname= "The Dicks">
+<Parents>
+<Father First = "Lewis" MI = "R" Last = "Dick">Lew Dick</Father> 
+<Mother First = "Ruth" MI = "C" Last = "Dick">Ruth Dick</Mother> 
+<GrandKids>
+	<gkid>1</gkid>
+	<gkid>2</gkid>
+	<gkid>3</gkid>
+	<gkid>4</gkid>
+	<gkid>5</gkid>
+	<gkid>6</gkid>
+	<gkid>7</gkid>
+</GrandKids>
+</Parents>
+<Children>
+<Child>
+<Basic_Information>
+<Name First = "Andy" MI = "A" Last = "Dick">Andy Dick</Name>
+<Address Street = "32 Amberfield Dr" Town = "Delran" State = "NJ" Zip = "08130">Amberfield Dr</Address>
+<Phone>
+<Home>715.264.8205</Home>
+<Work/>
+<Fax/>
+<Celluar/>
+</Phone>
+<Social_Security>425-46-6978</Social_Security>
+</Basic_Information>
+<Personal_Information>
+<Sex>Male</Sex>
+<Age>45</Age>
+<Married Kids = "2">Yes</Married>
+<Family_Information>
+<Wife>
+<Name First="Barbara" MI="A" Last="Dick">Barbara</Name>
+<Age>45</Age>
+</Wife>
+<Kids>
+<Kid ID="1">
+<Name First="Julie" MI="A" Last="Dick">Jules</Name>
+<Age>9</Age></Kid>
+<Kid ID="4">
+<Name First="Daniel" MI="L" Last="Dick">Daniel</Name>
+<Age>8</Age></Kid></Kids>
+</Family_Information>
+</Personal_Information>
+<Education>
+<PA What = "Physican Assistant" From = "Hannamen College" When = "'84">PA</PA>
+<BS What = "Organic Chemistry" From = "Ohio Weslyean University" When = "'78">BS</BS>
+</Education>
+</Child>
+<Child>
+<Basic_Information>
+<Name First = "Thomas" MI = "B" Last = "Dick">Tom Dick</Name>
+<Address Street = "82 Lake Ave" Town = "Melrose" State = "MA" Zip = "02176">Lake Ave.</Address>
+<Phone>
+<Home>781.662.8617</Home>
+<Work/>
+<Fax/>
+<Celluar/>
+</Phone>
+<Social_Security>425-46-6979</Social_Security>
+</Basic_Information>
+<Personal_Information>
+<Sex>Male</Sex>
+<Age>30 </Age>
+<Married Kids = "2">Yes</Married>
+<Family_Information>
+<Wife>
+<Name First="Penelope" MI="A" Last="Young">Penny</Name>
+<Age>39</Age>
+</Wife>
+<Kids>
+<Kid ID="3">
+<Name First="Joshua" MI="R" Last="Dick">Joshua</Name>
+<Age>7</Age></Kid>
+<Kid ID="6">
+<Name First="Lauren" MI="R" Last="Dick">Lauren</Name>
+<Age>5</Age></Kid></Kids>
+</Family_Information>
+</Personal_Information>
+<Education What = "Finance" From = "Boston University" When = "'81">BA</Education>
+</Child>
+<Child>
+<Basic_Information>
+<Name First = "Peter" MI = "M" Last = "Dick">Peter Dick</Name>
+<Address Street = "80 Lake Ave." Town = "Melrose" State = "MA" Zip = "02176">Lake Ave.</Address>
+<Phone>
+<Home>781.665.4621</Home>
+<Work/>
+<Fax/>
+<Celluar/>
+</Phone>
+<Social_Security>425-46-6980</Social_Security>
+</Basic_Information>
+<Personal_Information>
+<Sex>Male</Sex>
+<Age>40 </Age>
+<Married Kids = "2">Yes</Married>
+<Family_Information>
+<Wife>
+<Name First="Barbara" MI="Q" Last="Dick">Barbara</Name>
+<Age>40</Age>
+</Wife>
+<Kids>
+<Kid ID="2">
+<Name First="Nathaniel" MI="Q" Last="Dick">Nate</Name>
+<Age>8</Age></Kid>
+<Kid ID="5">
+<Name First="Samual" MI="Q" Last="Dick">Sam</Name>
+<Age>7</Age></Kid></Kids>
+</Family_Information>
+</Personal_Information>
+<Education>
+<MBA In="Technology MBA" From = "Northeastern University" When = "'96">MBA</MBA>
+<BA In="Applied Physics &amp; Math" From = "Mass Institute of Technology" When = "'82">BA</BA>
+</Education>
+</Child>
+<Child>
+<Basic_Information>
+<Name First = "Paul" MI = "E" Last = "Dick">Paul Dick</Name>
+<Address Street = "36 Lindor Road" Town = "North Reading" State = "MA" Zip = "01864">Lindor Road</Address>
+<Phone>
+<Work>617.693.7808</Work>
+<Home>978.276.0739</Home>
+<Fax/>
+<Celluar/>
+</Phone>
+<Social_Security>425-46-6981</Social_Security>
+</Basic_Information>
+<Personal_Information>
+<Sex>Male</Sex>
+<Age>38</Age>
+<Married Kids = "1">Yes</Married>
+<Family_Information>
+<Wife>
+<Name First="Jacqueline" MI="A" Last="Dick">Jacky</Name>
+<Age>34</Age>
+</Wife>
+<Kids>
+<Kid ID="7">
+<Name First="Benjamin" MI="D" Last="Dick">Ben</Name>
+<Age>1</Age></Kid></Kids>
+</Family_Information>
+</Personal_Information>
+<Education What = "Computer Science &amp; Psychology" From = "University of Maine" When = "'84">BA</Education>
+</Child>
+<Child>
+<Basic_Information>
+<Name First = "Matthew" MI = "A" Last = "Dick">Matt Dick</Name>
+<Address Street = "85 Green St." Town = "Melrose" State = "MA" Zip = "02176">Lake Ave.</Address>
+<Phone>
+<Home>781.665.0539</Home>
+<Work/>
+<Fax/>
+<Celluar/>
+</Phone>
+<Social_Security>425-46-6982</Social_Security>
+</Basic_Information>
+<Personal_Information>
+<Sex>Male</Sex>
+<Age>34 </Age>
+<Married Kids = "0">Yes</Married>
+<Family_Information>
+<Wife>
+<Name First="Lilla" MI="A" Last="Dick">Lilla</Name>
+<Age>38</Age>
+</Wife>
+</Family_Information>
+</Personal_Information>
+<Education>
+<MA What = "Education" From = "Boston College" When = "'92">MA</MA>
+<BA What = "Political Science" From = "University of Maine" When = "'89">BA</BA>
+</Education>
+</Child>
+</Children>
+</Family>
+<Family Surname= "The Westons">
+
+<Parents>
+<Father First = "Melvin" MI = "O" Last = "Weston">Melvin Weston</Father> 
+<Mother First = "Elizabeth" MI = "A" Last = "Harris">Liz Harris</Mother> 
+<GrandKids>
+	<gkid>7</gkid>
+</GrandKids>
+</Parents>
+<Children>
+<Child>
+<Basic_Information>
+<Name First = "Caroline" MI = "A" Last = "Weston">Caroline Weston</Name>
+<Address Street = "32 Amberfield Dr" Town = "Delran" State = "NJ" Zip = "08130">Amberfield Dr</Address>
+<Phone>
+<Home>715.264.8205</Home>
+<Work/>
+<Fax/>
+<Celluar/>
+</Phone>
+<Social_Security>425-46-6978</Social_Security>
+</Basic_Information>
+<Personal_Information>
+<Sex>Female</Sex>
+<Age>37</Age>
+<Married >No</Married>
+<Family_Information>
+</Family_Information>
+</Personal_Information>
+<Education What = "Administrator" From = "Cathrine Gibbs" When = "'80">Assoc</Education>
+</Child>
+<Child>
+<Basic_Information>
+<Name First = "Jacqueline" MI = "A" Last = "Weston">Jacky Weston</Name>
+<Address Street = "36 Lindor Road" Town = "North Reading" State = "MA" Zip = "01864">Lindor Road</Address>
+<Phone>
+<Home>978.276.0739</Home>
+<Fax> 978.276.0739</Fax>
+<Celluar/>
+</Phone>
+<Social_Security>031-46-1271</Social_Security>
+</Basic_Information>
+<Personal_Information>
+<Sex>Female</Sex>
+<Age>34 </Age>
+<Married Kids = "1">Yes</Married>
+<Family_Information>
+<Husband>
+<Name First="Paul" MI="E" Last="Dick">Paul</Name>
+<Age>38</Age>
+</Husband>
+<Kids>
+<Kid>
+<Name First="Benjamin" MI="D" Last="Dick">Ben</Name>
+<Age>1</Age></Kid></Kids>
+</Family_Information>
+</Personal_Information>
+<Education>
+<MA What = "Exercise Physiology" From = "Indiania University" When = "'89">MA</MA>
+<BS What = "Kinetics" From = "Leeds Poloytechnical" When = "'87">BS</BS>
+</Education>
+</Child>
+</Children>
+</Family>
+</Family_Geneologies>

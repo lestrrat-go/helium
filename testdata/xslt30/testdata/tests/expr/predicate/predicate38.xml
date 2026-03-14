@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<doc>
+	<foo>
+		<bar attr="1">this</bar>
+		<bar attr="2">2</bar>
+		<bar attr="3">3</bar>
+	</foo>
+	<foo>
+		<bar attr="4">this</bar>
+		<bar attr="5">this</bar>
+		<bar1 attr="6">that</bar1>
+	</foo>
+	<foo>
+		<bar attr="7">
+			<baz attr="a">hello</baz>
+			<baz attr="b">goodbye</baz>
+		</bar>
+		<bar2 attr="8">this</bar2>
+		<bar2 attr="9">that</bar2>
+	</foo>
+	<foo>
+		<bar attr="10">this</bar>
+		<bar attr="11">
+			<baz attr="a">hello</baz>
+			<baz attr="b">goodbye</baz>
+		</bar>
+		<bar attr="12">other</bar>
+	</foo>
+</doc>
+
+
+					

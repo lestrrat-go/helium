@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<doc>
+	<data>de</data>
+	<data>ascending</data>
+	<data>http://www.w3.org/2005/xpath-functions/collation/codepoint</data>
+ 	<item target="ab"  num="1" />
+  	<item target="äb"  num="2" />
+  	<item target="zb"  num="3" />
+  	<item target="a"  num="4" />
+  	<item target="ä"  num="5" />
+  	
+  	<item target="ab"  num="6" />
+  	<item target="cb"  num="7" />
+  	<item target="dc"  num="8" />
+  	<item target="cd"  num="9" />
+  	<item target="ac"  num="10" />
+  
+  	<item target="Ä"  num="11" />
+  	<item target="A"  num="12" />
+  	<item target="aÄ"  num="13" />
+  	<item target="Az"  num="14" />
+</doc>

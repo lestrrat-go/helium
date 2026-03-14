@@ -1,0 +1,13 @@
+<cities>
+  <city name="milan"  country="italy"   pop="5" date="2001-04-04T13:00:00+02:00"/>
+  <city name="paris"  country="france"  pop="7" date="2001-04-04T11:00:00+00:00"/>/>
+  <city name="munich" country="germany" pop="4" date="2001-04-04T12:00:00+01:00"/>/>
+  <city name="lyon"   country="france"  pop="2" date="2001-04-04T11:00:00+00:00"/>/>
+  <city name="venice" country="italy"   pop="1" date="2001-04-04T13:00:00+02:00"/>/>
+  <city name="london"  country="england"   pop="10" date="2001-04-04T12:00:00+00:00"/>/>
+  <city name="bristol"   country="england"  pop="5.0"/>/>/>
+  <city name="manchester"  country="england"  pop="7.0" date="2001-04-04T12:00:00+00:00"/>/>/>
+  <city name="liverpool" country="england" pop="7" date="2001-04-04T12:00:00+00:00"/>/>/>
+  <city name="sheffield"   country="england"  pop="05" date="2001-04-04T12:00:00+00:00"/>/>/>
+  <city name="venice" country="italy"   pop="1" date="2001-04-04T13:00:00+02:00"/>/>/>  
+</cities>

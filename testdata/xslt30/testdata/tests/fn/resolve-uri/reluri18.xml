@@ -1,0 +1,11 @@
+<?xml version="1.0" standalone="no" ?>
+<!DOCTYPE test [
+  <!ELEMENT test (extEnt)>
+  <!ELEMENT extEnt (sub2)> 
+  <!ATTLIST extEnt attr CDATA #REQUIRED>
+  <!ELEMENT sub2 (#PCDATA)> 
+  <!ENTITY extElement SYSTEM "level1/element.xml">
+  <!ENTITY extPI SYSTEM "level1/pi.xml">  
+  ]>
+
+<test>&extElement;&extPI;</test>

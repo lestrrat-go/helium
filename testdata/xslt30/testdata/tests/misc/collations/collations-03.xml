@@ -1,0 +1,48 @@
+<?xml version="1.0"?> 
+
+<!-- Test for xsl:sort -->
+<w3cgroup group="xsl" group-name="W3C XSL Working Group">
+
+  <chair>
+  <name><first>Sharon</first><last>Adler</last></name>
+  <affiliation>Inso Corporation</affiliation>
+  </chair>
+
+
+  <member>
+  <primary><name><first>Alex</first><last>Milowski</last></name></primary>
+  <alternate><name><first>Murray</first><last>Maloney</last></name></alternate>
+  <affiliation>Veo Systems, Inc.</affiliation>
+  <date-joined>Tue, 20 Jan 1998</date-joined> 
+  </member>
+
+  <member>
+  <primary><name><first>Jeff</first><last>Caruso</last></name></primary>
+  <alternate><name><first>Andrew</first><last>Greene</last></name></alternate>
+  <affiliation>Bitstream</affiliation>
+  <date-joined>Thu, 26 Mar 1998</date-joined>
+  </member>
+
+  <member>
+  <primary><name><first>ALex</first><last>Moore</last></name></primary>
+  <alternate><name><first>Daniel</first><last>Rivers-Moore</last></name></alternate>
+  <affiliation>RivCom</affiliation>
+  <date-joined>Thu, 26 March 1998</date-joined> 
+  </member>
+
+  <member>
+  <primary><name><first>Chris</first><last>Maden</last></name></primary>
+  <affiliation>O'Reilly &amp; Associates, Inc.</affiliation> 
+  <date-joined>Tue, 20 Jan 1998</date-joined>
+  </member>
+
+  <member>
+  <primary><name><first>Alex</first><last>MOore</last></name></primary>
+  <affiliation>Silicon Graphics</affiliation> 
+  <date-joined>Thu, 15 Jan 1998</date-joined> 
+  </member>
+
+  
+    
+</w3cgroup>
+

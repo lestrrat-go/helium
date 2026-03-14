@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<foo>
+
+  <bar a="0" b="0" c="0" d="0" seq="0"/>
+  <bar a="0" b="0" c="0" d="1" seq="1"/>
+  <bar a="0" b="0" c="1" d="0" seq="2"/>
+  <bar a="0" b="0" c="1" d="1" seq="3"/>
+  <bar a="0" b="1" c="0" d="0" seq="4"/>
+  <bar a="0" b="1" c="0" d="1" seq="5"/>
+  <bar a="0" b="1" c="1" d="0" seq="6"/>
+  <bar a="0" b="1" c="1" d="1" seq="7"/>
+  <bar a="1" b="0" c="0" d="0" seq="8"/>
+  <bar a="1" b="0" c="0" d="1" seq="9"/>
+  <bar a="1" b="0" c="1" d="0" seq="a"/>
+  <bar a="1" b="0" c="1" d="1" seq="b"/>
+  <bar a="1" b="1" c="0" d="0" seq="c"/>
+  <bar a="1" b="1" c="0" d="1" seq="d"/>
+  <bar a="1" b="1" c="1" d="0" seq="e"/>
+  <bar a="1" b="1" c="1" d="1" seq="f"/>
+
+</foo>

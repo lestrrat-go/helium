@@ -1,0 +1,13 @@
+<?xml version="1.0"?> 
+
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0">
+
+  <!-- PURPOSE: effect of BC on general comparisons -->
+
+  <xsl:template name="main">
+    <xsl:variable name="rtf"><xsl:if test="false()"/></xsl:variable>
+    <out><xsl:value-of select="$rtf = true()"/></out>
+  </xsl:template>
+
+
+</xsl:stylesheet>

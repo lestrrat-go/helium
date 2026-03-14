@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doc>
+  <list id="list1">
+	  <item>a</item>
+	  <item>b</item>
+	  <item>c</item>
+  </list>
+  <list id="list2">
+	  <item>d</item>
+	  <item>e</item>
+	  <item>f</item>
+  </list>
+  <list id="list3">
+	  <item>g</item>
+	  <item>h</item>
+	  <item>i</item>
+  </list>
+  <list id="list4">
+	  <item>j</item>
+	  <item>k</item>
+	  <item>l</item>
+  </list>
+</doc>

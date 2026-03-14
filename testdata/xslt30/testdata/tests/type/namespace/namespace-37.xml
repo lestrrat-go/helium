@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<doc xmlns="http://xsl.lotus.com/ns2" xmlns:ns1="http://xsl.lotus.com/ns1">
+  <ns1:a attrib1="test" xmlns="http://xsl.lotus.com/ns2" xmlns:ns1="http://xsl.lotus.com/ns1"/>
+  <b ns1:attrib2="test"/>
+</doc>

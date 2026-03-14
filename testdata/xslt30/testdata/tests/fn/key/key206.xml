@@ -1,0 +1,9 @@
+<?xml version="1.0"?> 
+
+<doc>
+<item>1<s>21</s></item>
+<item>2<s>22</s></item>
+<item>3<s>23</s><s>22</s></item>
+<item>4<s>23</s><s>24</s></item>
+<item>5<s>21</s><s>22</s><s>23</s><s>22</s></item>
+</doc>

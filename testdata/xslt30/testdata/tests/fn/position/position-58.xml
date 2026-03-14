@@ -1,0 +1,30 @@
+<doc>
+  <alpha key="a">
+    <z>5</z>
+  </alpha>
+  <alpha key="b">
+    <b>3</b>
+    <z>9</z>
+  </alpha>
+  <alpha key="c">
+    <z>2</z>
+  </alpha>
+  <alpha key="d">
+    <z>4</z>
+    <z>12</z>
+  </alpha>
+  <alpha key="e">
+    <z>6</z>
+    <z>11</z>
+    <z>1</z>
+  </alpha>
+  <alpha key="f">
+    <z>3</z>
+    <f>8</f>
+  </alpha>
+  <alpha key="g">
+    <z>7</z>
+    <g>1</g>
+    <z>10</z>
+  </alpha>
+</doc>

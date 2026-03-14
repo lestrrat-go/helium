@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<root>
+	<list>
+		<elem type="a">
+			<active>true</active>
+			<dataset>
+				<field1>x</field1>
+				<field2>x</field2>
+				<field3>
+					<field4>x</field4>
+					<field5>x</field5>
+				</field3>
+			</dataset>
+		</elem>
+		<elem type="b">
+			<active>false</active>
+			<dataset>
+				<field1>y</field1>
+				<field2>y</field2>
+				<field3>
+					<field4>y</field4>
+					<field5>y</field5>
+				</field3>
+			</dataset>
+		</elem>
+		<elem type="c">
+			<active>true</active>
+			<dataset>
+				<field1>y</field1>
+				<field2>z</field2>
+				<field3>
+					<field4>y</field4>
+					<field5>y</field5>
+				</field3>
+			</dataset>
+		</elem>		
+	</list>
+</root>

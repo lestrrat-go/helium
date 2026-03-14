@@ -1,0 +1,100 @@
+<?xml version="1.0"?> 
+<?xml-stylesheet type="text/xsl" href="#style15"?>
+<!DOCTYPE doc [
+<!ELEMENT doc (#PCDATA | head | body)*>
+
+<!ELEMENT head (#PCDATA | xsl:stylesheet)*>
+<!ELEMENT body (#PCDATA | items | str)*>
+
+<!ELEMENT xsl:stylesheet (#PCDATA | xsl:template | xsl:import)*>
+<!ATTLIST xsl:stylesheet 
+		  id ID #REQUIRED
+		  xmlns:xsl CDATA #FIXED "http://www.w3.org/1999/XSL/Transform"
+		  xmlns:foo CDATA #FIXED "http://foo.test.com"
+		  xmlns:huh CDATA #FIXED "http://unknown.com"
+		  exclude-result-prefixes CDATA #FIXED "foo"
+		  version NMTOKEN #REQUIRED>
+		  
+<!ELEMENT xsl:template (#PCDATA | xsl:apply-templates | xsl:text | xsl:element)*>
+<!ATTLIST xsl:template match CDATA #IMPLIED >
+
+<!ELEMENT in EMPTY>
+<!ATTLIST in att CDATA #IMPLIED>
+
+<!ELEMENT xsl:element (#PCDATA |xsl:text |in | xsl:apply-templates)*>
+<!ATTLIST xsl:element name CDATA #IMPLIED>
+
+<!ELEMENT xsl:apply-templates EMPTY>
+<!ATTLIST xsl:apply-templates select CDATA #IMPLIED>
+
+<!ELEMENT xsl:text (#PCDATA)>
+
+<!ELEMENT items (#PCDATA | item)*>
+<!ATTLIST items xmlns CDATA #FIXED "http://www.examples.com/main" >
+
+<!ELEMENT item (#PCDATA | subitem)*>
+<!ATTLIST item attr CDATA #IMPLIED>
+
+<!ELEMENT subitem (#PCDATA)>
+
+<!ELEMENT str (#PCDATA | substr)*>
+<!ATTLIST str xmlns CDATA #IMPLIED> 
+
+<!ELEMENT substr (#PCDATA) >		  
+		  
+<!ELEMENT xsl:import EMPTY>		  
+<!ATTLIST xsl:import  href CDATA #FIXED "embed015a.xsl">		  
+]>
+
+<doc>
+  <head>
+	<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" 
+    xmlns:foo="http://foo.test.com"
+    xmlns:huh="http://unknown.com"
+    exclude-result-prefixes="foo"
+    version="2.0" id="style15" >
+
+	<!-- An imported stylesheet declares an exclude-result-prefixes attribute, but the embedded 
+				  stylesheet that imports has an exclude-result-prefixes attribute with a different value.
+			      This is to verify that the values of the standard attribute exclude-result-prefixes that apply to an element 
+			      in the imported stylesheet module are those that were defined on their own xsl:stylesheet element, not those 
+			      on the main (Embedded) stylesheet module. -->
+
+	<xsl:import href="embed015a.xsl"/>
+	
+	<xsl:template match="/">
+		<xsl:apply-templates select="*" />
+	</xsl:template>
+	
+	<xsl:template match="text()" />
+	
+	<xsl:template match="body">
+	    <xsl:element name="out">
+		    <in att="att2" />
+		    <xsl:apply-templates select="str[1]"/>
+	    </xsl:element>
+	</xsl:template>
+
+</xsl:stylesheet>
+  </head>
+
+  <body>
+	 <items xmlns="http://www.examples.com/main">
+		<item attr="atr1">
+			<subitem>a</subitem>
+		</item>
+		<item attr="atr2">
+			<subitem>b</subitem>
+		</item>
+		<item attr="atr3">
+			<subitem>c</subitem>
+		</item>
+	</items>
+	<str xmlns="http://www.examples.com/included">
+		<substr>match1</substr>
+	</str>
+	<str><substr>match2</substr></str>
+	<str><substr>match3</substr></str>
+  </body>
+
+</doc>

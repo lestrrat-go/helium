@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:mqh="http://www.fake.com/mqh/xsd" xmlns:qri="http://www.fake.com/xsd/Request" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <soap:Body>
+        <mqh:QuoteRetrieval>
+            <mqh:Request>
+                <qri:QuoteRef>NEG000001KWU</qri:QuoteRef>
+                <qri:CustomerSpecificFields>
+                    <qri:Entry>
+                        <qri:Key>PolicyId</qri:Key>
+                        <qri:Value>INS_00000012</qri:Value>
+                    </qri:Entry>
+                </qri:CustomerSpecificFields>
+            </mqh:Request>
+        </mqh:QuoteRetrieval>
+    </soap:Body>
+</soap:Envelope>

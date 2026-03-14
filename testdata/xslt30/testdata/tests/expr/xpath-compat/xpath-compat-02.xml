@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doc>
+  <a z="1">text node 1</a>
+  <a z="2">string value 2</a>
+  <a z="3">simple content 3</a>
+  <a z="4">content 4 u</a>
+  <b>text</b>
+  <b>simple</b>
+  <c>foo</c>
+  <c>text</c>
+  <d>o</d>
+  <d>x</d>
+  <e>t</e>
+  <f>2</f>
+</doc>

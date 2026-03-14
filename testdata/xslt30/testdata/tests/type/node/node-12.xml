@@ -1,0 +1,15 @@
+<?xml version="1.0"?> 
+<doc att="top">
+  <?mypi some data?>
+  <!-- This is the 1st comment -->
+  text-in-doc
+  <inner blat="blob">
+    inner-text
+    <!-- This is the 2nd comment -->
+    <sub>subtext</sub>
+  </inner>
+  text-in-doc2
+  <inner2 blat="bar">
+    <sub>subtext</sub>final-text
+  </inner2>
+</doc>

@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc  (l1)>
+  <!ATTLIST doc  id ID #REQUIRED>
+  <!ELEMENT l1    (v, l2)>
+  <!ELEMENT l2    (v, l3, w)>
+  <!ELEMENT l3    (v)>
+  <!ELEMENT v     (#PCDATA)>
+  <!ELEMENT w     (#PCDATA)>  
+]>
+<doc id='abc'>
+  <l1>
+    <v>Text from doc/l1/v</v>
+    <l2>
+      <v>Text from doc/l1/l2/v</v>
+      <l3>
+        <v>Text from doc/l1/l2/l3/v</v>
+      </l3>
+      <w>Text from doc/l1/l2/w</w>
+    </l2>
+  </l1>
+</doc>

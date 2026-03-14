@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<my:doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://www.example.com/ns/match/subgroup subgroupTypeSchemaMatch.xsd"
+     xmlns:my="http://www.example.com/ns/match/subgroup">
+	 <elem-URI>
+	 	<elem-anyURI>http://test1.org</elem-anyURI>		
+	 </elem-URI>
+	 <elem-INT>
+		<elem-anyURI>5</elem-anyURI>
+	 </elem-INT>
+	<my:elem-anyURI>http://www.example.com/test</my:elem-anyURI>
+	<my:elem-anyURI-sub>http://www.example.com/test</my:elem-anyURI-sub>
+	<my:elem-anyURI-sub1>http://test1.org</my:elem-anyURI-sub1>
+	<my:elem-anyURI-sub2>http://test2.org</my:elem-anyURI-sub2>
+	<my:elem-anyURI-sub3>http://test3.org</my:elem-anyURI-sub3>
+</my:doc>

@@ -1,0 +1,190 @@
+<?xml version="1.0"?>
+<ProteinDatabase id="PIR-PSD" release="70.03" date="09-Nov-2001">
+    <Database>
+        
+        P R O T E I N  S E Q U E N C E  D A T A B A S E
+        of PIR-International
+        
+        Release 70.03, November 09, 2001
+        262525 sequences, 89717977 residues
+        
+        Protein Information Resource (PIR)*
+        National Biomedical Research Foundation
+        3900 Reservoir Road, N.W.,
+        Washington, DC  20007, USA
+        
+        Japan International Protein           Munich Information Center for
+        Information Database (JIPID)             Protein Sequences (MIPS)
+        Amakubo 1-16-1          GSF-Forschungszentrum f. Umwelt und Gesundheit
+        Tsukuba 305-0005, Japan            am Max-Planck-Instut f. Biochemie
+        Am Klopferspitz 18, D-82152 Martinsried, FRG
+        
+        This database may be redistributed without prior consent, provided that
+        this notice be given to each user and that the words "Derived from" shall
+        precede this notice if the database has been altered by the redistributor.
+        
+        Copyright 2000, PIR-International.
+        
+        *PIR is a registered mark of NBRF.
+    </Database>
+    <ProteinEntry id="CCHU">
+        <header>
+            <uid>CCHU</uid>
+            <accession>A31764</accession>
+            <accession>A05676</accession>
+            <accession>I55192</accession>
+            <accession>A00001</accession>
+            <created_date>24-Apr-1984</created_date>
+            <seq-rev_date>30-Sep-1991</seq-rev_date>
+            <txt-rev_date>28-Jul-2000</txt-rev_date>
+        </header>
+        <protein>
+            <name>cytochrome c [validated]</name>
+        </protein>
+        <organism>
+            <source>human</source>
+            <common>man</common>
+            <formal>Homo sapiens</formal>
+        </organism>
+        <reference>
+            <refinfo refid="A31764">
+                <authors>
+                    <author>Evans, M.J.</author>
+                    <author>Scarpulla, R.C.</author>
+                </authors>
+                <citation>Proc. Natl. Acad. Sci. U.S.A.</citation>
+                <volume>85</volume><year>1988</year><pages>9625-9629</pages>
+                <title>The human somatic cytochrome c gene: two classes of processed pseudogenes demarcate a period of rapid molecular evolution.</title>
+                <xrefs>
+                    <xref><db>MUID</db><uid>89071748</uid></xref>
+                </xrefs>
+            </refinfo>
+            <accinfo label="EVA">
+                <accession>A31764</accession>
+                <mol-type>DNA</mol-type>
+                <seq-spec>1-105</seq-spec>
+                <xrefs>
+                    <xref><db>GB</db><uid>M22877</uid></xref>
+                    <xref><db>NID</db><uid>g181241</uid></xref>
+                    <xref><db>PIDN</db><uid>AAA35732.1</uid></xref>
+                    <xref><db>PID</db><uid>g181242</uid></xref>
+                </xrefs>
+            </accinfo>
+        </reference>
+        <reference>
+            <refinfo refid="A05676">
+                <authors>
+                    <author>Matsubara, H.</author>
+                    <author>Smith, E.L.</author>
+                </authors>
+                <citation>J. Biol. Chem.</citation>
+                <volume>238</volume><year>1963</year><pages>2732-2753</pages>
+                <title>Human heart cytochrome c. Chymotryptic peptides, tryptic peptides, and the complete amino acid sequence.</title>
+            </refinfo>
+            <accinfo label="MATS">
+                <accession>A05676</accession>
+                <mol-type>protein</mol-type>
+                <seq-spec>2-28;29-46;47-100;101-105</seq-spec>
+            </accinfo>
+        </reference>
+        <reference>
+            <refinfo refid="A00001">
+                <authors>
+                    <author>Matsubara, H.</author>
+                    <author>Smith, E.L.</author>
+                </authors>
+                <citation>J. Biol. Chem.</citation>
+                <volume>237</volume><year>1962</year><pages>3575-3576</pages>
+                <title>The amino acid sequence of human heart cytochrome c.</title>
+            </refinfo>
+            <contents>annotation</contents>
+            <note>66-Leu is found in 10% of the molecules in pooled protein</note>
+        </reference>
+        <reference>
+            <refinfo refid="I55192">
+                <authors>
+                    <author>Tanaka, Y.</author>
+                    <author>Ashikari, T.</author>
+                    <author>Shibano, Y.</author>
+                    <author>Amachi, T.</author>
+                    <author>Yoshizumi, H.</author>
+                    <author>Matsubara, H.</author>
+                </authors>
+                <citation>J. Biochem.</citation>
+                <volume>103</volume><year>1988</year><pages>954-961</pages>
+                <title>Construction of a human cytochrome c gene and its functional expression in Saccharomyces cerevisiae.</title>
+                <xrefs>
+                    <xref><db>MUID</db><uid>89008207</uid></xref>
+                </xrefs>
+            </refinfo>
+            <accinfo label="RES">
+                <accession>I55192</accession>
+                <status>translated from GB/EMBL/DDBJ</status>
+                <mol-type>mRNA</mol-type>
+                <seq-spec>78-105</seq-spec>
+                <xrefs>
+                    <xref><db>GB</db><uid>D00265</uid></xref>
+                    <xref><db>NID</db><uid>g2897691</uid></xref>
+                    <xref><db>PIDN</db><uid>BAA00187.1</uid></xref>
+                    <xref><db>PID</db><uid>g219557</uid></xref>
+                </xrefs>
+            </accinfo>
+        </reference>
+        <genetics>
+            <introns>57/1</introns>
+        </genetics>
+        <classification>
+            <superfamily>cytochrome c</superfamily>
+            <superfamily>cytochrome c homology</superfamily>
+        </classification>
+        <keywords>
+            <keyword>acetylated amino end</keyword>
+            <keyword>chromoprotein</keyword>
+            <keyword>electron transfer</keyword>
+            <keyword>heme</keyword>
+            <keyword>iron</keyword>
+            <keyword>metalloprotein</keyword>
+            <keyword>mitochondrion</keyword>
+            <keyword>oxidative phosphorylation</keyword>
+            <keyword>polymorphism</keyword>
+            <keyword>respiratory chain</keyword>
+        </keywords>
+        <feature label="MAT">
+            <feature-type>product</feature-type>
+            <description>cytochrome c</description>
+            <seq-spec>2-105</seq-spec>
+            <status>experimental</status>
+        </feature>
+        <feature label="CYC">
+            <feature-type>domain</feature-type>
+            <description>cytochrome c homology</description>
+            <seq-spec>5-99</seq-spec>
+        </feature>
+        <feature>
+            <feature-type>modified-site</feature-type>
+            <description>acetylated amino end (Gly) (in mature form)</description>
+            <seq-spec>2</seq-spec>
+            <status>experimental</status>
+        </feature>
+        <feature>
+            <feature-type>binding-site</feature-type>
+            <description>heme (Cys) (covalent)</description>
+            <seq-spec>15,18</seq-spec>
+            <status>experimental</status>
+        </feature>
+        <feature>
+            <feature-type>binding-site</feature-type>
+            <description>heme iron (His, Met) (axial ligands)</description>
+            <seq-spec>19,81</seq-spec>
+            <status>predicted</status>
+        </feature>
+        <summary>
+            <length>105</length>
+            <type>complete</type>
+        </summary>
+        <sequence>
+            MGDVEKGKKIFIMKCSQCHTVEKGGKHKTGPNLHGLFGRKTGQAPGYSYTAANKNKGIIW
+            GEDTLMEYLENPKKYIPGTKMIFVGIKKKEERADLIAYLKKATNE
+        </sequence>
+    </ProteinEntry>
+</ProteinDatabase>

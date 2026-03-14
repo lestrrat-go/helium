@@ -1,0 +1,12 @@
+<doc>
+   <memo><subj>Thread A</subj><time>10:02:44</time><body>A1</body></memo>
+   <memo><subj>Thread B</subj><time>10:03:18</time><body>B2</body></memo>
+   <memo><subj>Re: Thread A</subj><time>10:11:12</time><body>A3</body></memo>
+   <memo><subj>Re: Thread B</subj><time>10:19:57</time><body>B4</body></memo>
+   <memo><subj>Re: Thread A</subj><time>11:31:28</time><body>A5</body></memo>
+   <memo><subj>Thread C</subj><time>11:45:05</time><body>C6</body></memo>
+   <memo><subj>Re: Thread A</subj><time>13:15:17</time><body>A7</body></memo>
+   <memo><subj>Re: Thread C</subj><time>13:59:46</time><body>C8</body></memo>
+   <memo><subj>Re: Thread B</subj><time>14:21:28</time><body>B9</body></memo>
+   <memo><subj>Re: Thread A</subj><time>14:21:29</time><body>A10</body></memo>
+</doc>

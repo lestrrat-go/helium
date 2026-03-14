@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<doc xmlns:a="http://a.com/" xmlns:b="http://b.com/" xmlns:c="http://c.com/" xmlns:d="http://d.com/">
+  <a:element a:attribute="1">
+    <b:element b:attribute="2">
+      <c:element c:attribute="3">
+        <d>
+         <element attribute="4"/>
+        </d>
+      </c:element>
+    </b:element>
+  </a:element>
+</doc>
+   

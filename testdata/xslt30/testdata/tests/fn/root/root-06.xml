@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doc xmlns:test="http://www.example.com/example" xmlns:xs="http://www.w3.org/2001/XMLSchema" >
+	<!-- sample commment node1-->
+	<test:a alpha="attributeTest">hello<xs:a><xs:b>nested</xs:b>nested1</xs:a><xs:a><xs:b>nestednested</xs:b>nestednested1</xs:a><test:b>hello again</test:b></test:a>
+	<c ><ch>var with spaces35 <!-- sample commment node2--> </ch></c>
+	<d><ch>another var with spaces35</ch></d>
+	<string1><str1>abcd</str1><str2>ABCD</str2><str3>abcd<!-- sample commment node3--></str3><xs:a alpha="attributeTest">hello<xs:b>hello again</xs:b></xs:a><xs:str4 attrib="TestAttribute0123456789" >ABCB</xs:str4></string1>
+</doc>

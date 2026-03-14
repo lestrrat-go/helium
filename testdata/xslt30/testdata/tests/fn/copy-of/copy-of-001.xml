@@ -1,0 +1,9 @@
+<?xml version="1.0"?> 
+<doc>
+  <elem a="1" b="2" xmlns="http://one.com/">
+    <p:subelem xmlns:p="http://two.com/">a</p:subelem>
+    <!-- a comment -->
+    <p:subelem xmlns:p="http://two.com/">b</p:subelem>
+    <?a processing instruction?>
+  </elem>
+</doc>

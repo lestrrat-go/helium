@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE Section1 SYSTEM "unparsed-entity-uri-050.dtd">
+<Section1 xml:lang="en">
+  <Heading>Test Entity Resolution Compliance</Heading>
+  <Para>Extensible Markup Language (XML) 1.0 (Fifth Edition)</Para>
+  <Para>
+    4.2
+    ... If the same entity is declared more than once, the first declaration
+    encountered is binding; ...
+  </Para>
+  <Para>Testing an image below:</Para>
+  <Para>
+    <MediaObject src="dgr-08sdexample06"/>
+  </Para>
+</Section1>

@@ -1,0 +1,21 @@
+<article class="whitepaper" status="Note">
+  <articleinfo>
+    <title>AAA</title>
+    <section id="info">
+      <title>BBB</title>
+      <para>About this article</para>
+      <section revisionflag="added">
+        <title>CCC</title>
+        <para>This is the section titled "ZZZ".</para>
+        <ednote who="KKK">
+          <title>DDD</title>
+          <para>Don't worry.</para>
+          <section revisionflag="added">
+            <title>EEE</title>
+            <para>This is the deep subsection.</para>
+          </section>
+        </ednote>
+      </section>
+    </section>
+  </articleinfo>
+</article>

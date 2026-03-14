@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?> 
+<Members>
+  <Member>
+    <Name>
+      <fname>Fred</fname>
+      <id>1234</id>
+    </Name>
+    <Locations>
+      <name>Chicago</name>
+      <days>3</days>
+      <hours>24</hours>
+    </Locations>
+    <Locations>
+      <name>Chicago</name>
+      <days>3</days>
+      <hours>24</hours>
+    </Locations>
+    <Payments>
+      <amount>1000</amount>
+      <currency>USD</currency>
+    </Payments>
+    <Payments>
+      <amount>1000</amount>
+      <currency>USD</currency>
+    </Payments>
+  </Member>
+  <Member>
+    <Name>
+      <fname>Jack</fname>
+      <id>4567</id>
+    </Name>
+    <Locations>
+      <name>New York</name>
+      <days>5</days>
+      <hours>30</hours>
+    </Locations>
+    <Locations>
+      <name>Chicago</name>
+      <days>3</days>
+      <hours>24</hours>
+    </Locations>
+    <Payments>
+      <amount>1500</amount>
+      <currency>USD</currency>
+    </Payments>
+    <Payments>
+      <amount>1800</amount>
+      <currency>USD</currency>
+    </Payments>
+  </Member>
+</Members>

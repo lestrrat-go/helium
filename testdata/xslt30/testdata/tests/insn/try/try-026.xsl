@@ -1,0 +1,23 @@
+<?xml version="1.0"?> 
+
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0"
+  xmlns:err="http://www.w3.org/2005/xqt-errors" exclude-result-prefixes=" err">
+
+  <!-- original purpose: invalid child of xsl:try: xsl:fallback not allowed between xsl:catch children -->
+  <!-- but the rules in the spec have changed so this is now allowed. -->
+  <!-- same as try016, but run in 2.0 mode, with forwards compatibility enabled -->
+
+  <xsl:template name="main">
+    <out>
+      <xsl:try version="3.0">
+        <xsl:sequence select="2+2"/>
+        <xsl:catch errors="*"/>
+        <xsl:fallback>
+          <xsl:sequence select="2+3"/>
+        </xsl:fallback>
+        <xsl:catch errors="*"/>
+      </xsl:try>
+    </out>
+  </xsl:template>
+
+</xsl:stylesheet>

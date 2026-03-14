@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<doc>
+  <critter type="dog"><name>Lassie</name></critter>
+  <human><name>Anne</name></human>
+  <critter type="dog"><name>Wishbone</name></critter>
+  <critter type="cat"><name>Felix</name></critter>
+  <critter type="cat"><name>Sylvester</name></critter>
+  <critter type="porcupine"><name>Porky</name></critter>
+  <human><name>Elissa</name></human>
+  <critter type="cat"><name>TopCat</name></critter>
+  <critter type="turtle"><name>Churchy</name></critter>
+</doc>

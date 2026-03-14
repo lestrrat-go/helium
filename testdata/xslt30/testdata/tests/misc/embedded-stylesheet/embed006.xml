@@ -1,0 +1,61 @@
+<?xml version="1.0"?> 
+<?xml-stylesheet type="text/xsl" href="#style3"?>
+<!DOCTYPE doc [
+<!ELEMENT doc (#PCDATA | head | body)*>
+<!ATTLIST doc
+		  xmlns:xsl CDATA #FIXED "http://www.w3.org/1999/XSL/Transform">
+
+<!ELEMENT head (#PCDATA | xsl:stylesheet )*>
+<!ELEMENT body (#PCDATA | elem)*>
+
+<!ELEMENT xsl:stylesheet (#PCDATA | xsl:template | xsl:import)*>
+<!ATTLIST xsl:stylesheet 
+		  id ID #REQUIRED
+		  xmlns:xsl CDATA #FIXED "http://www.w3.org/1999/XSL/Transform"
+		  version NMTOKEN #REQUIRED>
+		  
+<!ELEMENT xsl:import EMPTY>		  
+<!ATTLIST xsl:import  href CDATA #FIXED "standalone_standard.xsl">
+
+<!ELEMENT xsl:template (#PCDATA | out)*>
+<!ATTLIST xsl:template  match CDATA #IMPLIED>
+
+<!ELEMENT out (#PCDATA | xsl:apply-templates )*>
+<!ELEMENT elem (#PCDATA | tag)*>
+<!ELEMENT tag (#PCDATA)*>
+
+<!ELEMENT xsl:apply-templates ( xsl:with-param )>
+<!ELEMENT xsl:with-param EMPTY>
+<!ATTLIST xsl:with-param name NMTOKEN #IMPLIED
+                         select CDATA #IMPLIED
+					     tunnel NMTOKEN #FIXED "yes" >
+]>
+
+<doc xmlns:xsl="http://www.w3.org/1999/XSL/Transform" >
+  <head>
+	<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0"
+                id="style3">
+	
+	<xsl:import href="standalone_standard.xsl" />
+
+	<!-- An embedded standard stylesheet imports a standalone standard stylesheet. -->
+
+		<xsl:template match="/" >
+  			<out>
+			    <xsl:apply-templates>
+			      <xsl:with-param name="size" select="28" tunnel="yes"/>
+			    </xsl:apply-templates>
+  			</out>
+		</xsl:template>
+		
+		<xsl:template match="text()"/>
+	</xsl:stylesheet>
+  </head>
+
+  <body>
+	<elem>
+	  <tag>-text</tag>
+	</elem>
+  </body>
+
+</doc>

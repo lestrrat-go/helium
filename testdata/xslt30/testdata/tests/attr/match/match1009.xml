@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<doc>
+  <foo att1="c" att2="ok">
+    <foo att1="b" att2="ok">
+      <foo att1="a" att2="no">
+        <baz att1="wrong"/>
+      </foo>
+    </foo>
+    <foo att1="d" att2="ok">
+      <foo att1="b" att2="ok">
+        <baz att1="wrong"/>
+      </foo>
+    </foo>
+    <foo att1="b" att2="no">
+      <foo att1="ok" att2="b">
+        <baz att1="wrong"/>
+      </foo>
+    </foo>
+  </foo>
+</doc>
+   

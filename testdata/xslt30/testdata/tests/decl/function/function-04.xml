@@ -1,0 +1,10 @@
+<?xml version="1.0"?> 
+
+<doc>
+<item att="a" desc="one"/>
+<item att="b" desc="two"/>
+<item att="c" desc="three"/>
+<thing att="a" desc="eins"/>
+<thing att="b" desc="zwei"/>
+<thing att="c" desc="drei"/>
+</doc>

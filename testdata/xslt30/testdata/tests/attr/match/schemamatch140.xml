@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<my:people xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://www.example.com/ns/match/attributes match-attributes.xsd"
+     xmlns:my="http://www.example.com/ns/match/attributes"
+     my:nationality="americans">
+	 <person my:nationality="american"
+	 		 my:id="id1"
+	 		 my:ref="id1"
+	 		 my:refs="id1"
+	 		 my:tok="aa"
+	 		 my:toks="aa bb cc"
+	 		 my:language="ge"
+	 		 my:positiveInteger="300"
+	 		 my:unsignedShort="2"
+	 		 my:long="-9223372036854775808">
+	 	<name>Peter Greenberg</name>
+	 	<age my:nationality="1.2">22</age>
+	 </person>
+</my:people>

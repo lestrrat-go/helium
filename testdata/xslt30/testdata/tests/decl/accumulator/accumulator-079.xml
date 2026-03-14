@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <fields>
+    <data>
+      <id1>111</id1>
+      <id2>123</id2>
+    </data>        
+  </fields>
+  <fields>
+    <data>
+      <id1>222</id1>
+      <id2>123</id2>
+    </data>
+    <data>
+      <id1>333</id1>
+      <id2>123</id2>
+    </data>
+  </fields>
+</root>

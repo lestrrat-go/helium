@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<docs>
+<doc1>
+	<a level="1">A1</a>
+	<b level="1">B2</b>
+	<c level="1">C3</c>
+</doc1>
+<doc2>
+	<a level="2">A1</a>
+	<b level="2">B2</b>
+	<c level="2">C3</c>
+	<doc3>
+		<a level="3">A1</a>
+		<bat level="3">B22</bat>
+		<cat level="3">C33</cat>
+	</doc3>
+</doc2>
+</docs>

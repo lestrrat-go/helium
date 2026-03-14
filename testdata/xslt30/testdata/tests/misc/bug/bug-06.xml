@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<schema>
+   <title>Test</title>
+   <pattern name="childless">
+      <rule context="*">
+         <report test="count(*)=0">
+            <name/> has no child elements
+         </report>
+      </rule>
+   </pattern>
+</schema>

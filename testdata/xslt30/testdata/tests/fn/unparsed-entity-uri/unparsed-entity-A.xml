@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!NOTATION gif SYSTEM "../www.foo.com" >
+  <!ENTITY hatch-pic
+         SYSTEM "../grafix/OpenHatch.gif"
+         NDATA gif >
+  <!ENTITY watch-pic
+         PUBLIC "-//Textuality//TEXT standard boilerplate//EN" 
+                "../grafix/OpenWatch.gif"
+         NDATA gif >         
+  <!ELEMENT doc (#PCDATA)>
+]>
+
+         
+<doc>
+</doc>

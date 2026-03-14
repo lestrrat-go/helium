@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<doc>
+  <foo att1="c" att2="ok" spot="1">
+    <foo att1="b" att2="ok" spot="11">
+      <foo att1="a" att2="no" spot="111">
+        <baz att1="wrong" spot="1110"/>
+      </foo>
+      <foo att1="c" att2="no" spot="112">
+        <baz att1="wrong" spot="1120"/>
+      </foo>
+    </foo>
+    <foo att1="d" att2="ok" spot="12">
+      <foo att1="b" att2="ok" spot="121">
+        <baz att1="wrong" spot="1210"/>
+      </foo>
+    </foo>
+    <foo att1="b" att2="no" spot="13">
+      <foo att1="ok" att2="b" spot="131">
+        <baz att1="wrong" spot="1310"/>
+      </foo>
+      <foo att1="c" att2="ok" spot="132">
+        <baz att1="wrong" spot="1320"/>
+      </foo>
+    </foo>
+  </foo>
+</doc>

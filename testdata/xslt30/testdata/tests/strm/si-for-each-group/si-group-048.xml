@@ -1,0 +1,23 @@
+<tbody>
+  <tr>
+    <th rowspan="8" scope="rowgroup">2005DEC</th>  
+    <th scope="row">Blemish on Card</th>
+    
+  </tr>
+  
+  <tr>
+    <th scope="row">Damaged</th>
+    
+  </tr>
+  
+  <tr>
+    <th rowspan="8" scope="rowgroup">2006JAN</th>  
+    <th scope="row">Lost</th>
+    
+  </tr>
+  
+  <tr>
+    <th scope="row">Stolen</th>
+    
+  </tr>
+</tbody>

@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<doc attrib="green"> 
+<?Process fun?>
+<item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
+<item1 attrib="blue"><?Process2 fun?> namespaced</item1>
+</doc>

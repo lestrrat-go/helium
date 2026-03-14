@@ -1,0 +1,7 @@
+<?xml version="1.0"?> 
+<doc xmlns:ext="http://somebody.elses.extension">D
+  <connection xmlns:woo="http://woo.com" a="bad"/>C
+  <section xmlns:foo="http://foo.com" b="bad">S
+    <inner xmlns:whiz="http://whiz.com/special/page"/>I
+  </section>X
+</doc>

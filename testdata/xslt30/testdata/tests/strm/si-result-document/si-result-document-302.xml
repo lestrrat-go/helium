@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <header>
+        <foo id="x:bar" xmlns:x="http://bar.com/">
+            <bar>baz</bar>
+        </foo>
+    </header>
+    <body>
+        <data>1</data>
+        <data>2</data>
+        <data>3</data>
+        <data>4</data>
+        <data>5</data>
+        <data>6</data>
+        <data>7</data>
+        <data>8</data>
+        <data>9</data>
+        <data>10</data>
+    </body>
+</root>

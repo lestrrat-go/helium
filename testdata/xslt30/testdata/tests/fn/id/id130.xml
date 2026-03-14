@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!DOCTYPE tee [
+  <!ELEMENT tee (s*)>
+  <!ELEMENT s (r)>
+  <!ELEMENT r EMPTY>
+  <!ATTLIST s id ID #REQUIRED>
+  <!ATTLIST r size CDATA #REQUIRED>
+]>
+<tee>
+  <s id="a"><r size="20"/></s>
+  <s id="b"><r size="18"/></s>
+  <s id="c"><r size="12"/></s>
+  <s id="d"><r size="19"/></s>
+  <s id="e"><r size="14"/></s>
+</tee>

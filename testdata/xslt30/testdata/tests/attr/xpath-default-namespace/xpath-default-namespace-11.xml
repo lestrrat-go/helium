@@ -1,0 +1,20 @@
+<?xml version="1.0"?> 
+<far-north>
+<north>
+<near-north>
+<far-west/>
+<west/>
+<near-west/>
+<center>
+  <near-south>WentNearSouth
+    <south>WentSouth
+      <far-south>WentFarSouth</far-south>BackToSouth
+    </south>BackToNearSouth
+  </near-south>BackToCentral
+</center>
+<near-east/>
+<east/>
+<far-east/>
+</near-north>
+</north>
+</far-north>

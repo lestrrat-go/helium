@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<ns1:NOTATION-enumeration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://notation.example.com namespaceNotationTest.xsd
+     					 http://test.notation.example.com simpleNamespaceNotation.xsd"
+     xmlns:ns1="http://notation.example.com"
+     xmlns:first="http://notation.example.com"
+     xmlns:two="http://different.notation.example.com">
+     
+	<ns1:NOTATION-element NOTATION-attribute="ns1:mp3" name="a">
+		<ns1:NOTATION-subelement>notation mp3 test1</ns1:NOTATION-subelement>
+	</ns1:NOTATION-element>
+	
+	<ns1:doc xmlns:ns1="http://test.notation.example.com" >
+		<sub filetype="ns1:mp3" notetype="ns1:mp3" name="a">
+			<subinner>notation test1</subinner>
+		</sub>
+	</ns1:doc>
+	
+</ns1:NOTATION-enumeration>

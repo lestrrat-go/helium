@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RootNode>
+    <Groups>
+        <Group>
+            <specifics>
+                <specific>Subgroup1</specific>
+                <specific>Subgroup2</specific>
+            </specifics>
+            <Group_Detail>
+                <GroupIdentifier>G1</GroupIdentifier>
+            </Group_Detail>
+        </Group>
+        <Group>
+            <specifics>
+                <specific>Subgroup3</specific>
+                <specific>Subgroup4</specific>
+            </specifics>
+            <Group_Detail>
+                <GroupIdentifier>G1</GroupIdentifier>
+            </Group_Detail>
+        </Group>
+        <Group>
+            <specifics>
+                <specific>Subgroup1</specific>
+                <specific>Subgroup2</specific>
+            </specifics>
+            <Group_Detail>
+                <GroupIdentifier>G2</GroupIdentifier>
+            </Group_Detail>
+        </Group>
+        <Group>
+            <specifics>
+                <specific>Subgroup5</specific>
+                <specific>Subgroup6</specific>
+            </specifics>
+            <Group_Detail>
+                <GroupIdentifier>G2</GroupIdentifier>
+            </Group_Detail>
+        </Group>
+    </Groups>
+</RootNode>
+
+

@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<docs>
+  <doc1>
+    <a level="1" origin="house">1a1</a>
+    <a level="1" origin="Albany">1a2</a>
+    <doc1supplement>
+      <a level="1" origin="Austin">1xa1</a>
+    </doc1supplement>
+  </doc1>
+  <doc2>
+    <a level="2" origin="Baltimore">2a1</a>
+    <b level="2" origin="Albany">2b1</b>
+    <a level="2" origin="Portland">2a2</a>
+    <a level="2" origin="Albany">2a3</a>
+    <doc2supplement>
+      <a level="3" origin="Chicago">2xa1</a>
+      <a level="3" origin="Albany">2xa2</a>
+      <a level="3" origin="Albany">2xa3</a>
+      <d level="3" origin="Albany">2xd1</d>
+    </doc2supplement>
+  </doc2>
+</docs>

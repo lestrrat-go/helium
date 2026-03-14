@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<doc>
+  <book>
+    <author>
+      <name real="no">Carmelo Montanez</name>
+      <chapters>Nine</chapters>
+      <bibliography></bibliography>
+    </author>
+  </book>
+  <book>
+    <author>
+      <name real="yes">David Marston</name>
+      <chapters>Seven</chapters>
+      <bibliography></bibliography>
+    </author>
+  </book>
+  <book>
+    <author>
+        <name real="yes">Mary Brady</name>
+        <chapters>Ten</chapters>
+        <bibliography>
+        <author>
+          <name>Lynne Rosenthal</name>
+          <chapters>Five</chapters>
+        </author>          
+      </bibliography>
+    </author>
+  </book>
+</doc>

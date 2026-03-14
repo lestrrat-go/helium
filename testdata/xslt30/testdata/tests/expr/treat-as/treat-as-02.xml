@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:userNode xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://www.schematreatas.example.com/ns/integer integerTypesSchemaTreatas.xsd"
+		  xmlns:my="http://www.schematreatas.example.com/ns/integer">
+	
+	<elem-decimal>3.4</elem-decimal>
+</my:userNode>

@@ -1,0 +1,2256 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- Current changes labelled at="I" (2011-04-28) -->
+<fos:functions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://www.w3.org/xpath-functions/spec/namespace ../../xpath-functions-30/src/fos.xsd"
+   xmlns:fos="http://www.w3.org/xpath-functions/spec/namespace">
+   <fos:global-variables>
+      <fos:variable name="po" as="element()">&lt;PurchaseOrder&gt; &lt;line-item&gt;
+         &lt;description&gt;Large widget&lt;/description&gt; &lt;price&gt;8.95&lt;/price&gt;
+         &lt;quantity&gt;5.0&lt;/quantity&gt; &lt;/line-item&gt; &lt;line-item&gt;
+         &lt;description&gt;Small widget&lt;/description&gt; &lt;price&gt;3.99&lt;/price&gt;
+         &lt;quantity&gt;2.0&lt;/quantity&gt; &lt;/line-item&gt; &lt;line-item&gt;
+         &lt;description&gt;Tiny widget&lt;/description&gt; &lt;price&gt;1.49&lt;/price&gt;
+         &lt;quantity&gt;805&lt;/quantity&gt; &lt;/line-item&gt;
+         &lt;/PurchaseOrder&gt;</fos:variable>
+      <fos:variable name="item1" select="$po/line-item[1]"/>
+      <fos:variable name="item2" select="$po/line-item[2]"/>
+      <fos:variable name="item3" select="$po/line-item[3]"/>
+   </fos:global-variables>
+ 
+   <fos:function name="current">
+      <fos:signatures>
+         <fos:proto name="current" return-type="item()"/>
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property>context-dependent</fos:property>
+         <fos:property>focus-dependent</fos:property>
+      </fos:properties>
+      <fos:summary><p>Returns the item that is the context item for the evaluation
+      of the containing XPath expression</p>
+      </fos:summary>
+      <fos:rules>
+
+         <p>The <function>current</function> function, used within an XPath <termref
+            def="dt-expression">expression</termref>, returns the item that was the
+            <termref def="dt-context-item">context item</termref> at the point where the
+            expression was invoked from the XSLT <termref def="dt-stylesheet"
+               >stylesheet</termref>. This is referred to as the current item. For an
+            outermost expression (an expression not occurring within another expression), the
+            current item is always the same as the context item. Thus,</p>
+         <eg xml:space="preserve"><![CDATA[<xsl:value-of select="current()"/>]]></eg>
+         <p>means the same as</p>
+         <eg xml:space="preserve"><![CDATA[<xsl:value-of select="."/>]]></eg>
+         <p>However, within square brackets, or on the right-hand side of the <code>/</code>
+         operator, the current item is generally different from the context item.</p>
+         <p>If the <function>current</function> function is used within a <termref
+            def="dt-pattern">pattern</termref>, its value is the <phrase diff="chg" at="C"
+               >item</phrase> that is being matched against the pattern.</p>
+      </fos:rules>
+      <fos:errors>
+         <p>
+            <error spec="XT" type="dynamic" class="DE" code="1360">
+               <p>If the <function>current</function> function is evaluated within an
+                  expression that is evaluated when the context item is absent, a <termref
+                     def="dt-nonrec-dynamic-error">non-recoverable dynamic error</termref>
+                  occurs.</p>
+            </error>
+         </p>
+         
+      </fos:errors>
+      <fos:examples>
+
+         <fos:example>
+            <p>The instruction:</p>
+            <eg xml:space="preserve"><![CDATA[<xsl:apply-templates select="//glossary/entry[@name=current()/@ref]"/>]]></eg>
+            <p>will process all <code>entry</code> elements that have a <code>glossary</code>
+               parent element and that have a <code>name</code> attribute with value equal to
+               the value of the current item's <code>ref</code> attribute. This is different
+               from</p>
+            <eg xml:space="preserve"><![CDATA[<xsl:apply-templates select="//glossary/entry[@name=./@ref]"/>]]></eg>
+            <p>which means the same as</p>
+            <eg xml:space="preserve"><![CDATA[<xsl:apply-templates select="//glossary/entry[@name=@ref]"/>]]></eg>
+            <p>and so would process all <code>entry</code> elements that have a
+               <code>glossary</code> parent element and that have a <code>name</code>
+               attribute and a <code>ref</code> attribute with the same value.</p>
+         </fos:example>
+         
+      </fos:examples>         
+         
+         
+   </fos:function>
+   
+   
+   <fos:function name="current-group">
+      <fos:signatures>
+         <fos:proto name="current-group" return-type="item()*"></fos:proto>
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property>context-dependent</fos:property>
+         <fos:property>focus-independent</fos:property>
+      </fos:properties>
+      <fos:summary>
+         <p>Returns the group currently being processed by an <elcode>xsl:for-each-group</elcode>
+      <phrase diff="del" at="K">or <elcode>xsl:merge</elcode></phrase> instruction.</p>
+      </fos:summary>
+      <fos:rules>
+         <p>
+            <termdef id="dt-current-group" term="current group">The evaluation context for XPath
+               <termref def="dt-expression">expressions</termref> includes a component called
+               the <term>current group</term>, which is a sequence.</termdef>
+         </p>
+         
+         <p diff="add" at="C">The current group is bound during evaluation of the
+            <elcode>xsl:for-each-group</elcode> instruction. 
+            If no <elcode>xsl:for-each-group</elcode> instruction is being evaluated,
+            the current group will be absent: that is, any reference to it will cause
+            a dynamic error.</p>
+         
+         <p diff="add" at="C">The scope of the current group is dynamic: its value is retained
+            through calls on named templates, template rules, 
+            <phrase diff="del" at="M">functions, </phrase>and attribute sets. <phrase diff="add" at="M">It is cleared (becomes <termref def="dt-absent"/>)
+            during <termref def="dt-non-contextual-function-call">non-contextual function calls</termref>, and
+            during the evaluation of global variables and stylesheet parameters.
+            It is also cleared 
+            during calls on <elcode>xsl:for-each-group</elcode> that use a <code>bind-group</code> attribute.</phrase>
+         </p>
+         
+         <p diff="add" at="C">The function
+            <function>current-group</function> returns the sequence of items making up the
+            current group.</p>
+ 
+         
+      </fos:rules>
+      <fos:errors>
+         <p><error spec="XT" type="static" class="SE" code="1060">
+            <p>It is a <termref def="dt-static-error">static error</termref> if the
+               <function>current-group</function> function is used within a <termref
+                  def="dt-pattern">pattern</termref>.</p>
+         </error></p>
+         <p diff="add" at="K">
+            <error spec="XT" type="dynamic" class="DE" code="1061">
+               <p>It is a <termref def="dt-dynamic-error">dynamic error</termref> if the
+                  <function>current-group</function> function is used when the
+                  current group is <termref def="dt-absent">absent</termref>. The error
+               <rfc2119>may</rfc2119> be reported statically if it can be detected statically.</p>
+            </error>
+         </p>
+      </fos:errors>
+      <fos:notes>
+         <p diff="add" at="I">The function is classified as 
+            <xtermref ref="dt-focus-dependent" spec="FO30">focus-dependent</xtermref>, 
+            which means that it cannot
+         be used with higher-order functions. Specifically, <code>current-group#0</code> will not be
+         recognized as a function literal.</p>
+         
+      </fos:notes>
+   </fos:function>
+   
+   <fos:function name="current-grouping-key">
+      <fos:signatures>
+         <fos:proto name="current-grouping-key" return-type="xs:anyAtomicType*"/>
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property>context-dependent</fos:property>
+         <fos:property>focus-independent</fos:property>
+      </fos:properties>
+      <fos:summary><p>Returns the grouping key of the group currently being processed using
+      the <elcode>xsl:for-each-group</elcode> <phrase diff="del" at="K">or <elcode>xsl:merge</elcode></phrase> instruction.</p></fos:summary>
+      <fos:rules>
+         <p>
+            <termdef id="dt-current-grouping-key" term="current grouping key">The evaluation
+               context for XPath <termref def="dt-expression">expressions</termref> includes a
+               component called the <term>current grouping key</term>, which is <phrase
+                  diff="chg" at="C">a sequence of atomic values</phrase>. The current grouping key
+               is the <termref def="dt-grouping-key">grouping key</termref> shared in common by
+               all the items within the <termref def="dt-current-group">current
+                  group</termref>.</termdef>
+         </p>
+         
+         <p diff="add" at="C">The current grouping key is bound during evaluation of the
+            <elcode>xsl:for-each-group</elcode> instruction<phrase diff="del" at="K"> and during evaluation of the
+            <elcode>xsl:merge</elcode> instruction</phrase>. If <phrase>no <elcode>xsl:for-each-group</elcode> instruction 
+               is being evaluated, the current grouping key will be absent, which means that
+               any reference to it causes a dynamic error.</phrase></p>
+         
+         <p diff="add" at="M">The scope of the current grouping key is dynamic: its value is retained
+            through calls on named templates, template rules, 
+            and attribute sets. It is cleared (becomes <termref def="dt-absent"/>)
+               during <termref def="dt-non-contextual-function-call">non-contextual function calls</termref>, and
+               during the evaluation of global variables and stylesheet parameters. It is also cleared 
+            during calls on <elcode>xsl:for-each-group</elcode> that use a <code>group-starting-with</code>
+            or <code>group-ending-with</code> or <code>bind-grouping-key</code> attribute.
+         </p>
+         
+         <p>While an <elcode>xsl:for-each-group</elcode> instruction with a <code>group-by</code>
+            or <code>group-adjacent</code> attribute is being evaluated, the <termref
+               def="dt-current-grouping-key">current grouping key</termref> will be a single
+            atomic value <phrase diff="add" at="G">if <code>composite="no"</code> is specified (explicitly or implicitly), 
+               or a sequence of atomic
+               values if <code>composite="yes"</code> is specified.</phrase> </p>
+         
+         <p diff="del" at="K">While the <elcode>xsl:merge-action</elcode> part of an
+            <elcode>xsl:merge</elcode> instruction is being evaluated, the current grouping
+            key will be a sequence of atomic values, one for each component of the grouping key,
+            as defined by the <elcode>xsl:merge-key</elcode> elements.</p>
+         
+         <p>At other times, the current grouping key will be <termref def="dt-absent">absent</termref>.</p>
+         
+         
+         <p>The function <function>current-grouping-key</function> returns the <termref
+            def="dt-current-grouping-key">current grouping key</termref>.</p>
+         <p><phrase diff="chg" at="D">The <termref def="dt-grouping-key">grouping keys</termref>
+            of all items in a group are not necessarily identical. For example, one might be
+            an <code>xs:float</code> while another is a numerically equal
+            <code>xs:decimal</code></phrase>. The <function>current-grouping-key</function>
+            function <phrase diff="chg" at="F">returns</phrase> the grouping key of the <termref def="dt-initial-item"
+               >initial item</termref> in the group, after atomization and casting of
+            <code>xs:untypedAtomic</code> values to <code>xs:string</code>.</p>
+         
+         <p>The function takes no arguments.</p>         
+         
+         
+      </fos:rules>
+      <fos:errors>
+         <p>
+            <error spec="XT" type="static" class="SE" code="1070">
+               <p>It is a <termref def="dt-static-error">static error</termref> if the
+                  <function>current-grouping-key</function> function is used within a <termref
+                     def="dt-pattern">pattern</termref>.</p>
+            </error>
+         </p>
+         <p diff="add" at="K">
+            <error spec="XT" type="dynamic" class="DE" code="1071">
+               <p>It is a <termref def="dt-dynamic-error">dynamic error</termref> if the
+                  <function>current-grouping-key</function> function is used when the
+                  current grouping key is <termref def="dt-absent">absent</termref>.
+               The error <rfc2119>may</rfc2119> be reported statically if it can be detected statically.</p>
+            </error>
+         </p>
+      </fos:errors>
+      <fos:notes>
+         <p diff="add" at="K">The function is classified as 
+            <xtermref ref="dt-focus-dependent" spec="FO30">focus-dependent</xtermref>, 
+            which means that it cannot
+            be used with higher-order functions. Specifically, <code>current-grouping-key#0</code> will not be
+            recognized as a function literal.</p>
+      </fos:notes>
+   </fos:function>
+   
+   <fos:function name="regex-group">
+      <fos:signatures>
+         <fos:proto name="regex-group" return-type="xs:string">
+            <fos:arg name="group-number" type="xs:integer"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property>context-dependent</fos:property>
+         <fos:property>focus-independent</fos:property>
+      </fos:properties>
+      <fos:summary><p>Returns the string captured by a parenthesized subexpression of the
+      regular expression used during evaluation of the <elcode>xsl:analyze-string</elcode>
+      instruction.</p></fos:summary>
+      <fos:rules>
+         <p>
+            <termdef id="dt-current-captured-substrings" term="current captured substrings">While
+               the <elcode>xsl:matching-substring</elcode> instruction is active, a set of
+               <term>current captured substrings</term> is available, corresponding to the
+               parenthesized sub-expressions of the regular expression.</termdef> These captured
+            substrings are accessible using the function <function>regex-group</function>. This
+            function takes an integer argument to identify the group, and returns a string
+            representing the captured substring.</p>
+         <p>The <var>N</var>th captured substring (where <var>N</var> &gt; 0) is the string
+            matched by the subexpression contained by the <var>N</var>th left parenthesis in the
+            regex, <phrase diff="add" at="C">excluding any non-capturing groups, which are
+               written as <code>(?:xxx)</code></phrase>. The zeroeth captured substring is the
+            string that matches the entire regex. This means that the value of
+            <code>regex-group(0)</code> is initially the same as the value of <code>.</code>
+            (dot).</p>
+         <p>The function returns the zero-length string if there is no captured substring with
+            the relevant number. This can occur for a number of reasons:</p>
+         <olist>
+            <item>
+               <p>The number is negative.</p>
+            </item>
+            <item>
+               <p>The regular expression does not contain a parenthesized sub-expression with the
+                  given number.</p>
+            </item>
+            <item>
+               <p>The parenthesized sub-expression exists, and did not match any part of the
+                  input string.</p>
+            </item>
+            <item>
+               <p>The parenthesized sub-expression exists, and matched a zero-length substring of
+                  the input string.</p>
+            </item>
+         </olist>
+         <p>The set of captured substrings is a context variable with dynamic scope. It is
+            initially an empty sequence. During the evaluation of an
+            <elcode>xsl:matching-substring</elcode> instruction it is set to the sequence of
+            matched substrings for that regex match. During the evaluation of an
+            <elcode>xsl:non-matching-substring</elcode> instruction or a <termref
+               def="dt-pattern">pattern</termref> or a <termref def="dt-stylesheet-function"
+                  >stylesheet function</termref> it is set to an empty sequence. On completion of an
+            instruction that changes the value, the variable reverts to its previous value.</p>
+         <p>The value of the <termref def="dt-current-captured-substrings">current captured
+            substrings</termref> is unaffected through calls of
+            <elcode>xsl:apply-templates</elcode>, <elcode>xsl:call-template</elcode>,
+            <elcode>xsl:apply-imports</elcode> or <elcode>xsl:next-match</elcode>, or by
+            expansion of named <termref def="dt-attribute-set">attribute sets</termref>.</p>         
+         
+      </fos:rules>
+   </fos:function>
+
+   <fos:function name="copy-of">
+      <fos:signatures>
+         <fos:proto name="copy-of" return-type="node()"></fos:proto>
+         <fos:proto name="copy-of" return-type="node()?">
+            <fos:arg name="node" type="node()?"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties arity="0">
+         <fos:property>nondeterministic</fos:property>
+         <fos:property>focus-dependent</fos:property>
+         <fos:property>context-independent</fos:property>
+      </fos:properties>
+      <fos:properties arity="1">
+         <fos:property>nondeterministic</fos:property>
+         <fos:property>focus-independent</fos:property>
+         <fos:property>context-independent</fos:property>
+      </fos:properties>
+      <fos:summary><p>Returns a deep copy of the node supplied as the <code>$node</code>
+      argument, or the context node if the argument is absent.</p></fos:summary>
+      <fos:rules>
+          
+         <p>The zero-argument form of this function has the same effect as calling
+            <code>copy-of(.)</code>, that is, supplying the context item as an implicit
+            argument.</p>
+         <p>The function returns a deep copy of the node supplied as the argument
+            <code>$node</code>. If the argument is an empty sequence, the function returns an
+            empty sequence. The effect is the same as that of the <elcode>xsl:copy-of</elcode>
+            instruction with <code>copy-namespaces</code> set to <code>yes</code> and
+            <code>validation</code> set to <code>preserve</code>.</p>
+         <p>If the function is called more than once with the same argument, it is <termref
+            def="dt-implementation-dependent">implementation-dependent</termref> whether each
+            call returns the same node, or whether multiple calls return different nodes. That
+            is, the result of the expression <code>copy-of($X) is copy-of($X)</code> is <termref
+               def="dt-implementation-dependent">implementation-dependent</termref>.</p>
+         <p>The <function>copy-of</function> function is available for use (and is primarily
+            intended for use) when a source document is processed using streaming. It can also be
+            used when not streaming. The effect is to take a copy of the subtree rooted at the
+            current node, and to make this available as a normal tree, that can be processed
+            without any of the restrictions that apply while streaming, for example only being
+            able to process children once. The copy, of course, does not include siblings or
+            ancestors of the context node, so any attempt to navigate to siblings or ancestors
+            will result in an empty sequence being returned.</p>
+      </fos:rules>
+      <fos:examples>
+         <fos:example>
+            <p>Using <code>copy-of()</code> while streaming:</p>
+            <p>This example copies from the source document all employees who work in marketing
+               and are based in Dubai. Because there are two accesses using the child axis, it is
+               not possible to do this without buffering each employee in memory, which can be
+               achieved using the <function>copy-of</function> function.</p>
+            <eg xml:space="preserve"><![CDATA[<xsl:source-document streamable="true" href="employees.xml">
+  <xsl:sequence select="employees/employee/copy-of()
+                          [department='Marketing' and location='Dubai']"/>
+</xsl:source-document>]]></eg>
+         </fos:example>
+      </fos:examples>   
+      
+   </fos:function>
+   
+   <fos:function name="snapshot">
+      <fos:signatures>
+         <fos:proto name="snapshot" return-type="node()"/>
+         <fos:proto name="snapshot" return-type="node()?">
+            <fos:arg name="node" type="node()?"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties arity="0">
+         <fos:property>nondeterministic</fos:property>
+         <fos:property>focus-dependent</fos:property>
+         <fos:property>context-independent</fos:property>
+      </fos:properties>
+      <fos:properties arity="1">
+         <fos:property>nondeterministic</fos:property>
+         <fos:property>focus-independent</fos:property>
+         <fos:property>context-independent</fos:property>
+      </fos:properties>
+      <fos:summary><p>Returns a copy of a node together with its ancestors and descendants
+      and their attributes and namespaces.</p></fos:summary>
+      <fos:rules>
+         
+         
+         <p>The zero-argument form of this function has the same effect as calling
+            <code>snapshot(.)</code>, that is, supplying the context item as an implicit
+            argument.</p>
+         <p>The function returns a <termref def="dt-snapshot">snapshot</termref> of the node
+            supplied as the argument <code>$node</code>. If the argument is an empty sequence,
+            the function returns an empty sequence.</p>
+         <p>If the function is called more than once with the same argument, it is <termref
+            def="dt-implementation-dependent">implementation-dependent</termref> whether each
+            call returns the same node, or whether multiple calls return different nodes. That
+            is, the result of the expression <code>snapshot($X) is snapshot($X)</code> is
+            <termref def="dt-implementation-dependent">implementation-dependent</termref>.</p>
+         <p>
+            <termdef id="dt-snapshot" term="snapshot">A <term>snapshot</term> of a
+               node <var>N</var> is a deep copy of <var>N</var>, as produced by the
+               <elcode>xsl:copy-of</elcode> instruction with <code>copy-namespaces</code> set
+               to <code>yes</code> and <code>validation</code> set to <code>preserve</code>, with
+               the additional property that for every ancestor of <var>N</var>, the copy also has
+               a corresponding ancestor whose name, node-kind, and base URI are the same as the
+               corresponding ancestor of <var>N</var>, and that has copies of the attributes and
+               namespaces of the corresponding ancestor of <var>N</var>. But the ancestor has a
+               type annotation of <code>xs:anyType</code>, has the properties
+               <code>nilled</code>, <code>is-id</code>, and <code>is-idref</code> set to false,
+               and has no children other than the child that is a copy of <var>N</var> or one of
+               its ancestors.</termdef>
+         </p>
+         <p>More formally, a <termref def="dt-snapshot">snapshot</termref> of a node is the
+            result of the following function.</p>
+         <eg xml:space="preserve"><![CDATA[<xsl:function name="fn:snapshot" as="node()?">
+  <xsl:param name="origin" as="node()?"/>
+  
+  <!-- create a copy of the tree containing the supplied node, retaining only
+       * the supplied node with its attributes and namespaces
+       * the ancestors of the supplied node with their attributes and namespaces
+       * the descendants of the supplied node with their attributes and namespaces
+       -->
+  <xsl:variable name="root-copy" as="node()">
+    <xsl:apply-templates select="root($origin)" mode="snapshot">
+      <xsl:with-param name="origin" select="$origin" tunnel="yes"/>
+    </xsl:apply-templates>
+  </xsl:variable>
+  
+  <!-- find and return the node in the copied tree that corresponds to the origin node
+       --> 
+  <xsl:sequence select="($root-copy/descendant-or-self::node()/(.|@*|namespace::*)
+      [f:corresponds(., $origin)]"/>
+</xsl:function>
+
+<xsl:template match="node()" mode="snapshot">
+  <xsl:param name="origin" as="node()" tunnel="yes"/>
+  <xsl:choose>
+    <xsl:when test=". is $origin">
+      <xsl:copy-of select="." validation="preserve"/>
+    </xsl:when>
+    <xsl:when test=". intersect $origin/ancestor::node()">
+      <xsl:copy validation="strip">
+        <xsl:copy-of select="@*" validation="preserve"/>
+        <xsl:apply-templates mode="snapshot"/>
+      </xsl:copy>
+    </xsl:when>
+    <xsl:otherwise/>
+  </xsl:choose>
+</xsl:template>
+
+<!-- f:corresponds compares two nodes and returns true if all the following are true:
+     * they are at the same depth in their respective trees
+     * they have the same name (or none)
+     * they have the same node kind
+     The tests on node name and node kind are needed only when the origin node is an
+     attribute or namespace.
+     -->
+<xsl:function name="f:corresponds" as="xs:boolean">
+  <xsl:param name="node1" as="node()"/>
+  <xsl:param name="node2" as="node()"/>
+  <xsl:sequence select="
+    count($node1/ancestor::node()) = count($node2/ancestor::node()) and
+    deep-equal(node-name($node1), node-name($node2)) and
+    f:node-kind($node1) = f:node-kind($node2)"/>    
+</xsl:function>
+
+<!-- f:node-kind returns a string identifying the node kind of the supplied node
+     -->
+<xsl:function name="f:node-kind" as="xs:string">
+  <xsl:param name="node" as="node()"/>
+  <xsl:choose>
+    <xsl:when test="$node instance of document-node()">D</xsl:when>
+    <xsl:when test="$node instance of element(*)">E</xsl:when>
+    <xsl:when test="$node instance of attribute(*)">A</xsl:when>
+    <xsl:when test="$node instance of text()">T</xsl:when>
+    <xsl:when test="$node instance of comment()">C</xsl:when>
+    <xsl:when test="$node instance of processing-instruction()">P</xsl:when>
+    <xsl:when test="$node instance of namespace-node()">N</xsl:when>
+  </xsl:choose>
+</xsl:function>
+ 
+]]></eg>
+         
+         <p>The <function>snapshot</function> function is available for use (and is primarily
+            intended for use) when a source document is processed using streaming. It can also be
+            used when not streaming. The effect is to take a copy of the subtree rooted at the
+            current node, along with copies of the ancestors and their attributes, and to make
+            this available as a normal tree, that can be processed without any of the
+            restrictions that apply while streaming, for example only being able to process
+            children once. The copy, of course, does not include siblings of the context node or
+            of its ancestors, so any attempt to navigate to these siblings will result in an
+            empty sequence being returned.</p>
+      </fos:rules>
+      <fos:examples>
+         <fos:example>
+            <p>Using <code>snapshot()</code> while streaming:</p>
+            <p>This example copies from the source document all employees who work in marketing
+               and are based in Dubai. It assumes that employees are grouped by location. Because
+               there are two accesses using the child axis (referencing <code>department</code>
+               and <code>salary</code>), it is not possible to do this without buffering each
+               employee in memory. The <function>snapshot</function> function is used in
+               preference to the simpler <function>copy-of</function> so that access to
+               attributes of the parent <code>location</code> element remains possible.</p>
+            <eg xml:space="preserve"><![CDATA[<xsl:source-document streamable="true" href="employees.xml">
+  <xsl:for-each select="locations/location[@name='Dubai']
+                          /employee/snapshot()[department='Marketing']">
+    <employee>
+      <location code="{../@code}"/>
+      <salary value="{salary}"/>
+    </employee>
+  </xsl:for-each>
+</xsl:source-document>]]></eg>
+         </fos:example>
+      </fos:examples>
+   </fos:function>
+   
+   
+   
+   
+ 
+   
+   <fos:function name="document">
+      <fos:signatures>
+         <fos:proto name="document" return-type="node()*">
+            <fos:arg name="uri-sequence" type="item()*"/>
+         </fos:proto>
+         <fos:proto name="document" return-type="node()*">
+            <fos:arg name="uri-sequence" type="item()*"/>
+            <fos:arg name="base-node" type="node()"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties arity="1">
+         <fos:property>deterministic</fos:property>
+         <fos:property>focus-independent</fos:property>
+         <fos:property dependency="static-base-uri">context-dependent</fos:property>
+      </fos:properties>
+      <fos:properties arity="2">
+         <fos:property>deterministic</fos:property>
+         <fos:property>focus-independent</fos:property>
+         <fos:property>context-independent</fos:property>
+      </fos:properties>
+      <fos:summary>
+         <p>Provides access to XML documents identified by a URI.</p>
+      </fos:summary>
+      <fos:rules>
+         <p>The <function>document</function> function allows access to XML documents
+            identified by a URI.</p>
+         <p>The first argument contains a sequence of URI references. The second argument, if
+            present, is a node whose base URI is used to resolve any relative URI references
+            contained in the first argument.</p>
+         <p>A sequence of absolute URI references is obtained as follows.</p>
+         <ulist>
+            <item>
+               <p>For an item in <code>$uri-sequence</code> that is an instance of
+                  <code>xs:string</code>, <code>xs:anyURI</code>, or
+                  <code>xs:untypedAtomic</code>, the value is cast to
+                  <code>xs:anyURI</code>. If the resulting URI reference is an absolute URI
+                  reference then it is used <emph>as is</emph>. If it is a relative URI
+                  reference, then it is resolved against the base URI of
+                  <code>$base-node</code> if supplied, or against the base URI from the
+                  static context otherwise (this will usually be the base URI of the
+                  stylesheet module). A relative URI <phrase diff="add" at="F">reference</phrase> is resolved against a base URI using the
+                  rules defined in <bibref ref="RFC3986"/>.</p>
+            </item>
+            <item>
+               <p>For an item in <code>$uri-sequence</code> that is a node, the node is
+                  <termref def="dt-atomization">atomized</termref>. The result
+                  <rfc2119>must</rfc2119> be a sequence whose items are all instances of
+                  <code>xs:string</code>, <code>xs:anyURI</code>, or
+                  <code>xs:untypedAtomic</code>. Each of these values is cast to
+                  <code>xs:anyURI</code>, and if the resulting URI reference is an absolute
+                  URI reference then it is used <emph>as is</emph>. If it is a relative URI
+                  reference, then it is resolved against the base URI of
+                  <code>$base-node</code> if supplied, or against the base URI of the node
+                  that contained it otherwise.</p>
+            </item>
+         </ulist>
+ 
+         <p>Each of these absolute URI references is then processed as follows. Any fragment
+            identifier that is present in the URI reference is removed, and the resulting
+            absolute URI is cast to a string and then passed to the <xfunction>doc</xfunction>
+            function defined in <bibref ref="xpath-functions-30"/>. This returns a document node.
+            If an error occurs during evaluation of the <xfunction>doc</xfunction> function,
+            the processor <rfc2119>may</rfc2119> either signal this error in the normal way,
+            or <rfc2119>may</rfc2119> recover by ignoring the failure, in which case the
+            failing URI will not contribute any nodes to the result of the
+            <function>document</function> function.</p>
+         <p>If the URI reference contained no fragment identifier, then this document node is
+            included in the sequence of nodes returned by the <function>document</function>
+            function.</p>
+         <p>If the URI reference contained a fragment identifier, then the fragment identifier
+            is interpreted according to the rules for the media type of the resource
+            representation identified by the URI, and is used to select zero or more nodes
+            that are descendant-or-self nodes of the returned document node. As described in
+            <specref ref="initiating"/>, the media type is available as part of the
+            evaluation context for a transformation.</p>
+         
+         
+         <p>The sequence of nodes returned by the function is in document order, with no
+            duplicates. This order has no necessary relationship to the order in which URIs
+            were supplied in the <code>$uri-sequence</code> argument.</p>
+         
+      </fos:rules>
+      <fos:errors>
+         <p>
+            <error spec="XT" type="dynamic" class="RE" code="1160">
+               <p>When a URI reference <error.extra>supplied to the
+                  <function>document</function> function</error.extra> contains a
+                  fragment identifier, it is a <termref def="dt-recoverable-error">recoverable
+                     dynamic error</termref> if the media type is not one that is recognized
+                  by the processor, or if the fragment identifier does not conform to the
+                  rules for fragment identifiers for that media type, or if the fragment
+                  identifier selects something other than a sequence of nodes (for example, if
+                  it selects a range of characters within a text node). <error.action>The
+                     <termref def="dt-optional-recovery-action">optional recovery
+                        action</termref> is to ignore the fragment identifier and return the
+                     document node.</error.action>
+               </p>
+            </error> The set of media types recognized by a processor is <termref
+               def="dt-implementation-defined">implementation-defined</termref>.</p>
+         <imp-def-feature>The set of media types recognized by the processor, for the purpose
+            of interpreting fragment identifiers in URI references passed to the
+            <function>document</function> function, is
+            implementation-defined.</imp-def-feature>
+         <p diff="add" at="G"><!-- bug 10109 -->
+            <error spec="XT" type="dynamic" class="DE" code="1162">
+               <p>When a URI reference <error.extra>supplied to the
+                  <function>document</function> function</error.extra> is a relative reference, 
+                  it is a <termref def="dt-dynamic-error">dynamic error</termref> 
+                  if no base URI is available to resolve the relative reference. This can arise
+                  for example when the URI is contained in a node that has no base URI (for example a parentless
+                  text node), or when the second argument to the function is a node that has no
+                  base URI, or when the base URI from the static context is undefined.
+               </p>
+            </error></p>
+      </fos:errors>
+      <fos:notes>
+         
+            <p>One effect of these rules is that unless XML entities or <code>xml:base</code>
+               are used, and provided that the base URI of the stylesheet module is known,
+               <code>document("")</code> refers to the document node of the containing
+               stylesheet module (the definitive rules are in <bibref ref="RFC3986"/>). The
+               XML resource containing the stylesheet module is processed exactly as if it
+               were any other XML document, for example there is no special recognition of
+               <elcode>xsl:text</elcode> elements, and no special treatment of comments and
+               processing instructions.</p>
+         
+         <p>The XPath rules for function calling ensure that it is a type error if the
+            supplied value of the second argument is anything other than a single node. If
+            <termref def="dt-xpath-compat-mode">XPath 1.0 compatibility mode</termref>
+            is enabled, then a sequence of nodes may be supplied, and the first node in the
+            sequence will be used.</p>
+         
+      </fos:notes>
+   </fos:function>
+   
+   <fos:function name="unparsed-entity-uri">
+      <fos:signatures>
+         <fos:proto name="unparsed-entity-uri" return-type="xs:anyURI">
+            <fos:arg name="entity-name" type="xs:string"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property>focus-dependent</fos:property>
+         <fos:property>context-dependent</fos:property>
+      </fos:properties>
+      <fos:summary><p>Returns the URI (system identifier) of an unparsed entity</p></fos:summary>
+      <fos:rules>
+         <p>The <function>unparsed-entity-uri</function> function returns the URI of the
+            unparsed entity whose name is given by the value of the <code>$entity-name</code>
+            argument, in the document containing the <termref def="dt-context-node">context
+               node</termref>. It returns the zero-length <code>xs:anyURI</code> if there is
+            no such entity. This function maps to the
+            <code>dm:unparsed-entity-system-id</code> accessor defined in <bibref
+               ref="xpath-datamodel-30"/>.</p>
+         
+      </fos:rules>
+      <fos:errors>
+         <p>
+            <error spec="XT" type="dynamic" class="DE" code="1370">
+               <p>It is a <termref def="dt-nonrec-dynamic-error">non-recoverable dynamic
+                  error</termref> if the <function>unparsed-entity-uri</function> function
+                  is called when there is no <termref def="dt-context-node">context
+                     node</termref>, or when the root of the tree containing the context node
+                  is not a document node.</p>
+            </error>
+         </p>
+      </fos:errors>
+   </fos:function>
+   
+   <fos:function name="unparsed-entity-public-id">
+      <fos:signatures>
+         <fos:proto name="unparsed-entity-public-id" return-type="xs:anyURI">
+            <fos:arg name="entity-name" type="xs:string"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property>focus-dependent</fos:property>
+         <fos:property>context-dependent</fos:property>
+      </fos:properties>
+      <fos:summary><p>Returns the public identifier of an unparsed entity</p></fos:summary>
+      <fos:rules>
+         <p>The <function>unparsed-entity-public-id</function> function returns the public
+            identifier of the unparsed entity whose name is given by the value of the
+            <code>$entity-name</code> argument, in the document containing the <termref
+               def="dt-context-node">context node</termref>. It returns the zero-length string
+            if there is no such entity, or if the entity has no public identifier. This
+            function maps to the <code>dm:unparsed-entity-public-id</code> accessor defined in
+            <bibref ref="xpath-datamodel-30"/>.</p>
+         
+      </fos:rules>
+      <fos:errors>
+         <p>
+            <error spec="XT" type="dynamic" class="DE" code="1380">
+               <p>It is a <termref def="dt-nonrec-dynamic-error">non-recoverable dynamic
+                  error</termref> if the <function>unparsed-entity-public-id</function>
+                  function is called when there is no <termref def="dt-context-node">context
+                     node</termref>, or when the root of the tree containing the context node
+                  is not a document node.</p>
+            </error>
+         </p>
+      </fos:errors>
+   </fos:function>
+   
+   
+   <fos:function name="key">
+      <fos:signatures>
+         <fos:proto name="key" return-type="node()*">
+            <fos:arg name="key-name" type="xs:string"/>
+            <fos:arg name="key-value" type="xs:anyAtomicType*"/>
+         </fos:proto>
+         <fos:proto name="key" return-type="node()*">
+            <fos:arg name="key-name" type="xs:string"/>
+            <fos:arg name="key-value" type="xs:anyAtomicType*"/>
+            <fos:arg name="top" type="node()"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties arity="2">
+         <fos:property>deterministic</fos:property>
+         <fos:property>focus-dependent</fos:property>
+         <fos:property>context-dependent</fos:property>
+      </fos:properties>
+      <fos:properties arity="3">
+         <fos:property>deterministic</fos:property>
+         <fos:property>focus-independent</fos:property>
+         <fos:property>context-dependent</fos:property>
+      </fos:properties>
+      <fos:summary>
+         <p>Returns the nodes that match a supplied key value.</p>
+      </fos:summary>
+      <fos:rules>
+         <p>The <function>key</function> function does for keys what the <phrase diff="chg"
+            at="D"><xfunction>element-with-id</xfunction></phrase> function does for
+            IDs.</p>
+         <p>The <code>$key-name</code> argument specifies the name of the <termref
+            def="dt-key">key</termref>. The value of the argument <rfc2119>must</rfc2119>
+            be a <termref def="dt-lexical-qname">lexical QName</termref>, which is expanded as
+            described in <specref ref="qname"/>.</p>
+         
+         <p>The <code>$key-value</code> argument to the <function>key</function> function is
+            considered as a sequence. <phrase diff="add" at="G">The effect depends on the
+               value of the <code>composite</code> attribute of the corresponding <code>xsl:key</code>
+               declaration.</phrase></p>
+         
+         <ulist>
+            <item><p><phrase  diff="add" at="G">If <code>composite</code> is <code>no</code> or absent,</phrase>
+               the set of requested key values is formed by atomizing
+               the supplied value of the argument, using the standard <termref
+                  def="dt-function-conversion-rules">function conversion rules</termref>. Each of
+               the resulting atomic values is considered as a requested key value. The result of
+               the function is a sequence of nodes, in document order and with duplicates
+               removed, comprising those nodes in the selected subtree (see below) that are
+               matched by an <elcode>xsl:key</elcode> declaration whose name is the same as the
+               supplied key name, where the result of evaluating the <termref
+                  def="dt-key-specifier">key specifier</termref> contains a value that is equal
+               to one of these requested key values, under the rules appropriate to the XPath
+               <code>eq</code> operator for the two values in question, using the
+               <code>collation</code> attributes of the <elcode>xsl:key</elcode> declaration
+               when comparing strings. No error is reported if two values are encountered that
+               are not comparable; they are regarded for the purposes of this function as being
+               not equal. </p>
+               <p>If the second argument is an empty sequence, the result of the function will be an
+                  empty sequence.</p></item>
+            <item><p diff="add" at="G">If <code>composite</code> is <code>yes</code>,
+               the requested key value is the sequence formed by atomizing
+               the supplied value of the argument, using the standard <termref
+                  def="dt-function-conversion-rules">function conversion rules</termref>. The result of
+               the function is a sequence of nodes, in document order and with duplicates
+               removed, comprising those nodes in the selected subtree (see below) that are
+               matched by an <elcode>xsl:key</elcode> declaration whose name is the same as the
+               supplied key name, where the result of evaluating the <termref
+                  def="dt-key-specifier">key specifier</termref> is deep-equal
+               to the requested key value, under the rules appropriate to the <xfunction>deep-equal</xfunction>
+               function applied to the two values in question, using the
+               <code>collation</code> attributes of the <elcode>xsl:key</elcode> declaration
+               when comparing strings. Note that the <xfunction>deep-equal</xfunction>
+               function reports no error if two values are encountered that
+               are not comparable; they are regarded for the purposes of this function as being
+               not equal.</p>
+               <p diff="add" at="G">If the second argument is an empty sequence, the result of the function will be the
+                  set of nodes having an empty sequence as the value of the key specifier.</p></item>
+         </ulist>
+         
+         
+         <p>Different rules apply when <phrase diff="chg" at="D"><termref
+            def="dt-xslt-10-behavior">XSLT 1.0 compatible behavior</termref> is enabled.
+            Specifically, if any of the <elcode>xsl:key</elcode> elements in the definition
+            of the <termref def="dt-key">key</termref> is processed with XSLT 1.0
+            behavior</phrase>, <phrase diff="chg" at="G">and if the effective value of the <code>composite</code>
+               attribute is <code>no</code>,</phrase> then the value of the <termref def="dt-key-specifier">key
+                  specifier</termref> and the value of the second argument of the
+            <function>key</function> function are both converted after atomization to a
+            sequence of strings, by applying a cast to each item in the sequence, before
+            performing the comparison.</p>
+         <p>The third argument is used to identify the selected subtree. If the argument is
+            present, the selected subtree is the set of nodes that have <var>$top</var> as an
+            ancestor-or-self node. If the argument is omitted, the selected subtree is the
+            document containing the context node. This means that the third argument
+            effectively defaults to <code>/</code>.</p>
+         
+         <p>The result of the <function>key</function> function can be described more
+            specifically as follows. The result is a sequence containing every node
+            <var>$N</var> that satisfies the following conditions:</p>
+         <ulist>
+            <item>
+               <p>
+                  <code>$N/ancestor-or-self::node() intersect $top</code> is non-empty. (If
+                  the third argument is omitted, <code>$top</code> defaults to
+                  <code>/</code>)</p>
+            </item>
+            <item>
+               <p>
+                  <var>$N</var> matches the pattern specified in the <code>match</code>
+                  attribute of an <elcode>xsl:key</elcode> declaration whose <code>name</code>
+                  attribute matches the name specified in the <code>$key-name</code>
+                  argument.</p>
+            </item>
+            <item>
+               <p><phrase diff="add" at="G">When <code>composite="no"</code>, </phrase>
+                  and the <termref def="dt-key-specifier">key specifier</termref> of that
+                  <elcode>xsl:key</elcode> declaration is evaluated with a <termref
+                     def="dt-singleton-focus">singleton focus</termref> based on
+                  <var>$N</var>, the <termref def="dt-atomization">atomized</termref> value of
+                  the resulting sequence includes a value that compares equal to at least one
+                  item in the atomized value of the sequence supplied as
+                  <code>$key-value</code>, under the rules of the <code>eq</code> operator
+                  with the collation selected as described above.</p>
+               <p><phrase diff="add" at="G">When <code>composite="yes"</code>, </phrase>
+                  and the <termref def="dt-key-specifier">key specifier</termref> of that
+                  <elcode>xsl:key</elcode> declaration is evaluated with a <termref
+                     def="dt-singleton-focus">singleton focus</termref> based on
+                  <var>$N</var>, the <termref def="dt-atomization">atomized</termref> value of
+                  the resulting sequence compares equal to the atomized value of the sequence supplied as
+                  <code>$key-value</code>, under the rules of the <xfunction>deep-equal</xfunction> function
+                  with the collation selected as described above.</p>
+            </item>
+         </ulist>
+         <p>The sequence returned by the <function>key</function> function will be in document
+         order, with duplicates (that is, nodes having the same identity) removed. </p>
+      </fos:rules>
+      <fos:errors>
+         <p>
+            <error spec="XT" type="dynamic" class="DE" code="1260">
+               <p>It is a <termref def="dt-nonrec-dynamic-error">non-recoverable dynamic
+                  error</termref> if the value <error.extra>of the first argument to the
+                     <function>key</function> function</error.extra> is not a valid QName,
+                  or if there is no namespace declaration in scope for the prefix of the
+                  QName, or if the name obtained by expanding the QName is not the same as the
+                  expanded name of any <elcode>xsl:key</elcode> declaration in the 
+                  <phrase diff="chg" at="I">containing <termref
+                     def="dt-package">package</termref></phrase>. If the processor is able to
+                  detect the error statically (for example, when the argument is supplied as a
+                  string literal), then the processor <rfc2119>may</rfc2119> optionally signal
+                  this as a <termref def="dt-static-error">static error</termref>.</p>
+            </error>
+         </p>
+         <p>
+            <error spec="XT" type="dynamic" class="DE" code="1270">
+               <p>It is a <termref def="dt-nonrec-dynamic-error">non-recoverable dynamic
+                  error</termref> to call the <function>key</function> function with two
+                  arguments if there is no <termref def="dt-context-node">context
+                     node</termref>, or if the root of the tree containing the context node is
+                  not a document node; or to call the function with three arguments if the
+                  root of the tree containing the node supplied in the third argument is not a
+                  document node.</p>
+            </error>
+         </p>
+      </fos:errors>
+      <fos:notes>
+         
+            <p>Untyped atomic values are
+               converted to strings, not to the type of the other operand. This means, for
+               example, that if the expression in the <code>use</code> attribute returns a
+               date, supplying an untyped atomic value in the call to the
+               <function>key</function> function will return an empty sequence.</p>
+         
+      </fos:notes>
+      <fos:examples>    
+         <fos:example>
+            <example>
+            <head>Using a Key to Follow Cross-References</head>
+            <p>Given a declaration</p>
+            <eg xml:space="preserve"><![CDATA[<xsl:key name="idkey" match="div" use="@id"/>]]></eg>
+            <p>an expression <code>key("idkey",@ref)</code> will return the same nodes as
+               <code>id(@ref)</code>, assuming that the only ID attribute declared in the
+               XML source document is:</p>
+            <eg xml:space="preserve"><![CDATA[<!ATTLIST div id ID #IMPLIED>]]></eg>
+            <p>and that the <code>ref</code> attribute of the context node contains no
+            whitespace.</p>
+            </example>
+         </fos:example>
+         <fos:example>
+            <example>
+               <head>Using a Key to Generate Hyperlinks</head>
+                      
+            <p>Suppose a document describing a function library uses a <code>prototype</code>
+               element to define functions</p>
+            <eg xml:space="preserve"><![CDATA[<prototype name="sqrt" return-type="xs:double">
+  <arg type="xs:double"/>
+</prototype>]]></eg>
+            <p>and a <code>function</code> element to refer to function names</p>
+            <eg xml:space="preserve"><![CDATA[<function>sqrt</function>]]></eg>
+            <p>Then the stylesheet could generate hyperlinks between the references and
+               definitions as follows:</p>
+            <eg xml:space="preserve"><![CDATA[<xsl:key name="func" match="prototype" use="@name"/>
+
+<xsl:template match="function">
+<b>
+  <a href="#{generate-id(key('func',.))}">
+    <xsl:apply-templates/>
+  </a>
+</b>
+</xsl:template>
+
+<xsl:template match="prototype">
+  <p>
+    <a name="{generate-id()}">
+      <b>Function: </b>
+      ...
+    </a>
+  </p>
+  </xsl:template>]]></eg>
+            </example>  
+         </fos:example>
+         <fos:example>
+         <p>When called with two arguments, the <function>key</function> function always
+            returns nodes that are in the same document as the context node. To retrieve a
+            node from any other document, it is necessary either to change the context node,
+            or to supply a third argument.</p>
+         <example>
+            <head>Using Keys to Reference other Documents</head>
+            <p>For example, suppose a document contains bibliographic references in the form
+               <code>&lt;bibref&gt;XSLT&lt;/bibref&gt;</code>, and there is a separate XML
+               document <code>bib.xml</code> containing a bibliographic database with entries
+               in the form:</p>
+            <eg xml:space="preserve"><![CDATA[<entry name="XSLT">...</entry>]]></eg>
+            <p>Then the stylesheet could use the following to transform the
+               <code>bibref</code> elements:</p>
+            <eg xml:space="preserve"><![CDATA[<xsl:key name="bib" match="entry" use="@name"/>
+
+<xsl:template match="bibref">
+  <xsl:variable name="name" select="."/>
+  <xsl:apply-templates select="document('bib.xml')/key('bib',$name)"/>
+</xsl:template>]]></eg>
+            <note>
+               <p>This relies on the ability in XPath 2.0 to have a function call on the
+                  right-hand side of the <code>/</code> operator in a path expression.</p>
+            </note>
+            <p>The following code would also work:</p>
+            <eg xml:space="preserve"><![CDATA[<xsl:key name="bib" match="entry" use="@name"/>
+
+<xsl:template match="bibref">
+  <xsl:apply-templates select="key('bib', ., document('bib.xml'))"/>
+</xsl:template>]]></eg>
+         </example>
+         </fos:example>
+         <fos:example>
+            <example>
+            <head>Using a Composite Key</head>
+            <p>This example uses a composite key consisting of first name and last name to
+               locate employees in an employee file.</p>
+            <p>The key can be defined like this:</p>
+            <eg><![CDATA[
+<xsl:key name="emp-name-key" 
+         match="employee" 
+         use="name/first, name/last" 
+         composite="yes"/>                     
+         ]]></eg>
+            <p>A particular employee can then be located using the function call:</p>
+            <eg>key('emp-name-key', ('Tim', 'Berners-Lee'), doc('employees.xml'))</eg>
+            </example>
+         </fos:example>
+         
+      </fos:examples>  
+   </fos:function>
+   
+   <fos:function name="system-property">
+      <fos:signatures>
+         <fos:proto name="system-property" return-type="xs:string">
+            <fos:arg name="property-name" type="xs:string"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property>focus-independent</fos:property>
+         <fos:property>context-dependent</fos:property>
+      </fos:properties>
+      <fos:summary><p>Returns the value of a system property</p></fos:summary>
+      <fos:rules>
+         <p>The <code>$property-name</code> argument <rfc2119>must</rfc2119> evaluate to a
+            <termref def="dt-lexical-qname">lexical QName</termref>. The <termref
+               def="dt-lexical-qname">lexical QName</termref> is expanded as described in
+            <specref ref="qname"/>.</p>
+         
+         <p>The <function>system-property</function> function returns a string representing
+            the value of the system property identified by the name. If there is no such
+            system property, the zero-length string is returned.</p>
+         <p>Implementations <rfc2119>must</rfc2119> provide the following system properties,
+            which are all in the <termref def="dt-xslt-namespace">XSLT
+               namespace</termref>:</p>
+         <ulist>
+            <item>
+               <p>
+                  <code>xsl:version</code>, a number giving the version of XSLT implemented by
+                  the <termref def="dt-processor">processor</termref>; for implementations
+                  conforming to the version of XSLT specified by this document, this is the
+                  string <phrase diff="chg" at="A"><code>"3.0"</code></phrase>. The value will
+                  always be a string in the lexical space of the decimal data type defined in
+                  XML Schema (see <bibref ref="xmlschema-2"/>). This allows the value to be
+                  converted to a number for the purpose of magnitude comparisons.</p>
+            </item>
+            <item>
+               <p>
+                  <code>xsl:vendor</code>, a string identifying the implementer of the
+                  <termref def="dt-processor">processor</termref>
+               </p>
+            </item>
+            <item>
+               <p>
+                  <code>xsl:vendor-url</code>, a string containing a URL identifying the
+                  implementer of the <termref def="dt-processor">processor</termref>;
+                  typically this is the host page (home page) of the implementer's Web
+                  site.</p>
+            </item>
+            <item>
+               <p>
+                  <code>xsl:product-name</code>, a string containing the name of the
+                  implementation, as defined by the implementer. This
+                  <rfc2119>should</rfc2119> normally remain constant from one release of
+                  the product to the next. It <rfc2119>should</rfc2119> also be constant
+                  across platforms in cases where the same source code is used to produce
+                  compatible products for multiple execution platforms.</p>
+            </item>
+            <item>
+               <p>
+                  <code>xsl:product-version</code>, a string identifying the version of the
+                  implementation, as defined by the implementer. This
+                  <rfc2119>should</rfc2119> normally vary from one release of the product
+                  to the next, and at the discretion of the implementer it
+                  <rfc2119>may</rfc2119> also vary across different execution
+                  platforms.</p>
+            </item>
+            <item>
+               <p>
+                  <code>xsl:is-schema-aware</code>, returns the string <code>"yes"</code> in
+                  the case of a processor that claims conformance as a <termref
+                     def="dt-schema-aware-xslt-processor">schema-aware XSLT
+                     processor</termref>, or <code>"no"</code> in the case of a <termref
+                        def="dt-basic-xslt-processor">basic XSLT processor</termref>.</p>
+            </item>
+            <item>
+               <p>
+                  <code>xsl:supports-serialization</code>, returns the string
+                  <code>"yes"</code> in the case of a processor that offers the <termref
+                     def="dt-serialization-feature">serialization feature</termref>, or
+                  <code>"no"</code> otherwise.</p>
+            </item>
+            <item>
+               <p>
+                  <code>xsl:supports-backwards-compatibility</code>, returns the string
+                  <code>"yes"</code> in the case of a processor that offers the <phrase
+                     diff="chg" at="E"><termref def="dt-1.0-compatibility-feature"/></phrase>,
+                  or <code>"no"</code> otherwise.</p>
+            </item>
+            <item>
+               <p diff="add" at="E">
+                  <code>xsl:supports-1.0-compatibility</code>, returns the string
+                  <code>"yes"</code> in the case of a processor that offers the <termref
+                     def="dt-1.0-compatibility-feature"/>, or <code>"no"</code> otherwise.</p>
+            </item>
+            <item>
+               <p diff="add" at="E">
+                  <code>xsl:supports-2.0-compatibility</code>, returns the string
+                  <code>"yes"</code> in the case of a processor that offers the <termref
+                     def="dt-2.0-compatibility-feature"/>, or <code>"no"</code> otherwise.</p>
+            </item>
+            <item>
+               <p diff="add" at="A">
+                  <code>xsl:supports-namespace-axis</code>, returns the string
+                  <code>"yes"</code> in the case of a processor that offers the XPath
+                  namespace axis even when not in backwards compatible mode, or
+                  <code>"no"</code> otherwise. Note that a processor that supports
+                  backwards compatible mode must support the namespace axis when in that mode,
+                  so this property is not relevant to that case.</p>
+            </item>
+            <item>
+               <p diff="add" at="A">
+                  <code>xsl:supports-streaming</code>, returns the string <code>"yes"</code>
+                  in the case of a processor that offers the streaming feature (see <specref
+                     ref="streaming-feature"/>), or <code>"no"</code> otherwise.</p>
+               
+            </item>
+         </ulist>
+         <p>Some of these properties relate to the conformance levels and features offered by
+            the <termref def="dt-processor">processor</termref>: these options are described
+            in <specref ref="conformance"/>.</p>
+         <p>The actual values returned for the above properties are <termref
+            def="dt-implementation-defined">implementation-defined</termref>.</p>
+         <p>The set of system properties that are supported, in addition to those listed
+            above, is also <termref def="dt-implementation-defined"
+               >implementation-defined</termref>. Implementations <rfc2119>must not</rfc2119>
+            define additional system properties in the XSLT namespace.</p>
+         <imp-def-feature>The values returned by the <function>system-property</function>
+            function, and the names of the additional properties that are recognized, are
+            implementation-defined.</imp-def-feature>
+ 
+      </fos:rules>
+      <fos:errors>
+         <p>
+            <error spec="XT" type="dynamic" class="DE" code="1390">
+               <p>It is a <termref def="dt-nonrec-dynamic-error">non-recoverable dynamic
+                  error</termref> if the value <error.extra>supplied as the
+                     <code>$property-name</code> argument to the
+                     <function>system-property</function> function</error.extra> is not a
+                  valid QName, or if there is no namespace declaration in scope for the prefix
+                  of the QName. If the processor is able to detect the error statically (for
+                  example, when the argument is supplied as a string literal), then the
+                  processor <rfc2119>may</rfc2119> optionally signal this as a <termref
+                     def="dt-static-error">static error</termref>. </p>
+            </error>
+         </p>
+      </fos:errors>
+      <fos:notes>
+         <p>An implementation must not return the value <code>
+            <phrase diff="chg" at="A">3.0</phrase>
+         </code> as the value of the <code>xsl:version</code> system property unless it
+            is conformant to XSLT <phrase diff="chg" at="A">3.0</phrase>.</p>
+         <p>It is recognized that vendors who are enhancing XSLT 1.0 <phrase diff="chg"
+            at="A">or 2.0</phrase> processors may wish to release interim implementations
+            before all the mandatory features of this specification are implemented. Since
+            such products are not conformant to XSLT 3.0, this specification cannot define
+            their behavior. However, implementers of such products are encouraged to return
+            a value for the <code>xsl:version</code> system property that is intermediate
+            between 1.0 and 3.0, and to provide the <function>element-available</function>
+            and <function>function-available</function> functions to allow users to test
+            which features have been fully implemented.</p>
+      </fos:notes>
+   </fos:function>
+   
+   
+   
+   <fos:function name="new" prefix="map" diff="add" at="MAP">
+      <fos:signatures>
+         <fos:proto name="new" return-type="map(*)"/>
+         <fos:proto name="new" return-type="map(*)">
+            <fos:arg name="maps" type="map(*)*"/>
+         </fos:proto>
+         
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property dependency="collations">context-dependent</fos:property>
+         <fos:property>focus-independent</fos:property>
+      </fos:properties>
+      <fos:summary>
+         <p>Creates a new map: either an empty map, or a map that combines entries from a number of
+            existing maps.</p>
+      </fos:summary>
+      <fos:rules>
+         <p>The function <function>map:new</function> constructs and returns a new map.</p>
+
+         <p>The zero-argument form of the function returns an empty <termref def="dt-map"
+               >map</termref> whose collation is the default collation in the static context. It is
+            equivalent to calling the one-argument form of the function with an empty sequence as
+            the value of the first argument.</p>
+
+         <p>The one-argument form of the function returns a <termref def="dt-map">map</termref> that
+            is formed by combining the contents of the maps supplied in the <code>$input</code>
+            argument. It is equivalent to calling the two-argument form of the function with the
+            default collation from the static context as the second argument.</p>
+
+         <p>The two-argument form of the function returns a <termref def="dt-map">map</termref> that
+            is formed by combining the contents of the maps supplied in the <code>$input</code>
+            argument. The collation of the new map is the value of the <code>$collation</code>
+            argument. The supplied maps are combined as follows:</p>
+
+         <olist>
+            <item>
+               <p>There is one entry in the new map for each distinct key value present in the union
+                  of the input maps, where keys are considered distinct according to the rules of
+                  the <code>fn:distinct-values</code> function with <code>$collation</code> as the
+                  collation.</p>
+            </item>
+            <item>
+               <p>The associated value for each such key is taken from the last map in the input
+                  sequence <code>$input</code> that contains an entry with this key. If this map
+                  contains more than one entry with this key (which can happen if its collation is
+                  different from that of the new map) then it is <termref
+                     def="implementation-dependent">implementation-dependent</termref> which of them
+                  is selected.</p>
+            </item>
+         </olist>
+
+         <p>There is no requirement that the supplied input maps should have the same or compatible
+            types. The type of a map (for example <code>map(xs:integer, xs:string)</code>) is
+            descriptive of the entries it currently contains, but is not a constraint on how the map
+            may be combined with other maps.</p>
+      </fos:rules>
+      <fos:examples>
+         <fos:variable name="week"
+            select="map{0:=&quot;Sonntag&quot;, 1:=&quot;Montag&quot;, 2:=&quot;Dienstag&quot;,
+            3:=&quot;Mittwoch&quot;, 4:=&quot;Donnerstag&quot;, 5:=&quot;Freitag&quot;, 6:=&quot;Samstag&quot;}"/>
+         <fos:example>
+            <fos:test>
+               <fos:expression>map:new()</fos:expression>
+               <fos:result>map{}</fos:result>
+               <fos:postamble>Returns an empty map, whose collation is the default collation from
+                  the static context</fos:postamble>
+            </fos:test>
+            <fos:test>
+               <fos:expression>map:new(())</fos:expression>
+               <fos:result>map{}</fos:result>
+               <fos:postamble>Returns an empty map, whose collation is the default collation from
+                  the static context</fos:postamble>
+            </fos:test>
+            <fos:test>
+               <fos:expression>map:new((map:entry(0, "no"), map:entry(1, "yes")))</fos:expression>
+               <fos:result>map{0:="no", 1:="yes"}</fos:result>
+               <fos:postamble>Returns a map with two entries; the collation of the map is the
+                  default collation from the static context</fos:postamble>
+            </fos:test>
+            <fos:test>
+               <fos:expression>map:new((map:entry(0, "no"), map:entry(1, "yes")))</fos:expression>
+               <fos:result>map{0:="no", 1:="yes"}</fos:result>
+               <fos:postamble>Returns a map with two entries; the collation of the map is the
+                  default collation from the static context</fos:postamble>
+            </fos:test>
+            <fos:test>
+               <fos:expression>map:new(($week, map{7:="Unbekannt"}))</fos:expression>
+               <fos:result>map{0:="Sonntag", 1:="Montag", 2:="Dienstag", 3:="Mittwoch",
+                  4:="Donnerstag", 5:="Freitag", 6:="Samstag", 7:="Unbekannt"}</fos:result>
+               <fos:postamble>The value of the existing map is unchanged; a new map is created
+                  containing all the entries from <code>$week</code>, supplemented with a new
+                  entry.</fos:postamble>
+            </fos:test>
+            <fos:test>
+               <fos:expression>map:new(($week, map{6:="Sonnabend"}))</fos:expression>
+               <fos:result>map{0:="Sonntag", 1:="Montag", 2:="Dienstag", 3:="Mittwoch",
+                  4:="Donnerstag", 5:="Freitag", 6:="Sonnabend"}</fos:result>
+               <fos:postamble>The value of the existing map is unchanged; a new map is created
+                  containing all the entries from <code>$week</code>, with one entry replaced by a
+                  new entry. Both input maps contain an entry with the key value <code>6</code>; the
+                  one used in the result is the one that comes last in the input
+                  sequence.</fos:postamble>
+            </fos:test>
+
+            <fos:test>
+               <fos:expression>map:new((map{"A":=1}, map{"a":=2}),
+                  "http://collation.example.com/caseblind")</fos:expression>
+               <fos:result>map{"a":=2}</fos:result>
+               <fos:postamble>Assuming that the keys of the two entries are equal under the rules of
+                  the chosen collation, only one of the entries can appear in the result; the one
+                  that is chosen is the one from the last map in the input sequence. If both entries
+                  were in the same map, it would be implementation-dependent which was
+                  chosen.</fos:postamble>
+            </fos:test>
+         </fos:example>
+      </fos:examples>
+   </fos:function>
+   
+   <fos:function name="keys" prefix="map">
+      <fos:signatures>
+         <fos:proto name="keys" return-type="xs:anyAtomicType*">
+            <fos:arg name="input" type="map(*)"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property>context-independent</fos:property>
+         <fos:property>focus-independent</fos:property>
+      </fos:properties>
+      <fos:summary>
+         <p>Returns a sequence containing all the key values present in a map</p>
+      </fos:summary>
+      <fos:rules>
+         <p>The function <function>map:keys</function> takes any <termref def="dt-map">map</termref>
+            as its <code>$input</code> argument and returns the keys that are present in the map as
+            a sequence of atomic values, in <termref def="implementation-dependent"
+               >implementation-dependent</termref> order.</p>
+      </fos:rules>
+      <fos:examples>
+         <fos:example>
+            <fos:test>
+               <fos:expression>map:keys(map{1:="yes", 2:="no"})</fos:expression>
+               <fos:result allow-permutation="true">(1,2)</fos:result>
+               <fos:postamble>The result is in implementation-dependent order.</fos:postamble>
+            </fos:test>
+         </fos:example>
+      </fos:examples>
+   </fos:function>
+   <fos:function name="size" prefix="map" diff="add" at="MAP">
+      <fos:signatures>
+         <fos:proto name="size" return-type="xs:integer">
+            <fos:arg name="input" type="map(*)"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property>context-independent</fos:property>
+         <fos:property>focus-independent</fos:property>
+      </fos:properties>
+      <fos:summary>
+         <p>Returns the number of entries in the supplied map.</p>
+      </fos:summary>
+      <fos:rules>
+         <p>The function <function>map:size</function> takes any <termref def="dt-map">map</termref>
+            as its <code>$input</code> argument and returns the number of entries that are present
+            in the map.</p>
+      </fos:rules>
+      <fos:examples>
+         <fos:example>
+            <fos:test>
+               <fos:expression>map:size(map:new())</fos:expression>
+               <fos:result>0</fos:result>
+            </fos:test>
+            <fos:test>
+               <fos:expression>map:size(map{"true":=1, "false":=0})</fos:expression>
+               <fos:result>2</fos:result>
+            </fos:test>
+         </fos:example>
+      </fos:examples>
+   </fos:function>
+   <fos:function name="contains" prefix="map" diff="add" at="MAP">
+      <fos:signatures>
+         <fos:proto name="contains" return-type="xs:boolean">
+            <fos:arg name="map" type="map(*)"/>
+            <fos:arg name="key" type="xs:anyAtomicType"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property>context-independent</fos:property>
+         <fos:property>focus-independent</fos:property>
+      </fos:properties>
+      <fos:summary>
+         <p>Tests whether a supplied map contains an entry for a given key</p>
+      </fos:summary>
+      <fos:rules>
+         <p>The function <function>map:contains</function> returns true if the <termref def="dt-map"
+               >map</termref> supplied as <code>$map</code> contains an entry with a key equal to
+            the supplied value of <code>$key</code>; otherwise it returns false. The equality
+            comparison uses the map's collation; no error occurs if the map contains keys that are
+            not comparable with the supplied <code>$key</code>.</p>
+
+         <p>If the supplied key is <code>xs:untypedAtomic</code>, it is converted to
+               <code>xs:string</code>. If the supplied key is the <code>xs:float</code> or
+               <code>xs:double</code> value <code>NaN</code>, the function returns false.</p>
+      </fos:rules>
+      <fos:examples>
+         <fos:variable name="week"
+            select="map{0:=&quot;Sonntag&quot;, 1:=&quot;Montag&quot;, 2:=&quot;Dienstag&quot;,
+            3:=&quot;Mittwoch&quot;, 4:=&quot;Donnerstag&quot;, 5:=&quot;Freitag&quot;, 6:=&quot;Samstag&quot;}"/>
+         <fos:example>
+            <fos:test>
+               <fos:expression>map:contains($week, 2)</fos:expression>
+               <fos:result>true()</fos:result>
+            </fos:test>
+            <fos:test>
+               <fos:expression>map:contains($week, 9)</fos:expression>
+               <fos:result>false()</fos:result>
+            </fos:test>
+            <fos:test>
+               <fos:expression>map:contains(map{}, "xyz")</fos:expression>
+               <fos:result>false()</fos:result>
+            </fos:test>
+            <fos:test>
+               <fos:expression>map:contains(map{"xyz":=23}, "xyz")</fos:expression>
+               <fos:result>true()</fos:result>
+            </fos:test>
+            <fos:test>
+               <fos:expression>map:contains(map{"abc":=23, "xyz":=()}, "xyz")</fos:expression>
+               <fos:result>true()</fos:result>
+            </fos:test>
+         </fos:example>
+      </fos:examples>
+   </fos:function>
+   <fos:function name="get" prefix="map" diff="add" at="MAP">
+      <fos:signatures>
+         <fos:proto name="get" return-type="item()*">
+            <fos:arg name="map" type="map(*)"/>
+            <fos:arg name="key" type="xs:anyAtomicType"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property>context-independent</fos:property>
+         <fos:property>focus-independent</fos:property>
+      </fos:properties>
+      <fos:summary>
+         <p>Returns the value associated with a supplied key in a given map.</p>
+      </fos:summary>
+      <fos:rules>
+         <p>The function <function>map:get</function> attempts to find an entry within the <termref
+               def="dt-map">map</termref> supplied as <code>$input</code> that has a key equal to
+            the supplied value of <code>$key</code>. If there is such an entry, it returns the
+            associated value; otherwise it returns an empty sequence. The equality comparison uses
+            the map's collation; no error occurs if the map contains keys that are not comparable
+            with the supplied <code>$key</code>.</p>
+
+         <p>If the supplied key is <code>xs:untypedAtomic</code>, it is converted to
+               <code>xs:string</code>. If the supplied key is the <code>xs:float</code> or
+               <code>xs:double</code> value <code>NaN</code>, the function returns an empty
+            sequence.</p>
+      </fos:rules>
+      <fos:notes>
+         <p>A return value of <code>()</code> from <function>map:get</function> could indicate that
+            the key is present in the map with an associated value of <code>()</code>, or it could
+            indicate that the key is not present in the map. The two cases can be distinguished by
+            calling <function>map:contains</function>.</p>
+
+         <p>Invoking the <termref def="dt-map">map</termref> as a function item has the same effect
+            as calling <code>get</code>: that is, when <code>$map</code> is a map, the expression
+               <code>$map($K)</code> is equivalent to <code>get($map, $K)</code>. Similarly, the
+            expression <code>get(get(get($map, 'employee'), 'name'), 'first')</code> can be written
+            as <code>$map('employee')('name')('first')</code>. </p>
+      </fos:notes>
+      <fos:examples>
+         <fos:variable name="week"
+            select="map{0:=&quot;Sonntag&quot;, 1:=&quot;Montag&quot;, 2:=&quot;Dienstag&quot;,
+            3:=&quot;Mittwoch&quot;, 4:=&quot;Donnerstag&quot;, 5:=&quot;Freitag&quot;, 6:=&quot;Samstag&quot;}"/>
+         <fos:example>
+            <fos:test>
+               <fos:expression>map:get($week, 4)</fos:expression>
+               <fos:result>"Donnerstag"</fos:result>
+            </fos:test>
+            <fos:test>
+               <fos:expression>map:get($week, 9)</fos:expression>
+               <fos:result>()</fos:result>
+               <fos:postamble>When the key is not present, the function returns an empty
+                  sequence.</fos:postamble>
+            </fos:test>
+            <fos:test>
+               <fos:expression>map:get(map:entry(7,()), 7)</fos:expression>
+               <fos:result>()</fos:result>
+               <fos:postamble>An empty sequence as the result can also signify that the key is
+                  present and the associated value is an empty sequence.</fos:postamble>
+            </fos:test>
+         </fos:example>
+      </fos:examples>
+   </fos:function>
+   <fos:function name="entry" prefix="map" diff="add" at="MAP">
+      <fos:signatures>
+         <fos:proto name="entry" return-type="map(*)">
+            <fos:arg name="key" type="xs:anyAtomicType"/>
+            <fos:arg name="value" type="item()*"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property>context-independent</fos:property>
+         <fos:property>focus-independent</fos:property>
+      </fos:properties>
+      <fos:summary>
+         <p>Creates a map that contains a single entry (a key-value pair).</p>
+      </fos:summary>
+      <fos:rules>
+         <p>The function <function>map:entry</function> returns a new <termref def="dt-map"
+               >map</termref> which normally contains a single entry. The collation of the new map is the 
+            default collation from the static context. The key of the entry in the new map is
+               <code>$key</code>, and its associated value is <code>$value</code>.</p>
+         
+         <p>If the supplied key is the <code>xs:float</code> or
+            <code>xs:double</code> value <code>NaN</code>, the supplied <code>$map</code> is
+            empty (that is, it contains no entries).</p>
+
+         <p>If the supplied key is <code>xs:untypedAtomic</code>, it is converted to
+               <code>xs:string</code>.</p>
+      </fos:rules>
+      <fos:notes>
+         <p>The function <code>map:entry</code> is intended primarily for use in conjunction with
+            the function <code>map:new</code>. For example, a map containing seven entries may be
+            constructed like this:</p>
+
+         <eg><![CDATA[
+map:new((
+   map:entry("Su", "Sunday"),
+   map:entry("Mo", "Monday"),
+   map:entry("Tu", "Tuesday"),
+   map:entry("We", "Wednesday"),
+   map:entry("Th", "Thursday"),
+   map:entry("Fr", "Friday"),
+   map:entry("Sa", "Saturday")
+   ))]]></eg>
+         <p>Unlike the <code>map{...}</code> expression, this technique can be used to construct a
+            map with a variable number of entries, for example:</p>
+         <eg><![CDATA[
+map:new(for $b in //book return map:entry($b/isbn, $b))]]></eg>
+      </fos:notes>
+      <fos:examples>
+         <fos:example>
+            <fos:test>
+               <fos:expression>map:entry("M", "Monday")</fos:expression>
+               <fos:result>map{"M":="Monday"}</fos:result>
+            </fos:test>
+         </fos:example>
+      </fos:examples>
+   </fos:function>
+   <fos:function name="remove" prefix="map" diff="add" at="MAP">
+      <fos:signatures>
+         <fos:proto name="remove" return-type="map(*)">
+            <fos:arg name="map" type="map(*)"/>
+            <fos:arg name="key" type="xs:anyAtomicType"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property>context-independent</fos:property>
+         <fos:property>focus-independent</fos:property>
+      </fos:properties>
+      <fos:summary>
+         <p>Constructs a new map by removing an entry from an existing map</p>
+      </fos:summary>
+      <fos:rules>
+         <p>The function <function>map:remove</function> returns a new <termref def="dt-map"
+               >map</termref>. The collation of the new map is the same as the collation of the map
+            supplied as <code>$map</code>. The entries in the new map correspond to the entries of
+               <code>$map</code>, excluding any entry whose key is equal to <code>$key</code>.</p>
+         <p>No failure occurs if the input map contains no entry with the supplied key; the input
+            map is returned unchanged</p>
+      </fos:rules>
+      <fos:examples>
+         <fos:variable name="week"
+            select="map{0:=&quot;Sonntag&quot;, 1:=&quot;Montag&quot;, 2:=&quot;Dienstag&quot;,
+              3:=&quot;Mittwoch&quot;, 4:=&quot;Donnerstag&quot;, 5:=&quot;Freitag&quot;, 6:=&quot;Samstag&quot;}"/>
+         <fos:example>
+            <fos:test>
+               <fos:expression>map:remove($week, 4)</fos:expression>
+               <fos:result>map{0:="Sonntag", 1:="Montag", 2:="Dienstag", 3:="Mittwoch",
+                  5:="Freitag", 6:="Samstag"}</fos:result>
+            </fos:test>
+            <fos:test>
+               <fos:expression>map:remove($week, 23)</fos:expression>
+               <fos:result>map{0:="Sonntag", 1:="Montag", 2:="Dienstag", 3:="Mittwoch",
+                  4:="Donnerstag", 5:="Freitag", 6:="Samstag"}</fos:result>
+            </fos:test>
+         </fos:example>
+      </fos:examples>
+   </fos:function>
+   <fos:function name="parse-json" prefix="fn" diff="add" at="MAP">
+      <fos:signatures>
+         <fos:proto name="parse-json" return-type="item()?">
+            <fos:arg name="json-text" type="xs:string"/>
+         </fos:proto>
+         <fos:proto name="parse-json" return-type="item()?">
+            <fos:arg name="json-text" type="xs:string"/>
+            <fos:arg name="options" type="map(*)"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property>context-independent</fos:property>
+         <fos:property>focus-independent</fos:property>
+      </fos:properties>
+      <fos:summary>
+         <p>Parses a string supplied in the form of a JSON text, returning the results in the form
+            of a map.</p>
+      </fos:summary>
+      <fos:rules>
+         <p>The effect of the one-argument form of this function is the same as calling the
+            two-argument form with an empty map as the value of the <code>$options</code>
+            argument.</p>
+
+         <p>The first argument is a JSON-text (see below) in the form of a string. The function
+            parses this string to return an XPath value.</p>
+
+         <p>The <code>$options</code> argument can be used to control the way in which the parsing
+            takes place. The value of the argument is a map. The options defined in this 
+            specification have keys that are strings. The effect of any map entries whose 
+            keys are not defined in this specification is implementation-defined; 
+            implementation-defined options <rfc2119>should</rfc2119> use QNames as keys. 
+            Implementations <rfc2119>must</rfc2119> ignore any entries in the map whose keys 
+            are not defined in this specification, unless the key has a specific 
+            <termref def="dt-implementation-defined">implementation-defined</termref> meaning. </p>
+
+         <p>If the <code>$options</code> map contains an entry whose key is the <code>xs:string</code>
+            value "spec", the
+            value determines the specification of JSON that is to be used. The value <rfc2119>must</rfc2119>
+            be a string; the effect of supplying any value other than "RFC4627", "ECMA-262", or "liberal" is
+            <termref def="dt-implementation-defined"/>. </p>
+            
+            <ulist>
+               <item><p>The value "RFC4627"
+               denotes <bibref id="rfc4627"/>, with no deviations from the grammar permitted.</p></item>
+               <item><p>The value "ECMA-262"
+                  denotes the specification in <bibref id="ecma-262"/> (section 15.12 in the 5th Edition).</p></item>
+               <item><p>The value
+                  "liberal" indicates any implementation-defined superset of RFC4627 (or equivalently, an
+                  implementation that recovers from some or all errors in the input). </p></item>
+            </ulist>
+            <p>The default is "RFC4627".</p>
+
+         <p>If the <code>$options</code> map contains an entry with the key <code>"unescape"</code>,
+            the value determines whether escape sequences (marked by a backslash) in the input are
+            expanded. The value is a boolean: <code>true</code> indicates that escape sequences are
+            expanded into the characters they represent, while <code>false</code> indicates that
+            they remain as escape sequences. The default is <code>true</code>. If the value is
+               <code>true</code> and the input contains escape sequences representing characters or
+            codepoints that are not valid characters in the version of XML supported by the
+            implementation, a dynamic error occurs.</p>
+
+         <p>The various structures that can occur in JSON are transformed recursively to XDM values
+            as follows:</p>
+
+         <olist>
+            <item>
+               <p>A JSON <emph>object</emph> is converted to a map. The collation of the map is the
+                  Unicode codepoint collation. The entries in the map correspond to the key/value
+                  pairs in the JSON object. The key is always of type <code>xs:string</code>; the
+                  associated value may be of any type, and is the result of converting the JSON
+                  value by recursive application of these rules. For example, the JSON text
+                     <code>{"x":2, "y":5}</code> is transformed to the value <code>map{"x":=2,
+                     "y":=5}</code>.</p>
+            </item>
+            <item>
+               <p>A JSON <emph>array</emph> is transformed to a map whose keys are consecutive
+                  integers starting at one, and whose associated values are the result of converting
+                  the corresponding member of the array by recursive application of these rules. For
+                  example, the JSON text <code>["a", "b", null]</code> is transformed to the value
+                     <code>map{1:="a", 2:="b", 3:=()}</code>.</p>
+               
+               <p>The collation of the map is a special collation with the URI 
+                  <code>http://www.w3.org/2005/xpath-functions/collation/integer-map</code>, 
+                  which is intended to be used only for a map having integer keys. 
+                  The use of this collation distinguishes an map representing an empty 
+                  JSON array from a map representing an empty JSON object. This 
+                  collation is not intended to be used when comparing strings; if it 
+                  ever is so used, the result of string comparisons is implementation-dependent. </p>
+            </item>
+            <item>
+               <p>A JSON <emph>string</emph> is converted to an <code>xs:string</code> value. If the
+                     <code>unescape</code> option is set to <code>true</code> (or omitted), then
+                  escaped characters are expanded (for example, <code>\n</code> becomes a single x0A
+                  character, while <code>\u20AC</code> becomes the character <code>&#x20ac;</code>),
+                  provided that the expansion is a valid XML character. A character that is not
+                  valid in the version of XML used by the processor is then a dynamic error. If the
+                     <code>unescape</code> option is set to <code>false</code>, escaped characters
+                  are retained in their escaped form, and no error can then occur.</p>
+            </item>
+            <item>
+               <p>A JSON <emph>number</emph> is converted to an <code>xs:double</code> value using
+                  the rules for casting from <code>xs:string</code> to <code>xs:double</code>.</p>
+            </item>
+            <item>
+               <p>The JSON <emph>boolean</emph> values <code>true</code> and <code>false</code> are
+                  converted to the corresponding <code>xs:boolean</code> values.</p>
+            </item>
+            <item>
+               <p>The JSON value <emph>null</emph> is converted to the empty sequence.</p>
+            </item>
+         </olist>
+
+
+      </fos:rules>
+      <fos:errors>
+
+         <p><error  spec="XT" type="dynamic" class="DE" code="3240">
+            <p>It is a <termref def="dt-nonrec-dynamic-error">non-recoverable dynamic
+            error</termref> if the value of
+               <code>$input</code> does not conform to the JSON grammar, as selected using the
+            explicit or implicit <code>spec</code> option.</p></error></p>
+         <p><error  spec="XT" type="dynamic" class="DE" code="3250">
+            <p>It is a <termref def="dt-nonrec-dynamic-error">non-recoverable dynamic
+               error</termref> if the value of
+               <code>$input</code> contains an escaped representation of a character (or codepoint)
+            that is not a valid character in the version of XML supported by the implementation,
+            unless the <code>unescape</code> option is set to false.</p></error></p>
+         <p><error  spec="XT" type="dynamic" class="DE" code="3260">
+            <p>It is a <termref def="dt-nonrec-dynamic-error">non-recoverable dynamic
+               error</termref> if the value of
+            <code>$options</code> includes an entry whose key is "spec" and whose value is not
+            a single <code>xs:string</code>, or an entry whose key is "unescape" and whose value
+            is not a single <code>xs:boolean</code>.</p></error></p>
+      </fos:errors>
+      <fos:notes>
+         <p>To read a JSON file, this function can be
+            used in conjunction with the <xfunction>unparsed-text</xfunction> function.</p>
+         <p>ECMA-262 differs from RFC 4627 in two respects: it does not allow the input to depart
+            from the JSON grammar, but it does allow the top-level construct in the input to be a
+            string, boolean, number, or null, rather than requiring an object or array.</p>
+         <p>Many JSON implementations allow commas to be used after the last item in an object or
+            array, although the specification does not permit it. The option
+               <code>spec="liberal"</code> is provided to allow such deviations from the
+            specification to be accepted. Some JSON implementations also allow constructors such as
+               <code>new Date("2000-12-13")</code> to appear as values: specifying
+               <code>spec="liberal"</code> allows such extensions to be accepted, but does not
+            guarantee it. If such extensions are accepted, the resulting value is
+            implementation-defined.</p>
+         <p>The result of the function will be an instance of one of the following types. An
+               <code>instance of</code> test (or in XQuery, <code>typeswitch</code>) can 
+            in most cases be used to distinguish them: </p>
+         <ulist>
+            <item>
+               <p><code>map(xs:string, xs:anyAtomicType)</code> for a JSON object</p>
+            </item>
+            <item>
+               <p><code>map(xs:integer, xs:anyAtomicType)</code> for a JSON array</p>
+            </item>
+            <item>
+               <p><code>xs:string</code> for a JSON string</p>
+            </item>
+            <item>
+               <p><code>xs:double</code> for a JSON number</p>
+            </item>
+            <item>
+               <p><code>xs:boolean</code> for a JSON boolean</p>
+            </item>
+            <item>
+               <p><code>empty-sequence()</code> for a JSON null</p>
+            </item>
+         </ulist>
+         <p>The only exception is that an empty map might represent either an empty JSON object or 
+         an empty JSON array. These can be distinguished if need be by the special collation used
+         to represent an empty array.</p>
+      </fos:notes>
+      <fos:examples>
+         <fos:example>
+            <fos:test>
+               <fos:expression>parse-json('{"x":1, "y":[3,4,5]}')</fos:expression>
+               <fos:result>map{"x":=1e0,"y":=map{1:=3e0,2:=4e0,3:=5e0}}</fos:result>
+            </fos:test>
+            <fos:test>
+               <fos:expression>parse-json('"abcd"', map{'spec':='RFC4627'})</fos:expression>
+               <fos:error-result error-code="FOJS0001"/>
+            </fos:test>
+            <fos:test>
+               <fos:expression>parse-json('"abcd"', map{'spec':='ECMA-262'})</fos:expression>
+               <fos:result>"abcd"</fos:result>
+            </fos:test>
+            <fos:test>
+               <fos:expression>parse-json('{"x":"\\", "y":"\u0025"}')</fos:expression>
+               <fos:result>map{"x":="\","y":="%"}</fos:result>
+            </fos:test>
+            <fos:test>
+               <fos:expression>parse-json('{"x":"\\", "y":"\u0025"}',
+                  map{'unescape':=false()})</fos:expression>
+               <fos:result>map{"x":="\\","y":="\u0025"}</fos:result>
+            </fos:test>
+         </fos:example>
+      </fos:examples>
+   </fos:function>
+   <fos:function name="serialize-json" prefix="fn" diff="add" at="MAP">
+      <fos:signatures>
+         <fos:proto name="serialize-json" return-type="xs:string">
+            <fos:arg name="input" type="item()?"/>
+         </fos:proto>
+         <fos:proto name="serialize-json" return-type="xs:string">
+            <fos:arg name="input" type="item()?"/>
+            <fos:arg name="options" type="map(*)"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property>context-independent</fos:property>
+         <fos:property>focus-independent</fos:property>
+      </fos:properties>
+      <fos:summary>
+         <p>Serializes an item as a string conforming to the JSON grammar.</p>
+      </fos:summary>
+      <fos:rules>
+         <p>The effect of the one-argument form of this function is the same as calling the
+            two-argument form with an empty map as the value of the <code>$options</code>
+            argument.</p>
+
+         <p>The <code>$options</code> argument can be used to control the way in which the serialization
+            takes place. The value of the argument is a map. The options defined in this 
+            specification have keys that are strings. The effect of any map entries whose 
+            keys are not defined in this specification is <termref def="dt-implementation-defined">implementation-defined</termref>; 
+            implementation-defined options <rfc2119>should</rfc2119> use QNames as keys. 
+            Implementations <rfc2119>must</rfc2119> ignore any entries in the map whose keys 
+            are not defined in this specification, unless the key has a specific 
+            implementation-defined meaning. </p>
+
+         <p>In the absence of options specifying otherwise, the function applies the following rules
+            to achieve the conversion, recursively.</p>
+
+         <p>A value is <emph>JSON-serializable</emph> if it satisfies one of the following rules;
+            it is serialized according to the first rule which applies:</p>
+
+         <olist>
+            <item>
+               <p>An empty map is JSON-serializable. It is serialized as an empty JSON object
+                  unless it has a collation of <code>http://www.w3.org/2005/xpath-functions/collation/integer-map</code>, 
+                  in which case it is serialized as an empty JSON array. </p>
+            </item>
+            <item>
+               <p>An instance of <code>map(xs:string, item()?)</code> is JSON-serializable if the
+                  value associated with every entry in the map is JSON-serializable. Such a value is
+                  serialized as a JSON object. The JSON object contains one member for each entry in the map 
+                  (in implementation-dependent order). The name of the member is the key of the entry 
+                  (a string), and its value is the JSON-serialization of the value in the map that is associated 
+                  with that key. </p>
+            </item>
+            <item>
+               <p>An instance of <code>map(xs:integer, item()?)</code> is JSON-serializable if the
+                  keys are all positive integers and the value associated with every key is 
+                  JSON-serializable. The map is serialized as a JSON array of size <var>N</var> where <var>N</var> is the
+                  maximum key value in the map; the <var>J</var>'th member of the array is the serialization
+                  of the value associated with the key <var>J</var> if present, or the JSON value 
+                  <code>null</code> if the map contains no entry with key value <var>J</var>.</p>
+            </item>
+            <item>
+               <p>A sequence containing two or more items is JSON-serializable if each of its items
+                  is JSON-serializable. Such a value is serialized as a JSON array.</p>
+            </item>
+            <item>
+               <p>An atomic value of type <code>xs:string</code> or <code>xs:untypedAtomic</code>
+                  is JSON-serializable; it is
+                  serialized as a JSON string, after escaping any special characters using the
+                  JSON backslash convention as described below.</p>
+            </item>
+            <item>
+               <p>An atomic value of any numeric type is JSON-serializable. An ordinary value is 
+                  serialized as a JSON number, formatted by applying the rules in this specification
+                  for casting a numeric value to a string. The special values positive and negative 
+                  infinity and NaN are serialized as JSON strings "INF", "-INF" or "NaN" respectively. </p>
+            </item>
+            <item>
+               <p>An atomic value of type <code>xs:boolean</code> is JSON-serializable; it is
+                  serialized as the JSON boolean value <code>true</code> or <code>false</code>.</p>
+            </item>
+            <item>
+               <p>An empty sequence is JSON-serializable; it is serialized as the JSON value
+                     <code>null</code>.</p>
+            </item>
+         </olist>
+
+         <p>If the option <code>indent</code> is present it <rfc2119>must</rfc2119> have the boolean value
+               <code>true</code> or <code>false</code>. The default is <code>false</code>. The value
+               <code>true</code> indicates that whitespace should be added to the output with the
+            aim of improving human legibility; the value <code>false</code> indicates that no
+            optional whitespace should be added.</p>
+
+         <p>If the option <code>escape</code> is present it <rfc2119>must</rfc2119> have the boolean value
+               <code>true</code> or <code>false</code>. The default is <code>true</code>. The value
+               <code>true</code> indicates that special characters <rfc2119>may</rfc2119> be escaped
+            using the JSON backslash notation, and where the JSON syntax requires it, they
+               <rfc2119>must</rfc2119> be escaped. The value <code>false</code> indicates that
+            strings are already in escaped form and no further escaping is permitted; in this case a
+            dynamic error [TBA] occurs if the resulting string is not valid according to the JSON
+            grammar.</p>
+
+         <p>If the option <code>fallback</code> is present its value <rfc2119>must</rfc2119> be a function
+            of arity 1 (one). The supplied function is called
+            when a value that is not JSON-serializable is encountered in a map. The function must
+            return a value that is JSON-serializable, or a map that can be made JSON-serializable 
+            by recursive application of the function to the values in the entries of the map, and 
+            the serialization of this value will be
+            inserted in the output as the serialization of the original value. For example,
+            supplying the function <code>string#1</code> will convert all non-serializable values to
+            strings, provided that the <code>fn:string</code> function is applicable to the value. </p>
+         
+         <p>If the option <code>spec</code> is present, its permitted values  
+            are the same as the values recognized by the implementation for the corresponding 
+            option in the <function>parse-json</function> function, and the same rules apply. 
+            The input supplied to the <function>serialize-json</function> <rfc2119>must</rfc2119> be 
+            one that can be serialized to generate a string 
+            that the implementation will accept as valid input to
+            the <function>parse-json</function> function with the same value of the "spec" 
+            option.
+         </p>
+      </fos:rules>
+      <fos:errors>
+         <p>
+            <error spec="XT" type="dynamic" class="DE" code="3006">
+               <p>It is a <termref def="dt-nonrec-dynamic-error">non-recoverable dynamic
+                  error</termref> if the supplied value cannot be serialized as a JSON
+                  text conforming to the rules of the specification selected by the explicit or implicit
+                  <code>spec</code> option.</p>
+            </error>
+         </p>
+         <p>
+            <error spec="XT" type="dynamic" class="DE" code="3007">
+               <p>It is a <termref def="dt-nonrec-dynamic-error">non-recoverable dynamic
+                  error</termref> if the value of <code>$options</code> includes an 
+                  entry whose key is "spec" and whose value is not a single <code>xs:string</code>, 
+                  or an entry whose key is "indent" or "escape" and whose value is not a 
+                  single <code>xs:boolean</code>, or an entry whose key is "fallback" and whose value 
+                  is not a single function item of arity 1 (one). </p>
+            </error>
+         </p>
+         
+      </fos:errors>
+      <fos:notes>
+         <p>The <code>fallback</code> function can be used to customize what is serializable, and
+            how it is serialized. For example, supplying the function <code>fn:string#1</code> will
+            ensure that values such as dates and times are converted to strings. Supplying the
+            function <code>fn:serialize-xml#1</code> will cause nodes to be serialized as strings
+            containing lexical XML. More elaborate conversions can be achieved by specifying a
+            user-defined function, for example one which converts an element node to a map.</p>
+
+         <p>Although the value returned by the fallback function must be JSON-serializable, the
+            fallback function will be called recursively if the value is a map that contains values
+            that are not JSON-serializable.</p>
+      </fos:notes>
+      <fos:examples>
+         <fos:example>
+            <fos:test>
+               <fos:expression>fn:serialize-json(map{"a":=1, "b":=(3 to 5)})</fos:expression>
+               <fos:result>'{"a":1,"b":[3,4,5]}'</fos:result>
+               <fos:result>'{"b":[3,4,5],"a":1}'</fos:result>
+            </fos:test>
+            <fos:test>
+               <fos:expression>fn:serialize-json(("a", "b", "c", "d"))</fos:expression>
+               <fos:result>'["a","b","c","d"]'</fos:result>
+            </fos:test>
+            <fos:test>
+               <fos:expression>fn:serialize-json(xs:date('2010-12-31'),
+                  map{'spec':='ECMA-262','fallback':=fn:string#1})</fos:expression>
+               <fos:result>'"2010-12-31"'</fos:result>
+            </fos:test>
+         </fos:example>
+      </fos:examples>
+   </fos:function>
+   
+   <fos:function name="function-available" prefix="fn">
+      <fos:signatures>
+         <fos:proto name="function-available" return-type="xs:boolean">
+            <fos:arg name="function-name" type="xs:string"/>
+         </fos:proto>
+         <fos:proto name="function-available" return-type="xs:boolean">
+            <fos:arg name="function-name" type="xs:string"/>
+            <fos:arg name="arity" type="xs:integer"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property dependency="namespaces known-function-signatures">context-dependent</fos:property>
+         <fos:property>focus-independent</fos:property>
+      </fos:properties>
+      <fos:summary>
+         <p>Determines whether a particular function is or is not available for use. The function
+         is particularly useful for calling within an <code>[xsl:]use-when</code> attribute
+         (see <specref ref="conditional-inclusion"/>) to test whether a particular
+            <termref def="dt-extension-function"/> is available.</p>
+      </fos:summary>
+      <fos:rules>
+ 
+   <p>A function is said to be available within an XPath expression if it is present in
+      the <xtermref spec="XP30" ref="dt-known-func-signatures">statically known function signatures</xtermref> 
+      for that expression (see <specref ref="static-context"/>).
+      Functions in the static context are uniquely identified by the name of the
+      function (a QName) in combination with its <termref def="dt-arity"
+         >arity</termref>.</p> 
+   <p>The value of the <code>$function-name</code> argument <rfc2119>must</rfc2119> be a
+      string containing a <termref def="dt-eqname">EQName</termref>. The
+      lexical QName is expanded into an <termref def="dt-expanded-qname"
+         >expanded QName</termref> using the namespace declarations in scope for the
+      <termref def="dt-expression">expression</termref>. If the value is an
+      unprefixed lexical QName, then the <termref def="dt-standard-function-namespace">standard
+         function namespace</termref> is used in the expanded QName.</p>
+   <p>The two-argument version of the <function>function-available</function> function 
+      returns true if and only if there is an available function whose name matches the
+      value of the <code>$function-name</code> argument and whose <termref
+         def="dt-arity">arity</termref> matches the value of the <code>$arity</code>
+      argument. </p>
+   <p>The single-argument version of the <function>function-available</function>
+      function returns true if and only if there is at least one available function
+      (with some arity) whose name matches the value of the <code>$function-name</code>
+      argument. </p>
+         
+         
+   
+   <p><phrase diff="chg" at="D">When the containing expression is evaluated with
+      <termref def="dt-xpath-compat-mode">XPath 1.0 compatibility mode</termref>
+      set to true</phrase>, the <function>function-available</function>
+      function returns false in respect of a function name and arity for which no
+      implementation is available (other than the fallback error function that raises a
+      dynamic error whenever it is called). This means that it is possible (as in XSLT
+      1.0) to use logic such as the following to test whether a function is available
+      before calling it:</p>
+   <example>
+      <head>Calling an extension function with backwards compatibility enabled</head>
+      <eg xml:space="preserve"><![CDATA[
+<summary xsl:version="1.0">
+  <xsl:choose>
+    <xsl:when test="function-available('my:summary')">
+      <xsl:value-of select="my:summary()"/>
+    </xsl:when>
+    <xsl:otherwise>
+      <xsl:text>Summary not available</xsl:text>
+    </xsl:otherwise>
+  </xsl:choose>
+</summary>]]></eg>
+   </example>
+
+
+ 
+      
+      </fos:rules>
+      <fos:errors>
+         <p>
+            <error spec="XT" type="dynamic" class="DE" code="1400">
+               <p diff="chg" at="K">It is a <termref def="dt-nonrec-dynamic-error">non-recoverable dynamic
+                  error</termref> if the argument <error.extra>passed to the
+                     <function>function-available</function> function</error.extra> does
+                  not evaluate to a string that is a valid <termref def="dt-eqname"
+                     >EQName</termref>, or if the value is a <termref def="dt-lexical-qname">lexical QName</termref>
+                  with a prefix for which no namespace declaration is present in the static context. If the processor
+                  is able to detect the error statically (for example, when the argument is
+                  supplied as a string literal), then the processor <rfc2119>may</rfc2119>
+                  optionally signal this as a <termref def="dt-static-error">static
+                     error</termref>.</p>
+            </error>
+         </p>
+      </fos:errors>
+      <fos:notes>
+         <p>The fact that a function with a given name is available gives no guarantee that
+            any particular call on the function will be successful. For example, it is not
+            possible to determine the types of the arguments expected.</p>
+         <p diff="add" at="L">The introduction of the <xfunction>function-lookup</xfunction> function in XPath 3.0
+            reduces the need for <function>function-available</function>, since <xfunction>function-lookup</xfunction>
+            not only tests whether a function is available, but also returns a function item that enables it to be
+            dynamically called.</p>
+         <p diff="add" at="M">If a function is present in the static context but with
+            no useful functionality (for example, if the system has been configured for security
+            reasons so that <function>fn:environment-variables</function> returns no information), then
+            <function>function-available</function> when applied to that function <rfc>should</rfc> return false.</p>
+      </fos:notes>
+      <fos:examples>
+         <fos:example>
+         <example>
+            <head>Stylesheet portable between XSLT 1.0, XSLT 2.0, and XSLT 3.0</head>
+            <p>A stylesheet that is designed to use XSLT 2.0 facilities when running under an
+               <phrase diff="chg" at="F">XSLT 2.0 or XSLT 3.0 processor</phrase>, but to fall 
+               back to XSLT 1.0 capabilities when not, might be written
+               using the code:</p>
+            <eg xml:space="preserve"><![CDATA[
+<out xsl:version="2.0">
+  <xsl:choose>
+    <xsl:when test="function-available('matches')">
+      <xsl:value-of select="matches($input, '[a-z]*')"/>
+    </xsl:when>
+    <xsl:otherwise>
+      <xsl:value-of select="string-length(
+	                  translate($in, 'abcdefghijklmnopqrstuvwxyz', '')) = 0"/>
+    </xsl:otherwise>
+  </xsl:choose>
+</out>]]></eg>
+            <p>Here an <phrase diff="chg" at="F">XSLT 2.0 or XSLT 3.0</phrase> 
+               processor will always take the <elcode>xsl:when</elcode>
+               branch, while a 1.0 processor will follow the <elcode>xsl:otherwise</elcode>
+               branch. The single-argument version of the
+               <function>function-available</function> function is used here, because that
+               is the only version available in XSLT 1.0. Under the rules of XSLT 1.0, the
+               call on the <code>matches</code> function is not an error, because it is never
+               evaluated.</p>
+         </example>
+         </fos:example>
+         <fos:example>
+         <example>
+            <head>Stylesheet portable between XSLT 3.0 and a future version of XSLT</head>
+            <p>A stylesheet that is designed to use facilities in some future XSLT version
+               when they are available, but to fall back to <phrase diff="chg" at="F">XSLT 2.0 or XSLT 3.0</phrase> capabilities when not,
+               might be written using code such as the following. This hypothesizes the
+               availability in some future version of a function <code>pad</code> which pads a
+               string to a fixed length with spaces:</p>
+            <eg xml:space="preserve"><![CDATA[
+ <xsl:value-of select="pad($input, 10)" 
+               use-when="function-available('pad', 2)"/>
+ <xsl:value-of select="concat($input, string-join(
+                          for $i in 1 to 10 - string-length($input) 
+						  return ' ', ''))"
+               use-when="not(function-available('pad', 2))"/>
+ ]]></eg>
+            <p>In this case the two-argument version of
+               <function>function-available</function> is used, because there is no
+               requirement for this code to run under XSLT 1.0.</p>
+         </example>
+         </fos:example>
+      </fos:examples>
+   
+   </fos:function>
+   
+   <fos:function name="element-available" prefix="fn">
+      <fos:signatures>
+         <fos:proto name="element-available" return-type="xs:boolean">
+            <fos:arg name="element-name" type="xs:string"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property dependency="namespaces">context-dependent</fos:property>
+         <fos:property>focus-independent</fos:property>
+      </fos:properties>
+      <fos:summary>
+         <p>Determines whether a particular instruction is or is not available for use. The function
+            is particularly useful for calling within an <code>[xsl:]use-when</code> attribute
+            (see <specref ref="conditional-inclusion"/>) to test whether a particular
+            <termref def="dt-extension-instruction"/> is available.</p>
+      </fos:summary>
+      <fos:rules>
+         
+   
+ 
+
+   <p diff="chg" at="K">The value of the <code>$element-name</code> argument <rfc2119>must</rfc2119> be a
+      string containing an <termref def="dt-eqname">EQName</termref>. 
+      If it is a <termref def="dt-lexical-qname">lexical QName</termref> with a prefix,
+      the it is expanded into an <termref
+         def="dt-expanded-qname">expanded QName</termref> using the namespace
+      declarations in the static context of the <termref def="dt-expression">expression</termref>.
+      If there is a default namespace in scope, then it is used to expand an unprefixed
+      <termref def="dt-lexical-qname">lexical QName</termref>. The
+      <function>element-available</function> function returns true if and only if the
+      <termref def="dt-expanded-qname">expanded QName</termref> is the name of an
+      <termref def="dt-instruction">instruction</termref>. If the <termref
+         def="dt-expanded-qname">expanded QName</termref> has a namespace URI equal to
+      the <termref def="dt-xslt-namespace">XSLT namespace</termref> URI, then it refers
+      to an element defined by XSLT. Otherwise, it refers to an <termref
+         def="dt-extension-instruction">extension instruction</termref>. If the <termref
+            def="dt-expanded-qname">expanded QName</termref> has a null namespace URI, the
+      <function>element-available</function> function will return false.</p>
+   
+   <p>If the <termref def="dt-expanded-qname">expanded QName</termref> is in the
+      <termref def="dt-xslt-namespace">XSLT namespace</termref>, the function returns
+      true if and only if the expanded QName is the name of an <termref
+         def="dt-xslt-instruction">XSLT instruction</termref>, that is, an <termref
+            def="dt-xslt-element">XSLT element</termref> whose syntax summary in this
+      specification classifies it as an <termref def="dt-instruction"
+         >instruction</termref>.</p>
+   
+   <p>If the <termref def="dt-expanded-qname">expanded QName</termref> is not in the
+      <termref def="dt-xslt-namespace">XSLT namespace</termref>, the function returns
+      true if and only if the processor has an implementation available of an <termref
+         def="dt-extension-instruction">extension instruction</termref> with the given
+      expanded QName. This applies whether or not the namespace has been designated as
+      an <termref def="dt-extension-namespace">extension namespace</termref>.</p>
+   <p>If the processor does not have an implementation of a particular extension
+      instruction available, and such an extension instruction is evaluated, then the
+      processor <rfc2119>must</rfc2119> perform fallback for the element as specified in
+      <specref ref="fallback"/>. An implementation <rfc2119>must not</rfc2119> signal
+      an error merely because the stylesheet contains an extension instruction for which
+      no implementation is available.</p>
+         
+      </fos:rules>
+<fos:errors>
+   <p diff="chg" at="K">
+      <error spec="XT" type="dynamic" class="DE" code="1440">
+         <p>It is a <termref def="dt-nonrec-dynamic-error">non-recoverable dynamic
+            error</termref> if the argument <error.extra>passed to the
+               <function>element-available</function> function</error.extra> does not
+            evaluate to a string that is a valid <termref def="dt-eqname"
+               >EQName</termref>, or if the value is a <termref def="dt-lexical-qname">lexical QName</termref>
+            with a prefix for which no namespace declaration is present in the static context. If the processor is
+            able to detect the error statically (for example, when the argument is
+            supplied as a string literal), then the processor <rfc2119>may</rfc2119>
+            optionally signal this as a <termref def="dt-static-error">static
+               error</termref>.</p>
+      </error>
+   </p>
+</fos:errors> 
+      <fos:notes>
+         <p>Although the result of applying this function to a name in the XSLT namespace
+            when using a conformant XSLT <phrase diff="chg" at="A">3.0</phrase> processor
+            is entirely predictable, the function is useful in cases where the stylesheet
+            might be executing under a processor that implements some other version of XSLT
+            with different rules.</p>
+         <p>Note that the result of the <function>element-available</function> does not depend on whether
+         or not the namespace of the supplied instruction name has been designated as an
+         extension element namespace; it tests whether the instruction would be available if the namespace
+         were designated as such.</p>
+         <p diff="add" at="M">If an instruction is recognized but offers
+            no useful functionality (for example, if the system has been configured for security
+            reasons so that <elcode>xsl:evaluate</elcode> always raises an error), then
+            <function>element-available</function> when applied to that instruction <rfc>should</rfc> return false.</p>
+      </fos:notes>
+   </fos:function>
+   
+   <fos:function name="type-available" prefix="fn">
+      <fos:signatures>
+         <fos:proto name="type-available" return-type="xs:boolean">
+            <fos:arg name="type-name" type="xs:string"/>
+         </fos:proto>
+      </fos:signatures>
+      <fos:properties>
+         <fos:property>deterministic</fos:property>
+         <fos:property dependency="namespaces schema-definitions">context-dependent</fos:property>
+         <fos:property>focus-independent</fos:property>
+      </fos:properties>
+      <fos:summary>
+         <!--Text replaced by erratum E15 change 1"-->
+         <p>Used to control how a
+            stylesheet behaves if a particular schema type is or is not available in the static
+            context.</p>
+         <!--End of text replaced by erratum E15-->
+      </fos:summary>
+      <fos:rules>
+ 
+         <p>A schema type (that is, a simple type or a complex type) is said to be available
+            within an XPath expression if it is a type definition that is present in the
+            <xtermref spec="XP30" ref="dt-is-types">in-scope schema types</xtermref> for
+            that expression (see <specref ref="static-context"/>). This includes built-in
+            types, types imported using <elcode>xsl:import-schema</elcode>, and extension
+            types defined by the implementation.</p>
+         <p>The value of the <code>$type-name</code> argument <rfc2119>must</rfc2119> be a
+            string containing a <phrase diff="chg" at="K"><termref def="dt-eqname">EQName</termref></phrase>. The
+            EQName is expanded into an <termref def="dt-expanded-qname"
+               >expanded QName</termref> using the namespace declarations in scope for the
+            <termref def="dt-expression">expression</termref>. If the value is an
+            unprefixed lexical QName, then the default namespace is used in the expanded QName.</p>
+         <p>The function returns true if and only if there is an available type whose name
+            matches the value of the <code>$type-name</code> argument. </p>
+         
+         
+      </fos:rules>
+      <fos:errors>
+         <p diff="chg" at="K">
+            <error spec="XT" type="dynamic" class="DE" code="1428">
+               <p>It is a <termref def="dt-nonrec-dynamic-error">non-recoverable dynamic
+                  error</termref> if the argument <error.extra>passed to the
+                     <function>type-available</function> function</error.extra> does
+                  not evaluate to a string that is a valid <termref def="dt-eqname"
+                     >EQName</termref>, or if the value is a <termref def="dt-lexical-qname">lexical QName</termref>
+                  with a prefix for which no namespace declaration is present in the static context. If the processor is
+                  able to detect the error statically (for example, when the argument is
+                  supplied as a string literal), then the processor <rfc2119>may</rfc2119>
+                  optionally signal this as a <termref def="dt-static-error">static
+                     error</termref>.</p>
+            </error>
+         </p>
+      </fos:errors>
+      <fos:notes>
+         <!--Text inserted by erratum E15 change 2"-->
+         
+            <p>The <function>type-available</function> function is of limited use within an
+               <code>[xsl:]use-when</code> expression, because the static context for the
+               expression does not include any user-defined types.</p>
+         
+         <!--End of text inserted by erratum E15-->        
+      </fos:notes>
+   </fos:function>
+</fos:functions>

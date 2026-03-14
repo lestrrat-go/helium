@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<root>
+ <base side="left">
+  <a>
+   <description>a1</description>
+  </a>
+  <a>
+   <description>a2</description>
+   <b>
+    <description>a2b1</description>
+   </b>
+   <b>
+    <description>a2b2</description>
+   </b>
+  </a>
+ </base>
+ <base side="right">
+  <a>
+   <description>a3</description>
+   <b>
+    <description>a3b1</description>
+   </b>
+  </a>
+  <a>
+   <description>a4</description>
+  </a>
+  <a>
+   <description>a5</description>
+   <b>
+    <description>a5b1</description>
+   </b>
+  </a>
+ </base>
+</root>

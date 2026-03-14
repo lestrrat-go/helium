@@ -1,0 +1,9 @@
+<doc>
+    <chap>
+        <para>one</para>
+    </chap>
+    <chap>
+        <xi:include href="dir/data1.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+        <xi:include href="dir/data2.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+    </chap>
+</doc>

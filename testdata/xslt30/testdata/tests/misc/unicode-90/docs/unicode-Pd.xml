@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<characters>
+   <c cp="002D" d="45" v="1.1" cat="Pd" c="-"/>
+   <c cp="058A" d="1418" v="3.0" cat="Pd" c="֊"/>
+   <c cp="05BE" d="1470" v="1.1" cat="Pd" c="־"/>
+   <c cp="1400" d="5120" v="5.2" cat="Pd" c="᐀"/>
+   <c cp="1806" d="6150" v="3.0" cat="Pd" c="᠆"/>
+   <c cp="2010" d="8208" v="1.1" cat="Pd" c="‐"/>
+   <c cp="2011" d="8209" v="1.1" cat="Pd" c="‑"/>
+   <c cp="2012" d="8210" v="1.1" cat="Pd" c="‒"/>
+   <c cp="2013" d="8211" v="1.1" cat="Pd" c="–"/>
+   <c cp="2014" d="8212" v="1.1" cat="Pd" c="—"/>
+   <c cp="2015" d="8213" v="1.1" cat="Pd" c="―"/>
+   <c cp="2E17" d="11799" v="4.1" cat="Pd" c="⸗"/>
+   <c cp="2E1A" d="11802" v="5.1" cat="Pd" c="⸚"/>
+   <c cp="2E3A" d="11834" v="6.1" cat="Pd" c="⸺"/>
+   <c cp="2E3B" d="11835" v="6.1" cat="Pd" c="⸻"/>
+   <c cp="2E40" d="11840" v="7.0" cat="Pd" c="⹀"/>
+   <c cp="301C" d="12316" v="1.1" cat="Pd" c="〜"/>
+   <c cp="3030" d="12336" v="1.1" cat="Pd" c="〰"/>
+   <c cp="30A0" d="12448" v="3.2" cat="Pd" c="゠"/>
+   <c cp="FE31" d="65073" v="1.1" cat="Pd" c="︱"/>
+   <c cp="FE32" d="65074" v="1.1" cat="Pd" c="︲"/>
+   <c cp="FE58" d="65112" v="1.1" cat="Pd" c="﹘"/>
+   <c cp="FE63" d="65123" v="1.1" cat="Pd" c="﹣"/>
+   <c cp="FF0D" d="65293" v="1.1" cat="Pd" c="－"/>
+</characters>

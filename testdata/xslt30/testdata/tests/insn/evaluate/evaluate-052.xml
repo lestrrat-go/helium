@@ -1,0 +1,3 @@
+<root>
+  <value>function() { $p1?foo }</value>
+</root>

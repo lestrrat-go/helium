@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!-- Test for xsl:sort -->
+<doc>
+  <item target="ab"  num="1" />
+  <item target="cd"  num="2" />
+  <item target="dc"  num="3" />
+  <item target="cd"  num="4" />
+  <item target="ab"  num="5" />
+  
+  <item target="Ab"  num="11" />
+  <item target="Cd"  num="12" />
+  <item target="Dc"  num="13" />
+  <item target="CD"  num="14" />
+  <item target="AB"  num="15" />
+</doc>

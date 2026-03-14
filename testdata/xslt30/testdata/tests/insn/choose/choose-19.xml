@@ -1,0 +1,14 @@
+<?xml version="1.0" ?>
+<doc>
+<true val="true">
+<true val="true-true"/>
+<false val="true-false"/>
+</true>
+<false val="false">
+<true val="false-true"/>
+<false val="false-false"/>
+</false>
+<zero val="0"/>
+<two val="2"/>
+<three val="3"/>
+</doc>

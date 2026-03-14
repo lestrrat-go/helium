@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="iso-8859-1"?> 
+
+<!-- Test for xsl:sort with accents and case differences -->
+<doc>
+ <item>Jager</item>
+ <item>Jaeger</item>
+ <item>JAEGER</item>
+ <item>Jagger</item>
+ <item>JAGGED</item>
+ <item>jogger</item>
+ <item>Jæger</item>
+ <item>JÆGER</item>
+ <item>Jäger</item>
+ <item>jäger</item>
+ <item>JÄGER</item>
+</doc>

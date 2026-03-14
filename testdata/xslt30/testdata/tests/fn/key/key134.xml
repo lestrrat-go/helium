@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<doc>
+  <p>The whole document.</p>
+  <div>
+    <title>Introduction</title>
+    <p>Intro Section.</p>
+    <body>Deeper
+      <p>Body of Intro.</p>junk
+    </body>
+  </div>
+  
+  <div>
+    <title>Stylesheet Structure</title>
+    <p>SS Section.</p>
+    <div>
+      <title>Introduction</title>
+      <p>Intro to SS subsection.</p>
+      <body>Deeper
+        <p>Body of SS Intro.</p>junk
+      </body>
+    </div>
+    <body>Deeper
+      <p>Body of SS.</p>junk
+    </body>
+  </div>
+  
+  <div>
+    <title>Expressions</title>
+    <p>Exp Section.</p>
+    <body>Deeper
+      <p>Body of Exp.</p>junk
+    </body>
+  </div>
+
+  <appendix>
+    <title>Appendix Title</title>
+    <p>Appendix.</p>
+    <div>
+      <title>Introduction</title>
+      <p>Intro to Appendix.</p>
+      <body>Deeper
+        <Sect1>Into 1
+          <p>Body of App1.</p>junk
+        </Sect1>
+        <Sect2>Into 2
+          <p>Body of App2.</p>junk
+        </Sect2>
+        <Sect3>Into 3
+          <sub>Further Into 3
+            <p>Body of App3sub.</p>junk
+          </sub>Coming back
+        </Sect3>Back
+      </body>Back to div
+    </div>Out of div
+  </appendix>
+</doc>

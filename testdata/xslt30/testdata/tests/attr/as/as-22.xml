@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:integer-main xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://www.example.com/ns/integer integerSchemaAs.xsd"
+		  xmlns:my="http://www.example.com/ns/integer">
+	<i1-integer-enumeration>999999999</i1-integer-enumeration>
+	<i2-integer-maxExclusive-minExclusive>99999999</i2-integer-maxExclusive-minExclusive>
+	<i3-integer-maxInclusive-minInclusive>-1000000</i3-integer-maxInclusive-minInclusive>
+	<i4-integer-pattern>-12345678</i4-integer-pattern>
+	<i5-integer-fractionDigits-totalDigits>1234</i5-integer-fractionDigits-totalDigits>
+	<i6-integer-whiteSpace>    3    </i6-integer-whiteSpace>
+</my:integer-main>

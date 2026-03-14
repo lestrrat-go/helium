@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<doc-striptype xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:noNamespaceSchemaLocation="allBuiltinTypes.xsd"
+     xmlns:my="http://www.example.com/ns/test">
+	<elem-integer>003</elem-integer>
+</doc-striptype>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:userNode xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://www.example.com/ns/union-list list-unionSchemaAs.xsd"
+		  xmlns:my="http://www.example.com/ns/union-list">
+	<my:list-builtin>one two three</my:list-builtin>
+	<my:list-primitive>2.2 4.00099 -0.1111 7</my:list-primitive>
+	<my:list-derived>EN PT BG</my:list-derived>
+	<my:list-user-defined>000-AB 123-CD</my:list-user-defined>
+	<my:list-union>5 111-GG 188</my:list-union>	
+</my:userNode>

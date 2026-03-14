@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<customers>
+  <customer>
+    <name>William</name>
+    <order>pc10</order>
+    <order>pc20</order>
+  </customer>
+  <customer>
+    <name>Harry</name>
+    <order>pc21</order>
+    <order>pc22</order>
+  </customer>
+</customers>

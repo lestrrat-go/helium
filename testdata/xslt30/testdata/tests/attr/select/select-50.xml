@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<doc>
+  <child>Selection of this child is an error.</child>
+  <child high="3">Selection of this child is an error.</child>
+  <child wide="4">Selection of this child is an error.</child>
+  <child wide="4" high="3">Selection of this child is an error.</child>
+  <child wide="3">E</child>
+  <child wide="3" high="3">F</child>
+  <child wide="3" deep="3">G</child>
+  <child wide="4" deep="2">Selection of this child is an error.</child>
+  <child wide="4" deep="2" high="3">Selection of this child is an error.</child>
+  <child wide="3" deep="2">J</child>
+  <child wide="3" deep="3" high="3">K</child>
+  <child deep="2">Selection of this child is an error.</child>
+  <child deep="2" high="3">Selection of this child is an error.</child>
+  <child deep="3">N</child>
+  <child deep="3" high="3">O</child>
+  <child wide="4" deep="3">P</child>
+</doc>

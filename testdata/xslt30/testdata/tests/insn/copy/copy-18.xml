@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inc>
+  <list>
+    <node1>foo1</node1>
+    <node2>foo2</node2>
+    <node3>foo3</node3>
+  </list>
+  <node1>bar1</node1>
+  <node2>bar2</node2>
+  <node4 ax="by+c">bar4</node4>
+</inc>

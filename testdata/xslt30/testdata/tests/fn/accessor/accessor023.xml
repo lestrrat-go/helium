@@ -1,0 +1,1 @@
+<doc att="att1" ><?mypi some_data?><!-- comment 1-->text-node-1<inner att2="att2"><down><abc/></down></inner></doc>
