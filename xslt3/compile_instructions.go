@@ -20,10 +20,44 @@ func (c *compiler) compileInstruction(elem *helium.Element) (Instruction, error)
 	}
 	defer func() { c.preserveSpace = savedPreserve }()
 
+	// Handle per-instruction xpath-default-namespace
+	savedXPathDefaultNS := c.xpathDefaultNS
+	hasLocalXPNS := false
+	if xdn, ok := elem.GetAttribute("xpath-default-namespace"); ok {
+		c.xpathDefaultNS = xdn
+		hasLocalXPNS = true
+	}
+	defer func() { c.xpathDefaultNS = savedXPathDefaultNS }()
+
 	if elem.URI() == NSXSLT {
-		return c.compileXSLTInstruction(elem)
+		inst, err := c.compileXSLTInstruction(elem)
+		if err != nil {
+			return nil, err
+		}
+		// Store effective xpath-default-namespace on instructions that support it
+		c.setInstructionXPathNS(inst, hasLocalXPNS)
+		return inst, nil
 	}
 	return c.compileLiteralResultElement(elem)
+}
+
+// setInstructionXPathNS stores the current xpath-default-namespace on
+// instructions that embed xpathNS.
+func (c *compiler) setInstructionXPathNS(inst Instruction, hasLocal bool) {
+	set := func(ns *xpathNS) {
+		ns.XPathDefaultNS = c.xpathDefaultNS
+		ns.HasXPathDefaultNS = hasLocal
+	}
+	switch v := inst.(type) {
+	case *IfInst:
+		set(&v.xpathNS)
+	case *ValueOfInst:
+		set(&v.xpathNS)
+	case *ForEachInst:
+		set(&v.xpathNS)
+	case *ChooseInst:
+		set(&v.xpathNS)
+	}
 }
 
 // pushElementNamespaces adds namespace declarations from elem to nsBindings
@@ -176,10 +210,10 @@ func (c *compiler) compileChildren(parent *helium.Element) ([]Instruction, error
 
 func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesInst, error) {
 	inst := &ApplyTemplatesInst{
-		Mode: getAttr(elem,"mode"),
+		Mode: getAttr(elem, "mode"),
 	}
 
-	selectAttr := getAttr(elem,"select")
+	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -244,7 +278,7 @@ func (c *compiler) compileCallTemplate(elem *helium.Element) (*CallTemplateInst,
 func (c *compiler) compileValueOf(elem *helium.Element) (*ValueOfInst, error) {
 	inst := &ValueOfInst{}
 
-	selectAttr := getAttr(elem,"select")
+	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -295,12 +329,12 @@ func (c *compiler) compileText(elem *helium.Element) (*TextInst, error) {
 
 	return &TextInst{
 		Value:                 sb.String(),
-		DisableOutputEscaping: getAttr(elem,"disable-output-escaping") == "yes",
+		DisableOutputEscaping: getAttr(elem, "disable-output-escaping") == "yes",
 	}, nil
 }
 
 func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
-	nameAttr := getAttr(elem,"name")
+	nameAttr := getAttr(elem, "name")
 	if nameAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:element requires name attribute")
 	}
@@ -312,7 +346,7 @@ func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
 
 	inst := &ElementInst{Name: nameAVT}
 
-	nsAttr := getAttr(elem,"namespace")
+	nsAttr := getAttr(elem, "namespace")
 	if nsAttr != "" {
 		nsAVT, err := compileAVT(nsAttr, c.nsBindings)
 		if err != nil {
@@ -331,7 +365,7 @@ func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
 }
 
 func (c *compiler) compileAttribute(elem *helium.Element) (*AttributeInst, error) {
-	nameAttr := getAttr(elem,"name")
+	nameAttr := getAttr(elem, "name")
 	if nameAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:attribute requires name attribute")
 	}
@@ -343,7 +377,7 @@ func (c *compiler) compileAttribute(elem *helium.Element) (*AttributeInst, error
 
 	inst := &AttributeInst{Name: nameAVT}
 
-	nsAttr := getAttr(elem,"namespace")
+	nsAttr := getAttr(elem, "namespace")
 	if nsAttr != "" {
 		nsAVT, err := compileAVT(nsAttr, c.nsBindings)
 		if err != nil {
@@ -352,7 +386,7 @@ func (c *compiler) compileAttribute(elem *helium.Element) (*AttributeInst, error
 		inst.Namespace = nsAVT
 	}
 
-	selectAttr := getAttr(elem,"select")
+	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -373,7 +407,7 @@ func (c *compiler) compileAttribute(elem *helium.Element) (*AttributeInst, error
 func (c *compiler) compileComment(elem *helium.Element) (*CommentInst, error) {
 	inst := &CommentInst{}
 
-	selectAttr := getAttr(elem,"select")
+	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -392,7 +426,7 @@ func (c *compiler) compileComment(elem *helium.Element) (*CommentInst, error) {
 }
 
 func (c *compiler) compilePI(elem *helium.Element) (*PIInst, error) {
-	nameAttr := getAttr(elem,"name")
+	nameAttr := getAttr(elem, "name")
 	if nameAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:processing-instruction requires name attribute")
 	}
@@ -404,7 +438,7 @@ func (c *compiler) compilePI(elem *helium.Element) (*PIInst, error) {
 
 	inst := &PIInst{Name: nameAVT}
 
-	selectAttr := getAttr(elem,"select")
+	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -423,7 +457,7 @@ func (c *compiler) compilePI(elem *helium.Element) (*PIInst, error) {
 }
 
 func (c *compiler) compileIf(elem *helium.Element) (*IfInst, error) {
-	testAttr := getAttr(elem,"test")
+	testAttr := getAttr(elem, "test")
 	if testAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:if requires test attribute")
 	}
@@ -455,21 +489,44 @@ func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 
 		switch childElem.LocalName() {
 		case "when":
-			testAttr := getAttr(childElem,"test")
+			savedNS := c.xpathDefaultNS
+			hasLocal := false
+			if xdn, ok := childElem.GetAttribute("xpath-default-namespace"); ok {
+				c.xpathDefaultNS = xdn
+				hasLocal = true
+			}
+			testAttr := getAttr(childElem, "test")
 			if testAttr == "" {
+				c.xpathDefaultNS = savedNS
 				return nil, staticError(errCodeXTSE0110, "xsl:when requires test attribute")
 			}
 			expr, err := compileXPath(testAttr, c.nsBindings)
 			if err != nil {
+				c.xpathDefaultNS = savedNS
 				return nil, err
 			}
 			body, err := c.compileChildren(childElem)
+			wc := &WhenClause{Test: expr, Body: body}
+			wc.XPathDefaultNS = c.xpathDefaultNS
+			wc.HasXPathDefaultNS = hasLocal
+			c.xpathDefaultNS = savedNS
 			if err != nil {
 				return nil, err
 			}
-			inst.When = append(inst.When, &WhenClause{Test: expr, Body: body})
+			inst.When = append(inst.When, wc)
 		case "otherwise":
+			savedNS := c.xpathDefaultNS
+			hasLocal := false
+			if xdn, ok := childElem.GetAttribute("xpath-default-namespace"); ok {
+				c.xpathDefaultNS = xdn
+				hasLocal = true
+			}
 			body, err := c.compileChildren(childElem)
+			if hasLocal {
+				inst.OtherwiseXPNS = c.xpathDefaultNS
+				inst.HasOtherwiseXPNS = true
+			}
+			c.xpathDefaultNS = savedNS
 			if err != nil {
 				return nil, err
 			}
@@ -481,7 +538,7 @@ func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 }
 
 func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
-	selectAttr := getAttr(elem,"select")
+	selectAttr := getAttr(elem, "select")
 	if selectAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:for-each requires select attribute")
 	}
@@ -536,7 +593,7 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 }
 
 func (c *compiler) compileLocalVariable(elem *helium.Element) (*VariableInst, error) {
-	name := getAttr(elem,"name")
+	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:variable requires name attribute")
 	}
@@ -546,7 +603,7 @@ func (c *compiler) compileLocalVariable(elem *helium.Element) (*VariableInst, er
 		As:   getAttr(elem, "as"),
 	}
 
-	selectAttr := getAttr(elem,"select")
+	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -565,17 +622,17 @@ func (c *compiler) compileLocalVariable(elem *helium.Element) (*VariableInst, er
 }
 
 func (c *compiler) compileLocalParam(elem *helium.Element) (*ParamInst, error) {
-	name := getAttr(elem,"name")
+	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:param requires name attribute")
 	}
 
 	inst := &ParamInst{
 		Name:     name,
-		Required: getAttr(elem,"required") == "yes",
+		Required: getAttr(elem, "required") == "yes",
 	}
 
-	selectAttr := getAttr(elem,"select")
+	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -613,7 +670,7 @@ func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
 }
 
 func (c *compiler) compileCopyOf(elem *helium.Element) (*CopyOfInst, error) {
-	selectAttr := getAttr(elem,"select")
+	selectAttr := getAttr(elem, "select")
 	if selectAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:copy-of requires select attribute")
 	}
@@ -628,13 +685,13 @@ func (c *compiler) compileCopyOf(elem *helium.Element) (*CopyOfInst, error) {
 
 func (c *compiler) compileNumber(elem *helium.Element) (*NumberInst, error) {
 	inst := &NumberInst{
-		Level: getAttr(elem,"level"),
+		Level: getAttr(elem, "level"),
 	}
 	if inst.Level == "" {
 		inst.Level = "single"
 	}
 
-	if countAttr := getAttr(elem,"count"); countAttr != "" {
+	if countAttr := getAttr(elem, "count"); countAttr != "" {
 		p, err := compilePattern(countAttr, c.nsBindings, c.xpathDefaultNS)
 		if err != nil {
 			return nil, err
@@ -642,7 +699,7 @@ func (c *compiler) compileNumber(elem *helium.Element) (*NumberInst, error) {
 		inst.Count = p
 	}
 
-	if fromAttr := getAttr(elem,"from"); fromAttr != "" {
+	if fromAttr := getAttr(elem, "from"); fromAttr != "" {
 		p, err := compilePattern(fromAttr, c.nsBindings, c.xpathDefaultNS)
 		if err != nil {
 			return nil, err
@@ -650,7 +707,7 @@ func (c *compiler) compileNumber(elem *helium.Element) (*NumberInst, error) {
 		inst.From = p
 	}
 
-	if valueAttr := getAttr(elem,"value"); valueAttr != "" {
+	if valueAttr := getAttr(elem, "value"); valueAttr != "" {
 		expr, err := compileXPath(valueAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
@@ -658,7 +715,7 @@ func (c *compiler) compileNumber(elem *helium.Element) (*NumberInst, error) {
 		inst.Value = expr
 	}
 
-	if fmtAttr := getAttr(elem,"format"); fmtAttr != "" {
+	if fmtAttr := getAttr(elem, "format"); fmtAttr != "" {
 		avt, err := compileAVT(fmtAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
@@ -712,7 +769,7 @@ func (c *compiler) compileNumber(elem *helium.Element) (*NumberInst, error) {
 func (c *compiler) compileMessage(elem *helium.Element) (*MessageInst, error) {
 	inst := &MessageInst{}
 
-	selectAttr := getAttr(elem,"select")
+	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -727,7 +784,7 @@ func (c *compiler) compileMessage(elem *helium.Element) (*MessageInst, error) {
 		inst.Body = body
 	}
 
-	termAttr := getAttr(elem,"terminate")
+	termAttr := getAttr(elem, "terminate")
 	if termAttr != "" {
 		avt, err := compileAVT(termAttr, c.nsBindings)
 		if err != nil {
@@ -749,7 +806,7 @@ func (c *compiler) compileMessage(elem *helium.Element) (*MessageInst, error) {
 }
 
 func (c *compiler) compileNamespace(elem *helium.Element) (*NamespaceInst, error) {
-	nameAttr := getAttr(elem,"name")
+	nameAttr := getAttr(elem, "name")
 	if nameAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:namespace requires name attribute")
 	}
@@ -761,7 +818,7 @@ func (c *compiler) compileNamespace(elem *helium.Element) (*NamespaceInst, error
 
 	inst := &NamespaceInst{Name: nameAVT}
 
-	selectAttr := getAttr(elem,"select")
+	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -782,7 +839,7 @@ func (c *compiler) compileNamespace(elem *helium.Element) (*NamespaceInst, error
 func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
 	sk := &SortKey{}
 
-	selectAttr := getAttr(elem,"select")
+	selectAttr := getAttr(elem, "select")
 	if selectAttr == "" {
 		selectAttr = "."
 	}
@@ -792,7 +849,7 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
 	}
 	sk.Select = expr
 
-	if order := getAttr(elem,"order"); order != "" {
+	if order := getAttr(elem, "order"); order != "" {
 		avt, err := compileAVT(order, c.nsBindings)
 		if err != nil {
 			return nil, err
@@ -800,7 +857,7 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
 		sk.Order = avt
 	}
 
-	if dataType := getAttr(elem,"data-type"); dataType != "" {
+	if dataType := getAttr(elem, "data-type"); dataType != "" {
 		avt, err := compileAVT(dataType, c.nsBindings)
 		if err != nil {
 			return nil, err
@@ -808,7 +865,7 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
 		sk.DataType = avt
 	}
 
-	if caseOrder := getAttr(elem,"case-order"); caseOrder != "" {
+	if caseOrder := getAttr(elem, "case-order"); caseOrder != "" {
 		avt, err := compileAVT(caseOrder, c.nsBindings)
 		if err != nil {
 			return nil, err
@@ -816,7 +873,7 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
 		sk.CaseOrder = avt
 	}
 
-	if lang := getAttr(elem,"lang"); lang != "" {
+	if lang := getAttr(elem, "lang"); lang != "" {
 		avt, err := compileAVT(lang, c.nsBindings)
 		if err != nil {
 			return nil, err
@@ -828,7 +885,7 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
 }
 
 func (c *compiler) compileWithParam(elem *helium.Element) (*WithParam, error) {
-	name := getAttr(elem,"name")
+	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:with-param requires name attribute")
 	}
@@ -839,7 +896,7 @@ func (c *compiler) compileWithParam(elem *helium.Element) (*WithParam, error) {
 		wp.Tunnel = true
 	}
 
-	selectAttr := getAttr(elem,"select")
+	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {

@@ -130,9 +130,21 @@ func sortNodes(ctx context.Context, ec *execContext, nodes []helium.Node, sortKe
 }
 
 func compareNumericStrings(a, b string) int {
-	// Parse as float64 for comparison
+	// Parse as float64 for comparison.
+	// NaN (non-numeric) values sort before all real numbers.
 	fa := parseNumber(a)
 	fb := parseNumber(b)
+	aNaN := math.IsNaN(fa)
+	bNaN := math.IsNaN(fb)
+	if aNaN && bNaN {
+		return 0
+	}
+	if aNaN {
+		return -1
+	}
+	if bNaN {
+		return 1
+	}
 	if fa < fb {
 		return -1
 	}
