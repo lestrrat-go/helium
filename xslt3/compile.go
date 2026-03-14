@@ -12,6 +12,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xsd"
 )
 
 // compiler holds state during stylesheet compilation.
@@ -122,6 +123,11 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 
 	// Collect namespace declarations from root
 	c.collectNamespaces(root)
+
+	// Read default-validation from stylesheet root (XSLT 3.0)
+	if dv := getAttr(root, "default-validation"); dv != "" {
+		c.stylesheet.defaultValidation = dv
+	}
 
 	// Read xpath-default-namespace from stylesheet root
 	if xdn := getAttr(root, "xpath-default-namespace"); xdn != "" {
@@ -263,7 +269,9 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 		case "mode":
 			c.compileMode(elem)
 		case "import-schema":
-			// TODO: implement xsl:import-schema
+			if err := c.compileImportSchema(elem); err != nil {
+				return err
+			}
 		case "namespace-alias", "attribute-set":
 			// TODO: implement in later phases
 		default:
@@ -866,6 +874,88 @@ func compileSimplified(doc *helium.Document, root *helium.Element, cfg *compileC
 	c.stylesheet.baseURI = c.baseURI
 
 	return c.stylesheet, nil
+}
+
+func (c *compiler) compileImportSchema(elem *helium.Element) error {
+	schemaLoc := getAttr(elem, "schema-location")
+	if schemaLoc != "" {
+		// File-backed schema
+		uri := schemaLoc
+		if c.baseURI != "" && !strings.Contains(schemaLoc, "://") && !filepath.IsAbs(schemaLoc) {
+			baseDir := filepath.Dir(c.baseURI)
+			uri = filepath.Join(baseDir, schemaLoc)
+		}
+
+		ctx := context.Background()
+		schema, err := xsd.CompileFile(ctx, uri)
+		if err != nil {
+			return fmt.Errorf("xsl:import-schema: cannot compile %q: %w", uri, err)
+		}
+		c.stylesheet.schemas = append(c.stylesheet.schemas, schema)
+		return nil
+	}
+
+	// Look for inline xs:schema child
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		childElem, ok := child.(*helium.Element)
+		if !ok {
+			continue
+		}
+		if childElem.LocalName() == "schema" && childElem.URI() == "http://www.w3.org/2001/XMLSchema" {
+			inlineDoc := helium.NewDefaultDocument()
+			copied, err := helium.CopyNode(childElem, inlineDoc)
+			if err != nil {
+				return fmt.Errorf("xsl:import-schema: cannot copy inline schema: %w", err)
+			}
+			if err := inlineDoc.AddChild(copied); err != nil {
+				return fmt.Errorf("xsl:import-schema: cannot build inline schema doc: %w", err)
+			}
+			ctx := context.Background()
+			schema, err := xsd.Compile(ctx, inlineDoc)
+			if err != nil {
+				return fmt.Errorf("xsl:import-schema: cannot compile inline schema: %w", err)
+			}
+			c.stylesheet.schemas = append(c.stylesheet.schemas, schema)
+			return nil
+		}
+	}
+
+	// Namespace-only declaration — no schema to compile, accepted silently
+	return nil
+}
+
+// resolveXSDTypeName normalizes a QName type reference (e.g., "xs:ID",
+// "xsd:integer", or "Q{http://www.w3.org/2001/XMLSchema}ID") to the
+// canonical "xs:..." prefix form used by xpath3 constants.
+func resolveXSDTypeName(qname string, nsBindings map[string]string) string {
+	qname = strings.TrimSpace(qname)
+	if qname == "" {
+		return ""
+	}
+	// Handle EQName Q{uri}local
+	if strings.HasPrefix(qname, "Q{") {
+		closeIdx := strings.IndexByte(qname, '}')
+		if closeIdx > 0 {
+			uri := qname[2:closeIdx]
+			local := qname[closeIdx+1:]
+			if uri == "http://www.w3.org/2001/XMLSchema" {
+				return "xs:" + local
+			}
+			return qname
+		}
+	}
+	// Handle prefix:local
+	if idx := strings.IndexByte(qname, ':'); idx >= 0 {
+		prefix := qname[:idx]
+		local := qname[idx+1:]
+		if prefix == "xs" || prefix == "xsd" {
+			return "xs:" + local
+		}
+		if uri, ok := nsBindings[prefix]; ok && uri == "http://www.w3.org/2001/XMLSchema" {
+			return "xs:" + local
+		}
+	}
+	return qname
 }
 
 func (c *compiler) sortTemplates() {

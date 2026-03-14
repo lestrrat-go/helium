@@ -55,6 +55,7 @@ type evalConfig struct {
 	position           int  // initial context position (0 = use default 1)
 	size               int  // initial context size (0 = use default 1)
 	contextItem        Item // non-nil when context is an atomic value, not a node
+	typeAnnotations    map[helium.Node]string // node → xs:... type annotation (set by xslt3)
 }
 
 func getEvalConfig(ctx context.Context) *evalConfig {
@@ -369,6 +370,18 @@ func FnContextNode(ctx context.Context) helium.Node {
 		return nil
 	}
 	return ec.node
+}
+
+// WithTypeAnnotations sets the type annotation map used for schema-aware
+// node matching and typed atomization. The map associates helium nodes with
+// their XSD type annotations (e.g., "xs:ID", "xs:integer"). The map is NOT
+// cloned; the caller must guarantee it is not mutated for the lifetime of
+// the context.
+func WithTypeAnnotations(ctx context.Context, annotations map[helium.Node]string) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) bool {
+		c.typeAnnotations = annotations
+		return false
+	})
 }
 
 func cloneVariableMap(vars map[string]Sequence) map[string]Sequence {

@@ -384,6 +384,10 @@ func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
 
 	inst := &ElementInst{Name: nameAVT}
 
+	if typeAttr := getAttr(elem, "type"); typeAttr != "" {
+		inst.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
+	}
+
 	nsAttr := getAttr(elem, "namespace")
 	if nsAttr != "" {
 		nsAVT, err := compileAVT(nsAttr, c.nsBindings)
@@ -414,6 +418,10 @@ func (c *compiler) compileAttribute(elem *helium.Element) (*AttributeInst, error
 	}
 
 	inst := &AttributeInst{Name: nameAVT}
+
+	if typeAttr := getAttr(elem, "type"); typeAttr != "" {
+		inst.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
+	}
 
 	nsAttr := getAttr(elem, "namespace")
 	if nsAttr != "" {
@@ -699,6 +707,10 @@ func (c *compiler) compileLocalParam(elem *helium.Element) (*ParamInst, error) {
 func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
 	inst := &CopyInst{}
 
+	if v := getAttr(elem, "validation"); v != "" {
+		inst.Validation = v
+	}
+
 	if selectAttr := getAttr(elem, "select"); selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -726,7 +738,11 @@ func (c *compiler) compileCopyOf(elem *helium.Element) (*CopyOfInst, error) {
 		return nil, err
 	}
 
-	return &CopyOfInst{Select: expr}, nil
+	inst := &CopyOfInst{Select: expr}
+	if v := getAttr(elem, "validation"); v != "" {
+		inst.Validation = v
+	}
+	return inst, nil
 }
 
 func (c *compiler) compileNumber(elem *helium.Element) (*NumberInst, error) {

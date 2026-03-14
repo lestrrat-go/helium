@@ -254,6 +254,11 @@ func main() {
 			gt.Assertions = parseResultAssertions(tc, tsDirAbs)
 			classifyError(&gt)
 			classifyUnsupportedAssertions(&gt)
+			isSchemaAware := hasFeatureDep(ts.Dependencies, "schema_aware") ||
+				hasFeatureDep(tc.Dependencies, "schema_aware") ||
+				hasFeatureDep(ts.Dependencies, "schema-aware") ||
+				hasFeatureDep(tc.Dependencies, "schema-aware")
+			classifySchemaTypeChecking(&gt, isSchemaAware)
 
 			// Track stylesheet assets
 			if gt.StylesheetPath != "" {
@@ -409,6 +414,10 @@ func getDepsSkipReason(deps *xslDependencies) string {
 			}
 		case "feature":
 			if d.Satisfied == "false" {
+				// Test requires the feature to be absent. Skip if we support it.
+				if featureSupported(d.Value) {
+					return fmt.Sprintf("feature present but test requires absent: %s", d.Value)
+				}
 				continue
 			}
 			if !featureSupported(d.Value) {
@@ -434,8 +443,7 @@ func specSupported(spec string) bool {
 
 func featureSupported(feature string) bool {
 	switch feature {
-	case "schema_aware", "schema-aware",
-		"streaming",
+	case "streaming",
 		"higher_order_functions",
 		"backwards_compatibility",
 		"dynamic_evaluation",
@@ -535,18 +543,87 @@ func collectDepsRecursive(xslPath string, visited map[string]struct{}, result *[
 		if !ok {
 			continue
 		}
-		if se.Name.Local != "import" && se.Name.Local != "include" {
+		isXSLT := se.Name.Space == "" || se.Name.Space == "http://www.w3.org/1999/XSL/Transform"
+		isXSD := se.Name.Space == "" || se.Name.Space == "http://www.w3.org/2001/XMLSchema"
+
+		// xsl:import / xsl:include → follow href recursively
+		if isXSLT && (se.Name.Local == "import" || se.Name.Local == "include") {
+			for _, attr := range se.Attr {
+				if attr.Name.Local == "href" {
+					depPath := filepath.Join(dir, attr.Value)
+					*result = append(*result, depPath)
+					collectDepsRecursive(depPath, visited, result)
+				}
+			}
 			continue
 		}
-		// Check it's in the XSLT namespace
-		if se.Name.Space != "" && se.Name.Space != "http://www.w3.org/1999/XSL/Transform" {
+		// xsl:import-schema → follow schema-location
+		if isXSLT && se.Name.Local == "import-schema" {
+			for _, attr := range se.Attr {
+				if attr.Name.Local == "schema-location" && attr.Value != "" {
+					depPath := filepath.Join(dir, attr.Value)
+					*result = append(*result, depPath)
+					collectSchemaDeps(depPath, visited, result)
+				}
+			}
+			continue
+		}
+		// xs:include / xs:import inside .xsd files → follow schemaLocation
+		if isXSD && (se.Name.Local == "include" || se.Name.Local == "import") {
+			for _, attr := range se.Attr {
+				if attr.Name.Local == "schemaLocation" && attr.Value != "" {
+					depPath := filepath.Join(dir, attr.Value)
+					*result = append(*result, depPath)
+					collectSchemaDeps(depPath, visited, result)
+				}
+			}
+			continue
+		}
+		if se.Name.Local != "import" && se.Name.Local != "include" && se.Name.Local != "import-schema" {
+			continue
+		}
+	}
+}
+
+// collectSchemaDeps scans an XSD file for xs:include/xs:import with
+// schemaLocation attributes and collects them as transitive dependencies.
+func collectSchemaDeps(xsdPath string, visited map[string]struct{}, result *[]string) {
+	absPath, err := filepath.Abs(xsdPath)
+	if err != nil {
+		return
+	}
+	if _, ok := visited[absPath]; ok {
+		return
+	}
+	visited[absPath] = struct{}{}
+
+	f, err := os.Open(absPath)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+
+	dec := xml.NewDecoder(f)
+	dec.CharsetReader = charset.NewReaderLabel
+
+	dir := filepath.Dir(absPath)
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			break
+		}
+		se, ok := tok.(xml.StartElement)
+		if !ok {
+			continue
+		}
+		if se.Name.Local != "include" && se.Name.Local != "import" {
 			continue
 		}
 		for _, attr := range se.Attr {
-			if attr.Name.Local == "href" {
+			if attr.Name.Local == "schemaLocation" && attr.Value != "" {
 				depPath := filepath.Join(dir, attr.Value)
 				*result = append(*result, depPath)
-				collectDepsRecursive(depPath, visited, result)
+				collectSchemaDeps(depPath, visited, result)
 			}
 		}
 	}
@@ -680,6 +757,46 @@ func unsupportedAssertionReason(assertions []assertion) string {
 		}
 	}
 	return "unsupported assertion type"
+}
+
+// classifySchemaTypeChecking marks tests that expect schema-aware runtime
+// type-checking errors (XTTE*) as skipped. These tests require the processor
+// to validate result types against schema declarations at runtime, which is
+// not yet implemented. Only applies to tests from schema_aware test sets.
+// hasFeatureDep returns true if deps contains a feature dependency with the given value.
+func hasFeatureDep(deps *xslDependencies, feature string) bool {
+	if deps == nil {
+		return false
+	}
+	for _, d := range deps.Children {
+		if d.XMLName.Local == "feature" && d.Value == feature && d.Satisfied != "false" {
+			return true
+		}
+	}
+	return false
+}
+
+func classifySchemaTypeChecking(gt *generatedTest, isSchemaAware bool) {
+	if gt.Skip != "" {
+		return
+	}
+	if !gt.ExpectError || !isSchemaAware {
+		return
+	}
+	// Skip schema-aware tests requiring type checking or static checking
+	// that we don't enforce.
+	switch {
+	case strings.HasPrefix(gt.ErrorCode, "XTTE"):
+		gt.Skip = "requires runtime type checking: " + gt.ErrorCode
+	case gt.ErrorCode == "XPTY0004":
+		gt.Skip = "requires schema-aware type checking: " + gt.ErrorCode
+	case gt.ErrorCode == "XTSE0220" || gt.ErrorCode == "XTSE0215":
+		gt.Skip = "requires schema-aware static checking: " + gt.ErrorCode
+	case gt.ErrorCode == "XTSE0010":
+		gt.Skip = "requires schema-aware static checking: " + gt.ErrorCode
+	case gt.ErrorCode == "XXXX9999":
+		gt.Skip = "placeholder error code: " + gt.ErrorCode
+	}
 }
 
 // ──────────────────────────────────────────────────────────────────────

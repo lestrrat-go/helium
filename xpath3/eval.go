@@ -46,7 +46,8 @@ type evalContext struct {
 	// indirection. It is pointer-sized and nil when unused, so copies via
 	// withNode/withContextItem are negligible. The net/http dependency is
 	// already transitively required by golang.org/x/text.
-	httpClient *http.Client
+	httpClient      *http.Client
+	typeAnnotations map[helium.Node]string // node → xs:... type (from xslt3 schema awareness)
 }
 
 type variableScope struct {
@@ -133,6 +134,7 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 		ec.uriResolver = cfg.uriResolver
 		ec.collectionResolver = cfg.collectionResolver
 		ec.httpClient = cfg.httpClient
+		ec.typeAnnotations = cfg.typeAnnotations
 		if cfg.position > 0 {
 			ec.position = cfg.position
 		}
