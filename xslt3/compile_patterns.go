@@ -95,6 +95,9 @@ func computeDefaultPriority(expr xpath3.Expr) float64 {
 	case xpath3.RootExpr, *xpath3.RootExpr:
 		// "/" matches document nodes; default priority is -0.5
 		return -0.5
+	case xpath3.ContextItemExpr:
+		// "." (self::node()) — wildcard node test, priority -0.5
+		return -0.5
 	default:
 		return 0.5
 	}
@@ -221,6 +224,9 @@ func matchPatternAlt(ctx *execContext, alt *PatternAlt, node helium.Node) bool {
 		return node.Type() == helium.DocumentNode
 	case *xpath3.RootExpr:
 		return node.Type() == helium.DocumentNode
+	case xpath3.ContextItemExpr:
+		// "." matches any node (equivalent to self::node()).
+		return true
 	default:
 		// For complex expressions, try evaluating from document root
 		// and checking if node is in the result set.
@@ -298,10 +304,19 @@ func matchStepsUpward(ctx *execContext, steps []xpath3.Step, absolute bool, node
 
 // nodeMatchesStep checks if a node matches a single step's node test and predicates.
 func nodeMatchesStep(ctx *execContext, step xpath3.Step, node helium.Node) bool {
-	// Document nodes are only matched by "/" or document-node() patterns.
+	// Document nodes are matched by document-node() patterns, or by node()
+	// on the self axis (as in match=".").  On the child/descendant axes,
+	// document nodes are never selected.
 	if node.Type() == helium.DocumentNode {
 		if _, ok := step.NodeTest.(xpath3.DocumentTest); !ok {
-			return false
+			// Allow self::node() to match document nodes.
+			if step.Axis == xpath3.AxisSelf {
+				if tt, ok := step.NodeTest.(xpath3.TypeTest); !ok || tt.Kind != xpath3.NodeKindNode {
+					return false
+				}
+			} else {
+				return false
+			}
 		}
 	}
 	// Attribute nodes are only matched by the attribute axis (e.g., @*, attribute::node()).
