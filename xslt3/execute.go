@@ -299,7 +299,13 @@ func (ec *execContext) evaluateGlobalVar(v *Variable) (xpath3.Sequence, error) {
 		val = result.Sequence()
 	} else if len(v.Body) > 0 {
 		var err error
-		val, err = ec.evaluateBodyAsDocument(ctx, v.Body)
+		if v.As != "" {
+			// With as attribute: evaluate as raw sequence
+			val, err = ec.evaluateBody(ctx, v.Body)
+		} else {
+			// No as: wrap in document node (temporary tree)
+			val, err = ec.evaluateBodyAsDocument(ctx, v.Body)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("error evaluating global variable %q body: %w", v.Name, err)
 		}

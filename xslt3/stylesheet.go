@@ -51,6 +51,7 @@ type Variable struct {
 	Name   string
 	Select *xpath3.Expression
 	Body   []Instruction // used when select is absent
+	As     string        // type declaration (e.g., "element()*")
 }
 
 // Param is a compiled xsl:param.
