@@ -1143,6 +1143,20 @@ func (ec *execContext) copyNodeToOutput(node helium.Node) error {
 			return nil
 		}
 		return copyAttributeToElement(elem, attr)
+	case helium.NamespaceNode:
+		// Namespace nodes are copied as namespace declarations on the current element.
+		nsw, ok := node.(*helium.NamespaceNodeWrapper)
+		if !ok {
+			return nil
+		}
+		out := ec.currentOutput()
+		elem, ok := out.current.(*helium.Element)
+		if !ok {
+			return nil
+		}
+		prefix := nsw.Name()
+		uri := string(nsw.Content())
+		return elem.DeclareNamespace(prefix, uri)
 	default:
 		copied, err := helium.CopyNode(node, ec.resultDoc)
 		if err != nil {
@@ -1880,7 +1894,7 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 }
 
 func (ec *execContext) execPerformSort(ctx context.Context, inst *PerformSortInst) error {
-	var nodes []helium.Node
+	var seq xpath3.Sequence
 
 	if inst.Select != nil {
 		xpathCtx := ec.newXPathContext(ec.contextNode)
@@ -1888,53 +1902,87 @@ func (ec *execContext) execPerformSort(ctx context.Context, inst *PerformSortIns
 		if err != nil {
 			return err
 		}
-		ns, ok := xpath3.NodesFrom(result.Sequence())
-		if !ok {
-			return nil
-		}
-		nodes = ns
+		seq = result.Sequence()
 	} else if len(inst.Body) > 0 {
 		// Body acts as sequence constructor: evaluate to get the items to sort
-		seq, err := ec.evaluateBody(ctx, inst.Body)
+		var err error
+		seq, err = ec.evaluateBody(ctx, inst.Body)
 		if err != nil {
 			return err
 		}
-		ns, ok := xpath3.NodesFrom(seq)
-		if !ok {
-			return nil
-		}
-		nodes = ns
-	} else {
+	}
+	if len(seq) == 0 {
 		return nil
 	}
 
+	// Try to extract nodes for node-based sorting
+	nodes, allNodes := xpath3.NodesFrom(seq)
+	if allNodes && len(nodes) > 0 {
+		if len(inst.Sort) > 0 {
+			var err error
+			nodes, err = sortNodes(ctx, ec, nodes, inst.Sort)
+			if err != nil {
+				return err
+			}
+		}
+
+		savedCurrent := ec.currentNode
+		savedContext := ec.contextNode
+		savedPos := ec.position
+		savedSize := ec.size
+		ec.size = len(nodes)
+		defer func() {
+			ec.currentNode = savedCurrent
+			ec.contextNode = savedContext
+			ec.position = savedPos
+			ec.size = savedSize
+		}()
+
+		// Output sorted nodes
+		for _, node := range nodes {
+			if err := ec.copyNodeToOutput(node); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Atomic sequence: sort by string value and output as text items
 	if len(inst.Sort) > 0 {
 		var err error
-		nodes, err = sortNodes(ctx, ec, nodes, inst.Sort)
+		seq, err = sortItems(ctx, ec, seq, inst.Sort)
 		if err != nil {
 			return err
 		}
 	}
 
-	savedCurrent := ec.currentNode
-	savedContext := ec.contextNode
-	savedPos := ec.position
-	savedSize := ec.size
-	ec.size = len(nodes)
-	defer func() {
-		ec.currentNode = savedCurrent
-		ec.contextNode = savedContext
-		ec.position = savedPos
-		ec.size = savedSize
-	}()
-
-	// Output sorted nodes
-	for _, node := range nodes {
-		if err := ec.copyNodeToOutput(node); err != nil {
+	// Output atomic items separated by spaces
+	for i, item := range seq {
+		if i > 0 {
+			sep, err := ec.resultDoc.CreateText([]byte(" "))
+			if err != nil {
+				return err
+			}
+			if err := ec.addNode(sep); err != nil {
+				return err
+			}
+		}
+		av, ok := item.(xpath3.AtomicValue)
+		if !ok {
+			continue
+		}
+		s, err := xpath3.AtomicToString(av)
+		if err != nil {
+			continue
+		}
+		text, err := ec.resultDoc.CreateText([]byte(s))
+		if err != nil {
+			return err
+		}
+		if err := ec.addNode(text); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -1943,19 +1991,31 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *NextMatchInst) e
 	node := ec.currentNode
 	mode := ec.currentMode
 
-	// Process with-param (tunnel and regular)
+	// Process with-param (tunnel and regular).
+	// Copy tunnel params to avoid mutating the caller's map.
 	var pv map[string]xpath3.Sequence
 	savedTunnel := ec.tunnelParams
 	if len(inst.Params) > 0 {
+		hasTunnel := false
+		for _, wp := range inst.Params {
+			if wp.Tunnel {
+				hasTunnel = true
+				break
+			}
+		}
+		if hasTunnel {
+			newTunnel := make(map[string]xpath3.Sequence, len(ec.tunnelParams)+len(inst.Params))
+			for k, v := range ec.tunnelParams {
+				newTunnel[k] = v
+			}
+			ec.tunnelParams = newTunnel
+		}
 		for _, wp := range inst.Params {
 			val, err := ec.evaluateWithParam(ctx, wp)
 			if err != nil {
 				return err
 			}
 			if wp.Tunnel {
-				if ec.tunnelParams == nil {
-					ec.tunnelParams = make(map[string]xpath3.Sequence)
-				}
 				ec.tunnelParams[wp.Name] = val
 			} else {
 				if pv == nil {
@@ -1994,19 +2054,31 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *ApplyImportsI
 	mode := ec.currentMode
 	maxPrec := ec.currentTemplate.ImportPrec
 
-	// Process with-param (tunnel and regular)
+	// Process with-param (tunnel and regular).
+	// Copy tunnel params to avoid mutating the caller's map.
 	var pv map[string]xpath3.Sequence
 	savedTunnel := ec.tunnelParams
 	if len(inst.Params) > 0 {
+		hasTunnel := false
+		for _, wp := range inst.Params {
+			if wp.Tunnel {
+				hasTunnel = true
+				break
+			}
+		}
+		if hasTunnel {
+			newTunnel := make(map[string]xpath3.Sequence, len(ec.tunnelParams)+len(inst.Params))
+			for k, v := range ec.tunnelParams {
+				newTunnel[k] = v
+			}
+			ec.tunnelParams = newTunnel
+		}
 		for _, wp := range inst.Params {
 			val, err := ec.evaluateWithParam(ctx, wp)
 			if err != nil {
 				return err
 			}
 			if wp.Tunnel {
-				if ec.tunnelParams == nil {
-					ec.tunnelParams = make(map[string]xpath3.Sequence)
-				}
 				ec.tunnelParams[wp.Name] = val
 			} else {
 				if pv == nil {

@@ -297,6 +297,12 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		ec.msgHandler = cfg.msgHandler
 	}
 
+	// Apply xsl:strip-space to the source document so that whitespace-only
+	// text nodes are removed before template matching and XPath evaluation.
+	if len(ss.stripSpace) > 0 && source != nil {
+		ec.stripWhitespaceFromDoc(source)
+	}
+
 	// Store exec context in Go context for AVT evaluation
 	ctx = withExecContext(ctx, ec)
 
@@ -995,6 +1001,27 @@ func nameTestPriority(nt NameTest) int {
 		return 1 // "prefix:*"
 	}
 	return 2 // specific name
+}
+
+// stripWhitespaceFromDoc removes whitespace-only text nodes from a document
+// tree according to the stylesheet's xsl:strip-space and xsl:preserve-space rules.
+// This is called when loading documents so that XPath evaluation sees the
+// correctly stripped tree.
+func (ec *execContext) stripWhitespaceFromDoc(doc *helium.Document) {
+	ec.stripWhitespaceFromNode(doc)
+}
+
+func (ec *execContext) stripWhitespaceFromNode(node helium.Node) {
+	child := node.FirstChild()
+	for child != nil {
+		next := child.NextSibling()
+		if ec.shouldStripWhitespace(child) {
+			helium.UnlinkNode(child)
+		} else {
+			ec.stripWhitespaceFromNode(child)
+		}
+		child = next
+	}
 }
 
 // selectDefaultNodes returns the default node-set for apply-templates

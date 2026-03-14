@@ -157,6 +157,15 @@ func (e *Entity) SystemID() string {
 	return e.systemID
 }
 
+// URI returns the fully resolved URI for external entities.
+// Falls back to SystemID if no resolved URI is available.
+func (e *Entity) URI() string {
+	if e.uri != "" {
+		return e.uri
+	}
+	return e.systemID
+}
+
 func (e *Entity) Content() []byte {
 	return []byte(e.content)
 }
