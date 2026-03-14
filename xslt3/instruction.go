@@ -299,8 +299,10 @@ func (*OnEmptyInst) instructionTag() {}
 
 // TryCatchInst represents xsl:try/xsl:catch.
 type TryCatchInst struct {
-	Try   []Instruction
-	Catch []Instruction
+	Select     *xpath3.Expression // xsl:try select attribute
+	Try        []Instruction
+	Catch      []Instruction
+	CatchSelect *xpath3.Expression // xsl:catch select attribute
 }
 
 func (*TryCatchInst) instructionTag() {}

@@ -1058,17 +1058,35 @@ func (c *compiler) compileApplyImports(elem *helium.Element) (*ApplyImportsInst,
 func (c *compiler) compileTry(elem *helium.Element) (*TryCatchInst, error) {
 	inst := &TryCatchInst{}
 
+	// xsl:try select attribute
+	if sel := getAttr(elem, "select"); sel != "" {
+		expr, err := compileXPath(sel, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.Select = expr
+	}
+
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
 		}
 		if childElem.URI() == NSXSLT && childElem.LocalName() == "catch" {
-			body, err := c.compileChildren(childElem)
-			if err != nil {
-				return nil, err
+			// xsl:catch select attribute
+			if sel := getAttr(childElem, "select"); sel != "" {
+				expr, err := compileXPath(sel, c.nsBindings)
+				if err != nil {
+					return nil, err
+				}
+				inst.CatchSelect = expr
+			} else {
+				body, err := c.compileChildren(childElem)
+				if err != nil {
+					return nil, err
+				}
+				inst.Catch = body
 			}
-			inst.Catch = body
 		} else {
 			childInst, err := c.compileInstruction(childElem)
 			if err != nil {

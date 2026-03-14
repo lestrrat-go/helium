@@ -1789,6 +1789,35 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 	return nil
 }
 
+// outputSequence writes a sequence of items to the current output.
+func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
+	for _, item := range seq {
+		switch v := item.(type) {
+		case xpath3.NodeItem:
+			copied, copyErr := helium.CopyNode(v.Node, ec.resultDoc)
+			if copyErr != nil {
+				return copyErr
+			}
+			if err := ec.addNode(copied); err != nil {
+				return err
+			}
+		case xpath3.AtomicValue:
+			s, sErr := xpath3.AtomicToString(v)
+			if sErr != nil {
+				return sErr
+			}
+			text, tErr := ec.resultDoc.CreateText([]byte(s))
+			if tErr != nil {
+				return tErr
+			}
+			if err := ec.addNode(text); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (ec *execContext) execPerformSort(ctx context.Context, inst *PerformSortInst) error {
 	var nodes []helium.Node
 
@@ -2080,6 +2109,15 @@ func (ec *execContext) execOnEmpty(ctx context.Context, inst *OnEmptyInst) error
 func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) error {
 	// Execute try body; if it fails, execute catch
 	tryErr := func() error {
+		if inst.Select != nil {
+			// xsl:try select="..." — evaluate expression and output result
+			xpathCtx := ec.newXPathContext(ec.contextNode)
+			result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+			if err != nil {
+				return err
+			}
+			return ec.outputSequence(result.Sequence())
+		}
 		for _, child := range inst.Try {
 			if err := ec.executeInstruction(ctx, child); err != nil {
 				return err
@@ -2114,6 +2152,14 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 	ec.setVar("{"+errNS+"}column-number", xpath3.SingleInteger(0))
 
 	// Execute catch body
+	if inst.CatchSelect != nil {
+		xpathCtx := ec.newXPathContext(ec.contextNode)
+		result, err := inst.CatchSelect.Evaluate(xpathCtx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		return ec.outputSequence(result.Sequence())
+	}
 	for _, child := range inst.Catch {
 		if err := ec.executeInstruction(ctx, child); err != nil {
 			return err
