@@ -44,10 +44,10 @@ jobs:
         run: |
           go test -race ./...
 
-      - name: Build heliumlint command
+      - name: Build helium command
         run: |
-          go build ./cmd/heliumlint
-          rm heliumlint
+          go build ./cmd/helium
+          rm helium
 
       - name: Check for uncommitted changes
         run: |

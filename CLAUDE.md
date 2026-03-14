@@ -23,7 +23,7 @@ Read the linked doc BEFORE working in that area. No exceptions.
 | Parse pipeline, encoding, entities, SAX→DOM, push parser | `.claude/docs/parser-internals.md` |
 | DOM node hierarchy, struct fields, namespace/attr storage | `.claude/docs/node-types.md` |
 | XSD/RELAX NG/Schematron compile→validate flow | `.claude/docs/validation-pipeline.md` |
-| heliumlint CLI flags, pipeline, exit codes | `.claude/docs/heliumlint.md` |
+| helium CLI commands, flags, pipeline, exit codes | `.claude/docs/helium-command.md` |
 | XPath 3.1 design overview, constraints, sub-doc index | `.claude/docs/xpath3-design.md` |
 | XPath 3.1 architecture, file layout, internal/xpath | `.claude/docs/xpath3-architecture.md` |
 | XPath 3.1 public API, Context, Result, errors | `.claude/docs/xpath3-api.md` |
@@ -52,7 +52,7 @@ These docs cache repository state. Still read source before modifying code.
 | `parser-internals.md` | Parse pipeline, encoding, entity, SAX, or parserCtx changes |
 | `node-types.md` | Node type, struct field, or tree operation changes |
 | `validation-pipeline.md` | Compile/validate phase, data model, or backtracking changes |
-| `heliumlint.md` | CLI flag, pipeline, or exit code changes |
+| `helium-command.md` | CLI command, flag, pipeline, or exit code changes |
 | `xpath3-design.md` | Design constraints, sub-doc structure changes |
 | `xpath3-architecture.md` | Package layout, file additions/removals, import graph changes |
 | `xpath3-api.md` | Public API, Context, Result, error type changes |

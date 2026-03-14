@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// writeFile creates a file in dir with given name and content, returns full path.
 func writeFile(t *testing.T, dir, name, content string) string {
 	t.Helper()
 	p := filepath.Join(dir, name)
@@ -18,15 +18,23 @@ func writeFile(t *testing.T, dir, name, content string) string {
 	return p
 }
 
-// runWithFile processes a single XML file through heliumlint with the given args.
-// Returns stdout content and exit code.
+func newTestCommand() *command {
+	return &command{
+		prog:     "helium lint",
+		stdin:    strings.NewReader(""),
+		stderr:   io.Discard,
+		stdinTTY: true,
+	}
+}
+
 func runWithFile(t *testing.T, xmlPath string, args ...string) (string, int) {
 	t.Helper()
 
+	cmd := newTestCommand()
 	allArgs := make([]string, len(args)+1)
 	copy(allArgs, args)
 	allArgs[len(args)] = xmlPath
-	cfg, files := parseArgs(allArgs)
+	cfg, files := cmd.parseArgs(allArgs)
 	require.NotNil(t, cfg, "parseArgs returned nil config for args: %v", allArgs)
 	require.NotEmpty(t, files, "no files collected from args: %v", allArgs)
 
@@ -35,13 +43,10 @@ func runWithFile(t *testing.T, xmlPath string, args ...string) (string, int) {
 	}
 
 	var out strings.Builder
-	input := namedInput{name: files[0]}
-	code := processInput(t.Context(), cfg, input, nil, nil, &out)
+	code := cmd.processInput(t.Context(), cfg, namedInput{name: files[0]}, nil, nil, &out)
 	return out.String(), code
 }
 
-// runWithStdin processes XML from a string (simulating stdin) with the given args.
-// Returns stdout content and exit code.
 func runWithStdin(t *testing.T, xmlContent string, args ...string) (string, int) {
 	t.Helper()
 
@@ -50,12 +55,9 @@ func runWithStdin(t *testing.T, xmlContent string, args ...string) (string, int)
 	return runWithFile(t, f, args...)
 }
 
-// =====================================================================
-// parseArgs unit tests
-// =====================================================================
-
 func TestParseArgsDefaults(t *testing.T) {
-	cfg, files := parseArgs([]string{})
+	cmd := newTestCommand()
+	cfg, files := cmd.parseArgs([]string{})
 	require.NotNil(t, cfg)
 	require.Empty(t, files)
 	require.Equal(t, -1, cfg.pretty)
@@ -68,12 +70,12 @@ func TestParseArgsDefaults(t *testing.T) {
 }
 
 func TestParseArgsSimpleCases(t *testing.T) {
+	cmd := newTestCommand()
 	tests := []struct {
-		name       string
-		args       []string
-		wantFiles  []string
-		check      func(*testing.T, *config)
-		filesUnset bool
+		name      string
+		args      []string
+		wantFiles []string
+		check     func(*testing.T, *config)
 	}{
 		{
 			name: "version",
@@ -220,7 +222,7 @@ func TestParseArgsSimpleCases(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			cfg, files := parseArgs(tc.args)
+			cfg, files := cmd.parseArgs(tc.args)
 			require.NotNil(t, cfg)
 			if tc.wantFiles != nil {
 				require.Equal(t, tc.wantFiles, files)
@@ -233,12 +235,13 @@ func TestParseArgsSimpleCases(t *testing.T) {
 }
 
 func TestParseArgsAllParserFlags(t *testing.T) {
+	cmd := newTestCommand()
 	args := []string{
 		"--recover", "--noent", "--loaddtd", "--pedantic",
 		"--noblanks", "--nsclean", "--nocdata", "--nonet",
 		"--huge", "--noenc", "--noxincludenode", "--nofixup-base-uris",
 	}
-	cfg, _ := parseArgs(args)
+	cfg, _ := cmd.parseArgs(args)
 	require.NotNil(t, cfg)
 	require.True(t, cfg.parseOptions.IsSet(helium.ParseRecover))
 	require.True(t, cfg.parseOptions.IsSet(helium.ParseNoEnt))
@@ -255,6 +258,7 @@ func TestParseArgsAllParserFlags(t *testing.T) {
 }
 
 func TestParseArgsC14nModes(t *testing.T) {
+	cmd := newTestCommand()
 	tests := []struct {
 		flag string
 		mode int
@@ -264,13 +268,14 @@ func TestParseArgsC14nModes(t *testing.T) {
 		{"--exc-c14n", 3},
 	}
 	for _, tc := range tests {
-		cfg, _ := parseArgs([]string{tc.flag})
+		cfg, _ := cmd.parseArgs([]string{tc.flag})
 		require.NotNil(t, cfg, "flag=%s", tc.flag)
 		require.Equal(t, tc.mode, cfg.c14nMode, "flag=%s", tc.flag)
 	}
 }
 
 func TestParseArgsInvalidCases(t *testing.T) {
+	cmd := newTestCommand()
 	tests := []struct {
 		name string
 		args []string
@@ -284,23 +289,20 @@ func TestParseArgsInvalidCases(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			cfg, _ := parseArgs(tc.args)
+			cfg, _ := cmd.parseArgs(tc.args)
 			require.Nil(t, cfg)
 		})
 	}
 }
 
 func TestParseArgsMissingValues(t *testing.T) {
+	cmd := newTestCommand()
 	flags := []string{"--schema", "--xpath", "--output", "--encode", "--pretty", "--path", "--repeat"}
 	for _, flag := range flags {
-		cfg, _ := parseArgs([]string{flag})
+		cfg, _ := cmd.parseArgs([]string{flag})
 		require.Nil(t, cfg, "flag %s without value should fail", flag)
 	}
 }
-
-// =====================================================================
-// processInput integration tests
-// =====================================================================
 
 func TestBasicParse(t *testing.T) {
 	out, code := runWithStdin(t, `<root><child/></root>`)
@@ -319,16 +321,17 @@ func TestBasicParseFile(t *testing.T) {
 }
 
 func TestMultipleFiles(t *testing.T) {
+	cmd := newTestCommand()
 	dir := t.TempDir()
 	f1 := writeFile(t, dir, "a.xml", `<?xml version="1.0"?><a/>`)
 	f2 := writeFile(t, dir, "b.xml", `<?xml version="1.0"?><b/>`)
 
-	cfg, files := parseArgs([]string{f1, f2})
+	cfg, files := cmd.parseArgs([]string{f1, f2})
 	require.NotNil(t, cfg)
 
 	var out strings.Builder
 	for _, fn := range files {
-		processInput(t.Context(), cfg, namedInput{name: fn}, nil, nil, &out)
+		cmd.processInput(t.Context(), cfg, namedInput{name: fn}, nil, nil, &out)
 	}
 	result := out.String()
 	require.Contains(t, result, `<a/>`)
@@ -336,20 +339,19 @@ func TestMultipleFiles(t *testing.T) {
 }
 
 func TestFileNotFound(t *testing.T) {
-	cfg, _ := parseArgs([]string{})
+	cmd := newTestCommand()
+	cfg, _ := cmd.parseArgs([]string{})
 	require.NotNil(t, cfg)
 
 	var out strings.Builder
-	code := processInput(t.Context(), cfg, namedInput{name: "/nonexistent/file.xml"}, nil, nil, &out)
-	require.Equal(t, exitReadFile, code)
+	code := cmd.processInput(t.Context(), cfg, namedInput{name: "/nonexistent/file.xml"}, nil, nil, &out)
+	require.Equal(t, ExitReadFile, code)
 }
 
 func TestMalformedXML(t *testing.T) {
 	_, code := runWithStdin(t, `<root><unclosed>`)
 	require.NotEqual(t, 0, code)
 }
-
-// --- Parser flags ---
 
 func TestNoBlanks(t *testing.T) {
 	out, code := runWithStdin(t, `<a>   <b/>   </a>`, "--noblanks")
@@ -383,8 +385,6 @@ func TestRecover(t *testing.T) {
 	require.Equal(t, 0, code)
 	require.Contains(t, out, `<root>`)
 }
-
-// --- Output control ---
 
 func TestOutputControlModes(t *testing.T) {
 	tests := []struct {
@@ -446,18 +446,19 @@ func TestOutputControlModes(t *testing.T) {
 }
 
 func TestOutputFile(t *testing.T) {
+	cmd := newTestCommand()
 	dir := t.TempDir()
 	outFile := filepath.Join(dir, "out.xml")
 	xmlFile := writeFile(t, dir, "in.xml", `<?xml version="1.0"?><root/>`)
 
-	cfg, files := parseArgs([]string{"--output", outFile, xmlFile})
+	cfg, files := cmd.parseArgs([]string{"--output", outFile, xmlFile})
 	require.NotNil(t, cfg)
 
 	f, err := os.Create(cfg.outputFile)
 	require.NoError(t, err)
 	defer func() { _ = f.Close() }()
 
-	code := processInput(t.Context(), cfg, namedInput{name: files[0]}, nil, nil, f)
+	code := cmd.processInput(t.Context(), cfg, namedInput{name: files[0]}, nil, nil, f)
 	require.Equal(t, 0, code)
 	require.NoError(t, f.Close())
 
@@ -465,8 +466,6 @@ func TestOutputFile(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(data), `<root/>`)
 }
-
-// --- C14N ---
 
 func TestC14NModes(t *testing.T) {
 	tests := []struct {
@@ -527,8 +526,6 @@ func TestC14NFile(t *testing.T) {
 	require.Equal(t, 0, code)
 	require.Contains(t, out, `<root a="1" z="2"></root>`)
 }
-
-// --- XPath ---
 
 func TestXPathExpressions(t *testing.T) {
 	tests := []struct {
@@ -592,7 +589,7 @@ func TestXPathExpressions(t *testing.T) {
 			name:     "invalid expression",
 			xml:      `<a/>`,
 			expr:     "///invalid[[[",
-			wantCode: exitXPath,
+			wantCode: ExitXPath,
 		},
 	}
 
@@ -620,8 +617,6 @@ func TestXPathWithFile(t *testing.T) {
 	require.Contains(t, out, `<b>1</b>`)
 	require.Contains(t, out, `<b>2</b>`)
 }
-
-// --- XInclude ---
 
 func TestXInclude(t *testing.T) {
 	dir := t.TempDir()
@@ -667,9 +662,8 @@ func TestXIncludeTextInclusion(t *testing.T) {
 	require.Contains(t, out, "Hello, World!")
 }
 
-// --- Schema validation ---
-
 func TestSchemaValidation(t *testing.T) {
+	cmd := newTestCommand()
 	tests := []struct {
 		name      string
 		xsdType   string
@@ -681,14 +675,14 @@ func TestSchemaValidation(t *testing.T) {
 			name:      "valid",
 			xsdType:   "xs:string",
 			xmlValue:  "hello",
-			wantCode:  exitOK,
+			wantCode:  ExitOK,
 			wantEmpty: true,
 		},
 		{
 			name:     "invalid",
 			xsdType:  "xs:integer",
 			xmlValue: "not-an-integer",
-			wantCode: exitValidation,
+			wantCode: ExitValidation,
 		},
 	}
 
@@ -703,14 +697,14 @@ func TestSchemaValidation(t *testing.T) {
 			xsdFile := writeFile(t, dir, "test.xsd", xsdContent)
 			xmlFile := writeFile(t, dir, "test.xml", `<?xml version="1.0"?><root>`+tc.xmlValue+`</root>`)
 
-			cfg, files := parseArgs([]string{"--schema", xsdFile, "--noout", xmlFile})
+			cfg, files := cmd.parseArgs([]string{"--schema", xsdFile, "--noout", xmlFile})
 			require.NotNil(t, cfg)
 
-			schema, err := compileSchema(t.Context(), cfg)
+			schema, err := cmd.compileSchema(t.Context(), cfg)
 			require.NoError(t, err)
 
 			var out strings.Builder
-			code := processInput(t.Context(), cfg, namedInput{name: files[0]}, nil, schema, &out)
+			code := cmd.processInput(t.Context(), cfg, namedInput{name: files[0]}, nil, schema, &out)
 			require.Equal(t, tc.wantCode, code)
 			if tc.wantEmpty {
 				require.Empty(t, out.String())
@@ -718,8 +712,6 @@ func TestSchemaValidation(t *testing.T) {
 		})
 	}
 }
-
-// --- Behavioral flags ---
 
 func TestDropDTD(t *testing.T) {
 	dir := t.TempDir()
@@ -737,12 +729,11 @@ func TestDropDTD(t *testing.T) {
 }
 
 func TestRepeat(t *testing.T) {
-	cfg, _ := parseArgs([]string{"--repeat", "3"})
+	cmd := newTestCommand()
+	cfg, _ := cmd.parseArgs([]string{"--repeat", "3"})
 	require.NotNil(t, cfg)
 	require.Equal(t, 3, cfg.repeat)
 }
-
-// --- NsClean ---
 
 func TestNsClean(t *testing.T) {
 	xml := `<?xml version="1.0" encoding="US-ASCII"?>
@@ -755,8 +746,6 @@ func TestNsClean(t *testing.T) {
 	require.Equal(t, 1, count, "redundant ns should be cleaned")
 }
 
-// --- Combination flags ---
-
 func TestFormatWithNoBlanks(t *testing.T) {
 	out, code := runWithStdin(t, `<a>   <b>   <c/> </b>   </a>`, "--noblanks", "--format")
 	require.Equal(t, 0, code)
@@ -765,18 +754,19 @@ func TestFormatWithNoBlanks(t *testing.T) {
 }
 
 func TestC14NWithOutput(t *testing.T) {
+	cmd := newTestCommand()
 	dir := t.TempDir()
 	outFile := filepath.Join(dir, "out.xml")
 	xmlFile := writeFile(t, dir, "in.xml", `<?xml version="1.0"?><b a="1"/>`)
 
-	cfg, files := parseArgs([]string{"--c14n", "--output", outFile, xmlFile})
+	cfg, files := cmd.parseArgs([]string{"--c14n", "--output", outFile, xmlFile})
 	require.NotNil(t, cfg)
 
 	f, err := os.Create(cfg.outputFile)
 	require.NoError(t, err)
 	defer func() { _ = f.Close() }()
 
-	code := processInput(t.Context(), cfg, namedInput{name: files[0]}, nil, nil, f)
+	code := cmd.processInput(t.Context(), cfg, namedInput{name: files[0]}, nil, nil, f)
 	require.Equal(t, 0, code)
 	require.NoError(t, f.Close())
 
@@ -786,7 +776,6 @@ func TestC14NWithOutput(t *testing.T) {
 }
 
 func TestXPathWithNoOut(t *testing.T) {
-	// --xpath implies --noout, verify no XML decl but xpath result present
 	out, code := runWithStdin(t, `<a><b>42</b></a>`, "--xpath", "string(//b)")
 	require.Equal(t, 0, code)
 	require.Contains(t, out, "42")
@@ -794,6 +783,7 @@ func TestXPathWithNoOut(t *testing.T) {
 }
 
 func TestSchemaValidQuiet(t *testing.T) {
+	cmd := newTestCommand()
 	dir := t.TempDir()
 	xsdContent := `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -802,21 +792,20 @@ func TestSchemaValidQuiet(t *testing.T) {
 	xsdFile := writeFile(t, dir, "test.xsd", xsdContent)
 	xmlFile := writeFile(t, dir, "test.xml", `<?xml version="1.0"?><root>hello</root>`)
 
-	cfg, files := parseArgs([]string{"--schema", xsdFile, "--noout", "--quiet", xmlFile})
+	cfg, files := cmd.parseArgs([]string{"--schema", xsdFile, "--noout", "--quiet", xmlFile})
 	require.NotNil(t, cfg)
 	require.True(t, cfg.quiet)
 
-	schema, err := compileSchema(t.Context(), cfg)
+	schema, err := cmd.compileSchema(t.Context(), cfg)
 	require.NoError(t, err)
 
 	var out strings.Builder
-	code := processInput(t.Context(), cfg, namedInput{name: files[0]}, nil, schema, &out)
-	require.Equal(t, exitOK, code)
+	code := cmd.processInput(t.Context(), cfg, namedInput{name: files[0]}, nil, schema, &out)
+	require.Equal(t, ExitOK, code)
 }
 
-// --- Catalog ---
-
 func TestCatalogLoading(t *testing.T) {
+	cmd := newTestCommand()
 	dir := t.TempDir()
 
 	dtdContent := `<!ATTLIST doc status CDATA "active">`
@@ -833,29 +822,24 @@ func TestCatalogLoading(t *testing.T) {
 <doc>hello</doc>`
 	xmlFile := writeFile(t, dir, "test.xml", xmlContent)
 
-	cfg, files := parseArgs([]string{"--catalogs", "--loaddtd", "--dtdattr", "--noout", xmlFile})
+	cfg, files := cmd.parseArgs([]string{"--catalogs", "--loaddtd", "--dtdattr", "--noout", xmlFile})
 	require.NotNil(t, cfg)
 
-	// Simulate XML_CATALOG_FILES env
 	t.Setenv("XML_CATALOG_FILES", catFile)
 
-	// Load catalog the same way run() does
-	cat, err := loadCatalogFromEnv(t.Context())
+	cat, err := cmd.loadCatalogFromEnv(t.Context())
 	require.NoError(t, err)
 	require.NotNil(t, cat)
 
 	var out strings.Builder
-	code := processInput(t.Context(), cfg, namedInput{name: files[0]}, cat, nil, &out)
-	require.Equal(t, exitOK, code)
+	code := cmd.processInput(t.Context(), cfg, namedInput{name: files[0]}, cat, nil, &out)
+	require.Equal(t, ExitOK, code)
 }
-
-// --- Format edge cases ---
 
 func TestFormatNestedElements(t *testing.T) {
 	out, code := runWithStdin(t, `<a><b><c><d/></c></b></a>`, "--format")
 	require.Equal(t, 0, code)
 	lines := strings.Split(out, "\n")
-	// Find lines with indentation
 	var indented []string
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)

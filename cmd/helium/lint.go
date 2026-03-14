@@ -1,4 +1,3 @@
-// Package main implements the heliumlint command-line XML linting tool.
 package main
 
 import (
@@ -21,54 +20,149 @@ import (
 
 // Exit codes matching xmllint conventions.
 const (
-	exitOK         = 0
-	exitErr        = 1
-	exitValidation = 3
-	exitReadFile   = 4
-	exitSchemaComp = 5
-	exitXPath      = 10
+	ExitOK         = 0
+	ExitErr        = 1
+	ExitValidation = 3
+	ExitReadFile   = 4
+	ExitSchemaComp = 5
+	ExitXPath      = 10
 )
 
 type config struct {
-	// Parser flags
 	parseOptions helium.ParseOption
 
-	// Feature integration
 	doXInclude bool
-	c14nMode   int // 0=off, 1=c14n10, 2=c14n11, 3=exc-c14n
+	c14nMode   int
 	schemaFile string
 	xpathExpr  string
 	catalogs   bool
 	noCatalogs bool
 	pathDirs   string
 
-	// Output control
 	noout      bool
 	format     bool
 	outputFile string
 	encode     string
-	pretty     int // -1=unset, 0=none, 1=indent, 2=indent+attrs
+	pretty     int
 
-	// Behavioral
 	quiet   bool
 	timing  bool
 	dropdtd bool
 	repeat  int
 
-	// Info
 	version bool
 }
 
-func main() {
-	os.Exit(run())
+type namedInput struct {
+	name  string
+	stdin bool
 }
 
-func showVersion() {
-	fmt.Fprintf(os.Stderr, "heliumlint: using helium version %s\n", helium.Version)
+type command struct {
+	prog     string
+	stdin    io.Reader
+	stdout   io.Writer
+	stderr   io.Writer
+	stdinTTY bool
 }
 
-func showUsage() {
-	fmt.Fprintf(os.Stderr, `Usage : heliumlint [options] XMLfiles ...
+func Run(prog string, args []string) int {
+	return newCommand(prog).run(args)
+}
+
+func newCommand(prog string) *command {
+	return &command{
+		prog:     prog,
+		stdin:    os.Stdin,
+		stdout:   os.Stdout,
+		stderr:   os.Stderr,
+		stdinTTY: cliutil.IsTty(os.Stdin.Fd()),
+	}
+}
+
+func (c *command) run(args []string) int {
+	ctx := context.Background()
+
+	cfg, files := c.parseArgs(args)
+	if cfg == nil {
+		c.showUsage()
+		return ExitErr
+	}
+
+	if cfg.version {
+		c.showVersion()
+		return ExitOK
+	}
+
+	if cfg.pretty >= 1 {
+		cfg.format = true
+	}
+
+	var inputs []namedInput
+	switch {
+	case len(files) > 0:
+		for _, f := range files {
+			inputs = append(inputs, namedInput{name: f})
+		}
+	case !c.stdinTTY:
+		inputs = append(inputs, namedInput{name: "-", stdin: true})
+	default:
+		c.showUsage()
+		return ExitErr
+	}
+
+	var cat *catalog.Catalog
+	if cfg.catalogs && !cfg.noCatalogs {
+		var err error
+		cat, err = c.loadCatalogFromEnv(ctx)
+		if err != nil {
+			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+		}
+	}
+
+	var schema *xsd.Schema
+	if cfg.schemaFile != "" {
+		var t0 time.Time
+		if cfg.timing {
+			t0 = time.Now()
+		}
+
+		var err error
+		schema, err = c.compileSchema(ctx, cfg)
+		if cfg.timing {
+			_, _ = fmt.Fprintf(c.stderr, "Compiling schema took %s\n", time.Since(t0))
+		}
+		if err != nil {
+			_, _ = fmt.Fprintf(c.stderr, "%s\n", err)
+			return ExitSchemaComp
+		}
+	}
+
+	out := c.stdout
+	if cfg.outputFile != "" {
+		f, err := os.Create(cfg.outputFile) //nolint:gosec // CLI output path is user supplied
+		if err != nil {
+			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+			return ExitErr
+		}
+		defer func() { _ = f.Close() }()
+		out = f
+	}
+
+	exitCode := ExitOK
+	for _, input := range inputs {
+		code := c.processInput(ctx, cfg, input, cat, schema, out)
+		exitCode = mergeExitCode(exitCode, code)
+	}
+	return exitCode
+}
+
+func (c *command) showVersion() {
+	_, _ = fmt.Fprintf(c.stderr, "%s: using helium version %s\n", c.prog, helium.Version)
+}
+
+func (c *command) showUsage() {
+	_, _ = fmt.Fprintf(c.stderr, `Usage : %s [options] XMLfiles ...
 	Parse the XML files and output the result of the parsing
 	--version : display the version of the XML library used
 	--recover : output what was parsable on broken XML documents
@@ -104,10 +198,10 @@ func showUsage() {
 	--timing : print timing information to stderr
 	--dropdtd : remove the DOCTYPE of the result
 	--repeat N : parse N times for benchmarking
-`)
+`, c.prog)
 }
 
-func parseArgs(args []string) (*config, []string) {
+func (c *command) parseArgs(args []string) (*config, []string) {
 	cfg := &config{
 		pretty: -1,
 		repeat: 1,
@@ -116,8 +210,6 @@ func parseArgs(args []string) (*config, []string) {
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
-
-		// Accept both -flag and --flag (matching xmllint)
 		if strings.HasPrefix(arg, "-") && !strings.HasPrefix(arg, "--") && len(arg) > 1 {
 			arg = "-" + arg
 		}
@@ -180,19 +272,17 @@ func parseArgs(args []string) (*config, []string) {
 			cfg.timing = true
 		case "--dropdtd":
 			cfg.dropdtd = true
-
-		// Flags that take a value argument
 		case "--schema":
 			i++
 			if i >= len(args) {
-				fmt.Fprintf(os.Stderr, "heliumlint: --schema requires an argument\n")
+				_, _ = fmt.Fprintf(c.stderr, "%s: --schema requires an argument\n", c.prog)
 				return nil, nil
 			}
 			cfg.schemaFile = args[i] //nolint:gosec // bounds checked above
 		case "--xpath":
 			i++
 			if i >= len(args) {
-				fmt.Fprintf(os.Stderr, "heliumlint: --xpath requires an argument\n")
+				_, _ = fmt.Fprintf(c.stderr, "%s: --xpath requires an argument\n", c.prog)
 				return nil, nil
 			}
 			cfg.xpathExpr = args[i] //nolint:gosec // bounds checked above
@@ -200,52 +290,51 @@ func parseArgs(args []string) (*config, []string) {
 		case "--output":
 			i++
 			if i >= len(args) {
-				fmt.Fprintf(os.Stderr, "heliumlint: --output requires an argument\n")
+				_, _ = fmt.Fprintf(c.stderr, "%s: --output requires an argument\n", c.prog)
 				return nil, nil
 			}
 			cfg.outputFile = args[i] //nolint:gosec // bounds checked above
 		case "--encode":
 			i++
 			if i >= len(args) {
-				fmt.Fprintf(os.Stderr, "heliumlint: --encode requires an argument\n")
+				_, _ = fmt.Fprintf(c.stderr, "%s: --encode requires an argument\n", c.prog)
 				return nil, nil
 			}
 			cfg.encode = args[i] //nolint:gosec // bounds checked above
 		case "--pretty":
 			i++
 			if i >= len(args) {
-				fmt.Fprintf(os.Stderr, "heliumlint: --pretty requires an argument\n")
+				_, _ = fmt.Fprintf(c.stderr, "%s: --pretty requires an argument\n", c.prog)
 				return nil, nil
 			}
 			n, err := strconv.Atoi(args[i]) //nolint:gosec // bounds checked above
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "heliumlint: --pretty: invalid argument %q\n", args[i]) //nolint:gosec // bounds checked above
+				_, _ = fmt.Fprintf(c.stderr, "%s: --pretty: invalid argument %q\n", c.prog, args[i]) //nolint:gosec // bounds checked above
 				return nil, nil
 			}
 			cfg.pretty = n
 		case "--path":
 			i++
 			if i >= len(args) {
-				fmt.Fprintf(os.Stderr, "heliumlint: --path requires an argument\n")
+				_, _ = fmt.Fprintf(c.stderr, "%s: --path requires an argument\n", c.prog)
 				return nil, nil
 			}
 			cfg.pathDirs = args[i] //nolint:gosec // bounds checked above
 		case "--repeat":
 			i++
 			if i >= len(args) {
-				fmt.Fprintf(os.Stderr, "heliumlint: --repeat requires an argument\n")
+				_, _ = fmt.Fprintf(c.stderr, "%s: --repeat requires an argument\n", c.prog)
 				return nil, nil
 			}
 			n, err := strconv.Atoi(args[i]) //nolint:gosec // bounds checked above
 			if err != nil || n < 1 {
-				fmt.Fprintf(os.Stderr, "heliumlint: --repeat: invalid argument %q\n", args[i]) //nolint:gosec // bounds checked above
+				_, _ = fmt.Fprintf(c.stderr, "%s: --repeat: invalid argument %q\n", c.prog, args[i]) //nolint:gosec // bounds checked above
 				return nil, nil
 			}
 			cfg.repeat = n
-
 		default:
 			if strings.HasPrefix(arg, "--") {
-				fmt.Fprintf(os.Stderr, "heliumlint: unrecognized option %s\n", arg) //nolint:gosec // CLI diagnostic output to stderr
+				_, _ = fmt.Fprintf(c.stderr, "%s: unrecognized option %s\n", c.prog, arg) //nolint:gosec // CLI diagnostic output
 				return nil, nil
 			}
 			files = append(files, arg)
@@ -255,90 +344,7 @@ func parseArgs(args []string) (*config, []string) {
 	return cfg, files
 }
 
-func run() int {
-	ctx := context.Background()
-
-	cfg, files := parseArgs(os.Args[1:])
-	if cfg == nil {
-		showUsage()
-		return exitErr
-	}
-
-	if cfg.version {
-		showVersion()
-		return exitOK
-	}
-
-	// Determine format settings
-	if cfg.pretty >= 1 {
-		cfg.format = true
-	}
-
-	// Collect inputs
-	var inputs []namedInput
-	switch {
-	case len(files) > 0:
-		for _, f := range files {
-			inputs = append(inputs, namedInput{name: f})
-		}
-	case !cliutil.IsTty(os.Stdin.Fd()):
-		inputs = append(inputs, namedInput{name: "-", stdin: true})
-	default:
-		showUsage()
-		return exitErr
-	}
-
-	// Load catalogs if requested
-	var cat *catalog.Catalog
-	if cfg.catalogs && !cfg.noCatalogs {
-		var err error
-		cat, err = loadCatalogFromEnv(ctx)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "heliumlint: %s\n", err)
-		}
-	}
-
-	// Compile schema if requested
-	var schema *xsd.Schema
-	if cfg.schemaFile != "" {
-		var t0 time.Time
-		if cfg.timing {
-			t0 = time.Now()
-		}
-		var err error
-		schema, err = compileSchema(ctx, cfg)
-		if cfg.timing {
-			fmt.Fprintf(os.Stderr, "Compiling schema took %s\n", time.Since(t0))
-		}
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s\n", err)
-			return exitSchemaComp
-		}
-	}
-
-	// Determine output destination
-	var out io.Writer = os.Stdout
-	if cfg.outputFile != "" {
-		f, err := os.Create(cfg.outputFile) //nolint:gosec // output file path supplied by user via CLI flag
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "heliumlint: %s\n", err)
-			return exitErr
-		}
-		defer func() { _ = f.Close() }()
-		out = f
-	}
-
-	exitCode := exitOK
-	for _, input := range inputs {
-		code := processInput(ctx, cfg, input, cat, schema, out)
-		if code != exitOK {
-			exitCode = code
-		}
-	}
-	return exitCode
-}
-
-func loadCatalogFromEnv(ctx context.Context) (*catalog.Catalog, error) {
+func (c *command) loadCatalogFromEnv(ctx context.Context) (*catalog.Catalog, error) {
 	envFiles := os.Getenv("XML_CATALOG_FILES")
 	if envFiles == "" {
 		return nil, nil
@@ -348,44 +354,37 @@ func loadCatalogFromEnv(ctx context.Context) (*catalog.Catalog, error) {
 		if f == "" {
 			continue
 		}
-		c, err := catalog.Load(ctx, f)
+		cat, err := catalog.Load(ctx, f)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "heliumlint: failed to load catalog %s: %s\n", f, err)
+			_, _ = fmt.Fprintf(c.stderr, "%s: failed to load catalog %s: %s\n", c.prog, f, err)
 			continue
 		}
-		return c, nil
+		return cat, nil
 	}
 	return nil, nil
 }
 
-func compileSchema(ctx context.Context, cfg *config) (*xsd.Schema, error) {
+func (c *command) compileSchema(ctx context.Context, cfg *config) (*xsd.Schema, error) {
 	schema, err := xsd.CompileFile(ctx, cfg.schemaFile)
 	if err != nil {
-		return nil, fmt.Errorf("heliumlint: failed to compile schema: %w", err)
+		return nil, fmt.Errorf("%s: failed to compile schema: %w", c.prog, err)
 	}
 	return schema, nil
 }
 
-type namedInput struct {
-	name  string
-	stdin bool
-}
-
-func processInput(ctx context.Context, cfg *config, input namedInput, cat *catalog.Catalog, schema *xsd.Schema, out io.Writer) int {
-	// Read input
+func (c *command) processInput(ctx context.Context, cfg *config, input namedInput, cat *catalog.Catalog, schema *xsd.Schema, out io.Writer) int {
 	var buf []byte
 	var err error
 	if input.stdin {
-		buf, err = io.ReadAll(os.Stdin)
+		buf, err = io.ReadAll(c.stdin)
 	} else {
 		buf, err = os.ReadFile(input.name)
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "heliumlint: %s\n", err)
-		return exitReadFile
+		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+		return ExitReadFile
 	}
 
-	// Parse (possibly repeated for benchmarking)
 	var doc *helium.Document
 	for rep := 0; rep < cfg.repeat; rep++ {
 		var t0 time.Time
@@ -404,22 +403,20 @@ func processInput(ctx context.Context, cfg *config, input namedInput, cat *catal
 
 		doc, err = p.Parse(ctx, buf)
 		if cfg.timing {
-			fmt.Fprintf(os.Stderr, "Parsing took %s\n", time.Since(t0))
+			_, _ = fmt.Fprintf(c.stderr, "Parsing took %s\n", time.Since(t0))
 		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s\n", err)
+			_, _ = fmt.Fprintf(c.stderr, "%s\n", err)
 			if doc == nil {
-				return exitErr
+				return ExitErr
 			}
-			// With --recover, doc may be non-nil
 		}
 	}
 
 	if doc == nil {
-		return exitErr
+		return ExitErr
 	}
 
-	// XInclude processing
 	if cfg.doXInclude {
 		var t0 time.Time
 		if cfg.timing {
@@ -432,14 +429,13 @@ func processInput(ctx context.Context, cfg *config, input namedInput, cat *catal
 		}
 		_, xiErr := xinclude.Process(ctx, doc, xiOpts...)
 		if cfg.timing {
-			fmt.Fprintf(os.Stderr, "XInclude took %s\n", time.Since(t0))
+			_, _ = fmt.Fprintf(c.stderr, "XInclude took %s\n", time.Since(t0))
 		}
 		if xiErr != nil {
-			fmt.Fprintf(os.Stderr, "%s\n", xiErr)
+			_, _ = fmt.Fprintf(c.stderr, "%s\n", xiErr)
 		}
 	}
 
-	// Schema validation
 	if schema != nil {
 		var t0 time.Time
 		if cfg.timing {
@@ -447,27 +443,24 @@ func processInput(ctx context.Context, cfg *config, input namedInput, cat *catal
 		}
 		err := xsd.Validate(ctx, doc, schema)
 		if cfg.timing {
-			fmt.Fprintf(os.Stderr, "Validating took %s\n", time.Since(t0))
+			_, _ = fmt.Fprintf(c.stderr, "Validating took %s\n", time.Since(t0))
 		}
 		if err != nil {
-			fmt.Fprint(os.Stderr, err)
-			return exitValidation
+			_, _ = fmt.Fprint(c.stderr, err)
+			return ExitValidation
 		}
 	}
 
-	// DTD validation result (already done during parsing if --valid)
 	if cfg.parseOptions.IsSet(helium.ParseDTDValid) && err != nil {
-		return exitValidation
+		return ExitValidation
 	}
 
-	// XPath query
 	if cfg.xpathExpr != "" {
-		return evalXPath(ctx, cfg, doc, out)
+		return c.evalXPath(ctx, cfg, doc, out)
 	}
 
-	// Output
 	if cfg.noout {
-		return exitOK
+		return ExitOK
 	}
 
 	var t0 time.Time
@@ -475,7 +468,6 @@ func processInput(ctx context.Context, cfg *config, input namedInput, cat *catal
 		t0 = time.Now()
 	}
 
-	// C14N output
 	if cfg.c14nMode > 0 {
 		var mode c14n.Mode
 		switch cfg.c14nMode {
@@ -488,16 +480,15 @@ func processInput(ctx context.Context, cfg *config, input namedInput, cat *catal
 		}
 		cErr := c14n.Canonicalize(out, doc, mode, c14n.WithComments())
 		if cfg.timing {
-			fmt.Fprintf(os.Stderr, "Saving took %s\n", time.Since(t0))
+			_, _ = fmt.Fprintf(c.stderr, "Saving took %s\n", time.Since(t0))
 		}
 		if cErr != nil {
-			fmt.Fprintf(os.Stderr, "%s\n", cErr)
-			return exitErr
+			_, _ = fmt.Fprintf(c.stderr, "%s\n", cErr)
+			return ExitErr
 		}
-		return exitOK
+		return ExitOK
 	}
 
-	// Standard dump
 	var opts []helium.WriteOption
 	if cfg.format {
 		opts = append(opts, helium.WithFormat())
@@ -509,66 +500,71 @@ func processInput(ctx context.Context, cfg *config, input namedInput, cat *catal
 	d := helium.NewWriter(opts...)
 	if dErr := d.WriteDoc(out, doc); dErr != nil {
 		if cfg.timing {
-			fmt.Fprintf(os.Stderr, "Saving took %s\n", time.Since(t0))
+			_, _ = fmt.Fprintf(c.stderr, "Saving took %s\n", time.Since(t0))
 		}
-		fmt.Fprintf(os.Stderr, "%s\n", dErr)
-		return exitErr
+		_, _ = fmt.Fprintf(c.stderr, "%s\n", dErr)
+		return ExitErr
 	}
 	if cfg.timing {
-		fmt.Fprintf(os.Stderr, "Saving took %s\n", time.Since(t0))
+		_, _ = fmt.Fprintf(c.stderr, "Saving took %s\n", time.Since(t0))
 	}
-	return exitOK
+	return ExitOK
 }
 
-func evalXPath(ctx context.Context, cfg *config, doc *helium.Document, out io.Writer) int {
-	result, err := xpath1.Evaluate(ctx, doc, cfg.xpathExpr)
+func (c *command) evalXPath(ctx context.Context, cfg *config, doc *helium.Document, out io.Writer) int {
+	expr, err := xpath1.Compile(cfg.xpathExpr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "XPath error: %s\n", err)
-		return exitXPath
+		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+		return ExitXPath
 	}
 
-	d := helium.NewWriter()
+	res, err := expr.Evaluate(ctx, doc)
+	if err != nil {
+		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+		return ExitXPath
+	}
 
-	switch result.Type {
+	switch res.Type {
 	case xpath1.NodeSetResult:
-		for _, node := range result.NodeSet {
-			switch node.Type() {
+		for _, n := range res.NodeSet {
+			switch n.Type() {
 			case helium.AttributeNode:
-				if _, wErr := fmt.Fprintf(out, " %s=\"%s\"\n", node.Name(), string(node.Content())); wErr != nil { //nolint:gosec // XML attribute output to writer
-					return exitXPath
+				attr := n.(*helium.Attribute) //nolint:forcetypeassert // node type checked above
+				_, _ = fmt.Fprintf(out, " %s=%q\n", attr.Name(), attr.Value())
+			case helium.NamespaceDeclNode, helium.NamespaceNode:
+				ns, ok := n.(interface {
+					Prefix() string
+					URI() string
+				})
+				if !ok {
+					_, _ = fmt.Fprintf(c.stderr, "%s: unexpected namespace node type %T\n", c.prog, n)
+					return ExitErr
 				}
-			case helium.NamespaceNode:
-				if _, wErr := fmt.Fprintf(out, " xmlns:%s=\"%s\"\n", node.Name(), string(node.Content())); wErr != nil { //nolint:gosec // XML namespace output to writer
-					return exitXPath
+				if ns.Prefix() == "" {
+					_, _ = fmt.Fprintf(out, " xmlns=%q\n", ns.URI())
+				} else {
+					_, _ = fmt.Fprintf(out, " xmlns:%s=%q\n", ns.Prefix(), ns.URI())
 				}
 			default:
-				if dErr := d.WriteNode(out, node); dErr != nil {
-					fmt.Fprintf(os.Stderr, "%s\n", dErr)
-					return exitXPath
+				d := helium.NewWriter()
+				if err := d.WriteNode(out, n); err != nil {
+					_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
+					return ExitErr
 				}
-				if _, wErr := fmt.Fprintln(out); wErr != nil {
-					return exitXPath
-				}
+				_, _ = fmt.Fprintln(out)
 			}
 		}
 	case xpath1.BooleanResult:
-		if result.Bool {
-			if _, wErr := fmt.Fprintln(out, "true"); wErr != nil {
-				return exitXPath
-			}
+		if res.Bool {
+			_, _ = fmt.Fprintln(out, "true")
 		} else {
-			if _, wErr := fmt.Fprintln(out, "false"); wErr != nil {
-				return exitXPath
-			}
+			_, _ = fmt.Fprintln(out, "false")
 		}
 	case xpath1.NumberResult:
-		if _, wErr := fmt.Fprintln(out, result.Number); wErr != nil { //nolint:gosec // numeric output to writer
-			return exitXPath
-		}
-	case xpath1.StringResult:
-		if _, wErr := fmt.Fprintln(out, result.String); wErr != nil { //nolint:gosec // string output to writer
-			return exitXPath
-		}
+		_, _ = fmt.Fprintf(out, "%g\n", res.Number)
+	default:
+		_, _ = fmt.Fprintln(out, res.String)
 	}
-	return exitOK
+
+	return ExitOK
 }
