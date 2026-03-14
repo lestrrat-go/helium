@@ -182,7 +182,9 @@ func (ec *execContext) evaluateWithParam(ctx context.Context, wp *WithParam) (xp
 		return result.Sequence(), nil
 	}
 	if len(wp.Body) > 0 {
-		return ec.evaluateBody(ctx, wp.Body)
+		// Per XSLT spec: with-param body without select produces a
+		// document node (temporary tree), same as variables.
+		return ec.evaluateBodyAsDocument(ctx, wp.Body)
 	}
 	return xpath3.EmptySequence(), nil
 }
@@ -255,7 +257,9 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 			}
 			ec.setVar(p.Name, result.Sequence())
 		} else if len(p.Body) > 0 {
-			val, err := ec.evaluateBody(ctx, p.Body)
+			// Per XSLT spec: param body without select produces a
+			// document node (temporary tree).
+			val, err := ec.evaluateBodyAsDocument(ctx, p.Body)
 			if err != nil {
 				return err
 			}
