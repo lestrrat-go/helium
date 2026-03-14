@@ -189,6 +189,19 @@ func w3cRunTests(t *testing.T, tests []w3cTest) {
 	}
 }
 
+// w3cRunHeavyTests runs tests serially without t.Parallel().
+// Use for test sets that are computationally expensive (e.g. unicode-90 which
+// materializes ~1.1M code points per test and runs regex across all of them).
+func w3cRunHeavyTests(t *testing.T, tests []w3cTest) {
+	t.Helper()
+
+	for _, tc := range tests {
+		t.Run(tc.Name, func(t *testing.T) {
+			w3cRunOne(t, tc)
+		})
+	}
+}
+
 func w3cRunOne(t *testing.T, tc w3cTest) {
 	t.Helper()
 

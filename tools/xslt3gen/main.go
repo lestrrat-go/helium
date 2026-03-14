@@ -445,6 +445,16 @@ func featureSupported(feature string) bool {
 	return true
 }
 
+// isHeavyTestSet returns true for test sets that are computationally expensive
+// and should run serially behind the HELIUM_HEAVY_TESTS env var.
+func isHeavyTestSet(name string) bool {
+	switch name {
+	case "unicode-90":
+		return true
+	}
+	return false
+}
+
 // ──────────────────────────────────────────────────────────────────────
 // Environment resolution
 // ──────────────────────────────────────────────────────────────────────
@@ -704,10 +714,15 @@ func generateTestFile(tests []generatedTest) string {
 	for _, setName := range groupOrder {
 		g := groups[setName]
 		funcName := "TestW3C_" + goIdentifier(setName)
+		heavy := isHeavyTestSet(setName)
 
 		fmt.Fprintf(&b, "func %s(t *testing.T) {\n", funcName)
-		fmt.Fprintf(&b, "\tt.Parallel()\n")
-		fmt.Fprintf(&b, "\tw3cRunTests(t, []w3cTest{\n")
+		if heavy {
+			fmt.Fprintf(&b, "\tw3cRunHeavyTests(t, []w3cTest{\n")
+		} else {
+			fmt.Fprintf(&b, "\tt.Parallel()\n")
+			fmt.Fprintf(&b, "\tw3cRunTests(t, []w3cTest{\n")
+		}
 
 		for _, tc := range g.tests {
 			b.WriteString("\t\t{")
