@@ -1,0 +1,13 @@
+<?xml version="1.0"?> 
+<doc>
+  <foo name="x">
+    <item type="z">a</item>
+    <item type="c">b</item>
+    <item type="x">c</item>
+  </foo>
+  <foo name="y">
+    <item type="y">d</item>
+    <item type="h">e</item>
+    <item type="k">f</item>
+  </foo>
+</doc>

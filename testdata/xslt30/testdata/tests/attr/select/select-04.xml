@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<!-- to test xsl:process and xsl:for-each -->
+<doc>
+  <do do="-do-">do</do>
+  <re>re</re>
+  <mi mi1="-mi1-">mi</mi>
+  <fa fa="-fa-">fa<so so="-so-">so<la>la<ti>ti</ti>do</la></so></fa>
+  <Gsharp so="so+">G#</Gsharp>
+  <Aflat><natural><la>A</la></natural>Ab</Aflat>
+  <Bflat>Bb</Bflat>
+  <Csharp><natural>C</natural>C#<doublesharp>D</doublesharp></Csharp>
+</doc>

@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<my:doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://www.schemanodetest.example.com/ns/various variousTypesNodeTest.xsd"
+     xmlns:my="http://www.schemanodetest.example.com/ns/various">
+	<my:elem-anyURI>http://www.example.org/ns/test</my:elem-anyURI>
+</my:doc>

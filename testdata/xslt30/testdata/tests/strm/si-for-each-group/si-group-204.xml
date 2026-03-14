@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<transactions>
+    <transaction value="5.60" account="01826370" date="2016-05-09"/>
+    <transaction value="11.20" account="92741838" date="2015-04-01"/>
+    <transaction value="-3.40" account="01826370" date="2015-06-16"/>
+    <transaction value="8.90" account="92741838" date="2016-07-14"/>
+    <transaction value="-1.99" account="43861562" date="2014-05-18"/>
+    <transaction value="2.51" account="01826370" date="2016-12-01"/>
+    <transaction value="5.31" account="43861562" date="2014-08-29"/>    
+</transactions>

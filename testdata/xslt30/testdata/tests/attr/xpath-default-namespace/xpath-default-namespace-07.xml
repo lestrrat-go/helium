@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doc-default xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://www.defaultnamespace.example.com/ns/schema schemaForDefaultnamespace.xsd"
+     xmlns="http://www.defaultnamespace.example.com/ns/schema" >
+	<elem>123-AB</elem>
+	<item>hello</item>
+</doc-default>

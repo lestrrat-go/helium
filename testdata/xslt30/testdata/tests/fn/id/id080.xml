@@ -1,0 +1,42 @@
+<!DOCTYPE census [
+  <!ENTITY % param1 "<!ELEMENT census (person)*>">
+  <!ENTITY % parext SYSTEM "id080.dtd">
+  <!ENTITY % param2 "person">
+  %param1;
+  %parext;  
+  <!ELEMENT person (person)*>
+  <!ATTLIST person
+        name    ID      #REQUIRED
+        spouse  IDREF   #IMPLIED
+        job     CDATA   #IMPLIED>
+]>
+<census>
+  <person name="Bill" job="Teacher">
+    <person name="Joe" job="Painter" spouse="Martha">
+      <person name="Sam" job="Nurse">
+        <person name="Fred" job="Senator" spouse="Jane">
+        </person>
+      </person>
+      <person name="Karen" job="Doctor" spouse="Steve">
+      </person>
+    </person>
+    <person name="Mary" job="Pilot">
+      <person name="Susan" job="Pilot" spouse="Dave">
+      </person>
+    </person>
+  </person>
+  <person name="Frank" job="Writer">
+    <person name="Martha" job="Programmer" spouse="Joe">
+      <person name="Dave" job="Athlete" spouse="Susan">
+      </person>
+    </person>
+    <person name="John" job="Artist">
+      <person name="Helen" job="Athlete">
+      </person>
+      <person name="Steve" job="Accountant" spouse="Karen">
+        <person name="Jane" job="Doctor" spouse="Fred">
+        </person>
+      </person>
+    </person>
+  </person>
+</census>

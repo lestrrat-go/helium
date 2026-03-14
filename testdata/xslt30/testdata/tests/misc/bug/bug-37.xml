@@ -1,0 +1,820 @@
+<usages>
+  <file name="ACCEPTED_SUBMISSION" found-in="ch05"/>
+  <file name="ACCEPTED_SUBMISSION_SEQ" found-in="ch05"/>
+  <file name="ACCESS_LOG" found-in="ch06"/>
+  <file name="AIRPORT" found-in="appb"/>
+  <file name="AIRPORT" found-in="ch05"/>
+  <file name="AIRPORT" found-in="ch08"/>
+  <file name="AIRPORT" found-in="ch11"/>
+  <file name="AIRPORT" found-in="ch12"/>
+  <file name="AIRPORT" found-in="ch15"/>
+
+
+
+  <file name="AIRPORTDESCRIPTION" found-in="ch05"/>
+  <file name="AUTHOR" found-in="book"/>
+  <file name="AUTHOR" found-in="ch00"/>
+  <file name="AUTHOR" found-in="ch01"/>
+  <file name="AUTHOR" found-in="ch02"/>
+  <file name="AUTHOR" found-in="ch05"/>
+  <file name="AUTHOR" found-in="ch06"/>
+  <file name="AUTHOR" found-in="ch08"/>
+  <file name="AUTHOR" found-in="ch10"/>
+  <file name="AUTHOR" found-in="ch12"/>
+  <file name="AUTHOR" found-in="ch13"/>
+  <file name="AUTHOR" found-in="ch16"/>
+  <file name="AUTHOR" found-in="ch17"/>
+
+
+
+  <file name="AUTHORIZATION_REQUEST" found-in="ch12"/>
+  <file name="AUTHORIZATION_REQUEST_BEFINS" found-in="ch12"/>
+  <file name="AUTHORIZATION_REQUEST_SEQ" found-in="ch12"/>
+  <file name="AUTHORSEQ" found-in="ch12"/>
+  <file name="AUTHOR_TABLE" found-in="ch12"/>
+  <file name="BAD_XML_DOCUMENTS" found-in="ch05"/>
+  <file name="BAR" found-in="appb"/>
+  <file name="BAR" found-in="ch02"/>
+  <file name="BAR" found-in="ch04"/>
+  <file name="BAR" found-in="ch06"/>
+  <file name="BAR" found-in="ch08"/>
+  <file name="BAR" found-in="ch10"/>
+  <file name="BAR" found-in="ch12"/>
+  <file name="BAR" found-in="ch15"/>
+  <file name="BAR" found-in="ch16"/>
+  <file name="BAR" found-in="ch17"/>
+
+
+
+  <file name="BOOKMARK" found-in="ch08"/>
+
+  <file name="BOOKS" found-in="ch05"/>
+  <file name="BOOKS" found-in="ch12"/>
+  <file name="BOOKS" found-in="ch13"/>
+  <file name="BOOKS" found-in="ch17"/>
+
+
+  <file name="BOOK_T" found-in="ch12"/>
+  <file name="BOOK_TABLE" found-in="ch12"/>
+  <file name="BUG" found-in="ch01"/>
+  <file name="BUG" found-in="ch02"/>
+  <file name="BUG" found-in="ch03"/>
+  <file name="BUG" found-in="ch04"/>
+  <file name="BUG" found-in="ch06"/>
+  <file name="BUG" found-in="ch07"/>
+  <file name="BUG" found-in="ch08"/>
+  <file name="BUG" found-in="ch09"/>
+  <file name="BUG" found-in="ch10"/>
+  <file name="BUG" found-in="ch11"/>
+  <file name="BUG" found-in="ch14"/>
+  <file name="BUG" found-in="ch16"/>
+  <file name="BUG" found-in="ch17"/>
+
+
+
+  <file name="CaptureQuotes" found-in="ch06"/>
+
+
+  <file name="CHECKXMLINCLOB" found-in="ch05"/>
+
+
+  <file name="CITY" found-in="appb"/>
+  <file name="CITY" found-in="ch01"/>
+  <file name="CITY" found-in="ch06"/>
+  <file name="CITY" found-in="ch07"/>
+  <file name="CITY" found-in="ch08"/>
+  <file name="CITY" found-in="ch10"/>
+  <file name="CITY" found-in="ch13"/>
+  <file name="CLIENT_TABLE" found-in="ch11"/>
+  <file name="COUNTRY" found-in="ch01"/>
+  <file name="COUNTRY" found-in="ch05"/>
+  <file name="COUNTRY" found-in="ch08"/>
+  <file name="COUNTRY" found-in="ch10"/>
+  <file name="COURSE_ASSIGNMENTS" found-in="ch06"/>
+  <file name="CUSTOMER_ID_SEQ" found-in="ch16"/>
+  <file name="DBXML" found-in="ch01"/>
+  <file name="DBXML" found-in="ch10"/>
+
+
+  <file name="Debug" found-in="ch01"/>
+  <file name="Debug" found-in="ch02"/>
+  <file name="Debug" found-in="ch03"/>
+  <file name="Debug" found-in="ch04"/>
+  <file name="Debug" found-in="ch06"/>
+  <file name="Debug" found-in="ch07"/>
+  <file name="Debug" found-in="ch08"/>
+  <file name="Debug" found-in="ch10"/>
+  <file name="Debug" found-in="ch11"/>
+  <file name="Debug" found-in="ch16"/>
+  <file name="Debug" found-in="ch17"/>
+
+  <file name="DEPT" found-in="ch00"/>
+  <file name="DEPT" found-in="ch05"/>
+  <file name="DEPT" found-in="ch07"/>
+  <file name="DEPT" found-in="ch08"/>
+  <file name="DEPT" found-in="ch09"/>
+  <file name="DEPT" found-in="ch11"/>
+  <file name="DEPT" found-in="ch12"/>
+  <file name="DEPT" found-in="ch13"/>
+  <file name="DEPT" found-in="ch14"/>
+  <file name="DEPT" found-in="ch15"/>
+  <file name="DEPT" found-in="ch16"/>
+
+
+  <file name="DEPTOREMP" found-in="ch15"/>
+  <file name="DIMENSION_TYPE" found-in="ch12"/>
+  <file name="DOCTOR" found-in="ch06"/>
+  <file name="DOCTOR" found-in="ch08"/>
+  <file name="DOCTOR" found-in="ch10"/>
+  <file name="DOCTOR" found-in="ch11"/>
+
+  <file name="EMP" found-in="appa"/>
+  <file name="EMP" found-in="appb"/>
+  <file name="EMP" found-in="ch00"/>
+  <file name="EMP" found-in="ch01"/>
+  <file name="EMP" found-in="ch02"/>
+  <file name="EMP" found-in="ch03"/>
+  <file name="EMP" found-in="ch04"/>
+  <file name="EMP" found-in="ch05"/>
+  <file name="EMP" found-in="ch06"/>
+  <file name="EMP" found-in="ch07"/>
+  <file name="EMP" found-in="ch08"/>
+  <file name="EMP" found-in="ch09"/>
+  <file name="EMP" found-in="ch10"/>
+  <file name="EMP" found-in="ch11"/>
+  <file name="EMP" found-in="ch12"/>
+  <file name="EMP" found-in="ch13"/>
+  <file name="EMP" found-in="ch14"/>
+  <file name="EMP" found-in="ch15"/>
+  <file name="EMP" found-in="ch16"/>
+  <file name="EMP" found-in="ch17"/>
+
+
+
+  <file name="Enrollment" found-in="ch06"/>
+
+
+
+  <file name="EnrollmentWriter" found-in="ch06"/>
+
+
+  <file name="ENROLLMENTXML" found-in="ch06"/>
+  <file name="Examples" found-in="appa"/>
+  <file name="Examples" found-in="appb"/>
+  <file name="Examples" found-in="ch00"/>
+  <file name="Examples" found-in="ch01"/>
+  <file name="Examples" found-in="ch02"/>
+  <file name="Examples" found-in="ch03"/>
+  <file name="Examples" found-in="ch04"/>
+  <file name="Examples" found-in="ch05"/>
+  <file name="Examples" found-in="ch06"/>
+  <file name="Examples" found-in="ch07"/>
+  <file name="Examples" found-in="ch08"/>
+  <file name="Examples" found-in="ch09"/>
+  <file name="Examples" found-in="ch10"/>
+  <file name="Examples" found-in="ch11"/>
+  <file name="Examples" found-in="ch12"/>
+  <file name="Examples" found-in="ch13"/>
+  <file name="Examples" found-in="ch14"/>
+  <file name="Examples" found-in="ch15"/>
+  <file name="Examples" found-in="ch16"/>
+  <file name="Examples" found-in="ch17"/>
+
+
+
+  <file name="F" found-in="appa"/>
+  <file name="F" found-in="appb"/>
+  <file name="F" found-in="appc"/>
+  <file name="F" found-in="appd"/>
+  <file name="F" found-in="book"/>
+  <file name="F" found-in="ch00"/>
+  <file name="F" found-in="ch01"/>
+  <file name="F" found-in="ch02"/>
+  <file name="F" found-in="ch03"/>
+  <file name="F" found-in="ch04"/>
+  <file name="F" found-in="ch05"/>
+  <file name="F" found-in="ch06"/>
+  <file name="F" found-in="ch07"/>
+  <file name="F" found-in="ch08"/>
+  <file name="F" found-in="ch09"/>
+  <file name="F" found-in="ch10"/>
+  <file name="F" found-in="ch11"/>
+  <file name="F" found-in="ch12"/>
+  <file name="F" found-in="ch13"/>
+  <file name="F" found-in="ch14"/>
+  <file name="F" found-in="ch15"/>
+  <file name="F" found-in="ch16"/>
+  <file name="F" found-in="ch17"/>
+
+
+
+  <file name="FACILITY" found-in="ch01"/>
+  <file name="FACILITY" found-in="ch03"/>
+  <file name="FACILITY" found-in="ch04"/>
+  <file name="FACILITY" found-in="ch05"/>
+  <file name="FACILITY" found-in="ch06"/>
+  <file name="FACILITY" found-in="ch09"/>
+  <file name="FACILITY" found-in="ch10"/>
+  <file name="FACILITY" found-in="ch14"/>
+  <file name="FACILITY" found-in="ch15"/>
+  <file name="FACILITY" found-in="ch17"/>
+  <file name="FAQ_TABLE" found-in="ch03"/>
+
+  <file name="FEATURED_ITEMS" found-in="ch17"/>
+  <file name="FOO" found-in="ch06"/>
+  <file name="FOO" found-in="ch09"/>
+  <file name="FOO" found-in="ch12"/>
+  <file name="FOO" found-in="ch15"/>
+  <file name="FOO" found-in="ch16"/>
+  <file name="FORUM" found-in="ch00"/>
+  <file name="FORUM" found-in="ch04"/>
+  <file name="FORUM" found-in="ch06"/>
+  <file name="FORUM" found-in="ch15"/>
+  <file name="FORUM" found-in="ch17"/>
+
+
+
+  <file name="FORUMID" found-in="ch17"/>
+  <file name="FORUMSEARCH" found-in="ch17"/>
+
+
+
+  <file name="FORUM_ID_TRIG" found-in="ch17"/>
+  <file name="FORUM_NEW_TOPIC" found-in="ch17"/>
+
+  <file name="FORUM_NEW_TOPIC_INS" found-in="ch17"/>
+  <file name="FORUM_PK" found-in="ch17"/>
+  <file name="FORUM_TOPIC" found-in="ch17"/>
+
+  <file name="FORUM_TOPICID_TRIG" found-in="ch17"/>
+  <file name="FORUM_TOPIC_PK" found-in="ch17"/>
+  <file name="FORUM_TOPIC_POSTING" found-in="ch17"/>
+
+  <file name="FORUM_TOPIC_POSTINGID_TRIG" found-in="ch17"/>
+  <file name="FORUM_TOPIC_POSTING_IDX" found-in="ch17"/>
+  <file name="FORUM_TOPIC_POSTING_PK" found-in="ch17"/>
+  <file name="FORUM_TOPIC_TITLE_IDX" found-in="ch17"/>
+  <file name="FORUM_USER" found-in="ch17"/>
+  <file name="FORUM_USER_PK" found-in="ch17"/>
+  <file name="HANDLENEWSUBMISSION" found-in="ch05"/>
+
+
+  <file name="HANDLETODAYSSUBMISSIONS" found-in="ch05"/>
+  <file name="HTTP" found-in="appa"/>
+  <file name="HTTP" found-in="appb"/>
+  <file name="HTTP" found-in="appd"/>
+  <file name="HTTP" found-in="ch00"/>
+  <file name="HTTP" found-in="ch01"/>
+  <file name="HTTP" found-in="ch02"/>
+  <file name="HTTP" found-in="ch03"/>
+  <file name="HTTP" found-in="ch04"/>
+  <file name="HTTP" found-in="ch05"/>
+  <file name="HTTP" found-in="ch06"/>
+  <file name="HTTP" found-in="ch07"/>
+  <file name="HTTP" found-in="ch08"/>
+  <file name="HTTP" found-in="ch09"/>
+  <file name="HTTP" found-in="ch10"/>
+  <file name="HTTP" found-in="ch11"/>
+  <file name="HTTP" found-in="ch12"/>
+  <file name="HTTP" found-in="ch13"/>
+  <file name="HTTP" found-in="ch14"/>
+  <file name="HTTP" found-in="ch15"/>
+  <file name="HTTP" found-in="ch16"/>
+  <file name="HTTP" found-in="ch17"/>
+
+
+
+  <file name="HTTP_PROXY" found-in="appa"/>
+  <file name="IDATTRIBUTEOFDOCELEMENT" found-in="ch05"/>
+  <file name="IMAGEGROUP_TYPE" found-in="ch12"/>
+  <file name="INSERTXMLFILE" found-in="ch05"/>
+
+
+  <file name="INSERT_QUOTE" found-in="ch06"/>
+  <file name="INSTEAD_OF_INSERT_ON_BOOKS" found-in="ch12"/>
+  <file name="INS_CLAIM" found-in="ch05"/>
+  <file name="INS_CLAIM_PAYMENT" found-in="ch05"/>
+  <file name="ITEM" found-in="appa"/>
+  <file name="ITEM" found-in="appb"/>
+  <file name="ITEM" found-in="ch00"/>
+  <file name="ITEM" found-in="ch01"/>
+  <file name="ITEM" found-in="ch02"/>
+  <file name="ITEM" found-in="ch03"/>
+  <file name="ITEM" found-in="ch04"/>
+  <file name="ITEM" found-in="ch05"/>
+  <file name="ITEM" found-in="ch06"/>
+  <file name="ITEM" found-in="ch07"/>
+  <file name="ITEM" found-in="ch08"/>
+  <file name="ITEM" found-in="ch09"/>
+  <file name="ITEM" found-in="ch10"/>
+  <file name="ITEM" found-in="ch11"/>
+  <file name="ITEM" found-in="ch12"/>
+  <file name="ITEM" found-in="ch13"/>
+  <file name="ITEM" found-in="ch14"/>
+  <file name="ITEM" found-in="ch15"/>
+  <file name="ITEM" found-in="ch16"/>
+  <file name="ITEM" found-in="ch17"/>
+
+
+
+  <file name="JTidyConverter" found-in="ch06"/>
+  <file name="JTidyConverter" found-in="ch16"/>
+
+
+  <file name="LATESTNEWS" found-in="ch15"/>
+  <file name="LATESTNEWS" found-in="ch17"/>
+  <file name="LATEST_QUOTES" found-in="ch06"/>
+  <file name="LATEST_QUOTES" found-in="ch17"/>
+  <file name="LATEST_QUOTES_IDX" found-in="ch06"/>
+  <file name="LOADRULESETFROMFILE" found-in="ch05"/>
+  <file name="LOG" found-in="appb"/>
+  <file name="LOG" found-in="appd"/>
+  <file name="LOG" found-in="ch00"/>
+  <file name="LOG" found-in="ch01"/>
+  <file name="LOG" found-in="ch02"/>
+  <file name="LOG" found-in="ch03"/>
+  <file name="LOG" found-in="ch04"/>
+  <file name="LOG" found-in="ch05"/>
+  <file name="LOG" found-in="ch06"/>
+  <file name="LOG" found-in="ch07"/>
+  <file name="LOG" found-in="ch08"/>
+  <file name="LOG" found-in="ch09"/>
+  <file name="LOG" found-in="ch10"/>
+  <file name="LOG" found-in="ch12"/>
+  <file name="LOG" found-in="ch13"/>
+  <file name="LOG" found-in="ch14"/>
+  <file name="LOG" found-in="ch15"/>
+  <file name="LOG" found-in="ch16"/>
+  <file name="LOG" found-in="ch17"/>
+
+
+
+  <file name="MAKER" found-in="ch09"/>
+  <file name="MAKER" found-in="ch17"/>
+  <file name="MESSAGE" found-in="ch00"/>
+  <file name="MESSAGE" found-in="ch01"/>
+  <file name="MESSAGE" found-in="ch02"/>
+  <file name="MESSAGE" found-in="ch03"/>
+  <file name="MESSAGE" found-in="ch04"/>
+  <file name="MESSAGE" found-in="ch05"/>
+  <file name="MESSAGE" found-in="ch06"/>
+  <file name="MESSAGE" found-in="ch07"/>
+  <file name="MESSAGE" found-in="ch08"/>
+  <file name="MESSAGE" found-in="ch09"/>
+  <file name="MESSAGE" found-in="ch11"/>
+  <file name="MESSAGE" found-in="ch12"/>
+  <file name="MESSAGE" found-in="ch13"/>
+  <file name="MESSAGE" found-in="ch15"/>
+  <file name="MESSAGE" found-in="ch16"/>
+  <file name="MESSAGE" found-in="ch17"/>
+
+
+  <file name="MOVEBADXMLDOCUMENTS" found-in="ch05"/>
+
+
+  <file name="MYDYNAMICQUERYPACKAGE" found-in="ch15"/>
+  <file name="NEWSSTORY" found-in="ch05"/>
+  <file name="NEWSSTORY" found-in="ch06"/>
+  <file name="NEWSSTORY" found-in="ch12"/>
+  <file name="NEWSSTORY" found-in="ch14"/>
+  <file name="NEWSSTORY" found-in="ch17"/>
+
+
+
+  <file name="NEWSSTORYVIEW" found-in="ch12"/>
+  <file name="NEWSSTORY_AUTOID" found-in="ch12"/>
+  <file name="NEWSSTORY_ID_SEQ" found-in="ch12"/>
+  <file name="OracleXML" found-in="appb"/>
+  <file name="OracleXML" found-in="book"/>
+  <file name="OracleXML" found-in="ch00"/>
+  <file name="OracleXML" found-in="ch05"/>
+  <file name="OracleXML" found-in="ch06"/>
+  <file name="OracleXML" found-in="ch08"/>
+  <file name="OracleXML" found-in="ch11"/>
+  <file name="OracleXML" found-in="ch12"/>
+  <file name="OracleXML" found-in="ch14"/>
+
+  <file name="P" found-in="appa"/>
+  <file name="P" found-in="appb"/>
+  <file name="P" found-in="appc"/>
+  <file name="P" found-in="appd"/>
+  <file name="P" found-in="book"/>
+  <file name="P" found-in="ch00"/>
+  <file name="P" found-in="ch01"/>
+  <file name="P" found-in="ch02"/>
+  <file name="P" found-in="ch03"/>
+  <file name="P" found-in="ch04"/>
+  <file name="P" found-in="ch05"/>
+  <file name="P" found-in="ch06"/>
+  <file name="P" found-in="ch07"/>
+  <file name="P" found-in="ch08"/>
+  <file name="P" found-in="ch09"/>
+  <file name="P" found-in="ch10"/>
+  <file name="P" found-in="ch11"/>
+  <file name="P" found-in="ch12"/>
+  <file name="P" found-in="ch13"/>
+  <file name="P" found-in="ch14"/>
+  <file name="P" found-in="ch15"/>
+  <file name="P" found-in="ch16"/>
+  <file name="P" found-in="ch17"/>
+
+
+
+  <file name="PATIENT" found-in="ch00"/>
+  <file name="PATIENT" found-in="ch10"/>
+
+
+
+  <file name="PATIENTPROFILE" found-in="ch10"/>
+
+
+  <file name="PERSON" found-in="appb"/>
+  <file name="PERSON" found-in="book"/>
+  <file name="PERSON" found-in="ch00"/>
+  <file name="PERSON" found-in="ch03"/>
+  <file name="PERSON" found-in="ch04"/>
+  <file name="PERSON" found-in="ch08"/>
+  <file name="PERSON" found-in="ch09"/>
+  <file name="PERSON" found-in="ch12"/>
+  <file name="PERSON" found-in="ch13"/>
+  <file name="PERSON" found-in="ch17"/>
+  <file name="PORTFOLIO_STOCKS" found-in="ch08"/>
+  <file name="PORTFOLIO_STOCKS" found-in="ch10"/>
+  <file name="PORTFOLIO_STOCKS" found-in="ch11"/>
+  <file name="POSTNEWSSTORY" found-in="ch05"/>
+
+
+
+  <file name="PRODUCT" found-in="book"/>
+  <file name="PRODUCT" found-in="ch00"/>
+  <file name="PRODUCT" found-in="ch01"/>
+  <file name="PRODUCT" found-in="ch02"/>
+  <file name="PRODUCT" found-in="ch03"/>
+  <file name="PRODUCT" found-in="ch04"/>
+  <file name="PRODUCT" found-in="ch05"/>
+  <file name="PRODUCT" found-in="ch06"/>
+  <file name="PRODUCT" found-in="ch07"/>
+  <file name="PRODUCT" found-in="ch08"/>
+  <file name="PRODUCT" found-in="ch09"/>
+  <file name="PRODUCT" found-in="ch10"/>
+  <file name="PRODUCT" found-in="ch11"/>
+  <file name="PRODUCT" found-in="ch12"/>
+  <file name="PRODUCT" found-in="ch13"/>
+  <file name="PRODUCT" found-in="ch15"/>
+  <file name="PRODUCT" found-in="ch16"/>
+  <file name="PRODUCT" found-in="ch17"/>
+
+
+
+  <file name="PropertyHelper" found-in="appa"/>
+  <file name="PropertyHelper" found-in="ch05"/>
+  <file name="QUOTES" found-in="ch02"/>
+  <file name="QUOTES" found-in="ch06"/>
+  <file name="QUOTES" found-in="ch08"/>
+  <file name="QUOTES" found-in="ch09"/>
+  <file name="QUOTES" found-in="ch10"/>
+  <file name="QUOTES" found-in="ch11"/>
+  <file name="QUOTES" found-in="ch16"/>
+  <file name="QUOTES" found-in="ch17"/>
+
+
+
+  <file name="ReadCLOB" found-in="ch06"/>
+
+
+  <file name="REFRESHALLLATESTQUOTES" found-in="ch17"/>
+  <file name="RULE" found-in="ch01"/>
+  <file name="RULE" found-in="ch02"/>
+  <file name="RULE" found-in="ch03"/>
+  <file name="RULE" found-in="ch05"/>
+  <file name="RULE" found-in="ch06"/>
+  <file name="RULE" found-in="ch07"/>
+  <file name="RULE" found-in="ch08"/>
+  <file name="RULE" found-in="ch09"/>
+  <file name="RULE" found-in="ch15"/>
+  <file name="RULE" found-in="ch17"/>
+
+
+  <file name="RULESET" found-in="ch05"/>
+  <file name="RULESET" found-in="ch06"/>
+
+  <file name="RULESET_SEQ" found-in="ch05"/>
+  <file name="RULE_PK" found-in="ch05"/>
+  <file name="SENDEMAIL" found-in="ch05"/>
+  <file name="SetProxy" found-in="appa"/>
+  <file name="SetProxy" found-in="ch05"/>
+  <file name="SetProxy" found-in="ch06"/>
+  <file name="SHOP" found-in="ch01"/>
+  <file name="SHOP" found-in="ch09"/>
+  <file name="SHOP" found-in="ch15"/>
+  <file name="SHOP" found-in="ch17"/>
+
+  <file name="SITE_NEWSCATEGORY" found-in="ch17"/>
+  <file name="SITE_NEWSCATPK" found-in="ch17"/>
+  <file name="SITE_NEWSSTORY" found-in="ch14"/>
+  <file name="SITE_NEWSSTORY" found-in="ch17"/>
+
+  <file name="SITE_NEWSSTORYPK" found-in="ch17"/>
+  <file name="SITE_USERS" found-in="ch15"/>
+  <file name="STATE" found-in="ch01"/>
+  <file name="STATE" found-in="ch03"/>
+  <file name="STATE" found-in="ch04"/>
+  <file name="STATE" found-in="ch05"/>
+  <file name="STATE" found-in="ch06"/>
+  <file name="STATE" found-in="ch08"/>
+  <file name="STATE" found-in="ch09"/>
+  <file name="STATE" found-in="ch10"/>
+  <file name="STATE" found-in="ch11"/>
+  <file name="STATE" found-in="ch12"/>
+  <file name="STATE" found-in="ch13"/>
+  <file name="STATE" found-in="ch15"/>
+  <file name="STATE" found-in="ch16"/>
+  <file name="STATE" found-in="ch17"/>
+
+
+  <file name="STATEPROFILE" found-in="ch10"/>
+
+
+  <file name="STEVE" found-in="book"/>
+  <file name="STEVE" found-in="ch02"/>
+  <file name="STEVE" found-in="ch03"/>
+  <file name="STEVE" found-in="ch05"/>
+  <file name="STEVE" found-in="ch06"/>
+  <file name="STEVE" found-in="ch08"/>
+  <file name="STEVE" found-in="ch09"/>
+  <file name="STEVE" found-in="ch12"/>
+  <file name="STEVE" found-in="ch16"/>
+  <file name="STOCKQUOTESDBXML" found-in="ch10"/>
+
+
+  <file name="STOCKQUOTESDBXMLBASIC" found-in="ch10"/>
+
+
+  <file name="SUBMISSIONXML" found-in="ch05"/>
+
+
+  <file name="T" found-in="appa"/>
+  <file name="T" found-in="appb"/>
+  <file name="T" found-in="appc"/>
+  <file name="T" found-in="appd"/>
+  <file name="T" found-in="book"/>
+  <file name="T" found-in="ch00"/>
+  <file name="T" found-in="ch01"/>
+  <file name="T" found-in="ch02"/>
+  <file name="T" found-in="ch03"/>
+  <file name="T" found-in="ch04"/>
+  <file name="T" found-in="ch05"/>
+  <file name="T" found-in="ch06"/>
+  <file name="T" found-in="ch07"/>
+  <file name="T" found-in="ch08"/>
+  <file name="T" found-in="ch09"/>
+  <file name="T" found-in="ch10"/>
+  <file name="T" found-in="ch11"/>
+  <file name="T" found-in="ch12"/>
+  <file name="T" found-in="ch13"/>
+  <file name="T" found-in="ch14"/>
+  <file name="T" found-in="ch15"/>
+  <file name="T" found-in="ch16"/>
+  <file name="T" found-in="ch17"/>
+
+
+
+  <file name="TEAM" found-in="ch00"/>
+  <file name="TEAM" found-in="ch01"/>
+  <file name="TEAM" found-in="ch03"/>
+  <file name="TEAM" found-in="ch09"/>
+  <file name="TEAM" found-in="ch17"/>
+  <file name="TEMP" found-in="appa"/>
+  <file name="TEMP" found-in="ch00"/>
+  <file name="TEMP" found-in="ch01"/>
+  <file name="TEMP" found-in="ch02"/>
+  <file name="TEMP" found-in="ch03"/>
+  <file name="TEMP" found-in="ch04"/>
+  <file name="TEMP" found-in="ch05"/>
+  <file name="TEMP" found-in="ch06"/>
+  <file name="TEMP" found-in="ch07"/>
+  <file name="TEMP" found-in="ch08"/>
+  <file name="TEMP" found-in="ch09"/>
+  <file name="TEMP" found-in="ch10"/>
+  <file name="TEMP" found-in="ch11"/>
+  <file name="TEMP" found-in="ch12"/>
+  <file name="TEMP" found-in="ch13"/>
+  <file name="TEMP" found-in="ch14"/>
+  <file name="TEMP" found-in="ch15"/>
+  <file name="TEMP" found-in="ch16"/>
+  <file name="TEMP" found-in="ch17"/>
+
+
+
+  <file name="TemporaryCLOB" found-in="ch06"/>
+
+
+  <file name="TEST" found-in="appa"/>
+  <file name="TEST" found-in="appb"/>
+  <file name="TEST" found-in="ch00"/>
+  <file name="TEST" found-in="ch01"/>
+  <file name="TEST" found-in="ch02"/>
+  <file name="TEST" found-in="ch04"/>
+  <file name="TEST" found-in="ch05"/>
+  <file name="TEST" found-in="ch06"/>
+  <file name="TEST" found-in="ch07"/>
+  <file name="TEST" found-in="ch08"/>
+  <file name="TEST" found-in="ch09"/>
+  <file name="TEST" found-in="ch10"/>
+  <file name="TEST" found-in="ch11"/>
+  <file name="TEST" found-in="ch12"/>
+  <file name="TEST" found-in="ch13"/>
+  <file name="TEST" found-in="ch15"/>
+  <file name="TEST" found-in="ch16"/>
+  <file name="TEST" found-in="ch17"/>
+
+
+
+  <file name="TestXMLDocURL" found-in="ch06"/>
+
+
+  <file name="URLUtils" found-in="ch06"/>
+  <file name="URLUtils" found-in="ch14"/>
+
+
+  <file name="USER_NEWS_CATEGORIES" found-in="ch17"/>
+  <file name="USER_PREFS" found-in="ch15"/>
+  <file name="USER_PREFS" found-in="ch17"/>
+
+  <file name="USER_PREFS_INS" found-in="ch17"/>
+  <file name="USER_PREFS_PK" found-in="ch17"/>
+  <file name="USER_PREFS_VIEW" found-in="ch17"/>
+
+  <file name="USER_STOCKS" found-in="ch17"/>
+  <file name="VISIT" found-in="appb"/>
+  <file name="VISIT" found-in="ch02"/>
+  <file name="VISIT" found-in="ch06"/>
+  <file name="VISIT" found-in="ch10"/>
+  <file name="VISIT" found-in="ch17"/>
+
+  <file name="WEIGHT_TYPE" found-in="ch12"/>
+  <file name="WriteCLOB" found-in="ch06"/>
+
+
+  <file name="XML" found-in="appa"/>
+  <file name="XML" found-in="appb"/>
+  <file name="XML" found-in="appc"/>
+  <file name="XML" found-in="appd"/>
+  <file name="XML" found-in="book"/>
+  <file name="XML" found-in="ch00"/>
+  <file name="XML" found-in="ch01"/>
+  <file name="XML" found-in="ch02"/>
+  <file name="XML" found-in="ch03"/>
+  <file name="XML" found-in="ch04"/>
+  <file name="XML" found-in="ch05"/>
+  <file name="XML" found-in="ch06"/>
+  <file name="XML" found-in="ch07"/>
+  <file name="XML" found-in="ch08"/>
+  <file name="XML" found-in="ch09"/>
+  <file name="XML" found-in="ch10"/>
+  <file name="XML" found-in="ch11"/>
+  <file name="XML" found-in="ch12"/>
+  <file name="XML" found-in="ch13"/>
+  <file name="XML" found-in="ch14"/>
+  <file name="XML" found-in="ch15"/>
+  <file name="XML" found-in="ch16"/>
+  <file name="XML" found-in="ch17"/>
+
+
+
+  <file name="XMLDOC" found-in="appa"/>
+  <file name="XMLDOC" found-in="ch00"/>
+  <file name="XMLDOC" found-in="ch01"/>
+  <file name="XMLDOC" found-in="ch05"/>
+  <file name="XMLDOC" found-in="ch06"/>
+  <file name="XMLDOC" found-in="ch09"/>
+  <file name="XMLDOC" found-in="ch11"/>
+  <file name="XMLDOC" found-in="ch12"/>
+  <file name="XMLDOC" found-in="ch13"/>
+  <file name="XMLDOC" found-in="ch14"/>
+  <file name="XMLDOC" found-in="ch15"/>
+  <file name="XMLDOC" found-in="ch16"/>
+
+
+
+  <file name="XMLDocuments" found-in="ch05"/>
+  <file name="XMLDocuments" found-in="ch06"/>
+  <file name="XMLDocuments" found-in="ch14"/>
+
+
+
+  <file name="XMLDOCURL" found-in="ch06"/>
+
+
+
+  <file name="XMLDocURLConnection" found-in="ch06"/>
+
+
+  <file name="XMLDocURLStreamHandler" found-in="ch06"/>
+  <file name="XMLDocURLStreamHandlerFactory" found-in="ch06"/>
+  <file name="XMLDOC_IDX" found-in="ch13"/>
+  <file name="XMLDOM" found-in="appa"/>
+  <file name="XMLDOM" found-in="ch05"/>
+  <file name="XMLDOM" found-in="ch06"/>
+  <file name="XMLDOM" found-in="ch11"/>
+  <file name="XMLDOM" found-in="ch12"/>
+  <file name="XMLGEN" found-in="ch05"/>
+  <file name="XMLHelper" found-in="ch06"/>
+  <file name="XMLHelper" found-in="ch10"/>
+
+
+  <file name="XMLPARSER" found-in="appa"/>
+  <file name="XMLPARSER" found-in="appb"/>
+  <file name="XMLPARSER" found-in="ch02"/>
+  <file name="XMLPARSER" found-in="ch04"/>
+  <file name="XMLPARSER" found-in="ch05"/>
+  <file name="XMLPARSER" found-in="ch06"/>
+
+  <file name="XMLQ" found-in="ch05"/>
+  <file name="XMLQ" found-in="ch06"/>
+  <file name="XMLQ" found-in="ch10"/>
+  <file name="XMLQ" found-in="ch11"/>
+  <file name="XMLQ" found-in="ch12"/>
+
+
+  <file name="XMLQUOTESFORSTOCKSINPORTFOLIO" found-in="ch10"/>
+  <file name="XML_BUSINESS_MESSAGES" found-in="ch15"/>
+  <file name="XML_CLAIM" found-in="ch05"/>
+
+
+  <file name="XML_DOCUMENTS" found-in="appa"/>
+  <file name="XML_DOCUMENTS" found-in="ch05"/>
+  <file name="XML_DOCUMENTS" found-in="ch06"/>
+  <file name="XML_DOCUMENTS" found-in="ch13"/>
+  <file name="XML_DOCUMENTS_TIMESTAMP" found-in="ch05"/>
+  <file name="XML_HTTP" found-in="appa"/>
+  <file name="XML_HTTP" found-in="ch05"/>
+
+
+  <file name="XML_MESSAGE" found-in="ch05"/>
+  <file name="XML_MESSAGE" found-in="ch06"/>
+  <file name="XML_MSG_QUEUE" found-in="ch05"/>
+  <file name="XML_MSG_QUEUE" found-in="ch06"/>
+  <file name="XML_MSG_QUEUETABLE" found-in="ch05"/>
+  <file name="XPATH" found-in="appa"/>
+  <file name="XPATH" found-in="appd"/>
+  <file name="XPATH" found-in="ch00"/>
+  <file name="XPATH" found-in="ch01"/>
+  <file name="XPATH" found-in="ch02"/>
+  <file name="XPATH" found-in="ch03"/>
+  <file name="XPATH" found-in="ch04"/>
+  <file name="XPATH" found-in="ch05"/>
+  <file name="XPATH" found-in="ch06"/>
+  <file name="XPATH" found-in="ch07"/>
+  <file name="XPATH" found-in="ch08"/>
+  <file name="XPATH" found-in="ch09"/>
+  <file name="XPATH" found-in="ch11"/>
+  <file name="XPATH" found-in="ch12"/>
+  <file name="XPATH" found-in="ch13"/>
+  <file name="XPATH" found-in="ch14"/>
+  <file name="XPATH" found-in="ch15"/>
+  <file name="XPATH" found-in="ch16"/>
+  <file name="XPATH" found-in="ch17"/>
+
+
+
+  <file name="XPATH_RULES" found-in="ch05"/>
+
+
+  <file name="XPATH_RULES_ADMIN" found-in="ch05"/>
+
+
+  <file name="XSLPROCESSOR" found-in="appa"/>
+  <file name="XSLPROCESSOR" found-in="ch05"/>
+  <file name="XSLPROCESSOR" found-in="ch06"/>
+  <file name="XSLPROCESSOR" found-in="ch09"/>
+  <file name="XSLPROCESSOR" found-in="ch12"/>
+  <file name="XSLPROCESSOR" found-in="ch14"/>
+  <file name="XSLT" found-in="appa"/>
+  <file name="XSLT" found-in="appb"/>
+  <file name="XSLT" found-in="appd"/>
+  <file name="XSLT" found-in="ch00"/>
+  <file name="XSLT" found-in="ch01"/>
+  <file name="XSLT" found-in="ch02"/>
+  <file name="XSLT" found-in="ch03"/>
+  <file name="XSLT" found-in="ch04"/>
+  <file name="XSLT" found-in="ch05"/>
+  <file name="XSLT" found-in="ch06"/>
+  <file name="XSLT" found-in="ch07"/>
+  <file name="XSLT" found-in="ch08"/>
+  <file name="XSLT" found-in="ch09"/>
+  <file name="XSLT" found-in="ch12"/>
+  <file name="XSLT" found-in="ch13"/>
+  <file name="XSLT" found-in="ch14"/>
+  <file name="XSLT" found-in="ch15"/>
+  <file name="XSLT" found-in="ch16"/>
+  <file name="XSLT" found-in="ch17"/>
+
+
+
+  <file name="YAHOOQUOTES" found-in="ch06"/>
+  <file name="YAHOOQUOTES" found-in="ch16"/>
+  <file name="YAHOOQUOTES" found-in="ch17"/>
+
+
+</usages>

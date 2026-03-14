@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <p><span class="someclass"/> Tekst <i>italic</i> etc..</p>    
+    <p> Tekst <i>italic</i> etc..</p>
+</root>

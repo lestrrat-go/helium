@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<doc>
+  <l1>
+    <v2>doc-l1-v2</v2>
+    <x2>doc-l1-x2</x2>
+    <l2>
+      <v3>doc-l1-l2-v3</v3>
+      <w3>doc-l1-l2-w3</w3>
+      <x3>doc-l1-l2-x3</x3>
+      <y3>doc-l1-l2-y3</y3>
+      <l3>
+        <v4>doc-l1-l2-l3-v4</v4>
+        <x4>doc-l1-l2-l3-x4</x4>
+      </l3>
+    </l2>
+  </l1>
+</doc>

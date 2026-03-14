@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<!DOCTYPE credits_and_about_author [
+<!ELEMENT credits_and_about_author (credits,about_author)>
+<!ELEMENT credits (editor+,production,proofing_indexing,contributing_writer)>
+<!ELEMENT about_author ( #PCDATA)>
+<!ELEMENT editor (copy_editor+,acquisitions,development,technical)>
+<!ELEMENT development (#PCDATA)>
+<!ELEMENT acquisitions (#PCDATA)>
+<!ELEMENT contributing_writer (#PCDATA)>
+<!ELEMENT technical (#PCDATA)>
+<!ELEMENT copy_editor (#PCDATA)>
+<!ELEMENT production (#PCDATA)>
+<!ELEMENT proofing_indexing (#PCDATA)>
+]>
+<credits_and_about_author>
+	<credits>
+		<editor>
+			<copy_editor>Amy Eoff</copy_editor>
+			<copy_editor>Amanda Kaufman</copy_editor>
+			<copy_editor>Nicole LeClerc</copy_editor>
+			<copy_editor>Victoria Lee</copy_editor>
+			<acquisitions>John Osborne</acquisitions>
+			<development>Terri Varveris</development>
+			<technical>Greg Guntle</technical>
+		</editor>
+		<production>IDG Books Wolrdwide Production</production>
+		<proofing_indexing>York Production Services</proofing_indexing>
+		<contributing_writer>Heather Williamson</contributing_writer>
+	</credits>
+	<about_author/>
+</credits_and_about_author>

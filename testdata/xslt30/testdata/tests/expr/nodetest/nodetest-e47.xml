@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<my:doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://www.schemanodetest.example.com/ns/subgroup subgroupTypeNodeTest.xsd"
+     xmlns:my="http://www.schemanodetest.example.com/ns/subgroup">
+	 <my:article xsi:type="my:article-Type">
+	 	<my:title>Hello World</my:title>
+	 	<my:uri>http://www.mybook.foo</my:uri>
+	 	<my:price>19.99</my:price>
+	 	<my:magazine>Times</my:magazine>
+	 	<my:page>12</my:page>
+	 </my:article>
+	 <my:article xsi:type="my:derivedArticle">
+	 	<my:title>My second article</my:title>
+	 	<my:uri>http://www.mybook1.foo</my:uri>
+	 	<my:price>29.99</my:price>
+	 	<my:magazine>News</my:magazine>
+	 	<my:page>30</my:page>
+	 	<my:level>intermediate</my:level>
+	 </my:article>
+</my:doc>

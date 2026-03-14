@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="iso-8859-1" ?>
+<html
+	xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:bib="http://greenbytes.de/2000/xmlns/bibliography"
+>
+<head>
+	<title>PATH XSLT usage instructions</title>
+	<style type="text/css">
+		h1 { font-family:sans-serif; font-size:14pt }
+		h2 { font-family:sans-serif; font-size:12pt }
+		h3 { font-family:sans-serif; font-size:10pt }
+		td,th,p,li,ul { font-family:sans-serif; font-size:10pt}
+		pre { font-family:monospace}
+		th {text-align:left; background:#d0e0d0 }
+		td {vertical-align:top; background:#e8e8e8 }
+		td.rt {text-align:right; background:#d0e0d0 }
+		a {text-decoration: none}
+		a:hover {text-decoration: underline}
+		a:active {text-decoration: underline}                        
+  </style>
+</head><body>
+
+<h1>PATH XSLT usage instructions</h1>
+	
+<p><a href="mailto:julian.reschke@greenbytes.de?subject=path xslt usage">Julian F. Reschke</a>, 
+<a href="http://greenbytes.de"><font color="#90cc00">&lt;</font><font color="#90cc00"><font 
+color="purple">green</font>/&gt;</font>bytes GmbH</a>, 2001-01-24
+</p>
+		
+<h2>Table of contents</h2>
+<p>
+<a href="#dt4dtd.xslt">dt4dtd.xslt</a>
+<a href="#gen-compare-XSU.xslt">dt4dtd.xslt</a>
+</p>
+
+<h2><a name="dt4dtd.xslt">dt4dtd.xslt</a></h2>
+<p>
+<b>Applies to:</b> source XDR file
+</p>
+<p>
+The current <bib:ref name="XDR" />s for PROMPT datasources have been automatically
+converted from <bib:ref name="DTD" />s using the <bib:ref name="DT4DTD" /> extension
+(which allows to define datatypes in DTDs). <code>dt4dtd.xslt</code> takes an
+XDR document with attribute definitions based on DT4DTD and converts them into
+their proper XDR counterparts, making the XDR both more expressive (data types
+actually can be validated) and readable.
+</p>
+
+<h2><a name="gen-compare-XSU.xslt">gen-compare-XSU.xslt</a></h2>
+<p>
+<b>Applies to:</b> PATH XDR file
+</p>
+<p>
+<b>Parameter:</b>
+</p>
+<p>
+</p>
+
+<h2>References</h2>
+
+<bib:include-references />
+
+<bib:def name="DTD" href="http://www.w3.org/TR/REC-xml#dt-doctype">
+	Document Type Definition.
+</bib:def>
+
+<bib:def name="DT4DTD" href="http://www.w3.org/TR/dt4dtd">
+	Datatypes for <bib:ref name="DTD" />s (DT4DTD) 1.0 (W3C Note 13 January 2000)
+</bib:def>
+
+<bib:def name="MSXML" href="http://msdn.microsoft.com/xml/">
+	Microsoft <bib:ref name="XML" /> component. Latest release (3.x) includes <bib:ref name="XSLT"/> support.
+</bib:def>
+
+<bib:def name="XDR" href="http://msdn.microsoft.com/library/psdk/xmlsdk/xmls5gkl.htm">
+	<bib:ref name="XML"/> Data Reduced -- a subset of the <bib:ref name="XML-Data"/> schema language implemented in <bib:ref name="MSXML" />.
+</bib:def>
+
+<bib:def name="XML" href="http://www.w3.org/TR/REC-xml">
+	Extensible Markup Language (XML) 1.0 <bib:ref name="W3C" /> Recommendation 10-February-1998.
+</bib:def>
+
+<bib:def name="XML-Data" href="http://www.w3.org/TR/1998/NOTE-XML-data-0105/">
+	XML-Data - <bib:ref name="W3C"/> Note 05 Jan 1998 
+</bib:def>
+
+<bib:def name="XSL" href="http://www.w3.org/Style/XSL/">
+	Extensible Stylesheet Language
+</bib:def>
+
+<bib:def name="XSLT" href="http://www.w3.org/TR/xslt">
+	<bib:ref name="XSL" /> Transformations (XSLT). Version 1.0 <bib:ref name="W3C" /> Recommendation 16 November 1999
+</bib:def>
+
+<bib:def name="W3C" href="http://www.w3.org/">
+	World Wide Web Consortium
+</bib:def>
+
+</body>
+</html>

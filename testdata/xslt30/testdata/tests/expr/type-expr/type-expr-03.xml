@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:userNode xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://www.schemaexpr.example.com/ns/various variousTypesSchemaExpr.xsd"
+		  xmlns:my="http://www.schemaexpr.example.com/ns/various"
+		  xmlns:one="http://www.schemaexpr.example.com/ns/various"
+		  xmlns:two="http://www.schemaexpr.example.com">
+
+	<elem-duration>P1Y1DT5M</elem-duration>
+	<elem-duration>P1Y1DT5M</elem-duration>
+	<elem-duration>P1Y3DT5M</elem-duration>
+	<elem-duration-derived>P1Y3DT5M</elem-duration-derived>
+	<elem-duration-derived>P1Y3DT5M</elem-duration-derived>
+	<elem-duration-derived>P1Y3DT6S</elem-duration-derived>
+</my:userNode>

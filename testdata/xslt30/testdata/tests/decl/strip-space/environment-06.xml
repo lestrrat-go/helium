@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:userNode 
+  xmlns:my="http://www.whitespace.example.com/ns/various"
+	 	  my:specialPart="123-AB">
+		<my:complexUserElem age="75">
+		
+		
+			<firstName>Hello</firstName>
+      		
+      					<familyName>There</familyName>
+      					
+		</my:complexUserElem>
+	
+	<my:complexUserElem age="31">
+		<firstName>    </firstName>
+		<familyName>    </familyName>
+	</my:complexUserElem>
+</my:userNode>

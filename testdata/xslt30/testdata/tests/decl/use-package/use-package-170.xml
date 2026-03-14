@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dita-doc>
+    <ph class="- topic/ph ">Phrase text</ph>
+    <b class="+ topic/ph hi-d/b ">Bold text</b>
+</dita-doc>

@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!DOCTYPE t04 [
+  <!ELEMENT t04 (dummy|a)*>
+  <!ELEMENT dummy EMPTY>  
+  <!ELEMENT a EMPTY>
+  <!ATTLIST a  id ID #REQUIRED>
+  <!ATTLIST a  value CDATA #IMPLIED>  
+]>
+<t04>
+  <dummy/>
+  <a id="a"/>
+  <a id="b" value="gotcha"/>
+  <a id="c"/>
+  <a id="d"/>
+</t04>

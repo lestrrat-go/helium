@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<items>
+    <item id="i1" pos="1">
+        <data>data 1</data>
+    </item>
+    <item id="i2" pos="2">
+        <data>data 2</data>
+    </item>
+    <item id="i3" pos="3">
+        <data>data 3</data>
+    </item>
+    <item id="i4" pos="4">
+        <data>data 4</data>
+    </item>
+    <item id="i5" pos="5">
+        <data>data 5</data>
+    </item>
+</items>

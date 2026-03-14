@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<publist>
+	<pubtag list='yes' pub='xml journal' />
+	<pubtag list='no'  pub='fortran journal' />
+	<pubtag list='yes' pub='xml journal' />
+	<pubtag list='yes' pub='xsl journal' />
+	<pubtag list='yes' pub='css journal' />
+	<pubtag list='yes' pub='xml journal' />
+	<pubtag list='no'  pub='cobol journal' />
+	<pubtag list='no'  pub='ada journal' />
+	<pubtag list='no'  pub='fortran journal' />
+	<pubtag list='no'  pub='snobol journal' />
+	<pubtag list='yes' pub='xsl journal' />
+</publist>

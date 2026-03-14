@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<characters>
+   <c cp="0488" d="1160" v="3.0" cat="Me" c="҈"/>
+   <c cp="0489" d="1161" v="3.0" cat="Me" c="҉"/>
+   <c cp="1ABE" d="6846" v="7.0" cat="Me" c="᪾"/>
+   <c cp="20DD" d="8413" v="1.1" cat="Me" c="⃝"/>
+   <c cp="20DE" d="8414" v="1.1" cat="Me" c="⃞"/>
+   <c cp="20DF" d="8415" v="1.1" cat="Me" c="⃟"/>
+   <c cp="20E0" d="8416" v="1.1" cat="Me" c="⃠"/>
+   <c cp="20E2" d="8418" v="3.0" cat="Me" c="⃢"/>
+   <c cp="20E3" d="8419" v="3.0" cat="Me" c="⃣"/>
+   <c cp="20E4" d="8420" v="3.2" cat="Me" c="⃤"/>
+   <c cp="A670" d="42608" v="5.1" cat="Me" c="꙰"/>
+   <c cp="A671" d="42609" v="5.1" cat="Me" c="꙱"/>
+   <c cp="A672" d="42610" v="5.1" cat="Me" c="꙲"/>
+</characters>

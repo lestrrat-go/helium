@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<publishing>
+  <title><emph>Unofficial</emph> publishing DTD test document</title>
+  <body>
+    <para>
+      <gi-def><t>term in glossary-entries</t><def>present to test the gathering functions</def></gi-def>
+      <gi-def><t>term in glossary-entries</t><def>present to test the gathering functions</def></gi-def>
+      <gi-def><t>term in glossary-entries</t><def>present to test the gathering functions</def></gi-def>
+      <gi-def><t>term in glossary-entries</t><def>present to test the gathering functions</def></gi-def>
+      <gi-def><t>term in glossary-entries</t><def>present to test the gathering functions</def></gi-def>
+      <gi-def><t>term in glossary-entries</t><def>present to test the gathering functions</def></gi-def>
+    </para>
+  </body>
+</publishing>

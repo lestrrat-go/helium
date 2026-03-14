@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<table>
+    <row>
+        <id>10</id>
+        <email>fake@fake.com</email>
+        <address>dsffe</address>
+        <birthday>10/2018</birthday>
+        <country>FR</country>
+        <external>zz</external>
+        <internal>ww</internal>
+        <name>Jean</name>
+        <phone>000000</phone>
+        <city>Dfegd</city>
+    </row>
+    <row>
+        <id>9</id>
+        <email>fake@fake2.com</email>
+        <address>sdfzefzef</address>
+        <birthday>11/2012</birthday>
+        <country>GB</country>
+        <external>xx</external>
+        <internal>yy</internal>
+        <name>Jean-Claude</name>
+        <phone>000000</phone>
+        <city>dd</city>
+    </row>
+</table>

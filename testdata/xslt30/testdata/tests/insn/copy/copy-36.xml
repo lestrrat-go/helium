@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<far-north> Level-1
+  <?a-pi pi-1?>
+  <north>
+    Level-3
+    <?b-pi pi-2?>
+    <near-north>
+      Level-4
+      <?a-pi pi-3?>
+      <center>
+        <?b-pi pi-4?>
+        <near-south-west/>Level-5
+          <?a-pi pi-5?>
+          <near-south>Level-6
+            <?b-pi pi-6?>
+	    <south/>
+            <?a-pi pi-7?>
+          </near-south>
+          <?b-pi pi-8?>
+        </center>
+     </near-north>
+  <?a-pi pi-9?>
+  </north>
+</far-north>

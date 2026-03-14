@@ -1,0 +1,12 @@
+<catalog.entry>
+<catalog.entry.id>c1230987
+</catalog.entry.id>
+<catalog.operator.pointer>
+<url.reference url.string="..\IDKY\doc07.xml"/>
+</catalog.operator.pointer>
+<product.description.group>
+<product.description.pointer>
+<url.reference url.string="..\IDKY\think.xml"/>
+</product.description.pointer>
+</product.description.group>
+</catalog.entry>

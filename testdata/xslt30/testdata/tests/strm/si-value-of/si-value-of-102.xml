@@ -1,0 +1,5 @@
+<root>
+  <record att1="a1" att2="b1" att3=""/>
+  <record att1="a2" att2="b2" att3="c2"/>
+  <record att1="a3" att2="b3" att3="c3"/>
+</root>

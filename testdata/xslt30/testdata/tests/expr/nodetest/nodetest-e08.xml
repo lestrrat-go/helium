@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<my:doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://www.schemanodetest.example.com/ns/subgroup subgroupTypeNodeTest.xsd"
+     xmlns:my="http://www.schemanodetest.example.com/ns/subgroup">
+     <my:elem-URI>
+		<my:elem-anyURI>http://test1.org</my:elem-anyURI>
+	 </my:elem-URI>
+	 <my:article>
+	 	<my:title>Hello World</my:title>
+	 	<my:uri>http://www.mybook.foo</my:uri>
+	 	<my:price>19.99</my:price>
+	 	<my:magazine>Times</my:magazine>
+	 	<my:page>12</my:page>
+	 </my:article>
+</my:doc>

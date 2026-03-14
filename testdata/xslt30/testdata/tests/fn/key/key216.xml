@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<root xmlns:a="http://aURI/" xmlns:b="http://bURI/">
+  <target name="1" ref="a:something" />
+  <target name="2" ref="b:something" />
+  <target name="3" ref="something" />
+  <target name="4" ref="a:anything" />
+
+  <namespace value="http://aURI/" />
+  <namespace value="http://bURI/" />
+  <namespace value="" />
+</root>

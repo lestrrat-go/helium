@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doc>
+  <side att="view"><!-- This is the side comment -->text-in-side<?s-pi side ?></side>
+  <a>key-042b.xml</a><!-- Shirt, Overt -->
+  <a>key-042c.xml</a><!-- GoodBye -->
+  <a>key-042d.xml</a><!-- Tie, Sly -->
+</doc>

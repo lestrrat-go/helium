@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<doc xml:base="http://a.org/" xmlns:one="http://one.org/test/">
+<!--Comment node-->
+<str1 attr1="red" attr2="blue" xml:base="http://b.org/">string1
+	<substring1/>
+</str1>
+<str2>string2</str2>
+<?PI name="processing" ?>
+</doc>

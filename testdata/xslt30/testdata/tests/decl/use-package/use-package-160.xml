@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEST>
+    <!-- test comment -->
+    <test1 test="yes">Child 1</test1>
+    <test2 purpose="display" rename="yes">Child 2</test2>
+</TEST>

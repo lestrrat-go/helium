@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?pi a?>
+<!-- comment 1 -->
+<root>
+    <?pi b?>
+    <!-- comment 2 -->
+    <items>
+        <?pi c?>
+        <!-- comment 3 -->
+        <item>a</item>
+        <item>b</item>
+    </items>
+    <?pi d?>
+    <!-- comment 4 -->
+</root>
+<?pi e?>
+<!-- comment 5 -->

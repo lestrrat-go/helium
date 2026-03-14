@@ -1,0 +1,304 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<catalog xmlns:xs="http://www.w3.org/2001/XMLSchema"
+      xmlns="http://www.w3.org/2012/10/xslt-test-catalog">
+          
+      <!-- XSLT stylesheet attributes -->
+
+      <test-set name="as" file="tests/attr/as/_as-test-set.xml"/>
+      <test-set name="avt" file="tests/attr/avt/_avt-test-set.xml"/>
+      <test-set name="declared-modes" file="tests/attr/declared-modes/_declared-modes-test-set.xml"/>
+      <test-set name="disable-output-escaping" file="tests/attr/disable-output-escaping/_disable-output-escaping-test-set.xml"/>
+      <test-set name="expand-text" file="tests/attr/expand-text/_expand-text-test-set.xml"/>
+      <test-set name="match" file="tests/attr/match/_match-test-set.xml"/>
+      <test-set name="mode" file="tests/attr/mode/_mode-test-set.xml"/>
+      <test-set name="package-version" file="tests/attr/package-version/_package-version-test-set.xml"/>
+      <test-set name="select" file="tests/attr/select/_select-test-set.xml"/>
+      <test-set name="shadow" file="tests/attr/shadow/_shadow-test-set.xml"/>
+      <test-set name="static" file="tests/attr/static/_static-test-set.xml"/>
+      <test-set name="streamable" file="tests/attr/streamable/_streamable-test-set.xml"/>
+      <test-set name="strip-type-annotations" file="tests/attr/strip-type-annotations/_strip-type-annotations-test-set.xml"/>
+      <test-set name="tunnel" file="tests/attr/tunnel/_tunnel-test-set.xml"/>
+      <test-set name="use-when" file="tests/attr/use-when/_use-when-test-set.xml"/>
+      <test-set name="validation" file="tests/attr/validation/_validation-test-set.xml"/>
+      <test-set name="version" file="tests/attr/version/_version-test-set.xml"/>         
+      <test-set name="xpath-default-namespace" file="tests/attr/xpath-default-namespace/_xpath-default-namespace-test-set.xml"/>
+      
+      <!-- Declarations -->
+      
+      <test-set name="accept" file="tests/decl/accept/_accept-test-set.xml"/>
+      <test-set name="accumulator" file="tests/decl/accumulator/_accumulator-test-set.xml"/>
+      <test-set name="attribute-set" file="tests/decl/attribute-set/_attribute-set-test-set.xml"/>
+      <test-set name="character-map" file="tests/decl/character-map/_character-map-test-set.xml"/>
+      <test-set name="context-item" file="tests/decl/context-item/_context-item-test-set.xml"/>  
+      <test-set name="expose" file="tests/decl/expose/_expose-test-set.xml"/>               
+      <test-set name="function" file="tests/decl/function/_function-test-set.xml"/>         
+      <test-set name="global-context-item" file="tests/decl/global-context-item/_global-context-item-test-set.xml"/>               
+      <test-set name="import" file="tests/decl/import/_import-test-set.xml"/>
+      <test-set name="import-schema" file="tests/decl/import-schema/_import-schema-test-set.xml"/>         
+      <test-set name="include" file="tests/decl/include/_include-test-set.xml"/>
+      <test-set name="namespace-alias" file="tests/decl/namespace-alias/_namespace-alias-test-set.xml"/>
+      <test-set name="output" file="tests/decl/output/_output-test-set.xml"/>        
+      <test-set name="override" file="tests/decl/override/_override-test-set.xml"/>
+      <test-set name="package" file="tests/decl/package/_package-test-set.xml"/>
+      <test-set name="param" file="tests/decl/param/_param-test-set.xml"/>
+      <test-set name="strip-space" file="tests/decl/strip-space/_strip-space-test-set.xml"/>
+      <test-set name="template" file="tests/decl/template/_template-test-set.xml"/>
+      <test-set name="use-package" file="tests/decl/use-package/_use-package-test-set.xml"/>
+      <test-set name="variable" file="tests/decl/variable/_variable-test-set.xml"/>
+      
+      <!-- Expressions -->
+
+      <test-set name="axes" file="tests/expr/axes/_axes-test-set.xml"/>
+      <test-set name="castable" file="tests/expr/castable/_castable-test-set.xml"/>
+      <test-set name="data-manipulation" file="tests/expr/data-manipulation/_data-manipulation-test-set.xml"/>
+      <test-set name="expression" file="tests/expr/expression/_expression-test-set.xml"/>
+      <test-set name="for" file="tests/expr/for/_for-test-set.xml"/>
+      <test-set name="higher-order-functions" file="tests/expr/higher-order-functions/_higher-order-functions-test-set.xml"/>
+      <test-set name="math" file="tests/expr/math/_math-test-set.xml"/>
+      <test-set name="nodetest" file="tests/expr/nodetest/_nodetest-test-set.xml"/>
+      <test-set name="path" file="tests/expr/path/_path-test-set.xml"/>
+      <test-set name="predicate" file="tests/expr/predicate/_predicate-test-set.xml"/>
+      <test-set name="treat-as" file="tests/expr/treat-as/_treat-as-test-set.xml"/>
+      <test-set name="type-expr" file="tests/expr/type-expr/_type-expr-test-set.xml"/>         
+      <test-set name="type-functions" file="tests/expr/type-functions/_type-functions-test-set.xml"/>
+      <test-set name="xpath-compat" file="tests/expr/xpath-compat/_xpath-compat-test-set.xml"/>
+      
+      <!-- Functions -->
+      
+      <test-set name="accessor" file="tests/fn/accessor/_accessor-test-set.xml"/>
+      <test-set name="available-system-properties" file="tests/fn/available-system-properties/_available-system-properties-test-set.xml"/>
+      <test-set name="base-uri" file="tests/fn/base-uri/_base-uri-test-set.xml"/>
+      <test-set name="collection" file="tests/fn/collection/_collection-test-set.xml"/>
+      <test-set name="core-function" file="tests/fn/core-function/_core-function-test-set.xml"/>
+      <test-set name="copy-of" file="tests/fn/copy-of/_copy-of-test-set.xml"/>
+      <test-set name="current" file="tests/fn/current/_current-test-set.xml"/> 
+      <test-set name="current-output-uri" file="tests/fn/current-output-uri/_current-output-uri-test-set.xml"/>      
+      <test-set name="deep-equal" file="tests/fn/deep-equal/_deep-equal-test-set.xml"/>
+      <test-set name="document" file="tests/fn/document/_document-test-set.xml"/>         
+      <test-set name="extension-functions" file="tests/fn/extension-functions/_extension-functions-test-set.xml"/>
+      <test-set name="format-date" file="tests/fn/format-date/_format-date-test-set.xml"/>
+      <test-set name="format-date-en" file="tests/fn/format-date-en/_format-date-en-test-set.xml"/>
+      <test-set name="format-number" file="tests/fn/format-number/_format-number-test-set.xml"/>
+      <test-set name="function-available" file="tests/fn/function-available/_function-available-test-set.xml"/>
+      <test-set name="function-lookup" file="tests/fn/function-lookup/_function-lookup-test-set.xml"/>
+      <test-set name="id" file="tests/fn/id/_id-test-set.xml"/>
+      <test-set name="innermost" file="tests/fn/innermost/_innermost-test-set.xml"/>
+      <test-set name="json-to-xml" file="tests/fn/json-to-xml/_json-to-xml-test-set.xml"/>
+      <test-set name="key" file="tests/fn/key/_key-test-set.xml"/>
+      <test-set name="load-xquery-module" file="tests/fn/load-xquery-module/_load-xquery-module-test-set.xml"/>
+      <test-set name="normalize-unicode" file="tests/fn/normalize-unicode/_normalize-unicode-test-set.xml"/> 
+      <test-set name="outermost" file="tests/fn/outermost/_outermost-test-set.xml"/>
+      <test-set name="position" file="tests/fn/position/_position-test-set.xml"/>
+      <test-set name="resolve-uri" file="tests/fn/resolve-uri/_resolve-uri-test-set.xml"/>         
+      <test-set name="root" file="tests/fn/root/_root-test-set.xml"/>
+      <test-set name="snapshot" file="tests/fn/snapshot/_snapshot-test-set.xml"/>
+      <test-set name="stream-available" file="tests/fn/stream-available/_stream-available-test-set.xml"/>
+      <test-set name="system-property" file="tests/fn/system-property/_system-property-test-set.xml"/>
+      <!--<test-set name="system-property-gen" file="tests/fn/system-property-gen/_system-property-gen-test-set.xml"/>-->
+      <test-set name="transform" file="tests/fn/transform/_transform-test-set.xml"/>
+      <test-set name="type-available" file="tests/fn/type-available/_type-available-test-set.xml"/>
+      <test-set name="unparsed-entity-uri" file="tests/fn/unparsed-entity-uri/_unparsed-entity-uri-test-set.xml"/> 
+      <test-set name="unparsed-text" file="tests/fn/unparsed-text/_unparsed-text-test-set.xml"/>         
+      <test-set name="unparsed-text-lines" file="tests/fn/unparsed-text-lines/_unparsed-text-lines-test-set.xml"/>
+      <test-set name="xml-to-json" file="tests/fn/xml-to-json/_xml-to-json-test-set.xml"/>
+      
+      <!-- Instructions -->
+      
+      <test-set name="analyze-string" file="tests/insn/analyze-string/_analyze-string-test-set.xml"/>
+      <test-set name="apply-imports" file="tests/insn/apply-imports/_apply-imports-test-set.xml"/>
+      <test-set name="apply-templates" file="tests/insn/apply-templates/_apply-templates-test-set.xml"/> 
+      <test-set name="assert" file="tests/insn/assert/_assert-test-set.xml"/>
+      <test-set name="attribute" file="tests/insn/attribute/_attribute-test-set.xml"/>
+      <test-set name="call-template" file="tests/insn/call-template/_call-template-test-set.xml"/>
+      <test-set name="choose" file="tests/insn/choose/_choose-test-set.xml"/>
+      <test-set name="xsl-document" file="tests/insn/xsl-document/_xsl-document-test-set.xml"/>
+      <test-set name="element" file="tests/insn/element/_element-test-set.xml"/>
+      <test-set name="where-populated" file="tests/insn/where-populated/_where-populated-test-set.xml"/>
+      <test-set name="construct-node" file="tests/insn/construct-node/_construct-node-test-set.xml"/>         
+      <test-set name="copy" file="tests/insn/copy/_copy-test-set.xml"/>
+      <test-set name="evaluate" file="tests/insn/evaluate/_evaluate-test-set.xml"/>
+      <test-set name="for-each-group" file="tests/insn/for-each-group/_for-each-group-test-set.xml"/>
+      <test-set name="iterate" file="tests/insn/iterate/_iterate-test-set.xml"/>
+      <test-set name="lre" file="tests/insn/lre/_lre-test-set.xml"/>
+      <test-set name="merge" file="tests/insn/merge/_merge-test-set.xml"/>
+      <test-set name="message" file="tests/insn/message/_message-test-set.xml"/>
+      <test-set name="next-match" file="tests/insn/next-match/_next-match-test-set.xml"/>
+      <test-set name="number" file="tests/insn/number/_number-test-set.xml"/>
+      <test-set name="on-empty" file="tests/insn/on-empty/_on-empty-test-set.xml"/>
+      <test-set name="on-non-empty" file="tests/insn/on-non-empty/_on-non-empty-test-set.xml"/>
+      <test-set name="result-document" file="tests/insn/result-document/_result-document-test-set.xml"/>
+      <test-set name="sequence" file="tests/insn/sequence/_sequence-test-set.xml"/>
+      <test-set name="sort" file="tests/insn/sort/_sort-test-set.xml"/>
+      <test-set name="source-document" file="tests/insn/source-document/_source-document-test-set.xml"/>
+      <test-set name="try" file="tests/insn/try/_try-test-set.xml"/>
+      
+      <!-- Miscellaneous features -->
+      
+      <test-set name="aspiring" file="tests/misc/aspiring/_aspiring-test-set.xml"/>
+      <test-set name="backwards" file="tests/misc/backwards/_backwards-test-set.xml"/>
+      <test-set name="bug" file="tests/misc/bug/_bug-test-set.xml"/>
+      <test-set name="built-in-templates" file="tests/misc/built-in-templates/_built-in-templates-test-set.xml"/>
+      <test-set name="catalog" file="tests/misc/catalog/_catalog-test-set.xml"/>
+      <test-set name="collations" file="tests/misc/collations/_collations-test-set.xml"/>
+      <test-set name="docbook" file="tests/misc/docbook/_docbook-test-set.xml"/>
+      <test-set name="embedded-stylesheet" file="tests/misc/embedded-stylesheet/_embedded-stylesheet-test-set.xml"/>
+      <test-set name="error" file="tests/misc/error/_error-test-set.xml"/>
+      <test-set name="forwards" file="tests/misc/forwards/_forwards-test-set.xml"/>     
+      <test-set name="initial-function" file="tests/misc/initial-function/_initial-function-test-set.xml"/>
+      <test-set name="initial-mode" file="tests/misc/initial-mode/_initial-mode-test-set.xml"/>
+      <test-set name="initial-template" file="tests/misc/initial-template/_initial-template-test-set.xml"/>
+      <test-set name="regex-classes" file="tests/misc/regex-classes/_regex-classes-test-set.xml"/><!-- because very slow... -->
+      <test-set name="regex" file="tests/misc/regex/_regex-test-set.xml"/>
+      <test-set name="regex-syntax" file="tests/misc/regex-syntax/_regex-syntax-test-set.xml"/>
+      <test-set name="regex-syntax-xslt20" file="tests/misc/regex-syntax-xslt20/_regex-syntax-xslt20-test-set.xml"/>
+      <test-set name="seqtor" file="tests/misc/seqtor/_seqtor-test-set.xml"/>
+      <test-set name="unicode-90" file="tests/misc/unicode-90/_unicode-90-test-set.xml"/><!-- because very slow... -->
+      <test-set name="streaming-fallback" file="tests/misc/streaming-fallback/_streaming-fallback-test-set.xml"/>
+      <test-set name="whitespace" file="tests/misc/whitespace/_whitespace-test-set.xml"/>
+      <test-set name="xml-version" file="tests/misc/xml-version/_xml-version-test-set.xml"/>
+      <test-set name="xslt-compat" file="tests/misc/xslt-compat/_xslt-compat-test-set.xml"/>
+      
+      <!-- Streaming -->
+      
+      <!-- streamability analysis -->
+      <!-- naming conv.: [xp|pt|in|dc] - context posture - result posture - result sweep -->
+      <!--<test-set name="xp-striding-striding-consumingA" file="tests/sandp/xp-striding-striding-consuming/_xp-striding-striding-consumingA-test-set.xml"/>
+      <test-set name="xp-striding-striding-consumingB" file="tests/sandp/xp-striding-striding-consuming/_xp-striding-striding-consumingB-test-set.xml"/>
+      <test-set name="xp-striding-grounded-motionlessA" file="tests/sandp/xp-striding-grounded-motionless/_xp-striding-grounded-motionlessA-test-set.xml"/>
+      <test-set name="xp-striding-grounded-motionlessB" file="tests/sandp/xp-striding-grounded-motionless/_xp-striding-grounded-motionlessB-test-set.xml"/>
+      <test-set name="xp-striding-grounded-motionlessC" file="tests/sandp/xp-striding-grounded-motionless/_xp-striding-grounded-motionlessC-test-set.xml"/>
+      <test-set name="xp-striding-grounded-motionlessD" file="tests/sandp/xp-striding-grounded-motionless/_xp-striding-grounded-motionlessD-test-set.xml"/>
+      <test-set name="xp-striding-grounded-motionlessE" file="tests/sandp/xp-striding-grounded-motionless/_xp-striding-grounded-motionlessE-test-set.xml"/>
+      <test-set name="xp-striding-grounded-motionlessF" file="tests/sandp/xp-striding-grounded-motionless/_xp-striding-grounded-motionlessF-test-set.xml"/>
+      <test-set name="xp-striding-grounded-motionlessG" file="tests/sandp/xp-striding-grounded-motionless/_xp-striding-grounded-motionlessG-test-set.xml"/>
+      <test-set name="xp-striding-grounded-motionlessH" file="tests/sandp/xp-striding-grounded-motionless/_xp-striding-grounded-motionlessH-test-set.xml"/>
+      <test-set name="xp-striding-striding-motionlessA" file="tests/sandp/xp-striding-striding-motionless/_xp-striding-striding-motionlessA-test-set.xml"/>
+      <test-set name="xp-striding-climbing-motionlessA" file="tests/sandp/xp-striding-climbing-motionless/_xp-striding-climbing-motionlessA-test-set.xml"/>
+      <test-set name="xp-striding-climbing-motionlessB" file="tests/sandp/xp-striding-climbing-motionless/_xp-striding-climbing-motionlessB-test-set.xml"/>
+      <test-set name="xp-striding-climbing-motionlessC" file="tests/sandp/xp-striding-climbing-motionless/_xp-striding-climbing-motionlessC-test-set.xml"/>
+      <test-set name="xp-striding-climbing-consumingA" file="tests/sandp/xp-striding-climbing-consuming/_xp-striding-climbing-consumingA-test-set.xml"/>
+      <test-set name="xp-striding-climbing-consumingB" file="tests/sandp/xp-striding-climbing-consuming/_xp-striding-climbing-consumingB-test-set.xml"/>
+      <test-set name="xp-striding-crawling-consumingA" file="tests/sandp/xp-striding-crawling-consuming/_xp-striding-crawling-consumingA-test-set.xml"/>
+      <test-set name="xp-striding-crawling-consumingB" file="tests/sandp/xp-striding-crawling-consuming/_xp-striding-crawling-consumingB-test-set.xml"/>
+      <test-set name="xp-striding-crawling-consumingC" file="tests/sandp/xp-striding-crawling-consuming/_xp-striding-crawling-consumingC-test-set.xml"/>
+      <test-set name="xp-striding-grounded-consumingA" file="tests/sandp/xp-striding-grounded-consuming/_xp-striding-grounded-consumingA-test-set.xml"/>
+      <test-set name="xp-striding-grounded-consumingB" file="tests/sandp/xp-striding-grounded-consuming/_xp-striding-grounded-consumingB-test-set.xml"/>
+      <test-set name="xp-striding-grounded-consumingC" file="tests/sandp/xp-striding-grounded-consuming/_xp-striding-grounded-consumingC-test-set.xml"/>
+      <test-set name="xp-striding-roaming-free-rangingA" file="tests/sandp/xp-striding-roaming-free-ranging/_xp-striding-roaming-free-rangingA-test-set.xml"/>
+      <test-set name="xp-striding-roaming-free-rangingB" file="tests/sandp/xp-striding-roaming-free-ranging/_xp-striding-roaming-free-rangingB-test-set.xml"/>
+      <test-set name="xp-striding-roaming-free-rangingC" file="tests/sandp/xp-striding-roaming-free-ranging/_xp-striding-roaming-free-rangingC-test-set.xml"/>
+      -->
+      <!-- Streaming - functions -->
+      
+      <test-set name="sf-avg" file="tests/strm/sf-avg/_sf-avg-test-set.xml"/>
+      <test-set name="sf-boolean" file="tests/strm/sf-boolean/_sf-boolean-test-set.xml"/>      
+      <test-set name="sf-codepoints-to-string" file="tests/strm/sf-codepoints-to-string/_sf-codepoints-to-string-test-set.xml"/>
+      <test-set name="sf-copy-of" file="tests/strm/sf-copy-of/_sf-copy-of-test-set.xml"/>
+      <test-set name="sf-count" file="tests/strm/sf-count/_sf-count-test-set.xml"/>
+      <test-set name="sf-current" file="tests/strm/sf-current/_sf-current-test-set.xml"/>
+      <test-set name="sf-deep-equal" file="tests/strm/sf-deep-equal/_sf-deep-equal-test-set.xml"/>
+      <test-set name="sf-distinct-values" file="tests/strm/sf-distinct-values/_sf-distinct-values-test-set.xml"/>
+      <test-set name="sf-empty" file="tests/strm/sf-empty/_sf-empty-test-set.xml"/>      
+      <test-set name="sf-exists" file="tests/strm/sf-exists/_sf-exists-test-set.xml"/>
+      <test-set name="sf-exactly-one" file="tests/strm/sf-exactly-one/_sf-exactly-one-test-set.xml"/>
+      <test-set name="sf-filter" file="tests/strm/sf-filter/_sf-filter-test-set.xml"/>
+      <test-set name="sf-fold-left" file="tests/strm/sf-fold-left/_sf-fold-left-test-set.xml"/>
+      <test-set name="sf-fold-right" file="tests/strm/sf-fold-right/_sf-fold-right-test-set.xml"/>
+      <test-set name="sf-has-children" file="tests/strm/sf-has-children/_sf-has-children-test-set.xml"/>
+      <test-set name="sf-head" file="tests/strm/sf-head/_sf-head-test-set.xml"/>
+      <test-set name="sf-innermost" file="tests/strm/sf-innermost/_sf-innermost-test-set.xml"/>
+      <test-set name="sf-index-of" file="tests/strm/sf-index-of/_sf-index-of-test-set.xml"/>
+      <test-set name="sf-insert-before" file="tests/strm/sf-insert-before/_sf-insert-before-test-set.xml"/>
+      <test-set name="sf-max" file="tests/strm/sf-max/_sf-max-test-set.xml"/>
+      <test-set name="sf-min" file="tests/strm/sf-min/_sf-min-test-set.xml"/>
+      <test-set name="sf-not" file="tests/strm/sf-not/_sf-not-test-set.xml"/>
+      <test-set name="sf-one-or-more" file="tests/strm/sf-one-or-more/_sf-one-or-more-test-set.xml"/>
+      <test-set name="sf-outermost" file="tests/strm/sf-outermost/_sf-outermost-test-set.xml"/>
+      <test-set name="sf-remove" file="tests/strm/sf-remove/_sf-remove-test-set.xml"/>
+      <test-set name="sf-reverse" file="tests/strm/sf-reverse/_sf-reverse-test-set.xml"/>
+      <test-set name="sf-snapshot" file="tests/strm/sf-snapshot/_sf-snapshot-test-set.xml"/>
+      <test-set name="sf-string-join" file="tests/strm/sf-string-join/_sf-string-join-test-set.xml"/>
+      <test-set name="sf-subsequence" file="tests/strm/sf-subsequence/_sf-subsequence-test-set.xml"/>
+      <test-set name="sf-sum" file="tests/strm/sf-sum/_sf-sum-test-set.xml"/>
+      <test-set name="sf-tail" file="tests/strm/sf-tail/_sf-tail-test-set.xml"/>
+      <test-set name="sf-trace" file="tests/strm/sf-trace/_sf-trace-test-set.xml"/>
+      <test-set name="sf-unordered" file="tests/strm/sf-unordered/_sf-unordered-test-set.xml"/>
+      <test-set name="sf-unparsed-entity-uri" file="tests/strm/sf-unparsed-entity-uri/_sf-unparsed-entity-uri-test-set.xml"/>
+      <test-set name="sf-xml-to-json" file="tests/strm/sf-xml-to-json/_sf-xml-to-json-test-set.xml"/>
+      <test-set name="sf-zero-or-one" file="tests/strm/sf-zero-or-one/_sf-zero-or-one-test-set.xml"/>
+      
+      <!-- Streaming - instructions --> 
+      
+      <test-set name="si-apply-imports" file="tests/strm/si-apply-imports/_si-apply-imports-test-set.xml"/>
+      <test-set name="si-apply-templates" file="tests/strm/si-apply-templates/_si-apply-templates-test-set.xml"/>
+      <test-set name="si-assert" file="tests/strm/si-assert/_si-assert-test-set.xml"/>
+      <test-set name="si-attribute" file="tests/strm/si-attribute/_si-attribute-test-set.xml"/>
+      <test-set name="si-call-template" file="tests/strm/si-call-template/_si-call-template-test-set.xml"/>
+      <test-set name="si-choose" file="tests/strm/si-choose/_si-choose-test-set.xml"/>
+      <test-set name="si-copy" file="tests/strm/si-copy/_si-copy-test-set.xml"/>
+      <test-set name="si-copy-of" file="tests/strm/si-copy-of/_si-copy-of-test-set.xml"/>
+      <test-set name="si-document" file="tests/strm/si-document/_si-document-test-set.xml"/>
+      <test-set name="si-element" file="tests/strm/si-element/_si-element-test-set.xml"/>
+      <test-set name="si-for-each" file="tests/strm/si-for-each/_si-for-each-test-set.xml"/>
+      <test-set name="si-for-each-group" file="tests/strm/si-for-each-group/_si-for-each-group-test-set.xml"/>
+      <test-set name="si-fork" file="tests/strm/si-fork/_si-fork-test-set.xml"/>
+      <test-set name="si-iterate" file="tests/strm/si-iterate/_si-iterate-test-set.xml"/>
+      <test-set name="si-map" file="tests/strm/si-map/_si-map-test-set.xml"/>
+      <test-set name="si-merge" file="tests/strm/si-merge/_si-merge-test-set.xml"/>
+      <test-set name="si-message" file="tests/strm/si-message/_si-message-test-set.xml"/>
+      <test-set name="si-next-match" file="tests/strm/si-next-match/_si-next-match-test-set.xml"/>
+      <test-set name="si-on-empty" file="tests/strm/si-on-empty/_si-on-empty-test-set.xml"/>
+      <test-set name="si-on-non-empty" file="tests/strm/si-on-non-empty/_si-on-non-empty-test-set.xml"/>
+      <test-set name="si-perform-sort" file="tests/strm/si-perform-sort/_si-perform-sort-test-set.xml"/>
+      <test-set name="si-result-document" file="tests/strm/si-result-document/_si-result-document-test-set.xml"/>
+      <test-set name="si-try" file="tests/strm/si-try/_si-try-test-set.xml"/>
+      <test-set name="si-value-of" file="tests/strm/si-value-of/_si-value-of-test-set.xml"/>
+      <test-set name="si-where-populated" file="tests/strm/si-where-populated/_si-where-populated-test-set.xml"/>
+      
+      <test-set name="si-LRE" file="tests/strm/si-LRE/_si-lre-test-set.xml"/>
+      
+      <!-- Streaming - user-defined streamable stylesheet functions -->
+      
+      <test-set name="su-absorbing" file="tests/strm/su-absorbing/_su-absorbing-test-set.xml"/>
+      <test-set name="su-ascent" file="tests/strm/su-ascent/_su-ascent-test-set.xml"/>
+      <test-set name="su-filter" file="tests/strm/su-filter/_su-filter-test-set.xml"/>
+      <test-set name="su-inspection" file="tests/strm/su-inspection/_su-inspection-test-set.xml"/>
+      <test-set name="su-shallow-descent" file="tests/strm/su-shallow-descent/_su-shallow-descent-test-set.xml"/>
+      <test-set name="su-unclassified" file="tests/strm/su-unclassified/_su-unclassified-test-set.xml"/>
+      
+      <!-- Streaming - expressions -->
+      
+      <test-set name="sx-ArithmeticExpr" file="tests/strm/sx-ArithmeticExpr/_sx-ArithmeticExpr-test-set.xml"/>
+      <test-set name="sx-CommaExpr" file="tests/strm/sx-CommaExpr/_sx-CommaExpr-test-set.xml"/>
+      <test-set name="sx-ForExpr" file="tests/strm/sx-ForExpr/_sx-ForExpr-test-set.xml"/>
+      <test-set name="sx-ExceptExpr" file="tests/strm/sx-ExceptExpr/_sx-ExceptExpr-test-set.xml"/>
+      <test-set name="sx-FunctionCall" file="tests/strm/sx-FunctionCall/_sx-FunctionCall-test-set.xml"/>
+      <test-set name="sx-GeneralComp-eq" file="tests/strm/sx-GeneralComp-eq/_sx-GeneralComp-eq-test-set.xml"/>
+      <test-set name="sx-GeneralComp-ge" file="tests/strm/sx-GeneralComp-ge/_sx-GeneralComp-ge-test-set.xml"/>
+      <test-set name="sx-GeneralComp-gt" file="tests/strm/sx-GeneralComp-gt/_sx-GeneralComp-gt-test-set.xml"/>
+      <test-set name="sx-GeneralComp-le" file="tests/strm/sx-GeneralComp-le/_sx-GeneralComp-le-test-set.xml"/>
+      <test-set name="sx-GeneralComp-lt" file="tests/strm/sx-GeneralComp-lt/_sx-GeneralComp-lt-test-set.xml"/>
+      <test-set name="sx-GeneralComp-ne" file="tests/strm/sx-GeneralComp-ne/_sx-GeneralComp-ne-test-set.xml"/>
+      <test-set name="sx-IfExpr" file="tests/strm/sx-IfExpr/_sx-IfExpr-test-set.xml"/>
+      <test-set name="sx-IntersectExpr" file="tests/strm/sx-IntersectExpr/_sx-IntersectExpr-test-set.xml"/>
+      <test-set name="sx-InstanceofExpr" file="tests/strm/sx-InstanceofExpr/_sx-InstanceofExpr-test-set.xml"/>
+      <test-set name="sx-MapExpr" file="tests/strm/sx-MapExpr/_sx-MapExpr-test-set.xml"/>
+      <test-set name="sx-QuantifiedExpr" file="tests/strm/sx-QuantifiedExpr/_sx-QuantifiedExpr-test-set.xml"/>
+      <test-set name="sx-SimpleMappingExpr" file="tests/strm/sx-SimpleMappingExpr/_sx-SimpleMappingExpr-test-set.xml"/>
+      <test-set name="sx-SquareArrayConstructor" file="tests/strm/sx-SquareArrayConstructor/_sx-SquareArrayConstructor-test-set.xml"/>
+      <test-set name="sx-TreatExpr" file="tests/strm/sx-TreatExpr/_sx-TreatExpr-test-set.xml"/>
+      <test-set name="sx-UnionExpr" file="tests/strm/sx-UnionExpr/_sx-UnionExpr-test-set.xml"/>
+      
+      <!-- Types -->
+      
+      <test-set name="arrays" file="tests/type/arrays/_arrays-test-set.xml"/>
+      <test-set name="boolean" file="tests/type/boolean/_boolean-test-set.xml"/>
+      <test-set name="date" file="tests/type/date/_date-test-set.xml"/>
+      <test-set name="maps" file="tests/type/maps/_maps-test-set.xml"/>
+      <test-set name="namespace" file="tests/type/namespace/_namespace-test-set.xml"/>
+      <test-set name="node" file="tests/type/node/_node-test-set.xml"/>
+      <test-set name="notation" file="tests/type/notation/_notation-test-set.xml"/>
+      <test-set name="string" file="tests/type/string/_string-test-set.xml"/>
+      <test-set name="type" file="tests/type/type/_type-test-set.xml"/>
+          
+   </catalog>

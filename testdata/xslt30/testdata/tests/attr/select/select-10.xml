@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- Top comment -->
+<OL>
+  <LI>item1</LI>
+  <!-- Upper Middle comment -->
+  <LI>item2</LI>
+  <LI>item3</LI>
+  <OL>
+    <LI>subitem1</LI>
+    <LI>subitem2</LI>
+    <OL>
+      <!-- Lower Middle comment -->
+      <LI>subsubitem</LI>
+      <tag/>
+    </OL>
+  </OL>
+</OL>
+<!-- Bottom comment -->

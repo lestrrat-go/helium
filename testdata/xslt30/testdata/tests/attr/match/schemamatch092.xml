@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<doc-match xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:noNamespaceSchemaLocation="match-builtin.xsd">
+	<elem-ALL-attr-Types-match
+    	attr-anyURI-match="http://www.example.org/ns/test"
+    	attr-base64Binary-match="PM24"
+		attr-boolean-match="true"
+		attr-date-match="-0012-12-03-05:00"
+		attr-de1-decimal-enumeration-match="-1.0001"/>
+</doc-match>

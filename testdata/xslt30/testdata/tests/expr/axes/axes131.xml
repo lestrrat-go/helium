@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doc>
+  <child><grandchild><greatgrandchild/></grandchild><grandchild><greatgrandchild><greatgreatgreatgrandchild/></greatgrandchild><greatgrandchild/></grandchild></child>
+  <child><grandchild><greatgrandchild/><greatgrandchild/><greatgrandchild/></grandchild></child>
+  <child><grandchild><greatgrandchild/></grandchild></child>
+  <child><grandchild/></child>
+  <child><grandchild/><grandchild/></child>
+  <child/>
+</doc>

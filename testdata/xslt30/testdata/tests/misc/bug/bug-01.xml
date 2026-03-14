@@ -1,0 +1,18 @@
+<xsl:transform
+ xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+ version="1.0"
+>
+
+<!-- test fix for bug 5.3/001 -->
+
+<xsl:template match="/">
+<xsl:variable name="tmp">
+<a a-foo="a-bar"/>
+<b b-foo="b-bar"/>
+</xsl:variable>
+<xsl:copy-of select="$tmp"/>
+</xsl:template>
+
+
+
+</xsl:transform>

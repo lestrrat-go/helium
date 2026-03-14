@@ -1,0 +1,12 @@
+<?xml version="1.0" ?>
+<lot>
+  <car color="red" make="honda">
+    <plate>HJU-789</plate>
+  </car>
+  <car color="silver" make="honda">
+    <plate>HXU-000</plate>
+  </car>
+  <car color="black" make="honda">
+    <plate>ZXU-040</plate>
+  </car>
+</lot>

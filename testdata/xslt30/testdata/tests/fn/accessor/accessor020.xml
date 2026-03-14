@@ -1,0 +1,3 @@
+<doc att="att1">
+  <inner xml:base="http://nstest1.org"/>
+</doc>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doc>
+    <section id="sec1">This is a quick test.</section>
+    <section id="sec2">
+        <p>The quick <b>brown</b> fox jumped over the lazy dog.</p>
+    </section>
+</doc>

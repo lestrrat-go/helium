@@ -1,0 +1,67 @@
+<?xml version="1.0"?>
+<!--This is my first attempt at creating a xml document -->
+<Family_Geneologies>
+<Family Surname= "The Dicks">
+<Parents>
+<Father First = "Lewis" MI = "R" Last = "Dick">Lew Dick</Father> 
+<Mother First = "Ruth" MI = "C" Last = "Dick">Ruth Dick</Mother> 
+</Parents>
+<Children>
+
+<Child>
+<Name First = "Andy" MI = "A" Last = "Dick">Andy Dick</Name>
+<Address Street = "32 Amberfield Dr" Town = "Delran" State = "NJ" Zip = "08130">Amberfield Dr</Address>
+<Social_Security>425-46-6978</Social_Security>
+<Sex>Male</Sex>
+<Age>45</Age>
+<Married Kids = "2">Yes</Married>
+</Child>
+
+<Child>
+<Name First = "Thomas" MI = "B" Last = "Dick">Tom Dick</Name>
+<Address Street = "82 Lake Ave" Town = "Melrose" State = "MA" Zip = "02176">Lake Ave.</Address>
+<Social_Security>425-46-6979</Social_Security>
+<Sex>Male</Sex>
+<Age>30 </Age>
+<Married Kids = "2">Yes</Married>
+</Child>
+
+<Child>
+<Name First = "Peter" MI = "M" Last = "Dick">Peter Dick</Name>
+<Address Street = "80 Lake Ave." Town = "Melrose" State = "MA" Zip = "02176">Lake Ave.</Address>
+<Social_Security>425-46-6980</Social_Security>
+<Sex>Male</Sex>
+<Age>40 </Age>
+<Married Kids = "2">Yes</Married>
+</Child>
+
+<Child>
+<Name First = "Paul" MI = "E" Last = "Dick">Paul Dick</Name>
+<Address Street = "36 Lindor Road" Town = "North Reading" State = "MA" Zip = "01864">Lindor Road</Address>
+<Social_Security>425-46-6981</Social_Security>
+<Sex>Male</Sex>
+<Age>38</Age>
+<Married Kids = "1">Yes</Married>
+</Child>
+
+<Child>
+<Name First = "Matthew" MI = "A" Last = "Dick">Matt Dick</Name>
+<Address Street = "85 Green St." Town = "Melrose" State = "MA" Zip = "02176">Lake Ave.</Address>
+<Social_Security>425-46-6982</Social_Security>
+<Sex>Male</Sex>
+<Age>34 </Age>
+<Married Kids = "0">Yes</Married>
+</Child>
+</Children>
+<GrandChildren>
+	<gkid>Julie</gkid>
+	<gkid>Nate</gkid>
+	<gkid>Dan</gkid>
+	<gkid>Joshua</gkid>
+	<gkid>Sam</gkid>
+	<gkid>Lauren</gkid>
+	<gkid>Ben</gkid>
+</GrandChildren>
+
+</Family>
+</Family_Geneologies>

@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<doc>
+  <person><sex>M</sex><name>John</name></person>
+  <person><sex>F</sex><name>Jane</name></person>
+  <person><sex>H</sex><name>Hermaphrodite</name></person>
+  <person><sex>12</sex><name>Prince</name></person>
+</doc>

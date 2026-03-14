@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!DOCTYPE root-tag [
+  <!ATTLIST xsl:stylesheet id ID #REQUIRED>
+]>
+<root-tag>
+	 <one-tag>Text of one-tag</one-tag>
+	 <two-tag>Text of two-tag</two-tag>
+	 <xsl:stylesheet
+	    xmlns:xsl="http://www.w3.org/1999/XSL/Transform" 
+	    version="2.0"
+	    id="embedded">
+	 <xsl:template name="x">found it</xsl:template>
+	 </xsl:stylesheet> 		 
+</root-tag>

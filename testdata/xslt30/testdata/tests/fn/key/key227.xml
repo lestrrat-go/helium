@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<data>
+<item id="a">2002-10-06T03:00:00Z</item>
+<item id="b">2002-10-06T03:00:00+01:00</item>
+<item id="c">2002-10-06T04:00:00+01:00</item>
+<item id="d">2002-10-05T23:00:00-04:00</item>
+</data>
+

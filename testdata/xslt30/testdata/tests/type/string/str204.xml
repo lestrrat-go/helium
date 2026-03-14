@@ -1,0 +1,24 @@
+<?xml version="1.0" ?>
+
+<doc>
+ <x>a <y/></x>
+ <x>b</x>
+ <x>c</x>
+ <x>4</x>
+ <x>5</x>
+ <x>6</x>
+
+<node name="Alpha">
+  <node name="a"/>
+  <node name="b"/>
+</node>
+<node name="roman">
+  <node name="i"/>
+  <node name="ii"/>
+</node>
+<node name="Alpha2">
+  <node name="a"/>
+  <node name="b"/>
+</node>
+
+</doc>

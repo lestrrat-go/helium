@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:userNode xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://ns.example.com/strip-type varietyOfTypes.xsd"
+		  xmlns:my="http://ns.example.com/strip-type"
+	 	  specialPart="123-AB" listParts="000-SS 000-RR">
+		<simpleUserElem>123-AB</simpleUserElem>
+		<simpleUserList>345-PT 675-RT 897-GB</simpleUserList>
+		<simpleUserUnion>100</simpleUserUnion>
+		<complexMixedUserElem age="44">
+			<description>Mr <name>Peter</name> has brown hair</description>
+			<company>He works at a <name>Notorios</name> company</company>
+		</complexMixedUserElem>
+		<complexUserElem age="75">
+			<firstName>Hello</firstName>
+      		<familyName>There</familyName>
+		</complexUserElem>
+		<onlyAttributes colors="red blue green" specialPart="123-AB" />	
+</my:userNode> 

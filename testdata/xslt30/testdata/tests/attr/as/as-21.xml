@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:anyUri-main xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://www.example.com/ns/anyuri anyUriSchemaAs.xsd"
+		  xmlns:my="http://www.example.com/ns/anyuri">
+	<au1-anyURI-enumeration>http://xsl.lotus.com</au1-anyURI-enumeration>
+	<au2-anyURI-length>http://xsl.lotus.com</au2-anyURI-length>
+	<au3-anyURI-minLength-pattern>ftp://ftp.aaabbb.com</au3-anyURI-minLength-pattern>
+	<au4-anyURI-maxLength-whiteSpace>    lotus.com    </au4-anyURI-maxLength-whiteSpace>
+</my:anyUri-main>

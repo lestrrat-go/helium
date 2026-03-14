@@ -1,0 +1,2 @@
+<?xml version="1.0"?> 
+<doc att="att1" xml:base="http://parent.com" xmlns:sub="http://test.com"><?mypi some_data?><!-- comment 1-->text-node-1<inner att2="att2" xml:base="http://nstest1.com"><down xml:base="http://nstest2.com"><abc/></down></inner></doc>

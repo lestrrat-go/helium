@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<doc>
+  <sub pos="1">
+    <child>child number 1</child>
+    <sub-sub pos="1sub">
+      <child>grandchild number 1</child>
+    </sub-sub>
+  </sub>
+  <sub0 pos="2-no">
+    <child>child number 2</child>
+    <sub pos="2.5">
+      <child>grandchild number 2</child>
+    </sub>
+  </sub0>
+  <sub pos="3">
+    <child>child number 3</child>
+    <subno pos="3.5-no">
+      <child>grandchild number 3</child>
+    </subno>
+  </sub>
+  <sub0 pos="4-no">
+    <child>child number 4</child>
+    <sub-sub pos="4sub">
+      <child>grandchild number 4</child>
+    </sub-sub>
+  </sub0>
+</doc>

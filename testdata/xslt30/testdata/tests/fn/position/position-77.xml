@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<foo>
+  <bar>
+    <test>1</test>
+    <test>3</test>
+    <test>5</test>
+    <test>7</test>
+    <test>9</test>
+  </bar>
+  <baz>
+    <test>2</test>
+    <test>4</test>
+    <test>6</test>
+    <test>8</test>
+    <test>10</test>
+  </baz>
+</foo>

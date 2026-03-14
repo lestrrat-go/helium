@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<doc>
+  <foo test="true"/>
+  <sub test="false"/>
+  <foo test="false"/>
+  <bar test="true"/>
+  <wiz test="false"/>
+  <sub test="true"/>
+  <wiz test="true"/>
+  <foo test="true"/>
+</doc>

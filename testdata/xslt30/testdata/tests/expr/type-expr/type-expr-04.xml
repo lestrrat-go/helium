@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:userNode xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://www.schemaexpr.example.com/ns/various variousTypesSchemaExpr.xsd"
+		  xmlns:my="http://www.schemaexpr.example.com/ns/various"
+		  xmlns:one="http://www.schemaexpr.example.com/ns/various"
+		  xmlns:two="http://www.schemaexpr.example.com">
+
+	<elem-date>2004-11-01-12:00</elem-date>
+	<elem-date>2004-11-02+12:00</elem-date>
+	<elem-date>2004-11-02</elem-date>
+	<elem-date-derived>2004-11-02</elem-date-derived>
+	<elem-date-derived>2004-11-02</elem-date-derived>
+	<elem-date-derived>2000-11-07</elem-date-derived>
+</my:userNode>

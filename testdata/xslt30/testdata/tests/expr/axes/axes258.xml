@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<docs>
+<doc x="x " y="y " z="z "/>
+<doc y="ay " z="az "  xmlns:foo="http://foo.com"/>
+<doc y="by " z="bz "  
+	 xmlns:ext="http://somebody.elses.extension" 
+	 xmlns:java="http://xml.apache.org/xslt/java" 
+	 xmlns:ped="http://tester.com" 
+	 xmlns:bdd="http://buster.com" 
+	 xmlns:jad="http://administrator.com"
+	 xmlns="http://www.ped.com"/>
+</docs>

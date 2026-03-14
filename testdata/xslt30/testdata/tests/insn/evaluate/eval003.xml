@@ -1,0 +1,9 @@
+<doc>
+  <exp xmlns:eval="http://example.com/eval">2+2</exp>
+  <exp>count(preceding-sibling::*)</exp>
+  <exp>lower-case(substring-after(base-uri(), '/evaluate/'))</exp>
+  <exp>lower-case(substring-after(static-base-uri(), '/evaluate/'))</exp>
+  <exp xmlns:p="http://a/uri" p:att="17">string(@p:att)</exp>
+  <exp xmlns:eval="http://example.com/eval">eval:node(ancestor::doc/exp[1])</exp>
+  <exp>for $i in (1,2,3) return $i*$i</exp>
+</doc> 
