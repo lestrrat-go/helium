@@ -97,6 +97,10 @@ func computeDefaultPriority(expr xpath3.Expr) float64 {
 	if len(steps) == 0 {
 		return 0.5
 	}
+	// Per XSLT 3.0 §6.4: path patterns with multiple steps get priority 0.5
+	if len(steps) > 1 {
+		return 0.5
+	}
 	return stepPriority(steps[len(steps)-1])
 }
 
