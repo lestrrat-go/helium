@@ -1,9 +1,10 @@
 package xslt3
 
 import (
+	"cmp"
 	"context"
 	"math"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -21,43 +22,117 @@ type SortKey struct {
 	Lang      *AVT
 }
 
-type sortableNodes struct {
-	nodes    []helium.Node
-	keys     [][]string // keys[nodeIndex][sortKeyIndex]
-	sortKeys []*SortKey
-	orders   []string
-	types    []string
-	err      error
+// keyed pairs an item with its pre-extracted sort key strings.
+type keyed[T any] struct {
+	item T
+	keys []string
 }
 
-func (s *sortableNodes) Len() int { return len(s.nodes) }
-
-func (s *sortableNodes) Swap(i, j int) {
-	s.nodes[i], s.nodes[j] = s.nodes[j], s.nodes[i]
-	s.keys[i], s.keys[j] = s.keys[j], s.keys[i]
+// resolvedSort holds the fully resolved per-level sort configuration.
+// Built once before sorting; the comparison function captures it by value
+// so no per-comparison AVT evaluation or mode switching is needed.
+type resolvedSort struct {
+	comparators []func(a, b string) int // one per sort level
 }
 
-func (s *sortableNodes) Less(i, j int) bool {
-	for k := range s.sortKeys {
-		ki := s.keys[i][k]
-		kj := s.keys[j][k]
-
-		var cmp int
-		if s.types[k] == "number" {
-			cmp = compareNumericStrings(ki, kj)
-		} else {
-			cmp = strings.Compare(ki, kj)
+// buildResolvedSort evaluates AVTs for order/data-type once and builds a
+// comparator function per sort level.
+func buildResolvedSort(ctx context.Context, ec *execContext, sortKeys []*SortKey) (resolvedSort, error) {
+	comps := make([]func(a, b string) int, len(sortKeys))
+	for i, sk := range sortKeys {
+		order := "ascending"
+		if sk.Order != nil {
+			var err error
+			order, err = sk.Order.evaluate(ctx, ec.contextNode)
+			if err != nil {
+				return resolvedSort{}, err
+			}
+		}
+		dataType := "text"
+		if sk.DataType != nil {
+			var err error
+			dataType, err = sk.DataType.evaluate(ctx, ec.contextNode)
+			if err != nil {
+				return resolvedSort{}, err
+			}
 		}
 
-		if cmp == 0 {
+		desc := order == "descending"
+		numeric := dataType == "number"
+		// Capture resolved values; no further AVT evaluation during sort.
+		comps[i] = func(a, b string) int {
+			var c int
+			if numeric {
+				c = compareNumeric(a, b)
+			} else {
+				c = cmp.Compare(a, b)
+			}
+			if desc {
+				c = -c
+			}
+			return c
+		}
+	}
+	return resolvedSort{comparators: comps}, nil
+}
+
+// compare returns the ordering for two keyed items using the pre-built
+// comparators. Returns 0 when all levels are equal (stable tie).
+func (rs *resolvedSort) compare(a, b []string) int {
+	for i, cmpFn := range rs.comparators {
+		if c := cmpFn(a[i], b[i]); c != 0 {
+			return c
+		}
+	}
+	return 0
+}
+
+// extractKeys evaluates sort key expressions/body constructors for a single
+// item and returns the string key per sort level.
+// node may be nil when the context is an atomic item.
+func extractKeys(ctx context.Context, ec *execContext, sortKeys []*SortKey, node helium.Node, autoTypes []bool) ([]string, error) {
+	keys := make([]string, len(sortKeys))
+	for i, sk := range sortKeys {
+		if sk.Select != nil {
+			xpathCtx := ec.newXPathContext(node)
+			result, err := sk.Select.Evaluate(xpathCtx, node)
+			if err != nil {
+				return nil, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", err)
+			}
+			keys[i] = stringifyResult(result)
+			if autoTypes != nil && !autoTypes[i] {
+				seq := result.Sequence()
+				if len(seq) == 1 {
+					if av, ok := seq[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
+						autoTypes[i] = true
+					}
+				}
+			}
 			continue
 		}
-		if s.orders[k] == "descending" {
-			return cmp > 0
+		if len(sk.Body) == 0 {
+			continue
 		}
-		return cmp < 0
+		savedCurrent := ec.currentNode
+		savedContext := ec.contextNode
+		if node != nil {
+			ec.currentNode = node
+			ec.contextNode = node
+		}
+		val, err := ec.evaluateBody(ctx, sk.Body)
+		ec.currentNode = savedCurrent
+		ec.contextNode = savedContext
+		if err != nil {
+			return nil, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", err)
+		}
+		keys[i] = stringifySequence(val)
+		if autoTypes != nil && !autoTypes[i] && len(val) == 1 {
+			if av, ok := val[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
+				autoTypes[i] = true
+			}
+		}
 	}
-	return false // stable: preserve document order
+	return keys, nil
 }
 
 // sortNodes sorts nodes according to the given sort keys.
@@ -66,85 +141,30 @@ func sortNodes(ctx context.Context, ec *execContext, nodes []helium.Node, sortKe
 		return nodes, nil
 	}
 
-	// Compute sort key values for each node
-	keys := make([][]string, len(nodes))
-	orders := make([]string, len(sortKeys))
-	types := make([]string, len(sortKeys))
-
-	for ki, sk := range sortKeys {
-		order := "ascending"
-		if sk.Order != nil {
-			var err error
-			order, err = sk.Order.evaluate(ctx, ec.contextNode)
-			if err != nil {
-				return nil, err
-			}
-		}
-		orders[ki] = order
-
-		dataType := "text"
-		if sk.DataType != nil {
-			var err error
-			dataType, err = sk.DataType.evaluate(ctx, ec.contextNode)
-			if err != nil {
-				return nil, err
-			}
-		}
-		types[ki] = dataType
-	}
-
+	// Extract keys for each node.
+	autoTypes := makeAutoTypes(sortKeys)
+	entries := make([]keyed[helium.Node], len(nodes))
 	for i, node := range nodes {
-		keys[i] = make([]string, len(sortKeys))
-		for ki, sk := range sortKeys {
-			var keyStr string
-			var keySeq xpath3.Sequence
-			if sk.Select != nil {
-				xpathCtx := ec.newXPathContext(node)
-				result, err := sk.Select.Evaluate(xpathCtx, node)
-				if err != nil {
-					return nil, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", err)
-				}
-				keyStr = stringifyResult(result)
-				keySeq = result.Sequence()
-			} else if len(sk.Body) > 0 {
-				// Sequence constructor: evaluate body with context node
-				savedCurrent := ec.currentNode
-				savedContext := ec.contextNode
-				ec.currentNode = node
-				ec.contextNode = node
-				val, err := ec.evaluateBody(ctx, sk.Body)
-				ec.currentNode = savedCurrent
-				ec.contextNode = savedContext
-				if err != nil {
-					return nil, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", err)
-				}
-				keyStr = stringifySequence(val)
-				keySeq = val
-			}
-			keys[i][ki] = keyStr
-			// Auto-detect numeric type when data-type not explicitly set
-			if types[ki] == "text" && sk.DataType == nil && len(keySeq) == 1 {
-				if av, ok := keySeq[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
-					types[ki] = "number"
-				}
-			}
+		keys, err := extractKeys(ctx, ec, sortKeys, node, autoTypes)
+		if err != nil {
+			return nil, err
 		}
+		entries[i] = keyed[helium.Node]{item: node, keys: keys}
 	}
 
-	sn := &sortableNodes{
-		nodes:    nodes,
-		keys:     keys,
-		sortKeys: sortKeys,
-		orders:   orders,
-		types:    types,
+	rs, err := buildResolvedSortWithAuto(ctx, ec, sortKeys, autoTypes)
+	if err != nil {
+		return nil, err
 	}
 
-	sort.Stable(sn)
-	if sn.err != nil {
-		return nil, sn.err
-	}
+	slices.SortStableFunc(entries, func(a, b keyed[helium.Node]) int {
+		return rs.compare(a.keys, b.keys)
+	})
 
-	return sn.nodes, nil
+	for i, e := range entries {
+		nodes[i] = e.item
+	}
+	return nodes, nil
 }
 
 // sortItems sorts a sequence of items (including atomic values) according to sort keys.
@@ -153,132 +173,77 @@ func sortItems(ctx context.Context, ec *execContext, items xpath3.Sequence, sort
 		return items, nil
 	}
 
-	keys := make([][]string, len(items))
-	orders := make([]string, len(sortKeys))
-	types := make([]string, len(sortKeys))
-
-	for ki, sk := range sortKeys {
-		order := "ascending"
-		if sk.Order != nil {
-			var err error
-			order, err = sk.Order.evaluate(ctx, ec.contextNode)
-			if err != nil {
-				return nil, err
-			}
-		}
-		orders[ki] = order
-
-		dataType := "text"
-		if sk.DataType != nil {
-			var err error
-			dataType, err = sk.DataType.evaluate(ctx, ec.contextNode)
-			if err != nil {
-				return nil, err
-			}
-		}
-		types[ki] = dataType
-	}
+	autoTypes := makeAutoTypes(sortKeys)
+	entries := make([]keyed[xpath3.Item], len(items))
 
 	savedItem := ec.contextItem
 	defer func() { ec.contextItem = savedItem }()
 
 	for i, item := range items {
-		keys[i] = make([]string, len(sortKeys))
-		// Set context item for sort key evaluation
 		ec.contextItem = item
 		var node helium.Node
 		if ni, ok := item.(xpath3.NodeItem); ok {
 			node = ni.Node
 			ec.contextItem = nil
 		}
-		for ki, sk := range sortKeys {
-			var keyStr string
-			var keySeq xpath3.Sequence
-			if sk.Select != nil {
-				xpathCtx := ec.newXPathContext(node)
-				result, err := sk.Select.Evaluate(xpathCtx, node)
-				if err != nil {
-					return nil, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", err)
+		keys, err := extractKeys(ctx, ec, sortKeys, node, autoTypes)
+		if err != nil {
+			return nil, err
+		}
+		entries[i] = keyed[xpath3.Item]{item: item, keys: keys}
+	}
+
+	rs, err := buildResolvedSortWithAuto(ctx, ec, sortKeys, autoTypes)
+	if err != nil {
+		return nil, err
+	}
+
+	slices.SortStableFunc(entries, func(a, b keyed[xpath3.Item]) int {
+		return rs.compare(a.keys, b.keys)
+	})
+
+	for i, e := range entries {
+		items[i] = e.item
+	}
+	return items, nil
+}
+
+// makeAutoTypes returns a slice tracking which sort levels have auto-detected
+// numeric type. nil entries in sortKeys[i].DataType mean "auto-detect".
+func makeAutoTypes(sortKeys []*SortKey) []bool {
+	types := make([]bool, len(sortKeys))
+	for i, sk := range sortKeys {
+		if sk.DataType != nil {
+			types[i] = true // already explicit — skip auto-detection
+		}
+	}
+	return types
+}
+
+// buildResolvedSortWithAuto is like buildResolvedSort but overrides data-type
+// to "number" for levels where auto-detection found numeric keys.
+func buildResolvedSortWithAuto(ctx context.Context, ec *execContext, sortKeys []*SortKey, autoTypes []bool) (resolvedSort, error) {
+	rs, err := buildResolvedSort(ctx, ec, sortKeys)
+	if err != nil {
+		return rs, err
+	}
+	for i, sk := range sortKeys {
+		if sk.DataType == nil && autoTypes[i] {
+			// Override the comparator to use numeric comparison.
+			desc := rs.comparators[i]("b", "a") < 0 // infer direction from existing comparator
+			rs.comparators[i] = func(a, b string) int {
+				c := compareNumeric(a, b)
+				if desc {
+					c = -c
 				}
-				keyStr = stringifyResult(result)
-				keySeq = result.Sequence()
-			} else if len(sk.Body) > 0 {
-				savedCurrent := ec.currentNode
-				savedContext := ec.contextNode
-				if node != nil {
-					ec.currentNode = node
-					ec.contextNode = node
-				}
-				val, err := ec.evaluateBody(ctx, sk.Body)
-				ec.currentNode = savedCurrent
-				ec.contextNode = savedContext
-				if err != nil {
-					return nil, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", err)
-				}
-				keyStr = stringifySequence(val)
-				keySeq = val
+				return c
 			}
-			keys[i][ki] = keyStr
-			if types[ki] == "text" && sk.DataType == nil && len(keySeq) == 1 {
-				if av, ok := keySeq[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
-					types[ki] = "number"
-				}
-			}
 		}
 	}
-
-	si := &sortableItems{
-		items:    items,
-		keys:     keys,
-		sortKeys: sortKeys,
-		orders:   orders,
-		types:    types,
-	}
-	sort.Stable(si)
-	return si.items, nil
+	return rs, nil
 }
 
-type sortableItems struct {
-	items    xpath3.Sequence
-	keys     [][]string
-	sortKeys []*SortKey
-	orders   []string
-	types    []string
-}
-
-func (s *sortableItems) Len() int { return len(s.items) }
-
-func (s *sortableItems) Swap(i, j int) {
-	s.items[i], s.items[j] = s.items[j], s.items[i]
-	s.keys[i], s.keys[j] = s.keys[j], s.keys[i]
-}
-
-func (s *sortableItems) Less(i, j int) bool {
-	for k := range s.sortKeys {
-		ki := s.keys[i][k]
-		kj := s.keys[j][k]
-
-		var cmp int
-		if s.types[k] == "number" {
-			cmp = compareNumericStrings(ki, kj)
-		} else {
-			cmp = strings.Compare(ki, kj)
-		}
-
-		if cmp == 0 {
-			continue
-		}
-		if s.orders[k] == "descending" {
-			return cmp > 0
-		}
-		return cmp < 0
-	}
-	return false
-}
-
-func compareNumericStrings(a, b string) int {
-	// Parse as float64 for comparison.
-	// NaN (non-numeric) values sort before all real numbers.
+func compareNumeric(a, b string) int {
 	fa := parseNumber(a)
 	fb := parseNumber(b)
 	aNaN := math.IsNaN(fa)
