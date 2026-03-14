@@ -166,12 +166,7 @@ func parseEnvironments(t *testing.T, root *helium.Element, tsDir string) map[str
 				if !ok || cElem.LocalName() != "content" {
 					continue
 				}
-				// Get text content (including CDATA)
-				var buf bytes.Buffer
-				for tc := cElem.FirstChild(); tc != nil; tc = tc.NextSibling() {
-					buf.Write(tc.Content())
-				}
-				env.sourceContent = buf.Bytes()
+				env.sourceContent = serializeChildren(cElem)
 			}
 		}
 		envs[name] = env
@@ -370,11 +365,7 @@ func parseExpectedResult(tc *helium.Element) expectedResult {
 				result.expectError = true
 				result.errorCode, _ = rElem.GetAttribute("code")
 			case "assert-xml":
-				var buf bytes.Buffer
-				for tc := rElem.FirstChild(); tc != nil; tc = tc.NextSibling() {
-					buf.Write(tc.Content())
-				}
-				result.assertXML = buf.String()
+				result.assertXML = string(serializeChildren(rElem))
 			}
 		}
 	}
@@ -464,11 +455,7 @@ func findInlineSourceContent(tc *helium.Element, tsDir string) []byte {
 				if !ok || cElem.LocalName() != "content" {
 					continue
 				}
-				var buf bytes.Buffer
-				for tc := cElem.FirstChild(); tc != nil; tc = tc.NextSibling() {
-					buf.Write(tc.Content())
-				}
-				return buf.Bytes()
+				return serializeChildren(cElem)
 			}
 		}
 	}
@@ -491,6 +478,20 @@ func findChildEnvRef(tc *helium.Element) string {
 		}
 	}
 	return ""
+}
+
+// serializeChildren serializes all children of an element, preserving markup
+// for element children (Content() only returns descendant text).
+func serializeChildren(parent *helium.Element) []byte {
+	var buf bytes.Buffer
+	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
+		if elem, ok := child.(*helium.Element); ok {
+			_ = elem.XML(&buf)
+		} else {
+			buf.Write(child.Content())
+		}
+	}
+	return buf.Bytes()
 }
 
 // xmlEqual compares two XML strings for semantic equality.
