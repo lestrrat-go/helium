@@ -248,11 +248,12 @@ func matchNameTest(test NameTest, n helium.Node, axis AxisType, ec *evalContext)
 	}
 	// Check for default element namespace (xpath-default-namespace).
 	// Only applies to element axis, not attributes.
+	// Per XPath 3.1 §3.3.2.1: when default element namespace is absent,
+	// unprefixed names match only no-namespace elements.
 	if axis != AxisAttribute && ec.namespaces != nil {
-		if defNS, ok := ec.namespaces[""]; ok {
-			return ixpath.NodeNamespaceURI(n) == defNS
-		}
+		return ixpath.NodeNamespaceURI(n) == ec.namespaces[""]
 	}
+	// No namespace context at all: permissive match (any namespace).
 	return true
 }
 
