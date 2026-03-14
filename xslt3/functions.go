@@ -488,11 +488,16 @@ func (ec *execContext) fnAccumulatorAfter(_ context.Context, args []xpath3.Seque
 }
 
 // copy-of() returns a deep copy of the context node (zero-argument XSLT 3.0 streaming function).
-func (ec *execContext) fnCopyOf(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+func (ec *execContext) fnCopyOf(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 	// copy-of() with argument: deep-copy the argument node(s)
 	// copy-of() with no args: deep-copy the context node (streaming snapshot)
 	var nodes []helium.Node
-	if len(args) > 0 && len(args[0]) > 0 {
+	if len(args) > 0 {
+		// Explicit argument: copy the given node(s).
+		// If the argument is empty, return empty (don't fall through to context).
+		if len(args[0]) == 0 {
+			return xpath3.EmptySequence(), nil
+		}
 		for _, item := range args[0] {
 			ni, ok := item.(xpath3.NodeItem)
 			if !ok {
@@ -501,10 +506,16 @@ func (ec *execContext) fnCopyOf(_ context.Context, args []xpath3.Sequence) (xpat
 			nodes = append(nodes, ni.Node)
 		}
 	} else {
-		if ec.contextNode == nil {
+		// No argument: copy the context node (streaming snapshot).
+		// Prefer XPath dynamic context node (set by evaluator during path
+		// steps like transaction/copy-of()) over XSLT execution context.
+		if n := xpath3.FnContextNode(ctx); n != nil {
+			nodes = append(nodes, n)
+		} else if ec.contextNode != nil {
+			nodes = append(nodes, ec.contextNode)
+		} else {
 			return xpath3.EmptySequence(), nil
 		}
-		nodes = append(nodes, ec.contextNode)
 	}
 	var result xpath3.Sequence
 	for _, node := range nodes {

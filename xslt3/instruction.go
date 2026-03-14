@@ -363,6 +363,7 @@ type ForEachGroupInst struct {
 	GroupAdjacent     *xpath3.Expression
 	GroupStartingWith *Pattern
 	GroupEndingWith   *Pattern
+	Composite         bool
 	Sort              []*SortKey
 	Body              []Instruction
 }

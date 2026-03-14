@@ -1128,6 +1128,10 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 
 	inst := &ForEachGroupInst{Select: expr}
 
+	if comp := getAttr(elem, "composite"); comp == "yes" || comp == "true" || comp == "1" {
+		inst.Composite = true
+	}
+
 	if gb := getAttr(elem, "group-by"); gb != "" {
 		gbExpr, gbErr := compileXPath(gb, c.nsBindings)
 		if gbErr != nil {
