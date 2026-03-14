@@ -513,11 +513,16 @@ func (ec *execContext) evaluateBody(ctx context.Context, body []Instruction) (xp
 	}
 
 	// Return all children as node items
-	if tmpRoot.FirstChild() != nil {
-		var seq xpath3.Sequence
-		for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
-			seq = append(seq, xpath3.NodeItem{Node: child})
-		}
+	var seq xpath3.Sequence
+	for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
+		seq = append(seq, xpath3.NodeItem{Node: child})
+	}
+	// Also collect attributes that were set on the temporary root
+	// (e.g., from xsl:attribute with as="attribute()")
+	for _, attr := range tmpRoot.Attributes() {
+		seq = append(seq, xpath3.NodeItem{Node: attr})
+	}
+	if len(seq) > 0 {
 		return seq, nil
 	}
 
