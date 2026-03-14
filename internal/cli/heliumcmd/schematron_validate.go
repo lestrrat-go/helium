@@ -1,4 +1,4 @@
-package main
+package heliumcmd
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/cliutil"
 	"github.com/lestrrat-go/helium/schematron"
 )
 
@@ -30,22 +29,16 @@ type schematronValidateCommand struct {
 	stdinTTY bool
 }
 
-func RunSchematronValidate(prog string, args []string) int {
-	return newSchematronValidateCommand(prog).run(args)
-}
-
-func newSchematronValidateCommand(prog string) *schematronValidateCommand {
+func newSchematronValidateCommandWithIO(prog string, stdin io.Reader, stderr io.Writer, stdinTTY bool) *schematronValidateCommand {
 	return &schematronValidateCommand{
 		prog:     prog,
-		stdin:    os.Stdin,
-		stderr:   os.Stderr,
-		stdinTTY: cliutil.IsTty(os.Stdin.Fd()),
+		stdin:    stdin,
+		stderr:   stderr,
+		stdinTTY: stdinTTY,
 	}
 }
 
-func (c *schematronValidateCommand) run(args []string) int {
-	ctx := context.Background()
-
+func (c *schematronValidateCommand) runContext(ctx context.Context, args []string) int {
 	cfg, files := c.parseArgs(args)
 	if cfg == nil {
 		c.showUsage()

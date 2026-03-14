@@ -1,6 +1,7 @@
-package main
+package heliumcmd
 
 import (
+	"context"
 	"io"
 	"path/filepath"
 	"strings"
@@ -27,7 +28,7 @@ func TestXPathMultipleFilesUsesHighestExitCode(t *testing.T) {
 		stdinTTY: true,
 	}
 
-	code := cmd.run([]string{"//book", filepath.Join(dir, "missing.xml"), badXML})
+	code := cmd.runContext(context.Background(), []string{"//book", filepath.Join(dir, "missing.xml"), badXML})
 	require.Equal(t, ExitReadFile, code)
 }
 
@@ -46,6 +47,6 @@ func TestXSDValidateMultipleFilesUsesHighestExitCode(t *testing.T) {
 		stdinTTY: true,
 	}
 
-	code := cmd.run([]string{schemaFile, filepath.Join(dir, "missing.xml"), invalidXML})
+	code := cmd.runContext(context.Background(), []string{schemaFile, filepath.Join(dir, "missing.xml"), invalidXML})
 	require.Equal(t, ExitReadFile, code)
 }

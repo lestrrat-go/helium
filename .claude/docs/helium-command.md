@@ -1,6 +1,13 @@
 # helium command
 
-Unified CLI entrypoint. Primary file: `cmd/helium/main.go`.
+Unified CLI entrypoint. Wrapper file: `cmd/helium/main.go`. Implementation package: `internal/cli/heliumcmd`.
+
+## Entry API
+
+- `heliumcmd.Execute(ctx, args)` is package entrypoint
+- `heliumcmd.WithIO(ctx, stdin, stdout, stderr)` injects stdio for tests/examples
+- `heliumcmd.WithStdinTTY(ctx, bool)` overrides stdin TTY detection for tests/examples
+- When no CLI-specific values exist on `ctx`, defaults are `os.Stdin`, `os.Stdout`, `os.Stderr`, + TTY detection from `os.Stdin`
 
 ## Command Tree
 
@@ -36,7 +43,7 @@ Multiple XML inputs → highest exit code wins.
 
 ## `helium lint`
 
-Primary file: `cmd/helium/lint.go`
+Primary file: `internal/cli/heliumcmd/lint.go`
 
 ### Processing Pipeline
 
@@ -74,7 +81,7 @@ Primary file: `cmd/helium/lint.go`
 
 ## `helium xpath`
 
-Primary file: `cmd/helium/xpath.go`
+Primary file: `internal/cli/heliumcmd/xpath.go`
 
 - Usage: `helium xpath [--engine 1|3] EXPR [XMLfiles ...]`
 - Default engine: `3`
@@ -89,7 +96,7 @@ Primary file: `cmd/helium/xpath.go`
 
 ## `helium xsd validate`
 
-Primary file: `cmd/helium/xsd_validate.go`
+Primary file: `internal/cli/heliumcmd/xsd_validate.go`
 
 - Usage: `helium xsd validate [--timing] SCHEMA [XMLfiles ...]`
 - Schema path mandatory positional arg
@@ -98,7 +105,7 @@ Primary file: `cmd/helium/xsd_validate.go`
 
 ## `helium relaxng validate`
 
-Primary file: `cmd/helium/relaxng_validate.go`
+Primary file: `internal/cli/heliumcmd/relaxng_validate.go`
 
 - Usage: `helium relaxng validate [--timing] SCHEMA [XMLfiles ...]`
 - Schema path mandatory positional arg
@@ -107,7 +114,7 @@ Primary file: `cmd/helium/relaxng_validate.go`
 
 ## `helium schematron validate`
 
-Primary file: `cmd/helium/schematron_validate.go`
+Primary file: `internal/cli/heliumcmd/schematron_validate.go`
 
 - Usage: `helium schematron validate [--timing] SCHEMA [XMLfiles ...]`
 - Schema path mandatory positional arg

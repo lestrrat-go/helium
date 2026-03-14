@@ -3,7 +3,8 @@
 Arrows show "imports" direction. Indented items are transitive.
 
 ```
-cmd/helium     → helium, c14n, relaxng, schematron, xsd, xinclude, xpath1, xpath3, catalog, internal/cliutil
+cmd/helium     → internal/cli/heliumcmd
+internal/cli/heliumcmd → helium, c14n, relaxng, schematron, xsd, xinclude, xpath1, xpath3, catalog, internal/cliutil
 shim           → helium, stream, internal/encoding
 xinclude       → helium, xpointer
                   → xpath1 (via xpointer)
@@ -37,4 +38,5 @@ c14n, xpath1, xpath3, html, catalog, relaxng, stream
 xsd (root + xpath1), xpointer (root + xpath1), schematron (root + xpath1), xinclude (root + xpointer), shim (root + stream)
 
 ## Application layer
-cmd/helium (CLI + lint implementation)
+internal/cli/heliumcmd (CLI implementation)
+cmd/helium (CLI wrapper)

@@ -1,4 +1,4 @@
-package main
+package heliumcmd
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/cliutil"
 	"github.com/lestrrat-go/helium/xpath1"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -27,23 +26,17 @@ type xpathCommand struct {
 	stdinTTY bool
 }
 
-func RunXPath(prog string, args []string) int {
-	return newXPathCommand(prog).run(args)
-}
-
-func newXPathCommand(prog string) *xpathCommand {
+func newXPathCommandWithIO(prog string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY bool) *xpathCommand {
 	return &xpathCommand{
 		prog:     prog,
-		stdin:    os.Stdin,
-		stdout:   os.Stdout,
-		stderr:   os.Stderr,
-		stdinTTY: cliutil.IsTty(os.Stdin.Fd()),
+		stdin:    stdin,
+		stdout:   stdout,
+		stderr:   stderr,
+		stdinTTY: stdinTTY,
 	}
 }
 
-func (c *xpathCommand) run(args []string) int {
-	ctx := context.Background()
-
+func (c *xpathCommand) runContext(ctx context.Context, args []string) int {
 	cfg, files := c.parseArgs(args)
 	if cfg == nil {
 		c.showUsage()

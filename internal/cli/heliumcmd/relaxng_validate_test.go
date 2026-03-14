@@ -1,6 +1,7 @@
-package main
+package heliumcmd
 
 import (
+	"context"
 	"io"
 	"path/filepath"
 	"strings"
@@ -19,7 +20,7 @@ func newTestRelaxNGValidateCommand() *relaxNGValidateCommand {
 }
 
 func TestRunRelaxNGValidateVersion(t *testing.T) {
-	require.Equal(t, ExitOK, run([]string{"relaxng", "validate", "--version"}))
+	require.Equal(t, ExitOK, Execute(newExecuteTestContext(), []string{"relaxng", "validate", "--version"}))
 }
 
 func TestParseRelaxNGValidateArgs(t *testing.T) {
@@ -50,7 +51,7 @@ func TestRelaxNGValidateValid(t *testing.T) {
 </grammar>`)
 	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root>ok</root>`)
 
-	code := cmd.run([]string{schemaFile, xmlFile})
+	code := cmd.runContext(context.Background(), []string{schemaFile, xmlFile})
 	require.Equal(t, ExitOK, code)
 }
 
@@ -65,7 +66,7 @@ func TestRelaxNGValidateInvalid(t *testing.T) {
 </grammar>`)
 	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root><child/></root>`)
 
-	code := cmd.run([]string{schemaFile, xmlFile})
+	code := cmd.runContext(context.Background(), []string{schemaFile, xmlFile})
 	require.Equal(t, ExitValidation, code)
 }
 
@@ -74,7 +75,7 @@ func TestRelaxNGValidateSchemaCompileError(t *testing.T) {
 	dir := t.TempDir()
 	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root/>`)
 
-	code := cmd.run([]string{filepath.Join(dir, "missing.rng"), xmlFile})
+	code := cmd.runContext(context.Background(), []string{filepath.Join(dir, "missing.rng"), xmlFile})
 	require.Equal(t, ExitSchemaComp, code)
 }
 
@@ -88,7 +89,7 @@ func TestRelaxNGValidateFileReadError(t *testing.T) {
   </start>
 </grammar>`)
 
-	code := cmd.run([]string{schemaFile, filepath.Join(dir, "missing.xml")})
+	code := cmd.runContext(context.Background(), []string{schemaFile, filepath.Join(dir, "missing.xml")})
 	require.Equal(t, ExitReadFile, code)
 }
 
@@ -103,7 +104,7 @@ func TestRelaxNGValidateParseError(t *testing.T) {
 </grammar>`)
 	xmlFile := writeFile(t, dir, "doc.xml", `<root>`)
 
-	code := cmd.run([]string{schemaFile, xmlFile})
+	code := cmd.runContext(context.Background(), []string{schemaFile, xmlFile})
 	require.Equal(t, ExitErr, code)
 }
 
@@ -119,7 +120,7 @@ func TestRelaxNGValidateMultipleFiles(t *testing.T) {
 	validXML := writeFile(t, dir, "valid.xml", `<?xml version="1.0"?><root>ok</root>`)
 	invalidXML := writeFile(t, dir, "invalid.xml", `<?xml version="1.0"?><root><child/></root>`)
 
-	code := cmd.run([]string{schemaFile, validXML, invalidXML})
+	code := cmd.runContext(context.Background(), []string{schemaFile, validXML, invalidXML})
 	require.Equal(t, ExitValidation, code)
 }
 
@@ -132,7 +133,7 @@ func TestRelaxNGValidateVersionWritesToStderr(t *testing.T) {
 		stdinTTY: true,
 	}
 
-	code := cmd.run([]string{"--version"})
+	code := cmd.runContext(context.Background(), []string{"--version"})
 	require.Equal(t, ExitOK, code)
 	require.Contains(t, errOut.String(), "helium version")
 }
@@ -153,7 +154,7 @@ func TestRelaxNGValidateStdIn(t *testing.T) {
 		stdinTTY: false,
 	}
 
-	code := cmd.run([]string{schemaFile})
+	code := cmd.runContext(context.Background(), []string{schemaFile})
 	require.Equal(t, ExitOK, code)
 }
 
@@ -166,7 +167,7 @@ func TestRelaxNGValidateMissingSchemaArg(t *testing.T) {
 		stdinTTY: true,
 	}
 
-	code := cmd.run(nil)
+	code := cmd.runContext(context.Background(), nil)
 	require.Equal(t, ExitErr, code)
 	require.Contains(t, errOut.String(), "schema is required")
 }
@@ -180,7 +181,7 @@ func TestRelaxNGValidateUnknownOption(t *testing.T) {
 		stdinTTY: true,
 	}
 
-	code := cmd.run([]string{"--schema"})
+	code := cmd.runContext(context.Background(), []string{"--schema"})
 	require.Equal(t, ExitErr, code)
 	require.Contains(t, errOut.String(), "unrecognized option --schema")
 }

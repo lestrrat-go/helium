@@ -249,16 +249,26 @@ Platform-specific TTY handling for CLI commands.
 
 - Files: `tty_posix.go`, `tty_windows.go`, `tty_bsd.go`
 
-## cmd/helium/
+## internal/cli/heliumcmd/
 
-Unified CLI entrypoint + lint implementation.
+Importable implementation behind `helium` CLI. Used by `cmd/helium` wrapper and executable examples.
 
+- Entry points: `Execute(ctx, args)`, context mutators `WithIO(ctx, stdin, stdout, stderr)`, `WithStdinTTY(ctx, bool)`
 - Subcommands: `lint`, `xpath`, `xsd validate`, `relaxng validate`, `schematron validate`
 - Planned subcommands listed in usage: `xslt`
+- Context behavior: when stdio carriers are absent, defaults to `os.Stdin`, `os.Stdout`, `os.Stderr`, and TTY detection from `os.Stdin`
 - Lint behavior: parse args, detect stdin/TTY, process XML, run XInclude/XSD/XPath/C14N, emit xmllint-style exit codes
 - XPath behavior: mandatory positional expr, default engine `3`, `--engine 1|3`, XML from file args or stdin, type-aware result output for xpath1/xpath3
 - RELAX NG behavior: compile grammar from mandatory positional schema path, parse XML input(s), validate via `relaxng.Validate`, return schema/validation exit codes
 - Schematron behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via `schematron.Validate`, return schema/validation exit codes
 - XSD behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via `xsd.Validate`, return schema/validation exit codes
-- Files: `main.go`, `exitcode.go`, `lint.go`, `xpath.go`, `relaxng_validate.go`, `schematron_validate.go`, `xsd_validate.go`
+- Files: `cli.go`, `exitcode.go`, `lint.go`, `xpath.go`, `relaxng_validate.go`, `schematron_validate.go`, `xsd_validate.go`
 - Imports: helium, c14n/, relaxng/, schematron/, xsd/, xinclude/, xpath1/, xpath3/, catalog/, internal/cliutil/
+
+## cmd/helium/
+
+Thin executable wrapper around `internal/cli/heliumcmd`.
+
+- Main behavior: `main()` → `os.Exit(heliumcmd.Execute(context.Background(), os.Args[1:]))`
+- Files: `main.go`
+- Imports: internal/cli/heliumcmd/

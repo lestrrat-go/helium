@@ -1,6 +1,7 @@
-package main
+package heliumcmd
 
 import (
+	"context"
 	"io"
 	"path/filepath"
 	"strings"
@@ -19,7 +20,7 @@ func newTestSchematronValidateCommand() *schematronValidateCommand {
 }
 
 func TestRunSchematronValidateVersion(t *testing.T) {
-	require.Equal(t, ExitOK, run([]string{"schematron", "validate", "--version"}))
+	require.Equal(t, ExitOK, Execute(newExecuteTestContext(), []string{"schematron", "validate", "--version"}))
 }
 
 func TestParseSchematronValidateArgs(t *testing.T) {
@@ -52,7 +53,7 @@ func TestSchematronValidateValid(t *testing.T) {
 </schema>`)
 	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root><child/></root>`)
 
-	code := cmd.run([]string{schemaFile, xmlFile})
+	code := cmd.runContext(context.Background(), []string{schemaFile, xmlFile})
 	require.Equal(t, ExitOK, code)
 }
 
@@ -75,7 +76,7 @@ func TestSchematronValidateInvalid(t *testing.T) {
 </schema>`)
 	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root/>`)
 
-	code := cmd.run([]string{schemaFile, xmlFile})
+	code := cmd.runContext(context.Background(), []string{schemaFile, xmlFile})
 	require.Equal(t, ExitValidation, code)
 	require.Contains(t, errOut.String(), "fails to validate")
 	require.Contains(t, errOut.String(), "child element is required")
@@ -87,7 +88,7 @@ func TestSchematronValidateSchemaCompileError(t *testing.T) {
 	dir := t.TempDir()
 	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root/>`)
 
-	code := cmd.run([]string{filepath.Join(dir, "missing.sch"), xmlFile})
+	code := cmd.runContext(context.Background(), []string{filepath.Join(dir, "missing.sch"), xmlFile})
 	require.Equal(t, ExitSchemaComp, code)
 }
 
@@ -103,7 +104,7 @@ func TestSchematronValidateFileReadError(t *testing.T) {
   </pattern>
 </schema>`)
 
-	code := cmd.run([]string{schemaFile, filepath.Join(dir, "missing.xml")})
+	code := cmd.runContext(context.Background(), []string{schemaFile, filepath.Join(dir, "missing.xml")})
 	require.Equal(t, ExitReadFile, code)
 }
 
@@ -120,7 +121,7 @@ func TestSchematronValidateParseError(t *testing.T) {
 </schema>`)
 	xmlFile := writeFile(t, dir, "doc.xml", `<root>`)
 
-	code := cmd.run([]string{schemaFile, xmlFile})
+	code := cmd.runContext(context.Background(), []string{schemaFile, xmlFile})
 	require.Equal(t, ExitErr, code)
 }
 
@@ -138,7 +139,7 @@ func TestSchematronValidateMultipleFiles(t *testing.T) {
 	validXML := writeFile(t, dir, "valid.xml", `<?xml version="1.0"?><root><child/></root>`)
 	invalidXML := writeFile(t, dir, "invalid.xml", `<?xml version="1.0"?><root/>`)
 
-	code := cmd.run([]string{schemaFile, validXML, invalidXML})
+	code := cmd.runContext(context.Background(), []string{schemaFile, validXML, invalidXML})
 	require.Equal(t, ExitValidation, code)
 }
 
@@ -151,7 +152,7 @@ func TestSchematronValidateVersionWritesToStderr(t *testing.T) {
 		stdinTTY: true,
 	}
 
-	code := cmd.run([]string{"--version"})
+	code := cmd.runContext(context.Background(), []string{"--version"})
 	require.Equal(t, ExitOK, code)
 	require.Contains(t, errOut.String(), "helium version")
 }
@@ -174,7 +175,7 @@ func TestSchematronValidateStdIn(t *testing.T) {
 		stdinTTY: false,
 	}
 
-	code := cmd.run([]string{schemaFile})
+	code := cmd.runContext(context.Background(), []string{schemaFile})
 	require.Equal(t, ExitOK, code)
 }
 
@@ -187,7 +188,7 @@ func TestSchematronValidateMissingSchemaArg(t *testing.T) {
 		stdinTTY: true,
 	}
 
-	code := cmd.run(nil)
+	code := cmd.runContext(context.Background(), nil)
 	require.Equal(t, ExitErr, code)
 	require.Contains(t, errOut.String(), "schema is required")
 }
@@ -201,7 +202,7 @@ func TestSchematronValidateUnknownOption(t *testing.T) {
 		stdinTTY: true,
 	}
 
-	code := cmd.run([]string{"--schema"})
+	code := cmd.runContext(context.Background(), []string{"--schema"})
 	require.Equal(t, ExitErr, code)
 	require.Contains(t, errOut.String(), "unrecognized option --schema")
 }
