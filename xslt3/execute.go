@@ -161,7 +161,7 @@ func (ec *execContext) newXPathContext(node helium.Node) context.Context {
 
 // baseXPathContext builds the invariant portion of an XPath evaluation context.
 // It includes variables, functions, namespace bindings, and the exec context carrier.
-// Position, size, and context item are NOT included — use deriveXPathContext to add them.
+// Position, size, and context item are layered by the caller when needed.
 func (ec *execContext) baseXPathContext() context.Context {
 	vars := ec.collectAllVars()
 	ctx := ec.transformCtx
@@ -197,23 +197,6 @@ func (ec *execContext) baseXPathContext() context.Context {
 			}
 		}
 		ctx = xpath3.WithNamedDecimalFormats(ctx, ec.stylesheet.decimalFormats)
-	}
-	return ctx
-}
-
-// deriveXPathContext layers position, size, and context item from ec's current
-// state onto a pre-built base context. This is much cheaper than building a
-// full context from scratch via newXPathContext.
-func (ec *execContext) deriveXPathContext(base context.Context, node helium.Node) context.Context {
-	ctx := base
-	if ec.position > 0 {
-		ctx = xpath3.WithPosition(ctx, ec.position)
-	}
-	if ec.size > 0 {
-		ctx = xpath3.WithSize(ctx, ec.size)
-	}
-	if ec.contextItem != nil {
-		ctx = xpath3.WithContextItem(ctx, ec.contextItem)
 	}
 	return ctx
 }
