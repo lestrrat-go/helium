@@ -71,6 +71,7 @@ func (*TextInst) instructionTag() {}
 // LiteralTextInst represents literal text content in the stylesheet.
 type LiteralTextInst struct {
 	Value string
+	TVT   *AVT // text value template (non-nil when expand-text is active)
 }
 
 func (*LiteralTextInst) instructionTag() {}
