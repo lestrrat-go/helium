@@ -167,8 +167,9 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 	// Sort templates by import precedence (desc) then priority (desc)
 	c.sortTemplates()
 
-	// Store the stylesheet source document for document("")
+	// Store the stylesheet source document and base URI
 	c.stylesheet.sourceDoc = doc
+	c.stylesheet.baseURI = c.baseURI
 
 	return c.stylesheet, nil
 }
@@ -751,8 +752,9 @@ func compileSimplified(doc *helium.Document, root *helium.Element, cfg *compileC
 	c.stylesheet.templates = append(c.stylesheet.templates, tmpl)
 	c.stylesheet.modeTemplates[""] = append(c.stylesheet.modeTemplates[""], tmpl)
 
-	// Store the stylesheet source document for document("")
+	// Store the stylesheet source document and base URI
 	c.stylesheet.sourceDoc = doc
+	c.stylesheet.baseURI = c.baseURI
 
 	return c.stylesheet, nil
 }
