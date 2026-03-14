@@ -43,6 +43,9 @@ type execContext struct {
 	globalVarsGen     uint64                             // incremented when globalVars changes
 	cachedVarsMap     map[string]xpath3.Sequence         // cached result of collectAllVars (globals only)
 	cachedVarsGen     uint64                             // globalVarsGen at time cachedVarsMap was built
+	accumulatorState  map[string]xpath3.Sequence         // accumulator name -> current value
+	breakValue        xpath3.Sequence                    // value produced by xsl:break
+	nextIterParams    map[string]xpath3.Sequence         // param values from xsl:next-iteration
 	msgHandler        func(string, bool)
 	transformCfg      *transformConfig
 	transformCtx      context.Context                  // parent context from Transform caller (for cancellation/deadlines)
@@ -346,9 +349,10 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		globalVars:   make(map[string]xpath3.Sequence),
 		currentMode:  "",
 		outputStack:  []*outputFrame{{doc: resultDoc, current: resultDoc}},
-		keyTables:    make(map[string]*keyTable),
-		docCache:     make(map[string]*helium.Document),
-		transformCtx: ctx,
+		keyTables:        make(map[string]*keyTable),
+		docCache:         make(map[string]*helium.Document),
+		accumulatorState: make(map[string]xpath3.Sequence),
+		transformCtx:     ctx,
 	}
 
 	if cfg != nil && cfg.msgHandler != nil {

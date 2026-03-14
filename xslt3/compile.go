@@ -123,6 +123,7 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 			outputs:        make(map[string]*OutputDef),
 			functions:      make(map[xpath3.QualifiedName]*XSLFunction),
 			namespaces:     make(map[string]string),
+			accumulators:   make(map[string]*AccumulatorDef),
 		},
 		nsBindings:    make(map[string]string),
 		importStack:   make(map[string]struct{}),
@@ -293,6 +294,10 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 			}
 		case "namespace-alias":
 			// TODO: implement namespace-alias
+		case "accumulator":
+			if err := c.compileAccumulator(elem); err != nil {
+				return err
+			}
 		default:
 			// Unknown top-level element - ignore for forward compatibility
 		}
@@ -667,9 +672,10 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 	}
 
 	fn := &XSLFunction{
-		Name:   qn,
-		Params: params,
-		Body:   body,
+		Name:          qn,
+		Params:        params,
+		Body:          body,
+		Streamability: getAttr(elem, "streamability"),
 	}
 
 	c.stylesheet.functions[qn] = fn
@@ -682,8 +688,9 @@ func (c *compiler) compileMode(elem *helium.Element) {
 		name = "#default"
 	}
 	md := &ModeDef{
-		Name:      name,
-		OnNoMatch: getAttr(elem, "on-no-match"),
+		Name:       name,
+		OnNoMatch:  getAttr(elem, "on-no-match"),
+		Streamable: getAttr(elem, "streamable") == "yes",
 	}
 	if md.OnNoMatch == "" {
 		md.OnNoMatch = "text-only-copy" // XSLT 3.0 default
@@ -927,6 +934,7 @@ func compileSimplified(doc *helium.Document, root *helium.Element, cfg *compileC
 			outputs:        make(map[string]*OutputDef),
 			functions:      make(map[xpath3.QualifiedName]*XSLFunction),
 			namespaces:     make(map[string]string),
+			accumulators:   make(map[string]*AccumulatorDef),
 		},
 		nsBindings:    make(map[string]string),
 		importStack:   make(map[string]struct{}),

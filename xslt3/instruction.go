@@ -322,7 +322,54 @@ type CatchClause struct {
 	Select *xpath3.Expression // xsl:catch select attribute
 	Body   []Instruction      // xsl:catch body
 }
+// SourceDocumentInst represents xsl:source-document.
+type SourceDocumentInst struct {
+	Href       *AVT
+	Streamable bool
+	Body       []Instruction
+}
 
+func (*SourceDocumentInst) instructionTag() {}
+
+// IterateInst represents xsl:iterate.
+type IterateInst struct {
+	Select       *xpath3.Expression
+	Params       []*IterateParam
+	OnCompletion []Instruction
+	Body         []Instruction
+}
+
+func (*IterateInst) instructionTag() {}
+
+// IterateParam is a compiled xsl:param inside xsl:iterate.
+type IterateParam struct {
+	Name   string
+	Select *xpath3.Expression
+	Body   []Instruction
+}
+
+// BreakInst represents xsl:break.
+type BreakInst struct {
+	Select *xpath3.Expression
+	Body   []Instruction
+}
+
+func (*BreakInst) instructionTag() {}
+
+// NextIterationInst represents xsl:next-iteration.
+type NextIterationInst struct {
+	Params []*WithParam
+}
+
+func (*NextIterationInst) instructionTag() {}
+
+// ForkInst represents xsl:fork.
+// Each entry in Branches is a sequence of instructions from one child.
+type ForkInst struct {
+	Branches [][]Instruction
+}
+
+func (*ForkInst) instructionTag() {}
 // ForEachGroupInst represents xsl:for-each-group.
 type ForEachGroupInst struct {
 	Select            *xpath3.Expression
