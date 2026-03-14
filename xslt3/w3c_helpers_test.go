@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
 )
@@ -121,6 +122,17 @@ func w3cAssertSkip() w3cAssertion {
 	}
 }
 
+func w3cAssertXPath(expr string) w3cAssertion {
+	return w3cAssertion{
+		Type:  "assert",
+		Value: expr,
+		Check: func(t *testing.T, result string, _ []string) bool {
+			t.Helper()
+			return evalXPathAssert(t, expr, result)
+		},
+	}
+}
+
 // ──────────────────────────────────────────────────────────────────────
 // Check constructors (for any-of / assert-message)
 // ──────────────────────────────────────────────────────────────────────
@@ -134,6 +146,25 @@ func w3cCheckXML(expected string) w3cCheck {
 func w3cCheckStringValue(expected string) w3cCheck {
 	return w3cCheck{fn: func(result string, _ []string) bool {
 		return extractTextContent(result) == expected
+	}}
+}
+
+func w3cCheckXPath(expr string) w3cCheck {
+	return w3cCheck{fn: func(result string, _ []string) bool {
+		doc, err := helium.Parse(context.TODO(), []byte(result))
+		if err != nil {
+			return false
+		}
+		compiled, err := xpath3.Compile(expr)
+		if err != nil {
+			return false
+		}
+		res, err := compiled.Evaluate(context.TODO(), doc)
+		if err != nil {
+			return false
+		}
+		ebv, err := xpath3.EBV(res.Sequence())
+		return err == nil && ebv
 	}}
 }
 
@@ -388,4 +419,39 @@ func collectText(n helium.Node) string {
 	default:
 		return ""
 	}
+}
+
+// evalXPathAssert parses the result XML, evaluates the XPath expression
+// against it, and checks that the effective boolean value is true.
+func evalXPathAssert(t *testing.T, expr string, resultXML string) bool {
+	t.Helper()
+
+	doc, err := helium.Parse(context.TODO(), []byte(resultXML))
+	if err != nil {
+		t.Errorf("assert: cannot parse result XML: %v", err)
+		return false
+	}
+
+	compiled, err := xpath3.Compile(expr)
+	if err != nil {
+		t.Errorf("assert: cannot compile XPath %q: %v", expr, err)
+		return false
+	}
+
+	res, err := compiled.Evaluate(context.TODO(), doc)
+	if err != nil {
+		t.Errorf("assert: XPath evaluation error for %q: %v", expr, err)
+		return false
+	}
+
+	ebv, err := xpath3.EBV(res.Sequence())
+	if err != nil {
+		t.Errorf("assert: cannot compute EBV for %q: %v", expr, err)
+		return false
+	}
+	if !ebv {
+		t.Errorf("assert failed: %s evaluated to false (result: %s)", expr, resultXML)
+		return false
+	}
+	return true
 }
