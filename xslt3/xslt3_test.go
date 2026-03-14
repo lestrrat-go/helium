@@ -303,14 +303,13 @@ func runTestCase(t *testing.T, tc *helium.Element, tsDir string, environments ma
 	}
 
 	// Transform
-	var transformOpts []xslt3.TransformOption
 	if initialTemplate != "" {
-		transformOpts = append(transformOpts, xslt3.WithInitialTemplate(initialTemplate))
+		ctx = xslt3.WithInitialTemplate(ctx, initialTemplate)
 	}
 	for pName, pVal := range testParams {
-		transformOpts = append(transformOpts, xslt3.WithParameter(pName, pVal))
+		ctx = xslt3.WithParameter(ctx, pName, pVal)
 	}
-	resultDoc, err := xslt3.Transform(ctx, sourceDoc, ss, transformOpts...)
+	resultDoc, err := xslt3.Transform(ctx, sourceDoc, ss)
 	if err != nil {
 		if expectedResult.expectError {
 			return testPass
