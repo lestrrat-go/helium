@@ -1487,6 +1487,10 @@ func (ec *execContext) numberMultiple(inst *NumberInst, node helium.Node) []int 
 	var ancestors []helium.Node
 	for n := node; n != nil; n = n.Parent() {
 		if ec.numberFromMatches(inst, n) {
+			// Include the from node itself if it matches count
+			if ec.numberNodeMatches(inst, n, node) {
+				ancestors = append(ancestors, n)
+			}
 			break
 		}
 		if ec.numberNodeMatches(inst, n, node) {
