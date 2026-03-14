@@ -1549,14 +1549,15 @@ func (ec *execContext) numberFindAncestorOrSelf(inst *NumberInst, node helium.No
 	return nil
 }
 
-// hasFromAncestor checks if any ancestor of node matches the from pattern.
+// hasFromAncestor checks if the node or any ancestor matches the from pattern.
 func (ec *execContext) hasFromAncestor(inst *NumberInst, node helium.Node) bool {
-	for n := node.Parent(); n != nil; n = n.Parent() {
+	// Check the node itself and all ancestors
+	for n := node; n != nil; n = n.Parent() {
 		if ec.numberFromMatches(inst, n) {
 			return true
 		}
 	}
-	// Also check preceding siblings of ancestors (from can match a sibling, not just ancestor)
+	// Also check preceding siblings of the node (from can match a sibling)
 	for n := node.PrevSibling(); n != nil; n = n.PrevSibling() {
 		if ec.numberFromMatches(inst, n) {
 			return true
