@@ -429,6 +429,7 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
 
 	p := &Param{
 		Name:     resolveQName(name, c.nsBindings),
+		As:       getAttr(elem, "as"),
 		Required: getAttr(elem, "required") == "yes",
 		Tunnel:   getAttr(elem, "tunnel") == "yes",
 	}
