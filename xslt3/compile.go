@@ -3,6 +3,7 @@ package xslt3
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -15,13 +16,13 @@ import (
 
 // compiler holds state during stylesheet compilation.
 type compiler struct {
-	stylesheet      *Stylesheet
-	nsBindings      map[string]string
-	importPrec      int
-	importStack     map[string]struct{} // circular import detection
-	baseURI         string
-	resolver        URIResolver
-	localExcludes   map[string]struct{} // accumulated LRE-level exclude-result-prefixes
+	stylesheet    *Stylesheet
+	nsBindings    map[string]string
+	importPrec    int
+	importStack   map[string]struct{} // circular import detection
+	baseURI       string
+	resolver      URIResolver
+	localExcludes map[string]struct{} // accumulated LRE-level exclude-result-prefixes
 }
 
 // getAttr returns the value of an attribute or "" if not found.
@@ -110,7 +111,7 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 	c.collectNamespaces(root)
 
 	// Read version
-	c.stylesheet.version = getAttr(root,"version")
+	c.stylesheet.version = getAttr(root, "version")
 	if c.stylesheet.version == "" {
 		c.stylesheet.version = "3.0"
 	}
@@ -238,7 +239,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 	// Collect namespace declarations from this template
 	c.collectNamespaces(elem)
 
-	matchAttr := getAttr(elem,"match")
+	matchAttr := getAttr(elem, "match")
 	if matchAttr != "" {
 		p, err := compilePattern(matchAttr, c.nsBindings)
 		if err != nil {
@@ -248,9 +249,9 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 	}
 
 	tmpl.Name = resolveQName(getAttr(elem, "name"), c.nsBindings)
-	tmpl.Mode = getAttr(elem,"mode")
+	tmpl.Mode = getAttr(elem, "mode")
 
-	if prio := getAttr(elem,"priority"); prio != "" {
+	if prio := getAttr(elem, "priority"); prio != "" {
 		f, err := strconv.ParseFloat(prio, 64)
 		if err != nil {
 			return staticError(errCodeXTSE0010, "invalid priority %q: %v", prio, err)
@@ -362,18 +363,18 @@ func (c *compiler) compileTemplateBody(elem *helium.Element) ([]Instruction, []*
 }
 
 func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
-	name := getAttr(elem,"name")
+	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:param requires name attribute")
 	}
 
 	p := &Param{
 		Name:     resolveQName(name, c.nsBindings),
-		Required: getAttr(elem,"required") == "yes",
+		Required: getAttr(elem, "required") == "yes",
 		Tunnel:   getAttr(elem, "tunnel") == "yes",
 	}
 
-	selectAttr := getAttr(elem,"select")
+	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -394,14 +395,14 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
 }
 
 func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
-	name := getAttr(elem,"name")
+	name := getAttr(elem, "name")
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:variable requires name attribute")
 	}
 
 	v := &Variable{Name: name, As: getAttr(elem, "as")}
 
-	selectAttr := getAttr(elem,"select")
+	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -430,17 +431,17 @@ func (c *compiler) compileGlobalParam(elem *helium.Element) error {
 }
 
 func (c *compiler) compileKey(elem *helium.Element) error {
-	name := getAttr(elem,"name")
+	name := getAttr(elem, "name")
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:key requires name attribute")
 	}
 
-	matchAttr := getAttr(elem,"match")
+	matchAttr := getAttr(elem, "match")
 	if matchAttr == "" {
 		return staticError(errCodeXTSE0110, "xsl:key requires match attribute")
 	}
 
-	useAttr := getAttr(elem,"use")
+	useAttr := getAttr(elem, "use")
 	if useAttr == "" {
 		return staticError(errCodeXTSE0110, "xsl:key requires use attribute")
 	}
@@ -464,12 +465,12 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 }
 
 func (c *compiler) compileOutput(elem *helium.Element) error {
-	name := getAttr(elem,"name")
+	name := getAttr(elem, "name")
 	outDef := &OutputDef{
 		Name:     name,
-		Method:   strings.ToLower(getAttr(elem,"method")),
-		Encoding: getAttr(elem,"encoding"),
-		Version:  getAttr(elem,"version"),
+		Method:   strings.ToLower(getAttr(elem, "method")),
+		Encoding: getAttr(elem, "encoding"),
+		Version:  getAttr(elem, "version"),
 	}
 
 	if outDef.Method == "" {
@@ -479,14 +480,14 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		outDef.Encoding = "UTF-8"
 	}
 
-	outDef.Indent = getAttr(elem,"indent") == "yes"
-	outDef.OmitDeclaration = getAttr(elem,"omit-xml-declaration") == "yes"
-	outDef.Standalone = getAttr(elem,"standalone")
-	outDef.DoctypePublic = getAttr(elem,"doctype-public")
-	outDef.DoctypeSystem = getAttr(elem,"doctype-system")
-	outDef.MediaType = getAttr(elem,"media-type")
+	outDef.Indent = getAttr(elem, "indent") == "yes"
+	outDef.OmitDeclaration = getAttr(elem, "omit-xml-declaration") == "yes"
+	outDef.Standalone = getAttr(elem, "standalone")
+	outDef.DoctypePublic = getAttr(elem, "doctype-public")
+	outDef.DoctypeSystem = getAttr(elem, "doctype-system")
+	outDef.MediaType = getAttr(elem, "media-type")
 
-	cdataStr := getAttr(elem,"cdata-section-elements")
+	cdataStr := getAttr(elem, "cdata-section-elements")
 	if cdataStr != "" {
 		outDef.CDATASections = strings.Fields(cdataStr)
 	}
@@ -538,7 +539,7 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 }
 
 func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) {
-	elements := getAttr(elem,"elements")
+	elements := getAttr(elem, "elements")
 	if elements == "" {
 		return
 	}
@@ -560,7 +561,7 @@ func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) {
 }
 
 func (c *compiler) compileImport(elem *helium.Element) error {
-	href := getAttr(elem,"href")
+	href := getAttr(elem, "href")
 	if href == "" {
 		return staticError(errCodeXTSE0110, "xsl:import requires href attribute")
 	}
@@ -568,7 +569,7 @@ func (c *compiler) compileImport(elem *helium.Element) error {
 }
 
 func (c *compiler) compileInclude(elem *helium.Element) error {
-	href := getAttr(elem,"href")
+	href := getAttr(elem, "href")
 	if href == "" {
 		return staticError(errCodeXTSE0110, "xsl:include requires href attribute")
 	}
@@ -600,17 +601,11 @@ func (c *compiler) loadExternalStylesheet(href string, isImport bool) error {
 		if resolveErr != nil {
 			return fmt.Errorf("cannot resolve %q: %w", uri, resolveErr)
 		}
-		defer rc.Close()
-		buf := make([]byte, 0, 4096)
-		tmp := make([]byte, 4096)
-		for {
-			n, readErr := rc.Read(tmp)
-			buf = append(buf, tmp[:n]...)
-			if readErr != nil {
-				break
-			}
+		defer func() { _ = rc.Close() }()
+		data, err = io.ReadAll(rc)
+		if err != nil {
+			return fmt.Errorf("cannot read %q: %w", uri, err)
 		}
-		data = buf
 	} else {
 		// Try direct file loading
 		data, err = os.ReadFile(uri)

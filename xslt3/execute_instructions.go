@@ -1527,14 +1527,14 @@ func isAlphanumeric(r rune) bool {
 }
 
 func formatSingleNumber(num int, token string, groupSep string, groupSize int) string {
-	switch {
-	case token == "a":
+	switch token {
+	case "a":
 		return toLowerAlpha(num)
-	case token == "A":
+	case "A":
 		return toUpperAlpha(num)
-	case token == "i":
+	case "i":
 		return strings.ToLower(toRoman(num))
-	case token == "I":
+	case "I":
 		return toRoman(num)
 	default:
 		// Numeric format: determine minimum width from token (e.g., "001" = width 3)

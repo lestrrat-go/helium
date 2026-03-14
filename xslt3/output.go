@@ -58,7 +58,7 @@ func serializeText(w io.Writer, doc *helium.Document) error {
 	err := helium.Walk(doc, func(n helium.Node) error {
 		switch n.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
-			sw.WriteRaw(string(n.Content()))
+			return sw.WriteRaw(string(n.Content()))
 		}
 		return nil
 	})

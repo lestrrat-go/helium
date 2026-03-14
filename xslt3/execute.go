@@ -13,28 +13,28 @@ type execContextKey struct{}
 
 // execContext holds XSLT transformation state. Stored inside context.Context.
 type execContext struct {
-	stylesheet      *Stylesheet
-	sourceDoc       *helium.Document
-	resultDoc       *helium.Document
-	currentNode     helium.Node // XSLT current() node
-	contextNode     helium.Node // XPath context node
-	position        int
-	size            int
-	localVars       *varScope
-	globalVars      map[string]xpath3.Sequence
-	globalVarDefs   map[string]*Variable       // unevaluated global variable definitions (lazy)
-	globalParamDefs map[string]*Param          // unevaluated global param definitions (lazy)
-	globalEvaluating map[string]bool            // circular dependency detection
-	collectingVars   bool                       // reentrancy guard for collectAllVars
-	currentMode     string
-	currentTemplate *Template // currently executing template (for next-match)
-	tunnelParams    map[string]xpath3.Sequence // tunnel parameters passed through apply-templates
-	depth           int      // recursion depth
-	outputStack     []*outputFrame
-	keyTables       map[string]*keyTable
-	docCache        map[string]*helium.Document
-	msgHandler      func(string, bool)
-	transformCfg    *transformConfig
+	stylesheet       *Stylesheet
+	sourceDoc        *helium.Document
+	resultDoc        *helium.Document
+	currentNode      helium.Node // XSLT current() node
+	contextNode      helium.Node // XPath context node
+	position         int
+	size             int
+	localVars        *varScope
+	globalVars       map[string]xpath3.Sequence
+	globalVarDefs    map[string]*Variable // unevaluated global variable definitions (lazy)
+	globalParamDefs  map[string]*Param    // unevaluated global param definitions (lazy)
+	globalEvaluating map[string]bool      // circular dependency detection
+	collectingVars   bool                 // reentrancy guard for collectAllVars
+	currentMode      string
+	currentTemplate  *Template                  // currently executing template (for next-match)
+	tunnelParams     map[string]xpath3.Sequence // tunnel parameters passed through apply-templates
+	depth            int                        // recursion depth
+	outputStack      []*outputFrame
+	keyTables        map[string]*keyTable
+	docCache         map[string]*helium.Document
+	msgHandler       func(string, bool)
+	transformCfg     *transformConfig
 }
 
 func withExecContext(ctx context.Context, ec *execContext) context.Context {
@@ -79,31 +79,6 @@ func (ec *execContext) setVar(name string, value xpath3.Sequence) {
 		ec.localVars = &varScope{vars: make(map[string]xpath3.Sequence)}
 	}
 	ec.localVars.vars[name] = value
-}
-
-func (ec *execContext) lookupVar(name string) (xpath3.Sequence, bool) {
-	if seq, ok := ec.localVars.lookup(name); ok {
-		return seq, true
-	}
-	if seq, ok := ec.globalVars[name]; ok {
-		return seq, true
-	}
-	// Lazy evaluation: check if there's an unevaluated global var/param
-	if v, ok := ec.globalVarDefs[name]; ok {
-		val, err := ec.evaluateGlobalVar(v)
-		if err != nil {
-			return nil, false
-		}
-		return val, true
-	}
-	if p, ok := ec.globalParamDefs[name]; ok {
-		val, err := ec.evaluateGlobalParam(p)
-		if err != nil {
-			return nil, false
-		}
-		return val, true
-	}
-	return nil, false
 }
 
 func (ec *execContext) resolvePrefix(prefix string) string {
@@ -452,9 +427,10 @@ func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mod
 	}
 	defer func() { ec.depth-- }()
 
-	if mode == "#current" {
+	switch mode {
+	case "#current":
 		mode = ec.currentMode
-	} else if mode == "#default" || mode == "" {
+	case "#default", "":
 		mode = ec.stylesheet.defaultMode
 	}
 

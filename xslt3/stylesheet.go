@@ -11,21 +11,20 @@ const (
 
 // Stylesheet is a compiled XSLT stylesheet ready for transformation.
 type Stylesheet struct {
-	version        string
-	templates      []*Template
-	namedTemplates map[string]*Template
-	modeTemplates  map[string][]*Template // mode -> templates sorted by import-precedence then priority
-	defaultMode    string
-	globalVars     []*Variable // topologically sorted
-	globalParams   []*Param
-	keys           map[string]*KeyDef
-	outputs        map[string]*OutputDef // "" = default output
-	functions      map[xpath3.QualifiedName]*XSLFunction // xsl:function defs
-	stripSpace     []NameTest
-	preserveSpace  []NameTest
-	namespaces      map[string]string    // prefix -> URI from stylesheet
+	version         string
+	templates       []*Template
+	namedTemplates  map[string]*Template
+	modeTemplates   map[string][]*Template // mode -> templates sorted by import-precedence then priority
+	defaultMode     string
+	globalVars      []*Variable // topologically sorted
+	globalParams    []*Param
+	keys            map[string]*KeyDef
+	outputs         map[string]*OutputDef                 // "" = default output
+	functions       map[xpath3.QualifiedName]*XSLFunction // xsl:function defs
+	stripSpace      []NameTest
+	preserveSpace   []NameTest
+	namespaces      map[string]string   // prefix -> URI from stylesheet
 	excludePrefixes map[string]struct{} // prefixes excluded from output
-	baseURI         string
 }
 
 // XSLFunction is a compiled xsl:function.
@@ -72,17 +71,17 @@ type KeyDef struct {
 
 // OutputDef is a compiled xsl:output.
 type OutputDef struct {
-	Name             string
-	Method           string // "xml", "html", "text"
-	Encoding         string
-	Indent           bool
-	OmitDeclaration  bool
-	Standalone       string // "yes", "no", "omit"
-	CDATASections    []string
-	DoctypePublic    string
-	DoctypeSystem    string
-	MediaType        string
-	Version          string
+	Name              string
+	Method            string // "xml", "html", "text"
+	Encoding          string
+	Indent            bool
+	OmitDeclaration   bool
+	Standalone        string // "yes", "no", "omit"
+	CDATASections     []string
+	DoctypePublic     string
+	DoctypeSystem     string
+	MediaType         string
+	Version           string
 	UndeclarePrefixes bool
 }
 
