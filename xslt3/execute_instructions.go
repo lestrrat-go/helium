@@ -696,10 +696,21 @@ func (ec *execContext) execVariable(ctx context.Context, inst *VariableInst) err
 		}
 		val = result.Sequence()
 	} else if len(inst.Body) > 0 {
-		var err error
-		val, err = ec.evaluateBody(ctx, inst.Body)
-		if err != nil {
-			return err
+		if inst.As == "" {
+			// Per XSLT spec: variable with content body (no select, no as)
+			// produces a document node (temporary tree)
+			var err error
+			val, err = ec.evaluateBodyAsDocument(ctx, inst.Body)
+			if err != nil {
+				return err
+			}
+		} else {
+			// With as attribute: evaluate as raw sequence
+			var err error
+			val, err = ec.evaluateBody(ctx, inst.Body)
+			if err != nil {
+				return err
+			}
 		}
 	} else {
 		val = xpath3.SingleString("")
@@ -723,7 +734,45 @@ func (ec *execContext) execParam(ctx context.Context, inst *ParamInst) error {
 }
 
 func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
-	node := ec.contextNode
+	if inst.Select != nil {
+		// XSLT 3.0: xsl:copy with select — iterate over selected items
+		xpathCtx := ec.newXPathContext(ec.contextNode)
+		result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		seq := result.Sequence()
+		if len(seq) == 0 {
+			return nil // empty sequence: skip body
+		}
+		for _, item := range seq {
+			switch v := item.(type) {
+			case xpath3.NodeItem:
+				if err := ec.execCopyNode(ctx, v.Node, inst.Body); err != nil {
+					return err
+				}
+			case xpath3.AtomicValue:
+				// Atomic values: output as text, body is not evaluated
+				s, err := xpath3.AtomicToString(v)
+				if err != nil {
+					return err
+				}
+				text, err := ec.resultDoc.CreateText([]byte(s))
+				if err != nil {
+					return err
+				}
+				if err := ec.addNode(text); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	return ec.execCopyNode(ctx, ec.contextNode, inst.Body)
+}
+
+func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body []Instruction) error {
 	if node == nil {
 		return nil
 	}
@@ -759,7 +808,7 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		out.current = elem
 		defer func() { out.current = savedCurrent }()
 
-		for _, child := range inst.Body {
+		for _, child := range body {
 			if err := ec.executeInstruction(ctx, child); err != nil {
 				return err
 			}
@@ -790,7 +839,7 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 
 	case helium.DocumentNode:
 		// Copy document: just process body
-		for _, child := range inst.Body {
+		for _, child := range body {
 			if err := ec.executeInstruction(ctx, child); err != nil {
 				return err
 			}

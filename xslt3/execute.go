@@ -309,6 +309,27 @@ func (ec *execContext) evaluateBody(ctx context.Context, body []Instruction) (xp
 	return xpath3.SingleString(sb.String()), nil
 }
 
+// evaluateBodyAsDocument executes instructions and wraps the result in a
+// document node (temporary tree), as required by the XSLT spec for variables
+// and params with content body and no select/as attributes.
+func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []Instruction) (xpath3.Sequence, error) {
+	tmpDoc := helium.NewDefaultDocument()
+
+	frame := &outputFrame{doc: tmpDoc, current: tmpDoc}
+	ec.outputStack = append(ec.outputStack, frame)
+	defer func() {
+		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+	}()
+
+	for _, inst := range body {
+		if err := ec.executeInstruction(ctx, inst); err != nil {
+			return nil, err
+		}
+	}
+
+	return xpath3.Sequence{xpath3.NodeItem{Node: tmpDoc}}, nil
+}
+
 // applyTemplates matches and executes templates for a node.
 func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mode string, paramValues ...map[string]xpath3.Sequence) error {
 	// Strip whitespace-only text nodes per xsl:strip-space
@@ -342,7 +363,7 @@ func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mod
 	}
 
 	// Use built-in template rules
-	return ec.applyBuiltinRules(ctx, node, mode)
+	return ec.applyBuiltinRules(ctx, node, mode, paramValues...)
 }
 
 // findBestTemplate finds the highest-priority matching template for a node.
