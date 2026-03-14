@@ -139,6 +139,10 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 		if cfg.size > 0 {
 			ec.size = cfg.size
 		}
+		if cfg.contextItem != nil {
+			ec.contextItem = cfg.contextItem
+			ec.node = nil
+		}
 	}
 	return ec
 }

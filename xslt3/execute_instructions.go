@@ -782,10 +782,17 @@ func (ec *execContext) execForEach(ctx context.Context, inst *ForEachInst) error
 	seq := result.Sequence()
 	nodes, isNodes := xpath3.NodesFrom(seq)
 
-	if isNodes && len(inst.Sort) > 0 {
-		nodes, err = sortNodes(ctx, ec, nodes, inst.Sort)
-		if err != nil {
-			return err
+	if len(inst.Sort) > 0 {
+		if isNodes {
+			nodes, err = sortNodes(ctx, ec, nodes, inst.Sort)
+			if err != nil {
+				return err
+			}
+		} else {
+			seq, err = sortItems(ctx, ec, seq, inst.Sort)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -818,11 +825,16 @@ func (ec *execContext) execForEach(ctx context.Context, inst *ForEachInst) error
 		}
 	} else {
 		ec.size = len(seq)
+		savedItem := ec.contextItem
+		defer func() { ec.contextItem = savedItem }()
 		for i, item := range seq {
 			ec.position = i + 1
 			if ni, ok := item.(xpath3.NodeItem); ok {
 				ec.currentNode = ni.Node
 				ec.contextNode = ni.Node
+				ec.contextItem = nil
+			} else {
+				ec.contextItem = item
 			}
 
 			ec.pushVarScope()
