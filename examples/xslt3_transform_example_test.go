@@ -42,7 +42,7 @@ func Example_xslt3_transform() {
 		return
 	}
 
-	stylesheet, err := xslt3.CompileStylesheet(stylesheetDoc)
+	stylesheet, err := xslt3.CompileStylesheet(ctx, stylesheetDoc)
 	if err != nil {
 		fmt.Printf("failed to compile stylesheet: %s\n", err)
 		return
@@ -96,7 +96,7 @@ func Example_xslt3_compile_file() {
 		return
 	}
 
-	stylesheet, err := xslt3.CompileFile(stylesheetPath)
+	stylesheet, err := xslt3.CompileFile(context.Background(), stylesheetPath)
 	if err != nil {
 		fmt.Printf("failed to compile stylesheet: %s\n", err)
 		return
@@ -161,13 +161,11 @@ func Example_xslt3_with_uri_resolver() {
 		return
 	}
 
-	stylesheet, err := xslt3.CompileStylesheet(
-		stylesheetDoc,
-		xslt3.WithBaseURI("/virtual/main.xsl"),
-		xslt3.WithURIResolver(exampleXSLTResolver{
-			"/virtual/common.xsl": includedStylesheetSrc,
-		}),
-	)
+	compileCtx := xslt3.WithCompileBaseURI(ctx, "/virtual/main.xsl")
+	compileCtx = xslt3.WithCompileURIResolver(compileCtx, exampleXSLTResolver{
+		"/virtual/common.xsl": includedStylesheetSrc,
+	})
+	stylesheet, err := xslt3.CompileStylesheet(compileCtx, stylesheetDoc)
 	if err != nil {
 		fmt.Printf("failed to compile stylesheet: %s\n", err)
 		return

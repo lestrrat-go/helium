@@ -280,7 +280,7 @@ func runTestCase(t *testing.T, tc *helium.Element, tsDir string, environments ma
 
 	// Compile stylesheet
 	ssPath := filepath.Join(tsDir, stylesheetFile)
-	ss, err := xslt3.CompileFile(ssPath)
+	ss, err := xslt3.CompileFile(t.Context(), ssPath)
 
 	if expectedResult.expectError {
 		if err != nil {
