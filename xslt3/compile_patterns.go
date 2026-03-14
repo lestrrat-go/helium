@@ -504,15 +504,33 @@ func evaluatePredicate(ctx *execContext, pred xpath3.Expr, node helium.Node) boo
 	if err != nil {
 		return false
 	}
-	// Numeric predicates: compare to position
+	// Numeric predicates: compare to position among siblings
 	if f, ok := result.IsNumber(); ok {
-		return int(f) == 1 // in pattern matching, position is always 1 for the candidate
+		return int(f) == positionAmongSiblings(node)
 	}
 	b, err := xpath3.EBV(result.Sequence())
 	if err != nil {
 		return false
 	}
 	return b
+}
+
+// positionAmongSiblings returns the 1-based position of a node among
+// same-type preceding siblings (for numeric predicate evaluation in patterns).
+func positionAmongSiblings(node helium.Node) int {
+	pos := 1
+	for sib := node.PrevSibling(); sib != nil; sib = sib.PrevSibling() {
+		if sib.Type() == node.Type() {
+			if node.Type() == helium.ElementNode {
+				if sib.Name() == node.Name() {
+					pos++
+				}
+			} else {
+				pos++
+			}
+		}
+	}
+	return pos
 }
 
 // matchByEvaluation matches complex patterns by evaluating from document root.
