@@ -5,13 +5,18 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TARGET_DIR="$SCRIPT_DIR/source"
 
 # Pinned commit to ensure reproducible test inputs.
-# Override via XSLT30_COMMIT_SHA env var if you need to update it.
-XSLT30_COMMIT_SHA="${XSLT30_COMMIT_SHA:-main}"
+# Override via XSLT30_COMMIT_SHA env var if you need different ref,
+# e.g. `main`, tag, or newer commit SHA.
+XSLT30_COMMIT_SHA="${XSLT30_COMMIT_SHA:-6f8fd9e966ae74a251a2604abef9d904c7bc5c9b}"
 
 if [ -d "$TARGET_DIR/.git" ]; then
     echo "XSLT 3.0 test suite repo already exists at $TARGET_DIR."
     cd "$TARGET_DIR"
-    if [ "$XSLT30_COMMIT_SHA" != "main" ]; then
+    if [ "$XSLT30_COMMIT_SHA" = "main" ]; then
+        echo "Updating to latest main ..."
+        git fetch --filter=blob:none --prune --no-tags origin main
+        XSLT30_COMMIT_SHA="origin/main"
+    else
         CURRENT_SHA="$(git rev-parse HEAD)"
         if [ "$CURRENT_SHA" = "$XSLT30_COMMIT_SHA" ]; then
             echo "Already at pinned commit $XSLT30_COMMIT_SHA, nothing to do."
@@ -19,10 +24,6 @@ if [ -d "$TARGET_DIR/.git" ]; then
         fi
         echo "At $CURRENT_SHA, updating to pinned commit $XSLT30_COMMIT_SHA ..."
         git fetch --filter=blob:none --prune --no-tags origin "$XSLT30_COMMIT_SHA"
-    else
-        echo "Updating to latest main ..."
-        git fetch --filter=blob:none --prune --no-tags origin main
-        XSLT30_COMMIT_SHA="origin/main"
     fi
 else
     echo "Cloning W3C XSLT 3.0 test suite into $TARGET_DIR ..."
