@@ -137,12 +137,6 @@ func w3cCheckStringValue(expected string) w3cCheck {
 	}}
 }
 
-func w3cCheckError(code string) w3cCheck {
-	return w3cCheck{fn: func(_ string, _ []string) bool {
-		return false // errors are handled at the runner level
-	}}
-}
-
 func w3cCheckSkip() w3cCheck {
 	return w3cCheck{fn: func(_ string, _ []string) bool {
 		return true // skip = pass
