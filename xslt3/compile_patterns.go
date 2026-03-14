@@ -411,10 +411,13 @@ func evaluatePredicate(ctx *execContext, pred xpath3.Expr, node helium.Node) boo
 }
 
 // matchByEvaluation matches complex patterns by evaluating from document root.
+//
+// TODO(xslt3): implement evaluation-based pattern matching for non-LocationPath
+// patterns (e.g., key(), id(), doc()). This requires evaluating the pattern
+// expression from the document root and checking whether the candidate node
+// appears in the result sequence. Currently returns false, so templates with
+// these pattern forms will never match. This is a known limitation of the
+// initial XSLT 3.0 implementation — not a bug to be fixed in isolation.
 func matchByEvaluation(ctx *execContext, alt *PatternAlt, node helium.Node) bool {
-	// For non-LocationPath patterns, this is a fallback that evaluates
-	// the expression from the document root and checks if the node
-	// appears in the result set.
-	// This handles patterns like key(), id(), etc.
 	return false
 }
