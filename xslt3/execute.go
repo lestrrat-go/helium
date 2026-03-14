@@ -157,6 +157,71 @@ func (ec *execContext) newXPathContext(node helium.Node) context.Context {
 	return ctx
 }
 
+// baseXPathContext builds the invariant portion of an XPath evaluation context.
+// It includes variables, functions, namespace bindings, and the exec context carrier.
+// Position, size, and context item are NOT included — use deriveXPathContext to add them.
+func (ec *execContext) baseXPathContext() context.Context {
+	vars := ec.collectAllVars()
+	ctx := ec.transformCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx = withExecContext(ctx, ec)
+	ctx = xpath3.WithVariables(ctx, vars)
+	ctx = xpath3.WithFunctions(ctx, ec.xsltFunctions())
+	if fnsNS := ec.xsltFunctionsNS(); len(fnsNS) > 0 {
+		ctx = xpath3.WithFunctionsNS(ctx, fnsNS)
+	}
+	if len(ec.stylesheet.namespaces) > 0 || ec.hasXPathDefaultNS {
+		ns := make(map[string]string, len(ec.stylesheet.namespaces)+1)
+		for k, v := range ec.stylesheet.namespaces {
+			if k == "" && !ec.hasXPathDefaultNS {
+				continue
+			}
+			ns[k] = v
+		}
+		if ec.hasXPathDefaultNS {
+			ns[""] = ec.xpathDefaultNS
+		}
+		ctx = xpath3.WithNamespaces(ctx, ns)
+	}
+	if ec.stylesheet.baseURI != "" {
+		ctx = xpath3.WithBaseURI(ctx, ec.stylesheet.baseURI)
+	}
+	if len(ec.stylesheet.decimalFormats) > 0 {
+		for qn, df := range ec.stylesheet.decimalFormats {
+			if qn == (xpath3.QualifiedName{}) {
+				ctx = xpath3.WithDefaultDecimalFormat(ctx, df)
+			}
+		}
+		ctx = xpath3.WithNamedDecimalFormats(ctx, ec.stylesheet.decimalFormats)
+	}
+	return ctx
+}
+
+// deriveXPathContext layers position, size, and context item from ec's current
+// state onto a pre-built base context. This is much cheaper than building a
+// full context from scratch via newXPathContext.
+func (ec *execContext) deriveXPathContext(base context.Context, node helium.Node) context.Context {
+	ctx := base
+	if ec.position > 0 {
+		ctx = xpath3.WithPosition(ctx, ec.position)
+	}
+	if ec.size > 0 {
+		ctx = xpath3.WithSize(ctx, ec.size)
+	}
+	if ec.contextItem != nil {
+		ctx = xpath3.WithContextItem(ctx, ec.contextItem)
+	}
+	return ctx
+}
+
+// sortXPathEvalState creates a reusable xpath3.EvalState from the base context.
+// Used by sort to avoid per-item newEvalContext allocations.
+func (ec *execContext) sortXPathEvalState() *xpath3.EvalState {
+	return xpath3.NewEvalState(ec.baseXPathContext(), nil)
+}
+
 func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
 	vars := make(map[string]xpath3.Sequence)
 	// Eagerly evaluate all pending global vars/params, but only at the
