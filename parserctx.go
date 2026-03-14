@@ -5455,9 +5455,9 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 		if err != nil {
 			return pctx.error(ctx, err)
 		}
-		l := utf8.RuneLen(v)
-		b := make([]byte, l)
-		utf8.EncodeRune(b, v)
+		var buf [utf8.UTFMax]byte
+		l := utf8.EncodeRune(buf[:], v)
+		b := buf[:l]
 		if s := pctx.sax; s != nil {
 			if err := pctx.deliverCharacters(ctx, s.Characters, b); err != nil {
 				return err

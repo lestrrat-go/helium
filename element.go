@@ -290,3 +290,19 @@ func (n Element) Attributes() []*Attribute {
 
 	return attrs
 }
+
+// ForEachAttribute calls fn for each attribute on the element.
+// If fn returns false, iteration stops early.
+// This avoids the slice allocation of Attributes().
+func (n Element) ForEachAttribute(fn func(*Attribute) bool) {
+	for attr := n.properties; attr != nil; {
+		if !fn(attr) {
+			return
+		}
+		if a := attr.NextSibling(); a != nil {
+			attr = a.(*Attribute)
+		} else {
+			attr = nil
+		}
+	}
+}
