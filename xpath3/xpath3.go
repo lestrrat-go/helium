@@ -29,6 +29,15 @@ func Compile(expr string) (*Expression, error) {
 	}, nil
 }
 
+// CompileExpr wraps a pre-parsed AST Expr into an Expression.
+func CompileExpr(ast Expr) *Expression {
+	return &Expression{
+		source:     "",
+		ast:        ast,
+		prefixPlan: buildPrefixValidationPlan(ast),
+	}
+}
+
 // MustCompile is like Compile but panics on error.
 func MustCompile(expr string) *Expression {
 	e, err := Compile(expr)
