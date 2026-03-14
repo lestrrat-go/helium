@@ -35,6 +35,18 @@ func getAttr(elem *helium.Element, name string) string {
 // and the result is returned in Clark notation: {uri}local.
 // If no prefix, the name is returned as-is.
 func resolveQName(qname string, nsBindings map[string]string) string {
+	// Handle EQName syntax: Q{uri}local
+	if braceIdx := strings.IndexByte(qname, '{'); braceIdx >= 0 {
+		closeIdx := strings.IndexByte(qname, '}')
+		if closeIdx > braceIdx {
+			uri := qname[braceIdx+1 : closeIdx]
+			local := qname[closeIdx+1:]
+			if uri == "" {
+				return local // Q{}local → just local (no namespace)
+			}
+			return "{" + uri + "}" + local
+		}
+	}
 	idx := strings.IndexByte(qname, ':')
 	if idx < 0 {
 		return qname
@@ -356,7 +368,7 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
 	}
 
 	p := &Param{
-		Name:     name,
+		Name:     resolveQName(name, c.nsBindings),
 		Required: getAttr(elem,"required") == "yes",
 		Tunnel:   getAttr(elem, "tunnel") == "yes",
 	}
