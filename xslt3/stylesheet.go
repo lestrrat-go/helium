@@ -62,6 +62,7 @@ type Param struct {
 	Name     string
 	Select   *xpath3.Expression
 	Body     []Instruction // used when select is absent
+	As       string        // type declaration (e.g., "xs:integer")
 	Required bool
 	Tunnel   bool
 }

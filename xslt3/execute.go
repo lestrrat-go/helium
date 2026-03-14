@@ -258,6 +258,23 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 }
 
 // initGlobalVars registers global variables and parameters for lazy evaluation.
+// castParamValue casts a string param value to the declared XSD type.
+// Handles simple atomic types like "xs:integer", "xs:double", "xs:string".
+// Occurrence indicators (*, +, ?) are stripped.
+func castParamValue(s string, asType string) (xpath3.Sequence, error) {
+	// Strip occurrence indicator
+	t := strings.TrimRight(asType, "*+?")
+	t = strings.TrimSpace(t)
+	if t == "" {
+		return nil, fmt.Errorf("empty type")
+	}
+	av, err := xpath3.CastFromString(s, t)
+	if err != nil {
+		return nil, err
+	}
+	return xpath3.Sequence{av}, nil
+}
+
 // Params with caller-provided values are set immediately; all others are
 // evaluated on first access to support arbitrary declaration order.
 func (ec *execContext) initGlobalVars(ctx context.Context, cfg *transformConfig) error {
@@ -270,7 +287,15 @@ func (ec *execContext) initGlobalVars(ctx context.Context, cfg *transformConfig)
 	for _, p := range ec.stylesheet.globalParams {
 		if cfg != nil && cfg.params != nil {
 			if sv, ok := cfg.params[p.Name]; ok {
-				ec.globalVars[p.Name] = xpath3.SingleString(sv)
+				val := xpath3.SingleString(sv)
+				// Cast to declared type if specified
+				if p.As != "" {
+					castVal, err := castParamValue(sv, p.As)
+					if err == nil {
+						val = castVal
+					}
+				}
+				ec.globalVars[p.Name] = val
 				continue
 			}
 		}
