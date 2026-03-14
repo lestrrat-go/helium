@@ -8,8 +8,8 @@ import (
 )
 
 func Example_helium_command_lint() {
-	// Each command example gets its own temporary working directory so the
-	// files it creates match what a user would type against on disk.
+	// Each example gets its own temporary directory so it can create isolated
+	// on-disk inputs without interfering with other tests.
 	workDir, err := os.MkdirTemp("", "helium-command-lint-*")
 	if err != nil {
 		fmt.Printf("failed to create temp dir: %s\n", err)
@@ -32,6 +32,8 @@ func Example_helium_command_lint() {
 		return
 	}
 
+	// The displayed command uses a basename for readability; runHeliumCLI above
+	// receives the absolute temp-file path.
 	fmt.Println("$ helium lint --format catalog.xml")
 	fmt.Println(strings.TrimRight(stdout, "\n"))
 	// Output:

@@ -31,6 +31,8 @@ func Example_helium_command_xpath() {
 		return
 	}
 
+	// The displayed command uses a basename for readability; runHeliumCLI above
+	// receives the absolute temp-file path.
 	fmt.Println("$ helium xpath --engine 1 'count(/catalog/book)' catalog.xml")
 	fmt.Println(strings.TrimSpace(stdout))
 	// Output:

@@ -43,6 +43,8 @@ func Example_helium_command_relaxng_validate() {
 		return
 	}
 
+	// The displayed command uses basenames for readability; runHeliumCLI above
+	// receives absolute temp-file paths.
 	fmt.Println("$ helium relaxng validate catalog.rng catalog.xml")
 	fmt.Printf("exit code: %d\n", exitCode)
 	// Output:

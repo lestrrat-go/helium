@@ -39,6 +39,8 @@ func Example_helium_command_schematron_validate() {
 		return
 	}
 
+	// The displayed command uses basenames for readability; runHeliumCLI above
+	// receives absolute temp-file paths.
 	fmt.Println("$ helium schematron validate catalog.sch catalog.xml")
 	fmt.Printf("exit code: %d\n", exitCode)
 	// Output:

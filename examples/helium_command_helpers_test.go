@@ -9,8 +9,10 @@ import (
 )
 
 // runHeliumCLI calls the importable CLI entrypoint directly with injected
-// buffers instead of spawning a subprocess. That keeps the examples focused on
-// command usage while still exercising the real argument parsing and handlers.
+// buffers instead of spawning a subprocess. The examples pass absolute paths
+// from temporary directories into this helper so they can create isolated test
+// fixtures without changing process-wide working directory state; the printed
+// shell commands use shorter basenames only to keep the example output readable.
 func runHeliumCLI(args ...string) (string, string, int) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
