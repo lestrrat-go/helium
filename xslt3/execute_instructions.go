@@ -1568,6 +1568,17 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 	for _, item := range result.Sequence() {
 		switch v := item.(type) {
 		case xpath3.NodeItem:
+			if v.Node.Type() == helium.AttributeNode {
+				// Attribute nodes: add as attribute to current element
+				attr := v.Node.(*helium.Attribute)
+				elem, ok := out.current.(*helium.Element)
+				if ok {
+					if err := elem.SetAttribute(attr.Name(), attr.Value()); err != nil {
+						return err
+					}
+				}
+				continue
+			}
 			copied, copyErr := helium.CopyNode(v.Node, ec.resultDoc)
 			if copyErr != nil {
 				return copyErr
