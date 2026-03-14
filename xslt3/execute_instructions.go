@@ -1295,12 +1295,13 @@ func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error
 			return err
 		}
 		value = stringifyResult(result)
-	} else if len(inst.Body) > 0 {
+	}
+	if len(inst.Body) > 0 {
 		val, err := ec.evaluateBody(ctx, inst.Body)
 		if err != nil {
 			return err
 		}
-		value = stringifySequence(val)
+		value += stringifySequence(val)
 	}
 
 	terminate := false

@@ -822,13 +822,13 @@ func (c *compiler) compileMessage(elem *helium.Element) (*MessageInst, error) {
 			return nil, err
 		}
 		inst.Select = expr
-	} else {
-		body, err := c.compileChildren(elem)
-		if err != nil {
-			return nil, err
-		}
-		inst.Body = body
 	}
+	// XSLT 3.0: both select and body content are allowed
+	body, err := c.compileChildren(elem)
+	if err != nil {
+		return nil, err
+	}
+	inst.Body = body
 
 	termAttr := getAttr(elem, "terminate")
 	if termAttr != "" {
