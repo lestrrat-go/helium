@@ -36,6 +36,7 @@ type execContext struct {
 	docCache         map[string]*helium.Document
 	msgHandler       func(string, bool)
 	transformCfg     *transformConfig
+	transformCtx     context.Context // parent context from Transform caller (for cancellation/deadlines)
 }
 
 func withExecContext(ctx context.Context, ec *execContext) context.Context {
@@ -104,7 +105,10 @@ func (ec *execContext) addNode(node helium.Node) error {
 // XPath expressions within the XSLT transformation.
 func (ec *execContext) newXPathContext(node helium.Node) context.Context {
 	vars := ec.collectAllVars()
-	ctx := context.Background()
+	ctx := ec.transformCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	ctx = withExecContext(ctx, ec)
 	ctx = xpath3.WithVariables(ctx, vars)
 	ctx = xpath3.WithFunctions(ctx, ec.xsltFunctions())
@@ -179,18 +183,19 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	resultDoc := helium.NewDefaultDocument()
 
 	ec := &execContext{
-		stylesheet:  ss,
-		sourceDoc:   source,
-		resultDoc:   resultDoc,
-		currentNode: source,
-		contextNode: source,
-		position:    1,
-		size:        1,
-		globalVars:  make(map[string]xpath3.Sequence),
-		currentMode: "",
-		outputStack: []*outputFrame{{doc: resultDoc, current: resultDoc}},
-		keyTables:   make(map[string]*keyTable),
-		docCache:    make(map[string]*helium.Document),
+		stylesheet:   ss,
+		sourceDoc:    source,
+		resultDoc:    resultDoc,
+		currentNode:  source,
+		contextNode:  source,
+		position:     1,
+		size:         1,
+		globalVars:   make(map[string]xpath3.Sequence),
+		currentMode:  "",
+		outputStack:  []*outputFrame{{doc: resultDoc, current: resultDoc}},
+		keyTables:    make(map[string]*keyTable),
+		docCache:     make(map[string]*helium.Document),
+		transformCtx: ctx,
 	}
 
 	if cfg != nil && cfg.msgHandler != nil {
@@ -359,7 +364,14 @@ func (ec *execContext) evaluateBody(ctx context.Context, body []Instruction) (xp
 
 	// If we captured atomic items via xsl:sequence, return them directly
 	if len(frame.pendingItems) > 0 {
-		// If there are also DOM children, merge them
+		// TODO(xslt3): when the body produces both DOM nodes and atomic
+		// items, this concatenates all nodes first then all atomics,
+		// which loses the original construction order (e.g., node,
+		// atomic, node becomes node, node, atomic). To fully conform
+		// to XSLT sequence-constructor semantics, the capture mechanism
+		// should record a single ordered stream of items (nodes and
+		// atomics interleaved) rather than two separate buckets. This
+		// is a known limitation of the initial implementation.
 		if tmpRoot.FirstChild() != nil {
 			var seq xpath3.Sequence
 			for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
@@ -414,6 +426,11 @@ func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []Instru
 
 	// If the body produced atomic items via xsl:sequence, return them
 	// directly rather than wrapping in a document node.
+	// TODO(xslt3): when both DOM children and atomic items exist, the
+	// atomics are silently dropped (only the document node is returned).
+	// A proper implementation should either merge them into an ordered
+	// sequence or raise an error when atomics appear in a document-node
+	// context. This is a known limitation of the initial implementation.
 	if len(frame.pendingItems) > 0 && tmpDoc.FirstChild() == nil {
 		return frame.pendingItems, nil
 	}

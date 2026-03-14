@@ -34,7 +34,12 @@ func compileAVT(s string, nsBindings map[string]string) (*AVT, error) {
 				i += 2
 				continue
 			}
-			// find matching }
+			// TODO(xslt3): this finds the next '}' without tracking nesting
+			// depth or string literal state. XPath 3.x expressions containing
+			// map{...} or array{...} constructors, or '}' inside string
+			// literals, will be truncated. Needs a nesting-aware scanner that
+			// counts brace depth and skips string content. This is a known
+			// limitation — only simple XPath expressions work in AVTs today.
 			end := strings.IndexByte(s[i+1:], '}')
 			if end < 0 {
 				return nil, staticError(errCodeXTSE0580, "unterminated AVT expression in %q", s)

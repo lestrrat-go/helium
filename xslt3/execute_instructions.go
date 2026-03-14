@@ -502,6 +502,24 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 	return elem.SetAttribute(name, value)
 }
 
+// copyAttributeToElement copies an attribute to an element, preserving its
+// namespace URI and prefix. For non-namespaced attributes, falls back to
+// SetAttribute.
+func copyAttributeToElement(elem *helium.Element, attr *helium.Attribute) error {
+	if uri := attr.URI(); uri != "" {
+		prefix := attr.Prefix()
+		// Extract local name by stripping prefix from Name()
+		name := attr.Name()
+		localName := name
+		if prefix != "" {
+			localName = name[len(prefix)+1:]
+		}
+		ns := helium.NewNamespace(prefix, uri)
+		return elem.SetAttributeNS(localName, attr.Value(), ns)
+	}
+	return elem.SetAttribute(attr.Name(), attr.Value())
+}
+
 // hasNSDecl checks if an element already has a namespace declaration for
 // the given prefix and URI.
 func hasNSDecl(elem *helium.Element, prefix, uri string) bool {
@@ -917,7 +935,7 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body 
 		if !ok {
 			return nil
 		}
-		return elem.SetAttribute(attr.Name(), attr.Value())
+		return copyAttributeToElement(elem, attr)
 	}
 
 	return nil
@@ -975,7 +993,7 @@ func (ec *execContext) copyNodeToOutput(node helium.Node) error {
 		if !ok {
 			return nil
 		}
-		return elem.SetAttribute(attr.Name(), attr.Value())
+		return copyAttributeToElement(elem, attr)
 	default:
 		copied, err := helium.CopyNode(node, ec.resultDoc)
 		if err != nil {
@@ -1622,7 +1640,7 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 				attr := v.Node.(*helium.Attribute)
 				elem, ok := out.current.(*helium.Element)
 				if ok {
-					if err := elem.SetAttribute(attr.Name(), attr.Value()); err != nil {
+					if err := copyAttributeToElement(elem, attr); err != nil {
 						return err
 					}
 				}
