@@ -1005,21 +1005,33 @@ func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Nod
 }
 
 func (ec *execContext) onNoMatchDeepCopy(node helium.Node) error {
-	// Deep copy: serialize node content from source and add to output
-	// For now, use shallow-copy behavior for non-element nodes
+	// Deep copy: copy the entire subtree to the output without template matching.
 	switch node.Type() {
-	case helium.TextNode, helium.CDATASectionNode:
-		text, err := ec.resultDoc.CreateText(node.Content())
+	case helium.DocumentNode:
+		// For document nodes, deep-copy each child.
+		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+			if err := ec.onNoMatchDeepCopy(child); err != nil {
+				return err
+			}
+		}
+		return nil
+	case helium.ElementNode, helium.TextNode, helium.CDATASectionNode,
+		helium.CommentNode, helium.ProcessingInstructionNode:
+		copied, err := helium.CopyNode(node, ec.resultDoc)
 		if err != nil {
 			return err
 		}
-		return ec.addNode(text)
-	case helium.CommentNode:
-		comment, err := ec.resultDoc.CreateComment(node.Content())
-		if err != nil {
-			return err
+		return ec.addNode(copied)
+	case helium.AttributeNode:
+		attr, ok := node.(*helium.Attribute)
+		if !ok {
+			return nil
 		}
-		return ec.addNode(comment)
+		out := ec.currentOutput()
+		if outElem, ok := out.current.(*helium.Element); ok {
+			return copyAttributeToElement(outElem, attr)
+		}
+		return nil
 	default:
 		return nil
 	}
