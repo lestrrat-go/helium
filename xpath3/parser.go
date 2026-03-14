@@ -1088,8 +1088,11 @@ func (p *parser) parseStep() (Step, error) {
 		return Step{}, err
 	}
 	if axis == AxisChild {
-		if _, ok := nodeTest.(NamespaceNodeTest); ok {
+		switch nodeTest.(type) {
+		case NamespaceNodeTest:
 			axis = AxisNamespace
+		case AttributeTest, SchemaAttributeTest:
+			axis = AxisAttribute
 		}
 	}
 
