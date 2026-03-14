@@ -255,7 +255,8 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 	ec.pushVarScope()
 	defer ec.popVarScope()
 
-	// Separate tunnel from regular with-param values
+	// Separate tunnel from regular with-param values.
+	// call-template forwards tunnel params from the caller's context.
 	paramOverrides := make(map[string]xpath3.Sequence)
 	savedTunnel := ec.tunnelParams
 	hasTunnelOverrides := false
@@ -266,7 +267,6 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 		}
 		if wp.Tunnel {
 			if !hasTunnelOverrides {
-				// Copy existing tunnel params before modifying
 				merged := make(map[string]xpath3.Sequence)
 				for k, v := range ec.tunnelParams {
 					merged[k] = v
