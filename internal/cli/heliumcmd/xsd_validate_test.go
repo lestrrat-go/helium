@@ -49,7 +49,7 @@ func TestXSDValidateValid(t *testing.T) {
 </xs:schema>`)
 	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root>ok</root>`)
 
-	code := cmd.run([]string{schemaFile, xmlFile})
+	code := cmd.runContext(context.Background(), []string{schemaFile, xmlFile})
 	require.Equal(t, ExitOK, code)
 }
 
@@ -62,7 +62,7 @@ func TestXSDValidateInvalid(t *testing.T) {
 </xs:schema>`)
 	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root>bad</root>`)
 
-	code := cmd.run([]string{schemaFile, xmlFile})
+	code := cmd.runContext(context.Background(), []string{schemaFile, xmlFile})
 	require.Equal(t, ExitValidation, code)
 }
 
@@ -72,7 +72,7 @@ func TestXSDValidateSchemaCompileError(t *testing.T) {
 	schemaFile := writeFile(t, dir, "schema.xsd", `<?xml version="1.0"?><not-schema/>`)
 	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root/>`)
 
-	code := cmd.run([]string{schemaFile, xmlFile})
+	code := cmd.runContext(context.Background(), []string{schemaFile, xmlFile})
 	require.Equal(t, ExitSchemaComp, code)
 }
 
@@ -84,7 +84,7 @@ func TestXSDValidateFileReadError(t *testing.T) {
   <xs:element name="root" type="xs:string"/>
 </xs:schema>`)
 
-	code := cmd.run([]string{schemaFile, filepath.Join(dir, "missing.xml")})
+	code := cmd.runContext(context.Background(), []string{schemaFile, filepath.Join(dir, "missing.xml")})
 	require.Equal(t, ExitReadFile, code)
 }
 
@@ -97,7 +97,7 @@ func TestXSDValidateParseError(t *testing.T) {
 </xs:schema>`)
 	xmlFile := writeFile(t, dir, "doc.xml", `<root>`)
 
-	code := cmd.run([]string{schemaFile, xmlFile})
+	code := cmd.runContext(context.Background(), []string{schemaFile, xmlFile})
 	require.Equal(t, ExitErr, code)
 }
 
@@ -111,7 +111,7 @@ func TestXSDValidateMultipleFiles(t *testing.T) {
 	validXML := writeFile(t, dir, "valid.xml", `<?xml version="1.0"?><root>ok</root>`)
 	invalidXML := writeFile(t, dir, "invalid.xml", `<?xml version="1.0"?><root><child/></root>`)
 
-	code := cmd.run([]string{schemaFile, validXML, invalidXML})
+	code := cmd.runContext(context.Background(), []string{schemaFile, validXML, invalidXML})
 	require.Equal(t, ExitValidation, code)
 }
 
@@ -124,7 +124,7 @@ func TestXSDValidateVersionWritesToStderr(t *testing.T) {
 		stdinTTY: true,
 	}
 
-	code := cmd.run([]string{"--version"})
+	code := cmd.runContext(context.Background(), []string{"--version"})
 	require.Equal(t, ExitOK, code)
 	require.Contains(t, errOut.String(), "helium version")
 }
@@ -143,7 +143,7 @@ func TestXSDValidateStdIn(t *testing.T) {
 		stdinTTY: false,
 	}
 
-	code := cmd.run([]string{schemaFile})
+	code := cmd.runContext(context.Background(), []string{schemaFile})
 	require.Equal(t, ExitOK, code)
 }
 
@@ -156,7 +156,7 @@ func TestXSDValidateMissingSchemaArg(t *testing.T) {
 		stdinTTY: true,
 	}
 
-	code := cmd.run(nil)
+	code := cmd.runContext(context.Background(), nil)
 	require.Equal(t, ExitErr, code)
 	require.Contains(t, errOut.String(), "schema is required")
 }
@@ -170,7 +170,7 @@ func TestXSDValidateUnknownOption(t *testing.T) {
 		stdinTTY: true,
 	}
 
-	code := cmd.run([]string{"--schema"})
+	code := cmd.runContext(context.Background(), []string{"--schema"})
 	require.Equal(t, ExitErr, code)
 	require.Contains(t, errOut.String(), "unrecognized option --schema")
 }

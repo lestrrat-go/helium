@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/cliutil"
 	"github.com/lestrrat-go/helium/relaxng"
 )
 
@@ -30,10 +29,6 @@ type relaxNGValidateCommand struct {
 	stdinTTY bool
 }
 
-func newRelaxNGValidateCommand(prog string) *relaxNGValidateCommand {
-	return newRelaxNGValidateCommandWithIO(prog, os.Stdin, os.Stderr, cliutil.IsTty(os.Stdin.Fd()))
-}
-
 func newRelaxNGValidateCommandWithIO(prog string, stdin io.Reader, stderr io.Writer, stdinTTY bool) *relaxNGValidateCommand {
 	return &relaxNGValidateCommand{
 		prog:     prog,
@@ -41,10 +36,6 @@ func newRelaxNGValidateCommandWithIO(prog string, stdin io.Reader, stderr io.Wri
 		stderr:   stderr,
 		stdinTTY: stdinTTY,
 	}
-}
-
-func (c *relaxNGValidateCommand) run(args []string) int {
-	return c.runContext(context.Background(), args)
 }
 
 func (c *relaxNGValidateCommand) runContext(ctx context.Context, args []string) int {

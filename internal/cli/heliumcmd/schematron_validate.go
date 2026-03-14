@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/cliutil"
 	"github.com/lestrrat-go/helium/schematron"
 )
 
@@ -30,10 +29,6 @@ type schematronValidateCommand struct {
 	stdinTTY bool
 }
 
-func newSchematronValidateCommand(prog string) *schematronValidateCommand {
-	return newSchematronValidateCommandWithIO(prog, os.Stdin, os.Stderr, cliutil.IsTty(os.Stdin.Fd()))
-}
-
 func newSchematronValidateCommandWithIO(prog string, stdin io.Reader, stderr io.Writer, stdinTTY bool) *schematronValidateCommand {
 	return &schematronValidateCommand{
 		prog:     prog,
@@ -41,10 +36,6 @@ func newSchematronValidateCommandWithIO(prog string, stdin io.Reader, stderr io.
 		stderr:   stderr,
 		stdinTTY: stdinTTY,
 	}
-}
-
-func (c *schematronValidateCommand) run(args []string) int {
-	return c.runContext(context.Background(), args)
 }
 
 func (c *schematronValidateCommand) runContext(ctx context.Context, args []string) int {

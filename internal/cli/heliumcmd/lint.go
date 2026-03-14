@@ -12,7 +12,6 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/c14n"
 	"github.com/lestrrat-go/helium/catalog"
-	"github.com/lestrrat-go/helium/internal/cliutil"
 	"github.com/lestrrat-go/helium/xinclude"
 	"github.com/lestrrat-go/helium/xpath1"
 	"github.com/lestrrat-go/helium/xsd"
@@ -66,10 +65,6 @@ type command struct {
 	stdinTTY bool
 }
 
-func newCommand(prog string) *command {
-	return newCommandWithIO(prog, os.Stdin, os.Stdout, os.Stderr, cliutil.IsTty(os.Stdin.Fd()))
-}
-
 func newCommandWithIO(prog string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY bool) *command {
 	return &command{
 		prog:     prog,
@@ -78,10 +73,6 @@ func newCommandWithIO(prog string, stdin io.Reader, stdout, stderr io.Writer, st
 		stderr:   stderr,
 		stdinTTY: stdinTTY,
 	}
-}
-
-func (c *command) run(args []string) int {
-	return c.runContext(context.Background(), args)
 }
 
 func (c *command) runContext(ctx context.Context, args []string) int {

@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/cliutil"
 	"github.com/lestrrat-go/helium/xpath1"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -27,10 +26,6 @@ type xpathCommand struct {
 	stdinTTY bool
 }
 
-func newXPathCommand(prog string) *xpathCommand {
-	return newXPathCommandWithIO(prog, os.Stdin, os.Stdout, os.Stderr, cliutil.IsTty(os.Stdin.Fd()))
-}
-
 func newXPathCommandWithIO(prog string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY bool) *xpathCommand {
 	return &xpathCommand{
 		prog:     prog,
@@ -39,10 +34,6 @@ func newXPathCommandWithIO(prog string, stdin io.Reader, stdout, stderr io.Write
 		stderr:   stderr,
 		stdinTTY: stdinTTY,
 	}
-}
-
-func (c *xpathCommand) run(args []string) int {
-	return c.runContext(context.Background(), args)
 }
 
 func (c *xpathCommand) runContext(ctx context.Context, args []string) int {

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/cliutil"
 	"github.com/lestrrat-go/helium/xsd"
 )
 
@@ -30,10 +29,6 @@ type xsdValidateCommand struct {
 	stdinTTY bool
 }
 
-func newXSDValidateCommand(prog string) *xsdValidateCommand {
-	return newXSDValidateCommandWithIO(prog, os.Stdin, os.Stderr, cliutil.IsTty(os.Stdin.Fd()))
-}
-
 func newXSDValidateCommandWithIO(prog string, stdin io.Reader, stderr io.Writer, stdinTTY bool) *xsdValidateCommand {
 	return &xsdValidateCommand{
 		prog:     prog,
@@ -41,10 +36,6 @@ func newXSDValidateCommandWithIO(prog string, stdin io.Reader, stderr io.Writer,
 		stderr:   stderr,
 		stdinTTY: stdinTTY,
 	}
-}
-
-func (c *xsdValidateCommand) run(args []string) int {
-	return c.runContext(context.Background(), args)
 }
 
 func (c *xsdValidateCommand) runContext(ctx context.Context, args []string) int {

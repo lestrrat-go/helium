@@ -72,7 +72,7 @@ func TestXPathEngine1File(t *testing.T) {
 		stdinTTY: true,
 	}
 
-	code := cmd.run([]string{"--engine", "1", "count(//book)", xmlFile})
+	code := cmd.runContext(context.Background(), []string{"--engine", "1", "count(//book)", xmlFile})
 	require.Equal(t, ExitOK, code)
 	require.Equal(t, "2\n", out.String())
 }
@@ -90,7 +90,7 @@ func TestXPathEngine3DefaultFile(t *testing.T) {
 		stdinTTY: true,
 	}
 
-	code := cmd.run([]string{"count(//book)", xmlFile})
+	code := cmd.runContext(context.Background(), []string{"count(//book)", xmlFile})
 	require.Equal(t, ExitOK, code)
 	require.Equal(t, "2\n", out.String())
 }
@@ -105,7 +105,7 @@ func TestXPathEngine3StdInXML(t *testing.T) {
 		stdinTTY: false,
 	}
 
-	code := cmd.run([]string{"//book"})
+	code := cmd.runContext(context.Background(), []string{"//book"})
 	require.Equal(t, ExitOK, code)
 	require.Contains(t, out.String(), "<book>one</book>")
 }
@@ -123,7 +123,7 @@ func TestXPathEngine3AtomicSequence(t *testing.T) {
 		stdinTTY: true,
 	}
 
-	code := cmd.run([]string{"(1,2,3)", xmlFile})
+	code := cmd.runContext(context.Background(), []string{"(1,2,3)", xmlFile})
 	require.Equal(t, ExitOK, code)
 	require.Equal(t, "1\n2\n3\n", out.String())
 }
@@ -133,13 +133,13 @@ func TestXPathInvalidExpression(t *testing.T) {
 	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root/>`)
 
 	cmd := newTestXPathCommand()
-	code := cmd.run([]string{"///invalid[[[", xmlFile})
+	code := cmd.runContext(context.Background(), []string{"///invalid[[[", xmlFile})
 	require.Equal(t, ExitXPath, code)
 }
 
 func TestXPathReadFileError(t *testing.T) {
 	cmd := newTestXPathCommand()
-	code := cmd.run([]string{"//book", "/missing.xml"})
+	code := cmd.runContext(context.Background(), []string{"//book", "/missing.xml"})
 	require.Equal(t, ExitReadFile, code)
 }
 
@@ -148,6 +148,6 @@ func TestXPathParseError(t *testing.T) {
 	xmlFile := writeFile(t, dir, "doc.xml", `<root>`)
 
 	cmd := newTestXPathCommand()
-	code := cmd.run([]string{"//book", xmlFile})
+	code := cmd.runContext(context.Background(), []string{"//book", xmlFile})
 	require.Equal(t, ExitErr, code)
 }
