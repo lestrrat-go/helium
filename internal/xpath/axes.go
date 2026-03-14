@@ -283,7 +283,7 @@ func axisAttribute(node helium.Node) []helium.Node {
 	if !ok {
 		return nil
 	}
-	var result []helium.Node
+	var result []helium.Node // no prealloc: most elements have 1-3 attrs
 	elem.ForEachAttribute(func(attr *helium.Attribute) bool {
 		result = append(result, attr)
 		return true
