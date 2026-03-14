@@ -130,9 +130,11 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 	}
 
 	mode := inst.Mode
-	if mode == "" || mode == "#current" {
+	if mode == "#current" {
 		mode = ec.currentMode
 	}
+	// When mode is absent (empty), use the stylesheet's default-mode
+	// (not the current mode — #current must be explicit)
 
 	// Process with-param values, separating tunnel from regular params
 	var paramValues map[string]xpath3.Sequence
