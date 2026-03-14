@@ -37,6 +37,7 @@ func getAttr(elem *helium.Element, name string) string {
 // and the result is returned in Clark notation: {uri}local.
 // If no prefix, the name is returned as-is.
 func resolveQName(qname string, nsBindings map[string]string) string {
+	qname = strings.TrimSpace(qname)
 	// Handle EQName syntax: Q{uri}local
 	if braceIdx := strings.IndexByte(qname, '{'); braceIdx >= 0 {
 		closeIdx := strings.IndexByte(qname, '}')
