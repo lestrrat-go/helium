@@ -13,6 +13,13 @@ func (c *compiler) compileInstruction(elem *helium.Element) (Instruction, error)
 	saved := c.pushElementNamespaces(elem)
 	defer func() { c.nsBindings = saved }()
 
+	// Handle xml:space inheritance
+	savedPreserve := c.preserveSpace
+	if xs := getAttr(elem, "xml:space"); xs != "" {
+		c.preserveSpace = (xs == "preserve")
+	}
+	defer func() { c.preserveSpace = savedPreserve }()
+
 	if elem.URI() == NSXSLT {
 		return c.compileXSLTInstruction(elem)
 	}
@@ -157,7 +164,7 @@ func (c *compiler) compileChildren(parent *helium.Element) ([]Instruction, error
 			}
 		case *helium.Text:
 			text := string(v.Content())
-			if strings.TrimSpace(text) != "" {
+			if !c.shouldStripText(text) {
 				body = append(body, &LiteralTextInst{Value: text})
 			}
 		case *helium.CDATASection:
@@ -517,7 +524,7 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 			}
 		case *helium.Text:
 			text := string(v.Content())
-			if strings.TrimSpace(text) != "" {
+			if !c.shouldStripText(text) {
 				inst.Body = append(inst.Body, &LiteralTextInst{Value: text})
 			}
 		case *helium.CDATASection:
@@ -1003,7 +1010,7 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 			}
 		case *helium.Text:
 			text := string(v.Content())
-			if strings.TrimSpace(text) != "" {
+			if !c.shouldStripText(text) {
 				inst.Body = append(inst.Body, &LiteralTextInst{Value: text})
 			}
 		}

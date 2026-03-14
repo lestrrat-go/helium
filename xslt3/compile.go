@@ -19,11 +19,21 @@ type compiler struct {
 	stylesheet     *Stylesheet
 	nsBindings     map[string]string
 	xpathDefaultNS string // current xpath-default-namespace
+	preserveSpace  bool   // xml:space="preserve" in effect
 	importPrec     int
 	importStack    map[string]struct{} // circular import detection
 	baseURI        string
 	resolver       URIResolver
 	localExcludes  map[string]struct{} // accumulated LRE-level exclude-result-prefixes
+}
+
+// shouldStripText returns true if a whitespace-only text node should be stripped
+// during compilation (i.e., xml:space is not "preserve").
+func (c *compiler) shouldStripText(text string) bool {
+	if c.preserveSpace {
+		return false
+	}
+	return strings.TrimSpace(text) == ""
 }
 
 // getAttr returns the value of an attribute or "" if not found.
@@ -383,7 +393,7 @@ func (c *compiler) compileTemplateBody(elem *helium.Element) ([]Instruction, []*
 			}
 		case *helium.Text:
 			text := string(v.Content())
-			if strings.TrimSpace(text) != "" {
+			if !c.shouldStripText(text) {
 				inParams = false
 				body = append(body, &LiteralTextInst{Value: text})
 			}
