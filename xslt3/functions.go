@@ -30,6 +30,9 @@ func (ec *execContext) xsltFunctions() map[string]xpath3.Function {
 		"type-available":       &xsltFunc{min: 1, max: 1, fn: ec.fnTypeAvailable},
 		"current-group":        &xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroup},
 		"current-grouping-key": &xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroupingKey},
+		"accumulator-before":   &xsltFunc{min: 1, max: 1, fn: ec.fnAccumulatorBefore},
+		"accumulator-after":    &xsltFunc{min: 1, max: 1, fn: ec.fnAccumulatorAfter},
+		"copy-of":              &xsltFunc{min: 0, max: 1, fn: ec.fnCopyOf},
 	}
 	return ec.cachedFns
 }
@@ -442,6 +445,77 @@ func (ec *execContext) fnCurrentGroupingKey(_ context.Context, _ []xpath3.Sequen
 		return ec.currentGroupKey, nil
 	}
 	return xpath3.EmptySequence(), nil
+}
+
+// accumulator-before(name) returns the pre-descent value of a named accumulator.
+func (ec *execContext) fnAccumulatorBefore(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	if len(args) == 0 || len(args[0]) == 0 {
+		return xpath3.EmptySequence(), nil
+	}
+	av, err := xpath3.AtomizeItem(args[0][0])
+	if err != nil {
+		return xpath3.EmptySequence(), nil
+	}
+	name, err := xpath3.AtomicToString(av)
+	if err != nil {
+		return xpath3.EmptySequence(), nil
+	}
+	name = resolveQName(name, ec.stylesheet.namespaces)
+	if val, ok := ec.accumulatorState[name]; ok {
+		return val, nil
+	}
+	return xpath3.EmptySequence(), nil
+}
+
+// accumulator-after(name) returns the post-descent value of a named accumulator.
+func (ec *execContext) fnAccumulatorAfter(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	if len(args) == 0 || len(args[0]) == 0 {
+		return xpath3.EmptySequence(), nil
+	}
+	av, err := xpath3.AtomizeItem(args[0][0])
+	if err != nil {
+		return xpath3.EmptySequence(), nil
+	}
+	name, err := xpath3.AtomicToString(av)
+	if err != nil {
+		return xpath3.EmptySequence(), nil
+	}
+	name = resolveQName(name, ec.stylesheet.namespaces)
+	if val, ok := ec.accumulatorState[name]; ok {
+		return val, nil
+	}
+	return xpath3.EmptySequence(), nil
+}
+
+// copy-of() returns a deep copy of the context node (zero-argument XSLT 3.0 streaming function).
+func (ec *execContext) fnCopyOf(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	// copy-of() with argument: deep-copy the argument node(s)
+	// copy-of() with no args: deep-copy the context node (streaming snapshot)
+	var nodes []helium.Node
+	if len(args) > 0 && len(args[0]) > 0 {
+		for _, item := range args[0] {
+			ni, ok := item.(xpath3.NodeItem)
+			if !ok {
+				continue
+			}
+			nodes = append(nodes, ni.Node)
+		}
+	} else {
+		if ec.contextNode == nil {
+			return xpath3.EmptySequence(), nil
+		}
+		nodes = append(nodes, ec.contextNode)
+	}
+	var result xpath3.Sequence
+	for _, node := range nodes {
+		copied, err := helium.CopyNode(node, ec.resultDoc)
+		if err != nil {
+			result = append(result, xpath3.NodeItem{Node: node})
+			continue
+		}
+		result = append(result, xpath3.NodeItem{Node: copied})
+	}
+	return result, nil
 }
 
 // xsltFunctionsNS returns user-defined xsl:function definitions as xpath3 functions

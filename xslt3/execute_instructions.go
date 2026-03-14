@@ -87,6 +87,16 @@ func (ec *execContext) executeInstruction(ctx context.Context, inst Instruction)
 		return ec.execForEachGroup(ctx, v)
 	case *NamespaceInst:
 		return ec.execNamespace(ctx, v)
+	case *SourceDocumentInst:
+		return ec.execSourceDocument(ctx, v)
+	case *IterateInst:
+		return ec.execIterate(ctx, v)
+	case *ForkInst:
+		return ec.execFork(ctx, v)
+	case *BreakInst:
+		return ec.execBreak(ctx, v)
+	case *NextIterationInst:
+		return ec.execNextIteration(ctx, v)
 	default:
 		return dynamicError(errCodeXTDE0820, "unsupported instruction type %T", inst)
 	}

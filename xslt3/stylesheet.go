@@ -28,21 +28,24 @@ type Stylesheet struct {
 	excludePrefixes map[string]struct{} // prefixes excluded from output
 	decimalFormats  map[xpath3.QualifiedName]xpath3.DecimalFormat // named decimal formats
 	modeDefs        map[string]*ModeDef                         // mode name -> mode definition
+	accumulators    map[string]*AccumulatorDef                  // accumulator name -> definition
 	sourceDoc       *helium.Document                            // the parsed stylesheet document (for document(""))
 	baseURI         string                                      // base URI for resolving relative document references
 }
 
 // ModeDef is a compiled xsl:mode declaration.
 type ModeDef struct {
-	Name      string
-	OnNoMatch string // "shallow-copy", "deep-copy", "shallow-skip", "deep-skip", "text-only-copy", "fail"
+	Name       string
+	OnNoMatch  string // "shallow-copy", "deep-copy", "shallow-skip", "deep-skip", "text-only-copy", "fail"
+	Streamable bool
 }
 
 // XSLFunction is a compiled xsl:function.
 type XSLFunction struct {
-	Name   xpath3.QualifiedName
-	Params []*Param
-	Body   []Instruction
+	Name          xpath3.QualifiedName
+	Params        []*Param
+	Body          []Instruction
+	Streamability string // "absorbing", "inspection", etc.; "" = unspecified
 }
 
 // Template is a compiled xsl:template.
@@ -96,6 +99,25 @@ type OutputDef struct {
 	MediaType         string
 	Version           string
 	UndeclarePrefixes bool
+}
+
+// AccumulatorDef is a compiled xsl:accumulator.
+type AccumulatorDef struct {
+	Name        string
+	As          string // type declaration
+	Initial     *xpath3.Expression
+	InitialBody []Instruction
+	Rules       []*AccumulatorRule
+	Streamable  bool
+}
+
+// AccumulatorRule is a compiled xsl:accumulator-rule.
+type AccumulatorRule struct {
+	Match  *Pattern
+	Phase  string // "start" or "end"
+	Select *xpath3.Expression
+	Body   []Instruction
+	New    bool // new="yes" starts a fresh value
 }
 
 // NameTest is used for xsl:strip-space and xsl:preserve-space element names.

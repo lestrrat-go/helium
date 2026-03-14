@@ -202,12 +202,18 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (Instruction, er
 		// TODO: implement xsl:analyze-string
 		return &SequenceInst{}, nil
 	case "source-document":
-		// TODO: implement xsl:source-document
-		body, err := c.compileChildren(elem)
-		if err != nil {
-			return nil, err
-		}
-		return &SequenceInst{Body: body}, nil
+		return c.compileSourceDocument(elem)
+	case "iterate":
+		return c.compileIterate(elem)
+	case "fork":
+		return c.compileFork(elem)
+	case "break":
+		return c.compileBreak(elem)
+	case "next-iteration":
+		return c.compileNextIteration(elem)
+	case "on-completion":
+		// Handled as part of xsl:iterate compilation
+		return nil, nil
 	default:
 		return nil, staticError(errCodeXTSE0090, "unknown XSLT instruction xsl:%s", elem.LocalName())
 	}
