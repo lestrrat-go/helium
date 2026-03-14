@@ -141,8 +141,8 @@ func stepPriority(step xpath3.Step) float64 {
 		if nt.Local == "*" && nt.Prefix == "" && nt.URI == "" {
 			return -0.5
 		}
-		if nt.Local == "*" {
-			// prefix:* or *:local
+		if nt.Local == "*" || nt.Prefix == "*" {
+			// prefix:* or *:local — one component is wildcard
 			return -0.25
 		}
 		return 0
@@ -398,6 +398,10 @@ func matchNameTest(ctx *execContext, nt xpath3.NameTest, node helium.Node) bool 
 		return nodeLocal == nt.Local && nodeURI == nt.URI
 	}
 
+	if nt.Prefix == "*" {
+		// *:local matches any namespace
+		return nodeLocal == nt.Local
+	}
 	expectedURI := ""
 	if nt.Prefix != "" && ctx != nil {
 		expectedURI = ctx.resolvePrefix(nt.Prefix)
