@@ -524,5 +524,22 @@ func evaluatePredicate(ctx *execContext, pred xpath3.Expr, node helium.Node) boo
 // these pattern forms will never match. This is a known limitation of the
 // initial XSLT 3.0 implementation — not a bug to be fixed in isolation.
 func matchByEvaluation(ctx *execContext, alt *PatternAlt, node helium.Node) bool {
+	compiled := xpath3.CompileExpr(alt.expr)
+
+	// Try evaluating from each ancestor up to the document root.
+	// This handles nodes in variable trees where the document root
+	// has a synthetic wrapper element.
+	for ancestor := node.Parent(); ancestor != nil; ancestor = ancestor.Parent() {
+		xpathCtx := ctx.newXPathContext(ancestor)
+		result, err := compiled.Evaluate(xpathCtx, ancestor)
+		if err != nil {
+			continue
+		}
+		for _, item := range result.Sequence() {
+			if ni, ok := item.(xpath3.NodeItem); ok && ni.Node == node {
+				return true
+			}
+		}
+	}
 	return false
 }

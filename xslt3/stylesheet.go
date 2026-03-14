@@ -3,6 +3,7 @@ package xslt3
 import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xsd"
 )
 
 const (
@@ -28,8 +29,10 @@ type Stylesheet struct {
 	excludePrefixes map[string]struct{} // prefixes excluded from output
 	decimalFormats  map[xpath3.QualifiedName]xpath3.DecimalFormat // named decimal formats
 	modeDefs        map[string]*ModeDef                         // mode name -> mode definition
-	sourceDoc       *helium.Document                            // the parsed stylesheet document (for document(""))
-	baseURI         string                                      // base URI for resolving relative document references
+	sourceDoc         *helium.Document                            // the parsed stylesheet document (for document(""))
+	baseURI           string                                      // base URI for resolving relative document references
+	schemas           []*xsd.Schema                               // imported schemas (xsl:import-schema)
+	defaultValidation string                                      // "strict", "lax", "preserve", "strip" (default-validation attr)
 }
 
 // ModeDef is a compiled xsl:mode declaration.

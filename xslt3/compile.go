@@ -133,6 +133,11 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 		c.expandText = true
 	}
 
+	// Read default-validation from stylesheet root (XSLT 3.0)
+	if dv := getAttr(root, "default-validation"); dv != "" {
+		c.stylesheet.defaultValidation = dv
+	}
+
 	// Read default-mode from stylesheet root (XSLT 3.0)
 	if dm := getAttr(root, "default-mode"); dm != "" {
 		c.stylesheet.defaultMode = dm
@@ -257,6 +262,8 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 			c.compileDecimalFormat(elem)
 		case "mode":
 			c.compileMode(elem)
+		case "import-schema":
+			// TODO: implement xsl:import-schema
 		case "namespace-alias", "attribute-set":
 			// TODO: implement in later phases
 		default:
