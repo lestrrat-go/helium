@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -25,6 +26,7 @@ type Stylesheet struct {
 	preserveSpace   []NameTest
 	namespaces      map[string]string   // prefix -> URI from stylesheet
 	excludePrefixes map[string]struct{} // prefixes excluded from output
+	sourceDoc       *helium.Document    // the parsed stylesheet document (for document(""))
 }
 
 // XSLFunction is a compiled xsl:function.

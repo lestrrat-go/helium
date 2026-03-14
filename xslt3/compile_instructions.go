@@ -254,8 +254,20 @@ func (c *compiler) compileValueOf(elem *helium.Element) (*ValueOfInst, error) {
 		inst.Separator = avt
 	}
 
-	// Check for body content (XSLT 2.0+)
-	if selectAttr == "" {
+	// XTSE0350: xsl:value-of with select must not have non-whitespace content
+	if selectAttr != "" {
+		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+			switch child.Type() {
+			case helium.TextNode, helium.CDATASectionNode:
+				if strings.TrimSpace(string(child.Content())) != "" {
+					return nil, staticError(errCodeXTSE0350, "xsl:value-of with select attribute must not have content")
+				}
+			case helium.ElementNode:
+				return nil, staticError(errCodeXTSE0350, "xsl:value-of with select attribute must not have content")
+			}
+		}
+	} else {
+		// Sequence constructor body (XSLT 2.0+)
 		body, err := c.compileChildren(elem)
 		if err != nil {
 			return nil, err

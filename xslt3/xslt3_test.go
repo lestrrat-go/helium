@@ -72,6 +72,13 @@ func TestW3CTestSuite(t *testing.T) {
 				tcName, _ := tcElem.GetAttribute("name")
 
 				t.Run(tcName, func(t *testing.T) {
+					// TODO(xslt3): add a channel-based semaphore to limit concurrency.
+					// The W3C XSLT test suite has thousands of test cases; unbounded
+					// t.Parallel() can exhaust file descriptors and memory on CI.
+					// Plan: create a package-level `var sem = make(chan struct{}, N)`
+					// (e.g., N = runtime.GOMAXPROCS(0)*2), acquire before runTestCase,
+					// release with defer. This preserves parallelism while bounding
+					// resource usage.
 					t.Parallel()
 
 					runTestCase(t, tcElem, tsDir, environments, catalogNS)
@@ -489,26 +496,23 @@ func findChildEnvRef(tc *helium.Element) string {
 // xmlEqual compares two XML strings for semantic equality.
 // Handles whitespace normalization and attribute/namespace declaration order.
 func xmlEqual(actual, expected string) bool {
-	a := normalizeXMLString(actual)
-	e := normalizeXMLString(expected)
-	if a == e {
+	// Try DOM-based comparison first (preserves whitespace semantics)
+	if domEqual(actual, expected) {
 		return true
 	}
-	// Try DOM-based comparison to handle attribute/namespace order
-	return domEqual(actual, expected)
+	// Fall back to normalized string comparison for cases where DOM
+	// parsing fails (e.g., text-only output, fragments)
+	a := normalizeXMLString(actual)
+	e := normalizeXMLString(expected)
+	return a == e
 }
 
 // domEqual parses both strings as XML and compares the DOM trees.
+// Wraps content in a synthetic root element so that multi-node fragments
+// (e.g., "<a/><b/>") can be parsed.
 func domEqual(a, b string) bool {
-	// Wrap in root element if needed for fragments
-	wrapA := a
-	wrapB := b
-	if !strings.HasPrefix(strings.TrimSpace(a), "<?xml") {
-		wrapA = "<?xml version=\"1.0\"?>" + a
-	}
-	if !strings.HasPrefix(strings.TrimSpace(b), "<?xml") {
-		wrapB = "<?xml version=\"1.0\"?>" + b
-	}
+	wrapA := wrapXMLFragment(a)
+	wrapB := wrapXMLFragment(b)
 
 	docA, errA := helium.Parse(context.TODO(), []byte(wrapA))
 	docB, errB := helium.Parse(context.TODO(), []byte(wrapB))
@@ -516,6 +520,19 @@ func domEqual(a, b string) bool {
 		return false
 	}
 	return nodesEqual(docA.DocumentElement(), docB.DocumentElement())
+}
+
+// wrapXMLFragment wraps an XML string in a synthetic root element so that
+// fragments with multiple top-level nodes can be parsed.
+func wrapXMLFragment(s string) string {
+	trimmed := strings.TrimSpace(s)
+	if strings.HasPrefix(trimmed, "<?xml") {
+		// Strip the XML declaration, then wrap
+		if idx := strings.Index(trimmed, "?>"); idx >= 0 {
+			s = trimmed[idx+2:]
+		}
+	}
+	return "<_domEqual_root_>" + s + "</_domEqual_root_>"
 }
 
 func nodesEqual(a, b helium.Node) bool {
