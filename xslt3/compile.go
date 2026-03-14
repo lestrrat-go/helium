@@ -506,8 +506,9 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 	useAttr := getAttr(elem, "use")
 	if useAttr == "" {
 		// XSLT 2.0+: key may use body content instead of use attribute.
-		// For now, compile the body as a select="." fallback.
-		useAttr = "."
+		// TODO: compile body as sequence constructor for key value.
+		// For now, skip keys without use attribute.
+		return nil
 	}
 
 	matchPat, err := compilePattern(matchAttr, c.nsBindings, c.xpathDefaultNS)
