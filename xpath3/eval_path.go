@@ -262,7 +262,18 @@ func matchPrefix(prefix string, n helium.Node, ec *evalContext) bool {
 			return ixpath.NodeNamespaceURI(n) == uri
 		}
 	}
-	return ixpath.NodePrefix(n) == prefix
+	// The xml prefix is always bound per the XML Namespaces spec.
+	if prefix == "xml" {
+		return ixpath.NodeNamespaceURI(n) == helium.XMLNamespace
+	}
+	// Check built-in XPath prefixes (fn, xs, math, map, array, err).
+	if uri, ok := defaultPrefixNS[prefix]; ok {
+		return ixpath.NodeNamespaceURI(n) == uri
+	}
+	// Per XPath spec, prefix resolution must come from the static/evaluation
+	// namespace bindings, not the document's lexical prefixes. If the prefix
+	// is not declared in the namespace context, it cannot match.
+	return false
 }
 
 func matchTypeTest(test TypeTest, n helium.Node) bool {
