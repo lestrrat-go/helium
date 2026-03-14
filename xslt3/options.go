@@ -1,6 +1,10 @@
 package xslt3
 
-import "io"
+import (
+	"context"
+	"io"
+	"maps"
+)
 
 // CompileOption configures stylesheet compilation.
 type CompileOption func(*compileConfig)
@@ -32,8 +36,8 @@ func WithURIResolver(r URIResolver) CompileOption {
 	}
 }
 
-// TransformOption configures a transformation.
-type TransformOption func(*transformConfig)
+// transformConfigKey is used to store transform configuration in context.Context.
+type transformConfigKey struct{}
 
 type transformConfig struct {
 	params          map[string]string
@@ -41,28 +45,62 @@ type transformConfig struct {
 	initialTemplate string
 }
 
+func getTransformConfig(ctx context.Context) *transformConfig {
+	if ctx == nil {
+		return nil
+	}
+	cfg, _ := ctx.Value(transformConfigKey{}).(*transformConfig)
+	return cfg
+}
+
+func deriveTransformConfig(ctx context.Context) *transformConfig {
+	if cfg := getTransformConfig(ctx); cfg != nil {
+		return cfg.clone()
+	}
+	return &transformConfig{}
+}
+
+func withTransformConfig(ctx context.Context, cfg *transformConfig) context.Context {
+	return context.WithValue(ctx, transformConfigKey{}, cfg)
+}
+
+func updateTransformConfig(ctx context.Context, fn func(*transformConfig)) context.Context {
+	cfg := deriveTransformConfig(ctx)
+	fn(cfg)
+	return withTransformConfig(ctx, cfg)
+}
+
+func (c *transformConfig) clone() *transformConfig {
+	if c == nil {
+		return &transformConfig{}
+	}
+	cp := *c
+	cp.params = maps.Clone(c.params)
+	return &cp
+}
+
 // WithParameter sets a global stylesheet parameter value.
-func WithParameter(name, value string) TransformOption {
-	return func(c *transformConfig) {
+func WithParameter(ctx context.Context, name, value string) context.Context {
+	return updateTransformConfig(ctx, func(c *transformConfig) {
 		if c.params == nil {
 			c.params = make(map[string]string)
 		}
 		c.params[name] = value
-	}
+	})
 }
 
 // WithInitialTemplate sets the initial named template to call instead of
 // applying templates to the source document.
-func WithInitialTemplate(name string) TransformOption {
-	return func(c *transformConfig) {
+func WithInitialTemplate(ctx context.Context, name string) context.Context {
+	return updateTransformConfig(ctx, func(c *transformConfig) {
 		c.initialTemplate = name
-	}
+	})
 }
 
 // WithMessageHandler sets a handler for xsl:message output.
 // If terminate is true, the transformation should stop after the message.
-func WithMessageHandler(fn func(msg string, terminate bool)) TransformOption {
-	return func(c *transformConfig) {
+func WithMessageHandler(ctx context.Context, fn func(msg string, terminate bool)) context.Context {
+	return updateTransformConfig(ctx, func(c *transformConfig) {
 		c.msgHandler = fn
-	}
+	})
 }

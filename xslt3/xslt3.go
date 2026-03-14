@@ -41,22 +41,17 @@ func CompileFile(path string, opts ...CompileOption) (*Stylesheet, error) {
 }
 
 // Transform applies the compiled stylesheet to the source document and
-// returns the result document.
-func Transform(ctx context.Context, source *helium.Document, ss *Stylesheet, opts ...TransformOption) (*helium.Document, error) {
-	cfg := &transformConfig{}
-	for _, o := range opts {
-		o(cfg)
-	}
+// returns the result document. Use WithParameter, WithInitialTemplate,
+// and WithMessageHandler to configure the transformation via ctx.
+func Transform(ctx context.Context, source *helium.Document, ss *Stylesheet) (*helium.Document, error) {
+	cfg := getTransformConfig(ctx)
 	return executeTransform(ctx, source, ss, cfg)
 }
 
 // TransformToWriter applies the compiled stylesheet to the source document
 // and writes the serialized result to w.
-func TransformToWriter(ctx context.Context, source *helium.Document, ss *Stylesheet, w io.Writer, opts ...TransformOption) error {
-	cfg := &transformConfig{}
-	for _, o := range opts {
-		o(cfg)
-	}
+func TransformToWriter(ctx context.Context, source *helium.Document, ss *Stylesheet, w io.Writer) error {
+	cfg := getTransformConfig(ctx)
 	resultDoc, err := executeTransform(ctx, source, ss, cfg)
 	if err != nil {
 		return err
@@ -69,9 +64,9 @@ func TransformToWriter(ctx context.Context, source *helium.Document, ss *Stylesh
 
 // TransformString applies the compiled stylesheet to the source document
 // and returns the serialized result as a string.
-func TransformString(ctx context.Context, source *helium.Document, ss *Stylesheet, opts ...TransformOption) (string, error) {
+func TransformString(ctx context.Context, source *helium.Document, ss *Stylesheet) (string, error) {
 	var buf bytes.Buffer
-	if err := TransformToWriter(ctx, source, ss, &buf, opts...); err != nil {
+	if err := TransformToWriter(ctx, source, ss, &buf); err != nil {
 		return "", err
 	}
 	return buf.String(), nil
