@@ -7,46 +7,46 @@ import "testing"
 func TestW3C_as(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "as-0101", StylesheetPath: "tests/attr/as/as-0101.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "as-0101", StylesheetPath: "tests/attr/as/as-0101.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0102", StylesheetPath: "tests/attr/as/as-0102.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out/>")}},
 		{Name: "as-0103", StylesheetPath: "tests/attr/as/as-0103.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out/>")}},
-		{Name: "as-0104", StylesheetPath: "tests/attr/as/as-0104.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0105", StylesheetPath: "tests/attr/as/as-0105.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0106", StylesheetPath: "tests/attr/as/as-0106a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "as-0104", StylesheetPath: "tests/attr/as/as-0104.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0105", StylesheetPath: "tests/attr/as/as-0105.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0106", StylesheetPath: "tests/attr/as/as-0106a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0106a", StylesheetPath: "tests/attr/as/as-0106a.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "FODT0001"},
-		{Name: "as-0106b", StylesheetPath: "tests/attr/as/as-0106b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0107", StylesheetPath: "tests/attr/as/as-0107.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0108", StylesheetPath: "tests/attr/as/as-0108.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0109", StylesheetPath: "tests/attr/as/as-0109.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0110", StylesheetPath: "tests/attr/as/as-0110a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "as-0106b", StylesheetPath: "tests/attr/as/as-0106b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0107", StylesheetPath: "tests/attr/as/as-0107.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0108", StylesheetPath: "tests/attr/as/as-0108.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0109", StylesheetPath: "tests/attr/as/as-0109.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0110", StylesheetPath: "tests/attr/as/as-0110a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0110a", StylesheetPath: "tests/attr/as/as-0110a.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "FODT0001"},
-		{Name: "as-0110b", StylesheetPath: "tests/attr/as/as-0110b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0111", StylesheetPath: "tests/attr/as/as-0111a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "as-0110b", StylesheetPath: "tests/attr/as/as-0110b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0111", StylesheetPath: "tests/attr/as/as-0111a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0111a", StylesheetPath: "tests/attr/as/as-0111a.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "FODT0001"},
-		{Name: "as-0111b", StylesheetPath: "tests/attr/as/as-0111b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0112", StylesheetPath: "tests/attr/as/as-0112a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "as-0111b", StylesheetPath: "tests/attr/as/as-0111b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0112", StylesheetPath: "tests/attr/as/as-0112a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0112a", StylesheetPath: "tests/attr/as/as-0112a.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "FODT0001"},
-		{Name: "as-0112b", StylesheetPath: "tests/attr/as/as-0112b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "as-0113", StylesheetPath: "tests/attr/as/as-0113.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0114", StylesheetPath: "tests/attr/as/as-0114.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0115", StylesheetPath: "tests/attr/as/as-0115.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0116", StylesheetPath: "tests/attr/as/as-0116.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0117", StylesheetPath: "tests/attr/as/as-0117.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0118", StylesheetPath: "tests/attr/as/as-0118.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "as-0119", StylesheetPath: "tests/attr/as/as-0119.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0120", StylesheetPath: "tests/attr/as/as-0120.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0121", StylesheetPath: "tests/attr/as/as-0121.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0122", StylesheetPath: "tests/attr/as/as-0122.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0123", StylesheetPath: "tests/attr/as/as-0123.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0124", StylesheetPath: "tests/attr/as/as-0124.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0125", StylesheetPath: "tests/attr/as/as-0125.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0126", StylesheetPath: "tests/attr/as/as-0126.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0127", StylesheetPath: "tests/attr/as/as-0127.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0128", StylesheetPath: "tests/attr/as/as-0128.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0129", StylesheetPath: "tests/attr/as/as-0129.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "as-0130", StylesheetPath: "tests/attr/as/as-0130.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "as-0131", StylesheetPath: "tests/attr/as/as-0131.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "as-0132", StylesheetPath: "tests/attr/as/as-0132.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "as-0112b", StylesheetPath: "tests/attr/as/as-0112b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0113", StylesheetPath: "tests/attr/as/as-0113.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0114", StylesheetPath: "tests/attr/as/as-0114.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0115", StylesheetPath: "tests/attr/as/as-0115.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0116", StylesheetPath: "tests/attr/as/as-0116.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0117", StylesheetPath: "tests/attr/as/as-0117.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0118", StylesheetPath: "tests/attr/as/as-0118.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0119", StylesheetPath: "tests/attr/as/as-0119.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0120", StylesheetPath: "tests/attr/as/as-0120.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0121", StylesheetPath: "tests/attr/as/as-0121.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0122", StylesheetPath: "tests/attr/as/as-0122.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0123", StylesheetPath: "tests/attr/as/as-0123.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0124", StylesheetPath: "tests/attr/as/as-0124.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0125", StylesheetPath: "tests/attr/as/as-0125.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0126", StylesheetPath: "tests/attr/as/as-0126.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0127", StylesheetPath: "tests/attr/as/as-0127.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0128", StylesheetPath: "tests/attr/as/as-0128.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0129", StylesheetPath: "tests/attr/as/as-0129.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0130", StylesheetPath: "tests/attr/as/as-0130.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0131", StylesheetPath: "tests/attr/as/as-0131.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0132", StylesheetPath: "tests/attr/as/as-0132.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0133", StylesheetPath: "tests/attr/as/as-0133.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><e1/><e2 att=\"4\"/></out>")}},
 		{Name: "as-0134", StylesheetPath: "tests/attr/as/as-0134.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><e1/><e2 att=\"1\"/></out>")}},
 		{Name: "as-0135", StylesheetPath: "tests/attr/as/as-0135.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><e1/><e2 att=\"1\"/></out>")}},
@@ -55,119 +55,119 @@ func TestW3C_as(t *testing.T) {
 		{Name: "as-0138", StylesheetPath: "tests/attr/as/as-0138.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><func1>truefalse</func1><func2>truetrue</func2></out>")}},
 		{Name: "as-0139", StylesheetPath: "tests/attr/as/as-0139.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><e1>true</e1><e2>true</e2><e3>true</e3><e4>true</e4><e5>true</e5></out>")}},
 		{Name: "as-0140", StylesheetPath: "tests/attr/as/as-0140.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><e1><i1>item</i1></e1><e2>my string</e2><e3>2</e3><e4><elem>hi1</elem></e4><e5><my:item xmlns:my=\"http://uri.test\">1</my:item></e5></out>")}},
-		{Name: "as-0141", StylesheetPath: "tests/attr/as/as-0141.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "as-0141", StylesheetPath: "tests/attr/as/as-0141.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0142", StylesheetPath: "tests/attr/as/as-0142.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><temp1>P1Y2M3DT10H30M23S</temp1><temp2>2005</temp2><temp3>1.0001</temp3><temp4>000-TM</temp4></out>")}, Skip: "unsupported feature: schema_aware"},
-		{Name: "as-0143", StylesheetPath: "tests/attr/as/as-0143.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0144", StylesheetPath: "tests/attr/as/as-0144.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0144a", StylesheetPath: "tests/attr/as/as-0144a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0145", StylesheetPath: "tests/attr/as/as-0145.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "as-0143", StylesheetPath: "tests/attr/as/as-0143.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0144", StylesheetPath: "tests/attr/as/as-0144.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0144a", StylesheetPath: "tests/attr/as/as-0144a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0145", StylesheetPath: "tests/attr/as/as-0145.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0146", StylesheetPath: "tests/attr/as/as-0146.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><func1>true</func1><func2>true</func2><func3>true</func3><func4>true</func4><func5>true</func5><func6>true</func6></out>")}},
 		{Name: "as-0147", StylesheetPath: "tests/attr/as/as-0147.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><var1>falsetrue</var1><var2>falsetrue</var2></out>")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "as-0148", StylesheetPath: "tests/attr/as/as-0148.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><var1>123-AB * falsetrue</var1><var2>0 * falsetrue</var2></out>")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "as-0149", StylesheetPath: "tests/attr/as/as-0149.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><func1>true</func1><func2>true</func2></out>")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "as-0150", StylesheetPath: "tests/attr/as/as-0150.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><func1>truefalse</func1></out>")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "as-0151", StylesheetPath: "tests/attr/as/as-0151.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><item>111-AB</item><item>999-AC</item></out>")}, Skip: "unsupported feature: schema_aware"},
-		{Name: "as-0152", StylesheetPath: "tests/attr/as/as-0152.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "as-0152", StylesheetPath: "tests/attr/as/as-0152.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0201", StylesheetPath: "tests/attr/as/as-0201.xsl", SourceContent: "<doc><item1><item2></item2></item1></doc>", Assertions: []w3cAssertion{w3cAssertXML("<out/>")}},
 		{Name: "as-0301", StylesheetPath: "tests/attr/as/as-0301.xsl", SourceContent: `<doc>
 	<item attr="red">hello</item>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0302", StylesheetPath: "tests/attr/as/as-0302.xsl", SourceContent: `<doc>
 	<item attr="red">hello</item>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0303", StylesheetPath: "tests/attr/as/as-0303.xsl", SourceContent: `<doc>
 	<item attr="red">hello</item>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0304", StylesheetPath: "tests/attr/as/as-0304.xsl", SourceContent: `<doc>
 	<item attr="red">hello</item>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0401", StylesheetPath: "tests/attr/as/as-0401.xsl", SourceContent: `<doc>
 	<item attr1="red" attr2="blue" attr3="green">hello</item>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0402", StylesheetPath: "tests/attr/as/as-0402.xsl", SourceContent: `<doc>
 	<item attr1="red" attr2="blue" attr3="green">hello</item>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0501", StylesheetPath: "tests/attr/as/as-0501.xsl", SourceDocPath: "tests/attr/as/as-05a.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0501", StylesheetPath: "tests/attr/as/as-0501.xsl", SourceDocPath: "tests/attr/as/as-05a.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0501a", StylesheetPath: "tests/attr/as/as-0501.xsl", SourceDocPath: "tests/attr/as/as-05a.xml", ExpectError: true, ErrorCode: "FODT0001"},
-		{Name: "as-0501b", StylesheetPath: "tests/attr/as/as-0501.xsl", SourceDocPath: "tests/attr/as/as-05b.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0601", StylesheetPath: "tests/attr/as/as-0601.xsl", SourceDocPath: "tests/attr/as/as-06.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "as-0501b", StylesheetPath: "tests/attr/as/as-0501.xsl", SourceDocPath: "tests/attr/as/as-05b.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0601", StylesheetPath: "tests/attr/as/as-0601.xsl", SourceDocPath: "tests/attr/as/as-06.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0701", StylesheetPath: "tests/attr/as/as-0701.xsl", SourceContent: `<doc>
 <item-list>
 <item1>5.4321E-1001</item1>
 <item2>http://www.mytypetest.org</item2>
 </item-list>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0702", StylesheetPath: "tests/attr/as/as-0702.xsl", SourceContent: `<doc>
 <item-list>
 <item1>5.4321E-1001</item1>
 <item2>http://www.mytypetest.org</item2>
 </item-list>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0703", StylesheetPath: "tests/attr/as/as-0703.xsl", SourceContent: `<doc>
 <item-list>
 <item1>5.4321E-1001</item1>
 <item2>http://www.mytypetest.org</item2>
 </item-list>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "as-0801", StylesheetPath: "tests/attr/as/as-0801.xsl", SourceDocPath: "tests/attr/as/as-08a.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0801", StylesheetPath: "tests/attr/as/as-0801.xsl", SourceDocPath: "tests/attr/as/as-08a.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0801a", StylesheetPath: "tests/attr/as/as-0801.xsl", SourceDocPath: "tests/attr/as/as-08a.xml", ExpectError: true, ErrorCode: "FODT0001"},
-		{Name: "as-0801b", StylesheetPath: "tests/attr/as/as-0801.xsl", SourceDocPath: "tests/attr/as/as-08b.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-0802", StylesheetPath: "tests/attr/as/as-0802.xsl", SourceDocPath: "tests/attr/as/as-08a.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "as-0801b", StylesheetPath: "tests/attr/as/as-0801.xsl", SourceDocPath: "tests/attr/as/as-08b.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0802", StylesheetPath: "tests/attr/as/as-0802.xsl", SourceDocPath: "tests/attr/as/as-08a.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-0802a", StylesheetPath: "tests/attr/as/as-0802.xsl", SourceDocPath: "tests/attr/as/as-08a.xml", ExpectError: true, ErrorCode: "FODT0001"},
-		{Name: "as-0802b", StylesheetPath: "tests/attr/as/as-0802.xsl", SourceDocPath: "tests/attr/as/as-08b.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "as-0901", StylesheetPath: "tests/attr/as/as-0901.xsl", SourceDocPath: "tests/attr/as/as-09.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-1001", StylesheetPath: "tests/attr/as/as-1001.xsl", SourceContent: "<doc><item-list><item>5.4321E-1001</item></item-list></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "as-1101", StylesheetPath: "tests/attr/as/as-1101.xsl", SourceContent: "<doc><item-list><item1>5.4321E-1</item1><item1>-0.00175</item1><item1>INF</item1><item>hello</item></item-list></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "as-0802b", StylesheetPath: "tests/attr/as/as-0802.xsl", SourceDocPath: "tests/attr/as/as-08b.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-0901", StylesheetPath: "tests/attr/as/as-0901.xsl", SourceDocPath: "tests/attr/as/as-09.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-1001", StylesheetPath: "tests/attr/as/as-1001.xsl", SourceContent: "<doc><item-list><item>5.4321E-1001</item></item-list></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "as-1101", StylesheetPath: "tests/attr/as/as-1101.xsl", SourceContent: "<doc><item-list><item1>5.4321E-1</item1><item1>-0.00175</item1><item1>INF</item1><item>hello</item></item-list></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1201", StylesheetPath: "tests/attr/as/as-1201.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
 <item1 xmlns="http://test.default.org">namespaced</item1>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1202", StylesheetPath: "tests/attr/as/as-1202.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
 <item1 xmlns="http://test.default.org">namespaced</item1>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1203", StylesheetPath: "tests/attr/as/as-1203.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
 <item1 xmlns="http://test.default.org">namespaced</item1>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1204", StylesheetPath: "tests/attr/as/as-1204.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
 <item1 xmlns="http://test.default.org">namespaced</item1>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1205", StylesheetPath: "tests/attr/as/as-1205.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
 <item1 xmlns="http://test.default.org">namespaced</item1>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1206", StylesheetPath: "tests/attr/as/as-1206.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
 <item1 xmlns="http://test.default.org">namespaced</item1>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1207", StylesheetPath: "tests/attr/as/as-1207.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
 <item1 xmlns="http://test.default.org">namespaced</item1>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1208", StylesheetPath: "tests/attr/as/as-1208.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
 <item1 xmlns="http://test.default.org">namespaced</item1>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1209", StylesheetPath: "tests/attr/as/as-1209.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
 <item1 xmlns="http://test.default.org">namespaced</item1>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1210", StylesheetPath: "tests/attr/as/as-1210.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
 <item1 xmlns="http://test.default.org">namespaced</item1>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1211", StylesheetPath: "tests/attr/as/as-1211.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
@@ -177,12 +177,12 @@ func TestW3C_as(t *testing.T) {
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
 <item1 xmlns="http://test.default.org">namespaced</item1>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1213", StylesheetPath: "tests/attr/as/as-1213.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
 <item1 xmlns="http://test.default.org">namespaced</item1>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1214", StylesheetPath: "tests/attr/as/as-1214.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
@@ -207,27 +207,27 @@ func TestW3C_as(t *testing.T) {
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
 <item1 xmlns="http://test.default.org">namespaced</item1>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1219", StylesheetPath: "tests/attr/as/as-1219.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
 <item1 xmlns="http://test.default.org">namespaced</item1>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1220", StylesheetPath: "tests/attr/as/as-1220.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
 <item1 xmlns="http://test.default.org">namespaced</item1>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1221", StylesheetPath: "tests/attr/as/as-1221.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
 <item1 xmlns="http://test.default.org">namespaced</item1>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1222", StylesheetPath: "tests/attr/as/as-1222.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
 <item1 xmlns="http://test.default.org">namespaced</item1>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1301", StylesheetPath: "tests/attr/as/as-1301.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
@@ -237,7 +237,7 @@ func TestW3C_as(t *testing.T) {
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
 <item>namespaced</item>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "as-1303", StylesheetPath: "tests/attr/as/as-1303.xsl", SourceContent: `<doc> 
 <?Process fun?>
 <item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
@@ -547,10 +547,10 @@ func TestW3C_declared_modes(t *testing.T) {
 		{Name: "declared-modes-006", StylesheetPath: "tests/attr/declared-modes/declared-modes-006.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3085"},
 		{Name: "declared-modes-007", StylesheetPath: "tests/attr/declared-modes/declared-modes-007.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3085"},
 		{Name: "declared-modes-008", StylesheetPath: "tests/attr/declared-modes/declared-modes-008.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3085"},
-		{Name: "declared-modes-009", StylesheetPath: "tests/attr/declared-modes/declared-modes-009.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "declared-modes-010", StylesheetPath: "tests/attr/declared-modes/declared-modes-010.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "declared-modes-011", StylesheetPath: "tests/attr/declared-modes/declared-modes-011.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "declared-modes-012", StylesheetPath: "tests/attr/declared-modes/declared-modes-012.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "declared-modes-009", StylesheetPath: "tests/attr/declared-modes/declared-modes-009.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "declared-modes-010", StylesheetPath: "tests/attr/declared-modes/declared-modes-010.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "declared-modes-011", StylesheetPath: "tests/attr/declared-modes/declared-modes-011.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "declared-modes-012", StylesheetPath: "tests/attr/declared-modes/declared-modes-012.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "declared-modes-013", StylesheetPath: "tests/attr/declared-modes/declared-modes-013.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3085"},
 		{Name: "declared-modes-014", StylesheetPath: "tests/attr/declared-modes/declared-modes-014.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3085"},
 	})
@@ -559,35 +559,35 @@ func TestW3C_declared_modes(t *testing.T) {
 func TestW3C_disable_output_escaping(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "doe-0176", StylesheetPath: "tests/attr/disable-output-escaping/doe-0176.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0176a", StylesheetPath: "tests/attr/disable-output-escaping/doe-0176a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0176b", StylesheetPath: "tests/attr/disable-output-escaping/doe-0176b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0176c", StylesheetPath: "tests/attr/disable-output-escaping/doe-0176c.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0176d", StylesheetPath: "tests/attr/disable-output-escaping/doe-0176d.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0176e", StylesheetPath: "tests/attr/disable-output-escaping/doe-0176e.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "doe-0176", StylesheetPath: "tests/attr/disable-output-escaping/doe-0176.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "doe-0176a", StylesheetPath: "tests/attr/disable-output-escaping/doe-0176a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "doe-0176b", StylesheetPath: "tests/attr/disable-output-escaping/doe-0176b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "doe-0176c", StylesheetPath: "tests/attr/disable-output-escaping/doe-0176c.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "doe-0176d", StylesheetPath: "tests/attr/disable-output-escaping/doe-0176d.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "doe-0176e", StylesheetPath: "tests/attr/disable-output-escaping/doe-0176e.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "doe-0176f", StylesheetPath: "tests/attr/disable-output-escaping/doe-0176f.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
 		{Name: "doe-0177", StylesheetPath: "tests/attr/disable-output-escaping/doe-0176.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
-		{Name: "doe-0177a", StylesheetPath: "tests/attr/disable-output-escaping/doe-0176.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0180", StylesheetPath: "tests/attr/disable-output-escaping/doe-0180.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0181", StylesheetPath: "tests/attr/disable-output-escaping/doe-0181.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0182", StylesheetPath: "tests/attr/disable-output-escaping/doe-0182.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0183", StylesheetPath: "tests/attr/disable-output-escaping/doe-0183.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0184", StylesheetPath: "tests/attr/disable-output-escaping/doe-0184.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0185", StylesheetPath: "tests/attr/disable-output-escaping/doe-0185.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0186", StylesheetPath: "tests/attr/disable-output-escaping/doe-0186.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0190", StylesheetPath: "tests/attr/disable-output-escaping/doe-0190.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0191", StylesheetPath: "tests/attr/disable-output-escaping/doe-0191.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0201", StylesheetPath: "tests/attr/disable-output-escaping/doe-0201.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe-0201.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "doe-0401", StylesheetPath: "tests/attr/disable-output-escaping/doe-0401.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe04.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "doe-0177a", StylesheetPath: "tests/attr/disable-output-escaping/doe-0176.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "doe-0180", StylesheetPath: "tests/attr/disable-output-escaping/doe-0180.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "doe-0181", StylesheetPath: "tests/attr/disable-output-escaping/doe-0181.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "doe-0182", StylesheetPath: "tests/attr/disable-output-escaping/doe-0182.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "doe-0183", StylesheetPath: "tests/attr/disable-output-escaping/doe-0183.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "doe-0184", StylesheetPath: "tests/attr/disable-output-escaping/doe-0184.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "doe-0185", StylesheetPath: "tests/attr/disable-output-escaping/doe-0185.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "doe-0186", StylesheetPath: "tests/attr/disable-output-escaping/doe-0186.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "doe-0190", StylesheetPath: "tests/attr/disable-output-escaping/doe-0190.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "doe-0191", StylesheetPath: "tests/attr/disable-output-escaping/doe-0191.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "doe-0201", StylesheetPath: "tests/attr/disable-output-escaping/doe-0201.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe-0201.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "doe-0401", StylesheetPath: "tests/attr/disable-output-escaping/doe-0401.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe04.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
 		{Name: "doe-0402", StylesheetPath: "tests/attr/disable-output-escaping/doe-0401.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe04.xml", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
 		{Name: "doe-0402a", StylesheetPath: "tests/attr/disable-output-escaping/doe-0401.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe04.xml", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
-		{Name: "doe-0403", StylesheetPath: "tests/attr/disable-output-escaping/doe-0403.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe04.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0404", StylesheetPath: "tests/attr/disable-output-escaping/doe-0404.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe04.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0405", StylesheetPath: "tests/attr/disable-output-escaping/doe-0405.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe04.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0406", StylesheetPath: "tests/attr/disable-output-escaping/doe-0406.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe04.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "doe-0407", StylesheetPath: "tests/attr/disable-output-escaping/doe-0407.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe04.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "doe-0403", StylesheetPath: "tests/attr/disable-output-escaping/doe-0403.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe04.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "doe-0404", StylesheetPath: "tests/attr/disable-output-escaping/doe-0404.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe04.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "doe-0405", StylesheetPath: "tests/attr/disable-output-escaping/doe-0405.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe04.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "doe-0406", StylesheetPath: "tests/attr/disable-output-escaping/doe-0406.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe04.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "doe-0407", StylesheetPath: "tests/attr/disable-output-escaping/doe-0407.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe04.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "doe-0408", StylesheetPath: "tests/attr/disable-output-escaping/doe-0408.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe04.xml", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
-		{Name: "doe-0409", StylesheetPath: "tests/attr/disable-output-escaping/doe-0409.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "doe-0409", StylesheetPath: "tests/attr/disable-output-escaping/doe-0409.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "doe-0801", StylesheetPath: "tests/attr/disable-output-escaping/doe-0801.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe08.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
 		{Name: "doe-0802", StylesheetPath: "tests/attr/disable-output-escaping/doe-0802.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe08.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
 		{Name: "doe-0803", StylesheetPath: "tests/attr/disable-output-escaping/doe-0803.xsl", SourceDocPath: "tests/attr/disable-output-escaping/doe08.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
@@ -597,68 +597,68 @@ func TestW3C_disable_output_escaping(t *testing.T) {
 func TestW3C_expand_text(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "cvt-001", StylesheetPath: "tests/attr/expand-text/cvt-001.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-002", StylesheetPath: "tests/attr/expand-text/cvt-002.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-003", StylesheetPath: "tests/attr/expand-text/cvt-003.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-004", StylesheetPath: "tests/attr/expand-text/cvt-004.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-005", StylesheetPath: "tests/attr/expand-text/cvt-005.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-006", StylesheetPath: "tests/attr/expand-text/cvt-006.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-007", StylesheetPath: "tests/attr/expand-text/cvt-007.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "cvt-001", StylesheetPath: "tests/attr/expand-text/cvt-001.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-002", StylesheetPath: "tests/attr/expand-text/cvt-002.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-003", StylesheetPath: "tests/attr/expand-text/cvt-003.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-004", StylesheetPath: "tests/attr/expand-text/cvt-004.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-005", StylesheetPath: "tests/attr/expand-text/cvt-005.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-006", StylesheetPath: "tests/attr/expand-text/cvt-006.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-007", StylesheetPath: "tests/attr/expand-text/cvt-007.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "cvt-008", StylesheetPath: "tests/attr/expand-text/cvt-008.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0020"},
 		{Name: "cvt-009", StylesheetPath: "tests/attr/expand-text/cvt-009.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0020"},
 		{Name: "cvt-010", StylesheetPath: "tests/attr/expand-text/cvt-010.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0020"},
-		{Name: "cvt-011", StylesheetPath: "tests/attr/expand-text/cvt-011.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-012", StylesheetPath: "tests/attr/expand-text/cvt-012.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "cvt-011", StylesheetPath: "tests/attr/expand-text/cvt-011.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-012", StylesheetPath: "tests/attr/expand-text/cvt-012.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "cvt-013", StylesheetPath: "tests/attr/expand-text/cvt-013.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0350"},
 		{Name: "cvt-014", StylesheetPath: "tests/attr/expand-text/cvt-014.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: higher_order_functions"},
 		{Name: "cvt-015", StylesheetPath: "tests/attr/expand-text/cvt-015.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
 		{Name: "cvt-016", StylesheetPath: "tests/attr/expand-text/cvt-016.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
-		{Name: "cvt-017", StylesheetPath: "tests/attr/expand-text/cvt-017.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-018", StylesheetPath: "tests/attr/expand-text/cvt-018.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-019", StylesheetPath: "tests/attr/expand-text/cvt-019.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-020", StylesheetPath: "tests/attr/expand-text/cvt-020.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-021", StylesheetPath: "tests/attr/expand-text/cvt-021.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-022", StylesheetPath: "tests/attr/expand-text/cvt-022.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-023", StylesheetPath: "tests/attr/expand-text/cvt-023.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-024", StylesheetPath: "tests/attr/expand-text/cvt-024.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "cvt-017", StylesheetPath: "tests/attr/expand-text/cvt-017.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-018", StylesheetPath: "tests/attr/expand-text/cvt-018.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-019", StylesheetPath: "tests/attr/expand-text/cvt-019.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-020", StylesheetPath: "tests/attr/expand-text/cvt-020.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-021", StylesheetPath: "tests/attr/expand-text/cvt-021.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-022", StylesheetPath: "tests/attr/expand-text/cvt-022.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-023", StylesheetPath: "tests/attr/expand-text/cvt-023.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-024", StylesheetPath: "tests/attr/expand-text/cvt-024.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "cvt-025", StylesheetPath: "tests/attr/expand-text/cvt-025.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: schema_aware"},
 		{Name: "cvt-026", StylesheetPath: "tests/attr/expand-text/cvt-026.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: schema_aware"},
 		{Name: "cvt-027", StylesheetPath: "tests/attr/expand-text/cvt-027.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: schema_aware"},
-		{Name: "cvt-028", StylesheetPath: "tests/attr/expand-text/cvt-028.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "cvt-029", StylesheetPath: "tests/attr/expand-text/cvt-029.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-030", StylesheetPath: "tests/attr/expand-text/cvt-030.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-031", StylesheetPath: "tests/attr/expand-text/cvt-031.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "cvt-028", StylesheetPath: "tests/attr/expand-text/cvt-028.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-029", StylesheetPath: "tests/attr/expand-text/cvt-029.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-030", StylesheetPath: "tests/attr/expand-text/cvt-030.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-031", StylesheetPath: "tests/attr/expand-text/cvt-031.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "cvt-032", StylesheetPath: "tests/attr/expand-text/cvt-032.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<foo xpath-default-namespace=\"http://www.w3.org/2000/svg\"/>")}},
 		{Name: "cvt-033", StylesheetPath: "tests/attr/expand-text/cvt-033.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><a/><b/><c/><d>xyz</d></out>")}},
-		{Name: "cvt-034", StylesheetPath: "tests/attr/expand-text/cvt-034.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-035a", StylesheetPath: "tests/attr/expand-text/cvt-035a.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-035b", StylesheetPath: "tests/attr/expand-text/cvt-035b.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-035c", StylesheetPath: "tests/attr/expand-text/cvt-035c.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-036a", StylesheetPath: "tests/attr/expand-text/cvt-036a.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-036b", StylesheetPath: "tests/attr/expand-text/cvt-036b.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-036c", StylesheetPath: "tests/attr/expand-text/cvt-036c.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-037a", StylesheetPath: "tests/attr/expand-text/cvt-037a.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-037b", StylesheetPath: "tests/attr/expand-text/cvt-037b.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-037c", StylesheetPath: "tests/attr/expand-text/cvt-037c.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-038a", StylesheetPath: "tests/attr/expand-text/cvt-038a.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-038b", StylesheetPath: "tests/attr/expand-text/cvt-038b.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-038c", StylesheetPath: "tests/attr/expand-text/cvt-038c.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-039a", StylesheetPath: "tests/attr/expand-text/cvt-039a.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-039b", StylesheetPath: "tests/attr/expand-text/cvt-039b.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-039c", StylesheetPath: "tests/attr/expand-text/cvt-039c.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-040a", StylesheetPath: "tests/attr/expand-text/cvt-040a.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-040b", StylesheetPath: "tests/attr/expand-text/cvt-040b.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-040c", StylesheetPath: "tests/attr/expand-text/cvt-040c.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-041", StylesheetPath: "tests/attr/expand-text/cvt-041.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-042", StylesheetPath: "tests/attr/expand-text/cvt-042.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-043", StylesheetPath: "tests/attr/expand-text/cvt-043.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-044", StylesheetPath: "tests/attr/expand-text/cvt-044.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-045", StylesheetPath: "tests/attr/expand-text/cvt-045.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-046", StylesheetPath: "tests/attr/expand-text/cvt-046.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-047", StylesheetPath: "tests/attr/expand-text/cvt-047.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-048", StylesheetPath: "tests/attr/expand-text/cvt-048.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-049", StylesheetPath: "tests/attr/expand-text/cvt-049.xsl", SecondaryStylesheets: []string{"tests/attr/expand-text/cvt-049a.xsl"}, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "cvt-050", StylesheetPath: "tests/attr/expand-text/cvt-050.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "cvt-034", StylesheetPath: "tests/attr/expand-text/cvt-034.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-035a", StylesheetPath: "tests/attr/expand-text/cvt-035a.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-035b", StylesheetPath: "tests/attr/expand-text/cvt-035b.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-035c", StylesheetPath: "tests/attr/expand-text/cvt-035c.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-036a", StylesheetPath: "tests/attr/expand-text/cvt-036a.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-036b", StylesheetPath: "tests/attr/expand-text/cvt-036b.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-036c", StylesheetPath: "tests/attr/expand-text/cvt-036c.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-037a", StylesheetPath: "tests/attr/expand-text/cvt-037a.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-037b", StylesheetPath: "tests/attr/expand-text/cvt-037b.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-037c", StylesheetPath: "tests/attr/expand-text/cvt-037c.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-038a", StylesheetPath: "tests/attr/expand-text/cvt-038a.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-038b", StylesheetPath: "tests/attr/expand-text/cvt-038b.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-038c", StylesheetPath: "tests/attr/expand-text/cvt-038c.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-039a", StylesheetPath: "tests/attr/expand-text/cvt-039a.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-039b", StylesheetPath: "tests/attr/expand-text/cvt-039b.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-039c", StylesheetPath: "tests/attr/expand-text/cvt-039c.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-040a", StylesheetPath: "tests/attr/expand-text/cvt-040a.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-040b", StylesheetPath: "tests/attr/expand-text/cvt-040b.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-040c", StylesheetPath: "tests/attr/expand-text/cvt-040c.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-041", StylesheetPath: "tests/attr/expand-text/cvt-041.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-042", StylesheetPath: "tests/attr/expand-text/cvt-042.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-043", StylesheetPath: "tests/attr/expand-text/cvt-043.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-044", StylesheetPath: "tests/attr/expand-text/cvt-044.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-045", StylesheetPath: "tests/attr/expand-text/cvt-045.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-046", StylesheetPath: "tests/attr/expand-text/cvt-046.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-047", StylesheetPath: "tests/attr/expand-text/cvt-047.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-048", StylesheetPath: "tests/attr/expand-text/cvt-048.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-049", StylesheetPath: "tests/attr/expand-text/cvt-049.xsl", SecondaryStylesheets: []string{"tests/attr/expand-text/cvt-049a.xsl"}, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "cvt-050", StylesheetPath: "tests/attr/expand-text/cvt-050.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 	})
 }
 
@@ -687,8 +687,8 @@ func TestW3C_match(t *testing.T) {
 </doc>`, Assertions: []w3cAssertion{w3cAssertXML(`<out>
   cba
 </out>`)}},
-		{Name: "match-003", StylesheetPath: "tests/attr/match/match-003.xsl", SourceDocPath: "tests/attr/match/match1002.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-004", StylesheetPath: "tests/attr/match/match-004.xsl", SourceDocPath: "tests/attr/match/match1002.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "match-003", StylesheetPath: "tests/attr/match/match-003.xsl", SourceDocPath: "tests/attr/match/match1002.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-004", StylesheetPath: "tests/attr/match/match-004.xsl", SourceDocPath: "tests/attr/match/match1002.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-005", StylesheetPath: "tests/attr/match/match-005.xsl", SourceContent: ` 
 <letters>
   <letter>a</letter>
@@ -696,7 +696,7 @@ func TestW3C_match(t *testing.T) {
   <letter>c</letter>
   <letter>b</letter>
   <letter>h</letter>
-</letters>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</letters>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-006", StylesheetPath: "tests/attr/match/match-006.xsl", SourceContent: ` 
 <letters>
   <letter>a</letter>
@@ -704,7 +704,7 @@ func TestW3C_match(t *testing.T) {
   <letter>c</letter>
   <letter>b</letter>
   <letter>h</letter>
-</letters>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</letters>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-007", StylesheetPath: "tests/attr/match/match-007.xsl", SourceContent: ` 
 <letters>
   <letter>a</letter>
@@ -712,7 +712,7 @@ func TestW3C_match(t *testing.T) {
   <letter>c</letter>
   <letter>b</letter>
   <letter>h</letter>
-</letters>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</letters>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-008", StylesheetPath: "tests/attr/match/match-008.xsl", SourceContent: ` 
 <letters>
   <letter>a</letter>
@@ -720,7 +720,7 @@ func TestW3C_match(t *testing.T) {
   <letter>c</letter>
   <letter>b</letter>
   <letter>h</letter>
-</letters>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</letters>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-009", StylesheetPath: "tests/attr/match/match-009.xsl", SourceContent: ` 
 <letters>
   <letter>a</letter>
@@ -728,14 +728,14 @@ func TestW3C_match(t *testing.T) {
   <letter>c</letter>
   <letter>b</letter>
   <letter>h</letter>
-</letters>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-010", StylesheetPath: "tests/attr/match/match-010.xsl", SourceDocPath: "tests/attr/match/match1008.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-011", StylesheetPath: "tests/attr/match/match-011.xsl", SourceDocPath: "tests/attr/match/match1008.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-012", StylesheetPath: "tests/attr/match/match-012.xsl", SourceDocPath: "tests/attr/match/match1009.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-013", StylesheetPath: "tests/attr/match/match-013.xsl", SourceDocPath: "tests/attr/match/match1011.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-014", StylesheetPath: "tests/attr/match/match-014.xsl", SourceDocPath: "tests/attr/match/match1011.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+</letters>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-010", StylesheetPath: "tests/attr/match/match-010.xsl", SourceDocPath: "tests/attr/match/match1008.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-011", StylesheetPath: "tests/attr/match/match-011.xsl", SourceDocPath: "tests/attr/match/match1008.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-012", StylesheetPath: "tests/attr/match/match-012.xsl", SourceDocPath: "tests/attr/match/match1009.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-013", StylesheetPath: "tests/attr/match/match-013.xsl", SourceDocPath: "tests/attr/match/match1011.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-014", StylesheetPath: "tests/attr/match/match-014.xsl", SourceDocPath: "tests/attr/match/match1011.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-015", StylesheetPath: "tests/attr/match/match-015.xsl", SourceDocPath: "tests/attr/match/match1012.xml", Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"UTF-8\"?><out>Test for source tree depth\r\nFound an A node\r\nFound a B node\r\nFound a C node\r\nFound a D node\r\nFound an E node\r\nFound an F node\r\nFound a G node\r\nFound an H node\r\nFound an I node\r\nFound a J node\r\nFound a K node\r\nFound an L node\r\nFound an M node\r\nFound an N node\r\nFound an O node\r\n</out>")}},
-		{Name: "match-016", StylesheetPath: "tests/attr/match/match-016.xsl", SourceDocPath: "tests/attr/match/match1013.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "match-016", StylesheetPath: "tests/attr/match/match-016.xsl", SourceDocPath: "tests/attr/match/match1013.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-017", StylesheetPath: "tests/attr/match/match-017.xsl", SourceContent: `<doc>
   <foo att1="a">8</foo>
   <foo att1="b">5</foo>
@@ -747,21 +747,21 @@ func TestW3C_match(t *testing.T) {
   Passed: c
   Failed: d
 </out>`)}},
-		{Name: "match-018", StylesheetPath: "tests/attr/match/match-018.xsl", SourceDocPath: "tests/attr/match/match1015.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "match-018", StylesheetPath: "tests/attr/match/match-018.xsl", SourceDocPath: "tests/attr/match/match1015.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-019", StylesheetPath: "tests/attr/match/match-019.xsl", SourceDocPath: "tests/attr/match/match1016.xml", Assertions: []w3cAssertion{w3cAssertXML(`<out>
 <first>hello</first><other/>
 <first>goodbye</first><other/><other/>
 <first>aloha</first>
 <first>shalom</first><other/><other/></out>`)}},
-		{Name: "match-020", StylesheetPath: "tests/attr/match/match-020.xsl", SourceDocPath: "tests/attr/match/match1017.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-021", StylesheetPath: "tests/attr/match/match-021.xsl", SourceDocPath: "tests/attr/match/match1019.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-022", StylesheetPath: "tests/attr/match/match-022.xsl", SourceDocPath: "tests/attr/match/match1020.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-023", StylesheetPath: "tests/attr/match/match-023.xsl", SourceDocPath: "tests/attr/match/match1020.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-024", StylesheetPath: "tests/attr/match/match-024.xsl", SourceDocPath: "tests/attr/match/match1020.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-025", StylesheetPath: "tests/attr/match/match-025.xsl", SourceDocPath: "tests/attr/match/match1020.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-026", StylesheetPath: "tests/attr/match/match-026.xsl", SourceDocPath: "tests/attr/match/match1020.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-027", StylesheetPath: "tests/attr/match/match-027.xsl", SourceDocPath: "tests/attr/match/match1020.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-028", StylesheetPath: "tests/attr/match/match-028.xsl", SourceDocPath: "tests/attr/match/match1020.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "match-020", StylesheetPath: "tests/attr/match/match-020.xsl", SourceDocPath: "tests/attr/match/match1017.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-021", StylesheetPath: "tests/attr/match/match-021.xsl", SourceDocPath: "tests/attr/match/match1019.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-022", StylesheetPath: "tests/attr/match/match-022.xsl", SourceDocPath: "tests/attr/match/match1020.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-023", StylesheetPath: "tests/attr/match/match-023.xsl", SourceDocPath: "tests/attr/match/match1020.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-024", StylesheetPath: "tests/attr/match/match-024.xsl", SourceDocPath: "tests/attr/match/match1020.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-025", StylesheetPath: "tests/attr/match/match-025.xsl", SourceDocPath: "tests/attr/match/match1020.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-026", StylesheetPath: "tests/attr/match/match-026.xsl", SourceDocPath: "tests/attr/match/match1020.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-027", StylesheetPath: "tests/attr/match/match-027.xsl", SourceDocPath: "tests/attr/match/match1020.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-028", StylesheetPath: "tests/attr/match/match-028.xsl", SourceDocPath: "tests/attr/match/match1020.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-029", StylesheetPath: "tests/attr/match/match-029.xsl", SourceContent: `<A level="1">
   <X level="2">
      <B level="3">
@@ -811,13 +811,13 @@ func TestW3C_match(t *testing.T) {
   <or/>
   <div/>
 </div>
-   `, Assertions: []w3cAssertion{w3cAssertSkip()}},
+   `, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-038", StylesheetPath: "tests/attr/match/match-038.xsl", SourceContent: `<div>
   <and/>
   <or/>
   <div/>
 </div>
-   `, Assertions: []w3cAssertion{w3cAssertSkip()}},
+   `, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-039", StylesheetPath: "tests/attr/match/match-039.xsl", SourceContent: `<div>
   <and/>
   <or/>
@@ -842,8 +842,8 @@ func TestW3C_match(t *testing.T) {
     </table>
   </body>
 </html>`, Assertions: []w3cAssertion{w3cAssertXML("<out><t>testvar: \"the text to begin with\"</t><t>testvar: \"the text to begin with\"</t><t>testvar: \"the text to begin with\"</t></out>")}},
-		{Name: "match-042", StylesheetPath: "tests/attr/match/match-042.xsl", SourceDocPath: "tests/attr/match/match1055.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "match-043", StylesheetPath: "tests/attr/match/match-043.xsl", SourceDocPath: "tests/attr/match/match1055.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "match-042", StylesheetPath: "tests/attr/match/match-042.xsl", SourceDocPath: "tests/attr/match/match1055.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-043", StylesheetPath: "tests/attr/match/match-043.xsl", SourceDocPath: "tests/attr/match/match1055.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-044", StylesheetPath: "tests/attr/match/match-044.xsl", SourceContent: "<attributes><attribute/></attributes>", Assertions: []w3cAssertion{w3cAssertXML("<s><pling/></s>")}},
 		{Name: "match-045", StylesheetPath: "tests/attr/match/match-045.xsl", SourceDocPath: "tests/attr/match/match1058.xml", Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root xmlns:xhtml=\"http://www.w3.org/1999/xhtml\">\r\n                 <test>\r\n                     <html>\r\n                         <form id=\"test\">\r\n                             <a>\r\n                                 <br/>\r\n                             </a>\r\n                         </form>\r\n                     </html>\r\n                 </test>\r\n             </root>")}},
 		{Name: "match-046", StylesheetPath: "tests/attr/match/match-046.xsl", SourceContent: `<doc>
@@ -875,7 +875,7 @@ func TestW3C_match(t *testing.T) {
     </foo>
   </foo>
 </doc>
-   `, Assertions: []w3cAssertion{w3cAssertSkip()}},
+   `, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-049", StylesheetPath: "tests/attr/match/match-049.xsl", SourceContent: `<doc>
   <foo att1="c">
     <foo att1="b">
@@ -925,7 +925,7 @@ func TestW3C_match(t *testing.T) {
     </foo>
   </foo>
 </doc>
-   `, Assertions: []w3cAssertion{w3cAssertSkip()}},
+   `, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-054", StylesheetPath: "tests/attr/match/match-054.xsl", SourceContent: `<doc>
   <foo att1="c">
     <foo att1="b">
@@ -1169,7 +1169,7 @@ func TestW3C_match(t *testing.T) {
     </foo>
   </foo>
 </doc>
-   `, Assertions: []w3cAssertion{w3cAssertSkip()}},
+   `, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-072", StylesheetPath: "tests/attr/match/match-072.xsl", SourceContent: `<doc>
   <foo att1="c">
     <foo att1="b">
@@ -1179,7 +1179,7 @@ func TestW3C_match(t *testing.T) {
     </foo>
   </foo>
 </doc>
-   `, Assertions: []w3cAssertion{w3cAssertSkip()}},
+   `, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-073", StylesheetPath: "tests/attr/match/match-073.xsl", SourceContent: `<doc>
   <foo att1="c">
     <foo att1="b">
@@ -1189,7 +1189,7 @@ func TestW3C_match(t *testing.T) {
     </foo>
   </foo>
 </doc>
-   `, Assertions: []w3cAssertion{w3cAssertSkip()}},
+   `, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-074", StylesheetPath: "tests/attr/match/match-074.xsl", SourceContent: `<doc>
   <foo att1="c">
     <foo att1="b">
@@ -1199,7 +1199,7 @@ func TestW3C_match(t *testing.T) {
     </foo>
   </foo>
 </doc>
-   `, Assertions: []w3cAssertion{w3cAssertSkip()}},
+   `, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-075", StylesheetPath: "tests/attr/match/match-075.xsl", SourceContent: `<doc>
   <foo att1="c">
     <foo att1="b">
@@ -1219,7 +1219,7 @@ func TestW3C_match(t *testing.T) {
     </foo>
   </foo>
 </doc>
-   `, Assertions: []w3cAssertion{w3cAssertSkip()}},
+   `, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-077", StylesheetPath: "tests/attr/match/match-077.xsl", SourceContent: `<doc>
   <foo att1="c">
     <foo att1="b">
@@ -1279,7 +1279,7 @@ func TestW3C_match(t *testing.T) {
     </foo>
   </foo>
 </doc>
-   `, Assertions: []w3cAssertion{w3cAssertSkip()}},
+   `, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-082", StylesheetPath: "tests/attr/match/match-082.xsl", SourceContent: `<doc>
   <foo att1="c">
     <foo att1="b">
@@ -1299,7 +1299,7 @@ func TestW3C_match(t *testing.T) {
     </foo>
   </foo>
 </doc>
-   `, Assertions: []w3cAssertion{w3cAssertSkip()}},
+   `, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-082b", StylesheetPath: "tests/attr/match/match-082b.xsl", SourceContent: `<doc>
   <foo att1="c">
     <foo att1="b">
@@ -1589,9 +1589,9 @@ func TestW3C_match(t *testing.T) {
     </foo>
   </foo>
 </doc>
-   `, Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-216", StylesheetPath: "tests/attr/match/match-216.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-217", StylesheetPath: "tests/attr/match/match-217.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+   `, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-216", StylesheetPath: "tests/attr/match/match-216.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-217", StylesheetPath: "tests/attr/match/match-217.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-218", StylesheetPath: "tests/attr/match/match-218.xsl", SourceDocPath: "tests/attr/match/schemamatch001.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><E28>-1.0001</E28><E29>123.456788</E29><E30>1048.576</E30><E31>1234.123</E31><E32>8888888.8888</E32><E33>1.1</E33></out>")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "match-219", StylesheetPath: "tests/attr/match/match-219.xsl", SourceDocPath: "tests/attr/match/schemamatch001.xml", ExpectError: true, ErrorCode: "XTTE3100", Skip: "unsupported feature: schema_aware"},
 		{Name: "match-220", StylesheetPath: "tests/attr/match/match-220.xsl", SourceDocPath: "tests/attr/match/schemamatch001.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><E28>-1.0001</E28><E29>123.456788</E29><E30>1048.576</E30><E31>1234.123</E31><E32>8888888.8888</E32><E33>1.1</E33><ok/></out>")}, Skip: "unsupported feature: schema_aware"},
@@ -1607,7 +1607,7 @@ func TestW3C_match(t *testing.T) {
 		{Name: "match-230", StylesheetPath: "tests/attr/match/match-230.xsl", SourceDocPath: "tests/attr/match/schemamatch002.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><A1>http://www.example.com/ns/test</A1><B2>123-AB</B2><E7>5</E7></out>")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "match-231", StylesheetPath: "tests/attr/match/match-231.xsl", SourceDocPath: "tests/attr/match/schemamatch002.xml", ExpectError: true, ErrorCode: "XTTE3110", Skip: "unsupported feature: schema_aware"},
 		{Name: "match-232", StylesheetPath: "tests/attr/match/match-232.xsl", SourceDocPath: "tests/attr/match/schemamatch002.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><A>123-AB</A><A>000-SS 000-RR</A><A>44</A><A>75</A><A>red blue green</A><A>123-AB</A></out>")}, Skip: "unsupported feature: schema_aware"},
-		{Name: "match-233", StylesheetPath: "tests/attr/match/match-233.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "match-233", StylesheetPath: "tests/attr/match/match-233.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-234", StylesheetPath: "tests/attr/match/match-234.xsl", SourceDocPath: "tests/attr/match/match-234.xml", Assertions: []w3cAssertion{w3cAssertXML("<root><p>The brown <span><S/>fox</span> jumped over the lazy dog.</p><p>El zorro marron <span>salto<E/></span> el perro vago.</p></root>")}},
 		{Name: "match-235", StylesheetPath: "tests/attr/match/match-235.xsl", SourceDocPath: "tests/attr/match/match-235.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><found><foo>1</foo></found><found><foo>a</foo></found><found><foo>d1</foo></found></out>")}},
 		{Name: "match-236", StylesheetPath: "tests/attr/match/match-236.xsl", SourceDocPath: "tests/attr/match/match-235.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><found>1</found><found>2</found><found>a</found><found>d1</found><found>d2</found><found>X</found></out>")}},
@@ -1617,8 +1617,8 @@ func TestW3C_match(t *testing.T) {
 		{Name: "match-240a", StylesheetPath: "tests/attr/match/match-240.xsl", InitialTemplate: "main", Params: map[string]string{"N": "1"}, Assertions: []w3cAssertion{w3cAssertXML("<out><second><first>17</first></second></out>")}},
 		{Name: "match-240b", StylesheetPath: "tests/attr/match/match-240.xsl", InitialTemplate: "main", Params: map[string]string{"N": "2"}, Assertions: []w3cAssertion{w3cAssertXML("<out><first>17</first></out>")}},
 		{Name: "match-240c", StylesheetPath: "tests/attr/match/match-240.xsl", InitialTemplate: "main", Params: map[string]string{"N": "true()"}, Assertions: []w3cAssertion{w3cAssertXML("<out><second><first>17</first></second></out>")}},
-		{Name: "match-241", StylesheetPath: "tests/attr/match/match-241.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-242", StylesheetPath: "tests/attr/match/match-242.xsl", SourceDocPath: "tests/attr/match/match1013.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "match-241", StylesheetPath: "tests/attr/match/match-241.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-242", StylesheetPath: "tests/attr/match/match-242.xsl", SourceDocPath: "tests/attr/match/match1013.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-243", StylesheetPath: "tests/attr/match/match-243.xsl", SourceDocPath: "tests/attr/match/schemamatch001.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><E28>-1.0001</E28><E29>123.456788</E29><E30>1048.576</E30><E31>1234.123</E31><E32>8888888.8888</E32><E33>1.1</E33></out>")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "match-244", StylesheetPath: "tests/attr/match/match-244.xsl", SourceDocPath: "tests/attr/match/schemamatch001.xml", ExpectError: true, ErrorCode: "XTSE3105", Skip: "unsupported feature: schema_aware"},
 		{Name: "match-245", StylesheetPath: "tests/attr/match/match-245.xsl", SourceContent: ` 
@@ -1636,7 +1636,7 @@ func TestW3C_match(t *testing.T) {
   <letter>c</letter>
   <letter>b</letter>
   <letter>h</letter>
-</letters>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</letters>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-246b", StylesheetPath: "tests/attr/match/match-246b.xsl", SourceContent: ` 
 <letters>
   <letter>a</letter>
@@ -1644,17 +1644,17 @@ func TestW3C_match(t *testing.T) {
   <letter>c</letter>
   <letter>b</letter>
   <letter>h</letter>
-</letters>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-247", StylesheetPath: "tests/attr/match/match-247.xsl", SourceDocPath: "tests/attr/match/match-247.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-248", StylesheetPath: "tests/attr/match/match-248.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-249", StylesheetPath: "tests/attr/match/match-249.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-250", StylesheetPath: "tests/attr/match/match-250.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-251", StylesheetPath: "tests/attr/match/match-251.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-252", StylesheetPath: "tests/attr/match/match-252.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-253", StylesheetPath: "tests/attr/match/match-253.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-254", StylesheetPath: "tests/attr/match/match-254.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-255", StylesheetPath: "tests/attr/match/match-255.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-256", StylesheetPath: "tests/attr/match/match-256.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+</letters>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-247", StylesheetPath: "tests/attr/match/match-247.xsl", SourceDocPath: "tests/attr/match/match-247.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-248", StylesheetPath: "tests/attr/match/match-248.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-249", StylesheetPath: "tests/attr/match/match-249.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-250", StylesheetPath: "tests/attr/match/match-250.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-251", StylesheetPath: "tests/attr/match/match-251.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-252", StylesheetPath: "tests/attr/match/match-252.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-253", StylesheetPath: "tests/attr/match/match-253.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-254", StylesheetPath: "tests/attr/match/match-254.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-255", StylesheetPath: "tests/attr/match/match-255.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-256", StylesheetPath: "tests/attr/match/match-256.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-257", StylesheetPath: "tests/attr/match/match-257.xsl", SourceContent: `<doc>
   <foo att1="c">
     <foo att1="b">
@@ -1686,10 +1686,10 @@ func TestW3C_match(t *testing.T) {
 </doc>
    `, Assertions: []w3cAssertion{w3cAssertXML("<out><ok a=\"wrong\"/></out>")}},
 		{Name: "match-260", StylesheetPath: "tests/attr/match/match-260.xsl", ExpectError: true, ErrorCode: "XTDE0540"},
-		{Name: "match-261", StylesheetPath: "tests/attr/match/match-261.xsl", SourceDocPath: "tests/attr/match/match1058.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "match-261", StylesheetPath: "tests/attr/match/match-261.xsl", SourceDocPath: "tests/attr/match/match1058.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-262", StylesheetPath: "tests/attr/match/match-262.xsl", SourceDocPath: "tests/attr/match/schemamatch001.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: schema_aware"},
 		{Name: "match-263", StylesheetPath: "tests/attr/match/match-263.xsl", SourceDocPath: "tests/attr/match/schemamatch092.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: schema_aware"},
-		{Name: "match-264", StylesheetPath: "tests/attr/match/match-264.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "match-264", StylesheetPath: "tests/attr/match/match-264.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-265", StylesheetPath: "tests/attr/match/match-265.xsl", Assertions: []w3cAssertion{w3cAssertXML("<X><AB>23</AB><AB>25</AB></X>")}},
 		{Name: "match-266", StylesheetPath: "tests/attr/match/match-266.xsl", Assertions: []w3cAssertion{w3cAssertXML("<X><AB>23</AB><Z><AB>25</AB></Z></X>")}},
 		{Name: "match-267", StylesheetPath: "tests/attr/match/match-267.xsl", Assertions: []w3cAssertion{w3cAssertXML("<X><AB>23</AB><AB>25</AB></X>")}},
@@ -1697,18 +1697,18 @@ func TestW3C_match(t *testing.T) {
 		{Name: "match-269", StylesheetPath: "tests/attr/match/match-269.xsl", Assertions: []w3cAssertion{w3cAssertXML("<X><AB>23</AB><Z><AB>25</AB></Z></X>")}},
 		{Name: "match-270", StylesheetPath: "tests/attr/match/match-270.xsl", Assertions: []w3cAssertion{w3cAssertXML("<ok/>")}},
 		{Name: "match-271", StylesheetPath: "tests/attr/match/match-271.xsl", Assertions: []w3cAssertion{w3cAssertXML("<ok/>")}},
-		{Name: "match-272", StylesheetPath: "tests/attr/match/match-272.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "match-272", StylesheetPath: "tests/attr/match/match-272.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-273", StylesheetPath: "tests/attr/match/match-273.xsl", Assertions: []w3cAssertion{w3cAssertXML("<x><aa>23</aa><x><AA>25</AA></x></x>")}},
 		{Name: "match-274", StylesheetPath: "tests/attr/match/match-274.xsl", Assertions: []w3cAssertion{w3cAssertXML("<XX><a>23</a><XX><a>25</a></XX></XX>")}},
 		{Name: "match-275", StylesheetPath: "tests/attr/match/match-275.xsl", Assertions: []w3cAssertion{w3cAssertXML("<x><aa>23</aa><x><AA>25</AA></x></x>")}},
 		{Name: "match-276", StylesheetPath: "tests/attr/match/match-276.xsl", Assertions: []w3cAssertion{w3cAssertXML("<x><a p=\"2\" r=\"4\">23</a></x>")}},
 		{Name: "match-277", StylesheetPath: "tests/attr/match/match-277.xsl", Assertions: []w3cAssertion{w3cAssertXML("<x><p>2</p><r>4</r><s>5</s></x>")}},
-		{Name: "match-278", StylesheetPath: "tests/attr/match/match-278.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "match-279", StylesheetPath: "tests/attr/match/match-279.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "match-278", StylesheetPath: "tests/attr/match/match-278.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "match-279", StylesheetPath: "tests/attr/match/match-279.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-280", StylesheetPath: "tests/attr/match/match-280.xsl", Assertions: []w3cAssertion{w3cAssertXML("<out><n>21</n><n>42</n><n>63</n><n>84</n></out>")}},
 		{Name: "match-281", StylesheetPath: "tests/attr/match/match-281.xsl", Assertions: []w3cAssertion{w3cAssertXML("<out><n>7</n><n>14</n><n>28</n><n>35</n><n>49</n><n>56</n><n>70</n><n>77</n><n>91</n><n>98</n></out>")}},
 		{Name: "match-282", StylesheetPath: "tests/attr/match/match-282.xsl", Assertions: []w3cAssertion{w3cAssertXML("<X><AB>23</AB><Z><AB>25</AB></Z></X>")}},
-		{Name: "match-283", StylesheetPath: "tests/attr/match/match-283.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "match-283", StylesheetPath: "tests/attr/match/match-283.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "match-284", StylesheetPath: "tests/attr/match/match-284.xsl", Assertions: []w3cAssertion{w3cAssertXML("<x id=\"1\"><a>23</a><z><AA>25</AA></z></x>")}},
 		{Name: "match-285", StylesheetPath: "tests/attr/match/match-285.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><A>000-TM</A></out>")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "match-286", StylesheetPath: "tests/attr/match/match-286.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><A>000-TM</A></out>")}, Skip: "unsupported feature: schema_aware"},
@@ -1729,7 +1729,7 @@ func TestW3C_mode(t *testing.T) {
 		{Name: "mode-0008", StylesheetPath: "tests/attr/mode/mode-0008.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><c a=\"abracadabra\"/><d/><s>abracadabra</s></out>")}, Skip: "unsupported feature: streaming"},
 		{Name: "mode-0009", StylesheetPath: "tests/attr/mode/mode-0009.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><c xmlns:a=\"http://abracadabra.com/\"/><d/><s/></out>")}},
 		{Name: "mode-0010", StylesheetPath: "tests/attr/mode/mode-0010.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><c xmlns:a=\"http://abracadabra.com/\"/><d/><s/></out>")}, Skip: "unsupported feature: streaming"},
-		{Name: "mode-0011", StylesheetPath: "tests/attr/mode/mode-0011.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "mode-0011", StylesheetPath: "tests/attr/mode/mode-0011.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "mode-0012", StylesheetPath: "tests/attr/mode/mode-0012.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><c xmlns:a=\"http://abracadabra.com/\"/><d/><s/></out>")}, Skip: "unsupported feature: streaming"},
 		{Name: "mode-0013", StylesheetPath: "tests/attr/mode/mode-0013.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><c xmlns:a=\"http://abracadabra.com/\"/><d/><s/></out>")}},
 		{Name: "mode-0014", StylesheetPath: "tests/attr/mode/mode-0014.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0020", Skip: "unsupported feature: streaming"},
@@ -1846,14 +1846,14 @@ func TestW3C_mode(t *testing.T) {
 	 	 mode-#all (doc): 
 	  inside named-templates: mode-X: brown-fox</out>`)}},
 		{Name: "mode-1105", StylesheetPath: "tests/attr/mode/mode-1105.xsl", SourceContent: "<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>", Assertions: []w3cAssertion{w3cAssertXML("<out><mode-X at=\"doc\"/><inside>mode-X: brown-fox</inside></out>")}},
-		{Name: "mode-1106a", StylesheetPath: "tests/attr/mode/mode-1106.xsl", SourceContent: "<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "mode-1106a", StylesheetPath: "tests/attr/mode/mode-1106.xsl", SourceContent: "<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "mode-1106b", StylesheetPath: "tests/attr/mode/mode-1106.xsl", SourceContent: "<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>", Params: map[string]string{"STREAMABLE": "false()"}, ExpectError: true, ErrorCode: "XTDE3362"},
-		{Name: "mode-1106c", StylesheetPath: "tests/attr/mode/mode-1106.xsl", SourceContent: "<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "mode-1106d", StylesheetPath: "tests/attr/mode/mode-1106.xsl", SourceContent: "<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "mode-1106c", StylesheetPath: "tests/attr/mode/mode-1106.xsl", SourceContent: "<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "mode-1106d", StylesheetPath: "tests/attr/mode/mode-1106.xsl", SourceContent: "<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "mode-1106e", StylesheetPath: "tests/attr/mode/mode-1106.xsl", SourceContent: "<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>", Params: map[string]string{"STREAMABLE": "false()"}, ExpectError: true, ErrorCode: "XTDE3362"},
-		{Name: "mode-1107a", StylesheetPath: "tests/attr/mode/mode-1106.xsl", SourceContent: "<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "mode-1107a", StylesheetPath: "tests/attr/mode/mode-1106.xsl", SourceContent: "<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "mode-1107b", StylesheetPath: "tests/attr/mode/mode-1106.xsl", SourceContent: "<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>", Params: map[string]string{"STREAMABLE": "true()"}, ExpectError: true, ErrorCode: "XTDE3362"},
-		{Name: "mode-1107c", StylesheetPath: "tests/attr/mode/mode-1106.xsl", SourceContent: "<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "mode-1107c", StylesheetPath: "tests/attr/mode/mode-1106.xsl", SourceContent: "<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "mode-1108", StylesheetPath: "tests/attr/mode/mode-1108.xsl", SourceContent: "<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>", Params: map[string]string{"STREAMABLE": "true()"}, ExpectError: true, ErrorCode: "XTSE0010"},
 		{Name: "mode-1201", StylesheetPath: "tests/attr/mode/mode-1201.xsl", SourceContent: ` 
 <doc>
@@ -1886,11 +1886,11 @@ func TestW3C_mode(t *testing.T) {
 		{Name: "mode-1402", StylesheetPath: "tests/attr/mode/mode-1402.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><chapter a=\"m:Chapter 1\"/><chapter a=\"m:Chapter 2\"/></out>")}},
 		{Name: "mode-1403", StylesheetPath: "tests/attr/mode/modes37.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><chapter a=\"#default:Chapter 1\"/><chapter a=\"#default:Chapter 1\"/></out>")}},
 		{Name: "mode-1404", StylesheetPath: "tests/attr/mode/modes37.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><chapter a=\"#default:Chapter 1\"/><chapter a=\"#default:Chapter 1\"/></out>")}},
-		{Name: "mode-1405", StylesheetPath: "tests/attr/mode/mode-1405.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "mode-1405", StylesheetPath: "tests/attr/mode/mode-1405.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "mode-1406", StylesheetPath: "tests/attr/mode/mode-1406.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
-		{Name: "mode-1407", StylesheetPath: "tests/attr/mode/mode-1407.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "mode-1407", StylesheetPath: "tests/attr/mode/mode-1407.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "mode-1408", StylesheetPath: "tests/attr/mode/mode-1408.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
-		{Name: "mode-1409", StylesheetPath: "tests/attr/mode/mode-1409.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "mode-1409", StylesheetPath: "tests/attr/mode/mode-1409.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "mode-1410", StylesheetPath: "tests/attr/mode/mode-1410.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
 		{Name: "mode-1411", StylesheetPath: "tests/attr/mode/mode-1411.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertXML(`<?xml version="1.0" encoding="UTF-8"?><book>
  <bktlong>The First Book of Moses, Called GENESIS.</bktlong>
@@ -2672,21 +2672,21 @@ func TestW3C_mode(t *testing.T) {
 		{Name: "mode-1447", StylesheetPath: "tests/attr/mode/mode-1447.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", ExpectError: true, ErrorCode: "XTSE0020"},
 		{Name: "mode-1501", StylesheetPath: "tests/attr/mode/mode-1501.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", Assertions: []w3cAssertion{w3cAssertXML("<doc><para><?pi PI ?>text <bar><baz/></bar></para></doc>")}},
 		{Name: "mode-1502", StylesheetPath: "tests/attr/mode/mode-1502.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", ExpectError: true, ErrorCode: "XTSE0545"},
-		{Name: "mode-1503", StylesheetPath: "tests/attr/mode/mode-1503.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "mode-1504", StylesheetPath: "tests/attr/mode/mode-1504.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "mode-1505", StylesheetPath: "tests/attr/mode/mode-1505.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "mode-1503", StylesheetPath: "tests/attr/mode/mode-1503.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "mode-1504", StylesheetPath: "tests/attr/mode/mode-1504.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "mode-1505", StylesheetPath: "tests/attr/mode/mode-1505.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "mode-1506", StylesheetPath: "tests/attr/mode/mode-1506.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0545", Skip: "unsupported feature: streaming"},
 		{Name: "mode-1507", StylesheetPath: "tests/attr/mode/mode-1507.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0020"},
 		{Name: "mode-1508", StylesheetPath: "tests/attr/mode/mode-1508.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0020"},
 		{Name: "mode-1509", StylesheetPath: "tests/attr/mode/mode-1509.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0020"},
 		{Name: "mode-1510", StylesheetPath: "tests/attr/mode/mode-1510.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0545"},
-		{Name: "mode-1511", StylesheetPath: "tests/attr/mode/mode-1511.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "mode-1512", StylesheetPath: "tests/attr/mode/mode-1512.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "mode-1513", StylesheetPath: "tests/attr/mode/mode-1513.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "mode-1514", StylesheetPath: "tests/attr/mode/mode-1514.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "mode-1511", StylesheetPath: "tests/attr/mode/mode-1511.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "mode-1512", StylesheetPath: "tests/attr/mode/mode-1512.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "mode-1513", StylesheetPath: "tests/attr/mode/mode-1513.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "mode-1514", StylesheetPath: "tests/attr/mode/mode-1514.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "mode-1515", StylesheetPath: "tests/attr/mode/mode-1515.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0545"},
-		{Name: "mode-1516", StylesheetPath: "tests/attr/mode/mode-1516.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "mode-1517", StylesheetPath: "tests/attr/mode/mode-1517.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "mode-1516", StylesheetPath: "tests/attr/mode/mode-1516.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "mode-1517", StylesheetPath: "tests/attr/mode/mode-1517.xsl", SourceContent: "<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "mode-1601", StylesheetPath: "tests/attr/mode/mode-1601.xsl", SourceContent: ` 
 <doc>
   <a test="a attribute">a-text</a>
@@ -2864,9 +2864,9 @@ func TestW3C_mode(t *testing.T) {
   <a test="a attribute">a-text</a>
 </doc>
 `, ExpectError: true, ErrorCode: "XTDE0045", Skip: "no stylesheet"},
-		{Name: "mode-1801", StylesheetPath: "tests/attr/mode/mode-1801.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "mode-1802", StylesheetPath: "tests/attr/mode/mode-1802.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "mode-1803", StylesheetPath: "tests/attr/mode/mode-1803.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "mode-1801", StylesheetPath: "tests/attr/mode/mode-1801.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion: assert-result-document"},
+		{Name: "mode-1802", StylesheetPath: "tests/attr/mode/mode-1802.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion: assert-result-document"},
+		{Name: "mode-1803", StylesheetPath: "tests/attr/mode/mode-1803.xsl", SourceDocPath: "tests/attr/mode/mode-14.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "mode-1901", StylesheetPath: "tests/attr/mode/mode-1901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE0555"},
 		{Name: "mode-1902", StylesheetPath: "tests/attr/mode/mode-1902.xsl", SourceContent: ` 
 <doc>
@@ -2887,7 +2887,7 @@ func TestW3C_mode(t *testing.T) {
 <doc>
   <str>brown-fox</str>
   <yet>lazy-dog</yet>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 	})
 }
 
@@ -2895,28 +2895,28 @@ func TestW3C_package_version(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
 		{Name: "package-version-001", StylesheetPath: "tests/attr/package-version/package-version-001.xsl", Params: map[string]string{"initialVisibility": "'public'"}, Assertions: []w3cAssertion{w3cAssertStringValue("A package without a version is allowed")}},
-		{Name: "package-version-002", StylesheetPath: "tests/attr/package-version/package-version-002.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "package-version-003", StylesheetPath: "tests/attr/package-version/package-version-003.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "package-version-004", StylesheetPath: "tests/attr/package-version/package-version-004.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "package-version-005", StylesheetPath: "tests/attr/package-version/package-version-005.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "package-version-006", StylesheetPath: "tests/attr/package-version/package-version-006.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "package-version-007", StylesheetPath: "tests/attr/package-version/package-version-007.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "package-version-008", StylesheetPath: "tests/attr/package-version/package-version-008.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "package-version-009", StylesheetPath: "tests/attr/package-version/package-version-009.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "package-version-010", StylesheetPath: "tests/attr/package-version/package-version-010.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "package-version-011", StylesheetPath: "tests/attr/package-version/package-version-011.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "package-version-002", StylesheetPath: "tests/attr/package-version/package-version-002.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "package-version-003", StylesheetPath: "tests/attr/package-version/package-version-003.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "package-version-004", StylesheetPath: "tests/attr/package-version/package-version-004.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "package-version-005", StylesheetPath: "tests/attr/package-version/package-version-005.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "package-version-006", StylesheetPath: "tests/attr/package-version/package-version-006.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "package-version-007", StylesheetPath: "tests/attr/package-version/package-version-007.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "package-version-008", StylesheetPath: "tests/attr/package-version/package-version-008.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "package-version-009", StylesheetPath: "tests/attr/package-version/package-version-009.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "package-version-010", StylesheetPath: "tests/attr/package-version/package-version-010.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "package-version-011", StylesheetPath: "tests/attr/package-version/package-version-011.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "package-version-012", StylesheetPath: "tests/attr/package-version/package-version-012.xsl", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
 		{Name: "package-version-013", StylesheetPath: "tests/attr/package-version/package-version-013.xsl", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
-		{Name: "package-version-014", StylesheetPath: "tests/attr/package-version/package-version-014.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "package-version-014", StylesheetPath: "tests/attr/package-version/package-version-014.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "package-version-015", StylesheetPath: "tests/attr/package-version/package-version-015.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: backwards_compatibility"},
-		{Name: "package-version-016", StylesheetPath: "tests/attr/package-version/package-version-016.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "package-version-017", StylesheetPath: "tests/attr/package-version/package-version-017.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "package-version-018", StylesheetPath: "tests/attr/package-version/package-version-018.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "package-version-019", StylesheetPath: "tests/attr/package-version/package-version-019.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "package-version-101", StylesheetPath: "tests/attr/package-version/package-version-101.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "package-version-102", StylesheetPath: "tests/attr/package-version/package-version-102.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "package-version-103", StylesheetPath: "tests/attr/package-version/package-version-103.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "package-version-104", StylesheetPath: "tests/attr/package-version/package-version-104.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "package-version-016", StylesheetPath: "tests/attr/package-version/package-version-016.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "package-version-017", StylesheetPath: "tests/attr/package-version/package-version-017.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "package-version-018", StylesheetPath: "tests/attr/package-version/package-version-018.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "package-version-019", StylesheetPath: "tests/attr/package-version/package-version-019.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "package-version-101", StylesheetPath: "tests/attr/package-version/package-version-101.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "package-version-102", StylesheetPath: "tests/attr/package-version/package-version-102.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "package-version-103", StylesheetPath: "tests/attr/package-version/package-version-103.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "package-version-104", StylesheetPath: "tests/attr/package-version/package-version-104.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "package-version-900", StylesheetPath: "tests/attr/package-version/package-version-900.xsl", ExpectError: true, ErrorCode: "XTSE0090"},
 		{Name: "package-version-901", StylesheetPath: "tests/attr/package-version/package-version-901.xsl", ExpectError: true, ErrorCode: "XTSE0090"},
 		{Name: "package-version-902", StylesheetPath: "tests/attr/package-version/package-version-902.xsl", ExpectError: true, ErrorCode: "XTSE0020"},
@@ -2968,7 +2968,7 @@ func TestW3C_select(t *testing.T) {
   a
 </out>`)}},
 		{Name: "select-0301", StylesheetPath: "tests/attr/select/select-0301.xsl", SourceDocPath: "tests/attr/select/select-03.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><item type=\"x\">c</item> <item type=\"y\">d</item> </out>")}},
-		{Name: "select-0302", StylesheetPath: "tests/attr/select/select-0302.xsl", SourceDocPath: "tests/attr/select/select-03.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "select-0302", StylesheetPath: "tests/attr/select/select-0302.xsl", SourceDocPath: "tests/attr/select/select-03.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "select-0401", StylesheetPath: "tests/attr/select/select-0401.xsl", SourceDocPath: "tests/attr/select/select-04.xml", Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"UTF-8\"?><out>\r\n  This should come out fasolatido:\r\n  fasolatido\r\n  This should come out doremifasolatido:\r\n  doremifasolatido\r\n  This should come out do-do-remi-mi1-fasolatido-fa--so-:\r\n  do-do-remi-mi1-fasolatido-fa--so-\r\n  This should come out solatidoG#:\r\n  solatidoG#\r\n  This should come out relatidoABb:\r\n  relatidoABb\r\n  This should come out domitiACD:\r\n  domitiACD</out>")}},
 		{Name: "select-0501", StylesheetPath: "tests/attr/select/select-0501.xsl", SourceContent: `<document-element>
   <inside>
@@ -2978,7 +2978,7 @@ func TestW3C_select(t *testing.T) {
 		{Name: "select-0601", StylesheetPath: "tests/attr/select/select-0601.xsl", SourceDocPath: "tests/attr/select/select-06.xml", Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"UTF-8\"?><out>\r\n      Inside an A node\r\n      Finished C node: A1B2C1Finished C node: A1B2C2Finished C node: A1B2C3|\r\n            |\r\n            Finished C node: A1B3C4\r\n      Inside an A node\r\n      |\r\n            A2B4C5D3E1,Finished C node: A2B4C5\r\n      Inside an A node\r\n      |\r\n            A3B5C6D4E2,|\r\n            A3B5C6D5E3,Finished C node: A3B5C6|\r\n            |\r\n            A3B5C7D7E4,A3B5C7D7E5,A3B5C7D7E6,|\r\n            Finished C node: A3B5C7|\r\n            A3B9C8D9E7,Finished C node: A3B9C8</out>")}},
 		{Name: "select-0701", StylesheetPath: "tests/attr/select/select-0701.xsl", SourceContent: `<doc>
   <inner>content</inner>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
 		{Name: "select-0801", StylesheetPath: "tests/attr/select/select-0801.xsl", SourceDocPath: "tests/attr/select/select-08.xml", Assertions: []w3cAssertion{w3cAssertXML(`<out>Got a foo node;Got some other node;
 Got some other node;
 Got a wiz node;Got a foo node;</out>`)}},
@@ -3481,8 +3481,8 @@ Text for variable
 </doc>`, Assertions: []w3cAssertion{w3cAssertXML(`<out>
 Count of node-set: 1
 Count of union: 1</out>`)}},
-		{Name: "select-6101", StylesheetPath: "tests/attr/select/select-6101.xsl", SourceDocPath: "tests/attr/select/select-61.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "select-6201", StylesheetPath: "tests/attr/select/select-6201.xsl", SourceDocPath: "tests/attr/select/select-62.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "select-6101", StylesheetPath: "tests/attr/select/select-6101.xsl", SourceDocPath: "tests/attr/select/select-61.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "select-6201", StylesheetPath: "tests/attr/select/select-6201.xsl", SourceDocPath: "tests/attr/select/select-62.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "select-6301", StylesheetPath: "tests/attr/select/select-6301.xsl", SourceContent: ` 
 <!-- First comment -->
 <doc>
@@ -3593,7 +3593,7 @@ Node c has on-c in @x</list></out>`)}},
 		{Name: "select-7502a", StylesheetPath: "tests/attr/select/select-7502.xsl", SourceContent: ` 
 <doc><inner1/><inner1/></doc>`, ExpectError: true, ErrorCode: "XTSE0870"},
 		{Name: "select-7502b", StylesheetPath: "tests/attr/select/select-7502.xsl", SourceContent: ` 
-<doc><inner1/><inner1/></doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+<doc><inner1/><inner1/></doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 	})
 }
 
@@ -3605,37 +3605,37 @@ func TestW3C_shadow(t *testing.T) {
 	<item>att2</item>
 	<item>att3</item>
 	<item>att4</item>
-</doc>`, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "shadow-002", StylesheetPath: "tests/attr/shadow/shadow-002.xsl", SourceContent: `<doc>
 	<item>att1</item>
 	<item>att2</item>
 	<item>att3</item>
 	<item>att4</item>
-</doc>`, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "shadow-003", StylesheetPath: "tests/attr/shadow/shadow-003.xsl", SourceContent: `<doc>
 	<item>att1</item>
 	<item>att2</item>
 	<item>att3</item>
 	<item>att4</item>
-</doc>`, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "shadow-004", StylesheetPath: "tests/attr/shadow/shadow-004.xsl", SourceContent: `<doc>
 	<item>att1</item>
 	<item>att2</item>
 	<item>att3</item>
 	<item>att4</item>
-</doc>`, InitialTemplate: "go", Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, InitialTemplate: "go", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "shadow-005", StylesheetPath: "tests/attr/shadow/shadow-005.xsl", SourceContent: `<doc>
 	<item>att1</item>
 	<item>att2</item>
 	<item>att3</item>
 	<item>att4</item>
-</doc>`, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "shadow-006", StylesheetPath: "tests/attr/shadow/shadow-006.xsl", SourceContent: `<doc>
 	<item>att1</item>
 	<item>att2</item>
 	<item>att3</item>
 	<item>att4</item>
-</doc>`, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "shadow-007", StylesheetPath: "tests/attr/shadow/shadow-007.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out one=\"1\" _one=\"1.0\" _two=\"two\"/>")}},
 		{Name: "shadow-008", StylesheetPath: "tests/attr/shadow/shadow-008.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0805"},
 	})
@@ -3688,11 +3688,11 @@ func TestW3C_static(t *testing.T) {
 		{Name: "static-024", StylesheetPath: "tests/attr/static/static-024.xsl", Assertions: []w3cAssertion{w3cAssertXML("<result v1=\"1\" v4=\"1\"/>")}},
 		{Name: "static-025", StylesheetPath: "tests/attr/static/static-025.xsl", ExpectError: true, ErrorCode: "XTSE0020"},
 		{Name: "static-026", StylesheetPath: "tests/attr/static/static-026.xsl", ExpectError: true, ErrorCode: "XTSE0020"},
-		{Name: "static-027", StylesheetPath: "tests/attr/static/static-027.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "static-028", StylesheetPath: "tests/attr/static/static-028.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "static-029", StylesheetPath: "tests/attr/static/static-029.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "static-030", StylesheetPath: "tests/attr/static/static-030.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "static-031", StylesheetPath: "tests/attr/static/static-031.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "static-027", StylesheetPath: "tests/attr/static/static-027.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "static-028", StylesheetPath: "tests/attr/static/static-028.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "static-029", StylesheetPath: "tests/attr/static/static-029.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "static-030", StylesheetPath: "tests/attr/static/static-030.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "static-031", StylesheetPath: "tests/attr/static/static-031.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 	})
 }
 
@@ -3874,9 +3874,9 @@ func TestW3C_strip_type_annotations(t *testing.T) {
 		{Name: "strip-type-annotations-020", StylesheetPath: "tests/attr/strip-type-annotations/strip-type-annotations-020.xsl", SourceDocPath: "tests/attr/strip-type-annotations/striptype011.xml", Assertions: []w3cAssertion{w3cAssertXML("<out>3|003|true|false</out>")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "strip-type-annotations-021", StylesheetPath: "tests/attr/strip-type-annotations/strip-type-annotations-021.xsl", SourceDocPath: "tests/attr/strip-type-annotations/striptype012.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><E0>false</E0><E1>false</E1><E2>false</E2><E3>false</E3><E4>false</E4><E5>id1</E5><E6>id1</E6><E7>id2</E7><E8>ref refs</E8><E9>refs</E9></out>")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "strip-type-annotations-022", StylesheetPath: "tests/attr/strip-type-annotations/strip-type-annotations-022.xsl", SourceDocPath: "tests/attr/strip-type-annotations/striptype013.xml", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}, Skip: "unsupported feature: schema_aware"},
-		{Name: "strip-type-annotations-023", StylesheetPath: "tests/attr/strip-type-annotations/strip-type-annotations-023.xsl", SourceDocPath: "tests/attr/strip-type-annotations/striptype026.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "strip-type-annotations-024", StylesheetPath: "tests/attr/strip-type-annotations/strip-type-annotations-024.xsl", SourceDocPath: "tests/attr/strip-type-annotations/striptype026.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "strip-type-annotations-025", StylesheetPath: "tests/attr/strip-type-annotations/strip-type-annotations-025.xsl", SourceDocPath: "tests/attr/strip-type-annotations/striptype026.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "strip-type-annotations-023", StylesheetPath: "tests/attr/strip-type-annotations/strip-type-annotations-023.xsl", SourceDocPath: "tests/attr/strip-type-annotations/striptype026.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "strip-type-annotations-024", StylesheetPath: "tests/attr/strip-type-annotations/strip-type-annotations-024.xsl", SourceDocPath: "tests/attr/strip-type-annotations/striptype026.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "strip-type-annotations-025", StylesheetPath: "tests/attr/strip-type-annotations/strip-type-annotations-025.xsl", SourceDocPath: "tests/attr/strip-type-annotations/striptype026.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "strip-type-annotations-026", StylesheetPath: "tests/attr/strip-type-annotations/strip-type-annotations-026.xsl", SourceDocPath: "tests/attr/strip-type-annotations/striptype038.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><E1>false</E1><E2>false</E2><E3>false</E3><E4>false</E4><E5>id1</E5><E7>id2</E7><E8>ref refs</E8><E9>refs</E9></out>")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "strip-type-annotations-027", StylesheetPath: "tests/attr/strip-type-annotations/strip-type-annotations-027.xsl", SecondaryStylesheets: []string{"tests/attr/strip-type-annotations/import_unspecified.xsl"}, SourceDocPath: "tests/attr/strip-type-annotations/striptype001.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: schema_aware"},
 	})
@@ -4351,7 +4351,7 @@ func TestW3C_use_when(t *testing.T) {
    <para>p1</para>
    <para>p2</para>
  </section>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "use-when-0128", StylesheetPath: "tests/attr/use-when/use-when-0128.xsl", SourceContent: `<doc>
  <section>
    <para>p1</para>
@@ -4382,10 +4382,10 @@ func TestW3C_use_when(t *testing.T) {
    <para>p2</para>
  </section>
 </doc>`, ExpectError: true, ErrorCode: "XPST0008"},
-		{Name: "use-when-0133", StylesheetPath: "tests/attr/use-when/use-when-0133.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "use-when-0134", StylesheetPath: "tests/attr/use-when/use-when-0134.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "use-when-0135", StylesheetPath: "tests/attr/use-when/use-when-0135.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "use-when-0136", StylesheetPath: "tests/attr/use-when/use-when-0136.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "use-when-0133", StylesheetPath: "tests/attr/use-when/use-when-0133.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "use-when-0134", StylesheetPath: "tests/attr/use-when/use-when-0134.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "use-when-0135", StylesheetPath: "tests/attr/use-when/use-when-0135.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "use-when-0136", StylesheetPath: "tests/attr/use-when/use-when-0136.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "use-when-0137", StylesheetPath: "tests/attr/use-when/use-when-0137.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3450"},
 		{Name: "use-when-0138", StylesheetPath: "tests/attr/use-when/use-when-0138.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3450"},
 		{Name: "use-when-0139", StylesheetPath: "tests/attr/use-when/use-when-0139.xsl", SourceContent: `<doc>
@@ -4452,7 +4452,7 @@ func TestW3C_use_when(t *testing.T) {
 <item price="100" />
 <item price="120" />
 <item price="150" />
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "use-when-0406", StylesheetPath: "tests/attr/use-when/use-when-0406.xsl", SourceContent: `<doc>
 <item price="100" />
 <item price="120" />
@@ -4462,12 +4462,12 @@ func TestW3C_use_when(t *testing.T) {
 <item price="100" />
 <item price="120" />
 <item price="150" />
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "use-when-0407a", StylesheetPath: "tests/attr/use-when/use-when-0407a.xsl", SourceContent: `<doc>
 <item price="100" />
 <item price="120" />
 <item price="150" />
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "use-when-0408", StylesheetPath: "tests/attr/use-when/use-when-0408.xsl", SourceContent: `<doc>
 <item price="100" />
 <item price="120" />
@@ -4620,12 +4620,12 @@ func TestW3C_validation(t *testing.T) {
 		{Name: "validation-0006", StylesheetPath: "tests/attr/validation/validation-0006.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1555", Skip: "unsupported feature: schema_aware"},
 		{Name: "validation-0101", StylesheetPath: "tests/attr/validation/validation-0101.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XTSE1660"},
 		{Name: "validation-0102a", StylesheetPath: "tests/attr/validation/validation-0102.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XTSE1660"},
-		{Name: "validation-0102b", StylesheetPath: "tests/attr/validation/validation-0102.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "validation-0102b", StylesheetPath: "tests/attr/validation/validation-0102.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "validation-0103a", StylesheetPath: "tests/attr/validation/validation-0103.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XTSE1660"},
-		{Name: "validation-0103b", StylesheetPath: "tests/attr/validation/validation-0103.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "validation-0103b", StylesheetPath: "tests/attr/validation/validation-0103.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "validation-0104", StylesheetPath: "tests/attr/validation/validation-0104.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XTSE1660"},
 		{Name: "validation-0105a", StylesheetPath: "tests/attr/validation/validation-0105.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XTSE1660"},
-		{Name: "validation-0105b", StylesheetPath: "tests/attr/validation/validation-0105.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "validation-0105b", StylesheetPath: "tests/attr/validation/validation-0105.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "validation-0106", StylesheetPath: "tests/attr/validation/validation-0106.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XTSE1660"},
 		{Name: "validation-0106a", StylesheetPath: "tests/attr/validation/validation-0106.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<elem>2.2</elem>")}},
 		{Name: "validation-0107", StylesheetPath: "tests/attr/validation/validation-0107.xsl", SourceContent: "<doc/>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported feature: schema_aware"},
@@ -4823,7 +4823,7 @@ func TestW3C_version(t *testing.T) {
   <item n="3">Some</item>
   <item>string</item>
   <item n="19">value</item>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "version-033", StylesheetPath: "tests/attr/version/version-033.xsl", SourceContent: `<doc>
 </doc>`, ExpectError: true, ErrorCode: "XTSE0010"},
 	})
@@ -4832,13 +4832,13 @@ func TestW3C_version(t *testing.T) {
 func TestW3C_xpath_default_namespace(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "xpath-default-namespace-0101", StylesheetPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-0101.xsl", SourceDocPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-01.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "xpath-default-namespace-0102", StylesheetPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-0102.xsl", SourceDocPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-01.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "xpath-default-namespace-0101", StylesheetPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-0101.xsl", SourceDocPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-01.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "xpath-default-namespace-0102", StylesheetPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-0102.xsl", SourceDocPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-01.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "xpath-default-namespace-0103", StylesheetPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-0103.xsl", SourceDocPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-01.xml", Assertions: []w3cAssertion{w3cAssertXML("<out>a,atr1 atr2 atr3,atr1 atr2 atr3<group>a</group><group>b</group><group>c</group></out>")}},
 		{Name: "xpath-default-namespace-0104", StylesheetPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-0104.xsl", SourceDocPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-01.xml", Assertions: []w3cAssertion{w3cAssertXML("<output><out xpath-default-namespace=\"http://example.org/hal\">,</out><out>atr1 atr2 atr3</out></output>")}},
 		{Name: "xpath-default-namespace-0105", StylesheetPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-0105.xsl", SourceDocPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-01.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><result>a,atr1 atr2 atr3,atr1 atr2 atr3<group>b</group><group>b</group><group>b</group></result></out>")}},
-		{Name: "xpath-default-namespace-0106", StylesheetPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-0106.xsl", SourceDocPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-01.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "xpath-default-namespace-0107", StylesheetPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-0107.xsl", SourceDocPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "xpath-default-namespace-0106", StylesheetPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-0106.xsl", SourceDocPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-01.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "xpath-default-namespace-0107", StylesheetPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-0107.xsl", SourceDocPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "xpath-default-namespace-0108", StylesheetPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-0108.xsl", SourceDocPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-01.xml", Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<out>,,\r\n\t\r\n<elem>1 a</elem>\r\n\t\r\n<elem>2 b</elem>\r\n\t\r\n<elem>3 c</elem>\r\n\t\r\n<elem>4 Good Morning!</elem>\r\n\t\r\n<elem>5 Good Afternoon!</elem>\r\n\t\r\n<elem>6 Goodnight!</elem>\r\n\r\n</out>")}},
 		{Name: "xpath-default-namespace-0201", StylesheetPath: "tests/attr/xpath-default-namespace/xpath-default-namespace-0201.xsl", SourceContent: `<doc xmlns="http://example.org/hal">
 <item><subitem>a</subitem></item>

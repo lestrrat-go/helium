@@ -253,6 +253,7 @@ func main() {
 			// Parse assertions
 			gt.Assertions = parseResultAssertions(tc, tsDirAbs)
 			classifyError(&gt)
+			classifyUnsupportedAssertions(&gt)
 
 			// Track stylesheet assets
 			if gt.StylesheetPath != "" {
@@ -632,6 +633,43 @@ func classifyError(gt *generatedTest) {
 			}
 		}
 	}
+}
+
+// classifyUnsupportedAssertions sets Skip when all emitted assertions would
+// be w3cAssertSkip(). This avoids compiling/transforming stylesheets for
+// tests whose results cannot be verified.
+func classifyUnsupportedAssertions(gt *generatedTest) {
+	if gt.Skip != "" || gt.ExpectError {
+		return
+	}
+	exprs := emitAssertions(gt.Assertions)
+	if len(exprs) == 0 {
+		return
+	}
+	for _, e := range exprs {
+		if e != "w3cAssertSkip()" {
+			return
+		}
+	}
+	gt.Skip = unsupportedAssertionReason(gt.Assertions)
+}
+
+func unsupportedAssertionReason(assertions []assertion) string {
+	for _, a := range assertions {
+		switch a.Type {
+		case "assert-result-document":
+			return "unsupported assertion: assert-result-document"
+		case "assert-serialization":
+			return "unsupported assertion: assert-serialization"
+		case "assert-posture-and-sweep":
+			return "unsupported assertion: assert-posture-and-sweep"
+		case "all-of":
+			if reason := unsupportedAssertionReason(a.Children); reason != "" {
+				return reason
+			}
+		}
+	}
+	return "unsupported assertion type"
 }
 
 // ──────────────────────────────────────────────────────────────────────
