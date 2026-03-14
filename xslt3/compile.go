@@ -248,7 +248,9 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 			if err := c.compileFunction(elem); err != nil {
 				return err
 			}
-		case "decimal-format", "namespace-alias", "attribute-set":
+		case "decimal-format":
+			c.compileDecimalFormat(elem)
+		case "namespace-alias", "attribute-set":
 			// TODO: implement in later phases
 		default:
 			// Unknown top-level element - ignore for forward compatibility
@@ -596,6 +598,76 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 
 	c.stylesheet.functions[qn] = fn
 	return nil
+}
+
+func (c *compiler) compileDecimalFormat(elem *helium.Element) {
+	df := xpath3.DefaultDecimalFormat()
+
+	if v := getAttr(elem, "decimal-separator"); v != "" {
+		df.DecimalSeparator = firstRune(v)
+	}
+	if v := getAttr(elem, "grouping-separator"); v != "" {
+		df.GroupingSeparator = firstRune(v)
+	}
+	if v := getAttr(elem, "percent"); v != "" {
+		df.Percent = firstRune(v)
+	}
+	if v := getAttr(elem, "per-mille"); v != "" {
+		df.PerMille = firstRune(v)
+	}
+	if v := getAttr(elem, "zero-digit"); v != "" {
+		df.ZeroDigit = firstRune(v)
+	}
+	if v := getAttr(elem, "digit"); v != "" {
+		df.Digit = firstRune(v)
+	}
+	if v := getAttr(elem, "pattern-separator"); v != "" {
+		df.PatternSeparator = firstRune(v)
+	}
+	if v := getAttr(elem, "exponent-separator"); v != "" {
+		df.ExponentSeparator = firstRune(v)
+	}
+	if v := getAttr(elem, "infinity"); v != "" {
+		df.Infinity = v
+	}
+	if v := getAttr(elem, "NaN"); v != "" {
+		df.NaN = v
+	}
+	if v := getAttr(elem, "minus-sign"); v != "" {
+		df.MinusSign = firstRune(v)
+	}
+
+	name := getAttr(elem, "name")
+	if name == "" {
+		// Default (unnamed) decimal format
+		if c.stylesheet.decimalFormats == nil {
+			c.stylesheet.decimalFormats = make(map[xpath3.QualifiedName]xpath3.DecimalFormat)
+		}
+		c.stylesheet.decimalFormats[xpath3.QualifiedName{}] = df
+		return
+	}
+
+	qn := xpath3.QualifiedName{Name: name}
+	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		prefix := name[:idx]
+		local := name[idx+1:]
+		if uri, ok := c.nsBindings[prefix]; ok {
+			qn = xpath3.QualifiedName{URI: uri, Name: local}
+		} else {
+			qn.Name = local
+		}
+	}
+	if c.stylesheet.decimalFormats == nil {
+		c.stylesheet.decimalFormats = make(map[xpath3.QualifiedName]xpath3.DecimalFormat)
+	}
+	c.stylesheet.decimalFormats[qn] = df
+}
+
+func firstRune(s string) rune {
+	for _, r := range s {
+		return r
+	}
+	return 0
 }
 
 func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) {
