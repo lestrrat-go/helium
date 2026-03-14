@@ -82,6 +82,7 @@ type ElementInst struct {
 	Name      *AVT
 	Namespace *AVT
 	Body      []Instruction
+	TypeName  string // XSD type annotation (e.g., "xs:integer")
 }
 
 func (*ElementInst) instructionTag() {}
@@ -93,6 +94,7 @@ type AttributeInst struct {
 	Select    *xpath3.Expression
 	Body      []Instruction
 	Separator *AVT
+	TypeName  string // XSD type annotation (e.g., "xs:ID")
 }
 
 func (*AttributeInst) instructionTag() {}
@@ -174,15 +176,17 @@ func (*ParamInst) instructionTag() {}
 
 // CopyInst represents xsl:copy.
 type CopyInst struct {
-	Select *xpath3.Expression
-	Body   []Instruction
+	Select     *xpath3.Expression
+	Body       []Instruction
+	Validation string // "strict", "lax", "preserve", "strip"
 }
 
 func (*CopyInst) instructionTag() {}
 
 // CopyOfInst represents xsl:copy-of.
 type CopyOfInst struct {
-	Select *xpath3.Expression
+	Select     *xpath3.Expression
+	Validation string // "strict", "lax", "preserve", "strip"
 }
 
 func (*CopyOfInst) instructionTag() {}

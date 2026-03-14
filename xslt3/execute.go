@@ -45,7 +45,8 @@ type execContext struct {
 	cachedVarsGen     uint64                             // globalVarsGen at time cachedVarsMap was built
 	msgHandler        func(string, bool)
 	transformCfg      *transformConfig
-	transformCtx      context.Context // parent context from Transform caller (for cancellation/deadlines)
+	transformCtx      context.Context                  // parent context from Transform caller (for cancellation/deadlines)
+	typeAnnotations   map[helium.Node]string           // node → xs:... type annotation (schema-aware)
 }
 
 func withExecContext(ctx context.Context, ec *execContext) context.Context {
@@ -55,6 +56,61 @@ func withExecContext(ctx context.Context, ec *execContext) context.Context {
 func getExecContext(ctx context.Context) *execContext {
 	v, _ := ctx.Value(execContextKey{}).(*execContext)
 	return v
+}
+
+// annotateAttr applies a type annotation to a just-set attribute on an element.
+// If typeName is empty, this is a no-op.
+func (ec *execContext) annotateAttr(elem *helium.Element, typeName, localName, nsURI, value string) {
+	if typeName == "" {
+		return
+	}
+	if nsURI != "" {
+		if attr := elem.GetAttributeNodeNS(localName, nsURI); attr != nil {
+			ec.annotateNode(attr, typeName)
+		}
+	} else {
+		for _, attr := range elem.Attributes() {
+			if attr.Name() == localName {
+				ec.annotateNode(attr, typeName)
+				break
+			}
+		}
+	}
+	if typeName == "xs:ID" {
+		// Register on the document that owns this element (may be a
+		// temporary document during variable/function body evaluation).
+		out := ec.currentOutput()
+		out.doc.RegisterID(value, elem)
+	}
+}
+
+// annotateNode records a type annotation for a result-tree node.
+func (ec *execContext) annotateNode(node helium.Node, typeName string) {
+	if typeName == "" {
+		return
+	}
+	if ec.typeAnnotations == nil {
+		ec.typeAnnotations = make(map[helium.Node]string)
+	}
+	ec.typeAnnotations[node] = typeName
+}
+
+// transferAnnotations copies the type annotation for srcNode to the most
+// recently appended child of the current output node. Used when
+// validation="preserve" is in effect during copy-of.
+func (ec *execContext) transferAnnotations(srcNode helium.Node) {
+	if ec.typeAnnotations == nil {
+		return
+	}
+	ann, ok := ec.typeAnnotations[srcNode]
+	if !ok || ann == "" {
+		return
+	}
+	out := ec.currentOutput()
+	last := out.current.LastChild()
+	if last != nil {
+		ec.annotateNode(last, ann)
+	}
 }
 
 // varScope is a variable scope chain.
@@ -124,6 +180,9 @@ func (ec *execContext) newXPathContext(node helium.Node) context.Context {
 	if fnsNS := ec.xsltFunctionsNS(); len(fnsNS) > 0 {
 		ctx = xpath3.WithFunctionsNSBorrowed(ctx, fnsNS)
 	}
+	if len(ec.typeAnnotations) > 0 {
+		ctx = xpath3.WithTypeAnnotations(ctx, ec.typeAnnotations)
+	}
 	if len(ec.stylesheet.namespaces) > 0 || ec.hasXPathDefaultNS {
 		ns := make(map[string]string, len(ec.stylesheet.namespaces)+1)
 		for k, v := range ec.stylesheet.namespaces {
@@ -178,6 +237,9 @@ func (ec *execContext) baseXPathContext() context.Context {
 	ctx = xpath3.WithFunctionsBorrowed(ctx, ec.xsltFunctions())
 	if fnsNS := ec.xsltFunctionsNS(); len(fnsNS) > 0 {
 		ctx = xpath3.WithFunctionsNSBorrowed(ctx, fnsNS)
+	}
+	if len(ec.typeAnnotations) > 0 {
+		ctx = xpath3.WithTypeAnnotations(ctx, ec.typeAnnotations)
 	}
 	if len(ec.stylesheet.namespaces) > 0 || ec.hasXPathDefaultNS {
 		ns := make(map[string]string, len(ec.stylesheet.namespaces)+1)

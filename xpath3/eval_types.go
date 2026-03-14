@@ -355,11 +355,23 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		if !ok {
 			return false
 		}
+		if t.TypeName != "" && ni.TypeAnnotation != "" {
+			target := resolveTestTypeName(t.TypeName, ec)
+			if !isSubtypeOf(ni.TypeAnnotation, target) {
+				return false
+			}
+		}
 		return matchNodeTest(t, ni.Node, AxisChild, ec)
 	case AttributeTest:
 		ni, ok := item.(NodeItem)
 		if !ok {
 			return false
+		}
+		if t.TypeName != "" && ni.TypeAnnotation != "" {
+			target := resolveTestTypeName(t.TypeName, ec)
+			if !isSubtypeOf(ni.TypeAnnotation, target) {
+				return false
+			}
 		}
 		return matchNodeTest(t, ni.Node, AxisAttribute, ec)
 	case DocumentTest:

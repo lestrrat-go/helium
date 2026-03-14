@@ -81,11 +81,12 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
 - Compile context options: `WithCompileBaseURI(ctx, uri)`, `WithCompileURIResolver(ctx, resolver)`
 - Transform context options: `WithParameter(ctx, name, value)`, `WithInitialTemplate(ctx, name)`, `WithMessageHandler(ctx, fn)`
 - Key types: `Stylesheet`, `Template`, `Variable`, `Param`, `KeyDef`, `OutputDef`, `URIResolver`
-- Supports: `xsl:template`, `xsl:apply-templates`, `xsl:call-template`, `xsl:param`/`xsl:variable`, `xsl:include`/`xsl:import`, `xsl:sort`, `xsl:number`, `xsl:message`, `xsl:key`, `xsl:output`, literal result elements, AVTs, `xsl:function`
-- Runtime helpers: `current()`, `document()`, `key()`, `generate-id()`, `system-property()`, `unparsed-entity-uri()`
+- Supports: `xsl:template`, `xsl:apply-templates`, `xsl:call-template`, `xsl:param`/`xsl:variable`, `xsl:include`/`xsl:import`, `xsl:sort`, `xsl:number`, `xsl:message`, `xsl:key`, `xsl:output`, `xsl:import-schema`, literal result elements, AVTs, `xsl:function`
+- Schema awareness: `xsl:import-schema` compiles XSD schemas, `type=` on `xsl:element`/`xsl:attribute` annotates result nodes, `validation=` on `xsl:copy`/`xsl:copy-of`, `default-validation` stylesheet attribute, `type-available()` function, type annotations flow to xpath3 via `WithTypeAnnotations`
+- Runtime helpers: `current()`, `document()`, `key()`, `generate-id()`, `system-property()`, `unparsed-entity-uri()`, `type-available()`
 - Output methods: `xml`, `html`, `text`
 - Files: `xslt3.go` (API), `options.go` (context config), `compile.go`, `compile_instructions.go`, `compile_patterns.go`, `execute.go`, `execute_instructions.go`, `output.go`, `functions.go`, `keys.go`, `avt.go`, `stylesheet.go`, `instruction.go`, `sort.go`, `errors.go`
-- Imports: helium, xpath3
+- Imports: helium, xpath3, xsd
 - Tests: `xslt3_test.go` runs phase-1 W3C XSLT 3.0 test sets from `testdata/xslt30/source/` when fetched
 
 ## xsd/

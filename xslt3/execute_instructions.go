@@ -471,6 +471,10 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 		return err
 	}
 
+	if inst.TypeName != "" {
+		ec.annotateNode(elem, inst.TypeName)
+	}
+
 	// Push new output context for children
 	out := ec.currentOutput()
 	savedCurrent := out.current
@@ -566,7 +570,11 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 			if err != nil {
 				return err
 			}
-			return elem.SetAttributeNS(localName, value, ns)
+			if err := elem.SetAttributeNS(localName, value, ns); err != nil {
+				return err
+			}
+			ec.annotateAttr(elem, inst.TypeName, localName, nsURI, value)
+			return nil
 		}
 	}
 
@@ -581,13 +589,21 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 			if err != nil {
 				return err
 			}
-			return elem.SetAttributeNS(localName, value, ns)
+			if err := elem.SetAttributeNS(localName, value, ns); err != nil {
+				return err
+			}
+			ec.annotateAttr(elem, inst.TypeName, localName, uri, value)
+			return nil
 		}
 	}
 
 	// Remove existing attribute with same name to allow replacement
 	elem.RemoveAttribute(name)
-	return elem.SetAttribute(name, value)
+	if err := elem.SetAttribute(name, value); err != nil {
+		return err
+	}
+	ec.annotateAttr(elem, inst.TypeName, name, "", value)
+	return nil
 }
 
 // copyAttributeToElement copies an attribute to an element, preserving its
@@ -981,6 +997,15 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 	return ec.execCopyNode(ctx, ec.contextNode, inst.Body)
 }
 
+// effectiveValidation returns the validation mode for a copy/copy-of instruction,
+// falling back to the stylesheet default when the instruction has none.
+func (ec *execContext) effectiveValidation(instValidation string) string {
+	if instValidation != "" {
+		return instValidation
+	}
+	return ec.stylesheet.defaultValidation
+}
+
 func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body []Instruction) error {
 	if node == nil {
 		return nil
@@ -1075,6 +1100,8 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 		return err
 	}
 
+	preserve := ec.effectiveValidation(inst.Validation) == "preserve"
+
 	prevWasAtomic := false
 	for _, item := range result.Sequence() {
 		switch v := item.(type) {
@@ -1082,6 +1109,9 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 			prevWasAtomic = false
 			if err := ec.copyNodeToOutput(v.Node); err != nil {
 				return err
+			}
+			if preserve {
+				ec.transferAnnotations(v.Node)
 			}
 		case xpath3.AtomicValue:
 			s, err := xpath3.AtomicToString(v)
