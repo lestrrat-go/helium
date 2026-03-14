@@ -27,6 +27,7 @@ type Stylesheet struct {
 	namespaces      map[string]string   // prefix -> URI from stylesheet
 	excludePrefixes map[string]struct{} // prefixes excluded from output
 	sourceDoc       *helium.Document    // the parsed stylesheet document (for document(""))
+	baseURI         string              // base URI for resolving relative document references
 }
 
 // XSLFunction is a compiled xsl:function.

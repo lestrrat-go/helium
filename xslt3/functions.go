@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -71,12 +72,13 @@ func (ec *execContext) fnDocument(ctx context.Context, args []xpath3.Sequence) (
 		return xpath3.SingleNode(doc), nil
 	}
 
-	// TODO(xslt3): use the configured URIResolver (WithURIResolver) instead of
-	// os.ReadFile. The resolver is available at compile time (c.resolver) but is
-	// not yet wired into the runtime execContext. Relative URIs should also be
-	// resolved against the stylesheet base URI per the XSLT spec. This is a
-	// known limitation — non-filesystem URIs will fail here.
-	data, err := os.ReadFile(uri)
+	// Resolve relative URI against stylesheet base URI
+	resolvedURI := uri
+	if ec.stylesheet.baseURI != "" && !strings.Contains(uri, "://") && !filepath.IsAbs(uri) {
+		baseDir := filepath.Dir(ec.stylesheet.baseURI)
+		resolvedURI = filepath.Join(baseDir, uri)
+	}
+	data, err := os.ReadFile(resolvedURI)
 	if err != nil {
 		return nil, dynamicError("FODC0002", "cannot load document %q: %v", uri, err)
 	}
