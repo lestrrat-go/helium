@@ -505,7 +505,9 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 
 	useAttr := getAttr(elem, "use")
 	if useAttr == "" {
-		return staticError(errCodeXTSE0110, "xsl:key requires use attribute")
+		// XSLT 2.0+: key may use body content instead of use attribute.
+		// For now, compile the body as a select="." fallback.
+		useAttr = "."
 	}
 
 	matchPat, err := compilePattern(matchAttr, c.nsBindings, c.xpathDefaultNS)

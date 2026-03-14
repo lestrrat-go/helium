@@ -194,6 +194,20 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (Instruction, er
 	case "sort":
 		// xsl:sort is handled by parent instructions
 		return nil, nil
+	case "fallback":
+		// xsl:fallback is only activated when the parent is unrecognized;
+		// when we reach here the parent was recognized, so skip.
+		return nil, nil
+	case "analyze-string":
+		// TODO: implement xsl:analyze-string
+		return &SequenceInst{}, nil
+	case "source-document":
+		// TODO: implement xsl:source-document
+		body, err := c.compileChildren(elem)
+		if err != nil {
+			return nil, err
+		}
+		return &SequenceInst{Body: body}, nil
 	default:
 		return nil, staticError(errCodeXTSE0090, "unknown XSLT instruction xsl:%s", elem.LocalName())
 	}

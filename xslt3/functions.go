@@ -21,9 +21,11 @@ func (ec *execContext) xsltFunctions() map[string]xpath3.Function {
 		"generate-id":         &xsltFunc{min: 0, max: 1, fn: ec.fnGenerateID},
 		"system-property":     &xsltFunc{min: 1, max: 1, fn: ec.fnSystemProperty},
 		"unparsed-entity-uri": &xsltFunc{min: 1, max: 1, fn: ec.fnUnparsedEntityURI},
-		"element-available":   &xsltFunc{min: 1, max: 1, fn: ec.fnElementAvailable},
-		"function-available":  &xsltFunc{min: 1, max: 2, fn: ec.fnFunctionAvailable},
-		"type-available":      &xsltFunc{min: 1, max: 1, fn: ec.fnTypeAvailable},
+		"element-available":    &xsltFunc{min: 1, max: 1, fn: ec.fnElementAvailable},
+		"function-available":   &xsltFunc{min: 1, max: 2, fn: ec.fnFunctionAvailable},
+		"type-available":       &xsltFunc{min: 1, max: 1, fn: ec.fnTypeAvailable},
+		"current-group":        &xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroup},
+		"current-grouping-key": &xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroupingKey},
 	}
 }
 
@@ -381,6 +383,22 @@ func (ec *execContext) fnFunctionAvailable(_ context.Context, args []xpath3.Sequ
 // type-available(name) — not supported (no schema awareness), always returns false.
 func (ec *execContext) fnTypeAvailable(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
 	return xpath3.SingleBoolean(false), nil
+}
+
+// current-group() returns the items in the current group during for-each-group.
+func (ec *execContext) fnCurrentGroup(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
+	if ec.currentGroup != nil {
+		return ec.currentGroup, nil
+	}
+	return xpath3.EmptySequence(), nil
+}
+
+// current-grouping-key() returns the grouping key for the current group.
+func (ec *execContext) fnCurrentGroupingKey(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
+	if ec.currentGroupKey != nil {
+		return ec.currentGroupKey, nil
+	}
+	return xpath3.EmptySequence(), nil
 }
 
 // xsltFunctionsNS returns user-defined xsl:function definitions as xpath3 functions
