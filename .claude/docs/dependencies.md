@@ -10,6 +10,7 @@ xinclude       → helium, xpointer
                   → xpath1 (via xpointer)
                   → internal/encoding
 xpath3         → helium, internal/xpath
+xslt3          → helium, xpath3
 xsd            → helium, xpath1
 relaxng        → helium
 schematron     → helium, xpath1
@@ -35,7 +36,7 @@ helium (root) → sax, enum, internal/*
 c14n, xpath1, xpath3, html, catalog, relaxng, stream
 
 ## Composition layer (depends on processing)
-xsd (root + xpath1), xpointer (root + xpath1), schematron (root + xpath1), xinclude (root + xpointer), shim (root + stream)
+xsd (root + xpath1), xpointer (root + xpath1), schematron (root + xpath1), xinclude (root + xpointer), xslt3 (root + xpath3), shim (root + stream)
 
 ## Application layer
 internal/cli/heliumcmd (CLI implementation)
