@@ -167,7 +167,19 @@ func w3cCheckXPath(expr string) w3cCheck {
 		if err != nil {
 			return false
 		}
-		res, err := compiled.Evaluate(context.TODO(), doc)
+		ctx := context.TODO()
+		if root := doc.DocumentElement(); root != nil {
+			ns := make(map[string]string)
+			for _, n := range root.Namespaces() {
+				if n.Prefix() != "" {
+					ns[n.Prefix()] = n.URI()
+				}
+			}
+			if len(ns) > 0 {
+				ctx = xpath3.WithNamespaces(ctx, ns)
+			}
+		}
+		res, err := compiled.Evaluate(ctx, doc)
 		if err != nil {
 			return false
 		}
@@ -462,7 +474,21 @@ func evalXPathAssert(t *testing.T, expr string, resultXML string) bool {
 		return false
 	}
 
-	res, err := compiled.Evaluate(context.TODO(), doc)
+	// Extract namespace bindings from the document element for XPath evaluation
+	ctx := context.TODO()
+	if root := doc.DocumentElement(); root != nil {
+		ns := make(map[string]string)
+		for _, n := range root.Namespaces() {
+			if n.Prefix() != "" {
+				ns[n.Prefix()] = n.URI()
+			}
+		}
+		if len(ns) > 0 {
+			ctx = xpath3.WithNamespaces(ctx, ns)
+		}
+	}
+
+	res, err := compiled.Evaluate(ctx, doc)
 	if err != nil {
 		t.Errorf("assert: XPath evaluation error for %q: %v", expr, err)
 		return false
