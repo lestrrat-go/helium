@@ -3,6 +3,7 @@ package xpath3
 import (
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/lestrrat-go/helium"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
@@ -24,8 +25,26 @@ func evalLiteral(e LiteralExpr) (Sequence, error) {
 
 func evalVariable(ec *evalContext, e VariableExpr) (Sequence, error) {
 	if ec.vars != nil {
+		// Try exact name first
 		if v, ok := ec.vars.Lookup(e.Name); ok {
 			return v, nil
+		}
+		// If EQName (Q{uri}local), normalize to {uri}local and retry
+		if strings.HasPrefix(e.Name, "Q{") {
+			resolved := e.Name[1:] // strip leading "Q"
+			if v, ok := ec.vars.Lookup(resolved); ok {
+				return v, nil
+			}
+		}
+		// If prefixed, resolve to {uri}local and retry
+		if e.Prefix != "" {
+			if uri, ok := ec.namespaces[e.Prefix]; ok {
+				local := e.Name[len(e.Prefix)+1:] // strip "prefix:"
+				resolved := "{" + uri + "}" + local
+				if v, ok := ec.vars.Lookup(resolved); ok {
+					return v, nil
+				}
+			}
 		}
 	}
 	return nil, fmt.Errorf("%w: $%s", ErrUndefinedVariable, e.Name)

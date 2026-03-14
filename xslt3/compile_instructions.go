@@ -814,7 +814,7 @@ func (c *compiler) compileWithParam(elem *helium.Element) (*WithParam, error) {
 		return nil, staticError(errCodeXTSE0110, "xsl:with-param requires name attribute")
 	}
 
-	wp := &WithParam{Name: name}
+	wp := &WithParam{Name: resolveQName(name, c.nsBindings)}
 
 	if tunnelAttr := getAttr(elem, "tunnel"); tunnelAttr == "yes" {
 		wp.Tunnel = true
