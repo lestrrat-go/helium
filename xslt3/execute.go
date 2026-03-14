@@ -22,6 +22,10 @@ type execContext struct {
 	size            int
 	localVars       *varScope
 	globalVars      map[string]xpath3.Sequence
+	globalVarDefs   map[string]*Variable       // unevaluated global variable definitions (lazy)
+	globalParamDefs map[string]*Param          // unevaluated global param definitions (lazy)
+	globalEvaluating map[string]bool            // circular dependency detection
+	collectingVars   bool                       // reentrancy guard for collectAllVars
 	currentMode     string
 	currentTemplate *Template // currently executing template (for next-match)
 	tunnelParams    map[string]xpath3.Sequence // tunnel parameters passed through apply-templates
@@ -30,6 +34,7 @@ type execContext struct {
 	keyTables       map[string]*keyTable
 	docCache        map[string]*helium.Document
 	msgHandler      func(string, bool)
+	transformCfg    *transformConfig
 }
 
 func withExecContext(ctx context.Context, ec *execContext) context.Context {
@@ -83,6 +88,21 @@ func (ec *execContext) lookupVar(name string) (xpath3.Sequence, bool) {
 	if seq, ok := ec.globalVars[name]; ok {
 		return seq, true
 	}
+	// Lazy evaluation: check if there's an unevaluated global var/param
+	if v, ok := ec.globalVarDefs[name]; ok {
+		val, err := ec.evaluateGlobalVar(v)
+		if err != nil {
+			return nil, false
+		}
+		return val, true
+	}
+	if p, ok := ec.globalParamDefs[name]; ok {
+		val, err := ec.evaluateGlobalParam(p)
+		if err != nil {
+			return nil, false
+		}
+		return val, true
+	}
 	return nil, false
 }
 
@@ -129,7 +149,32 @@ func (ec *execContext) newXPathContext(node helium.Node) context.Context {
 
 func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
 	vars := make(map[string]xpath3.Sequence)
-	// Start with globals, then overlay with locals (innermost scope wins)
+	// Eagerly evaluate all pending global vars/params, but only at the
+	// top level. Nested calls (from within evaluateGlobalVar/Param →
+	// newXPathContext → collectAllVars) just snapshot what's available;
+	// the lazy lookupVar path handles remaining references on demand.
+	if !ec.collectingVars {
+		ec.collectingVars = true
+		defer func() { ec.collectingVars = false }()
+		for len(ec.globalVarDefs) > 0 || len(ec.globalParamDefs) > 0 {
+			progress := false
+			for _, v := range ec.globalVarDefs {
+				if _, err := ec.evaluateGlobalVar(v); err == nil {
+					progress = true
+				}
+			}
+			for _, p := range ec.globalParamDefs {
+				if _, err := ec.evaluateGlobalParam(p); err == nil {
+					progress = true
+				}
+			}
+			if !progress {
+				break // avoid infinite loop on circular deps
+			}
+		}
+	}
+
+	// Start with globals
 	for k, v := range ec.globalVars {
 		vars[k] = v
 	}
@@ -207,59 +252,94 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	return resultDoc, nil
 }
 
-// initGlobalVars evaluates global variables and parameters in dependency order.
+// initGlobalVars registers global variables and parameters for lazy evaluation.
+// Params with caller-provided values are set immediately; all others are
+// evaluated on first access to support arbitrary declaration order.
 func (ec *execContext) initGlobalVars(ctx context.Context, cfg *transformConfig) error {
-	// First, process params (may be overridden by caller)
-	for _, p := range ec.stylesheet.globalParams {
-		var val xpath3.Sequence
+	ec.transformCfg = cfg
+	ec.globalVarDefs = make(map[string]*Variable, len(ec.stylesheet.globalVars))
+	ec.globalParamDefs = make(map[string]*Param, len(ec.stylesheet.globalParams))
+	ec.globalEvaluating = make(map[string]bool)
 
-		// Check if caller provided a value
+	// Register params — set immediately if caller provided a value
+	for _, p := range ec.stylesheet.globalParams {
 		if cfg != nil && cfg.params != nil {
 			if sv, ok := cfg.params[p.Name]; ok {
-				val = xpath3.SingleString(sv)
-				ec.globalVars[p.Name] = val
+				ec.globalVars[p.Name] = xpath3.SingleString(sv)
 				continue
 			}
 		}
-
-		if p.Select != nil {
-			xpathCtx := ec.newXPathContext(ec.sourceDoc)
-			result, err := p.Select.Evaluate(xpathCtx, ec.sourceDoc)
-			if err != nil {
-				return fmt.Errorf("error evaluating global param %q: %w", p.Name, err)
-			}
-			val = result.Sequence()
-		} else if len(p.Body) > 0 {
-			var err error
-			val, err = ec.evaluateBody(ctx, p.Body)
-			if err != nil {
-				return fmt.Errorf("error evaluating global param %q body: %w", p.Name, err)
-			}
-		}
-		ec.globalVars[p.Name] = val
+		ec.globalParamDefs[p.Name] = p
 	}
 
-	// Then process variables
+	// Register variables for lazy evaluation
 	for _, v := range ec.stylesheet.globalVars {
-		if v.Select != nil {
-			xpathCtx := ec.newXPathContext(ec.sourceDoc)
-			result, err := v.Select.Evaluate(xpathCtx, ec.sourceDoc)
-			if err != nil {
-				return fmt.Errorf("error evaluating global variable %q: %w", v.Name, err)
-			}
-			ec.globalVars[v.Name] = result.Sequence()
-		} else if len(v.Body) > 0 {
-			val, err := ec.evaluateBody(ctx, v.Body)
-			if err != nil {
-				return fmt.Errorf("error evaluating global variable %q body: %w", v.Name, err)
-			}
-			ec.globalVars[v.Name] = val
-		} else {
-			ec.globalVars[v.Name] = xpath3.SingleString("")
-		}
+		ec.globalVarDefs[v.Name] = v
 	}
 
 	return nil
+}
+
+// evaluateGlobalVar evaluates a global variable on first access.
+func (ec *execContext) evaluateGlobalVar(v *Variable) (xpath3.Sequence, error) {
+	if ec.globalEvaluating[v.Name] {
+		return nil, fmt.Errorf("circular dependency in global variable %q", v.Name)
+	}
+	ec.globalEvaluating[v.Name] = true
+	defer delete(ec.globalEvaluating, v.Name)
+
+	var val xpath3.Sequence
+	ctx := context.Background()
+	if v.Select != nil {
+		xpathCtx := ec.newXPathContext(ec.sourceDoc)
+		result, err := v.Select.Evaluate(xpathCtx, ec.sourceDoc)
+		if err != nil {
+			return nil, fmt.Errorf("error evaluating global variable %q: %w", v.Name, err)
+		}
+		val = result.Sequence()
+	} else if len(v.Body) > 0 {
+		var err error
+		val, err = ec.evaluateBody(ctx, v.Body)
+		if err != nil {
+			return nil, fmt.Errorf("error evaluating global variable %q body: %w", v.Name, err)
+		}
+	} else {
+		val = xpath3.SingleString("")
+	}
+
+	ec.globalVars[v.Name] = val
+	delete(ec.globalVarDefs, v.Name)
+	return val, nil
+}
+
+// evaluateGlobalParam evaluates a global param on first access.
+func (ec *execContext) evaluateGlobalParam(p *Param) (xpath3.Sequence, error) {
+	if ec.globalEvaluating[p.Name] {
+		return nil, fmt.Errorf("circular dependency in global param %q", p.Name)
+	}
+	ec.globalEvaluating[p.Name] = true
+	defer delete(ec.globalEvaluating, p.Name)
+
+	var val xpath3.Sequence
+	ctx := context.Background()
+	if p.Select != nil {
+		xpathCtx := ec.newXPathContext(ec.sourceDoc)
+		result, err := p.Select.Evaluate(xpathCtx, ec.sourceDoc)
+		if err != nil {
+			return nil, fmt.Errorf("error evaluating global param %q: %w", p.Name, err)
+		}
+		val = result.Sequence()
+	} else if len(p.Body) > 0 {
+		var err error
+		val, err = ec.evaluateBody(ctx, p.Body)
+		if err != nil {
+			return nil, fmt.Errorf("error evaluating global param %q body: %w", p.Name, err)
+		}
+	}
+
+	ec.globalVars[p.Name] = val
+	delete(ec.globalParamDefs, p.Name)
+	return val, nil
 }
 
 // evaluateBody executes instructions and captures the result as a sequence.
