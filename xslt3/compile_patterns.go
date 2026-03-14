@@ -192,8 +192,13 @@ func nodeTestPriority(test xpath3.NodeTest) float64 {
 func (p *Pattern) matchPattern(ctx *execContext, node helium.Node) bool {
 	// Temporarily set xpath-default-namespace from pattern's compile-time value
 	saved := ctx.xpathDefaultNS
+	savedHas := ctx.hasXPathDefaultNS
 	ctx.xpathDefaultNS = p.xpathDefaultNS
-	defer func() { ctx.xpathDefaultNS = saved }()
+	ctx.hasXPathDefaultNS = p.xpathDefaultNS != ""
+	defer func() {
+		ctx.xpathDefaultNS = saved
+		ctx.hasXPathDefaultNS = savedHas
+	}()
 
 	for _, alt := range p.Alternatives {
 		if matchPatternAlt(ctx, alt, node) {

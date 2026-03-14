@@ -220,7 +220,11 @@ func runTestCase(t *testing.T, tc *helium.Element, tsDir string, environments ma
 				stylesheetFile = f
 			case "initial-template":
 				n, _ := sElem.GetAttribute("name")
-				// Resolve QName prefix using namespace declarations on element
+				// Resolve QName prefix using namespace declarations on element.
+			// Note: Namespaces() returns only locally-declared namespaces, not
+			// inherited ones. This is sufficient for W3C test cases which declare
+			// prefixes on the elements that use them. If a test ever declares the
+			// prefix on an ancestor only, this will need to walk up the tree.
 				if idx := strings.IndexByte(n, ':'); idx >= 0 {
 					prefix := n[:idx]
 					local := n[idx+1:]
@@ -254,7 +258,11 @@ func runTestCase(t *testing.T, tc *helium.Element, tsDir string, environments ma
 		return testSkip
 	}
 
-	// Resolve source data
+	// Resolve source data.
+	// When envRef is set but the environment has no source specification
+	// (no inline content and no source file), sourceData stays nil and
+	// falls through to the default empty document below. This is intentional:
+	// some environments only define parameters or other settings.
 	if envRef != "" {
 		if env, ok := environments[envRef]; ok {
 			if env.sourceContent != nil {

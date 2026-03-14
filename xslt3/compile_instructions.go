@@ -623,7 +623,7 @@ func (c *compiler) compileLocalVariable(elem *helium.Element) (*VariableInst, er
 	}
 
 	inst := &VariableInst{
-		Name: name,
+		Name: resolveQName(name, c.nsBindings),
 		As:   getAttr(elem, "as"),
 	}
 
@@ -652,7 +652,7 @@ func (c *compiler) compileLocalParam(elem *helium.Element) (*ParamInst, error) {
 	}
 
 	inst := &ParamInst{
-		Name:     name,
+		Name:     resolveQName(name, c.nsBindings),
 		Required: getAttr(elem, "required") == "yes",
 	}
 

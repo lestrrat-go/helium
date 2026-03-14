@@ -120,6 +120,12 @@ func (ec *execContext) newXPathContext(node helium.Node) context.Context {
 	if len(ec.stylesheet.namespaces) > 0 || ec.hasXPathDefaultNS {
 		ns := make(map[string]string, len(ec.stylesheet.namespaces)+1)
 		for k, v := range ec.stylesheet.namespaces {
+			// Skip the default namespace binding unless xpath-default-namespace
+			// is explicitly set; otherwise the stylesheet's xmlns="..." leaks
+			// into XPath name tests and changes how unprefixed names resolve.
+			if k == "" && !ec.hasXPathDefaultNS {
+				continue
+			}
 			ns[k] = v
 		}
 		if ec.hasXPathDefaultNS {
