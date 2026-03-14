@@ -28,6 +28,7 @@ type execContext struct {
 	collectingVars   bool                 // reentrancy guard for collectAllVars
 	currentMode      string
 	currentTemplate  *Template                  // currently executing template (for next-match)
+	xpathDefaultNS   string                     // current xpath-default-namespace
 	tunnelParams     map[string]xpath3.Sequence // tunnel parameters passed through apply-templates
 	depth            int                        // recursion depth
 	outputStack      []*outputFrame
@@ -110,8 +111,15 @@ func (ec *execContext) newXPathContext(node helium.Node) context.Context {
 	if fnsNS := ec.xsltFunctionsNS(); len(fnsNS) > 0 {
 		ctx = xpath3.WithFunctionsNS(ctx, fnsNS)
 	}
-	if len(ec.stylesheet.namespaces) > 0 {
-		ctx = xpath3.WithNamespaces(ctx, ec.stylesheet.namespaces)
+	if len(ec.stylesheet.namespaces) > 0 || ec.xpathDefaultNS != "" {
+		ns := make(map[string]string, len(ec.stylesheet.namespaces)+1)
+		for k, v := range ec.stylesheet.namespaces {
+			ns[k] = v
+		}
+		if ec.xpathDefaultNS != "" {
+			ns[""] = ec.xpathDefaultNS
+		}
+		ctx = xpath3.WithNamespaces(ctx, ns)
 	}
 	if ec.position > 0 {
 		ctx = xpath3.WithPosition(ctx, ec.position)
@@ -478,10 +486,12 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 	savedSize := ec.size
 	savedTemplate := ec.currentTemplate
 	savedTunnel := ec.tunnelParams
+	savedXPathDefaultNS := ec.xpathDefaultNS
 	ec.currentNode = node
 	ec.contextNode = node
 	ec.currentMode = mode
 	ec.currentTemplate = tmpl
+	ec.xpathDefaultNS = tmpl.XPathDefaultNS
 	ec.position = 1
 	ec.size = 1
 	defer func() {
@@ -489,6 +499,7 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 		ec.contextNode = savedContext
 		ec.currentMode = savedMode
 		ec.currentTemplate = savedTemplate
+		ec.xpathDefaultNS = savedXPathDefaultNS
 		ec.position = savedPos
 		ec.size = savedSize
 		ec.tunnelParams = savedTunnel
