@@ -142,6 +142,9 @@ func (ec *execContext) newXPathContext(node helium.Node) context.Context {
 	if ec.contextItem != nil {
 		ctx = xpath3.WithContextItem(ctx, ec.contextItem)
 	}
+	if ec.stylesheet.baseURI != "" {
+		ctx = xpath3.WithBaseURI(ctx, ec.stylesheet.baseURI)
+	}
 	return ctx
 }
 
