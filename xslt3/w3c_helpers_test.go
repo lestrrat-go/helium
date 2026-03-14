@@ -354,10 +354,18 @@ func nodesEqual(a, b helium.Node) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	if a.Type() != b.Type() {
+	aType, bType := a.Type(), b.Type()
+	// Treat CDATA and Text as equivalent
+	if aType == helium.CDATASectionNode {
+		aType = helium.TextNode
+	}
+	if bType == helium.CDATASectionNode {
+		bType = helium.TextNode
+	}
+	if aType != bType {
 		return false
 	}
-	switch a.Type() {
+	switch aType {
 	case helium.ElementNode:
 		ea := a.(*helium.Element)
 		eb := b.(*helium.Element)
@@ -374,16 +382,8 @@ func nodesEqual(a, b helium.Node) bool {
 				return false
 			}
 		}
-		childA := ea.FirstChild()
-		childB := eb.FirstChild()
-		for childA != nil && childB != nil {
-			if !nodesEqual(childA, childB) {
-				return false
-			}
-			childA = childA.NextSibling()
-			childB = childB.NextSibling()
-		}
-		return childA == nil && childB == nil
+		// Compare children, merging adjacent text/CDATA nodes
+		return mergedChildrenEqual(ea, eb)
 	case helium.TextNode:
 		return string(a.Content()) == string(b.Content())
 	case helium.CommentNode:
@@ -393,6 +393,43 @@ func nodesEqual(a, b helium.Node) bool {
 	default:
 		return string(a.Content()) == string(b.Content())
 	}
+}
+
+func isTextLike(n helium.Node) bool {
+	return n.Type() == helium.TextNode || n.Type() == helium.CDATASectionNode
+}
+
+// mergedChildrenEqual compares element children, merging adjacent text/CDATA nodes.
+func mergedChildrenEqual(a, b *helium.Element) bool {
+	childA := a.FirstChild()
+	childB := b.FirstChild()
+	for childA != nil || childB != nil {
+		if childA == nil || childB == nil {
+			return false
+		}
+		// If both are text-like, merge and compare
+		if isTextLike(childA) && isTextLike(childB) {
+			var textA, textB strings.Builder
+			for childA != nil && isTextLike(childA) {
+				textA.Write(childA.Content())
+				childA = childA.NextSibling()
+			}
+			for childB != nil && isTextLike(childB) {
+				textB.Write(childB.Content())
+				childB = childB.NextSibling()
+			}
+			if textA.String() != textB.String() {
+				return false
+			}
+			continue
+		}
+		if !nodesEqual(childA, childB) {
+			return false
+		}
+		childA = childA.NextSibling()
+		childB = childB.NextSibling()
+	}
+	return true
 }
 
 func collectAttrs(e *helium.Element) map[string]string {
