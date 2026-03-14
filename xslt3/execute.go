@@ -218,7 +218,10 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 
 	// XSLT 3.0: if no explicit initial template, check for xsl:initial-template
 	if initialTemplateName == "" {
-		if _, ok := ec.stylesheet.namedTemplates["xsl:initial-template"]; ok {
+		xsltInitial := "{" + NSXSLT + "}initial-template"
+		if _, ok := ec.stylesheet.namedTemplates[xsltInitial]; ok {
+			initialTemplateName = xsltInitial
+		} else if _, ok := ec.stylesheet.namedTemplates["xsl:initial-template"]; ok {
 			initialTemplateName = "xsl:initial-template"
 		}
 	}
