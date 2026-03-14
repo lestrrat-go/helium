@@ -314,8 +314,9 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 		}
 		value = stringifySequenceWithSep(val, separator)
 	}
-
-	if value == "" {
+	// XSLT 3.0: xsl:value-of always produces a text node, even if empty.
+	// Skip only when select evaluates to empty sequence.
+	if value == "" && inst.Select != nil {
 		return nil
 	}
 	text, err := ec.resultDoc.CreateText([]byte(value))

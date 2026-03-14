@@ -3,7 +3,6 @@ package xslt3
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -383,19 +382,8 @@ func (ec *execContext) evaluateBody(ctx context.Context, body []Instruction) (xp
 		return frame.pendingItems, nil
 	}
 
-	// Collect children as sequence or text value
-	var sb strings.Builder
-	hasNodes := false
-	for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
-		if child.Type() == helium.TextNode || child.Type() == helium.CDATASectionNode {
-			sb.Write(child.Content())
-		} else {
-			hasNodes = true
-		}
-	}
-
-	if hasNodes {
-		// Return as a document fragment (the temp root's children)
+	// Return all children as node items
+	if tmpRoot.FirstChild() != nil {
 		var seq xpath3.Sequence
 		for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
 			seq = append(seq, xpath3.NodeItem{Node: child})
@@ -403,7 +391,7 @@ func (ec *execContext) evaluateBody(ctx context.Context, body []Instruction) (xp
 		return seq, nil
 	}
 
-	return xpath3.SingleString(sb.String()), nil
+	return xpath3.EmptySequence(), nil
 }
 
 // evaluateBodyAsDocument executes instructions and wraps the result in a
