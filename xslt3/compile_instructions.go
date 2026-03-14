@@ -522,7 +522,10 @@ func (c *compiler) compileLocalVariable(elem *helium.Element) (*VariableInst, er
 		return nil, staticError(errCodeXTSE0110, "xsl:variable requires name attribute")
 	}
 
-	inst := &VariableInst{Name: name}
+	inst := &VariableInst{
+		Name: name,
+		As:   getAttr(elem, "as"),
+	}
 
 	selectAttr := getAttr(elem,"select")
 	if selectAttr != "" {
@@ -572,11 +575,22 @@ func (c *compiler) compileLocalParam(elem *helium.Element) (*ParamInst, error) {
 }
 
 func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
+	inst := &CopyInst{}
+
+	if selectAttr := getAttr(elem, "select"); selectAttr != "" {
+		expr, err := compileXPath(selectAttr, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.Select = expr
+	}
+
 	body, err := c.compileChildren(elem)
 	if err != nil {
 		return nil, err
 	}
-	return &CopyInst{Body: body}, nil
+	inst.Body = body
+	return inst, nil
 }
 
 func (c *compiler) compileCopyOf(elem *helium.Element) (*CopyOfInst, error) {

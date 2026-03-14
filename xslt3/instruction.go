@@ -132,6 +132,7 @@ type VariableInst struct {
 	Name   string
 	Select *xpath3.Expression
 	Body   []Instruction
+	As     string // type declaration (e.g., "item()*"); empty = wrap body in document node
 }
 
 func (*VariableInst) instructionTag() {}
@@ -149,7 +150,8 @@ func (*ParamInst) instructionTag() {}
 
 // CopyInst represents xsl:copy.
 type CopyInst struct {
-	Body []Instruction
+	Select *xpath3.Expression
+	Body   []Instruction
 }
 
 func (*CopyInst) instructionTag() {}
