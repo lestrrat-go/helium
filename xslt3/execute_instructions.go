@@ -3,8 +3,10 @@ package xslt3
 import (
 	"context"
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -1372,7 +1374,18 @@ func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
 			if err != nil {
 				continue
 			}
-			nums = append(nums, int(math.Round(dv.DoubleVal())))
+			f := math.Round(dv.DoubleVal())
+			if f > math.MaxInt64 || f < math.MinInt64 || math.IsInf(f, 0) || math.IsNaN(f) {
+				// For values outside int64 range, format directly as big integer
+				bf := new(big.Float).SetFloat64(f)
+				bi, _ := bf.Int(nil)
+				text, tErr := ec.resultDoc.CreateText([]byte(bi.String()))
+				if tErr != nil {
+					return tErr
+				}
+				return ec.addNode(text)
+			}
+			nums = append(nums, int(f))
 		}
 	} else {
 		switch inst.Level {
@@ -1691,7 +1704,10 @@ func formatNumberList(nums []int, format string, groupSep string, groupSize int)
 }
 
 func isAlphanumeric(r rune) bool {
-	return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+	if (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+		return true
+	}
+	return r > 127 && (unicode.IsLetter(r) || unicode.IsNumber(r))
 }
 
 func formatSingleNumber(num int, token string, groupSep string, groupSize int) string {
@@ -1704,20 +1720,158 @@ func formatSingleNumber(num int, token string, groupSep string, groupSize int) s
 		return strings.ToLower(toRoman(num))
 	case "I":
 		return toRoman(num)
+	case "w":
+		return numberToWords(num, false)
+	case "W":
+		return numberToWords(num, true)
+	case "Ww":
+		w := numberToWords(num, false)
+		if len(w) > 0 {
+			runes := []rune(w)
+			runes[0] = unicode.ToUpper(runes[0])
+			w = string(runes)
+		}
+		return w
 	default:
-		// Numeric format: determine minimum width from token (e.g., "001" = width 3)
+		runes := []rune(token)
+		firstRune := runes[0]
+
+		// Non-ASCII digit: use as base of a decimal numbering system
+		// (e.g., ٠ = U+0660 for Arabic-Indic digits)
+		if firstRune > 127 && unicode.IsDigit(firstRune) {
+			return formatWithDigitSystem(num, digitZeroOf(firstRune), len(runes))
+		}
+		// Non-ASCII number (not a digit): ordinal numbering from that codepoint
+		// (e.g., ① = U+2460 for circled digits)
+		if firstRune > 127 && unicode.IsNumber(firstRune) {
+			return formatWithOrdinalSystem(num, firstRune)
+		}
+		// Non-ASCII letter: ordinal numbering from that codepoint
+		if firstRune > 127 && unicode.IsLetter(firstRune) {
+			return formatWithOrdinalSystem(num, firstRune)
+		}
+
+		// ASCII numeric format: determine minimum width from token (e.g., "001" = width 3)
 		minWidth := len(token)
 		s := strconv.Itoa(num)
-		// Pad with leading zeros to meet minimum width
 		for len(s) < minWidth {
 			s = "0" + s
 		}
-		// Apply grouping separator
 		if groupSep != "" && groupSize > 0 {
 			s = applyGroupingSeparator(s, groupSep, groupSize)
 		}
 		return s
 	}
+}
+
+// digitZeroOf returns the zero digit for the Unicode digit block containing r.
+func digitZeroOf(r rune) rune {
+	// Unicode digit blocks are groups of 10 consecutive codepoints.
+	// The zero digit is always at an offset of (r - digit_value) from r.
+	// For standard digit blocks, digit_value = r % 10 when aligned at 0.
+	// Use unicode.Digit to get the numeric value.
+	for d := rune(0); d <= 9; d++ {
+		if r-d >= 0 && unicode.IsDigit(r-d) {
+			// Verify this is actually the zero of the block
+			candidate := r - d
+			if !unicode.IsDigit(candidate - 1) || candidate == 0 {
+				return candidate
+			}
+		}
+	}
+	// Fallback: assume digit value is r mod 10 offset
+	return r - (r % 10)
+}
+
+// formatWithDigitSystem formats a number using a decimal digit system
+// starting at the given zero codepoint.
+func formatWithDigitSystem(num int, zero rune, minWidth int) string {
+	if num < 0 {
+		return "-" + formatWithDigitSystem(-num, zero, minWidth)
+	}
+	if num == 0 {
+		s := string(zero)
+		for len([]rune(s)) < minWidth {
+			s = string(zero) + s
+		}
+		return s
+	}
+	var runes []rune
+	n := num
+	for n > 0 {
+		runes = append([]rune{zero + rune(n%10)}, runes...)
+		n /= 10
+	}
+	for len(runes) < minWidth {
+		runes = append([]rune{zero}, runes...)
+	}
+	return string(runes)
+}
+
+// formatWithOrdinalSystem formats using consecutive codepoints from start.
+// E.g., ① (U+2460) maps 1→①, 2→②, etc.
+func formatWithOrdinalSystem(num int, start rune) string {
+	if num < 0 {
+		return strconv.Itoa(num)
+	}
+	if num == 0 {
+		// Circled digits: ① (U+2460) → ⓪ (U+24EA) for zero
+		if start == 0x2460 {
+			return "\u24EA"
+		}
+		return string(start - 1)
+	}
+	return string(start + rune(num-1))
+}
+
+// numberToWords converts a number to English words.
+func numberToWords(n int, upper bool) string {
+	if n == 0 {
+		if upper {
+			return "ZERO"
+		}
+		return "zero"
+	}
+	var ones = []string{"", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+		"ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"}
+	var tens = []string{"", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"}
+
+	var words func(int) string
+	words = func(n int) string {
+		if n < 0 {
+			return "minus " + words(-n)
+		}
+		if n < 20 {
+			return ones[n]
+		}
+		if n < 100 {
+			w := tens[n/10]
+			if n%10 != 0 {
+				w += " " + ones[n%10]
+			}
+			return w
+		}
+		if n < 1000 {
+			w := ones[n/100] + " hundred"
+			if n%100 != 0 {
+				w += " and " + words(n%100)
+			}
+			return w
+		}
+		if n < 1000000 {
+			w := words(n/1000) + " thousand"
+			if n%1000 != 0 {
+				w += " " + words(n%1000)
+			}
+			return w
+		}
+		return strconv.Itoa(n)
+	}
+	result := words(n)
+	if upper {
+		return strings.ToUpper(result)
+	}
+	return result
 }
 
 func applyGroupingSeparator(s string, sep string, size int) string {
