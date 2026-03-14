@@ -71,9 +71,7 @@ func (c *xpathCommand) run(args []string) int {
 	exitCode := ExitOK
 	for _, input := range inputs {
 		code := c.processInput(ctx, cfg, input)
-		if code != ExitOK {
-			exitCode = code
-		}
+		exitCode = mergeExitCode(exitCode, code)
 	}
 	return exitCode
 }

@@ -86,9 +86,7 @@ func (c *xsdValidateCommand) run(args []string) int {
 	exitCode := ExitOK
 	for _, input := range inputs {
 		code := c.processInput(ctx, cfg, input, schema)
-		if code != ExitOK {
-			exitCode = code
-		}
+		exitCode = mergeExitCode(exitCode, code)
 	}
 	return exitCode
 }

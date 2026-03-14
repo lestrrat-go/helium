@@ -260,5 +260,5 @@ Unified CLI entrypoint + lint implementation.
 - RELAX NG behavior: compile grammar from mandatory positional schema path, parse XML input(s), validate via `relaxng.Validate`, return schema/validation exit codes
 - Schematron behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via `schematron.Validate`, return schema/validation exit codes
 - XSD behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via `xsd.Validate`, return schema/validation exit codes
-- Files: `main.go`, `lint.go`, `xpath.go`, `relaxng_validate.go`, `schematron_validate.go`, `xsd_validate.go`
+- Files: `main.go`, `exitcode.go`, `lint.go`, `xpath.go`, `relaxng_validate.go`, `schematron_validate.go`, `xsd_validate.go`
 - Imports: helium, c14n/, relaxng/, schematron/, xsd/, xinclude/, xpath1/, xpath3/, catalog/, internal/cliutil/
