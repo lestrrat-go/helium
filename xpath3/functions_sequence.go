@@ -109,6 +109,9 @@ func fnReverse(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 	seq := args[0]
+	if len(args[1]) == 0 {
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: starting position is required"}
+	}
 	a, err := AtomizeItem(args[1][0])
 	if err != nil {
 		return nil, err
@@ -119,6 +122,9 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 	startF := math.Round(a.ToFloat64())
 
 	hasLength := len(args) > 2
+	if hasLength && len(args[2]) == 0 {
+		hasLength = false // $length is xs:double? — empty means no bound
+	}
 	var lengthF float64
 	if hasLength {
 		la, err := AtomizeItem(args[2][0])
