@@ -489,6 +489,11 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 				prefix = name[:idx]
 				localName = name[idx+1:]
 			}
+			// Attributes in a namespace require a non-empty prefix (unlike
+			// elements, the default namespace does not apply to attributes).
+			if prefix == "" {
+				prefix = "ns0"
+			}
 			// If the prefix is already bound to a different URI on this element,
 			// generate a unique prefix to avoid conflicts.
 			prefix = uniqueNSPrefix(elem, prefix, nsURI)
@@ -1264,8 +1269,17 @@ func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
 		if err != nil {
 			return err
 		}
-		if f, ok := result.IsNumber(); ok {
-			nums = []int{int(math.Round(f))}
+		seq := result.Sequence()
+		for _, item := range seq {
+			av, err := xpath3.AtomizeItem(item)
+			if err != nil {
+				continue
+			}
+			dv, err := xpath3.CastAtomic(av, xpath3.TypeDouble)
+			if err != nil {
+				continue
+			}
+			nums = append(nums, int(math.Round(dv.DoubleVal())))
 		}
 	} else {
 		switch inst.Level {
