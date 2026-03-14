@@ -521,8 +521,9 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 		return err
 	}
 
-	c.stylesheet.keys[name] = &KeyDef{
-		Name:  name,
+	expandedName := resolveQName(name, c.nsBindings)
+	c.stylesheet.keys[expandedName] = &KeyDef{
+		Name:  expandedName,
 		Match: matchPat,
 		Use:   useExpr,
 	}

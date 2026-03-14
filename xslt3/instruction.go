@@ -307,10 +307,13 @@ func (*TryCatchInst) instructionTag() {}
 
 // ForEachGroupInst represents xsl:for-each-group.
 type ForEachGroupInst struct {
-	Select  *xpath3.Expression
-	GroupBy string
-	Sort    []*SortKey
-	Body    []Instruction
+	Select            *xpath3.Expression
+	GroupBy           *xpath3.Expression
+	GroupAdjacent     *xpath3.Expression
+	GroupStartingWith *Pattern
+	GroupEndingWith   *Pattern
+	Sort              []*SortKey
+	Body              []Instruction
 }
 
 func (*ForEachGroupInst) instructionTag() {}

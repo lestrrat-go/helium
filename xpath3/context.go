@@ -6,6 +6,8 @@ import (
 	"maps"
 	"net/http"
 	"time"
+
+	"github.com/lestrrat-go/helium"
 )
 
 type contextKey struct{}
@@ -134,6 +136,17 @@ func WithVariables(ctx context.Context, vars map[string]Sequence) context.Contex
 	})
 }
 
+// WithVariablesBorrowed binds variable names to pre-constructed Sequence values
+// without cloning. The caller must guarantee that the map and its sequences are
+// not mutated for the lifetime of the returned context. This is an optimization
+// for internal callers (e.g. xslt3) that already own the data.
+func WithVariablesBorrowed(ctx context.Context, vars map[string]Sequence) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) bool {
+		c.variables = vars
+		return true
+	})
+}
+
 // WithAdditionalVariables merges variable bindings into the returned context.
 func WithAdditionalVariables(ctx context.Context, vars map[string]Sequence) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) bool {
@@ -166,6 +179,15 @@ func WithFunctions(ctx context.Context, fns map[string]Function) context.Context
 	})
 }
 
+// WithFunctionsBorrowed is like WithFunctions but does not clone the map.
+// The caller must guarantee the map is not mutated for the lifetime of the context.
+func WithFunctionsBorrowed(ctx context.Context, fns map[string]Function) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) bool {
+		c.functions = fns
+		return false
+	})
+}
+
 // WithFunction registers a single user-defined function by local name.
 func WithFunction(ctx context.Context, name string, fn Function) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) bool {
@@ -183,6 +205,15 @@ func WithFunction(ctx context.Context, name string, fn Function) context.Context
 func WithFunctionsNS(ctx context.Context, fns map[QualifiedName]Function) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) bool {
 		c.functionsNS = maps.Clone(fns)
+		return false
+	})
+}
+
+// WithFunctionsNSBorrowed is like WithFunctionsNS but does not clone the map.
+// The caller must guarantee the map is not mutated for the lifetime of the context.
+func WithFunctionsNSBorrowed(ctx context.Context, fns map[QualifiedName]Function) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) bool {
+		c.functionsNS = fns
 		return false
 	})
 }
@@ -326,6 +357,18 @@ func withFnContext(ctx context.Context, ec *evalContext) context.Context {
 func getFnContext(ctx context.Context) *evalContext {
 	ec, _ := ctx.Value(fnContextKey{}).(*evalContext)
 	return ec
+}
+
+// FnContextNode returns the current XPath context node from a function call
+// context. This is the context.Context passed to Function.Call by the evaluator.
+// Returns nil if the context does not carry an evaluation state or the context
+// item is not a node.
+func FnContextNode(ctx context.Context) helium.Node {
+	ec := getFnContext(ctx)
+	if ec == nil {
+		return nil
+	}
+	return ec.node
 }
 
 func cloneVariableMap(vars map[string]Sequence) map[string]Sequence {

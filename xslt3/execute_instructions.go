@@ -2121,13 +2121,6 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 	return nil
 }
 
-// TODO(xslt3): implement proper xsl:for-each-group grouping semantics.
-// Currently this is a stub that iterates the selected sequence without
-// performing any grouping (group-by, group-adjacent, group-starting-with,
-// group-ending-with). The current-group() and current-grouping-key()
-// functions are not populated. This is a known limitation of the initial
-// XSLT 3.0 implementation — callers relying on grouping will get
-// ungrouped iteration, which produces incorrect output silently.
 func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupInst) error {
 	xpathCtx := ec.newXPathContext(ec.contextNode)
 	result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
@@ -2135,27 +2128,57 @@ func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupI
 		return err
 	}
 
-	nodes, isNodes := xpath3.NodesFrom(result.Sequence())
-	if !isNodes {
-		return nil
+	seq := result.Sequence()
+
+	// Build groups based on the grouping mode
+	var groups []fegGroup
+
+	switch {
+	case inst.GroupBy != nil:
+		groups, err = ec.groupBy(ctx, seq, inst.GroupBy)
+	case inst.GroupAdjacent != nil:
+		groups, err = ec.groupAdjacent(ctx, seq, inst.GroupAdjacent)
+	case inst.GroupStartingWith != nil:
+		groups = ec.groupStartingWith(seq, inst.GroupStartingWith)
+	case inst.GroupEndingWith != nil:
+		groups = ec.groupEndingWith(seq, inst.GroupEndingWith)
+	default:
+		// No grouping attribute — treat entire sequence as one group
+		groups = []fegGroup{{items: seq}}
+	}
+	if err != nil {
+		return err
 	}
 
 	savedCurrent := ec.currentNode
 	savedContext := ec.contextNode
 	savedPos := ec.position
 	savedSize := ec.size
-	ec.size = len(nodes)
+	savedGroup := ec.currentGroup
+	savedGroupKey := ec.currentGroupKey
+	ec.size = len(groups)
 	defer func() {
 		ec.currentNode = savedCurrent
 		ec.contextNode = savedContext
 		ec.position = savedPos
 		ec.size = savedSize
+		ec.currentGroup = savedGroup
+		ec.currentGroupKey = savedGroupKey
 	}()
 
-	for i, node := range nodes {
+	for i, g := range groups {
 		ec.position = i + 1
-		ec.currentNode = node
-		ec.contextNode = node
+		ec.currentGroup = g.items
+		ec.currentGroupKey = g.key
+
+		// Context item is the first item of the group
+		if len(g.items) > 0 {
+			if ni, ok := g.items[0].(xpath3.NodeItem); ok {
+				ec.currentNode = ni.Node
+				ec.contextNode = ni.Node
+			}
+		}
+
 		ec.pushVarScope()
 		for _, child := range inst.Body {
 			if childErr := ec.executeInstruction(ctx, child); childErr != nil {
@@ -2166,6 +2189,142 @@ func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupI
 		ec.popVarScope()
 	}
 	return nil
+}
+
+type fegGroup struct {
+	key   xpath3.Sequence
+	items xpath3.Sequence
+}
+
+// groupBy implements group-by: items are grouped by the string value of the
+// group-by expression evaluated with each item as context. When the group-by
+// expression returns a sequence of multiple values, the item is added to
+// a group for each value.
+func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByExpr *xpath3.Expression) ([]fegGroup, error) {
+	type entry struct {
+		key   string
+		items xpath3.Sequence
+	}
+	var order []string
+	groupMap := make(map[string]*entry)
+
+	for _, item := range seq {
+		var node helium.Node
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			node = ni.Node
+		}
+		xpathCtx := ec.newXPathContext(node)
+		result, err := groupByExpr.Evaluate(xpathCtx, node)
+		if err != nil {
+			return nil, err
+		}
+
+		// Each value in the result creates a separate group key.
+		// An item may appear in multiple groups.
+		resultSeq := result.Sequence()
+		if len(resultSeq) == 0 {
+			// No grouping key — item is not included in any group
+			continue
+		}
+		for _, keyItem := range resultSeq {
+			keyVal := stringifyItem(keyItem)
+			if e, ok := groupMap[keyVal]; ok {
+				e.items = append(e.items, item)
+			} else {
+				groupMap[keyVal] = &entry{key: keyVal, items: xpath3.Sequence{item}}
+				order = append(order, keyVal)
+			}
+		}
+	}
+
+	groups := make([]fegGroup, len(order))
+	for i, k := range order {
+		e := groupMap[k]
+		groups[i] = fegGroup{
+			key:   xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: e.key}},
+			items: e.items,
+		}
+	}
+	return groups, nil
+}
+
+// groupAdjacent implements group-adjacent: consecutive items with equal
+// grouping key values form a group.
+func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, adjExpr *xpath3.Expression) ([]fegGroup, error) {
+	var groups []fegGroup
+	var currentKey string
+	var currentItems xpath3.Sequence
+
+	for _, item := range seq {
+		var node helium.Node
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			node = ni.Node
+		}
+		xpathCtx := ec.newXPathContext(node)
+		result, err := adjExpr.Evaluate(xpathCtx, node)
+		if err != nil {
+			return nil, err
+		}
+		keyVal := stringifyResult(result)
+		if keyVal == currentKey && len(currentItems) > 0 {
+			currentItems = append(currentItems, item)
+		} else {
+			if len(currentItems) > 0 {
+				groups = append(groups, fegGroup{
+					key:   xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: currentKey}},
+					items: currentItems,
+				})
+			}
+			currentKey = keyVal
+			currentItems = xpath3.Sequence{item}
+		}
+	}
+	if len(currentItems) > 0 {
+		groups = append(groups, fegGroup{
+			key:   xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: currentKey}},
+			items: currentItems,
+		})
+	}
+	return groups, nil
+}
+
+// groupStartingWith implements group-starting-with: a new group starts
+// whenever an item matches the pattern.
+func (ec *execContext) groupStartingWith(seq xpath3.Sequence, pat *Pattern) []fegGroup {
+	var groups []fegGroup
+	var currentItems xpath3.Sequence
+	for _, item := range seq {
+		ni, isNode := item.(xpath3.NodeItem)
+		startsGroup := isNode && pat.matchPattern(ec, ni.Node)
+		if startsGroup && len(currentItems) > 0 {
+			groups = append(groups, fegGroup{items: currentItems})
+			currentItems = nil
+		}
+		currentItems = append(currentItems, item)
+	}
+	if len(currentItems) > 0 {
+		groups = append(groups, fegGroup{items: currentItems})
+	}
+	return groups
+}
+
+// groupEndingWith implements group-ending-with: a group ends whenever
+// an item matches the pattern.
+func (ec *execContext) groupEndingWith(seq xpath3.Sequence, pat *Pattern) []fegGroup {
+	var groups []fegGroup
+	var currentItems xpath3.Sequence
+	for _, item := range seq {
+		currentItems = append(currentItems, item)
+		ni, isNode := item.(xpath3.NodeItem)
+		if isNode && pat.matchPattern(ec, ni.Node) {
+			groups = append(groups, fegGroup{items: currentItems})
+			currentItems = nil
+		}
+	}
+	if len(currentItems) > 0 {
+		groups = append(groups, fegGroup{items: currentItems})
+	}
+	return groups
 }
 
 func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) error {

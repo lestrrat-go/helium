@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -15,6 +16,13 @@ import (
 )
 
 const w3cTestdataDir = "../testdata/xslt30/testdata"
+
+// Caches for compiled stylesheets and source file bytes, keyed by absolute path.
+// These are safe for concurrent use because sync.Map handles its own locking.
+var (
+	w3cStylesheetCache sync.Map // path → *xslt3.Stylesheet
+	w3cSourceBytesCache sync.Map // path → []byte
+)
 
 // w3cTest describes a single W3C XSLT 3.0 test case.
 type w3cTest struct {
@@ -215,9 +223,9 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		return
 	}
 
-	// Compile stylesheet
+	// Compile stylesheet (cached across tests sharing the same path)
 	ssPath := filepath.Join(w3cTestdataDir, tc.StylesheetPath)
-	ss, err := xslt3.CompileFile(t.Context(), ssPath)
+	ss, err := w3cCompileCached(t.Context(), ssPath)
 
 	if tc.ExpectError {
 		if err != nil {
@@ -228,13 +236,11 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		t.Fatalf("compile error: %v", err)
 	}
 
-	// Prepare source document
+	// Prepare source document (file bytes cached across tests sharing the same path)
 	var sourceData []byte
 	if tc.SourceDocPath != "" {
 		srcPath := filepath.Join(w3cTestdataDir, tc.SourceDocPath)
-		var readErr error
-		sourceData, readErr = os.ReadFile(srcPath)
-		require.NoError(t, readErr)
+		sourceData = w3cReadSourceCached(t, srcPath)
 	} else if tc.SourceContent != "" {
 		sourceData = []byte(tc.SourceContent)
 	} else {
@@ -467,4 +473,34 @@ func evalXPathAssert(t *testing.T, expr string, resultXML string) bool {
 		return false
 	}
 	return true
+}
+
+// w3cCompileCached compiles a stylesheet, caching the result by path.
+// Compile errors are not cached so that tests expecting compile errors
+// still report them per test case.
+func w3cCompileCached(ctx context.Context, path string) (*xslt3.Stylesheet, error) {
+	if v, ok := w3cStylesheetCache.Load(path); ok {
+		return v.(*xslt3.Stylesheet), nil
+	}
+	ss, err := xslt3.CompileFile(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	actual, loaded := w3cStylesheetCache.LoadOrStore(path, ss)
+	if loaded {
+		return actual.(*xslt3.Stylesheet), nil
+	}
+	return ss, nil
+}
+
+// w3cReadSourceCached reads source file bytes, caching by path.
+func w3cReadSourceCached(t *testing.T, path string) []byte {
+	t.Helper()
+	if v, ok := w3cSourceBytesCache.Load(path); ok {
+		return v.([]byte)
+	}
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	w3cSourceBytesCache.LoadOrStore(path, data)
+	return data
 }

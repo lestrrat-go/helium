@@ -79,26 +79,55 @@ func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnCodepointsToString(_ context.Context, args []Sequence) (Sequence, error) {
-	var b strings.Builder
-	for _, item := range args[0] {
-		a, err := AtomizeItem(item)
+	seq := args[0]
+
+	// Fast path: singleton integer (common in unicode-90 where each codepoint
+	// is mapped individually via codepoints-to-string(.))
+	if len(seq) == 1 {
+		cp, err := itemToCodepoint(seq[0])
 		if err != nil {
 			return nil, err
 		}
-		// Function coercion: cast untypedAtomic to integer
-		if a.TypeName == TypeUntypedAtomic {
-			a, err = CastAtomic(a, TypeInteger)
-			if err != nil {
-				return nil, err
-			}
+		if !isValidXMLCodepoint(cp) {
+			return nil, &XPathError{Code: "FOCH0001", Message: fmt.Sprintf("invalid XML character [x%X]", cp)}
 		}
-		cp := int(a.ToFloat64())
+		return SingleString(string(rune(cp))), nil
+	}
+
+	var b strings.Builder
+	for _, item := range seq {
+		cp, err := itemToCodepoint(item)
+		if err != nil {
+			return nil, err
+		}
 		if !isValidXMLCodepoint(cp) {
 			return nil, &XPathError{Code: "FOCH0001", Message: fmt.Sprintf("invalid XML character [x%X]", cp)}
 		}
 		b.WriteRune(rune(cp))
 	}
 	return SingleString(b.String()), nil
+}
+
+// itemToCodepoint extracts an integer codepoint from an item, avoiding
+// expensive big.Float conversion when the value is already a *big.Int.
+func itemToCodepoint(item Item) (int, error) {
+	a, err := AtomizeItem(item)
+	if err != nil {
+		return 0, err
+	}
+	if a.TypeName == TypeUntypedAtomic {
+		a, err = CastAtomic(a, TypeInteger)
+		if err != nil {
+			return 0, err
+		}
+	}
+	// Fast path: extract int64 directly from *big.Int (avoids big.Float allocation)
+	if isIntegerDerived(a.TypeName) {
+		if n, ok := a.Value.(*big.Int); ok {
+			return int(n.Int64()), nil
+		}
+	}
+	return int(a.ToFloat64()), nil
 }
 
 // isValidXMLCodepoint returns true if the codepoint is a valid XML character.
@@ -191,16 +220,19 @@ func fnStringJoin(_ context.Context, args []Sequence) (Sequence, error) {
 			return nil, err
 		}
 	}
-	parts := make([]string, 0, len(args[0]))
-	for _, item := range args[0] {
+	var b strings.Builder
+	for i, item := range args[0] {
+		if i > 0 && sep != "" {
+			b.WriteString(sep)
+		}
 		a, err := AtomizeItem(item)
 		if err != nil {
 			return nil, err
 		}
 		s, _ := atomicToString(a)
-		parts = append(parts, s)
+		b.WriteString(s)
 	}
-	return SingleString(strings.Join(parts, sep)), nil
+	return SingleString(b.String()), nil
 }
 
 func fnSubstring(_ context.Context, args []Sequence) (Sequence, error) {

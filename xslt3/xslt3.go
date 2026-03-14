@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/lestrrat-go/helium"
 )
@@ -31,7 +32,11 @@ func CompileFile(ctx context.Context, path string) (*Stylesheet, error) {
 	}
 	cfg := deriveCompileConfig(ctx)
 	if cfg.baseURI == "" {
-		cfg.baseURI = path
+		absPath, absErr := filepath.Abs(path)
+		if absErr != nil {
+			absPath = path
+		}
+		cfg.baseURI = absPath
 	}
 	return compile(doc, cfg)
 }

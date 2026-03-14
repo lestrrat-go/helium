@@ -143,6 +143,19 @@ func stringifySequence(seq xpath3.Sequence) string {
 	return stringifySequenceWithSep(seq, " ")
 }
 
+// stringifyItem converts a single XPath Item to its string representation.
+func stringifyItem(item xpath3.Item) string {
+	av, err := xpath3.AtomizeItem(item)
+	if err != nil {
+		return ""
+	}
+	s, err := xpath3.AtomicToString(av)
+	if err != nil {
+		return ""
+	}
+	return s
+}
+
 func stringifySequenceWithSep(seq xpath3.Sequence, sep string) string {
 	if len(seq) == 0 {
 		return ""
