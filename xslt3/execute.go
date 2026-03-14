@@ -500,8 +500,6 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 	ec.currentTemplate = tmpl
 	ec.xpathDefaultNS = tmpl.XPathDefaultNS
 	ec.hasXPathDefaultNS = tmpl.XPathDefaultNS != ""
-	ec.position = 1
-	ec.size = 1
 	defer func() {
 		ec.currentNode = savedCurrent
 		ec.contextNode = savedContext

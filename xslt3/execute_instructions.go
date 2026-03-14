@@ -163,6 +163,16 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 		ec.tunnelParams = merged
 	}
 
+	// Filter whitespace-only text nodes per xsl:strip-space before
+	// setting position/size, so position()/last() reflect the filtered list.
+	filtered := nodes[:0]
+	for _, node := range nodes {
+		if !ec.shouldStripWhitespace(node) {
+			filtered = append(filtered, node)
+		}
+	}
+	nodes = filtered
+
 	savedPos := ec.position
 	savedSize := ec.size
 	ec.size = len(nodes)
