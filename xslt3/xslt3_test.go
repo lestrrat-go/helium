@@ -234,6 +234,17 @@ func runTestCase(t *testing.T, tc *helium.Element, tsDir string, environments ma
 				stylesheetFile = f
 			case "initial-template":
 				n, _ := sElem.GetAttribute("name")
+				// Resolve QName prefix using namespace declarations on element
+				if idx := strings.IndexByte(n, ':'); idx >= 0 {
+					prefix := n[:idx]
+					local := n[idx+1:]
+					for _, ns := range sElem.Namespaces() {
+						if ns.Prefix() == prefix {
+							n = "{" + ns.URI() + "}" + local
+							break
+						}
+					}
+				}
 				initialTemplate = n
 			case "param":
 				pName, _ := sElem.GetAttribute("name")
