@@ -299,7 +299,7 @@ func (ec *execContext) evaluateGlobalVar(v *Variable) (xpath3.Sequence, error) {
 		val = result.Sequence()
 	} else if len(v.Body) > 0 {
 		var err error
-		val, err = ec.evaluateBody(ctx, v.Body)
+		val, err = ec.evaluateBodyAsDocument(ctx, v.Body)
 		if err != nil {
 			return nil, fmt.Errorf("error evaluating global variable %q body: %w", v.Name, err)
 		}
@@ -411,7 +411,7 @@ func (ec *execContext) evaluateBody(ctx context.Context, body []Instruction) (xp
 func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []Instruction) (xpath3.Sequence, error) {
 	tmpDoc := helium.NewDefaultDocument()
 
-	frame := &outputFrame{doc: tmpDoc, current: tmpDoc}
+	frame := &outputFrame{doc: tmpDoc, current: tmpDoc, captureItems: true}
 	ec.outputStack = append(ec.outputStack, frame)
 	defer func() {
 		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
@@ -421,6 +421,12 @@ func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []Instru
 		if err := ec.executeInstruction(ctx, inst); err != nil {
 			return nil, err
 		}
+	}
+
+	// If the body produced atomic items via xsl:sequence, return them
+	// directly rather than wrapping in a document node.
+	if len(frame.pendingItems) > 0 && tmpDoc.FirstChild() == nil {
+		return frame.pendingItems, nil
 	}
 
 	return xpath3.Sequence{xpath3.NodeItem{Node: tmpDoc}}, nil

@@ -514,29 +514,39 @@ func hasNSDecl(elem *helium.Element, prefix, uri string) bool {
 }
 
 // uniqueNSPrefix returns a prefix for nsURI that doesn't conflict with
-// existing namespace declarations on elem. If prefix is already bound to
-// nsURI, it's returned as-is. If it's bound to a different URI, a suffix
-// like _1, _2, ... is appended until a unique prefix is found.
+// in-scope namespace declarations on elem or its ancestors. If prefix is
+// already bound to nsURI, it's returned as-is. If it's bound to a different
+// URI, a suffix like _1, _2, ... is appended until a unique prefix is found.
 func uniqueNSPrefix(elem *helium.Element, prefix, nsURI string) string {
-	for _, ns := range elem.Namespaces() {
-		if ns.Prefix() == prefix && ns.URI() != nsURI {
-			// Conflict — generate a new prefix
-			for i := 1; ; i++ {
-				candidate := prefix + "_" + strconv.Itoa(i)
-				conflict := false
-				for _, ns2 := range elem.Namespaces() {
-					if ns2.Prefix() == candidate {
-						conflict = true
-						break
-					}
-				}
-				if !conflict {
-					return candidate
-				}
+	if prefixBoundTo(elem, prefix) == nsURI {
+		return prefix
+	}
+	if uri := prefixBoundTo(elem, prefix); uri != "" && uri != nsURI {
+		for i := 1; ; i++ {
+			candidate := prefix + "_" + strconv.Itoa(i)
+			if prefixBoundTo(elem, candidate) == "" {
+				return candidate
 			}
 		}
 	}
 	return prefix
+}
+
+// prefixBoundTo walks the element and its ancestors to find what URI
+// a prefix is bound to. Returns "" if not found.
+func prefixBoundTo(elem *helium.Element, prefix string) string {
+	for node := helium.Node(elem); node != nil; node = node.Parent() {
+		e, ok := node.(*helium.Element)
+		if !ok {
+			continue
+		}
+		for _, ns := range e.Namespaces() {
+			if ns.Prefix() == prefix {
+				return ns.URI()
+			}
+		}
+	}
+	return ""
 }
 
 func (ec *execContext) execComment(ctx context.Context, inst *CommentInst) error {
