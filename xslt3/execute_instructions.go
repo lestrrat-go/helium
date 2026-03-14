@@ -2649,9 +2649,9 @@ func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupI
 
 	switch {
 	case inst.GroupBy != nil:
-		groups, err = ec.groupBy(ctx, seq, inst.GroupBy)
+		groups, err = ec.groupBy(ctx, seq, inst.GroupBy, inst.Composite)
 	case inst.GroupAdjacent != nil:
-		groups, err = ec.groupAdjacent(ctx, seq, inst.GroupAdjacent)
+		groups, err = ec.groupAdjacent(ctx, seq, inst.GroupAdjacent, inst.Composite)
 	case inst.GroupStartingWith != nil:
 		groups = ec.groupStartingWith(seq, inst.GroupStartingWith)
 	case inst.GroupEndingWith != nil:
@@ -2711,18 +2711,29 @@ type fegGroup struct {
 }
 
 // groupBy implements group-by: items are grouped by the string value of the
-// group-by expression evaluated with each item as context. When the group-by
-// expression returns a sequence of multiple values, the item is added to
-// a group for each value.
-func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByExpr *xpath3.Expression) ([]fegGroup, error) {
+// group-by expression evaluated with each item as context. When composite is
+// false and the expression returns a sequence of multiple values, the item is
+// added to a group for each value. When composite is true, the entire sequence
+// is treated as a single composite key.
+func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByExpr *xpath3.Expression, composite bool) ([]fegGroup, error) {
 	type entry struct {
-		key   string
-		items xpath3.Sequence
+		key      string
+		keySeq   xpath3.Sequence
+		items    xpath3.Sequence
 	}
 	var order []string
 	groupMap := make(map[string]*entry)
 
-	for _, item := range seq {
+	savedPos := ec.position
+	savedSize := ec.size
+	ec.size = len(seq)
+	defer func() {
+		ec.position = savedPos
+		ec.size = savedSize
+	}()
+
+	for i, item := range seq {
+		ec.position = i + 1
 		var node helium.Node
 		if ni, ok := item.(xpath3.NodeItem); ok {
 			node = ni.Node
@@ -2733,20 +2744,30 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 			return nil, err
 		}
 
-		// Each value in the result creates a separate group key.
-		// An item may appear in multiple groups.
 		resultSeq := result.Sequence()
 		if len(resultSeq) == 0 {
-			// No grouping key — item is not included in any group
 			continue
 		}
-		for _, keyItem := range resultSeq {
-			keyVal := stringifyItem(keyItem)
+
+		if composite {
+			// Composite: entire sequence is a single key
+			keyVal := compositeKeyString(resultSeq)
 			if e, ok := groupMap[keyVal]; ok {
 				e.items = append(e.items, item)
 			} else {
-				groupMap[keyVal] = &entry{key: keyVal, items: xpath3.Sequence{item}}
+				groupMap[keyVal] = &entry{key: keyVal, keySeq: atomizeSequence(resultSeq), items: xpath3.Sequence{item}}
 				order = append(order, keyVal)
+			}
+		} else {
+			// Non-composite: each value creates a separate group key
+			for _, keyItem := range resultSeq {
+				keyVal := stringifyItem(keyItem)
+				if e, ok := groupMap[keyVal]; ok {
+					e.items = append(e.items, item)
+				} else {
+					groupMap[keyVal] = &entry{key: keyVal, items: xpath3.Sequence{item}}
+					order = append(order, keyVal)
+				}
 			}
 		}
 	}
@@ -2754,22 +2775,37 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 	groups := make([]fegGroup, len(order))
 	for i, k := range order {
 		e := groupMap[k]
-		groups[i] = fegGroup{
-			key:   xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: e.key}},
-			items: e.items,
+		if e.keySeq != nil {
+			groups[i] = fegGroup{key: e.keySeq, items: e.items}
+		} else {
+			groups[i] = fegGroup{
+				key:   xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: e.key}},
+				items: e.items,
+			}
 		}
 	}
 	return groups, nil
 }
 
 // groupAdjacent implements group-adjacent: consecutive items with equal
-// grouping key values form a group.
-func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, adjExpr *xpath3.Expression) ([]fegGroup, error) {
+// grouping key values form a group. When composite is true, the key
+// expression returns a sequence treated as a single composite key.
+func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, adjExpr *xpath3.Expression, composite bool) ([]fegGroup, error) {
 	var groups []fegGroup
 	var currentKey string
+	var currentKeySeq xpath3.Sequence
 	var currentItems xpath3.Sequence
 
-	for _, item := range seq {
+	savedPos := ec.position
+	savedSize := ec.size
+	ec.size = len(seq)
+	defer func() {
+		ec.position = savedPos
+		ec.size = savedSize
+	}()
+
+	for i, item := range seq {
+		ec.position = i + 1
 		var node helium.Node
 		if ni, ok := item.(xpath3.NodeItem); ok {
 			node = ni.Node
@@ -2779,27 +2815,69 @@ func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, a
 		if err != nil {
 			return nil, err
 		}
-		keyVal := stringifyResult(result)
+
+		var keyVal string
+		var keySeq xpath3.Sequence
+		if composite {
+			rSeq := result.Sequence()
+			keyVal = compositeKeyString(rSeq)
+			keySeq = atomizeSequence(rSeq)
+		} else {
+			keyVal = stringifyResult(result)
+		}
+
 		if keyVal == currentKey && len(currentItems) > 0 {
 			currentItems = append(currentItems, item)
 		} else {
 			if len(currentItems) > 0 {
-				groups = append(groups, fegGroup{
-					key:   xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: currentKey}},
-					items: currentItems,
-				})
+				var gKey xpath3.Sequence
+				if currentKeySeq != nil {
+					gKey = currentKeySeq
+				} else {
+					gKey = xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: currentKey}}
+				}
+				groups = append(groups, fegGroup{key: gKey, items: currentItems})
 			}
 			currentKey = keyVal
+			currentKeySeq = keySeq
 			currentItems = xpath3.Sequence{item}
 		}
 	}
 	if len(currentItems) > 0 {
-		groups = append(groups, fegGroup{
-			key:   xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: currentKey}},
-			items: currentItems,
-		})
+		var gKey xpath3.Sequence
+		if currentKeySeq != nil {
+			gKey = currentKeySeq
+		} else {
+			gKey = xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: currentKey}}
+		}
+		groups = append(groups, fegGroup{key: gKey, items: currentItems})
 	}
 	return groups, nil
+}
+
+// compositeKeyString creates a canonical string representation of a composite
+// key for use as a map key. Items are separated by a NUL byte to avoid
+// collisions.
+func compositeKeyString(seq xpath3.Sequence) string {
+	parts := make([]string, len(seq))
+	for i, item := range seq {
+		parts[i] = stringifyItem(item)
+	}
+	return strings.Join(parts, "\x00")
+}
+
+// atomizeSequence converts each item in the sequence to an atomic value.
+func atomizeSequence(seq xpath3.Sequence) xpath3.Sequence {
+	result := make(xpath3.Sequence, len(seq))
+	for i, item := range seq {
+		av, err := xpath3.AtomizeItem(item)
+		if err != nil {
+			result[i] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: stringifyItem(item)}
+		} else {
+			result[i] = av
+		}
+	}
+	return result
 }
 
 // groupStartingWith implements group-starting-with: a new group starts

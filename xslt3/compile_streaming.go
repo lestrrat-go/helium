@@ -73,11 +73,20 @@ func (c *compiler) compileIterate(elem *helium.Element) (Instruction, error) {
 				}
 				// param after non-param content is a body instruction
 			case "on-completion":
-				body, err := c.compileChildren(childElem)
-				if err != nil {
-					return nil, err
+				// Check for select attribute first.
+				if selAttr := getAttr(childElem, "select"); selAttr != "" {
+					selExpr, selErr := compileXPath(selAttr, c.nsBindings)
+					if selErr != nil {
+						return nil, selErr
+					}
+					inst.OnCompletion = []Instruction{&XSLSequenceInst{Select: selExpr}}
+				} else {
+					body, err := c.compileChildren(childElem)
+					if err != nil {
+						return nil, err
+					}
+					inst.OnCompletion = body
 				}
-				inst.OnCompletion = body
 				continue
 			}
 		}

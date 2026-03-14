@@ -169,8 +169,16 @@ func (ec *execContext) execIterate(ctx context.Context, inst *IterateInst) error
 		}
 	}
 
-	// Execute on-completion if present and loop completed normally.
-	if completed && len(inst.OnCompletion) > 0 {
+	if !completed {
+		// xsl:break was executed — output the break value if any.
+		if ec.breakValue != nil {
+			if err := ec.outputSequence(ec.breakValue); err != nil {
+				return err
+			}
+			ec.breakValue = nil
+		}
+	} else if len(inst.OnCompletion) > 0 {
+		// Execute on-completion if present and loop completed normally.
 		ec.pushVarScope()
 		for name, val := range paramVals {
 			ec.setVar(name, val)
