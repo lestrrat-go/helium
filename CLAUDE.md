@@ -2,7 +2,9 @@
 
 # Helium
 
-Go libxml2 implementation.
+XML toolkit for Go covering XML parsing, SAX2-style streaming, XPath 3.1,
+XInclude, XSD, Relax NG, and Schematron. Started as a libxml2-style port to
+Go and grew broader native Go APIs and features along the way.
 
 ## XPath 3.1 — XSD Version
 

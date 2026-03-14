@@ -5,9 +5,13 @@
 
 ** WARNING: THIS SOFTWARE SHOULD BE CONSIDERED ALPHA. ALL API STILL SUBJECT TO CHANGE **
 
-Pure-Go replacement of libxml2. Initially by hand, and later with the help of AI agents.
+Helium is an XML toolkit for Go covering XML parsing, SAX2-style streaming,
+XPath 3.1, XInclude, XSD, Relax NG, and Schematron.
 
-Attempts to do everything libxml2 can, while making it more idiomatic Go where it makes sense to do so.
+It started as an effort to port libxml2-style capabilities to Go, but grew
+new features and broader native Go APIs along the way. The goal is to provide
+a broad Go XML stack for parsing, querying, transforming, and validating XML
+documents.
 
 # SYNOPSIS
 
