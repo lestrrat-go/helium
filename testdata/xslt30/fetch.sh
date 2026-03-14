@@ -5,8 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TARGET_DIR="$SCRIPT_DIR/source"
 
 # Pinned commit to ensure reproducible test inputs.
-# Override via XSLT30_COMMIT_SHA env var if you need different ref,
-# e.g. `main`, tag, or newer commit SHA.
+# Override via XSLT30_COMMIT_SHA env var if you need a different ref,
+# e.g. `main` or a newer commit SHA (tags are not fetched).
 XSLT30_COMMIT_SHA="${XSLT30_COMMIT_SHA:-6f8fd9e966ae74a251a2604abef9d904c7bc5c9b}"
 
 if [ -d "$TARGET_DIR/.git" ]; then
