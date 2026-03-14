@@ -41,11 +41,21 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 	}
 	ec.keyTables[cacheKey] = kt
 
-	// Walk the document and build the index
+	// Walk the document and build the index.
+	// Save/restore contextNode and currentNode so current() works in use expr.
+	savedContext := ec.contextNode
+	savedCurrent := ec.currentNode
+	defer func() {
+		ec.contextNode = savedContext
+		ec.currentNode = savedCurrent
+	}()
+
 	err := helium.Walk(root, func(node helium.Node) error {
 		if !kd.Match.matchPattern(ec, node) {
 			return nil
 		}
+		ec.contextNode = node
+		ec.currentNode = node
 		xpathCtx := ec.newXPathContext(node)
 		result, err := kd.Use.Evaluate(xpathCtx, node)
 		if err != nil {
