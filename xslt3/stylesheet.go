@@ -59,6 +59,7 @@ type Param struct {
 	Select   *xpath3.Expression
 	Body     []Instruction // used when select is absent
 	Required bool
+	Tunnel   bool
 }
 
 // KeyDef is a compiled xsl:key.
