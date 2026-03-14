@@ -53,3 +53,17 @@ func TestRunSchematronUnknownSubcommand(t *testing.T) {
 func TestRunXSDUnknownSubcommand(t *testing.T) {
 	require.Equal(t, ExitErr, Execute(newExecuteTestContext(), []string{"xsd", "compile"}))
 }
+
+func TestExecuteWithInjectedStdinDefaultsToNonTTY(t *testing.T) {
+	var stdout strings.Builder
+	ctx := WithIO(
+		context.Background(),
+		strings.NewReader(`<?xml version="1.0"?><root><book/></root>`),
+		&stdout,
+		io.Discard,
+	)
+
+	code := Execute(ctx, []string{"xpath", "count(//book)"})
+	require.Equal(t, ExitOK, code)
+	require.Equal(t, "1\n", stdout.String())
+}

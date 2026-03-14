@@ -68,6 +68,9 @@ func resolveIO(ctx context.Context) (io.Reader, io.Writer, io.Writer, bool) {
 	}
 	if cfg.stdin != nil {
 		stdin = cfg.stdin
+		if cfg.stdinTTY == nil {
+			stdinTTY = false
+		}
 	}
 	if cfg.stdout != nil {
 		stdout = cfg.stdout
