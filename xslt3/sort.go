@@ -12,6 +12,10 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
+// TODO(perf): explore sync.Pool for intermediate allocations (keyed[]
+// slices, []string key rows, autoTypes slices) to reduce GC pressure
+// during heavy sorting workloads (e.g., large for-each with sort).
+
 // SortKey is a compiled xsl:sort specification.
 type SortKey struct {
 	Select    *xpath3.Expression
