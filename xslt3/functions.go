@@ -309,7 +309,8 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 	tmpRoot, _ := tmpDoc.CreateElement("_xsl_fn_result")
 	_ = tmpDoc.SetDocumentElement(tmpRoot)
 
-	ec.outputStack = append(ec.outputStack, &outputFrame{current: tmpRoot, doc: tmpDoc})
+	frame := &outputFrame{current: tmpRoot, doc: tmpDoc, captureItems: true}
+	ec.outputStack = append(ec.outputStack, frame)
 	defer func() {
 		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 	}()
@@ -320,7 +321,18 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 		}
 	}
 
-	// Collect results from the temporary tree
+	// Return captured atomic items if any, otherwise collect from DOM
+	if len(frame.pendingItems) > 0 {
+		if tmpRoot.FirstChild() != nil {
+			var seq xpath3.Sequence
+			for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
+				seq = append(seq, xpath3.NodeItem{Node: child})
+			}
+			seq = append(seq, frame.pendingItems...)
+			return seq, nil
+		}
+		return frame.pendingItems, nil
+	}
 	return ec.collectSequenceFromNode(tmpRoot), nil
 }
 
