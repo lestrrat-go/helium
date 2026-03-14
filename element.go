@@ -294,6 +294,10 @@ func (n Element) Attributes() []*Attribute {
 // ForEachAttribute calls fn for each attribute on the element.
 // If fn returns false, iteration stops early.
 // This avoids the slice allocation of Attributes().
+//
+// The unchecked type assertion on NextSibling is safe: the properties
+// chain is attribute-only by construction (field typed *Attribute,
+// only *Attribute nodes are ever linked in).
 func (n Element) ForEachAttribute(fn func(*Attribute) bool) {
 	for attr := n.properties; attr != nil; {
 		if !fn(attr) {
