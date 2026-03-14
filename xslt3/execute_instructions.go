@@ -463,6 +463,15 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 				prefix = name[:idx]
 				localName = name[idx+1:]
 			}
+			// If the prefix is already bound to a different URI on this element,
+			// generate a unique prefix to avoid conflicts.
+			prefix = uniqueNSPrefix(elem, prefix, nsURI)
+			// Ensure the namespace is declared on the element
+			if !hasNSDecl(elem, prefix, nsURI) {
+				if err := elem.DeclareNamespace(prefix, nsURI); err != nil {
+					return err
+				}
+			}
 			// Remove existing attribute with same expanded name to allow replacement
 			elem.RemoveAttributeNS(localName, nsURI)
 			ns, err := ec.resultDoc.CreateNamespace(prefix, nsURI)
@@ -491,6 +500,43 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 	// Remove existing attribute with same name to allow replacement
 	elem.RemoveAttribute(name)
 	return elem.SetAttribute(name, value)
+}
+
+// hasNSDecl checks if an element already has a namespace declaration for
+// the given prefix and URI.
+func hasNSDecl(elem *helium.Element, prefix, uri string) bool {
+	for _, ns := range elem.Namespaces() {
+		if ns.Prefix() == prefix && ns.URI() == uri {
+			return true
+		}
+	}
+	return false
+}
+
+// uniqueNSPrefix returns a prefix for nsURI that doesn't conflict with
+// existing namespace declarations on elem. If prefix is already bound to
+// nsURI, it's returned as-is. If it's bound to a different URI, a suffix
+// like _1, _2, ... is appended until a unique prefix is found.
+func uniqueNSPrefix(elem *helium.Element, prefix, nsURI string) string {
+	for _, ns := range elem.Namespaces() {
+		if ns.Prefix() == prefix && ns.URI() != nsURI {
+			// Conflict — generate a new prefix
+			for i := 1; ; i++ {
+				candidate := prefix + "_" + strconv.Itoa(i)
+				conflict := false
+				for _, ns2 := range elem.Namespaces() {
+					if ns2.Prefix() == candidate {
+						conflict = true
+						break
+					}
+				}
+				if !conflict {
+					return candidate
+				}
+			}
+		}
+	}
+	return prefix
 }
 
 func (ec *execContext) execComment(ctx context.Context, inst *CommentInst) error {
