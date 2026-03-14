@@ -22,8 +22,8 @@ func WithBaseURI(uri string) CompileOption {
 	}
 }
 
-// URIResolver resolves URIs to readable content. Used for xsl:import,
-// xsl:include, and the document() function.
+// URIResolver resolves URIs to readable content. Used for xsl:import
+// and xsl:include during compilation.
 type URIResolver interface {
 	Resolve(uri string) (io.ReadCloser, error)
 }
@@ -55,7 +55,10 @@ func getTransformConfig(ctx context.Context) *transformConfig {
 
 func deriveTransformConfig(ctx context.Context) *transformConfig {
 	if cfg := getTransformConfig(ctx); cfg != nil {
-		return cfg.clone()
+		// Shallow-copy the config and let mutators clone maps only when they
+		// actually modify them.
+		cp := *cfg
+		return &cp
 	}
 	return &transformConfig{}
 }
@@ -70,18 +73,10 @@ func updateTransformConfig(ctx context.Context, fn func(*transformConfig)) conte
 	return withTransformConfig(ctx, cfg)
 }
 
-func (c *transformConfig) clone() *transformConfig {
-	if c == nil {
-		return &transformConfig{}
-	}
-	cp := *c
-	cp.params = maps.Clone(c.params)
-	return &cp
-}
-
 // WithParameter sets a global stylesheet parameter value.
 func WithParameter(ctx context.Context, name, value string) context.Context {
 	return updateTransformConfig(ctx, func(c *transformConfig) {
+		c.params = maps.Clone(c.params)
 		if c.params == nil {
 			c.params = make(map[string]string)
 		}
