@@ -1095,7 +1095,35 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 	}
 
 	inst := &ForEachGroupInst{Select: expr}
-	inst.GroupBy = getAttr(elem, "group-by")
+
+	if gb := getAttr(elem, "group-by"); gb != "" {
+		gbExpr, gbErr := compileXPath(gb, c.nsBindings)
+		if gbErr != nil {
+			return nil, gbErr
+		}
+		inst.GroupBy = gbExpr
+	}
+	if ga := getAttr(elem, "group-adjacent"); ga != "" {
+		gaExpr, gaErr := compileXPath(ga, c.nsBindings)
+		if gaErr != nil {
+			return nil, gaErr
+		}
+		inst.GroupAdjacent = gaExpr
+	}
+	if gs := getAttr(elem, "group-starting-with"); gs != "" {
+		gsPat, gsErr := compilePattern(gs, c.nsBindings, c.xpathDefaultNS)
+		if gsErr != nil {
+			return nil, gsErr
+		}
+		inst.GroupStartingWith = gsPat
+	}
+	if ge := getAttr(elem, "group-ending-with"); ge != "" {
+		gePat, geErr := compilePattern(ge, c.nsBindings, c.xpathDefaultNS)
+		if geErr != nil {
+			return nil, geErr
+		}
+		inst.GroupEndingWith = gePat
+	}
 
 	// Compile body (skip sort elements)
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {

@@ -13,8 +13,12 @@ import (
 
 // xsltFunctions returns the XSLT-specific functions that need to be
 // registered with the XPath evaluator by local name (no namespace prefix).
+// The map is cached on ec after the first call.
 func (ec *execContext) xsltFunctions() map[string]xpath3.Function {
-	return map[string]xpath3.Function{
+	if ec.cachedFns != nil {
+		return ec.cachedFns
+	}
+	ec.cachedFns = map[string]xpath3.Function{
 		"current":             &xsltFunc{min: 0, max: 0, fn: ec.fnCurrent},
 		"document":            &xsltFunc{min: 1, max: 2, fn: ec.fnDocument},
 		"key":                 &xsltFunc{min: 2, max: 3, fn: ec.fnKey},
@@ -27,6 +31,7 @@ func (ec *execContext) xsltFunctions() map[string]xpath3.Function {
 		"current-group":        &xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroup},
 		"current-grouping-key": &xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroupingKey},
 	}
+	return ec.cachedFns
 }
 
 type xsltFunc struct {
@@ -112,35 +117,69 @@ func (ec *execContext) fnKey(_ context.Context, args []xpath3.Sequence) (xpath3.
 		return nil, err
 	}
 
+	// Resolve prefixed key names to expanded names using stylesheet namespaces
+	name = resolveQName(name, ec.stylesheet.namespaces)
+
 	if len(args[1]) == 0 {
 		return xpath3.EmptySequence(), nil
 	}
-	valAV, err := xpath3.AtomizeItem(args[1][0])
-	if err != nil {
-		return nil, err
-	}
-	value, err := xpath3.AtomicToString(valAV)
-	if err != nil {
-		return nil, err
+
+	// Determine the document root for key lookup. When the 3rd argument
+	// is provided, use the document containing that node.
+	var root helium.Node = ec.sourceDoc
+	if len(args) >= 3 && len(args[2]) > 0 {
+		ni, ok := args[2][0].(xpath3.NodeItem)
+		if ok {
+			root = documentRoot(ni.Node)
+		}
 	}
 
-	nodes, err := ec.lookupKey(name, value)
-	if err != nil {
-		return nil, err
-	}
-
-	seq := make(xpath3.Sequence, len(nodes))
-	for i, n := range nodes {
-		seq[i] = xpath3.NodeItem{Node: n}
+	// When the second argument is a sequence, look up each value and
+	// union the results (XSLT 2.0+ §16.3.2).
+	seen := make(map[helium.Node]struct{})
+	var seq xpath3.Sequence
+	for _, item := range args[1] {
+		valAV, err := xpath3.AtomizeItem(item)
+		if err != nil {
+			return nil, err
+		}
+		value, err := xpath3.AtomicToString(valAV)
+		if err != nil {
+			return nil, err
+		}
+		nodes, err := ec.lookupKeyInDoc(name, value, root)
+		if err != nil {
+			return nil, err
+		}
+		for _, n := range nodes {
+			if _, dup := seen[n]; !dup {
+				seen[n] = struct{}{}
+				seq = append(seq, xpath3.NodeItem{Node: n})
+			}
+		}
 	}
 	return seq, nil
 }
 
+// documentRoot walks up to the document root of the given node.
+func documentRoot(n helium.Node) helium.Node {
+	for n.Parent() != nil {
+		n = n.Parent()
+	}
+	return n
+}
+
 // generate-id(node?) returns a unique string identifier for a node.
-func (ec *execContext) fnGenerateID(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+func (ec *execContext) fnGenerateID(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 	var node helium.Node
 	if len(args) == 0 || len(args[0]) == 0 {
-		node = ec.contextNode
+		// Use the XPath context node (correct inside predicates) rather
+		// than the XSLT context node.
+		if xpathNode := xpath3.FnContextNode(ctx); xpathNode != nil {
+			node = xpathNode
+		} else {
+			node = ec.contextNode
+		}
 	} else {
 		ni, ok := args[0][0].(xpath3.NodeItem)
 		if !ok {
@@ -404,13 +443,16 @@ func (ec *execContext) fnCurrentGroupingKey(_ context.Context, _ []xpath3.Sequen
 // xsltFunctionsNS returns user-defined xsl:function definitions as xpath3 functions
 // keyed by qualified name.
 func (ec *execContext) xsltFunctionsNS() map[xpath3.QualifiedName]xpath3.Function {
+	if ec.cachedFnsNS != nil {
+		return ec.cachedFnsNS
+	}
 	if len(ec.stylesheet.functions) == 0 {
 		return nil
 	}
-	fns := make(map[xpath3.QualifiedName]xpath3.Function, len(ec.stylesheet.functions))
+	ec.cachedFnsNS = make(map[xpath3.QualifiedName]xpath3.Function, len(ec.stylesheet.functions))
 	for qn, def := range ec.stylesheet.functions {
-		fns[qn] = &xslUserFunc{def: def, ec: ec}
+		ec.cachedFnsNS[qn] = &xslUserFunc{def: def, ec: ec}
 	}
-	return fns
+	return ec.cachedFnsNS
 }
 

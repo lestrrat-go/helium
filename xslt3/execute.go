@@ -38,6 +38,8 @@ type execContext struct {
 	outputStack       []*outputFrame
 	keyTables         map[string]*keyTable
 	docCache          map[string]*helium.Document
+	cachedFns         map[string]xpath3.Function         // cached xsltFunctions() result
+	cachedFnsNS       map[xpath3.QualifiedName]xpath3.Function // cached xsltFunctionsNS() result
 	msgHandler        func(string, bool)
 	transformCfg      *transformConfig
 	transformCtx      context.Context // parent context from Transform caller (for cancellation/deadlines)
@@ -114,10 +116,10 @@ func (ec *execContext) newXPathContext(node helium.Node) context.Context {
 		ctx = context.Background()
 	}
 	ctx = withExecContext(ctx, ec)
-	ctx = xpath3.WithVariables(ctx, vars)
-	ctx = xpath3.WithFunctions(ctx, ec.xsltFunctions())
+	ctx = xpath3.WithVariablesBorrowed(ctx, vars)
+	ctx = xpath3.WithFunctionsBorrowed(ctx, ec.xsltFunctions())
 	if fnsNS := ec.xsltFunctionsNS(); len(fnsNS) > 0 {
-		ctx = xpath3.WithFunctionsNS(ctx, fnsNS)
+		ctx = xpath3.WithFunctionsNSBorrowed(ctx, fnsNS)
 	}
 	if len(ec.stylesheet.namespaces) > 0 || ec.hasXPathDefaultNS {
 		ns := make(map[string]string, len(ec.stylesheet.namespaces)+1)
@@ -169,10 +171,10 @@ func (ec *execContext) baseXPathContext() context.Context {
 		ctx = context.Background()
 	}
 	ctx = withExecContext(ctx, ec)
-	ctx = xpath3.WithVariables(ctx, vars)
-	ctx = xpath3.WithFunctions(ctx, ec.xsltFunctions())
+	ctx = xpath3.WithVariablesBorrowed(ctx, vars)
+	ctx = xpath3.WithFunctionsBorrowed(ctx, ec.xsltFunctions())
 	if fnsNS := ec.xsltFunctionsNS(); len(fnsNS) > 0 {
-		ctx = xpath3.WithFunctionsNS(ctx, fnsNS)
+		ctx = xpath3.WithFunctionsNSBorrowed(ctx, fnsNS)
 	}
 	if len(ec.stylesheet.namespaces) > 0 || ec.hasXPathDefaultNS {
 		ns := make(map[string]string, len(ec.stylesheet.namespaces)+1)
