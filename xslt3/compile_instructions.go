@@ -855,14 +855,27 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
 	sk := &SortKey{}
 
 	selectAttr := getAttr(elem, "select")
-	if selectAttr == "" {
-		selectAttr = "."
+	if selectAttr != "" {
+		expr, err := compileXPath(selectAttr, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		sk.Select = expr
+	} else {
+		body, err := c.compileChildren(elem)
+		if err != nil {
+			return nil, err
+		}
+		if len(body) > 0 {
+			sk.Body = body
+		} else {
+			expr, err := compileXPath(".", c.nsBindings)
+			if err != nil {
+				return nil, err
+			}
+			sk.Select = expr
+		}
 	}
-	expr, err := compileXPath(selectAttr, c.nsBindings)
-	if err != nil {
-		return nil, err
-	}
-	sk.Select = expr
 
 	if order := getAttr(elem, "order"); order != "" {
 		avt, err := compileAVT(order, c.nsBindings)

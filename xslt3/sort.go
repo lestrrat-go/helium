@@ -14,9 +14,10 @@ import (
 // SortKey is a compiled xsl:sort specification.
 type SortKey struct {
 	Select    *xpath3.Expression
-	Order     *AVT // "ascending" or "descending"
-	DataType  *AVT // "text" or "number"
-	CaseOrder *AVT // "upper-first" or "lower-first"
+	Body      []Instruction // sequence constructor (when select is absent)
+	Order     *AVT          // "ascending" or "descending"
+	DataType  *AVT          // "text" or "number"
+	CaseOrder *AVT          // "upper-first" or "lower-first"
 	Lang      *AVT
 }
 
@@ -95,19 +96,36 @@ func sortNodes(ctx context.Context, ec *execContext, nodes []helium.Node, sortKe
 	for i, node := range nodes {
 		keys[i] = make([]string, len(sortKeys))
 		for ki, sk := range sortKeys {
-			xpathCtx := ec.newXPathContext(node)
-			result, err := sk.Select.Evaluate(xpathCtx, node)
-			if err != nil {
-				return nil, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", err)
+			var keyStr string
+			var keySeq xpath3.Sequence
+			if sk.Select != nil {
+				xpathCtx := ec.newXPathContext(node)
+				result, err := sk.Select.Evaluate(xpathCtx, node)
+				if err != nil {
+					return nil, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", err)
+				}
+				keyStr = stringifyResult(result)
+				keySeq = result.Sequence()
+			} else if len(sk.Body) > 0 {
+				// Sequence constructor: evaluate body with context node
+				savedCurrent := ec.currentNode
+				savedContext := ec.contextNode
+				ec.currentNode = node
+				ec.contextNode = node
+				val, err := ec.evaluateBody(ctx, sk.Body)
+				ec.currentNode = savedCurrent
+				ec.contextNode = savedContext
+				if err != nil {
+					return nil, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", err)
+				}
+				keyStr = stringifySequence(val)
+				keySeq = val
 			}
-			keys[i][ki] = stringifyResult(result)
+			keys[i][ki] = keyStr
 			// Auto-detect numeric type when data-type not explicitly set
-			if types[ki] == "text" && sk.DataType == nil {
-				seq := result.Sequence()
-				if len(seq) == 1 {
-					if av, ok := seq[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
-						types[ki] = "number"
-					}
+			if types[ki] == "text" && sk.DataType == nil && len(keySeq) == 1 {
+				if av, ok := keySeq[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
+					types[ki] = "number"
 				}
 			}
 		}
@@ -174,18 +192,36 @@ func sortItems(ctx context.Context, ec *execContext, items xpath3.Sequence, sort
 			ec.contextItem = nil
 		}
 		for ki, sk := range sortKeys {
-			xpathCtx := ec.newXPathContext(node)
-			result, err := sk.Select.Evaluate(xpathCtx, node)
-			if err != nil {
-				return nil, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", err)
+			var keyStr string
+			var keySeq xpath3.Sequence
+			if sk.Select != nil {
+				xpathCtx := ec.newXPathContext(node)
+				result, err := sk.Select.Evaluate(xpathCtx, node)
+				if err != nil {
+					return nil, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", err)
+				}
+				keyStr = stringifyResult(result)
+				keySeq = result.Sequence()
+			} else if len(sk.Body) > 0 {
+				savedCurrent := ec.currentNode
+				savedContext := ec.contextNode
+				if node != nil {
+					ec.currentNode = node
+					ec.contextNode = node
+				}
+				val, err := ec.evaluateBody(ctx, sk.Body)
+				ec.currentNode = savedCurrent
+				ec.contextNode = savedContext
+				if err != nil {
+					return nil, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", err)
+				}
+				keyStr = stringifySequence(val)
+				keySeq = val
 			}
-			keys[i][ki] = stringifyResult(result)
-			if types[ki] == "text" && sk.DataType == nil {
-				seq := result.Sequence()
-				if len(seq) == 1 {
-					if av, ok := seq[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
-						types[ki] = "number"
-					}
+			keys[i][ki] = keyStr
+			if types[ki] == "text" && sk.DataType == nil && len(keySeq) == 1 {
+				if av, ok := keySeq[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
+					types[ki] = "number"
 				}
 			}
 		}
