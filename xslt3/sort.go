@@ -129,6 +129,117 @@ func sortNodes(ctx context.Context, ec *execContext, nodes []helium.Node, sortKe
 	return sn.nodes, nil
 }
 
+// sortItems sorts a sequence of items (including atomic values) according to sort keys.
+func sortItems(ctx context.Context, ec *execContext, items xpath3.Sequence, sortKeys []*SortKey) (xpath3.Sequence, error) {
+	if len(sortKeys) == 0 || len(items) == 0 {
+		return items, nil
+	}
+
+	keys := make([][]string, len(items))
+	orders := make([]string, len(sortKeys))
+	types := make([]string, len(sortKeys))
+
+	for ki, sk := range sortKeys {
+		order := "ascending"
+		if sk.Order != nil {
+			var err error
+			order, err = sk.Order.evaluate(ctx, ec.contextNode)
+			if err != nil {
+				return nil, err
+			}
+		}
+		orders[ki] = order
+
+		dataType := "text"
+		if sk.DataType != nil {
+			var err error
+			dataType, err = sk.DataType.evaluate(ctx, ec.contextNode)
+			if err != nil {
+				return nil, err
+			}
+		}
+		types[ki] = dataType
+	}
+
+	savedItem := ec.contextItem
+	defer func() { ec.contextItem = savedItem }()
+
+	for i, item := range items {
+		keys[i] = make([]string, len(sortKeys))
+		// Set context item for sort key evaluation
+		ec.contextItem = item
+		var node helium.Node
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			node = ni.Node
+			ec.contextItem = nil
+		}
+		for ki, sk := range sortKeys {
+			xpathCtx := ec.newXPathContext(node)
+			result, err := sk.Select.Evaluate(xpathCtx, node)
+			if err != nil {
+				return nil, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", err)
+			}
+			keys[i][ki] = stringifyResult(result)
+			if types[ki] == "text" && sk.DataType == nil {
+				seq := result.Sequence()
+				if len(seq) == 1 {
+					if av, ok := seq[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
+						types[ki] = "number"
+					}
+				}
+			}
+		}
+	}
+
+	si := &sortableItems{
+		items:    items,
+		keys:     keys,
+		sortKeys: sortKeys,
+		orders:   orders,
+		types:    types,
+	}
+	sort.Stable(si)
+	return si.items, nil
+}
+
+type sortableItems struct {
+	items    xpath3.Sequence
+	keys     [][]string
+	sortKeys []*SortKey
+	orders   []string
+	types    []string
+}
+
+func (s *sortableItems) Len() int { return len(s.items) }
+
+func (s *sortableItems) Swap(i, j int) {
+	s.items[i], s.items[j] = s.items[j], s.items[i]
+	s.keys[i], s.keys[j] = s.keys[j], s.keys[i]
+}
+
+func (s *sortableItems) Less(i, j int) bool {
+	for k := range s.sortKeys {
+		ki := s.keys[i][k]
+		kj := s.keys[j][k]
+
+		var cmp int
+		if s.types[k] == "number" {
+			cmp = compareNumericStrings(ki, kj)
+		} else {
+			cmp = strings.Compare(ki, kj)
+		}
+
+		if cmp == 0 {
+			continue
+		}
+		if s.orders[k] == "descending" {
+			return cmp > 0
+		}
+		return cmp < 0
+	}
+	return false
+}
+
 func compareNumericStrings(a, b string) int {
 	// Parse as float64 for comparison.
 	// NaN (non-numeric) values sort before all real numbers.

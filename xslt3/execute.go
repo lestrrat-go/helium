@@ -18,6 +18,7 @@ type execContext struct {
 	resultDoc         *helium.Document
 	currentNode       helium.Node // XSLT current() node
 	contextNode       helium.Node // XPath context node
+	contextItem       xpath3.Item // non-nil when context is an atomic value (for-each over atomics)
 	position          int
 	size              int
 	localVars         *varScope
@@ -131,6 +132,9 @@ func (ec *execContext) newXPathContext(node helium.Node) context.Context {
 	}
 	if ec.size > 0 {
 		ctx = xpath3.WithSize(ctx, ec.size)
+	}
+	if ec.contextItem != nil {
+		ctx = xpath3.WithContextItem(ctx, ec.contextItem)
 	}
 	return ctx
 }

@@ -50,8 +50,9 @@ type evalConfig struct {
 	uriResolver        URIResolver
 	collectionResolver CollectionResolver
 	httpClient         *http.Client
-	position           int // initial context position (0 = use default 1)
-	size               int // initial context size (0 = use default 1)
+	position           int  // initial context position (0 = use default 1)
+	size               int  // initial context size (0 = use default 1)
+	contextItem        Item // non-nil when context is an atomic value, not a node
 }
 
 func getEvalConfig(ctx context.Context) *evalConfig {
@@ -300,6 +301,16 @@ func WithPosition(ctx context.Context, pos int) context.Context {
 func WithSize(ctx context.Context, size int) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) bool {
 		c.size = size
+		return false
+	})
+}
+
+// WithContextItem sets the context item for evaluation to an atomic value
+// instead of a node. This is used by XSLT for xsl:for-each over atomic
+// sequences where `.` should return the current atomic value.
+func WithContextItem(ctx context.Context, item Item) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) bool {
+		c.contextItem = item
 		return false
 	})
 }
