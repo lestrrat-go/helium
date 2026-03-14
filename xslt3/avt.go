@@ -34,13 +34,8 @@ func compileAVT(s string, nsBindings map[string]string) (*AVT, error) {
 				i += 2
 				continue
 			}
-			// TODO(xslt3): this finds the next '}' without tracking nesting
-			// depth or string literal state. XPath 3.x expressions containing
-			// map{...} or array{...} constructors, or '}' inside string
-			// literals, will be truncated. Needs a nesting-aware scanner that
-			// counts brace depth and skips string content. This is a known
-			// limitation — only simple XPath expressions work in AVTs today.
-			end := strings.IndexByte(s[i+1:], '}')
+			// Find matching '}' tracking nesting depth and string literals.
+			end := findAVTExprEnd(s[i+1:])
 			if end < 0 {
 				return nil, staticError(errCodeXTSE0580, "unterminated AVT expression in %q", s)
 			}
@@ -70,6 +65,32 @@ func compileAVT(s string, nsBindings map[string]string) (*AVT, error) {
 		}
 	}
 	return &AVT{parts: parts}, nil
+}
+
+// findAVTExprEnd finds the index of the closing '}' for an AVT expression,
+// tracking brace nesting (for EQName Q{uri}local, map{}, array{}) and
+// skipping braces inside string literals.
+func findAVTExprEnd(s string) int {
+	depth := 0
+	inSingle := false
+	inDouble := false
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		switch {
+		case ch == '\'' && !inDouble:
+			inSingle = !inSingle
+		case ch == '"' && !inSingle:
+			inDouble = !inDouble
+		case ch == '{' && !inSingle && !inDouble:
+			depth++
+		case ch == '}' && !inSingle && !inDouble:
+			if depth == 0 {
+				return i
+			}
+			depth--
+		}
+	}
+	return -1
 }
 
 func appendLiteral(parts []avtPart, s string) []avtPart {
