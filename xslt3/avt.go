@@ -26,8 +26,8 @@ func compileAVT(s string, nsBindings map[string]string) (*AVT, error) {
 	var parts []avtPart
 	i := 0
 	for i < len(s) {
-		switch {
-		case s[i] == '{':
+		switch s[i] {
+		case '{':
 			if i+1 < len(s) && s[i+1] == '{' {
 				// escaped {{
 				parts = appendLiteral(parts, "{")
@@ -46,7 +46,7 @@ func compileAVT(s string, nsBindings map[string]string) (*AVT, error) {
 			}
 			parts = append(parts, avtPart{expr: expr})
 			i = i + 1 + end + 1
-		case s[i] == '}':
+		case '}':
 			if i+1 < len(s) && s[i+1] == '}' {
 				// escaped }}
 				parts = appendLiteral(parts, "}")
@@ -73,25 +73,6 @@ func appendLiteral(parts []avtPart, s string) []avtPart {
 		return parts
 	}
 	return append(parts, avtPart{literal: s})
-}
-
-// isStatic returns true if the AVT contains no expressions (pure literal).
-func (a *AVT) isStatic() bool {
-	for _, p := range a.parts {
-		if p.expr != nil {
-			return false
-		}
-	}
-	return true
-}
-
-// staticValue returns the static value if isStatic() is true.
-func (a *AVT) staticValue() string {
-	var sb strings.Builder
-	for _, p := range a.parts {
-		sb.WriteString(p.literal)
-	}
-	return sb.String()
 }
 
 // evaluate evaluates the AVT in the given context.

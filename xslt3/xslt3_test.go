@@ -2,6 +2,7 @@ package xslt3_test
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -510,8 +511,8 @@ func domEqual(a, b string) bool {
 		wrapB = "<?xml version=\"1.0\"?>" + b
 	}
 
-	docA, errA := helium.Parse(nil, []byte(wrapA))
-	docB, errB := helium.Parse(nil, []byte(wrapB))
+	docA, errA := helium.Parse(context.TODO(), []byte(wrapA))
+	docB, errB := helium.Parse(context.TODO(), []byte(wrapB))
 	if errA != nil || errB != nil {
 		return false
 	}
@@ -600,8 +601,8 @@ func normalizeXMLString(s string) string {
 	}
 	// Second pass: clean up tag-boundary whitespace
 	s = string(result)
-	s = strings.ReplaceAll(s, "> <", "><")  // space between tags
-	s = strings.ReplaceAll(s, " >", ">")    // space before >
-	s = strings.ReplaceAll(s, " />", "/>")  // space before />
+	s = strings.ReplaceAll(s, "> <", "><") // space between tags
+	s = strings.ReplaceAll(s, " >", ">")   // space before >
+	s = strings.ReplaceAll(s, " />", "/>") // space before />
 	return s
 }
