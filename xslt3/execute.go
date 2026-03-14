@@ -13,31 +13,31 @@ type execContextKey struct{}
 
 // execContext holds XSLT transformation state. Stored inside context.Context.
 type execContext struct {
-	stylesheet       *Stylesheet
-	sourceDoc        *helium.Document
-	resultDoc        *helium.Document
-	currentNode      helium.Node // XSLT current() node
-	contextNode      helium.Node // XPath context node
-	position         int
-	size             int
-	localVars        *varScope
-	globalVars       map[string]xpath3.Sequence
-	globalVarDefs    map[string]*Variable // unevaluated global variable definitions (lazy)
-	globalParamDefs  map[string]*Param    // unevaluated global param definitions (lazy)
-	globalEvaluating map[string]bool      // circular dependency detection
-	collectingVars   bool                 // reentrancy guard for collectAllVars
-	currentMode      string
-	currentTemplate  *Template                  // currently executing template (for next-match)
+	stylesheet        *Stylesheet
+	sourceDoc         *helium.Document
+	resultDoc         *helium.Document
+	currentNode       helium.Node // XSLT current() node
+	contextNode       helium.Node // XPath context node
+	position          int
+	size              int
+	localVars         *varScope
+	globalVars        map[string]xpath3.Sequence
+	globalVarDefs     map[string]*Variable // unevaluated global variable definitions (lazy)
+	globalParamDefs   map[string]*Param    // unevaluated global param definitions (lazy)
+	globalEvaluating  map[string]bool      // circular dependency detection
+	collectingVars    bool                 // reentrancy guard for collectAllVars
+	currentMode       string
+	currentTemplate   *Template                  // currently executing template (for next-match)
 	xpathDefaultNS    string                     // current xpath-default-namespace
 	hasXPathDefaultNS bool                       // true when xpathDefaultNS is explicitly set
-	tunnelParams     map[string]xpath3.Sequence // tunnel parameters passed through apply-templates
-	depth            int                        // recursion depth
-	outputStack      []*outputFrame
-	keyTables        map[string]*keyTable
-	docCache         map[string]*helium.Document
-	msgHandler       func(string, bool)
-	transformCfg     *transformConfig
-	transformCtx     context.Context // parent context from Transform caller (for cancellation/deadlines)
+	tunnelParams      map[string]xpath3.Sequence // tunnel parameters passed through apply-templates
+	depth             int                        // recursion depth
+	outputStack       []*outputFrame
+	keyTables         map[string]*keyTable
+	docCache          map[string]*helium.Document
+	msgHandler        func(string, bool)
+	transformCfg      *transformConfig
+	transformCtx      context.Context // parent context from Transform caller (for cancellation/deadlines)
 }
 
 func withExecContext(ctx context.Context, ec *execContext) context.Context {
@@ -434,7 +434,12 @@ func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []Instru
 			if i > 0 {
 				sb.WriteByte(' ')
 			}
-			s, err := xpath3.AtomicToString(item.(xpath3.AtomicValue))
+			av, err := xpath3.AtomizeItem(item)
+			if err != nil {
+				_, _ = fmt.Fprint(&sb, item)
+				continue
+			}
+			s, err := xpath3.AtomicToString(av)
 			if err != nil {
 				_, _ = fmt.Fprint(&sb, item)
 			} else {
