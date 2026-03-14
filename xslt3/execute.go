@@ -178,10 +178,22 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	}
 
 	// Either call the initial-template or apply templates to the document root
+	initialTemplateName := ""
 	if cfg != nil && cfg.initialTemplate != "" {
-		tmpl := ec.stylesheet.namedTemplates[cfg.initialTemplate]
+		initialTemplateName = cfg.initialTemplate
+	}
+
+	// XSLT 3.0: if no explicit initial template, check for xsl:initial-template
+	if initialTemplateName == "" {
+		if _, ok := ec.stylesheet.namedTemplates["xsl:initial-template"]; ok {
+			initialTemplateName = "xsl:initial-template"
+		}
+	}
+
+	if initialTemplateName != "" {
+		tmpl := ec.stylesheet.namedTemplates[initialTemplateName]
 		if tmpl == nil {
-			return nil, dynamicError(errCodeXTDE0820, "initial template %q not found", cfg.initialTemplate)
+			return nil, dynamicError(errCodeXTDE0820, "initial template %q not found", initialTemplateName)
 		}
 		if err := ec.executeTemplate(ctx, tmpl, source, ""); err != nil {
 			return nil, err
