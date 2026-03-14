@@ -30,8 +30,6 @@ func TestW3CTestSuite(t *testing.T) {
 
 	// Collect test sets from catalog
 	const catalogNS = "http://www.w3.org/2012/10/xslt-test-catalog"
-	var testSetCount, testCount, passCount, skipCount, failCount int
-
 	for child := catalogDoc.DocumentElement().FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := child.(*helium.Element)
 		if !ok || elem.LocalName() != "test-set" {
@@ -45,7 +43,6 @@ func TestW3CTestSuite(t *testing.T) {
 			continue
 		}
 
-		testSetCount++
 		t.Run(tsName, func(t *testing.T) {
 			t.Parallel()
 
@@ -72,30 +69,16 @@ func TestW3CTestSuite(t *testing.T) {
 				}
 
 				tcName, _ := tcElem.GetAttribute("name")
-				testCount++
 
 				t.Run(tcName, func(t *testing.T) {
 					t.Parallel()
 
-					result := runTestCase(t, tcElem, tsDir, environments, catalogNS)
-					switch result {
-					case testPass:
-						passCount++
-					case testSkip:
-						skipCount++
-					case testFail:
-						failCount++
-					}
+					runTestCase(t, tcElem, tsDir, environments, catalogNS)
 				})
 			}
 		})
 	}
 
-	_ = testSetCount
-	_ = testCount
-	_ = passCount
-	_ = skipCount
-	_ = failCount
 }
 
 // isPhase1TestSet returns true if this test set exercises Phase 1 features.

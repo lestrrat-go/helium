@@ -464,6 +464,11 @@ func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mod
 
 // findBestTemplate finds the highest-priority matching template for a node.
 func (ec *execContext) findBestTemplate(node helium.Node, mode string) *Template {
+	// Set currentNode to the candidate so current() works in pattern predicates
+	savedCurrent := ec.currentNode
+	ec.currentNode = node
+	defer func() { ec.currentNode = savedCurrent }()
+
 	templates := ec.stylesheet.modeTemplates[mode]
 	for _, tmpl := range templates {
 		if tmpl.Match != nil && tmpl.Match.matchPattern(ec, node) {
