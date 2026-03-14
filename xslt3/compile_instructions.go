@@ -20,6 +20,13 @@ func (c *compiler) compileInstruction(elem *helium.Element) (Instruction, error)
 	}
 	defer func() { c.preserveSpace = savedPreserve }()
 
+	// Handle expand-text inheritance
+	savedExpandText := c.expandText
+	if et := getAttr(elem, "expand-text"); et != "" {
+		c.expandText = (et == "yes")
+	}
+	defer func() { c.expandText = savedExpandText }()
+
 	// Handle per-instruction xpath-default-namespace
 	savedXPathDefaultNS := c.xpathDefaultNS
 	hasLocalXPNS := false
@@ -199,7 +206,15 @@ func (c *compiler) compileChildren(parent *helium.Element) ([]Instruction, error
 		case *helium.Text:
 			text := string(v.Content())
 			if !c.shouldStripText(text) {
-				body = append(body, &LiteralTextInst{Value: text})
+				inst := &LiteralTextInst{Value: text}
+				if c.expandText && strings.ContainsAny(text, "{}") {
+					avt, err := compileAVT(text, c.nsBindings)
+					if err != nil {
+						return nil, err
+					}
+					inst.TVT = avt
+				}
+				body = append(body, inst)
 			}
 		case *helium.CDATASection:
 			body = append(body, &LiteralTextInst{Value: string(v.Content())})

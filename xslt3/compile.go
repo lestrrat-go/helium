@@ -20,6 +20,7 @@ type compiler struct {
 	nsBindings     map[string]string
 	xpathDefaultNS string // current xpath-default-namespace
 	preserveSpace  bool   // xml:space="preserve" in effect
+	expandText     bool   // expand-text="yes" — text value templates enabled
 	importPrec     int
 	importStack    map[string]struct{} // circular import detection
 	baseURI        string
@@ -125,6 +126,11 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 	// Read xpath-default-namespace from stylesheet root
 	if xdn := getAttr(root, "xpath-default-namespace"); xdn != "" {
 		c.xpathDefaultNS = xdn
+	}
+
+	// Read expand-text from stylesheet root (XSLT 3.0)
+	if et := getAttr(root, "expand-text"); et == "yes" {
+		c.expandText = true
 	}
 
 	// Read version
@@ -395,7 +401,15 @@ func (c *compiler) compileTemplateBody(elem *helium.Element) ([]Instruction, []*
 			text := string(v.Content())
 			if !c.shouldStripText(text) {
 				inParams = false
-				body = append(body, &LiteralTextInst{Value: text})
+				inst := &LiteralTextInst{Value: text}
+				if c.expandText && strings.ContainsAny(text, "{}") {
+					avt, err := compileAVT(text, c.nsBindings)
+					if err != nil {
+						return nil, nil, err
+					}
+					inst.TVT = avt
+				}
+				body = append(body, inst)
 			}
 		case *helium.CDATASection:
 			inParams = false

@@ -359,10 +359,24 @@ func (ec *execContext) execText(inst *TextInst) error {
 }
 
 func (ec *execContext) execLiteralText(inst *LiteralTextInst) error {
-	if inst.Value == "" {
+	value := inst.Value
+	if inst.TVT != nil {
+		// Text value template: evaluate like an AVT
+		ctx := ec.transformCtx
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		ctx = withExecContext(ctx, ec)
+		var err error
+		value, err = inst.TVT.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+	}
+	if value == "" {
 		return nil
 	}
-	text, err := ec.resultDoc.CreateText([]byte(inst.Value))
+	text, err := ec.resultDoc.CreateText([]byte(value))
 	if err != nil {
 		return err
 	}
