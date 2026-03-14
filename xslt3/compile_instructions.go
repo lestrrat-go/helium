@@ -20,17 +20,23 @@ func (c *compiler) compileInstruction(elem *helium.Element) (Instruction, error)
 	}
 	defer func() { c.preserveSpace = savedPreserve }()
 
-	// Handle expand-text inheritance
+	// Handle expand-text inheritance (check both unprefixed and xsl:-prefixed for LREs)
 	savedExpandText := c.expandText
 	if et := getAttr(elem, "expand-text"); et != "" {
+		c.expandText = (et == "yes")
+	} else if et, ok := elem.GetAttributeNS("expand-text", NSXSLT); ok {
 		c.expandText = (et == "yes")
 	}
 	defer func() { c.expandText = savedExpandText }()
 
 	// Handle per-instruction xpath-default-namespace
+	// Check both unprefixed (on XSLT elements) and xsl:-prefixed (on LREs)
 	savedXPathDefaultNS := c.xpathDefaultNS
 	hasLocalXPNS := false
 	if xdn, ok := elem.GetAttribute("xpath-default-namespace"); ok {
+		c.xpathDefaultNS = xdn
+		hasLocalXPNS = true
+	} else if xdn, ok := elem.GetAttributeNS("xpath-default-namespace", NSXSLT); ok {
 		c.xpathDefaultNS = xdn
 		hasLocalXPNS = true
 	}
@@ -53,9 +59,12 @@ func (c *compiler) compileInstruction(elem *helium.Element) (Instruction, error)
 func (c *compiler) setInstructionXPathNS(inst Instruction, hasLocal bool) {
 	set := func(ns *xpathNS) {
 		ns.XPathDefaultNS = c.xpathDefaultNS
-		ns.HasXPathDefaultNS = hasLocal
+		// Mark as set when either explicitly declared locally or inherited non-empty
+		ns.HasXPathDefaultNS = hasLocal || c.xpathDefaultNS != ""
 	}
 	switch v := inst.(type) {
+	case *ApplyTemplatesInst:
+		set(&v.xpathNS)
 	case *IfInst:
 		set(&v.xpathNS)
 	case *ValueOfInst:

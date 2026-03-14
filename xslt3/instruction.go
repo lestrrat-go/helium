@@ -26,6 +26,7 @@ func (x xpathNS) xpathNSIsSet() bool        { return x.HasXPathDefaultNS }
 
 // ApplyTemplatesInst represents xsl:apply-templates.
 type ApplyTemplatesInst struct {
+	xpathNS
 	Select *xpath3.Expression // nil = "child::node()"
 	Mode   string             // "" = current mode, "#default", "#current"
 	Sort   []*SortKey
