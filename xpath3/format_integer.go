@@ -23,7 +23,19 @@ func fnFormatInteger(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	n := valAtom.BigInt()
+	if valAtom.TypeName == TypeUntypedAtomic || valAtom.TypeName == TypeString {
+		valAtom, err = CastAtomic(valAtom, TypeInteger)
+		if err != nil {
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:integer", valAtom.TypeName)}
+		}
+	}
+	if !isSubtypeOf(valAtom.TypeName, TypeInteger) {
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("format-integer: expected xs:integer, got %s", valAtom.TypeName)}
+	}
+	n, ok := valAtom.Value.(*big.Int)
+	if !ok {
+		return nil, fmt.Errorf("xpath3: internal error: expected *big.Int for %s", valAtom.TypeName)
+	}
 
 	picAtom, err := AtomizeItem(picSeq[0])
 	if err != nil {
