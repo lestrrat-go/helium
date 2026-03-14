@@ -1539,10 +1539,6 @@ func (ec *execContext) hasFromAncestor(inst *NumberInst, node helium.Node) bool 
 // formatNumberList formats a list of numbers according to an XSLT format string.
 // The format string is parsed into prefix, (format-token, separator)* pairs, and suffix.
 func formatNumberList(nums []int, format string, groupSep string, groupSize int) string {
-	if len(nums) == 0 {
-		return ""
-	}
-
 	// Parse format string into tokens
 	type fmtToken struct {
 		format    string // e.g. "1", "a", "A", "i", "I"
