@@ -811,6 +811,8 @@ func emitAssertion(a assertion) []string {
 			return nil
 		}
 		return []string{fmt.Sprintf("w3cAssertMessage(%s)", strings.Join(msgChecks, ", "))}
+	case "assert":
+		return []string{fmt.Sprintf("w3cAssertXPath(%s)", goStringLiteral(strings.TrimSpace(a.Value)))}
 	case "assert-result-document", "assert-serialization", "assert-posture-and-sweep":
 		return []string{"w3cAssertSkip()"}
 	default:
@@ -824,6 +826,8 @@ func emitCheck(a assertion) string {
 		return fmt.Sprintf("w3cCheckXML(%s)", goStringLiteral(strings.TrimSpace(a.Value)))
 	case "assert-string-value":
 		return fmt.Sprintf("w3cCheckStringValue(%s)", goStringLiteral(a.Value))
+	case "assert":
+		return fmt.Sprintf("w3cCheckXPath(%s)", goStringLiteral(strings.TrimSpace(a.Value)))
 	case "error":
 		return fmt.Sprintf("w3cCheckError(%q)", a.Value)
 	default:
