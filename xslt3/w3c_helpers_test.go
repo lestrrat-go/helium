@@ -329,10 +329,10 @@ func wrapXMLFragment(s string) string {
 	trimmed := strings.TrimSpace(s)
 	if strings.HasPrefix(trimmed, "<?xml") {
 		if idx := strings.Index(trimmed, "?>"); idx >= 0 {
-			s = trimmed[idx+2:]
+			trimmed = strings.TrimSpace(trimmed[idx+2:])
 		}
 	}
-	return "<_w3c_root_>" + s + "</_w3c_root_>"
+	return "<_w3c_root_>" + trimmed + "</_w3c_root_>"
 }
 
 func nodesEqual(a, b helium.Node) bool {
