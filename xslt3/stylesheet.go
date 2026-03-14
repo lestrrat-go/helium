@@ -27,8 +27,15 @@ type Stylesheet struct {
 	namespaces      map[string]string   // prefix -> URI from stylesheet
 	excludePrefixes map[string]struct{} // prefixes excluded from output
 	decimalFormats  map[xpath3.QualifiedName]xpath3.DecimalFormat // named decimal formats
+	modeDefs        map[string]*ModeDef                         // mode name -> mode definition
 	sourceDoc       *helium.Document                            // the parsed stylesheet document (for document(""))
 	baseURI         string                                      // base URI for resolving relative document references
+}
+
+// ModeDef is a compiled xsl:mode declaration.
+type ModeDef struct {
+	Name      string
+	OnNoMatch string // "shallow-copy", "deep-copy", "shallow-skip", "deep-skip", "text-only-copy", "fail"
 }
 
 // XSLFunction is a compiled xsl:function.

@@ -250,6 +250,8 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 			}
 		case "decimal-format":
 			c.compileDecimalFormat(elem)
+		case "mode":
+			c.compileMode(elem)
 		case "namespace-alias", "attribute-set":
 			// TODO: implement in later phases
 		default:
@@ -602,6 +604,24 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 
 	c.stylesheet.functions[qn] = fn
 	return nil
+}
+
+func (c *compiler) compileMode(elem *helium.Element) {
+	name := getAttr(elem, "name")
+	if name == "" {
+		name = "#default"
+	}
+	md := &ModeDef{
+		Name:      name,
+		OnNoMatch: getAttr(elem, "on-no-match"),
+	}
+	if md.OnNoMatch == "" {
+		md.OnNoMatch = "text-only-copy" // XSLT 3.0 default
+	}
+	if c.stylesheet.modeDefs == nil {
+		c.stylesheet.modeDefs = make(map[string]*ModeDef)
+	}
+	c.stylesheet.modeDefs[name] = md
 }
 
 func (c *compiler) compileDecimalFormat(elem *helium.Element) {

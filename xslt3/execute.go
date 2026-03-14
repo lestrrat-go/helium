@@ -701,9 +701,45 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 
 // applyBuiltinRules applies the built-in template rules per XSLT spec.
 func (ec *execContext) applyBuiltinRules(ctx context.Context, node helium.Node, mode string, paramValues ...map[string]xpath3.Sequence) error {
+	// Check for xsl:mode on-no-match behavior
+	if md := ec.stylesheet.modeDefs[mode]; md != nil {
+		return ec.applyOnNoMatch(ctx, node, mode, md.OnNoMatch, paramValues...)
+	}
+	if mode == "" {
+		if md := ec.stylesheet.modeDefs["#default"]; md != nil {
+			return ec.applyOnNoMatch(ctx, node, mode, md.OnNoMatch, paramValues...)
+		}
+	}
+	return ec.applyOnNoMatch(ctx, node, mode, "text-only-copy", paramValues...)
+}
+
+func (ec *execContext) applyOnNoMatch(ctx context.Context, node helium.Node, mode, behavior string, paramValues ...map[string]xpath3.Sequence) error {
+	switch behavior {
+	case "shallow-copy":
+		return ec.onNoMatchShallowCopy(ctx, node, mode, paramValues...)
+	case "deep-copy":
+		return ec.onNoMatchDeepCopy(node)
+	case "shallow-skip":
+		if node.Type() == helium.DocumentNode || node.Type() == helium.ElementNode {
+			for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+				if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	case "deep-skip":
+		return nil
+	case "fail":
+		return dynamicError("XTDE0555", "no matching template in mode %q (on-no-match=fail)", mode)
+	default: // "text-only-copy"
+		return ec.onNoMatchTextOnlyCopy(ctx, node, mode, paramValues...)
+	}
+}
+
+func (ec *execContext) onNoMatchTextOnlyCopy(ctx context.Context, node helium.Node, mode string, paramValues ...map[string]xpath3.Sequence) error {
 	switch node.Type() {
 	case helium.DocumentNode, helium.ElementNode:
-		// Built-in rule: apply templates to children, forwarding params
 		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
 			if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
 				return err
@@ -711,18 +747,15 @@ func (ec *execContext) applyBuiltinRules(ctx context.Context, node helium.Node, 
 		}
 		return nil
 	case helium.TextNode, helium.CDATASectionNode:
-		// Check strip-space: skip whitespace-only text nodes if parent is stripped
 		if ec.shouldStripWhitespace(node) {
 			return nil
 		}
-		// Built-in rule: copy text to output
 		text, err := ec.resultDoc.CreateText(node.Content())
 		if err != nil {
 			return err
 		}
 		return ec.addNode(text)
 	case helium.AttributeNode:
-		// Built-in rule: copy text value to output
 		attr, ok := node.(*helium.Attribute)
 		if !ok {
 			return nil
@@ -733,7 +766,94 @@ func (ec *execContext) applyBuiltinRules(ctx context.Context, node helium.Node, 
 		}
 		return ec.addNode(text)
 	default:
-		// Other node types: do nothing
+		return nil
+	}
+}
+
+func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Node, mode string, paramValues ...map[string]xpath3.Sequence) error {
+	switch node.Type() {
+	case helium.DocumentNode:
+		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+			if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
+				return err
+			}
+		}
+		return nil
+	case helium.ElementNode:
+		srcElem := node.(*helium.Element)
+		newElem, err := ec.resultDoc.CreateElement(srcElem.LocalName())
+		if err != nil {
+			return err
+		}
+		for _, ns := range srcElem.Namespaces() {
+			_ = newElem.DeclareNamespace(ns.Prefix(), ns.URI())
+		}
+		if srcElem.URI() != "" {
+			_ = newElem.SetActiveNamespace(srcElem.Prefix(), srcElem.URI())
+		}
+		for _, attr := range srcElem.Attributes() {
+			_ = copyAttributeToElement(newElem, attr)
+		}
+		if err := ec.addNode(newElem); err != nil {
+			return err
+		}
+		out := ec.currentOutput()
+		savedCurrent := out.current
+		out.current = newElem
+		defer func() { out.current = savedCurrent }()
+		for child := srcElem.FirstChild(); child != nil; child = child.NextSibling() {
+			if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
+				return err
+			}
+		}
+		return nil
+	case helium.TextNode, helium.CDATASectionNode:
+		text, err := ec.resultDoc.CreateText(node.Content())
+		if err != nil {
+			return err
+		}
+		return ec.addNode(text)
+	case helium.CommentNode:
+		comment, err := ec.resultDoc.CreateComment(node.Content())
+		if err != nil {
+			return err
+		}
+		return ec.addNode(comment)
+	case helium.ProcessingInstructionNode:
+		pi, err := ec.resultDoc.CreatePI(node.Name(), string(node.Content()))
+		if err != nil {
+			return err
+		}
+		return ec.addNode(pi)
+	case helium.AttributeNode:
+		attr := node.(*helium.Attribute)
+		out := ec.currentOutput()
+		if outElem, ok := out.current.(*helium.Element); ok {
+			_ = copyAttributeToElement(outElem, attr)
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
+func (ec *execContext) onNoMatchDeepCopy(node helium.Node) error {
+	// Deep copy: serialize node content from source and add to output
+	// For now, use shallow-copy behavior for non-element nodes
+	switch node.Type() {
+	case helium.TextNode, helium.CDATASectionNode:
+		text, err := ec.resultDoc.CreateText(node.Content())
+		if err != nil {
+			return err
+		}
+		return ec.addNode(text)
+	case helium.CommentNode:
+		comment, err := ec.resultDoc.CreateComment(node.Content())
+		if err != nil {
+			return err
+		}
+		return ec.addNode(comment)
+	default:
 		return nil
 	}
 }
