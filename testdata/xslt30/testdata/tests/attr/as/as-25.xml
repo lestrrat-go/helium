@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<doc-schemaas xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:noNamespaceSchemaLocation="builtinTypeSchemaAs.xsd">
+	<elem-int>131072</elem-int>
+	<elem-nonNegativeInteger>44444</elem-nonNegativeInteger>
+	<elem-negativeInteger>-74146</elem-negativeInteger>
+	<elem-long>-922337</elem-long>
+	<elem-unsignedShort>65535</elem-unsignedShort>
+	<elem-byte>-128</elem-byte>
+</doc-schemaas>

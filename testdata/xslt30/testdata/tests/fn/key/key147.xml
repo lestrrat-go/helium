@@ -1,0 +1,108 @@
+<?xml version="1.0"?>
+<Tree>
+<Level1 ID="id1">
+	<Name First="Lee" MI="R" Last="Smith">Lee</Name>
+	<Age>70</Age>
+	<Level2 ID="id2">
+		<Name First="Amby" MI="A" Last="Smith">Amby</Name>
+		<Age>46</Age>
+
+		<Level3 ID="id6">
+			<Name First="Julie" MI="A" Last="Smith">Jules</Name>
+			<Age>9</Age>
+		</Level3>
+		<Level3 ID="id9">
+			<Name First="Daniel" MI="L" Last="Smith">Daniel</Name>
+			<Age>8</Age>
+		</Level3>
+	</Level2>
+	<Level2 ID="id3">
+		<Name First="Ted" MI="R" Last="Smith">Ted</Name>
+		<Age>45</Age>
+		<Level3 ID="id8">
+			<Name First="Joshua" MI="R" Last="Smith">Joshua</Name>
+			<Age>7</Age>
+		</Level3>
+		<Level3 ID="id11">
+			<Name First="Lauren" MI="R" Last="Smith">Lauren</Name>
+			<Age>5</Age>
+		</Level3>
+	</Level2>
+	<Level2 ID="id4">
+		<Name First="Pedro" MI="Q" Last="Smith">Pedro</Name>
+		<Age>43</Age>
+		<Level3 ID="id7">
+			<Name First="Nathaniel" MI="Q" Last="Smith">Nate</Name>
+			<Age>8</Age>
+		</Level3>
+		<Level3 ID="id10">
+			<Name First="Samual" MI="Q" Last="Smith">Sam</Name>
+			<Age>7</Age>
+		</Level3>
+	</Level2>
+	<Level2 ID="id5">
+		<Name First="Pablo" MI="E" Last="Smith">Pablo</Name>
+		<Age>41</Age>
+		<Level3 ID="id12">
+			<Name First="Benjamin" MI="D" Last="Smith">Ben</Name>
+			<Age>5</Age>
+		</Level3>
+		<Level3 ID="id13">
+			<Name First="Lucy" MI="E" Last="Smith">Lucy</Name>
+			<Age>2</Age>
+		</Level3>
+		<Level3 ID="id14">
+			<Name First="Jake" MI="E" Last="Smith">Jake</Name>
+			<Age>1</Age>
+		</Level3>
+	</Level2>
+	<Level3 ID="id15">
+		<Name First="Jeffery" MI="Q" Last="Smith">Jeff</Name>
+		<Age>36</Age>
+		<Level3 ID="id16">
+			<Name First="Christopher" MI="Q" Last="Smith">Chris</Name>
+			<Age>8</Age>
+		</Level3>
+		<Level3 ID="id17">
+			<Name First="Jabriella" MI="Q" Last="Smith">Jabriella</Name>
+			<Age>7</Age>
+		</Level3>
+	</Level3>
+</Level1>
+<Level2 ID="id1">
+	<Name First="Melvin" MI="R" Last="Gaas">Mel</Name>
+	<Age>80</Age>
+	<Level3 ID="id8">
+		<Name First="Robert" MI="A" Last="Gaas">Bob</Name>
+		<Age>52</Age>
+
+		<Level3 ID="id20">
+			<Name First="Eric" MI="A" Last="Gaas">Eric</Name>
+			<Age>19</Age>
+		</Level3>
+		<Level3 ID="id21">
+			<Name First="Johnathan" MI="L" Last="Gaas">John</Name>
+			<Age>18</Age>
+		</Level3>
+	</Level3>
+</Level2>
+<childnodeset>
+	<id>id6</id>
+	<id>id7</id>
+	<id>id8</id>
+	<id>id9</id>
+	<id>id10</id>
+	<id>id11</id>
+	<id>id12</id>
+	<id>id13</id>
+	<id>id14</id>
+	<id>id15</id>
+</childnodeset>
+<parentnodeset>
+	<id>id2</id>
+	<id>id3</id>
+	<id>id4</id>
+	<id>id5</id>
+</parentnodeset>
+</Tree>
+

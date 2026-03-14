@@ -1,0 +1,10 @@
+<?xml version="1.0"?> 
+<doc>
+<title>Testing:import-precedence</title>
+<author>Joe Jones</author>
+<overview>testing-import</overview>
+<chapters>
+<chapter num="1">know xsl</chapter>
+<chapter num="2">love xsl</chapter>
+</chapters>
+</doc>

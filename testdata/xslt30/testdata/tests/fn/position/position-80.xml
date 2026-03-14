@@ -1,0 +1,15 @@
+<doc>
+  <alpha key="a">
+    <z key="a1"/>
+  </alpha>
+  <alpha key="b">
+    <beta key="b1"/>
+    <z key="b2"/>
+  </alpha>
+  <alpha key="c">
+    <z key="c1"/>
+    <z key="c2"/>
+    <beta key="c2"/>
+    <z key="c4"/>
+  </alpha>
+</doc>

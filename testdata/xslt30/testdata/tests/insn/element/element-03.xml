@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<doc>Document
+  <prefix type="text">randomprefix:random</prefix>
+  <namespace type="address">http://www.example.com/ns/xsl/test</namespace>
+  <namespace type="URI">http://www.test.ca</namespace>
+</doc>

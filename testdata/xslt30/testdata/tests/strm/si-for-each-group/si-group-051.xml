@@ -1,0 +1,14 @@
+<Orders>
+    <Order number="100">
+        <Date>2006-02-15</Date>
+    </Order>
+    <Order number="101">
+        <Date>2006-02-16</Date>
+    </Order>
+    <Order number="102">
+        <Date>2006-02-20</Date>
+    </Order>
+    <Order number="102">
+        <Date>2006-02-21</Date>
+    </Order>    
+</Orders>

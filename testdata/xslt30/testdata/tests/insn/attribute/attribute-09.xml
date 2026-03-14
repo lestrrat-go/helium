@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<docs>
+<doc xmlns:ped="http://www.ped.com">
+  <foo ped:att1="a"/>
+  <outer xml:att1="b"/>
+</doc>
+<doc xmlns:ped="http://www.ped.com">
+  <inner ped:att1="c"/>
+  <foo xml:att1="d"/>
+</doc>
+</docs>
+   

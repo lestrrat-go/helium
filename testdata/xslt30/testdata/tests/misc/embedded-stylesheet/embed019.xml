@@ -1,0 +1,77 @@
+<?xml version="1.0"?> 
+<?xml-stylesheet type="text/xsl" href="#style1"?>
+<!DOCTYPE doc [
+<!ELEMENT doc (#PCDATA | head | body)*>
+
+<!ELEMENT head (#PCDATA | xsl:stylesheet)*>
+<!ELEMENT body (#PCDATA | elem)*>
+
+<!ELEMENT elem (#PCDATA | a | b)*>
+<!ELEMENT a (#PCDATA)*>
+<!ELEMENT b (#PCDATA)*>
+
+<!ELEMENT xsl:stylesheet (#PCDATA | xsl:template | xsl:import)*>
+<!ATTLIST xsl:stylesheet 
+		  id ID #REQUIRED
+		  xmlns:xsl CDATA #FIXED "http://www.w3.org/1999/XSL/Transform"
+		  version NMTOKEN #REQUIRED>
+		  
+<!ELEMENT xsl:template (#PCDATA | out | xsl:text | print_a | xsl:apply-templates)*>
+<!ATTLIST xsl:template match CDATA #IMPLIED
+					   use-when CDATA #IMPLIED>
+
+<!ELEMENT out (#PCDATA | xsl:apply-templates)*>	
+<!ELEMENT xsl:text (#PCDATA)*> 
+<!ELEMENT print_a (#PCDATA)*> 
+
+<!ELEMENT xsl:apply-templates EMPTY>	
+<!ATTLIST xsl:apply-templates select CDATA #IMPLIED >	  
+		  
+<!ELEMENT xsl:import EMPTY>		  
+<!ATTLIST xsl:import  href CDATA #FIXED "use-when.xsl">		  
+]>
+
+<doc>
+  <head>
+	<xsl:stylesheet id="style1" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+
+  <!-- FileName: embed20_019 -->
+	<!-- Document: http://www.w3.org/TR/xslt20-->
+	<!-- DocVersion: 20051103 -->
+	<!-- Section: 3.11 Embedded Stylesheet Modules -->
+	<!-- Purpose: Test case to verify that the values of the standard attribute use-when that apply to 
+			      an element in an imported stylesheet module are those that were defined on their own 
+			      xsl:stylesheet element, not those on the stylesheet module that imports it, where the 
+			      main stylesheet is an embedded stylesheet. -->
+
+	<xsl:import href="use-when.xsl"/>
+		
+  	<xsl:template match="/">
+  		<out>
+   			<xsl:apply-templates/>
+   		</out>
+  	</xsl:template>
+  
+	<xsl:template match="a" use-when="true()">
+	<xsl:text>&#010;</xsl:text>
+		<print_a>From the main stylesheet</print_a>
+		<!-- Although there is a template for 'b' in the included stylesheet, 
+		it is not called because the use-when attribute for the included stylesheet 
+		is 'false'.-->
+		<xsl:apply-templates select="b" />
+	</xsl:template>
+	
+	<xsl:template match="text()" />
+	</xsl:stylesheet>
+  </head>
+
+  <body>
+	 <elem>
+	   <a>a1</a>
+	   <a>a2</a>
+	   <b>b1</b>
+	   <b>b2</b>
+	 </elem>
+  </body>
+
+</doc>

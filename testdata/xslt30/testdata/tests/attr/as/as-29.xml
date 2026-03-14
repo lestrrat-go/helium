@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<doc-schemaas xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:noNamespaceSchemaLocation="builtinTypeSchemaAs.xsd">
+	<elem-anyURI>http://www.example.org/ns/test</elem-anyURI>
+	<elem-NMTOKEN>business-enforcement::link-chain.common</elem-NMTOKEN>
+</doc-schemaas>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doc>
+    <body>
+        <heading>heading 1</heading>
+        <section>section 1</section>
+        <heading>heading 2</heading>
+        <section>section 2</section>
+        <heading>heading 3</heading>
+        <section>section 3</section>
+    </body>
+</doc>

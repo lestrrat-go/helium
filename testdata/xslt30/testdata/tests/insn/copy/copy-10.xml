@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OL>
+  <LI>item1</LI>
+  <LI attrib="2">item2</LI>
+  <LI>item3</LI>
+  <OL>
+    <LI>subitem1</LI>
+    <LI attrib="2">subitem2</LI>
+    <!-- Now go deeper -->
+    <OL>
+      <LI>subitem3</LI>
+    </OL>
+  </OL>
+  <?a-pi some data?>
+</OL>

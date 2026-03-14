@@ -1,0 +1,13 @@
+<?xml version="1.0"?> 
+<doc>
+  <element1>
+    <child1>Test executed successfully!!</child1>
+    <child2>child2</child2>
+  </element1>
+  <element2>
+    <child1>Wrong node selected!!</child1>
+  </element2>
+  <element3>
+    <child1>Wrong node selected!!</child1>
+  </element3>
+</doc>

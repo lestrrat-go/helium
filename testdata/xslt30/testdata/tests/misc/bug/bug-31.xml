@@ -1,0 +1,25 @@
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" 
+xmlns:file-reader="java:testFile/java.io.FileReader" 
+xmlns:buffered-reader="java:testFile/java.io.BufferedReader" 
+xmlns:string="java:testFile/java.lang.String" 
+xmlns:user="java:mynamespace" version="1.0">
+
+
+  <xsl:template match="/">
+<HTML >
+	<HEAD>
+	<TITLE><xsl:value-of select="'Your Example'" /></TITLE>
+	</HEAD>
+
+	<BODY>
+   <p><xsl:value-of select="buffered-reader:readLine(buffered-reader:new(file-reader:new('C:\\winnt\\java\\trustlib\testMethod.java')))"/></p>
+	<xsl:apply-templates />
+
+	</BODY>
+	</HTML>
+
+
+
+</xsl:template>
+</xsl:stylesheet>
+

@@ -1,0 +1,52 @@
+<?xml version="1.0"?> 
+<?xml-stylesheet type="text/xsl" href="#stylesheet"?>
+<!DOCTYPE doc [
+<!ELEMENT doc (#PCDATA | head | body)*>
+<!ATTLIST doc
+		  xmlns:xsl CDATA #FIXED "http://www.w3.org/1999/XSL/Transform"
+		  xsl:use-when CDATA #FIXED "false()">
+
+<!ELEMENT head (#PCDATA | xsl:stylesheet)*>
+<!ELEMENT body (#PCDATA|para)*>
+
+<!ELEMENT xsl:stylesheet (#PCDATA | xsl:template)*>
+<!ATTLIST xsl:stylesheet 
+		  id ID #REQUIRED
+		  xmlns:xsl CDATA #FIXED "http://www.w3.org/1999/XSL/Transform"
+		  version NMTOKEN #REQUIRED>
+
+<!ELEMENT xsl:template (#PCDATA | out)*>
+<!ATTLIST xsl:template  match CDATA #IMPLIED>
+
+<!ELEMENT out (#PCDATA | xsl:value-of )*>
+
+<!ELEMENT xsl:value-of EMPTY>
+<!ATTLIST xsl:value-of select CDATA #REQUIRED>
+
+<!ELEMENT para (#PCDATA)*>
+<!ATTLIST para id ID #REQUIRED>
+]>
+
+<doc xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xsl:use-when="false()" >
+  <head>
+	<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0"
+                id="stylesheet">
+
+	<!-- Test case to verify that in a embedded standard stylesheet module, the standard attribute
+				 (xsl:use-when) appearing on an ancestor of the outermost element of 
+				 the stylesheet module has no effect. -->
+
+		<xsl:template match="/">
+  			<out>
+    			<xsl:value-of select="doc/body/para"/>
+  			</out>
+		</xsl:template>
+	</xsl:stylesheet>
+  </head>
+
+  <body>
+  	<para id="foo">Hello</para>
+	<para id="foey">Goodbye</para>
+  </body>
+
+</doc>

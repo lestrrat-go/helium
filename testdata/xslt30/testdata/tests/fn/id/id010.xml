@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!DOCTYPE t04 [
+  <!ELEMENT t04 (a|dummy)*>
+  <!ATTLIST t04 xmlns:zzz CDATA #REQUIRED>
+  <!ELEMENT dummy EMPTY>    
+  <!ATTLIST dummy xmlns:xxx CDATA #REQUIRED>    
+  <!ELEMENT a EMPTY>
+  <!ATTLIST a id ID #REQUIRED>
+]>
+<t04 xmlns:zzz="http://zzz.uri/">
+  <dummy xmlns:xxx="http://xxx.uri/"/>
+  <a id="a"/>
+  <a id="b"/>
+  <a id="c"/>
+  <a id="d"/>
+</t04>

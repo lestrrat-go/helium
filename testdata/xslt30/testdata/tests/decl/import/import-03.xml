@@ -1,0 +1,11 @@
+<?xml version="1.0"?> 
+<doc>
+  <title>Testing import/include nesting</title>
+  <author>Joe Jones</author>
+  <publisher>Conformance Press</publisher>
+  <overview>testing-import</overview>
+  <chapters>
+    <chapter num="1">know XSL</chapter>
+    <chapter num="2">love XSL</chapter>
+  </chapters>
+</doc>

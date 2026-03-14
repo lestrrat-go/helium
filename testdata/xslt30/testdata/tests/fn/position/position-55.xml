@@ -1,0 +1,17 @@
+<?xml version="1.0"?> 
+<items>
+  <bracket group="1">left front</bracket>
+  <button group="1">momentary</button>
+  <button group="1">toggle</button>
+  <dial group="1">source select</dial>
+  <button group="2">power switch</button>
+  <light group="2">main panel</light>
+  <light group="2">selector</light>
+  <bracket group="1">right front</bracket>
+  <bracket group="2">top inner</bracket>
+  <dial group="1">output select</dial>
+  <dial group="3">frequency</dial>
+  <dial group="3">voltage</dial>
+  <light group="1">power</light>
+  <light group="2">safety</light>
+</items>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<doc>
+  <a test="true">a</a>
+  <a>b</a>
+  <a test="false">c</a>
+  <a test="true">d</a>
+  <a>e</a>
+  <a test="false">f</a>
+  <a test="true">g</a>
+  <a test="false">h</a>
+</doc>

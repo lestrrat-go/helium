@@ -1,0 +1,106 @@
+<?xml-stylesheet type="text/xsl" href="#style17"?>
+<!DOCTYPE doc [
+<!ELEMENT doc (#PCDATA | head | body)*>
+
+<!ELEMENT head (#PCDATA | xsl:transform)*>
+<!ELEMENT body (#PCDATA | items | str)*>
+<!ATTLIST body xmlns CDATA #IMPLIED >
+
+<!ELEMENT xsl:transform (#PCDATA | xsl:template | xsl:include)*>
+<!ATTLIST xsl:transform 
+		  id ID #REQUIRED
+		  xmlns:xsl CDATA #FIXED "http://www.w3.org/1999/XSL/Transform"
+		  xpath-default-namespace CDATA #FIXED "http://www.examples.com/main"
+		  version NMTOKEN #REQUIRED>
+		  
+<!ELEMENT xsl:template (#PCDATA | out | xsl:text | elem | str)*>
+<!ATTLIST xsl:template match CDATA #IMPLIED>	
+
+<!ELEMENT xsl:text (#PCDATA)*> 	
+
+<!ELEMENT elem (#PCDATA | xsl:value-of | xsl:number)*>
+
+<!ELEMENT xsl:number EMPTY>
+<!ATTLIST xsl:number count CDATA #IMPLIED>
+
+<!ELEMENT xsl:value-of EMPTY>
+<!ATTLIST xsl:value-of select CDATA #IMPLIED>
+
+<!ELEMENT out (#PCDATA | xsl:apply-templates)*>
+
+<!ELEMENT xsl:apply-templates EMPTY>	
+<!ATTLIST xsl:apply-templates select CDATA #IMPLIED >
+
+<!ELEMENT items (#PCDATA | item)*>
+
+<!ELEMENT item (#PCDATA | subitem)*>
+<!ATTLIST item attr CDATA #IMPLIED>
+
+<!ELEMENT subitem (#PCDATA)>
+
+<!ELEMENT str (#PCDATA | substr | xsl:number | xsl:value-of)*>
+<!ATTLIST str xmlns CDATA #IMPLIED> 
+
+<!ELEMENT substr (#PCDATA) >	  
+		  
+<!ELEMENT xsl:include EMPTY>		  
+<!ATTLIST xsl:include  href CDATA #FIXED "def.xsl">		  
+]>
+
+<doc>
+  <head>
+	<xsl:transform 
+	id="style17" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" 
+	version="2.0" xpath-default-namespace="http://www.examples.com/main">
+
+	<!-- Purpose: Test case in which an embedded stylesheet has declared an xpath-default-namespace, but the 
+				  stylesheet it includes has declared a different xpath-default-namespace.
+				  This is to verify that the values of the standard attribute xpath-default-namespace that apply 
+				  to an element in the embedded stylesheet module are those that were defined on their own 
+				  xsl:stylesheet element, not those on the included stylesheet module. -->
+
+	<xsl:include href="def.xsl" />
+	
+	<xsl:template match="body">
+	<out>
+	    <xsl:apply-templates select="items/item"/> 
+		<xsl:apply-templates select="str"/>
+	</out>
+	</xsl:template>
+	
+	<xsl:template match="text()" />
+	
+	<xsl:template match="item">
+		<xsl:text>&#10;</xsl:text>
+	    <elem>
+	    	<xsl:number count="item" />
+	    	<xsl:value-of select="'  Matched Item element: Inside main stylesheet'" />
+	    </elem>
+	</xsl:template>
+	
+	<xsl:template match="str">
+		<xsl:text>&#10;</xsl:text>
+	    <str>
+	    	<xsl:number count="str" />
+	    	<xsl:value-of select="'  Matched Str element: Inside main stylesheet'" />
+	    </str>
+	</xsl:template>
+	
+
+  </xsl:transform>
+  </head>
+
+  <body xmlns="http://www.examples.com/main">
+	<items>
+		<item attr="atr1" />
+		<item attr="atr2" />
+		<item attr="atr3"/>
+	</items>
+	<str xmlns="www.examples.com/included">
+		<substr>match1</substr>
+	</str>
+	<str xmlns="http://www.examples.com/main"><substr>match2</substr></str>
+	<str><substr>match3</substr></str>
+  </body>
+
+</doc>

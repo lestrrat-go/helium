@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<test xmlns:a="http://a.com/" xmlns:b="http://b.com/">
+   <hello a="a" a:a="a:a" b:a="b:a">hello</hello>
+   <a:hello a="a" a:a="a:a" b:a="b:a">a:hello</a:hello>
+   <b:hello a="a" a:a="a:a" b:a="b:a">b:hello</b:hello>
+</test>
+

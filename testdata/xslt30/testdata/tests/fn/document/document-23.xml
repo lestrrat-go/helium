@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<report>
+  <month sequence="01">
+    <miles-earned>35215</miles-earned>
+  </month>
+  <month sequence="02">
+    <miles-earned>92731</miles-earned>
+  </month>
+  <month sequence="03">
+    <miles-earned>76725</miles-earned>
+  </month>
+  <month sequence="04">
+    <miles-earned>31781</miles-earned>
+  </month>
+</report>

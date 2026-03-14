@@ -1,0 +1,10 @@
+<root>
+    <example>
+        <function>fn:concat</function>
+        <arguments>
+            <arg>a</arg>
+            <arg>b</arg>
+            <arg>c</arg>
+        </arguments>
+    </example>
+</root>

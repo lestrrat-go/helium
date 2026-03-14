@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:userNode xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://www.example.com/ns/union-list list-unionSchemaAs.xsd"
+		  xmlns:my="http://www.example.com/ns/union-list">	
+	<my:union-primitive>5</my:union-primitive>
+	<my:union-primitive>hello</my:union-primitive>
+	<my:union-derived>-128</my:union-derived>
+	<my:union-derived>my:local-name</my:union-derived>
+	<my:union-user-defined>7</my:union-user-defined>
+	<my:union-user-defined>000-AB</my:union-user-defined>
+	<my:union-list>123-CD 456-EF</my:union-list>
+	<my:union-list>2.2 4.00099</my:union-list>
+	<my:union-list>PT EN</my:union-list>
+	<my:part-integer-union>111-CC</my:part-integer-union>
+	<my:part-integer-union>30</my:part-integer-union>
+	<my:union-complex>2.2 4.00099</my:union-complex>
+	<my:union-complex>127</my:union-complex>
+	<my:union-complex>123-CD</my:union-complex>
+</my:userNode>

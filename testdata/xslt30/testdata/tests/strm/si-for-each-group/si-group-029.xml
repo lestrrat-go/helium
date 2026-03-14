@@ -1,0 +1,22 @@
+<root>
+  <record>
+    <foo>a</foo>
+    <bar>1</bar>
+  </record>
+  <record>
+    <foo>a</foo>
+    <bar>2</bar>
+  </record>
+  <record>
+    <foo>b</foo>
+    <bar>3</bar>
+  </record>
+  <record>
+    <foo>a</foo>
+    <bar>4</bar>
+  </record>
+  <record>
+    <foo>a</foo>
+    <bar>5</bar>
+  </record>
+</root>

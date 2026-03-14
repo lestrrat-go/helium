@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<docs>
+  <d level="1"><!-- doc1 --></d>
+  <doc2>
+    <a level="2">
+      <b level="3">3-B2</b>
+      <c level="3">3-C3</c>
+      <d level="3">Hello
+        <e level="4">Success</e>
+        <!-- Me, too -->
+      </d>
+    </a>
+    <d level="2">More</d>
+  </doc2>
+</docs>

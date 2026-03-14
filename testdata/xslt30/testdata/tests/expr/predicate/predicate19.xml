@@ -1,0 +1,19 @@
+<?xml version="1.0"?> 
+<doc>
+  <a>
+    <asub>
+      <asubsub/>
+    </asub>
+  </a>
+  <b>
+    <bsub>x</bsub>
+  </b>
+  <c>inside</c>
+  <d>
+    <dsub>
+      <q>
+        <foundnode/>
+      </q>
+    </dsub>
+  </d>
+</doc>

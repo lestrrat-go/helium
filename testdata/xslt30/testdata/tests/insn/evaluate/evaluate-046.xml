@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:f="http://www.w3.org/local-functions"
+  exclude-result-prefixes="#all"
+  version="3.0">
+  
+  <!-- This might look like a stylesheet but it is only used as test data for evaluate-046.xsl -->
+  
+  
+  
+  <xsl:variable name="parity" static="yes" select="17"/>
+  
+  <xsl:variable name="streamable" static="yes" select="$parity gt 12"/>
+  
+  <xsl:function name="f:process" as="xs:integer" use-when="$parity mod 2 = 0">
+    <xsl:param name="x"/>
+    <xsl:sequence select="$x + 1"/>
+  </xsl:function>
+  
+  <xsl:function name="f:process" as="xs:integer" use-when="$parity mod 2 = 1">
+    <xsl:param name="x"/>
+    <xsl:sequence select="$x - 1"/>
+  </xsl:function>
+  
+  <xsl:mode _streamable="{$streamable}"/>
+  
+  <xsl:template name="xsl:initial-template">
+    <xsl:value-of select="f:process(23)"/>
+  </xsl:template>
+  
+  
+</xsl:stylesheet>

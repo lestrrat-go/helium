@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!-- Test for xsl:sort -->
+<doc>
+  <item>XSLT</item>
+  <item>processors</item>
+  <item>must</item>
+  <item>use</item>
+  <item>XML</item>
+  <item>Namespaces</item>
+  <item>mechanism</item>
+  <item>to</item>
+  <item>recognize</item>
+  <item>XSLT-defined</item>
+  <item>elements</item>
+  <item>specified</item>
+  <item>document</item>
+  <item>prefix</item>
+  <item>recognized</item>
+  <item>URI</item>
+  <item>preFIX</item>
+</doc>

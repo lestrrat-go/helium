@@ -1,0 +1,31 @@
+<doc>
+ <chap>
+   <head>The first chapter</head>
+   <div>
+     Intro
+     <div>more</div>
+     <div>more with a diagram<fig alt="a diagram"><diag/></fig></div>
+   </div>
+   <div>
+     Extro
+     <div>more</div>
+     <div>more with a diagram<fig alt="another diagram"><diag/></fig></div>
+   </div>
+ </chap>
+ <chap>
+   <head>The second chapter</head>
+   <div>
+     Intro
+     <div>more</div>
+     <div>more with a diagram<fig alt="a third diagram"><diag/></fig></div>
+   </div>
+   <div>
+     Extro
+     <div>more</div>
+     <div>more with a diagram<fig alt="a fourth diagram"><diag/></fig></div>
+   </div>
+ </chap>
+</doc> 
+ 
+  
+

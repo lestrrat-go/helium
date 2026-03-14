@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<characters>
+   <c cp="00AB" d="171" v="1.1" cat="Pi" c="«"/>
+   <c cp="2018" d="8216" v="1.1" cat="Pi" c="‘"/>
+   <c cp="201B" d="8219" v="1.1" cat="Pi" c="‛"/>
+   <c cp="201C" d="8220" v="1.1" cat="Pi" c="“"/>
+   <c cp="201F" d="8223" v="1.1" cat="Pi" c="‟"/>
+   <c cp="2039" d="8249" v="1.1" cat="Pi" c="‹"/>
+   <c cp="2E02" d="11778" v="4.1" cat="Pi" c="⸂"/>
+   <c cp="2E04" d="11780" v="4.1" cat="Pi" c="⸄"/>
+   <c cp="2E09" d="11785" v="4.1" cat="Pi" c="⸉"/>
+   <c cp="2E0C" d="11788" v="4.1" cat="Pi" c="⸌"/>
+   <c cp="2E1C" d="11804" v="4.1" cat="Pi" c="⸜"/>
+   <c cp="2E20" d="11808" v="5.1" cat="Pi" c="⸠"/>
+</characters>

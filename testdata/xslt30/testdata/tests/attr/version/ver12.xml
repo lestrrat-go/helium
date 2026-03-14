@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                xmlns:ext="http://example.com/nosuchclass"
+                extension-element-prefixes="ext"
+                exclude-result-prefixes="ext"
+                version="1.0">
+
+<xsl:output method="html"/>
+
+<xsl:template match="/">
+  <xsl:variable name="vendor" select="system-property('xsl:vendor')"/>
+  <xsl:if test="$vendor = 'hi mom'">
+    <ext:foo/>
+  </xsl:if>
+  <xsl:apply-templates/>
+</xsl:template>
+
+</xsl:stylesheet>
+

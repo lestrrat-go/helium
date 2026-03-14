@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<publishing>
+  <title><emph>Unofficial</emph></title>
+  <body>
+    <para>
+        <p>one</p>
+        <p>two</p>
+        <p>three</p>
+    </para>
+  </body>
+</publishing>

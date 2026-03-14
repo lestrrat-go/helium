@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://ns.example.com/strip-type varietyOfTypes.xsd"
+		  xmlns:my="http://ns.example.com/strip-type">
+	<elem-anyURI>http://www.example.org/ns/test</elem-anyURI>
+	<elem-boolean>true</elem-boolean>
+	<elem-date>-0012-12-03-05:00</elem-date>
+	<elem-double>-0.0E0</elem-double>
+	<elem-duration>-P12M23DT0M59.123S</elem-duration>
+	<elem-QName>my:test</elem-QName>
+	<elem-string>hello</elem-string>
+	<elem-NCName>vwxyz12</elem-NCName>
+	<elem-NMTOKEN>business-enforcement::link-chain.common</elem-NMTOKEN>
+	<elem-int>131072</elem-int>
+	<elem-nonPositiveInteger>-763246023412394</elem-nonPositiveInteger>
+	<elem-long>-9223372036854775808</elem-long>
+	<elem-unsignedLong>18446744073709551615</elem-unsignedLong>
+	<simple-derived>123-AB</simple-derived>
+	<complex-derived age="21">
+		<firstName>John</firstName>
+		<familyName>Brigs</familyName>
+	</complex-derived>
+	<list-builtin>one two three</list-builtin>
+	<list-derived>123-AB 456-CD 789-EF</list-derived>
+	<union-derived>5</union-derived>
+	<union-derived>123-AB</union-derived>
+</my:doc>

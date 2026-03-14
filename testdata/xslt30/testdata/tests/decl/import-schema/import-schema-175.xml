@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<d:userNode xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://ns.example.com/sch004 schema004.xsd"
+		  xmlns:d="http://ns.example.com/sch004"
+	 	  d:specialPart="123-AB" d:listParts="000-SS 000-RR">
+		<d:simpleBuiltin>http://www.test.example.com</d:simpleBuiltin>
+		<d:simpleUserElem>123-AB</d:simpleUserElem>
+		<d:simpleUserList>345-PT 675-RT 897-GB</d:simpleUserList>
+		<d:simpleUserUnion>100</d:simpleUserUnion>
+		<d:complexMixedUserElem age="44">
+			<description>Mr <name>Peter</name> has brown hair</description>
+			<company>He works at a <name>Notorios</name> company</company>
+		</d:complexMixedUserElem>
+		<d:complexUserElem age="75">
+			<firstName>Hello</firstName>
+      		<familyName>There</familyName>
+		</d:complexUserElem>
+		<d:complexSimpleContentElem d:count="five">5</d:complexSimpleContentElem>
+		<d:onlyAttributes d:colors="red blue green" specialPart="123-AB" />	
+</d:userNode>

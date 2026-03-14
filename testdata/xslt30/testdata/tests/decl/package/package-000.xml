@@ -1,0 +1,6 @@
+<!-- just some random input file -->
+<?proc do something ?>
+<doc>
+    <first-child att="some attribute" />
+    <second-child>Some random input file</second-child>
+</doc>

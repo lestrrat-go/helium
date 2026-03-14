@@ -1,0 +1,11 @@
+<!DOCTYPE doc [
+<!ENTITY e SYSTEM "dir/data.xml">
+]>
+<doc>
+    <chap>
+        <para>one</para>
+    </chap>
+    <chap>
+        &e;
+    </chap>
+</doc>

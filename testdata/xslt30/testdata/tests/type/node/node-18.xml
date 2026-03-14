@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<far-north> Level-1
+  <north>
+     <near-north>
+        <far-west/>
+        <west/>
+        <near-west/>
+        <center>
+          <south/>
+        </center>
+     </near-north>
+  </north>
+</far-north>

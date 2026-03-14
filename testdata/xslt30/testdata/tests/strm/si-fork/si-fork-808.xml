@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <p class="l1">   (a)<tab/>blah blah</p>
+    <p class="l2">   (i)<tab/>blah blah</p>
+    <p class="l1">   (b)<tab/>blah blah</p>
+    <p class="l1">   (c)<tab/>blah blah</p>
+    <p class="l2">   (i)<tab/>blah blah</p>
+    <p class="l3">   (1)<tab/>blah blah</p>
+    <p class="l3">   (2)<tab/>blah blah</p>
+    <p class="l2">   (ii)<tab/>blah blah</p>
+    <p class="l2">   (iii)<tab/>blah blah</p>
+    <p class="l2">   (iv)<tab/>blah blah</p>
+</root>

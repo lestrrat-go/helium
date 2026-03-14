@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <section>
+        <h1>heading 1</h1>
+        <p>para A</p>
+        <p>para B</p>
+        <h1>heading 2</h1>
+        <p>para C</p>
+        <h1>heading 3</h1>
+        <h1>heading 4</h1>
+        <p>para D</p>
+    </section>
+</root>

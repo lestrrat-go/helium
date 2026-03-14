@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<docs xmlns:ped="http:\\www.ped.com"><?MyPI DoesNothing ?><!-- This is a big tree containing all letters of the alphabet -->
+<a attr1="This should not be seen">A</a>
+<b><c attr1="tsnbs" attr2="tsnbs">B-C</c>
+<d><e><f>TextNode_between_F_and_G
+<g><h><i><j><k><l><m><n><o><p><q><r><s><t><u><v><w><x><y><z><Yahoo>Yahoo</Yahoo>
+</z></y></x></w></v></u></t></s></r></q></p></o></n></m></l></k></j></i></h>SecondNode_after_H</g></f></e></d></b>
+</docs>

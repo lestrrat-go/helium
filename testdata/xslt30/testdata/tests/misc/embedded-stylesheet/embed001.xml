@@ -1,0 +1,68 @@
+<?xml version="1.0"?> 
+<?xml-stylesheet type="text/xsl" href="#style1"?>
+<!DOCTYPE doc [
+<!ELEMENT doc (#PCDATA | head | body)*>
+<!ATTLIST doc
+		  xmlns:xsl CDATA #FIXED "http://www.w3.org/1999/XSL/Transform"
+		  xsl:xpath-default-namespace CDATA #FIXED "http://example.org/hal">
+
+<!ELEMENT head (#PCDATA | xsl:stylesheet)*>
+<!ELEMENT body (#PCDATA | elem)*>
+
+<!ELEMENT xsl:stylesheet (#PCDATA | xsl:template)*>
+<!ATTLIST xsl:stylesheet 
+		  id ID #REQUIRED
+		  xmlns:xsl CDATA #FIXED "http://www.w3.org/1999/XSL/Transform"
+		  version NMTOKEN #REQUIRED>
+
+<!ELEMENT xsl:template (#PCDATA | out)*>
+<!ATTLIST xsl:template  match CDATA #IMPLIED>
+
+<!ELEMENT out (#PCDATA | xsl:for-each )*>
+
+<!ELEMENT xsl:for-each (#PCDATA | xsl:copy-of )*>
+<!ATTLIST xsl:for-each  select CDATA #IMPLIED>
+
+<!ELEMENT xsl:copy-of (#PCDATA)*>
+<!ATTLIST xsl:copy-of select CDATA #IMPLIED>
+
+<!ELEMENT elem (#PCDATA | item)*>
+<!ELEMENT subitem (#PCDATA)*>
+			
+<!ELEMENT item (#PCDATA | subitem)*>
+<!ATTLIST item attr CDATA #IMPLIED
+		  xmlns CDATA #IMPLIED>
+]>
+
+<doc xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xsl:xpath-default-namespace="http://example.org/hal" >
+  <head>
+	<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0"
+                id="style1">
+
+	<!-- Purpose: Test case to verify that in a embedded standard stylesheet module, standard attribute
+				 (xsl:xpath-default-namespace) appearing on ancestors of the outermost element of 
+				 the stylesheet module has no effect. -->
+
+		<xsl:template match="/" >
+  			<out>
+    			<xsl:for-each select="doc/body/elem/item"  >
+					<xsl:copy-of select="." />
+				</xsl:for-each>
+  			</out>
+		</xsl:template>
+	</xsl:stylesheet>
+  </head>
+
+  <body>
+	<elem>
+		<item attr="atr1" xmlns="http://example.org/hal">
+			<subitem>a</subitem>
+		</item>
+		<item attr="atr2" xmlns="http://example.org/hal">
+			<subitem>b</subitem>
+		</item>
+		<item attr="atr3"><subitem>c</subitem></item>
+	</elem>
+  </body>
+
+</doc>

@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<doc>
+  <element1>Text from first element (correct execution)<child1>
+    </child1><child2></child2></element1>
+  <element1>Text from second element
+    <child1>Text from child1 of second element</child1>
+  </element1>
+</doc>

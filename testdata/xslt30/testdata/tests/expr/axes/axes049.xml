@@ -1,0 +1,24 @@
+<?xml version="1.0"?> 
+<a>  
+  <b att="hey">
+    <c att="these"/>
+    <d>
+       <e/>
+       <f att="should"/>
+    </d>
+    <g>
+       <h>
+           <i/>
+           <j att="not" xmlns:key="http://a.namespace.uri/"/>
+       </h>
+    </g>
+  </b>
+  <k>
+    <l>
+      <m att="show"/>
+      <n att="up"/>
+    </l>
+    <o att="in"/>
+    <p att="the output"/>
+  </k>
+</a>

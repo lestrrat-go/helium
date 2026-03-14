@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<t04>  
+  <a id="a" name="aa"/>
+  <a id="b" name="bb"/>
+  <a id="c" name="cc"/>
+  <a id="d" name="dd"/>
+  <a id="e" name="ee"/>
+  <a id="f" name="ff"/>
+  <a id="g" name="gg"/>
+  <a id="h" name="hh"/>
+  <a id="i" name="ii"/>
+  <a id="j" name="jj"/>
+  <a id="k" name="kk"/>
+  <a id="l" name="ll"/>
+  <a id="m" name="mm"/>
+  <b ref="a"/>
+  <b ref="k"/>
+</t04>

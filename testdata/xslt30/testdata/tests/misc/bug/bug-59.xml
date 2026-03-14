@@ -1,0 +1,256 @@
+<?xml version = '1.0'?>
+<nav>
+   <!--
+    | Need example of EJB-deployed AM (do they show up in same package?)
+    | Need example of EJB Session and entity beans (where does ejb-jar.xml show up?)
+    | Need exmaple of UML Class diagram with some classes on it.
+    | Need example of showing BC4J and Diagram and Java class in one package.
+    | Java classes that are not part of a BC4J and not part of a diagram.
+    +-->
+    <!--
+     | New thing of a "EJB Diagram"
+     | New thing of a "Web Services Diagram"
+     | New thing of a "Page Flow Diagram" (controller)
+     |
+     | offline db objects 
+     |
+     | (Not sure if EAI Activity diagram)
+     |
+     | UML Class Diagram    \
+     | UML Use Case          \ 
+     | UML Activity Diagram   > Analysis Level
+     | UML Sequence?         /
+     +-->
+   <workspace n="MyToystoreApplication.jws">
+      <project n="ToyStoreModel.jpr">
+         <sources n="Application Code">
+            <pkg n="toystore">
+               <pkg n="model">
+                  <pkg n="businessobjects">
+                     <java n="MyHelperClass1.java"/>
+                     <java n="MyHelperClass2.java"/>
+                     <bc4jdiag n="My Business Model"/>
+                     <eo n="Account"/>
+                     <eo n="Category"/>
+                     <eo n="Inventory"/>
+                     <eo n="Item"/>
+                     <eo n="Lineitem"/>
+                     <eo n="Orders"/>
+                     <eo n="Orderstatus"/>
+                     <eo n="Product"/>
+                     <eo n="Profile"/>
+                     <eo n="Signon"/>
+                     <eo n="Supplier"/>
+                     <as n="OnHandInfoForAssoc"/>
+                     <as n="OrderForItemAssoc"/>
+                     <as n="ItemOrderdOnAssoc"/>
+                     <as n="OrderedByAssoc"/>
+                     <as n="StatusOfOrderAssoc"/>
+                     <as n="ProductKindAssoc"/>
+                     <as n="CategoryForProductAssoc"/>
+                     <as n="ProfileForAccountAssoc"/>
+                     <as n="SuppliedByAssoc"/>
+                     <as n="AccountInfoForUser"/>
+                  </pkg>
+                  <pkg n="dataaccess">
+                    <vo n="ProductList"/>
+                    <vo n="ItemsForSale"/>
+                    <vo n="Orders"/>
+                    <vo n="LineItems"/>
+                    <vo n="Accounts"/>
+                    <vo n="FindProducts"/>
+                    <vo n="ReviewOrder"/>
+                    <vo n="ReviewLineItems"/>
+                    <vo n="CountryList"/>
+                    <vo n="CreditCardList"/>
+                    <vo n="ExpirationYearList"/>
+                    <vo n="ShippingOptionsList"/>
+                    <vo n="ProductsInCategory"/>
+                    <vo n="ShoppingCart"/>
+                    <vo n="ShoppingCartItemLookup"/>
+                    <vl n="ItemsOfProductKind"/>
+                    <vl n="OrderLines"/>
+                    <vl n="AccountPlacingOrder"/>
+                    <vl n="ReviewLinesForOrder"/>
+                  </pkg>
+                  <pkg n="datatypes">
+                    <dm n="CreditCardNumber"/>
+                    <dm n="Email"/> 
+                  </pkg>
+                  <pkg n="services">
+                    <am n="ToyStoreService"/>
+                    <ws n="ToySoreWebService"/>
+                    <sb n="ToyStoreServiceBean"/>
+                    <sb n="MySessionBean"/>
+                  </pkg>
+               </pkg>
+            </pkg>
+         </sources>
+         <models n="UML Diagrams">
+            <pkg n="toystore">
+               <pkg n="uml">
+                 <umlclassdiag n="MyClassDesign"/>
+                 <umlactivitydiag n="MyBusinessProcess"/>
+                 <umlusecasediag n="MyUseCase"/>
+                 <umlsequencediag n="MySequenceDiagram"/>
+               </pkg>
+            </pkg>
+         </models>
+         <dbres n="Database Resources">
+           <sql n="MyScript.sql"/>
+           <sql n="AnotherScript.sql"/>
+           <tab n="EMP"/>
+           <tab n="DEPT"/>
+           <dbdiag n="My HR Tables"/>
+         </dbres>
+      </project>
+      <project n="ToyStoreController.jpr">
+         <sources n="Application Code">
+            <pkg n="toystore">
+               <pkg n="controller">
+                 <java n="AppUserInfo.java"/>
+                 <pkg n="strutsactions">
+                    <java n="CreateAccountAction.java"/>
+                    <java n="EditAccountAction.java"/>
+                    <java n="FinalizeOrderAction.java"/>
+                    <java n="HelpAction.java"/>
+                    <java n="PlaceOrderAction.java"/>
+                    <java n="RegisterAction.java"/>
+                    <java n="ReviewCheckoutAction.java"/>
+                    <java n="SearchAction.java"/>
+                    <java n="ShowCategoryAction.java"/>
+                    <java n="ShowProductAction.java"/>
+                    <java n="ShowProductDetailsAction.java"/>
+                    <java n="SignInAction.java"/>
+                    <java n="SignOutAction.java"/>
+                    <java n="ThankYouAction.java"/>
+                    <java n="UpdateAccountAction.java"/>
+                    <java n="VerifySignInAction.java"/>
+                    <java n="YourCartAction.java"/>
+                 </pkg>
+                 <pkg n="strutsformbeans">
+                    <java n="LoginForm.java"/>
+                 </pkg>
+               </pkg>
+            </pkg>
+         </sources>
+         <htmlsources n="HTML Sources">
+            <folder n="WEB-INF">
+              <xml n="struts-config.xml">
+                <act n="/home"/>
+                <act n="/showcategory"/>
+                <act n="/showproduct"/>
+                <act n="/showproductdetails"/>
+                <act n="/yourcart"/>
+                <act n="/search"/>
+                <act n="/signout"/>
+                <act n="/signin"/>
+                <act n="/register"/>
+                <act n="/registernewuser"/>
+                <act n="/createaccount"/>
+                <act n="/accountcreated"/>
+                <act n="/editaccount"/>
+                <act n="/editexistingaccount"/>
+                <act n="/updateaccount"/>
+                <act n="/accountmodified"/>
+                <act n="/reviewcheckout"/>
+                <act n="/verifysignin"/>
+                <act n="/placeorder"/>
+                <act n="/confirmshippinginfo"/>
+                <act n="/finalizeorder"/>
+                <act n="/thankyou"/>
+                <act n="/revieworder"/>
+                <act n="/revieworderxml"/>
+                <act n="/help"/>                
+              </xml>
+            </folder>
+         </htmlsources>
+      </project>
+      <project n="ToyStoreView.jpr">
+         <sources n="Application Code">
+            <pkg n="toystore">
+               <pkg n="view">
+                 <prop n="GlobalErrors.properties"/>
+                 <prop n="GlobalErrors_it.properties"/>
+                 <prop n="ToyStoreResources.properties"/>
+                 <prop n="ToyStoreResources_it.properties"/>
+               </pkg>
+            </pkg>
+         </sources>
+         <htmlsources n="HTML Sources">
+            <folder n="WEB-INF">
+              <xml n="web.xml"/>
+              <folder n="jsp">
+                <jsp n="accountcreated.jsp"/>
+                <jsp n="accountmodified.jsp"/>
+                <jsp n="bc4jerrorpage.jsp"/>
+                <jsp n="confirmshippinginfo.jsp"/>
+                <jsp n="editexistingaccount.jsp"/>
+                <jsp n="errorpage.jsp"/>
+                <jsp n="header.jsp"/>
+                <jsp n="help.jsp"/>
+                <jsp n="index.jsp"/>
+                <jsp n="navbar.jsp"/>
+                <jsp n="registernewuser.jsp"/>
+                <jsp n="reviewcheckout.jsp"/>
+                <jsp n="search.jsp"/>
+                <jsp n="showcategory.jsp"/>
+                <jsp n="showproduct.jsp"/>
+                <jsp n="showproductdetails.jsp"/>
+                <jsp n="signin.jsp"/>
+                <jsp n="signout.jsp"/>
+                <jsp n="thankyou.jsp"/>
+                <jsp n="welcome.jsp"/>
+                <jsp n="yourcart.jsp"/>
+                <folder n="lib">
+                  <jsp n="dataentryform.jsp"/>
+                </folder>
+              </folder>
+            </folder>
+         </htmlsources>
+      </project>
+      <project n="FwkExtensions.jpr">
+        <sources n="Application Code">
+          <pkg n="toystore">
+            <pkg n="fwk">
+              <javadiag n="FrameworkExtension Diagram"/>
+              <pkg n="controller">
+                <java n="ToyStoreDisplayDataWithPagingAction.java"/>
+                <java n="ToyStoreEditAction.java"/>
+                <java n="ToyStoreRequestProcessor.java"/>
+                <java n="ToyStoreUpdateAction.java"/>
+              </pkg>               
+              <pkg n="exceptions">
+                <java n="EntityAlreadyExistsException.java"/>
+                <java n="ErrorMessages.java"/>
+                <java n="ErrorMessages_it.java"/>
+                <java n="ExceptionHelper.java"/>
+              </pkg>               
+              <pkg n="model">
+                <pkg n="businessobjects">
+                  <java n="ToyStoreEntityImpl.java"/>
+                </pkg>               
+                <pkg n="dataaccess">
+                  <java n="PropertyFileBasedLookupViewObjectImpl.java"/>
+                  <java n="ToyStoreViewRowImpl.java"/>
+                </pkg>               
+                <pkg n="service">
+                  <java n="ToyStoreDBTransactionFactory.java"/>
+                  <java n="ToyStoreDBTransactionImpl.java"/>
+                </pkg>               
+              </pkg>               
+              <pkg n="rules">
+                <java n="VerifyStateForCountryRule.java"/>
+                <pkg n="dataaccess">
+                   <vo n="StatesForCountry"/>
+                </pkg>               
+              </pkg>               
+              <pkg n="view">
+                <java n="VOBasedPoplistRenderer.java"/>
+              </pkg>               
+            </pkg>
+          </pkg>
+        </sources>
+      </project>
+   </workspace>
+</nav>

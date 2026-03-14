@@ -1,0 +1,11 @@
+<?xml version="1.0"?> 
+<table>
+<tr><td>1.1</td><td>1.2</td></tr>
+<tr><td>2.1</td><td>2.2</td><td>2.3</td></tr>
+<tr><td>3.1</td><td>3.2<td>3.2.1</td></td></tr>
+<tr><td>4<td>4.1<td>4.1.1</td></td></td></tr>
+<tr><td>5.1</td><td>5.2</td><td>5.3</td><td>5.4</td></tr>
+<tr><ta/><td>6.1</td><td>6.2</td></tr>
+<tr><ta/><td>7.1</td><td>7.2</td><td>7.3</td></tr>
+<tr><ta/><td>8.1</td><td>8.2</td><td>8.3</td><td>8.4</td></tr>
+</table>

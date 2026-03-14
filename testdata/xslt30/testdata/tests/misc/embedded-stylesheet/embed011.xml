@@ -1,0 +1,48 @@
+<?xml version="1.0"?> 
+<?xml-stylesheet type="text/xsl" href="#style11"?>
+<!DOCTYPE doc [
+<!ELEMENT doc (#PCDATA | head | body)*>
+
+<!ELEMENT head (#PCDATA | xsl:transform)*>
+<!ELEMENT body (#PCDATA | price)*>
+
+<!ELEMENT xsl:transform (#PCDATA | xsl:template | xsl:include)*>
+<!ATTLIST xsl:transform 
+		  id ID #REQUIRED
+		  xmlns:xsl CDATA #FIXED "http://www.w3.org/1999/XSL/Transform"
+		  version NMTOKEN #REQUIRED>
+		  
+<!ELEMENT xsl:include EMPTY>		  
+<!ATTLIST xsl:include href CDATA #FIXED "standalone_simplified.xsl">			  
+
+<!ELEMENT xsl:template (#PCDATA)*>
+<!ATTLIST xsl:template match CDATA #IMPLIED>
+<!ELEMENT price (#PCDATA)>
+
+]>
+
+<doc>
+  <head>
+	<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0"
+                id="style11">
+	
+	<xsl:include href="standalone_simplified.xsl" />
+
+	<!-- An embedded standard stylesheet includes a standalone simplified stylesheet. -->
+
+		<xsl:template match="*" />
+		
+		<xsl:template match="text()"/>
+		<xsl:template match="xsl:transform" />
+		
+	</xsl:transform>
+  </head>
+
+  <body>
+	<price>10</price>
+	<price>20</price>
+	<price>30</price>
+	<price>40</price>
+  </body>
+
+</doc>

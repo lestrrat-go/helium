@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?> 
+
+<XMI> 
+  <Actor xmi.id="xmi.3"> 
+    <name>User</name> 
+    <specialization> 
+      <Gen xmi.idref="xmi.5"/> 
+    </specialization> 
+  </Actor> 
+  <Actor xmi.id="xmi.54"> 
+    <name>Administrator</name> 
+    <generalization> 
+      <Gen xmi.idref="xmi.5"/> 
+    </generalization> 
+  </Actor> 
+</XMI>

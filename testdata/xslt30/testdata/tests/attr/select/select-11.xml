@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<doc>
+  <sub1>
+    <child1>preceding sibling number 1</child1>
+    <child2>current node</child2>
+    <child3>following sibling number 3</child3>
+  </sub1>
+  <sub2>
+    <c>cousin 1</c>
+    <c>cousin 2</c>
+    <child3>cousin 3</child3>
+  </sub2>
+</doc>

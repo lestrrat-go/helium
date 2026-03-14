@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<metadata>
+  <keyword majorName="Earn"/>
+  <keyword tag="ticker" value="MSFT"/>
+  <keyword tag="sector" value="unitedstates"/>
+  <keyword tag="ticker" value="IBM"/>
+  <keyword tag="ticker" value="Lotus"/>
+  <CLASSIFICATION value="immediate"/>
+  <keyword tag="sector" value="automotive">
+    <keyword tag="ticker" value="GM"/>
+    <keyword tag="ticker" value="F"/>
+    <keyword tag="ticker" value="C"/>
+  </keyword>
+  <IPTYPE_REF majorName="Earn" value="announcement"/>
+</metadata>

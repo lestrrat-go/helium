@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<doc id="id0">
+  <a id="id1">
+    *id1*
+    <a id="id2">*id2*
+      <a id="id3">*id3*</a>
+      <b id="id4">*id4*</b>
+      <c id="id5">*id5*</c>
+    </a>
+    <b id="id6">*id6*</b>
+    <c id="id7">*id7*</c>
+  </a>
+</doc>

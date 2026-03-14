@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+
+<?spec xslt#import?>
+    <!-- Purpose: Test of importing a basic stylesheet involving matching. -->
+
+<xsl:import href="fragments/imp16all.xsl"/>
+
+</xsl:stylesheet>

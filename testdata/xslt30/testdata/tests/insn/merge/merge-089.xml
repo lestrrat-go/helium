@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+	<item>
+		<foo>a</foo>
+		<bar>1</bar>
+		<value>1</value>
+	</item>
+	<item>
+		<foo>a</foo>
+		<bar>1</bar>
+		<value>2</value>		
+	</item>
+	<item>
+		<foo>a</foo>
+		<bar>2</bar>
+		<value>3</value>
+	</item>
+	<item>
+		<foo>b</foo>
+		<bar>1</bar>
+		<value>4</value>
+	</item>
+	<item>
+		<foo>b</foo>
+		<bar>1</bar>
+		<value>5</value>
+	</item>
+	<item>
+		<foo>b</foo>
+		<bar>2</bar>
+		<value>6</value>
+	</item>
+</root>
+

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE docid [
+<!ENTITY eac "&#xE9;">
+<!ENTITY a "A">
+]>
+
+<my:docid xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://www.example.com/ns/notation-id-ref id-idref-notation-schemaas.xsd"
+		  xmlns:my="http://www.example.com/ns/notation-id-ref">
+		  
+		<derived-elem my:attr-token="hello" my:attr-language="en" my:attr-positiveInteger="200"></derived-elem>
+		<id-elem my:id="a1">id1</id-elem>
+		<id-elem my:id="a2">id2</id-elem>
+		<idref-elem my:ref="a1">idref a1</idref-elem>
+		<idrefs-elem my:refs="a2 a1">idrefs</idrefs-elem>
+		<notation-elem my:filetype="my:rar">notation</notation-elem>
+		<entity-elem my:entitytype="eac" my:entities="a">entities</entity-elem> 
+</my:docid>

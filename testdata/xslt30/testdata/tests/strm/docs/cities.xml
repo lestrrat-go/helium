@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cities>
+  <city name="Milano"  country="Italia"      pop="5"/>
+  <city name="Paris"   country="France"      pop="7"/>
+  <city name="München" country="Deutschland" pop="4"/>
+  <city name="Lyon"    country="France"      pop="2"/>
+  <city name="Venezia" country="Italia"      pop="1"/>
+</cities>

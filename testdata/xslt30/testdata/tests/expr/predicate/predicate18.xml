@@ -1,0 +1,35 @@
+<?xml version="1.0"?> 
+<doc>
+  <a>
+    <asub>
+      <asubsub/>
+    </asub>
+  </a>
+  <b>
+    <bsub>
+      <foo>
+        <child/>
+      </foo>
+    </bsub>
+  </b>
+  <c>f-inside</c>
+  <d>
+    <dsub>
+      <dsubsub>
+        <foundnode/>
+      </dsubsub>
+    </dsub>
+  </d>
+  <e>f-inside
+    <esub>
+      f-inside
+    </esub>
+    <esubsib>
+      f-inside
+    </esubsib>
+    f-inside
+  </e>
+  <f>
+    <fsub/>
+  </f>
+</doc>

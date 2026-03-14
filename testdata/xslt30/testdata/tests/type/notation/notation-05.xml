@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:noNamespaceSchemaLocation="noNamespaceNotation.xsd">
+	<sub filetype="mp3" notetype="mp3" name="a">
+		<subinner>notation test1</subinner>
+	</sub>
+	<sub filetype="mp3" notetype="wav" name="b">
+		<subinner>notation test2</subinner>
+	</sub>
+</doc>

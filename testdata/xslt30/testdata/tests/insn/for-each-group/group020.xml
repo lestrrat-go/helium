@@ -1,0 +1,12 @@
+<cities>
+  <city name="milan"  country="italy"   pop="5"/>
+  <city name="paris"  country="france"  pop="7"/>
+  <city name="munich" country="germany" pop="4"/>
+  <city name="lyon"   country="france"  pop="2"/>
+  <city name="london"  country="england"   pop="10"/>
+  <city name="bristol"   country="england"  pop="5.0"/>
+  <city name="manchester"  country="england"  pop="7.0"/>
+  <city name="liverpool" country="england" pop="7"/>
+  <city name="sheffield"   country="england"  pop="05"/>
+  <city name="venice" country="italy"   pop="1"/>  
+</cities>

@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<doc att="doc_attribute">
+<item xmlns:one="http://one.org" xmlns:two="http://two.org">
+	<?PI name="processing-instruction1"?>
+	<empty>
+		<sub-empty>This text should not appear</sub-empty>
+	</empty>
+</item>
+<inner att="inner_attribute">Text in inner element 
+	<sub-inner xmlns:one="http://example.org">Text in sub-inner element</sub-inner>
+</inner>
+<item/>
+<item>Text in last item<!--Comment 2-->
+	<empty>
+		<sub-empty>This text should not appear</sub-empty>
+	</empty>
+	<empty>
+		<sub-empty>This text should not appear</sub-empty>
+	</empty>
+</item>
+</doc>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<doc>
+  <a test="true">
+<num>1</num>
+</a>
+  <a>
+<num>5</num>
+</a>
+  <a test="false">
+<num>5</num>
+</a>
+  <a test="true">
+<num>2</num>
+</a>
+  <a>
+<num>5</num>
+</a>
+  <a test="false">
+<num>5</num>
+</a>
+  <a test="true">
+<num>3</num>
+</a>
+  <a test="true">
+<num>4</num>
+</a>
+</doc>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<s:schema xmlns:s="http://www.w3.org/2001/XMLSchema"
+    xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
+     targetNamespace="http://soap.pocketsoap.com/weblogs.com/encodedTypes">
+   <s:complexType name="ArrayOfString">
+     <s:complexContent mixed="false">
+       <s:restriction base="soapenc:Array">
+         <s:attribute d7p1:arrayType="s:string[]" ref="soapenc:arrayType"
+         xmlns:d7p1="http://schemas.xmlsoap.org/wsdl/"/>
+       </s:restriction>
+     </s:complexContent>
+   </s:complexType>
+</s:schema>

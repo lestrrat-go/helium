@@ -1,0 +1,22 @@
+<root>
+  <chapter>
+    <section>
+     <foo>1</foo>
+     <foo>2</foo>
+    </section>
+  </chapter>
+  <chapter>
+     <foo>a</foo>
+  </chapter>
+  <chapter>
+     <foo>d1</foo>
+     <section>
+       <foo>d2</foo>
+     </section>
+  </chapter>
+  <appendix>
+    <section>
+      <foo>X</foo>
+    </section>
+  </appendix>
+</root>

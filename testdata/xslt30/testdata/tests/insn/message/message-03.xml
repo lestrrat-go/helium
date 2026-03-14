@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<docs>
+<terminate>no</terminate>
+<terminate>yes</terminate>
+<message> This </message>
+<message>message </message>
+<message>is </message>
+<message>produced </message>
+<message>from </message>
+<message>a </message>
+<message>source </message>
+<message>document </message>
+</docs>

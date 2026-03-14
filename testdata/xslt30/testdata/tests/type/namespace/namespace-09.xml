@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+
+<!-- test masked namespaces --> 
+
+<doc xmlns:z="http://z.uri/" xmlns="http://default.uri/">
+  <chap xmlns:z="http://new-z.uri/" xmlns="http://chap-default.uri/">
+     <para xmlns=""/>
+  </chap>
+</doc>

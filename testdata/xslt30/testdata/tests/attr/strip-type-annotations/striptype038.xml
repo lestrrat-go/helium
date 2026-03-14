@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!DOCTYPE doc-id [
+  <!ELEMENT doc-id (id-elem+, idref-elem, idrefs-elem)>
+  <!ELEMENT id-elem (#PCDATA)>
+  <!ELEMENT idref-elem (#PCDATA)>
+  <!ELEMENT idrefs-elem (#PCDATA)>
+  <!ATTLIST id-elem id ID #REQUIRED>
+  <!ATTLIST idref-elem ref IDREF #REQUIRED>
+  <!ATTLIST idrefs-elem refs IDREFS #REQUIRED>
+]>
+<doc-id>
+     <id-elem id="a1">id1</id-elem>
+     <id-elem id="a2">id2</id-elem>
+     <idref-elem ref="a1">idref</idref-elem>
+     <idrefs-elem refs="a2 a1">idrefs</idrefs-elem>
+</doc-id>

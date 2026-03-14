@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustInvoiceJour class="entity">
+    <CustInvoiceTrans class="entity">
+        <InventTransId>AABB</InventTransId>
+        <InvoiceId>SI100</InvoiceId>
+        <ItemId>444</ItemId>
+        <LineAmount>100</LineAmount>
+    </CustInvoiceTrans>
+    <CustInvoiceTrans class="entity">
+        <InventTransId>BBCC</InventTransId>
+        <InvoiceId>SI100</InvoiceId>
+        <ItemId>444</ItemId>
+        <LineAmount>25</LineAmount>
+    </CustInvoiceTrans>
+    <CustInvoiceTrans class="entity">
+        <InventTransId>CCDD</InventTransId>
+        <InvoiceId>SI100</InvoiceId>
+        <ItemId>555</ItemId>
+        <LineAmount>200</LineAmount>
+    </CustInvoiceTrans>
+    <CustInvoiceTrans class="entity">
+        <InventTransId>DDEE</InventTransId>
+        <InvoiceId>SI100</InvoiceId>
+        <ItemId>555</ItemId>
+        <LineAmount>15</LineAmount>
+    </CustInvoiceTrans>         
+    <CustInvoiceTrans class="entity">
+        <InventTransId>EEFF</InventTransId>
+        <InvoiceId>SI100</InvoiceId>
+        <ItemId>12345</ItemId>
+        <LineAmount>40</LineAmount>
+    </CustInvoiceTrans>
+    <TaxTrans class="entity">
+        <InventTransId>AABB</InventTransId>
+        <TaxAmount>-21</TaxAmount>
+        <TaxBaseAmount>-100</TaxBaseAmount>
+        <TaxValue>21.00</TaxValue>
+    </TaxTrans>
+    <TaxTrans class="entity">
+        <InventTransId>BBCC</InventTransId>
+        <TaxAmount>-5.25</TaxAmount>
+        <TaxBaseAmount>-25</TaxBaseAmount>
+        <TaxValue>21.00</TaxValue>
+    </TaxTrans>
+    <TaxTrans class="entity">
+        <InventTransId>CCDD</InventTransId>
+        <TaxAmount>-42</TaxAmount>
+        <TaxBaseAmount>-200</TaxBaseAmount>
+        <TaxValue>21.00</TaxValue>
+    </TaxTrans>
+    <TaxTrans class="entity">
+        <InventTransId>DDEE</InventTransId>
+        <TaxAmount>-3.15</TaxAmount>
+        <TaxBaseAmount>-15</TaxBaseAmount>
+        <TaxValue>15</TaxValue>
+    </TaxTrans>
+    <TaxTrans class="entity">
+        <InventTransId>EEFF</InventTransId>
+        <TaxAmount>-8.40</TaxAmount>
+        <TaxBaseAmount>-40</TaxBaseAmount>
+        <TaxValue>15</TaxValue>
+    </TaxTrans>         
+</CustInvoiceJour>

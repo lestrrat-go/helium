@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doc>
+	<num>13</num>
+	<a>foo</a>
+	<b>bar1</b>
+	<b>bar2</b>
+	<b attr = 'blah'>bar3</b>
+	<c>cplus
+		<noodle>good</noodle>
+		<what>yes this is nonsense</what>
+	</c>
+</doc>
