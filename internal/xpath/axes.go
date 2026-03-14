@@ -283,11 +283,11 @@ func axisAttribute(node helium.Node) []helium.Node {
 	if !ok {
 		return nil
 	}
-	attrs := elem.Attributes()
-	result := make([]helium.Node, len(attrs))
-	for i, a := range attrs {
-		result[i] = a
-	}
+	var result []helium.Node
+	elem.ForEachAttribute(func(attr *helium.Attribute) bool {
+		result = append(result, attr)
+		return true
+	})
 	return result
 }
 
