@@ -900,7 +900,23 @@ func (t *TreeBuilder) UnparsedEntityDecl(ctxif context.Context, name string, pub
 		return errors.New("sax.UnparsedEntityDecl called while not in subset")
 	}
 
-	_, _ = dtd.AddEntity(name, enum.ExternalGeneralUnparsedEntity, publicID, systemID, notation)
+	ent, _ := dtd.AddEntity(name, enum.ExternalGeneralUnparsedEntity, publicID, systemID, notation)
+
+	// Build the full URI for unparsed entities by resolving the system ID
+	// against the document's base URI (mirrors libxml2's xmlSAX2UnparsedEntityDecl).
+	if ent != nil && ent.uri == "" && systemID != "" {
+		base := ctx.baseURI
+		if base != "" {
+			resolved := BuildURI(systemID, base)
+			if resolved != "" {
+				ent.uri = resolved
+			}
+		}
+		if ent.uri == "" {
+			ent.uri = systemID
+		}
+	}
+
 	return nil
 }
 

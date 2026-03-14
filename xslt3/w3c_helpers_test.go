@@ -266,6 +266,11 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		}
 		t.Fatalf("cannot parse source: %v", err)
 	}
+	// Set document URL for entity URI resolution (unparsed-entity-uri).
+	if tc.SourceDocPath != "" {
+		srcAbsPath, _ := filepath.Abs(filepath.Join(w3cTestdataDir, tc.SourceDocPath))
+		sourceDoc.SetURL(srcAbsPath)
+	}
 
 	// Configure transform context
 	ctx := t.Context()

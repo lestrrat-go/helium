@@ -39,9 +39,17 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *SourceDocum
 			return dynamicError("FODC0002", "xsl:source-document cannot load %q: %v", uri, err)
 		}
 
-		doc, err = helium.Parse(ctx, data)
+		p := helium.NewParser()
+		p.SetBaseURI(resolvedURI)
+		doc, err = p.Parse(ctx, data)
 		if err != nil {
 			return dynamicError("FODC0002", "xsl:source-document cannot parse %q: %v", uri, err)
+		}
+
+		// Apply xsl:strip-space to the loaded document so that whitespace-only
+		// text nodes are removed before XPath evaluation sees them.
+		if len(ec.stylesheet.stripSpace) > 0 {
+			ec.stripWhitespaceFromDoc(doc)
 		}
 
 		if ec.docCache == nil {

@@ -11,6 +11,12 @@ import (
 // Supports Element, Text, Comment, CDATASection, PI, and EntityRef nodes.
 func CopyNode(src Node, targetDoc *Document) (Node, error) {
 	switch src.Type() {
+	case DocumentNode:
+		doc, ok := src.(*Document)
+		if !ok {
+			return nil, fmt.Errorf("helium: unexpected DocumentNode type %T", src)
+		}
+		return CopyDoc(doc)
 	case ElementNode:
 		return copyElement(src.(*Element), targetDoc)
 	case TextNode:
@@ -23,6 +29,10 @@ func CopyNode(src Node, targetDoc *Document) (Node, error) {
 		return targetDoc.CreatePI(src.Name(), string(src.Content()))
 	case EntityRefNode:
 		return targetDoc.CreateCharRef(src.Name())
+	case NamespaceNode:
+		// Namespace nodes are virtual; return a new wrapper with the same data.
+		ns := NewNamespace(src.Name(), string(src.Content()))
+		return NewNamespaceNodeWrapper(ns, nil), nil
 	default:
 		return nil, fmt.Errorf("helium: cannot copy node of type %s", src.Type())
 	}

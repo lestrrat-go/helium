@@ -24,7 +24,8 @@ func (ec *execContext) xsltFunctions() map[string]xpath3.Function {
 		"key":                 &xsltFunc{min: 2, max: 3, fn: ec.fnKey},
 		"generate-id":         &xsltFunc{min: 0, max: 1, fn: ec.fnGenerateID},
 		"system-property":     &xsltFunc{min: 1, max: 1, fn: ec.fnSystemProperty},
-		"unparsed-entity-uri": &xsltFunc{min: 1, max: 1, fn: ec.fnUnparsedEntityURI},
+		"unparsed-entity-uri":       &xsltFunc{min: 1, max: 2, fn: ec.fnUnparsedEntityURI},
+		"unparsed-entity-public-id": &xsltFunc{min: 1, max: 2, fn: ec.fnUnparsedEntityPublicID},
 		"element-available":    &xsltFunc{min: 1, max: 1, fn: ec.fnElementAvailable},
 		"function-available":   &xsltFunc{min: 1, max: 2, fn: ec.fnFunctionAvailable},
 		"type-available":       &xsltFunc{min: 1, max: 1, fn: ec.fnTypeAvailable},
@@ -33,6 +34,7 @@ func (ec *execContext) xsltFunctions() map[string]xpath3.Function {
 		"accumulator-before":   &xsltFunc{min: 1, max: 1, fn: ec.fnAccumulatorBefore},
 		"accumulator-after":    &xsltFunc{min: 1, max: 1, fn: ec.fnAccumulatorAfter},
 		"copy-of":              &xsltFunc{min: 0, max: 1, fn: ec.fnCopyOf},
+		"snapshot":             &xsltFunc{min: 0, max: 1, fn: ec.fnCopyOf},
 	}
 	return ec.cachedFns
 }
@@ -251,10 +253,73 @@ func (ec *execContext) fnSystemProperty(_ context.Context, args []xpath3.Sequenc
 	}
 }
 
+// lookupUnparsedEntity finds an unparsed entity by name in the source document's DTD.
+func (ec *execContext) lookupUnparsedEntity(name string) *helium.Entity {
+	doc := ec.sourceDoc
+	if doc == nil {
+		return nil
+	}
+	if dtd := doc.IntSubset(); dtd != nil {
+		if ent, ok := dtd.LookupEntity(name); ok {
+			return ent
+		}
+	}
+	if dtd := doc.ExtSubset(); dtd != nil {
+		if ent, ok := dtd.LookupEntity(name); ok {
+			return ent
+		}
+	}
+	return nil
+}
+
 // unparsed-entity-uri(name) returns the URI of an unparsed entity.
 func (ec *execContext) fnUnparsedEntityURI(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
-	// Not commonly used; return empty string
-	return xpath3.SingleString(""), nil
+	if len(args[0]) == 0 {
+		return xpath3.SingleString(""), nil
+	}
+	av, err := xpath3.AtomizeItem(args[0][0])
+	if err != nil {
+		return xpath3.SingleString(""), nil
+	}
+	name, err := xpath3.AtomicToString(av)
+	if err != nil {
+		return xpath3.SingleString(""), nil
+	}
+	ent := ec.lookupUnparsedEntity(name)
+	if ent == nil {
+		return xpath3.SingleString(""), nil
+	}
+	// If the entity has a pre-resolved URI, use it. Otherwise resolve
+	// the system ID against the source document's base URL.
+	uri := ent.URI()
+	if uri == ent.SystemID() && ec.sourceDoc != nil {
+		if base := ec.sourceDoc.URL(); base != "" {
+			if resolved := helium.BuildURI(uri, base); resolved != "" {
+				uri = resolved
+			}
+		}
+	}
+	return xpath3.SingleString(uri), nil
+}
+
+// unparsed-entity-public-id(name) returns the public identifier of an unparsed entity.
+func (ec *execContext) fnUnparsedEntityPublicID(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	if len(args[0]) == 0 {
+		return xpath3.SingleString(""), nil
+	}
+	av, err := xpath3.AtomizeItem(args[0][0])
+	if err != nil {
+		return xpath3.SingleString(""), nil
+	}
+	name, err := xpath3.AtomicToString(av)
+	if err != nil {
+		return xpath3.SingleString(""), nil
+	}
+	ent := ec.lookupUnparsedEntity(name)
+	if ent == nil {
+		return xpath3.SingleString(""), nil
+	}
+	return xpath3.SingleString(ent.ExternalID()), nil
 }
 
 // xslUserFunc wraps an xsl:function for use as an xpath3.Function.

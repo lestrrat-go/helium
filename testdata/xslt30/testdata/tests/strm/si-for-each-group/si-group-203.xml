@@ -1,0 +1,35 @@
+<Root>
+    <List>
+        <Item>
+            <Id>Item 1</Id>
+            <?start?>
+        </Item>
+        <Item>
+            <Id>Item 2</Id>
+        </Item>
+        <Item>
+            <Id>Item 3</Id>
+        </Item>        
+        <Item>
+            <Id>Item 4</Id>
+            <?end?>
+        </Item>
+        <Item>
+            <Id>Item 5</Id>
+        </Item>
+        <Item>
+            <Id>Item 6</Id>
+            <?start?>
+        </Item>
+        <Item>
+            <Id>Item 7</Id>
+        </Item>
+        <Item>
+            <Id>Item 8</Id>
+            <?end?>
+        </Item>
+        <Item>
+            <Id>Item 9</Id>
+        </Item>
+    </List>
+</Root>
