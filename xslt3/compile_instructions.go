@@ -657,6 +657,22 @@ func (c *compiler) compileNumber(elem *helium.Element) (*NumberInst, error) {
 		inst.Ordinal = avt
 	}
 
+	if sa := getAttr(elem, "start-at"); sa != "" {
+		avt, err := compileAVT(sa, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.StartAt = avt
+	}
+
+	if sel := getAttr(elem, "select"); sel != "" {
+		expr, err := compileXPath(sel, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.Select = expr
+	}
+
 	return inst, nil
 }
 

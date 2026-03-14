@@ -191,6 +191,8 @@ type NumberInst struct {
 	GroupingSeparator *AVT
 	GroupingSize      *AVT
 	Ordinal           *AVT
+	StartAt           *AVT              // XSLT 3.0 start-at attribute
+	Select            *xpath3.Expression // XSLT 3.0 select attribute
 }
 
 func (*NumberInst) instructionTag() {}

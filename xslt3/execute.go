@@ -427,12 +427,12 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 }
 
 // applyBuiltinRules applies the built-in template rules per XSLT spec.
-func (ec *execContext) applyBuiltinRules(ctx context.Context, node helium.Node, mode string) error {
+func (ec *execContext) applyBuiltinRules(ctx context.Context, node helium.Node, mode string, paramValues ...map[string]xpath3.Sequence) error {
 	switch node.Type() {
 	case helium.DocumentNode, helium.ElementNode:
-		// Built-in rule: apply templates to children
+		// Built-in rule: apply templates to children, forwarding params
 		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
-			if err := ec.applyTemplates(ctx, child, mode); err != nil {
+			if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
 				return err
 			}
 		}
@@ -468,6 +468,10 @@ func (ec *execContext) applyBuiltinRules(ctx context.Context, node helium.Node, 
 // shouldStripWhitespace returns true if a text node is whitespace-only
 // and its parent element matches a strip-space pattern.
 func (ec *execContext) shouldStripWhitespace(node helium.Node) bool {
+	// Only strip text/CDATA nodes, not elements or other node types
+	if node.Type() != helium.TextNode && node.Type() != helium.CDATASectionNode {
+		return false
+	}
 	content := node.Content()
 	// Check if whitespace-only
 	for _, b := range content {

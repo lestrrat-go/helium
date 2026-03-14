@@ -1014,6 +1014,21 @@ func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
 		return nil
 	}
 
+	// XSLT 3.0: select attribute specifies which node to number
+	if inst.Select != nil && inst.Value == nil {
+		xpathCtx := ec.newXPathContext(node)
+		result, err := inst.Select.Evaluate(xpathCtx, node)
+		if err != nil {
+			return err
+		}
+		seq := result.Sequence()
+		if len(seq) > 0 {
+			if ni, ok := seq[0].(xpath3.NodeItem); ok {
+				node = ni.Node
+			}
+		}
+	}
+
 	var nums []int
 
 	if inst.Value != nil {
@@ -1036,6 +1051,26 @@ func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
 			nums = ec.numberAny(inst, node)
 		default:
 			nums = ec.numberSingle(inst, node)
+		}
+	}
+
+	// Apply start-at offset (XSLT 3.0): default is 1, so start-at="0" subtracts 1
+	if inst.StartAt != nil {
+		saStr, err := inst.StartAt.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		// start-at can be a space-separated list of integers, one per level
+		saParts := strings.Fields(saStr)
+		for i, n := range nums {
+			offset := 0
+			if i < len(saParts) {
+				offset, _ = strconv.Atoi(saParts[i])
+			} else if len(saParts) > 0 {
+				offset, _ = strconv.Atoi(saParts[len(saParts)-1])
+			}
+			// start-at shifts numbering: number = number + startAt - 1
+			nums[i] = n + offset - 1
 		}
 	}
 
@@ -1564,7 +1599,21 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *ApplyImportsI
 		}
 	}
 
-	// No imported template found, use built-in rules
+	// No imported template found, use built-in rules (forwarding params)
+	var pv map[string]xpath3.Sequence
+	if len(inst.Params) > 0 {
+		pv = make(map[string]xpath3.Sequence, len(inst.Params))
+		for _, wp := range inst.Params {
+			val, err := ec.evaluateWithParam(ctx, wp)
+			if err != nil {
+				return err
+			}
+			pv[wp.Name] = val
+		}
+	}
+	if pv != nil {
+		return ec.applyBuiltinRules(ctx, node, mode, pv)
+	}
 	return ec.applyBuiltinRules(ctx, node, mode)
 }
 
