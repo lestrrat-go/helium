@@ -6,35 +6,65 @@ import (
 	"maps"
 )
 
-// CompileOption configures stylesheet compilation.
-type CompileOption func(*compileConfig)
-
-type compileConfig struct {
-	baseURI  string
-	resolver URIResolver
-}
-
-// WithBaseURI sets the base URI for resolving relative URIs in
-// xsl:import and xsl:include.
-func WithBaseURI(uri string) CompileOption {
-	return func(c *compileConfig) {
-		c.baseURI = uri
-	}
-}
-
 // URIResolver resolves URIs to readable content. Used for xsl:import
 // and xsl:include during compilation.
 type URIResolver interface {
 	Resolve(uri string) (io.ReadCloser, error)
 }
 
-// WithURIResolver sets a custom URI resolver for loading external
-// stylesheets and documents.
-func WithURIResolver(r URIResolver) CompileOption {
-	return func(c *compileConfig) {
-		c.resolver = r
-	}
+// --- Compile configuration (context-based) ---
+
+// compileConfigKey is used to store compile configuration in context.Context.
+type compileConfigKey struct{}
+
+type compileConfig struct {
+	baseURI  string
+	resolver URIResolver
 }
+
+func getCompileConfig(ctx context.Context) *compileConfig {
+	if ctx == nil {
+		return nil
+	}
+	cfg, _ := ctx.Value(compileConfigKey{}).(*compileConfig)
+	return cfg
+}
+
+func deriveCompileConfig(ctx context.Context) *compileConfig {
+	if cfg := getCompileConfig(ctx); cfg != nil {
+		cp := *cfg
+		return &cp
+	}
+	return &compileConfig{}
+}
+
+func withCompileConfig(ctx context.Context, cfg *compileConfig) context.Context {
+	return context.WithValue(ctx, compileConfigKey{}, cfg)
+}
+
+func updateCompileConfig(ctx context.Context, fn func(*compileConfig)) context.Context {
+	cfg := deriveCompileConfig(ctx)
+	fn(cfg)
+	return withCompileConfig(ctx, cfg)
+}
+
+// WithCompileBaseURI sets the base URI for resolving relative URIs in
+// xsl:import and xsl:include during compilation.
+func WithCompileBaseURI(ctx context.Context, uri string) context.Context {
+	return updateCompileConfig(ctx, func(c *compileConfig) {
+		c.baseURI = uri
+	})
+}
+
+// WithCompileURIResolver sets a custom URI resolver for loading external
+// stylesheets and documents during compilation.
+func WithCompileURIResolver(ctx context.Context, r URIResolver) context.Context {
+	return updateCompileConfig(ctx, func(c *compileConfig) {
+		c.resolver = r
+	})
+}
+
+// --- Transform configuration (context-based) ---
 
 // transformConfigKey is used to store transform configuration in context.Context.
 type transformConfigKey struct{}
@@ -55,8 +85,6 @@ func getTransformConfig(ctx context.Context) *transformConfig {
 
 func deriveTransformConfig(ctx context.Context) *transformConfig {
 	if cfg := getTransformConfig(ctx); cfg != nil {
-		// Shallow-copy the config and let mutators clone maps only when they
-		// actually modify them.
 		cp := *cfg
 		return &cp
 	}

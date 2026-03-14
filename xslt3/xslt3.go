@@ -10,30 +10,26 @@ import (
 )
 
 // CompileStylesheet compiles a parsed XSLT stylesheet document into a
-// reusable Stylesheet.
-func CompileStylesheet(doc *helium.Document, opts ...CompileOption) (*Stylesheet, error) {
-	cfg := &compileConfig{}
-	for _, o := range opts {
-		o(cfg)
-	}
+// reusable Stylesheet. Use WithCompileBaseURI and WithCompileURIResolver
+// to configure compilation via ctx.
+func CompileStylesheet(ctx context.Context, doc *helium.Document) (*Stylesheet, error) {
+	cfg := deriveCompileConfig(ctx)
 	return compile(doc, cfg)
 }
 
 // CompileFile parses and compiles an XSLT stylesheet from a file path.
-func CompileFile(path string, opts ...CompileOption) (*Stylesheet, error) {
+// Use WithCompileBaseURI and WithCompileURIResolver to configure
+// compilation via ctx.
+func CompileFile(ctx context.Context, path string) (*Stylesheet, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	doc, err := helium.Parse(context.Background(), data)
+	doc, err := helium.Parse(ctx, data)
 	if err != nil {
 		return nil, err
 	}
-	// Set baseURI from file path if not already set
-	cfg := &compileConfig{}
-	for _, o := range opts {
-		o(cfg)
-	}
+	cfg := deriveCompileConfig(ctx)
 	if cfg.baseURI == "" {
 		cfg.baseURI = path
 	}
