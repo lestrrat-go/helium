@@ -2066,6 +2066,27 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 		return nil
 	}
 
+	// Set XSLT 3.0 error variables in catch scope
+	const errNS = "http://www.w3.org/2005/xqt-errors"
+	ec.pushVarScope()
+	defer ec.popVarScope()
+
+	errCode := "XSLT0000"
+	errDesc := tryErr.Error()
+	if xErr, ok := tryErr.(*XSLTError); ok {
+		errCode = xErr.Code
+		errDesc = xErr.Message
+	} else if xpErr, ok := tryErr.(*xpath3.XPathError); ok {
+		errCode = xpErr.Code
+		errDesc = xpErr.Message
+	}
+	ec.setVar("{"+errNS+"}code", xpath3.SingleString(errCode))
+	ec.setVar("{"+errNS+"}description", xpath3.SingleString(errDesc))
+	ec.setVar("{"+errNS+"}value", xpath3.EmptySequence())
+	ec.setVar("{"+errNS+"}module", xpath3.SingleString(""))
+	ec.setVar("{"+errNS+"}line-number", xpath3.SingleInteger(0))
+	ec.setVar("{"+errNS+"}column-number", xpath3.SingleInteger(0))
+
 	// Execute catch body
 	for _, child := range inst.Catch {
 		if err := ec.executeInstruction(ctx, child); err != nil {
