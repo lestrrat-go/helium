@@ -609,6 +609,16 @@ func (ec *execContext) findBestTemplate(node helium.Node, mode string) *Template
 			return tmpl
 		}
 	}
+
+	// Also check #all mode templates that might not be registered in this mode
+	if mode != "#all" {
+		for _, tmpl := range ec.stylesheet.modeTemplates["#all"] {
+			if tmpl.Match != nil && tmpl.Match.matchPattern(ec, node) {
+				return tmpl
+			}
+		}
+	}
+
 	return nil
 }
 

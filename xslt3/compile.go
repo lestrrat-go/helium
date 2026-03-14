@@ -133,6 +133,11 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 		c.expandText = true
 	}
 
+	// Read default-mode from stylesheet root (XSLT 3.0)
+	if dm := getAttr(root, "default-mode"); dm != "" {
+		c.stylesheet.defaultMode = dm
+	}
+
 	// Read version
 	c.stylesheet.version = getAttr(root, "version")
 	if c.stylesheet.version == "" {
