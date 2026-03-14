@@ -172,10 +172,10 @@ func (c *compiler) collectNamespaces(elem *helium.Element) {
 	for _, ns := range elem.Namespaces() {
 		prefix := ns.Prefix()
 		uri := ns.URI()
-		if uri != NSXSLT {
-			c.nsBindings[prefix] = uri
-			c.stylesheet.namespaces[prefix] = uri
-		}
+		// All namespace bindings (including XSLT) are needed for XPath
+		// resolution (e.g., document('')/*/xsl:template).
+		c.nsBindings[prefix] = uri
+		c.stylesheet.namespaces[prefix] = uri
 	}
 }
 
