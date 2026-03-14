@@ -3,7 +3,6 @@ package xslt3
 import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
-	"github.com/lestrrat-go/helium/xsd"
 )
 
 const (
@@ -31,7 +30,6 @@ type Stylesheet struct {
 	modeDefs        map[string]*ModeDef                         // mode name -> mode definition
 	sourceDoc         *helium.Document                            // the parsed stylesheet document (for document(""))
 	baseURI           string                                      // base URI for resolving relative document references
-	schemas           []*xsd.Schema                               // imported schemas (xsl:import-schema)
 	defaultValidation string                                      // "strict", "lax", "preserve", "strip" (default-validation attr)
 }
 
