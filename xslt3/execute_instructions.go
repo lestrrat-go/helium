@@ -95,17 +95,27 @@ func (ec *execContext) executeInstruction(ctx context.Context, inst Instruction)
 func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTemplatesInst) error {
 	var nodes []helium.Node
 
+	var atomicItems xpath3.Sequence // XSLT 3.0: atomic values from select
 	if inst.Select != nil {
 		xpathCtx := ec.newXPathContext(ec.contextNode)
 		result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
 		if err != nil {
 			return err
 		}
-		ns, ok := xpath3.NodesFrom(result.Sequence())
-		if !ok {
-			return dynamicError(errCodeXTDE0820, "apply-templates select must return nodes")
+		seq := result.Sequence()
+		ns, ok := xpath3.NodesFrom(seq)
+		if ok {
+			nodes = ns
+		} else {
+			// XSLT 3.0: separate nodes from atomic values
+			for _, item := range seq {
+				if ni, ok := item.(xpath3.NodeItem); ok {
+					nodes = append(nodes, ni.Node)
+				} else {
+					atomicItems = append(atomicItems, item)
+				}
+			}
 		}
-		nodes = ns
 	} else {
 		nodes = selectDefaultNodes(ec.contextNode)
 	}
@@ -186,6 +196,25 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 		ec.position = i + 1
 
 		if err := ec.applyTemplates(ctx, node, mode, paramValues); err != nil {
+			return err
+		}
+	}
+
+	// XSLT 3.0: built-in template for atomic values — output string value
+	for _, item := range atomicItems {
+		av, err := xpath3.AtomizeItem(item)
+		if err != nil {
+			continue
+		}
+		s, err := xpath3.AtomicToString(av)
+		if err != nil {
+			continue
+		}
+		text, err := ec.resultDoc.CreateText([]byte(s))
+		if err != nil {
+			return err
+		}
+		if err := ec.addNode(text); err != nil {
 			return err
 		}
 	}
