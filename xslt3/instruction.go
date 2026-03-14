@@ -48,6 +48,7 @@ type WithParam struct {
 	Name   string
 	Select *xpath3.Expression
 	Body   []Instruction
+	As     string
 	Tunnel bool
 }
 

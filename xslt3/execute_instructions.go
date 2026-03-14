@@ -239,8 +239,11 @@ func (ec *execContext) evaluateWithParam(ctx context.Context, wp *WithParam) (xp
 		return result.Sequence(), nil
 	}
 	if len(wp.Body) > 0 {
-		// Per XSLT spec: with-param body without select produces a
-		// document node (temporary tree), same as variables.
+		if wp.As != "" {
+			// With as attribute: evaluate as raw sequence (individual items)
+			return ec.evaluateBody(ctx, wp.Body)
+		}
+		// No as: wrap in document node (temporary tree)
 		return ec.evaluateBodyAsDocument(ctx, wp.Body)
 	}
 	return xpath3.EmptySequence(), nil
