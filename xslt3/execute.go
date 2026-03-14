@@ -3,6 +3,7 @@ package xslt3
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -280,7 +281,11 @@ func (ec *execContext) evaluateGlobalVar(v *Variable) (xpath3.Sequence, error) {
 	defer delete(ec.globalEvaluating, v.Name)
 
 	var val xpath3.Sequence
-	ctx := context.Background()
+	ctx := ec.transformCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx = withExecContext(ctx, ec)
 	if v.Select != nil {
 		xpathCtx := ec.newXPathContext(ec.sourceDoc)
 		result, err := v.Select.Evaluate(xpathCtx, ec.sourceDoc)
@@ -318,7 +323,11 @@ func (ec *execContext) evaluateGlobalParam(p *Param) (xpath3.Sequence, error) {
 	defer delete(ec.globalEvaluating, p.Name)
 
 	var val xpath3.Sequence
-	ctx := context.Background()
+	ctx := ec.transformCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx = withExecContext(ctx, ec)
 	if p.Select != nil {
 		xpathCtx := ec.newXPathContext(ec.sourceDoc)
 		result, err := p.Select.Evaluate(xpathCtx, ec.sourceDoc)
@@ -416,15 +425,31 @@ func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []Instru
 		}
 	}
 
-	// If the body produced atomic items via xsl:sequence, return them
-	// directly rather than wrapping in a document node.
-	// TODO(xslt3): when both DOM children and atomic items exist, the
-	// atomics are silently dropped (only the document node is returned).
-	// A proper implementation should either merge them into an ordered
-	// sequence or raise an error when atomics appear in a document-node
-	// context. This is a known limitation of the initial implementation.
-	if len(frame.pendingItems) > 0 && tmpDoc.FirstChild() == nil {
-		return frame.pendingItems, nil
+	// Per XSLT spec: in document-node context (variable/param without as),
+	// atomic items from xsl:sequence are converted to text nodes and added
+	// to the document node as space-separated text.
+	if len(frame.pendingItems) > 0 {
+		var sb strings.Builder
+		for i, item := range frame.pendingItems {
+			if i > 0 {
+				sb.WriteByte(' ')
+			}
+			s, err := xpath3.AtomicToString(item.(xpath3.AtomicValue))
+			if err != nil {
+				sb.WriteString(fmt.Sprint(item))
+			} else {
+				sb.WriteString(s)
+			}
+		}
+		if sb.Len() > 0 {
+			text, err := tmpDoc.CreateText([]byte(sb.String()))
+			if err != nil {
+				return nil, err
+			}
+			if err := tmpDoc.AddChild(text); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	return xpath3.Sequence{xpath3.NodeItem{Node: tmpDoc}}, nil
