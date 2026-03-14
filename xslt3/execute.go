@@ -145,6 +145,15 @@ func (ec *execContext) newXPathContext(node helium.Node) context.Context {
 	if ec.stylesheet.baseURI != "" {
 		ctx = xpath3.WithBaseURI(ctx, ec.stylesheet.baseURI)
 	}
+	if len(ec.stylesheet.decimalFormats) > 0 {
+		// Separate default from named formats
+		for qn, df := range ec.stylesheet.decimalFormats {
+			if qn == (xpath3.QualifiedName{}) {
+				ctx = xpath3.WithDefaultDecimalFormat(ctx, df)
+			}
+		}
+		ctx = xpath3.WithNamedDecimalFormats(ctx, ec.stylesheet.decimalFormats)
+	}
 	return ctx
 }
 
