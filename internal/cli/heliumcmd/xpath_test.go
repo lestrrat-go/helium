@@ -20,7 +20,7 @@ func newTestXPathCommand() *xpathCommand {
 }
 
 func TestRunXPathVersion(t *testing.T) {
-	require.Equal(t, ExitOK, Execute(context.Background(), []string{"xpath", "--version"}))
+	require.Equal(t, ExitOK, Execute(newExecuteTestContext(), []string{"xpath", "--version"}))
 }
 
 func TestParseXPathArgsDefaults(t *testing.T) {

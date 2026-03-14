@@ -20,7 +20,7 @@ func newTestSchematronValidateCommand() *schematronValidateCommand {
 }
 
 func TestRunSchematronValidateVersion(t *testing.T) {
-	require.Equal(t, ExitOK, Execute(context.Background(), []string{"schematron", "validate", "--version"}))
+	require.Equal(t, ExitOK, Execute(newExecuteTestContext(), []string{"schematron", "validate", "--version"}))
 }
 
 func TestParseSchematronValidateArgs(t *testing.T) {

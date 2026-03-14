@@ -20,7 +20,7 @@ func newTestXSDValidateCommand() *xsdValidateCommand {
 }
 
 func TestRunXSDValidateVersion(t *testing.T) {
-	require.Equal(t, ExitOK, Execute(context.Background(), []string{"xsd", "validate", "--version"}))
+	require.Equal(t, ExitOK, Execute(newExecuteTestContext(), []string{"xsd", "validate", "--version"}))
 }
 
 func TestParseXSDValidateArgs(t *testing.T) {
