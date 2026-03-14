@@ -139,9 +139,9 @@ func TestW3C_accumulator(t *testing.T) {
 		{Name: "accumulator-036s", StylesheetPath: "tests/decl/accumulator/accumulator-036.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-015.xml", Params: map[string]string{"streamable": "'yes'"}, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
 		{Name: "accumulator-037", StylesheetPath: "tests/decl/accumulator/accumulator-037.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-001.xml", Params: map[string]string{"streamable": "'No'"}, ExpectError: true, ErrorCode: "XTSE0020"},
 		{Name: "accumulator-038", StylesheetPath: "tests/decl/accumulator/accumulator-038.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XPTY0004"},
-		{Name: "accumulator-039", StylesheetPath: "tests/decl/accumulator/accumulator-039.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "accumulator-039", StylesheetPath: "tests/decl/accumulator/accumulator-039.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "accumulator-040", StylesheetPath: "tests/decl/accumulator/accumulator-040.xsl", SourceContent: "<html lang=\"en\"><head><title>Test 1</title></head><body><h1>Test 1</h1><p>This is test 1.</p></body></html>", Assertions: []w3cAssertion{w3cAssertXML("<html lang=\"en\"><head><title>Test 1</title></head><body><p>This is test 1.</p></body></html>")}},
-		{Name: "accumulator-041", StylesheetPath: "tests/decl/accumulator/accumulator-041.xsl", SourceContent: "<html lang=\"en\"><head><title>Test 1</title></head><body><h1>Test 1</h1><p>This is test 1.</p></body></html>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "accumulator-041", StylesheetPath: "tests/decl/accumulator/accumulator-041.xsl", SourceContent: "<html lang=\"en\"><head><title>Test 1</title></head><body><h1>Test 1</h1><p>This is test 1.</p></body></html>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "accumulator-042", StylesheetPath: "tests/decl/accumulator/accumulator-042.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-042.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><p>1</p><p>1.1</p><p>1.2</p><p>1.3</p><p>1.3.1</p><p>1.3.2</p></out>")}},
 		{Name: "accumulator-043", StylesheetPath: "tests/decl/accumulator/accumulator-043.xsl", SourceDocPath: "tests/decl/accumulator/books.xml", Assertions: []w3cAssertion{w3cAssertXML(`<histogram
      	 ><publisher name="Bantam Classics">1</publisher
@@ -160,7 +160,7 @@ func TestW3C_accumulator(t *testing.T) {
 		{Name: "accumulator-048s", StylesheetPath: "tests/decl/accumulator/accumulator-048.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-001.xml", Params: map[string]string{"copyAcc": "'yes'", "streamable": "'yes'"}, Assertions: []w3cAssertion{w3cAssertXML("<figures><p>Figure 3: a third diagram</p><p>Figure 4: a fourth diagram</p></figures>")}, Skip: "unsupported feature: streaming"},
 		{Name: "accumulator-049", StylesheetPath: "tests/decl/accumulator/accumulator-048.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-001.xml", Params: map[string]string{"copyAcc": "'no'", "streamable": "'no'"}, Assertions: []w3cAssertion{w3cAssertXML("<figures><p>Figure 1: a third diagram</p><p>Figure 2: a fourth diagram</p></figures>")}},
 		{Name: "accumulator-049s", StylesheetPath: "tests/decl/accumulator/accumulator-048.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-001.xml", Params: map[string]string{"copyAcc": "'no'", "streamable": "'yes'"}, Assertions: []w3cAssertion{w3cAssertXML("<figures><p>Figure 1: a third diagram</p><p>Figure 2: a fourth diagram</p></figures>")}, Skip: "unsupported feature: streaming"},
-		{Name: "accumulator-050", StylesheetPath: "tests/decl/accumulator/accumulator-050.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-050.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "accumulator-050", StylesheetPath: "tests/decl/accumulator/accumulator-050.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-050.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "accumulator-051", StylesheetPath: "tests/decl/accumulator/accumulator-051.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-051.xml", Params: map[string]string{"streamable": "false()"}, Assertions: []w3cAssertion{w3cAssertXML(`<root><start state=""
             /><start name="A" state="(A"
             /><start name="B" state="(A (B"
@@ -183,10 +183,10 @@ func TestW3C_accumulator(t *testing.T) {
             /><end state="(A (B (C C) (D D) B) A)"/></root>`)}},
 		{Name: "accumulator-052a", StylesheetPath: "", SourceDocPath: "tests/decl/accumulator/accumulator-001.xml", Params: map[string]string{"start": "12"}, Assertions: []w3cAssertion{w3cAssertXML("<root><end value=\"45\"/></root>")}, Skip: "no stylesheet"},
 		{Name: "accumulator-052b", StylesheetPath: "", SourceDocPath: "tests/decl/accumulator/accumulator-001.xml", Params: map[string]string{"start": "24"}, Assertions: []w3cAssertion{w3cAssertXML("<root><end value=\"57\"/></root>")}, Skip: "no stylesheet"},
-		{Name: "accumulator-053", StylesheetPath: "tests/decl/accumulator/accumulator-053.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-053.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "accumulator-053", StylesheetPath: "tests/decl/accumulator/accumulator-053.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-053.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "accumulator-054", StylesheetPath: "tests/decl/accumulator/accumulator-054.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-054.xml", Assertions: []w3cAssertion{w3cAssertXML("<root><item group-head=\"class1\" class=\"class1\">item 1</item><item group-head=\"class2\" class=\"class2\">item 2</item><item class=\"class1\">item 3</item><item class=\"class1\">item 4</item><item group-head=\"class3\" class=\"class3\">item 5</item><item class=\"class2\">item 6</item></root>")}},
-		{Name: "accumulator-055", StylesheetPath: "tests/decl/accumulator/accumulator-055.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-055.xml", Params: map[string]string{"streamable": "false()"}, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "accumulator-055s", StylesheetPath: "tests/decl/accumulator/accumulator-055.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-055.xml", Params: map[string]string{"streamable": "true()"}, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "accumulator-055", StylesheetPath: "tests/decl/accumulator/accumulator-055.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-055.xml", Params: map[string]string{"streamable": "false()"}, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "accumulator-055s", StylesheetPath: "tests/decl/accumulator/accumulator-055.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-055.xml", Params: map[string]string{"streamable": "true()"}, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "accumulator-056", StylesheetPath: "tests/decl/accumulator/accumulator-056.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-001.xml", Params: map[string]string{"streamable": "'no'"}, Assertions: []w3cAssertion{w3cAssertXML("<figures><divide-by-zero/><divide-by-zero/><divide-by-zero/><divide-by-zero/></figures>")}},
 		{Name: "accumulator-056s", StylesheetPath: "tests/decl/accumulator/accumulator-056.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-001.xml", Params: map[string]string{"streamable": "'yes'"}, Assertions: []w3cAssertion{w3cAssertXML("<figures><divide-by-zero/><divide-by-zero/><divide-by-zero/><divide-by-zero/></figures>")}, Skip: "unsupported feature: streaming"},
 		{Name: "accumulator-057", StylesheetPath: "tests/decl/accumulator/accumulator-057.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-001.xml", Params: map[string]string{"streamable": "'no'"}, Assertions: []w3cAssertion{w3cAssertXML("<figures><divide-by-zero/><divide-by-zero/><divide-by-zero/><divide-by-zero/></figures>")}},
@@ -196,8 +196,8 @@ func TestW3C_accumulator(t *testing.T) {
 		{Name: "accumulator-060", StylesheetPath: "tests/decl/accumulator/accumulator-060.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-002.xml", Params: map[string]string{"streamable": "'1'"}, ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
 		{Name: "accumulator-061", StylesheetPath: "tests/decl/accumulator/accumulator-061.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-002.xml", ExpectError: true, ErrorCode: "XTDE3350", Skip: "unsupported feature: streaming"},
 		{Name: "accumulator-062", StylesheetPath: "tests/decl/accumulator/accumulator-062.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "accumulator-063", StylesheetPath: "tests/decl/accumulator/accumulator-063.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "accumulator-064", StylesheetPath: "tests/decl/accumulator/accumulator-064.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "accumulator-063", StylesheetPath: "tests/decl/accumulator/accumulator-063.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "accumulator-064", StylesheetPath: "tests/decl/accumulator/accumulator-064.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "accumulator-065", StylesheetPath: "tests/decl/accumulator/accumulator-065.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported feature: higher_order_functions"},
 		{Name: "accumulator-066", StylesheetPath: "tests/decl/accumulator/accumulator-066.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported feature: higher_order_functions"},
 		{Name: "accumulator-067", StylesheetPath: "tests/decl/accumulator/accumulator-067.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported feature: higher_order_functions"},
@@ -211,8 +211,8 @@ func TestW3C_accumulator(t *testing.T) {
             ><transaction key="c"><count>2</count><amount>20</amount></transaction
             ></TRANSACTION-LIST>`)}, Skip: "unsupported feature: streaming"},
 		{Name: "accumulator-070", StylesheetPath: "tests/decl/accumulator/accumulator-070.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported feature: schema_aware"},
-		{Name: "accumulator-071", StylesheetPath: "tests/decl/accumulator/accumulator-071.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "accumulator-072", StylesheetPath: "tests/decl/accumulator/accumulator-072.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "accumulator-071", StylesheetPath: "tests/decl/accumulator/accumulator-071.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "accumulator-072", StylesheetPath: "tests/decl/accumulator/accumulator-072.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "accumulator-073", StylesheetPath: "tests/decl/accumulator/accumulator-073.xsl", SourceDocPath: "tests/decl/accumulator/books.xml", Assertions: []w3cAssertion{w3cAssertXML(`<out><book title="Jude the Obscure" typed="true">16.48</book
             ><book title="The Big Over Easy" typed="true">21.43</book
             ><book title="The Eyre Affair" typed="true">37.9</book
@@ -220,24 +220,24 @@ func TestW3C_accumulator(t *testing.T) {
 		{Name: "accumulator-075", StylesheetPath: "tests/decl/accumulator/accumulator-075.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-075.xml", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported feature: schema_aware"},
 		{Name: "accumulator-075s", StylesheetPath: "tests/decl/accumulator/accumulator-075.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-075.xml", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported feature: schema_aware"},
 		{Name: "accumulator-076", StylesheetPath: "tests/decl/accumulator/accumulator-076.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-001.xml", Params: map[string]string{"streamable": "'yes'"}, ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "accumulator-077", StylesheetPath: "tests/decl/accumulator/accumulator-077.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-077.xml", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "accumulator-077s", StylesheetPath: "tests/decl/accumulator/accumulator-077.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-077.xml", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "accumulator-077", StylesheetPath: "tests/decl/accumulator/accumulator-077.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-077.xml", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "accumulator-077s", StylesheetPath: "tests/decl/accumulator/accumulator-077.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-077.xml", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "accumulator-078", StylesheetPath: "tests/decl/accumulator/accumulator-078.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-077.xml", ExpectError: true, ErrorCode: "XTSE0130"},
-		{Name: "accumulator-079", StylesheetPath: "tests/decl/accumulator/accumulator-079.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-079.xml", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "accumulator-079s", StylesheetPath: "tests/decl/accumulator/accumulator-079.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-079.xml", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "accumulator-079", StylesheetPath: "tests/decl/accumulator/accumulator-079.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-079.xml", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "accumulator-079s", StylesheetPath: "tests/decl/accumulator/accumulator-079.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-079.xml", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "accumulator-080", StylesheetPath: "tests/decl/accumulator/accumulator-080.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-079.xml", Params: map[string]string{"STREAMABLE": "false()"}, ExpectError: true, ErrorCode: "XTDE3400"},
 		{Name: "accumulator-080s", StylesheetPath: "tests/decl/accumulator/accumulator-080.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-079.xml", Params: map[string]string{"STREAMABLE": "true()"}, ExpectError: true, ErrorCode: "XTDE3400"},
-		{Name: "accumulator-081", StylesheetPath: "tests/decl/accumulator/accumulator-081.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "accumulator-082", StylesheetPath: "tests/decl/accumulator/accumulator-082.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-082.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "accumulator-083", StylesheetPath: "tests/decl/accumulator/accumulator-083.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-082.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "accumulator-084", StylesheetPath: "tests/decl/accumulator/accumulator-084.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-082.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "accumulator-085", StylesheetPath: "tests/decl/accumulator/accumulator-085.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-082.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "accumulator-086", StylesheetPath: "tests/decl/accumulator/accumulator-086.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-082.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "accumulator-087", StylesheetPath: "tests/decl/accumulator/accumulator-087.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-087.xml", Params: map[string]string{"streamable": "false()"}, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "accumulator-087s", StylesheetPath: "tests/decl/accumulator/accumulator-087.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-087.xml", Params: map[string]string{"streamable": "true()"}, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "accumulator-088", StylesheetPath: "tests/decl/accumulator/accumulator-088.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "accumulator-089", StylesheetPath: "tests/decl/accumulator/accumulator-089.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-089.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "accumulator-090", StylesheetPath: "tests/decl/accumulator/accumulator-090.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-089.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "accumulator-081", StylesheetPath: "tests/decl/accumulator/accumulator-081.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "accumulator-082", StylesheetPath: "tests/decl/accumulator/accumulator-082.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-082.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "accumulator-083", StylesheetPath: "tests/decl/accumulator/accumulator-083.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-082.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "accumulator-084", StylesheetPath: "tests/decl/accumulator/accumulator-084.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-082.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "accumulator-085", StylesheetPath: "tests/decl/accumulator/accumulator-085.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-082.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "accumulator-086", StylesheetPath: "tests/decl/accumulator/accumulator-086.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-082.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "accumulator-087", StylesheetPath: "tests/decl/accumulator/accumulator-087.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-087.xml", Params: map[string]string{"streamable": "false()"}, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "accumulator-087s", StylesheetPath: "tests/decl/accumulator/accumulator-087.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-087.xml", Params: map[string]string{"streamable": "true()"}, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "accumulator-088", StylesheetPath: "tests/decl/accumulator/accumulator-088.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "accumulator-089", StylesheetPath: "tests/decl/accumulator/accumulator-089.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-089.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "accumulator-090", StylesheetPath: "tests/decl/accumulator/accumulator-090.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-089.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "accumulator-091", StylesheetPath: "tests/decl/accumulator/accumulator-091.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-089.xml", ExpectError: true, ErrorCode: "XPST0008"},
 	})
 }
@@ -259,7 +259,7 @@ func TestW3C_attribute_set(t *testing.T) {
         /><section class="section" position="7"/><p class="p" position="8"/><p class="p" position="9"
         /><section class="section" position="10"/><p class="p" position="11"/><p class="p" position="12"/><p class="p" position="13"
         /><section class="section" position="14"/><p class="p" position="15"/><p class="p" position="16"/></out>`)}},
-		{Name: "attribute-set-0108", StylesheetPath: "tests/decl/attribute-set/attribute-set-0108.xsl", SourceDocPath: "tests/decl/attribute-set/attribute-set-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "attribute-set-0108", StylesheetPath: "tests/decl/attribute-set/attribute-set-0108.xsl", SourceDocPath: "tests/decl/attribute-set/attribute-set-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "attribute-set-0201", StylesheetPath: "tests/decl/attribute-set/attribute-set-0201.xsl", SourceContent: "<doc><foo>a</foo></doc>", Assertions: []w3cAssertion{w3cAssertXML("<out><test1 color=\"black\" text-decoration=\"underline\"/></out>")}},
 		{Name: "attribute-set-0202", StylesheetPath: "tests/decl/attribute-set/attribute-set-0202.xsl", SourceContent: "<doc><foo>a</foo></doc>", Assertions: []w3cAssertion{w3cAssertXML("<out><test color=\"black\" text-decoration=\"underline\"/></out>")}},
 		{Name: "attribute-set-0203", StylesheetPath: "tests/decl/attribute-set/attribute-set-0203.xsl", SourceContent: "<doc><foo>a</foo></doc>", Assertions: []w3cAssertion{w3cAssertXML("<out><foo color=\"black\" text-decoration=\"underline\"/></out>")}},
@@ -314,34 +314,34 @@ func TestW3C_attribute_set(t *testing.T) {
 func TestW3C_character_map(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "character-map-001", StylesheetPath: "tests/decl/character-map/character-map-001.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "character-map-002", StylesheetPath: "tests/decl/character-map/character-map-002.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "character-map-003", StylesheetPath: "tests/decl/character-map/character-map-003.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "character-map-004", StylesheetPath: "tests/decl/character-map/character-map-004.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "character-map-005", StylesheetPath: "tests/decl/character-map/character-map-005.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "character-map-006", StylesheetPath: "tests/decl/character-map/character-map-006.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "character-map-007", StylesheetPath: "tests/decl/character-map/character-map-007.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "character-map-008", StylesheetPath: "tests/decl/character-map/character-map-008.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "character-map-009", StylesheetPath: "tests/decl/character-map/character-map-009.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "character-map-010", StylesheetPath: "tests/decl/character-map/character-map-010.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "character-map-011", StylesheetPath: "tests/decl/character-map/character-map-011.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "character-map-012", StylesheetPath: "tests/decl/character-map/character-map-012.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "character-map-013", StylesheetPath: "tests/decl/character-map/character-map-013.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "character-map-014", StylesheetPath: "tests/decl/character-map/character-map-014.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "character-map-015", StylesheetPath: "tests/decl/character-map/character-map-015.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "character-map-016", StylesheetPath: "tests/decl/character-map/character-map-016.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "character-map-017", StylesheetPath: "tests/decl/character-map/character-map-017.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "character-map-018", StylesheetPath: "tests/decl/character-map/character-map-018.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "character-map-001", StylesheetPath: "tests/decl/character-map/character-map-001.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "character-map-002", StylesheetPath: "tests/decl/character-map/character-map-002.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "character-map-003", StylesheetPath: "tests/decl/character-map/character-map-003.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "character-map-004", StylesheetPath: "tests/decl/character-map/character-map-004.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "character-map-005", StylesheetPath: "tests/decl/character-map/character-map-005.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "character-map-006", StylesheetPath: "tests/decl/character-map/character-map-006.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "character-map-007", StylesheetPath: "tests/decl/character-map/character-map-007.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "character-map-008", StylesheetPath: "tests/decl/character-map/character-map-008.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "character-map-009", StylesheetPath: "tests/decl/character-map/character-map-009.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "character-map-010", StylesheetPath: "tests/decl/character-map/character-map-010.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "character-map-011", StylesheetPath: "tests/decl/character-map/character-map-011.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "character-map-012", StylesheetPath: "tests/decl/character-map/character-map-012.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "character-map-013", StylesheetPath: "tests/decl/character-map/character-map-013.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "character-map-014", StylesheetPath: "tests/decl/character-map/character-map-014.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "character-map-015", StylesheetPath: "tests/decl/character-map/character-map-015.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "character-map-016", StylesheetPath: "tests/decl/character-map/character-map-016.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "character-map-017", StylesheetPath: "tests/decl/character-map/character-map-017.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "character-map-018", StylesheetPath: "tests/decl/character-map/character-map-018.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "character-map-019", StylesheetPath: "tests/decl/character-map/character-map-019.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", ExpectError: true, ErrorCode: "XTSE1590"},
 		{Name: "character-map-020", StylesheetPath: "tests/decl/character-map/character-map-020.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", ExpectError: true, ErrorCode: "XTSE1590"},
 		{Name: "character-map-021", StylesheetPath: "tests/decl/character-map/character-map-021.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", ExpectError: true, ErrorCode: "XTSE1600"},
 		{Name: "character-map-022", StylesheetPath: "tests/decl/character-map/character-map-022.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", ExpectError: true, ErrorCode: "XTSE1580"},
-		{Name: "character-map-023", StylesheetPath: "tests/decl/character-map/character-map-023.xsl", SourceContent: "<root>Hello &lt; &gt; World</root>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "character-map-024", StylesheetPath: "tests/decl/character-map/character-map-024.xsl", SourceContent: "<x>&lt;z&gt;1+2&lt;/z&gt;</x>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "character-map-023", StylesheetPath: "tests/decl/character-map/character-map-023.xsl", SourceContent: "<root>Hello &lt; &gt; World</root>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "character-map-024", StylesheetPath: "tests/decl/character-map/character-map-024.xsl", SourceContent: "<x>&lt;z&gt;1+2&lt;/z&gt;</x>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "character-map-025", StylesheetPath: "tests/decl/character-map/character-map-025.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip(), w3cCheckSkip())}},
-		{Name: "character-map-026", StylesheetPath: "tests/decl/character-map/character-map-026.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "character-map-026", StylesheetPath: "tests/decl/character-map/character-map-026.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "character-map-027", StylesheetPath: "tests/decl/character-map/character-map-027.xsl", InitialTemplate: "go", ExpectError: true, ErrorCode: "XTSE0010"},
-		{Name: "character-map-028", StylesheetPath: "tests/decl/character-map/character-map-028.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "character-map-028", StylesheetPath: "tests/decl/character-map/character-map-028.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "character-map-901", StylesheetPath: "tests/decl/character-map/character-map-901.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", ExpectError: true, ErrorCode: "XTSE0010"},
 	})
 }
@@ -349,25 +349,25 @@ func TestW3C_character_map(t *testing.T) {
 func TestW3C_context_item(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "context-item-001", StylesheetPath: "tests/decl/context-item/context-item-001.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "context-item-001", StylesheetPath: "tests/decl/context-item/context-item-001.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "context-item-002", StylesheetPath: "tests/decl/context-item/context-item-002.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE0590"},
-		{Name: "context-item-003", StylesheetPath: "tests/decl/context-item/context-item-003.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "context-item-003", StylesheetPath: "tests/decl/context-item/context-item-003.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "context-item-004", StylesheetPath: "tests/decl/context-item/context-item-004.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XTTE0590"},
 		{Name: "context-item-005", StylesheetPath: "tests/decl/context-item/context-item-005.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XTTE0590"},
 		{Name: "context-item-006", StylesheetPath: "tests/decl/context-item/context-item-006.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE3090"},
-		{Name: "context-item-007", StylesheetPath: "tests/decl/context-item/context-item-007.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "context-item-008", StylesheetPath: "tests/decl/context-item/context-item-008.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "context-item-009", StylesheetPath: "tests/decl/context-item/context-item-009.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "context-item-007", StylesheetPath: "tests/decl/context-item/context-item-007.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "context-item-008", StylesheetPath: "tests/decl/context-item/context-item-008.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "context-item-009", StylesheetPath: "tests/decl/context-item/context-item-009.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "context-item-010", StylesheetPath: "tests/decl/context-item/context-item-010.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3088"},
-		{Name: "context-item-011", StylesheetPath: "tests/decl/context-item/context-item-011.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "context-item-012", StylesheetPath: "tests/decl/context-item/context-item-012.xsl", SourceContent: "<doc/>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "context-item-011", StylesheetPath: "tests/decl/context-item/context-item-011.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "context-item-012", StylesheetPath: "tests/decl/context-item/context-item-012.xsl", SourceContent: "<doc/>", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "context-item-013", StylesheetPath: "tests/decl/context-item/context-item-013.xsl", SourceContent: "<doc/>", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE0590"},
 		{Name: "context-item-014", StylesheetPath: "tests/decl/context-item/context-item-014.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE3090"},
-		{Name: "context-item-015", StylesheetPath: "tests/decl/context-item/context-item-015.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "context-item-015", StylesheetPath: "tests/decl/context-item/context-item-015.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "context-item-016", StylesheetPath: "tests/decl/context-item/context-item-016.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XTSE0020"},
 		{Name: "context-item-017", StylesheetPath: "tests/decl/context-item/context-item-017.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XPDY0002"},
-		{Name: "context-item-018", StylesheetPath: "tests/decl/context-item/context-item-018.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "context-item-019", StylesheetPath: "tests/decl/context-item/context-item-019.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "context-item-018", StylesheetPath: "tests/decl/context-item/context-item-018.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "context-item-019", StylesheetPath: "tests/decl/context-item/context-item-019.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "context-item-901", StylesheetPath: "tests/decl/context-item/context-item-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0020"},
 		{Name: "context-item-902", StylesheetPath: "tests/decl/context-item/context-item-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0020"},
 		{Name: "context-item-903", StylesheetPath: "tests/decl/context-item/context-item-903.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0020"},
@@ -443,23 +443,23 @@ func TestW3C_function(t *testing.T) {
     <at>7</at>;
     <union>24</union></out>`)}},
 		{Name: "function-0103", StylesheetPath: "tests/decl/function/function-0103.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertXML("<out>17</out>")}},
-		{Name: "function-0104", StylesheetPath: "tests/decl/function/function-0104.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "function-0104", StylesheetPath: "tests/decl/function/function-0104.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "function-0105", StylesheetPath: "tests/decl/function/function-0105.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertXML("<out>17</out>")}},
-		{Name: "function-0106", StylesheetPath: "tests/decl/function/function-0106.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "function-0106", StylesheetPath: "tests/decl/function/function-0106.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "function-0107", StylesheetPath: "tests/decl/function/function-0107.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertXML("<out>17</out>")}},
-		{Name: "function-0108", StylesheetPath: "tests/decl/function/function-0108.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "function-0108", StylesheetPath: "tests/decl/function/function-0108.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "function-0109", StylesheetPath: "tests/decl/function/function-0109.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertXML("<out>17</out>")}},
-		{Name: "function-0110", StylesheetPath: "tests/decl/function/function-0110.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "function-0110", StylesheetPath: "tests/decl/function/function-0110.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "function-0111", StylesheetPath: "tests/decl/function/function-0111.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertXML("<out>17</out>")}},
-		{Name: "function-0112", StylesheetPath: "tests/decl/function/function-0112.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "function-0112", StylesheetPath: "tests/decl/function/function-0112.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "function-0113", StylesheetPath: "tests/decl/function/function-0113.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertXML("<out>17</out>")}},
-		{Name: "function-0114", StylesheetPath: "tests/decl/function/function-0114.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "function-0114", StylesheetPath: "tests/decl/function/function-0114.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "function-0115", StylesheetPath: "tests/decl/function/function-0115.xsl", SourceDocPath: "tests/decl/function/function-01.xml", ExpectError: true, ErrorCode: "XTSE0020"},
 		{Name: "function-0116", StylesheetPath: "tests/decl/function/function-0116.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertXML("<out>17</out>")}},
 		{Name: "function-0117", StylesheetPath: "tests/decl/function/function-0117.xsl", SourceDocPath: "tests/decl/function/function-01.xml", ExpectError: true, ErrorCode: "XTSE0020"},
 		{Name: "function-0118", StylesheetPath: "tests/decl/function/function-0118.xsl", SourceDocPath: "tests/decl/function/function-01.xml", ExpectError: true, ErrorCode: "XTSE0020"},
 		{Name: "function-0119a", StylesheetPath: "tests/decl/function/function-0119.xsl", SourceDocPath: "tests/decl/function/function-01.xml", ExpectError: true, ErrorCode: "XTSE0090"},
-		{Name: "function-0119b", StylesheetPath: "tests/decl/function/function-0119.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "function-0119b", StylesheetPath: "tests/decl/function/function-0119.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "function-0120a", StylesheetPath: "tests/decl/function/function-0120.xsl", SourceDocPath: "tests/decl/function/function-01.xml", ExpectError: true, ErrorCode: "XTSE0090"},
 		{Name: "function-0120b", StylesheetPath: "tests/decl/function/function-0120.xsl", SourceDocPath: "tests/decl/function/function-01.xml", ExpectError: true, ErrorCode: "XTSE0020"},
 		{Name: "function-0121", StylesheetPath: "tests/decl/function/function-0121.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertXML("<out>17</out>")}},
@@ -487,7 +487,7 @@ func TestW3C_function(t *testing.T) {
 <a c="grapefruit"/>
 <a c="lemons"/>
 <a c="tangerines"/>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "function-0302b", StylesheetPath: "tests/decl/function/function-0302.xsl", SourceContent: ` 
 
 <doc>
@@ -497,7 +497,7 @@ func TestW3C_function(t *testing.T) {
 <a c="grapefruit"/>
 <a c="lemons"/>
 <a c="tangerines"/>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "function-0303", StylesheetPath: "tests/decl/function/function-0303.xsl", SourceContent: ` 
 
 <doc>
@@ -507,9 +507,9 @@ func TestW3C_function(t *testing.T) {
 <a c="grapefruit"/>
 <a c="lemons"/>
 <a c="tangerines"/>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "function-0401", StylesheetPath: "tests/decl/function/function-0401.xsl", SourceDocPath: "tests/decl/function/function-04.xml", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:test=\"http://foobar/\"><item att=\"a\" desc=\"one\"/><thing att=\"b\" desc=\"zwei\"/></out>")}},
-		{Name: "function-0501", StylesheetPath: "tests/decl/function/function-0501.xsl", SourceDocPath: "tests/decl/function/function-05.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "function-0501", StylesheetPath: "tests/decl/function/function-0501.xsl", SourceDocPath: "tests/decl/function/function-05.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "function-0601", StylesheetPath: "tests/decl/function/function-0601.xsl", SourceContent: ` 
 <doc>
 <a>1</a>
@@ -528,7 +528,7 @@ func TestW3C_function(t *testing.T) {
 <a>19</a>
 <a>20</a>
 </doc>`, Assertions: []w3cAssertion{w3cAssertXML("<out>342</out>")}},
-		{Name: "function-0701", StylesheetPath: "tests/decl/function/function-0701.xsl", SourceContent: "<d/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "function-0701", StylesheetPath: "tests/decl/function/function-0701.xsl", SourceContent: "<d/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "function-0901", StylesheetPath: "tests/decl/function/function-0901.xsl", SourceContent: `
 <test/>
 `, Assertions: []w3cAssertion{w3cAssertXML("<testing>true,true</testing>")}},
@@ -545,7 +545,7 @@ func TestW3C_function(t *testing.T) {
 		{Name: "function-1012", StylesheetPath: "tests/decl/function/function-1012.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out result=\"5.5\"/>")}},
 		{Name: "function-1013", StylesheetPath: "tests/decl/function/function-1013.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><x value=\"1\"/><x value=\"4\"/><x value=\"9\"/><x value=\"16\"/><x value=\"25\"/><x value=\"36\"/><x value=\"49\"/><x value=\"64\"/><x value=\"81\"/><x value=\"100\"/></out>")}},
 		{Name: "function-1014", StylesheetPath: "tests/decl/function/function-1014.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<result>10</result>")}},
-		{Name: "function-1015", StylesheetPath: "tests/decl/function/function-1015.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "function-1015", StylesheetPath: "tests/decl/function/function-1015.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "function-1016", StylesheetPath: "tests/decl/function/function-1016.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XTSE0770"},
 		{Name: "function-1017", StylesheetPath: "tests/decl/function/function-1017.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXML(""))}},
 		{Name: "function-1018", StylesheetPath: "tests/decl/function/function-1018.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXML(""))}},
@@ -555,15 +555,15 @@ func TestW3C_function(t *testing.T) {
 		{Name: "function-1022", StylesheetPath: "tests/decl/function/function-1022.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XPTY0004"},
 		{Name: "function-1023", StylesheetPath: "tests/decl/function/function-1023.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XPST0017"},
 		{Name: "function-1024", StylesheetPath: "tests/decl/function/function-1024.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "FODF1310"},
-		{Name: "function-1025", StylesheetPath: "tests/decl/function/function-1025.xsl", SourceContent: "<doc/>", Params: map[string]string{"new-each-time": "'no'"}, Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "function-1026", StylesheetPath: "tests/decl/function/function-1026.xsl", SourceContent: "<doc/>", Params: map[string]string{"new-each-time": "'no'"}, Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "function-1027", StylesheetPath: "tests/decl/function/function-1025.xsl", SourceContent: "<doc/>", Params: map[string]string{"new-each-time": "'yes'"}, Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "function-1028", StylesheetPath: "tests/decl/function/function-1026.xsl", SourceContent: "<doc/>", Params: map[string]string{"new-each-time": "'yes'"}, Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "function-1029", StylesheetPath: "tests/decl/function/function-1025.xsl", SourceContent: "<doc/>", Params: map[string]string{"new-each-time": "'maybe'"}, Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "function-1030", StylesheetPath: "tests/decl/function/function-1026.xsl", SourceContent: "<doc/>", Params: map[string]string{"new-each-time": "'maybe'"}, Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "function-1031", StylesheetPath: "tests/decl/function/function-1031.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "function-1032", StylesheetPath: "tests/decl/function/function-1032.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "function-1033", StylesheetPath: "tests/decl/function/function-1033.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "function-1025", StylesheetPath: "tests/decl/function/function-1025.xsl", SourceContent: "<doc/>", Params: map[string]string{"new-each-time": "'no'"}, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "function-1026", StylesheetPath: "tests/decl/function/function-1026.xsl", SourceContent: "<doc/>", Params: map[string]string{"new-each-time": "'no'"}, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "function-1027", StylesheetPath: "tests/decl/function/function-1025.xsl", SourceContent: "<doc/>", Params: map[string]string{"new-each-time": "'yes'"}, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "function-1028", StylesheetPath: "tests/decl/function/function-1026.xsl", SourceContent: "<doc/>", Params: map[string]string{"new-each-time": "'yes'"}, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "function-1029", StylesheetPath: "tests/decl/function/function-1025.xsl", SourceContent: "<doc/>", Params: map[string]string{"new-each-time": "'maybe'"}, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "function-1030", StylesheetPath: "tests/decl/function/function-1026.xsl", SourceContent: "<doc/>", Params: map[string]string{"new-each-time": "'maybe'"}, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "function-1031", StylesheetPath: "tests/decl/function/function-1031.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "function-1032", StylesheetPath: "tests/decl/function/function-1032.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "function-1033", StylesheetPath: "tests/decl/function/function-1033.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "function-1034", StylesheetPath: "tests/decl/function/function-1034.xsl", Assertions: []w3cAssertion{w3cAssertXML(`<out><int-int><a>4</a><b>2</b><c>4</c><d>-3</d><e>4</e></int-int
             ><str-str><a>14</a><b>9</b><c>18</c><d>14</d></str-str
             ><qn-qn><a>true</a><b>false</b><c>true</c></qn-qn
@@ -594,8 +594,8 @@ func TestW3C_function(t *testing.T) {
 		{Name: "function-1501", StylesheetPath: "tests/decl/function/function-1501.xsl", SourceContent: `<doc>
  Test
 </doc>
-`, Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "function-1601", StylesheetPath: "tests/decl/function/function-1601.xsl", SourceContent: "<para>p1</para>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "function-1601", StylesheetPath: "tests/decl/function/function-1601.xsl", SourceContent: "<para>p1</para>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "function-1701", StylesheetPath: "tests/decl/function/function-1701.xsl", SourceContent: "<doc><a>1</a><a>2</a><a>3</a><a>4</a><a>5</a></doc>", Assertions: []w3cAssertion{w3cAssertXML(`<out>
    <a>1</a>
    <a>2</a>
@@ -615,7 +615,7 @@ func TestW3C_function(t *testing.T) {
 </out>`)}},
 		{Name: "function-1901", StylesheetPath: "tests/decl/function/function-1901.xsl", SourceDocPath: "tests/decl/function/function-1901.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: higher_order_functions"},
 		{Name: "function-1902", StylesheetPath: "tests/decl/function/function-1902.xsl", SourceDocPath: "tests/decl/function/function-1902.xml", Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"UTF-8\"?><out><correctly-missing-function name=\"fn:node-name\" arity=\"0\"/><correctly-missing-function name=\"fn:nilled\" arity=\"0\"/><correctly-missing-function name=\"fn:data\" arity=\"0\"/><correctly-missing-function name=\"fn:document-uri\" arity=\"0\"/><correctly-missing-function name=\"fn:round\" arity=\"2\"/><correctly-missing-function name=\"fn:format-integer\" arity=\"2\"/><correctly-missing-function name=\"fn:format-integer\" arity=\"3\"/><correctly-missing-function name=\"math:pi\" arity=\"0\"/><correctly-missing-function name=\"math:exp\" arity=\"1\"/><correctly-missing-function name=\"math:exp10\" arity=\"1\"/><correctly-missing-function name=\"math:log\" arity=\"1\"/><correctly-missing-function name=\"math:log10\" arity=\"1\"/><correctly-missing-function name=\"math:pow\" arity=\"2\"/><correctly-missing-function name=\"math:sqrt\" arity=\"1\"/><correctly-missing-function name=\"math:sin\" arity=\"1\"/><correctly-missing-function name=\"math:cos\" arity=\"1\"/><correctly-missing-function name=\"math:tan\" arity=\"1\"/><correctly-missing-function name=\"math:asin\" arity=\"1\"/><correctly-missing-function name=\"math:acos\" arity=\"1\"/><correctly-missing-function name=\"math:atan\" arity=\"1\"/><correctly-missing-function name=\"math:atan2\" arity=\"2\"/><correctly-missing-function name=\"fn:string-join\" arity=\"1\"/><correctly-missing-function name=\"fn:analyze-string\" arity=\"2\"/><correctly-missing-function name=\"fn:analyze-string\" arity=\"3\"/><correctly-missing-function name=\"fn:path\" arity=\"0\"/><correctly-missing-function name=\"fn:path\" arity=\"1\"/><correctly-missing-function name=\"fn:has-children\" arity=\"0\"/><correctly-missing-function name=\"fn:has-children\" arity=\"1\"/><correctly-missing-function name=\"fn:innermost\" arity=\"1\"/><correctly-missing-function name=\"fn:outermost\" arity=\"1\"/><correctly-missing-function name=\"fn:head\" arity=\"1\"/><correctly-missing-function name=\"fn:tail\" arity=\"1\"/><correctly-missing-function name=\"fn:uri-collection\" arity=\"0\"/><correctly-missing-function name=\"fn:uri-collection\" arity=\"1\"/><correctly-missing-function name=\"fn:unparsed-text-lines\" arity=\"1\"/><correctly-missing-function name=\"fn:unparsed-text-lines\" arity=\"2\"/><correctly-missing-function name=\"fn:environment-variable\" arity=\"1\"/><correctly-missing-function name=\"fn:available-environment-variables\" arity=\"0\"/><correctly-missing-function name=\"fn:parse-xml\" arity=\"1\"/><correctly-missing-function name=\"fn:parse-xml-fragment\" arity=\"1\"/><correctly-missing-function name=\"fn:serialize\" arity=\"1\"/><correctly-missing-function name=\"fn:serialize\" arity=\"2\"/><correctly-missing-function name=\"fn:function-lookup\" arity=\"2\"/><correctly-missing-function name=\"fn:function-arity\" arity=\"1\"/><correctly-missing-function name=\"fn:for-each\" arity=\"2\"/><correctly-missing-function name=\"fn:filter\" arity=\"2\"/><correctly-missing-function name=\"fn:fold-left\" arity=\"3\"/><correctly-missing-function name=\"fn:fold-right\" arity=\"3\"/><correctly-missing-function name=\"fn:for-each-pair\" arity=\"3\"/><correctly-missing-function name=\"xs:NMTOKENS\" arity=\"1\"/><correctly-missing-function name=\"xs:ENTITIES\" arity=\"1\"/><correctly-missing-function name=\"xs:IDREFS\" arity=\"1\"/><correctly-missing-function name=\"xs:error\" arity=\"1\"/></out>")}},
-		{Name: "function-2001", StylesheetPath: "tests/decl/function/function-2001.xsl", SourceDocPath: "tests/decl/function/function-2001.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "function-2001", StylesheetPath: "tests/decl/function/function-2001.xsl", SourceDocPath: "tests/decl/function/function-2001.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "function-2002", StylesheetPath: "tests/decl/function/function-2002.xsl", SourceDocPath: "tests/decl/function/function-20.xml", Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"UTF-8\"?><out><f name=\"current\" arity=\"0\" test=\"true\"/><f name=\"current-group\" arity=\"0\" test=\"true\"/><f name=\"current-grouping-key\" arity=\"0\" test=\"true\"/><f name=\"regex-group\" arity=\"1\" test=\"true\"/><f name=\"copy-of\" arity=\"0\" test=\"false\"/><f name=\"copy-of\" arity=\"1\" test=\"false\"/><f name=\"snapshot\" arity=\"0\" test=\"false\"/><f name=\"snapshot\" arity=\"1\" test=\"false\"/><f name=\"document\" arity=\"1\" test=\"true\"/><f name=\"document\" arity=\"2\" test=\"true\"/><f name=\"unparsed-entity-uri\" arity=\"1\" test=\"true\"/><f name=\"unparsed-entity-public-id\" arity=\"1\" test=\"true\"/><f name=\"key\" arity=\"2\" test=\"true\"/><f name=\"key\" arity=\"3\" test=\"true\"/><f name=\"system-property\" arity=\"1\" test=\"true\"/><f name=\"new\" arity=\"0\" test=\"false\"/><f name=\"new\" arity=\"1\" test=\"false\"/><f name=\"keys\" arity=\"1\" test=\"false\"/><f name=\"size\" arity=\"1\" test=\"false\"/><f name=\"contains\" arity=\"2\" test=\"true\"/><f name=\"get\" arity=\"2\" test=\"false\"/><f name=\"entry\" arity=\"2\" test=\"false\"/><f name=\"remove\" arity=\"2\" test=\"true\"/><f name=\"parse-json\" arity=\"1\" test=\"false\"/><f name=\"parse-json\" arity=\"2\" test=\"false\"/><f name=\"serialize-json\" arity=\"1\" test=\"false\"/><f name=\"serialize-json\" arity=\"2\" test=\"false\"/><f name=\"function-available\" arity=\"1\" test=\"true\"/><f name=\"function-available\" arity=\"2\" test=\"true\"/><f name=\"element-available\" arity=\"1\" test=\"true\"/><f name=\"type-available\" arity=\"1\" test=\"true\"/></out>")}},
 		{Name: "function-2101", StylesheetPath: "tests/decl/function/function-2101.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XTSE0010"},
 		{Name: "function-2102", StylesheetPath: "tests/decl/function/function-2102.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XTSE0020"},
@@ -625,7 +625,7 @@ func TestW3C_function(t *testing.T) {
 		{Name: "function-2106", StylesheetPath: "tests/decl/function/function-2106.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XTSE0010"},
 		{Name: "function-2107", StylesheetPath: "tests/decl/function/function-2107.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XTSE0080"},
 		{Name: "function-2108", StylesheetPath: "tests/decl/function/function-2108.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XTSE0080"},
-		{Name: "function-2109", StylesheetPath: "tests/decl/function/function-2109.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "function-2109", StylesheetPath: "tests/decl/function/function-2109.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "function-5001", StylesheetPath: "tests/decl/function/function-5001.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
 		{Name: "function-5002", StylesheetPath: "tests/decl/function/function-5002.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
 		{Name: "function-5003", StylesheetPath: "tests/decl/function/function-5003.xsl", SourceDocPath: "tests/decl/function/function-01.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
@@ -1213,9 +1213,9 @@ func TestW3C_namespace_alias(t *testing.T) {
 func TestW3C_output(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "output-0101", StylesheetPath: "tests/decl/output/output-0101.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0101a", StylesheetPath: "tests/decl/output/output-0101a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0101b", StylesheetPath: "tests/decl/output/output-0101b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "output-0101", StylesheetPath: "tests/decl/output/output-0101.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0101a", StylesheetPath: "tests/decl/output/output-0101a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0101b", StylesheetPath: "tests/decl/output/output-0101b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0102a", StylesheetPath: "", InitialTemplate: "a", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "no stylesheet"},
 		{Name: "output-0102b", StylesheetPath: "", InitialTemplate: "b", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "no stylesheet"},
 		{Name: "output-0102c", StylesheetPath: "", InitialTemplate: "c", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip(), w3cCheckSkip())}, Skip: "no stylesheet"},
@@ -1228,22 +1228,22 @@ func TestW3C_output(t *testing.T) {
 		{Name: "output-0103d", StylesheetPath: "", InitialTemplate: "d", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "no stylesheet"},
 		{Name: "output-0103e", StylesheetPath: "", InitialTemplate: "e", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "no stylesheet"},
 		{Name: "output-0103f", StylesheetPath: "", InitialTemplate: "f", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "no stylesheet"},
-		{Name: "output-0104", StylesheetPath: "tests/decl/output/output-0104.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0105", StylesheetPath: "tests/decl/output/output-0105.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0106", StylesheetPath: "tests/decl/output/output-0106.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0106a", StylesheetPath: "tests/decl/output/output-0106a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0106b", StylesheetPath: "tests/decl/output/output-0106b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "output-0104", StylesheetPath: "tests/decl/output/output-0104.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0105", StylesheetPath: "tests/decl/output/output-0105.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0106", StylesheetPath: "tests/decl/output/output-0106.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0106a", StylesheetPath: "tests/decl/output/output-0106a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0106b", StylesheetPath: "tests/decl/output/output-0106b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0107", StylesheetPath: "tests/decl/output/output-0107.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip(), w3cCheckSkip())}},
 		{Name: "output-0108", StylesheetPath: "tests/decl/output/output-0108.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip(), w3cCheckSkip())}},
-		{Name: "output-0109", StylesheetPath: "tests/decl/output/output-0109.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0110", StylesheetPath: "tests/decl/output/output-0110.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0110a", StylesheetPath: "tests/decl/output/output-0110a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0110b", StylesheetPath: "tests/decl/output/output-0110b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0111", StylesheetPath: "tests/decl/output/output-0111.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0112", StylesheetPath: "tests/decl/output/output-0112.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0113", StylesheetPath: "tests/decl/output/output-0113.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0114", StylesheetPath: "tests/decl/output/output-0114.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0115", StylesheetPath: "tests/decl/output/output-0115.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "output-0109", StylesheetPath: "tests/decl/output/output-0109.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0110", StylesheetPath: "tests/decl/output/output-0110.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0110a", StylesheetPath: "tests/decl/output/output-0110a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0110b", StylesheetPath: "tests/decl/output/output-0110b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0111", StylesheetPath: "tests/decl/output/output-0111.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0112", StylesheetPath: "tests/decl/output/output-0112.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0113", StylesheetPath: "tests/decl/output/output-0113.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0114", StylesheetPath: "tests/decl/output/output-0114.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0115", StylesheetPath: "tests/decl/output/output-0115.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0115b", StylesheetPath: "tests/decl/output/output-0115b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAnyOf(w3cCheckSkip(), w3cCheckSkip(), w3cCheckSkip())}},
 		{Name: "output-0115c", StylesheetPath: "tests/decl/output/output-0115c.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAnyOf(w3cCheckSkip(), w3cCheckSkip(), w3cCheckSkip())}},
 		{Name: "output-0115d", StylesheetPath: "tests/decl/output/output-0115d.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAnyOf(w3cCheckSkip(), w3cCheckSkip())}},
@@ -1251,101 +1251,101 @@ func TestW3C_output(t *testing.T) {
 		{Name: "output-0116", StylesheetPath: "tests/decl/output/output-0116.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip(), w3cCheckSkip())}},
 		{Name: "output-0116a", StylesheetPath: "tests/decl/output/output-0116a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip(), w3cCheckSkip())}},
 		{Name: "output-0116b", StylesheetPath: "tests/decl/output/output-0116b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip(), w3cCheckSkip())}},
-		{Name: "output-0117", StylesheetPath: "tests/decl/output/output-0117.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0118", StylesheetPath: "tests/decl/output/output-0118.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0119", StylesheetPath: "tests/decl/output/output-0119.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0120", StylesheetPath: "tests/decl/output/output-0120.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0121", StylesheetPath: "tests/decl/output/output-0121.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0122", StylesheetPath: "tests/decl/output/output-0122.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0123", StylesheetPath: "tests/decl/output/output-0123.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0124", StylesheetPath: "tests/decl/output/output-0124.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0124a", StylesheetPath: "tests/decl/output/output-0124a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0124b", StylesheetPath: "tests/decl/output/output-0124b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0125", StylesheetPath: "tests/decl/output/output-0125.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0125a", StylesheetPath: "tests/decl/output/output-0125a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0125b", StylesheetPath: "tests/decl/output/output-0125b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0126", StylesheetPath: "tests/decl/output/output-0126.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0127", StylesheetPath: "tests/decl/output/output-0127.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0128", StylesheetPath: "tests/decl/output/output-0128.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0129", StylesheetPath: "tests/decl/output/output-0129.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0130", StylesheetPath: "tests/decl/output/output-0130.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "output-0117", StylesheetPath: "tests/decl/output/output-0117.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0118", StylesheetPath: "tests/decl/output/output-0118.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0119", StylesheetPath: "tests/decl/output/output-0119.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0120", StylesheetPath: "tests/decl/output/output-0120.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0121", StylesheetPath: "tests/decl/output/output-0121.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0122", StylesheetPath: "tests/decl/output/output-0122.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0123", StylesheetPath: "tests/decl/output/output-0123.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0124", StylesheetPath: "tests/decl/output/output-0124.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0124a", StylesheetPath: "tests/decl/output/output-0124a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0124b", StylesheetPath: "tests/decl/output/output-0124b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0125", StylesheetPath: "tests/decl/output/output-0125.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0125a", StylesheetPath: "tests/decl/output/output-0125a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0125b", StylesheetPath: "tests/decl/output/output-0125b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0126", StylesheetPath: "tests/decl/output/output-0126.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0127", StylesheetPath: "tests/decl/output/output-0127.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0128", StylesheetPath: "tests/decl/output/output-0128.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0129", StylesheetPath: "tests/decl/output/output-0129.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0130", StylesheetPath: "tests/decl/output/output-0130.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0131", StylesheetPath: "tests/decl/output/output-0131.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip(), w3cCheckSkip())}},
-		{Name: "output-0132", StylesheetPath: "tests/decl/output/output-0132.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0133", StylesheetPath: "tests/decl/output/output-0133.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0134", StylesheetPath: "tests/decl/output/output-0134.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0135", StylesheetPath: "tests/decl/output/output-0135.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0136", StylesheetPath: "tests/decl/output/output-0136.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0136a", StylesheetPath: "tests/decl/output/output-0136a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0136b", StylesheetPath: "tests/decl/output/output-0136b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0137", StylesheetPath: "tests/decl/output/output-0137.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0137a", StylesheetPath: "tests/decl/output/output-0137a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0137b", StylesheetPath: "tests/decl/output/output-0137b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0138", StylesheetPath: "tests/decl/output/output-0138.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0139", StylesheetPath: "tests/decl/output/output-0139.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0140", StylesheetPath: "tests/decl/output/output-0140.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0141", StylesheetPath: "tests/decl/output/output-0141.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0141a", StylesheetPath: "tests/decl/output/output-0141a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0141b", StylesheetPath: "tests/decl/output/output-0141b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0142", StylesheetPath: "tests/decl/output/output-0142.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0143", StylesheetPath: "tests/decl/output/output-0143.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0144", StylesheetPath: "tests/decl/output/output-0144.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0145", StylesheetPath: "tests/decl/output/output-0145.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0146", StylesheetPath: "tests/decl/output/output-0146.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0147", StylesheetPath: "tests/decl/output/output-0147.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0148", StylesheetPath: "tests/decl/output/output-0148.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0148a", StylesheetPath: "tests/decl/output/output-0148a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0148b", StylesheetPath: "tests/decl/output/output-0148b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0149", StylesheetPath: "tests/decl/output/output-0149.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0149a", StylesheetPath: "tests/decl/output/output-0149a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0149b", StylesheetPath: "tests/decl/output/output-0149b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0150", StylesheetPath: "tests/decl/output/output-0150.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0150a", StylesheetPath: "tests/decl/output/output-0150a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0150b", StylesheetPath: "tests/decl/output/output-0150b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0151", StylesheetPath: "tests/decl/output/output-0151.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0152", StylesheetPath: "tests/decl/output/output-0152.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0153", StylesheetPath: "tests/decl/output/output-0153.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0154", StylesheetPath: "tests/decl/output/output-0154.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0155a", StylesheetPath: "tests/decl/output/output-0155.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0155b", StylesheetPath: "tests/decl/output/output-0155.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0156", StylesheetPath: "tests/decl/output/output-0156.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0157", StylesheetPath: "tests/decl/output/output-0157.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0158", StylesheetPath: "tests/decl/output/output-0158.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0159", StylesheetPath: "tests/decl/output/output-0159.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0160", StylesheetPath: "tests/decl/output/output-0160.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0161", StylesheetPath: "tests/decl/output/output-0161.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0162", StylesheetPath: "tests/decl/output/output-0162.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0163", StylesheetPath: "tests/decl/output/output-0163.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0164", StylesheetPath: "tests/decl/output/output-0164.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0165", StylesheetPath: "tests/decl/output/output-0165.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0166", StylesheetPath: "tests/decl/output/output-0166.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0167", StylesheetPath: "tests/decl/output/output-0167.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0168", StylesheetPath: "tests/decl/output/output-0168.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0169", StylesheetPath: "tests/decl/output/output-0169.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0170", StylesheetPath: "tests/decl/output/output-0170.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0171", StylesheetPath: "tests/decl/output/output-0171.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0172", StylesheetPath: "tests/decl/output/output-0172.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0173", StylesheetPath: "tests/decl/output/output-0173.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0174", StylesheetPath: "tests/decl/output/output-0174.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0175", StylesheetPath: "tests/decl/output/output-0175.xsl", SecondaryStylesheets: []string{"tests/decl/output/output-0175a.xsl", "tests/decl/output/output-0175b.xsl"}, SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "output-0132", StylesheetPath: "tests/decl/output/output-0132.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0133", StylesheetPath: "tests/decl/output/output-0133.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0134", StylesheetPath: "tests/decl/output/output-0134.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0135", StylesheetPath: "tests/decl/output/output-0135.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0136", StylesheetPath: "tests/decl/output/output-0136.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0136a", StylesheetPath: "tests/decl/output/output-0136a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0136b", StylesheetPath: "tests/decl/output/output-0136b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0137", StylesheetPath: "tests/decl/output/output-0137.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0137a", StylesheetPath: "tests/decl/output/output-0137a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0137b", StylesheetPath: "tests/decl/output/output-0137b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0138", StylesheetPath: "tests/decl/output/output-0138.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0139", StylesheetPath: "tests/decl/output/output-0139.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0140", StylesheetPath: "tests/decl/output/output-0140.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0141", StylesheetPath: "tests/decl/output/output-0141.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0141a", StylesheetPath: "tests/decl/output/output-0141a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0141b", StylesheetPath: "tests/decl/output/output-0141b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0142", StylesheetPath: "tests/decl/output/output-0142.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0143", StylesheetPath: "tests/decl/output/output-0143.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0144", StylesheetPath: "tests/decl/output/output-0144.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0145", StylesheetPath: "tests/decl/output/output-0145.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0146", StylesheetPath: "tests/decl/output/output-0146.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0147", StylesheetPath: "tests/decl/output/output-0147.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0148", StylesheetPath: "tests/decl/output/output-0148.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0148a", StylesheetPath: "tests/decl/output/output-0148a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0148b", StylesheetPath: "tests/decl/output/output-0148b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0149", StylesheetPath: "tests/decl/output/output-0149.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0149a", StylesheetPath: "tests/decl/output/output-0149a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0149b", StylesheetPath: "tests/decl/output/output-0149b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0150", StylesheetPath: "tests/decl/output/output-0150.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0150a", StylesheetPath: "tests/decl/output/output-0150a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0150b", StylesheetPath: "tests/decl/output/output-0150b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0151", StylesheetPath: "tests/decl/output/output-0151.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0152", StylesheetPath: "tests/decl/output/output-0152.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0153", StylesheetPath: "tests/decl/output/output-0153.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0154", StylesheetPath: "tests/decl/output/output-0154.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0155a", StylesheetPath: "tests/decl/output/output-0155.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0155b", StylesheetPath: "tests/decl/output/output-0155.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0156", StylesheetPath: "tests/decl/output/output-0156.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0157", StylesheetPath: "tests/decl/output/output-0157.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0158", StylesheetPath: "tests/decl/output/output-0158.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0159", StylesheetPath: "tests/decl/output/output-0159.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0160", StylesheetPath: "tests/decl/output/output-0160.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0161", StylesheetPath: "tests/decl/output/output-0161.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0162", StylesheetPath: "tests/decl/output/output-0162.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0163", StylesheetPath: "tests/decl/output/output-0163.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0164", StylesheetPath: "tests/decl/output/output-0164.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0165", StylesheetPath: "tests/decl/output/output-0165.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0166", StylesheetPath: "tests/decl/output/output-0166.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0167", StylesheetPath: "tests/decl/output/output-0167.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0168", StylesheetPath: "tests/decl/output/output-0168.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0169", StylesheetPath: "tests/decl/output/output-0169.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0170", StylesheetPath: "tests/decl/output/output-0170.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0171", StylesheetPath: "tests/decl/output/output-0171.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0172", StylesheetPath: "tests/decl/output/output-0172.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0173", StylesheetPath: "tests/decl/output/output-0173.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0174", StylesheetPath: "tests/decl/output/output-0174.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0175", StylesheetPath: "tests/decl/output/output-0175.xsl", SecondaryStylesheets: []string{"tests/decl/output/output-0175a.xsl", "tests/decl/output/output-0175b.xsl"}, SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
 		{Name: "output-0178", StylesheetPath: "tests/decl/output/output-0178.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip(), w3cCheckSkip())}},
 		{Name: "output-0180", StylesheetPath: "tests/decl/output/output-0180.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip(), w3cCheckSkip())}},
-		{Name: "output-0182", StylesheetPath: "tests/decl/output/output-0182.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0183", StylesheetPath: "tests/decl/output/output-0183.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0184", StylesheetPath: "tests/decl/output/output-0184.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0185", StylesheetPath: "tests/decl/output/output-0185.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0186", StylesheetPath: "tests/decl/output/output-0186.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0187", StylesheetPath: "tests/decl/output/output-0187.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0188", StylesheetPath: "tests/decl/output/output-0188.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0189", StylesheetPath: "tests/decl/output/output-0189.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0190", StylesheetPath: "tests/decl/output/output-0190.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0191", StylesheetPath: "tests/decl/output/output-0191.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0192", StylesheetPath: "tests/decl/output/output-0192.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "output-0182", StylesheetPath: "tests/decl/output/output-0182.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0183", StylesheetPath: "tests/decl/output/output-0183.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0184", StylesheetPath: "tests/decl/output/output-0184.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0185", StylesheetPath: "tests/decl/output/output-0185.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0186", StylesheetPath: "tests/decl/output/output-0186.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0187", StylesheetPath: "tests/decl/output/output-0187.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0188", StylesheetPath: "tests/decl/output/output-0188.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0189", StylesheetPath: "tests/decl/output/output-0189.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0190", StylesheetPath: "tests/decl/output/output-0190.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0191", StylesheetPath: "tests/decl/output/output-0191.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0192", StylesheetPath: "tests/decl/output/output-0192.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0193", StylesheetPath: "tests/decl/output/output-0193.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip(), w3cCheckSkip())}},
-		{Name: "output-0194", StylesheetPath: "tests/decl/output/output-0194.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0195", StylesheetPath: "tests/decl/output/output-0195.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "output-0194", StylesheetPath: "tests/decl/output/output-0194.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0195", StylesheetPath: "tests/decl/output/output-0195.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0195a", StylesheetPath: "tests/decl/output/output-0195.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip(), w3cCheckSkip())}},
 		{Name: "output-0195b", StylesheetPath: "tests/decl/output/output-0195b.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip(), w3cCheckSkip())}},
-		{Name: "output-0196", StylesheetPath: "tests/decl/output/output-0196.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "output-0196", StylesheetPath: "tests/decl/output/output-0196.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0197", StylesheetPath: "tests/decl/output/output-0197.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
 		{Name: "output-0197a", StylesheetPath: "tests/decl/output/output-0197a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
 		{Name: "output-0198", StylesheetPath: "tests/decl/output/output-0198.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
@@ -1356,147 +1356,147 @@ func TestW3C_output(t *testing.T) {
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
 		{Name: "output-0202", StylesheetPath: "tests/decl/output/output-0202.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
 		{Name: "output-0203", StylesheetPath: "tests/decl/output/output-0203.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
 		{Name: "output-0204", StylesheetPath: "tests/decl/output/output-0204.xsl", SecondaryStylesheets: []string{"tests/decl/output/x.xsl"}, SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
 		{Name: "output-0205", StylesheetPath: "tests/decl/output/output-0205.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
 		{Name: "output-0206", StylesheetPath: "tests/decl/output/output-0206.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
 		{Name: "output-0207", StylesheetPath: "tests/decl/output/output-0207.xsl", SecondaryStylesheets: []string{"tests/decl/output/x.xsl"}, SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
 		{Name: "output-0208", StylesheetPath: "tests/decl/output/output-0208.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0209", StylesheetPath: "tests/decl/output/output-0209.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0210", StylesheetPath: "tests/decl/output/output-0210.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0211", StylesheetPath: "tests/decl/output/output-0211.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0212", StylesheetPath: "tests/decl/output/output-0212.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0213", StylesheetPath: "tests/decl/output/output-0213.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0214", StylesheetPath: "tests/decl/output/output-0214.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0215", StylesheetPath: "tests/decl/output/output-0215.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0216", StylesheetPath: "tests/decl/output/output-0216.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0217", StylesheetPath: "tests/decl/output/output-0217.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0218", StylesheetPath: "tests/decl/output/output-0218.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0219", StylesheetPath: "tests/decl/output/output-0219.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0220", StylesheetPath: "tests/decl/output/output-0220.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0221", StylesheetPath: "tests/decl/output/output-0221.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0222", StylesheetPath: "tests/decl/output/output-0222.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0223", StylesheetPath: "tests/decl/output/output-0223.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0224", StylesheetPath: "tests/decl/output/output-0224.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0225", StylesheetPath: "tests/decl/output/output-0225.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0226", StylesheetPath: "tests/decl/output/output-0226.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0227", StylesheetPath: "tests/decl/output/output-0227.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0228", StylesheetPath: "tests/decl/output/output-0228.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0229", StylesheetPath: "tests/decl/output/output-0229.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0230", StylesheetPath: "tests/decl/output/output-0230.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
@@ -1506,22 +1506,22 @@ func TestW3C_output(t *testing.T) {
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0232", StylesheetPath: "tests/decl/output/output-0232.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0233", StylesheetPath: "tests/decl/output/output-0233.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0234", StylesheetPath: "tests/decl/output/output-0234.xsl", SourceContent: `<doc>
 	<a>xx&#035;xx</a>
 	<a>yy&#036;yy</a>
 	<a>zz&#037;zz</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0280", StylesheetPath: "tests/decl/output/output-0280.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
 		{Name: "output-0280a", StylesheetPath: "tests/decl/output/output-0280a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
 		{Name: "output-0281", StylesheetPath: "tests/decl/output/output-0281.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
@@ -1531,56 +1531,56 @@ func TestW3C_output(t *testing.T) {
 		{Name: "output-0283", StylesheetPath: "tests/decl/output/output-0283.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
 		{Name: "output-0283a", StylesheetPath: "tests/decl/output/output-0283a.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
 		{Name: "output-0284", StylesheetPath: "tests/decl/output/output-0284.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
-		{Name: "output-0285", StylesheetPath: "tests/decl/output/output-0285.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0301", StylesheetPath: "tests/decl/output/output-0301.xsl", SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0302", StylesheetPath: "tests/decl/output/output-0302.xsl", SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0303", StylesheetPath: "tests/decl/output/output-0303.xsl", SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0304", StylesheetPath: "tests/decl/output/output-0304.xsl", SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0305", StylesheetPath: "tests/decl/output/output-0305.xsl", SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0306", StylesheetPath: "tests/decl/output/output-0306.xsl", SecondaryStylesheets: []string{"tests/decl/output/output-0306y.xsl", "tests/decl/output/output-0306z.xsl"}, SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0307", StylesheetPath: "tests/decl/output/output-0307.xsl", SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0308", StylesheetPath: "tests/decl/output/output-0308.xsl", SecondaryStylesheets: []string{"tests/decl/output/output-0308a.xsl"}, SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0309", StylesheetPath: "tests/decl/output/output-0309.xsl", SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0310", StylesheetPath: "tests/decl/output/output-0310.xsl", SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0311", StylesheetPath: "tests/decl/output/output-0311.xsl", SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0312", StylesheetPath: "tests/decl/output/output-0312.xsl", SecondaryStylesheets: []string{"tests/decl/output/output-0312a.xsl"}, SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0313", StylesheetPath: "tests/decl/output/output-0313.xsl", SecondaryStylesheets: []string{"tests/decl/output/output-0313a.xsl"}, SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "output-0285", StylesheetPath: "tests/decl/output/output-0285.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0301", StylesheetPath: "tests/decl/output/output-0301.xsl", SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0302", StylesheetPath: "tests/decl/output/output-0302.xsl", SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0303", StylesheetPath: "tests/decl/output/output-0303.xsl", SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0304", StylesheetPath: "tests/decl/output/output-0304.xsl", SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0305", StylesheetPath: "tests/decl/output/output-0305.xsl", SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0306", StylesheetPath: "tests/decl/output/output-0306.xsl", SecondaryStylesheets: []string{"tests/decl/output/output-0306y.xsl", "tests/decl/output/output-0306z.xsl"}, SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0307", StylesheetPath: "tests/decl/output/output-0307.xsl", SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0308", StylesheetPath: "tests/decl/output/output-0308.xsl", SecondaryStylesheets: []string{"tests/decl/output/output-0308a.xsl"}, SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0309", StylesheetPath: "tests/decl/output/output-0309.xsl", SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0310", StylesheetPath: "tests/decl/output/output-0310.xsl", SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0311", StylesheetPath: "tests/decl/output/output-0311.xsl", SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0312", StylesheetPath: "tests/decl/output/output-0312.xsl", SecondaryStylesheets: []string{"tests/decl/output/output-0312a.xsl"}, SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0313", StylesheetPath: "tests/decl/output/output-0313.xsl", SecondaryStylesheets: []string{"tests/decl/output/output-0313a.xsl"}, SourceContent: "<doc><a>xx&#035;xx</a><a>yy&#042;&#036;yy</a><a>zz&#037;&#035;zz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
 		{Name: "output-0501", StylesheetPath: "tests/decl/output/output-0501.xsl", SourceContent: "<!-- Test for Serialization --><doc><a>&#xA;</a><a>bbb</a></doc>", ExpectError: true, ErrorCode: "XTSE0010"},
-		{Name: "output-0601", StylesheetPath: "tests/decl/output/output-0601.xsl", SourceDocPath: "tests/decl/output/output06c.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "output-0601", StylesheetPath: "tests/decl/output/output-0601.xsl", SourceDocPath: "tests/decl/output/output06c.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0602a", StylesheetPath: "", SourceDocPath: "tests/decl/output/output06a.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "no stylesheet"},
 		{Name: "output-0602b", StylesheetPath: "", SourceDocPath: "tests/decl/output/output06a.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "no stylesheet"},
 		{Name: "output-0602c", StylesheetPath: "", SourceDocPath: "tests/decl/output/output06a.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "no stylesheet"},
 		{Name: "output-0603a", StylesheetPath: "", SourceDocPath: "tests/decl/output/output06b.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "no stylesheet"},
 		{Name: "output-0603b", StylesheetPath: "", SourceDocPath: "tests/decl/output/output06b.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "no stylesheet"},
 		{Name: "output-0603c", StylesheetPath: "", SourceDocPath: "tests/decl/output/output06b.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "no stylesheet"},
-		{Name: "output-0604", StylesheetPath: "tests/decl/output/output-0602.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "output-0604", StylesheetPath: "tests/decl/output/output-0602.xsl", SourceContent: "<doc><a value=\"abcde\">vwxyz</a></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0701", StylesheetPath: "tests/decl/output/output-0701.xsl", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip(), w3cCheckSkip()), w3cAnyOf(w3cCheckSkip(), w3cCheckSkip()), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0702", StylesheetPath: "tests/decl/output/output-0702.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "output-0703", StylesheetPath: "tests/decl/output/output-0703.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "output-0702", StylesheetPath: "tests/decl/output/output-0702.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0703", StylesheetPath: "tests/decl/output/output-0703.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0704", StylesheetPath: "tests/decl/output/output-0704.xsl", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip(), w3cCheckSkip())}},
 		{Name: "output-0705", StylesheetPath: "tests/decl/output/output-0705.xsl", ExpectError: true, ErrorCode: "SERE0022"},
-		{Name: "output-0706", StylesheetPath: "tests/decl/output/output-0706.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0706a", StylesheetPath: "tests/decl/output/output-0706.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "output-0706", StylesheetPath: "tests/decl/output/output-0706.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0706a", StylesheetPath: "tests/decl/output/output-0706.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0707", StylesheetPath: "tests/decl/output/output-0707.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "output-0708", StylesheetPath: "tests/decl/output/output-0708.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0709", StylesheetPath: "tests/decl/output/output-0709.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "output-0708", StylesheetPath: "tests/decl/output/output-0708.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0709", StylesheetPath: "tests/decl/output/output-0709.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0710", StylesheetPath: "tests/decl/output/output-0710.xsl", ExpectError: true, ErrorCode: "SENR0001"},
 		{Name: "output-0711", StylesheetPath: "tests/decl/output/output-0711.xsl", ExpectError: true, ErrorCode: "SENR0001"},
 		{Name: "output-0712", StylesheetPath: "tests/decl/output/output-0712.xsl", ExpectError: true, ErrorCode: "SENR0001"},
-		{Name: "output-0713", StylesheetPath: "tests/decl/output/output-0713.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0714", StylesheetPath: "tests/decl/output/output-0714.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0715", StylesheetPath: "tests/decl/output/output-0715.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0716", StylesheetPath: "tests/decl/output/output-0716.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0717", StylesheetPath: "tests/decl/output/output-0717.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0718", StylesheetPath: "tests/decl/output/output-0718.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0719", StylesheetPath: "tests/decl/output/output-0719.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0720", StylesheetPath: "tests/decl/output/output-0720.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0721", StylesheetPath: "tests/decl/output/output-0721.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0722", StylesheetPath: "tests/decl/output/output-0722.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0723", StylesheetPath: "tests/decl/output/output-0723.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "output-0713", StylesheetPath: "tests/decl/output/output-0713.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "output-0714", StylesheetPath: "tests/decl/output/output-0714.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0715", StylesheetPath: "tests/decl/output/output-0715.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0716", StylesheetPath: "tests/decl/output/output-0716.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0717", StylesheetPath: "tests/decl/output/output-0717.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0718", StylesheetPath: "tests/decl/output/output-0718.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0719", StylesheetPath: "tests/decl/output/output-0719.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0720", StylesheetPath: "tests/decl/output/output-0720.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0721", StylesheetPath: "tests/decl/output/output-0721.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0722", StylesheetPath: "tests/decl/output/output-0722.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0723", StylesheetPath: "tests/decl/output/output-0723.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "output-0724", StylesheetPath: "tests/decl/output/output-0724.xsl", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip(), w3cCheckSkip(), w3cCheckSkip())}},
-		{Name: "output-0725", StylesheetPath: "tests/decl/output/output-0725.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "output-0726", StylesheetPath: "tests/decl/output/output-0726.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "output-0725", StylesheetPath: "tests/decl/output/output-0725.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "output-0726", StylesheetPath: "tests/decl/output/output-0726.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 	})
 }
 
@@ -1748,8 +1748,8 @@ func TestW3C_package(t *testing.T) {
 		{Name: "package-021err", StylesheetPath: "", SecondaryStylesheets: []string{"tests/decl/package/package-021err-includeA.xsl", "tests/decl/package/package-021err-includeB.xsl", "tests/decl/package/package-021err-includeC.xsl"}, SourceDocPath: "tests/decl/package/package-000.xml", ExpectError: true, ErrorCode: "XTSE3050", Skip: "no stylesheet"},
 		{Name: "package-022", StylesheetPath: "", SecondaryStylesheets: []string{"tests/decl/package/package-022-includeA.xsl", "tests/decl/package/package-022-includeB.xsl", "tests/decl/package/package-022-includeC.xsl"}, SourceDocPath: "tests/decl/package/package-000.xml", Assertions: []w3cAssertion{w3cAssertStringValue("You found me!")}, Skip: "no stylesheet"},
 		{Name: "package-022err", StylesheetPath: "", SecondaryStylesheets: []string{"tests/decl/package/package-022err-includeA.xsl", "tests/decl/package/package-022err-includeB.xsl", "tests/decl/package/package-022err-includeC.xsl"}, SourceDocPath: "tests/decl/package/package-000.xml", ExpectError: true, ErrorCode: "XTSE3050", Skip: "no stylesheet"},
-		{Name: "package-100", StylesheetPath: "tests/decl/package/package-100a.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "package-101", StylesheetPath: "tests/decl/package/package-101.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "package-100", StylesheetPath: "tests/decl/package/package-100a.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "package-101", StylesheetPath: "tests/decl/package/package-101.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "package-902", StylesheetPath: "", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0010", Skip: "no stylesheet"},
 		{Name: "package-903", StylesheetPath: "", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0010", Skip: "no stylesheet"},
 		{Name: "package-904", StylesheetPath: "", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0010", Skip: "no stylesheet"},
@@ -1816,11 +1816,11 @@ func TestW3C_param(t *testing.T) {
 func TestW3C_strip_space(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "strip-space-001", StylesheetPath: "tests/decl/strip-space/strip-space-001.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "strip-space-001", StylesheetPath: "tests/decl/strip-space/strip-space-001.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "strip-space-002", StylesheetPath: "tests/decl/strip-space/strip-space-002.xsl", SourceContent: "<doc></doc>", ExpectError: true, ErrorCode: "XTSE0280"},
-		{Name: "strip-space-003", StylesheetPath: "tests/decl/strip-space/strip-space-003.xsl", SourceDocPath: "tests/decl/strip-space/environment-04.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "strip-space-004", StylesheetPath: "tests/decl/strip-space/strip-space-004.xsl", SourceDocPath: "tests/decl/strip-space/environment-04.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "strip-space-005", StylesheetPath: "tests/decl/strip-space/strip-space-005.xsl", SourceDocPath: "tests/decl/strip-space/environment-05.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "strip-space-003", StylesheetPath: "tests/decl/strip-space/strip-space-003.xsl", SourceDocPath: "tests/decl/strip-space/environment-04.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "strip-space-004", StylesheetPath: "tests/decl/strip-space/strip-space-004.xsl", SourceDocPath: "tests/decl/strip-space/environment-04.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "strip-space-005", StylesheetPath: "tests/decl/strip-space/strip-space-005.xsl", SourceDocPath: "tests/decl/strip-space/environment-05.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "strip-space-006", StylesheetPath: "tests/decl/strip-space/strip-space-006.xsl", SourceDocPath: "tests/decl/strip-space/environment-05.xml", Assertions: []w3cAssertion{w3cAssertXML(`<out>
 <b>el1</b>
 <b>elem2</b>
@@ -1925,9 +1925,9 @@ Position:3,Last:3
   <e xml:space="default">
     <f xml:space="preserve">  </f>
   </e>
-</a>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</a>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "strip-space-023", StylesheetPath: "tests/decl/strip-space/strip-space-023.xsl", SourceContent: "<a><b> </b><c> </c></a>", InitialTemplate: "main", ExpectError: true, ErrorCode: "XPDY0002"},
-		{Name: "strip-space-024", StylesheetPath: "tests/decl/strip-space/strip-space-024.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "strip-space-024", StylesheetPath: "tests/decl/strip-space/strip-space-024.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "strip-space-025", StylesheetPath: "tests/decl/strip-space/strip-space-025.xsl", SourceContent: ` 
 
 <doc>
@@ -1954,7 +1954,7 @@ Position:3,Last:3
 <q>    </q>
 </abc:doc>`, Assertions: []w3cAssertion{w3cAssertXML("<abc:doc xmlns:abc=\"http://abc.uri/\"><abc:w>   </abc:w><abc:x/><abc:y/><abc:z/><q>    </q></abc:doc>")}},
 		{Name: "strip-space-028", StylesheetPath: "tests/decl/strip-space/strip-space-028.xsl", SourceContent: "<doc><a> </a><b> </b><c> </c></doc>", ExpectError: true, ErrorCode: "XTSE0270"},
-		{Name: "strip-space-029", StylesheetPath: "tests/decl/strip-space/strip-space-029.xsl", SourceDocPath: "tests/decl/strip-space/strip-space-029.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "strip-space-029", StylesheetPath: "tests/decl/strip-space/strip-space-029.xsl", SourceDocPath: "tests/decl/strip-space/strip-space-029.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 	})
 }
 
@@ -2070,9 +2070,9 @@ func TestW3C_variable(t *testing.T) {
 		{Name: "variable-0118", StylesheetPath: "tests/decl/variable/variable-0118.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XPST0008"},
 		{Name: "variable-0119", StylesheetPath: "tests/decl/variable/variable-0119.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out v=\"1\"/>")}},
 		{Name: "variable-0120", StylesheetPath: "tests/decl/variable/variable-0120.xsl", SecondaryStylesheets: []string{"tests/decl/variable/variable-0120a.xsl"}, SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XPST0008"},
-		{Name: "variable-0121", StylesheetPath: "tests/decl/variable/variable-0121.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "variable-0122", StylesheetPath: "tests/decl/variable/variable-0122.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "variable-0123", StylesheetPath: "tests/decl/variable/variable-0123.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "variable-0121", StylesheetPath: "tests/decl/variable/variable-0121.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "variable-0122", StylesheetPath: "tests/decl/variable/variable-0122.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "variable-0123", StylesheetPath: "tests/decl/variable/variable-0123.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "variable-0201", StylesheetPath: "tests/decl/variable/variable-0201.xsl", SourceContent: "<doc><a><b><c><d>test</d></c></b></a></doc>", Assertions: []w3cAssertion{w3cAssertXML("<b><d>17</d></b>")}},
 		{Name: "variable-0202", StylesheetPath: "tests/decl/variable/variable-0202.xsl", SourceContent: "<doc><a><b><c><d>test</d></c></b></a></doc>", Assertions: []w3cAssertion{w3cAssertXML("<out><b><d t1=\"17\" t2=\"28\" t3=\"38\"/></b><old>18</old></out>")}},
 		{Name: "variable-0203", StylesheetPath: "tests/decl/variable/variable-0203.xsl", SourceContent: "<doc><a><b><c><d>test</d></c></b></a></doc>", Assertions: []w3cAssertion{w3cAssertXML("<out><b><d t1=\"17\" t2=\"28\" t3=\"38\"/></b><old>18</old></out>")}},
@@ -2216,6 +2216,6 @@ nNode: neither</out>`)}},
 		{Name: "variable-4701", StylesheetPath: "tests/decl/variable/variable-4701.xsl", SecondaryStylesheets: []string{"tests/decl/variable/variable-4701a.xsl"}, SourceContent: "<doc><foo>bar</foo></doc>", Assertions: []w3cAssertion{w3cAssertXML("<out>the value of bar is bar</out>")}},
 		{Name: "variable-4702", StylesheetPath: "tests/decl/variable/variable-4702.xsl", SecondaryStylesheets: []string{"tests/decl/variable/variable-4701a.xsl"}, SourceContent: "<doc><foo>bar</foo></doc>", Assertions: []w3cAssertion{w3cAssertXML("<out>the value of bar is bar</out>")}},
 		{Name: "variable-4801", StylesheetPath: "tests/decl/variable/variable-4801.xsl", SourceDocPath: "tests/decl/variable/variable-32.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><e>id3</e><e>id6</e><e>id7</e><e>id12</e><e>id15</e><e>id19</e></out>")}},
-		{Name: "variable-4802", StylesheetPath: "tests/decl/variable/variable-4802.xsl", SourceDocPath: "tests/decl/variable/variable-4802.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "variable-4802", StylesheetPath: "tests/decl/variable/variable-4802.xsl", SourceDocPath: "tests/decl/variable/variable-4802.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 	})
 }

@@ -63,12 +63,12 @@ func TestW3C_arrays(t *testing.T) {
 		{Name: "square-array-142", StylesheetPath: "", InitialTemplate: "r-042", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "no stylesheet"},
 		{Name: "square-array-143", StylesheetPath: "", InitialTemplate: "r-043", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip(), w3cCheckSkip())}, Skip: "no stylesheet"},
 		{Name: "square-array-201", StylesheetPath: "tests/type/arrays/square-array-201.xsl", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
-		{Name: "arrays-301", StylesheetPath: "tests/type/arrays/arrays-301.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "arrays-302", StylesheetPath: "tests/type/arrays/arrays-302.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "arrays-303", StylesheetPath: "tests/type/arrays/arrays-303.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "arrays-304", StylesheetPath: "tests/type/arrays/arrays-304.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "arrays-305", StylesheetPath: "tests/type/arrays/arrays-305.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "arrays-306", StylesheetPath: "tests/type/arrays/arrays-306.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "arrays-301", StylesheetPath: "tests/type/arrays/arrays-301.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "arrays-302", StylesheetPath: "tests/type/arrays/arrays-302.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "arrays-303", StylesheetPath: "tests/type/arrays/arrays-303.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "arrays-304", StylesheetPath: "tests/type/arrays/arrays-304.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "arrays-305", StylesheetPath: "tests/type/arrays/arrays-305.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "arrays-306", StylesheetPath: "tests/type/arrays/arrays-306.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 	})
 }
 
@@ -284,7 +284,7 @@ func TestW3C_boolean(t *testing.T) {
   <value>3</value><value>22</value>
  </set2>
 </dummy>
-`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "boolean-067", StylesheetPath: "tests/type/boolean/boolean-067.xsl", SourceContent: `<dummy>
  <set1>
   <value>2</value><value>3</value>
@@ -757,9 +757,9 @@ func TestW3C_maps(t *testing.T) {
 		{Name: "maps-006", StylesheetPath: "tests/type/maps/maps-006.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE0450"},
 		{Name: "maps-007", StylesheetPath: "tests/type/maps/maps-007.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE3375"},
 		{Name: "maps-008", StylesheetPath: "tests/type/maps/maps-008.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3280"},
-		{Name: "maps-009", StylesheetPath: "tests/type/maps/maps-009.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "maps-009", StylesheetPath: "tests/type/maps/maps-009.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "maps-010", StylesheetPath: "tests/type/maps/maps-010.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "maps-011", StylesheetPath: "tests/type/maps/maps-011.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "maps-011", StylesheetPath: "tests/type/maps/maps-011.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "maps-012", StylesheetPath: "", SourceContent: "<doc><e ref='1'/></doc>", Params: map[string]string{"param": "'map'"}, Assertions: []w3cAssertion{w3cAssertXML("<out>1st</out>")}, Skip: "no stylesheet"},
 		{Name: "maps-013", StylesheetPath: "", SourceContent: "<doc><e ref='1'/></doc>", Params: map[string]string{"param": "'array'"}, Assertions: []w3cAssertion{w3cAssertXML("<out>first</out>")}, Skip: "no stylesheet"},
 		{Name: "maps-014", StylesheetPath: "tests/type/maps/maps-014.xsl", Assertions: []w3cAssertion{w3cAssertXML("<out>22</out>")}},
@@ -767,7 +767,7 @@ func TestW3C_maps(t *testing.T) {
 		{Name: "maps-016", StylesheetPath: "tests/type/maps/maps-016.xsl", Assertions: []w3cAssertion{w3cAssertXML("<out><contains>false</contains><get/></out>")}},
 		{Name: "maps-017", StylesheetPath: "tests/type/maps/maps-017.xsl", SourceContent: `<foo:root xmlns:foo='http://www.example.com'>
       <foo:bar>Hello world</foo:bar>
-</foo:root>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</foo:root>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "maps-018", StylesheetPath: "", SourceContent: "<doc><e ref='1'/></doc>", Params: map[string]string{"param": "'map'"}, ExpectError: true, ErrorCode: "XPTY0004", Skip: "no stylesheet"},
 		{Name: "maps-019", StylesheetPath: "", SourceContent: "<doc><e ref='1'/></doc>", Params: map[string]string{"param": "'array'"}, ExpectError: true, ErrorCode: "XPTY0004", Skip: "no stylesheet"},
 		{Name: "maps-020", StylesheetPath: "", SourceContent: "<doc><e ref='1'/></doc>", Params: map[string]string{"param": "'string'"}, ExpectError: true, ErrorCode: "XPTY0004", Skip: "no stylesheet"},
@@ -799,7 +799,7 @@ func TestW3C_maps(t *testing.T) {
 		{Name: "maps-906k", StylesheetPath: "tests/type/maps/maps-906.xsl", InitialTemplate: "xsl:initial-template", Params: map[string]string{"test-case": "'mapold:for-each-entry($validmap, function($a, $b) {$a})'"}, ExpectError: true, ErrorCode: "XPST0017"},
 		{Name: "maps-906l", StylesheetPath: "tests/type/maps/maps-906.xsl", InitialTemplate: "xsl:initial-template", Params: map[string]string{"test-case": "'mapold:for-each($validmap, function($a, $b) {$a})'"}, ExpectError: true, ErrorCode: "XPST0017"},
 		{Name: "maps-907", StylesheetPath: "tests/type/maps/maps-907.xsl", InitialTemplate: "xsl:initial-template", ExpectError: true, ErrorCode: "FOTY0013"},
-		{Name: "maps-908", StylesheetPath: "tests/type/maps/maps-908.xsl", InitialTemplate: "xsl:initial-template", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "maps-908", StylesheetPath: "tests/type/maps/maps-908.xsl", InitialTemplate: "xsl:initial-template", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "maps-909", StylesheetPath: "tests/type/maps/maps-909.xsl", InitialTemplate: "xsl:initial-template", ExpectError: true, ErrorCode: "XPTY0004"},
 	})
 }
@@ -808,12 +808,12 @@ func TestW3C_namespace(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
 		{Name: "namespace-0101", StylesheetPath: "tests/type/namespace/namespace-0101.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE0860"},
-		{Name: "namespace-0201", StylesheetPath: "tests/type/namespace/namespace-0201.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "namespace-0201", StylesheetPath: "tests/type/namespace/namespace-0201.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "namespace-0202", StylesheetPath: "tests/type/namespace/namespace-0202.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:anamespace=\"http://foo.com/\"><p><test xmlns=\"http://foo.com/\"/></p><p><test xmlns=\"http://baz.com/\"/></p></out>")}},
 		{Name: "namespace-0301", StylesheetPath: "tests/type/namespace/namespace-0301.xsl", SourceDocPath: "tests/type/namespace/namespace-03.xml", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:c=\"http://y.com\" xmlns:a=\"http://z.com\" xmlns:b=\"http://x.com\" t1=\"http://z.com:t1\" t2=\"http://z.com:t2\"><foo t1=\"http://y.com:t1\" t2=\"http://z.com:t2\"/></out>")}},
 		{Name: "namespace-0401", StylesheetPath: "tests/type/namespace/namespace-0401.xsl", SourceContent: "<foo xmlns=\"http://bogus\" up=\"down\"/>", Assertions: []w3cAssertion{w3cAssertXML("<foo xmlns:bogus=\"http://bogus\"/>")}},
 		{Name: "namespace-0402", StylesheetPath: "tests/type/namespace/namespace-0402.xsl", SourceContent: "<foo xmlns=\"http://bogus\" up=\"down\"/>", Assertions: []w3cAssertion{w3cAssertXML("<foo xmlns:bogus=\"http://bogus\"/>")}},
-		{Name: "namespace-0501", StylesheetPath: "tests/type/namespace/namespace-0501.xsl", SourceDocPath: "tests/type/namespace/namespace-05.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "namespace-0501", StylesheetPath: "tests/type/namespace/namespace-0501.xsl", SourceDocPath: "tests/type/namespace/namespace-05.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "namespace-0601", StylesheetPath: "", SourceContent: "<doc><q xmlns:a=\"http://a.uri/\" xmlns:b=\"http://b.uri/\" xmlns:c=\"http://c.uri/\"/></doc>", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:a=\"http://a.uri/\" xmlns:c=\"http://c.uri/\" xmlns:b=\"http://b.uri/\"/>")}, Skip: "no stylesheet"},
 		{Name: "namespace-0602", StylesheetPath: "", SourceContent: "<doc><q xmlns:a=\"http://a.uri/\" xmlns:b=\"http://b.uri/\" xmlns:c=\"http://c.uri/\"/></doc>", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:a=\"http://a.uri/\"/>")}, Skip: "no stylesheet"},
 		{Name: "namespace-0603", StylesheetPath: "", SourceContent: "<doc><q xmlns:a=\"http://a.uri/\" xmlns:b=\"http://b.uri/\" xmlns:c=\"http://c.uri/\"/></doc>", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:a=\"http://a.uri/\" xmlns:c=\"http://c.uri/\" xmlns:b=\"http://b.uri/\"/>")}, Skip: "no stylesheet"},
@@ -855,11 +855,11 @@ z = http://new-z.uri/;
 </out>`)}},
 		{Name: "namespace-0909", StylesheetPath: "tests/type/namespace/namespace-0909.xsl", SourceDocPath: "tests/type/namespace/namespace-09.xml", Assertions: []w3cAssertion{w3cAssertXML("<out>8</out>")}},
 		{Name: "namespace-0910", StylesheetPath: "tests/type/namespace/namespace-0910.xsl", SourceDocPath: "tests/type/namespace/namespace-09.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><check>true</check><check>true</check><check>true</check></out>")}},
-		{Name: "namespace-0911", StylesheetPath: "tests/type/namespace/namespace-0911.xsl", SourceDocPath: "tests/type/namespace/namespace-09.xml", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "namespace-0911", StylesheetPath: "tests/type/namespace/namespace-0911.xsl", SourceDocPath: "tests/type/namespace/namespace-09.xml", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "namespace-0912", StylesheetPath: "tests/type/namespace/namespace-0912.xsl", SourceDocPath: "tests/type/namespace/namespace-0912.xml", Assertions: []w3cAssertion{w3cAssertXML("<report xmlns=\"x-uri\"><p xmlns=\"\"><w:s xmlns:w=\"w-uri\"/></p></report>")}},
 		{Name: "namespace-0913", StylesheetPath: "tests/type/namespace/namespace-0913.xsl", Assertions: []w3cAssertion{w3cAssertXML(`<description xmlns="http://example.com/x"><x:scenario xmlns="" 
                xmlns:x="http://example.com/x"><e/></x:scenario></description>`), w3cAssertSkip()}},
-		{Name: "namespace-0914", StylesheetPath: "tests/type/namespace/namespace-0913.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "namespace-0914", StylesheetPath: "tests/type/namespace/namespace-0913.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "namespace-1101", StylesheetPath: "tests/type/namespace/namespace-1101.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:zz=\"http://a-namespace-uri/\" new=\"at XSLT 2.0\"/>")}},
 		{Name: "namespace-1102", StylesheetPath: "tests/type/namespace/namespace-1102.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<newdoc6 xmlns=\"http://NotDefault/\" xmlns:ns0=\"http://NotDefault/\" ns0:third=\"3rd\"/>")}},
 		{Name: "namespace-1103", StylesheetPath: "tests/type/namespace/namespace-1103.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><ans count=\"1\" name=\"xml\" value=\"http://www.w3.org/XML/1998/namespace\"/></out>")}},
@@ -892,23 +892,23 @@ z = http://new-z.uri/;
 <row>4</row>
 </data>
 `, Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"UTF-8\"?><out xmlns=\"http://www.w3.org/TR/REC-html40\">\r\n    Correct output: 8 lines, saying \"value is n\" where n is 1..8 \r\n   \r\n     value is 1\r\n     value is 2\r\n     value is 3\r\n     value is 4\r\n     value is 5\r\n     value is 6\r\n     value is 7\r\n     value is 8</out>")}},
-		{Name: "namespace-1801", StylesheetPath: "tests/type/namespace/namespace-1801.xsl", SourceContent: "<doc xmlns:xml=\"http://www.w3.org/XML/1998/namespace\"></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "namespace-1901", StylesheetPath: "tests/type/namespace/namespace-1901.xsl", SourceDocPath: "tests/type/namespace/namespace-19a.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "namespace-2001", StylesheetPath: "tests/type/namespace/namespace-2001.xsl", SourceContent: "<doc xmlns:ns=\"http://nstwo.uri/\"/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "namespace-2101", StylesheetPath: "tests/type/namespace/namespace-2101.xsl", SourceDocPath: "tests/type/namespace/namespace-21.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "namespace-1801", StylesheetPath: "tests/type/namespace/namespace-1801.xsl", SourceContent: "<doc xmlns:xml=\"http://www.w3.org/XML/1998/namespace\"></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "namespace-1901", StylesheetPath: "tests/type/namespace/namespace-1901.xsl", SourceDocPath: "tests/type/namespace/namespace-19a.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "namespace-2001", StylesheetPath: "tests/type/namespace/namespace-2001.xsl", SourceContent: "<doc xmlns:ns=\"http://nstwo.uri/\"/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "namespace-2101", StylesheetPath: "tests/type/namespace/namespace-2101.xsl", SourceDocPath: "tests/type/namespace/namespace-21.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "namespace-2201", StylesheetPath: "tests/type/namespace/namespace-2201.xsl", SourceContent: "<doc xmlns:a=\"http://a/\" xmlns:b=\"http://b/\" xmlns:c=\"http://c/\"><a:thing/><b:thing/><c:thing/><thing/></doc>", Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"UTF-8\"?><out xmlns:c=\"http://c/\" xmlns:b=\"http://b/\" xmlns:a=\"http://a/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"><without-default-namespace><doc>xxx</doc><a:thing>xxx</a:thing><b:thing>xxx</b:thing><c:thing>xxx</c:thing><thing>xxx</thing></without-default-namespace><with-default-namespace xmlns=\"http://default/\"><doc>xxx</doc><a:thing>xxx</a:thing><b:thing>xxx</b:thing><c:thing>xxx</c:thing><thing>xxx</thing></with-default-namespace></out>")}},
 		{Name: "namespace-2301", StylesheetPath: "tests/type/namespace/namespace-2301.xsl", SourceContent: `<e xmlns:my="http://my.uri/" att="att" my:att="my:att">
   <f/>
   <my:g/>
   <?api a processing instruction?>
   <!-- a comment -->
-</e>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</e>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "namespace-2302", StylesheetPath: "tests/type/namespace/namespace-2302.xsl", SourceContent: `<e xmlns:my="http://my.uri/" att="att" my:att="my:att">
   <f/>
   <my:g/>
   <?api a processing instruction?>
   <!-- a comment -->
-</e>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</e>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "namespace-2401", StylesheetPath: "tests/type/namespace/namespace-2401.xsl", SourceContent: `<e xmlns:my="http://my.uri/" att="att" my:att="my:att" xmlns="http://default.uri/">
   <f xmlns="" xmlns:your="http://your.uri/"/>
 </e>`, Assertions: []w3cAssertion{w3cAssertXML("<z><e>,my,xml</e><f>my,xml,your</f></z>")}},
@@ -931,10 +931,10 @@ z = http://new-z.uri/;
 		{Name: "namespace-2605", StylesheetPath: "tests/type/namespace/namespace-2605.xsl", SourceContent: "<data/>", Assertions: []w3cAssertion{w3cAssertXML("<a xmlns:n=\"http://n1.com/\" xmlns:m=\"http://m1.com/\" xmlns:k=\"http://k1.com/\"><b xmlns:k=\"http://k2.com/\" xmlns:m=\"\"><c/></b></a>")}},
 		{Name: "namespace-2606", StylesheetPath: "tests/type/namespace/namespace-2606.xsl", SourceContent: "<data/>", Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.1\" encoding=\"UTF-8\"?>\r\n<a xmlns:n=\"http://n1.com/\" xmlns:m=\"http://m1.com/\" xmlns:k=\"http://k1.com/\">\r\n   <b xmlns:k=\"http://k2.com/\" xmlns:m=\"\">\r\n      <c xmlns:n=\"\" xmlns:k=\"\"/>\r\n   </b>\r\n</a>")}},
 		{Name: "namespace-2607", StylesheetPath: "tests/type/namespace/namespace-2607.xsl", SourceContent: "<data/>", Assertions: []w3cAssertion{w3cAssertXML("<a xmlns:n=\"http://n/\"><b xmlns:n=\"\"/></a>")}},
-		{Name: "namespace-2608", StylesheetPath: "tests/type/namespace/namespace-2608.xsl", SourceContent: "<data/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "namespace-2608", StylesheetPath: "tests/type/namespace/namespace-2608.xsl", SourceContent: "<data/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "namespace-2609", StylesheetPath: "tests/type/namespace/namespace-2609.xsl", SourceContent: "<data/>", Assertions: []w3cAssertion{w3cAssertXML("<n:a xmlns=\"http://d/\" xmlns:n=\"http://n/\"><n:b xmlns:n=\"http://n2/\" xmlns=\"\"/><n:c xmlns:n=\"http://n3/\" xmlns=\"\"/></n:a>")}},
 		{Name: "namespace-2610", StylesheetPath: "tests/type/namespace/namespace-2610.xsl", SourceContent: "<data/>", Assertions: []w3cAssertion{w3cAssertXML("<n:a xmlns=\"http://d/\" xmlns:n=\"http://n/\"><n:b xmlns:n=\"http://n2/\" xmlns=\"\"/><c xmlns=\"http://n3/\" xmlns:n=\"\"/></n:a>")}},
-		{Name: "namespace-2611", StylesheetPath: "tests/type/namespace/namespace-2611.xsl", SourceContent: "<data/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "namespace-2611", StylesheetPath: "tests/type/namespace/namespace-2611.xsl", SourceContent: "<data/>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "namespace-2612", StylesheetPath: "tests/type/namespace/namespace-2612.xsl", SourceContent: "<data/>", Assertions: []w3cAssertion{w3cAssertXML("<x>1 0</x>")}},
 		{Name: "namespace-2614", StylesheetPath: "tests/type/namespace/namespace-2614.xsl", SourceContent: "<data/>", Assertions: []w3cAssertion{w3cAssertXML("<p_0:item xmlns:p=\"http://q.uri/\" xmlns:p_0=\"http://p.uri/\"/>")}},
 		{Name: "namespace-2615", StylesheetPath: "tests/type/namespace/namespace-2615.xsl", SourceContent: "<data/>", Assertions: []w3cAssertion{w3cAssertXML("<ok>true</ok>")}},
@@ -1049,10 +1049,10 @@ z = http://new-z.uri/;
 		{Name: "namespace-3163", StylesheetPath: "tests/type/namespace/namespace-3163.xsl", SourceContent: "<doc>x</doc>", Assertions: []w3cAssertion{w3cAssertXML("<out><p2:foo xmlns:p2=\"http://barz.com/\"><yyy/></p2:foo></out>")}},
 		{Name: "namespace-3164", StylesheetPath: "tests/type/namespace/namespace-3164.xsl", SourceContent: "<doc>x</doc>", Assertions: []w3cAssertion{w3cAssertXML("<out><p2:foo xmlns:p2=\"http://barz.com/\"><yyy xmlns:p2=\"http://testguys.com/\"/></p2:foo></out>")}},
 		{Name: "namespace-3201", StylesheetPath: "tests/type/namespace/namespace-3201.xsl", SourceContent: "<doc>x</doc>", ExpectError: true, ErrorCode: "XTDE0820"},
-		{Name: "namespace-3202", StylesheetPath: "tests/type/namespace/namespace-3202.xsl", SourceContent: "<doc>x</doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "namespace-3202", StylesheetPath: "tests/type/namespace/namespace-3202.xsl", SourceContent: "<doc>x</doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "namespace-3203", StylesheetPath: "tests/type/namespace/namespace-3203.xsl", SourceContent: "<doc>x</doc>", ExpectError: true, ErrorCode: "XTDE0820"},
 		{Name: "namespace-3301", StylesheetPath: "tests/type/namespace/namespace-3301.xsl", SourceContent: `<doc>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "namespace-3302", StylesheetPath: "tests/type/namespace/namespace-3302.xsl", SourceContent: `<doc>
 </doc>`, Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:anamespace=\"http://foo.com/\"><test xmlns=\"http://foo.com/\"><inner xmlns=\"\"/></test><later/><anamespace:anelement/></out>")}},
 		{Name: "namespace-3303", StylesheetPath: "tests/type/namespace/namespace-3303.xsl", SourceContent: `<doc>
@@ -1078,7 +1078,7 @@ z = http://new-z.uri/;
 		{Name: "namespace-3313", StylesheetPath: "tests/type/namespace/namespace-3313.xsl", SourceContent: `<doc>
 </doc>`, Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:pfix=\"http://party.com/\"><inner xmlns:other=\"http://party.com/\" other:nuts=\"almond\"/></out>")}},
 		{Name: "namespace-3314", StylesheetPath: "tests/type/namespace/namespace-3314.xsl", SourceContent: `<doc>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "namespace-3315", StylesheetPath: "tests/type/namespace/namespace-3315.xsl", SourceContent: `<doc>
 </doc>`, Assertions: []w3cAssertion{w3cAssertXML("<out><p xmlns:ns0=\"http://foo2.com/\" ns0:test=\"true\"/></out>")}},
 		{Name: "namespace-3401", StylesheetPath: "tests/type/namespace/namespace-3401.xsl", SourceContent: `<doc>
@@ -1172,7 +1172,7 @@ Testing 1 2 3 quos</out>`)}},
 </doc>`, Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:n=\"http://ns.test.com\"><n:x>from stylesheet</n:x><e xmlns=\"http://literalURI\"><n:a xmlns:n=\"http://example.com\">content</n:a></e></out>")}},
 		{Name: "namespace-4302", StylesheetPath: "tests/type/namespace/namespace-4302.xsl", SourceContent: `<doc>
   <n:a xmlns:n="http://example.com">content</n:a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "namespace-4401", StylesheetPath: "tests/type/namespace/namespace-4401.xsl", SourceContent: `<doc>
   <noprefix>elementName</noprefix>
   <prefix>someprefix:elementName</prefix>
@@ -1279,7 +1279,7 @@ name||namespace-uri||local-name||</out>`)}},
   <c href="http://www.bdd.com">Out3</c>
 </docs>`, Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:ped=\"http://www.ped.com\"><Out3 xmlns=\"http://www.bdd.com\"/></out>")}},
 		{Name: "namespace-6101", StylesheetPath: "tests/type/namespace/namespace-6101.xsl", SourceContent: "<doc>boo</doc>", Assertions: []w3cAssertion{w3cAssertXML("<out>boo</out>")}},
-		{Name: "namespace-6201", StylesheetPath: "tests/type/namespace/namespace-6201.xsl", SourceContent: "<doc>boo</doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "namespace-6201", StylesheetPath: "tests/type/namespace/namespace-6201.xsl", SourceContent: "<doc>boo</doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "namespace-6202", StylesheetPath: "tests/type/namespace/namespace-6202.xsl", SourceContent: "<doc>boo</doc>", ExpectError: true, ErrorCode: "XPST0081"},
 	})
 }
@@ -1812,9 +1812,9 @@ ef
 <a>a</a>
 
 </doc>`)}},
-		{Name: "string-134", StylesheetPath: "tests/type/string/string-134.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "string-135", StylesheetPath: "tests/type/string/string-135.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "string-136", StylesheetPath: "tests/type/string/string-136.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "string-134", StylesheetPath: "tests/type/string/string-134.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "string-135", StylesheetPath: "tests/type/string/string-135.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "string-136", StylesheetPath: "tests/type/string/string-136.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 	})
 }
 
@@ -1914,7 +1914,7 @@ func TestW3C_type(t *testing.T) {
 		{Name: "type-0166", StylesheetPath: "tests/type/type/type-0166.xsl", SourceContent: "<doc><a/><b/><c/></doc>", ExpectError: true, ErrorCode: "XPTY0004"},
 		{Name: "type-0167", StylesheetPath: "tests/type/type/type-0167.xsl", SourceContent: "<doc><a/><b/><c/></doc>", ExpectError: true, ErrorCode: "FORG0001"},
 		{Name: "type-0168a", StylesheetPath: "tests/type/type/type-0168.xsl", SourceContent: "<doc><a/><b/><c/></doc>", ExpectError: true, ErrorCode: "XPTY0004"},
-		{Name: "type-0168b", StylesheetPath: "tests/type/type/type-0168.xsl", SourceContent: "<doc><a/><b/><c/></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "type-0168b", StylesheetPath: "tests/type/type/type-0168.xsl", SourceContent: "<doc><a/><b/><c/></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "type-0169", StylesheetPath: "tests/type/type/type-0169.xsl", SourceDocPath: "tests/type/type/type-06.xml", ExpectError: true, ErrorCode: "XTTE0505"},
 		{Name: "type-0170", StylesheetPath: "tests/type/type/type-0170.xsl", SourceDocPath: "tests/type/type/type-06.xml", ExpectError: true, ErrorCode: "XTTE0505"},
 		{Name: "type-0171", StylesheetPath: "tests/type/type/type-0171.xsl", SourceDocPath: "tests/type/type/type-06.xml", ExpectError: true, ErrorCode: "XTTE0505"},

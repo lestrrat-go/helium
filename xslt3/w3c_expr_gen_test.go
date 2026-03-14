@@ -100,11 +100,11 @@ B:doc/foo/baz/is not new
 		{Name: "axes-057", StylesheetPath: "tests/expr/axes/axes-057.xsl", SourceContent: ` 
 <a>
   <c x="1"><x>1</x></c><c x="2"><x>2</x></c><b/>
-</a>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+</a>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "axes-058", StylesheetPath: "tests/expr/axes/axes-058.xsl", SourceContent: ` 
 <a>
   <c x="1"><x>1</x></c><c x="2"><x>2</x></c><b/>
-</a>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+</a>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "axes-059", StylesheetPath: "tests/expr/axes/axes-059.xsl", SourceContent: ` 
 <a>
   <c x="1"><x>1</x></c><c x="2"><x>2</x></c><b/>
@@ -170,7 +170,7 @@ B:doc/foo/baz/is not new
     <g/>
   </e>
   <h/>
-</a>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</a>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "axes-067", StylesheetPath: "tests/expr/axes/axes-067.xsl", SourceDocPath: "tests/expr/axes/axes100.xml", Assertions: []w3cAssertion{w3cAssertXML("<out> far-north north near-north center</out>")}},
 		{Name: "axes-068", StylesheetPath: "tests/expr/axes/axes-068.xsl", SourceDocPath: "tests/expr/axes/axes100.xml", Assertions: []w3cAssertion{w3cAssertXML("<out/>")}},
 		{Name: "axes-069", StylesheetPath: "tests/expr/axes/axes-069.xsl", SourceDocPath: "tests/expr/axes/axes100.xml", Assertions: []w3cAssertion{w3cAssertXML("<out/>")}},
@@ -316,7 +316,7 @@ From baz: 5= e, e, a, e, a;
 ), </out>`)}},
 		{Name: "axes-129", StylesheetPath: "tests/expr/axes/axes-129.xsl", SourceContent: `<docs xmlns:test="http://tester.com">
   <doc x="x" test:y="y" jad:z="z" xmlns:jad="http://administrator.com"/>
-</docs>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</docs>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "axes-130", StylesheetPath: "tests/expr/axes/axes-130.xsl", SourceContent: `<north>
   <center center-attr="here">
      <south/>
@@ -485,7 +485,7 @@ doc/foo/baz/is not new
 <!--A comment-->
 <!DOCTYPE task PUBLIC "-//OASIS//DTD DITA Task//EN" "axes-202.dtd">
 <?Pub Inc?>
-<task/>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+<task/>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 	})
 }
 
@@ -498,9 +498,9 @@ func TestW3C_castable(t *testing.T) {
 		{Name: "castable-004", StylesheetPath: "tests/expr/castable/castable-004.xsl", SourceDocPath: "tests/expr/castable/castbl01.xml", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><a>true</a><a>true</a><a>true</a><a>true</a><b>false</b><b>false</b><b>false</b><b>false</b></out>")}},
 		{Name: "castable-005", StylesheetPath: "tests/expr/castable/castable-005.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: schema_aware"},
 		{Name: "castable-006", StylesheetPath: "tests/expr/castable/castable-006.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: schema_aware"},
-		{Name: "castable-007", StylesheetPath: "tests/expr/castable/castable-007.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "castable-008", StylesheetPath: "tests/expr/castable/castable-008.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "castable-009", StylesheetPath: "tests/expr/castable/castable-009.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "castable-007", StylesheetPath: "tests/expr/castable/castable-007.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "castable-008", StylesheetPath: "tests/expr/castable/castable-008.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "castable-009", StylesheetPath: "tests/expr/castable/castable-009.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 	})
 }
 
@@ -640,7 +640,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0904", StylesheetPath: "tests/expr/expression/expression-0904.xsl", SourceContent: ` 
 
 <doc>
@@ -649,7 +649,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0905", StylesheetPath: "tests/expr/expression/expression-0905.xsl", SourceContent: ` 
 
 <doc>
@@ -658,7 +658,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0906", StylesheetPath: "tests/expr/expression/expression-0906.xsl", SourceContent: ` 
 
 <doc>
@@ -667,7 +667,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0907", StylesheetPath: "tests/expr/expression/expression-0907.xsl", SourceContent: ` 
 
 <doc>
@@ -685,7 +685,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0909", StylesheetPath: "tests/expr/expression/expression-0909.xsl", SourceContent: ` 
 
 <doc>
@@ -694,7 +694,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0910", StylesheetPath: "tests/expr/expression/expression-0910.xsl", SourceContent: ` 
 
 <doc>
@@ -703,7 +703,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0911", StylesheetPath: "tests/expr/expression/expression-0911.xsl", SourceContent: ` 
 
 <doc>
@@ -712,7 +712,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0912", StylesheetPath: "tests/expr/expression/expression-0912.xsl", SourceContent: ` 
 
 <doc>
@@ -721,7 +721,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0913", StylesheetPath: "tests/expr/expression/expression-0913.xsl", SourceContent: ` 
 
 <doc>
@@ -730,7 +730,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0914", StylesheetPath: "tests/expr/expression/expression-0914.xsl", SourceContent: ` 
 
 <doc>
@@ -748,7 +748,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0916", StylesheetPath: "tests/expr/expression/expression-0916.xsl", SourceContent: ` 
 
 <doc>
@@ -757,7 +757,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0917", StylesheetPath: "tests/expr/expression/expression-0917.xsl", SourceContent: ` 
 
 <doc>
@@ -766,7 +766,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0918", StylesheetPath: "tests/expr/expression/expression-0918.xsl", SourceContent: ` 
 
 <doc>
@@ -775,7 +775,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0919", StylesheetPath: "tests/expr/expression/expression-0919.xsl", SourceContent: ` 
 
 <doc>
@@ -784,7 +784,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0920", StylesheetPath: "tests/expr/expression/expression-0920.xsl", SourceContent: ` 
 
 <doc>
@@ -811,7 +811,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0923", StylesheetPath: "tests/expr/expression/expression-0923.xsl", SourceContent: ` 
 
 <doc>
@@ -820,7 +820,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0924", StylesheetPath: "tests/expr/expression/expression-0924.xsl", SourceContent: ` 
 
 <doc>
@@ -829,7 +829,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0925", StylesheetPath: "tests/expr/expression/expression-0925.xsl", SourceContent: ` 
 
 <doc>
@@ -838,7 +838,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0926", StylesheetPath: "tests/expr/expression/expression-0926.xsl", SourceContent: ` 
 
 <doc>
@@ -874,7 +874,7 @@ func TestW3C_expression(t *testing.T) {
     <item val="3"/>
     <item val="4"/>
     <item val="5"/>                
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-0930", StylesheetPath: "tests/expr/expression/expression-0930.xsl", SourceContent: ` 
 
 <doc>
@@ -983,7 +983,7 @@ func TestW3C_expression(t *testing.T) {
     <a x="1" y="2" z="3">[4]</a>    
 </z>
 </doc>`, Assertions: []w3cAssertion{w3cAssertXML("<out>[1]</out>")}},
-		{Name: "expression-1601", StylesheetPath: "tests/expr/expression/expression-1601.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "expression-1601", StylesheetPath: "tests/expr/expression/expression-1601.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "expression-1701", StylesheetPath: "tests/expr/expression/expression-1701.xsl", SourceDocPath: "tests/expr/expression/expression-17.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><true>true</true><true>true</true><true>true</true><true>true</true><true>true</true><false>false</false><false>false</false><false>false</false></out>")}},
 		{Name: "expression-1702", StylesheetPath: "tests/expr/expression/expression-1702.xsl", SourceDocPath: "tests/expr/expression/expression-17.xml", Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"UTF-8\"?><out><true>true</true><true>true</true><true>true</true><true>true</true><true note=\"false in 7.4, compares number and string\">false</true><false>false</false><false>false</false><false>false</false></out>")}},
 		{Name: "expression-1801", StylesheetPath: "tests/expr/expression/expression-1801.xsl", SourceContent: `<doc>
@@ -996,7 +996,7 @@ func TestW3C_expression(t *testing.T) {
 </doc>
 `, Assertions: []w3cAssertion{w3cAssertXML(`<out>;
         </out>`)}},
-		{Name: "expression-2101", StylesheetPath: "tests/expr/expression/expression-2101.xsl", SourceContent: "<doc xmlns:ns=\"http://some_ns/\" ns:att=\"att value\"/>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "expression-2101", StylesheetPath: "tests/expr/expression/expression-2101.xsl", SourceContent: "<doc xmlns:ns=\"http://some_ns/\" ns:att=\"att value\"/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
 		{Name: "expression-2201", StylesheetPath: "tests/expr/expression/expression-2201.xsl", SourceContent: ` <doc>
    <sub1>
      <child1>child1</child1>
@@ -1337,7 +1337,7 @@ func TestW3C_higher_order_functions(t *testing.T) {
 func TestW3C_math(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "math-0101", StylesheetPath: "tests/expr/math/math-0101.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "math-0101", StylesheetPath: "tests/expr/math/math-0101.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-0102", StylesheetPath: "tests/expr/math/math-0102.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertXML(`<out>2;
     2;   
     2;    
@@ -1361,10 +1361,10 @@ func TestW3C_math(t *testing.T) {
     NaN;        
   </out>`)}},
 		{Name: "math-0106", StylesheetPath: "tests/expr/math/math-0106.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", ExpectError: true, ErrorCode: "FORG0001"},
-		{Name: "math-0107", StylesheetPath: "tests/expr/math/math-0107.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-0201", StylesheetPath: "tests/expr/math/math-0201.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-0202", StylesheetPath: "tests/expr/math/math-0202.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-0301", StylesheetPath: "tests/expr/math/math-0301.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "math-0107", StylesheetPath: "tests/expr/math/math-0107.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-0201", StylesheetPath: "tests/expr/math/math-0201.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-0202", StylesheetPath: "tests/expr/math/math-0202.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-0301", StylesheetPath: "tests/expr/math/math-0301.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-0401", StylesheetPath: "tests/expr/math/math-0401.xsl", SourceContent: `<doc>
 <n attrib="1">0</n>
 <n attrib="1">1</n>
@@ -1372,24 +1372,24 @@ func TestW3C_math(t *testing.T) {
 <n attrib="1">3</n>
 <n attrib="2">4</n>
 </doc>
-`, Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-0501", StylesheetPath: "tests/expr/math/math-0501.xsl", SourceContent: "<doc><n1 attrib=\"2\">2</n1><n2 attrib=\"4\">3</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-0601", StylesheetPath: "tests/expr/math/math-0601.xsl", SourceContent: "<doc><n1 attrib=\"5\">3</n1><n2 attrib=\"5\">6</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-0701", StylesheetPath: "tests/expr/math/math-0701.xsl", SourceContent: "<doc><n-1 attrib=\"9\">3</n-1><n-2 attrib=\"1\">7</n-2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-0501", StylesheetPath: "tests/expr/math/math-0501.xsl", SourceContent: "<doc><n1 attrib=\"2\">2</n1><n2 attrib=\"4\">3</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-0601", StylesheetPath: "tests/expr/math/math-0601.xsl", SourceContent: "<doc><n1 attrib=\"5\">3</n1><n2 attrib=\"5\">6</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-0701", StylesheetPath: "tests/expr/math/math-0701.xsl", SourceContent: "<doc><n-1 attrib=\"9\">3</n-1><n-2 attrib=\"1\">7</n-2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-0801", StylesheetPath: "tests/expr/math/math-0801.xsl", SourceContent: `<doc>
 <n1 attrib="10">6</n1>
 <n2 attrib="5">3</n2>
 <div attrib="20">9</div>
 <mod attrib="2">3</mod>
 </doc>
-`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-0901", StylesheetPath: "tests/expr/math/math-0901.xsl", SourceContent: `<doc>
 <n1 attrib="10">5</n1>
 <n2 attrib="4">2</n2>
 <div attrib="-5">-5</div>
 <mod attrib="-2">2</mod>
 </doc>
-`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-1001", StylesheetPath: "tests/expr/math/math-1001.xsl", SourceContent: `<doc>
   <n0>0</n0>
   <n1>1</n1>
@@ -1398,7 +1398,7 @@ func TestW3C_math(t *testing.T) {
   <n4>4</n4>
   <n5>5</n5>
   <n6>6</n6>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-1002", StylesheetPath: "tests/expr/math/math-1002.xsl", SourceContent: `<doc>
   <n0>0</n0>
   <n1>1</n1>
@@ -1407,7 +1407,7 @@ func TestW3C_math(t *testing.T) {
   <n4>4</n4>
   <n5>5</n5>
   <n6>6</n6>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-1003", StylesheetPath: "tests/expr/math/math-1003.xsl", SourceContent: `<doc>
   <n0>0</n0>
   <n1>1</n1>
@@ -1416,7 +1416,7 @@ func TestW3C_math(t *testing.T) {
   <n4>4</n4>
   <n5>5</n5>
   <n6>6</n6>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-1004", StylesheetPath: "tests/expr/math/math-1004.xsl", SourceContent: `<doc>
   <n0>0</n0>
   <n1>1</n1>
@@ -1425,7 +1425,7 @@ func TestW3C_math(t *testing.T) {
   <n4>4</n4>
   <n5>5</n5>
   <n6>6</n6>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-1005", StylesheetPath: "tests/expr/math/math-1005.xsl", SourceContent: `<doc>
   <n0>0</n0>
   <n1>1</n1>
@@ -1434,9 +1434,9 @@ func TestW3C_math(t *testing.T) {
   <n4>4</n4>
   <n5>5</n5>
   <n6>6</n6>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1101", StylesheetPath: "tests/expr/math/math-1101.xsl", SourceContent: "<doc>17</doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1201", StylesheetPath: "tests/expr/math/math-1201.xsl", SourceContent: "<doc><n1>3</n1><n2>7</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1101", StylesheetPath: "tests/expr/math/math-1101.xsl", SourceContent: "<doc>17</doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1201", StylesheetPath: "tests/expr/math/math-1201.xsl", SourceContent: "<doc><n1>3</n1><n2>7</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-1301", StylesheetPath: "tests/expr/math/math-1301.xsl", SourceContent: `<doc>
   <n>0</n>
   <n>1</n>
@@ -1458,26 +1458,26 @@ func TestW3C_math(t *testing.T) {
   <n3>3</n3>
   <n4>4</n4>
   <e>five</e>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1501", StylesheetPath: "tests/expr/math/math-1501.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1502", StylesheetPath: "tests/expr/math/math-1502.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1503", StylesheetPath: "tests/expr/math/math-1503.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1504", StylesheetPath: "tests/expr/math/math-1504.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1505", StylesheetPath: "tests/expr/math/math-1505.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1506", StylesheetPath: "tests/expr/math/math-1506.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1507", StylesheetPath: "tests/expr/math/math-1507.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1508", StylesheetPath: "tests/expr/math/math-1508.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1509", StylesheetPath: "tests/expr/math/math-1509.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1510", StylesheetPath: "tests/expr/math/math-1510.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1511", StylesheetPath: "tests/expr/math/math-1511.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1512", StylesheetPath: "tests/expr/math/math-1512.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1513", StylesheetPath: "tests/expr/math/math-1513.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1514", StylesheetPath: "tests/expr/math/math-1514.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1515", StylesheetPath: "tests/expr/math/math-1515.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1516", StylesheetPath: "tests/expr/math/math-1516.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1517", StylesheetPath: "tests/expr/math/math-1517.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1518", StylesheetPath: "tests/expr/math/math-1518.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1519", StylesheetPath: "tests/expr/math/math-1519.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1501", StylesheetPath: "tests/expr/math/math-1501.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1502", StylesheetPath: "tests/expr/math/math-1502.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1503", StylesheetPath: "tests/expr/math/math-1503.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1504", StylesheetPath: "tests/expr/math/math-1504.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1505", StylesheetPath: "tests/expr/math/math-1505.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1506", StylesheetPath: "tests/expr/math/math-1506.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1507", StylesheetPath: "tests/expr/math/math-1507.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1508", StylesheetPath: "tests/expr/math/math-1508.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1509", StylesheetPath: "tests/expr/math/math-1509.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1510", StylesheetPath: "tests/expr/math/math-1510.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1511", StylesheetPath: "tests/expr/math/math-1511.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1512", StylesheetPath: "tests/expr/math/math-1512.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1513", StylesheetPath: "tests/expr/math/math-1513.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1514", StylesheetPath: "tests/expr/math/math-1514.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1515", StylesheetPath: "tests/expr/math/math-1515.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1516", StylesheetPath: "tests/expr/math/math-1516.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1517", StylesheetPath: "tests/expr/math/math-1517.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1518", StylesheetPath: "tests/expr/math/math-1518.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1519", StylesheetPath: "tests/expr/math/math-1519.xsl", SourceContent: "<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-1601", StylesheetPath: "tests/expr/math/math-1601.xsl", SourceContent: "<doc><k>0.0004</k></doc>", Assertions: []w3cAssertion{w3cAssertXML(`<out>1.75|1.75|true|
 1.75|true|
 0.0004|0.0004|true|
@@ -1485,36 +1485,36 @@ func TestW3C_math(t *testing.T) {
 </out>`)}},
 		{Name: "math-1701", StylesheetPath: "tests/expr/math/math-1701.xsl", SourceDocPath: "tests/expr/math/math-17.xml", Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"UTF-8\"?><out>\r\n\t<pos>0</pos><neg>-0</neg>\r\n\t<pos>0.4</pos><neg>-0.4</neg>\r\n\t<pos>4</pos><neg>-4</neg>\r\n\t<pos>0.04</pos><neg>-0.04</neg>\r\n\t<pos>0.004</pos><neg>-0.004</neg>\r\n\t<pos>0.0004</pos><neg>-0.0004</neg>\r\n\t<pos>1.0E-13</pos><neg>-1.0E-13</neg>\r\n\t<pos>1.0E-28</pos><neg>-1.0E-28</neg>\r\n\t<pos>1.000000000000001E-13</pos><neg>-1.000000000000001E-13</neg>\r\n\t<pos>0.0012</pos><neg>-0.0012</neg>\r\n\t<pos>0.012</pos><neg>-0.012</neg>\r\n</out>")}},
 		{Name: "math-1801", StylesheetPath: "tests/expr/math/math-1801.xsl", SourceDocPath: "tests/expr/math/math-18.xml", Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"UTF-8\"?><out>\r\n\t<pos>20000</pos><neg>-20000</neg>\r\n\t<pos>200000</pos><neg>-200000</neg>\r\n\t<pos>999999</pos><neg>-999999</neg>\r\n\t<pos>1.0E6</pos><neg>-1.0E6</neg>\r\n\t<pos>1.000001E6</pos><neg>-1.000001E6</neg>\r\n    <pos>1.234567E6</pos><neg>-1.234567E6</neg>\r\n\t<pos>2.0E6</pos><neg>-2.0E6</neg>\r\n\t<pos>2.000002E6</pos><neg>-2.000002E6</neg>\t\r\n\t<pos>2.0E7</pos><neg>-2.0E7</neg>\r\n\t<pos>2.0E29</pos><neg>-2.0E29</neg>\r\n\t<pos>2.0E78</pos><neg>-2.0E78</neg>\r\n</out>")}},
-		{Name: "math-1901", StylesheetPath: "tests/expr/math/math-1901.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1902", StylesheetPath: "tests/expr/math/math-1902.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1903", StylesheetPath: "tests/expr/math/math-1903.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1904", StylesheetPath: "tests/expr/math/math-1904.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1905", StylesheetPath: "tests/expr/math/math-1905.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1906", StylesheetPath: "tests/expr/math/math-1906.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1907", StylesheetPath: "tests/expr/math/math-1907.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1908", StylesheetPath: "tests/expr/math/math-1908.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1909", StylesheetPath: "tests/expr/math/math-1909.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1910", StylesheetPath: "tests/expr/math/math-1910.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1911", StylesheetPath: "tests/expr/math/math-1911.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1912", StylesheetPath: "tests/expr/math/math-1912.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1913", StylesheetPath: "tests/expr/math/math-1913.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1914", StylesheetPath: "tests/expr/math/math-1914.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1915", StylesheetPath: "tests/expr/math/math-1915.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1916", StylesheetPath: "tests/expr/math/math-1916.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-1917", StylesheetPath: "tests/expr/math/math-1917.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-2001", StylesheetPath: "tests/expr/math/math-2001.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-2002", StylesheetPath: "tests/expr/math/math-2002.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-2003", StylesheetPath: "tests/expr/math/math-2003.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-2004", StylesheetPath: "tests/expr/math/math-2004.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-2005", StylesheetPath: "tests/expr/math/math-2005.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-2006", StylesheetPath: "tests/expr/math/math-2006.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-2007", StylesheetPath: "tests/expr/math/math-2007.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-2008", StylesheetPath: "tests/expr/math/math-2008.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-2009", StylesheetPath: "tests/expr/math/math-2009.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-2010", StylesheetPath: "tests/expr/math/math-2010.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-2011", StylesheetPath: "tests/expr/math/math-2011.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-2012", StylesheetPath: "tests/expr/math/math-2012.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-2013", StylesheetPath: "tests/expr/math/math-2013.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "math-1901", StylesheetPath: "tests/expr/math/math-1901.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1902", StylesheetPath: "tests/expr/math/math-1902.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1903", StylesheetPath: "tests/expr/math/math-1903.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1904", StylesheetPath: "tests/expr/math/math-1904.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1905", StylesheetPath: "tests/expr/math/math-1905.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1906", StylesheetPath: "tests/expr/math/math-1906.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1907", StylesheetPath: "tests/expr/math/math-1907.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1908", StylesheetPath: "tests/expr/math/math-1908.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1909", StylesheetPath: "tests/expr/math/math-1909.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1910", StylesheetPath: "tests/expr/math/math-1910.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1911", StylesheetPath: "tests/expr/math/math-1911.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1912", StylesheetPath: "tests/expr/math/math-1912.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1913", StylesheetPath: "tests/expr/math/math-1913.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1914", StylesheetPath: "tests/expr/math/math-1914.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1915", StylesheetPath: "tests/expr/math/math-1915.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1916", StylesheetPath: "tests/expr/math/math-1916.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-1917", StylesheetPath: "tests/expr/math/math-1917.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-2001", StylesheetPath: "tests/expr/math/math-2001.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-2002", StylesheetPath: "tests/expr/math/math-2002.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-2003", StylesheetPath: "tests/expr/math/math-2003.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-2004", StylesheetPath: "tests/expr/math/math-2004.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-2005", StylesheetPath: "tests/expr/math/math-2005.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-2006", StylesheetPath: "tests/expr/math/math-2006.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-2007", StylesheetPath: "tests/expr/math/math-2007.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-2008", StylesheetPath: "tests/expr/math/math-2008.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-2009", StylesheetPath: "tests/expr/math/math-2009.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-2010", StylesheetPath: "tests/expr/math/math-2010.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-2011", StylesheetPath: "tests/expr/math/math-2011.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-2012", StylesheetPath: "tests/expr/math/math-2012.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-2013", StylesheetPath: "tests/expr/math/math-2013.xsl", SourceContent: "<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-2101", StylesheetPath: "tests/expr/math/math-2101.xsl", SourceContent: `<doc>
 <n attrib="1">0</n>
 <n attrib="1">1</n>
@@ -1528,7 +1528,7 @@ func TestW3C_math(t *testing.T) {
 <n attrib="1">2</n>
 <n attrib="1">3</n>
 <n attrib="2">4</n>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-2201", StylesheetPath: "tests/expr/math/math-2201.xsl", SourceContent: `<doc>
 <n1 attrib="2">2</n1>
 <n2 attrib="4">3</n2>
@@ -1552,7 +1552,7 @@ func TestW3C_math(t *testing.T) {
 		{Name: "math-2401", StylesheetPath: "tests/expr/math/math-2401.xsl", SourceContent: `<doc>
 <n-1 attrib="9">3</n-1>
 <n-2 attrib="1">7</n-2>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-2402", StylesheetPath: "tests/expr/math/math-2402.xsl", SourceContent: `<doc>
 <n-1 attrib="9">3</n-1>
 <n-2 attrib="1">7</n-2>
@@ -1600,19 +1600,19 @@ func TestW3C_math(t *testing.T) {
 <n2 attrib="5">3</n2>
 <div attrib="20">9</div>
 <mod attrib="2">3</mod>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-2503", StylesheetPath: "tests/expr/math/math-2503.xsl", SourceContent: `<doc>
 <n1 attrib="10">6</n1>
 <n2 attrib="5">3</n2>
 <div attrib="20">9</div>
 <mod attrib="2">3</mod>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-2504", StylesheetPath: "tests/expr/math/math-2504.xsl", SourceContent: `<doc>
 <n1 attrib="10">6</n1>
 <n2 attrib="5">3</n2>
 <div attrib="20">9</div>
 <mod attrib="2">3</mod>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-2505", StylesheetPath: "tests/expr/math/math-2505.xsl", SourceContent: `<doc>
 <n1 attrib="10">6</n1>
 <n2 attrib="5">3</n2>
@@ -1624,13 +1624,13 @@ func TestW3C_math(t *testing.T) {
 <n2 attrib="5">3</n2>
 <div attrib="20">9</div>
 <mod attrib="2">3</mod>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-2507", StylesheetPath: "tests/expr/math/math-2507.xsl", SourceContent: `<doc>
 <n1 attrib="10">6</n1>
 <n2 attrib="5">3</n2>
 <div attrib="20">9</div>
 <mod attrib="2">3</mod>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-2508", StylesheetPath: "tests/expr/math/math-2508.xsl", SourceContent: `<doc>
 <n1 attrib="10">6</n1>
 <n2 attrib="5">3</n2>
@@ -1642,37 +1642,37 @@ func TestW3C_math(t *testing.T) {
 <n2 attrib="5">3</n2>
 <div attrib="20">9</div>
 <mod attrib="2">3</mod>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-2601", StylesheetPath: "tests/expr/math/math-2601.xsl", SourceContent: `<doc>
 <n1 attrib="10">5</n1>
 <n2 attrib="4">2</n2>
 <div attrib="-5">-5</div>
 <mod attrib="-2">2</mod>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-2602", StylesheetPath: "tests/expr/math/math-2602.xsl", SourceContent: `<doc>
 <n1 attrib="10">5</n1>
 <n2 attrib="4">2</n2>
 <div attrib="-5">-5</div>
 <mod attrib="-2">2</mod>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-2603", StylesheetPath: "tests/expr/math/math-2603.xsl", SourceContent: `<doc>
 <n1 attrib="10">5</n1>
 <n2 attrib="4">2</n2>
 <div attrib="-5">-5</div>
 <mod attrib="-2">2</mod>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-2604", StylesheetPath: "tests/expr/math/math-2604.xsl", SourceContent: `<doc>
 <n1 attrib="10">5</n1>
 <n2 attrib="4">2</n2>
 <div attrib="-5">-5</div>
 <mod attrib="-2">2</mod>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-2605", StylesheetPath: "tests/expr/math/math-2605.xsl", SourceContent: `<doc>
 <n1 attrib="10">5</n1>
 <n2 attrib="4">2</n2>
 <div attrib="-5">-5</div>
 <mod attrib="-2">2</mod>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-2606", StylesheetPath: "tests/expr/math/math-2606.xsl", SourceContent: `<doc>
 <n1 attrib="10">5</n1>
 <n2 attrib="4">2</n2>
@@ -1684,7 +1684,7 @@ func TestW3C_math(t *testing.T) {
 <n2 attrib="4">2</n2>
 <div attrib="-5">-5</div>
 <mod attrib="-2">2</mod>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-2608", StylesheetPath: "tests/expr/math/math-2608.xsl", SourceContent: `<doc>
 <n1 attrib="10">5</n1>
 <n2 attrib="4">2</n2>
@@ -1751,34 +1751,34 @@ func TestW3C_math(t *testing.T) {
   <n4>10</n4>
   <n5>3</n5>
 </doc>`, Assertions: []w3cAssertion{w3cAssertXML("<out>60,6,2</out>")}},
-		{Name: "math-3001", StylesheetPath: "tests/expr/math/math-3001.xsl", SourceDocPath: "tests/expr/math/math-30.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-3101", StylesheetPath: "tests/expr/math/math-3101.xsl", SourceContent: "<doc><e>1</e><e>2</e><e>3</e><e>4</e><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "math-3001", StylesheetPath: "tests/expr/math/math-3001.xsl", SourceDocPath: "tests/expr/math/math-30.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3101", StylesheetPath: "tests/expr/math/math-3101.xsl", SourceContent: "<doc><e>1</e><e>2</e><e>3</e><e>4</e><e>five</e></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-3201", StylesheetPath: "tests/expr/math/math-3201.xsl", SourceContent: "<doc><e>17</e><e>-5</e><e>8</e><e>-37</e></doc>", Assertions: []w3cAssertion{w3cAssertXML("<out>-17</out>")}},
-		{Name: "math-3301", StylesheetPath: "tests/expr/math/math-3301.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "math-3301a", StylesheetPath: "tests/expr/math/math-3301a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "math-3302", StylesheetPath: "tests/expr/math/math-3302.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "math-3302a", StylesheetPath: "tests/expr/math/math-3302a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "math-3303", StylesheetPath: "tests/expr/math/math-3303.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "math-3303a", StylesheetPath: "tests/expr/math/math-3303a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "math-3304", StylesheetPath: "tests/expr/math/math-3304.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "math-3304a", StylesheetPath: "tests/expr/math/math-3304a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "math-3305", StylesheetPath: "tests/expr/math/math-3305.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "math-3305a", StylesheetPath: "tests/expr/math/math-3305a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "math-3306", StylesheetPath: "tests/expr/math/math-3306.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "math-3306a", StylesheetPath: "tests/expr/math/math-3306a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "math-3301", StylesheetPath: "tests/expr/math/math-3301.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3301a", StylesheetPath: "tests/expr/math/math-3301a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3302", StylesheetPath: "tests/expr/math/math-3302.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3302a", StylesheetPath: "tests/expr/math/math-3302a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3303", StylesheetPath: "tests/expr/math/math-3303.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3303a", StylesheetPath: "tests/expr/math/math-3303a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3304", StylesheetPath: "tests/expr/math/math-3304.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3304a", StylesheetPath: "tests/expr/math/math-3304a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3305", StylesheetPath: "tests/expr/math/math-3305.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3305a", StylesheetPath: "tests/expr/math/math-3305a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3306", StylesheetPath: "tests/expr/math/math-3306.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3306a", StylesheetPath: "tests/expr/math/math-3306a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-3307", StylesheetPath: "tests/expr/math/math-3307.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertXML("<out result=\"true\"/>")}},
-		{Name: "math-3307a", StylesheetPath: "tests/expr/math/math-3307a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-3308", StylesheetPath: "tests/expr/math/math-3308.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-3308a", StylesheetPath: "tests/expr/math/math-3308a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-3309", StylesheetPath: "tests/expr/math/math-3309.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-3309a", StylesheetPath: "tests/expr/math/math-3309a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}},
-		{Name: "math-3310", StylesheetPath: "tests/expr/math/math-3310.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "math-3310a", StylesheetPath: "tests/expr/math/math-3310a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "math-3307a", StylesheetPath: "tests/expr/math/math-3307a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3308", StylesheetPath: "tests/expr/math/math-3308.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3308a", StylesheetPath: "tests/expr/math/math-3308a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3309", StylesheetPath: "tests/expr/math/math-3309.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3309a", StylesheetPath: "tests/expr/math/math-3309a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3310", StylesheetPath: "tests/expr/math/math-3310.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3310a", StylesheetPath: "tests/expr/math/math-3310a.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-3311", StylesheetPath: "tests/expr/math/math-3311.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertXML("<a>509471411997963289699523771874153765145607095</a>")}},
 		{Name: "math-3312", StylesheetPath: "tests/expr/math/math-3312.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertXML("<a val=\"0 999999999999 18446744073709551615 18446744073709551618.14159\">OK</a>")}, Skip: "unsupported feature: schema_aware"},
-		{Name: "math-3313", StylesheetPath: "tests/expr/math/math-3313.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "math-3314", StylesheetPath: "tests/expr/math/math-3314.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
-		{Name: "math-3315", StylesheetPath: "tests/expr/math/math-3315.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "math-3313", StylesheetPath: "tests/expr/math/math-3313.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3314", StylesheetPath: "tests/expr/math/math-3314.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "math-3315", StylesheetPath: "tests/expr/math/math-3315.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "math-3316", StylesheetPath: "tests/expr/math/math-3316.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertXML("<circle xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" cx=\"10\" cy=\"-1\" r=\"4\"/>")}},
 		{Name: "math-3317", StylesheetPath: "tests/expr/math/math-3317.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertXML("<out><a0 ans=\"NaN\"/><a0 ans=\"NaN\"/><a0 ans=\"NaN\"/></out>")}, Skip: "unsupported feature: backwards_compatibility"},
 		{Name: "math-3318", StylesheetPath: "tests/expr/math/math-3318.xsl", SourceContent: "<doc></doc>", Assertions: []w3cAssertion{w3cAssertXML("<x>123456789012345678</x>")}},
@@ -2126,13 +2126,13 @@ func TestW3C_predicate(t *testing.T) {
   <a ex="value">3</a>
   <a why="">4</a>
   <a why="value">5</a>
-</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+</doc>`, Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "predicate-052", StylesheetPath: "tests/expr/predicate/predicate-052.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><a>ok1</a><a>ok2</a></out>")}},
 		{Name: "predicate-053", StylesheetPath: "tests/expr/predicate/predicate-053.xsl", SourceDocPath: "tests/expr/predicate/predicate48.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><bar a=\"1\" b=\"0\" c=\"0\" d=\"0\" seq=\"8\"/></out>")}},
 		{Name: "predicate-054", StylesheetPath: "tests/expr/predicate/predicate-054.xsl", SourceDocPath: "tests/expr/predicate/predicate48.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><bar seq=\"8\"/><bar seq=\"9\"/><bar seq=\"a\"/><bar seq=\"b\"/><bar seq=\"c\"/><bar seq=\"d\"/><bar seq=\"e\"/><bar seq=\"f\"/></out>")}},
-		{Name: "predicate-055", StylesheetPath: "tests/expr/predicate/predicate-055.xsl", SourceDocPath: "tests/expr/predicate/predicate-055.xml", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "predicate-055", StylesheetPath: "tests/expr/predicate/predicate-055.xsl", SourceDocPath: "tests/expr/predicate/predicate-055.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "predicate-056", StylesheetPath: "tests/expr/predicate/predicate-056.xsl", SourceDocPath: "tests/expr/predicate/predicate48.xml", ExpectError: true, ErrorCode: "FORG0006"},
-		{Name: "predicate-057", StylesheetPath: "tests/expr/predicate/predicate-057.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}},
+		{Name: "predicate-057", StylesheetPath: "tests/expr/predicate/predicate-057.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 	})
 }
 
