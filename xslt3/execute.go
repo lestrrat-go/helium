@@ -129,14 +129,18 @@ func (ec *execContext) newXPathContext(node helium.Node) context.Context {
 
 func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
 	vars := make(map[string]xpath3.Sequence)
+	// Start with globals, then overlay with locals (innermost scope wins)
 	for k, v := range ec.globalVars {
 		vars[k] = v
 	}
+	// Walk from outermost to innermost scope so inner scopes override
+	var scopes []*varScope
 	for s := ec.localVars; s != nil; s = s.parent {
-		for k, v := range s.vars {
-			if _, exists := vars[k]; !exists {
-				vars[k] = v
-			}
+		scopes = append(scopes, s)
+	}
+	for i := len(scopes) - 1; i >= 0; i-- {
+		for k, v := range scopes[i].vars {
+			vars[k] = v
 		}
 	}
 	return vars
