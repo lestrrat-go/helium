@@ -40,6 +40,9 @@ type execContext struct {
 	docCache          map[string]*helium.Document
 	cachedFns         map[string]xpath3.Function         // cached xsltFunctions() result
 	cachedFnsNS       map[xpath3.QualifiedName]xpath3.Function // cached xsltFunctionsNS() result
+	globalVarsGen     uint64                             // incremented when globalVars changes
+	cachedVarsMap     map[string]xpath3.Sequence         // cached result of collectAllVars (globals only)
+	cachedVarsGen     uint64                             // globalVarsGen at time cachedVarsMap was built
 	msgHandler        func(string, bool)
 	transformCfg      *transformConfig
 	transformCtx      context.Context // parent context from Transform caller (for cancellation/deadlines)
@@ -210,12 +213,11 @@ func (ec *execContext) sortXPathEvalState() *xpath3.EvalState {
 }
 
 func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
-	vars := make(map[string]xpath3.Sequence)
 	// Eagerly evaluate all pending global vars/params, but only at the
 	// top level. Nested calls (from within evaluateGlobalVar/Param →
 	// newXPathContext → collectAllVars) just snapshot what's available;
 	// the lazy lookupVar path handles remaining references on demand.
-	if !ec.collectingVars {
+	if !ec.collectingVars && (len(ec.globalVarDefs) > 0 || len(ec.globalParamDefs) > 0) {
 		ec.collectingVars = true
 		defer func() { ec.collectingVars = false }()
 		for len(ec.globalVarDefs) > 0 || len(ec.globalParamDefs) > 0 {
@@ -236,6 +238,13 @@ func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
 		}
 	}
 
+	// Fast path: when there are no local variables and globals haven't
+	// changed since the last call, return the cached map directly.
+	if ec.localVars == nil && ec.cachedVarsGen == ec.globalVarsGen && ec.cachedVarsMap != nil {
+		return ec.cachedVarsMap
+	}
+
+	vars := make(map[string]xpath3.Sequence, len(ec.globalVars))
 	// Start with globals
 	for k, v := range ec.globalVars {
 		vars[k] = v
@@ -250,6 +259,13 @@ func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
 			vars[k] = v
 		}
 	}
+
+	// Cache the result when it's globals-only (no local scopes)
+	if ec.localVars == nil {
+		ec.cachedVarsMap = vars
+		ec.cachedVarsGen = ec.globalVarsGen
+	}
+
 	return vars
 }
 
@@ -409,6 +425,7 @@ func (ec *execContext) evaluateGlobalVar(v *Variable) (xpath3.Sequence, error) {
 	}
 
 	ec.globalVars[v.Name] = val
+	ec.globalVarsGen++
 	delete(ec.globalVarDefs, v.Name)
 	return val, nil
 }
@@ -443,6 +460,7 @@ func (ec *execContext) evaluateGlobalParam(p *Param) (xpath3.Sequence, error) {
 	}
 
 	ec.globalVars[p.Name] = val
+	ec.globalVarsGen++
 	delete(ec.globalParamDefs, p.Name)
 	return val, nil
 }
