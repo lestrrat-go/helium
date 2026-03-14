@@ -1061,9 +1061,11 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 		return err
 	}
 
+	prevWasAtomic := false
 	for _, item := range result.Sequence() {
 		switch v := item.(type) {
 		case xpath3.NodeItem:
+			prevWasAtomic = false
 			if err := ec.copyNodeToOutput(v.Node); err != nil {
 				return err
 			}
@@ -1072,6 +1074,15 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 			if err != nil {
 				return err
 			}
+			if prevWasAtomic {
+				sep, tErr := ec.resultDoc.CreateText([]byte(" "))
+				if tErr != nil {
+					return tErr
+				}
+				if err := ec.addNode(sep); err != nil {
+					return err
+				}
+			}
 			text, err := ec.resultDoc.CreateText([]byte(s))
 			if err != nil {
 				return err
@@ -1079,6 +1090,7 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 			if err := ec.addNode(text); err != nil {
 				return err
 			}
+			prevWasAtomic = true
 		}
 	}
 	return nil
@@ -1751,9 +1763,11 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 		return nil
 	}
 
+	prevWasAtomic := false
 	for _, item := range result.Sequence() {
 		switch v := item.(type) {
 		case xpath3.NodeItem:
+			prevWasAtomic = false
 			if v.Node.Type() == helium.AttributeNode {
 				// Attribute nodes: add as attribute to current element
 				attr := v.Node.(*helium.Attribute)
@@ -1777,6 +1791,16 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 			if sErr != nil {
 				return sErr
 			}
+			// Insert space separator between consecutive atomic values
+			if prevWasAtomic {
+				sep, tErr := ec.resultDoc.CreateText([]byte(" "))
+				if tErr != nil {
+					return tErr
+				}
+				if err := ec.addNode(sep); err != nil {
+					return err
+				}
+			}
 			text, tErr := ec.resultDoc.CreateText([]byte(s))
 			if tErr != nil {
 				return tErr
@@ -1784,6 +1808,7 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 			if err := ec.addNode(text); err != nil {
 				return err
 			}
+			prevWasAtomic = true
 		}
 	}
 	return nil
@@ -1791,9 +1816,11 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 
 // outputSequence writes a sequence of items to the current output.
 func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
+	prevWasAtomic := false
 	for _, item := range seq {
 		switch v := item.(type) {
 		case xpath3.NodeItem:
+			prevWasAtomic = false
 			copied, copyErr := helium.CopyNode(v.Node, ec.resultDoc)
 			if copyErr != nil {
 				return copyErr
@@ -1806,6 +1833,15 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 			if sErr != nil {
 				return sErr
 			}
+			if prevWasAtomic {
+				sep, tErr := ec.resultDoc.CreateText([]byte(" "))
+				if tErr != nil {
+					return tErr
+				}
+				if err := ec.addNode(sep); err != nil {
+					return err
+				}
+			}
 			text, tErr := ec.resultDoc.CreateText([]byte(s))
 			if tErr != nil {
 				return tErr
@@ -1813,6 +1849,7 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 			if err := ec.addNode(text); err != nil {
 				return err
 			}
+			prevWasAtomic = true
 		}
 	}
 	return nil
