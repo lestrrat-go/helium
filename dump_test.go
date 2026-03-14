@@ -120,7 +120,7 @@ func TestDumpNsPropagatesWriteError(t *testing.T) {
 	require.NoError(t, root.DeclareNamespace("p", "urn:test"))
 
 	writer := helium.NewWriter(helium.WithNoDecl())
-	err = writer.WriteDoc(namespaceFailWriter{failOn: "xmlns"}, doc)
+	err = writer.WriteDoc(&namespaceFailWriter{failOn: "xmlns"}, doc)
 	require.ErrorIs(t, err, errNamespaceWrite)
 }
 
@@ -128,11 +128,20 @@ var errNamespaceWrite = errors.New("namespace write failed")
 
 type namespaceFailWriter struct {
 	failOn string
+	tail   string
 }
 
-func (w namespaceFailWriter) Write(p []byte) (int, error) {
-	if strings.Contains(string(p), w.failOn) {
+func (w *namespaceFailWriter) Write(p []byte) (int, error) {
+	window := w.tail + string(p)
+	if strings.Contains(window, w.failOn) {
 		return 0, errNamespaceWrite
+	}
+	if keep := len(w.failOn) - 1; keep > 0 {
+		if len(window) > keep {
+			w.tail = window[len(window)-keep:]
+		} else {
+			w.tail = window
+		}
 	}
 	return len(p), nil
 }
