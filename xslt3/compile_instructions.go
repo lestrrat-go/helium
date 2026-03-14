@@ -424,6 +424,14 @@ func (c *compiler) compileAttribute(elem *helium.Element) (*AttributeInst, error
 		inst.Namespace = nsAVT
 	}
 
+	if sep := getAttr(elem, "separator"); sep != "" {
+		sepAVT, err := compileAVT(sep, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.Separator = sepAVT
+	}
+
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)

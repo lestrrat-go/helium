@@ -494,18 +494,32 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 
 	var value string
 	if inst.Select != nil {
+		sep := " "
+		if inst.Separator != nil {
+			sep, err = inst.Separator.evaluate(ctx, ec.contextNode)
+			if err != nil {
+				return err
+			}
+		}
 		xpathCtx := ec.newXPathContext(ec.contextNode)
 		result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
 		if err != nil {
 			return err
 		}
-		value = stringifyResult(result)
+		value = stringifyResultWithSep(result, sep)
 	} else if len(inst.Body) > 0 {
+		sep := ""
+		if inst.Separator != nil {
+			sep, err = inst.Separator.evaluate(ctx, ec.contextNode)
+			if err != nil {
+				return err
+			}
+		}
 		val, err := ec.evaluateBody(ctx, inst.Body)
 		if err != nil {
 			return err
 		}
-		value = stringifySequence(val)
+		value = stringifySequenceWithSep(val, sep)
 	}
 
 	// The current output node must be an element
