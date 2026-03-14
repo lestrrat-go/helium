@@ -261,6 +261,11 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		ctx = xslt3.WithInitialTemplate(ctx, tc.InitialTemplate)
 	}
 	for pName, pVal := range tc.Params {
+		// The W3C test catalog specifies param values as XPath expressions.
+		// Strip enclosing quotes from string literals like "'Svalue'".
+		if len(pVal) >= 2 && pVal[0] == '\'' && pVal[len(pVal)-1] == '\'' {
+			pVal = pVal[1 : len(pVal)-1]
+		}
 		ctx = xslt3.WithParameter(ctx, pName, pVal)
 	}
 
