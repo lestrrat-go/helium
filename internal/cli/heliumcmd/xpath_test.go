@@ -1,6 +1,7 @@
-package main
+package heliumcmd
 
 import (
+	"context"
 	"io"
 	"strings"
 	"testing"
@@ -19,7 +20,7 @@ func newTestXPathCommand() *xpathCommand {
 }
 
 func TestRunXPathVersion(t *testing.T) {
-	require.Equal(t, ExitOK, run([]string{"xpath", "--version"}))
+	require.Equal(t, ExitOK, Execute(context.Background(), []string{"xpath", "--version"}))
 }
 
 func TestParseXPathArgsDefaults(t *testing.T) {

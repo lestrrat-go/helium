@@ -1,4 +1,4 @@
-package main
+package heliumcmd
 
 import (
 	"context"
@@ -66,23 +66,25 @@ type command struct {
 	stdinTTY bool
 }
 
-func Run(prog string, args []string) int {
-	return newCommand(prog).run(args)
+func newCommand(prog string) *command {
+	return newCommandWithIO(prog, os.Stdin, os.Stdout, os.Stderr, cliutil.IsTty(os.Stdin.Fd()))
 }
 
-func newCommand(prog string) *command {
+func newCommandWithIO(prog string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY bool) *command {
 	return &command{
 		prog:     prog,
-		stdin:    os.Stdin,
-		stdout:   os.Stdout,
-		stderr:   os.Stderr,
-		stdinTTY: cliutil.IsTty(os.Stdin.Fd()),
+		stdin:    stdin,
+		stdout:   stdout,
+		stderr:   stderr,
+		stdinTTY: stdinTTY,
 	}
 }
 
 func (c *command) run(args []string) int {
-	ctx := context.Background()
+	return c.runContext(context.Background(), args)
+}
 
+func (c *command) runContext(ctx context.Context, args []string) int {
 	cfg, files := c.parseArgs(args)
 	if cfg == nil {
 		c.showUsage()

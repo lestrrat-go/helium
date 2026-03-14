@@ -1,6 +1,7 @@
-package main
+package heliumcmd
 
 import (
+	"context"
 	"io"
 	"path/filepath"
 	"strings"
@@ -19,7 +20,7 @@ func newTestRelaxNGValidateCommand() *relaxNGValidateCommand {
 }
 
 func TestRunRelaxNGValidateVersion(t *testing.T) {
-	require.Equal(t, ExitOK, run([]string{"relaxng", "validate", "--version"}))
+	require.Equal(t, ExitOK, Execute(context.Background(), []string{"relaxng", "validate", "--version"}))
 }
 
 func TestParseRelaxNGValidateArgs(t *testing.T) {

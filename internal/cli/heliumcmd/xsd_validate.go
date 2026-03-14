@@ -1,4 +1,4 @@
-package main
+package heliumcmd
 
 import (
 	"context"
@@ -9,43 +9,45 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/cliutil"
-	"github.com/lestrrat-go/helium/relaxng"
+	"github.com/lestrrat-go/helium/xsd"
 )
 
-type relaxNGValidateConfig struct {
+type xsdValidateConfig struct {
 	schemaFile string
 	timing     bool
 	version    bool
 }
 
-type relaxNGValidateInput struct {
+type xsdValidateInput struct {
 	name  string
 	stdin bool
 }
 
-type relaxNGValidateCommand struct {
+type xsdValidateCommand struct {
 	prog     string
 	stdin    io.Reader
 	stderr   io.Writer
 	stdinTTY bool
 }
 
-func RunRelaxNGValidate(prog string, args []string) int {
-	return newRelaxNGValidateCommand(prog).run(args)
+func newXSDValidateCommand(prog string) *xsdValidateCommand {
+	return newXSDValidateCommandWithIO(prog, os.Stdin, os.Stderr, cliutil.IsTty(os.Stdin.Fd()))
 }
 
-func newRelaxNGValidateCommand(prog string) *relaxNGValidateCommand {
-	return &relaxNGValidateCommand{
+func newXSDValidateCommandWithIO(prog string, stdin io.Reader, stderr io.Writer, stdinTTY bool) *xsdValidateCommand {
+	return &xsdValidateCommand{
 		prog:     prog,
-		stdin:    os.Stdin,
-		stderr:   os.Stderr,
-		stdinTTY: cliutil.IsTty(os.Stdin.Fd()),
+		stdin:    stdin,
+		stderr:   stderr,
+		stdinTTY: stdinTTY,
 	}
 }
 
-func (c *relaxNGValidateCommand) run(args []string) int {
-	ctx := context.Background()
+func (c *xsdValidateCommand) run(args []string) int {
+	return c.runContext(context.Background(), args)
+}
 
+func (c *xsdValidateCommand) runContext(ctx context.Context, args []string) int {
 	cfg, files := c.parseArgs(args)
 	if cfg == nil {
 		c.showUsage()
@@ -57,14 +59,14 @@ func (c *relaxNGValidateCommand) run(args []string) int {
 		return ExitOK
 	}
 
-	var inputs []relaxNGValidateInput
+	var inputs []xsdValidateInput
 	switch {
 	case len(files) > 0:
 		for _, f := range files {
-			inputs = append(inputs, relaxNGValidateInput{name: f})
+			inputs = append(inputs, xsdValidateInput{name: f})
 		}
 	case !c.stdinTTY:
-		inputs = append(inputs, relaxNGValidateInput{name: "-", stdin: true})
+		inputs = append(inputs, xsdValidateInput{name: "-", stdin: true})
 	default:
 		c.showUsage()
 		return ExitErr
@@ -74,7 +76,7 @@ func (c *relaxNGValidateCommand) run(args []string) int {
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	grammar, err := relaxng.CompileFile(ctx, cfg.schemaFile)
+	schema, err := xsd.CompileFile(ctx, cfg.schemaFile)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Compiling schema took %s\n", time.Since(t0))
 	}
@@ -85,26 +87,26 @@ func (c *relaxNGValidateCommand) run(args []string) int {
 
 	exitCode := ExitOK
 	for _, input := range inputs {
-		code := c.processInput(ctx, cfg, input, grammar)
+		code := c.processInput(ctx, cfg, input, schema)
 		exitCode = mergeExitCode(exitCode, code)
 	}
 	return exitCode
 }
 
-func (c *relaxNGValidateCommand) showVersion() {
+func (c *xsdValidateCommand) showVersion() {
 	_, _ = fmt.Fprintf(c.stderr, "%s: using helium version %s\n", c.prog, helium.Version)
 }
 
-func (c *relaxNGValidateCommand) showUsage() {
+func (c *xsdValidateCommand) showUsage() {
 	_, _ = fmt.Fprintf(c.stderr, `Usage : %s [options] SCHEMA [XMLfiles ...]
-	Validate XML files against a RELAX NG schema
+	Validate XML files against an XML Schema
 	--timing : print timing information to stderr
 	--version : display the version of the XML library used
 `, c.prog)
 }
 
-func (c *relaxNGValidateCommand) parseArgs(args []string) (*relaxNGValidateConfig, []string) {
-	cfg := &relaxNGValidateConfig{}
+func (c *xsdValidateCommand) parseArgs(args []string) (*xsdValidateConfig, []string) {
+	cfg := &xsdValidateConfig{}
 	var positional []string
 
 	for i := 0; i < len(args); i++ {
@@ -136,7 +138,7 @@ func (c *relaxNGValidateCommand) parseArgs(args []string) (*relaxNGValidateConfi
 	return cfg, positional[1:]
 }
 
-func (c *relaxNGValidateCommand) processInput(ctx context.Context, cfg *relaxNGValidateConfig, input relaxNGValidateInput, grammar *relaxng.Grammar) int {
+func (c *xsdValidateCommand) processInput(ctx context.Context, cfg *xsdValidateConfig, input xsdValidateInput, schema *xsd.Schema) int {
 	var buf []byte
 	var err error
 	if input.stdin {
@@ -170,7 +172,7 @@ func (c *relaxNGValidateCommand) processInput(ctx context.Context, cfg *relaxNGV
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	err = relaxng.Validate(doc, grammar)
+	err = xsd.Validate(ctx, doc, schema)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Validating took %s\n", time.Since(t0))
 	}

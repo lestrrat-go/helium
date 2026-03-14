@@ -1,4 +1,4 @@
-package main
+package heliumcmd
 
 import (
 	"context"
@@ -9,43 +9,45 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/cliutil"
-	"github.com/lestrrat-go/helium/schematron"
+	"github.com/lestrrat-go/helium/relaxng"
 )
 
-type schematronValidateConfig struct {
+type relaxNGValidateConfig struct {
 	schemaFile string
 	timing     bool
 	version    bool
 }
 
-type schematronValidateInput struct {
+type relaxNGValidateInput struct {
 	name  string
 	stdin bool
 }
 
-type schematronValidateCommand struct {
+type relaxNGValidateCommand struct {
 	prog     string
 	stdin    io.Reader
 	stderr   io.Writer
 	stdinTTY bool
 }
 
-func RunSchematronValidate(prog string, args []string) int {
-	return newSchematronValidateCommand(prog).run(args)
+func newRelaxNGValidateCommand(prog string) *relaxNGValidateCommand {
+	return newRelaxNGValidateCommandWithIO(prog, os.Stdin, os.Stderr, cliutil.IsTty(os.Stdin.Fd()))
 }
 
-func newSchematronValidateCommand(prog string) *schematronValidateCommand {
-	return &schematronValidateCommand{
+func newRelaxNGValidateCommandWithIO(prog string, stdin io.Reader, stderr io.Writer, stdinTTY bool) *relaxNGValidateCommand {
+	return &relaxNGValidateCommand{
 		prog:     prog,
-		stdin:    os.Stdin,
-		stderr:   os.Stderr,
-		stdinTTY: cliutil.IsTty(os.Stdin.Fd()),
+		stdin:    stdin,
+		stderr:   stderr,
+		stdinTTY: stdinTTY,
 	}
 }
 
-func (c *schematronValidateCommand) run(args []string) int {
-	ctx := context.Background()
+func (c *relaxNGValidateCommand) run(args []string) int {
+	return c.runContext(context.Background(), args)
+}
 
+func (c *relaxNGValidateCommand) runContext(ctx context.Context, args []string) int {
 	cfg, files := c.parseArgs(args)
 	if cfg == nil {
 		c.showUsage()
@@ -57,14 +59,14 @@ func (c *schematronValidateCommand) run(args []string) int {
 		return ExitOK
 	}
 
-	var inputs []schematronValidateInput
+	var inputs []relaxNGValidateInput
 	switch {
 	case len(files) > 0:
 		for _, f := range files {
-			inputs = append(inputs, schematronValidateInput{name: f})
+			inputs = append(inputs, relaxNGValidateInput{name: f})
 		}
 	case !c.stdinTTY:
-		inputs = append(inputs, schematronValidateInput{name: "-", stdin: true})
+		inputs = append(inputs, relaxNGValidateInput{name: "-", stdin: true})
 	default:
 		c.showUsage()
 		return ExitErr
@@ -74,7 +76,7 @@ func (c *schematronValidateCommand) run(args []string) int {
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	schema, err := schematron.CompileFile(ctx, cfg.schemaFile, schematron.WithSchemaFilename(cfg.schemaFile))
+	grammar, err := relaxng.CompileFile(ctx, cfg.schemaFile)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Compiling schema took %s\n", time.Since(t0))
 	}
@@ -85,26 +87,26 @@ func (c *schematronValidateCommand) run(args []string) int {
 
 	exitCode := ExitOK
 	for _, input := range inputs {
-		code := c.processInput(ctx, cfg, input, schema)
+		code := c.processInput(ctx, cfg, input, grammar)
 		exitCode = mergeExitCode(exitCode, code)
 	}
 	return exitCode
 }
 
-func (c *schematronValidateCommand) showVersion() {
+func (c *relaxNGValidateCommand) showVersion() {
 	_, _ = fmt.Fprintf(c.stderr, "%s: using helium version %s\n", c.prog, helium.Version)
 }
 
-func (c *schematronValidateCommand) showUsage() {
+func (c *relaxNGValidateCommand) showUsage() {
 	_, _ = fmt.Fprintf(c.stderr, `Usage : %s [options] SCHEMA [XMLfiles ...]
-	Validate XML files against a Schematron schema
+	Validate XML files against a RELAX NG schema
 	--timing : print timing information to stderr
 	--version : display the version of the XML library used
 `, c.prog)
 }
 
-func (c *schematronValidateCommand) parseArgs(args []string) (*schematronValidateConfig, []string) {
-	cfg := &schematronValidateConfig{}
+func (c *relaxNGValidateCommand) parseArgs(args []string) (*relaxNGValidateConfig, []string) {
+	cfg := &relaxNGValidateConfig{}
 	var positional []string
 
 	for i := 0; i < len(args); i++ {
@@ -136,7 +138,7 @@ func (c *schematronValidateCommand) parseArgs(args []string) (*schematronValidat
 	return cfg, positional[1:]
 }
 
-func (c *schematronValidateCommand) processInput(ctx context.Context, cfg *schematronValidateConfig, input schematronValidateInput, schema *schematron.Schema) int {
+func (c *relaxNGValidateCommand) processInput(ctx context.Context, cfg *relaxNGValidateConfig, input relaxNGValidateInput, grammar *relaxng.Grammar) int {
 	var buf []byte
 	var err error
 	if input.stdin {
@@ -170,7 +172,7 @@ func (c *schematronValidateCommand) processInput(ctx context.Context, cfg *schem
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	err = schematron.Validate(ctx, doc, schema, schematron.WithFilename(input.name))
+	err = relaxng.Validate(doc, grammar)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Validating took %s\n", time.Since(t0))
 	}

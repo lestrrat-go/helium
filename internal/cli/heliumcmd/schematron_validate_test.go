@@ -1,6 +1,7 @@
-package main
+package heliumcmd
 
 import (
+	"context"
 	"io"
 	"path/filepath"
 	"strings"
@@ -19,7 +20,7 @@ func newTestSchematronValidateCommand() *schematronValidateCommand {
 }
 
 func TestRunSchematronValidateVersion(t *testing.T) {
-	require.Equal(t, ExitOK, run([]string{"schematron", "validate", "--version"}))
+	require.Equal(t, ExitOK, Execute(context.Background(), []string{"schematron", "validate", "--version"}))
 }
 
 func TestParseSchematronValidateArgs(t *testing.T) {

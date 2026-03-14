@@ -1,4 +1,4 @@
-package main
+package heliumcmd
 
 func mergeExitCode(current, next int) int {
 	if next > current {

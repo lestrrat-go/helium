@@ -1,6 +1,7 @@
-package main
+package heliumcmd
 
 import (
+	"context"
 	"io"
 	"path/filepath"
 	"strings"
@@ -19,7 +20,7 @@ func newTestXSDValidateCommand() *xsdValidateCommand {
 }
 
 func TestRunXSDValidateVersion(t *testing.T) {
-	require.Equal(t, ExitOK, run([]string{"xsd", "validate", "--version"}))
+	require.Equal(t, ExitOK, Execute(context.Background(), []string{"xsd", "validate", "--version"}))
 }
 
 func TestParseXSDValidateArgs(t *testing.T) {

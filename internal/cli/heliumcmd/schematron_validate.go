@@ -1,4 +1,4 @@
-package main
+package heliumcmd
 
 import (
 	"context"
@@ -9,43 +9,45 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/cliutil"
-	"github.com/lestrrat-go/helium/xsd"
+	"github.com/lestrrat-go/helium/schematron"
 )
 
-type xsdValidateConfig struct {
+type schematronValidateConfig struct {
 	schemaFile string
 	timing     bool
 	version    bool
 }
 
-type xsdValidateInput struct {
+type schematronValidateInput struct {
 	name  string
 	stdin bool
 }
 
-type xsdValidateCommand struct {
+type schematronValidateCommand struct {
 	prog     string
 	stdin    io.Reader
 	stderr   io.Writer
 	stdinTTY bool
 }
 
-func RunXSDValidate(prog string, args []string) int {
-	return newXSDValidateCommand(prog).run(args)
+func newSchematronValidateCommand(prog string) *schematronValidateCommand {
+	return newSchematronValidateCommandWithIO(prog, os.Stdin, os.Stderr, cliutil.IsTty(os.Stdin.Fd()))
 }
 
-func newXSDValidateCommand(prog string) *xsdValidateCommand {
-	return &xsdValidateCommand{
+func newSchematronValidateCommandWithIO(prog string, stdin io.Reader, stderr io.Writer, stdinTTY bool) *schematronValidateCommand {
+	return &schematronValidateCommand{
 		prog:     prog,
-		stdin:    os.Stdin,
-		stderr:   os.Stderr,
-		stdinTTY: cliutil.IsTty(os.Stdin.Fd()),
+		stdin:    stdin,
+		stderr:   stderr,
+		stdinTTY: stdinTTY,
 	}
 }
 
-func (c *xsdValidateCommand) run(args []string) int {
-	ctx := context.Background()
+func (c *schematronValidateCommand) run(args []string) int {
+	return c.runContext(context.Background(), args)
+}
 
+func (c *schematronValidateCommand) runContext(ctx context.Context, args []string) int {
 	cfg, files := c.parseArgs(args)
 	if cfg == nil {
 		c.showUsage()
@@ -57,14 +59,14 @@ func (c *xsdValidateCommand) run(args []string) int {
 		return ExitOK
 	}
 
-	var inputs []xsdValidateInput
+	var inputs []schematronValidateInput
 	switch {
 	case len(files) > 0:
 		for _, f := range files {
-			inputs = append(inputs, xsdValidateInput{name: f})
+			inputs = append(inputs, schematronValidateInput{name: f})
 		}
 	case !c.stdinTTY:
-		inputs = append(inputs, xsdValidateInput{name: "-", stdin: true})
+		inputs = append(inputs, schematronValidateInput{name: "-", stdin: true})
 	default:
 		c.showUsage()
 		return ExitErr
@@ -74,7 +76,7 @@ func (c *xsdValidateCommand) run(args []string) int {
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	schema, err := xsd.CompileFile(ctx, cfg.schemaFile)
+	schema, err := schematron.CompileFile(ctx, cfg.schemaFile, schematron.WithSchemaFilename(cfg.schemaFile))
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Compiling schema took %s\n", time.Since(t0))
 	}
@@ -91,20 +93,20 @@ func (c *xsdValidateCommand) run(args []string) int {
 	return exitCode
 }
 
-func (c *xsdValidateCommand) showVersion() {
+func (c *schematronValidateCommand) showVersion() {
 	_, _ = fmt.Fprintf(c.stderr, "%s: using helium version %s\n", c.prog, helium.Version)
 }
 
-func (c *xsdValidateCommand) showUsage() {
+func (c *schematronValidateCommand) showUsage() {
 	_, _ = fmt.Fprintf(c.stderr, `Usage : %s [options] SCHEMA [XMLfiles ...]
-	Validate XML files against an XML Schema
+	Validate XML files against a Schematron schema
 	--timing : print timing information to stderr
 	--version : display the version of the XML library used
 `, c.prog)
 }
 
-func (c *xsdValidateCommand) parseArgs(args []string) (*xsdValidateConfig, []string) {
-	cfg := &xsdValidateConfig{}
+func (c *schematronValidateCommand) parseArgs(args []string) (*schematronValidateConfig, []string) {
+	cfg := &schematronValidateConfig{}
 	var positional []string
 
 	for i := 0; i < len(args); i++ {
@@ -136,7 +138,7 @@ func (c *xsdValidateCommand) parseArgs(args []string) (*xsdValidateConfig, []str
 	return cfg, positional[1:]
 }
 
-func (c *xsdValidateCommand) processInput(ctx context.Context, cfg *xsdValidateConfig, input xsdValidateInput, schema *xsd.Schema) int {
+func (c *schematronValidateCommand) processInput(ctx context.Context, cfg *schematronValidateConfig, input schematronValidateInput, schema *schematron.Schema) int {
 	var buf []byte
 	var err error
 	if input.stdin {
@@ -170,7 +172,7 @@ func (c *xsdValidateCommand) processInput(ctx context.Context, cfg *xsdValidateC
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	err = xsd.Validate(ctx, doc, schema)
+	err = schematron.Validate(ctx, doc, schema, schematron.WithFilename(input.name))
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Validating took %s\n", time.Since(t0))
 	}
