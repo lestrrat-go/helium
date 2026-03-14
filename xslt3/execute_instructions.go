@@ -1225,9 +1225,9 @@ func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error
 	if terminate {
 		errorCode := "XTMM9000"
 		if inst.ErrorCode != nil {
-			ec, err := inst.ErrorCode.evaluate(ctx, ec.contextNode)
-			if err == nil && ec != "" {
-				errorCode = ec
+			code, err := inst.ErrorCode.evaluate(ctx, ec.contextNode)
+			if err == nil && code != "" {
+				errorCode = code
 			}
 		}
 		return &XSLTError{
