@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath1"
 )
 
 const xsdNS = "http://www.w3.org/2001/XMLSchema"
@@ -2457,6 +2458,24 @@ func (c *compiler) parseIDConstraint(elem *helium.Element, kind IDCKind) *IDCons
 			idc.Fields = append(idc.Fields, getAttr(ce, "xpath"))
 		}
 	}
+
+	// Pre-compile selector XPath expression.
+	if idc.Selector != "" {
+		compiled, err := xpath1.Compile(idc.Selector)
+		if err == nil {
+			idc.SelectorExpr = compiled
+		}
+	}
+
+	// Pre-compile field XPath expressions.
+	idc.FieldExprs = make([]*xpath1.Expression, len(idc.Fields))
+	for i, f := range idc.Fields {
+		compiled, err := xpath1.Compile(f)
+		if err == nil {
+			idc.FieldExprs[i] = compiled
+		}
+	}
+
 	return idc
 }
 

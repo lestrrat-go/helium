@@ -82,8 +82,14 @@ func validateIDConstraints(ctx context.Context, elem *helium.Element, edecl *Ele
 
 // evaluateIDC evaluates the selector and field XPaths for a single IDC.
 func evaluateIDC(nsCtx context.Context, elem *helium.Element, idc *IDConstraint) (*idcTable, error) {
-	// Evaluate selector XPath.
-	selectorResult, err := xpath1.Evaluate(nsCtx, elem, idc.Selector)
+	// Evaluate selector XPath using pre-compiled expression when available.
+	var selectorResult *xpath1.Result
+	var err error
+	if idc.SelectorExpr != nil {
+		selectorResult, err = idc.SelectorExpr.Evaluate(nsCtx, elem)
+	} else {
+		selectorResult, err = xpath1.Evaluate(nsCtx, elem, idc.Selector)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("xsd: IDC selector XPath failed: %w", err)
 	}
@@ -103,8 +109,13 @@ func evaluateIDC(nsCtx context.Context, elem *helium.Element, idc *IDConstraint)
 
 		// Evaluate each field XPath relative to the selected node.
 		allPresent := true
-		for _, fieldXPath := range idc.Fields {
-			fieldResult, err := xpath1.Evaluate(nsCtx, node, fieldXPath)
+		for i, fieldXPath := range idc.Fields {
+			var fieldResult *xpath1.Result
+			if i < len(idc.FieldExprs) && idc.FieldExprs[i] != nil {
+				fieldResult, err = idc.FieldExprs[i].Evaluate(nsCtx, node)
+			} else {
+				fieldResult, err = xpath1.Evaluate(nsCtx, node, fieldXPath)
+			}
 			if err != nil {
 				allPresent = false
 				break
