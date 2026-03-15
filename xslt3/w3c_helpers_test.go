@@ -296,12 +296,6 @@ func w3cCheckXPath(expr string) w3cCheck {
 	}}
 }
 
-func w3cCheckError(code string) w3cCheck {
-	return w3cCheck{fn: func(_ string, _ []string, _ map[string]*helium.Document) bool {
-		return false // error checks are handled at the transform level
-	}}
-}
-
 func w3cCheckSkip() w3cCheck {
 	return w3cCheck{fn: func(_ string, _ []string, _ map[string]*helium.Document) bool {
 		return true // skip = pass
