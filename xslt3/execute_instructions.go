@@ -1054,7 +1054,10 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		for _, item := range seq {
 			switch v := item.(type) {
 			case xpath3.NodeItem:
-				if err := ec.execCopyNode(ctx, v.Node, inst.Body); err != nil {
+				if err := ec.execCopyNode(ctx, v.Node, copyNodeOpts{
+					body:           inst.Body,
+					copyNamespaces: inst.CopyNamespaces,
+				}); err != nil {
 					return err
 				}
 			case xpath3.AtomicValue:
@@ -1078,7 +1081,11 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 	if ec.contextNode == nil {
 		return dynamicError(errCodeXTTE0945, "xsl:copy: no context item")
 	}
-	return ec.execCopyNode(ctx, ec.contextNode, inst.Body, inst.UseAttrSets)
+	return ec.execCopyNode(ctx, ec.contextNode, copyNodeOpts{
+		body:           inst.Body,
+		useAttrSets:    inst.UseAttrSets,
+		copyNamespaces: inst.CopyNamespaces,
+	})
 }
 
 // effectiveValidation returns the validation mode for a copy/copy-of instruction,
@@ -1090,7 +1097,13 @@ func (ec *execContext) effectiveValidation(instValidation string) string {
 	return ec.stylesheet.defaultValidation
 }
 
-func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body []Instruction, useAttrSets ...[]string) error {
+type copyNodeOpts struct {
+	body           []Instruction
+	useAttrSets    []string
+	copyNamespaces bool
+}
+
+func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts copyNodeOpts) error {
 	if node == nil {
 		return nil
 	}
@@ -1104,13 +1117,21 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body 
 			return err
 		}
 
-		// Copy namespace declarations
-		for _, ns := range srcElem.Namespaces() {
-			if err := elem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
-				return err
+		if opts.copyNamespaces {
+			// Copy all namespace declarations
+			for _, ns := range srcElem.Namespaces() {
+				if err := elem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
+					return err
+				}
 			}
 		}
 		if srcElem.URI() != "" {
+			// Always declare the element's own namespace
+			if !hasNSDecl(elem, srcElem.Prefix(), srcElem.URI()) {
+				if err := elem.DeclareNamespace(srcElem.Prefix(), srcElem.URI()); err != nil {
+					return err
+				}
+			}
 			if err := elem.SetActiveNamespace(srcElem.Prefix(), srcElem.URI()); err != nil {
 				return err
 			}
@@ -1127,13 +1148,13 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body 
 		defer func() { out.current = savedCurrent }()
 
 		// Apply attribute sets if specified
-		if len(useAttrSets) > 0 && len(useAttrSets[0]) > 0 {
-			if err := ec.applyAttributeSets(ctx, useAttrSets[0]); err != nil {
+		if len(opts.useAttrSets) > 0 {
+			if err := ec.applyAttributeSets(ctx, opts.useAttrSets); err != nil {
 				return err
 			}
 		}
 
-		for _, child := range body {
+		for _, child := range opts.body {
 			if err := ec.executeInstruction(ctx, child); err != nil {
 				return err
 			}
@@ -1185,7 +1206,7 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body 
 				// No doc element yet; use the document node itself as output target.
 				out.current = newDoc
 			}
-			for _, child := range body {
+			for _, child := range opts.body {
 				if err := ec.executeInstruction(ctx, child); err != nil {
 					ec.resultDoc = savedDoc
 					out.current = savedOutput
@@ -1199,7 +1220,7 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body 
 		}
 
 		// Not in capture mode — process body in current context.
-		for _, child := range body {
+		for _, child := range opts.body {
 			if err := ec.executeInstruction(ctx, child); err != nil {
 				return err
 			}
@@ -1240,7 +1261,7 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 		switch v := item.(type) {
 		case xpath3.NodeItem:
 			prevWasAtomic = false
-			if err := ec.copyNodeToOutput(v.Node); err != nil {
+			if err := ec.copyNodeToOutput(v.Node, inst.CopyNamespaces); err != nil {
 				return err
 			}
 			if preserve {
@@ -1274,13 +1295,19 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 }
 
 // copyNodeToOutput copies a node to the current output, handling document
-// and attribute nodes specially.
-func (ec *execContext) copyNodeToOutput(node helium.Node) error {
+// and attribute nodes specially. When copyNamespaces is false, namespace
+// declarations are not copied onto element nodes (only those required by
+// the element name and attribute names are preserved).
+func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool) error {
+	copyNS := true
+	if len(copyNamespaces) > 0 {
+		copyNS = copyNamespaces[0]
+	}
 	switch node.Type() {
 	case helium.DocumentNode:
 		// Copy children of the document node
 		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
-			if err := ec.copyNodeToOutput(child); err != nil {
+			if err := ec.copyNodeToOutput(child, copyNS); err != nil {
 				return err
 			}
 		}
@@ -1318,12 +1345,73 @@ func (ec *execContext) copyNodeToOutput(node helium.Node) error {
 		uri := string(nsw.Content())
 		return elem.DeclareNamespace(prefix, uri)
 	default:
+		if !copyNS && node.Type() == helium.ElementNode {
+			return ec.copyElementNoNamespaces(node.(*helium.Element))
+		}
 		copied, err := helium.CopyNode(node, ec.resultDoc)
 		if err != nil {
 			return err
 		}
 		return ec.addNode(copied)
 	}
+}
+
+// copyElementNoNamespaces deep-copies an element but omits namespace
+// declarations that are not required by the element or attribute names.
+func (ec *execContext) copyElementNoNamespaces(src *helium.Element) error {
+	elem, err := ec.resultDoc.CreateElement(src.LocalName())
+	if err != nil {
+		return err
+	}
+
+	// Only declare namespace for the element's own name
+	if src.URI() != "" {
+		if err := elem.DeclareNamespace(src.Prefix(), src.URI()); err != nil {
+			return err
+		}
+		if err := elem.SetActiveNamespace(src.Prefix(), src.URI()); err != nil {
+			return err
+		}
+	}
+
+	// Copy attributes, declaring their namespaces as needed
+	for _, a := range src.Attributes() {
+		if a.URI() != "" {
+			if !hasNSDecl(elem, a.Prefix(), a.URI()) {
+				if err := elem.DeclareNamespace(a.Prefix(), a.URI()); err != nil {
+					return err
+				}
+			}
+			ns, nsErr := ec.resultDoc.CreateNamespace(a.Prefix(), a.URI())
+			if nsErr != nil {
+				return nsErr
+			}
+			if err := elem.SetAttributeNS(a.LocalName(), a.Value(), ns); err != nil {
+				return err
+			}
+		} else {
+			if err := elem.SetAttribute(a.Name(), a.Value()); err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := ec.addNode(elem); err != nil {
+		return err
+	}
+
+	// Recursively copy children (also without namespaces)
+	out := ec.currentOutput()
+	savedCurrent := out.current
+	out.current = elem
+	for child := src.FirstChild(); child != nil; child = child.NextSibling() {
+		if err := ec.copyNodeToOutput(child, false); err != nil {
+			out.current = savedCurrent
+			return err
+		}
+	}
+	out.current = savedCurrent
+	return nil
 }
 
 func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *LiteralResultElement) error {
