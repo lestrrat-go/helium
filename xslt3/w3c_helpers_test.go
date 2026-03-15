@@ -447,18 +447,6 @@ func mergedChildrenEqual(a, b *helium.Element) bool {
 	return true
 }
 
-func isWhitespaceOnlyText(n helium.Node) bool {
-	if n.Type() != helium.TextNode {
-		return false
-	}
-	for _, b := range n.Content() {
-		if b != ' ' && b != '\t' && b != '\n' && b != '\r' {
-			return false
-		}
-	}
-	return true
-}
-
 func collectAttrs(e *helium.Element) map[string]string {
 	attrs := make(map[string]string)
 	for _, attr := range e.Attributes() {
