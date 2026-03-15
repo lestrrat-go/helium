@@ -80,10 +80,11 @@ func (*LiteralTextInst) instructionTag() {}
 
 // ElementInst represents xsl:element.
 type ElementInst struct {
-	Name      *AVT
-	Namespace *AVT
-	Body      []Instruction
-	TypeName  string // XSD type annotation (e.g., "xs:integer")
+	Name             *AVT
+	Namespace        *AVT
+	Body             []Instruction
+	TypeName         string   // XSD type annotation (e.g., "xs:integer")
+	UseAttributeSets []string // xsl:use-attribute-sets
 }
 
 func (*ElementInst) instructionTag() {}

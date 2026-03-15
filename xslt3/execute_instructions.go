@@ -481,6 +481,13 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 		}
 	}
 
+	// Apply attribute sets before adding to output
+	if len(inst.UseAttributeSets) > 0 {
+		if err := ec.applyAttributeSets(ctx, elem, inst.UseAttributeSets); err != nil {
+			return err
+		}
+	}
+
 	if err := ec.addNode(elem); err != nil {
 		return err
 	}

@@ -397,6 +397,12 @@ func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
 		inst.Namespace = nsAVT
 	}
 
+	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
+		for _, name := range strings.Fields(uas) {
+			inst.UseAttributeSets = append(inst.UseAttributeSets, resolveQName(name, c.nsBindings))
+		}
+	}
+
 	body, err := c.compileChildren(elem)
 	if err != nil {
 		return nil, err
