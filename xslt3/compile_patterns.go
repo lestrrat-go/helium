@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -30,9 +31,22 @@ func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS strin
 		if alt == "" {
 			continue
 		}
+		// Reject patterns wrapped in outer parentheses: "(pattern)"
+		// These are not valid in the XSLT pattern grammar even though
+		// they parse as valid XPath.
+		if isOuterParenthesized(alt) {
+			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: parenthesized pattern not allowed", alt)
+		}
+		// Reject 'union' keyword in patterns — XSLT patterns use '|', not 'union'
+		if containsUnionKeyword(alt) {
+			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: 'union' keyword not allowed in pattern", alt)
+		}
 		ast, err := xpath3.Parse(alt)
 		if err != nil {
 			return nil, staticError(errCodeXTSE0500, "invalid pattern %q: %v", alt, err)
+		}
+		if err := validatePatternExpr(ast); err != nil {
+			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: %s", alt, err)
 		}
 		pa := &PatternAlt{
 			expr:     ast,
@@ -44,6 +58,249 @@ func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS strin
 		return nil, staticError(errCodeXTSE0500, "empty pattern %q", s)
 	}
 	return p, nil
+}
+
+// validatePatternExpr validates that a parsed XPath expression is a valid
+// XSLT match pattern. XSLT patterns are a restricted subset of XPath —
+// certain constructs like variable references, arbitrary function calls,
+// and parenthesized union expressions are not allowed.
+func validatePatternExpr(expr xpath3.Expr) error {
+	return validatePatternExprInner(expr, true)
+}
+
+func validatePatternExprInner(expr xpath3.Expr, topLevel bool) error {
+	switch e := expr.(type) {
+	case xpath3.LocationPath, *xpath3.LocationPath:
+		// LocationPath patterns are valid (e.g., a/b/c, //x, /)
+		return validateLocationPathPattern(expr)
+	case xpath3.RootExpr, *xpath3.RootExpr:
+		// "/" is valid
+		return nil
+	case xpath3.ContextItemExpr:
+		// "." is valid
+		return nil
+	case xpath3.FilterExpr:
+		// FilterExpr: a primary expression with predicates.
+		// In patterns, only "." with predicates is allowed (e.g., .[pred]).
+		// A root expression with predicates like /[doc] is NOT allowed.
+		if _, ok := e.Expr.(xpath3.ContextItemExpr); ok {
+			return nil // .[pred] is valid
+		}
+		if _, ok := e.Expr.(xpath3.RootExpr); ok {
+			return fmt.Errorf("predicates on '/' are not allowed")
+		}
+		if _, ok := e.Expr.(*xpath3.RootExpr); ok {
+			return fmt.Errorf("predicates on '/' are not allowed")
+		}
+		return fmt.Errorf("filter expression not allowed in pattern")
+	case xpath3.PathExpr:
+		// PathExpr: filter/step. Check the filter part is valid.
+		return validatePatternPathExpr(e)
+	case xpath3.PathStepExpr:
+		// E1/E2 or E1//E2 where E2 is a non-axis expression
+		return validatePatternPathStepExpr(e)
+	case xpath3.VariableExpr:
+		// Variable references are allowed in XSLT 3.0 patterns
+		return nil
+	case xpath3.FunctionCall:
+		// Function calls: key(), id(), doc() with literal args are allowed
+		if isAllowedPatternFunction(e) {
+			return nil
+		}
+		return fmt.Errorf("function call %s() not allowed in pattern", e.Name)
+	case xpath3.UnionExpr:
+		// Union inside a pattern: valid in XSLT 3.0 as operands of
+		// intersect/except or inside parenthesized path steps
+		return nil
+	case xpath3.IntersectExceptExpr:
+		// intersect/except are valid pattern operators in XSLT 3.0
+		if err := validatePatternExprInner(e.Left, false); err != nil {
+			return err
+		}
+		return validatePatternExprInner(e.Right, false)
+	case xpath3.BinaryExpr:
+		// Binary expressions like "and union or" parse as operator expressions
+		return fmt.Errorf("binary operator not allowed in pattern")
+	default:
+		return fmt.Errorf("expression type %T not allowed in pattern", expr)
+	}
+}
+
+func validateLocationPathPattern(expr xpath3.Expr) error {
+	var steps []xpath3.Step
+	switch e := expr.(type) {
+	case xpath3.LocationPath:
+		steps = e.Steps
+	case *xpath3.LocationPath:
+		steps = e.Steps
+	}
+	// Check each step for disallowed constructs in predicates
+	for _, step := range steps {
+		for _, pred := range step.Predicates {
+			if err := validatePredicateExpr(pred); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validatePatternPathExpr(e xpath3.PathExpr) error {
+	// The filter part: only ContextItemExpr, RootExpr, or FunctionCall (key/id/doc)
+	switch f := e.Filter.(type) {
+	case xpath3.ContextItemExpr:
+		// .[pred]/steps is valid
+	case xpath3.RootExpr, *xpath3.RootExpr:
+		// /steps is valid
+	case xpath3.FunctionCall:
+		// Only certain functions at the start of a path pattern
+		if !isAllowedPatternFunction(f) {
+			return fmt.Errorf("function call %s() not allowed at start of path pattern", f.Name)
+		}
+	case xpath3.FilterExpr:
+		// FilterExpr at the start of a path
+		return validatePatternExprInner(f, false)
+	case xpath3.VariableExpr:
+		// Variable references are allowed in XSLT 3.0 patterns
+	default:
+		return fmt.Errorf("expression type %T not allowed at start of path pattern", e.Filter)
+	}
+	return nil
+}
+
+func validatePatternPathStepExpr(e xpath3.PathStepExpr) error {
+	// Check left side
+	switch l := e.Left.(type) {
+	case xpath3.VariableExpr:
+		// Variable references are allowed in XSLT 3.0 patterns
+	case xpath3.FunctionCall:
+		if !isAllowedPatternFunction(l) {
+			return fmt.Errorf("function call %s() not allowed in pattern", l.Name)
+		}
+	case xpath3.PathExpr:
+		if err := validatePatternPathExpr(l); err != nil {
+			return err
+		}
+	case xpath3.PathStepExpr:
+		if err := validatePatternPathStepExpr(l); err != nil {
+			return err
+		}
+	}
+	// Check right side
+	switch r := e.Right.(type) {
+	case xpath3.VariableExpr:
+		// Variable references are allowed in XSLT 3.0 patterns
+	case xpath3.FunctionCall:
+		return fmt.Errorf("function call %s() not allowed in middle of pattern", r.Name)
+	case xpath3.ArrayConstructorExpr:
+		return fmt.Errorf("array constructor not allowed in pattern")
+	}
+	return nil
+}
+
+// isAllowedPatternFunction returns true if a function call is allowed at the
+// start of a path pattern. In XSLT 3.0, key(), id(), and doc() are allowed
+// with literal arguments.
+func isAllowedPatternFunction(fc xpath3.FunctionCall) bool {
+	switch fc.Name {
+	case "key", "id", "idref", "doc":
+		// Check that all arguments are literals
+		for _, arg := range fc.Args {
+			if !isPatternFunctionArg(arg) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// isPatternFunctionArg returns true if an expression is a valid argument
+// to a function in a pattern (must be a literal or variable reference).
+func isPatternFunctionArg(expr xpath3.Expr) bool {
+	switch expr.(type) {
+	case xpath3.LiteralExpr:
+		return true
+	case xpath3.VariableExpr:
+		return true
+	}
+	return false
+}
+
+// validatePredicateExpr validates expressions used inside predicates.
+// Predicates in patterns can contain arbitrary XPath expressions.
+func validatePredicateExpr(_ xpath3.Expr) error {
+	// Predicates can contain any valid XPath expression,
+	// so no additional validation needed.
+	return nil
+}
+
+// containsUnionKeyword checks if a pattern string uses the 'union' keyword
+// as an operator (not inside strings, predicates, or as an element name).
+// XSLT patterns must use '|' for union, not the 'union' keyword.
+func containsUnionKeyword(s string) bool {
+	// Simple check: look for ' union ' (surrounded by spaces) outside of
+	// strings and predicates/parens.
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\'', '"':
+			q := s[i]
+			i++
+			for i < len(s) && s[i] != q {
+				i++
+			}
+		case '(', '[':
+			depth++
+		case ')', ']':
+			depth--
+		default:
+			if depth == 0 && i+5 < len(s) && s[i:i+5] == "union" {
+				// Check word boundaries
+				before := i == 0 || !isXPathNameChar(s[i-1])
+				after := i+5 >= len(s) || !isXPathNameChar(s[i+5])
+				if before && after {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func isXPathNameChar(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') ||
+		(b >= '0' && b <= '9') || b == '_' || b == '-' || b == '.'
+}
+
+// isOuterParenthesized checks if a pattern string is entirely wrapped in
+// outer parentheses, e.g. "(doc|cod)" or "(.[. instance of xs:integer])".
+// It returns false for patterns that merely contain parentheses in sub-expressions
+// like "element(foo)" or "a[position()=1]".
+func isOuterParenthesized(s string) bool {
+	if len(s) < 2 || s[0] != '(' {
+		return false
+	}
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return i == len(s)-1
+			}
+		case '\'', '"':
+			// Skip string literals
+			q := s[i]
+			i++
+			for i < len(s) && s[i] != q {
+				i++
+			}
+		}
+	}
+	return false
 }
 
 // splitPatternUnion splits a pattern string by | at the top level.
