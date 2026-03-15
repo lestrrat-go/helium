@@ -7,6 +7,66 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
+// Allowed attribute sets for XSLT elements (unprefixed attributes only).
+var (
+	withParamAllowedAttrs = map[string]struct{}{
+		"name": {}, "select": {}, "as": {}, "tunnel": {},
+	}
+	paramAllowedAttrs = map[string]struct{}{
+		"name": {}, "select": {}, "as": {}, "required": {}, "tunnel": {}, "static": {},
+	}
+	variableAllowedAttrs = map[string]struct{}{
+		"name": {}, "select": {}, "as": {}, "static": {}, "visibility": {},
+	}
+	// XSLT-namespace attributes allowed on literal result elements
+	lreAllowedXSLTAttrs = map[string]struct{}{
+		"use-attribute-sets":        {},
+		"expand-text":               {},
+		"xpath-default-namespace":   {},
+		"exclude-result-prefixes":   {},
+		"extension-element-prefixes": {},
+		"version":                   {},
+		"type":                      {},
+		"validation":                {},
+		"default-collation":         {},
+		"default-mode":              {},
+		"default-validation":        {},
+		"inherit-namespaces":        {},
+		"use-when":                  {},
+	}
+)
+
+// validateBooleanAttr checks that a boolean attribute value is valid xs:boolean.
+// Valid values are "yes", "no", "true", "false", "1", "0" (with optional whitespace).
+// Returns XTSE0020 if the value is not valid.
+func validateBooleanAttr(elemName, attrName, value string) error {
+	if _, ok := parseXSDBool(value); !ok {
+		return staticError(errCodeXTSE0020, "%q is not a valid value for %s/@%s", value, elemName, attrName)
+	}
+	return nil
+}
+
+// validateXSLTAttrs checks that an XSLT element has only allowed unprefixed attributes
+// and no attributes in the XSLT namespace. Returns XTSE0090 for unknown attributes.
+func validateXSLTAttrs(elem *helium.Element, allowed map[string]struct{}) error {
+	for _, attr := range elem.Attributes() {
+		// Attributes in the XSLT namespace are not allowed on XSLT elements
+		if attr.URI() == NSXSLT {
+			return staticError(errCodeXTSE0090,
+				"attribute %q in the XSLT namespace is not allowed on xsl:%s", attr.LocalName(), elem.LocalName())
+		}
+		// Skip attributes in other (non-null) namespaces — those are extension attributes
+		if attr.URI() != "" {
+			continue
+		}
+		if _, ok := allowed[attr.LocalName()]; !ok {
+			return staticError(errCodeXTSE0090,
+				"attribute %q is not allowed on xsl:%s", attr.LocalName(), elem.LocalName())
+		}
+	}
+	return nil
+}
+
 // compileInstruction compiles a single element into an Instruction.
 func (c *compiler) compileInstruction(elem *helium.Element) (Instruction, error) {
 	// Push element-local namespace declarations into scope
@@ -22,13 +82,19 @@ func (c *compiler) compileInstruction(elem *helium.Element) (Instruction, error)
 
 	// Handle expand-text inheritance (check both unprefixed and xsl:-prefixed for LREs)
 	savedExpandText := c.expandText
-	if et := getAttr(elem, "expand-text"); et != "" {
+	if et, hasET := elem.GetAttribute("expand-text"); hasET {
 		if v, ok := parseXSDBool(et); ok {
 			c.expandText = v
+		} else if elem.URI() == NSXSLT {
+			// XTSE0020: invalid boolean value for expand-text on XSLT element
+			return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:%s/@expand-text", et, elem.LocalName())
 		}
 	} else if et, ok := elem.GetAttributeNS("expand-text", NSXSLT); ok {
 		if v, ok := parseXSDBool(et); ok {
 			c.expandText = v
+		} else {
+			// XTSE0020: invalid boolean value for xsl:expand-text on LRE
+			return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:expand-text", et)
 		}
 	}
 	defer func() { c.expandText = savedExpandText }()
@@ -407,6 +473,13 @@ func (c *compiler) compileText(elem *helium.Element) (*TextInst, error) {
 }
 
 func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
+	// Validate boolean attributes (including empty string)
+	if inAttr, hasIn := elem.GetAttribute("inherit-namespaces"); hasIn {
+		if err := validateBooleanAttr("xsl:element", "inherit-namespaces", inAttr); err != nil {
+			return nil, err
+		}
+	}
+
 	nameAttr := getAttr(elem, "name")
 	if nameAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:element requires name attribute")
@@ -766,6 +839,18 @@ func (c *compiler) compileLocalParam(elem *helium.Element) (*ParamInst, error) {
 }
 
 func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
+	// Validate boolean attributes (including empty string)
+	if inAttr, hasIn := elem.GetAttribute("inherit-namespaces"); hasIn {
+		if err := validateBooleanAttr("xsl:copy", "inherit-namespaces", inAttr); err != nil {
+			return nil, err
+		}
+	}
+	if cn, hasCN := elem.GetAttribute("copy-namespaces"); hasCN {
+		if err := validateBooleanAttr("xsl:copy", "copy-namespaces", cn); err != nil {
+			return nil, err
+		}
+	}
+
 	inst := &CopyInst{}
 
 	if v := getAttr(elem, "validation"); v != "" {
@@ -800,6 +885,24 @@ func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
 }
 
 func (c *compiler) compileCopyOf(elem *helium.Element) (*CopyOfInst, error) {
+	// XTSE0090: reject specific attributes that are not allowed on xsl:copy-of
+	for _, attr := range elem.Attributes() {
+		if attr.URI() != "" {
+			continue
+		}
+		if attr.LocalName() == "match" || attr.LocalName() == "count" || attr.LocalName() == "from" {
+			return nil, staticError(errCodeXTSE0090,
+				"attribute %q is not allowed on xsl:copy-of", attr.LocalName())
+		}
+	}
+
+	// Validate boolean attribute: copy-namespaces
+	if cn, hasCN := elem.GetAttribute("copy-namespaces"); hasCN {
+		if err := validateBooleanAttr("xsl:copy-of", "copy-namespaces", cn); err != nil {
+			return nil, err
+		}
+	}
+
 	selectAttr := getAttr(elem, "select")
 	if selectAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:copy-of requires select attribute")
@@ -971,6 +1074,13 @@ func (c *compiler) compileNamespace(elem *helium.Element) (*NamespaceInst, error
 }
 
 func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
+	// Validate boolean attribute: stable (including empty string)
+	if stableAttr, hasStable := elem.GetAttribute("stable"); hasStable {
+		if err := validateBooleanAttr("xsl:sort", "stable", stableAttr); err != nil {
+			return nil, err
+		}
+	}
+
 	sk := &SortKey{}
 
 	selectAttr := getAttr(elem, "select")
@@ -1032,9 +1142,22 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
 }
 
 func (c *compiler) compileWithParam(elem *helium.Element) (*WithParam, error) {
+	// Validate attributes: xsl:with-param allows name, select, as, tunnel
+	// but NOT required (that's only for xsl:param)
+	if err := validateXSLTAttrs(elem, withParamAllowedAttrs); err != nil {
+		return nil, err
+	}
+
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:with-param requires name attribute")
+	}
+
+	// Validate tunnel attribute value if present (including empty string)
+	if tunnelAttr, hasTunnel := elem.GetAttribute("tunnel"); hasTunnel {
+		if err := validateBooleanAttr("xsl:with-param", "tunnel", tunnelAttr); err != nil {
+			return nil, err
+		}
 	}
 
 	wp := &WithParam{
@@ -1259,6 +1382,28 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 		return nil, staticError(errCodeXTSE0110, "xsl:for-each-group requires select attribute")
 	}
 
+	// XTSE1080: exactly one of group-by, group-adjacent, group-starting-with,
+	// group-ending-with must be present
+	groupingCount := 0
+	if getAttr(elem, "group-by") != "" {
+		groupingCount++
+	}
+	if getAttr(elem, "group-adjacent") != "" {
+		groupingCount++
+	}
+	if getAttr(elem, "group-starting-with") != "" {
+		groupingCount++
+	}
+	if getAttr(elem, "group-ending-with") != "" {
+		groupingCount++
+	}
+	if groupingCount == 0 {
+		return nil, staticError(errCodeXTSE1080, "xsl:for-each-group requires one of group-by, group-adjacent, group-starting-with, or group-ending-with")
+	}
+	if groupingCount > 1 {
+		return nil, staticError(errCodeXTSE1080, "xsl:for-each-group must have at most one of group-by, group-adjacent, group-starting-with, or group-ending-with")
+	}
+
 	expr, err := compileXPath(selectAttr, c.nsBindings)
 	if err != nil {
 		return nil, err
@@ -1266,8 +1411,14 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 
 	inst := &ForEachGroupInst{Select: expr}
 
-	if comp := getAttr(elem, "composite"); comp == "yes" || comp == "true" || comp == "1" {
-		inst.Composite = true
+	// Validate boolean attribute: composite
+	if comp, hasComp := elem.GetAttribute("composite"); hasComp {
+		if err := validateBooleanAttr("xsl:for-each-group", "composite", comp); err != nil {
+			return nil, err
+		}
+		if comp == "yes" || comp == "true" || comp == "1" {
+			inst.Composite = true
+		}
 	}
 
 	if gb := getAttr(elem, "group-by"); gb != "" {
@@ -1408,9 +1559,14 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 		lre.Namespaces[prefix] = uri
 	}
 
-	// Compile attributes (those not in XSLT namespace) with AVTs
+	// Validate and compile attributes
 	for _, attr := range elem.Attributes() {
 		if attr.URI() == NSXSLT {
+			// XTSE0805: only certain XSLT attributes are allowed on LREs
+			if _, ok := lreAllowedXSLTAttrs[attr.LocalName()]; !ok {
+				return nil, staticError(errCodeXTSE0805,
+					"attribute xsl:%s is not allowed on a literal result element", attr.LocalName())
+			}
 			continue
 		}
 		avt, err := compileAVT(attr.Value(), c.nsBindings)

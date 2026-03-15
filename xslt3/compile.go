@@ -159,10 +159,12 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 		c.xpathDefaultNS = xdn
 	}
 
-	// Read expand-text from stylesheet root (XSLT 3.0)
-	if et := getAttr(root, "expand-text"); et != "" {
+	// Read expand-text from stylesheet root (XSLT 3.0, using GetAttribute to catch empty values)
+	if et, hasET := root.GetAttribute("expand-text"); hasET {
 		if v, ok := parseXSDBool(et); ok {
 			c.expandText = v
+		} else {
+			return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:stylesheet/@expand-text", et)
 		}
 	}
 
@@ -307,7 +309,9 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 		case "decimal-format":
 			c.compileDecimalFormat(elem)
 		case "mode":
-			c.compileMode(elem)
+			if err := c.compileMode(elem); err != nil {
+				return err
+			}
 		case "import-schema":
 			if err := c.compileImportSchema(elem); err != nil {
 				return err
@@ -393,11 +397,13 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		c.localExcludes = newExcludes
 	}
 
-	// Handle expand-text on xsl:template
+	// Handle expand-text on xsl:template (using GetAttribute to catch empty values)
 	savedExpandText := c.expandText
-	if et := getAttr(elem, "expand-text"); et != "" {
+	if et, hasET := elem.GetAttribute("expand-text"); hasET {
 		if v, ok := parseXSDBool(et); ok {
 			c.expandText = v
+		} else {
+			return staticError(errCodeXTSE0020, "%q is not a valid value for xsl:template/@expand-text", et)
 		}
 	}
 
@@ -518,15 +524,53 @@ func (c *compiler) compileTemplateBody(elem *helium.Element) ([]Instruction, []*
 }
 
 func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
+	// Validate attributes on xsl:param
+	if err := validateXSLTAttrs(elem, paramAllowedAttrs); err != nil {
+		return nil, err
+	}
+
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:param requires name attribute")
 	}
 
+	// Validate boolean attribute values (including empty string)
+	if reqAttr, hasReq := elem.GetAttribute("required"); hasReq {
+		if err := validateBooleanAttr("xsl:param", "required", reqAttr); err != nil {
+			return nil, err
+		}
+	}
+	if tunnelAttr, hasTunnel := elem.GetAttribute("tunnel"); hasTunnel {
+		if err := validateBooleanAttr("xsl:param", "tunnel", tunnelAttr); err != nil {
+			return nil, err
+		}
+	}
+
+	required := getAttr(elem, "required") == "yes"
+
+	// XTSE0010: A required parameter must not have a select attribute or body content
+	if required {
+		selectAttr := getAttr(elem, "select")
+		if selectAttr != "" {
+			return nil, staticError(errCodeXTSE0010, "xsl:param with required='yes' must not have a select attribute")
+		}
+		// Check for non-whitespace body content
+		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+			switch child.Type() {
+			case helium.ElementNode:
+				return nil, staticError(errCodeXTSE0010, "xsl:param with required='yes' must not have content")
+			case helium.TextNode, helium.CDATASectionNode:
+				if strings.TrimSpace(string(child.Content())) != "" {
+					return nil, staticError(errCodeXTSE0010, "xsl:param with required='yes' must not have content")
+				}
+			}
+		}
+	}
+
 	p := &Param{
 		Name:     resolveQName(name, c.nsBindings),
 		As:       getAttr(elem, "as"),
-		Required: getAttr(elem, "required") == "yes",
+		Required: required,
 		Tunnel:   getAttr(elem, "tunnel") == "yes",
 	}
 
@@ -551,6 +595,11 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
 }
 
 func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
+	// Validate attributes on xsl:variable
+	if err := validateXSLTAttrs(elem, variableAllowedAttrs); err != nil {
+		return err
+	}
+
 	name := getAttr(elem, "name")
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:variable requires name attribute")
@@ -698,11 +747,13 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 		return staticError(errCodeXTSE0010, "xsl:function name %q must have a namespace prefix", name)
 	}
 
-	// Handle expand-text on xsl:function
+	// Handle expand-text on xsl:function (using GetAttribute to catch empty values)
 	savedExpandText := c.expandText
-	if et := getAttr(elem, "expand-text"); et != "" {
+	if et, hasET := elem.GetAttribute("expand-text"); hasET {
 		if v, ok := parseXSDBool(et); ok {
 			c.expandText = v
+		} else {
+			return staticError(errCodeXTSE0020, "%q is not a valid value for xsl:function/@expand-text", et)
 		}
 	}
 
@@ -725,23 +776,92 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 	return nil
 }
 
-func (c *compiler) compileMode(elem *helium.Element) {
+func (c *compiler) compileMode(elem *helium.Element) error {
 	name := getAttr(elem, "name")
 	if name == "" {
 		name = "#default"
 	}
+
+	// Validate boolean attributes on xsl:mode (using GetAttribute to catch empty values)
+	// Note: "typed" is NOT a simple boolean — it accepts "strict", "lax", "unspecified" as well
+	for _, boolAttr := range []string{"streamable", "warning-on-no-match", "warning-on-multiple-match"} {
+		if v, has := elem.GetAttribute(boolAttr); has {
+			if err := validateBooleanAttr("xsl:mode", boolAttr, v); err != nil {
+				return err
+			}
+		}
+	}
+
+	// XTSE0020: visibility constraints on mode
+	if vis := getAttr(elem, "visibility"); vis != "" {
+		if name == "#default" && (vis == "public" || vis == "final") {
+			return staticError(errCodeXTSE0020, "the unnamed mode cannot have visibility=%q", vis)
+		}
+		if name != "#default" && vis == "abstract" {
+			return staticError(errCodeXTSE0020, "a named mode cannot have visibility=%q", vis)
+		}
+	}
+
+	onNoMatch := getAttr(elem, "on-no-match")
+	if onNoMatch == "" {
+		onNoMatch = "text-only-copy" // XSLT 3.0 default
+	}
+
+	useAccum := getAttr(elem, "use-accumulators")
+	onMultipleMatch := getAttr(elem, "on-multiple-match")
+
 	md := &ModeDef{
-		Name:       name,
-		OnNoMatch:  getAttr(elem, "on-no-match"),
-		Streamable: getAttr(elem, "streamable") == "yes",
+		Name:            name,
+		OnNoMatch:       onNoMatch,
+		Streamable:      getAttr(elem, "streamable") == "yes",
+		UseAccumulators: useAccum,
+		OnMultipleMatch: onMultipleMatch,
 	}
-	if md.OnNoMatch == "" {
-		md.OnNoMatch = "text-only-copy" // XSLT 3.0 default
-	}
+
 	if c.stylesheet.modeDefs == nil {
 		c.stylesheet.modeDefs = make(map[string]*ModeDef)
 	}
-	c.stylesheet.modeDefs[name] = md
+
+	// XTSE0545: conflicting mode declarations at same import precedence
+	if existing, ok := c.stylesheet.modeDefs[name]; ok {
+		explicitOnNoMatch := getAttr(elem, "on-no-match")
+		// Check for conflicting on-no-match values
+		if explicitOnNoMatch != "" && existing.OnNoMatch != "" && existing.OnNoMatch != onNoMatch {
+			return staticError(errCodeXTSE0545,
+				"conflicting on-no-match values for mode %q: %q vs %q", name, existing.OnNoMatch, onNoMatch)
+		}
+		// Check for conflicting streamable values
+		if getAttr(elem, "streamable") != "" && existing.Streamable != md.Streamable {
+			return staticError(errCodeXTSE0545,
+				"conflicting streamable values for mode %q", name)
+		}
+		// Check for conflicting use-accumulators values
+		if useAccum != "" && existing.UseAccumulators != "" && existing.UseAccumulators != useAccum {
+			return staticError(errCodeXTSE0545,
+				"conflicting use-accumulators values for mode %q: %q vs %q", name, existing.UseAccumulators, useAccum)
+		}
+		// Check for conflicting on-multiple-match values
+		if onMultipleMatch != "" && existing.OnMultipleMatch != "" && existing.OnMultipleMatch != onMultipleMatch {
+			return staticError(errCodeXTSE0545,
+				"conflicting on-multiple-match values for mode %q: %q vs %q", name, existing.OnMultipleMatch, onMultipleMatch)
+		}
+		// Merge: keep existing, only update explicitly specified attributes
+		if explicitOnNoMatch != "" {
+			existing.OnNoMatch = onNoMatch
+		}
+		if getAttr(elem, "streamable") != "" {
+			existing.Streamable = md.Streamable
+		}
+		if useAccum != "" {
+			existing.UseAccumulators = useAccum
+		}
+		if onMultipleMatch != "" {
+			existing.OnMultipleMatch = onMultipleMatch
+		}
+	} else {
+		c.stylesheet.modeDefs[name] = md
+	}
+	return nil
 }
 
 func (c *compiler) compileAttributeSet(elem *helium.Element) error {
