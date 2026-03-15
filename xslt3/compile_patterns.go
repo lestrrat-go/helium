@@ -355,6 +355,13 @@ func computeDefaultPriority(expr xpath3.Expr) float64 {
 	case xpath3.ContextItemExpr:
 		// "." (self::node()) — wildcard node test, priority -0.5
 		return -0.5
+	case xpath3.FilterExpr:
+		// Predicate pattern: .[pred1][pred2]...
+		// Priority = 0.5 + (number of predicates * 0.25)
+		if _, ok := e.Expr.(xpath3.ContextItemExpr); ok {
+			return 0.5 + float64(len(e.Predicates))*0.25
+		}
+		return 0.5
 	default:
 		return 0.5
 	}
