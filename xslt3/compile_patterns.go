@@ -420,14 +420,25 @@ func nodeTestPriority(test xpath3.NodeTest) float64 {
 
 // matchPattern tests whether a node matches the pattern.
 func (p *Pattern) matchPattern(ctx *execContext, node helium.Node) bool {
-	// Temporarily set xpath-default-namespace from pattern's compile-time value
+	// Temporarily set xpath-default-namespace from pattern's compile-time value.
+	// Also clear contextItem so predicates evaluate with the candidate node
+	// as the context item (not an atomic value from an enclosing instruction
+	// like xsl:analyze-string). Per XSLT spec, the set of captured substrings
+	// is empty when evaluating patterns: regex-group() must return empty
+	// sequence inside a pattern, not groups from an enclosing matching-substring.
 	saved := ctx.xpathDefaultNS
 	savedHas := ctx.hasXPathDefaultNS
+	savedGroups := ctx.regexGroups
+	savedItem := ctx.contextItem
 	ctx.xpathDefaultNS = p.xpathDefaultNS
 	ctx.hasXPathDefaultNS = p.xpathDefaultNS != ""
+	ctx.regexGroups = nil
+	ctx.contextItem = nil
 	defer func() {
 		ctx.xpathDefaultNS = saved
 		ctx.hasXPathDefaultNS = savedHas
+		ctx.regexGroups = savedGroups
+		ctx.contextItem = savedItem
 	}()
 
 	for _, alt := range p.Alternatives {
