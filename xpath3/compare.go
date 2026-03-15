@@ -496,6 +496,18 @@ func compareAtomic(op TokenType, a, b AtomicValue) (bool, error) {
 	return compareAtomicWithImplicitTimezone(op, a, b, nil)
 }
 
+// AtomicEquals tests two atomic values for equality using XPath value
+// comparison (eq) semantics, including untypedAtomic promotion.
+// Returns false when the types are not comparable (instead of an error),
+// making it suitable for key() lookup where type mismatches mean "no match".
+func AtomicEquals(a, b AtomicValue) bool {
+	result, err := ValueCompare(TokenEq, a, b)
+	if err != nil {
+		return false
+	}
+	return result
+}
+
 func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitTZ *time.Location) (bool, error) {
 	// Map general comparison operators to value comparison operators
 	op = normalizeCompareOp(op)

@@ -262,6 +262,15 @@ func (a AtomicValue) QNameVal() QNameValue {
 	return a.Value.(QNameValue)
 }
 
+// IsNaN returns true if the atomic value is NaN (xs:double or xs:float).
+func (a AtomicValue) IsNaN() bool {
+	if a.TypeName != TypeDouble && a.TypeName != TypeFloat {
+		return false
+	}
+	fv, ok := a.Value.(*FloatValue)
+	return ok && fv.IsNaN()
+}
+
 // IsNumeric returns true if the type is xs:integer (or derived), xs:decimal, xs:double, or xs:float.
 func (a AtomicValue) IsNumeric() bool {
 	if isIntegerDerived(a.TypeName) {

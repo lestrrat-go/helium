@@ -5,14 +5,46 @@ import (
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath3"
 )
+
+// keyEntry pairs a typed atomic key value with the node it indexes.
+type keyEntry struct {
+	key  xpath3.AtomicValue
+	node helium.Node
+}
 
 // keyTable is a built key index for a specific xsl:key name.
 type keyTable struct {
 	defs     []*KeyDef
-	entries  map[string][]helium.Node // key-value -> matching nodes
+	entries  map[string][]keyEntry // canonicalKey -> entries
 	building bool
 	built    bool
+}
+
+// canonicalKey produces a hash key that groups potentially-equal values
+// into the same bucket. Typed comparison refines matches within a bucket.
+// Values that could be equal under XPath eq semantics (including
+// untypedAtomic promotion) must share the same canonical key.
+func canonicalKey(av xpath3.AtomicValue) string {
+	s, _ := xpath3.AtomicToString(av)
+	// Group numerics together so integer 4 and double 4.0 can be
+	// compared in the same bucket.
+	if av.IsNumeric() {
+		return "N:" + s
+	}
+	// Group untypedAtomic, string, and all string-derived types together
+	// since untypedAtomic is promoted to string for eq comparison.
+	switch av.TypeName {
+	case xpath3.TypeUntypedAtomic, xpath3.TypeString,
+		xpath3.TypeNormalizedString, xpath3.TypeToken,
+		xpath3.TypeLanguage, xpath3.TypeName, xpath3.TypeNCName,
+		xpath3.TypeNMTOKEN, xpath3.TypeNMTOKENS,
+		xpath3.TypeENTITY, xpath3.TypeID, xpath3.TypeIDREF, xpath3.TypeIDREFS,
+		xpath3.TypeAnyURI:
+		return "S:" + s
+	}
+	return av.TypeName + ":" + s
 }
 
 // buildKeyTable builds or retrieves a key table for the given key name
@@ -37,7 +69,7 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 
 	kt := &keyTable{
 		defs:     defs,
-		entries:  make(map[string][]helium.Node),
+		entries:  make(map[string][]keyEntry),
 		building: true,
 	}
 	ec.keyTables[cacheKey] = kt
@@ -51,9 +83,13 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 		ec.currentNode = savedCurrent
 	}()
 
-	// Track which nodes have been added for each key value to avoid
+	// Track which nodes have been added for each canonical key to avoid
 	// duplicates when multiple defs match the same node.
-	seen := make(map[string]map[helium.Node]struct{})
+	type seenKey struct {
+		canonical string
+		node      helium.Node
+	}
+	seen := make(map[seenKey]struct{})
 
 	err := helium.Walk(root, func(node helium.Node) error {
 		for _, kd := range defs {
@@ -63,6 +99,7 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 			ec.contextNode = node
 			ec.currentNode = node
 
+			var items []xpath3.Item
 			if kd.Use != nil {
 				// use="expr" form
 				xpathCtx := ec.newXPathContext(node)
@@ -70,16 +107,7 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 				if err != nil {
 					return err
 				}
-				for _, item := range result.Sequence() {
-					keyVal := stringifyItem(item)
-					if seen[keyVal] == nil {
-						seen[keyVal] = make(map[helium.Node]struct{})
-					}
-					if _, dup := seen[keyVal][node]; !dup {
-						seen[keyVal][node] = struct{}{}
-						kt.entries[keyVal] = append(kt.entries[keyVal], node)
-					}
-				}
+				items = result.Sequence()
 			} else if len(kd.Body) > 0 {
 				// Content constructor form: evaluate body as sequence
 				ctx := ec.transformCtx
@@ -90,16 +118,26 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 				if err != nil {
 					return err
 				}
-				for _, item := range seq {
-					keyVal := stringifyItem(item)
-					if seen[keyVal] == nil {
-						seen[keyVal] = make(map[helium.Node]struct{})
-					}
-					if _, dup := seen[keyVal][node]; !dup {
-						seen[keyVal][node] = struct{}{}
-						kt.entries[keyVal] = append(kt.entries[keyVal], node)
-					}
+				items = seq
+			}
+
+			for _, item := range items {
+				av, err := xpath3.AtomizeItem(item)
+				if err != nil {
+					continue
 				}
+				// NaN values never match anything (NaN != NaN),
+				// so do not index them.
+				if av.IsNaN() {
+					continue
+				}
+				ck := canonicalKey(av)
+				sk := seenKey{canonical: ck, node: node}
+				if _, dup := seen[sk]; dup {
+					continue
+				}
+				seen[sk] = struct{}{}
+				kt.entries[ck] = append(kt.entries[ck], keyEntry{key: av, node: node})
 			}
 		}
 		return nil
@@ -114,8 +152,8 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 	return kt, nil
 }
 
-// lookupKeyInDoc looks up nodes by key name and value in the given document root.
-func (ec *execContext) lookupKeyInDoc(name, value string, root helium.Node) ([]helium.Node, error) {
+// lookupKey looks up nodes by key name and typed value in the given document root.
+func (ec *execContext) lookupKey(name string, value xpath3.AtomicValue, root helium.Node) ([]helium.Node, error) {
 	cacheKey := fmt.Sprintf("%s@%p", name, root)
 	if kt, ok := ec.keyTables[cacheKey]; ok && kt.building {
 		return nil, nil
@@ -124,5 +162,24 @@ func (ec *execContext) lookupKeyInDoc(name, value string, root helium.Node) ([]h
 	if err != nil {
 		return nil, err
 	}
-	return kt.entries[value], nil
+
+	// NaN lookup never matches.
+	if value.IsNaN() {
+		return nil, nil
+	}
+
+	ck := canonicalKey(value)
+	candidates := kt.entries[ck]
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+
+	// Filter candidates using typed eq comparison.
+	var result []helium.Node
+	for _, entry := range candidates {
+		if xpath3.AtomicEquals(value, entry.key) {
+			result = append(result, entry.node)
+		}
+	}
+	return result, nil
 }
