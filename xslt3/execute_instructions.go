@@ -1054,10 +1054,24 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		for _, item := range seq {
 			switch v := item.(type) {
 			case xpath3.NodeItem:
-				if err := ec.execCopyNode(ctx, v.Node, copyNodeOpts{
+				// Set focus to the selected node (singleton focus)
+				savedCtx := ec.contextNode
+				savedCur := ec.currentNode
+				savedPos := ec.position
+				savedSize := ec.size
+				ec.contextNode = v.Node
+				ec.currentNode = v.Node
+				ec.position = 1
+				ec.size = 1
+				err := ec.execCopyNode(ctx, v.Node, copyNodeOpts{
 					body:           inst.Body,
 					copyNamespaces: inst.CopyNamespaces,
-				}); err != nil {
+				})
+				ec.contextNode = savedCtx
+				ec.currentNode = savedCur
+				ec.position = savedPos
+				ec.size = savedSize
+				if err != nil {
 					return err
 				}
 			case xpath3.AtomicValue:
