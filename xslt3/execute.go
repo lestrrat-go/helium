@@ -734,7 +734,7 @@ func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mod
 	switch mode {
 	case "#current":
 		mode = ec.currentMode
-	case "#default", "":
+	case "#default", "#unnamed", "":
 		mode = ec.stylesheet.defaultMode
 	}
 
