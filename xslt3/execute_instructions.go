@@ -2502,11 +2502,8 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 		return nil
 	}
 
-	// Set XSLT 3.0 error variables in catch scope
+	// Extract error code from the error
 	const errNS = "http://www.w3.org/2005/xqt-errors"
-	ec.pushVarScope()
-	defer ec.popVarScope()
-
 	errCode := "XSLT0000"
 	errDesc := tryErr.Error()
 	if xErr, ok := tryErr.(*XSLTError); ok {
@@ -2516,6 +2513,24 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 		errCode = xpErr.Code
 		errDesc = xpErr.Message
 	}
+
+	// Find matching catch clause
+	var matchedCatch *CatchClause
+	for _, clause := range inst.Catches {
+		if catchMatches(clause, errCode) {
+			matchedCatch = clause
+			break
+		}
+	}
+	if matchedCatch == nil {
+		// No matching catch — propagate the error
+		return tryErr
+	}
+
+	// Set XSLT 3.0 error variables in catch scope
+	ec.pushVarScope()
+	defer ec.popVarScope()
+
 	ec.setVar("{"+errNS+"}code", xpath3.SingleString(errCode))
 	ec.setVar("{"+errNS+"}description", xpath3.SingleString(errDesc))
 	ec.setVar("{"+errNS+"}value", xpath3.EmptySequence())
@@ -2523,21 +2538,48 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 	ec.setVar("{"+errNS+"}line-number", xpath3.SingleInteger(0))
 	ec.setVar("{"+errNS+"}column-number", xpath3.SingleInteger(0))
 
-	// Execute catch body
-	if inst.CatchSelect != nil {
+	// Execute matched catch body
+	if matchedCatch.Select != nil {
 		xpathCtx := ec.newXPathContext(ec.contextNode)
-		result, err := inst.CatchSelect.Evaluate(xpathCtx, ec.contextNode)
+		result, err := matchedCatch.Select.Evaluate(xpathCtx, ec.contextNode)
 		if err != nil {
 			return err
 		}
 		return ec.outputSequence(result.Sequence())
 	}
-	for _, child := range inst.Catch {
+	for _, child := range matchedCatch.Body {
 		if err := ec.executeInstruction(ctx, child); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// catchMatches returns true if a catch clause matches the given error code.
+func catchMatches(clause *CatchClause, errCode string) bool {
+	if len(clause.Errors) == 0 {
+		return true // no errors attribute = match all
+	}
+	for _, pattern := range clause.Errors {
+		if pattern == "*" {
+			return true
+		}
+		// Match by local name (QName form)
+		if pattern == errCode {
+			return true
+		}
+		// Match by Clark notation: {uri}local
+		if strings.HasPrefix(pattern, "{") {
+			// Extract local name from Clark notation
+			if idx := strings.Index(pattern, "}"); idx >= 0 {
+				local := pattern[idx+1:]
+				if local == errCode {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupInst) error {
