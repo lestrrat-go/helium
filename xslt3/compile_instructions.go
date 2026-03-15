@@ -1297,6 +1297,13 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 		})
 	}
 
+	// Handle xsl:use-attribute-sets
+	if uas, ok := elem.GetAttributeNS("use-attribute-sets", NSXSLT); ok {
+		for _, name := range strings.Fields(uas) {
+			lre.UseAttributeSets = append(lre.UseAttributeSets, resolveQName(name, c.nsBindings))
+		}
+	}
+
 	// Compile children
 	body, err := c.compileChildren(elem)
 	if err != nil {

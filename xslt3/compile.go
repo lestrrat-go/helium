@@ -272,8 +272,12 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 			if err := c.compileImportSchema(elem); err != nil {
 				return err
 			}
-		case "namespace-alias", "attribute-set":
-			// TODO: implement in later phases
+		case "attribute-set":
+			if err := c.compileAttributeSet(elem); err != nil {
+				return err
+			}
+		case "namespace-alias":
+			// TODO: implement namespace-alias
 		default:
 			// Unknown top-level element - ignore for forward compatibility
 		}
@@ -642,6 +646,42 @@ func (c *compiler) compileMode(elem *helium.Element) {
 		c.stylesheet.modeDefs = make(map[string]*ModeDef)
 	}
 	c.stylesheet.modeDefs[name] = md
+}
+
+func (c *compiler) compileAttributeSet(elem *helium.Element) error {
+	name := getAttr(elem, "name")
+	if name == "" {
+		return staticError(errCodeXTSE0110, "xsl:attribute-set requires name attribute")
+	}
+	name = resolveQName(name, c.nsBindings)
+
+	asd := &AttributeSetDef{Name: name}
+
+	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
+		for _, n := range strings.Fields(uas) {
+			asd.UseAttrSets = append(asd.UseAttrSets, resolveQName(n, c.nsBindings))
+		}
+	}
+
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		childElem, ok := child.(*helium.Element)
+		if !ok {
+			continue
+		}
+		if childElem.URI() == NSXSLT && childElem.LocalName() == "attribute" {
+			inst, err := c.compileAttribute(childElem)
+			if err != nil {
+				return err
+			}
+			asd.Attrs = append(asd.Attrs, inst)
+		}
+	}
+
+	if c.stylesheet.attributeSets == nil {
+		c.stylesheet.attributeSets = make(map[string]*AttributeSetDef)
+	}
+	c.stylesheet.attributeSets[name] = asd
+	return nil
 }
 
 func (c *compiler) compileDecimalFormat(elem *helium.Element) {

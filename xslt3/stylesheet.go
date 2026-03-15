@@ -29,6 +29,7 @@ type Stylesheet struct {
 	excludePrefixes map[string]struct{} // prefixes excluded from output
 	decimalFormats  map[xpath3.QualifiedName]xpath3.DecimalFormat // named decimal formats
 	modeDefs        map[string]*ModeDef                         // mode name -> mode definition
+	attributeSets   map[string]*AttributeSetDef                 // xsl:attribute-set definitions
 	sourceDoc         *helium.Document                            // the parsed stylesheet document (for document(""))
 	baseURI           string                                      // base URI for resolving relative document references
 	schemas           []*xsd.Schema                               // imported schemas (xsl:import-schema)
@@ -39,6 +40,13 @@ type Stylesheet struct {
 type ModeDef struct {
 	Name      string
 	OnNoMatch string // "shallow-copy", "deep-copy", "shallow-skip", "deep-skip", "text-only-copy", "fail"
+}
+
+// AttributeSetDef is a compiled xsl:attribute-set.
+type AttributeSetDef struct {
+	Name          string
+	UseAttrSets   []string      // names of other attribute sets to include
+	Attrs         []Instruction // xsl:attribute instructions
 }
 
 // XSLFunction is a compiled xsl:function.
