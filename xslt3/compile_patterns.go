@@ -236,44 +236,6 @@ func validatePredicateExpr(_ xpath3.Expr) error {
 	return nil
 }
 
-// containsUnionKeyword checks if a pattern string uses the 'union' keyword
-// as an operator (not inside strings, predicates, or as an element name).
-// XSLT patterns must use '|' for union, not the 'union' keyword.
-func containsUnionKeyword(s string) bool {
-	// Simple check: look for ' union ' (surrounded by spaces) outside of
-	// strings and predicates/parens.
-	depth := 0
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '\'', '"':
-			q := s[i]
-			i++
-			for i < len(s) && s[i] != q {
-				i++
-			}
-		case '(', '[':
-			depth++
-		case ')', ']':
-			depth--
-		default:
-			if depth == 0 && i+5 < len(s) && s[i:i+5] == "union" {
-				// Check word boundaries
-				before := i == 0 || !isXPathNameChar(s[i-1])
-				after := i+5 >= len(s) || !isXPathNameChar(s[i+5])
-				if before && after {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
-func isXPathNameChar(b byte) bool {
-	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') ||
-		(b >= '0' && b <= '9') || b == '_' || b == '-' || b == '.'
-}
-
 // isOuterParenthesized checks if a pattern string is entirely wrapped in
 // outer parentheses, e.g. "(doc|cod)" or "(.[. instance of xs:integer])".
 // It returns false for patterns that merely contain parentheses in sub-expressions

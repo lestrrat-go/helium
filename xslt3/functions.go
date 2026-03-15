@@ -339,7 +339,7 @@ func (ec *execContext) fnGenerateID(ctx context.Context, args []xpath3.Sequence)
 }
 
 // system-property(name) returns XSLT system properties.
-func (ec *execContext) fnSystemProperty(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+func (ec *execContext) fnSystemProperty(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 	if len(args) == 0 || len(args[0]) == 0 {
 		return xpath3.SingleString(""), nil
 	}
@@ -353,10 +353,29 @@ func (ec *execContext) fnSystemProperty(_ context.Context, args []xpath3.Sequenc
 		return nil, err
 	}
 
-	// Strip prefix
+	// Resolve QName: only prefixed names in the XSLT namespace return
+	// XSLT properties. Unprefixed names are in no namespace and return "".
 	local := name
+	ns := ""
 	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		prefix := name[:idx]
 		local = name[idx+1:]
+		// Try XPath context namespaces first (includes local declarations),
+		// then fall back to stylesheet-level namespaces.
+		if ctxNS := xpath3.GetNamespaces(ctx); ctxNS != nil {
+			if uri, ok := ctxNS[prefix]; ok {
+				ns = uri
+			}
+		}
+		if ns == "" {
+			if uri, ok := ec.stylesheet.namespaces[prefix]; ok {
+				ns = uri
+			}
+		}
+	}
+
+	if ns != NSXSLT {
+		return xpath3.SingleString(""), nil
 	}
 
 	switch local {
