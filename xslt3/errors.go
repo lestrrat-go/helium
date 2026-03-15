@@ -44,10 +44,16 @@ const (
 	errCodeXTSE1060 = "XTSE1060" // for-each-group missing grouping attribute
 	errCodeXTSE1070 = "XTSE1070" // for-each-group multiple grouping attributes
 	errCodeXTSE1080 = "XTSE1080" // for-each-group invalid attribute combination
-	errCodeXTSE3430 = "XTSE3430" // non-streamable expression in streaming context
-	errCodeXTSE3441 = "XTSE3441" // streamability error in accumulator
-	errCodeXTDE3630 = "XTDE3630" // source-document runtime error
-	errCodeXTDE3635 = "XTDE3635" // source-document URI resolution error
+	errCodeXTSE0580_ = "XTSE0580" // duplicate parameter name in xsl:iterate
+	errCodeXTSE0670  = "XTSE0670" // duplicate with-param name in xsl:next-iteration
+	errCodeXTSE3120  = "XTSE3120" // xsl:break/xsl:next-iteration not allowed in this position
+	errCodeXTSE3125  = "XTSE3125" // xsl:break/xsl:on-completion with both select and body
+	errCodeXTSE3130  = "XTSE3130" // xsl:next-iteration references undeclared parameter
+	errCodeXTSE3430  = "XTSE3430" // non-streamable expression in streaming context
+	errCodeXTSE3441  = "XTSE3441" // streamability error in accumulator
+	errCodeXTSE3520  = "XTSE3520" // iterate param without default when type requires value
+	errCodeXTDE3630  = "XTDE3630" // source-document runtime error
+	errCodeXTDE3635  = "XTDE3635" // source-document URI resolution error
 )
 
 // Sentinel errors for the xslt3 package.
