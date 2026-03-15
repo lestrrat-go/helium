@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/big"
 	"strconv"
@@ -89,6 +90,22 @@ func (ec *execContext) executeInstruction(ctx context.Context, inst Instruction)
 		return ec.execForEachGroup(ctx, v)
 	case *NamespaceInst:
 		return ec.execNamespace(ctx, v)
+	case *SourceDocumentInst:
+		return ec.execSourceDocument(ctx, v)
+	case *IterateInst:
+		return ec.execIterate(ctx, v)
+	case *ForkInst:
+		return ec.execFork(ctx, v)
+	case *BreakInst:
+		return ec.execBreak(ctx, v)
+	case *NextIterationInst:
+		return ec.execNextIteration(ctx, v)
+	case *MergeInst:
+		return ec.execMerge(ctx, v)
+	case *MapInst:
+		return ec.execMap(ctx, v)
+	case *MapEntryInst:
+		return ec.execMapEntry(ctx, v)
 	default:
 		return dynamicError(errCodeXTDE0820, "unsupported instruction type %T", inst)
 	}
@@ -189,11 +206,23 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 
 	savedPos := ec.position
 	savedSize := ec.size
+	savedGroupKey := ec.currentGroupKey
+	savedGroup := ec.currentGroup
+	savedInGroupCtx := ec.inGroupContext
 	ec.size = len(nodes)
+	// Per XSLT 3.0: current-grouping-key() and current-group() are only
+	// available in the body of xsl:for-each-group itself, not in templates
+	// invoked by apply-templates within that body.
+	ec.currentGroupKey = nil
+	ec.currentGroup = nil
+	ec.inGroupContext = false
 	defer func() {
 		ec.position = savedPos
 		ec.size = savedSize
 		ec.tunnelParams = savedTunnel
+		ec.currentGroupKey = savedGroupKey
+		ec.currentGroup = savedGroup
+		ec.inGroupContext = savedInGroupCtx
 	}()
 
 	for i, node := range nodes {
@@ -376,7 +405,7 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 				return err
 			}
 		}
-		val, err := ec.evaluateBody(ctx, inst.Body)
+		val, err := ec.evaluateBodySeparateText(ctx, inst.Body)
 		if err != nil {
 			return err
 		}
@@ -498,13 +527,6 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 		}
 	}
 
-	// Apply attribute sets before adding to output
-	if len(inst.UseAttributeSets) > 0 {
-		if err := ec.applyAttributeSets(ctx, elem, inst.UseAttributeSets); err != nil {
-			return err
-		}
-	}
-
 	if err := ec.addNode(elem); err != nil {
 		return err
 	}
@@ -518,6 +540,18 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 	savedCurrent := out.current
 	out.current = elem
 	defer func() { out.current = savedCurrent }()
+
+	// Apply attribute sets (before body so body can override)
+	if len(inst.UseAttributeSets) > 0 {
+		if err := ec.applyAttributeSets(ctx, inst.UseAttributeSets); err != nil {
+			return err
+		}
+	}
+	if len(inst.UseAttrSets) > 0 {
+		if err := ec.applyAttributeSets(ctx, inst.UseAttrSets); err != nil {
+			return err
+		}
+	}
 
 	for _, child := range inst.Body {
 		if err := ec.executeInstruction(ctx, child); err != nil {
@@ -1032,7 +1066,7 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		return nil
 	}
 
-	return ec.execCopyNodeWithAttrSets(ctx, ec.contextNode, inst.Body, inst.UseAttributeSets)
+	return ec.execCopyNode(ctx, ec.contextNode, inst.Body, inst.UseAttrSets)
 }
 
 // effectiveValidation returns the validation mode for a copy/copy-of instruction,
@@ -1044,45 +1078,7 @@ func (ec *execContext) effectiveValidation(instValidation string) string {
 	return ec.stylesheet.defaultValidation
 }
 
-func (ec *execContext) execCopyNodeWithAttrSets(ctx context.Context, node helium.Node, body []Instruction, useAttrSets []string) error {
-	if node == nil {
-		return nil
-	}
-	if len(useAttrSets) == 0 || node.Type() != helium.ElementNode {
-		return ec.execCopyNode(ctx, node, body)
-	}
-	// For elements with attribute sets: create element, apply attr sets, then body
-	srcElem := node.(*helium.Element)
-	elem, err := ec.resultDoc.CreateElement(srcElem.LocalName())
-	if err != nil {
-		return err
-	}
-	for _, ns := range srcElem.Namespaces() {
-		_ = elem.DeclareNamespace(ns.Prefix(), ns.URI())
-	}
-	if srcElem.URI() != "" {
-		_ = elem.SetActiveNamespace(srcElem.Prefix(), srcElem.URI())
-	}
-	// Apply attribute sets before body
-	if err := ec.applyAttributeSets(ctx, elem, useAttrSets); err != nil {
-		return err
-	}
-	if err := ec.addNode(elem); err != nil {
-		return err
-	}
-	out := ec.currentOutput()
-	savedCurrent := out.current
-	out.current = elem
-	defer func() { out.current = savedCurrent }()
-	for _, child := range body {
-		if err := ec.executeInstruction(ctx, child); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body []Instruction) error {
+func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body []Instruction, useAttrSets ...[]string) error {
 	if node == nil {
 		return nil
 	}
@@ -1118,6 +1114,13 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body 
 		out.current = elem
 		defer func() { out.current = savedCurrent }()
 
+		// Apply attribute sets if specified
+		if len(useAttrSets) > 0 && len(useAttrSets[0]) > 0 {
+			if err := ec.applyAttributeSets(ctx, useAttrSets[0]); err != nil {
+				return err
+			}
+		}
+
 		for _, child := range body {
 			if err := ec.executeInstruction(ctx, child); err != nil {
 				return err
@@ -1148,7 +1151,42 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body 
 		return ec.addNode(newPI)
 
 	case helium.DocumentNode:
-		// Copy document: just process body
+		// xsl:copy of a document node creates a new document node.
+		// DTD information (including unparsed entities) is preserved.
+		srcDoc, _ := node.(*helium.Document)
+		newDoc := helium.NewDefaultDocument()
+		if srcDoc != nil {
+			// Copy DTD information to preserve unparsed entities.
+			helium.CopyDTDInfo(srcDoc, newDoc)
+			newDoc.SetURL(srcDoc.URL())
+		}
+
+		out := ec.currentOutput()
+		if out.captureItems {
+			// We're inside a variable or function body — capture the
+			// document node as an item.
+			savedDoc := ec.resultDoc
+			savedOutput := out.current
+			ec.resultDoc = newDoc
+			docRoot := newDoc.DocumentElement()
+			if docRoot == nil {
+				// No doc element yet; use the document node itself as output target.
+				out.current = newDoc
+			}
+			for _, child := range body {
+				if err := ec.executeInstruction(ctx, child); err != nil {
+					ec.resultDoc = savedDoc
+					out.current = savedOutput
+					return err
+				}
+			}
+			ec.resultDoc = savedDoc
+			out.current = savedOutput
+			out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: newDoc})
+			return nil
+		}
+
+		// Not in capture mode — process body in current context.
 		for _, child := range body {
 			if err := ec.executeInstruction(ctx, child); err != nil {
 				return err
@@ -1239,6 +1277,20 @@ func (ec *execContext) copyNodeToOutput(node helium.Node) error {
 			return nil
 		}
 		return copyAttributeToElement(elem, attr)
+	case helium.NamespaceNode:
+		// Namespace nodes are copied as namespace declarations on the current element.
+		nsw, ok := node.(*helium.NamespaceNodeWrapper)
+		if !ok {
+			return nil
+		}
+		out := ec.currentOutput()
+		elem, ok := out.current.(*helium.Element)
+		if !ok {
+			return nil
+		}
+		prefix := nsw.Name()
+		uri := string(nsw.Content())
+		return elem.DeclareNamespace(prefix, uri)
 	default:
 		copied, err := helium.CopyNode(node, ec.resultDoc)
 		if err != nil {
@@ -1315,12 +1367,6 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *Liter
 	}
 
 	// Apply attribute sets before adding to output
-	if len(inst.UseAttributeSets) > 0 {
-		if err := ec.applyAttributeSets(ctx, elem, inst.UseAttributeSets); err != nil {
-			return err
-		}
-	}
-
 	if err := ec.addNode(elem); err != nil {
 		return err
 	}
@@ -1335,6 +1381,18 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *Liter
 		out.current = savedCurrent
 	}()
 
+	// Apply attribute sets (before body so body can override)
+	if len(inst.UseAttributeSets) > 0 {
+		if err := ec.applyAttributeSets(ctx, inst.UseAttributeSets); err != nil {
+			return err
+		}
+	}
+	if len(inst.UseAttrSets) > 0 {
+		if err := ec.applyAttributeSets(ctx, inst.UseAttrSets); err != nil {
+			return err
+		}
+	}
+
 	for _, child := range inst.Body {
 		if err := ec.executeInstruction(ctx, child); err != nil {
 			return err
@@ -1344,30 +1402,25 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *Liter
 	return nil
 }
 
-// applyAttributeSets applies named attribute sets to an element.
-func (ec *execContext) applyAttributeSets(ctx context.Context, elem *helium.Element, names []string) error {
+// applyAttributeSets applies named attribute sets to the current output element.
+func (ec *execContext) applyAttributeSets(ctx context.Context, names []string) error {
 	for _, name := range names {
-		asd := ec.stylesheet.attributeSets[name]
-		if asd == nil {
+		asDef := ec.stylesheet.attributeSets[name]
+		if asDef == nil {
 			continue
 		}
-		// Apply inherited attribute sets first
-		if len(asd.UseAttrSets) > 0 {
-			if err := ec.applyAttributeSets(ctx, elem, asd.UseAttrSets); err != nil {
+		// Apply referenced attribute sets first (use-attribute-sets on the set itself)
+		if len(asDef.UseAttrSets) > 0 {
+			if err := ec.applyAttributeSets(ctx, asDef.UseAttrSets); err != nil {
 				return err
 			}
 		}
-		// Execute attribute instructions with elem as current output
-		out := ec.currentOutput()
-		savedCurrent := out.current
-		out.current = elem
-		for _, inst := range asd.Attrs {
+		// Execute the attribute instructions
+		for _, inst := range asDef.Attrs {
 			if err := ec.executeInstruction(ctx, inst); err != nil {
-				out.current = savedCurrent
 				return err
 			}
 		}
-		out.current = savedCurrent
 	}
 	return nil
 }
@@ -2092,8 +2145,12 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 
 	out := ec.currentOutput()
 
-	// In capture mode, accumulate items directly instead of writing to DOM
-	if out.captureItems {
+	// In capture mode, accumulate items directly instead of writing to DOM.
+	// Only capture when we are at the function's root output level (the
+	// document element wrapper). When nested inside a result element
+	// (e.g. an LRE or xsl:copy body), items must be written to the DOM
+	// as children of that element.
+	if out.captureItems && out.doc != nil && out.current == out.doc.DocumentElement() {
 		out.pendingItems = append(out.pendingItems, result.Sequence()...)
 		return nil
 	}
@@ -2109,6 +2166,21 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 				elem, ok := out.current.(*helium.Element)
 				if ok {
 					if err := copyAttributeToElement(elem, attr); err != nil {
+						return err
+					}
+				}
+				continue
+			}
+			if v.Node.Type() == helium.DocumentNode {
+				// Document nodes: output their children (per XSLT spec,
+				// a document node in a sequence constructor is replaced
+				// by its children).
+				for child := v.Node.FirstChild(); child != nil; child = child.NextSibling() {
+					copied, copyErr := helium.CopyNode(child, ec.resultDoc)
+					if copyErr != nil {
+						return copyErr
+					}
+					if err := ec.addNode(copied); err != nil {
 						return err
 					}
 				}
@@ -2151,11 +2223,33 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 
 // outputSequence writes a sequence of items to the current output.
 func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
+	out := ec.currentOutput()
+
+	// In capture mode, accumulate items directly (handles maps, arrays,
+	// functions, and other non-DOM items that cannot be serialized to a tree).
+	if out.captureItems {
+		out.pendingItems = append(out.pendingItems, seq...)
+		return nil
+	}
+
 	prevWasAtomic := false
 	for _, item := range seq {
 		switch v := item.(type) {
 		case xpath3.NodeItem:
 			prevWasAtomic = false
+			if v.Node.Type() == helium.DocumentNode {
+				// Document nodes: output their children.
+				for child := v.Node.FirstChild(); child != nil; child = child.NextSibling() {
+					copied, copyErr := helium.CopyNode(child, ec.resultDoc)
+					if copyErr != nil {
+						return copyErr
+					}
+					if err := ec.addNode(copied); err != nil {
+						return err
+					}
+				}
+				continue
+			}
 			copied, copyErr := helium.CopyNode(v.Node, ec.resultDoc)
 			if copyErr != nil {
 				return copyErr
@@ -2191,7 +2285,7 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 }
 
 func (ec *execContext) execPerformSort(ctx context.Context, inst *PerformSortInst) error {
-	var nodes []helium.Node
+	var seq xpath3.Sequence
 
 	if inst.Select != nil {
 		xpathCtx := ec.newXPathContext(ec.contextNode)
@@ -2199,53 +2293,87 @@ func (ec *execContext) execPerformSort(ctx context.Context, inst *PerformSortIns
 		if err != nil {
 			return err
 		}
-		ns, ok := xpath3.NodesFrom(result.Sequence())
-		if !ok {
-			return nil
-		}
-		nodes = ns
+		seq = result.Sequence()
 	} else if len(inst.Body) > 0 {
 		// Body acts as sequence constructor: evaluate to get the items to sort
-		seq, err := ec.evaluateBody(ctx, inst.Body)
+		var err error
+		seq, err = ec.evaluateBody(ctx, inst.Body)
 		if err != nil {
 			return err
 		}
-		ns, ok := xpath3.NodesFrom(seq)
-		if !ok {
-			return nil
-		}
-		nodes = ns
-	} else {
+	}
+	if len(seq) == 0 {
 		return nil
 	}
 
+	// Try to extract nodes for node-based sorting
+	nodes, allNodes := xpath3.NodesFrom(seq)
+	if allNodes && len(nodes) > 0 {
+		if len(inst.Sort) > 0 {
+			var err error
+			nodes, err = sortNodes(ctx, ec, nodes, inst.Sort)
+			if err != nil {
+				return err
+			}
+		}
+
+		savedCurrent := ec.currentNode
+		savedContext := ec.contextNode
+		savedPos := ec.position
+		savedSize := ec.size
+		ec.size = len(nodes)
+		defer func() {
+			ec.currentNode = savedCurrent
+			ec.contextNode = savedContext
+			ec.position = savedPos
+			ec.size = savedSize
+		}()
+
+		// Output sorted nodes
+		for _, node := range nodes {
+			if err := ec.copyNodeToOutput(node); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Atomic sequence: sort by string value and output as text items
 	if len(inst.Sort) > 0 {
 		var err error
-		nodes, err = sortNodes(ctx, ec, nodes, inst.Sort)
+		seq, err = sortItems(ctx, ec, seq, inst.Sort)
 		if err != nil {
 			return err
 		}
 	}
 
-	savedCurrent := ec.currentNode
-	savedContext := ec.contextNode
-	savedPos := ec.position
-	savedSize := ec.size
-	ec.size = len(nodes)
-	defer func() {
-		ec.currentNode = savedCurrent
-		ec.contextNode = savedContext
-		ec.position = savedPos
-		ec.size = savedSize
-	}()
-
-	// Output sorted nodes
-	for _, node := range nodes {
-		if err := ec.copyNodeToOutput(node); err != nil {
+	// Output atomic items separated by spaces
+	for i, item := range seq {
+		if i > 0 {
+			sep, err := ec.resultDoc.CreateText([]byte(" "))
+			if err != nil {
+				return err
+			}
+			if err := ec.addNode(sep); err != nil {
+				return err
+			}
+		}
+		av, ok := item.(xpath3.AtomicValue)
+		if !ok {
+			continue
+		}
+		s, err := xpath3.AtomicToString(av)
+		if err != nil {
+			continue
+		}
+		text, err := ec.resultDoc.CreateText([]byte(s))
+		if err != nil {
+			return err
+		}
+		if err := ec.addNode(text); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -2254,19 +2382,31 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *NextMatchInst) e
 	node := ec.currentNode
 	mode := ec.currentMode
 
-	// Process with-param (tunnel and regular)
+	// Process with-param (tunnel and regular).
+	// Copy tunnel params to avoid mutating the caller's map.
 	var pv map[string]xpath3.Sequence
 	savedTunnel := ec.tunnelParams
 	if len(inst.Params) > 0 {
+		hasTunnel := false
+		for _, wp := range inst.Params {
+			if wp.Tunnel {
+				hasTunnel = true
+				break
+			}
+		}
+		if hasTunnel {
+			newTunnel := make(map[string]xpath3.Sequence, len(ec.tunnelParams)+len(inst.Params))
+			for k, v := range ec.tunnelParams {
+				newTunnel[k] = v
+			}
+			ec.tunnelParams = newTunnel
+		}
 		for _, wp := range inst.Params {
 			val, err := ec.evaluateWithParam(ctx, wp)
 			if err != nil {
 				return err
 			}
 			if wp.Tunnel {
-				if ec.tunnelParams == nil {
-					ec.tunnelParams = make(map[string]xpath3.Sequence)
-				}
 				ec.tunnelParams[wp.Name] = val
 			} else {
 				if pv == nil {
@@ -2305,19 +2445,31 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *ApplyImportsI
 	mode := ec.currentMode
 	maxPrec := ec.currentTemplate.ImportPrec
 
-	// Process with-param (tunnel and regular)
+	// Process with-param (tunnel and regular).
+	// Copy tunnel params to avoid mutating the caller's map.
 	var pv map[string]xpath3.Sequence
 	savedTunnel := ec.tunnelParams
 	if len(inst.Params) > 0 {
+		hasTunnel := false
+		for _, wp := range inst.Params {
+			if wp.Tunnel {
+				hasTunnel = true
+				break
+			}
+		}
+		if hasTunnel {
+			newTunnel := make(map[string]xpath3.Sequence, len(ec.tunnelParams)+len(inst.Params))
+			for k, v := range ec.tunnelParams {
+				newTunnel[k] = v
+			}
+			ec.tunnelParams = newTunnel
+		}
 		for _, wp := range inst.Params {
 			val, err := ec.evaluateWithParam(ctx, wp)
 			if err != nil {
 				return err
 			}
 			if wp.Tunnel {
-				if ec.tunnelParams == nil {
-					ec.tunnelParams = make(map[string]xpath3.Sequence)
-				}
 				ec.tunnelParams[wp.Name] = val
 			} else {
 				if pv == nil {
@@ -2639,9 +2791,9 @@ func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupI
 
 	switch {
 	case inst.GroupBy != nil:
-		groups, err = ec.groupBy(ctx, seq, inst.GroupBy)
+		groups, err = ec.groupBy(ctx, seq, inst.GroupBy, inst.Composite)
 	case inst.GroupAdjacent != nil:
-		groups, err = ec.groupAdjacent(ctx, seq, inst.GroupAdjacent)
+		groups, err = ec.groupAdjacent(ctx, seq, inst.GroupAdjacent, inst.Composite)
 	case inst.GroupStartingWith != nil:
 		groups = ec.groupStartingWith(seq, inst.GroupStartingWith)
 	case inst.GroupEndingWith != nil:
@@ -2660,7 +2812,9 @@ func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupI
 	savedSize := ec.size
 	savedGroup := ec.currentGroup
 	savedGroupKey := ec.currentGroupKey
+	savedInGroupCtx := ec.inGroupContext
 	ec.size = len(groups)
+	ec.inGroupContext = true
 	defer func() {
 		ec.currentNode = savedCurrent
 		ec.contextNode = savedContext
@@ -2668,6 +2822,7 @@ func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupI
 		ec.size = savedSize
 		ec.currentGroup = savedGroup
 		ec.currentGroupKey = savedGroupKey
+		ec.inGroupContext = savedInGroupCtx
 	}()
 
 	for i, g := range groups {
@@ -2701,18 +2856,29 @@ type fegGroup struct {
 }
 
 // groupBy implements group-by: items are grouped by the string value of the
-// group-by expression evaluated with each item as context. When the group-by
-// expression returns a sequence of multiple values, the item is added to
-// a group for each value.
-func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByExpr *xpath3.Expression) ([]fegGroup, error) {
+// group-by expression evaluated with each item as context. When composite is
+// false and the expression returns a sequence of multiple values, the item is
+// added to a group for each value. When composite is true, the entire sequence
+// is treated as a single composite key.
+func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByExpr *xpath3.Expression, composite bool) ([]fegGroup, error) {
 	type entry struct {
-		key   string
-		items xpath3.Sequence
+		key      string
+		keySeq   xpath3.Sequence
+		items    xpath3.Sequence
 	}
 	var order []string
 	groupMap := make(map[string]*entry)
 
-	for _, item := range seq {
+	savedPos := ec.position
+	savedSize := ec.size
+	ec.size = len(seq)
+	defer func() {
+		ec.position = savedPos
+		ec.size = savedSize
+	}()
+
+	for i, item := range seq {
+		ec.position = i + 1
 		var node helium.Node
 		if ni, ok := item.(xpath3.NodeItem); ok {
 			node = ni.Node
@@ -2723,20 +2889,30 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 			return nil, err
 		}
 
-		// Each value in the result creates a separate group key.
-		// An item may appear in multiple groups.
 		resultSeq := result.Sequence()
 		if len(resultSeq) == 0 {
-			// No grouping key — item is not included in any group
 			continue
 		}
-		for _, keyItem := range resultSeq {
-			keyVal := stringifyItem(keyItem)
+
+		if composite {
+			// Composite: entire sequence is a single key
+			keyVal := compositeKeyString(resultSeq)
 			if e, ok := groupMap[keyVal]; ok {
 				e.items = append(e.items, item)
 			} else {
-				groupMap[keyVal] = &entry{key: keyVal, items: xpath3.Sequence{item}}
+				groupMap[keyVal] = &entry{key: keyVal, keySeq: atomizeSequence(resultSeq), items: xpath3.Sequence{item}}
 				order = append(order, keyVal)
+			}
+		} else {
+			// Non-composite: each value creates a separate group key
+			for _, keyItem := range resultSeq {
+				keyVal := stringifyItem(keyItem)
+				if e, ok := groupMap[keyVal]; ok {
+					e.items = append(e.items, item)
+				} else {
+					groupMap[keyVal] = &entry{key: keyVal, items: xpath3.Sequence{item}}
+					order = append(order, keyVal)
+				}
 			}
 		}
 	}
@@ -2744,22 +2920,37 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 	groups := make([]fegGroup, len(order))
 	for i, k := range order {
 		e := groupMap[k]
-		groups[i] = fegGroup{
-			key:   xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: e.key}},
-			items: e.items,
+		if e.keySeq != nil {
+			groups[i] = fegGroup{key: e.keySeq, items: e.items}
+		} else {
+			groups[i] = fegGroup{
+				key:   xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: e.key}},
+				items: e.items,
+			}
 		}
 	}
 	return groups, nil
 }
 
 // groupAdjacent implements group-adjacent: consecutive items with equal
-// grouping key values form a group.
-func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, adjExpr *xpath3.Expression) ([]fegGroup, error) {
+// grouping key values form a group. When composite is true, the key
+// expression returns a sequence treated as a single composite key.
+func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, adjExpr *xpath3.Expression, composite bool) ([]fegGroup, error) {
 	var groups []fegGroup
 	var currentKey string
+	var currentKeySeq xpath3.Sequence
 	var currentItems xpath3.Sequence
 
-	for _, item := range seq {
+	savedPos := ec.position
+	savedSize := ec.size
+	ec.size = len(seq)
+	defer func() {
+		ec.position = savedPos
+		ec.size = savedSize
+	}()
+
+	for i, item := range seq {
+		ec.position = i + 1
 		var node helium.Node
 		if ni, ok := item.(xpath3.NodeItem); ok {
 			node = ni.Node
@@ -2769,27 +2960,69 @@ func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, a
 		if err != nil {
 			return nil, err
 		}
-		keyVal := stringifyResult(result)
+
+		var keyVal string
+		var keySeq xpath3.Sequence
+		if composite {
+			rSeq := result.Sequence()
+			keyVal = compositeKeyString(rSeq)
+			keySeq = atomizeSequence(rSeq)
+		} else {
+			keyVal = stringifyResult(result)
+		}
+
 		if keyVal == currentKey && len(currentItems) > 0 {
 			currentItems = append(currentItems, item)
 		} else {
 			if len(currentItems) > 0 {
-				groups = append(groups, fegGroup{
-					key:   xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: currentKey}},
-					items: currentItems,
-				})
+				var gKey xpath3.Sequence
+				if currentKeySeq != nil {
+					gKey = currentKeySeq
+				} else {
+					gKey = xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: currentKey}}
+				}
+				groups = append(groups, fegGroup{key: gKey, items: currentItems})
 			}
 			currentKey = keyVal
+			currentKeySeq = keySeq
 			currentItems = xpath3.Sequence{item}
 		}
 	}
 	if len(currentItems) > 0 {
-		groups = append(groups, fegGroup{
-			key:   xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: currentKey}},
-			items: currentItems,
-		})
+		var gKey xpath3.Sequence
+		if currentKeySeq != nil {
+			gKey = currentKeySeq
+		} else {
+			gKey = xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: currentKey}}
+		}
+		groups = append(groups, fegGroup{key: gKey, items: currentItems})
 	}
 	return groups, nil
+}
+
+// compositeKeyString creates a canonical string representation of a composite
+// key for use as a map key. Items are separated by a NUL byte to avoid
+// collisions.
+func compositeKeyString(seq xpath3.Sequence) string {
+	parts := make([]string, len(seq))
+	for i, item := range seq {
+		parts[i] = stringifyItem(item)
+	}
+	return strings.Join(parts, "\x00")
+}
+
+// atomizeSequence converts each item in the sequence to an atomic value.
+func atomizeSequence(seq xpath3.Sequence) xpath3.Sequence {
+	result := make(xpath3.Sequence, len(seq))
+	for i, item := range seq {
+		av, err := xpath3.AtomizeItem(item)
+		if err != nil {
+			result[i] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: stringifyItem(item)}
+		} else {
+			result[i] = av
+		}
+	}
+	return result
 }
 
 // groupStartingWith implements group-starting-with: a new group starts
@@ -2859,4 +3092,95 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 		return nil
 	}
 	return elem.DeclareNamespace(name, value)
+}
+
+// execMap executes an xsl:map instruction, producing a MapItem from child
+// xsl:map-entry instructions.
+func (ec *execContext) execMap(ctx context.Context, inst *MapInst) error {
+	var entries []xpath3.MapEntry
+	for _, child := range inst.Body {
+		me, ok := child.(*MapEntryInst)
+		if !ok {
+			// Non-map-entry children are executed normally (e.g., xsl:variable)
+			if err := ec.executeInstruction(ctx, child); err != nil {
+				return err
+			}
+			continue
+		}
+		// Evaluate the key
+		xpathCtx := ec.newXPathContext(ec.contextNode)
+		keyResult, err := me.Key.Evaluate(xpathCtx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		keySeq := keyResult.Sequence()
+		if len(keySeq) != 1 {
+			return dynamicError("XPTY0004", "xsl:map-entry key must be a single atomic value")
+		}
+		keyAV, err := xpath3.AtomizeItem(keySeq[0])
+		if err != nil {
+			return err
+		}
+
+		// Evaluate the value
+		var valSeq xpath3.Sequence
+		if me.Select != nil {
+			valResult, err := me.Select.Evaluate(xpathCtx, ec.contextNode)
+			if err != nil {
+				return err
+			}
+			valSeq = valResult.Sequence()
+		} else if len(me.Body) > 0 {
+			valSeq, err = ec.evaluateBody(ctx, me.Body)
+			if err != nil {
+				return err
+			}
+		}
+
+		entries = append(entries, xpath3.MapEntry{Key: keyAV, Value: valSeq})
+	}
+
+	m := xpath3.NewMap(entries)
+	out := ec.currentOutput()
+	if out.captureItems {
+		out.pendingItems = append(out.pendingItems, m)
+		return nil
+	}
+	// If not in capture mode, maps can't be added to DOM — produce string representation
+	text, err := ec.resultDoc.CreateText([]byte(fmt.Sprint(m)))
+	if err != nil {
+		return err
+	}
+	return ec.addNode(text)
+}
+
+// execMapEntry is a no-op when called outside xsl:map; entries are handled
+// by execMap directly.
+func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) error {
+	// When called standalone (outside xsl:map), evaluate and produce output
+	xpathCtx := ec.newXPathContext(ec.contextNode)
+	var valSeq xpath3.Sequence
+	var err error
+	if inst.Select != nil {
+		valResult, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		valSeq = valResult.Sequence()
+	} else if len(inst.Body) > 0 {
+		valSeq, err = ec.evaluateBody(ctx, inst.Body)
+		if err != nil {
+			return err
+		}
+	}
+	// Output the value as text
+	s := stringifySequenceWithSep(valSeq, " ")
+	if s != "" {
+		text, err := ec.resultDoc.CreateText([]byte(s))
+		if err != nil {
+			return err
+		}
+		return ec.addNode(text)
+	}
+	return nil
 }

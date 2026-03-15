@@ -34,6 +34,7 @@ type execContext struct {
 	tunnelParams      map[string]xpath3.Sequence // tunnel parameters passed through apply-templates
 	currentGroup      xpath3.Sequence            // current-group() value during for-each-group
 	currentGroupKey   xpath3.Sequence            // current-grouping-key() value during for-each-group
+	inGroupContext    bool                       // true when inside for-each-group body
 	depth             int                        // recursion depth
 	outputStack       []*outputFrame
 	keyTables         map[string]*keyTable
@@ -43,6 +44,9 @@ type execContext struct {
 	globalVarsGen     uint64                             // incremented when globalVars changes
 	cachedVarsMap     map[string]xpath3.Sequence         // cached result of collectAllVars (globals only)
 	cachedVarsGen     uint64                             // globalVarsGen at time cachedVarsMap was built
+	accumulatorState  map[string]xpath3.Sequence         // accumulator name -> current value
+	breakValue        xpath3.Sequence                    // value produced by xsl:break
+	nextIterParams    map[string]xpath3.Sequence         // param values from xsl:next-iteration
 	msgHandler        func(string, bool)
 	transformCfg      *transformConfig
 	transformCtx      context.Context                  // parent context from Transform caller (for cancellation/deadlines)
@@ -163,6 +167,14 @@ func (ec *execContext) currentOutput() *outputFrame {
 // addNode adds a node to the current output insertion point.
 func (ec *execContext) addNode(node helium.Node) error {
 	out := ec.currentOutput()
+	// When separateTextNodes is set, capture each text node as a separate
+	// string item to avoid DOM text-node merging.  This is needed by
+	// xsl:value-of with separator + body content so that each produced
+	// text value remains a distinct item for separator insertion.
+	if out.separateTextNodes && node.Type() == helium.TextNode {
+		out.pendingItems = append(out.pendingItems, xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: string(node.Content())})
+		return nil
+	}
 	return out.current.AddChild(node)
 }
 
@@ -346,13 +358,20 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		globalVars:   make(map[string]xpath3.Sequence),
 		currentMode:  "",
 		outputStack:  []*outputFrame{{doc: resultDoc, current: resultDoc}},
-		keyTables:    make(map[string]*keyTable),
-		docCache:     make(map[string]*helium.Document),
-		transformCtx: ctx,
+		keyTables:        make(map[string]*keyTable),
+		docCache:         make(map[string]*helium.Document),
+		accumulatorState: make(map[string]xpath3.Sequence),
+		transformCtx:     ctx,
 	}
 
 	if cfg != nil && cfg.msgHandler != nil {
 		ec.msgHandler = cfg.msgHandler
+	}
+
+	// Apply xsl:strip-space to the source document so that whitespace-only
+	// text nodes are removed before template matching and XPath evaluation.
+	if len(ss.stripSpace) > 0 && source != nil {
+		ec.stripWhitespaceFromDoc(source)
 	}
 
 	// Store exec context in Go context for AVT evaluation
@@ -515,7 +534,13 @@ func (ec *execContext) evaluateGlobalParam(p *Param) (xpath3.Sequence, error) {
 		val = result.Sequence()
 	} else if len(p.Body) > 0 {
 		var err error
-		val, err = ec.evaluateBody(ctx, p.Body)
+		if p.As != "" {
+			// With as attribute: evaluate as raw sequence
+			val, err = ec.evaluateBody(ctx, p.Body)
+		} else {
+			// No as: wrap in document node (temporary tree)
+			val, err = ec.evaluateBodyAsDocument(ctx, p.Body)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("error evaluating global param %q body: %w", p.Name, err)
 		}
@@ -588,6 +613,47 @@ func (ec *execContext) evaluateBody(ctx context.Context, body []Instruction) (xp
 		return seq, nil
 	}
 
+	return xpath3.EmptySequence(), nil
+}
+
+// evaluateBodySeparateText is like evaluateBody but keeps each produced
+// text node as a separate string item instead of letting the DOM merge
+// adjacent text nodes.  This is needed by xsl:value-of with separator
+// so that each text value is a distinct item for separator insertion.
+func (ec *execContext) evaluateBodySeparateText(ctx context.Context, body []Instruction) (xpath3.Sequence, error) {
+	tmpDoc := helium.NewDefaultDocument()
+	tmpRoot, err := tmpDoc.CreateElement("_tmp")
+	if err != nil {
+		return nil, err
+	}
+	if err := tmpDoc.AddChild(tmpRoot); err != nil {
+		return nil, err
+	}
+
+	frame := &outputFrame{doc: tmpDoc, current: tmpRoot, captureItems: true, separateTextNodes: true}
+	ec.outputStack = append(ec.outputStack, frame)
+	defer func() {
+		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+	}()
+
+	for _, inst := range body {
+		if err := ec.executeInstruction(ctx, inst); err != nil {
+			return nil, err
+		}
+	}
+
+	// Collect DOM children (non-text) and pending items in order
+	if tmpRoot.FirstChild() != nil {
+		var seq xpath3.Sequence
+		for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
+			seq = append(seq, xpath3.NodeItem{Node: child})
+		}
+		seq = append(seq, frame.pendingItems...)
+		return seq, nil
+	}
+	if len(frame.pendingItems) > 0 {
+		return frame.pendingItems, nil
+	}
 	return xpath3.EmptySequence(), nil
 }
 
@@ -789,12 +855,19 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 	savedTunnel := ec.tunnelParams
 	savedXPathDefaultNS := ec.xpathDefaultNS
 	savedHasXPathDefaultNS := ec.hasXPathDefaultNS
+	savedGroup := ec.currentGroup
+	savedGroupKey := ec.currentGroupKey
 	ec.currentNode = node
 	ec.contextNode = node
 	ec.currentMode = mode
 	ec.currentTemplate = tmpl
 	ec.xpathDefaultNS = tmpl.XPathDefaultNS
 	ec.hasXPathDefaultNS = tmpl.XPathDefaultNS != ""
+	// XSLT spec: current-group() and current-grouping-key() are only
+	// available within the body of xsl:for-each-group, not in templates
+	// called from it.
+	ec.currentGroup = nil
+	ec.currentGroupKey = nil
 	defer func() {
 		ec.currentNode = savedCurrent
 		ec.contextNode = savedContext
@@ -805,6 +878,8 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 		ec.position = savedPos
 		ec.size = savedSize
 		ec.tunnelParams = savedTunnel
+		ec.currentGroup = savedGroup
+		ec.currentGroupKey = savedGroupKey
 	}()
 
 	ec.pushVarScope()
@@ -954,9 +1029,6 @@ func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Nod
 		if srcElem.URI() != "" {
 			_ = newElem.SetActiveNamespace(srcElem.Prefix(), srcElem.URI())
 		}
-		for _, attr := range srcElem.Attributes() {
-			_ = copyAttributeToElement(newElem, attr)
-		}
 		if err := ec.addNode(newElem); err != nil {
 			return err
 		}
@@ -964,6 +1036,13 @@ func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Nod
 		savedCurrent := out.current
 		out.current = newElem
 		defer func() { out.current = savedCurrent }()
+		// Apply templates to attributes first (so user templates can
+		// intercept attribute nodes, e.g. match="w/@id"), then children.
+		for _, attr := range srcElem.Attributes() {
+			if err := ec.applyTemplates(ctx, attr, mode, paramValues...); err != nil {
+				return err
+			}
+		}
 		for child := srcElem.FirstChild(); child != nil; child = child.NextSibling() {
 			if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
 				return err
@@ -1001,21 +1080,33 @@ func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Nod
 }
 
 func (ec *execContext) onNoMatchDeepCopy(node helium.Node) error {
-	// Deep copy: serialize node content from source and add to output
-	// For now, use shallow-copy behavior for non-element nodes
+	// Deep copy: copy the entire subtree to the output without template matching.
 	switch node.Type() {
-	case helium.TextNode, helium.CDATASectionNode:
-		text, err := ec.resultDoc.CreateText(node.Content())
+	case helium.DocumentNode:
+		// For document nodes, deep-copy each child.
+		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+			if err := ec.onNoMatchDeepCopy(child); err != nil {
+				return err
+			}
+		}
+		return nil
+	case helium.ElementNode, helium.TextNode, helium.CDATASectionNode,
+		helium.CommentNode, helium.ProcessingInstructionNode:
+		copied, err := helium.CopyNode(node, ec.resultDoc)
 		if err != nil {
 			return err
 		}
-		return ec.addNode(text)
-	case helium.CommentNode:
-		comment, err := ec.resultDoc.CreateComment(node.Content())
-		if err != nil {
-			return err
+		return ec.addNode(copied)
+	case helium.AttributeNode:
+		attr, ok := node.(*helium.Attribute)
+		if !ok {
+			return nil
 		}
-		return ec.addNode(comment)
+		out := ec.currentOutput()
+		if outElem, ok := out.current.(*helium.Element); ok {
+			return copyAttributeToElement(outElem, attr)
+		}
+		return nil
 	default:
 		return nil
 	}
@@ -1109,6 +1200,27 @@ func nameTestPriority(nt NameTest) int {
 		return 1 // "prefix:*"
 	}
 	return 2 // specific name
+}
+
+// stripWhitespaceFromDoc removes whitespace-only text nodes from a document
+// tree according to the stylesheet's xsl:strip-space and xsl:preserve-space rules.
+// This is called when loading documents so that XPath evaluation sees the
+// correctly stripped tree.
+func (ec *execContext) stripWhitespaceFromDoc(doc *helium.Document) {
+	ec.stripWhitespaceFromNode(doc)
+}
+
+func (ec *execContext) stripWhitespaceFromNode(node helium.Node) {
+	child := node.FirstChild()
+	for child != nil {
+		next := child.NextSibling()
+		if ec.shouldStripWhitespace(child) {
+			helium.UnlinkNode(child)
+		} else {
+			ec.stripWhitespaceFromNode(child)
+		}
+		child = next
+	}
 }
 
 // selectDefaultNodes returns the default node-set for apply-templates

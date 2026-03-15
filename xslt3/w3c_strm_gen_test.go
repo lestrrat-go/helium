@@ -38,16 +38,16 @@ func TestW3C_sf_avg(t *testing.T) {
 		{Name: "sf-avg-053", StylesheetPath: "", InitialTemplate: "s-053", ExpectError: true, ErrorCode: "FORG0006", Skip: "no stylesheet"},
 		{Name: "sf-avg-054", StylesheetPath: "", InitialTemplate: "s-054", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"caught\"")}, Skip: "no stylesheet"},
 		{Name: "sf-avg-055", StylesheetPath: "", InitialTemplate: "s-055", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"caught\"")}, Skip: "no stylesheet"},
-		{Name: "sf-avg-100", StylesheetPath: "tests/strm/sf-avg/sf-avg-100.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/@avg='7.4587322'"), w3cAssertXPath("/out/@is-decimal='true'")}, Skip: "unsupported feature: streaming"},
-		{Name: "sf-avg-901", StylesheetPath: "tests/strm/sf-avg/sf-avg-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sf-avg-902", StylesheetPath: "tests/strm/sf-avg/sf-avg-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sf-avg-100", StylesheetPath: "tests/strm/sf-avg/sf-avg-100.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/@avg='7.4587322'"), w3cAssertXPath("/out/@is-decimal='true'")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "sf-avg-901", StylesheetPath: "tests/strm/sf-avg/sf-avg-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sf-avg-902", StylesheetPath: "tests/strm/sf-avg/sf-avg-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
 func TestW3C_sf_boolean(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "sf-boolean-001", StylesheetPath: "tests/strm/sf-boolean/sf-boolean-001.xsl", InitialTemplate: "c-001", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"true\"")}, Skip: "unsupported feature: streaming"},
+		{Name: "sf-boolean-001", StylesheetPath: "tests/strm/sf-boolean/sf-boolean-001.xsl", InitialTemplate: "c-001", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"true\"")}},
 		{Name: "sf-boolean-002", StylesheetPath: "", InitialTemplate: "c-002", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"true\"")}, Skip: "no stylesheet"},
 		{Name: "sf-boolean-003", StylesheetPath: "", InitialTemplate: "c-003", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"true\"")}, Skip: "no stylesheet"},
 		{Name: "sf-boolean-004", StylesheetPath: "", InitialTemplate: "c-004", ExpectError: true, ErrorCode: "FORG0006", Skip: "no stylesheet"},
@@ -80,17 +80,17 @@ func TestW3C_sf_boolean(t *testing.T) {
 		{Name: "sf-boolean-118", StylesheetPath: "", InitialTemplate: "c-118", Assertions: []w3cAssertion{w3cAssertXML("<out>true</out>")}, Skip: "no stylesheet"},
 		{Name: "sf-boolean-119", StylesheetPath: "", InitialTemplate: "c-119", Assertions: []w3cAssertion{w3cAssertXML("<out>true</out>")}, Skip: "no stylesheet"},
 		{Name: "sf-boolean-120", StylesheetPath: "", InitialTemplate: "c-120", ExpectError: true, ErrorCode: "FORG0006", Skip: "no stylesheet"},
-		{Name: "sf-boolean-901", StylesheetPath: "tests/strm/sf-boolean/sf-boolean-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sf-boolean-901", StylesheetPath: "tests/strm/sf-boolean/sf-boolean-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
 func TestW3C_sf_codepoints_to_string(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "sf-codepoints-to-string-001", StylesheetPath: "tests/strm/sf-codepoints-to-string/sf-codepoints-to-string-001.xsl", InitialTemplate: "c-001", Assertions: []w3cAssertion{w3cAssertXML("<out>1/7./-</out>")}, Skip: "unsupported feature: streaming"},
-		{Name: "sf-codepoints-to-string-002", StylesheetPath: "tests/strm/sf-codepoints-to-string/sf-codepoints-to-string-001.xsl", InitialTemplate: "c-002", ExpectError: true, ErrorCode: "FOCH0001", Skip: "unsupported feature: streaming"},
-		{Name: "sf-codepoints-to-string-003", StylesheetPath: "tests/strm/sf-codepoints-to-string/sf-codepoints-to-string-001.xsl", InitialTemplate: "c-003", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'caught'")}, Skip: "unsupported feature: streaming"},
-		{Name: "sf-codepoints-to-string-004", StylesheetPath: "tests/strm/sf-codepoints-to-string/sf-codepoints-to-string-001.xsl", InitialTemplate: "c-004", Assertions: []w3cAssertion{w3cAssertXPath("/out = ''")}, Skip: "unsupported feature: streaming"},
+		{Name: "sf-codepoints-to-string-001", StylesheetPath: "tests/strm/sf-codepoints-to-string/sf-codepoints-to-string-001.xsl", InitialTemplate: "c-001", Assertions: []w3cAssertion{w3cAssertXML("<out>1/7./-</out>")}},
+		{Name: "sf-codepoints-to-string-002", StylesheetPath: "tests/strm/sf-codepoints-to-string/sf-codepoints-to-string-001.xsl", InitialTemplate: "c-002", ExpectError: true, ErrorCode: "FOCH0001"},
+		{Name: "sf-codepoints-to-string-003", StylesheetPath: "tests/strm/sf-codepoints-to-string/sf-codepoints-to-string-001.xsl", InitialTemplate: "c-003", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'caught'")}},
+		{Name: "sf-codepoints-to-string-004", StylesheetPath: "tests/strm/sf-codepoints-to-string/sf-codepoints-to-string-001.xsl", InitialTemplate: "c-004", Assertions: []w3cAssertion{w3cAssertXPath("/out = ''")}},
 	})
 }
 
@@ -113,7 +113,7 @@ func TestW3C_sf_copy_of(t *testing.T) {
 func TestW3C_sf_count(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "sf-count-001", StylesheetPath: "tests/strm/sf-count/sf-count-001.xsl", InitialTemplate: "c-001", Assertions: []w3cAssertion{w3cAssertXML("<out>6</out>")}, Skip: "unsupported feature: streaming"},
+		{Name: "sf-count-001", StylesheetPath: "tests/strm/sf-count/sf-count-001.xsl", InitialTemplate: "c-001", Assertions: []w3cAssertion{w3cAssertXML("<out>6</out>")}},
 		{Name: "sf-count-002", StylesheetPath: "", InitialTemplate: "c-002", Assertions: []w3cAssertion{w3cAssertXML("<out>4</out>")}, Skip: "no stylesheet"},
 		{Name: "sf-count-003", StylesheetPath: "", InitialTemplate: "c-003", Assertions: []w3cAssertion{w3cAssertXML("<out>2</out>")}, Skip: "no stylesheet"},
 		{Name: "sf-count-004", StylesheetPath: "", InitialTemplate: "c-004", Assertions: []w3cAssertion{w3cAssertXML("<out>18</out>")}, Skip: "no stylesheet"},
@@ -141,7 +141,7 @@ func TestW3C_sf_count(t *testing.T) {
 		{Name: "sf-count-107", StylesheetPath: "", InitialTemplate: "c-107", Assertions: []w3cAssertion{w3cAssertXML("<out>6</out>")}, Skip: "no stylesheet"},
 		{Name: "sf-count-108", StylesheetPath: "", InitialTemplate: "c-108", Assertions: []w3cAssertion{w3cAssertXML("<out>6</out>")}, Skip: "no stylesheet"},
 		{Name: "sf-count-109", StylesheetPath: "", InitialTemplate: "c-109", Assertions: []w3cAssertion{w3cAssertXML("<out>6</out>")}, Skip: "no stylesheet"},
-		{Name: "sf-count-901", StylesheetPath: "tests/strm/sf-count/sf-count-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sf-count-901", StylesheetPath: "tests/strm/sf-count/sf-count-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -169,12 +169,12 @@ func TestW3C_sf_current(t *testing.T) {
 		{Name: "sf-current-004", StylesheetPath: "", InitialTemplate: "c-004", Assertions: []w3cAssertion{w3cAssertXML("<out><PRICE>4.95</PRICE></out>")}, Skip: "no stylesheet"},
 		{Name: "sf-current-005", StylesheetPath: "", InitialTemplate: "c-005", Assertions: []w3cAssertion{w3cAssertXML("<out><a>20 21</a><a>20 21</a><a>20 21</a><a>20 21</a><a>20 21</a><b>78</b></out>")}, Skip: "no stylesheet"},
 		{Name: "sf-current-006", StylesheetPath: "", InitialTemplate: "c-006", Assertions: []w3cAssertion{w3cAssertXML("<out>ITEM ITEM ITEM ITEM ITEM ITEM</out>")}, Skip: "no stylesheet"},
-		{Name: "sf-current-100", StylesheetPath: "tests/strm/sf-current/sf-current-100.xsl", Assertions: []w3cAssertion{w3cAssertXPath("not(//ITEM[@CAT=\"H\"]/AUTHOR)")}, Skip: "unsupported feature: streaming"},
-		{Name: "sf-current-901", StylesheetPath: "tests/strm/sf-current/sf-current-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sf-current-902", StylesheetPath: "tests/strm/sf-current/sf-current-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sf-current-903", StylesheetPath: "tests/strm/sf-current/sf-current-903.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sf-current-904", StylesheetPath: "tests/strm/sf-current/sf-current-904.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sf-current-905", StylesheetPath: "tests/strm/sf-current/sf-current-905.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sf-current-100", StylesheetPath: "tests/strm/sf-current/sf-current-100.xsl", Assertions: []w3cAssertion{w3cAssertXPath("not(//ITEM[@CAT=\"H\"]/AUTHOR)")}},
+		{Name: "sf-current-901", StylesheetPath: "tests/strm/sf-current/sf-current-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sf-current-902", StylesheetPath: "tests/strm/sf-current/sf-current-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sf-current-903", StylesheetPath: "tests/strm/sf-current/sf-current-903.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sf-current-904", StylesheetPath: "tests/strm/sf-current/sf-current-904.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sf-current-905", StylesheetPath: "tests/strm/sf-current/sf-current-905.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -240,7 +240,7 @@ func TestW3C_sf_distinct_values(t *testing.T) {
 func TestW3C_sf_empty(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "sf-empty-001", StylesheetPath: "tests/strm/sf-empty/sf-empty-001.xsl", InitialTemplate: "c-001", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}, Skip: "unsupported feature: streaming"},
+		{Name: "sf-empty-001", StylesheetPath: "tests/strm/sf-empty/sf-empty-001.xsl", InitialTemplate: "c-001", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}},
 		{Name: "sf-empty-002", StylesheetPath: "", InitialTemplate: "c-002", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}, Skip: "no stylesheet"},
 		{Name: "sf-empty-003", StylesheetPath: "", InitialTemplate: "c-003", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}, Skip: "no stylesheet"},
 		{Name: "sf-empty-004", StylesheetPath: "", InitialTemplate: "c-004", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}, Skip: "no stylesheet"},
@@ -268,14 +268,14 @@ func TestW3C_sf_empty(t *testing.T) {
 		{Name: "sf-empty-107", StylesheetPath: "", InitialTemplate: "c-107", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}, Skip: "no stylesheet"},
 		{Name: "sf-empty-108", StylesheetPath: "", InitialTemplate: "c-108", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}, Skip: "no stylesheet"},
 		{Name: "sf-empty-109", StylesheetPath: "", InitialTemplate: "c-109", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}, Skip: "no stylesheet"},
-		{Name: "sf-empty-901", StylesheetPath: "tests/strm/sf-empty/sf-empty-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sf-empty-901", StylesheetPath: "tests/strm/sf-empty/sf-empty-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
 func TestW3C_sf_exists(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "sf-exists-001", StylesheetPath: "tests/strm/sf-exists/sf-exists-001.xsl", InitialTemplate: "c-001", Assertions: []w3cAssertion{w3cAssertXML("<out>true</out>")}, Skip: "unsupported feature: streaming"},
+		{Name: "sf-exists-001", StylesheetPath: "tests/strm/sf-exists/sf-exists-001.xsl", InitialTemplate: "c-001", Assertions: []w3cAssertion{w3cAssertXML("<out>true</out>")}},
 		{Name: "sf-exists-002", StylesheetPath: "", InitialTemplate: "c-002", Assertions: []w3cAssertion{w3cAssertXML("<out>true</out>")}, Skip: "no stylesheet"},
 		{Name: "sf-exists-003", StylesheetPath: "", InitialTemplate: "c-003", Assertions: []w3cAssertion{w3cAssertXML("<out>true</out>")}, Skip: "no stylesheet"},
 		{Name: "sf-exists-004", StylesheetPath: "", InitialTemplate: "c-004", Assertions: []w3cAssertion{w3cAssertXML("<out>true</out>")}, Skip: "no stylesheet"},
@@ -303,7 +303,7 @@ func TestW3C_sf_exists(t *testing.T) {
 		{Name: "sf-exists-107", StylesheetPath: "", InitialTemplate: "c-107", Assertions: []w3cAssertion{w3cAssertXML("<out>true</out>")}, Skip: "no stylesheet"},
 		{Name: "sf-exists-108", StylesheetPath: "", InitialTemplate: "c-108", Assertions: []w3cAssertion{w3cAssertXML("<out>true</out>")}, Skip: "no stylesheet"},
 		{Name: "sf-exists-109", StylesheetPath: "", InitialTemplate: "c-109", Assertions: []w3cAssertion{w3cAssertXML("<out>true</out>")}, Skip: "no stylesheet"},
-		{Name: "sf-exists-901", StylesheetPath: "tests/strm/sf-exists/sf-exists-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sf-exists-901", StylesheetPath: "tests/strm/sf-exists/sf-exists-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -324,9 +324,9 @@ func TestW3C_sf_exactly_one(t *testing.T) {
 func TestW3C_sf_filter(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "sf-filter-001", StylesheetPath: "tests/strm/sf-filter/sf-filter-001.xsl", InitialTemplate: "r-001", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sf-filter-002", StylesheetPath: "tests/strm/sf-filter/sf-filter-002.xsl", InitialTemplate: "r-002", Assertions: []w3cAssertion{w3cAssertXML("<out><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>")}, Skip: "unsupported feature: streaming"},
-		{Name: "sf-filter-003", StylesheetPath: "tests/strm/sf-filter/sf-filter-003.xsl", InitialTemplate: "r-003", Assertions: []w3cAssertion{w3cAssertXML("<out>22.5 18.0</out>")}, Skip: "unsupported feature: streaming"},
+		{Name: "sf-filter-001", StylesheetPath: "tests/strm/sf-filter/sf-filter-001.xsl", InitialTemplate: "r-001", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: higher_order_functions"},
+		{Name: "sf-filter-002", StylesheetPath: "tests/strm/sf-filter/sf-filter-002.xsl", InitialTemplate: "r-002", Assertions: []w3cAssertion{w3cAssertXML("<out><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "sf-filter-003", StylesheetPath: "tests/strm/sf-filter/sf-filter-003.xsl", InitialTemplate: "r-003", Assertions: []w3cAssertion{w3cAssertXML("<out>22.5 18.0</out>")}, Skip: "unsupported feature: higher_order_functions"},
 	})
 }
 
@@ -359,14 +359,14 @@ func TestW3C_sf_fold_left(t *testing.T) {
 func TestW3C_sf_fold_right(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "sf-fold-right-003", StylesheetPath: "tests/strm/sf-fold-right/sf-fold-right-A.xsl", InitialTemplate: "s-003", Assertions: []w3cAssertion{w3cAssertXML("<out>54.37</out>")}, Skip: "unsupported feature: streaming"},
+		{Name: "sf-fold-right-003", StylesheetPath: "tests/strm/sf-fold-right/sf-fold-right-A.xsl", InitialTemplate: "s-003", Assertions: []w3cAssertion{w3cAssertXML("<out>54.37</out>")}, Skip: "unsupported feature: higher_order_functions"},
 	})
 }
 
 func TestW3C_sf_has_children(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "sf-has-children-001", StylesheetPath: "tests/strm/sf-has-children/sf-has-children-001.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/BOOKLIST/@has-children = 'true'"), w3cAssertXPath("/BOOKLIST/BOOKS/@has-children = 'true'"), w3cAssertXPath("/BOOKLIST/BOOKS/ITEM[1]/@has-children = 'true'"), w3cAssertXPath("/BOOKLIST/BOOKS/ITEM[1]/TITLE/@has-children = 'true'"), w3cAssertXPath("/BOOKLIST/BOOKS/ITEM[1]/PRICE/@has-children = 'true'"), w3cAssertXPath("/BOOKLIST/CATEGORIES/@has-children = 'true'"), w3cAssertXPath("/BOOKLIST/CATEGORIES/CATEGORY[1]/@has-children = 'false'")}, Skip: "unsupported feature: streaming"},
+		{Name: "sf-has-children-001", StylesheetPath: "tests/strm/sf-has-children/sf-has-children-001.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/BOOKLIST/@has-children = 'true'"), w3cAssertXPath("/BOOKLIST/BOOKS/@has-children = 'true'"), w3cAssertXPath("/BOOKLIST/BOOKS/ITEM[1]/@has-children = 'true'"), w3cAssertXPath("/BOOKLIST/BOOKS/ITEM[1]/TITLE/@has-children = 'true'"), w3cAssertXPath("/BOOKLIST/BOOKS/ITEM[1]/PRICE/@has-children = 'true'"), w3cAssertXPath("/BOOKLIST/CATEGORIES/@has-children = 'true'"), w3cAssertXPath("/BOOKLIST/CATEGORIES/CATEGORY[1]/@has-children = 'false'")}},
 	})
 }
 
@@ -401,8 +401,8 @@ func TestW3C_sf_head(t *testing.T) {
 func TestW3C_sf_innermost(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "sf-innermost-001", StylesheetPath: "tests/strm/sf-innermost/sf-innermost-001.xsl", InitialTemplate: "r-001", Assertions: []w3cAssertion{w3cAssertXML("<out>1.1 1.2.1 1.2.2 1.3</out>")}, Skip: "unsupported feature: streaming"},
-		{Name: "sf-innermost-901", StylesheetPath: "tests/strm/sf-innermost/sf-innermost-901.xsl", InitialTemplate: "r-901", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sf-innermost-001", StylesheetPath: "tests/strm/sf-innermost/sf-innermost-001.xsl", InitialTemplate: "r-001", Assertions: []w3cAssertion{w3cAssertXML("<out>1.1 1.2.1 1.2.2 1.3</out>")}},
+		{Name: "sf-innermost-901", StylesheetPath: "tests/strm/sf-innermost/sf-innermost-901.xsl", InitialTemplate: "r-901", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -518,8 +518,8 @@ func TestW3C_sf_max(t *testing.T) {
 		{Name: "sf-max-053", StylesheetPath: "", InitialTemplate: "s-053", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'c'")}, Skip: "no stylesheet"},
 		{Name: "sf-max-054", StylesheetPath: "", InitialTemplate: "s-054", ExpectError: true, ErrorCode: "FOCH0002", Skip: "no stylesheet"},
 		{Name: "sf-max-055", StylesheetPath: "", InitialTemplate: "s-055", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'caught'")}, Skip: "no stylesheet"},
-		{Name: "sf-max-901", StylesheetPath: "tests/strm/sf-max/sf-max-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sf-max-902", StylesheetPath: "tests/strm/sf-max/sf-max-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sf-max-901", StylesheetPath: "tests/strm/sf-max/sf-max-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sf-max-902", StylesheetPath: "tests/strm/sf-max/sf-max-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -562,15 +562,15 @@ func TestW3C_sf_min(t *testing.T) {
 		{Name: "sf-min-053", StylesheetPath: "", InitialTemplate: "s-053", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'a'")}, Skip: "no stylesheet"},
 		{Name: "sf-min-054", StylesheetPath: "", InitialTemplate: "s-054", ExpectError: true, ErrorCode: "FOCH0002", Skip: "no stylesheet"},
 		{Name: "sf-min-055", StylesheetPath: "", InitialTemplate: "s-055", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'caught'")}, Skip: "no stylesheet"},
-		{Name: "sf-min-901", StylesheetPath: "tests/strm/sf-min/sf-min-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sf-min-902", StylesheetPath: "tests/strm/sf-min/sf-min-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sf-min-901", StylesheetPath: "tests/strm/sf-min/sf-min-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sf-min-902", StylesheetPath: "tests/strm/sf-min/sf-min-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
 func TestW3C_sf_not(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "sf-not-001", StylesheetPath: "tests/strm/sf-not/sf-not-001.xsl", InitialTemplate: "c-001", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}, Skip: "unsupported feature: streaming"},
+		{Name: "sf-not-001", StylesheetPath: "tests/strm/sf-not/sf-not-001.xsl", InitialTemplate: "c-001", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}},
 		{Name: "sf-not-002", StylesheetPath: "", InitialTemplate: "c-002", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}, Skip: "no stylesheet"},
 		{Name: "sf-not-003", StylesheetPath: "", InitialTemplate: "c-003", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}, Skip: "no stylesheet"},
 		{Name: "sf-not-004", StylesheetPath: "", InitialTemplate: "c-004", ExpectError: true, ErrorCode: "FORG0006", Skip: "no stylesheet"},
@@ -603,7 +603,7 @@ func TestW3C_sf_not(t *testing.T) {
 		{Name: "sf-not-118", StylesheetPath: "", InitialTemplate: "c-118", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}, Skip: "no stylesheet"},
 		{Name: "sf-not-119", StylesheetPath: "", InitialTemplate: "c-119", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}, Skip: "no stylesheet"},
 		{Name: "sf-not-120", StylesheetPath: "", InitialTemplate: "c-120", ExpectError: true, ErrorCode: "FORG0006", Skip: "no stylesheet"},
-		{Name: "sf-not-901", StylesheetPath: "tests/strm/sf-not/sf-not-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sf-not-901", StylesheetPath: "tests/strm/sf-not/sf-not-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -706,8 +706,8 @@ func TestW3C_sf_remove(t *testing.T) {
 func TestW3C_sf_reverse(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "sf-reverse-001", StylesheetPath: "tests/strm/sf-reverse/sf-reverse-001.xsl", InitialTemplate: "r-001", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"1.3 1.2.2 1.2.1 1.2 1.1 1\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "sf-reverse-901", StylesheetPath: "tests/strm/sf-reverse/sf-reverse-901.xsl", InitialTemplate: "r-901", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sf-reverse-001", StylesheetPath: "tests/strm/sf-reverse/sf-reverse-001.xsl", InitialTemplate: "r-001", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"1.3 1.2.2 1.2.1 1.2 1.1 1\"")}},
+		{Name: "sf-reverse-901", StylesheetPath: "tests/strm/sf-reverse/sf-reverse-901.xsl", InitialTemplate: "r-901", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -736,7 +736,7 @@ func TestW3C_sf_snapshot(t *testing.T) {
    <br:width>27 feet (8 m)</br:width>
    <br:spans>Mississippi River</br:spans>
 </br:Bridge>
-`, InitialTemplate: "a", Assertions: []w3cAssertion{w3cAssertXPath("/ok")}, Skip: "unsupported feature: streaming"},
+`, InitialTemplate: "a", Assertions: []w3cAssertion{w3cAssertXPath("/ok")}},
 		{Name: "sf-snapshot-0101b", StylesheetPath: "tests/strm/sf-snapshot/sf-snapshot-0101.xsl", SourceContent: ` 
 <br:Bridge xmlns:gml="http://www.opengis.net/gml/3.2"
                   xmlns:br="http://www.bridge.org"
@@ -759,7 +759,7 @@ func TestW3C_sf_snapshot(t *testing.T) {
    <br:width>27 feet (8 m)</br:width>
    <br:spans>Mississippi River</br:spans>
 </br:Bridge>
-`, InitialTemplate: "b", Assertions: []w3cAssertion{w3cAssertXPath("/ok"), w3cAssertXPath("/ok/@doc = 'true'")}, Skip: "unsupported feature: streaming"},
+`, InitialTemplate: "b", Assertions: []w3cAssertion{w3cAssertXPath("/ok"), w3cAssertXPath("/ok/@doc = 'true'")}},
 		{Name: "sf-snapshot-0101c", StylesheetPath: "tests/strm/sf-snapshot/sf-snapshot-0101.xsl", SourceContent: ` 
 <br:Bridge xmlns:gml="http://www.opengis.net/gml/3.2"
                   xmlns:br="http://www.bridge.org"
@@ -785,7 +785,7 @@ func TestW3C_sf_snapshot(t *testing.T) {
 `, InitialTemplate: "c", Assertions: []w3cAssertion{w3cAssertXML(`<br:Bridge xmlns:gml="http://www.opengis.net/gml/3.2"
            xmlns:br="http://www.bridge.org"
            gml:id="Iowa-IllinoisMemorialBridge"
-><gml:identifier codeSpace="http://iowadot.gov">#8205,OL074  8205,OR074</gml:identifier></br:Bridge>`)}, Skip: "unsupported feature: streaming"},
+><gml:identifier codeSpace="http://iowadot.gov">#8205,OL074  8205,OR074</gml:identifier></br:Bridge>`)}},
 		{Name: "sf-snapshot-0102", StylesheetPath: "tests/strm/sf-snapshot/sf-snapshot-0102.xsl", SourceContent: ` 
 <br:Bridge xmlns:gml="http://www.opengis.net/gml/3.2"
                   xmlns:br="http://www.bridge.org"
@@ -808,7 +808,7 @@ func TestW3C_sf_snapshot(t *testing.T) {
    <br:width>27 feet (8 m)</br:width>
    <br:spans>Mississippi River</br:spans>
 </br:Bridge>
-`, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out"), w3cAssertXPath("not(/out/wrong)")}, Skip: "unsupported feature: streaming"},
+`, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out"), w3cAssertXPath("not(/out/wrong)")}},
 		{Name: "sf-snapshot-0105", StylesheetPath: "tests/strm/sf-snapshot/sf-snapshot-0105.xsl", SourceContent: ` 
 <br:Bridge xmlns:gml="http://www.opengis.net/gml/3.2"
                   xmlns:br="http://www.bridge.org"
@@ -831,7 +831,7 @@ func TestW3C_sf_snapshot(t *testing.T) {
    <br:width>27 feet (8 m)</br:width>
    <br:spans>Mississippi River</br:spans>
 </br:Bridge>
-`, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out"), w3cAssertXPath("not(/out/node())")}, Skip: "unsupported feature: streaming"},
+`, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out"), w3cAssertXPath("not(/out/node())")}},
 		{Name: "sf-snapshot-0201", StylesheetPath: "tests/strm/sf-snapshot/sf-snapshot-0201.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/emp) = 13"), w3cAssertXML(`<out>
    <emp name="Jane Doe 1" dept="sales" nr="E101" hours="40"/>
    <emp name="John Doe 2" dept="sales" nr="E102" hours="70 20"/>
@@ -846,7 +846,7 @@ func TestW3C_sf_snapshot(t *testing.T) {
    <emp name="Jane Doe 11" dept="finance" nr="E401" hours="20"/>
    <emp name="John Doe 12" dept="finance" nr="E402" hours="40"/>
    <emp name="Jane Doe 13" dept="finance" nr="E403" hours="80"/>
-</out>`)}, Skip: "unsupported feature: streaming"},
+</out>`)}},
 		{Name: "sf-snapshot-0202", StylesheetPath: "tests/strm/sf-snapshot/sf-snapshot-0202.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out"), w3cAssertXML(`<out>
    <emp name="Jane Doe 1" dept="sales" nr="E101" hours="40"/>
    <emp name="John Doe 2" dept="sales" nr="E102" hours="70 20"/>
@@ -861,39 +861,39 @@ func TestW3C_sf_snapshot(t *testing.T) {
    <emp name="Jane Doe 11" dept="finance" nr="E401" hours="20"/>
    <emp name="John Doe 12" dept="finance" nr="E402" hours="40"/>
    <emp name="Jane Doe 13" dept="finance" nr="E403" hours="80"/>
-</out>`)}, Skip: "unsupported feature: streaming"},
+</out>`)}},
 		{Name: "sf-snapshot-0203", StylesheetPath: "tests/strm/sf-snapshot/sf-snapshot-0203.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out"), w3cAssertXML(`<out>
    <emp name="Jane Doe 1" gender="female" dept="sales"/>
    <emp name="John Doe 2" gender="male" dept="sales"/>
    <emp name="Jane Doe 3" gender="female" dept="sales"/>
-</out>`)}, Skip: "unsupported feature: streaming"},
+</out>`)}},
 		{Name: "sf-snapshot-0204", StylesheetPath: "tests/strm/sf-snapshot/sf-snapshot-0204.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out"), w3cAssertXML(`<out>
    <emp name="Jane Doe 1" dept="sales" num="E101" gender="female"/>
    <emp name="John Doe 6" dept="customer-support" num="E106" gender="male"/>
    <emp name="John Doe 10" dept="finance" num="E302" gender="male"/>
-</out>`)}, Skip: "unsupported feature: streaming"},
+</out>`)}},
 		{Name: "sf-snapshot-0205", StylesheetPath: "tests/strm/sf-snapshot/sf-snapshot-0205.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out"), w3cAssertXML(`<out>
    <emp name="Jane Doe 1" gender="female" dept="sales"/>
    <emp name="John Doe 2" gender="male" dept="sales"/>
    <emp name="Jane Doe 3" gender="female" dept="sales"/>
-</out>`)}, Skip: "unsupported feature: streaming"},
+</out>`)}},
 		{Name: "sf-snapshot-0206", StylesheetPath: "tests/strm/sf-snapshot/sf-snapshot-0206.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out"), w3cAssertXML(`<out>
    <emp name="Jane Doe 1" gender="female" dept="sales"/>
    <emp name="John Doe 2" gender="male" dept="sales"/>
    <emp name="Jane Doe 3" gender="female" dept="sales"/>
-</out>`)}, Skip: "unsupported feature: streaming"},
+</out>`)}},
 		{Name: "sf-snapshot-0207", StylesheetPath: "tests/strm/sf-snapshot/sf-snapshot-0207.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out"), w3cAssertXML(`<out>
    <emp name="Jane Doe 1" dept="sales" num="E101" gender="female"/>
    <emp name="John Doe 10" dept="finance" num="E302" gender="male"/>
-</out>`)}, Skip: "unsupported feature: streaming"},
+</out>`)}},
 		{Name: "sf-snapshot-0208", StylesheetPath: "tests/strm/sf-snapshot/sf-snapshot-0208.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out"), w3cAssertXML(`<out>
    <emp name="Jane Doe 1" dept="sales" num="E101" gender="female"/>
    <emp name="John Doe 10" dept="finance" num="E302" gender="male"/>
-</out>`)}, Skip: "unsupported feature: streaming"},
+</out>`)}},
 		{Name: "sf-snapshot-0209", StylesheetPath: "tests/strm/sf-snapshot/sf-snapshot-0209.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out"), w3cAssertXML(`<out>
    <emp name="Jane Doe 1" dept="sales" num="E101" gender="female"/>
    <emp name="John Doe 10" dept="finance" num="E302" gender="male"/>
-</out>`)}, Skip: "unsupported feature: streaming"},
+</out>`)}},
 		{Name: "sf-snapshot-0303", StylesheetPath: "", InitialTemplate: "cy-003", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"-15.00 -5.00 -2.33 -248.05\"")}, Skip: "no stylesheet"},
 		{Name: "sf-snapshot-0304", StylesheetPath: "", InitialTemplate: "cy-004", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"-15.00 -5.00 -2.33 -248.05 101 102\"")}, Skip: "no stylesheet"},
 		{Name: "sf-snapshot-0305", StylesheetPath: "", InitialTemplate: "cy-005", Assertions: []w3cAssertion{w3cAssertXML("<out><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>")}, Skip: "no stylesheet"},
@@ -1005,8 +1005,8 @@ func TestW3C_sf_sum(t *testing.T) {
 		{Name: "sf-sum-057", StylesheetPath: "", InitialTemplate: "s-057", Assertions: []w3cAssertion{w3cAssertXPath("/out = '54.37'")}, Skip: "no stylesheet"},
 		{Name: "sf-sum-058", StylesheetPath: "", InitialTemplate: "s-058", Assertions: []w3cAssertion{w3cAssertXPath("/out = '54.37'")}, Skip: "no stylesheet"},
 		{Name: "sf-sum-059", StylesheetPath: "", InitialTemplate: "s-059", Assertions: []w3cAssertion{w3cAssertXPath("/out = '15'")}, Skip: "no stylesheet"},
-		{Name: "sf-sum-901", StylesheetPath: "tests/strm/sf-sum/sf-sum-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sf-sum-902", StylesheetPath: "tests/strm/sf-sum/sf-sum-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sf-sum-901", StylesheetPath: "tests/strm/sf-sum/sf-sum-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sf-sum-902", StylesheetPath: "tests/strm/sf-sum/sf-sum-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -1097,30 +1097,30 @@ func TestW3C_sf_unordered(t *testing.T) {
 func TestW3C_sf_unparsed_entity_uri(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "sf-unparsed-entity-01", StylesheetPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-01.xsl", SourceDocPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/a = 'true'"), w3cAssertXPath("/out/b = ''"), w3cAssertXPath("/out/c = 'false'"), w3cAssertXPath("/out/d = '-//Textuality//TEXT standard boilerplate//EN'")}, Skip: "unsupported feature: streaming"},
-		{Name: "sf-unparsed-entity-02", StylesheetPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-02.xsl", SourceDocPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXML("<out>true</out>")}, Skip: "unsupported feature: streaming"},
-		{Name: "sf-unparsed-entity-03", StylesheetPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-03.xsl", SourceDocPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/a = 'true'"), w3cAssertXPath("/out/b = ''"), w3cAssertXPath("/out/c = 'false'"), w3cAssertXPath("/out/d = '-//Textuality//TEXT standard boilerplate//EN'")}, Skip: "unsupported feature: streaming"},
-		{Name: "sf-unparsed-entity-04", StylesheetPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-04.xsl", SourceDocPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXML("<out>true</out>")}, Skip: "unsupported feature: streaming"},
-		{Name: "sf-unparsed-entity-05", StylesheetPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-05.xsl", SourceDocPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/a = 'true'"), w3cAssertXPath("/out/b = ''"), w3cAssertXPath("/out/c = 'false'"), w3cAssertXPath("/out/d = '-//Textuality//TEXT standard boilerplate//EN'")}, Skip: "unsupported feature: streaming"},
-		{Name: "sf-unparsed-entity-06", StylesheetPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-06.xsl", SourceDocPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/a = 'true'"), w3cAssertXPath("/out/b = ''"), w3cAssertXPath("/out/c = 'false'"), w3cAssertXPath("/out/d = '-//Textuality//TEXT standard boilerplate//EN'")}, Skip: "unsupported feature: streaming"},
-		{Name: "sf-unparsed-entity-07", StylesheetPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-07.xsl", SourceDocPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/a = 'true'"), w3cAssertXPath("/out/b = ''"), w3cAssertXPath("/out/c = 'false'"), w3cAssertXPath("/out/d = '-//Textuality//TEXT standard boilerplate//EN'")}, Skip: "unsupported feature: streaming"},
-		{Name: "sf-unparsed-entity-08", StylesheetPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-08.xsl", SourceDocPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/a = 'true'"), w3cAssertXPath("/out/b = ''"), w3cAssertXPath("/out/c = 'false'"), w3cAssertXPath("/out/d = '-//Textuality//TEXT standard boilerplate//EN'")}, Skip: "unsupported feature: streaming"},
+		{Name: "sf-unparsed-entity-01", StylesheetPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-01.xsl", SourceDocPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/a = 'true'"), w3cAssertXPath("/out/b = ''"), w3cAssertXPath("/out/c = 'false'"), w3cAssertXPath("/out/d = '-//Textuality//TEXT standard boilerplate//EN'")}},
+		{Name: "sf-unparsed-entity-02", StylesheetPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-02.xsl", SourceDocPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXML("<out>true</out>")}},
+		{Name: "sf-unparsed-entity-03", StylesheetPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-03.xsl", SourceDocPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/a = 'true'"), w3cAssertXPath("/out/b = ''"), w3cAssertXPath("/out/c = 'false'"), w3cAssertXPath("/out/d = '-//Textuality//TEXT standard boilerplate//EN'")}},
+		{Name: "sf-unparsed-entity-04", StylesheetPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-04.xsl", SourceDocPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXML("<out>true</out>")}},
+		{Name: "sf-unparsed-entity-05", StylesheetPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-05.xsl", SourceDocPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/a = 'true'"), w3cAssertXPath("/out/b = ''"), w3cAssertXPath("/out/c = 'false'"), w3cAssertXPath("/out/d = '-//Textuality//TEXT standard boilerplate//EN'")}},
+		{Name: "sf-unparsed-entity-06", StylesheetPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-06.xsl", SourceDocPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/a = 'true'"), w3cAssertXPath("/out/b = ''"), w3cAssertXPath("/out/c = 'false'"), w3cAssertXPath("/out/d = '-//Textuality//TEXT standard boilerplate//EN'")}},
+		{Name: "sf-unparsed-entity-07", StylesheetPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-07.xsl", SourceDocPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/a = 'true'"), w3cAssertXPath("/out/b = ''"), w3cAssertXPath("/out/c = 'false'"), w3cAssertXPath("/out/d = '-//Textuality//TEXT standard boilerplate//EN'")}},
+		{Name: "sf-unparsed-entity-08", StylesheetPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-08.xsl", SourceDocPath: "tests/strm/sf-unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/a = 'true'"), w3cAssertXPath("/out/b = ''"), w3cAssertXPath("/out/c = 'false'"), w3cAssertXPath("/out/d = '-//Textuality//TEXT standard boilerplate//EN'")}},
 	})
 }
 
 func TestW3C_sf_xml_to_json(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "sf-xml-to-json-001", StylesheetPath: "tests/strm/sf-xml-to-json/sf-xml-to-json-001.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/json = '{\"desc\":\"Distances between several cities, in kilometers.\",\"updated\":\"2014-02-04T18:50:45\",\"uptodate\":true,\"author\":null,\"cities\":{\"Brussels\":[{\"to\":\"London\",\"distance\":322},{\"to\":\"Paris\",\"distance\":265},{\"to\":\"Amsterdam\",\"distance\":173}],\"London\":[{\"to\":\"Brussels\",\"distance\":322},{\"to\":\"Paris\",\"distance\":344},{\"to\":\"Amsterdam\",\"distance\":358}],\"Paris\":[{\"to\":\"Brussels\",\"distance\":265},{\"to\":\"London\",\"distance\":344},{\"to\":\"Amsterdam\",\"distance\":431}],\"Amsterdam\":[{\"to\":\"Brussels\",\"distance\":173},{\"to\":\"London\",\"distance\":358},{\"to\":\"Paris\",\"distance\":431}]}}'")}, Skip: "unsupported feature: streaming"},
+		{Name: "sf-xml-to-json-001", StylesheetPath: "tests/strm/sf-xml-to-json/sf-xml-to-json-001.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/json = '{\"desc\":\"Distances between several cities, in kilometers.\",\"updated\":\"2014-02-04T18:50:45\",\"uptodate\":true,\"author\":null,\"cities\":{\"Brussels\":[{\"to\":\"London\",\"distance\":322},{\"to\":\"Paris\",\"distance\":265},{\"to\":\"Amsterdam\",\"distance\":173}],\"London\":[{\"to\":\"Brussels\",\"distance\":322},{\"to\":\"Paris\",\"distance\":344},{\"to\":\"Amsterdam\",\"distance\":358}],\"Paris\":[{\"to\":\"Brussels\",\"distance\":265},{\"to\":\"London\",\"distance\":344},{\"to\":\"Amsterdam\",\"distance\":431}],\"Amsterdam\":[{\"to\":\"Brussels\",\"distance\":173},{\"to\":\"London\",\"distance\":358},{\"to\":\"Paris\",\"distance\":431}]}}'")}},
 		{Name: "sf-xml-to-json-002", StylesheetPath: "tests/strm/sf-xml-to-json/sf-xml-to-json-002.xsl", Assertions: []w3cAssertion{w3cAssertXPath("contains(/json, \" {\")"), w3cAssertXPath("contains(/json, \" [\")"), w3cAssertXPath(`replace(/json, "\s*([,:\{\}\[\]])\s*", "$1") =
-               '{"desc":"Distances between several cities,in kilometers.","updated":"2014-02-04T18:50:45","uptodate":true,"author":null,"cities":{"Brussels":[{"to":"London","distance":322},{"to":"Paris","distance":265},{"to":"Amsterdam","distance":173}],"London":[{"to":"Brussels","distance":322},{"to":"Paris","distance":344},{"to":"Amsterdam","distance":358}],"Paris":[{"to":"Brussels","distance":265},{"to":"London","distance":344},{"to":"Amsterdam","distance":431}],"Amsterdam":[{"to":"Brussels","distance":173},{"to":"London","distance":358},{"to":"Paris","distance":431}]}}'`)}, Skip: "unsupported feature: streaming"},
+               '{"desc":"Distances between several cities,in kilometers.","updated":"2014-02-04T18:50:45","uptodate":true,"author":null,"cities":{"Brussels":[{"to":"London","distance":322},{"to":"Paris","distance":265},{"to":"Amsterdam","distance":173}],"London":[{"to":"Brussels","distance":322},{"to":"Paris","distance":344},{"to":"Amsterdam","distance":358}],"Paris":[{"to":"Brussels","distance":265},{"to":"London","distance":344},{"to":"Amsterdam","distance":431}],"Amsterdam":[{"to":"Brussels","distance":173},{"to":"London","distance":358},{"to":"Paris","distance":431}]}}'`)}},
 		{Name: "sf-xml-to-json-003", StylesheetPath: "tests/strm/sf-xml-to-json/sf-xml-to-json-003.xsl", Assertions: []w3cAssertion{w3cAssertXPath("contains(/json, \" {\")"), w3cAssertXPath("contains(/json, \" [\")"), w3cAssertXPath(`replace(/json, "\s*([,:\{\}\[\]])\s*", "$1") =
-               '{"desc":"Distances between several cities,in kilometers.","updated":"2014-02-04T18:50:45","uptodate":true,"author":null,"cities":{"Brussels":[{"to":"London","distance":322},{"to":"Paris","distance":265},{"to":"Amsterdam","distance":173}],"London":[{"to":"Brussels","distance":322},{"to":"Paris","distance":344},{"to":"Amsterdam","distance":358}],"Paris":[{"to":"Brussels","distance":265},{"to":"London","distance":344},{"to":"Amsterdam","distance":431}],"Amsterdam":[{"to":"Brussels","distance":173},{"to":"London","distance":358},{"to":"Paris","distance":431}]}}'`)}, Skip: "unsupported feature: streaming"},
-		{Name: "sf-xml-to-json-004", StylesheetPath: "tests/strm/sf-xml-to-json/sf-xml-to-json-004.xsl", ExpectError: true, ErrorCode: "XPTY0004", Skip: "unsupported feature: streaming"},
-		{Name: "sf-xml-to-json-005", StylesheetPath: "tests/strm/sf-xml-to-json/sf-xml-to-json-005.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/json = '{\"to\":\"London\",\"distance\":322}'")}, Skip: "unsupported feature: streaming"},
-		{Name: "sf-xml-to-json-006", StylesheetPath: "tests/strm/sf-xml-to-json/sf-xml-to-json-006.xsl", SourceDocPath: "tests/strm/sf-xml-to-json/sf-xml-to-json-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/json = '{\"desc\":\"Distances between several cities, in kilometers.\",\"updated\":\"2014-02-04T18:50:45\",\"uptodate\":true,\"author\":null,\"cities\":{\"Brussels\":[{\"to\":\"London\",\"distance\":322},{\"to\":\"Paris\",\"distance\":265},{\"to\":\"Amsterdam\",\"distance\":173}],\"London\":[{\"to\":\"Brussels\",\"distance\":322},{\"to\":\"Paris\",\"distance\":344},{\"to\":\"Amsterdam\",\"distance\":358}],\"Paris\":[{\"to\":\"Brussels\",\"distance\":265},{\"to\":\"London\",\"distance\":344},{\"to\":\"Amsterdam\",\"distance\":431}],\"Amsterdam\":[{\"to\":\"Brussels\",\"distance\":173},{\"to\":\"London\",\"distance\":358},{\"to\":\"Paris\",\"distance\":431}]}}'")}, Skip: "unsupported feature: streaming"},
+               '{"desc":"Distances between several cities,in kilometers.","updated":"2014-02-04T18:50:45","uptodate":true,"author":null,"cities":{"Brussels":[{"to":"London","distance":322},{"to":"Paris","distance":265},{"to":"Amsterdam","distance":173}],"London":[{"to":"Brussels","distance":322},{"to":"Paris","distance":344},{"to":"Amsterdam","distance":358}],"Paris":[{"to":"Brussels","distance":265},{"to":"London","distance":344},{"to":"Amsterdam","distance":431}],"Amsterdam":[{"to":"Brussels","distance":173},{"to":"London","distance":358},{"to":"Paris","distance":431}]}}'`)}},
+		{Name: "sf-xml-to-json-004", StylesheetPath: "tests/strm/sf-xml-to-json/sf-xml-to-json-004.xsl", ExpectError: true, ErrorCode: "XPTY0004"},
+		{Name: "sf-xml-to-json-005", StylesheetPath: "tests/strm/sf-xml-to-json/sf-xml-to-json-005.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/json = '{\"to\":\"London\",\"distance\":322}'")}},
+		{Name: "sf-xml-to-json-006", StylesheetPath: "tests/strm/sf-xml-to-json/sf-xml-to-json-006.xsl", SourceDocPath: "tests/strm/sf-xml-to-json/sf-xml-to-json-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/json = '{\"desc\":\"Distances between several cities, in kilometers.\",\"updated\":\"2014-02-04T18:50:45\",\"uptodate\":true,\"author\":null,\"cities\":{\"Brussels\":[{\"to\":\"London\",\"distance\":322},{\"to\":\"Paris\",\"distance\":265},{\"to\":\"Amsterdam\",\"distance\":173}],\"London\":[{\"to\":\"Brussels\",\"distance\":322},{\"to\":\"Paris\",\"distance\":344},{\"to\":\"Amsterdam\",\"distance\":358}],\"Paris\":[{\"to\":\"Brussels\",\"distance\":265},{\"to\":\"London\",\"distance\":344},{\"to\":\"Amsterdam\",\"distance\":431}],\"Amsterdam\":[{\"to\":\"Brussels\",\"distance\":173},{\"to\":\"London\",\"distance\":358},{\"to\":\"Paris\",\"distance\":431}]}}'")}},
 		{Name: "sf-xml-to-json-007", StylesheetPath: "tests/strm/sf-xml-to-json/sf-xml-to-json-007.xsl", SourceDocPath: "tests/strm/sf-xml-to-json/sf-xml-to-json-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("contains(/json, \" {\")"), w3cAssertXPath("contains(/json, \" [\")"), w3cAssertXPath(`replace(/json, "\s*([,:\{\}\[\]])\s*", "$1") =
-               '{"desc":"Distances between several cities,in kilometers.","updated":"2014-02-04T18:50:45","uptodate":true,"author":null,"cities":{"Brussels":[{"to":"London","distance":322},{"to":"Paris","distance":265},{"to":"Amsterdam","distance":173}],"London":[{"to":"Brussels","distance":322},{"to":"Paris","distance":344},{"to":"Amsterdam","distance":358}],"Paris":[{"to":"Brussels","distance":265},{"to":"London","distance":344},{"to":"Amsterdam","distance":431}],"Amsterdam":[{"to":"Brussels","distance":173},{"to":"London","distance":358},{"to":"Paris","distance":431}]}}'`)}, Skip: "unsupported feature: streaming"},
+               '{"desc":"Distances between several cities,in kilometers.","updated":"2014-02-04T18:50:45","uptodate":true,"author":null,"cities":{"Brussels":[{"to":"London","distance":322},{"to":"Paris","distance":265},{"to":"Amsterdam","distance":173}],"London":[{"to":"Brussels","distance":322},{"to":"Paris","distance":344},{"to":"Amsterdam","distance":358}],"Paris":[{"to":"Brussels","distance":265},{"to":"London","distance":344},{"to":"Amsterdam","distance":431}],"Amsterdam":[{"to":"Brussels","distance":173},{"to":"London","distance":358},{"to":"Paris","distance":431}]}}'`)}},
 	})
 }
 
@@ -1143,15 +1143,15 @@ func TestW3C_si_apply_imports(t *testing.T) {
 		{Name: "si-apply-imports-068", StylesheetPath: "tests/strm/si-apply-imports/si-apply-imports-068.xsl", SecondaryStylesheets: []string{"tests/strm/si-apply-imports/si-apply-imports-068a.xsl"}, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/prio5) = 39"), w3cAssertXPath(`every $P in /out/prio5 satisfies ($P/@p="17" and $P/@q="23" and $P/prio4 and
                not($P/prio4[2]))`), w3cAssertXPath(`every $P in /out/prio5/prio4 satisfies ($P/(@p="18" and @q="23" and
                @r="42"))`), w3cAssertXPath(`deep-equal(subsequence(/out/prio5/prio4/data(.), 1, 5), ('Genesis', 'Exodus',
-            'Leviticus', 'Numbers', 'Deuteronomy'))`)}, Skip: "unsupported feature: streaming"},
+            'Leviticus', 'Numbers', 'Deuteronomy'))`)}},
 		{Name: "si-apply-imports-069", StylesheetPath: "tests/strm/si-apply-imports/si-apply-imports-069.xsl", SecondaryStylesheets: []string{"tests/strm/si-apply-imports/si-apply-imports-069a.xsl"}, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/prio5) = 39"), w3cAssertXPath(`every $P in /out/prio5 satisfies ($P/@p="17" and $P/@q="23" and $P/prio4 and
                not($P/prio4[2]))`), w3cAssertXPath(`every $P in /out/prio5/prio4 satisfies ($P/(@p="18" and @q="23" and
                @r="42"))`), w3cAssertXPath(`deep-equal(subsequence(/out/prio5/prio4/data(.), 1, 5), ('Genesis', 'Exodus',
-            'Leviticus', 'Numbers', 'Deuteronomy'))`)}, Skip: "unsupported feature: streaming"},
+            'Leviticus', 'Numbers', 'Deuteronomy'))`)}},
 		{Name: "si-apply-imports-070", StylesheetPath: "tests/strm/si-apply-imports/si-apply-imports-070.xsl", SecondaryStylesheets: []string{"tests/strm/si-apply-imports/si-apply-imports-069a.xsl"}, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/prio5) = 39"), w3cAssertXPath(`every $P in /out/prio5 satisfies ($P/@p="17" and $P/@q="23" and $P/prio4 and
                not($P/prio4[2]))`), w3cAssertXPath(`every $P in /out/prio5/prio4 satisfies ($P/(@p="18" and @q="23" and
                @r="42"))`), w3cAssertXPath(`deep-equal(subsequence(/out/prio5/prio4/data(.), 1, 5), ('Genesis', 'Exodus',
-            'Leviticus', 'Numbers', 'Deuteronomy'))`)}, Skip: "unsupported feature: streaming"},
+            'Leviticus', 'Numbers', 'Deuteronomy'))`)}},
 	})
 }
 
@@ -1162,27 +1162,27 @@ func TestW3C_si_apply_templates(t *testing.T) {
          			*[1][self::Name][.='BOOKLIST'] and 
          			*[2][self::Attributes[not(*)]] and 
          			*[3][self::Name][.='CATEGORIES'] and
-         			*[4][self::Attributes[Name='DESC' and Value='Miscellaneous categories']]]`), w3cAssertXPath("count(/Results/CATEGORIES/CATEGORY) = 3")}, Skip: "unsupported feature: streaming"},
+         			*[4][self::Attributes[Name='DESC' and Value='Miscellaneous categories']]]`), w3cAssertXPath("count(/Results/CATEGORIES/CATEGORY) = 3")}},
 		{Name: "si-apply-templates-002", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-002.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXPath("/Results/CATEGORIES/CATEGORY[1]/Attributes[Name='CODE' and Value='P' and Name='DESC' and Value='Paperback']"), w3cAssertXPath(`/Results/CATEGORIES/CATEGORY[1]/Ancestors[
          			*[1][self::Name][.='BOOKLIST'] and 
          			*[2][self::Attributes[not(*)]] and 
          			*[3][self::Name][.='CATEGORIES'] and
-         			*[4][self::Attributes[Name='DESC' and Value='Miscellaneous categories']]]`), w3cAssertXPath("count(/Results/CATEGORIES/CATEGORY) = 3")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-apply-templates-003", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-003.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/p[1] = 'Document type: E'"), w3cAssertXPath("/out/p[2] = 'Name: John Smith'"), w3cAssertXPath("/out/p[3] = 'Document type: F'"), w3cAssertXPath("/out/p[4] = 'Name: Joe Doe'")}, Skip: "unsupported feature: streaming"},
+         			*[4][self::Attributes[Name='DESC' and Value='Miscellaneous categories']]]`), w3cAssertXPath("count(/Results/CATEGORIES/CATEGORY) = 3")}},
+		{Name: "si-apply-templates-003", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-003.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/p[1] = 'Document type: E'"), w3cAssertXPath("/out/p[2] = 'Name: John Smith'"), w3cAssertXPath("/out/p[3] = 'Document type: F'"), w3cAssertXPath("/out/p[4] = 'Name: Joe Doe'")}},
 		{Name: "si-apply-templates-004", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-004.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/Results/CATEGORIES/CATEGORY[1]/Attributes[Name='CODE' and Value='P' and Name='DESC' and Value='Paperback']"), w3cAssertXPath(`/Results/CATEGORIES/CATEGORY[1]/Ancestors[
          			*[1][self::Name][.='BOOKLIST'] and 
          			*[2][self::Attributes[not(*)]] and 
          			*[3][self::Name][.='CATEGORIES'] and
-         			*[4][self::Attributes[Name='DESC' and Value='Miscellaneous categories']]]`), w3cAssertXPath("count(/Results/CATEGORIES/CATEGORY) = 3")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-apply-templates-005", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-005.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/*/name(), ('open', 'copy', 'close'))"), w3cAssertXPath("count(/out/copy/Document) = 2")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-apply-templates-006", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-006.xsl", SourceDocPath: "tests/strm/si-apply-templates/si-apply-templates-006.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/root[1]/item-chunk/item = \"item 001\""), w3cAssertXPath("/out/root[2]/item-chunk/item = \"item 002\""), w3cAssertXPath("/out/root[35]/item-chunk/item = \"item 035\""), w3cAssertXPath("not(/out/root[36])")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-apply-templates-007", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-007.xsl", SourceDocPath: "tests/strm/docs/books.xml", Assertions: []w3cAssertion{w3cAssertXPath("empty(//AUTHOR)"), w3cAssertXPath("exists(//TITLE)")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-apply-templates-008", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-008.xsl", SourceDocPath: "tests/strm/si-apply-templates/si-apply-templates-008.xml", Assertions: []w3cAssertion{w3cAssertXPath("/ws/w[1]/@id = '[w_1]'"), w3cAssertXPath("/ws/w[8]/@id = '[w_8]'")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-apply-templates-009", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-009.xsl", SourceDocPath: "tests/strm/si-apply-templates/si-apply-templates-008.xml", Assertions: []w3cAssertion{w3cAssertXPath("/ws/w[1] = '[how]'"), w3cAssertXPath("/ws/w[8] = '[.]'")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-apply-templates-010", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-010.xsl", SourceDocPath: "tests/strm/si-apply-templates/si-apply-templates-010.xml", Assertions: []w3cAssertion{w3cAssertXPath("//id = \"10_ID\""), w3cAssertXPath("//id = \"9_ID\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-apply-templates-011", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-011.xsl", SourceDocPath: "tests/strm/si-apply-templates/si-apply-templates-010.xml", Assertions: []w3cAssertion{w3cAssertXPath("//id = \"10_ID\""), w3cAssertXPath("//id = \"9_ID\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-apply-templates-012", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-012.xsl", SourceDocPath: "tests/strm/docs/books.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out='false'")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-apply-templates-013", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-013.xsl", SourceDocPath: "tests/strm/docs/books.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out='true'")}, Skip: "unsupported feature: streaming"},
+         			*[4][self::Attributes[Name='DESC' and Value='Miscellaneous categories']]]`), w3cAssertXPath("count(/Results/CATEGORIES/CATEGORY) = 3")}},
+		{Name: "si-apply-templates-005", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-005.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/*/name(), ('open', 'copy', 'close'))"), w3cAssertXPath("count(/out/copy/Document) = 2")}},
+		{Name: "si-apply-templates-006", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-006.xsl", SourceDocPath: "tests/strm/si-apply-templates/si-apply-templates-006.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/root[1]/item-chunk/item = \"item 001\""), w3cAssertXPath("/out/root[2]/item-chunk/item = \"item 002\""), w3cAssertXPath("/out/root[35]/item-chunk/item = \"item 035\""), w3cAssertXPath("not(/out/root[36])")}},
+		{Name: "si-apply-templates-007", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-007.xsl", SourceDocPath: "tests/strm/docs/books.xml", Assertions: []w3cAssertion{w3cAssertXPath("empty(//AUTHOR)"), w3cAssertXPath("exists(//TITLE)")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "si-apply-templates-008", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-008.xsl", SourceDocPath: "tests/strm/si-apply-templates/si-apply-templates-008.xml", Assertions: []w3cAssertion{w3cAssertXPath("/ws/w[1]/@id = '[w_1]'"), w3cAssertXPath("/ws/w[8]/@id = '[w_8]'")}},
+		{Name: "si-apply-templates-009", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-009.xsl", SourceDocPath: "tests/strm/si-apply-templates/si-apply-templates-008.xml", Assertions: []w3cAssertion{w3cAssertXPath("/ws/w[1] = '[how]'"), w3cAssertXPath("/ws/w[8] = '[.]'")}},
+		{Name: "si-apply-templates-010", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-010.xsl", SourceDocPath: "tests/strm/si-apply-templates/si-apply-templates-010.xml", Assertions: []w3cAssertion{w3cAssertXPath("//id = \"10_ID\""), w3cAssertXPath("//id = \"9_ID\"")}},
+		{Name: "si-apply-templates-011", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-011.xsl", SourceDocPath: "tests/strm/si-apply-templates/si-apply-templates-010.xml", Assertions: []w3cAssertion{w3cAssertXPath("//id = \"10_ID\""), w3cAssertXPath("//id = \"9_ID\"")}},
+		{Name: "si-apply-templates-012", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-012.xsl", SourceDocPath: "tests/strm/docs/books.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out='false'")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "si-apply-templates-013", StylesheetPath: "tests/strm/si-apply-templates/si-apply-templates-013.xsl", SourceDocPath: "tests/strm/docs/books.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out='true'")}},
 	})
 }
 
@@ -1200,8 +1200,8 @@ func TestW3C_si_assert(t *testing.T) {
 		{Name: "si-assert-009", StylesheetPath: "", InitialTemplate: "d-009", Assertions: []w3cAssertion{w3cAssertXPath("/out=''")}, Skip: "no stylesheet"},
 		{Name: "si-assert-010", StylesheetPath: "", InitialTemplate: "d-010", Assertions: []w3cAssertion{w3cAssertXPath("/out=''")}, Skip: "no stylesheet"},
 		{Name: "si-assert-011", StylesheetPath: "", InitialTemplate: "d-011", Assertions: []w3cAssertion{w3cAssertXPath("true()")}, Skip: "no stylesheet"},
-		{Name: "si-assert-901", StylesheetPath: "tests/strm/si-assert/si-assert-901.xsl", ExpectError: true, ErrorCode: "Q{}XX99", Skip: "unsupported feature: streaming"},
-		{Name: "si-assert-902", StylesheetPath: "tests/strm/si-assert/si-assert-902.xsl", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "si-assert-901", StylesheetPath: "tests/strm/si-assert/si-assert-901.xsl", ExpectError: true, ErrorCode: "Q{}XX99"},
+		{Name: "si-assert-902", StylesheetPath: "tests/strm/si-assert/si-assert-902.xsl", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -1269,28 +1269,28 @@ func TestW3C_si_choose(t *testing.T) {
 	w3cRunTests(t, []w3cTest{
 		{Name: "si-choose-001", StylesheetPath: "tests/strm/si-choose/si-choose-001.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML(`<out><chapter><head>Heading</head><p>One</p><p>Two</p><p>Three</p
             ><bullet>point one</bullet><bullet>point two</bullet><bullet>point three</bullet
-            ><p>Four</p></chapter></out>`)}, Skip: "unsupported feature: streaming"},
+            ><p>Four</p></chapter></out>`)}},
 		{Name: "si-choose-002", StylesheetPath: "tests/strm/si-choose/si-choose-002.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML(`<out><chapter><head>Heading</head><p>One</p><p>Two</p><p>Three</p
             ><bullet>point one</bullet><bullet>point two</bullet><bullet>point three</bullet
-            ><p>Four</p></chapter></out>`)}, Skip: "unsupported feature: streaming"},
+            ><p>Four</p></chapter></out>`)}},
 		{Name: "si-choose-003", StylesheetPath: "tests/strm/si-choose/si-choose-003.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML(`<out><in/><chapter><head>Heading</head><p>One</p><p>Two</p><p>Three</p
             ><bullet>point one</bullet><bullet>point two</bullet><bullet>point three</bullet
-            ><p>Four</p></chapter><in/></out>`)}, Skip: "unsupported feature: streaming"},
+            ><p>Four</p></chapter><in/></out>`)}},
 		{Name: "si-choose-004", StylesheetPath: "tests/strm/si-choose/si-choose-004.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML(`<out><in/><chapter><head>Heading</head><p>One</p><p>Two</p><p>Three</p
             ><bullet>point one</bullet><bullet>point two</bullet><bullet>point three</bullet
-            ><p>Four</p></chapter><in/></out>`)}, Skip: "unsupported feature: streaming"},
+            ><p>Four</p></chapter><in/></out>`)}},
 		{Name: "si-choose-005", StylesheetPath: "tests/strm/si-choose/si-choose-005.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML(`<out><in/><chapter><head>Heading</head><p>One</p><p>Two</p><p>Three</p
             ><bullet>point one</bullet><bullet>point two</bullet><bullet>point three</bullet
-            ><p>Four</p></chapter><in/></out>`)}, Skip: "unsupported feature: streaming"},
-		{Name: "si-choose-006", StylesheetPath: "tests/strm/si-choose/si-choose-006.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/magic")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-choose-007", StylesheetPath: "tests/strm/si-choose/si-choose-007.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/cool")}, Skip: "unsupported feature: streaming"},
+            ><p>Four</p></chapter><in/></out>`)}},
+		{Name: "si-choose-006", StylesheetPath: "tests/strm/si-choose/si-choose-006.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/magic")}},
+		{Name: "si-choose-007", StylesheetPath: "tests/strm/si-choose/si-choose-007.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/cool")}},
 		{Name: "si-choose-008", StylesheetPath: "tests/strm/si-choose/si-choose-008.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML(`<out><head>Heading</head><para/><para/><para/><bullet>point one</bullet
-            ><bullet>point two</bullet><bullet>point three</bullet><para/></out>`)}, Skip: "unsupported feature: streaming"},
-		{Name: "si-choose-009", StylesheetPath: "tests/strm/si-choose/si-choose-009.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/magic")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-choose-010", StylesheetPath: "tests/strm/si-choose/si-choose-010.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = '10'")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-choose-011", StylesheetPath: "tests/strm/si-choose/si-choose-011.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = '[HeadingOneTwoThreepoint onepoint twopoint threeFourHeadingOneTwoThreepoint onepoint twopoint threeFour]'")}, Skip: "unsupported feature: streaming"},
+            ><bullet>point two</bullet><bullet>point three</bullet><para/></out>`)}},
+		{Name: "si-choose-009", StylesheetPath: "tests/strm/si-choose/si-choose-009.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/magic")}},
+		{Name: "si-choose-010", StylesheetPath: "tests/strm/si-choose/si-choose-010.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = '10'")}},
+		{Name: "si-choose-011", StylesheetPath: "tests/strm/si-choose/si-choose-011.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = '[HeadingOneTwoThreepoint onepoint twopoint threeFourHeadingOneTwoThreepoint onepoint twopoint threeFour]'")}},
 		{Name: "si-choose-012", StylesheetPath: "tests/strm/si-choose/si-choose-012.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML(`<out><D1>0.01</D1><D1>3.06</D1><D2>15.11</D2><D2>4.61</D2><D3>3.81</D3><D3>6.40</D3><D4>10.52</D4
-            ><D4>-1.84</D4><D5>15.83</D5><D5>-6.68</D5><D5>1.28</D5><D5>3.29</D5><D6>-2.37</D6><D6>6.21</D6><D6>-3.64</D6><D7>22.39</D7></out>`)}, Skip: "unsupported feature: streaming"},
+            ><D4>-1.84</D4><D5>15.83</D5><D5>-6.68</D5><D5>1.28</D5><D5>3.29</D5><D6>-2.37</D6><D6>6.21</D6><D6>-3.64</D6><D7>22.39</D7></out>`)}},
 	})
 }
 
@@ -1358,10 +1358,10 @@ func TestW3C_si_copy(t *testing.T) {
 		{Name: "si-copy-128", StylesheetPath: "", InitialTemplate: "cy-128", ExpectError: true, ErrorCode: "XTTE1510", Skip: "no stylesheet"},
 		{Name: "si-copy-129", StylesheetPath: "", InitialTemplate: "cy-129", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"true\"")}, Skip: "no stylesheet"},
 		{Name: "si-copy-130", StylesheetPath: "", InitialTemplate: "cy-130", ExpectError: true, ErrorCode: "XTTE0570", Skip: "no stylesheet"},
-		{Name: "si-copy-200", StylesheetPath: "tests/strm/si-copy/si-copy-200.xsl", SourceDocPath: "tests/strm/docs/novel-addresses.xml", Assertions: []w3cAssertion{w3cAssertXPath("count(//Address[LastName=\"ghi\"][FirstName=\"foo\"]) = 2")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-copy-901", StylesheetPath: "tests/strm/si-copy/si-copy-901.xsl", InitialTemplate: "cy-901", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-copy-902", StylesheetPath: "tests/strm/si-copy/si-copy-902.xsl", InitialTemplate: "cy-902", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-copy-903", StylesheetPath: "tests/strm/si-copy/si-copy-903.xsl", InitialTemplate: "cy-903", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "si-copy-200", StylesheetPath: "tests/strm/si-copy/si-copy-200.xsl", SourceDocPath: "tests/strm/docs/novel-addresses.xml", Assertions: []w3cAssertion{w3cAssertXPath("count(//Address[LastName=\"ghi\"][FirstName=\"foo\"]) = 2")}},
+		{Name: "si-copy-901", StylesheetPath: "tests/strm/si-copy/si-copy-901.xsl", InitialTemplate: "cy-901", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-copy-902", StylesheetPath: "tests/strm/si-copy/si-copy-902.xsl", InitialTemplate: "cy-902", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-copy-903", StylesheetPath: "tests/strm/si-copy/si-copy-903.xsl", InitialTemplate: "cy-903", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -1413,7 +1413,7 @@ func TestW3C_si_copy_of(t *testing.T) {
 		{Name: "si-copy-of-127", StylesheetPath: "", InitialTemplate: "cy-127", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"false\"")}, Skip: "no stylesheet"},
 		{Name: "si-copy-of-128", StylesheetPath: "", InitialTemplate: "cy-128", ExpectError: true, ErrorCode: "XTTE1510", Skip: "no stylesheet"},
 		{Name: "si-copy-of-801", StylesheetPath: "tests/strm/si-copy-of/si-copy-of-801.xsl", SourceDocPath: "tests/strm/si-copy-of/si-copy-of-801.xml", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML(`<p>The <adjective>quick</adjective> brown fox <verb>jumps</verb> 
-   <span class="highlight">quickly</span> over the lazy dog.</p>`)}, Skip: "unsupported feature: streaming"},
+   <span class="highlight">quickly</span> over the lazy dog.</p>`)}},
 	})
 }
 
@@ -1555,9 +1555,9 @@ func TestW3C_si_element(t *testing.T) {
 		{Name: "si-element-264", StylesheetPath: "", InitialTemplate: "s-064", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'caught'")}, Skip: "no stylesheet"},
 		{Name: "si-element-265", StylesheetPath: "", InitialTemplate: "s-065", ExpectError: true, ErrorCode: "XTDE0835", Skip: "no stylesheet"},
 		{Name: "si-element-266", StylesheetPath: "", InitialTemplate: "s-066", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'caught'")}, Skip: "no stylesheet"},
-		{Name: "si-element-901", StylesheetPath: "tests/strm/si-element/si-element-901.xsl", InitialTemplate: "cy-901", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-element-902", StylesheetPath: "tests/strm/si-element/si-element-902.xsl", InitialTemplate: "cy-902", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-element-903", StylesheetPath: "tests/strm/si-element/si-element-903.xsl", InitialTemplate: "cy-903", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "si-element-901", StylesheetPath: "tests/strm/si-element/si-element-901.xsl", InitialTemplate: "cy-901", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-element-902", StylesheetPath: "tests/strm/si-element/si-element-902.xsl", InitialTemplate: "cy-902", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-element-903", StylesheetPath: "tests/strm/si-element/si-element-903.xsl", InitialTemplate: "cy-903", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -1592,164 +1592,164 @@ func TestW3C_si_for_each(t *testing.T) {
         ><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE
         ><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES
         ><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>`)}, Skip: "no stylesheet"},
-		{Name: "si-for-each-801", StylesheetPath: "tests/strm/si-for-each/si-for-each-801.xsl", SourceDocPath: "tests/strm/si-for-each/si-for-each-801.xml", Params: map[string]string{"node-name": "'record'"}, Assertions: []w3cAssertion{w3cAssertXML("<root><found/><found/></root>")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-for-each-802", StylesheetPath: "tests/strm/si-for-each/si-for-each-802.xsl", InitialTemplate: "main", Params: map[string]string{"node-name": "'record'"}, Assertions: []w3cAssertion{w3cAssertXML("<root><found/><found/></root>")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-for-each-806", StylesheetPath: "tests/strm/si-for-each/si-for-each-806.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-for-each-807", StylesheetPath: "tests/strm/si-for-each/si-for-each-807.xsl", SourceDocPath: "tests/strm/si-for-each/si-for-each-807.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
-		{Name: "si-for-each-904", StylesheetPath: "tests/strm/si-for-each/si-for-each-904.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-for-each-905", StylesheetPath: "tests/strm/si-for-each/si-for-each-905.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-for-each-907", StylesheetPath: "tests/strm/si-for-each/si-for-each-907.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "si-for-each-801", StylesheetPath: "tests/strm/si-for-each/si-for-each-801.xsl", SourceDocPath: "tests/strm/si-for-each/si-for-each-801.xml", Params: map[string]string{"node-name": "'record'"}, Assertions: []w3cAssertion{w3cAssertXML("<root><found/><found/></root>")}},
+		{Name: "si-for-each-802", StylesheetPath: "tests/strm/si-for-each/si-for-each-802.xsl", InitialTemplate: "main", Params: map[string]string{"node-name": "'record'"}, Assertions: []w3cAssertion{w3cAssertXML("<root><found/><found/></root>")}},
+		{Name: "si-for-each-806", StylesheetPath: "tests/strm/si-for-each/si-for-each-806.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-for-each-807", StylesheetPath: "tests/strm/si-for-each/si-for-each-807.xsl", SourceDocPath: "tests/strm/si-for-each/si-for-each-807.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-result-document"},
+		{Name: "si-for-each-904", StylesheetPath: "tests/strm/si-for-each/si-for-each-904.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-for-each-905", StylesheetPath: "tests/strm/si-for-each/si-for-each-905.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-for-each-907", StylesheetPath: "tests/strm/si-for-each/si-for-each-907.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
 func TestW3C_si_for_each_group(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "si-group-001", StylesheetPath: "tests/strm/si-for-each-group/si-group-001.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/batch[1]/transaction/@value/number(), (13.24, 8.12))"), w3cAssertXPath("deep-equal(/out/batch[2]/transaction/@value/number(), (-15.00))"), w3cAssertXPath("deep-equal(/out/batch[3]/transaction/@value/number(), (6.00))"), w3cAssertXPath("deep-equal(/out/batch[4]/transaction/@value/number(), (0.50, 2.33, 4.44))"), w3cAssertXPath("deep-equal(/out/batch[5]/transaction/@value/number(), (-5.00))"), w3cAssertXPath("deep-equal(/out/batch[6]/transaction/@value/number(), (8.99))"), w3cAssertXPath("deep-equal(/out/batch[7]/transaction/@value/number(), (16.00))"), w3cAssertXPath("deep-equal(/out/batch[8]/transaction/@value/number(), (-2.33, 5.60, 4.32))"), w3cAssertXPath("deep-equal(/out/batch[9]/transaction/@value/number(), (6.78, 12.20, -248.05))"), w3cAssertXPath("deep-equal(/out/batch[10]/transaction/@value/number(), (12.00, 13.99))"), w3cAssertXPath("deep-equal(/out/batch[11]/transaction/@value/number(), (14.20))"), w3cAssertXPath("count(/out/batch) = 11")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-002", StylesheetPath: "tests/strm/si-for-each-group/si-group-002.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/batch[1]/transaction/@value/number(), (13.24, 8.12))"), w3cAssertXPath("deep-equal(/out/batch[2]/transaction/@value/number(), (-15.00))"), w3cAssertXPath("deep-equal(/out/batch[3]/transaction/@value/number(), (6.00))"), w3cAssertXPath("deep-equal(/out/batch[4]/transaction/@value/number(), (0.50, 2.33, 4.44))"), w3cAssertXPath("deep-equal(/out/batch[5]/transaction/@value/number(), (-5.00))"), w3cAssertXPath("deep-equal(/out/batch[6]/transaction/@value/number(), (8.99))"), w3cAssertXPath("deep-equal(/out/batch[7]/transaction/@value/number(), (16.00))"), w3cAssertXPath("deep-equal(/out/batch[8]/transaction/@value/number(), (-2.33, 5.60, 4.32))"), w3cAssertXPath("deep-equal(/out/batch[9]/transaction/@value/number(), (6.78, 12.20, -248.05))"), w3cAssertXPath("deep-equal(/out/batch[10]/transaction/@value/number(), (12.00, 13.99))"), w3cAssertXPath("deep-equal(/out/batch[11]/transaction/@value/number(), (14.20))"), w3cAssertXPath("count(/out/batch) = 11")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-003", StylesheetPath: "tests/strm/si-for-each-group/si-group-003.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/batch[1][@date = \"2006-02-13\"] = \"13.24 8.12\""), w3cAssertXPath("/out/batch[2][@date = \"2006-02-15\"] = \"-15.00\""), w3cAssertXPath("/out/batch[3][@date = \"2006-02-16\"] = \"6.00\""), w3cAssertXPath("/out/batch[4][@date = \"2006-02-17\"] = \"0.50 2.33 4.44\""), w3cAssertXPath("/out/batch[5][@date = \"2006-02-20\"] = \"-5.00\""), w3cAssertXPath("/out/batch[6][@date = \"2006-02-21\"] = \"8.99\""), w3cAssertXPath("/out/batch[7][@date = \"2006-02-22\"] = \"16.00\""), w3cAssertXPath("/out/batch[8][@date = \"2006-02-23\"] = \"-2.33 5.60 4.32\""), w3cAssertXPath("/out/batch[9][@date = \"2006-02-24\"] = \"6.78 12.20 -248.05\""), w3cAssertXPath("/out/batch[10][@date = \"2006-02-25\"] = \"12.00 13.99\""), w3cAssertXPath("/out/batch[11][@date = \"2006-02-26\"] = \"14.20\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-004", StylesheetPath: "tests/strm/si-for-each-group/si-group-004.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/batch[1][@date = \"2006-02-13\"]/transactions/@amounts = \"13.24 8.12\""), w3cAssertXPath("/out/batch[2][@date = \"2006-02-15\"]/transactions/@amounts = \"-15.00\""), w3cAssertXPath("/out/batch[3][@date = \"2006-02-16\"]/transactions/@amounts = \"6.00\""), w3cAssertXPath("/out/batch[4][@date = \"2006-02-17\"]/transactions/@amounts = \"0.50 2.33 4.44\""), w3cAssertXPath("/out/batch[5][@date = \"2006-02-20\"]/transactions/@amounts = \"-5.00\""), w3cAssertXPath("/out/batch[6][@date = \"2006-02-21\"]/transactions/@amounts = \"8.99\""), w3cAssertXPath("/out/batch[7][@date = \"2006-02-22\"]/transactions/@amounts = \"16.00\""), w3cAssertXPath("/out/batch[8][@date = \"2006-02-23\"]/transactions/@amounts = \"-2.33 5.60 4.32\""), w3cAssertXPath("/out/batch[9][@date = \"2006-02-24\"]/transactions/@amounts = \"6.78 12.20 -248.05\""), w3cAssertXPath("/out/batch[10][@date = \"2006-02-25\"]/transactions/@amounts = \"12.00 13.99\""), w3cAssertXPath("/out/batch[11][@date = \"2006-02-26\"]/transactions/@amounts = \"14.20\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-005", StylesheetPath: "tests/strm/si-for-each-group/si-group-005.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/batch[1][@date = \"2006-02-13\"]/size = \"2\""), w3cAssertXPath("/out/batch[2][@date = \"2006-02-15\"]/size = \"1\""), w3cAssertXPath("/out/batch[3][@date = \"2006-02-16\"]/size = \"1\""), w3cAssertXPath("/out/batch[4][@date = \"2006-02-17\"]/size = \"3\""), w3cAssertXPath("/out/batch[5][@date = \"2006-02-20\"]/size = \"1\""), w3cAssertXPath("/out/batch[6][@date = \"2006-02-21\"]/size = \"1\""), w3cAssertXPath("/out/batch[7][@date = \"2006-02-22\"]/size = \"1\""), w3cAssertXPath("/out/batch[8][@date = \"2006-02-23\"]/size = \"3\""), w3cAssertXPath("/out/batch[9][@date = \"2006-02-24\"]/size = \"3\""), w3cAssertXPath("/out/batch[10][@date = \"2006-02-25\"]/size = \"2\""), w3cAssertXPath("/out/batch[11][@date = \"2006-02-26\"]/size = \"1\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-006", StylesheetPath: "tests/strm/si-for-each-group/si-group-006.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/batch[1][@date = \"2006-02-13\"]/total = 21.36"), w3cAssertXPath("/out/batch[2][@date = \"2006-02-15\"]/total = -15.00"), w3cAssertXPath("/out/batch[3][@date = \"2006-02-16\"]/total = 6.00"), w3cAssertXPath("/out/batch[4][@date = \"2006-02-17\"]/total = 7.27"), w3cAssertXPath("/out/batch[5][@date = \"2006-02-20\"]/total = -5.00"), w3cAssertXPath("/out/batch[6][@date = \"2006-02-21\"]/total = 8.99"), w3cAssertXPath("/out/batch[7][@date = \"2006-02-22\"]/total = 16.00"), w3cAssertXPath("/out/batch[8][@date = \"2006-02-23\"]/total = 7.59"), w3cAssertXPath("/out/batch[9][@date = \"2006-02-24\"]/total = -229.07"), w3cAssertXPath("/out/batch[10][@date = \"2006-02-25\"]/total = 25.99"), w3cAssertXPath("/out/batch[11][@date = \"2006-02-26\"]/total = 14.20")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-007", StylesheetPath: "tests/strm/si-for-each-group/si-group-007.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><batch year=\"2006\" week=\"7\"><total>19.63</total></batch><batch year=\"2006\" week=\"8\"><total>-161.3</total></batch></out>")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-008", StylesheetPath: "tests/strm/si-for-each-group/si-group-008.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><batch year=\"2006\" week=\"7\"><min>-15</min><max>13.24</max></batch><batch year=\"2006\" week=\"8\"><min>-248.05</min><max>16</max></batch></out>")}, Skip: "unsupported feature: streaming"},
+		{Name: "si-group-001", StylesheetPath: "tests/strm/si-for-each-group/si-group-001.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/batch[1]/transaction/@value/number(), (13.24, 8.12))"), w3cAssertXPath("deep-equal(/out/batch[2]/transaction/@value/number(), (-15.00))"), w3cAssertXPath("deep-equal(/out/batch[3]/transaction/@value/number(), (6.00))"), w3cAssertXPath("deep-equal(/out/batch[4]/transaction/@value/number(), (0.50, 2.33, 4.44))"), w3cAssertXPath("deep-equal(/out/batch[5]/transaction/@value/number(), (-5.00))"), w3cAssertXPath("deep-equal(/out/batch[6]/transaction/@value/number(), (8.99))"), w3cAssertXPath("deep-equal(/out/batch[7]/transaction/@value/number(), (16.00))"), w3cAssertXPath("deep-equal(/out/batch[8]/transaction/@value/number(), (-2.33, 5.60, 4.32))"), w3cAssertXPath("deep-equal(/out/batch[9]/transaction/@value/number(), (6.78, 12.20, -248.05))"), w3cAssertXPath("deep-equal(/out/batch[10]/transaction/@value/number(), (12.00, 13.99))"), w3cAssertXPath("deep-equal(/out/batch[11]/transaction/@value/number(), (14.20))"), w3cAssertXPath("count(/out/batch) = 11")}},
+		{Name: "si-group-002", StylesheetPath: "tests/strm/si-for-each-group/si-group-002.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/batch[1]/transaction/@value/number(), (13.24, 8.12))"), w3cAssertXPath("deep-equal(/out/batch[2]/transaction/@value/number(), (-15.00))"), w3cAssertXPath("deep-equal(/out/batch[3]/transaction/@value/number(), (6.00))"), w3cAssertXPath("deep-equal(/out/batch[4]/transaction/@value/number(), (0.50, 2.33, 4.44))"), w3cAssertXPath("deep-equal(/out/batch[5]/transaction/@value/number(), (-5.00))"), w3cAssertXPath("deep-equal(/out/batch[6]/transaction/@value/number(), (8.99))"), w3cAssertXPath("deep-equal(/out/batch[7]/transaction/@value/number(), (16.00))"), w3cAssertXPath("deep-equal(/out/batch[8]/transaction/@value/number(), (-2.33, 5.60, 4.32))"), w3cAssertXPath("deep-equal(/out/batch[9]/transaction/@value/number(), (6.78, 12.20, -248.05))"), w3cAssertXPath("deep-equal(/out/batch[10]/transaction/@value/number(), (12.00, 13.99))"), w3cAssertXPath("deep-equal(/out/batch[11]/transaction/@value/number(), (14.20))"), w3cAssertXPath("count(/out/batch) = 11")}},
+		{Name: "si-group-003", StylesheetPath: "tests/strm/si-for-each-group/si-group-003.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/batch[1][@date = \"2006-02-13\"] = \"13.24 8.12\""), w3cAssertXPath("/out/batch[2][@date = \"2006-02-15\"] = \"-15.00\""), w3cAssertXPath("/out/batch[3][@date = \"2006-02-16\"] = \"6.00\""), w3cAssertXPath("/out/batch[4][@date = \"2006-02-17\"] = \"0.50 2.33 4.44\""), w3cAssertXPath("/out/batch[5][@date = \"2006-02-20\"] = \"-5.00\""), w3cAssertXPath("/out/batch[6][@date = \"2006-02-21\"] = \"8.99\""), w3cAssertXPath("/out/batch[7][@date = \"2006-02-22\"] = \"16.00\""), w3cAssertXPath("/out/batch[8][@date = \"2006-02-23\"] = \"-2.33 5.60 4.32\""), w3cAssertXPath("/out/batch[9][@date = \"2006-02-24\"] = \"6.78 12.20 -248.05\""), w3cAssertXPath("/out/batch[10][@date = \"2006-02-25\"] = \"12.00 13.99\""), w3cAssertXPath("/out/batch[11][@date = \"2006-02-26\"] = \"14.20\"")}},
+		{Name: "si-group-004", StylesheetPath: "tests/strm/si-for-each-group/si-group-004.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/batch[1][@date = \"2006-02-13\"]/transactions/@amounts = \"13.24 8.12\""), w3cAssertXPath("/out/batch[2][@date = \"2006-02-15\"]/transactions/@amounts = \"-15.00\""), w3cAssertXPath("/out/batch[3][@date = \"2006-02-16\"]/transactions/@amounts = \"6.00\""), w3cAssertXPath("/out/batch[4][@date = \"2006-02-17\"]/transactions/@amounts = \"0.50 2.33 4.44\""), w3cAssertXPath("/out/batch[5][@date = \"2006-02-20\"]/transactions/@amounts = \"-5.00\""), w3cAssertXPath("/out/batch[6][@date = \"2006-02-21\"]/transactions/@amounts = \"8.99\""), w3cAssertXPath("/out/batch[7][@date = \"2006-02-22\"]/transactions/@amounts = \"16.00\""), w3cAssertXPath("/out/batch[8][@date = \"2006-02-23\"]/transactions/@amounts = \"-2.33 5.60 4.32\""), w3cAssertXPath("/out/batch[9][@date = \"2006-02-24\"]/transactions/@amounts = \"6.78 12.20 -248.05\""), w3cAssertXPath("/out/batch[10][@date = \"2006-02-25\"]/transactions/@amounts = \"12.00 13.99\""), w3cAssertXPath("/out/batch[11][@date = \"2006-02-26\"]/transactions/@amounts = \"14.20\"")}},
+		{Name: "si-group-005", StylesheetPath: "tests/strm/si-for-each-group/si-group-005.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/batch[1][@date = \"2006-02-13\"]/size = \"2\""), w3cAssertXPath("/out/batch[2][@date = \"2006-02-15\"]/size = \"1\""), w3cAssertXPath("/out/batch[3][@date = \"2006-02-16\"]/size = \"1\""), w3cAssertXPath("/out/batch[4][@date = \"2006-02-17\"]/size = \"3\""), w3cAssertXPath("/out/batch[5][@date = \"2006-02-20\"]/size = \"1\""), w3cAssertXPath("/out/batch[6][@date = \"2006-02-21\"]/size = \"1\""), w3cAssertXPath("/out/batch[7][@date = \"2006-02-22\"]/size = \"1\""), w3cAssertXPath("/out/batch[8][@date = \"2006-02-23\"]/size = \"3\""), w3cAssertXPath("/out/batch[9][@date = \"2006-02-24\"]/size = \"3\""), w3cAssertXPath("/out/batch[10][@date = \"2006-02-25\"]/size = \"2\""), w3cAssertXPath("/out/batch[11][@date = \"2006-02-26\"]/size = \"1\"")}},
+		{Name: "si-group-006", StylesheetPath: "tests/strm/si-for-each-group/si-group-006.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/batch[1][@date = \"2006-02-13\"]/total = 21.36"), w3cAssertXPath("/out/batch[2][@date = \"2006-02-15\"]/total = -15.00"), w3cAssertXPath("/out/batch[3][@date = \"2006-02-16\"]/total = 6.00"), w3cAssertXPath("/out/batch[4][@date = \"2006-02-17\"]/total = 7.27"), w3cAssertXPath("/out/batch[5][@date = \"2006-02-20\"]/total = -5.00"), w3cAssertXPath("/out/batch[6][@date = \"2006-02-21\"]/total = 8.99"), w3cAssertXPath("/out/batch[7][@date = \"2006-02-22\"]/total = 16.00"), w3cAssertXPath("/out/batch[8][@date = \"2006-02-23\"]/total = 7.59"), w3cAssertXPath("/out/batch[9][@date = \"2006-02-24\"]/total = -229.07"), w3cAssertXPath("/out/batch[10][@date = \"2006-02-25\"]/total = 25.99"), w3cAssertXPath("/out/batch[11][@date = \"2006-02-26\"]/total = 14.20")}},
+		{Name: "si-group-007", StylesheetPath: "tests/strm/si-for-each-group/si-group-007.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><batch year=\"2006\" week=\"7\"><total>19.63</total></batch><batch year=\"2006\" week=\"8\"><total>-161.3</total></batch></out>")}},
+		{Name: "si-group-008", StylesheetPath: "tests/strm/si-for-each-group/si-group-008.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><batch year=\"2006\" week=\"7\"><min>-15</min><max>13.24</max></batch><batch year=\"2006\" week=\"8\"><min>-248.05</min><max>16</max></batch></out>")}},
 		{Name: "si-group-009", StylesheetPath: "tests/strm/si-for-each-group/si-group-009.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML(`<out><head>Heading</head><p>One</p><p>Two</p><p>Three</p
-         ><list><li>point one</li><li>point two</li><li>point three</li></list><p>Four</p></out>`)}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-010", StylesheetPath: "tests/strm/si-for-each-group/si-group-010.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/week[1][@nr=\"7\"]/day[1][@date=\"2006-02-13\"]/transaction[1][@value=\"13.24\"]"), w3cAssertXPath("/out/week[1][@nr=\"7\"]/day[1][@date=\"2006-02-13\"]/transaction[2][@value=\"8.12\"]"), w3cAssertXPath("/out/week[1][@nr=\"7\"]/day[2][@date=\"2006-02-15\"]/transaction[1][@value=\"-15.00\"]"), w3cAssertXPath("/out/week[1][@nr=\"7\"]/day[3][@date=\"2006-02-16\"]/transaction[1][@value=\"6.00\"]"), w3cAssertXPath("/out/week[2][@nr=\"8\"]/day[1][@date=\"2006-02-20\"]/transaction[1][@value=\"-5.00\"]"), w3cAssertXPath("/out/week[2][@nr=\"8\"]/day[7][@date=\"2006-02-26\"]/transaction[1][@value=\"14.20\"]")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-011", StylesheetPath: "tests/strm/si-for-each-group/si-group-011.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/batch[1][@date = \"2006-02-13\"] = \"[13.24][8.12]\""), w3cAssertXPath("/out/batch[2][@date = \"2006-02-15\"] = \"[-15.00]\""), w3cAssertXPath("/out/batch[3][@date = \"2006-02-16\"] = \"[6.00]\""), w3cAssertXPath("/out/batch[4][@date = \"2006-02-17\"] = \"[0.50][2.33][4.44]\""), w3cAssertXPath("/out/batch[5][@date = \"2006-02-20\"] = \"[-5.00]\""), w3cAssertXPath("/out/batch[6][@date = \"2006-02-21\"] = \"[8.99]\""), w3cAssertXPath("/out/batch[7][@date = \"2006-02-22\"] = \"[16.00]\""), w3cAssertXPath("/out/batch[8][@date = \"2006-02-23\"] = \"[-2.33][5.60][4.32]\""), w3cAssertXPath("/out/batch[9][@date = \"2006-02-24\"] = \"[6.78][12.20][-248.05]\""), w3cAssertXPath("/out/batch[10][@date = \"2006-02-25\"] = \"[12.00][13.99]\""), w3cAssertXPath("/out/batch[11][@date = \"2006-02-26\"] = \"[14.20]\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-012", StylesheetPath: "tests/strm/si-for-each-group/si-group-012.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/batch[1][@date = \"2006-02-13\"] = \"[13.24][8.12]\""), w3cAssertXPath("/out/batch[2][@date = \"2006-02-15\"] = \"[-15.00]\""), w3cAssertXPath("/out/batch[3][@date = \"2006-02-16\"] = \"[6.00]\""), w3cAssertXPath("/out/batch[4][@date = \"2006-02-17\"] = \"[0.50][2.33][4.44]\""), w3cAssertXPath("/out/batch[5][@date = \"2006-02-20\"] = \"[-5.00]\""), w3cAssertXPath("/out/batch[6][@date = \"2006-02-21\"] = \"[8.99]\""), w3cAssertXPath("/out/batch[7][@date = \"2006-02-22\"] = \"[16.00]\""), w3cAssertXPath("/out/batch[8][@date = \"2006-02-23\"] = \"[-2.33][5.60][4.32]\""), w3cAssertXPath("/out/batch[9][@date = \"2006-02-24\"] = \"[6.78][12.20][-248.05]\""), w3cAssertXPath("/out/batch[10][@date = \"2006-02-25\"] = \"[12.00][13.99]\""), w3cAssertXPath("/out/batch[11][@date = \"2006-02-26\"] = \"[14.20]\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-013", StylesheetPath: "tests/strm/si-for-each-group/si-group-013.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><batch year=\"2006\" week=\"7\"><min>8.12</min><max>13.24</max></batch><batch year=\"2006\" week=\"8\"><min>-5</min><max>8.99</max></batch></out>")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-014", StylesheetPath: "tests/strm/si-for-each-group/si-group-014.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><batch year=\"2006\" week=\"7\"><total>19.63</total></batch><batch year=\"2006\" week=\"8\"><total>-161.3</total></batch></out>")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-015", StylesheetPath: "tests/strm/si-for-each-group/si-group-015.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/first[1]/transaction/@value/number(), (13.24))"), w3cAssertXPath("deep-equal(/out/first[2]/transaction/@value/number(), (-15.00))"), w3cAssertXPath("deep-equal(/out/first[3]/transaction/@value/number(), (6.00))"), w3cAssertXPath("deep-equal(/out/first[4]/transaction/@value/number(), (0.50))"), w3cAssertXPath("deep-equal(/out/first[5]/transaction/@value/number(), (-5.00))"), w3cAssertXPath("deep-equal(/out/first[6]/transaction/@value/number(), (8.99))"), w3cAssertXPath("deep-equal(/out/first[7]/transaction/@value/number(), (16.00))"), w3cAssertXPath("deep-equal(/out/first[8]/transaction/@value/number(), (-2.33))"), w3cAssertXPath("deep-equal(/out/first[9]/transaction/@value/number(), (6.78))"), w3cAssertXPath("deep-equal(/out/first[10]/transaction/@value/number(), (12.00))"), w3cAssertXPath("deep-equal(/out/first[11]/transaction/@value/number(), (14.20))"), w3cAssertXPath("count(/out/first) = 11")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-015a", StylesheetPath: "tests/strm/si-for-each-group/si-group-015a.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/first[1]/transaction/@value/number(), (13.24))"), w3cAssertXPath("deep-equal(/out/first[2]/transaction/@value/number(), (-15.00))"), w3cAssertXPath("deep-equal(/out/first[3]/transaction/@value/number(), (6.00))"), w3cAssertXPath("deep-equal(/out/first[4]/transaction/@value/number(), (0.50))"), w3cAssertXPath("deep-equal(/out/first[5]/transaction/@value/number(), (-5.00))"), w3cAssertXPath("deep-equal(/out/first[6]/transaction/@value/number(), (8.99))"), w3cAssertXPath("deep-equal(/out/first[7]/transaction/@value/number(), (16.00))"), w3cAssertXPath("deep-equal(/out/first[8]/transaction/@value/number(), (-2.33))"), w3cAssertXPath("deep-equal(/out/first[9]/transaction/@value/number(), (6.78))"), w3cAssertXPath("deep-equal(/out/first[10]/transaction/@value/number(), (12.00))"), w3cAssertXPath("deep-equal(/out/first[11]/transaction/@value/number(), (14.20))"), w3cAssertXPath("count(/out/first) = 11")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-016", StylesheetPath: "tests/strm/si-for-each-group/si-group-016.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/first[1]/transaction/@value/number(), (13.24))"), w3cAssertXPath("deep-equal(/out/first[2]/transaction/@value/number(), (-15.00))"), w3cAssertXPath("deep-equal(/out/first[3]/transaction/@value/number(), (6.00))"), w3cAssertXPath("deep-equal(/out/first[4]/transaction/@value/number(), (0.50))"), w3cAssertXPath("deep-equal(/out/first[5]/transaction/@value/number(), (-5.00))"), w3cAssertXPath("deep-equal(/out/first[6]/transaction/@value/number(), (8.99))"), w3cAssertXPath("deep-equal(/out/first[7]/transaction/@value/number(), (16.00))"), w3cAssertXPath("deep-equal(/out/first[8]/transaction/@value/number(), (-2.33))"), w3cAssertXPath("deep-equal(/out/first[9]/transaction/@value/number(), (6.78))"), w3cAssertXPath("deep-equal(/out/first[10]/transaction/@value/number(), (12.00))"), w3cAssertXPath("deep-equal(/out/first[11]/transaction/@value/number(), (14.20))"), w3cAssertXPath("count(/out/first) = 11")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-017", StylesheetPath: "tests/strm/si-for-each-group/si-group-017.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-group-018", StylesheetPath: "tests/strm/si-for-each-group/si-group-018.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/batch[1][@date=\"2006-02-13\" and @nr=\"1\" and @size=\"2\"]"), w3cAssertXPath("/out/batch[2][@date=\"2006-02-15\" and @nr=\"2\" and @size=\"1\"]"), w3cAssertXPath("/out/batch[3][@date=\"2006-02-16\" and @nr=\"3\" and @size=\"1\"]"), w3cAssertXPath("/out/batch[4][@date=\"2006-02-17\" and @nr=\"4\" and @size=\"3\"]")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-019", StylesheetPath: "tests/strm/si-for-each-group/si-group-019.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/g) = 11")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-020", StylesheetPath: "tests/strm/si-for-each-group/si-group-020.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/g) = 11"), w3cAssertXPath("every $i in 1 to 11 satisfies /out/g[$i]/@pos = string($i)")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-021", StylesheetPath: "tests/strm/si-for-each-group/si-group-021.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/g[1]/@val = \"13.24\""), w3cAssertXPath("/out/g[2]/@val = \"-15.00\""), w3cAssertXPath("/out/g[3]/@val = \"6.00\""), w3cAssertXPath("/out/g[4]/@val = \"0.50\""), w3cAssertXPath("/out/g[5]/@val = \"-5.00\""), w3cAssertXPath("/out/g[6]/@val = \"8.99\""), w3cAssertXPath("/out/g[7]/@val = \"16.00\""), w3cAssertXPath("/out/g[8]/@val = \"-2.33\""), w3cAssertXPath("/out/g[9]/@val = \"6.78\""), w3cAssertXPath("/out/g[10]/@val = \"12.00\""), w3cAssertXPath("/out/g[11]/@val = \"14.20\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-022", StylesheetPath: "tests/strm/si-for-each-group/si-group-022.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/second[1]/transaction/@value/number(), (8.12))"), w3cAssertXPath("deep-equal(/out/second[2]/transaction, ())"), w3cAssertXPath("deep-equal(/out/second[3]/transaction, ())"), w3cAssertXPath("deep-equal(/out/second[4]/transaction/@value/number(), (2.33))"), w3cAssertXPath("count(/out/second) = 11"), w3cAssertXPath("count(/out/second/transaction) = 5")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-023", StylesheetPath: "tests/strm/si-for-each-group/si-group-023.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/credits[1]/transaction[1]/@value/number(), (13.24))"), w3cAssertXPath("deep-equal(/out/credits[1]/transaction[2]/@value/number(), (8.12))"), w3cAssertXPath("empty(/out/credits[2]/transaction)"), w3cAssertXPath("empty(/out/credits/transaction[number(@value) lt 0])")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-024", StylesheetPath: "tests/strm/si-for-each-group/si-group-024.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/group[1][@date=\"2006-02-13\"][@values=\"13.24 8.12\"]"), w3cAssertXPath("/out/group[2][@date=\"2006-02-15\"][@values=\"-15.00\"]"), w3cAssertXPath("/out/group[3][@date=\"2006-02-16\"][@values=\"6.00\"]"), w3cAssertXPath("/out/group[4][@date=\"2006-02-17\"][@values=\"0.50 2.33 4.44\"]"), w3cAssertXPath("/out/group[5][@date=\"2006-02-20\"][@values=\"-5.00\"]"), w3cAssertXPath("/out/group[6][@date=\"2006-02-21\"][@values=\"8.99\"]"), w3cAssertXPath("/out/group[7][@date=\"2006-02-22\"][@values=\"16.00\"]"), w3cAssertXPath("/out/group[8][@date=\"2006-02-23\"][@values=\"-2.33 5.60 4.32\"]"), w3cAssertXPath("/out/group[9][@date=\"2006-02-24\"][@values=\"6.78 12.20 -248.05\"]"), w3cAssertXPath("/out/group[10][@date=\"2006-02-25\"][@values=\"12.00 13.99\"]"), w3cAssertXPath("/out/group[11][@date=\"2006-02-26\"][@values=\"14.20\"]")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-025", StylesheetPath: "tests/strm/si-for-each-group/si-group-025.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/group[1][@price=\"4.95\"][@count=\"1\"]"), w3cAssertXPath("/out/group[2][@price=\"6.58\"][@count=\"1\"]"), w3cAssertXPath("/out/group[3][@price=\"4.95\"][@count=\"2\"]"), w3cAssertXPath("/out/group[4][@price=\"16.47\"][@count=\"2\"]")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-026", StylesheetPath: "tests/strm/si-for-each-group/si-group-026.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/group[1][@dates=\"2006-02-13\"][@values=\"13.24\"]"), w3cAssertXPath("/out/group[2][@dates=\"2006-02-13\"][@values=\"8.12\"]"), w3cAssertXPath("/out/group[3][@dates=\"2006-02-15\"][@values=\"-15.00\"]"), w3cAssertXPath("/out/group[4][@dates=\"2006-02-16\"][@values=\"6.00\"]"), w3cAssertXPath("/out/group[5][@dates=\"2006-02-17 2006-02-17 2006-02-17\"][@values=\"0.50 2.33 4.44\"]")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-027", StylesheetPath: "tests/strm/si-for-each-group/si-group-027.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/g[1]/start/@value = '13.24'"), w3cAssertXPath("/out/g[1]/group/@values = '13.24 8.12'"), w3cAssertXPath("/out/g[1]/end/@value = '13.24'"), w3cAssertXPath("/out/g[2]/start/@value = '-15.00'"), w3cAssertXPath("/out/g[2]/group/@values = '-15.00'"), w3cAssertXPath("/out/g[2]/end/@value = '-15.00'"), w3cAssertXPath("/out/g[3]/start/@value = '6.00'"), w3cAssertXPath("/out/g[3]/group/@values = '6.00 0.50 2.33 4.44'"), w3cAssertXPath("/out/g[3]/end/@value = '6.00'")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-028", StylesheetPath: "tests/strm/si-for-each-group/si-group-028.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/group[1]/@values=\"13.24 8.12 13.24\""), w3cAssertXPath("/out/group[2]/@values=\"-15.00 -15.00\""), w3cAssertXPath("/out/group[3]/@values=\"6.00 0.50 6.00 2.33 4.44\""), w3cAssertXPath("/out/group[4]/@values=\"-5.00 -5.00\""), w3cAssertXPath("/out/group[5]/@values=\"8.99 16.00 8.99\""), w3cAssertXPath("/out/group[6]/@values=\"-2.33 -2.33\""), w3cAssertXPath("/out/group[7]/@values=\"5.60 4.32 5.60 6.78 12.20\""), w3cAssertXPath("/out/group[8]/@values=\"-248.05 -248.05\""), w3cAssertXPath("/out/group[9]/@values=\"12.00 13.99 12.00 14.20\"")}, Skip: "unsupported feature: streaming"},
+         ><list><li>point one</li><li>point two</li><li>point three</li></list><p>Four</p></out>`)}},
+		{Name: "si-group-010", StylesheetPath: "tests/strm/si-for-each-group/si-group-010.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/week[1][@nr=\"7\"]/day[1][@date=\"2006-02-13\"]/transaction[1][@value=\"13.24\"]"), w3cAssertXPath("/out/week[1][@nr=\"7\"]/day[1][@date=\"2006-02-13\"]/transaction[2][@value=\"8.12\"]"), w3cAssertXPath("/out/week[1][@nr=\"7\"]/day[2][@date=\"2006-02-15\"]/transaction[1][@value=\"-15.00\"]"), w3cAssertXPath("/out/week[1][@nr=\"7\"]/day[3][@date=\"2006-02-16\"]/transaction[1][@value=\"6.00\"]"), w3cAssertXPath("/out/week[2][@nr=\"8\"]/day[1][@date=\"2006-02-20\"]/transaction[1][@value=\"-5.00\"]"), w3cAssertXPath("/out/week[2][@nr=\"8\"]/day[7][@date=\"2006-02-26\"]/transaction[1][@value=\"14.20\"]")}},
+		{Name: "si-group-011", StylesheetPath: "tests/strm/si-for-each-group/si-group-011.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/batch[1][@date = \"2006-02-13\"] = \"[13.24][8.12]\""), w3cAssertXPath("/out/batch[2][@date = \"2006-02-15\"] = \"[-15.00]\""), w3cAssertXPath("/out/batch[3][@date = \"2006-02-16\"] = \"[6.00]\""), w3cAssertXPath("/out/batch[4][@date = \"2006-02-17\"] = \"[0.50][2.33][4.44]\""), w3cAssertXPath("/out/batch[5][@date = \"2006-02-20\"] = \"[-5.00]\""), w3cAssertXPath("/out/batch[6][@date = \"2006-02-21\"] = \"[8.99]\""), w3cAssertXPath("/out/batch[7][@date = \"2006-02-22\"] = \"[16.00]\""), w3cAssertXPath("/out/batch[8][@date = \"2006-02-23\"] = \"[-2.33][5.60][4.32]\""), w3cAssertXPath("/out/batch[9][@date = \"2006-02-24\"] = \"[6.78][12.20][-248.05]\""), w3cAssertXPath("/out/batch[10][@date = \"2006-02-25\"] = \"[12.00][13.99]\""), w3cAssertXPath("/out/batch[11][@date = \"2006-02-26\"] = \"[14.20]\"")}},
+		{Name: "si-group-012", StylesheetPath: "tests/strm/si-for-each-group/si-group-012.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/batch[1][@date = \"2006-02-13\"] = \"[13.24][8.12]\""), w3cAssertXPath("/out/batch[2][@date = \"2006-02-15\"] = \"[-15.00]\""), w3cAssertXPath("/out/batch[3][@date = \"2006-02-16\"] = \"[6.00]\""), w3cAssertXPath("/out/batch[4][@date = \"2006-02-17\"] = \"[0.50][2.33][4.44]\""), w3cAssertXPath("/out/batch[5][@date = \"2006-02-20\"] = \"[-5.00]\""), w3cAssertXPath("/out/batch[6][@date = \"2006-02-21\"] = \"[8.99]\""), w3cAssertXPath("/out/batch[7][@date = \"2006-02-22\"] = \"[16.00]\""), w3cAssertXPath("/out/batch[8][@date = \"2006-02-23\"] = \"[-2.33][5.60][4.32]\""), w3cAssertXPath("/out/batch[9][@date = \"2006-02-24\"] = \"[6.78][12.20][-248.05]\""), w3cAssertXPath("/out/batch[10][@date = \"2006-02-25\"] = \"[12.00][13.99]\""), w3cAssertXPath("/out/batch[11][@date = \"2006-02-26\"] = \"[14.20]\"")}},
+		{Name: "si-group-013", StylesheetPath: "tests/strm/si-for-each-group/si-group-013.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><batch year=\"2006\" week=\"7\"><min>8.12</min><max>13.24</max></batch><batch year=\"2006\" week=\"8\"><min>-5</min><max>8.99</max></batch></out>")}},
+		{Name: "si-group-014", StylesheetPath: "tests/strm/si-for-each-group/si-group-014.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><batch year=\"2006\" week=\"7\"><total>19.63</total></batch><batch year=\"2006\" week=\"8\"><total>-161.3</total></batch></out>")}},
+		{Name: "si-group-015", StylesheetPath: "tests/strm/si-for-each-group/si-group-015.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/first[1]/transaction/@value/number(), (13.24))"), w3cAssertXPath("deep-equal(/out/first[2]/transaction/@value/number(), (-15.00))"), w3cAssertXPath("deep-equal(/out/first[3]/transaction/@value/number(), (6.00))"), w3cAssertXPath("deep-equal(/out/first[4]/transaction/@value/number(), (0.50))"), w3cAssertXPath("deep-equal(/out/first[5]/transaction/@value/number(), (-5.00))"), w3cAssertXPath("deep-equal(/out/first[6]/transaction/@value/number(), (8.99))"), w3cAssertXPath("deep-equal(/out/first[7]/transaction/@value/number(), (16.00))"), w3cAssertXPath("deep-equal(/out/first[8]/transaction/@value/number(), (-2.33))"), w3cAssertXPath("deep-equal(/out/first[9]/transaction/@value/number(), (6.78))"), w3cAssertXPath("deep-equal(/out/first[10]/transaction/@value/number(), (12.00))"), w3cAssertXPath("deep-equal(/out/first[11]/transaction/@value/number(), (14.20))"), w3cAssertXPath("count(/out/first) = 11")}},
+		{Name: "si-group-015a", StylesheetPath: "tests/strm/si-for-each-group/si-group-015a.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/first[1]/transaction/@value/number(), (13.24))"), w3cAssertXPath("deep-equal(/out/first[2]/transaction/@value/number(), (-15.00))"), w3cAssertXPath("deep-equal(/out/first[3]/transaction/@value/number(), (6.00))"), w3cAssertXPath("deep-equal(/out/first[4]/transaction/@value/number(), (0.50))"), w3cAssertXPath("deep-equal(/out/first[5]/transaction/@value/number(), (-5.00))"), w3cAssertXPath("deep-equal(/out/first[6]/transaction/@value/number(), (8.99))"), w3cAssertXPath("deep-equal(/out/first[7]/transaction/@value/number(), (16.00))"), w3cAssertXPath("deep-equal(/out/first[8]/transaction/@value/number(), (-2.33))"), w3cAssertXPath("deep-equal(/out/first[9]/transaction/@value/number(), (6.78))"), w3cAssertXPath("deep-equal(/out/first[10]/transaction/@value/number(), (12.00))"), w3cAssertXPath("deep-equal(/out/first[11]/transaction/@value/number(), (14.20))"), w3cAssertXPath("count(/out/first) = 11")}},
+		{Name: "si-group-016", StylesheetPath: "tests/strm/si-for-each-group/si-group-016.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/first[1]/transaction/@value/number(), (13.24))"), w3cAssertXPath("deep-equal(/out/first[2]/transaction/@value/number(), (-15.00))"), w3cAssertXPath("deep-equal(/out/first[3]/transaction/@value/number(), (6.00))"), w3cAssertXPath("deep-equal(/out/first[4]/transaction/@value/number(), (0.50))"), w3cAssertXPath("deep-equal(/out/first[5]/transaction/@value/number(), (-5.00))"), w3cAssertXPath("deep-equal(/out/first[6]/transaction/@value/number(), (8.99))"), w3cAssertXPath("deep-equal(/out/first[7]/transaction/@value/number(), (16.00))"), w3cAssertXPath("deep-equal(/out/first[8]/transaction/@value/number(), (-2.33))"), w3cAssertXPath("deep-equal(/out/first[9]/transaction/@value/number(), (6.78))"), w3cAssertXPath("deep-equal(/out/first[10]/transaction/@value/number(), (12.00))"), w3cAssertXPath("deep-equal(/out/first[11]/transaction/@value/number(), (14.20))"), w3cAssertXPath("count(/out/first) = 11")}},
+		{Name: "si-group-017", StylesheetPath: "tests/strm/si-for-each-group/si-group-017.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-group-018", StylesheetPath: "tests/strm/si-for-each-group/si-group-018.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/batch[1][@date=\"2006-02-13\" and @nr=\"1\" and @size=\"2\"]"), w3cAssertXPath("/out/batch[2][@date=\"2006-02-15\" and @nr=\"2\" and @size=\"1\"]"), w3cAssertXPath("/out/batch[3][@date=\"2006-02-16\" and @nr=\"3\" and @size=\"1\"]"), w3cAssertXPath("/out/batch[4][@date=\"2006-02-17\" and @nr=\"4\" and @size=\"3\"]")}},
+		{Name: "si-group-019", StylesheetPath: "tests/strm/si-for-each-group/si-group-019.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/g) = 11")}},
+		{Name: "si-group-020", StylesheetPath: "tests/strm/si-for-each-group/si-group-020.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/g) = 11"), w3cAssertXPath("every $i in 1 to 11 satisfies /out/g[$i]/@pos = string($i)")}},
+		{Name: "si-group-021", StylesheetPath: "tests/strm/si-for-each-group/si-group-021.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/g[1]/@val = \"13.24\""), w3cAssertXPath("/out/g[2]/@val = \"-15.00\""), w3cAssertXPath("/out/g[3]/@val = \"6.00\""), w3cAssertXPath("/out/g[4]/@val = \"0.50\""), w3cAssertXPath("/out/g[5]/@val = \"-5.00\""), w3cAssertXPath("/out/g[6]/@val = \"8.99\""), w3cAssertXPath("/out/g[7]/@val = \"16.00\""), w3cAssertXPath("/out/g[8]/@val = \"-2.33\""), w3cAssertXPath("/out/g[9]/@val = \"6.78\""), w3cAssertXPath("/out/g[10]/@val = \"12.00\""), w3cAssertXPath("/out/g[11]/@val = \"14.20\"")}},
+		{Name: "si-group-022", StylesheetPath: "tests/strm/si-for-each-group/si-group-022.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/second[1]/transaction/@value/number(), (8.12))"), w3cAssertXPath("deep-equal(/out/second[2]/transaction, ())"), w3cAssertXPath("deep-equal(/out/second[3]/transaction, ())"), w3cAssertXPath("deep-equal(/out/second[4]/transaction/@value/number(), (2.33))"), w3cAssertXPath("count(/out/second) = 11"), w3cAssertXPath("count(/out/second/transaction) = 5")}},
+		{Name: "si-group-023", StylesheetPath: "tests/strm/si-for-each-group/si-group-023.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/credits[1]/transaction[1]/@value/number(), (13.24))"), w3cAssertXPath("deep-equal(/out/credits[1]/transaction[2]/@value/number(), (8.12))"), w3cAssertXPath("empty(/out/credits[2]/transaction)"), w3cAssertXPath("empty(/out/credits/transaction[number(@value) lt 0])")}},
+		{Name: "si-group-024", StylesheetPath: "tests/strm/si-for-each-group/si-group-024.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/group[1][@date=\"2006-02-13\"][@values=\"13.24 8.12\"]"), w3cAssertXPath("/out/group[2][@date=\"2006-02-15\"][@values=\"-15.00\"]"), w3cAssertXPath("/out/group[3][@date=\"2006-02-16\"][@values=\"6.00\"]"), w3cAssertXPath("/out/group[4][@date=\"2006-02-17\"][@values=\"0.50 2.33 4.44\"]"), w3cAssertXPath("/out/group[5][@date=\"2006-02-20\"][@values=\"-5.00\"]"), w3cAssertXPath("/out/group[6][@date=\"2006-02-21\"][@values=\"8.99\"]"), w3cAssertXPath("/out/group[7][@date=\"2006-02-22\"][@values=\"16.00\"]"), w3cAssertXPath("/out/group[8][@date=\"2006-02-23\"][@values=\"-2.33 5.60 4.32\"]"), w3cAssertXPath("/out/group[9][@date=\"2006-02-24\"][@values=\"6.78 12.20 -248.05\"]"), w3cAssertXPath("/out/group[10][@date=\"2006-02-25\"][@values=\"12.00 13.99\"]"), w3cAssertXPath("/out/group[11][@date=\"2006-02-26\"][@values=\"14.20\"]")}},
+		{Name: "si-group-025", StylesheetPath: "tests/strm/si-for-each-group/si-group-025.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/group[1][@price=\"4.95\"][@count=\"1\"]"), w3cAssertXPath("/out/group[2][@price=\"6.58\"][@count=\"1\"]"), w3cAssertXPath("/out/group[3][@price=\"4.95\"][@count=\"2\"]"), w3cAssertXPath("/out/group[4][@price=\"16.47\"][@count=\"2\"]")}},
+		{Name: "si-group-026", StylesheetPath: "tests/strm/si-for-each-group/si-group-026.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/group[1][@dates=\"2006-02-13\"][@values=\"13.24\"]"), w3cAssertXPath("/out/group[2][@dates=\"2006-02-13\"][@values=\"8.12\"]"), w3cAssertXPath("/out/group[3][@dates=\"2006-02-15\"][@values=\"-15.00\"]"), w3cAssertXPath("/out/group[4][@dates=\"2006-02-16\"][@values=\"6.00\"]"), w3cAssertXPath("/out/group[5][@dates=\"2006-02-17 2006-02-17 2006-02-17\"][@values=\"0.50 2.33 4.44\"]")}},
+		{Name: "si-group-027", StylesheetPath: "tests/strm/si-for-each-group/si-group-027.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/g[1]/start/@value = '13.24'"), w3cAssertXPath("/out/g[1]/group/@values = '13.24 8.12'"), w3cAssertXPath("/out/g[1]/end/@value = '13.24'"), w3cAssertXPath("/out/g[2]/start/@value = '-15.00'"), w3cAssertXPath("/out/g[2]/group/@values = '-15.00'"), w3cAssertXPath("/out/g[2]/end/@value = '-15.00'"), w3cAssertXPath("/out/g[3]/start/@value = '6.00'"), w3cAssertXPath("/out/g[3]/group/@values = '6.00 0.50 2.33 4.44'"), w3cAssertXPath("/out/g[3]/end/@value = '6.00'")}},
+		{Name: "si-group-028", StylesheetPath: "tests/strm/si-for-each-group/si-group-028.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/group[1]/@values=\"13.24 8.12 13.24\""), w3cAssertXPath("/out/group[2]/@values=\"-15.00 -15.00\""), w3cAssertXPath("/out/group[3]/@values=\"6.00 0.50 6.00 2.33 4.44\""), w3cAssertXPath("/out/group[4]/@values=\"-5.00 -5.00\""), w3cAssertXPath("/out/group[5]/@values=\"8.99 16.00 8.99\""), w3cAssertXPath("/out/group[6]/@values=\"-2.33 -2.33\""), w3cAssertXPath("/out/group[7]/@values=\"5.60 4.32 5.60 6.78 12.20\""), w3cAssertXPath("/out/group[8]/@values=\"-248.05 -248.05\""), w3cAssertXPath("/out/group[9]/@values=\"12.00 13.99 12.00 14.20\"")}},
 		{Name: "si-group-029", StylesheetPath: "tests/strm/si-for-each-group/si-group-029.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-029.xml", Assertions: []w3cAssertion{w3cAssertXML(`<root
     ><group key="a"><record><foo>a</foo><bar>1</bar></record><record><foo>a</foo><bar>2</bar></record></group
     ><group key="b"><record><foo>b</foo><bar>3</bar></record></group
     ><group key="a"><record><foo>a</foo><bar>4</bar></record><record><foo>a</foo><bar>5</bar></record></group
-    ></root>`)}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-030", StylesheetPath: "tests/strm/si-for-each-group/si-group-030.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-029.xml", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-group-031", StylesheetPath: "tests/strm/si-for-each-group/si-group-031.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-031.xml", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-group-032", StylesheetPath: "tests/strm/si-for-each-group/si-group-032.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-031.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
+    ></root>`)}},
+		{Name: "si-group-030", StylesheetPath: "tests/strm/si-for-each-group/si-group-030.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-029.xml", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-group-031", StylesheetPath: "tests/strm/si-for-each-group/si-group-031.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-031.xml", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-group-032", StylesheetPath: "tests/strm/si-for-each-group/si-group-032.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-031.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion: assert-result-document"},
 		{Name: "si-group-033", StylesheetPath: "tests/strm/si-for-each-group/si-group-033.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-033.xml", Assertions: []w3cAssertion{w3cAssertXML(`<note
 ><group><para>customer name :</para><para>mr. Joe Someone</para></group
 ><group><para>calling from :</para><para>1234567</para></group
 ><group><para>device model :</para><para>ABC-123</para></group><group><para>issue:</para><para>some info</para><para>some more info</para><para>and even more info</para></group
-><group><para>solution :</para><para>some solutions</para><para>and some more solutions</para></group></note>`)}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-034", StylesheetPath: "tests/strm/si-for-each-group/si-group-034.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-034.xml", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(//@group-nr/xs:integer(.), 1 to 5)")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-035", StylesheetPath: "tests/strm/si-for-each-group/si-group-035.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-035.xml", Assertions: []w3cAssertion{w3cAssertXML("<doc><a>a</a><b>1,2,3</b><c>c</c><d>d</d><b>4,5</b><f>f</f><g>g1,g2</g><h>h</h></doc>")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-036", StylesheetPath: "tests/strm/si-for-each-group/si-group-036.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-036.xml", Assertions: []w3cAssertion{w3cAssertXML("<root><subjects><subject name=\"XSLT\"><book><title>book 1</title></book><book><title>book 3</title></book></subject><subject name=\"XQuery\"><book><title>book 2</title></book></subject><subject name=\"C#\"><book><title>book 4</title></book></subject></subjects></root>")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-037", StylesheetPath: "tests/strm/si-for-each-group/si-group-037.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-037.xml", Assertions: []w3cAssertion{w3cAssertXPath("normalize-space(/root/p[1]) eq \"Some text broken tags in my content which is really annoying.\""), w3cAssertXPath("normalize-space(/root/p[2]) eq \"Testing the code with some other samples.\""), w3cAssertXPath("normalize-space(/root/p[3]) eq \"Testing adjacent elements of different name.\""), w3cAssertXPath("/root/p[1]/span[@class='italic'] = 'broken tags'"), w3cAssertXPath("/root/p[1]/span[@class='italic'] = 'really annoying'"), w3cAssertXPath("/root/p[2]/span[@class='class1'] = 'the code'"), w3cAssertXPath("/root/p[2]/span[not(@class)] = ' with '"), w3cAssertXPath("/root/p[3]/b[@class = 'foo'] = 'adjacent '"), w3cAssertXPath("/root/p[3]/i[@class = 'foo'] = 'elements'")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-038", StylesheetPath: "tests/strm/si-for-each-group/si-group-038.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/group[1][key/@date=\"2006-02-13\"][first/@value=\"13.24\"]"), w3cAssertXPath("/out/group[2][key/@date=\"2006-02-15\"][first/@value=\"-15.00\"]"), w3cAssertXPath("/out/group[3][key/@date=\"2006-02-16\"][first/@value=\"6.00\"]"), w3cAssertXPath("/out/group[4][key/@date=\"2006-02-17\"][first/@value=\"0.50\"]"), w3cAssertXPath("/out/group[5][key/@date=\"2006-02-20\"][first/@value=\"-5.00\"]"), w3cAssertXPath("/out/group[6][key/@date=\"2006-02-21\"][first/@value=\"8.99\"]"), w3cAssertXPath("/out/group[7][key/@date=\"2006-02-22\"][first/@value=\"16.00\"]"), w3cAssertXPath("/out/group[8][key/@date=\"2006-02-23\"][first/@value=\"-2.33\"]"), w3cAssertXPath("/out/group[9][key/@date=\"2006-02-24\"][first/@value=\"6.78\"]"), w3cAssertXPath("/out/group[10][key/@date=\"2006-02-25\"][first/@value=\"12.00\"]"), w3cAssertXPath("/out/group[11][key/@date=\"2006-02-26\"][first/@value=\"14.20\"]")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-039", StylesheetPath: "tests/strm/si-for-each-group/si-group-039.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-039.xml", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-040", StylesheetPath: "tests/strm/si-for-each-group/si-group-040.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-040.xml", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/root[1]/item-chunk/item) = 10"), w3cAssertXPath("count(/out/root[2]/item-chunk/item) = 10"), w3cAssertXPath("count(/out/root[3]/item-chunk/item) = 10"), w3cAssertXPath("count(/out/root[4]/item-chunk/item) = 5")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-041", StylesheetPath: "tests/strm/si-for-each-group/si-group-041.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/group!number(), (12,1,1,123,1,1,1,123,123,12,1))")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-042", StylesheetPath: "tests/strm/si-for-each-group/si-group-042.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("empty(/out/group/transaction[2])"), w3cAssertXPath("/out/group[1]/transaction/@value=\"8.12\""), w3cAssertXPath("/out/group[2]/transaction/@value=\"2.33\""), w3cAssertXPath("/out/group[3]/transaction/@value=\"5.60\""), w3cAssertXPath("/out/group[4]/transaction/@value=\"12.20\""), w3cAssertXPath("/out/group[5]/transaction/@value=\"13.99\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-043", StylesheetPath: "tests/strm/si-for-each-group/si-group-043.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("empty(/out/group/transaction[2])"), w3cAssertXPath("/out/group[1]/transaction/@value=\"8.12\""), w3cAssertXPath("/out/group[2]/transaction/@value=\"2.33\""), w3cAssertXPath("/out/group[3]/transaction/@value=\"5.60\""), w3cAssertXPath("/out/group[4]/transaction/@value=\"12.20\""), w3cAssertXPath("/out/group[5]/transaction/@value=\"13.99\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-044", StylesheetPath: "tests/strm/si-for-each-group/si-group-044.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("empty(/out/group/transaction[2])"), w3cAssertXPath("/out/group[1]/transaction/@value=\"8.12\""), w3cAssertXPath("/out/group[2]/transaction/@value=\"2.33\""), w3cAssertXPath("/out/group[3]/transaction/@value=\"5.60\""), w3cAssertXPath("/out/group[4]/transaction/@value=\"12.20\""), w3cAssertXPath("/out/group[5]/transaction/@value=\"13.99\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-045", StylesheetPath: "tests/strm/si-for-each-group/si-group-045.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("empty(/out/group/transaction[2])"), w3cAssertXPath("/out/group[1]/transaction/@value=\"8.12\""), w3cAssertXPath("/out/group[2]/transaction/@value=\"2.33\""), w3cAssertXPath("/out/group[3]/transaction/@value=\"5.60\""), w3cAssertXPath("/out/group[4]/transaction/@value=\"12.20\""), w3cAssertXPath("/out/group[5]/transaction/@value=\"13.99\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-046", StylesheetPath: "tests/strm/si-for-each-group/si-group-046.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("every $t in /out/even satisfies count($t/transaction) eq 1"), w3cAssertXPath("every $t in /out/odd satisfies count($t/transaction) lt 2"), w3cAssertXPath("every $t in /out/* satisfies +$t/@position eq count($t/preceding-sibling::*) + 1")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-047", StylesheetPath: "tests/strm/si-for-each-group/si-group-047.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/*/local-name(), tokenize(\"odd odd even odd even odd even odd even odd even\", \" \"))"), w3cAssertXPath("deep-equal(/out/*/count(*), (2,1,1,3,1,1,1,3,3,2,1))"), w3cAssertXPath("every $t in /out/* satisfies +$t/@position eq count($t/preceding-sibling::*) + 1"), w3cAssertXPath("every $t in /out/*/value satisfies +$t/@position eq count($t/preceding-sibling::*) + 1")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-048", StylesheetPath: "tests/strm/si-for-each-group/si-group-048.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-048.xml", Assertions: []w3cAssertion{w3cAssertXPath("/Entries/Entry[1][Year='2005'][Month='DEC'][Reason='Blemish on Card']"), w3cAssertXPath("/Entries/Entry[2][Year='2005'][Month='DEC'][Reason='Damaged']"), w3cAssertXPath("/Entries/Entry[3][Year='2006'][Month='JAN'][Reason='Lost']"), w3cAssertXPath("/Entries/Entry[4][Year='2006'][Month='JAN'][Reason='Stolen']")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-049", StylesheetPath: "tests/strm/si-for-each-group/si-group-049.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out/date[1][@tomorrow='2006-02-14'][values='13.24 8.12']"), w3cAssertXPath("/out/date[2][@tomorrow='2006-02-16'][values='-15']"), w3cAssertXPath("/out/date[3][@tomorrow='2006-02-17'][values='6']"), w3cAssertXPath("/out/date[4][@tomorrow='2006-02-18'][values='0.5 2.33 4.44']"), w3cAssertXPath("/out/date[5][@tomorrow='2006-02-21'][values='-5']"), w3cAssertXPath("/out/date[6][@tomorrow='2006-02-22'][values='8.99']"), w3cAssertXPath("/out/date[7][@tomorrow='2006-02-23'][values='16']"), w3cAssertXPath("/out/date[8][@tomorrow='2006-02-24'][values='-2.33 5.6 4.32']"), w3cAssertXPath("/out/date[9][@tomorrow='2006-02-25'][values='6.78 12.2 -248.05']"), w3cAssertXPath("/out/date[10][@tomorrow='2006-02-26'][values='12 13.99']"), w3cAssertXPath("/out/date[11][@tomorrow='2006-02-27'][values='14.2']")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-050", StylesheetPath: "tests/strm/si-for-each-group/si-group-050.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-050.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-051", StylesheetPath: "tests/strm/si-for-each-group/si-group-051.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-051.xml", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertXPath("/Orders/group[@number=\"100\"]/value=\"-15.00\""), w3cAssertXPath("/Orders/group[@number=\"101\"]/value=\"6.00\""), w3cAssertXPath("/Orders/group[@number=\"102\"]/value=\"-5.00\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-051-ns", StylesheetPath: "tests/strm/si-for-each-group/si-group-051.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-051.xml", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertXPath("/Orders/group[@number=\"100\"]/value=\"-15.00\""), w3cAssertXPath("/Orders/group[@number=\"101\"]/value=\"6.00\""), w3cAssertXPath("/Orders/group[@number=\"102\"]/value=\"-5.00\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-052", StylesheetPath: "tests/strm/si-for-each-group/si-group-052.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-051.xml", Params: map[string]string{"STREAMABLE": "true()"}, ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-group-053", StylesheetPath: "tests/strm/si-for-each-group/si-group-053.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-053.xml", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertXPath("count(/chapter/pageset[1]/page) = 2"), w3cAssertXPath("count(/chapter/pageset[2]/page) = 1"), w3cAssertXPath("count(/chapter/pageset[3]/page) = 2"), w3cAssertXPath("count(/chapter/pageset) = 3"), w3cAssertXPath("empty(//pb)")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-053-ns", StylesheetPath: "tests/strm/si-for-each-group/si-group-053.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-053.xml", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertXPath("count(/chapter/pageset[1]/page) = 2"), w3cAssertXPath("count(/chapter/pageset[2]/page) = 1"), w3cAssertXPath("count(/chapter/pageset[3]/page) = 2"), w3cAssertXPath("count(/chapter/pageset) = 3"), w3cAssertXPath("empty(//pb)")}, Skip: "unsupported feature: streaming"},
+><group><para>solution :</para><para>some solutions</para><para>and some more solutions</para></group></note>`)}},
+		{Name: "si-group-034", StylesheetPath: "tests/strm/si-for-each-group/si-group-034.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-034.xml", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(//@group-nr/xs:integer(.), 1 to 5)")}},
+		{Name: "si-group-035", StylesheetPath: "tests/strm/si-for-each-group/si-group-035.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-035.xml", Assertions: []w3cAssertion{w3cAssertXML("<doc><a>a</a><b>1,2,3</b><c>c</c><d>d</d><b>4,5</b><f>f</f><g>g1,g2</g><h>h</h></doc>")}},
+		{Name: "si-group-036", StylesheetPath: "tests/strm/si-for-each-group/si-group-036.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-036.xml", Assertions: []w3cAssertion{w3cAssertXML("<root><subjects><subject name=\"XSLT\"><book><title>book 1</title></book><book><title>book 3</title></book></subject><subject name=\"XQuery\"><book><title>book 2</title></book></subject><subject name=\"C#\"><book><title>book 4</title></book></subject></subjects></root>")}},
+		{Name: "si-group-037", StylesheetPath: "tests/strm/si-for-each-group/si-group-037.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-037.xml", Assertions: []w3cAssertion{w3cAssertXPath("normalize-space(/root/p[1]) eq \"Some text broken tags in my content which is really annoying.\""), w3cAssertXPath("normalize-space(/root/p[2]) eq \"Testing the code with some other samples.\""), w3cAssertXPath("normalize-space(/root/p[3]) eq \"Testing adjacent elements of different name.\""), w3cAssertXPath("/root/p[1]/span[@class='italic'] = 'broken tags'"), w3cAssertXPath("/root/p[1]/span[@class='italic'] = 'really annoying'"), w3cAssertXPath("/root/p[2]/span[@class='class1'] = 'the code'"), w3cAssertXPath("/root/p[2]/span[not(@class)] = ' with '"), w3cAssertXPath("/root/p[3]/b[@class = 'foo'] = 'adjacent '"), w3cAssertXPath("/root/p[3]/i[@class = 'foo'] = 'elements'")}},
+		{Name: "si-group-038", StylesheetPath: "tests/strm/si-for-each-group/si-group-038.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/group[1][key/@date=\"2006-02-13\"][first/@value=\"13.24\"]"), w3cAssertXPath("/out/group[2][key/@date=\"2006-02-15\"][first/@value=\"-15.00\"]"), w3cAssertXPath("/out/group[3][key/@date=\"2006-02-16\"][first/@value=\"6.00\"]"), w3cAssertXPath("/out/group[4][key/@date=\"2006-02-17\"][first/@value=\"0.50\"]"), w3cAssertXPath("/out/group[5][key/@date=\"2006-02-20\"][first/@value=\"-5.00\"]"), w3cAssertXPath("/out/group[6][key/@date=\"2006-02-21\"][first/@value=\"8.99\"]"), w3cAssertXPath("/out/group[7][key/@date=\"2006-02-22\"][first/@value=\"16.00\"]"), w3cAssertXPath("/out/group[8][key/@date=\"2006-02-23\"][first/@value=\"-2.33\"]"), w3cAssertXPath("/out/group[9][key/@date=\"2006-02-24\"][first/@value=\"6.78\"]"), w3cAssertXPath("/out/group[10][key/@date=\"2006-02-25\"][first/@value=\"12.00\"]"), w3cAssertXPath("/out/group[11][key/@date=\"2006-02-26\"][first/@value=\"14.20\"]")}},
+		{Name: "si-group-039", StylesheetPath: "tests/strm/si-for-each-group/si-group-039.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-039.xml", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-result-document"},
+		{Name: "si-group-040", StylesheetPath: "tests/strm/si-for-each-group/si-group-040.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-040.xml", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/root[1]/item-chunk/item) = 10"), w3cAssertXPath("count(/out/root[2]/item-chunk/item) = 10"), w3cAssertXPath("count(/out/root[3]/item-chunk/item) = 10"), w3cAssertXPath("count(/out/root[4]/item-chunk/item) = 5")}},
+		{Name: "si-group-041", StylesheetPath: "tests/strm/si-for-each-group/si-group-041.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/group!number(), (12,1,1,123,1,1,1,123,123,12,1))")}},
+		{Name: "si-group-042", StylesheetPath: "tests/strm/si-for-each-group/si-group-042.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("empty(/out/group/transaction[2])"), w3cAssertXPath("/out/group[1]/transaction/@value=\"8.12\""), w3cAssertXPath("/out/group[2]/transaction/@value=\"2.33\""), w3cAssertXPath("/out/group[3]/transaction/@value=\"5.60\""), w3cAssertXPath("/out/group[4]/transaction/@value=\"12.20\""), w3cAssertXPath("/out/group[5]/transaction/@value=\"13.99\"")}},
+		{Name: "si-group-043", StylesheetPath: "tests/strm/si-for-each-group/si-group-043.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("empty(/out/group/transaction[2])"), w3cAssertXPath("/out/group[1]/transaction/@value=\"8.12\""), w3cAssertXPath("/out/group[2]/transaction/@value=\"2.33\""), w3cAssertXPath("/out/group[3]/transaction/@value=\"5.60\""), w3cAssertXPath("/out/group[4]/transaction/@value=\"12.20\""), w3cAssertXPath("/out/group[5]/transaction/@value=\"13.99\"")}},
+		{Name: "si-group-044", StylesheetPath: "tests/strm/si-for-each-group/si-group-044.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("empty(/out/group/transaction[2])"), w3cAssertXPath("/out/group[1]/transaction/@value=\"8.12\""), w3cAssertXPath("/out/group[2]/transaction/@value=\"2.33\""), w3cAssertXPath("/out/group[3]/transaction/@value=\"5.60\""), w3cAssertXPath("/out/group[4]/transaction/@value=\"12.20\""), w3cAssertXPath("/out/group[5]/transaction/@value=\"13.99\"")}},
+		{Name: "si-group-045", StylesheetPath: "tests/strm/si-for-each-group/si-group-045.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("empty(/out/group/transaction[2])"), w3cAssertXPath("/out/group[1]/transaction/@value=\"8.12\""), w3cAssertXPath("/out/group[2]/transaction/@value=\"2.33\""), w3cAssertXPath("/out/group[3]/transaction/@value=\"5.60\""), w3cAssertXPath("/out/group[4]/transaction/@value=\"12.20\""), w3cAssertXPath("/out/group[5]/transaction/@value=\"13.99\"")}},
+		{Name: "si-group-046", StylesheetPath: "tests/strm/si-for-each-group/si-group-046.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("every $t in /out/even satisfies count($t/transaction) eq 1"), w3cAssertXPath("every $t in /out/odd satisfies count($t/transaction) lt 2"), w3cAssertXPath("every $t in /out/* satisfies +$t/@position eq count($t/preceding-sibling::*) + 1")}},
+		{Name: "si-group-047", StylesheetPath: "tests/strm/si-for-each-group/si-group-047.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/*/local-name(), tokenize(\"odd odd even odd even odd even odd even odd even\", \" \"))"), w3cAssertXPath("deep-equal(/out/*/count(*), (2,1,1,3,1,1,1,3,3,2,1))"), w3cAssertXPath("every $t in /out/* satisfies +$t/@position eq count($t/preceding-sibling::*) + 1"), w3cAssertXPath("every $t in /out/*/value satisfies +$t/@position eq count($t/preceding-sibling::*) + 1")}},
+		{Name: "si-group-048", StylesheetPath: "tests/strm/si-for-each-group/si-group-048.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-048.xml", Assertions: []w3cAssertion{w3cAssertXPath("/Entries/Entry[1][Year='2005'][Month='DEC'][Reason='Blemish on Card']"), w3cAssertXPath("/Entries/Entry[2][Year='2005'][Month='DEC'][Reason='Damaged']"), w3cAssertXPath("/Entries/Entry[3][Year='2006'][Month='JAN'][Reason='Lost']"), w3cAssertXPath("/Entries/Entry[4][Year='2006'][Month='JAN'][Reason='Stolen']")}},
+		{Name: "si-group-049", StylesheetPath: "tests/strm/si-for-each-group/si-group-049.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out/date[1][@tomorrow='2006-02-14'][values='13.24 8.12']"), w3cAssertXPath("/out/date[2][@tomorrow='2006-02-16'][values='-15']"), w3cAssertXPath("/out/date[3][@tomorrow='2006-02-17'][values='6']"), w3cAssertXPath("/out/date[4][@tomorrow='2006-02-18'][values='0.5 2.33 4.44']"), w3cAssertXPath("/out/date[5][@tomorrow='2006-02-21'][values='-5']"), w3cAssertXPath("/out/date[6][@tomorrow='2006-02-22'][values='8.99']"), w3cAssertXPath("/out/date[7][@tomorrow='2006-02-23'][values='16']"), w3cAssertXPath("/out/date[8][@tomorrow='2006-02-24'][values='-2.33 5.6 4.32']"), w3cAssertXPath("/out/date[9][@tomorrow='2006-02-25'][values='6.78 12.2 -248.05']"), w3cAssertXPath("/out/date[10][@tomorrow='2006-02-26'][values='12 13.99']"), w3cAssertXPath("/out/date[11][@tomorrow='2006-02-27'][values='14.2']")}},
+		{Name: "si-group-050", StylesheetPath: "tests/strm/si-for-each-group/si-group-050.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-050.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "si-group-051", StylesheetPath: "tests/strm/si-for-each-group/si-group-051.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-051.xml", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertXPath("/Orders/group[@number=\"100\"]/value=\"-15.00\""), w3cAssertXPath("/Orders/group[@number=\"101\"]/value=\"6.00\""), w3cAssertXPath("/Orders/group[@number=\"102\"]/value=\"-5.00\"")}},
+		{Name: "si-group-051-ns", StylesheetPath: "tests/strm/si-for-each-group/si-group-051.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-051.xml", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertXPath("/Orders/group[@number=\"100\"]/value=\"-15.00\""), w3cAssertXPath("/Orders/group[@number=\"101\"]/value=\"6.00\""), w3cAssertXPath("/Orders/group[@number=\"102\"]/value=\"-5.00\"")}},
+		{Name: "si-group-052", StylesheetPath: "tests/strm/si-for-each-group/si-group-052.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-051.xml", Params: map[string]string{"STREAMABLE": "true()"}, ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-group-053", StylesheetPath: "tests/strm/si-for-each-group/si-group-053.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-053.xml", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertXPath("count(/chapter/pageset[1]/page) = 2"), w3cAssertXPath("count(/chapter/pageset[2]/page) = 1"), w3cAssertXPath("count(/chapter/pageset[3]/page) = 2"), w3cAssertXPath("count(/chapter/pageset) = 3"), w3cAssertXPath("empty(//pb)")}},
+		{Name: "si-group-053-ns", StylesheetPath: "tests/strm/si-for-each-group/si-group-053.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-053.xml", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertXPath("count(/chapter/pageset[1]/page) = 2"), w3cAssertXPath("count(/chapter/pageset[2]/page) = 1"), w3cAssertXPath("count(/chapter/pageset[3]/page) = 2"), w3cAssertXPath("count(/chapter/pageset) = 3"), w3cAssertXPath("empty(//pb)")}},
 		{Name: "si-group-054", StylesheetPath: "tests/strm/si-for-each-group/si-group-054.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-054.xml", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertXML(`<contents><unnumbered type="PT"><title>Title one</title></unnumbered
                ><unnumbered type="PT"><title>Title Two</title></unnumbered
                ><unnumbered type="PT"><title>Title Three</title></unnumbered
                ><unnumbered type="PT"><title>Title Four</title></unnumbered
-               ></contents>`)}, Skip: "unsupported feature: streaming"},
+               ></contents>`)}},
 		{Name: "si-group-054-ns", StylesheetPath: "tests/strm/si-for-each-group/si-group-054.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-054.xml", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertXML(`<contents><unnumbered type="PT"><title>Title one</title></unnumbered
                ><unnumbered type="PT"><title>Title Two</title></unnumbered
                ><unnumbered type="PT"><title>Title Three</title></unnumbered
                ><unnumbered type="PT"><title>Title Four</title></unnumbered
-               ></contents>`)}, Skip: "unsupported feature: streaming"},
+               ></contents>`)}},
 		{Name: "si-group-055", StylesheetPath: "tests/strm/si-for-each-group/si-group-055.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-054.xml", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertXML(`<contents><unnumbered type="PT"><title>Title one</title><unnumbered type="chapter" manid="01"
                /><unnumbered type="chapter" manid="02"/><unnumbered type="chapter" manid="03"/></unnumbered><unnumbered type="PT"
                ><title>Title Two</title><unnumbered type="chapter" manid="04"/><unnumbered type="chapter" manid="05"/><unnumbered type="chapter" manid="06"/></unnumbered><unnumbered type="PT"
                ><title>Title Three</title><unnumbered type="chapter" manid="07"/><unnumbered type="chapter" manid="08"/><unnumbered type="chapter" manid="09"/><unnumbered type="chapter" manid="10"/></unnumbered><unnumbered type="PT"
-               ><title>Title Four</title><unnumbered type="chapter" manid="11"/><unnumbered type="chapter" manid="12"/><unnumbered type="chapter" manid="13"/><unnumbered type="chapter" manid="14"/><unnumbered type="chapter" manid="15"/></unnumbered></contents>`)}, Skip: "unsupported feature: streaming"},
+               ><title>Title Four</title><unnumbered type="chapter" manid="11"/><unnumbered type="chapter" manid="12"/><unnumbered type="chapter" manid="13"/><unnumbered type="chapter" manid="14"/><unnumbered type="chapter" manid="15"/></unnumbered></contents>`)}},
 		{Name: "si-group-055-ns", StylesheetPath: "tests/strm/si-for-each-group/si-group-055.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-054.xml", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertXML(`<contents><unnumbered type="PT"><title>Title one</title><unnumbered type="chapter" manid="01"
                /><unnumbered type="chapter" manid="02"/><unnumbered type="chapter" manid="03"/></unnumbered><unnumbered type="PT"
                ><title>Title Two</title><unnumbered type="chapter" manid="04"/><unnumbered type="chapter" manid="05"/><unnumbered type="chapter" manid="06"/></unnumbered><unnumbered type="PT"
                ><title>Title Three</title><unnumbered type="chapter" manid="07"/><unnumbered type="chapter" manid="08"/><unnumbered type="chapter" manid="09"/><unnumbered type="chapter" manid="10"/></unnumbered><unnumbered type="PT"
-               ><title>Title Four</title><unnumbered type="chapter" manid="11"/><unnumbered type="chapter" manid="12"/><unnumbered type="chapter" manid="13"/><unnumbered type="chapter" manid="14"/><unnumbered type="chapter" manid="15"/></unnumbered></contents>`)}, Skip: "unsupported feature: streaming"},
+               ><title>Title Four</title><unnumbered type="chapter" manid="11"/><unnumbered type="chapter" manid="12"/><unnumbered type="chapter" manid="13"/><unnumbered type="chapter" manid="14"/><unnumbered type="chapter" manid="15"/></unnumbered></contents>`)}},
 		{Name: "si-group-056", StylesheetPath: "tests/strm/si-for-each-group/si-group-056.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-054.xml", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertXML(`<contents><unnumbered type="PT"><title>Title one</title><subtitle>Chapter Two</subtitle></unnumbered
                ><unnumbered type="PT"><title>Title Two</title></unnumbered
                ><unnumbered type="PT"><title>Title Three</title><subtitle>Chapter Eight</subtitle></unnumbered
-               ><unnumbered type="PT"><title>Title Four</title></unnumbered></contents>`)}, Skip: "unsupported feature: streaming"},
+               ><unnumbered type="PT"><title>Title Four</title></unnumbered></contents>`)}},
 		{Name: "si-group-056-ns", StylesheetPath: "tests/strm/si-for-each-group/si-group-056.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-054.xml", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertXML(`<contents><unnumbered type="PT"><title>Title one</title><subtitle>Chapter Two</subtitle></unnumbered
                ><unnumbered type="PT"><title>Title Two</title></unnumbered
                ><unnumbered type="PT"><title>Title Three</title><subtitle>Chapter Eight</subtitle></unnumbered
-               ><unnumbered type="PT"><title>Title Four</title></unnumbered></contents>`)}, Skip: "unsupported feature: streaming"},
+               ><unnumbered type="PT"><title>Title Four</title></unnumbered></contents>`)}},
 		{Name: "si-group-057", StylesheetPath: "tests/strm/si-for-each-group/si-group-057.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-057.xml", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertXML(`<Element><group><h1><title>Name1</title></h1
                ><para/></group><group><h1><title>Name2</title></h1
                ><para>Test1</para><para>Test2</para></group><group><h1><title>Name3</title></h1
-               ><para>Test3</para><para>Test4</para></group></Element>`)}, Skip: "unsupported feature: streaming"},
+               ><para>Test3</para><para>Test4</para></group></Element>`)}},
 		{Name: "si-group-057-ns", StylesheetPath: "tests/strm/si-for-each-group/si-group-057.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-057.xml", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertXML(`<Element><group><h1><title>Name1</title></h1
                ><para/></group><group><h1><title>Name2</title></h1
                ><para>Test1</para><para>Test2</para></group><group><h1><title>Name3</title></h1
-               ><para>Test3</para><para>Test4</para></group></Element>`)}, Skip: "unsupported feature: streaming"},
+               ><para>Test3</para><para>Test4</para></group></Element>`)}},
 		{Name: "si-group-058", StylesheetPath: "tests/strm/si-for-each-group/si-group-058.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-057.xml", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertXML(`<Element><group><h1><title>Name1</title></h1
                ><para/></group><group><h1><title>Name2</title></h1
                ><para>Test1</para><para>Test2</para></group><group><h1><title>Name3</title></h1
-               ><para>Test3</para><para>Test4</para></group></Element>`)}, Skip: "unsupported feature: streaming"},
+               ><para>Test3</para><para>Test4</para></group></Element>`)}},
 		{Name: "si-group-058-ns", StylesheetPath: "tests/strm/si-for-each-group/si-group-058.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-057.xml", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertXML(`<Element><group><h1><title>Name1</title></h1
                ><para/></group><group><h1><title>Name2</title></h1
                ><para>Test1</para><para>Test2</para></group><group><h1><title>Name3</title></h1
-               ><para>Test3</para><para>Test4</para></group></Element>`)}, Skip: "unsupported feature: streaming"},
+               ><para>Test3</para><para>Test4</para></group></Element>`)}},
 		{Name: "si-group-059", StylesheetPath: "tests/strm/si-for-each-group/si-group-059.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-057.xml", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertXML(`<Element><group><h1><title>Name1</title></h1
                ><para/></group><group><h1><title>Name2</title></h1
                ><para>Test1</para><para>Test2</para></group><group><h1><title>Name3</title></h1
-               ><para>Test3</para><para>Test4</para></group></Element>`)}, Skip: "unsupported feature: streaming"},
+               ><para>Test3</para><para>Test4</para></group></Element>`)}},
 		{Name: "si-group-059-ns", StylesheetPath: "tests/strm/si-for-each-group/si-group-059.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-057.xml", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertXML(`<Element><group><h1><title>Name1</title></h1
                ><para/></group><group><h1><title>Name2</title></h1
                ><para>Test1</para><para>Test2</para></group><group><h1><title>Name3</title></h1
-               ><para>Test3</para><para>Test4</para></group></Element>`)}, Skip: "unsupported feature: streaming"},
+               ><para>Test3</para><para>Test4</para></group></Element>`)}},
 		{Name: "si-group-059a", StylesheetPath: "tests/strm/si-for-each-group/si-group-059.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-059.xml", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertXML(`<Element><para>Test0</para><group><h1><title>Name1</title></h1
                ><para/></group><group><h1><title>Name2</title></h1
                ><para>Test1</para><para>Test2</para></group><group><h1><title>Name3</title></h1
-               ><para>Test3</para><para>Test4</para></group></Element>`)}, Skip: "unsupported feature: streaming"},
+               ><para>Test3</para><para>Test4</para></group></Element>`)}},
 		{Name: "si-group-059a-ns", StylesheetPath: "tests/strm/si-for-each-group/si-group-059.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-059.xml", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertXML(`<Element><para>Test0</para><group><h1><title>Name1</title></h1
                ><para/></group><group><h1><title>Name2</title></h1
                ><para>Test1</para><para>Test2</para></group><group><h1><title>Name3</title></h1
-               ><para>Test3</para><para>Test4</para></group></Element>`)}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-060", StylesheetPath: "tests/strm/si-for-each-group/si-group-060.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-060.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/p[1] = 'Milano, Italia, 5.26'"), w3cAssertXPath("/out/p[2] = 'Padova, Italia, 0.81'"), w3cAssertXPath("/out/p[3] = 'Paris, France, 7.4'")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-061", StylesheetPath: "tests/strm/si-for-each-group/si-group-061.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-060.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/p[1] = 'Milano, Italia, 5.23, 5.29'"), w3cAssertXPath("/out/p[2] = 'Padova, Italia, 0.69, 0.93'"), w3cAssertXPath("/out/p[3] = 'Paris, France, 7.2, 7.6'")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-062", StylesheetPath: "tests/strm/si-for-each-group/si-group-062.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-051.xml", Assertions: []w3cAssertion{w3cAssertXPath("/Orders/group[@number=\"100\"]/value=\"-15.00\""), w3cAssertXPath("/Orders/group[@number=\"101\"]/value=\"6.00\""), w3cAssertXPath("/Orders/group[@number=\"102\"]/value=\"-5.00\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-063", StylesheetPath: "tests/strm/si-for-each-group/si-group-063.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-063.xml", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+               ><para>Test3</para><para>Test4</para></group></Element>`)}},
+		{Name: "si-group-060", StylesheetPath: "tests/strm/si-for-each-group/si-group-060.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-060.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/p[1] = 'Milano, Italia, 5.26'"), w3cAssertXPath("/out/p[2] = 'Padova, Italia, 0.81'"), w3cAssertXPath("/out/p[3] = 'Paris, France, 7.4'")}},
+		{Name: "si-group-061", StylesheetPath: "tests/strm/si-for-each-group/si-group-061.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-060.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/p[1] = 'Milano, Italia, 5.23, 5.29'"), w3cAssertXPath("/out/p[2] = 'Padova, Italia, 0.69, 0.93'"), w3cAssertXPath("/out/p[3] = 'Paris, France, 7.2, 7.6'")}},
+		{Name: "si-group-062", StylesheetPath: "tests/strm/si-for-each-group/si-group-062.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-051.xml", Assertions: []w3cAssertion{w3cAssertXPath("/Orders/group[@number=\"100\"]/value=\"-15.00\""), w3cAssertXPath("/Orders/group[@number=\"101\"]/value=\"6.00\""), w3cAssertXPath("/Orders/group[@number=\"102\"]/value=\"-5.00\"")}},
+		{Name: "si-group-063", StylesheetPath: "tests/strm/si-for-each-group/si-group-063.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-063.xml", ExpectError: true, ErrorCode: "XTSE3430"},
 		{Name: "si-group-064", StylesheetPath: "tests/strm/si-for-each-group/si-group-064.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-064.xml", Assertions: []w3cAssertion{w3cAssertXPath(`deep-equal(/Members/Member[Name/fname='Fred']/* ! local-name(),
             ('Name', 'Locations_1', 'Locations_2', 'Payments_1', 'Payments_2'))`), w3cAssertXPath(`deep-equal(/Members/Member[Name/fname='Jack']/* ! local-name(),
-            ('Name', 'Locations_1', 'Locations_2', 'Payments_1', 'Payments_2'))`)}, Skip: "unsupported feature: streaming"},
+            ('Name', 'Locations_1', 'Locations_2', 'Payments_1', 'Payments_2'))`)}},
 		{Name: "si-group-065", StylesheetPath: "tests/strm/si-for-each-group/si-group-065.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-064.xml", Assertions: []w3cAssertion{w3cAssertXPath(`deep-equal(/Members/Member[Name/fname='Fred']/* ! local-name(),
              ('Name', 'Locations_1', 'Locations_2', 'Payments_1', 'Payments_2'))`), w3cAssertXPath(`deep-equal(/Members/Member[Name/fname='Jack']/* ! local-name(),
-             ('Name', 'Locations_1', 'Locations_2', 'Payments_1', 'Payments_2'))`)}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-101", StylesheetPath: "tests/strm/si-for-each-group/si-group-101.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/batch[1]/transaction/@value/xs:decimal(.), (13.24, 8.12))"), w3cAssertXPath("deep-equal(/out/batch[2]/transaction/@value/xs:decimal(.), (-15.00, 6.00, 0.50, 2.33, 4.44))"), w3cAssertXPath("deep-equal(/out/batch[3]/transaction/@value/xs:decimal(.), (-5.00, 8.99, 16.00))"), w3cAssertXPath("deep-equal(/out/batch[4]/transaction/@value/xs:decimal(.), (-2.33, 5.60, 4.32, 6.78, 12.20))"), w3cAssertXPath("deep-equal(/out/batch[5]/transaction/@value/xs:decimal(.), (-248.05, 12.00, 13.99, 14.20))")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-102", StylesheetPath: "tests/strm/si-for-each-group/si-group-102.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/batch[1]/transaction/@value/xs:decimal(.), (13.24))"), w3cAssertXPath("deep-equal(/out/batch[2]/transaction/@value/xs:decimal(.), (-15.00))"), w3cAssertXPath("deep-equal(/out/batch[3]/transaction/@value/xs:decimal(.), (-5.00))"), w3cAssertXPath("deep-equal(/out/batch[4]/transaction/@value/xs:decimal(.), (-2.33))"), w3cAssertXPath("deep-equal(/out/batch[5]/transaction/@value/xs:decimal(.), (-248.05))")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-201", StylesheetPath: "tests/strm/si-for-each-group/si-group-201.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/batch[1]/transaction/@value/xs:decimal(.), (13.24, 8.12, -15.00))"), w3cAssertXPath("deep-equal(/out/batch[2]/transaction/@value/xs:decimal(.), (6.00, 0.50, 2.33, 4.44, -5.00))"), w3cAssertXPath("deep-equal(/out/batch[3]/transaction/@value/xs:decimal(.), (8.99, 16.00, -2.33))"), w3cAssertXPath("deep-equal(/out/batch[4]/transaction/@value/xs:decimal(.), (5.60, 4.32, 6.78, 12.20, -248.05))"), w3cAssertXPath("deep-equal(/out/batch[5]/transaction/@value/xs:decimal(.), (12.00, 13.99, 14.20))")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-202", StylesheetPath: "tests/strm/si-for-each-group/si-group-202.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/batch[1]/transaction/@value/xs:decimal(.), (13.24))"), w3cAssertXPath("deep-equal(/out/batch[2]/transaction/@value/xs:decimal(.), (6.00))"), w3cAssertXPath("deep-equal(/out/batch[3]/transaction/@value/xs:decimal(.), (8.99))"), w3cAssertXPath("deep-equal(/out/batch[4]/transaction/@value/xs:decimal(.), (5.60))"), w3cAssertXPath("deep-equal(/out/batch[5]/transaction/@value/xs:decimal(.), (12.00))")}, Skip: "unsupported feature: streaming"},
+             ('Name', 'Locations_1', 'Locations_2', 'Payments_1', 'Payments_2'))`)}},
+		{Name: "si-group-101", StylesheetPath: "tests/strm/si-for-each-group/si-group-101.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/batch[1]/transaction/@value/xs:decimal(.), (13.24, 8.12))"), w3cAssertXPath("deep-equal(/out/batch[2]/transaction/@value/xs:decimal(.), (-15.00, 6.00, 0.50, 2.33, 4.44))"), w3cAssertXPath("deep-equal(/out/batch[3]/transaction/@value/xs:decimal(.), (-5.00, 8.99, 16.00))"), w3cAssertXPath("deep-equal(/out/batch[4]/transaction/@value/xs:decimal(.), (-2.33, 5.60, 4.32, 6.78, 12.20))"), w3cAssertXPath("deep-equal(/out/batch[5]/transaction/@value/xs:decimal(.), (-248.05, 12.00, 13.99, 14.20))")}},
+		{Name: "si-group-102", StylesheetPath: "tests/strm/si-for-each-group/si-group-102.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/batch[1]/transaction/@value/xs:decimal(.), (13.24))"), w3cAssertXPath("deep-equal(/out/batch[2]/transaction/@value/xs:decimal(.), (-15.00))"), w3cAssertXPath("deep-equal(/out/batch[3]/transaction/@value/xs:decimal(.), (-5.00))"), w3cAssertXPath("deep-equal(/out/batch[4]/transaction/@value/xs:decimal(.), (-2.33))"), w3cAssertXPath("deep-equal(/out/batch[5]/transaction/@value/xs:decimal(.), (-248.05))")}},
+		{Name: "si-group-201", StylesheetPath: "tests/strm/si-for-each-group/si-group-201.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/batch[1]/transaction/@value/xs:decimal(.), (13.24, 8.12, -15.00))"), w3cAssertXPath("deep-equal(/out/batch[2]/transaction/@value/xs:decimal(.), (6.00, 0.50, 2.33, 4.44, -5.00))"), w3cAssertXPath("deep-equal(/out/batch[3]/transaction/@value/xs:decimal(.), (8.99, 16.00, -2.33))"), w3cAssertXPath("deep-equal(/out/batch[4]/transaction/@value/xs:decimal(.), (5.60, 4.32, 6.78, 12.20, -248.05))"), w3cAssertXPath("deep-equal(/out/batch[5]/transaction/@value/xs:decimal(.), (12.00, 13.99, 14.20))")}},
+		{Name: "si-group-202", StylesheetPath: "tests/strm/si-for-each-group/si-group-202.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/out/batch[1]/transaction/@value/xs:decimal(.), (13.24))"), w3cAssertXPath("deep-equal(/out/batch[2]/transaction/@value/xs:decimal(.), (6.00))"), w3cAssertXPath("deep-equal(/out/batch[3]/transaction/@value/xs:decimal(.), (8.99))"), w3cAssertXPath("deep-equal(/out/batch[4]/transaction/@value/xs:decimal(.), (5.60))"), w3cAssertXPath("deep-equal(/out/batch[5]/transaction/@value/xs:decimal(.), (12.00))")}},
 		{Name: "si-group-203", StylesheetPath: "tests/strm/si-for-each-group/si-group-203.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML(`<Root
             ><Group><Item><Id>Item 2</Id></Item><Item><Id>Item 3</Id></Item></Group
-            ><Group/><Group><Item><Id>Item 7</Id></Item></Group><Group/></Root>`)}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-204", StylesheetPath: "tests/strm/si-for-each-group/si-group-204.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-204.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-205", StylesheetPath: "tests/strm/si-for-each-group/si-group-205.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-204.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
-		{Name: "si-group-901", StylesheetPath: "tests/strm/si-for-each-group/si-group-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+            ><Group/><Group><Item><Id>Item 7</Id></Item></Group><Group/></Root>`)}},
+		{Name: "si-group-204", StylesheetPath: "tests/strm/si-for-each-group/si-group-204.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-204.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion: assert-result-document"},
+		{Name: "si-group-205", StylesheetPath: "tests/strm/si-for-each-group/si-group-205.xsl", SourceDocPath: "tests/strm/si-for-each-group/si-group-204.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion: assert-result-document"},
+		{Name: "si-group-901", StylesheetPath: "tests/strm/si-for-each-group/si-group-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 		{Name: "si-group-A01", StylesheetPath: "", InitialTemplate: "feg-001", Assertions: []w3cAssertion{w3cAssertXML(`<out><transaction value="-15.00" date="2006-02-15"
             /><transaction value="-5.00" date="2006-02-20"
             /><transaction value="-2.33" date="2006-02-23"
@@ -1836,18 +1836,18 @@ func TestW3C_si_fork(t *testing.T) {
 		{Name: "si-fork-112", StylesheetPath: "", InitialTemplate: "g-012", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/g) = 4"), w3cAssertXPath("/out/g[@author=\"Jane Austen\" and @position=\"1\"]"), w3cAssertXPath("/out/g[@author=\"Charlotte Brontë\" and @position=\"2\"]"), w3cAssertXPath("/out/g[@author=\"Thomas Hardy\" and @position=\"3\"]"), w3cAssertXPath("/out/g[@author=\"Jasper Fforde\" and @position=\"4\"]")}, Skip: "no stylesheet"},
 		{Name: "si-fork-113", StylesheetPath: "", InitialTemplate: "g-013", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/g/h) = 4"), w3cAssertXPath("every $h in /out/g/h satisfies $h/@key = \"#absent#\"")}, Skip: "no stylesheet"},
 		{Name: "si-fork-114", StylesheetPath: "", InitialTemplate: "g-014", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/g/h) = 4"), w3cAssertXPath("every $h in /out/g/h satisfies $h/@size = \"#absent#\"")}, Skip: "no stylesheet"},
-		{Name: "si-fork-115", StylesheetPath: "tests/strm/si-fork/si-fork-115.xsl", InitialTemplate: "g-015", Assertions: []w3cAssertion{w3cAssertXPath("/out/g[@author='Jane Austen'][count(h)=1 and h/@key=\"#absent#\"]"), w3cAssertXPath("/out/g[starts-with(@author, 'Charlotte Bront')][count(h)=1 and h/@key=\"#absent#\"]"), w3cAssertXPath("/out/g[@author='Thomas Hardy'][count(h)=2 and h/@key=\"#absent#\"]"), w3cAssertXPath("/out/g[@author='Jasper Fforde'][count(h)=2 and h/@key=\"#absent#\"]")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-116", StylesheetPath: "tests/strm/si-fork/si-fork-116.xsl", InitialTemplate: "g-016", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "si-fork-115", StylesheetPath: "tests/strm/si-fork/si-fork-115.xsl", InitialTemplate: "g-015", Assertions: []w3cAssertion{w3cAssertXPath("/out/g[@author='Jane Austen'][count(h)=1 and h/@key=\"#absent#\"]"), w3cAssertXPath("/out/g[starts-with(@author, 'Charlotte Bront')][count(h)=1 and h/@key=\"#absent#\"]"), w3cAssertXPath("/out/g[@author='Thomas Hardy'][count(h)=2 and h/@key=\"#absent#\"]"), w3cAssertXPath("/out/g[@author='Jasper Fforde'][count(h)=2 and h/@key=\"#absent#\"]")}},
+		{Name: "si-fork-116", StylesheetPath: "tests/strm/si-fork/si-fork-116.xsl", InitialTemplate: "g-016", ExpectError: true, ErrorCode: "XTSE3430"},
 		{Name: "si-fork-117", StylesheetPath: "", InitialTemplate: "g-017", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/g) = 24"), w3cAssertXPath("/out/g[@author-contains=\"J\"]/books=\"Pride and Prejudice|The Big Over Easy|The Eyre Affair\""), w3cAssertXPath("/out/g[@author-contains=\"n\"]/books=\"Pride and Prejudice|Wuthering Heights\""), w3cAssertXPath("/out/g[@author-contains=\"A\"]/books=\"Pride and Prejudice\"")}, Skip: "no stylesheet"},
 		{Name: "si-fork-118", StylesheetPath: "", InitialTemplate: "g-018", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/CAT) = 3"), w3cAssertXPath("/out/CAT[@ID=\"H\"] = \"The Big Over Easy|Ulysses\""), w3cAssertXPath("/out/CAT[@ID=\"M\"] = \"Pride and Prejudice\""), w3cAssertXPath("/out/CAT[@ID=\"P\"] = \"Pride and Prejudice|Wuthering Heights|Tess of the d'Urbervilles|Jude the Obscure|The Eyre Affair\"")}, Skip: "no stylesheet"},
-		{Name: "si-fork-119", StylesheetPath: "tests/strm/si-fork/si-fork-119.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-119.xml", Assertions: []w3cAssertion{w3cAssertXPath("every $i in 1 to 5 satisfies matches(//li[$i], 'Item i' || $i || ', position: ' || $i || ', attribute pos: ' || $i)"), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-801", StylesheetPath: "tests/strm/si-fork/si-fork-801.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-801.xml", Assertions: []w3cAssertion{w3cAssertXPath("/doc/body/*[1][self::heading='TOC']"), w3cAssertXPath("/doc/body/*[2][self::ordered-list][count(list-item/link/@href) = 3]"), w3cAssertXPath("/doc/body/*[3][self::heading][.='heading 1']['#'||@id = (//@href)[1]]"), w3cAssertXPath("/doc/body/*[4][self::section][.='section 1']"), w3cAssertXPath("/doc/body/*[5][self::heading][.='heading 2']['#'||@id = (//@href)[2]]"), w3cAssertXPath("/doc/body/*[6][self::section][.='section 2']"), w3cAssertXPath("/doc/body/*[7][self::heading][.='heading 3']['#'||@id = (//@href)[3]]"), w3cAssertXPath("/doc/body/*[8][self::section][.='section 3']")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-802", StylesheetPath: "tests/strm/si-fork/si-fork-802.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-802.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-803", StylesheetPath: "tests/strm/si-fork/si-fork-803.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-803.xml", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(data(/html/body/table/tr/*[1]), (\"Position\", \"1\", \"2\", \"3\"))"), w3cAssertXPath("deep-equal(data(/html/body/table/tr/*[2]), (\"Country\", \"Italia\", \"France\", \"Deutschland\"))"), w3cAssertXPath("deep-equal(data(/html/body/table/tr/*[3]), (\"City List\", \"Milano, Venezia\", \"Paris, Lyon, Toulouse\", \"München\"))"), w3cAssertXPath("deep-equal(data(/html/body/table/tr/*[4]), (\"Population\", \"6\", \"15\", \"4\"))")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-804", StylesheetPath: "tests/strm/si-fork/si-fork-804.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-803.xml", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(data(/html/body/table/tr/*[1]), (\"Position\", \"1\", \"2\", \"3\"))"), w3cAssertXPath("deep-equal(data(/html/body/table/tr/*[2]), (\"Country\", \"Italia\", \"France\", \"Deutschland\"))"), w3cAssertXPath("deep-equal(data(/html/body/table/tr/*[3]), (\"City List\", \"Milano, Venezia\", \"Paris, Lyon, Toulouse\", \"München\"))"), w3cAssertXPath("deep-equal(data(/html/body/table/tr/*[4]), (\"Population\", \"6\", \"15\", \"4\"))")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-805", StylesheetPath: "tests/strm/si-fork/si-fork-805.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-805.xml", Assertions: []w3cAssertion{w3cAssertXML("<Root><Brand><Vehicle>Car</Vehicle></Brand><Brand><Vehicle>Truck</Vehicle></Brand><Brand><Vehicle>Motorcycle</Vehicle></Brand></Root>")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-806", StylesheetPath: "tests/strm/si-fork/si-fork-806.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-806.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/p[1] = 'Milano, Italia, 5.26'"), w3cAssertXPath("/out/p[2] = 'Padova, Italia, 0.81'"), w3cAssertXPath("/out/p[3] = 'Paris, France, 7.4'")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-807", StylesheetPath: "tests/strm/si-fork/si-fork-807.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-806.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/p[1] = 'Milano, Italia, 5.23, 5.29'"), w3cAssertXPath("/out/p[2] = 'Padova, Italia, 0.69, 0.93'"), w3cAssertXPath("/out/p[3] = 'Paris, France, 7.2, 7.6'")}, Skip: "unsupported feature: streaming"},
+		{Name: "si-fork-119", StylesheetPath: "tests/strm/si-fork/si-fork-119.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-119.xml", Assertions: []w3cAssertion{w3cAssertXPath("every $i in 1 to 5 satisfies matches(//li[$i], 'Item i' || $i || ', position: ' || $i || ', attribute pos: ' || $i)"), w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}},
+		{Name: "si-fork-801", StylesheetPath: "tests/strm/si-fork/si-fork-801.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-801.xml", Assertions: []w3cAssertion{w3cAssertXPath("/doc/body/*[1][self::heading='TOC']"), w3cAssertXPath("/doc/body/*[2][self::ordered-list][count(list-item/link/@href) = 3]"), w3cAssertXPath("/doc/body/*[3][self::heading][.='heading 1']['#'||@id = (//@href)[1]]"), w3cAssertXPath("/doc/body/*[4][self::section][.='section 1']"), w3cAssertXPath("/doc/body/*[5][self::heading][.='heading 2']['#'||@id = (//@href)[2]]"), w3cAssertXPath("/doc/body/*[6][self::section][.='section 2']"), w3cAssertXPath("/doc/body/*[7][self::heading][.='heading 3']['#'||@id = (//@href)[3]]"), w3cAssertXPath("/doc/body/*[8][self::section][.='section 3']")}},
+		{Name: "si-fork-802", StylesheetPath: "tests/strm/si-fork/si-fork-802.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-802.xml", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion: assert-result-document"},
+		{Name: "si-fork-803", StylesheetPath: "tests/strm/si-fork/si-fork-803.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-803.xml", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(data(/html/body/table/tr/*[1]), (\"Position\", \"1\", \"2\", \"3\"))"), w3cAssertXPath("deep-equal(data(/html/body/table/tr/*[2]), (\"Country\", \"Italia\", \"France\", \"Deutschland\"))"), w3cAssertXPath("deep-equal(data(/html/body/table/tr/*[3]), (\"City List\", \"Milano, Venezia\", \"Paris, Lyon, Toulouse\", \"München\"))"), w3cAssertXPath("deep-equal(data(/html/body/table/tr/*[4]), (\"Population\", \"6\", \"15\", \"4\"))")}},
+		{Name: "si-fork-804", StylesheetPath: "tests/strm/si-fork/si-fork-804.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-803.xml", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(data(/html/body/table/tr/*[1]), (\"Position\", \"1\", \"2\", \"3\"))"), w3cAssertXPath("deep-equal(data(/html/body/table/tr/*[2]), (\"Country\", \"Italia\", \"France\", \"Deutschland\"))"), w3cAssertXPath("deep-equal(data(/html/body/table/tr/*[3]), (\"City List\", \"Milano, Venezia\", \"Paris, Lyon, Toulouse\", \"München\"))"), w3cAssertXPath("deep-equal(data(/html/body/table/tr/*[4]), (\"Population\", \"6\", \"15\", \"4\"))")}},
+		{Name: "si-fork-805", StylesheetPath: "tests/strm/si-fork/si-fork-805.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-805.xml", Assertions: []w3cAssertion{w3cAssertXML("<Root><Brand><Vehicle>Car</Vehicle></Brand><Brand><Vehicle>Truck</Vehicle></Brand><Brand><Vehicle>Motorcycle</Vehicle></Brand></Root>")}},
+		{Name: "si-fork-806", StylesheetPath: "tests/strm/si-fork/si-fork-806.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-806.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/p[1] = 'Milano, Italia, 5.26'"), w3cAssertXPath("/out/p[2] = 'Padova, Italia, 0.81'"), w3cAssertXPath("/out/p[3] = 'Paris, France, 7.4'")}},
+		{Name: "si-fork-807", StylesheetPath: "tests/strm/si-fork/si-fork-807.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-806.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/p[1] = 'Milano, Italia, 5.23, 5.29'"), w3cAssertXPath("/out/p[2] = 'Padova, Italia, 0.69, 0.93'"), w3cAssertXPath("/out/p[3] = 'Paris, France, 7.2, 7.6'")}},
 		{Name: "si-fork-808", StylesheetPath: "tests/strm/si-fork/si-fork-808.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-808.xml", Assertions: []w3cAssertion{w3cAssertXML(`<root><orderlist type="manual"><item num="(a)"><para>blah blah</para
     ><orderlist type="manual"><item num="(i)"><para>blah blah</para
     ><orderlist type="manual"/></item></orderlist></item><item num="(b)"><para>blah blah</para
@@ -1857,7 +1857,7 @@ func TestW3C_si_fork(t *testing.T) {
     ><orderlist type="manual"/></item><item num="(2)"><para>blah blah</para
     ><orderlist type="manual"/></item></orderlist></item><item num="(ii)"><para>blah blah</para
     ><orderlist type="manual"/></item><item num="(iii)"><para>blah blah</para><orderlist type="manual"/></item><item num="(iv)"><para>blah blah</para
-    ><orderlist type="manual"/></item></orderlist></item></orderlist></root>`)}, Skip: "unsupported feature: streaming"},
+    ><orderlist type="manual"/></item></orderlist></item></orderlist></root>`)}},
 		{Name: "si-fork-808-ns", StylesheetPath: "tests/strm/si-fork/si-fork-808.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-808.xml", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertXML(`<root><orderlist type="manual"><item num="(a)"><para>blah blah</para
     ><orderlist type="manual"><item num="(i)"><para>blah blah</para
     ><orderlist type="manual"/></item></orderlist></item><item num="(b)"><para>blah blah</para
@@ -1867,31 +1867,31 @@ func TestW3C_si_fork(t *testing.T) {
     ><orderlist type="manual"/></item><item num="(2)"><para>blah blah</para
     ><orderlist type="manual"/></item></orderlist></item><item num="(ii)"><para>blah blah</para
     ><orderlist type="manual"/></item><item num="(iii)"><para>blah blah</para><orderlist type="manual"/></item><item num="(iv)"><para>blah blah</para
-    ><orderlist type="manual"/></item></orderlist></item></orderlist></root>`)}, Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-809", StylesheetPath: "tests/strm/si-fork/si-fork-809.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-809.xml", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/text()) = 12"), w3cAssertXPath("/out/text()[1] = \"Comedy, New, Paperback, 3\""), w3cAssertXPath("/out/text()[2] = \"Comedy, Old, Paperback, 3\""), w3cAssertXPath("/out/text()[3] = \"Comedy, New, Hardback, 3\""), w3cAssertXPath("/out/text()[4] = \"Comedy, Old, Hardback, 3\""), w3cAssertXPath("/out/text()[5] = \"Drama, New, Paperback, 3\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-810", StylesheetPath: "tests/strm/si-fork/si-fork-810.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-808.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/orderlist/item[@num=\"(a)\"]/rest/@size = \"2\""), w3cAssertXPath("/root/orderlist/item[@num=\"(b)\"]/rest/@size = \"1\""), w3cAssertXPath("/root/orderlist/item[@num=\"(c)\"]/rest/@size = \"7\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-811", StylesheetPath: "tests/strm/si-fork/si-fork-811.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-808.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/orderlist/item[@num=\"(a)\"]/rest/@size = \"1\""), w3cAssertXPath("/root/orderlist/item[@num=\"(b)\"]/rest/@size = \"0\""), w3cAssertXPath("/root/orderlist/item[@num=\"(c)\"]/rest/@size = \"6\"")}, Skip: "unsupported feature: streaming"},
+    ><orderlist type="manual"/></item></orderlist></item></orderlist></root>`)}},
+		{Name: "si-fork-809", StylesheetPath: "tests/strm/si-fork/si-fork-809.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-809.xml", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/text()) = 12"), w3cAssertXPath("/out/text()[1] = \"Comedy, New, Paperback, 3\""), w3cAssertXPath("/out/text()[2] = \"Comedy, Old, Paperback, 3\""), w3cAssertXPath("/out/text()[3] = \"Comedy, New, Hardback, 3\""), w3cAssertXPath("/out/text()[4] = \"Comedy, Old, Hardback, 3\""), w3cAssertXPath("/out/text()[5] = \"Drama, New, Paperback, 3\"")}},
+		{Name: "si-fork-810", StylesheetPath: "tests/strm/si-fork/si-fork-810.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-808.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/orderlist/item[@num=\"(a)\"]/rest/@size = \"2\""), w3cAssertXPath("/root/orderlist/item[@num=\"(b)\"]/rest/@size = \"1\""), w3cAssertXPath("/root/orderlist/item[@num=\"(c)\"]/rest/@size = \"7\"")}},
+		{Name: "si-fork-811", StylesheetPath: "tests/strm/si-fork/si-fork-811.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-808.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/orderlist/item[@num=\"(a)\"]/rest/@size = \"1\""), w3cAssertXPath("/root/orderlist/item[@num=\"(b)\"]/rest/@size = \"0\""), w3cAssertXPath("/root/orderlist/item[@num=\"(c)\"]/rest/@size = \"6\"")}},
 		{Name: "si-fork-812", StylesheetPath: "tests/strm/si-fork/si-fork-812.xsl", SourceDocPath: "tests/strm/docs/cities.xml", Params: map[string]string{"STREAMABLE": "true()"}, Assertions: []w3cAssertion{w3cAssertXML(`<out><country name="Italia" pop="6" cities="Milano Venezia"
             /><country name="France" pop="9" cities="Paris Lyon"
             /><country name="Deutschland" pop="4" cities="München"
-            /></out>`)}, Skip: "unsupported feature: streaming"},
+            /></out>`)}},
 		{Name: "si-fork-812ns", StylesheetPath: "tests/strm/si-fork/si-fork-812.xsl", SourceDocPath: "tests/strm/docs/cities.xml", Params: map[string]string{"STREAMABLE": "false()"}, Assertions: []w3cAssertion{w3cAssertXML(`<out><country name="Italia" pop="6" cities="Milano Venezia"
             /><country name="France" pop="9" cities="Paris Lyon"
             /><country name="Deutschland" pop="4" cities="München"
-            /></out>`)}, Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-813", StylesheetPath: "tests/strm/si-fork/si-fork-813.xsl", SourceDocPath: "tests/strm/docs/cities.xml", Params: map[string]string{"STREAMABLE": "true()"}, ExpectError: true, ErrorCode: "XTDE3365", Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-814", StylesheetPath: "tests/strm/si-fork/si-fork-814.xsl", SourceDocPath: "tests/strm/docs/cities.xml", Params: map[string]string{"STREAMABLE": "true()"}, ExpectError: true, ErrorCode: "XTDE3365", Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-815", StylesheetPath: "tests/strm/si-fork/si-fork-815.xsl", SourceDocPath: "tests/strm/docs/transactions.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-816", StylesheetPath: "tests/strm/si-fork/si-fork-816.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-816.xml", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/CustInvoiceJour/CustInvoiceTrans/LineAmount/number(), (125, 215, 40))"), w3cAssertXPath("deep-equal(/CustInvoiceJour/TaxTrans/TaxValue/number(), (21, 21, 15))")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-901", StylesheetPath: "tests/strm/si-fork/si-fork-901.xsl", InitialTemplate: "f-901", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-902", StylesheetPath: "tests/strm/si-fork/si-fork-902.xsl", InitialTemplate: "f-902", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-951", StylesheetPath: "tests/strm/si-fork/si-fork-951.xsl", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-952", StylesheetPath: "tests/strm/si-fork/si-fork-952.xsl", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-953", StylesheetPath: "tests/strm/si-fork/si-fork-953.xsl", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-954", StylesheetPath: "tests/strm/si-fork/si-fork-954.xsl", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-955", StylesheetPath: "tests/strm/si-fork/si-fork-955.xsl", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-956", StylesheetPath: "tests/strm/si-fork/si-fork-956.xsl", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-fork-957", StylesheetPath: "tests/strm/si-fork/si-fork-957.xsl", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+            /></out>`)}},
+		{Name: "si-fork-813", StylesheetPath: "tests/strm/si-fork/si-fork-813.xsl", SourceDocPath: "tests/strm/docs/cities.xml", Params: map[string]string{"STREAMABLE": "true()"}, ExpectError: true, ErrorCode: "XTDE3365"},
+		{Name: "si-fork-814", StylesheetPath: "tests/strm/si-fork/si-fork-814.xsl", SourceDocPath: "tests/strm/docs/cities.xml", Params: map[string]string{"STREAMABLE": "true()"}, ExpectError: true, ErrorCode: "XTDE3365"},
+		{Name: "si-fork-815", StylesheetPath: "tests/strm/si-fork/si-fork-815.xsl", SourceDocPath: "tests/strm/docs/transactions.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "si-fork-816", StylesheetPath: "tests/strm/si-fork/si-fork-816.xsl", SourceDocPath: "tests/strm/si-fork/si-fork-816.xml", Assertions: []w3cAssertion{w3cAssertXPath("deep-equal(/CustInvoiceJour/CustInvoiceTrans/LineAmount/number(), (125, 215, 40))"), w3cAssertXPath("deep-equal(/CustInvoiceJour/TaxTrans/TaxValue/number(), (21, 21, 15))")}},
+		{Name: "si-fork-901", StylesheetPath: "tests/strm/si-fork/si-fork-901.xsl", InitialTemplate: "f-901", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-fork-902", StylesheetPath: "tests/strm/si-fork/si-fork-902.xsl", InitialTemplate: "f-902", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-fork-951", StylesheetPath: "tests/strm/si-fork/si-fork-951.xsl", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-fork-952", StylesheetPath: "tests/strm/si-fork/si-fork-952.xsl", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-fork-953", StylesheetPath: "tests/strm/si-fork/si-fork-953.xsl", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-fork-954", StylesheetPath: "tests/strm/si-fork/si-fork-954.xsl", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-fork-955", StylesheetPath: "tests/strm/si-fork/si-fork-955.xsl", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-fork-956", StylesheetPath: "tests/strm/si-fork/si-fork-956.xsl", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-fork-957", StylesheetPath: "tests/strm/si-fork/si-fork-957.xsl", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -1919,38 +1919,38 @@ func TestW3C_si_iterate(t *testing.T) {
 		{Name: "si-iterate-011", StylesheetPath: "", InitialTemplate: "fe-011", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"13.24 8.12 6.00 0.50 2.33 4.44 8.99 16.00 5.60 4.32 6.78 12.20 12.00 13.99 14.20\"")}, Skip: "no stylesheet"},
 		{Name: "si-iterate-012", StylesheetPath: "", InitialTemplate: "fe-012", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns=\"http://loan.shark.com/\"><myroot/><ACERequest version=\"2.1\"/><Deal/><Pool id=\"22\"/><Loan/></out>")}, Skip: "no stylesheet"},
 		{Name: "si-iterate-013", StylesheetPath: "tests/strm/si-iterate/si-iterate-013.xsl", SourceDocPath: "tests/strm/si-iterate/si-iterate-013.xml", Assertions: []w3cAssertion{w3cAssertXML(`<root><header>...</header><item name="1">...</item><item name="2"
-            >...</item><item name="3">...</item><item name="4">...</item></root><?pi?>`)}, Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-035", StylesheetPath: "tests/strm/si-iterate/si-iterate-035.xsl", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-036", StylesheetPath: "tests/strm/si-iterate/si-iterate-036.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out/highest-paid-employees = \"Employee a Employee c\""), w3cAssertXPath("/out/lowest-paid-employees = \"Employee b\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-037", StylesheetPath: "tests/strm/si-iterate/si-iterate-037.xsl", SourceDocPath: "tests/strm/docs/ot.xml", Assertions: []w3cAssertion{w3cAssertXPath("count(tokenize(p, '\\s+')) = 202"), w3cAssertXPath("ends-with(p, 'covfefe.')")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-094", StylesheetPath: "tests/strm/si-iterate/si-iterate-094.xsl", SourceDocPath: "tests/strm/si-iterate/si-iterate-094.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><p>foo bar foobar</p><p>foobar baz foo</p></out>")}, Skip: "unsupported feature: streaming"},
+            >...</item><item name="3">...</item><item name="4">...</item></root><?pi?>`)}},
+		{Name: "si-iterate-035", StylesheetPath: "tests/strm/si-iterate/si-iterate-035.xsl", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-iterate-036", StylesheetPath: "tests/strm/si-iterate/si-iterate-036.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out/highest-paid-employees = \"Employee a Employee c\""), w3cAssertXPath("/out/lowest-paid-employees = \"Employee b\"")}},
+		{Name: "si-iterate-037", StylesheetPath: "tests/strm/si-iterate/si-iterate-037.xsl", SourceDocPath: "tests/strm/docs/ot.xml", Assertions: []w3cAssertion{w3cAssertXPath("count(tokenize(p, '\\s+')) = 202"), w3cAssertXPath("ends-with(p, 'covfefe.')")}},
+		{Name: "si-iterate-094", StylesheetPath: "tests/strm/si-iterate/si-iterate-094.xsl", SourceDocPath: "tests/strm/si-iterate/si-iterate-094.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><p>foo bar foobar</p><p>foobar baz foo</p></out>")}},
 		{Name: "si-iterate-095", StylesheetPath: "tests/strm/si-iterate/si-iterate-095.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath(`deep-equal(/out/loans/loan/number(@cumulativeValue),
                (400000,750000,1150000,1500000,2100000,2600000,3400000,4150000,4350000,4525000))`), w3cAssertXPath(`deep-equal(/out/loans/loan/number(@value),
-               (400000,350000,400000,350000,600000,500000,800000,750000,200000,175000))`)}, Skip: "unsupported feature: streaming"},
+               (400000,350000,400000,350000,600000,500000,800000,750000,200000,175000))`)}},
 		{Name: "si-iterate-096", StylesheetPath: "tests/strm/si-iterate/si-iterate-096.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath(`deep-equal(/out/loans/loan/number(@cumulativeValue),
                (400000,750000,1150000,1500000,2100000,2600000))`), w3cAssertXPath(`deep-equal(/out/loans/loan/number(@value),
-               (400000,350000,400000,350000,600000,500000))`)}, Skip: "unsupported feature: streaming"},
+               (400000,350000,400000,350000,600000,500000))`)}},
 		{Name: "si-iterate-097", StylesheetPath: "tests/strm/si-iterate/si-iterate-097.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath(`deep-equal(/out/loans/loan/number(@cumulativeValue),
                (400000,750000,1150000,1500000,2100000,2600000))`), w3cAssertXPath(`deep-equal(/out/loans/loan/number(@value),
-               (400000,350000,400000,350000,600000,500000))`)}, Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-098", StylesheetPath: "tests/strm/si-iterate/si-iterate-098.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><n>Property</n><n>Property</n><n>Property</n><n>Property</n><n>Property</n></out>")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-099", StylesheetPath: "tests/strm/si-iterate/si-iterate-099.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"true\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-131", StylesheetPath: "tests/strm/si-iterate/si-iterate-131.xsl", SourceDocPath: "tests/strm/docs/citygml.xml", Assertions: []w3cAssertion{w3cAssertXML("<result><polygons>2037</polygons><points>8148</points></result>")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-132", StylesheetPath: "tests/strm/si-iterate/si-iterate-132.xsl", SourceDocPath: "tests/strm/docs/citygml.xml", Assertions: []w3cAssertion{w3cAssertXML("<result><polygons>2037</polygons><points>8148</points></result>")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-133", StylesheetPath: "tests/strm/si-iterate/si-iterate-133.xsl", SourceDocPath: "tests/strm/docs/citygml.xml", Assertions: []w3cAssertion{w3cAssertXML("<result><polygons>2849</polygons><points>4070</points></result>")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-134", StylesheetPath: "tests/strm/si-iterate/si-iterate-134.xsl", SourceDocPath: "tests/strm/docs/citygml.xml", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/elements/e[@name=\"gml:pos\"]/@count=\"4070\""), w3cAssertXPath("/elements/e[@name=\"bldg:Building\"]/@count=\"14\""), w3cAssertXPath("/elements/e[@name=\"cityObjectMember\"]/@count=\"15\""), w3cAssertXPath("/elements/e[@name=\"app:TexCoordList\"]/@count=\"295\""), w3cAssertXPath("/elements/e[@name=\"bldg:boundedBy\"]/@count=\"812\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-135", StylesheetPath: "tests/strm/si-iterate/si-iterate-135.xsl", SourceDocPath: "tests/strm/docs/citygml.xml", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/elements/e[1][@name=\"CityModel\" and @count=\"1\"]"), w3cAssertXPath("/elements/e[2][@name=\"app:Appearance\" and @count=\"1\"]"), w3cAssertXPath("/elements/e[3][@name=\"app:GeoreferencedTexture\" and @count=\"1\"]"), w3cAssertXPath("/elements/e[4][@name=\"app:ParameterizedTexture\" and @count=\"295\"]"), w3cAssertXPath("/elements/e[5][@name=\"app:TexCoordList\" and @count=\"295\"]"), w3cAssertXPath("/elements/e[6][@name=\"app:X3DMaterial\" and @count=\"2\"]"), w3cAssertXPath("/elements/e[7][@name=\"app:appearanceMember\" and @count=\"1\"]"), w3cAssertXPath("/elements/e[8][@name=\"app:borderColor\" and @count=\"295\"]"), w3cAssertXPath("/elements/e[9][@name=\"app:diffuseColor\" and @count=\"2\"]"), w3cAssertXPath("/elements/e[10][@name=\"app:imageURI\" and @count=\"296\"]")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-136", StylesheetPath: "tests/strm/si-iterate/si-iterate-136.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/*[1][self::x][transaction/@value='13.24']"), w3cAssertXPath("/out/*[2][self::x]"), w3cAssertXPath("/out/*[3][self::x]"), w3cAssertXPath("/out/*[4][self::x]"), w3cAssertXPath("/out/*[last()][self::y][transaction/@value='14.20']")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-137", StylesheetPath: "tests/strm/si-iterate/si-iterate-137.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("every $i in 1 to 12 satisfies deep-equal(/out/x[$i]/*, /out/z[$i+1]/*)"), w3cAssertXPath("empty(/out/z[1]/*)")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-138", StylesheetPath: "tests/strm/si-iterate/si-iterate-138.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/*[1][self::x][@one='1'][@two='0'][@value='']"), w3cAssertXPath("/out/*[2][self::x][@one='2'][@two='1'][@value='']"), w3cAssertXPath("/out/*[3][self::x][@one='3'][@two='2'][@value='']"), w3cAssertXPath("/out/*[4][self::x][@one='4'][@two='3'][@value='']"), w3cAssertXPath("/out/*[5][self::x][@one='5'][@two='4'][@value='6.00']"), w3cAssertXPath("/out/*[6][self::x][@one='6'][@two='5'][@value='0.50']")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-139", StylesheetPath: "tests/strm/si-iterate/si-iterate-139.xsl", Assertions: []w3cAssertion{w3cAssertXPath("every $i in 1 to 101 satisfies exists(/data/out[@c=$i])"), w3cAssertXPath("empty(/data/out[@c > 101])")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-140", StylesheetPath: "tests/strm/si-iterate/si-iterate-140.xsl", SourceDocPath: "tests/strm/si-iterate/si-iterate-140.xml", Assertions: []w3cAssertion{w3cAssertXPath("count(/items/item) = 1"), w3cAssertXPath("/items/item[@cat='bar'][value='item 6']")}, Skip: "unsupported feature: streaming"},
+               (400000,350000,400000,350000,600000,500000))`)}},
+		{Name: "si-iterate-098", StylesheetPath: "tests/strm/si-iterate/si-iterate-098.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><n>Property</n><n>Property</n><n>Property</n><n>Property</n><n>Property</n></out>")}},
+		{Name: "si-iterate-099", StylesheetPath: "tests/strm/si-iterate/si-iterate-099.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"true\"")}},
+		{Name: "si-iterate-131", StylesheetPath: "tests/strm/si-iterate/si-iterate-131.xsl", SourceDocPath: "tests/strm/docs/citygml.xml", Assertions: []w3cAssertion{w3cAssertXML("<result><polygons>2037</polygons><points>8148</points></result>")}},
+		{Name: "si-iterate-132", StylesheetPath: "tests/strm/si-iterate/si-iterate-132.xsl", SourceDocPath: "tests/strm/docs/citygml.xml", Assertions: []w3cAssertion{w3cAssertXML("<result><polygons>2037</polygons><points>8148</points></result>")}},
+		{Name: "si-iterate-133", StylesheetPath: "tests/strm/si-iterate/si-iterate-133.xsl", SourceDocPath: "tests/strm/docs/citygml.xml", Assertions: []w3cAssertion{w3cAssertXML("<result><polygons>2849</polygons><points>4070</points></result>")}},
+		{Name: "si-iterate-134", StylesheetPath: "tests/strm/si-iterate/si-iterate-134.xsl", SourceDocPath: "tests/strm/docs/citygml.xml", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/elements/e[@name=\"gml:pos\"]/@count=\"4070\""), w3cAssertXPath("/elements/e[@name=\"bldg:Building\"]/@count=\"14\""), w3cAssertXPath("/elements/e[@name=\"cityObjectMember\"]/@count=\"15\""), w3cAssertXPath("/elements/e[@name=\"app:TexCoordList\"]/@count=\"295\""), w3cAssertXPath("/elements/e[@name=\"bldg:boundedBy\"]/@count=\"812\"")}},
+		{Name: "si-iterate-135", StylesheetPath: "tests/strm/si-iterate/si-iterate-135.xsl", SourceDocPath: "tests/strm/docs/citygml.xml", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/elements/e[1][@name=\"CityModel\" and @count=\"1\"]"), w3cAssertXPath("/elements/e[2][@name=\"app:Appearance\" and @count=\"1\"]"), w3cAssertXPath("/elements/e[3][@name=\"app:GeoreferencedTexture\" and @count=\"1\"]"), w3cAssertXPath("/elements/e[4][@name=\"app:ParameterizedTexture\" and @count=\"295\"]"), w3cAssertXPath("/elements/e[5][@name=\"app:TexCoordList\" and @count=\"295\"]"), w3cAssertXPath("/elements/e[6][@name=\"app:X3DMaterial\" and @count=\"2\"]"), w3cAssertXPath("/elements/e[7][@name=\"app:appearanceMember\" and @count=\"1\"]"), w3cAssertXPath("/elements/e[8][@name=\"app:borderColor\" and @count=\"295\"]"), w3cAssertXPath("/elements/e[9][@name=\"app:diffuseColor\" and @count=\"2\"]"), w3cAssertXPath("/elements/e[10][@name=\"app:imageURI\" and @count=\"296\"]")}},
+		{Name: "si-iterate-136", StylesheetPath: "tests/strm/si-iterate/si-iterate-136.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/*[1][self::x][transaction/@value='13.24']"), w3cAssertXPath("/out/*[2][self::x]"), w3cAssertXPath("/out/*[3][self::x]"), w3cAssertXPath("/out/*[4][self::x]"), w3cAssertXPath("/out/*[last()][self::y][transaction/@value='14.20']")}},
+		{Name: "si-iterate-137", StylesheetPath: "tests/strm/si-iterate/si-iterate-137.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("every $i in 1 to 12 satisfies deep-equal(/out/x[$i]/*, /out/z[$i+1]/*)"), w3cAssertXPath("empty(/out/z[1]/*)")}},
+		{Name: "si-iterate-138", StylesheetPath: "tests/strm/si-iterate/si-iterate-138.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/*[1][self::x][@one='1'][@two='0'][@value='']"), w3cAssertXPath("/out/*[2][self::x][@one='2'][@two='1'][@value='']"), w3cAssertXPath("/out/*[3][self::x][@one='3'][@two='2'][@value='']"), w3cAssertXPath("/out/*[4][self::x][@one='4'][@two='3'][@value='']"), w3cAssertXPath("/out/*[5][self::x][@one='5'][@two='4'][@value='6.00']"), w3cAssertXPath("/out/*[6][self::x][@one='6'][@two='5'][@value='0.50']")}},
+		{Name: "si-iterate-139", StylesheetPath: "tests/strm/si-iterate/si-iterate-139.xsl", Assertions: []w3cAssertion{w3cAssertXPath("every $i in 1 to 101 satisfies exists(/data/out[@c=$i])"), w3cAssertXPath("empty(/data/out[@c > 101])")}},
+		{Name: "si-iterate-140", StylesheetPath: "tests/strm/si-iterate/si-iterate-140.xsl", SourceDocPath: "tests/strm/si-iterate/si-iterate-140.xml", Assertions: []w3cAssertion{w3cAssertXPath("count(/items/item) = 1"), w3cAssertXPath("/items/item[@cat='bar'][value='item 6']")}},
 		{Name: "si-iterate-806", StylesheetPath: "tests/strm/si-iterate/si-iterate-806.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML(`<out><title>Pride and Prejudice</title><title>Wuthering Heights</title
             ><title>Tess of the d'Urbervilles</title><title>Jude the Obscure</title
-            ><title>The Big Over Easy</title><title>The Eyre Affair</title></out>`)}, Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-904", StylesheetPath: "tests/strm/si-iterate/si-iterate-904.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-905", StylesheetPath: "tests/strm/si-iterate/si-iterate-905.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-iterate-907", StylesheetPath: "tests/strm/si-iterate/si-iterate-907.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+            ><title>The Big Over Easy</title><title>The Eyre Affair</title></out>`)}},
+		{Name: "si-iterate-904", StylesheetPath: "tests/strm/si-iterate/si-iterate-904.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-iterate-905", StylesheetPath: "tests/strm/si-iterate/si-iterate-905.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-iterate-907", StylesheetPath: "tests/strm/si-iterate/si-iterate-907.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -1995,22 +1995,22 @@ func TestW3C_si_map(t *testing.T) {
 		{Name: "si-map-007", StylesheetPath: "", InitialTemplate: "m-007", ExpectError: true, ErrorCode: "XTDE3365", Skip: "no stylesheet"},
 		{Name: "si-map-008", StylesheetPath: "", InitialTemplate: "m-008", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/book) = 6"), w3cAssertXPath("/out/book[1]/@author = \"Jane Austen\""), w3cAssertXPath("/out/book[1]/@title = \"Pride and Prejudice\""), w3cAssertXPath("/out/book[6]/@author = \"Jasper Fforde\""), w3cAssertXPath("/out/book[6]/@outcome = \"success\"")}, Skip: "no stylesheet"},
 		{Name: "si-map-009", StylesheetPath: "", InitialTemplate: "m-009", ExpectError: true, ErrorCode: "XTTE3375", Skip: "no stylesheet"},
-		{Name: "si-map-901", StylesheetPath: "tests/strm/si-map/si-map-901.xsl", InitialTemplate: "m-901", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-map-902", StylesheetPath: "tests/strm/si-map/si-map-902.xsl", InitialTemplate: "m-902", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-map-903", StylesheetPath: "tests/strm/si-map/si-map-903.xsl", InitialTemplate: "m-903", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "si-map-901", StylesheetPath: "tests/strm/si-map/si-map-901.xsl", InitialTemplate: "m-901", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-map-902", StylesheetPath: "tests/strm/si-map/si-map-902.xsl", InitialTemplate: "m-902", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-map-903", StylesheetPath: "tests/strm/si-map/si-map-903.xsl", InitialTemplate: "m-903", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
 func TestW3C_si_merge(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "si-merge-001", StylesheetPath: "tests/strm/si-merge/si-merge-001.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/prices/price[@date=\"2014-03-31\"][@gold=\"1294.0\"][@uranium=\"34.91\"]"), w3cAssertXPath("/prices/price[@date=\"2014-02-28\"][@gold=\"1327.75\"][@uranium=\"35.54\"]"), w3cAssertXPath("/prices/price[@date=\"2014-01-31\"][@gold=\"1246.5\"][@uranium=\"35.1\"]")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-merge-002", StylesheetPath: "tests/strm/si-merge/si-merge-002.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<events><group><event timestamp=\"2009-08-20T12:01:01Z\">Transaction T1234 started</event><record><time>12:01:01-00:00</time><message>Temperature 15.4C</message></record></group><group><event timestamp=\"2009-08-20T12:01:08Z\">Transaction T1235 started</event></group><group><event timestamp=\"2009-08-20T12:01:12Z\">Transaction T1235 ended</event></group><group><event timestamp=\"2009-08-20T12:01:15Z\">Transaction T1234 ended</event></group><group><record><time>12:03:00-00:00</time><message>Temperature 18.2C</message></record></group></events>")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-merge-003", StylesheetPath: "tests/strm/si-merge/si-merge-003.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<events><group><event timestamp=\"2009-08-20T12:01:01Z\">Transaction T1234 started</event><record><time>12:01:01-00:00</time><message>Temperature 15.4C</message></record></group><group><event timestamp=\"2009-08-20T12:01:08Z\">Transaction T1235 started</event></group><group><event timestamp=\"2009-08-20T12:01:12Z\">Transaction T1235 ended</event></group><group><event timestamp=\"2009-08-20T12:01:15Z\">Transaction T1234 ended</event></group><group><record><time>12:03:00-00:00</time><message>Temperature 18.2C</message></record></group></events>")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-merge-004", StylesheetPath: "tests/strm/si-merge/si-merge-004.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("count(/prices/key) = 11774")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-merge-004ns", StylesheetPath: "tests/strm/si-merge/si-merge-004ns.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("count(/prices/key) = 11774")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-merge-005", StylesheetPath: "tests/strm/si-merge/si-merge-005.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/prices/price[@date=\"2014-03-31\"][@gold=\"1294.0\"][@uranium=\"34.91\"]"), w3cAssertXPath("/prices/price[@date=\"2014-02-28\"][@gold=\"1327.75\"][@uranium=\"35.54\"]"), w3cAssertXPath("/prices/price[@date=\"2014-01-31\"][@gold=\"1246.5\"][@uranium=\"35.1\"]")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-merge-006", StylesheetPath: "tests/strm/si-merge/si-merge-006.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/events/messages[1][@at='2006-02-13']/(count(fax/message)=1 and count(transaction/transaction)=2)"), w3cAssertXPath("/events/messages[2][@at='2006-02-15']/(count(fax/message)=1 and count(transaction/transaction)=1)"), w3cAssertXPath("/events/messages[4][@at='2006-02-17']/(empty(fax) and count(transaction/transaction)=3)")}, Skip: "unsupported feature: streaming"},
+		{Name: "si-merge-001", StylesheetPath: "tests/strm/si-merge/si-merge-001.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/prices/price[@date=\"2014-03-31\"][@gold=\"1294.0\"][@uranium=\"34.91\"]"), w3cAssertXPath("/prices/price[@date=\"2014-02-28\"][@gold=\"1327.75\"][@uranium=\"35.54\"]"), w3cAssertXPath("/prices/price[@date=\"2014-01-31\"][@gold=\"1246.5\"][@uranium=\"35.1\"]")}},
+		{Name: "si-merge-002", StylesheetPath: "tests/strm/si-merge/si-merge-002.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<events><group><event timestamp=\"2009-08-20T12:01:01Z\">Transaction T1234 started</event><record><time>12:01:01-00:00</time><message>Temperature 15.4C</message></record></group><group><event timestamp=\"2009-08-20T12:01:08Z\">Transaction T1235 started</event></group><group><event timestamp=\"2009-08-20T12:01:12Z\">Transaction T1235 ended</event></group><group><event timestamp=\"2009-08-20T12:01:15Z\">Transaction T1234 ended</event></group><group><record><time>12:03:00-00:00</time><message>Temperature 18.2C</message></record></group></events>")}},
+		{Name: "si-merge-003", StylesheetPath: "tests/strm/si-merge/si-merge-003.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<events><group><event timestamp=\"2009-08-20T12:01:01Z\">Transaction T1234 started</event><record><time>12:01:01-00:00</time><message>Temperature 15.4C</message></record></group><group><event timestamp=\"2009-08-20T12:01:08Z\">Transaction T1235 started</event></group><group><event timestamp=\"2009-08-20T12:01:12Z\">Transaction T1235 ended</event></group><group><event timestamp=\"2009-08-20T12:01:15Z\">Transaction T1234 ended</event></group><group><record><time>12:03:00-00:00</time><message>Temperature 18.2C</message></record></group></events>")}},
+		{Name: "si-merge-004", StylesheetPath: "tests/strm/si-merge/si-merge-004.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("count(/prices/key) = 11774")}},
+		{Name: "si-merge-004ns", StylesheetPath: "tests/strm/si-merge/si-merge-004ns.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("count(/prices/key) = 11774")}},
+		{Name: "si-merge-005", StylesheetPath: "tests/strm/si-merge/si-merge-005.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/prices/price[@date=\"2014-03-31\"][@gold=\"1294.0\"][@uranium=\"34.91\"]"), w3cAssertXPath("/prices/price[@date=\"2014-02-28\"][@gold=\"1327.75\"][@uranium=\"35.54\"]"), w3cAssertXPath("/prices/price[@date=\"2014-01-31\"][@gold=\"1246.5\"][@uranium=\"35.1\"]")}},
+		{Name: "si-merge-006", StylesheetPath: "tests/strm/si-merge/si-merge-006.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/events/messages[1][@at='2006-02-13']/(count(fax/message)=1 and count(transaction/transaction)=2)"), w3cAssertXPath("/events/messages[2][@at='2006-02-15']/(count(fax/message)=1 and count(transaction/transaction)=1)"), w3cAssertXPath("/events/messages[4][@at='2006-02-17']/(empty(fax) and count(transaction/transaction)=3)")}},
 	})
 }
 
@@ -2037,8 +2037,8 @@ func TestW3C_si_next_match(t *testing.T) {
 		{Name: "si-next-match-067", StylesheetPath: "tests/strm/si-next-match/si-next-match-067.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/prio5) = 39"), w3cAssertXPath(`every $P in /out/prio5 satisfies ($P/@p="57" and $P/@q="23" and $P/prio4 and
                not($P/prio4[2]))`), w3cAssertXPath(`every $P in /out/prio5/prio4 satisfies ($P/(@p="58" and @q="23" and
                @r="42"))`), w3cAssertXPath(`deep-equal(subsequence(/out/prio5/prio4/data(.), 1, 5), ('Genesis', 'Exodus',
-            'Leviticus', 'Numbers', 'Deuteronomy'))`)}, Skip: "unsupported feature: streaming"},
-		{Name: "si-next-match-108", StylesheetPath: "tests/strm/si-next-match/si-next-match-108.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+            'Leviticus', 'Numbers', 'Deuteronomy'))`)}},
+		{Name: "si-next-match-108", StylesheetPath: "tests/strm/si-next-match/si-next-match-108.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: schema_aware"},
 	})
 }
 
@@ -2156,8 +2156,8 @@ func TestW3C_si_on_non_empty(t *testing.T) {
 func TestW3C_si_perform_sort(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "si-perform-sort-001", StylesheetPath: "tests/strm/si-perform-sort/si-perform-sort-001.xsl", SourceDocPath: "tests/strm/si-perform-sort/si-perform-sort-001.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/list/item[1] = 'a'"), w3cAssertXPath("/root/list/item[2] = 'c'"), w3cAssertXPath("/root/list/item[3] = 'x'")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-perform-sort-002", StylesheetPath: "tests/strm/si-perform-sort/si-perform-sort-002.xsl", SourceDocPath: "tests/strm/si-perform-sort/si-perform-sort-001.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/list = 'a c x'")}, Skip: "unsupported feature: streaming"},
+		{Name: "si-perform-sort-001", StylesheetPath: "tests/strm/si-perform-sort/si-perform-sort-001.xsl", SourceDocPath: "tests/strm/si-perform-sort/si-perform-sort-001.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/list/item[1] = 'a'"), w3cAssertXPath("/root/list/item[2] = 'c'"), w3cAssertXPath("/root/list/item[3] = 'x'")}},
+		{Name: "si-perform-sort-002", StylesheetPath: "tests/strm/si-perform-sort/si-perform-sort-002.xsl", SourceDocPath: "tests/strm/si-perform-sort/si-perform-sort-001.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/list = 'a c x'")}},
 	})
 }
 
@@ -2203,10 +2203,10 @@ func TestW3C_si_result_document(t *testing.T) {
 		{Name: "si-result-document-126", StylesheetPath: "", InitialTemplate: "d-126", ExpectError: true, ErrorCode: "XTTE1510", Skip: "no stylesheet"},
 		{Name: "si-result-document-127", StylesheetPath: "", InitialTemplate: "d-127", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "no stylesheet"},
 		{Name: "si-result-document-128", StylesheetPath: "", InitialTemplate: "d-128", ExpectError: true, ErrorCode: "XTTE1540", Skip: "no stylesheet"},
-		{Name: "si-result-document-301", StylesheetPath: "tests/strm/si-result-document/si-result-document-301.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
-		{Name: "si-result-document-302", StylesheetPath: "tests/strm/si-result-document/si-result-document-302.xsl", SourceDocPath: "tests/strm/si-result-document/si-result-document-302.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
-		{Name: "si-result-document-303", StylesheetPath: "tests/strm/si-result-document/si-result-document-303.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
-		{Name: "si-result-document-304", StylesheetPath: "tests/strm/si-result-document/si-result-document-304.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: streaming"},
+		{Name: "si-result-document-301", StylesheetPath: "tests/strm/si-result-document/si-result-document-301.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-result-document"},
+		{Name: "si-result-document-302", StylesheetPath: "tests/strm/si-result-document/si-result-document-302.xsl", SourceDocPath: "tests/strm/si-result-document/si-result-document-302.xml", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-result-document"},
+		{Name: "si-result-document-303", StylesheetPath: "tests/strm/si-result-document/si-result-document-303.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-result-document"},
+		{Name: "si-result-document-304", StylesheetPath: "tests/strm/si-result-document/si-result-document-304.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-result-document"},
 	})
 }
 
@@ -2259,7 +2259,7 @@ func TestW3C_si_try(t *testing.T) {
 		{Name: "si-try-141", StylesheetPath: "", InitialTemplate: "s-141", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"\"")}, Skip: "no stylesheet"},
 		{Name: "si-try-142", StylesheetPath: "", InitialTemplate: "s-142", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"\"")}, Skip: "no stylesheet"},
 		{Name: "si-try-143", StylesheetPath: "", InitialTemplate: "s-143", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"\"")}, Skip: "no stylesheet"},
-		{Name: "si-try-200", StylesheetPath: "tests/strm/si-try/si-try-200.xsl", SourceDocPath: "tests/strm/si-try/si-try-200.xml", Assertions: []w3cAssertion{w3cAssertXML("<root><section><title>s1</title></section><section><title>s2</title></section></root>")}, Skip: "unsupported feature: streaming"},
+		{Name: "si-try-200", StylesheetPath: "tests/strm/si-try/si-try-200.xsl", SourceDocPath: "tests/strm/si-try/si-try-200.xml", Assertions: []w3cAssertion{w3cAssertXML("<root><section><title>s1</title></section><section><title>s2</title></section></root>")}},
 	})
 }
 
@@ -2302,9 +2302,9 @@ func TestW3C_si_value_of(t *testing.T) {
 		{Name: "si-value-of-074", StylesheetPath: "", InitialTemplate: "s-074", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"~12345~\"")}, Skip: "no stylesheet"},
 		{Name: "si-value-of-075", StylesheetPath: "", InitialTemplate: "s-075", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"1|2|3|12345|1|2|3\"")}, Skip: "no stylesheet"},
 		{Name: "si-value-of-076", StylesheetPath: "", InitialTemplate: "s-076", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"12345\"")}, Skip: "no stylesheet"},
-		{Name: "si-value-of-100", StylesheetPath: "tests/strm/si-value-of/si-value-of-100.xsl", SourceDocPath: "tests/strm/si-value-of/si-value-of-100.xml", Assertions: []w3cAssertion{w3cAssertXPath("count(tokenize(out, '\\n')) = 3"), w3cAssertXPath("tokenize(out, '\\n')[1] = '1,\"foo 1, \"\"quoted 1\"\", bar 1\",a'")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-value-of-101", StylesheetPath: "tests/strm/si-value-of/si-value-of-101.xsl", SourceDocPath: "tests/strm/si-value-of/si-value-of-100.xml", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-value-of-102", StylesheetPath: "tests/strm/si-value-of/si-value-of-102.xsl", SourceDocPath: "tests/strm/si-value-of/si-value-of-102.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/row[1] = \"a1,b1,default\""), w3cAssertXPath("/out/row[2] = \"a2,b2,c2\""), w3cAssertXPath("/out/row[3] = \"a3,b3,c3\"")}, Skip: "unsupported feature: streaming"},
+		{Name: "si-value-of-100", StylesheetPath: "tests/strm/si-value-of/si-value-of-100.xsl", SourceDocPath: "tests/strm/si-value-of/si-value-of-100.xml", Assertions: []w3cAssertion{w3cAssertXPath("count(tokenize(out, '\\n')) = 3"), w3cAssertXPath("tokenize(out, '\\n')[1] = '1,\"foo 1, \"\"quoted 1\"\", bar 1\",a'")}},
+		{Name: "si-value-of-101", StylesheetPath: "tests/strm/si-value-of/si-value-of-101.xsl", SourceDocPath: "tests/strm/si-value-of/si-value-of-100.xml", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-value-of-102", StylesheetPath: "tests/strm/si-value-of/si-value-of-102.xsl", SourceDocPath: "tests/strm/si-value-of/si-value-of-102.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/row[1] = \"a1,b1,default\""), w3cAssertXPath("/out/row[2] = \"a2,b2,c2\""), w3cAssertXPath("/out/row[3] = \"a3,b3,c3\"")}},
 	})
 }
 
@@ -2425,12 +2425,12 @@ func TestW3C_si_LRE(t *testing.T) {
 		{Name: "si-lre-257", StylesheetPath: "", InitialTemplate: "s-057", ExpectError: true, ErrorCode: "XTDE0450", Skip: "no stylesheet"},
 		{Name: "si-lre-258", StylesheetPath: "", InitialTemplate: "s-058", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'caught'")}, Skip: "no stylesheet"},
 		{Name: "si-lre-259", StylesheetPath: "", InitialTemplate: "s-059", Assertions: []w3cAssertion{w3cAssertXPath("/out/in/BOOKLIST/BOOKS[@OWNER=\"MHK\"]/ITEM[1]/TITLE=\"Pride and Prejudice\""), w3cAssertXPath("/out/in/BOOKLIST/CATEGORIES/@DESC eq \"Miscellaneous categories\"")}, Skip: "no stylesheet"},
-		{Name: "si-lre-901", StylesheetPath: "tests/strm/si-LRE/si-lre-901.xsl", InitialTemplate: "cy-901", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-lre-902", StylesheetPath: "tests/strm/si-LRE/si-lre-902.xsl", InitialTemplate: "cy-902", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-lre-903", StylesheetPath: "tests/strm/si-LRE/si-lre-903.xsl", InitialTemplate: "cy-903", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "si-lre-904", StylesheetPath: "tests/strm/si-LRE/si-lre-904.xsl", InitialTemplate: "cy-904", Assertions: []w3cAssertion{w3cAssertXPath("/out/*[@x='1' and @y='2']")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-lre-905", StylesheetPath: "tests/strm/si-LRE/si-lre-905.xsl", InitialTemplate: "cy-905", Assertions: []w3cAssertion{w3cAssertXPath("/out/*[@x='1' and @y='2']")}, Skip: "unsupported feature: streaming"},
-		{Name: "si-lre-906", StylesheetPath: "tests/strm/si-LRE/si-lre-906.xsl", InitialTemplate: "cy-906", ExpectError: true, ErrorCode: "XTSE0020", Skip: "unsupported feature: streaming"},
+		{Name: "si-lre-901", StylesheetPath: "tests/strm/si-LRE/si-lre-901.xsl", InitialTemplate: "cy-901", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-lre-902", StylesheetPath: "tests/strm/si-LRE/si-lre-902.xsl", InitialTemplate: "cy-902", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-lre-903", StylesheetPath: "tests/strm/si-LRE/si-lre-903.xsl", InitialTemplate: "cy-903", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "si-lre-904", StylesheetPath: "tests/strm/si-LRE/si-lre-904.xsl", InitialTemplate: "cy-904", Assertions: []w3cAssertion{w3cAssertXPath("/out/*[@x='1' and @y='2']")}},
+		{Name: "si-lre-905", StylesheetPath: "tests/strm/si-LRE/si-lre-905.xsl", InitialTemplate: "cy-905", Assertions: []w3cAssertion{w3cAssertXPath("/out/*[@x='1' and @y='2']")}},
+		{Name: "si-lre-906", StylesheetPath: "tests/strm/si-LRE/si-lre-906.xsl", InitialTemplate: "cy-906", ExpectError: true, ErrorCode: "XTSE0020"},
 	})
 }
 
@@ -2460,30 +2460,30 @@ func TestW3C_su_absorbing(t *testing.T) {
             ><h3>Heading 3.1</h3></section></section
             ><section><h2>Heading 2.2</h2><p>Paragraph 2.2.1</p></section
             ></section><section><h1>Heading 1.2</h1><p>Paragraph 1.2.1</p><section
-            ><h2>Heading 2.3</h2><p>Paragraph 2.3.1</p></section></section></body></html>`)}, Skip: "unsupported feature: streaming"},
+            ><h2>Heading 2.3</h2><p>Paragraph 2.3.1</p></section></section></body></html>`)}},
 		{Name: "su-absorbing-202", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-202.xsl", SourceDocPath: "tests/strm/su-absorbing/su-absorbing-202.xml", Assertions: []w3cAssertion{w3cAssertXML(`<Items Title="Title" Icon="Icon" Description="Description"><Item Value="01" Name="Agriculture"
             ><Item Value="011" Name="Horticulture and Fruit Growing"><Item Value="0111" Name="Plant Nurseries"
             ><Item Value="011101" Name="Bulb Propagating"/></Item><Item Value="0112" Name="Cut Flower and Flower Seed Growing"
-            ><Item Value="011201" Name="Display Foliage Growing"/></Item></Item></Item></Items>`)}, Skip: "unsupported feature: streaming"},
+            ><Item Value="011201" Name="Display Foliage Growing"/></Item></Item></Item></Items>`)}},
 		{Name: "su-absorbing-203", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-203.xsl", SourceDocPath: "tests/strm/su-absorbing/su-absorbing-202.xml", Assertions: []w3cAssertion{w3cAssertXML(`<Items Title="Title" Icon="Icon" Description="Description"><Item Value="01" Name="Agriculture"
             ><Item Value="011" Name="Horticulture and Fruit Growing"><Item Value="0111" Name="Plant Nurseries"
             ><Item Value="011101" Name="Bulb Propagating"/></Item><Item Value="0112" Name="Cut Flower and Flower Seed Growing"
-            ><Item Value="011201" Name="Display Foliage Growing"/></Item></Item></Item></Items>`)}, Skip: "unsupported feature: streaming"},
-		{Name: "su-absorbing-204", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-204.xsl", Assertions: []w3cAssertion{w3cAssertXML("<out><in x=\"a\" y=\"a1\"/><in x=\"b\" y=\"b1\"/><in x=\"b\" y=\"b2\"/><in x=\"b\" y=\"b3\"/><in x=\"c\" y=\"c1\"/><in x=\"c\" y=\"c2\"/></out>")}, Skip: "unsupported feature: streaming"},
-		{Name: "su-absorbing-205", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-205.xsl", SourceDocPath: "tests/strm/su-absorbing/su-absorbing-205.xml", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-absorbing-301", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-301.xsl", SourceDocPath: "tests/strm/su-absorbing/su-absorbing-301.xml", Assertions: []w3cAssertion{w3cAssertXPath("count(/root/chunk) = 8"), w3cAssertXPath("count(/root/chunk/item) = 23"), w3cAssertXPath("count(/root/chunk[1]/item) = 3"), w3cAssertXPath("count(/root/chunk[8]/item) = 2"), w3cAssertXPath("/root/chunk[1]/item[1] = 'item 01'"), w3cAssertXPath("/root/chunk[8]/item[1] = 'item 22'")}, Skip: "unsupported feature: streaming"},
-		{Name: "su-absorbing-901", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-absorbing-902", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-902.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out =  \"MMP P P P H P\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "su-absorbing-903", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-903.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-absorbing-904", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-904.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-absorbing-905", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-905.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-absorbing-906", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-906.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-absorbing-907", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-907.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("starts-with(/out, \"TITLE AUTHOR PUBLISHER PUB-DATE LANGUAGE PRICE QUANTITY ISBN PAGES DIMENSIONS WEIGHT TITLE AUTHOR PUBLISHER \")")}, Skip: "unsupported feature: streaming"},
-		{Name: "su-absorbing-908", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-908.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-absorbing-909", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-909.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"true true true true true true\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "su-absorbing-910", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-910.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "FOAR0001", Skip: "unsupported feature: streaming"},
-		{Name: "su-absorbing-911", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-911.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'divide-by-zero'")}, Skip: "unsupported feature: streaming"},
-		{Name: "su-absorbing-912", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-912.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+            ><Item Value="011201" Name="Display Foliage Growing"/></Item></Item></Item></Items>`)}},
+		{Name: "su-absorbing-204", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-204.xsl", Assertions: []w3cAssertion{w3cAssertXML("<out><in x=\"a\" y=\"a1\"/><in x=\"b\" y=\"b1\"/><in x=\"b\" y=\"b2\"/><in x=\"b\" y=\"b3\"/><in x=\"c\" y=\"c1\"/><in x=\"c\" y=\"c2\"/></out>")}},
+		{Name: "su-absorbing-205", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-205.xsl", SourceDocPath: "tests/strm/su-absorbing/su-absorbing-205.xml", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-absorbing-301", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-301.xsl", SourceDocPath: "tests/strm/su-absorbing/su-absorbing-301.xml", Assertions: []w3cAssertion{w3cAssertXPath("count(/root/chunk) = 8"), w3cAssertXPath("count(/root/chunk/item) = 23"), w3cAssertXPath("count(/root/chunk[1]/item) = 3"), w3cAssertXPath("count(/root/chunk[8]/item) = 2"), w3cAssertXPath("/root/chunk[1]/item[1] = 'item 01'"), w3cAssertXPath("/root/chunk[8]/item[1] = 'item 22'")}},
+		{Name: "su-absorbing-901", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-absorbing-902", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-902.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out =  \"MMP P P P H P\"")}},
+		{Name: "su-absorbing-903", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-903.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-absorbing-904", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-904.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-absorbing-905", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-905.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-absorbing-906", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-906.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-absorbing-907", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-907.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("starts-with(/out, \"TITLE AUTHOR PUBLISHER PUB-DATE LANGUAGE PRICE QUANTITY ISBN PAGES DIMENSIONS WEIGHT TITLE AUTHOR PUBLISHER \")")}},
+		{Name: "su-absorbing-908", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-908.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-absorbing-909", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-909.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"true true true true true true\"")}},
+		{Name: "su-absorbing-910", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-910.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "FOAR0001"},
+		{Name: "su-absorbing-911", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-911.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'divide-by-zero'")}},
+		{Name: "su-absorbing-912", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-912.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -2492,10 +2492,10 @@ func TestW3C_su_ascent(t *testing.T) {
 	w3cRunTests(t, []w3cTest{
 		{Name: "su-ascent-005", StylesheetPath: "", InitialTemplate: "t-005", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"1 1 1 1 1 1\"")}, Skip: "no stylesheet"},
 		{Name: "su-ascent-006", StylesheetPath: "", InitialTemplate: "t-006", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"1.1 1.2 1.2 1.2 1.3\"")}, Skip: "no stylesheet"},
-		{Name: "su-ascent-901", StylesheetPath: "tests/strm/su-ascent/su-ascent-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-ascent-902", StylesheetPath: "tests/strm/su-ascent/su-ascent-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-ascent-903", StylesheetPath: "tests/strm/su-ascent/su-ascent-903.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-ascent-904", StylesheetPath: "tests/strm/su-ascent/su-ascent-904.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "su-ascent-901", StylesheetPath: "tests/strm/su-ascent/su-ascent-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-ascent-902", StylesheetPath: "tests/strm/su-ascent/su-ascent-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-ascent-903", StylesheetPath: "tests/strm/su-ascent/su-ascent-903.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-ascent-904", StylesheetPath: "tests/strm/su-ascent/su-ascent-904.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -2508,10 +2508,10 @@ func TestW3C_su_filter(t *testing.T) {
 		{Name: "su-filter-004", StylesheetPath: "", InitialTemplate: "t-004", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"\"")}, Skip: "no stylesheet"},
 		{Name: "su-filter-101", StylesheetPath: "", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"The Big Over Easy\"")}, Skip: "no stylesheet"},
 		{Name: "su-filter-102", StylesheetPath: "", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"Wuthering Heights Tess of the d'Urbervilles Jude the Obscure The Big Over Easy The Eyre Affair\"")}, Skip: "no stylesheet"},
-		{Name: "su-filter-901", StylesheetPath: "tests/strm/su-filter/su-filter-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-filter-902", StylesheetPath: "tests/strm/su-filter/su-filter-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-filter-903", StylesheetPath: "tests/strm/su-filter/su-filter-903.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-filter-904", StylesheetPath: "tests/strm/su-filter/su-filter-904.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "su-filter-901", StylesheetPath: "tests/strm/su-filter/su-filter-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-filter-902", StylesheetPath: "tests/strm/su-filter/su-filter-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-filter-903", StylesheetPath: "tests/strm/su-filter/su-filter-903.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-filter-904", StylesheetPath: "tests/strm/su-filter/su-filter-904.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -2522,10 +2522,10 @@ func TestW3C_su_inspection(t *testing.T) {
 		{Name: "su-inspection-002", StylesheetPath: "", InitialTemplate: "t-002", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"3 3 3 3 3 3\"")}, Skip: "no stylesheet"},
 		{Name: "su-inspection-003", StylesheetPath: "", InitialTemplate: "t-003", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"oz oz oz oz g oz\"")}, Skip: "no stylesheet"},
 		{Name: "su-inspection-004", StylesheetPath: "", InitialTemplate: "t-004", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"MMP P P P H P\"")}, Skip: "no stylesheet"},
-		{Name: "su-inspection-901", StylesheetPath: "tests/strm/su-inspection/su-inspection-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-inspection-902", StylesheetPath: "tests/strm/su-inspection/su-inspection-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-inspection-903", StylesheetPath: "tests/strm/su-inspection/su-inspection-903.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-inspection-904", StylesheetPath: "tests/strm/su-inspection/su-inspection-904.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "su-inspection-901", StylesheetPath: "tests/strm/su-inspection/su-inspection-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-inspection-902", StylesheetPath: "tests/strm/su-inspection/su-inspection-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-inspection-903", StylesheetPath: "tests/strm/su-inspection/su-inspection-903.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-inspection-904", StylesheetPath: "tests/strm/su-inspection/su-inspection-904.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -2548,14 +2548,14 @@ func TestW3C_su_shallow_descent(t *testing.T) {
             ><TITLE>The Big Over Easy</TITLE><PUBLISHER>Hodder &amp; Stoughton</PUBLISHER><LANGUAGE>English</LANGUAGE><QUANTITY>129</QUANTITY><PAGES>346</PAGES><WEIGHT UNIT="g">390</WEIGHT
             ><TITLE>The Eyre Affair</TITLE><PUBLISHER>Penguin</PUBLISHER><LANGUAGE>English</LANGUAGE><QUANTITY>129</QUANTITY><PAGES>384</PAGES><WEIGHT UNIT="oz">9.0</WEIGHT></out>`)}, Skip: "no stylesheet"},
 		{Name: "su-shallow-descent-004", StylesheetPath: "", InitialTemplate: "t-004", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/BOOKLIST/BOOKS/ITEM) = 6"), w3cAssertXPath("count(/out/BOOKLIST/CATEGORIES/CATEGORY) = 3"), w3cAssertXPath("/out/BOOKLIST/BOOKS/ITEM[6]/TITLE='The Eyre Affair'")}, Skip: "no stylesheet"},
-		{Name: "su-shallow-descent-101", StylesheetPath: "tests/strm/su-shallow-descent/su-shallow-descent-101.xsl", Assertions: []w3cAssertion{w3cAssertXML("<out><section>one</section><section>two</section></out>")}, Skip: "unsupported feature: streaming"},
-		{Name: "su-shallow-descent-901", StylesheetPath: "tests/strm/su-shallow-descent/su-shallow-descent-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3155", Skip: "unsupported feature: streaming"},
-		{Name: "su-shallow-descent-902", StylesheetPath: "tests/strm/su-shallow-descent/su-shallow-descent-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-shallow-descent-903", StylesheetPath: "tests/strm/su-shallow-descent/su-shallow-descent-903.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-shallow-descent-904", StylesheetPath: "tests/strm/su-shallow-descent/su-shallow-descent-904.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-shallow-descent-905", StylesheetPath: "tests/strm/su-shallow-descent/su-shallow-descent-905.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-shallow-descent-906", StylesheetPath: "tests/strm/su-shallow-descent/su-shallow-descent-906.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "su-shallow-descent-907", StylesheetPath: "tests/strm/su-shallow-descent/su-shallow-descent-907.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "su-shallow-descent-101", StylesheetPath: "tests/strm/su-shallow-descent/su-shallow-descent-101.xsl", Assertions: []w3cAssertion{w3cAssertXML("<out><section>one</section><section>two</section></out>")}},
+		{Name: "su-shallow-descent-901", StylesheetPath: "tests/strm/su-shallow-descent/su-shallow-descent-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3155"},
+		{Name: "su-shallow-descent-902", StylesheetPath: "tests/strm/su-shallow-descent/su-shallow-descent-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-shallow-descent-903", StylesheetPath: "tests/strm/su-shallow-descent/su-shallow-descent-903.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-shallow-descent-904", StylesheetPath: "tests/strm/su-shallow-descent/su-shallow-descent-904.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-shallow-descent-905", StylesheetPath: "tests/strm/su-shallow-descent/su-shallow-descent-905.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-shallow-descent-906", StylesheetPath: "tests/strm/su-shallow-descent/su-shallow-descent-906.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "su-shallow-descent-907", StylesheetPath: "tests/strm/su-shallow-descent/su-shallow-descent-907.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -2642,7 +2642,7 @@ func TestW3C_sx_CommaExpr(t *testing.T) {
 		{Name: "sx-comma-141", StylesheetPath: "", InitialTemplate: "r-041", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("deep-equal(/out/PRICE/xs:decimal(.), (18.90, 4.95, 6.58, 4.95, 4.95, 16.47, 16.47))"), w3cCheckXPath("deep-equal(/out/PRICE/xs:decimal(.), (4.95, 6.58, 4.95, 4.95, 16.47, 16.47, 18.90))"))}, Skip: "no stylesheet"},
 		{Name: "sx-comma-142", StylesheetPath: "", InitialTemplate: "r-042", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"4.95 6.58 4.95 4.95 16.47 16.47 18.90\"")}, Skip: "no stylesheet"},
 		{Name: "sx-comma-143", StylesheetPath: "", InitialTemplate: "r-043", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out = \"18.90 4.95 6.58 4.95 4.95 16.47 16.47\""), w3cCheckXPath("/out = \"4.95 6.58 4.95 4.95 16.47 16.47 18.90\""))}, Skip: "no stylesheet"},
-		{Name: "sx-comma-201", StylesheetPath: "tests/strm/sx-CommaExpr/sx-comma-201.xsl", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sx-comma-201", StylesheetPath: "tests/strm/sx-CommaExpr/sx-comma-201.xsl", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -2736,8 +2736,8 @@ func TestW3C_sx_ExceptExpr(t *testing.T) {
 func TestW3C_sx_FunctionCall(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "sx-fcall-026", StylesheetPath: "tests/strm/sx-FunctionCall/sx-fcall-026.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sx-fcall-027", StylesheetPath: "tests/strm/sx-FunctionCall/sx-fcall-027.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sx-fcall-026", StylesheetPath: "tests/strm/sx-FunctionCall/sx-fcall-026.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sx-fcall-027", StylesheetPath: "tests/strm/sx-FunctionCall/sx-fcall-027.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -2769,8 +2769,8 @@ func TestW3C_sx_GeneralComp_eq(t *testing.T) {
 		{Name: "sx-gc-eq-026", StylesheetPath: "", InitialTemplate: "s-026", ExpectError: true, ErrorCode: "FORG0001", Skip: "no stylesheet"},
 		{Name: "sx-gc-eq-027", StylesheetPath: "", InitialTemplate: "s-027", ExpectError: true, ErrorCode: "XPTY0004", Skip: "no stylesheet"},
 		{Name: "sx-gc-eq-028", StylesheetPath: "", InitialTemplate: "s-028", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
-		{Name: "sx-gc-eq-100", StylesheetPath: "tests/strm/sx-GeneralComp-eq/sx-gc-eq-100.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: streaming"},
-		{Name: "sx-gc-eq-101", StylesheetPath: "tests/strm/sx-GeneralComp-eq/sx-gc-eq-101.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: streaming"},
+		{Name: "sx-gc-eq-100", StylesheetPath: "tests/strm/sx-GeneralComp-eq/sx-gc-eq-100.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "sx-gc-eq-101", StylesheetPath: "tests/strm/sx-GeneralComp-eq/sx-gc-eq-101.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "sx-gc-eq-103", StylesheetPath: "", InitialTemplate: "s-003", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
 		{Name: "sx-gc-eq-104", StylesheetPath: "", InitialTemplate: "s-004", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
 		{Name: "sx-gc-eq-105", StylesheetPath: "", InitialTemplate: "s-005", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
@@ -2796,9 +2796,9 @@ func TestW3C_sx_GeneralComp_eq(t *testing.T) {
 		{Name: "sx-gc-eq-126", StylesheetPath: "", InitialTemplate: "s-026", ExpectError: true, ErrorCode: "FORG0001", Skip: "no stylesheet"},
 		{Name: "sx-gc-eq-127", StylesheetPath: "", InitialTemplate: "s-027", ExpectError: true, ErrorCode: "XPTY0004", Skip: "no stylesheet"},
 		{Name: "sx-gc-eq-128", StylesheetPath: "", InitialTemplate: "s-028", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
-		{Name: "sx-gc-eq-801", StylesheetPath: "tests/strm/sx-GeneralComp-eq/sx-gc-eq-801.xsl", SourceDocPath: "tests/strm/sx-GeneralComp-eq/sx-gc-eq-801.xml", Assertions: []w3cAssertion{w3cAssertXPath("/ProteinEntry = \"hello\"")}, Skip: "unsupported feature: streaming"},
-		{Name: "sx-gc-eq-901", StylesheetPath: "tests/strm/sx-GeneralComp-eq/sx-gc-eq-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sx-gc-eq-902", StylesheetPath: "tests/strm/sx-GeneralComp-eq/sx-gc-eq-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sx-gc-eq-801", StylesheetPath: "tests/strm/sx-GeneralComp-eq/sx-gc-eq-801.xsl", SourceDocPath: "tests/strm/sx-GeneralComp-eq/sx-gc-eq-801.xml", Assertions: []w3cAssertion{w3cAssertXPath("/ProteinEntry = \"hello\"")}},
+		{Name: "sx-gc-eq-901", StylesheetPath: "tests/strm/sx-GeneralComp-eq/sx-gc-eq-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sx-gc-eq-902", StylesheetPath: "tests/strm/sx-GeneralComp-eq/sx-gc-eq-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -2830,8 +2830,8 @@ func TestW3C_sx_GeneralComp_ge(t *testing.T) {
 		{Name: "sx-gc-ge-026", StylesheetPath: "", InitialTemplate: "s-026", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out='true'"))}, Skip: "no stylesheet"},
 		{Name: "sx-gc-ge-027", StylesheetPath: "", InitialTemplate: "s-027", ExpectError: true, ErrorCode: "XPTY0004", Skip: "no stylesheet"},
 		{Name: "sx-gc-ge-028", StylesheetPath: "", InitialTemplate: "s-028", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
-		{Name: "sx-gc-ge-100", StylesheetPath: "tests/strm/sx-GeneralComp-ge/sx-gc-ge-100.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: streaming"},
-		{Name: "sx-gc-ge-101", StylesheetPath: "tests/strm/sx-GeneralComp-ge/sx-gc-ge-101.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: streaming"},
+		{Name: "sx-gc-ge-100", StylesheetPath: "tests/strm/sx-GeneralComp-ge/sx-gc-ge-100.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "sx-gc-ge-101", StylesheetPath: "tests/strm/sx-GeneralComp-ge/sx-gc-ge-101.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "sx-gc-ge-103", StylesheetPath: "", InitialTemplate: "s-003", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
 		{Name: "sx-gc-ge-104", StylesheetPath: "", InitialTemplate: "s-004", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
 		{Name: "sx-gc-ge-105", StylesheetPath: "", InitialTemplate: "s-005", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
@@ -2857,8 +2857,8 @@ func TestW3C_sx_GeneralComp_ge(t *testing.T) {
 		{Name: "sx-gc-ge-126", StylesheetPath: "", InitialTemplate: "s-026", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out='true'"))}, Skip: "no stylesheet"},
 		{Name: "sx-gc-ge-127", StylesheetPath: "", InitialTemplate: "s-027", ExpectError: true, ErrorCode: "XPTY0004", Skip: "no stylesheet"},
 		{Name: "sx-gc-ge-128", StylesheetPath: "", InitialTemplate: "s-028", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
-		{Name: "sx-gc-ge-901", StylesheetPath: "tests/strm/sx-GeneralComp-ge/sx-gc-ge-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sx-gc-ge-902", StylesheetPath: "tests/strm/sx-GeneralComp-ge/sx-gc-ge-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sx-gc-ge-901", StylesheetPath: "tests/strm/sx-GeneralComp-ge/sx-gc-ge-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sx-gc-ge-902", StylesheetPath: "tests/strm/sx-GeneralComp-ge/sx-gc-ge-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -2890,8 +2890,8 @@ func TestW3C_sx_GeneralComp_gt(t *testing.T) {
 		{Name: "sx-gc-gt-026", StylesheetPath: "", InitialTemplate: "s-026", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out='true'"))}, Skip: "no stylesheet"},
 		{Name: "sx-gc-gt-027", StylesheetPath: "", InitialTemplate: "s-027", ExpectError: true, ErrorCode: "XPTY0004", Skip: "no stylesheet"},
 		{Name: "sx-gc-gt-028", StylesheetPath: "", InitialTemplate: "s-028", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
-		{Name: "sx-gc-gt-100", StylesheetPath: "tests/strm/sx-GeneralComp-gt/sx-gc-gt-100.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: streaming"},
-		{Name: "sx-gc-gt-101", StylesheetPath: "tests/strm/sx-GeneralComp-gt/sx-gc-gt-101.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: streaming"},
+		{Name: "sx-gc-gt-100", StylesheetPath: "tests/strm/sx-GeneralComp-gt/sx-gc-gt-100.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "sx-gc-gt-101", StylesheetPath: "tests/strm/sx-GeneralComp-gt/sx-gc-gt-101.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "sx-gc-gt-103", StylesheetPath: "", InitialTemplate: "s-003", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
 		{Name: "sx-gc-gt-104", StylesheetPath: "", InitialTemplate: "s-004", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
 		{Name: "sx-gc-gt-105", StylesheetPath: "", InitialTemplate: "s-005", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
@@ -2917,8 +2917,8 @@ func TestW3C_sx_GeneralComp_gt(t *testing.T) {
 		{Name: "sx-gc-gt-126", StylesheetPath: "", InitialTemplate: "s-026", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out='true'"))}, Skip: "no stylesheet"},
 		{Name: "sx-gc-gt-127", StylesheetPath: "", InitialTemplate: "s-027", ExpectError: true, ErrorCode: "XPTY0004", Skip: "no stylesheet"},
 		{Name: "sx-gc-gt-128", StylesheetPath: "", InitialTemplate: "s-028", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
-		{Name: "sx-gc-gt-901", StylesheetPath: "tests/strm/sx-GeneralComp-gt/sx-gc-gt-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sx-gc-gt-902", StylesheetPath: "tests/strm/sx-GeneralComp-gt/sx-gc-gt-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sx-gc-gt-901", StylesheetPath: "tests/strm/sx-GeneralComp-gt/sx-gc-gt-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sx-gc-gt-902", StylesheetPath: "tests/strm/sx-GeneralComp-gt/sx-gc-gt-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -2950,8 +2950,8 @@ func TestW3C_sx_GeneralComp_le(t *testing.T) {
 		{Name: "sx-gc-le-026", StylesheetPath: "", InitialTemplate: "s-026", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out='true'"))}, Skip: "no stylesheet"},
 		{Name: "sx-gc-le-027", StylesheetPath: "", InitialTemplate: "s-027", ExpectError: true, ErrorCode: "XPTY0004", Skip: "no stylesheet"},
 		{Name: "sx-gc-le-028", StylesheetPath: "", InitialTemplate: "s-028", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
-		{Name: "sx-gc-le-100", StylesheetPath: "tests/strm/sx-GeneralComp-le/sx-gc-le-100.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: streaming"},
-		{Name: "sx-gc-le-101", StylesheetPath: "tests/strm/sx-GeneralComp-le/sx-gc-le-101.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: streaming"},
+		{Name: "sx-gc-le-100", StylesheetPath: "tests/strm/sx-GeneralComp-le/sx-gc-le-100.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "sx-gc-le-101", StylesheetPath: "tests/strm/sx-GeneralComp-le/sx-gc-le-101.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "sx-gc-le-103", StylesheetPath: "", InitialTemplate: "s-003", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
 		{Name: "sx-gc-le-104", StylesheetPath: "", InitialTemplate: "s-004", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
 		{Name: "sx-gc-le-105", StylesheetPath: "", InitialTemplate: "s-005", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
@@ -2977,8 +2977,8 @@ func TestW3C_sx_GeneralComp_le(t *testing.T) {
 		{Name: "sx-gc-le-126", StylesheetPath: "", InitialTemplate: "s-026", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out='true'"))}, Skip: "no stylesheet"},
 		{Name: "sx-gc-le-127", StylesheetPath: "", InitialTemplate: "s-027", ExpectError: true, ErrorCode: "XPTY0004", Skip: "no stylesheet"},
 		{Name: "sx-gc-le-128", StylesheetPath: "", InitialTemplate: "s-028", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
-		{Name: "sx-gc-le-901", StylesheetPath: "tests/strm/sx-GeneralComp-le/sx-gc-le-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sx-gc-le-902", StylesheetPath: "tests/strm/sx-GeneralComp-le/sx-gc-le-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sx-gc-le-901", StylesheetPath: "tests/strm/sx-GeneralComp-le/sx-gc-le-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sx-gc-le-902", StylesheetPath: "tests/strm/sx-GeneralComp-le/sx-gc-le-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -3010,8 +3010,8 @@ func TestW3C_sx_GeneralComp_lt(t *testing.T) {
 		{Name: "sx-gc-lt-026", StylesheetPath: "", InitialTemplate: "s-026", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out='true'"))}, Skip: "no stylesheet"},
 		{Name: "sx-gc-lt-027", StylesheetPath: "", InitialTemplate: "s-027", ExpectError: true, ErrorCode: "XPTY0004", Skip: "no stylesheet"},
 		{Name: "sx-gc-lt-028", StylesheetPath: "", InitialTemplate: "s-028", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
-		{Name: "sx-gc-lt-100", StylesheetPath: "tests/strm/sx-GeneralComp-lt/sx-gc-lt-100.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: streaming"},
-		{Name: "sx-gc-lt-101", StylesheetPath: "tests/strm/sx-GeneralComp-lt/sx-gc-lt-101.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: streaming"},
+		{Name: "sx-gc-lt-100", StylesheetPath: "tests/strm/sx-GeneralComp-lt/sx-gc-lt-100.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "sx-gc-lt-101", StylesheetPath: "tests/strm/sx-GeneralComp-lt/sx-gc-lt-101.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "sx-gc-lt-103", StylesheetPath: "", InitialTemplate: "s-003", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
 		{Name: "sx-gc-lt-104", StylesheetPath: "", InitialTemplate: "s-004", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
 		{Name: "sx-gc-lt-105", StylesheetPath: "", InitialTemplate: "s-005", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'false'")}, Skip: "no stylesheet"},
@@ -3037,8 +3037,8 @@ func TestW3C_sx_GeneralComp_lt(t *testing.T) {
 		{Name: "sx-gc-lt-126", StylesheetPath: "", InitialTemplate: "s-026", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out='true'"))}, Skip: "no stylesheet"},
 		{Name: "sx-gc-lt-127", StylesheetPath: "", InitialTemplate: "s-027", ExpectError: true, ErrorCode: "XPTY0004", Skip: "no stylesheet"},
 		{Name: "sx-gc-lt-128", StylesheetPath: "", InitialTemplate: "s-028", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
-		{Name: "sx-gc-lt-901", StylesheetPath: "tests/strm/sx-GeneralComp-lt/sx-gc-lt-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sx-gc-lt-902", StylesheetPath: "tests/strm/sx-GeneralComp-lt/sx-gc-lt-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sx-gc-lt-901", StylesheetPath: "tests/strm/sx-GeneralComp-lt/sx-gc-lt-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sx-gc-lt-902", StylesheetPath: "tests/strm/sx-GeneralComp-lt/sx-gc-lt-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -3070,8 +3070,8 @@ func TestW3C_sx_GeneralComp_ne(t *testing.T) {
 		{Name: "sx-gc-ne-026", StylesheetPath: "", InitialTemplate: "s-026", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out='true'"))}, Skip: "no stylesheet"},
 		{Name: "sx-gc-ne-027", StylesheetPath: "", InitialTemplate: "s-027", ExpectError: true, ErrorCode: "XPTY0004", Skip: "no stylesheet"},
 		{Name: "sx-gc-ne-028", StylesheetPath: "", InitialTemplate: "s-028", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
-		{Name: "sx-gc-ne-100", StylesheetPath: "tests/strm/sx-GeneralComp-ne/sx-gc-ne-100.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: streaming"},
-		{Name: "sx-gc-ne-101", StylesheetPath: "tests/strm/sx-GeneralComp-ne/sx-gc-ne-101.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: streaming"},
+		{Name: "sx-gc-ne-100", StylesheetPath: "tests/strm/sx-GeneralComp-ne/sx-gc-ne-100.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "sx-gc-ne-101", StylesheetPath: "tests/strm/sx-GeneralComp-ne/sx-gc-ne-101.xsl", SourceDocPath: "tests/strm/docs/big-transactions.xml", Assertions: []w3cAssertion{w3cAssertXPath("out/@result='true'")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "sx-gc-ne-103", StylesheetPath: "", InitialTemplate: "s-003", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
 		{Name: "sx-gc-ne-104", StylesheetPath: "", InitialTemplate: "s-004", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
 		{Name: "sx-gc-ne-105", StylesheetPath: "", InitialTemplate: "s-005", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
@@ -3097,8 +3097,8 @@ func TestW3C_sx_GeneralComp_ne(t *testing.T) {
 		{Name: "sx-gc-ne-126", StylesheetPath: "", InitialTemplate: "s-026", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out='true'"))}, Skip: "no stylesheet"},
 		{Name: "sx-gc-ne-127", StylesheetPath: "", InitialTemplate: "s-027", ExpectError: true, ErrorCode: "XPTY0004", Skip: "no stylesheet"},
 		{Name: "sx-gc-ne-128", StylesheetPath: "", InitialTemplate: "s-028", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "no stylesheet"},
-		{Name: "sx-gc-ne-901", StylesheetPath: "tests/strm/sx-GeneralComp-ne/sx-gc-ne-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sx-gc-ne-902", StylesheetPath: "tests/strm/sx-GeneralComp-ne/sx-gc-ne-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sx-gc-ne-901", StylesheetPath: "tests/strm/sx-GeneralComp-ne/sx-gc-ne-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sx-gc-ne-902", StylesheetPath: "tests/strm/sx-GeneralComp-ne/sx-gc-ne-902.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -3248,7 +3248,7 @@ func TestW3C_sx_IntersectExpr(t *testing.T) {
 func TestW3C_sx_InstanceofExpr(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "sx-instance-of-001", StylesheetPath: "tests/strm/sx-InstanceofExpr/sx-instance-of-001.xsl", InitialTemplate: "c-001", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}, Skip: "unsupported feature: streaming"},
+		{Name: "sx-instance-of-001", StylesheetPath: "tests/strm/sx-InstanceofExpr/sx-instance-of-001.xsl", InitialTemplate: "c-001", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}},
 		{Name: "sx-instance-of-002", StylesheetPath: "", InitialTemplate: "c-002", Assertions: []w3cAssertion{w3cAssertXML("<out>true</out>")}, Skip: "no stylesheet"},
 		{Name: "sx-instance-of-003", StylesheetPath: "", InitialTemplate: "c-003", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}, Skip: "no stylesheet"},
 		{Name: "sx-instance-of-004", StylesheetPath: "", InitialTemplate: "c-004", Assertions: []w3cAssertion{w3cAssertXML("<out>true</out>")}, Skip: "no stylesheet"},
@@ -3282,7 +3282,7 @@ func TestW3C_sx_InstanceofExpr(t *testing.T) {
 		{Name: "sx-instance-of-108a", StylesheetPath: "", InitialTemplate: "c-108a", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}, Skip: "no stylesheet"},
 		{Name: "sx-instance-of-109", StylesheetPath: "", InitialTemplate: "c-109", Assertions: []w3cAssertion{w3cAssertXML("<out>true</out>")}, Skip: "no stylesheet"},
 		{Name: "sx-instance-of-109a", StylesheetPath: "", InitialTemplate: "c-109a", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}, Skip: "no stylesheet"},
-		{Name: "sx-instance-of-901", StylesheetPath: "tests/strm/sx-InstanceofExpr/sx-instance-of-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sx-instance-of-901", StylesheetPath: "tests/strm/sx-InstanceofExpr/sx-instance-of-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -3327,12 +3327,12 @@ func TestW3C_sx_MapExpr(t *testing.T) {
 		{Name: "sx-MapExpr-007", StylesheetPath: "", InitialTemplate: "m-007", ExpectError: true, ErrorCode: "XTDE3365", Skip: "no stylesheet"},
 		{Name: "sx-MapExpr-008", StylesheetPath: "", InitialTemplate: "m-008", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/book) = 6"), w3cAssertXPath("/out/book[1]/@author = \"Jane Austen\""), w3cAssertXPath("/out/book[1]/@title = \"Pride and Prejudice\""), w3cAssertXPath("/out/book[6]/@author = \"Jasper Fforde\""), w3cAssertXPath("/out/book[6]/@outcome = \"success\"")}, Skip: "no stylesheet"},
 		{Name: "sx-MapExpr-009", StylesheetPath: "", InitialTemplate: "m-009", ExpectError: true, ErrorCode: "XTTE3375", Skip: "no stylesheet"},
-		{Name: "sx-MapExpr-101", StylesheetPath: "tests/strm/sx-MapExpr/sx-MapExpr-101.xsl", SourceDocPath: "tests/strm/sx-MapExpr/sx-MapExpr-101.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/section/div[1][h1='heading 1'][count(p)=2]"), w3cAssertXPath("/root/section/div[2][h1='heading 2'][count(p)=1]"), w3cAssertXPath("/root/section/h1[.='heading 3']"), w3cAssertXPath("/root/section/div[3][h1='heading 4'][count(p)=1]")}, Skip: "unsupported feature: streaming"},
-		{Name: "sx-MapExpr-102", StylesheetPath: "tests/strm/sx-MapExpr/sx-MapExpr-102.xsl", SourceDocPath: "tests/strm/sx-MapExpr/sx-MapExpr-101.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/section/div[1][h1='heading 1'][count(p)=2]"), w3cAssertXPath("/root/section/div[2][h1='heading 2'][count(p)=1]"), w3cAssertXPath("/root/section/h1[.='heading 3']"), w3cAssertXPath("/root/section/div[3][h1='heading 4'][count(p)=1]")}, Skip: "unsupported feature: streaming"},
-		{Name: "sx-MapExpr-103", StylesheetPath: "tests/strm/sx-MapExpr/sx-MapExpr-103.xsl", SourceDocPath: "tests/strm/sx-MapExpr/sx-MapExpr-101.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/section/div[1][h1='heading 1'][count(p)=2]"), w3cAssertXPath("/root/section/div[2][h1='heading 2'][count(p)=1]"), w3cAssertXPath("/root/section/h1[.='heading 3']"), w3cAssertXPath("/root/section/div[3][h1='heading 4'][count(p)=1]")}, Skip: "unsupported feature: streaming"},
-		{Name: "sx-MapExpr-104", StylesheetPath: "tests/strm/sx-MapExpr/sx-MapExpr-104.xsl", SourceDocPath: "tests/strm/sx-MapExpr/sx-MapExpr-101.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/section/div[1][h1='heading 1'][count(p)=2]"), w3cAssertXPath("/root/section/div[2][h1='heading 2'][count(p)=1]"), w3cAssertXPath("/root/section/h1[.='heading 3']"), w3cAssertXPath("/root/section/div[3][h1='heading 4'][count(p)=1]")}, Skip: "unsupported feature: streaming"},
-		{Name: "sx-MapExpr-901", StylesheetPath: "tests/strm/sx-MapExpr/sx-MapExpr-901.xsl", InitialTemplate: "m-901", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sx-MapExpr-902", StylesheetPath: "tests/strm/sx-MapExpr/sx-MapExpr-902.xsl", InitialTemplate: "m-902", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sx-MapExpr-101", StylesheetPath: "tests/strm/sx-MapExpr/sx-MapExpr-101.xsl", SourceDocPath: "tests/strm/sx-MapExpr/sx-MapExpr-101.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/section/div[1][h1='heading 1'][count(p)=2]"), w3cAssertXPath("/root/section/div[2][h1='heading 2'][count(p)=1]"), w3cAssertXPath("/root/section/h1[.='heading 3']"), w3cAssertXPath("/root/section/div[3][h1='heading 4'][count(p)=1]")}},
+		{Name: "sx-MapExpr-102", StylesheetPath: "tests/strm/sx-MapExpr/sx-MapExpr-102.xsl", SourceDocPath: "tests/strm/sx-MapExpr/sx-MapExpr-101.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/section/div[1][h1='heading 1'][count(p)=2]"), w3cAssertXPath("/root/section/div[2][h1='heading 2'][count(p)=1]"), w3cAssertXPath("/root/section/h1[.='heading 3']"), w3cAssertXPath("/root/section/div[3][h1='heading 4'][count(p)=1]")}},
+		{Name: "sx-MapExpr-103", StylesheetPath: "tests/strm/sx-MapExpr/sx-MapExpr-103.xsl", SourceDocPath: "tests/strm/sx-MapExpr/sx-MapExpr-101.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/section/div[1][h1='heading 1'][count(p)=2]"), w3cAssertXPath("/root/section/div[2][h1='heading 2'][count(p)=1]"), w3cAssertXPath("/root/section/h1[.='heading 3']"), w3cAssertXPath("/root/section/div[3][h1='heading 4'][count(p)=1]")}},
+		{Name: "sx-MapExpr-104", StylesheetPath: "tests/strm/sx-MapExpr/sx-MapExpr-104.xsl", SourceDocPath: "tests/strm/sx-MapExpr/sx-MapExpr-101.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/section/div[1][h1='heading 1'][count(p)=2]"), w3cAssertXPath("/root/section/div[2][h1='heading 2'][count(p)=1]"), w3cAssertXPath("/root/section/h1[.='heading 3']"), w3cAssertXPath("/root/section/div[3][h1='heading 4'][count(p)=1]")}},
+		{Name: "sx-MapExpr-901", StylesheetPath: "tests/strm/sx-MapExpr/sx-MapExpr-901.xsl", InitialTemplate: "m-901", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sx-MapExpr-902", StylesheetPath: "tests/strm/sx-MapExpr/sx-MapExpr-902.xsl", InitialTemplate: "m-902", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -3430,7 +3430,7 @@ func TestW3C_sx_SquareArrayConstructor(t *testing.T) {
 		{Name: "sx-square-array-141", StylesheetPath: "", InitialTemplate: "r-041", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("deep-equal(/out/PRICE/xs:decimal(.), (18.90, 4.95, 6.58, 4.95, 4.95, 16.47, 16.47))"), w3cCheckXPath("deep-equal(/out/PRICE/xs:decimal(.), (4.95, 6.58, 4.95, 4.95, 16.47, 16.47, 18.90))"))}, Skip: "no stylesheet"},
 		{Name: "sx-square-array-142", StylesheetPath: "", InitialTemplate: "r-042", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"4.95 6.58 4.95 4.95 16.47 16.47 18.90\"")}, Skip: "no stylesheet"},
 		{Name: "sx-square-array-143", StylesheetPath: "", InitialTemplate: "r-043", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out = \"18.90 4.95 6.58 4.95 4.95 16.47 16.47\""), w3cCheckXPath("/out = \"4.95 6.58 4.95 4.95 16.47 16.47 18.90\""))}, Skip: "no stylesheet"},
-		{Name: "sx-square-array-201", StylesheetPath: "tests/strm/sx-SquareArrayConstructor/sx-square-array-201.xsl", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sx-square-array-201", StylesheetPath: "tests/strm/sx-SquareArrayConstructor/sx-square-array-201.xsl", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -3470,9 +3470,9 @@ func TestW3C_sx_TreatExpr(t *testing.T) {
 		{Name: "sx-treat-108a", StylesheetPath: "", InitialTemplate: "c-108a", ExpectError: true, ErrorCode: "XPDY0050", Skip: "no stylesheet"},
 		{Name: "sx-treat-109", StylesheetPath: "", InitialTemplate: "c-109", Assertions: []w3cAssertion{w3cAssertXML("<out>4.95$ 6.58$ 4.95$ 4.95$ 16.47$ 16.47$ </out>")}, Skip: "no stylesheet"},
 		{Name: "sx-treat-109a", StylesheetPath: "", InitialTemplate: "c-109a", ExpectError: true, ErrorCode: "XPDY0050", Skip: "no stylesheet"},
-		{Name: "sx-treat-901", StylesheetPath: "tests/strm/sx-TreatExpr/sx-treat-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sx-treat-902", StylesheetPath: "tests/strm/sx-TreatExpr/sx-treat-902.xsl", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sx-treat-903", StylesheetPath: "tests/strm/sx-TreatExpr/sx-treat-903.xsl", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sx-treat-901", StylesheetPath: "tests/strm/sx-TreatExpr/sx-treat-901.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sx-treat-902", StylesheetPath: "tests/strm/sx-TreatExpr/sx-treat-902.xsl", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sx-treat-903", StylesheetPath: "tests/strm/sx-TreatExpr/sx-treat-903.xsl", ExpectError: true, ErrorCode: "XTSE3430"},
 	})
 }
 
@@ -3533,8 +3533,8 @@ func TestW3C_sx_UnionExpr(t *testing.T) {
 		{Name: "sx-union-141", StylesheetPath: "", InitialTemplate: "r-041", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("deep-equal(/out/PRICE/xs:decimal(.), (18.90, 4.95, 6.58, 4.95, 4.95, 16.47, 16.47))"), w3cCheckXPath("deep-equal(/out/PRICE/xs:decimal(.), (4.95, 6.58, 4.95, 4.95, 16.47, 16.47, 18.90))"))}, Skip: "no stylesheet"},
 		{Name: "sx-union-142", StylesheetPath: "", InitialTemplate: "r-042", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out = \"18.90 4.95 6.58 4.95 4.95 16.47 16.47\""), w3cCheckXPath("/out = \"4.95 6.58 4.95 4.95 16.47 16.47 18.90\""))}, Skip: "no stylesheet"},
 		{Name: "sx-union-143", StylesheetPath: "", InitialTemplate: "r-043", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out = \"18.90 4.95 6.58 4.95 4.95 16.47 16.47\""), w3cCheckXPath("/out = \"4.95 6.58 4.95 4.95 16.47 16.47 18.90\""))}, Skip: "no stylesheet"},
-		{Name: "sx-union-201", StylesheetPath: "tests/strm/sx-UnionExpr/sx-union-201.xsl", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "sx-union-202", StylesheetPath: "tests/strm/sx-UnionExpr/sx-union-202.xsl", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "sx-union-201", StylesheetPath: "tests/strm/sx-UnionExpr/sx-union-201.xsl", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sx-union-202", StylesheetPath: "tests/strm/sx-UnionExpr/sx-union-202.xsl", ExpectError: true, ErrorCode: "XTSE3430"},
 		{Name: "sx-union-302", StylesheetPath: "", InitialTemplate: "r-002", Assertions: []w3cAssertion{w3cAssertXPath("/out/*[1][self::AUTHOR] = 'Jane Austen'"), w3cAssertXPath("/out/*[2][self::PRICE] = '4.95'"), w3cAssertXPath("/out/*[3][self::AUTHOR] = 'Charlotte Brontë'"), w3cAssertXPath("/out/*[4][self::PRICE] = '6.58'"), w3cAssertXPath("/out/*[last()][self::PRICE] = '16.47'")}, Skip: "no stylesheet"},
 		{Name: "sx-union-310", StylesheetPath: "", InitialTemplate: "r-010", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"12\"")}, Skip: "no stylesheet"},
 		{Name: "sx-union-311", StylesheetPath: "", InitialTemplate: "r-011", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"54.37\"")}, Skip: "no stylesheet"},

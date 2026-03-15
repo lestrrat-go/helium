@@ -191,10 +191,9 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (Instruction, er
 	case "for-each-group":
 		return c.compileForEachGroup(elem)
 	case "map":
-		// xsl:map: stub for now
-		return &SequenceInst{}, nil
+		return c.compileMap(elem)
 	case "map-entry":
-		return &SequenceInst{}, nil
+		return c.compileMapEntry(elem)
 	case "sort":
 		// xsl:sort is handled by parent instructions
 		return nil, nil
@@ -206,12 +205,23 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (Instruction, er
 		// TODO: implement xsl:analyze-string
 		return &SequenceInst{}, nil
 	case "source-document":
-		// TODO: implement xsl:source-document
-		body, err := c.compileChildren(elem)
-		if err != nil {
-			return nil, err
-		}
-		return &SequenceInst{Body: body}, nil
+		return c.compileSourceDocument(elem)
+	case "iterate":
+		return c.compileIterate(elem)
+	case "fork":
+		return c.compileFork(elem)
+	case "break":
+		return c.compileBreak(elem)
+	case "next-iteration":
+		return c.compileNextIteration(elem)
+	case "merge":
+		return c.compileMerge(elem)
+	case "merge-source", "merge-action", "merge-key":
+		// Handled as part of xsl:merge compilation
+		return nil, nil
+	case "on-completion":
+		// Handled as part of xsl:iterate compilation
+		return nil, nil
 	default:
 		return nil, staticError(errCodeXTSE0090, "unknown XSLT instruction xsl:%s", elem.LocalName())
 	}
@@ -433,6 +443,10 @@ func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
 		return nil, err
 	}
 	inst.Body = body
+
+	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
+		inst.UseAttrSets = strings.Fields(uas)
+	}
 
 	return inst, nil
 }
@@ -777,6 +791,11 @@ func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
 		return nil, err
 	}
 	inst.Body = body
+
+	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
+		inst.UseAttrSets = strings.Fields(uas)
+	}
+
 	return inst, nil
 }
 
@@ -1135,6 +1154,46 @@ func (c *compiler) compileApplyImports(elem *helium.Element) (*ApplyImportsInst,
 	return inst, nil
 }
 
+func (c *compiler) compileMap(elem *helium.Element) (*MapInst, error) {
+	body, err := c.compileChildren(elem)
+	if err != nil {
+		return nil, err
+	}
+	return &MapInst{Body: body}, nil
+}
+
+func (c *compiler) compileMapEntry(elem *helium.Element) (*MapEntryInst, error) {
+	inst := &MapEntryInst{}
+
+	keyAttr := getAttr(elem, "key")
+	if keyAttr != "" {
+		expr, err := compileXPath(keyAttr, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.Key = expr
+	} else {
+		return nil, staticError(errCodeXTSE0010, "xsl:map-entry requires key attribute")
+	}
+
+	selectAttr := getAttr(elem, "select")
+	if selectAttr != "" {
+		expr, err := compileXPath(selectAttr, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.Select = expr
+	} else {
+		body, err := c.compileChildren(elem)
+		if err != nil {
+			return nil, err
+		}
+		inst.Body = body
+	}
+
+	return inst, nil
+}
+
 func (c *compiler) compileTry(elem *helium.Element) (*TryCatchInst, error) {
 	inst := &TryCatchInst{}
 
@@ -1206,6 +1265,10 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 	}
 
 	inst := &ForEachGroupInst{Select: expr}
+
+	if comp := getAttr(elem, "composite"); comp == "yes" || comp == "true" || comp == "1" {
+		inst.Composite = true
+	}
 
 	if gb := getAttr(elem, "group-by"); gb != "" {
 		gbExpr, gbErr := compileXPath(gb, c.nsBindings)
@@ -1368,6 +1431,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 		for _, name := range strings.Fields(uas) {
 			lre.UseAttributeSets = append(lre.UseAttributeSets, resolveQName(name, c.nsBindings))
 		}
+		lre.UseAttrSets = strings.Fields(uas)
 	}
 
 	// Compile children

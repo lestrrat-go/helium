@@ -17,6 +17,16 @@ import (
 
 const w3cTestdataDir = "../testdata/xslt30/testdata"
 
+// TODO: slow streaming tests — investigate performance:
+//   si-iterate-133   ~8.9s  (citygml.xml, 2849 polygons)
+//   si-choose-012    ~3.3s  (big-transactions.xml, large DOM)
+//   si-iterate-037   ~2.3s  (ot.xml, tokenize + iterate)
+//   si-iterate-134   ~1.7s  (citygml.xml, failing)
+//   si-iterate-135   ~1.7s  (citygml.xml, failing)
+//   si-next-match-067      ~1.7s  (ot.xml, deep template chain)
+//   si-apply-imports-068/069/070  ~1.8s  (ot.xml, import chain)
+//   si-lre-904/905   ~1.0s  (ot.xml, XTSE3430 expected)
+
 // Caches for compiled stylesheets and source file bytes, keyed by absolute path.
 // These are safe for concurrent use because sync.Map handles its own locking.
 var (
@@ -266,6 +276,11 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		}
 		t.Fatalf("cannot parse source: %v", err)
 	}
+	// Set document URL for entity URI resolution (unparsed-entity-uri).
+	if tc.SourceDocPath != "" {
+		srcAbsPath, _ := filepath.Abs(filepath.Join(w3cTestdataDir, tc.SourceDocPath))
+		sourceDoc.SetURL(srcAbsPath)
+	}
 
 	// Configure transform context
 	ctx := t.Context()
@@ -428,6 +443,18 @@ func mergedChildrenEqual(a, b *helium.Element) bool {
 		}
 		childA = childA.NextSibling()
 		childB = childB.NextSibling()
+	}
+	return true
+}
+
+func isWhitespaceOnlyText(n helium.Node) bool {
+	if n.Type() != helium.TextNode {
+		return false
+	}
+	for _, b := range n.Content() {
+		if b != ' ' && b != '\t' && b != '\n' && b != '\r' {
+			return false
+		}
 	}
 	return true
 }

@@ -123,6 +123,7 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 			outputs:        make(map[string]*OutputDef),
 			functions:      make(map[xpath3.QualifiedName]*XSLFunction),
 			namespaces:     make(map[string]string),
+			accumulators:   make(map[string]*AccumulatorDef),
 		},
 		nsBindings:    make(map[string]string),
 		importStack:   make(map[string]struct{}),
@@ -201,6 +202,11 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 	// Store the stylesheet source document and base URI
 	c.stylesheet.sourceDoc = doc
 	c.stylesheet.baseURI = c.baseURI
+
+	// Post-compilation streamability analysis: check for XTSE3430 errors.
+	if err := analyzeStreamability(c.stylesheet); err != nil {
+		return nil, err
+	}
 
 	return c.stylesheet, nil
 }
@@ -287,6 +293,10 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 			if err := c.compileImportSchema(elem); err != nil {
 				return err
 			}
+		case "accumulator":
+			if err := c.compileAccumulator(elem); err != nil {
+				return err
+			}
 		case "attribute-set":
 			if err := c.compileAttributeSet(elem); err != nil {
 				return err
@@ -328,6 +338,11 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 
 	tmpl.Name = resolveQName(getAttr(elem, "name"), c.nsBindings)
 	tmpl.Mode = getAttr(elem, "mode")
+	// XSLT 3.0 §6.7: if the stylesheet has xsl:stylesheet/@default-mode,
+	// templates without an explicit mode attribute belong to the default mode.
+	if tmpl.Mode == "" && c.stylesheet.defaultMode != "" {
+		tmpl.Mode = c.stylesheet.defaultMode
+	}
 
 	if prio := getAttr(elem, "priority"); prio != "" {
 		f, err := strconv.ParseFloat(prio, 64)
@@ -636,7 +651,19 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 
 	// Resolve the prefixed name to a QualifiedName
 	var qn xpath3.QualifiedName
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+	if strings.HasPrefix(name, "Q{") {
+		// EQName: Q{uri}local
+		closeBrace := strings.IndexByte(name, '}')
+		if closeBrace < 0 {
+			return staticError(errCodeXTSE0010, "malformed EQName in xsl:function name %q", name)
+		}
+		uri := name[2:closeBrace]
+		local := name[closeBrace+1:]
+		if uri == "" {
+			return staticError(errCodeXTSE0010, "xsl:function name %q must be in a non-null namespace", name)
+		}
+		qn = xpath3.QualifiedName{URI: uri, Name: local}
+	} else if idx := strings.IndexByte(name, ':'); idx >= 0 {
 		prefix := name[:idx]
 		local := name[idx+1:]
 		uri := c.nsBindings[prefix]
@@ -667,9 +694,11 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 	}
 
 	fn := &XSLFunction{
-		Name:   qn,
-		Params: params,
-		Body:   body,
+		Name:          qn,
+		Params:        params,
+		Body:          body,
+		As:            getAttr(elem, "as"),
+		Streamability: getAttr(elem, "streamability"),
 	}
 
 	c.stylesheet.functions[qn] = fn
@@ -682,8 +711,9 @@ func (c *compiler) compileMode(elem *helium.Element) {
 		name = "#default"
 	}
 	md := &ModeDef{
-		Name:      name,
-		OnNoMatch: getAttr(elem, "on-no-match"),
+		Name:       name,
+		OnNoMatch:  getAttr(elem, "on-no-match"),
+		Streamable: getAttr(elem, "streamable") == "yes",
 	}
 	if md.OnNoMatch == "" {
 		md.OnNoMatch = "text-only-copy" // XSLT 3.0 default
@@ -927,6 +957,7 @@ func compileSimplified(doc *helium.Document, root *helium.Element, cfg *compileC
 			outputs:        make(map[string]*OutputDef),
 			functions:      make(map[xpath3.QualifiedName]*XSLFunction),
 			namespaces:     make(map[string]string),
+			accumulators:   make(map[string]*AccumulatorDef),
 		},
 		nsBindings:    make(map[string]string),
 		importStack:   make(map[string]struct{}),

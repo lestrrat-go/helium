@@ -86,7 +86,8 @@ type ElementInst struct {
 	Namespace        *AVT
 	Body             []Instruction
 	TypeName         string   // XSD type annotation (e.g., "xs:integer")
-	UseAttributeSets []string // xsl:use-attribute-sets
+	UseAttributeSets []string // xsl:use-attribute-sets (resolved QNames)
+	UseAttrSets      []string // attribute set names (raw)
 }
 
 func (*ElementInst) instructionTag() {}
@@ -183,7 +184,8 @@ type CopyInst struct {
 	Select           *xpath3.Expression
 	Body             []Instruction
 	Validation       string   // "strict", "lax", "preserve", "strip"
-	UseAttributeSets []string // xsl:use-attribute-sets
+	UseAttributeSets []string // xsl:use-attribute-sets (resolved QNames)
+	UseAttrSets      []string // attribute set names (raw)
 }
 
 func (*CopyInst) instructionTag() {}
@@ -204,8 +206,9 @@ type LiteralResultElement struct {
 	LocalName        string
 	Attrs            []*LiteralAttribute
 	Namespaces       map[string]string // prefix -> URI declarations to copy
-	UseAttributeSets []string          // xsl:use-attribute-sets
+	UseAttributeSets []string          // xsl:use-attribute-sets (resolved QNames)
 	Body             []Instruction
+	UseAttrSets      []string // names of attribute sets to apply (raw)
 }
 
 func (*LiteralResultElement) instructionTag() {}
@@ -268,6 +271,23 @@ type XSLSequenceInst struct {
 
 func (*XSLSequenceInst) instructionTag() {}
 
+// MapInst represents xsl:map.
+type MapInst struct {
+	Body []Instruction // child xsl:map-entry instructions
+}
+
+func (*MapInst) instructionTag() {}
+
+// MapEntryInst represents xsl:map-entry.
+type MapEntryInst struct {
+	xpathNS
+	Key    *xpath3.Expression // key expression
+	Select *xpath3.Expression // optional select expression for value
+	Body   []Instruction      // optional body for value
+}
+
+func (*MapEntryInst) instructionTag() {}
+
 // PerformSortInst represents xsl:perform-sort.
 type PerformSortInst struct {
 	Select *xpath3.Expression
@@ -323,6 +343,56 @@ type CatchClause struct {
 	Body   []Instruction      // xsl:catch body
 }
 
+// SourceDocumentInst represents xsl:source-document.
+type SourceDocumentInst struct {
+	Href       *AVT
+	Streamable bool
+	Body       []Instruction
+}
+
+func (*SourceDocumentInst) instructionTag() {}
+
+// IterateInst represents xsl:iterate.
+type IterateInst struct {
+	Select       *xpath3.Expression
+	Params       []*IterateParam
+	OnCompletion []Instruction
+	Body         []Instruction
+}
+
+func (*IterateInst) instructionTag() {}
+
+// IterateParam is a compiled xsl:param inside xsl:iterate.
+type IterateParam struct {
+	Name   string
+	Select *xpath3.Expression
+	Body   []Instruction
+	As     string // type declaration (e.g., "element()*")
+}
+
+// BreakInst represents xsl:break.
+type BreakInst struct {
+	Select *xpath3.Expression
+	Body   []Instruction
+}
+
+func (*BreakInst) instructionTag() {}
+
+// NextIterationInst represents xsl:next-iteration.
+type NextIterationInst struct {
+	Params []*WithParam
+}
+
+func (*NextIterationInst) instructionTag() {}
+
+// ForkInst represents xsl:fork.
+// Each entry in Branches is a sequence of instructions from one child.
+type ForkInst struct {
+	Branches [][]Instruction
+}
+
+func (*ForkInst) instructionTag() {}
+
 // ForEachGroupInst represents xsl:for-each-group.
 type ForEachGroupInst struct {
 	Select            *xpath3.Expression
@@ -330,8 +400,34 @@ type ForEachGroupInst struct {
 	GroupAdjacent     *xpath3.Expression
 	GroupStartingWith *Pattern
 	GroupEndingWith   *Pattern
+	Composite         bool
 	Sort              []*SortKey
 	Body              []Instruction
 }
 
 func (*ForEachGroupInst) instructionTag() {}
+
+// MergeInst represents xsl:merge.
+type MergeInst struct {
+	Sources []*MergeSource
+	Action  []Instruction
+}
+
+func (*MergeInst) instructionTag() {}
+
+// MergeSource represents xsl:merge-source.
+type MergeSource struct {
+	Name            string
+	ForEachSource   *xpath3.Expression // XPath expr evaluating to sequence of URIs
+	ForEachItem     *xpath3.Expression // XPath expr evaluating to sequence of items (nodes)
+	Select          *xpath3.Expression
+	StreamableAttr  bool
+	SortBeforeMerge bool
+	Keys            []*MergeKey
+}
+
+// MergeKey represents xsl:merge-key.
+type MergeKey struct {
+	Select *xpath3.Expression
+	Order  string // "ascending" or "descending"
+}

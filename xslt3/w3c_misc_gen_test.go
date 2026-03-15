@@ -535,7 +535,7 @@ func TestW3C_docbook(t *testing.T) {
 	w3cRunTests(t, []w3cTest{
 		{Name: "docbook-001", StylesheetPath: "tests/misc/docbook/docbook-xsl-1.79.1/xhtml5/docbook.xsl", SourceDocPath: "tests/misc/docbook/prague2016mhk.xml", Assertions: []w3cAssertion{w3cAssertXPath("/Q{http://www.w3.org/1999/xhtml}html"), w3cAssertXPath("count(//*) = 249"), w3cAssertXPath("count(//@*) = 212")}, Skip: "unsupported feature: backwards_compatibility"},
 		{Name: "docbook-002", StylesheetPath: "tests/misc/docbook/docbook-xsl-1.79.1/fo/docbook.xsl", SourceDocPath: "tests/misc/docbook/prague2016mhk.xml", Assertions: []w3cAssertion{w3cAssertXPath("/Q{http://www.w3.org/1999/XSL/Format}root"), w3cAssertXPath("count(//*) = 619"), w3cAssertXPath("count(//@*) = 1717")}, Skip: "unsupported feature: backwards_compatibility"},
-		{Name: "docbook-003", StylesheetPath: "tests/misc/docbook/docbook-003.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/Q{http://docbook.org/ns/docbook}section/@xml:id=\"V1.79.1_Tools\""), w3cAssertXPath("/Q{http://docbook.org/ns/docbook}section/*:title = \"Tools\"")}, Skip: "unsupported feature: streaming"},
+		{Name: "docbook-003", StylesheetPath: "tests/misc/docbook/docbook-003.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/Q{http://docbook.org/ns/docbook}section/@xml:id=\"V1.79.1_Tools\""), w3cAssertXPath("/Q{http://docbook.org/ns/docbook}section/*:title = \"Tools\"")}},
 		{Name: "docbook-004", StylesheetPath: "tests/misc/docbook/docbook-004.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/Q{http://docbook.org/ns/docbook}section/@xml:id=\"V1.79.1_Tools\""), w3cAssertXPath("/Q{http://docbook.org/ns/docbook}section/*:title = \"Tools\"")}},
 	})
 }
@@ -1275,7 +1275,7 @@ func TestW3C_error(t *testing.T) {
 		{Name: "error-0720d", StylesheetPath: "tests/misc/error/error-0720d.xsl", SourceContent: `<doc>
   <element attribute="3"/>
 </doc>`, ExpectError: true, ErrorCode: "XTSE0720"},
-		{Name: "error-0730a", StylesheetPath: "tests/misc/error/error-0730a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0730", Skip: "unsupported feature: streaming"},
+		{Name: "error-0730a", StylesheetPath: "tests/misc/error/error-0730a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0730"},
 		{Name: "error-0740a", StylesheetPath: "tests/misc/error/error-0740a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
 </doc>`, ExpectError: true, ErrorCode: "XTSE0740"},
@@ -1835,7 +1835,7 @@ func TestW3C_error(t *testing.T) {
 		{Name: "error-3130a", StylesheetPath: "tests/misc/error/error-3130a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3130"},
 		{Name: "error-3140a", StylesheetPath: "tests/misc/error/error-3140a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3140"},
 		{Name: "error-3150a", StylesheetPath: "tests/misc/error/error-3150a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3150"},
-		{Name: "error-3155a", StylesheetPath: "tests/misc/error/error-3155a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3155", Skip: "unsupported feature: streaming"},
+		{Name: "error-3155a", StylesheetPath: "tests/misc/error/error-3155a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3155"},
 		{Name: "error-3160a", StylesheetPath: "tests/misc/error/error-3160a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE3160"},
 		{Name: "error-3170a", StylesheetPath: "tests/misc/error/error-3170a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE3170"},
 		{Name: "error-3175a", StylesheetPath: "tests/misc/error/error-3175a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE3175"},
@@ -1871,8 +1871,8 @@ func TestW3C_error(t *testing.T) {
 		{Name: "error-3380a", StylesheetPath: "tests/misc/error/error-3380a.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = '1'")}},
 		{Name: "error-3400a", StylesheetPath: "tests/misc/error/error-3400a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE3400"},
 		{Name: "error-3410a", StylesheetPath: "tests/misc/error/error-3410a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE3400"},
-		{Name: "error-3420a", StylesheetPath: "tests/misc/error/error-3420a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
-		{Name: "error-3430a", StylesheetPath: "tests/misc/error/error-3430a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: streaming"},
+		{Name: "error-3420a", StylesheetPath: "tests/misc/error/error-3420a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "error-3430a", StylesheetPath: "tests/misc/error/error-3430a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3430"},
 		{Name: "error-3440a", StylesheetPath: "tests/misc/error/error-3440a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3440"},
 		{Name: "error-3440b", StylesheetPath: "tests/misc/error/error-3440b.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3440"},
 		{Name: "error-3440c", StylesheetPath: "tests/misc/error/error-3440c.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3440"},
@@ -6080,12 +6080,12 @@ func TestW3C_unicode_90(t *testing.T) {
 func TestW3C_streaming_fallback(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "streaming-fallback-001", StylesheetPath: "tests/strm/si-value-of/si-value-of-101.xsl", SourceDocPath: "tests/strm/si-value-of/si-value-of-100.xml", Assertions: []w3cAssertion{w3cAssertXPath("starts-with(/out, '1,\"foo 1, \"\"quoted 1\"\", bar 1\"')")}, Skip: "unsupported feature: streaming"},
-		{Name: "streaming-fallback-002", StylesheetPath: "tests/insn/source-document/stream-204.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/score-partwise/identification/encoding")}, Skip: "unsupported feature: streaming"},
-		{Name: "streaming-fallback-003", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-901.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/WEIGHT) = 6")}, Skip: "unsupported feature: streaming"},
-		{Name: "streaming-fallback-004", StylesheetPath: "tests/decl/accumulator/accumulator-007.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-004.xml", Params: map[string]string{"initial-count": "'xs:integer(xs:decimal(//transaction[9]/@amount))'", "streamable": "'yes'"}, Assertions: []w3cAssertion{w3cAssertXPath("/result/@min = '-16'")}, Skip: "unsupported feature: streaming"},
-		{Name: "streaming-fallback-005", StylesheetPath: "tests/insn/merge/merge-094.xsl", SourceDocPath: "tests/insn/merge/merge001.xml", Assertions: []w3cAssertion{w3cAssertXPath("/events/group[5]")}, Skip: "unsupported feature: streaming"},
-		{Name: "streaming-fallback-006", StylesheetPath: "tests/insn/merge/merge-095.xsl", SourceDocPath: "tests/insn/merge/merge001.xml", Assertions: []w3cAssertion{w3cAssertXPath("/events/group[5]")}, Skip: "unsupported feature: streaming"},
+		{Name: "streaming-fallback-001", StylesheetPath: "tests/strm/si-value-of/si-value-of-101.xsl", SourceDocPath: "tests/strm/si-value-of/si-value-of-100.xml", Assertions: []w3cAssertion{w3cAssertXPath("starts-with(/out, '1,\"foo 1, \"\"quoted 1\"\", bar 1\"')")}},
+		{Name: "streaming-fallback-002", StylesheetPath: "tests/insn/source-document/stream-204.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/score-partwise/identification/encoding")}},
+		{Name: "streaming-fallback-003", StylesheetPath: "tests/strm/su-absorbing/su-absorbing-901.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/WEIGHT) = 6")}},
+		{Name: "streaming-fallback-004", StylesheetPath: "tests/decl/accumulator/accumulator-007.xsl", SourceDocPath: "tests/decl/accumulator/accumulator-004.xml", Params: map[string]string{"initial-count": "'xs:integer(xs:decimal(//transaction[9]/@amount))'", "streamable": "'yes'"}, Assertions: []w3cAssertion{w3cAssertXPath("/result/@min = '-16'")}},
+		{Name: "streaming-fallback-005", StylesheetPath: "tests/insn/merge/merge-094.xsl", SourceDocPath: "tests/insn/merge/merge001.xml", Assertions: []w3cAssertion{w3cAssertXPath("/events/group[5]")}},
+		{Name: "streaming-fallback-006", StylesheetPath: "tests/insn/merge/merge-095.xsl", SourceDocPath: "tests/insn/merge/merge001.xml", Assertions: []w3cAssertion{w3cAssertXPath("/events/group[5]")}},
 	})
 }
 
