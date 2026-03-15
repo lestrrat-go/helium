@@ -492,6 +492,7 @@ func (c *compiler) compileAccumulatorRule(parent *AccumulatorDef, elem *helium.E
 func (c *compiler) compileMerge(elem *helium.Element) (Instruction, error) {
 	inst := &MergeInst{}
 
+	actionCount := 0
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
@@ -508,11 +509,17 @@ func (c *compiler) compileMerge(elem *helium.Element) (Instruction, error) {
 			}
 			inst.Sources = append(inst.Sources, src)
 		case "merge-action":
+			actionCount++
+			if actionCount > 1 {
+				return nil, staticError(errCodeXTSE0010, "xsl:merge must have at most one xsl:merge-action child")
+			}
 			body, err := c.compileChildren(childElem)
 			if err != nil {
 				return nil, err
 			}
 			inst.Action = body
+		default:
+			return nil, staticError(errCodeXTSE0010, "unexpected child element xsl:%s in xsl:merge", childElem.LocalName())
 		}
 	}
 
@@ -536,8 +543,14 @@ func (c *compiler) compileMergeSource(elem *helium.Element) (*MergeSource, error
 	streamVal := strings.TrimSpace(getAttr(elem, "streamable"))
 	src.StreamableAttr = streamVal == "yes" || streamVal == "true" || streamVal == "1"
 
-	sortVal := strings.TrimSpace(getAttr(elem, "sort-before-merge"))
-	src.SortBeforeMerge = sortVal == "yes" || sortVal == "true" || sortVal == "1"
+	if sortAttr, hasSBM := elem.GetAttribute("sort-before-merge"); hasSBM {
+		sortVal := strings.TrimSpace(sortAttr)
+		if v, ok := parseXSDBool(sortVal); ok {
+			src.SortBeforeMerge = v
+		} else {
+			return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:merge-source/@sort-before-merge", sortVal)
+		}
+	}
 
 	// for-each-source: XPath expression evaluating to sequence of URI strings
 	if fes := getAttr(elem, "for-each-source"); fes != "" {
@@ -566,7 +579,7 @@ func (c *compiler) compileMergeSource(elem *helium.Element) (*MergeSource, error
 		src.Select = expr
 	}
 
-	// Parse xsl:merge-key children
+	// Parse xsl:merge-key children — only xsl:merge-key is allowed
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
@@ -578,7 +591,16 @@ func (c *compiler) compileMergeSource(elem *helium.Element) (*MergeSource, error
 				return nil, err
 			}
 			src.Keys = append(src.Keys, mk)
+		} else {
+			// Any non-merge-key child is an error
+			return nil, staticError(errCodeXTSE0010, "unexpected child element in xsl:merge-source: %s", childElem.Name())
 		}
+	}
+
+	// XTSE0010: merge-source must have at least a select, for-each-source,
+	// or for-each-item attribute.
+	if src.Select == nil && src.ForEachSource == nil && src.ForEachItem == nil {
+		return nil, staticError(errCodeXTSE0010, "xsl:merge-source requires at least one of select, for-each-source, or for-each-item attributes")
 	}
 
 	return src, nil
@@ -590,8 +612,28 @@ func (c *compiler) compileMergeKey(elem *helium.Element) (*MergeKey, error) {
 		Order: "ascending", // default
 	}
 
-	if sel := getAttr(elem, "select"); sel != "" {
-		expr, err := compileXPath(sel, c.nsBindings)
+	selAttr := getAttr(elem, "select")
+
+	// XTSE3200: merge-key must not have both select and body.
+	if selAttr != "" {
+		for ch := elem.FirstChild(); ch != nil; ch = ch.NextSibling() {
+			if chElem, ok := ch.(*helium.Element); ok {
+				if chElem.URI() == NSXSLT && chElem.LocalName() == "fallback" {
+					continue
+				}
+				return nil, staticError("XTSE3200", "xsl:merge-key must not have both select attribute and sequence constructor")
+			}
+			if txt, ok := ch.(*helium.Text); ok {
+				t := string(txt.Content())
+				if !c.shouldStripText(t) {
+					return nil, staticError("XTSE3200", "xsl:merge-key must not have both select attribute and sequence constructor")
+				}
+			}
+		}
+	}
+
+	if selAttr != "" {
+		expr, err := compileXPath(selAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
