@@ -18,6 +18,22 @@ var (
 	variableAllowedAttrs = map[string]struct{}{
 		"name": {}, "select": {}, "as": {}, "static": {}, "visibility": {},
 	}
+	// XSLT-namespace attributes allowed on literal result elements
+	lreAllowedXSLTAttrs = map[string]struct{}{
+		"use-attribute-sets":        {},
+		"expand-text":               {},
+		"xpath-default-namespace":   {},
+		"exclude-result-prefixes":   {},
+		"extension-element-prefixes": {},
+		"version":                   {},
+		"type":                      {},
+		"validation":                {},
+		"default-collation":         {},
+		"default-mode":              {},
+		"default-validation":        {},
+		"inherit-namespaces":        {},
+		"use-when":                  {},
+	}
 )
 
 // validateBooleanAttr checks that a boolean attribute value is valid xs:boolean.
@@ -1514,9 +1530,14 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 		lre.Namespaces[prefix] = uri
 	}
 
-	// Compile attributes (those not in XSLT namespace) with AVTs
+	// Validate and compile attributes
 	for _, attr := range elem.Attributes() {
 		if attr.URI() == NSXSLT {
+			// XTSE0805: only certain XSLT attributes are allowed on LREs
+			if _, ok := lreAllowedXSLTAttrs[attr.LocalName()]; !ok {
+				return nil, staticError(errCodeXTSE0805,
+					"attribute xsl:%s is not allowed on a literal result element", attr.LocalName())
+			}
 			continue
 		}
 		avt, err := compileAVT(attr.Value(), c.nsBindings)

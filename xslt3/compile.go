@@ -762,12 +762,22 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 		name = "#default"
 	}
 
-	// Validate boolean attributes on xsl:mode
+	// Validate boolean attributes on xsl:mode (using GetAttribute to catch empty values)
 	for _, boolAttr := range []string{"streamable", "warning-on-no-match", "typed"} {
-		if v := getAttr(elem, boolAttr); v != "" {
+		if v, has := elem.GetAttribute(boolAttr); has {
 			if err := validateBooleanAttr("xsl:mode", boolAttr, v); err != nil {
 				return err
 			}
+		}
+	}
+
+	// XTSE0020: visibility constraints on mode
+	if vis := getAttr(elem, "visibility"); vis != "" {
+		if name == "#default" && (vis == "public" || vis == "final") {
+			return staticError(errCodeXTSE0020, "the unnamed mode cannot have visibility=%q", vis)
+		}
+		if name != "#default" && vis == "abstract" {
+			return staticError(errCodeXTSE0020, "a named mode cannot have visibility=%q", vis)
 		}
 	}
 
