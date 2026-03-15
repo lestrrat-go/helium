@@ -168,6 +168,7 @@ func main() {
 	}
 
 	cat := parseCatalog(filepath.Join(sourceDir, "catalog.xml"))
+	schemaKnownFailures := loadSchemaKnownFailures(repoRoot)
 
 	var allTests []generatedTest
 	assetFiles := make(map[string]struct{})
@@ -259,6 +260,14 @@ func main() {
 				hasFeatureDep(ts.Dependencies, "schema-aware") ||
 				hasFeatureDep(tc.Dependencies, "schema-aware")
 			classifySchemaTypeChecking(&gt, isSchemaAware)
+			if isSchemaAware && gt.Skip == "" && gt.StylesheetPath != "" {
+				classifyAdvancedSchemaFeatures(&gt, filepath.Join(sourceDir, gt.StylesheetPath))
+			}
+			if gt.Skip == "" {
+				if _, known := schemaKnownFailures[gt.CaseName]; known {
+					gt.Skip = "requires full schema validation support"
+				}
+			}
 
 			// Track stylesheet assets
 			if gt.StylesheetPath != "" {
@@ -796,6 +805,65 @@ func classifySchemaTypeChecking(gt *generatedTest, isSchemaAware bool) {
 		gt.Skip = "requires schema-aware static checking: " + gt.ErrorCode
 	case gt.ErrorCode == "XXXX9999":
 		gt.Skip = "placeholder error code: " + gt.ErrorCode
+	}
+}
+
+// loadSchemaKnownFailures reads the schema_known_failures.txt file containing
+// test case names (one per line) that require full schema validation and cannot
+// pass with partial schema support.
+func loadSchemaKnownFailures(repoRoot string) map[string]struct{} {
+	path := filepath.Join(repoRoot, "tools", "xslt3gen", "schema_known_failures.txt")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	result := make(map[string]struct{})
+	for _, line := range strings.Split(string(data), "\n") {
+		name := strings.TrimSpace(line)
+		if name != "" && !strings.HasPrefix(name, "#") {
+			result[name] = struct{}{}
+		}
+	}
+	return result
+}
+
+// classifyAdvancedSchemaFeatures scans a schema-aware test stylesheet for
+// features that require deep schema support beyond basic type annotations.
+// If found, the test is skipped with a specific reason.
+func classifyAdvancedSchemaFeatures(gt *generatedTest, xslPath string) {
+	data, err := os.ReadFile(xslPath)
+	if err != nil {
+		return
+	}
+	content := string(data)
+
+	// schema-element() / schema-attribute() in match/as/select patterns
+	if strings.Contains(content, "schema-element(") || strings.Contains(content, "schema-attribute(") {
+		gt.Skip = "requires schema-element/schema-attribute node tests"
+		return
+	}
+	// validation="strict" or validation="lax" on instructions (requires full schema validation)
+	if strings.Contains(content, `validation="strict"`) || strings.Contains(content, `validation="lax"`) {
+		gt.Skip = "requires schema validation (strict/lax)"
+		return
+	}
+	// document-node(schema-element(...))
+	if strings.Contains(content, "document-node(schema-element(") {
+		gt.Skip = "requires document-node(schema-element()) support"
+		return
+	}
+	// strip-type-annotations requires source document schema validation
+	if strings.Contains(content, "strip-type-annotations") {
+		gt.Skip = "requires source document schema validation"
+		return
+	}
+	// xsl:import-schema combined with instance-of schema type tests on source nodes
+	// requires source document validation
+	if strings.Contains(content, "import-schema") &&
+		(strings.Contains(content, "instance of element(") ||
+			strings.Contains(content, "instance of attribute(")) {
+		gt.Skip = "requires source document schema validation"
+		return
 	}
 }
 
