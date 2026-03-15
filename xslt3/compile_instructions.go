@@ -289,6 +289,8 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesI
 	if mode == "" && c.defaultMode != "" {
 		mode = c.defaultMode
 	}
+	// Resolve mode QName to Clark notation (namespace-aware)
+	mode = c.resolveMode(mode)
 	inst := &ApplyTemplatesInst{
 		Mode: mode,
 	}
