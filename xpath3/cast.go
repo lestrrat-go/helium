@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -29,8 +30,10 @@ func isFloatOrDouble(typeName string) bool {
 
 // isAbstractCastTarget returns true if the type cannot be used as a cast/castable target.
 func isAbstractCastTarget(typeName string) bool {
-	return typeName == "xs:NOTATION" || typeName == TypeAnyAtomicType ||
-		typeName == "xs:anySimpleType" || typeName == "xs:anyType"
+	return typeName == TypeAnyAtomicType ||
+		typeName == "xs:anySimpleType" ||
+		typeName == "xs:anyType" ||
+		typeName == TypeNOTATION
 }
 
 // CastAtomic casts an AtomicValue to the target type.
@@ -206,6 +209,14 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		}
 		return AtomicValue{TypeName: targetType, Value: s}, nil
 	case TypeQName:
+		// NOTATION → QName: NOTATION values are QName-like (same value model).
+		// Schema-derived NOTATION types also hold QNameValue values.
+		if v.TypeName == TypeNOTATION {
+			return AtomicValue{TypeName: TypeQName, Value: v.Value}, nil
+		}
+		if _, ok := v.Value.(QNameValue); ok {
+			return AtomicValue{TypeName: TypeQName, Value: v.Value}, nil
+		}
 		// QName → QName is handled by identity check above.
 		// String/untypedAtomic → QName requires namespace context and is
 		// handled by evalCastExpr or the xs:QName constructor function.
@@ -213,6 +224,14 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		return AtomicValue{}, &XPathError{
 			Code:    errCodeXPTY0004,
 			Message: fmt.Sprintf("cannot cast %s to %s (requires namespace context)", v.TypeName, TypeQName),
+		}
+	case TypeNOTATION:
+		if v.TypeName == TypeString || v.TypeName == TypeUntypedAtomic {
+			return CastFromString(v.StringVal(), TypeNOTATION)
+		}
+		// QName → NOTATION
+		if v.TypeName == TypeQName {
+			return AtomicValue{TypeName: TypeNOTATION, Value: v.Value}, nil
 		}
 	}
 
@@ -228,6 +247,8 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 	case TypeString:
 		return AtomicValue{TypeName: TypeString, Value: s}, nil
 	case TypeUntypedAtomic:
+		return AtomicValue{TypeName: TypeUntypedAtomic, Value: s}, nil
+	case "xs:anyType", "xs:untyped":
 		return AtomicValue{TypeName: TypeUntypedAtomic, Value: s}, nil
 	}
 	// Whitespace trimming applies to all types except string/untypedAtomic
@@ -272,18 +293,30 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 	case TypeDate:
 		t, err := parseXSDDate(s)
 		if err != nil {
+			var xe *XPathError
+			if errors.As(err, &xe) {
+				return AtomicValue{}, xe
+			}
 			return AtomicValue{}, castError(s, targetType)
 		}
 		return AtomicValue{TypeName: TypeDate, Value: t}, nil
 	case TypeDateTime:
 		t, err := parseXSDDateTime(s)
 		if err != nil {
+			var xe *XPathError
+			if errors.As(err, &xe) {
+				return AtomicValue{}, xe
+			}
 			return AtomicValue{}, castError(s, targetType)
 		}
 		return AtomicValue{TypeName: TypeDateTime, Value: t}, nil
 	case TypeTime:
 		t, err := parseXSDTime(s)
 		if err != nil {
+			var xe *XPathError
+			if errors.As(err, &xe) {
+				return AtomicValue{}, xe
+			}
 			return AtomicValue{}, castError(s, targetType)
 		}
 		return AtomicValue{TypeName: TypeTime, Value: t}, nil
@@ -367,11 +400,78 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 			return AtomicValue{}, err
 		}
 		return AtomicValue{TypeName: targetType, Value: s}, nil
+	case TypeNOTATION:
+		// xs:NOTATION is QName-like; store the lexical value as-is.
+		return AtomicValue{TypeName: TypeNOTATION, Value: s}, nil
+	}
+	// XSD integer subtypes: parse as integer, validate range, preserve specific type
+	if isIntegerSubtype(targetType) {
+		n, ok := new(big.Int).SetString(s, 10)
+		if !ok {
+			return AtomicValue{}, castError(s, targetType)
+		}
+		if err := validateIntegerRange(n, targetType); err != nil {
+			return AtomicValue{}, err
+		}
+		return AtomicValue{TypeName: targetType, Value: n}, nil
 	}
 	return AtomicValue{}, &XPathError{
 		Code:    errCodeXPTY0004,
 		Message: "cannot cast string to " + targetType,
 	}
+}
+
+// isIntegerSubtype returns true for XSD integer-derived types like xs:int, xs:short, etc.
+func isIntegerSubtype(t string) bool {
+	switch t {
+	case "xs:long", "xs:int", "xs:short", "xs:byte",
+		"xs:unsignedLong", "xs:unsignedInt", "xs:unsignedShort", "xs:unsignedByte",
+		"xs:positiveInteger", "xs:nonPositiveInteger",
+		"xs:negativeInteger", "xs:nonNegativeInteger":
+		return true
+	}
+	return false
+}
+
+// validateIntegerRange checks that an integer value is within the range of the target type.
+func validateIntegerRange(n *big.Int, targetType string) error {
+	var min, max *big.Int
+	switch targetType {
+	case "xs:long":
+		min, max = big.NewInt(math.MinInt64), big.NewInt(math.MaxInt64)
+	case "xs:int":
+		min, max = big.NewInt(math.MinInt32), big.NewInt(math.MaxInt32)
+	case "xs:short":
+		min, max = big.NewInt(math.MinInt16), big.NewInt(math.MaxInt16)
+	case "xs:byte":
+		min, max = big.NewInt(math.MinInt8), big.NewInt(math.MaxInt8)
+	case "xs:unsignedLong":
+		min = big.NewInt(0)
+		max = new(big.Int).SetUint64(math.MaxUint64)
+	case "xs:unsignedInt":
+		min, max = big.NewInt(0), big.NewInt(math.MaxUint32)
+	case "xs:unsignedShort":
+		min, max = big.NewInt(0), big.NewInt(math.MaxUint16)
+	case "xs:unsignedByte":
+		min, max = big.NewInt(0), big.NewInt(math.MaxUint8)
+	case "xs:positiveInteger":
+		min = big.NewInt(1)
+	case "xs:nonPositiveInteger":
+		max = big.NewInt(0)
+	case "xs:negativeInteger":
+		max = big.NewInt(-1)
+	case "xs:nonNegativeInteger":
+		min = big.NewInt(0)
+	default:
+		return nil
+	}
+	if min != nil && n.Cmp(min) < 0 {
+		return castError(n.String(), targetType)
+	}
+	if max != nil && n.Cmp(max) > 0 {
+		return castError(n.String(), targetType)
+	}
+	return nil
 }
 
 // normalizeNegZeroYear strips leading '-' from "-0000" years (e.g. "-0000-05" → "0000-05").
@@ -415,6 +515,26 @@ func validateStringDerivedType(s, targetType string) error {
 	case TypeNMTOKEN:
 		if !reNMTOKEN.MatchString(s) {
 			return castError(s, targetType)
+		}
+	case TypeNMTOKENS:
+		// xs:NMTOKENS is a space-separated list of NMTOKEN values; must have at least one
+		if s == "" {
+			return castError(s, targetType)
+		}
+		for _, tok := range strings.Fields(s) {
+			if !reNMTOKEN.MatchString(tok) {
+				return castError(s, targetType)
+			}
+		}
+	case TypeIDREFS:
+		// xs:IDREFS is a space-separated list of IDREF (NCName) values; must have at least one
+		if s == "" {
+			return castError(s, targetType)
+		}
+		for _, tok := range strings.Fields(s) {
+			if !reNCName.MatchString(tok) {
+				return castError(s, targetType)
+			}
 		}
 	case TypeLanguage:
 		if !reLang.MatchString(s) {
