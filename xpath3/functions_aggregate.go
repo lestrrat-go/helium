@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"strconv"
 	"time"
 )
 
@@ -504,6 +505,10 @@ func fnDistinctValues(ctx context.Context, args []Sequence) (Sequence, error) {
 		implicitTZ = ec.getImplicitTimezone()
 	}
 	var result []AtomicValue
+	seenFast := make(map[string]struct{})
+	var numericDecInt []AtomicValue
+	var numericFloat []AtomicValue
+	var numericDouble []AtomicValue
 	seenNaN := false
 	for _, item := range args[0] {
 		a, err := AtomizeItem(item)
@@ -521,6 +526,29 @@ func fnDistinctValues(ctx context.Context, args []Sequence) (Sequence, error) {
 			}
 			seenNaN = true
 			result = append(result, a)
+			continue
+		}
+		if group, key, ok := distinctValueFastKey(a); ok {
+			if _, exists := seenFast[key]; exists {
+				continue
+			}
+			found, err := distinctValueSeenInOtherNumericGroups(a, group, coll, implicitTZ, numericDecInt, numericFloat, numericDouble)
+			if err != nil {
+				return nil, err
+			}
+			if found {
+				continue
+			}
+			seenFast[key] = struct{}{}
+			result = append(result, a)
+			switch group {
+			case distinctGroupDecimalInt:
+				numericDecInt = append(numericDecInt, a)
+			case distinctGroupFloat:
+				numericFloat = append(numericFloat, a)
+			case distinctGroupDouble:
+				numericDouble = append(numericDouble, a)
+			}
 			continue
 		}
 		found := false
@@ -547,6 +575,85 @@ func fnDistinctValues(ctx context.Context, args []Sequence) (Sequence, error) {
 		seq[i] = a
 	}
 	return seq, nil
+}
+
+type distinctGroup uint8
+
+const (
+	distinctGroupUnknown distinctGroup = iota
+	distinctGroupString
+	distinctGroupBoolean
+	distinctGroupDecimalInt
+	distinctGroupFloat
+	distinctGroupDouble
+)
+
+func distinctValueFastKey(a AtomicValue) (distinctGroup, string, bool) {
+	switch {
+	case isStringDerived(a.TypeName):
+		return distinctGroupString, "s:" + a.StringVal(), true
+	case a.TypeName == TypeAnyURI:
+		return distinctGroupString, "s:" + stringFromAtomic(a), true
+	case a.TypeName == TypeBoolean:
+		return distinctGroupBoolean, "b:" + strconv.FormatBool(a.BooleanVal()), true
+	case isIntegerDerived(a.TypeName) || a.TypeName == TypeDecimal:
+		return distinctGroupDecimalInt, "n:" + toRatForCompare(a).RatString(), true
+	case a.TypeName == TypeFloat:
+		f := float32(a.ToFloat64())
+		if f == 0 {
+			f = 0
+		}
+		return distinctGroupFloat, "f:" + strconv.FormatUint(uint64(math.Float32bits(f)), 16), true
+	case a.TypeName == TypeDouble:
+		f := a.ToFloat64()
+		if f == 0 {
+			f = 0
+		}
+		return distinctGroupDouble, "d:" + strconv.FormatUint(math.Float64bits(f), 16), true
+	default:
+		return distinctGroupUnknown, "", false
+	}
+}
+
+func distinctValueSeenInOtherNumericGroups(
+	a AtomicValue,
+	group distinctGroup,
+	coll *collationImpl,
+	implicitTZ *time.Location,
+	decimalInts []AtomicValue,
+	floats []AtomicValue,
+	doubles []AtomicValue,
+) (bool, error) {
+	switch group {
+	case distinctGroupDecimalInt:
+		return distinctValueSeenInSet(a, coll, implicitTZ, floats, doubles)
+	case distinctGroupFloat:
+		return distinctValueSeenInSet(a, coll, implicitTZ, decimalInts, doubles)
+	case distinctGroupDouble:
+		return distinctValueSeenInSet(a, coll, implicitTZ, decimalInts, floats)
+	default:
+		return false, nil
+	}
+}
+
+func distinctValueSeenInSet(
+	a AtomicValue,
+	coll *collationImpl,
+	implicitTZ *time.Location,
+	sets ...[]AtomicValue,
+) (bool, error) {
+	for _, set := range sets {
+		for _, existing := range set {
+			eq, err := distinctValueEqual(a, existing, coll, implicitTZ)
+			if err != nil {
+				continue
+			}
+			if eq {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func distinctValueEqual(a, b AtomicValue, coll *collationImpl, implicitTZ *time.Location) (bool, error) {

@@ -215,6 +215,11 @@ func TestFnSequence(t *testing.T) {
 		seq := evalExpr(t, doc, `distinct-values((1, 2, 1, 3, 2))`)
 		require.Len(t, seq, 3)
 	})
+
+	t.Run("distinct-values mixed numerics", func(t *testing.T) {
+		seq := evalExpr(t, doc, `distinct-values((xs:float('1'), xs:double('1'), xs:decimal('1.0'), xs:integer('1'), xs:float('0.1'), xs:decimal('0.1')))`)
+		require.Len(t, seq, 2)
+	})
 }
 
 // --- Node functions ---
