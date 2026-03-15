@@ -176,6 +176,11 @@ func (ec *execContext) addNode(node helium.Node) error {
 		out.pendingItems = append(out.pendingItems, xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: string(node.Content())})
 		return nil
 	}
+	// Reset atomic adjacency tracking when a non-text node (e.g., element)
+	// breaks the sequence of adjacent atomic values from xsl:sequence.
+	if node.Type() != helium.TextNode {
+		out.prevWasAtomic = false
+	}
 	return out.current.AddChild(node)
 }
 
