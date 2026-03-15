@@ -392,11 +392,11 @@ func (ec *execContext) fnSystemProperty(ctx context.Context, args []xpath3.Seque
 	case "product-version":
 		return xpath3.SingleString("0.1"), nil
 	case "is-schema-aware":
-		return xpath3.SingleString("yes"), nil
+		return xpath3.SingleString("no"), nil
 	case "supports-serialization":
 		return xpath3.SingleString("yes"), nil
 	case "supports-backwards-compatibility":
-		return xpath3.SingleString("yes"), nil
+		return xpath3.SingleString("no"), nil
 	default:
 		return xpath3.SingleString(""), nil
 	}
@@ -665,6 +665,16 @@ var xsltElementVersion = map[string]string{
 	"source-document": "3.0",
 }
 
+// xsltUnsupportedElements lists XSLT elements that are recognized but not
+// implemented. element-available() returns false for these.
+var xsltUnsupportedElements = map[string]struct{}{
+	"package":     {},
+	"use-package": {},
+	"accept":      {},
+	"expose":      {},
+	"override":    {},
+}
+
 // element-available(name) returns true if the named XSLT element is available.
 func (ec *execContext) fnElementAvailable(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 	if len(args) == 0 || len(args[0]) == 0 {
@@ -687,6 +697,10 @@ func (ec *execContext) fnElementAvailable(_ context.Context, args []xpath3.Seque
 		}
 	}
 	if ns != NSXSLT {
+		return xpath3.SingleBoolean(false), nil
+	}
+	// Reject elements that are recognized but not implemented
+	if _, unsupported := xsltUnsupportedElements[local]; unsupported {
 		return xpath3.SingleBoolean(false), nil
 	}
 	minVersion, ok := xsltElementVersion[local]
