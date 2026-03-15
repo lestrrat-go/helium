@@ -2251,7 +2251,9 @@ func getInstructionExprs(inst Instruction) []*xpath3.Expression {
 		}
 	case *TryCatchInst:
 		exprs = append(exprs, v.Select)
-		exprs = append(exprs, v.CatchSelect)
+		for _, c := range v.Catches {
+			exprs = append(exprs, c.Select)
+		}
 	case *OnEmptyInst:
 		exprs = append(exprs, v.Select)
 	case *CallTemplateInst:
@@ -2334,7 +2336,9 @@ func getChildInstructions(inst Instruction) [][]Instruction {
 		children = append(children, v.Body)
 	case *TryCatchInst:
 		children = append(children, v.Try)
-		children = append(children, v.Catch)
+		for _, c := range v.Catches {
+			children = append(children, c.Body)
+		}
 	case *OnEmptyInst:
 		children = append(children, v.Body)
 	case *WherePopulatedInst:
