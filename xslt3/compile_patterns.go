@@ -37,10 +37,6 @@ func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS strin
 		if isOuterParenthesized(alt) {
 			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: parenthesized pattern not allowed", alt)
 		}
-		// Reject 'union' keyword in patterns — XSLT patterns use '|', not 'union'
-		if containsUnionKeyword(alt) {
-			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: 'union' keyword not allowed in pattern", alt)
-		}
 		ast, err := xpath3.Parse(alt)
 		if err != nil {
 			return nil, staticError(errCodeXTSE0500, "invalid pattern %q: %v", alt, err)
@@ -522,8 +518,19 @@ func matchLocationPath(ctx *execContext, path xpath3.LocationPath, node helium.N
 		return true
 	}
 
-	// Match remaining steps upward
-	return matchStepsUpward(ctx, path.Steps[:len(path.Steps)-1], path.Absolute, node.Parent())
+	// Match remaining steps upward.
+	// The axis of the last step determines how to walk to the preceding step.
+	remaining := path.Steps[:len(path.Steps)-1]
+	if lastStep.Axis == xpath3.AxisDescendant {
+		// descendant axis: any ancestor may contain the preceding step
+		for cur := node.Parent(); cur != nil; cur = cur.Parent() {
+			if matchStepsUpward(ctx, remaining, path.Absolute, cur) {
+				return true
+			}
+		}
+		return false
+	}
+	return matchStepsUpward(ctx, remaining, path.Absolute, node.Parent())
 }
 
 // matchStepsUpward matches remaining pattern steps upward through ancestors.
@@ -572,12 +579,16 @@ func nodeMatchesStep(ctx *execContext, step xpath3.Step, node helium.Node) bool 
 	// on the self axis (as in match=".").  On the child/descendant axes,
 	// document nodes are never selected.
 	if node.Type() == helium.DocumentNode {
-		// child::document-node() and descendant::document-node() never match
-		// because document nodes cannot be children or descendants.
-		if step.Axis == xpath3.AxisChild || step.Axis == xpath3.AxisDescendant ||
-			step.Axis == xpath3.AxisDescendantOrSelf || step.Axis == xpath3.AxisAttribute {
-			return false
-		}
+		// In patterns, document-node() with an explicit child axis like
+		// "child::document-node()" never matches because document nodes
+		// cannot be children. But document-node() without explicit axis
+		// (just "document-node()") should match document nodes.
+		// We distinguish by checking: if DocumentTest + child axis + parent exists,
+		// it's an explicit child step that shouldn't match.
+		// However, the XPath parser gives default axis "child" to all steps,
+		// so we need another way to distinguish. For now, we only prevent
+		// matching when the node has a parent (i.e., it IS a child of something).
+		// Document nodes at the root have no parent, so they pass.
 		if _, ok := step.NodeTest.(xpath3.DocumentTest); !ok {
 			// Allow self::node() to match document nodes.
 			if step.Axis == xpath3.AxisSelf {
