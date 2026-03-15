@@ -964,9 +964,6 @@ func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Nod
 		if srcElem.URI() != "" {
 			_ = newElem.SetActiveNamespace(srcElem.Prefix(), srcElem.URI())
 		}
-		for _, attr := range srcElem.Attributes() {
-			_ = copyAttributeToElement(newElem, attr)
-		}
 		if err := ec.addNode(newElem); err != nil {
 			return err
 		}
@@ -974,6 +971,13 @@ func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Nod
 		savedCurrent := out.current
 		out.current = newElem
 		defer func() { out.current = savedCurrent }()
+		// Apply templates to attributes first (so user templates can
+		// intercept attribute nodes, e.g. match="w/@id"), then children.
+		for _, attr := range srcElem.Attributes() {
+			if err := ec.applyTemplates(ctx, attr, mode, paramValues...); err != nil {
+				return err
+			}
+		}
 		for child := srcElem.FirstChild(); child != nil; child = child.NextSibling() {
 			if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
 				return err

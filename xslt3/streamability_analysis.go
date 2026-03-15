@@ -144,7 +144,7 @@ func walkExprWithGrounding(expr xpath3.Expr, insideGrounding bool, fn func(xpath
 	// Check if this is a grounding function call
 	newGrounding := insideGrounding
 	if fc, ok := expr.(xpath3.FunctionCall); ok {
-		if fc.Prefix == "" && (fc.Name == "snapshot" || fc.Name == "copy-of" || fc.Name == "copy" || fc.Name == "current-group") {
+		if fc.Prefix == "" && isGroundingFuncName(fc.Name) {
 			newGrounding = true
 		}
 	}
@@ -192,7 +192,8 @@ func walkExprWithGrounding(expr xpath3.Expr, insideGrounding bool, fn func(xpath
 		walkExprWithGrounding(e.Right, insideGrounding, fn)
 	case xpath3.SimpleMapExpr:
 		walkExprWithGrounding(e.Left, insideGrounding, fn)
-		walkExprWithGrounding(e.Right, insideGrounding, fn)
+		g := insideGrounding || isGroundingExpr(e.Left)
+		walkExprWithGrounding(e.Right, g, fn)
 	case xpath3.UnionExpr:
 		walkExprWithGrounding(e.Left, insideGrounding, fn)
 		walkExprWithGrounding(e.Right, insideGrounding, fn)
@@ -217,6 +218,18 @@ func walkExprWithGrounding(expr xpath3.Expr, insideGrounding bool, fn func(xpath
 	}
 }
 
+// isGroundingFuncName returns true if the given function name is a grounding
+// function (produces grounded, non-streaming output).
+func isGroundingFuncName(name string) bool {
+	switch name {
+	case "snapshot", "copy-of", "copy", "current-group",
+		"outermost", "innermost", "parse-xml", "parse-xml-fragment",
+		"doc", "document", "sort", "reverse":
+		return true
+	}
+	return false
+}
+
 // isGroundingExpr returns true if an expression grounds its input,
 // meaning subsequent operations on its result work on non-streaming data.
 // This is different from functions that merely produce atomic output (like count/sum).
@@ -224,10 +237,7 @@ func isGroundingExpr(expr xpath3.Expr) bool {
 	expr = derefXPathExpr(expr)
 	if fc, ok := expr.(xpath3.FunctionCall); ok {
 		if fc.Prefix == "" {
-			switch fc.Name {
-			case "snapshot", "copy-of", "copy", "current-group":
-				return true
-			}
+			return isGroundingFuncName(fc.Name)
 		}
 	}
 	return false
@@ -842,10 +852,20 @@ func countStreamingDownwardSelectionsInner(expr xpath3.Expr, grounded bool) int 
 		count += countStreamingDownwardSelectionsInner(e.Right, false)
 	case xpath3.SimpleMapExpr:
 		count += countStreamingDownwardSelectionsInner(e.Left, false)
-		count += countStreamingDownwardSelectionsInner(e.Right, false)
+		// The RHS of ! receives individual items from the LHS.
+		// If the LHS is a grounding expression, the RHS operates on
+		// grounded data and doesn't consume the stream.
+		leftGrounding := isGroundingExpr(e.Left)
+		count += countStreamingDownwardSelectionsInner(e.Right, leftGrounding)
 	case xpath3.UnionExpr:
-		count += countStreamingDownwardSelectionsInner(e.Left, false)
-		count += countStreamingDownwardSelectionsInner(e.Right, false)
+		// A union of two downward selections is a single combined streaming
+		// selection (the result is one merged node sequence), so count at
+		// most 1 regardless of how many operands have downward paths.
+		leftDown := countStreamingDownwardSelectionsInner(e.Left, false)
+		rightDown := countStreamingDownwardSelectionsInner(e.Right, false)
+		if leftDown > 0 || rightDown > 0 {
+			count++
+		}
 	case xpath3.FilterExpr:
 		count += countStreamingDownwardSelectionsInner(e.Expr, false)
 		for _, pred := range e.Predicates {

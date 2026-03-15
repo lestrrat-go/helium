@@ -646,7 +646,19 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 
 	// Resolve the prefixed name to a QualifiedName
 	var qn xpath3.QualifiedName
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+	if strings.HasPrefix(name, "Q{") {
+		// EQName: Q{uri}local
+		closeBrace := strings.IndexByte(name, '}')
+		if closeBrace < 0 {
+			return staticError(errCodeXTSE0010, "malformed EQName in xsl:function name %q", name)
+		}
+		uri := name[2:closeBrace]
+		local := name[closeBrace+1:]
+		if uri == "" {
+			return staticError(errCodeXTSE0010, "xsl:function name %q must be in a non-null namespace", name)
+		}
+		qn = xpath3.QualifiedName{URI: uri, Name: local}
+	} else if idx := strings.IndexByte(name, ':'); idx >= 0 {
 		prefix := name[:idx]
 		local := name[idx+1:]
 		uri := c.nsBindings[prefix]
