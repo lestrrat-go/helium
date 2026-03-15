@@ -166,6 +166,14 @@ func (ec *execContext) currentOutput() *outputFrame {
 // addNode adds a node to the current output insertion point.
 func (ec *execContext) addNode(node helium.Node) error {
 	out := ec.currentOutput()
+	// When separateTextNodes is set, capture each text node as a separate
+	// string item to avoid DOM text-node merging.  This is needed by
+	// xsl:value-of with separator + body content so that each produced
+	// text value remains a distinct item for separator insertion.
+	if out.separateTextNodes && node.Type() == helium.TextNode {
+		out.pendingItems = append(out.pendingItems, xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: string(node.Content())})
+		return nil
+	}
 	return out.current.AddChild(node)
 }
 
@@ -525,7 +533,13 @@ func (ec *execContext) evaluateGlobalParam(p *Param) (xpath3.Sequence, error) {
 		val = result.Sequence()
 	} else if len(p.Body) > 0 {
 		var err error
-		val, err = ec.evaluateBody(ctx, p.Body)
+		if p.As != "" {
+			// With as attribute: evaluate as raw sequence
+			val, err = ec.evaluateBody(ctx, p.Body)
+		} else {
+			// No as: wrap in document node (temporary tree)
+			val, err = ec.evaluateBodyAsDocument(ctx, p.Body)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("error evaluating global param %q body: %w", p.Name, err)
 		}
@@ -598,6 +612,47 @@ func (ec *execContext) evaluateBody(ctx context.Context, body []Instruction) (xp
 		return seq, nil
 	}
 
+	return xpath3.EmptySequence(), nil
+}
+
+// evaluateBodySeparateText is like evaluateBody but keeps each produced
+// text node as a separate string item instead of letting the DOM merge
+// adjacent text nodes.  This is needed by xsl:value-of with separator
+// so that each text value is a distinct item for separator insertion.
+func (ec *execContext) evaluateBodySeparateText(ctx context.Context, body []Instruction) (xpath3.Sequence, error) {
+	tmpDoc := helium.NewDefaultDocument()
+	tmpRoot, err := tmpDoc.CreateElement("_tmp")
+	if err != nil {
+		return nil, err
+	}
+	if err := tmpDoc.AddChild(tmpRoot); err != nil {
+		return nil, err
+	}
+
+	frame := &outputFrame{doc: tmpDoc, current: tmpRoot, captureItems: true, separateTextNodes: true}
+	ec.outputStack = append(ec.outputStack, frame)
+	defer func() {
+		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+	}()
+
+	for _, inst := range body {
+		if err := ec.executeInstruction(ctx, inst); err != nil {
+			return nil, err
+		}
+	}
+
+	// Collect DOM children (non-text) and pending items in order
+	if tmpRoot.FirstChild() != nil {
+		var seq xpath3.Sequence
+		for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
+			seq = append(seq, xpath3.NodeItem{Node: child})
+		}
+		seq = append(seq, frame.pendingItems...)
+		return seq, nil
+	}
+	if len(frame.pendingItems) > 0 {
+		return frame.pendingItems, nil
+	}
 	return xpath3.EmptySequence(), nil
 }
 
@@ -799,12 +854,19 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 	savedTunnel := ec.tunnelParams
 	savedXPathDefaultNS := ec.xpathDefaultNS
 	savedHasXPathDefaultNS := ec.hasXPathDefaultNS
+	savedGroup := ec.currentGroup
+	savedGroupKey := ec.currentGroupKey
 	ec.currentNode = node
 	ec.contextNode = node
 	ec.currentMode = mode
 	ec.currentTemplate = tmpl
 	ec.xpathDefaultNS = tmpl.XPathDefaultNS
 	ec.hasXPathDefaultNS = tmpl.XPathDefaultNS != ""
+	// XSLT spec: current-group() and current-grouping-key() are only
+	// available within the body of xsl:for-each-group, not in templates
+	// called from it.
+	ec.currentGroup = nil
+	ec.currentGroupKey = nil
 	defer func() {
 		ec.currentNode = savedCurrent
 		ec.contextNode = savedContext
@@ -815,6 +877,8 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 		ec.position = savedPos
 		ec.size = savedSize
 		ec.tunnelParams = savedTunnel
+		ec.currentGroup = savedGroup
+		ec.currentGroupKey = savedGroupKey
 	}()
 
 	ec.pushVarScope()

@@ -4,8 +4,8 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
-// Instruction is the interface implemented by all compiled XSLT instructions.
-type Instruction interface {
+// instruction is the interface implemented by all compiled XSLT instructions.
+type instruction interface {
 	instructionTag()
 }
 
@@ -13,373 +13,634 @@ type Instruction interface {
 // per-instruction xpath-default-namespace override.
 type xpathNSHolder interface {
 	getXPathDefaultNS() string
+	xpathNSIsSet() bool
 }
 
 // xpathNS is embedded in instructions that support xpath-default-namespace.
 type xpathNS struct {
-	XPathDefaultNS    string
-	HasXPathDefaultNS bool // true when xpath-default-namespace is explicitly set
+	XPathDefaultNS         string
+	HasXPathDefaultNS      bool // true when xpath-default-namespace is set (explicit or inherited)
+	HasLocalXPathDefaultNS bool // true only when xpath-default-namespace is declared on this element
 }
 
 func (x xpathNS) getXPathDefaultNS() string { return x.XPathDefaultNS }
 func (x xpathNS) xpathNSIsSet() bool        { return x.HasXPathDefaultNS }
 
-// ApplyTemplatesInst represents xsl:apply-templates.
-type ApplyTemplatesInst struct {
+// sourceInfo records the source location of an instruction in the stylesheet.
+// Embedded in instruction types to report location for xsl:catch error variables.
+type sourceInfo struct {
+	SourceLine   int    // line number in the stylesheet
+	SourceModule string // stylesheet URI (module)
+}
+
+func (s *sourceInfo) setSourceInfo(line int, module string) {
+	s.SourceLine = line
+	s.SourceModule = module
+}
+
+func (s *sourceInfo) getSourceLine() int      { return s.SourceLine }
+func (s *sourceInfo) getSourceModule() string { return s.SourceModule }
+
+// applyTemplatesInst represents xsl:apply-templates.
+type applyTemplatesInst struct {
+	sourceInfo
 	xpathNS
 	Select *xpath3.Expression // nil = "child::node()"
 	Mode   string             // "" = current mode, "#default", "#current"
-	Sort   []*SortKey
-	Params []*WithParam
+	Sort   []*sortKey
+	Params []*withParam
 }
 
-func (*ApplyTemplatesInst) instructionTag() {}
+func (*applyTemplatesInst) instructionTag() {}
 
-// CallTemplateInst represents xsl:call-template.
-type CallTemplateInst struct {
+// callTemplateInst represents xsl:call-template.
+type callTemplateInst struct {
+	sourceInfo
 	Name   string
-	Params []*WithParam
+	Params []*withParam
 }
 
-func (*CallTemplateInst) instructionTag() {}
+func (*callTemplateInst) instructionTag() {}
 
-// WithParam is a compiled xsl:with-param.
-type WithParam struct {
+// withParam is a compiled xsl:with-param.
+type withParam struct {
 	Name   string
 	Select *xpath3.Expression
-	Body   []Instruction
+	Body   []instruction
 	As     string
 	Tunnel bool
 }
 
-// ValueOfInst represents xsl:value-of.
-type ValueOfInst struct {
+// valueOfInst represents xsl:value-of.
+type valueOfInst struct {
+	sourceInfo
 	xpathNS
-	Select       *xpath3.Expression
-	Separator    *AVT // default " " for 3.0, absent for 1.0
-	HasSeparator bool // true when separator attribute is explicitly specified
-	Body         []Instruction
-}
-
-func (*ValueOfInst) instructionTag() {}
-
-// TextInst represents xsl:text.
-type TextInst struct {
-	Value                 string
-	TVT                   *AVT // text value template (non-nil when expand-text is active)
+	Select                *xpath3.Expression
+	Separator             *avt // nil = absent; non-nil = present (even if empty)
+	Body                  []instruction
 	DisableOutputEscaping bool
 }
 
-func (*TextInst) instructionTag() {}
+func (*valueOfInst) instructionTag() {}
 
-// LiteralTextInst represents literal text content in the stylesheet.
-type LiteralTextInst struct {
+// textInst represents xsl:text.
+type textInst struct {
+	sourceInfo
+	Value                 string
+	TVT                   *avt // text value template (non-nil when expand-text is active)
+	DisableOutputEscaping bool
+}
+
+func (*textInst) instructionTag() {}
+
+// literalTextInst represents literal text content in the stylesheet.
+type literalTextInst struct {
+	sourceInfo
 	Value string
-	TVT   *AVT // text value template (non-nil when expand-text is active)
+	TVT   *avt // text value template (non-nil when expand-text is active)
 }
 
-func (*LiteralTextInst) instructionTag() {}
+func (*literalTextInst) instructionTag() {}
 
-// ElementInst represents xsl:element.
-type ElementInst struct {
-	Name             *AVT
-	Namespace        *AVT
-	Body             []Instruction
-	TypeName         string   // XSD type annotation (e.g., "xs:integer")
-	UseAttributeSets []string // xsl:use-attribute-sets
+// elementInst represents xsl:element.
+type elementInst struct {
+	sourceInfo
+	Name              *avt
+	Namespace         *avt
+	NSBindings        map[string]string // compile-time in-scope namespace bindings
+	Body              []instruction
+	TypeName          string   // XSD type annotation (e.g., "xs:integer")
+	Validation        string   // "strict", "lax", "preserve", "strip"
+	UseAttrSets       []string // xsl:use-attribute-sets (resolved QNames)
+	StaticBaseURI     string   // effective static base URI from xml:base
+	InheritNamespaces bool     // inherit-namespaces="yes" (default true)
 }
 
-func (*ElementInst) instructionTag() {}
+func (*elementInst) instructionTag() {}
 
-// AttributeInst represents xsl:attribute.
-type AttributeInst struct {
-	Name      *AVT
-	Namespace *AVT
-	Select    *xpath3.Expression
-	Body      []Instruction
-	Separator *AVT
-	TypeName  string // XSD type annotation (e.g., "xs:ID")
+// attributeInst represents xsl:attribute.
+type attributeInst struct {
+	sourceInfo
+	Name       *avt
+	Namespace  *avt
+	Select     *xpath3.Expression
+	Body       []instruction
+	Separator  *avt
+	TypeName   string // XSD type annotation (e.g., "xs:ID")
+	Validation string // "strict", "lax", "preserve", "strip"
 }
 
-func (*AttributeInst) instructionTag() {}
+func (*attributeInst) instructionTag() {}
 
-// CommentInst represents xsl:comment.
-type CommentInst struct {
+// commentInst represents xsl:comment.
+type commentInst struct {
+	sourceInfo
 	Select *xpath3.Expression
-	Body   []Instruction
+	Body   []instruction
 }
 
-func (*CommentInst) instructionTag() {}
+func (*commentInst) instructionTag() {}
 
-// PIInst represents xsl:processing-instruction.
-type PIInst struct {
-	Name   *AVT
+// piInst represents xsl:processing-instruction.
+type piInst struct {
+	sourceInfo
+	Name   *avt
 	Select *xpath3.Expression
-	Body   []Instruction
+	Body   []instruction
 }
 
-func (*PIInst) instructionTag() {}
+func (*piInst) instructionTag() {}
 
-// IfInst represents xsl:if.
-type IfInst struct {
+// ifInst represents xsl:if.
+type ifInst struct {
+	sourceInfo
 	xpathNS
 	Test *xpath3.Expression
-	Body []Instruction
+	Body []instruction
 }
 
-func (*IfInst) instructionTag() {}
+func (*ifInst) instructionTag() {}
 
-// ChooseInst represents xsl:choose.
-type ChooseInst struct {
+// chooseInst represents xsl:choose.
+type chooseInst struct {
+	sourceInfo
 	xpathNS
-	When              []*WhenClause
-	Otherwise         []Instruction
-	OtherwiseXPNS     string // xpath-default-namespace on xsl:otherwise
-	HasOtherwiseXPNS  bool
+	When             []*whenClause
+	Otherwise        []instruction
+	OtherwiseXPNS    string // xpath-default-namespace on xsl:otherwise
+	HasOtherwiseXPNS bool
+	DefaultCollation string // default-collation URI for XPath comparisons
 }
 
-func (*ChooseInst) instructionTag() {}
+func (*chooseInst) instructionTag() {}
 
-// WhenClause is one xsl:when branch in xsl:choose.
-type WhenClause struct {
+// whenClause is one xsl:when branch in xsl:choose.
+type whenClause struct {
 	xpathNS
-	Test *xpath3.Expression
-	Body []Instruction
+	Test             *xpath3.Expression
+	Body             []instruction
+	Namespaces       map[string]string // per-clause namespace bindings (nil = use stylesheet default)
+	DefaultCollation string            // per-clause default-collation (empty = inherit)
 }
 
-// ForEachInst represents xsl:for-each.
-type ForEachInst struct {
+// forEachInst represents xsl:for-each.
+type forEachInst struct {
+	sourceInfo
 	xpathNS
 	Select *xpath3.Expression
-	Sort   []*SortKey
-	Body   []Instruction
+	Sort   []*sortKey
+	Body   []instruction
 }
 
-func (*ForEachInst) instructionTag() {}
+func (*forEachInst) instructionTag() {}
 
-// VariableInst represents xsl:variable (local).
-type VariableInst struct {
-	Name   string
-	Select *xpath3.Expression
-	Body   []Instruction
-	As     string // type declaration (e.g., "item()*"); empty = wrap body in document node
+// variableInst represents xsl:variable (local).
+type variableInst struct {
+	sourceInfo
+	Name          string
+	Select        *xpath3.Expression
+	Body          []instruction
+	As            string // type declaration (e.g., "item()*"); empty = wrap body in document node
+	StaticBaseURI string // effective static base URI (non-empty when xml:base overrides)
 }
 
-func (*VariableInst) instructionTag() {}
+func (*variableInst) instructionTag() {}
 
-// ParamInst represents xsl:param (local, in a template).
-type ParamInst struct {
+// paramInst represents xsl:param (local, in a template).
+type paramInst struct {
+	sourceInfo
 	Name     string
 	Select   *xpath3.Expression
-	Body     []Instruction
+	Body     []instruction
+	As       string // type declaration (e.g., "xs:integer")
 	Required bool
 	Tunnel   bool
 }
 
-func (*ParamInst) instructionTag() {}
+func (*paramInst) instructionTag() {}
 
-// CopyInst represents xsl:copy.
-type CopyInst struct {
-	Select           *xpath3.Expression
-	Body             []Instruction
-	Validation       string   // "strict", "lax", "preserve", "strip"
-	UseAttributeSets []string // xsl:use-attribute-sets
+// copyInst represents xsl:copy.
+type copyInst struct {
+	sourceInfo
+	Select               *xpath3.Expression
+	Body                 []instruction
+	Validation           string   // "strict", "lax", "preserve", "strip"
+	TypeName             string   // type annotation (e.g., "Q{ns}typeName")
+	UseAttributeSets     []string // xsl:use-attribute-sets (resolved QNames)
+	UseAttrSets          []string // attribute set names (raw)
+	CopyNamespaces       bool     // copy-namespaces="yes" (default true)
+	InheritNamespaces    bool     // inherit-namespaces="yes" (default true)
+	CopyNamespacesAVT    *avt     // shadow attr _copy-namespaces (overrides CopyNamespaces)
+	InheritNamespacesAVT *avt     // shadow attr _inherit-namespaces (overrides InheritNamespaces)
 }
 
-func (*CopyInst) instructionTag() {}
+func (*copyInst) instructionTag() {}
 
-// CopyOfInst represents xsl:copy-of.
-type CopyOfInst struct {
-	Select     *xpath3.Expression
-	Validation string // "strict", "lax", "preserve", "strip"
+// copyOfInst represents xsl:copy-of.
+type copyOfInst struct {
+	sourceInfo
+	Select             *xpath3.Expression
+	Validation         string // "strict", "lax", "preserve", "strip"
+	TypeName           string // type annotation (e.g., "Q{ns}typeName")
+	CopyNamespaces     bool   // copy-namespaces="yes" (default true)
+	CopyNamespacesAVT  *avt   // shadow attr _copy-namespaces (overrides CopyNamespaces)
+	CopyAccumulators   bool   // copy-accumulators="yes" (default false)
 }
 
-func (*CopyOfInst) instructionTag() {}
+func (*copyOfInst) instructionTag() {}
 
-// LiteralResultElement represents a non-XSLT element in the stylesheet body.
-type LiteralResultElement struct {
-	Name             string // qualified name (prefix:local)
-	Namespace        string // namespace URI
-	Prefix           string
-	LocalName        string
-	Attrs            []*LiteralAttribute
-	Namespaces       map[string]string // prefix -> URI declarations to copy
-	UseAttributeSets []string          // xsl:use-attribute-sets
-	Body             []Instruction
+// literalResultElement represents a non-XSLT element in the stylesheet body.
+type literalResultElement struct {
+	sourceInfo
+	xpathNS
+	Name              string // qualified name (prefix:local)
+	Namespace         string // namespace URI
+	Prefix            string
+	LocalName         string
+	Attrs             []*literalAttribute
+	Namespaces        map[string]string // prefix -> URI declarations to copy
+	Body              []instruction
+	UseAttrSets       []string // xsl:use-attribute-sets (resolved QNames)
+	StaticBaseURI     string   // effective static base URI (non-empty when xml:base overrides)
+	Validation        string   // xsl:validation="strict"|"lax"|"preserve"|"strip"
+	TypeName          string   // xsl:type annotation (e.g., "xs:integer")
+	DefaultValidation string   // xsl:default-validation override for this LRE scope
+	InheritNamespaces bool     // xsl:inherit-namespaces (default true)
 }
 
-func (*LiteralResultElement) instructionTag() {}
+func (*literalResultElement) instructionTag() {}
 
-// LiteralAttribute is a computed attribute on a literal result element.
-type LiteralAttribute struct {
+// literalAttribute is a computed attribute on a literal result element.
+type literalAttribute struct {
 	Name      string // qualified name
 	Namespace string
 	Prefix    string
 	LocalName string
-	Value     *AVT
+	Value     *avt
 }
 
-// NumberInst represents xsl:number.
-type NumberInst struct {
-	Level             string             // "single", "multiple", "any"
-	Count             *Pattern
-	From              *Pattern
+// numberInst represents xsl:number.
+type numberInst struct {
+	sourceInfo
+	Level             string // "single", "multiple", "any"
+	Count             *pattern
+	From              *pattern
 	Value             *xpath3.Expression
-	Format            *AVT
-	GroupingSeparator *AVT
-	GroupingSize      *AVT
-	Ordinal           *AVT
-	StartAt           *AVT              // XSLT 3.0 start-at attribute
+	Format            *avt
+	GroupingSeparator *avt
+	GroupingSize      *avt
+	Ordinal           *avt
+	StartAt           *avt               // XSLT 3.0 start-at attribute
 	Select            *xpath3.Expression // XSLT 3.0 select attribute
+	Lang              *avt               // language for word/ordinal numbering
+	LetterValue       *avt               // "alphabetic" or "traditional"
 }
 
-func (*NumberInst) instructionTag() {}
+func (*numberInst) instructionTag() {}
 
-// MessageInst represents xsl:message.
-type MessageInst struct {
+// messageInst represents xsl:message.
+type messageInst struct {
+	sourceInfo
 	Select    *xpath3.Expression
-	Body      []Instruction
-	Terminate *AVT // defaults to "no"
-	ErrorCode *AVT // defaults to "XTMM9000"
+	Body      []instruction
+	Terminate *avt // defaults to "no"
+	ErrorCode *avt // defaults to "XTMM9000"
 }
 
-func (*MessageInst) instructionTag() {}
+func (*messageInst) instructionTag() {}
 
-// SequenceInst represents a sequence of instructions (implicit block).
-type SequenceInst struct {
-	Body []Instruction
+// sequenceInst represents a sequence of instructions (implicit block).
+type sequenceInst struct {
+	sourceInfo
+	Body              []instruction
+	DefaultValidation string // xsl:default-validation override (from xsl:sequence)
 }
 
-func (*SequenceInst) instructionTag() {}
+func (*sequenceInst) instructionTag() {}
 
-// NamespaceInst represents xsl:namespace.
-type NamespaceInst struct {
-	Name   *AVT
+// namespaceInst represents xsl:namespace.
+type namespaceInst struct {
+	sourceInfo
+	Name   *avt
 	Select *xpath3.Expression
-	Body   []Instruction
+	Body   []instruction
 }
 
-func (*NamespaceInst) instructionTag() {}
+func (*namespaceInst) instructionTag() {}
 
-// XSLSequenceInst represents xsl:sequence with a select attribute.
-type XSLSequenceInst struct {
+// resultDocumentInst represents xsl:result-document.
+// The body output goes to a secondary result, not the primary output.
+type resultDocumentInst struct {
+	sourceInfo
+	Href             *avt
+	Body             []instruction
+	Format           string  // name of xsl:output to use (static format attribute)
+	FormatAVT        *avt    // dynamic format attribute (when it contains {…})
+	Method           string  // output method override (from method attribute)
+	ItemSeparator    *avt   // item-separator override (avt); nil = not specified
+	ItemSeparatorSet bool   // true when item-separator attribute is present (including #absent)
+	Validation       string   // "strict", "lax", "preserve", "strip"
+	TypeName         string   // type annotation (e.g., "Q{ns}typeName")
+	UseCharacterMaps []string // names of character maps to use
+
+	NSBindings           map[string]string // compile-time namespace bindings for QName resolution
+	// Serialization parameter AVTs (evaluated at runtime).
+	OutputVersion        *avt
+	Encoding             *avt
+	Indent               *avt
+	OmitXMLDeclaration   *avt
+	Standalone           *avt
+	DoctypeSystem        *avt
+	DoctypePublic        *avt
+	CDATASectionElements *avt
+	ByteOrderMark        *avt
+	MethodAVT            *avt // method as avt (overrides Method if non-nil)
+	MediaType            *avt
+	HTMLVersion          *avt
+	IncludeContentType   *avt
+	AllowDuplicateNames   *avt
+	EscapeURIAttributes       *avt
+	JSONNodeOutputMethodAVT   *avt    // json-node-output-method avt
+	NormalizationForm         *avt     // normalization-form avt
+	SuppressIndentation       []string // suppress-indentation element names
+	ParameterDocAVT           *avt    // parameter-document avt
+	ParameterDocOutputDef *OutputDef // resolved output def from parameter-document (compile-time)
+	BuildTree             *bool  // build-tree: nil=default(true), true/false
+}
+
+func (*resultDocumentInst) instructionTag() {}
+
+// xslSequenceInst represents xsl:sequence with a select attribute.
+type xslSequenceInst struct {
+	sourceInfo
 	Select *xpath3.Expression
 }
 
-func (*XSLSequenceInst) instructionTag() {}
+func (*xslSequenceInst) instructionTag() {}
 
-// PerformSortInst represents xsl:perform-sort.
-type PerformSortInst struct {
+// mapInst represents xsl:map.
+type mapInst struct {
+	sourceInfo
+	Body []instruction // child xsl:map-entry instructions
+}
+
+func (*mapInst) instructionTag() {}
+
+// mapEntryInst represents xsl:map-entry.
+type mapEntryInst struct {
+	sourceInfo
+	xpathNS
+	Key    *xpath3.Expression // key expression
+	Select *xpath3.Expression // optional select expression for value
+	Body   []instruction      // optional body for value
+}
+
+func (*mapEntryInst) instructionTag() {}
+
+// performSortInst represents xsl:perform-sort.
+type performSortInst struct {
+	sourceInfo
 	Select *xpath3.Expression
-	Sort   []*SortKey
-	Body   []Instruction
+	Sort   []*sortKey
+	Body   []instruction
 }
 
-func (*PerformSortInst) instructionTag() {}
+func (*performSortInst) instructionTag() {}
 
-// NextMatchInst represents xsl:next-match.
-type NextMatchInst struct {
-	Params []*WithParam
+// nextMatchInst represents xsl:next-match.
+type nextMatchInst struct {
+	sourceInfo
+	Params []*withParam
 }
 
-func (*NextMatchInst) instructionTag() {}
+func (*nextMatchInst) instructionTag() {}
 
-// ApplyImportsInst represents xsl:apply-imports.
-type ApplyImportsInst struct {
-	Params []*WithParam
+// applyImportsInst represents xsl:apply-imports.
+type applyImportsInst struct {
+	sourceInfo
+	Params []*withParam
 }
 
-func (*ApplyImportsInst) instructionTag() {}
+func (*applyImportsInst) instructionTag() {}
 
-// WherePopulatedInst represents xsl:where-populated.
-type WherePopulatedInst struct {
-	Body []Instruction
+// wherePopulatedInst represents xsl:where-populated.
+type wherePopulatedInst struct {
+	sourceInfo
+	Body []instruction
 }
 
-func (*WherePopulatedInst) instructionTag() {}
+func (*wherePopulatedInst) instructionTag() {}
 
-// OnEmptyInst represents xsl:on-empty.
+// onEmptyInst represents xsl:on-empty.
 // Executes its body/select only if the current output container has no significant content.
-type OnEmptyInst struct {
-	Body   []Instruction
+type onEmptyInst struct {
+	sourceInfo
+	Body   []instruction
 	Select *xpath3.Expression
 }
 
-func (*OnEmptyInst) instructionTag() {}
+func (*onEmptyInst) instructionTag() {}
 
-// TryCatchInst represents xsl:try/xsl:catch.
-type TryCatchInst struct {
-	Select  *xpath3.Expression // xsl:try select attribute
-	Try     []Instruction
-	Catches []*CatchClause // multiple catch clauses (matched in order)
+// onNonEmptyInst represents xsl:on-non-empty.
+// Executes its body/select only if the current output container has significant content.
+type onNonEmptyInst struct {
+	sourceInfo
+	Body   []instruction
+	Select *xpath3.Expression
 }
 
-func (*TryCatchInst) instructionTag() {}
+func (*onNonEmptyInst) instructionTag() {}
 
-// CatchClause represents a single xsl:catch clause.
-type CatchClause struct {
+// tryCatchInst represents xsl:try/xsl:catch.
+type tryCatchInst struct {
+	sourceInfo
+	Select         *xpath3.Expression // xsl:try select attribute
+	Try            []instruction
+	Catches        []*catchClause // multiple catch clauses (matched in order)
+	RollbackOutput bool           // rollback-output="yes" (default true)
+}
+
+func (*tryCatchInst) instructionTag() {}
+
+// catchClause represents a single xsl:catch clause.
+type catchClause struct {
 	Errors []string           // error codes to match (empty = "*")
 	Select *xpath3.Expression // xsl:catch select attribute
-	Body   []Instruction      // xsl:catch body
-}
-// SourceDocumentInst represents xsl:source-document.
-type SourceDocumentInst struct {
-	Href       *AVT
-	Streamable bool
-	Body       []Instruction
+	Body   []instruction      // xsl:catch body
 }
 
-func (*SourceDocumentInst) instructionTag() {}
+// sourceDocumentInst represents xsl:source-document.
+type sourceDocumentInst struct {
+	sourceInfo
+	Href            *avt
+	Streamable      bool
+	UseAccumulators []string
+	BaseURI         string // effective base URI for resolving href
+	Validation      string // "strict", "lax", "preserve", "strip"
+	TypeName        string // resolved QName for type attribute
+	Body            []instruction
+}
 
-// IterateInst represents xsl:iterate.
-type IterateInst struct {
+func (*sourceDocumentInst) instructionTag() {}
+
+// iterateInst represents xsl:iterate.
+type iterateInst struct {
+	sourceInfo
 	Select       *xpath3.Expression
-	Params       []*IterateParam
-	OnCompletion []Instruction
-	Body         []Instruction
+	Params       []*iterateParam
+	OnCompletion []instruction
+	Body         []instruction
 }
 
-func (*IterateInst) instructionTag() {}
+func (*iterateInst) instructionTag() {}
 
-// IterateParam is a compiled xsl:param inside xsl:iterate.
-type IterateParam struct {
+// iterateParam is a compiled xsl:param inside xsl:iterate.
+type iterateParam struct {
 	Name   string
 	Select *xpath3.Expression
-	Body   []Instruction
+	Body   []instruction
+	As     string // type declaration (e.g., "element()*")
 }
 
-// BreakInst represents xsl:break.
-type BreakInst struct {
+// breakInst represents xsl:break.
+type breakInst struct {
+	sourceInfo
 	Select *xpath3.Expression
-	Body   []Instruction
+	Body   []instruction
 }
 
-func (*BreakInst) instructionTag() {}
+func (*breakInst) instructionTag() {}
 
-// NextIterationInst represents xsl:next-iteration.
-type NextIterationInst struct {
-	Params []*WithParam
+// nextIterationInst represents xsl:next-iteration.
+type nextIterationInst struct {
+	sourceInfo
+	Params []*withParam
 }
 
-func (*NextIterationInst) instructionTag() {}
+func (*nextIterationInst) instructionTag() {}
 
-// ForkInst represents xsl:fork.
+// forkInst represents xsl:fork.
 // Each entry in Branches is a sequence of instructions from one child.
-type ForkInst struct {
-	Branches [][]Instruction
+type forkInst struct {
+	sourceInfo
+	Branches [][]instruction
 }
 
-func (*ForkInst) instructionTag() {}
-// ForEachGroupInst represents xsl:for-each-group.
-type ForEachGroupInst struct {
+func (*forkInst) instructionTag() {}
+
+// forEachGroupInst represents xsl:for-each-group.
+type forEachGroupInst struct {
+	sourceInfo
 	Select            *xpath3.Expression
 	GroupBy           *xpath3.Expression
 	GroupAdjacent     *xpath3.Expression
-	GroupStartingWith *Pattern
-	GroupEndingWith   *Pattern
+	GroupStartingWith *pattern
+	GroupEndingWith   *pattern
+	Collation         *avt
 	Composite         bool
-	Sort              []*SortKey
-	Body              []Instruction
+	Sort              []*sortKey
+	Body              []instruction
 }
 
-func (*ForEachGroupInst) instructionTag() {}
+func (*forEachGroupInst) instructionTag() {}
+
+// mergeInst represents xsl:merge.
+type mergeInst struct {
+	sourceInfo
+	Sources []*mergeSource
+	Action  []instruction
+}
+
+func (*mergeInst) instructionTag() {}
+
+// mergeSource represents xsl:merge-source.
+type mergeSource struct {
+	Name            string
+	ForEachSource   *xpath3.Expression // XPath expr evaluating to sequence of URIs
+	ForEachItem     *xpath3.Expression // XPath expr evaluating to sequence of items (nodes)
+	Select          *xpath3.Expression
+	UseAccumulators []string
+	StreamableAttr  bool
+	SortBeforeMerge bool
+	BaseURI         string // effective base URI for resolving for-each-source URIs
+	Keys            []*mergeKey
+}
+
+// mergeKey represents xsl:merge-key.
+type mergeKey struct {
+	Select       *xpath3.Expression
+	Body         []instruction // used when select is absent
+	Order        string // "ascending" or "descending" (static)
+	OrderAVT     *avt   // non-nil when order is an avt
+	DataType     string // "text" or "number" (static)
+	DataTypeAVT  *avt   // non-nil when data-type is an avt
+	HasCollation bool   // true when lang, collation, or case-order is specified
+	Collation    string // collation URI (for XTDE2210 mismatch detection)
+	Lang         string // lang attribute value
+	CaseOrder    string // case-order attribute value
+}
+
+// documentInst represents xsl:document.
+// It creates a document node wrapping its content body.
+type documentInst struct {
+	sourceInfo
+	Validation string // "strict", "lax", "preserve", "strip"
+	TypeName   string // type annotation (e.g., "Q{ns}typeName")
+	Body       []instruction
+}
+
+func (*documentInst) instructionTag() {}
+
+// analyzeStringInst represents xsl:analyze-string.
+type analyzeStringInst struct {
+	sourceInfo
+	Select          *xpath3.Expression
+	Regex           *avt
+	Flags           *avt
+	MatchingBody    []instruction
+	NonMatchingBody []instruction
+}
+
+func (*analyzeStringInst) instructionTag() {}
+
+// assertInst represents xsl:assert.
+// When test evaluates to false, a dynamic error XTMM9001 is raised
+// (or the error-code specified by the error-code attribute).
+type assertInst struct {
+	sourceInfo
+	xpathNS
+	Test      *xpath3.Expression
+	Select    *xpath3.Expression
+	ErrorCode string // default "XTMM9001"
+	Body      []instruction
+}
+
+func (*assertInst) instructionTag() {}
+
+// evaluateInst represents xsl:evaluate.
+type evaluateInst struct {
+	sourceInfo
+	xpathNS
+	XPath            *xpath3.Expression // xpath attribute (expression producing the XPath string)
+	ContextItem      *xpath3.Expression // context-item attribute (optional)
+	BaseURI          *avt               // base-uri attribute (optional)
+	NamespaceContext *xpath3.Expression // namespace-context attribute (optional, expression producing a node)
+	WithParamsExpr   *xpath3.Expression // with-params attribute (optional, map expression)
+	As               string             // as attribute (optional sequence type)
+	SchemaAwareAVT *avt // nil = absent; non-nil = schema-aware attribute present
+	Params           []*withParam       // child xsl:with-param elements
+}
+
+func (*evaluateInst) instructionTag() {}
+
+// fallbackInst represents a forwards-compatible unknown XSLT instruction.
+// At runtime, the Body (from xsl:fallback children) is executed.
+// If no xsl:fallback was found, XTDE1450 is raised.
+type fallbackInst struct {
+	sourceInfo
+	Body        []instruction // compiled xsl:fallback children
+	Name        string        // original instruction name for error messages
+	HasFallback bool          // true if at least one xsl:fallback was found
+}
+
+func (*fallbackInst) instructionTag() {}

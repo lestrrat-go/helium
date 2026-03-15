@@ -1206,6 +1206,9 @@ func getInstructionExprs(inst Instruction) []*xpath3.Expression {
 		exprs = append(exprs, v.Select)
 	case *XSLSequenceInst:
 		exprs = append(exprs, v.Select)
+	case *MapEntryInst:
+		exprs = append(exprs, v.Key)
+		exprs = append(exprs, v.Select)
 	case *AttributeInst:
 		exprs = append(exprs, v.Select)
 	case *CommentInst:
@@ -1294,6 +1297,10 @@ func getChildInstructions(inst Instruction) [][]Instruction {
 	case *MessageInst:
 		children = append(children, v.Body)
 	case *SequenceInst:
+		children = append(children, v.Body)
+	case *MapInst:
+		children = append(children, v.Body)
+	case *MapEntryInst:
 		children = append(children, v.Body)
 	case *NamespaceInst:
 		children = append(children, v.Body)
