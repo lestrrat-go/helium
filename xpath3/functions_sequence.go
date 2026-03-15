@@ -116,6 +116,13 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Cast untypedAtomic to double (per XPath function calling convention)
+	if a.TypeName == TypeUntypedAtomic {
+		a, err = CastAtomic(a, TypeDouble)
+		if err != nil {
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: starting position must be numeric"}
+		}
+	}
 	if !isSubtypeOf(a.TypeName, TypeNumeric) {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: starting position must be numeric"}
 	}
@@ -130,6 +137,12 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 		la, err := AtomizeItem(args[2][0])
 		if err != nil {
 			return nil, err
+		}
+		if la.TypeName == TypeUntypedAtomic {
+			la, err = CastAtomic(la, TypeDouble)
+			if err != nil {
+				return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: length must be numeric"}
+			}
 		}
 		if !isSubtypeOf(la.TypeName, TypeNumeric) {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: length must be numeric"}
