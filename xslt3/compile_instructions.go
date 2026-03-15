@@ -289,8 +289,7 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (Instruction, er
 		// when we reach here the parent was recognized, so skip.
 		return nil, nil
 	case "analyze-string":
-		// TODO: implement xsl:analyze-string
-		return &SequenceInst{}, nil
+		return c.compileAnalyzeString(elem)
 	case "source-document":
 		return c.compileSourceDocument(elem)
 	case "iterate":
@@ -1631,4 +1630,90 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 	lre.Body = body
 
 	return lre, nil
+}
+
+func (c *compiler) compileAnalyzeString(elem *helium.Element) (*AnalyzeStringInst, error) {
+	selectAttr := getAttr(elem, "select")
+	if selectAttr == "" {
+		return nil, staticError(errCodeXTSE0110, "xsl:analyze-string requires select attribute")
+	}
+	regexAttr, regexFound := elem.GetAttribute("regex")
+	if !regexFound {
+		return nil, staticError(errCodeXTSE0110, "xsl:analyze-string requires regex attribute")
+	}
+
+	selectExpr, err := compileXPath(selectAttr, c.nsBindings)
+	if err != nil {
+		return nil, err
+	}
+
+	regexAVT, err := compileAVT(regexAttr, c.nsBindings)
+	if err != nil {
+		return nil, err
+	}
+
+	inst := &AnalyzeStringInst{
+		Select: selectExpr,
+		Regex:  regexAVT,
+	}
+
+	flagsAttr := getAttr(elem, "flags")
+	if flagsAttr != "" {
+		flagsAVT, err := compileAVT(flagsAttr, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.Flags = flagsAVT
+	}
+
+	// Compile xsl:matching-substring and xsl:non-matching-substring children.
+	// The spec requires: matching-substring? then non-matching-substring? then fallback*.
+	// (XTSE0010 if out of order)
+	const (
+		phaseInit     = 0
+		phaseMatching = 1
+		phaseNonMatch = 2
+		phaseFallback = 3
+	)
+	phase := phaseInit
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		childElem, ok := child.(*helium.Element)
+		if !ok {
+			continue
+		}
+		if childElem.URI() != NSXSLT {
+			continue
+		}
+		switch childElem.LocalName() {
+		case "matching-substring":
+			if phase >= phaseMatching {
+				return nil, staticError(errCodeXTSE0010, "xsl:matching-substring must precede xsl:non-matching-substring and xsl:fallback")
+			}
+			phase = phaseMatching
+			body, err := c.compileChildren(childElem)
+			if err != nil {
+				return nil, err
+			}
+			inst.MatchingBody = body
+		case "non-matching-substring":
+			if phase >= phaseNonMatch {
+				return nil, staticError(errCodeXTSE0010, "xsl:non-matching-substring out of order in xsl:analyze-string")
+			}
+			phase = phaseNonMatch
+			body, err := c.compileChildren(childElem)
+			if err != nil {
+				return nil, err
+			}
+			inst.NonMatchingBody = body
+		case "fallback":
+			phase = phaseFallback
+		}
+	}
+
+	// XTSE1130: at least one of matching-substring or non-matching-substring is required
+	if len(inst.MatchingBody) == 0 && len(inst.NonMatchingBody) == 0 {
+		return nil, staticError("XTSE1130", "xsl:analyze-string must contain xsl:matching-substring or xsl:non-matching-substring")
+	}
+
+	return inst, nil
 }

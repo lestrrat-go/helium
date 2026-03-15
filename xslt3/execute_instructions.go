@@ -108,9 +108,179 @@ func (ec *execContext) executeInstruction(ctx context.Context, inst Instruction)
 		return ec.execMap(ctx, v)
 	case *MapEntryInst:
 		return ec.execMapEntry(ctx, v)
+	case *AnalyzeStringInst:
+		return ec.execAnalyzeString(ctx, v)
 	default:
 		return dynamicError(errCodeXTDE0820, "unsupported instruction type %T", inst)
 	}
+}
+
+func (ec *execContext) execAnalyzeString(ctx context.Context, inst *AnalyzeStringInst) error {
+	// Evaluate the select expression
+	xpathCtx := ec.newXPathContext(ec.contextNode)
+	result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+	if err != nil {
+		return err
+	}
+	seq := result.Sequence()
+
+	// The select expression must produce a single xs:string value.
+	// A sequence of more than one item, or a non-string item, is XPTY0004.
+	isV2 := ec.stylesheet.version != "" && ec.stylesheet.version < "3.0"
+	if len(seq) == 0 {
+		if isV2 {
+			// XSLT 2.0: empty sequence is XPTY0004
+			return dynamicError("XPTY0004", "xsl:analyze-string select must be a single xs:string, got empty sequence")
+		}
+		// XSLT 3.0: empty sequence treated as ""
+		return nil
+	}
+	if len(seq) > 1 {
+		return dynamicError("XPTY0004", "xsl:analyze-string select must be a single xs:string, got sequence of %d items", len(seq))
+	}
+	av, err := xpath3.AtomizeItem(seq[0])
+	if err != nil {
+		return dynamicError("XPTY0004", "xsl:analyze-string select must be xs:string: %v", err)
+	}
+	// Reject non-string atomic types (xs:integer, etc.)
+	if av.TypeName != xpath3.TypeString && av.TypeName != xpath3.TypeUntypedAtomic && av.TypeName != xpath3.TypeAnyURI {
+		return dynamicError("XPTY0004", "xsl:analyze-string select must be xs:string, got %s", av.TypeName)
+	}
+	input, err := xpath3.AtomicToString(av)
+	if err != nil {
+		return dynamicError("XPTY0004", "xsl:analyze-string select must be xs:string: %v", err)
+	}
+
+	// Evaluate regex AVT
+	regex, err := inst.Regex.evaluate(ctx, ec.contextNode)
+	if err != nil {
+		return err
+	}
+
+	// Evaluate flags AVT
+	flags := ""
+	if inst.Flags != nil {
+		flags, err = inst.Flags.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Version 2.0 restrictions
+	if isV2 {
+		// XSLT 2.0: 'q' flag is not allowed (XTDE1145)
+		if strings.ContainsRune(flags, 'q') {
+			return dynamicError("XTDE1145", "xsl:analyze-string flag 'q' is not allowed in XSLT 2.0")
+		}
+		// XSLT 2.0: non-capturing groups (?:...) are not allowed (XTDE1140)
+		if strings.Contains(regex, "(?:") {
+			return dynamicError("XTDE1140", "non-capturing groups are not allowed in XSLT 2.0 regex")
+		}
+	}
+
+	// Compile the regex using XPath regex semantics
+	re, err := xpath3.CompileRegex(regex, flags)
+	if err != nil {
+		// Map XPath regex errors to XSLT error codes
+		return dynamicError("XTDE1140", "xsl:analyze-string invalid regex: %v", err)
+	}
+
+	// Check if regex matches the empty string
+	if isV2 {
+		matchesEmpty, emptyErr := re.MatchString("")
+		if emptyErr != nil {
+			return dynamicError("XTDE1140", "xsl:analyze-string regex error: %v", emptyErr)
+		}
+		if matchesEmpty {
+			return dynamicError("XTDE1150", "xsl:analyze-string regex must not match a zero-length string")
+		}
+	}
+
+	// Find all matches.
+	// In XSLT 3.0, zero-length matches are allowed (unlike XSLT 2.0
+	// which raised XTDE1150). We handle them by advancing past each
+	// zero-length match to avoid infinite loops.
+	matches, err := re.FindAllSubmatchIndex(input, -1)
+	if err != nil {
+		return dynamicError("XTDE1140", "xsl:analyze-string regex match error: %v", err)
+	}
+
+	// Save and restore context state
+	savedNode := ec.contextNode
+	savedCurrent := ec.currentNode
+	savedItem := ec.contextItem
+	savedPos := ec.position
+	savedSize := ec.size
+	savedGroups := ec.regexGroups
+	defer func() {
+		ec.contextNode = savedNode
+		ec.currentNode = savedCurrent
+		ec.contextItem = savedItem
+		ec.position = savedPos
+		ec.size = savedSize
+		ec.regexGroups = savedGroups
+	}()
+
+	// Build segments: alternating non-match/match segments
+	type segment struct {
+		text    string
+		isMatch bool
+		groups  []string // captured groups (only for matches)
+	}
+	var segments []segment
+	pos := 0
+	for _, m := range matches {
+		start, end := m[0], m[1]
+		if start > pos {
+			segments = append(segments, segment{text: input[pos:start], isMatch: false})
+		}
+		// Collect captured groups
+		var groups []string
+		groups = append(groups, input[start:end]) // group 0 = full match
+		for g := 1; g < len(m)/2; g++ {
+			gs, ge := m[2*g], m[2*g+1]
+			if gs < 0 || ge < 0 {
+				groups = append(groups, "")
+			} else {
+				groups = append(groups, input[gs:ge])
+			}
+		}
+		segments = append(segments, segment{text: input[start:end], isMatch: true, groups: groups})
+		pos = end
+	}
+	if pos < len(input) {
+		segments = append(segments, segment{text: input[pos:], isMatch: false})
+	}
+
+	// Set size = total number of segments
+	totalSegments := len(segments)
+
+	// Execute appropriate body for each segment
+	for i, seg := range segments {
+		ec.position = i + 1
+		ec.size = totalSegments
+		ec.contextItem = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: seg.text}
+		ec.contextNode = nil
+		ec.currentNode = nil
+
+		if seg.isMatch {
+			ec.regexGroups = seg.groups
+			for _, inst := range inst.MatchingBody {
+				if err := ec.executeInstruction(ctx, inst); err != nil {
+					return err
+				}
+			}
+		} else {
+			ec.regexGroups = nil
+			for _, inst := range inst.NonMatchingBody {
+				if err := ec.executeInstruction(ctx, inst); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTemplatesInst) error {
@@ -1547,7 +1717,7 @@ func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
 		}
 	}
 
-	if node == nil {
+	if node == nil && inst.Value == nil {
 		return nil
 	}
 
