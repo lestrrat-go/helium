@@ -2830,14 +2830,22 @@ func (ec *execContext) execWherePopulated(ctx context.Context, inst *WherePopula
 }
 
 // isPopulated checks if a node is "populated" per XSLT 3.0 xsl:where-populated semantics.
-// A sequence is populated if it contains at least one node other than an attribute or
-// namespace node that has non-empty content. Elements are always populated.
-// Text, comment, and PI nodes are populated only if their content is non-empty.
+// An element is populated if it has at least one non-whitespace child node (child element,
+// non-empty text, comment with content, PI with content). An element with only attributes
+// is NOT populated. Text, comment, and PI nodes at the top level are populated when non-empty.
 func isPopulated(node helium.Node) bool {
 	switch node.Type() {
 	case helium.ElementNode:
-		return true
-	case helium.TextNode, helium.CommentNode, helium.ProcessingInstructionNode:
+		elem := node.(*helium.Element)
+		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+			if isPopulated(child) {
+				return true
+			}
+		}
+		return false
+	case helium.TextNode:
+		return len(node.Content()) > 0
+	case helium.CommentNode, helium.ProcessingInstructionNode:
 		return len(node.Content()) > 0
 	default:
 		return false
