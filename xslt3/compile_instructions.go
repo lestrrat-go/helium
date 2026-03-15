@@ -176,11 +176,9 @@ func (c *compiler) pushElementNamespaces(elem *helium.Element) map[string]string
 	for _, ns := range nsList {
 		prefix := ns.Prefix()
 		uri := ns.URI()
-		if uri != NSXSLT {
-			newBindings[prefix] = uri
-			// Also add to stylesheet namespaces for runtime XPath evaluation
-			c.stylesheet.namespaces[prefix] = uri
-		}
+		newBindings[prefix] = uri
+		// Also add to stylesheet namespaces for runtime XPath evaluation
+		c.stylesheet.namespaces[prefix] = uri
 	}
 	c.nsBindings = newBindings
 	return saved
@@ -297,6 +295,8 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (Instruction, er
 		// xsl:fallback is only activated when the parent is unrecognized;
 		// when we reach here the parent was recognized, so skip.
 		return nil, nil
+	case "assert":
+		return c.compileAssert(elem)
 	case "analyze-string":
 		return c.compileAnalyzeString(elem)
 	case "source-document":
@@ -1844,6 +1844,56 @@ func (c *compiler) compileAnalyzeString(elem *helium.Element) (*AnalyzeStringIns
 	if len(inst.MatchingBody) == 0 && len(inst.NonMatchingBody) == 0 {
 		return nil, staticError("XTSE1130", "xsl:analyze-string must contain xsl:matching-substring or xsl:non-matching-substring")
 	}
+
+	return inst, nil
+}
+
+// compileAssert compiles xsl:assert.
+// Required attribute: test.
+// Optional attributes: select, error-code.
+// The body provides the error message if no select attribute is present.
+func (c *compiler) compileAssert(elem *helium.Element) (Instruction, error) {
+	testAttr := getAttr(elem, "test")
+	if testAttr == "" {
+		return nil, staticError(errCodeXTSE0010, "xsl:assert requires a test attribute")
+	}
+
+	testExpr, err := compileXPath(testAttr, c.nsBindings)
+	if err != nil {
+		return nil, err
+	}
+
+	inst := &AssertInst{
+		Test:      testExpr,
+		ErrorCode: "XTMM9001", // default error code per XSLT 3.0 spec
+	}
+
+	// xpath-default-namespace
+	if xdn := getAttr(elem, "xpath-default-namespace"); xdn != "" {
+		inst.XPathDefaultNS = xdn
+		inst.HasXPathDefaultNS = true
+	}
+
+	// error-code attribute
+	if ec := getAttr(elem, "error-code"); ec != "" {
+		inst.ErrorCode = resolveQName(ec, c.nsBindings)
+	}
+
+	// select attribute
+	if sel := getAttr(elem, "select"); sel != "" {
+		selExpr, err := compileXPath(sel, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.Select = selExpr
+	}
+
+	// Compile body (error message content)
+	body, err := c.compileChildren(elem)
+	if err != nil {
+		return nil, err
+	}
+	inst.Body = body
 
 	return inst, nil
 }

@@ -455,3 +455,16 @@ type AnalyzeStringInst struct {
 }
 
 func (*AnalyzeStringInst) instructionTag() {}
+
+// AssertInst represents xsl:assert.
+// When test evaluates to false, a dynamic error XTMM9001 is raised
+// (or the error-code specified by the error-code attribute).
+type AssertInst struct {
+	xpathNS
+	Test      *xpath3.Expression
+	Select    *xpath3.Expression
+	ErrorCode string // default "XTMM9001"
+	Body      []Instruction
+}
+
+func (*AssertInst) instructionTag() {}

@@ -111,6 +111,8 @@ func (ec *execContext) executeInstruction(ctx context.Context, inst Instruction)
 		return ec.execMapEntry(ctx, v)
 	case *AnalyzeStringInst:
 		return ec.execAnalyzeString(ctx, v)
+	case *AssertInst:
+		return ec.execAssert(ctx, v)
 	default:
 		return dynamicError(errCodeXTDE0820, "unsupported instruction type %T", inst)
 	}
@@ -3795,5 +3797,16 @@ func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) err
 		}
 		return ec.addNode(text)
 	}
+	return nil
+}
+
+// execAssert implements xsl:assert.
+// Per XSLT 3.0 spec section 4.9: a non-schema-aware processor MUST ignore
+// xsl:assert instructions. Since this processor is not schema-aware,
+// assertions are no-ops by default.
+//
+//nolint:unused
+func (ec *execContext) execAssert(_ context.Context, _ *AssertInst) error {
+	// Non-schema-aware processor: ignore xsl:assert
 	return nil
 }

@@ -137,6 +137,9 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 	}
 
 	localName := root.LocalName()
+	if localName == "package" {
+		return nil, staticError(errCodeXTSE0010, "xsl:package is not supported; use xsl:stylesheet or xsl:transform")
+	}
 	if localName != "stylesheet" && localName != "transform" {
 		return nil, staticError(errCodeXTSE0010, "root element must be xsl:stylesheet or xsl:transform, got %s", root.Name())
 	}
