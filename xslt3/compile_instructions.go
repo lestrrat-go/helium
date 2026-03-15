@@ -7,6 +7,50 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
+// Allowed attribute sets for XSLT elements (unprefixed attributes only).
+var (
+	withParamAllowedAttrs = map[string]struct{}{
+		"name": {}, "select": {}, "as": {}, "tunnel": {},
+	}
+	paramAllowedAttrs = map[string]struct{}{
+		"name": {}, "select": {}, "as": {}, "required": {}, "tunnel": {}, "static": {},
+	}
+	variableAllowedAttrs = map[string]struct{}{
+		"name": {}, "select": {}, "as": {}, "static": {}, "visibility": {},
+	}
+)
+
+// validateBooleanAttr checks that a boolean attribute value is valid xs:boolean.
+// Valid values are "yes", "no", "true", "false", "1", "0" (with optional whitespace).
+// Returns XTSE0020 if the value is not valid.
+func validateBooleanAttr(elemName, attrName, value string) error {
+	if _, ok := parseXSDBool(value); !ok {
+		return staticError(errCodeXTSE0020, "%q is not a valid value for %s/@%s", value, elemName, attrName)
+	}
+	return nil
+}
+
+// validateXSLTAttrs checks that an XSLT element has only allowed unprefixed attributes
+// and no attributes in the XSLT namespace. Returns XTSE0090 for unknown attributes.
+func validateXSLTAttrs(elem *helium.Element, allowed map[string]struct{}) error {
+	for _, attr := range elem.Attributes() {
+		// Attributes in the XSLT namespace are not allowed on XSLT elements
+		if attr.URI() == NSXSLT {
+			return staticError(errCodeXTSE0090,
+				"attribute %q in the XSLT namespace is not allowed on xsl:%s", attr.LocalName(), elem.LocalName())
+		}
+		// Skip attributes in other (non-null) namespaces — those are extension attributes
+		if attr.URI() != "" {
+			continue
+		}
+		if _, ok := allowed[attr.LocalName()]; !ok {
+			return staticError(errCodeXTSE0090,
+				"attribute %q is not allowed on xsl:%s", attr.LocalName(), elem.LocalName())
+		}
+	}
+	return nil
+}
+
 // compileInstruction compiles a single element into an Instruction.
 func (c *compiler) compileInstruction(elem *helium.Element) (Instruction, error) {
 	// Push element-local namespace declarations into scope
@@ -1032,9 +1076,22 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
 }
 
 func (c *compiler) compileWithParam(elem *helium.Element) (*WithParam, error) {
+	// Validate attributes: xsl:with-param allows name, select, as, tunnel
+	// but NOT required (that's only for xsl:param)
+	if err := validateXSLTAttrs(elem, withParamAllowedAttrs); err != nil {
+		return nil, err
+	}
+
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:with-param requires name attribute")
+	}
+
+	// Validate tunnel attribute value if present
+	if tunnelAttr := getAttr(elem, "tunnel"); tunnelAttr != "" {
+		if err := validateBooleanAttr("xsl:with-param", "tunnel", tunnelAttr); err != nil {
+			return nil, err
+		}
 	}
 
 	wp := &WithParam{

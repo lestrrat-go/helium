@@ -498,15 +498,53 @@ func (c *compiler) compileTemplateBody(elem *helium.Element) ([]Instruction, []*
 }
 
 func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
+	// Validate attributes on xsl:param
+	if err := validateXSLTAttrs(elem, paramAllowedAttrs); err != nil {
+		return nil, err
+	}
+
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:param requires name attribute")
 	}
 
+	// Validate boolean attribute values
+	if reqAttr := getAttr(elem, "required"); reqAttr != "" {
+		if err := validateBooleanAttr("xsl:param", "required", reqAttr); err != nil {
+			return nil, err
+		}
+	}
+	if tunnelAttr := getAttr(elem, "tunnel"); tunnelAttr != "" {
+		if err := validateBooleanAttr("xsl:param", "tunnel", tunnelAttr); err != nil {
+			return nil, err
+		}
+	}
+
+	required := getAttr(elem, "required") == "yes"
+
+	// XTSE0010: A required parameter must not have a select attribute or body content
+	if required {
+		selectAttr := getAttr(elem, "select")
+		if selectAttr != "" {
+			return nil, staticError(errCodeXTSE0010, "xsl:param with required='yes' must not have a select attribute")
+		}
+		// Check for non-whitespace body content
+		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+			switch child.Type() {
+			case helium.ElementNode:
+				return nil, staticError(errCodeXTSE0010, "xsl:param with required='yes' must not have content")
+			case helium.TextNode, helium.CDATASectionNode:
+				if strings.TrimSpace(string(child.Content())) != "" {
+					return nil, staticError(errCodeXTSE0010, "xsl:param with required='yes' must not have content")
+				}
+			}
+		}
+	}
+
 	p := &Param{
 		Name:     resolveQName(name, c.nsBindings),
 		As:       getAttr(elem, "as"),
-		Required: getAttr(elem, "required") == "yes",
+		Required: required,
 		Tunnel:   getAttr(elem, "tunnel") == "yes",
 	}
 
@@ -531,6 +569,11 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
 }
 
 func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
+	// Validate attributes on xsl:variable
+	if err := validateXSLTAttrs(elem, variableAllowedAttrs); err != nil {
+		return err
+	}
+
 	name := getAttr(elem, "name")
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:variable requires name attribute")
