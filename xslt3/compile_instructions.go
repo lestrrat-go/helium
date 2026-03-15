@@ -69,10 +69,16 @@ func (c *compiler) compileInstruction(elem *helium.Element) (Instruction, error)
 	if et := getAttr(elem, "expand-text"); et != "" {
 		if v, ok := parseXSDBool(et); ok {
 			c.expandText = v
+		} else if elem.URI() == NSXSLT {
+			// XTSE0020: invalid boolean value for expand-text on XSLT element
+			return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:%s/@expand-text", et, elem.LocalName())
 		}
 	} else if et, ok := elem.GetAttributeNS("expand-text", NSXSLT); ok {
 		if v, ok := parseXSDBool(et); ok {
 			c.expandText = v
+		} else {
+			// XTSE0020: invalid boolean value for xsl:expand-text on LRE
+			return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:expand-text", et)
 		}
 	}
 	defer func() { c.expandText = savedExpandText }()
@@ -451,6 +457,13 @@ func (c *compiler) compileText(elem *helium.Element) (*TextInst, error) {
 }
 
 func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
+	// Validate boolean attributes
+	if inAttr := getAttr(elem, "inherit-namespaces"); inAttr != "" {
+		if err := validateBooleanAttr("xsl:element", "inherit-namespaces", inAttr); err != nil {
+			return nil, err
+		}
+	}
+
 	nameAttr := getAttr(elem, "name")
 	if nameAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:element requires name attribute")
@@ -810,6 +823,13 @@ func (c *compiler) compileLocalParam(elem *helium.Element) (*ParamInst, error) {
 }
 
 func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
+	// Validate boolean attribute: inherit-namespaces
+	if inAttr := getAttr(elem, "inherit-namespaces"); inAttr != "" {
+		if err := validateBooleanAttr("xsl:copy", "inherit-namespaces", inAttr); err != nil {
+			return nil, err
+		}
+	}
+
 	inst := &CopyInst{}
 
 	if v := getAttr(elem, "validation"); v != "" {
@@ -1015,6 +1035,13 @@ func (c *compiler) compileNamespace(elem *helium.Element) (*NamespaceInst, error
 }
 
 func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
+	// Validate boolean attribute: stable
+	if stableAttr := getAttr(elem, "stable"); stableAttr != "" {
+		if err := validateBooleanAttr("xsl:sort", "stable", stableAttr); err != nil {
+			return nil, err
+		}
+	}
+
 	sk := &SortKey{}
 
 	selectAttr := getAttr(elem, "select")
@@ -1314,6 +1341,28 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 	selectAttr := getAttr(elem, "select")
 	if selectAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:for-each-group requires select attribute")
+	}
+
+	// XTSE1080: exactly one of group-by, group-adjacent, group-starting-with,
+	// group-ending-with must be present
+	groupingCount := 0
+	if getAttr(elem, "group-by") != "" {
+		groupingCount++
+	}
+	if getAttr(elem, "group-adjacent") != "" {
+		groupingCount++
+	}
+	if getAttr(elem, "group-starting-with") != "" {
+		groupingCount++
+	}
+	if getAttr(elem, "group-ending-with") != "" {
+		groupingCount++
+	}
+	if groupingCount == 0 {
+		return nil, staticError(errCodeXTSE1080, "xsl:for-each-group requires one of group-by, group-adjacent, group-starting-with, or group-ending-with")
+	}
+	if groupingCount > 1 {
+		return nil, staticError(errCodeXTSE1080, "xsl:for-each-group must have at most one of group-by, group-adjacent, group-starting-with, or group-ending-with")
 	}
 
 	expr, err := compileXPath(selectAttr, c.nsBindings)

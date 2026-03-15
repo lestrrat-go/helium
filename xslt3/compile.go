@@ -152,6 +152,8 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 	if et := getAttr(root, "expand-text"); et != "" {
 		if v, ok := parseXSDBool(et); ok {
 			c.expandText = v
+		} else {
+			return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:stylesheet/@expand-text", et)
 		}
 	}
 
@@ -288,7 +290,9 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 		case "decimal-format":
 			c.compileDecimalFormat(elem)
 		case "mode":
-			c.compileMode(elem)
+			if err := c.compileMode(elem); err != nil {
+				return err
+			}
 		case "import-schema":
 			if err := c.compileImportSchema(elem); err != nil {
 				return err
@@ -378,6 +382,8 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 	if et := getAttr(elem, "expand-text"); et != "" {
 		if v, ok := parseXSDBool(et); ok {
 			c.expandText = v
+		} else {
+			return staticError(errCodeXTSE0020, "%q is not a valid value for xsl:template/@expand-text", et)
 		}
 	}
 
@@ -726,6 +732,8 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 	if et := getAttr(elem, "expand-text"); et != "" {
 		if v, ok := parseXSDBool(et); ok {
 			c.expandText = v
+		} else {
+			return staticError(errCodeXTSE0020, "%q is not a valid value for xsl:function/@expand-text", et)
 		}
 	}
 
@@ -748,23 +756,79 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 	return nil
 }
 
-func (c *compiler) compileMode(elem *helium.Element) {
+func (c *compiler) compileMode(elem *helium.Element) error {
 	name := getAttr(elem, "name")
 	if name == "" {
 		name = "#default"
 	}
+
+	// Validate boolean attribute: streamable
+	if sa := getAttr(elem, "streamable"); sa != "" {
+		if err := validateBooleanAttr("xsl:mode", "streamable", sa); err != nil {
+			return err
+		}
+	}
+
+	onNoMatch := getAttr(elem, "on-no-match")
+	if onNoMatch == "" {
+		onNoMatch = "text-only-copy" // XSLT 3.0 default
+	}
+
+	useAccum := getAttr(elem, "use-accumulators")
+	onMultipleMatch := getAttr(elem, "on-multiple-match")
+
 	md := &ModeDef{
-		Name:       name,
-		OnNoMatch:  getAttr(elem, "on-no-match"),
-		Streamable: getAttr(elem, "streamable") == "yes",
+		Name:            name,
+		OnNoMatch:       onNoMatch,
+		Streamable:      getAttr(elem, "streamable") == "yes",
+		UseAccumulators: useAccum,
+		OnMultipleMatch: onMultipleMatch,
 	}
-	if md.OnNoMatch == "" {
-		md.OnNoMatch = "text-only-copy" // XSLT 3.0 default
-	}
+
 	if c.stylesheet.modeDefs == nil {
 		c.stylesheet.modeDefs = make(map[string]*ModeDef)
 	}
-	c.stylesheet.modeDefs[name] = md
+
+	// XTSE0545: conflicting mode declarations at same import precedence
+	if existing, ok := c.stylesheet.modeDefs[name]; ok {
+		explicitOnNoMatch := getAttr(elem, "on-no-match")
+		// Check for conflicting on-no-match values
+		if explicitOnNoMatch != "" && existing.OnNoMatch != "" && existing.OnNoMatch != onNoMatch {
+			return staticError(errCodeXTSE0545,
+				"conflicting on-no-match values for mode %q: %q vs %q", name, existing.OnNoMatch, onNoMatch)
+		}
+		// Check for conflicting streamable values
+		if getAttr(elem, "streamable") != "" && existing.Streamable != md.Streamable {
+			return staticError(errCodeXTSE0545,
+				"conflicting streamable values for mode %q", name)
+		}
+		// Check for conflicting use-accumulators values
+		if useAccum != "" && existing.UseAccumulators != "" && existing.UseAccumulators != useAccum {
+			return staticError(errCodeXTSE0545,
+				"conflicting use-accumulators values for mode %q: %q vs %q", name, existing.UseAccumulators, useAccum)
+		}
+		// Check for conflicting on-multiple-match values
+		if onMultipleMatch != "" && existing.OnMultipleMatch != "" && existing.OnMultipleMatch != onMultipleMatch {
+			return staticError(errCodeXTSE0545,
+				"conflicting on-multiple-match values for mode %q: %q vs %q", name, existing.OnMultipleMatch, onMultipleMatch)
+		}
+		// Merge: keep existing, only update explicitly specified attributes
+		if explicitOnNoMatch != "" {
+			existing.OnNoMatch = onNoMatch
+		}
+		if getAttr(elem, "streamable") != "" {
+			existing.Streamable = md.Streamable
+		}
+		if useAccum != "" {
+			existing.UseAccumulators = useAccum
+		}
+		if onMultipleMatch != "" {
+			existing.OnMultipleMatch = onMultipleMatch
+		}
+	} else {
+		c.stylesheet.modeDefs[name] = md
+	}
+	return nil
 }
 
 func (c *compiler) compileAttributeSet(elem *helium.Element) error {
