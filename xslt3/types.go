@@ -128,6 +128,25 @@ func coerceItem(item xpath3.Item, itemType string) (xpath3.Item, error) {
 		return nil, fmt.Errorf("expected document-node(), got %s", describeItem(item))
 	}
 
+	// Handle map(*) — any map
+	if strings.HasPrefix(itemType, "map(") {
+		if _, ok := item.(xpath3.MapItem); ok {
+			return item, nil
+		}
+		return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
+	}
+
+	// Handle array(*) — any array
+	if strings.HasPrefix(itemType, "array(") {
+		// Arrays are represented as xpath3.Sequence values; skip strict check
+		return item, nil
+	}
+
+	// Handle function(...) — any function
+	if strings.HasPrefix(itemType, "function(") {
+		return item, nil // function items are checked by the XPath layer
+	}
+
 	// Handle element(name) patterns like element(foo), element(ns:foo)
 	if strings.HasPrefix(itemType, "element(") {
 		if ni, ok := item.(xpath3.NodeItem); ok {
@@ -305,6 +324,8 @@ func describeItem(item xpath3.Item) string {
 		}
 	case xpath3.AtomicValue:
 		return fmt.Sprintf("atomic value of type %s", v.TypeName)
+	case xpath3.MapItem:
+		return "map"
 	default:
 		return fmt.Sprintf("%T", item)
 	}
