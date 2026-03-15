@@ -128,11 +128,33 @@ func coerceItem(item xpath3.Item, itemType string) (xpath3.Item, error) {
 		return nil, fmt.Errorf("expected document-node(), got %s", describeItem(item))
 	}
 
-	// Handle element(name) patterns like element(foo)
+	// Handle element(name) patterns like element(foo), element(ns:foo)
 	if strings.HasPrefix(itemType, "element(") {
 		if ni, ok := item.(xpath3.NodeItem); ok {
 			if ni.Node.Type() == helium.ElementNode {
-				return item, nil
+				// Extract the name from element(name)
+				inner := itemType[len("element(") : len(itemType)-1]
+				inner = strings.TrimSpace(inner)
+				if inner == "" || inner == "*" {
+					return item, nil // element() or element(*) matches any element
+				}
+				// Check element name match
+				elemName := ni.Node.Name()
+				if elem, ok := ni.Node.(*helium.Element); ok {
+					elemName = elem.LocalName()
+				}
+				// Strip namespace prefix from the required name for matching
+				reqName := inner
+				if idx := strings.IndexByte(reqName, ','); idx >= 0 {
+					reqName = strings.TrimSpace(reqName[:idx]) // element(name, type) — just use name
+				}
+				if idx := strings.IndexByte(reqName, ':'); idx >= 0 {
+					reqName = reqName[idx+1:] // strip prefix
+				}
+				if elemName == reqName {
+					return item, nil
+				}
+				return nil, fmt.Errorf("expected %s, got element %q", itemType, elemName)
 			}
 		}
 		return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
