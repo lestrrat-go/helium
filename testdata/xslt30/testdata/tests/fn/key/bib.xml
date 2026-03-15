@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<main>
+<entry name="XML">--location of the XML spec--</entry>
+<entry name="XPath">--location of the XPath spec--</entry>
+<entry name="XSLT">--location of the XSLT spec--</entry>
+</main>
