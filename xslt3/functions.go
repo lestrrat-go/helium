@@ -125,6 +125,37 @@ func (ec *execContext) fnDocument(ctx context.Context, args []xpath3.Sequence) (
 	return result, nil
 }
 
+// fnDoc is an XSLT-aware wrapper around fn:doc() that applies
+// xsl:strip-space rules to loaded documents.
+func (ec *execContext) fnDoc(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	if len(args) == 0 || len(args[0]) == 0 {
+		return xpath3.EmptySequence(), nil
+	}
+
+	av, err := xpath3.AtomizeItem(args[0][0])
+	if err != nil {
+		return nil, err
+	}
+	uri, err := xpath3.AtomicToString(av)
+	if err != nil {
+		return nil, err
+	}
+
+	// Determine base directory from current template or stylesheet.
+	baseDir := ""
+	if ec.currentTemplate != nil && ec.currentTemplate.BaseURI != "" {
+		baseDir = filepath.Dir(ec.currentTemplate.BaseURI)
+	} else if ec.stylesheet.baseURI != "" {
+		baseDir = filepath.Dir(ec.stylesheet.baseURI)
+	}
+
+	doc, err := ec.loadDocument(ctx, uri, baseDir)
+	if err != nil {
+		return nil, err
+	}
+	return xpath3.SingleNode(doc), nil
+}
+
 // loadDocument loads a single XML document by URI, using baseDir for
 // resolving relative paths.
 func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir string) (*helium.Document, error) {
@@ -163,6 +194,13 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 	}
 
 	doc.SetURL(resolvedURI)
+
+	// Apply xsl:strip-space rules to the loaded document so that
+	// whitespace-only text nodes are removed consistently with how
+	// the source document is treated.
+	if len(ec.stylesheet.stripSpace) > 0 {
+		ec.stripWhitespaceFromDoc(doc)
+	}
 
 	if ec.docCache == nil {
 		ec.docCache = make(map[string]*helium.Document)
@@ -959,6 +997,11 @@ func (ec *execContext) xsltFunctionsNS() map[xpath3.QualifiedName]xpath3.Functio
 
 	// Register XSLT document() in the fn: namespace so fn:document() works.
 	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "document"}] = &xsltFunc{min: 1, max: 2, fn: ec.fnDocument}
+
+	// Override fn:doc to apply xsl:strip-space rules to loaded documents.
+	if len(ec.stylesheet.stripSpace) > 0 {
+		ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "doc"}] = &xsltFunc{min: 1, max: 1, fn: ec.fnDoc}
+	}
 
 	for qn, def := range ec.stylesheet.functions {
 		ec.cachedFnsNS[qn] = &xslUserFunc{def: def, ec: ec}
