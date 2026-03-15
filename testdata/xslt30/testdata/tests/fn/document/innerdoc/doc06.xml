@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<outer>
+	<body>
+		<string>inner-GoodBye</string>
+		<string>inner-GoodMorning</string>
+		<string>inner-GoodNight</string>
+	</body>
+</outer>

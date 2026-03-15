@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!-- fthink.xml Version:  2.0 -->
+<!-- Purpose:  catalog entry for demo -->
+<!-- Terry Allen  15 August 1998 -->
+<!-- Copyright 1998 Veo Systems, Inc. -->
+
+<!-- Test for URI anchors -->
+
+<catalog.entry>
+  <catalog.entry.id>c1230987</catalog.entry.id>
+  <catalog.operator.pointer>
+    <url.reference url.string="dir05/data05.xml"/>
+  </catalog.operator.pointer>
+</catalog.entry>
