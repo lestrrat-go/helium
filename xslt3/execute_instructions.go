@@ -1008,6 +1008,29 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		return nil
 	}
 
+	// For xsl:copy of element nodes, apply attribute sets before body
+	if len(inst.UseAttributeSets) > 0 && ec.contextNode != nil && ec.contextNode.Type() == helium.ElementNode {
+		// Wrap body with attribute set application
+		origBody := inst.Body
+		err := ec.execCopyNode(ctx, ec.contextNode, nil)
+		if err != nil {
+			return err
+		}
+		// Apply attribute sets to the just-created element
+		out := ec.currentOutput()
+		if elem, ok := out.current.(*helium.Element); ok {
+			if err := ec.applyAttributeSets(ctx, elem, inst.UseAttributeSets); err != nil {
+				return err
+			}
+		}
+		// Execute body
+		for _, child := range origBody {
+			if err := ec.executeInstruction(ctx, child); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	return ec.execCopyNode(ctx, ec.contextNode, inst.Body)
 }
 

@@ -177,9 +177,10 @@ func (*ParamInst) instructionTag() {}
 
 // CopyInst represents xsl:copy.
 type CopyInst struct {
-	Select     *xpath3.Expression
-	Body       []Instruction
-	Validation string // "strict", "lax", "preserve", "strip"
+	Select           *xpath3.Expression
+	Body             []Instruction
+	Validation       string   // "strict", "lax", "preserve", "strip"
+	UseAttributeSets []string // xsl:use-attribute-sets
 }
 
 func (*CopyInst) instructionTag() {}
