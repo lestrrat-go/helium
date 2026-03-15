@@ -757,13 +757,13 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 		return staticError(errCodeXTSE0010, "xsl:mode must be empty")
 	}
 
-	name := getAttr(elem, "name")
+	name := strings.TrimSpace(getAttr(elem, "name"))
 	if name == "" {
 		name = "#default"
 	}
 
 	// Parse streamable with proper xs:boolean validation
-	streamableStr := getAttr(elem, "streamable")
+	streamableStr := strings.TrimSpace(getAttr(elem, "streamable"))
 	streamable := false
 	if streamableStr != "" {
 		v, ok := parseXSDBool(streamableStr)
@@ -774,7 +774,7 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 	}
 
 	// Validate on-no-match
-	onNoMatch := getAttr(elem, "on-no-match")
+	onNoMatch := strings.TrimSpace(getAttr(elem, "on-no-match"))
 	if onNoMatch != "" {
 		switch onNoMatch {
 		case "text-only-copy", "shallow-copy", "deep-copy", "shallow-skip", "deep-skip", "fail":
@@ -810,13 +810,13 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 		}
 	}
 
-	visibility := getAttr(elem, "visibility")
+	visibility := strings.TrimSpace(getAttr(elem, "visibility"))
 	// XTSE0020: unnamed mode cannot have visibility="public" or "final"
 	if name == "#default" && (visibility == "public" || visibility == "final") {
 		return staticError(errCodeXTSE0020, "unnamed mode cannot have visibility %q", visibility)
 	}
 
-	onMultipleMatch := getAttr(elem, "on-multiple-match")
+	onMultipleMatch := strings.TrimSpace(getAttr(elem, "on-multiple-match"))
 	if onMultipleMatch != "" {
 		switch onMultipleMatch {
 		case "use-last", "fail":
