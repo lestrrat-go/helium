@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
-	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -28,12 +26,13 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *SourceDocum
 	// Check the document cache first.
 	doc, ok := ec.docCache[uri]
 	if !ok {
-		// Resolve URI relative to stylesheet base URI.
-		resolvedURI := uri
-		if ec.stylesheet.baseURI != "" && !strings.Contains(uri, "://") && !filepath.IsAbs(uri) {
-			baseDir := filepath.Dir(ec.stylesheet.baseURI)
-			resolvedURI = filepath.Join(baseDir, uri)
+		// Resolve URI relative to the instruction's effective base URI,
+		// which accounts for xml:base attributes on ancestor elements.
+		effectiveBase := inst.BaseURI
+		if effectiveBase == "" {
+			effectiveBase = ec.stylesheet.baseURI
 		}
+		resolvedURI := resolveAgainstBaseURI(uri, effectiveBase)
 
 		data, err := os.ReadFile(resolvedURI)
 		if err != nil {
@@ -562,8 +561,8 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *MergeSou
 				return nil, err
 			}
 
-			// Load document from URI.
-			doc, err := ec.loadMergeDocument(ctx, uri)
+			// Load document from URI using the merge-source's effective base URI.
+			doc, err := ec.loadMergeDocument(ctx, uri, src.BaseURI)
 			if err != nil {
 				return nil, err
 			}
@@ -623,14 +622,14 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *MergeSou
 }
 
 // loadMergeDocument loads an XML document from a URI, resolving it relative
-// to the stylesheet base URI.
-func (ec *execContext) loadMergeDocument(ctx context.Context, uri string) (*helium.Document, error) {
-	// Resolve URI relative to stylesheet base URI.
-	resolvedURI := uri
-	if ec.stylesheet.baseURI != "" && !strings.Contains(uri, "://") && !filepath.IsAbs(uri) {
-		baseDir := filepath.Dir(ec.stylesheet.baseURI)
-		resolvedURI = filepath.Join(baseDir, uri)
+// to the given effective base URI (which accounts for xml:base).
+func (ec *execContext) loadMergeDocument(ctx context.Context, uri string, effectiveBaseURI string) (*helium.Document, error) {
+	// Resolve URI relative to the effective base URI.
+	effectiveBase := effectiveBaseURI
+	if effectiveBase == "" {
+		effectiveBase = ec.stylesheet.baseURI
 	}
+	resolvedURI := resolveAgainstBaseURI(uri, effectiveBase)
 
 	// Check document cache.
 	if doc, ok := ec.docCache[resolvedURI]; ok {

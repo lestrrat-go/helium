@@ -6,6 +6,7 @@ import (
 	"maps"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 // URIResolver resolves URIs to readable content. Used for xsl:import
@@ -88,10 +89,11 @@ func WithPackageResolver(ctx context.Context, r PackageResolver) context.Context
 type transformConfigKey struct{}
 
 type transformConfig struct {
-	params          map[string]string
-	msgHandler      func(msg string, terminate bool)
-	initialTemplate string
-	resultDocHandler func(href string, doc *helium.Document)
+	params             map[string]string
+	msgHandler         func(msg string, terminate bool)
+	initialTemplate    string
+	resultDocHandler   func(href string, doc *helium.Document)
+	collectionResolver xpath3.CollectionResolver
 }
 
 func getTransformConfig(ctx context.Context) *transformConfig {
@@ -153,5 +155,13 @@ func WithMessageHandler(ctx context.Context, fn func(msg string, terminate bool)
 func WithResultDocumentHandler(ctx context.Context, fn func(href string, doc *helium.Document)) context.Context {
 	return updateTransformConfig(ctx, func(c *transformConfig) {
 		c.resultDocHandler = fn
+	})
+}
+
+// WithCollectionResolver sets a resolver for fn:collection and
+// fn:uri-collection during transformation.
+func WithCollectionResolver(ctx context.Context, r xpath3.CollectionResolver) context.Context {
+	return updateTransformConfig(ctx, func(c *transformConfig) {
+		c.collectionResolver = r
 	})
 }

@@ -21,6 +21,7 @@ func (c *compiler) compileSourceDocument(elem *helium.Element) (Instruction, err
 	inst := &SourceDocumentInst{
 		Href:       hrefAVT,
 		Streamable: getAttr(elem, "streamable") == "yes",
+		BaseURI:    stylesheetBaseURI(elem, c.baseURI),
 	}
 
 	body, err := c.compileChildren(elem)
@@ -559,7 +560,8 @@ func (c *compiler) compileMerge(elem *helium.Element) (Instruction, error) {
 // compileMergeSource compiles an xsl:merge-source element.
 func (c *compiler) compileMergeSource(elem *helium.Element) (*MergeSource, error) {
 	src := &MergeSource{
-		Name: getAttr(elem, "name"),
+		Name:    getAttr(elem, "name"),
+		BaseURI: stylesheetBaseURI(elem, c.baseURI),
 	}
 
 	// Parse streamable attribute — accept "yes", "true", "1" (with whitespace trimming)
