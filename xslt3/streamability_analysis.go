@@ -2269,6 +2269,8 @@ func getInstructionExprs(inst Instruction) []*xpath3.Expression {
 		for _, wp := range v.Params {
 			exprs = append(exprs, wp.Select)
 		}
+	case *AnalyzeStringInst:
+		exprs = append(exprs, v.Select)
 	}
 
 	// Filter out nils.
@@ -2362,6 +2364,9 @@ func getChildInstructions(inst Instruction) [][]Instruction {
 		for _, wp := range v.Params {
 			children = append(children, wp.Body)
 		}
+	case *AnalyzeStringInst:
+		children = append(children, v.MatchingBody)
+		children = append(children, v.NonMatchingBody)
 	}
 
 	return children
