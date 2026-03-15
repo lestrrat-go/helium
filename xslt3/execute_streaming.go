@@ -58,17 +58,26 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *SourceDocum
 		ec.docCache[uri] = doc
 	}
 
-	// Save and restore source document and context nodes.
+	// Save and restore source document, context nodes, and context item.
 	savedSource := ec.sourceDoc
 	savedContext := ec.contextNode
 	savedCurrent := ec.currentNode
+	savedItem := ec.contextItem
+	savedPos := ec.position
+	savedSize := ec.size
 	ec.sourceDoc = doc
 	ec.contextNode = doc
 	ec.currentNode = doc
+	ec.contextItem = nil // document node is the context, not an atomic item
+	ec.position = 1
+	ec.size = 1
 	defer func() {
 		ec.sourceDoc = savedSource
 		ec.contextNode = savedContext
 		ec.currentNode = savedCurrent
+		ec.contextItem = savedItem
+		ec.position = savedPos
+		ec.size = savedSize
 	}()
 
 	// Execute the body with the loaded document as context.

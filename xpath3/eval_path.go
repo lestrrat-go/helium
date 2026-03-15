@@ -177,7 +177,7 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 		if test.TypeName != "" {
 			ann := nodeTypeAnnotation(n, ec)
 			if ann == "" {
-				ann = TypeUntypedAtomic
+				ann = TypeUntyped // elements default to xs:untyped
 			}
 			if !isSubtypeOf(ann, resolveTestTypeName(test.TypeName, ec)) {
 				return false

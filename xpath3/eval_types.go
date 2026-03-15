@@ -355,9 +355,13 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		if !ok {
 			return false
 		}
-		if t.TypeName != "" && ni.TypeAnnotation != "" {
+		if t.TypeName != "" {
+			ann := ni.TypeAnnotation
+			if ann == "" {
+				ann = TypeUntyped // elements default to xs:untyped
+			}
 			target := resolveTestTypeName(t.TypeName, ec)
-			if !isSubtypeOf(ni.TypeAnnotation, target) {
+			if !isSubtypeOf(ann, target) {
 				return false
 			}
 		}
@@ -367,9 +371,13 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		if !ok {
 			return false
 		}
-		if t.TypeName != "" && ni.TypeAnnotation != "" {
+		if t.TypeName != "" {
+			ann := ni.TypeAnnotation
+			if ann == "" {
+				ann = TypeUntypedAtomic // attributes default to xs:untypedAtomic
+			}
 			target := resolveTestTypeName(t.TypeName, ec)
-			if !isSubtypeOf(ni.TypeAnnotation, target) {
+			if !isSubtypeOf(ann, target) {
 				return false
 			}
 		}

@@ -275,16 +275,6 @@ var generatedAssetSourceAliases = map[string]string{
 	"tests/decl/import-schema/variousTypesSchemaInline.xsd": "tests/decl/import-schema/schema004.xsd",
 }
 
-// knownSkips maps test case names to skip reasons for tests that are
-// valid per spec but test an alternative behavior our implementation
-// does not follow.
-var knownSkips = map[string]string{
-	// XSLT 3.0 allows zero-length regex matches (XTDE1150 is optional).
-	// Our implementation handles them; these variants expect the error.
-	"analyze-string-090a": "implementation handles zero-length matches (XSLT 3.0)",
-	"analyze-string-091a": "implementation handles zero-length matches (XSLT 3.0)",
-}
-
 // ──────────────────────────────────────────────────────────────────────
 // Main
 // ──────────────────────────────────────────────────────────────────────
