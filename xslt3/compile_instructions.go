@@ -1171,6 +1171,10 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
 }
 
 func (c *compiler) compileWithParam(elem *helium.Element) (*WithParam, error) {
+	// Push element-local namespace declarations (for EQName variable refs)
+	saved := c.pushElementNamespaces(elem)
+	defer func() { c.nsBindings = saved }()
+
 	// Validate attributes: xsl:with-param allows name, select, as, tunnel
 	// but NOT required (that's only for xsl:param)
 	if err := validateXSLTAttrs(elem, withParamAllowedAttrs); err != nil {
