@@ -39,9 +39,13 @@ type Stylesheet struct {
 
 // ModeDef is a compiled xsl:mode declaration.
 type ModeDef struct {
-	Name       string
-	OnNoMatch  string // "shallow-copy", "deep-copy", "shallow-skip", "deep-skip", "text-only-copy", "fail"
-	Streamable bool
+	Name             string
+	OnNoMatch        string // "shallow-copy", "deep-copy", "shallow-skip", "deep-skip", "text-only-copy", "fail"
+	Streamable       bool
+	Visibility       string // "public", "private", "final"
+	OnMultipleMatch  string // "use-last", "fail"
+	UseAccumulators  string // accumulator names
+	ImportPrec       int
 }
 
 // AttributeSetDef is a compiled xsl:attribute-set.

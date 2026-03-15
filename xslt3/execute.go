@@ -940,15 +940,19 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 // applyBuiltinRules applies the built-in template rules per XSLT spec.
 func (ec *execContext) applyBuiltinRules(ctx context.Context, node helium.Node, mode string, paramValues ...map[string]xpath3.Sequence) error {
 	// Check for xsl:mode on-no-match behavior
+	onNoMatch := "text-only-copy" // XSLT 3.0 default
 	if md := ec.stylesheet.modeDefs[mode]; md != nil {
-		return ec.applyOnNoMatch(ctx, node, mode, md.OnNoMatch, paramValues...)
-	}
-	if mode == "" {
+		if md.OnNoMatch != "" {
+			onNoMatch = md.OnNoMatch
+		}
+	} else if mode == "" {
 		if md := ec.stylesheet.modeDefs["#default"]; md != nil {
-			return ec.applyOnNoMatch(ctx, node, mode, md.OnNoMatch, paramValues...)
+			if md.OnNoMatch != "" {
+				onNoMatch = md.OnNoMatch
+			}
 		}
 	}
-	return ec.applyOnNoMatch(ctx, node, mode, "text-only-copy", paramValues...)
+	return ec.applyOnNoMatch(ctx, node, mode, onNoMatch, paramValues...)
 }
 
 func (ec *execContext) applyOnNoMatch(ctx context.Context, node helium.Node, mode, behavior string, paramValues ...map[string]xpath3.Sequence) error {

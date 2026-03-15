@@ -290,7 +290,9 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 		case "decimal-format":
 			c.compileDecimalFormat(elem)
 		case "mode":
-			c.compileMode(elem)
+			if err := c.compileMode(elem); err != nil {
+				return err
+			}
 		case "import-schema":
 			if err := c.compileImportSchema(elem); err != nil {
 				return err
@@ -721,23 +723,141 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 	return nil
 }
 
-func (c *compiler) compileMode(elem *helium.Element) {
+func (c *compiler) compileMode(elem *helium.Element) error {
+	// xsl:mode must be empty (no children)
+	if elem.FirstChild() != nil {
+		return staticError(errCodeXTSE0010, "xsl:mode must be empty")
+	}
+
 	name := getAttr(elem, "name")
 	if name == "" {
 		name = "#default"
 	}
+
+	// Parse streamable with proper xs:boolean validation
+	streamableStr := getAttr(elem, "streamable")
+	streamable := false
+	if streamableStr != "" {
+		v, ok := parseXSDBool(streamableStr)
+		if !ok {
+			return staticError(errCodeXTSE0020, "invalid value %q for streamable on xsl:mode", streamableStr)
+		}
+		streamable = v
+	}
+
+	// Validate on-no-match
+	onNoMatch := getAttr(elem, "on-no-match")
+	if onNoMatch != "" {
+		switch onNoMatch {
+		case "text-only-copy", "shallow-copy", "deep-copy", "shallow-skip", "deep-skip", "fail":
+			// valid
+		default:
+			return staticError(errCodeXTSE0020, "invalid value %q for on-no-match on xsl:mode", onNoMatch)
+		}
+	}
+	// Note: we keep onNoMatch as "" when not specified, so we can detect
+	// conflicts properly. The default "text-only-copy" is applied later.
+
+	// Validate boolean attributes
+	if v := getAttr(elem, "warning-on-no-match"); v != "" {
+		if _, ok := parseXSDBool(v); !ok {
+			return staticError(errCodeXTSE0020, "invalid value %q for warning-on-no-match on xsl:mode", v)
+		}
+	}
+	if v := getAttr(elem, "warning-on-multiple-match"); v != "" {
+		if _, ok := parseXSDBool(v); !ok {
+			return staticError(errCodeXTSE0020, "invalid value %q for warning-on-multiple-match on xsl:mode", v)
+		}
+	}
+	if v := getAttr(elem, "typed"); v != "" {
+		// typed accepts "yes", "no", "true", "false", "1", "0",
+		// "strict", "lax", "unspecified"
+		switch v {
+		case "strict", "lax", "unspecified":
+			// valid non-boolean values
+		default:
+			if _, ok := parseXSDBool(v); !ok {
+				return staticError(errCodeXTSE0020, "invalid value %q for typed on xsl:mode", v)
+			}
+		}
+	}
+
+	visibility := getAttr(elem, "visibility")
+	// XTSE0020: unnamed mode cannot have visibility="public" or "final"
+	if name == "#default" && (visibility == "public" || visibility == "final") {
+		return staticError(errCodeXTSE0020, "unnamed mode cannot have visibility %q", visibility)
+	}
+
+	onMultipleMatch := getAttr(elem, "on-multiple-match")
+	if onMultipleMatch != "" {
+		switch onMultipleMatch {
+		case "use-last", "fail":
+			// valid
+		default:
+			return staticError(errCodeXTSE0020, "invalid value %q for on-multiple-match on xsl:mode", onMultipleMatch)
+		}
+	}
+
+	useAccumulators := getAttr(elem, "use-accumulators")
+
 	md := &ModeDef{
-		Name:       name,
-		OnNoMatch:  getAttr(elem, "on-no-match"),
-		Streamable: getAttr(elem, "streamable") == "yes",
+		Name:            name,
+		OnNoMatch:       onNoMatch,
+		Streamable:      streamable,
+		Visibility:      visibility,
+		OnMultipleMatch: onMultipleMatch,
+		UseAccumulators: useAccumulators,
+		ImportPrec:      c.importPrec,
 	}
-	if md.OnNoMatch == "" {
-		md.OnNoMatch = "text-only-copy" // XSLT 3.0 default
-	}
+
 	if c.stylesheet.modeDefs == nil {
 		c.stylesheet.modeDefs = make(map[string]*ModeDef)
 	}
+
+	// Check for conflicting declarations at the same import precedence
+	if existing, ok := c.stylesheet.modeDefs[name]; ok {
+		if existing.ImportPrec == c.importPrec {
+			// Same precedence: check for conflicting attribute values (XTSE0545)
+			// Only conflict if both explicitly set the same attribute to different values
+			if existing.OnNoMatch != "" && md.OnNoMatch != "" && existing.OnNoMatch != md.OnNoMatch {
+				return staticError(errCodeXTSE0545, "conflicting on-no-match values for mode %q: %q vs %q", name, existing.OnNoMatch, md.OnNoMatch)
+			}
+			if streamableStr != "" && existing.Streamable != md.Streamable {
+				return staticError(errCodeXTSE0545, "conflicting streamable values for mode %q", name)
+			}
+			if existing.Visibility != "" && md.Visibility != "" && existing.Visibility != md.Visibility {
+				return staticError(errCodeXTSE0545, "conflicting visibility values for mode %q: %q vs %q", name, existing.Visibility, md.Visibility)
+			}
+			if existing.OnMultipleMatch != "" && md.OnMultipleMatch != "" && existing.OnMultipleMatch != md.OnMultipleMatch {
+				return staticError(errCodeXTSE0545, "conflicting on-multiple-match values for mode %q", name)
+			}
+			if existing.UseAccumulators != "" && md.UseAccumulators != "" && existing.UseAccumulators != md.UseAccumulators {
+				return staticError(errCodeXTSE0545, "conflicting use-accumulators values for mode %q", name)
+			}
+			// Non-conflicting: merge attributes (use non-empty values from new decl)
+			if md.OnNoMatch != "" {
+				existing.OnNoMatch = md.OnNoMatch
+			}
+			if md.Visibility != "" {
+				existing.Visibility = md.Visibility
+			}
+			if md.OnMultipleMatch != "" {
+				existing.OnMultipleMatch = md.OnMultipleMatch
+			}
+			if md.UseAccumulators != "" {
+				existing.UseAccumulators = md.UseAccumulators
+			}
+			return nil
+		}
+		// Different precedence: higher precedence wins
+		if c.importPrec > existing.ImportPrec {
+			c.stylesheet.modeDefs[name] = md
+		}
+		return nil
+	}
+
 	c.stylesheet.modeDefs[name] = md
+	return nil
 }
 
 func (c *compiler) compileAttributeSet(elem *helium.Element) error {

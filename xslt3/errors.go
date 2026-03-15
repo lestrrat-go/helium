@@ -38,6 +38,7 @@ const (
 	errCodeXTDE1110 = "XTDE1110" // circular variable reference
 	errCodeXTDE1140 = "XTDE1140" // sort key comparison error
 	errCodeXTDE1170 = "XTDE1170" // key function lookup error
+	errCodeXTSE0545 = "XTSE0545" // conflicting xsl:mode declarations
 	errCodeXTSE3430 = "XTSE3430" // non-streamable expression in streaming context
 	errCodeXTSE3441 = "XTSE3441" // streamability error in accumulator
 	errCodeXTDE3630 = "XTDE3630" // source-document runtime error
