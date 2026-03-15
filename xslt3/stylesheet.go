@@ -91,6 +91,7 @@ type KeyDef struct {
 	Name  string
 	Match *Pattern
 	Use   *xpath3.Expression
+	Body  []Instruction // content constructor (when use attribute is absent)
 }
 
 // OutputDef is a compiled xsl:output.
