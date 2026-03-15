@@ -172,6 +172,14 @@ func (ec *execContext) currentOutput() *outputFrame {
 // addNode adds a node to the current output insertion point.
 func (ec *execContext) addNode(node helium.Node) error {
 	out := ec.currentOutput()
+	// When sequenceMode is set, capture all nodes as separate items in
+	// the pending list. This prevents DOM text-node merging and keeps
+	// attributes, comments, PIs, and elements as distinct sequence items.
+	// Used by variable/param/with-param with an as attribute.
+	if out.sequenceMode {
+		out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: node})
+		return nil
+	}
 	// When separateTextNodes is set, capture each text node as a separate
 	// string item to avoid DOM text-node merging.  This is needed by
 	// xsl:value-of with separator + body content so that each produced
@@ -531,8 +539,9 @@ func (ec *execContext) evaluateGlobalVar(v *Variable) (xpath3.Sequence, error) {
 	} else if len(v.Body) > 0 {
 		var err error
 		if v.As != "" {
-			// With as attribute: evaluate as raw sequence
-			val, err = ec.evaluateBody(ctx, v.Body)
+			// With as attribute: evaluate as sequence constructor,
+			// keeping each node as a separate item
+			val, err = ec.evaluateBodyAsSequence(ctx, v.Body)
 		} else {
 			// No as: wrap in document node (temporary tree)
 			val, err = ec.evaluateBodyAsDocument(ctx, v.Body)
@@ -542,6 +551,16 @@ func (ec *execContext) evaluateGlobalVar(v *Variable) (xpath3.Sequence, error) {
 		}
 	} else {
 		val = xpath3.SingleString("")
+	}
+
+	// Type check against the declared as type
+	if v.As != "" {
+		st := parseSequenceType(v.As)
+		checked, err := checkSequenceType(val, st, errCodeXTTE0570, "variable $"+v.Name)
+		if err != nil {
+			return nil, err
+		}
+		val = checked
 	}
 
 	ec.globalVars[v.Name] = val
@@ -574,8 +593,9 @@ func (ec *execContext) evaluateGlobalParam(p *Param) (xpath3.Sequence, error) {
 	} else if len(p.Body) > 0 {
 		var err error
 		if p.As != "" {
-			// With as attribute: evaluate as raw sequence
-			val, err = ec.evaluateBody(ctx, p.Body)
+			// With as attribute: evaluate as sequence constructor,
+			// keeping each node as a separate item
+			val, err = ec.evaluateBodyAsSequence(ctx, p.Body)
 		} else {
 			// No as: wrap in document node (temporary tree)
 			val, err = ec.evaluateBodyAsDocument(ctx, p.Body)
@@ -583,6 +603,16 @@ func (ec *execContext) evaluateGlobalParam(p *Param) (xpath3.Sequence, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error evaluating global param %q body: %w", p.Name, err)
 		}
+	}
+
+	// Type check against the declared as type
+	if p.As != "" {
+		st := parseSequenceType(p.As)
+		checked, err := checkSequenceType(val, st, errCodeXTTE0570, "param $"+p.Name)
+		if err != nil {
+			return nil, err
+		}
+		val = checked
 	}
 
 	ec.globalVars[p.Name] = val
@@ -747,6 +777,40 @@ func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []Instru
 	}
 
 	return xpath3.Sequence{xpath3.NodeItem{Node: tmpDoc}}, nil
+}
+
+// evaluateBodyAsSequence executes instructions and captures the result as a
+// flat sequence of items. Unlike evaluateBody, this keeps each produced node
+// (text, element, attribute, comment, PI) as a separate item without DOM
+// merging. This is needed for variables/params with an "as" attribute, where
+// the body is a sequence constructor per the XSLT spec.
+func (ec *execContext) evaluateBodyAsSequence(ctx context.Context, body []Instruction) (xpath3.Sequence, error) {
+	tmpDoc := helium.NewDefaultDocument()
+	tmpRoot, err := tmpDoc.CreateElement("_tmp")
+	if err != nil {
+		return nil, err
+	}
+	if err := tmpDoc.AddChild(tmpRoot); err != nil {
+		return nil, err
+	}
+
+	// Use sequenceMode to capture all nodes as separate items
+	frame := &outputFrame{doc: tmpDoc, current: tmpRoot, captureItems: true, sequenceMode: true}
+	ec.outputStack = append(ec.outputStack, frame)
+	defer func() {
+		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+	}()
+
+	for _, inst := range body {
+		if err := ec.executeInstruction(ctx, inst); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(frame.pendingItems) > 0 {
+		return frame.pendingItems, nil
+	}
+	return xpath3.EmptySequence(), nil
 }
 
 // applyTemplates matches and executes templates for a node.
@@ -933,46 +997,116 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 	// Set param values: use with-param overrides when available, else defaults.
 	// Tunnel params receive from ec.tunnelParams, not from regular param overrides.
 	for _, p := range tmpl.Params {
+		var val xpath3.Sequence
+		fromCaller := false
+
 		if p.Tunnel {
 			// Tunnel param: receive from tunnel context
 			if ec.tunnelParams != nil {
-				if val, ok := ec.tunnelParams[p.Name]; ok {
-					ec.setVar(p.Name, val)
-					continue
+				if v, ok := ec.tunnelParams[p.Name]; ok {
+					val = v
+					fromCaller = true
 				}
 			}
 		} else if po != nil {
-			if val, ok := po[p.Name]; ok {
-				ec.setVar(p.Name, val)
-				continue
+			if v, ok := po[p.Name]; ok {
+				val = v
+				fromCaller = true
 			}
 		}
-		// Use default value
-		if p.Select != nil {
-			xpathCtx := ec.newXPathContext(node)
-			result, err := p.Select.Evaluate(xpathCtx, node)
+
+		if !fromCaller {
+			// Use default value
+			if p.Select != nil {
+				xpathCtx := ec.newXPathContext(node)
+				result, err := p.Select.Evaluate(xpathCtx, node)
+				if err != nil {
+					return err
+				}
+				val = result.Sequence()
+			} else if len(p.Body) > 0 {
+				var err error
+				if p.As != "" {
+					val, err = ec.evaluateBodyAsSequence(ctx, p.Body)
+				} else {
+					val, err = ec.evaluateBody(ctx, p.Body)
+				}
+				if err != nil {
+					return err
+				}
+			} else {
+				val = xpath3.EmptySequence()
+			}
+		}
+
+		// Type check against the declared as type
+		if p.As != "" && len(val) > 0 {
+			st := parseSequenceType(p.As)
+			errCode := errCodeXTTE0570
+			if fromCaller {
+				errCode = "XTTE0590"
+			}
+			checked, err := checkSequenceType(val, st, errCode, "param $"+p.Name)
 			if err != nil {
 				return err
 			}
-			ec.setVar(p.Name, result.Sequence())
-		} else if len(p.Body) > 0 {
-			val, err := ec.evaluateBody(ctx, p.Body)
-			if err != nil {
-				return err
-			}
-			ec.setVar(p.Name, val)
-		} else {
-			ec.setVar(p.Name, xpath3.EmptySequence())
+			val = checked
 		}
+
+		ec.setVar(p.Name, val)
 	}
 
 	// Execute template body
+	if tmpl.As != "" {
+		// Template has return type constraint — capture output and validate
+		return ec.executeTemplateBodyWithAs(ctx, tmpl)
+	}
+
 	for _, inst := range tmpl.Body {
 		if err := ec.executeInstruction(ctx, inst); err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+// executeTemplateBodyWithAs runs the template body in capture mode,
+// checks the result against the declared as type, then writes the
+// validated items to the real output.
+func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *Template) error {
+	seq, err := ec.evaluateBodyAsSequence(ctx, tmpl.Body)
+	if err != nil {
+		return err
+	}
+
+	st := parseSequenceType(tmpl.As)
+	checked, err := checkSequenceType(seq, st, errCodeXTTE0505, "template")
+	if err != nil {
+		return err
+	}
+
+	// Write the validated items to the real output
+	for _, item := range checked {
+		switch v := item.(type) {
+		case xpath3.NodeItem:
+			if err := ec.addNode(v.Node); err != nil {
+				return err
+			}
+		case xpath3.AtomicValue:
+			s, err := xpath3.AtomicToString(v)
+			if err != nil {
+				return err
+			}
+			text, err := ec.resultDoc.CreateText([]byte(s))
+			if err != nil {
+				return err
+			}
+			if err := ec.addNode(text); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 

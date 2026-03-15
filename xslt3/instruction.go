@@ -173,6 +173,7 @@ type ParamInst struct {
 	Name     string
 	Select   *xpath3.Expression
 	Body     []Instruction
+	As       string // type declaration (e.g., "xs:integer")
 	Required bool
 	Tunnel   bool
 }

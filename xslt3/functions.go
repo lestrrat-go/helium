@@ -582,6 +582,17 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 	} else {
 		result = ec.collectSequenceFromNode(tmpRoot)
 	}
+
+	// Type check against the declared as type
+	if f.def.As != "" {
+		st := parseSequenceType(f.def.As)
+		checked, err := checkSequenceType(result, st, errCodeXTTE0780, "function "+f.def.Name.Name)
+		if err != nil {
+			return nil, err
+		}
+		result = checked
+	}
+
 	return result, nil
 }
 
