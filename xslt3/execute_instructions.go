@@ -2014,10 +2014,10 @@ var knownOrdinalSystems = map[rune]ordinalSystem{
 	0x2474: {oneChar: 0x2474, zero: 0x1F100, ranges: []rune{0x2474, 0x2487}},
 	// Full-stop digits: ⒈-⒛
 	0x2488: {oneChar: 0x2488, zero: 0x1F100, ranges: []rune{0x2488, 0x249B}},
-	// Double circled digits: ⓵-⓾
-	0x24F5: {oneChar: 0x24F5, zero: 0x24FF, ranges: []rune{0x24F5, 0x24FE}},
-	// Dingbat negative circled: ❶-❿
-	0x2776: {oneChar: 0x2776, zero: 0x24FF, ranges: []rune{0x2776, 0x277F}},
+	// Double circled digits: ⓵-⓾ (no special zero)
+	0x24F5: {oneChar: 0x24F5, zero: 0, ranges: []rune{0x24F5, 0x24FE}},
+	// Dingbat negative circled: ❶-❿, ⓫-⓴
+	0x2776: {oneChar: 0x2776, zero: 0x24FF, ranges: []rune{0x2776, 0x277F, 0x24EB, 0x24F4}},
 	// Dingbat negative circled sans-serif: ➊-➓
 	0x278A: {oneChar: 0x278A, zero: 0x1F10C, ranges: []rune{0x278A, 0x2793}},
 	// Dingbat negative circled sans-serif (alt, starting from ➀): ➀-➉
@@ -2038,14 +2038,22 @@ func formatWithOrdinalSystem(num int, start rune) string {
 	// Look up the system by the start character (which represents 1)
 	sys, ok := knownOrdinalSystems[start]
 	if !ok {
-		// Unknown system: simple offset, fall back to decimal on overflow
+		// Unknown system: detect range by scanning consecutive same-category
+		// characters, then fall back to decimal on overflow.
+		rangeLen := ordinalRangeLength(start)
+
 		if num == 0 {
-			if start == 0x2460 {
-				return "\u24EA"
+			// Check if start-1 is a valid zero character in the same category
+			prev := start - 1
+			if prev > 0 && (unicode.IsNumber(prev) || unicode.IsLetter(prev)) {
+				return string(prev)
 			}
 			return strconv.Itoa(0)
 		}
-		return string(start + rune(num-1))
+		if num <= rangeLen {
+			return string(start + rune(num-1))
+		}
+		return strconv.Itoa(num)
 	}
 
 	if num == 0 {
@@ -2069,6 +2077,32 @@ func formatWithOrdinalSystem(num int, start rune) string {
 
 	// Number exceeds ordinal system range: fall back to decimal
 	return strconv.Itoa(num)
+}
+
+// ordinalRangeLength returns how many consecutive characters starting at r
+// belong to the same Unicode category (Number or Letter). This determines
+// the range of an ordinal numbering system. For unknown systems, the range
+// is capped at 10 to avoid accidentally including characters from adjacent
+// but unrelated numbering systems.
+func ordinalRangeLength(r rune) int {
+	isNum := unicode.IsNumber(r)
+	count := 0
+	for c := r; ; c++ {
+		if isNum {
+			if !unicode.IsNumber(c) {
+				break
+			}
+		} else {
+			if !unicode.IsLetter(c) {
+				break
+			}
+		}
+		count++
+		if count >= 10 {
+			break // cap unknown systems at 10
+		}
+	}
+	return count
 }
 
 // numberToWords converts a number to English words.
