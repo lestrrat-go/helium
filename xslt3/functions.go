@@ -278,19 +278,23 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 	defer func() { ec.depth-- }()
 
 	// Save and restore execution state.
-	// xsl:function creates a new scope — tunnel params are NOT inherited.
+	// xsl:function creates a new scope — tunnel params and current mode
+	// are NOT inherited (XSLT 2.0 erratum XT.E19).
 	savedContext := ec.contextNode
 	savedCurrent := ec.currentNode
 	savedPos := ec.position
 	savedSize := ec.size
 	savedTunnel := ec.tunnelParams
+	savedMode := ec.currentMode
 	ec.tunnelParams = nil
+	ec.currentMode = ec.stylesheet.defaultMode
 	defer func() {
 		ec.contextNode = savedContext
 		ec.currentNode = savedCurrent
 		ec.position = savedPos
 		ec.size = savedSize
 		ec.tunnelParams = savedTunnel
+		ec.currentMode = savedMode
 	}()
 
 	// Push new variable scope for parameters
