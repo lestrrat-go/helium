@@ -2103,7 +2103,7 @@ func (p *parser) looksLikeStep() bool {
 			p.lexer.Next() // consume prefix
 			p.lexer.Next() // consume ':'
 			localTok := p.lexer.Peek()
-			if localTok.Type == TokenName {
+			if isNameLikeToken(localTok.Type) {
 				p.lexer.Next()
 				afterLocal := p.lexer.Peek()
 				p.lexer.Backup() // local name
