@@ -295,6 +295,11 @@ func (n Element) Attributes() []*Attribute {
 // If fn returns false, iteration stops early.
 // This avoids the slice allocation of Attributes().
 //
+// No dedicated unit tests: iteration order and early-stop semantics
+// are exercised transitively by XPath attribute-axis and doc-order tests.
+// All current callers always return true; the early-stop path exists as
+// a natural consequence of the iterator pattern.
+//
 // The unchecked type assertion on NextSibling is safe: the properties
 // chain is attribute-only by construction (field typed *Attribute,
 // only *Attribute nodes are ever linked in).
