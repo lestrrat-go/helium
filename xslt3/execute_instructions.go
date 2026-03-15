@@ -2493,6 +2493,11 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 
 	ec.outputStack = append(ec.outputStack, &outputFrame{doc: tmpDoc, current: tmpRoot})
 
+	// Push a new variable scope for the try body so variables
+	// declared inside the try are not visible in catch.
+	savedVarScope := ec.localVars
+	ec.pushVarScope()
+
 	tryErr := func() error {
 		if inst.Select != nil {
 			xpathCtx := ec.newXPathContext(ec.contextNode)
@@ -2549,6 +2554,10 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 	if errQName.URI != "" {
 		errClark = "{" + errQName.URI + "}" + errQName.Local
 	}
+
+	// Restore variable scope to before the try body.
+	// Variables declared inside the try must not be visible in catch.
+	ec.localVars = savedVarScope
 
 	// Find matching catch clause
 	var matchedCatch *CatchClause
