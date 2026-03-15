@@ -46,6 +46,19 @@ func (c *compiler) compileInstruction(elem *helium.Element) (Instruction, error)
 	}
 	defer func() { c.xpathDefaultNS = savedXPathDefaultNS }()
 
+	// Handle per-instruction default-mode (XSLT 3.0 standard attribute)
+	// On XSLT elements: default-mode="..."
+	// On LREs: xsl:default-mode="..."
+	// Mode names are stored as raw QNames (not Clark notation) for consistency
+	// with how template mode attributes are stored.
+	savedDefaultMode := c.defaultMode
+	if dm := getAttr(elem, "default-mode"); dm != "" {
+		c.defaultMode = dm
+	} else if dm, ok := elem.GetAttributeNS("default-mode", NSXSLT); ok {
+		c.defaultMode = dm
+	}
+	defer func() { c.defaultMode = savedDefaultMode }()
+
 	if elem.URI() == NSXSLT {
 		inst, err := c.compileXSLTInstruction(elem)
 		if err != nil {
@@ -270,8 +283,14 @@ func (c *compiler) compileChildren(parent *helium.Element) ([]Instruction, error
 }
 
 func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesInst, error) {
+	mode := getAttr(elem, "mode")
+	// When mode is absent, use the current default-mode (set by
+	// compileInstruction from ancestor or self default-mode attributes).
+	if mode == "" && c.defaultMode != "" {
+		mode = c.defaultMode
+	}
 	inst := &ApplyTemplatesInst{
-		Mode: getAttr(elem, "mode"),
+		Mode: mode,
 	}
 
 	selectAttr := getAttr(elem, "select")

@@ -27,6 +27,7 @@ type compiler struct {
 	baseURI        string
 	resolver       URIResolver
 	localExcludes  map[string]struct{} // accumulated LRE-level exclude-result-prefixes
+	defaultMode    string              // current default-mode (inherited through instruction nesting)
 }
 
 // shouldStripText returns true if a whitespace-only text node should be stripped
@@ -163,6 +164,7 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 	// Read default-mode from stylesheet root (XSLT 3.0)
 	if dm := getAttr(root, "default-mode"); dm != "" {
 		c.stylesheet.defaultMode = dm
+		c.defaultMode = dm
 	}
 
 	// Read version
@@ -338,11 +340,18 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 
 	tmpl.Name = resolveQName(getAttr(elem, "name"), c.nsBindings)
 	tmpl.Mode = getAttr(elem, "mode")
-	// XSLT 3.0 §6.7: if the stylesheet has xsl:stylesheet/@default-mode,
-	// templates without an explicit mode attribute belong to the default mode.
-	if tmpl.Mode == "" && c.stylesheet.defaultMode != "" {
-		tmpl.Mode = c.stylesheet.defaultMode
+	// XSLT 3.0 §6.7: if the stylesheet (or an included/imported module) has
+	// default-mode, templates without an explicit mode attribute belong to it.
+	if tmpl.Mode == "" && c.defaultMode != "" {
+		tmpl.Mode = c.defaultMode
 	}
+
+	// XSLT 3.0: default-mode on xsl:template affects apply-templates within
+	savedDefaultMode := c.defaultMode
+	if dm := getAttr(elem, "default-mode"); dm != "" {
+		c.defaultMode = dm
+	}
+	defer func() { c.defaultMode = savedDefaultMode }()
 
 	if prio := getAttr(elem, "priority"); prio != "" {
 		f, err := strconv.ParseFloat(prio, 64)
@@ -422,18 +431,22 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 			c.stylesheet.modeTemplates["#all"] = append(c.stylesheet.modeTemplates["#all"], tmpl)
 		} else {
 			// XSLT 2.0+: mode can be a whitespace-separated list of mode names.
-			// Each mode name can be a QName, "#default", or "#all".
+			// Each mode name can be a QName, "#default", "#unnamed", or "#all".
 			modes := strings.Fields(mode)
 			if len(modes) <= 1 {
 				// Single mode (or empty = default mode)
-				if mode == "#default" {
+				if mode == "#default" || mode == "#unnamed" {
 					mode = ""
 				}
 				c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], tmpl)
 			} else {
 				for _, m := range modes {
-					if m == "#default" {
+					if m == "#default" || m == "#unnamed" {
 						m = ""
+					} else if m == "#all" {
+						// In a mode list, #all means register in all modes
+						c.stylesheet.modeTemplates["#all"] = append(c.stylesheet.modeTemplates["#all"], tmpl)
+						continue
 					}
 					c.stylesheet.modeTemplates[m] = append(c.stylesheet.modeTemplates[m], tmpl)
 				}
@@ -928,6 +941,14 @@ func (c *compiler) loadExternalStylesheet(href string, isImport bool) error {
 	if importedRoot == nil || importedRoot.URI() != NSXSLT {
 		return staticError(errCodeXTSE0010, "imported document %q is not a stylesheet", uri)
 	}
+
+	// Save/restore default-mode: included/imported stylesheets may have
+	// their own default-mode that affects only their templates.
+	savedDefaultMode := c.defaultMode
+	if dm := getAttr(importedRoot, "default-mode"); dm != "" {
+		c.defaultMode = dm
+	}
+	defer func() { c.defaultMode = savedDefaultMode }()
 
 	if isImport {
 		// For imports: the imported stylesheet gets current (lower) precedence.
