@@ -236,12 +236,20 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (Instruction, er
 		// xsl:document is deprecated in XSLT 3.0, treat like xsl:sequence
 		return c.compileSequence(elem)
 	case "result-document":
-		// For now, treat result-document body as regular output
+		inst := &ResultDocumentInst{}
+		if href := getAttr(elem, "href"); href != "" {
+			avt, err := compileAVT(href, c.nsBindings)
+			if err != nil {
+				return nil, err
+			}
+			inst.Href = avt
+		}
 		body, err := c.compileChildren(elem)
 		if err != nil {
 			return nil, err
 		}
-		return &SequenceInst{Body: body}, nil
+		inst.Body = body
+		return inst, nil
 	case "where-populated":
 		// xsl:where-populated: execute body and only include if non-empty
 		body, err := c.compileChildren(elem)

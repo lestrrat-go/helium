@@ -264,6 +264,15 @@ type NamespaceInst struct {
 
 func (*NamespaceInst) instructionTag() {}
 
+// ResultDocumentInst represents xsl:result-document.
+// The body output goes to a secondary result, not the primary output.
+type ResultDocumentInst struct {
+	Href *AVT
+	Body []Instruction
+}
+
+func (*ResultDocumentInst) instructionTag() {}
+
 // XSLSequenceInst represents xsl:sequence with a select attribute.
 type XSLSequenceInst struct {
 	Select *xpath3.Expression

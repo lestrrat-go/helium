@@ -72,6 +72,8 @@ func (ec *execContext) executeInstruction(ctx context.Context, inst Instruction)
 			}
 		}
 		return nil
+	case *ResultDocumentInst:
+		return ec.execResultDocument(ctx, v)
 	case *XSLSequenceInst:
 		return ec.execXSLSequence(ctx, v)
 	case *PerformSortInst:
@@ -2787,6 +2789,33 @@ func (ec *execContext) execOnEmpty(ctx context.Context, inst *OnEmptyInst) error
 			return err
 		}
 	}
+	return nil
+}
+
+func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocumentInst) error {
+	// xsl:result-document redirects output to a secondary destination.
+	// Execute the body into a temporary document so it doesn't pollute
+	// the primary output. TODO: actually store/serialize secondary results.
+	tmpDoc := helium.NewDefaultDocument()
+	tmpRoot, err := tmpDoc.CreateElement("_result")
+	if err != nil {
+		return err
+	}
+	if err := tmpDoc.AddChild(tmpRoot); err != nil {
+		return err
+	}
+
+	ec.outputStack = append(ec.outputStack, &outputFrame{doc: tmpDoc, current: tmpRoot})
+	for _, child := range inst.Body {
+		if err := ec.executeInstruction(ctx, child); err != nil {
+			ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+			return err
+		}
+	}
+	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+
+	// TODO: store the secondary result in a map keyed by the evaluated href,
+	// and make it available via assert-result-document in the test harness.
 	return nil
 }
 

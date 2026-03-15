@@ -2309,6 +2309,8 @@ func getChildInstructions(inst Instruction) [][]Instruction {
 		children = append(children, v.Body)
 	case *SequenceInst:
 		children = append(children, v.Body)
+	case *ResultDocumentInst:
+		children = append(children, v.Body)
 	case *MapInst:
 		children = append(children, v.Body)
 	case *MapEntryInst:
