@@ -361,6 +361,18 @@ func (n node) Namespaces() []*Namespace {
 	return n.nsDefs
 }
 
+// RemoveNamespaceByPrefix removes a namespace declaration with the given prefix.
+// Returns true if a declaration was removed.
+func (n *node) RemoveNamespaceByPrefix(prefix string) bool {
+	for i, ns := range n.nsDefs {
+		if ns.Prefix() == prefix {
+			n.nsDefs = append(n.nsDefs[:i], n.nsDefs[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
 // DeclareNamespace declares a namespace on this node without making it the
 // node's active namespace (libxml2: xmlNewNs).
 func (n *node) DeclareNamespace(prefix, uri string) error {

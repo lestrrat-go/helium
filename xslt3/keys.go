@@ -7,9 +7,9 @@ import (
 	"github.com/lestrrat-go/helium"
 )
 
-// keyTable is a built key index for a specific xsl:key definition.
+// keyTable is a built key index for a specific xsl:key name.
 type keyTable struct {
-	def      *KeyDef
+	defs     []*KeyDef
 	entries  map[string][]helium.Node // key-value -> matching nodes
 	building bool
 	built    bool
@@ -30,13 +30,13 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 		}
 	}
 
-	kd, ok := ec.stylesheet.keys[name]
-	if !ok {
+	defs, ok := ec.stylesheet.keys[name]
+	if !ok || len(defs) == 0 {
 		return nil, dynamicError(errCodeXTDE1170, "unknown key %q", name)
 	}
 
 	kt := &keyTable{
-		def:      kd,
+		defs:     defs,
 		entries:  make(map[string][]helium.Node),
 		building: true,
 	}
@@ -51,37 +51,55 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 		ec.currentNode = savedCurrent
 	}()
 
-	err := helium.Walk(root, func(node helium.Node) error {
-		if !kd.Match.matchPattern(ec, node) {
-			return nil
-		}
-		ec.contextNode = node
-		ec.currentNode = node
+	// Track which nodes have been added for each key value to avoid
+	// duplicates when multiple defs match the same node.
+	seen := make(map[string]map[helium.Node]struct{})
 
-		if kd.Use != nil {
-			// use="expr" form
-			xpathCtx := ec.newXPathContext(node)
-			result, err := kd.Use.Evaluate(xpathCtx, node)
-			if err != nil {
-				return err
+	err := helium.Walk(root, func(node helium.Node) error {
+		for _, kd := range defs {
+			if !kd.Match.matchPattern(ec, node) {
+				continue
 			}
-			for _, item := range result.Sequence() {
-				keyVal := stringifyItem(item)
-				kt.entries[keyVal] = append(kt.entries[keyVal], node)
-			}
-		} else if len(kd.Body) > 0 {
-			// Content constructor form: evaluate body as sequence
-			ctx := ec.transformCtx
-			if ctx == nil {
-				ctx = context.Background()
-			}
-			seq, err := ec.evaluateBody(ctx, kd.Body)
-			if err != nil {
-				return err
-			}
-			for _, item := range seq {
-				keyVal := stringifyItem(item)
-				kt.entries[keyVal] = append(kt.entries[keyVal], node)
+			ec.contextNode = node
+			ec.currentNode = node
+
+			if kd.Use != nil {
+				// use="expr" form
+				xpathCtx := ec.newXPathContext(node)
+				result, err := kd.Use.Evaluate(xpathCtx, node)
+				if err != nil {
+					return err
+				}
+				for _, item := range result.Sequence() {
+					keyVal := stringifyItem(item)
+					if seen[keyVal] == nil {
+						seen[keyVal] = make(map[helium.Node]struct{})
+					}
+					if _, dup := seen[keyVal][node]; !dup {
+						seen[keyVal][node] = struct{}{}
+						kt.entries[keyVal] = append(kt.entries[keyVal], node)
+					}
+				}
+			} else if len(kd.Body) > 0 {
+				// Content constructor form: evaluate body as sequence
+				ctx := ec.transformCtx
+				if ctx == nil {
+					ctx = context.Background()
+				}
+				seq, err := ec.evaluateBody(ctx, kd.Body)
+				if err != nil {
+					return err
+				}
+				for _, item := range seq {
+					keyVal := stringifyItem(item)
+					if seen[keyVal] == nil {
+						seen[keyVal] = make(map[helium.Node]struct{})
+					}
+					if _, dup := seen[keyVal][node]; !dup {
+						seen[keyVal][node] = struct{}{}
+						kt.entries[keyVal] = append(kt.entries[keyVal], node)
+					}
+				}
 			}
 		}
 		return nil
