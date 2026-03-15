@@ -1,6 +1,8 @@
 package xslt3
 
 import (
+	"strings"
+
 	"github.com/lestrrat-go/helium"
 )
 
@@ -113,6 +115,7 @@ func (c *compiler) compileIterateParam(elem *helium.Element) (*IterateParam, err
 
 	p := &IterateParam{
 		Name: resolveQName(name, c.nsBindings),
+		As:   getAttr(elem, "as"),
 	}
 
 	selectAttr := getAttr(elem, "select")
@@ -310,4 +313,121 @@ func (c *compiler) compileAccumulatorRule(parent *AccumulatorDef, elem *helium.E
 
 	parent.Rules = append(parent.Rules, rule)
 	return nil
+}
+
+// compileMerge compiles an xsl:merge element.
+func (c *compiler) compileMerge(elem *helium.Element) (Instruction, error) {
+	inst := &MergeInst{}
+
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		childElem, ok := child.(*helium.Element)
+		if !ok {
+			continue
+		}
+		if childElem.URI() != NSXSLT {
+			continue
+		}
+		switch childElem.LocalName() {
+		case "merge-source":
+			src, err := c.compileMergeSource(childElem)
+			if err != nil {
+				return nil, err
+			}
+			inst.Sources = append(inst.Sources, src)
+		case "merge-action":
+			body, err := c.compileChildren(childElem)
+			if err != nil {
+				return nil, err
+			}
+			inst.Action = body
+		}
+	}
+
+	if len(inst.Sources) == 0 {
+		return nil, staticError(errCodeXTSE0110, "xsl:merge requires at least one xsl:merge-source child")
+	}
+	if len(inst.Action) == 0 {
+		return nil, staticError(errCodeXTSE0110, "xsl:merge requires an xsl:merge-action child")
+	}
+
+	return inst, nil
+}
+
+// compileMergeSource compiles an xsl:merge-source element.
+func (c *compiler) compileMergeSource(elem *helium.Element) (*MergeSource, error) {
+	src := &MergeSource{
+		Name: getAttr(elem, "name"),
+	}
+
+	// Parse streamable attribute — accept "yes", "true", "1" (with whitespace trimming)
+	streamVal := strings.TrimSpace(getAttr(elem, "streamable"))
+	src.StreamableAttr = streamVal == "yes" || streamVal == "true" || streamVal == "1"
+
+	sortVal := strings.TrimSpace(getAttr(elem, "sort-before-merge"))
+	src.SortBeforeMerge = sortVal == "yes" || sortVal == "true" || sortVal == "1"
+
+	// for-each-source: XPath expression evaluating to sequence of URI strings
+	if fes := getAttr(elem, "for-each-source"); fes != "" {
+		expr, err := compileXPath(fes, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		src.ForEachSource = expr
+	}
+
+	// for-each-item: XPath expression evaluating to sequence of items (nodes)
+	if fei := getAttr(elem, "for-each-item"); fei != "" {
+		expr, err := compileXPath(fei, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		src.ForEachItem = expr
+	}
+
+	// select: XPath expression for selecting items from each source
+	if sel := getAttr(elem, "select"); sel != "" {
+		expr, err := compileXPath(sel, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		src.Select = expr
+	}
+
+	// Parse xsl:merge-key children
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		childElem, ok := child.(*helium.Element)
+		if !ok {
+			continue
+		}
+		if childElem.URI() == NSXSLT && childElem.LocalName() == "merge-key" {
+			mk, err := c.compileMergeKey(childElem)
+			if err != nil {
+				return nil, err
+			}
+			src.Keys = append(src.Keys, mk)
+		}
+	}
+
+	return src, nil
+}
+
+// compileMergeKey compiles an xsl:merge-key element.
+func (c *compiler) compileMergeKey(elem *helium.Element) (*MergeKey, error) {
+	mk := &MergeKey{
+		Order: "ascending", // default
+	}
+
+	if sel := getAttr(elem, "select"); sel != "" {
+		expr, err := compileXPath(sel, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		mk.Select = expr
+	}
+
+	if order := getAttr(elem, "order"); order != "" {
+		mk.Order = order
+	}
+
+	return mk, nil
 }

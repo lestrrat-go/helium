@@ -17,11 +17,19 @@ func analyzeStreamability(ss *Stylesheet) error {
 		}
 	}
 
-	// Note: templates in streamable modes are NOT checked here because the
-	// streamability rules for template bodies in streamable modes are more
-	// nuanced (ancestor axes are allowed on the matched context node, etc.).
-	// The W3C XTSE3430 tests for streaming modes primarily target
-	// xsl:source-document bodies, not individual template bodies.
+	// Check templates in streamable modes for non-streamable constructs.
+	for _, tmpl := range ss.templates {
+		if tmpl.Mode == "" || tmpl.Mode == "#all" {
+			continue
+		}
+		md := ss.modeDefs[tmpl.Mode]
+		if md == nil || !md.Streamable {
+			continue
+		}
+		if err := checkStreamableTemplateBody(ss, tmpl.Body); err != nil {
+			return err
+		}
+	}
 
 	// Check functions with declared streamability.
 	for _, fn := range ss.functions {
@@ -62,6 +70,13 @@ func checkStreamableTemplateBody(ss *Stylesheet, body []Instruction) error {
 			return err
 		}
 	}
+
+	// Check for variables bound to the streaming context that are used
+	// consumingly in subsequent loop bodies.
+	if err := checkStreamingVarInLoop(body); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -76,6 +91,31 @@ func checkStreamableInstruction(ss *Stylesheet, inst Instruction) error {
 	// Check for multiple downward selections across sibling expressions in
 	// fork branches and map entries (they each consume the stream).
 	if err := checkMultipleDownwardInst(inst); err != nil {
+		return err
+	}
+
+	// Check attribute sets used in streaming context.
+	if err := checkUseAttributeSetsStreamable(ss, inst); err != nil {
+		return err
+	}
+
+	// Check for-each/iterate with crawling select or variable-bound streaming in loop.
+	if err := checkForEachStreamable(ss, inst); err != nil {
+		return err
+	}
+
+	// Check for-each-group streamability constraints.
+	if err := checkForEachGroupStreamable(ss, inst); err != nil {
+		return err
+	}
+
+	// Check xsl:map with multiple consuming entries or non-map-entry children.
+	if err := checkMapStreamable(ss, inst); err != nil {
+		return err
+	}
+
+	// Check xsl:iterate for streamed node accumulation violations.
+	if err := checkIterateStreamable(ss, inst); err != nil {
 		return err
 	}
 
@@ -127,7 +167,94 @@ func checkStreamableExpr(expr *xpath3.Expression) error {
 			"expression %q has multiple downward selections, which is not streamable", expr.String())
 	}
 
+	// 6. Grounding functions (reverse, innermost) with crawling operands are not
+	// streamable because the crawling expression itself requires multi-level descent.
+	if exprHasCrawlingGroundingArg(expr) {
+		return staticError(errCodeXTSE3430,
+			"expression %q uses a grounding function with a crawling operand, which is not streamable", expr.String())
+	}
+
 	return nil
+}
+
+// exprHasCrawlingGroundingArg returns true if the expression contains a call to
+// reverse(), innermost(), or outermost() whose argument has a crawling expression
+// on streaming (non-grounded) data.
+func exprHasCrawlingGroundingArg(expr *xpath3.Expression) bool {
+	if expr == nil {
+		return false
+	}
+	found := false
+	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		if fc, ok := e.(xpath3.FunctionCall); ok {
+			if fc.Prefix == "" && (fc.Name == "reverse" || fc.Name == "innermost") {
+				for _, arg := range fc.Args {
+					if argHasStreamingCrawl(arg) {
+						found = true
+						return false
+					}
+				}
+			}
+		}
+		return true
+	})
+	return found
+}
+
+// argHasStreamingCrawl returns true if an expression has a descendant-or-self
+// axis step that operates on streaming (non-grounded) data. Crawling inside
+// a grounding function like snapshot() is fine and not flagged.
+func argHasStreamingCrawl(expr xpath3.Expr) bool {
+	return argHasStreamingCrawlInner(expr, false)
+}
+
+func argHasStreamingCrawlInner(expr xpath3.Expr, grounded bool) bool {
+	expr = derefXPathExpr(expr)
+	if grounded {
+		return false
+	}
+	switch v := expr.(type) {
+	case xpath3.LocationPath:
+		for _, step := range v.Steps {
+			if step.Axis == xpath3.AxisDescendant || step.Axis == xpath3.AxisDescendantOrSelf {
+				return true
+			}
+		}
+	case xpath3.PathStepExpr:
+		if v.DescOrSelf {
+			// Check if the LHS is grounding
+			if !isGroundingExpr(v.Left) {
+				return true
+			}
+		}
+		leftGrounding := isGroundingExpr(v.Left) || isAtomicResultExpr(v.Left)
+		if argHasStreamingCrawlInner(v.Left, false) {
+			return true
+		}
+		return argHasStreamingCrawlInner(v.Right, leftGrounding)
+	case xpath3.PathExpr:
+		filterGrounding := isGroundingExpr(v.Filter)
+		if argHasStreamingCrawlInner(v.Filter, false) {
+			return true
+		}
+		if v.Path != nil {
+			lp := *v.Path
+			return argHasStreamingCrawlInner(lp, filterGrounding)
+		}
+	case xpath3.FunctionCall:
+		g := isGroundingExpr(v)
+		for _, arg := range v.Args {
+			if argHasStreamingCrawlInner(arg, g) {
+				return true
+			}
+		}
+	case xpath3.FilterExpr:
+		return argHasStreamingCrawlInner(v.Expr, false)
+	}
+	return false
 }
 
 // walkExprWithGrounding walks an expression tree, tracking whether we are
@@ -508,9 +635,567 @@ func checkMultipleDownwardInst(inst Instruction) error {
 			return staticError(errCodeXTSE3430,
 				"xsl:for-each-group body has multiple consuming references to current-group(), which is not streamable")
 		}
+
+		// Also check if a single current-group() usage has multiple downward
+		// selections (e.g. current-group()/(AUTHOR||TITLE)).
+		for _, bi := range v.Body {
+			for _, expr := range getInstructionExprs(bi) {
+				if expr == nil {
+					continue
+				}
+				if countDownwardFromCurrentGroup(expr.AST()) > 1 {
+					return staticError(errCodeXTSE3430,
+						"xsl:for-each-group body has multiple downward selections from current-group(), which is not streamable")
+				}
+			}
+			for _, children := range getChildInstructions(bi) {
+				for _, ci := range children {
+					for _, expr := range getInstructionExprs(ci) {
+						if expr == nil {
+							continue
+						}
+						if countDownwardFromCurrentGroup(expr.AST()) > 1 {
+							return staticError(errCodeXTSE3430,
+								"xsl:for-each-group body has multiple downward selections from current-group(), which is not streamable")
+						}
+					}
+				}
+			}
+		}
+
+		// Check if context item "." is used consumingly in for-each-group body.
+		// In for-each-group, "." refers to the first item of the current group,
+		// and using both "." (downward) and current-group() is multiple consumption.
+		bodyUsesContextDown := false
+		bodyUsesCurrentGroup := false
+		for _, bi := range v.Body {
+			for _, expr := range getInstructionExprs(bi) {
+				if expr == nil {
+					continue
+				}
+				if exprHasContextDownward(expr.AST()) {
+					bodyUsesContextDown = true
+				}
+				if xpath3.ExprUsesFunction(expr, "current-group") {
+					bodyUsesCurrentGroup = true
+				}
+			}
+			for _, children := range getChildInstructions(bi) {
+				for _, ci := range children {
+					for _, expr := range getInstructionExprs(ci) {
+						if expr == nil {
+							continue
+						}
+						if exprHasContextDownward(expr.AST()) {
+							bodyUsesContextDown = true
+						}
+						if xpath3.ExprUsesFunction(expr, "current-group") {
+							bodyUsesCurrentGroup = true
+						}
+					}
+				}
+			}
+		}
+		if bodyUsesContextDown && bodyUsesCurrentGroup {
+			return staticError(errCodeXTSE3430,
+				"xsl:for-each-group body uses both context item (downward) and current-group(), which is not streamable")
+		}
 	}
 
 	return nil
+}
+
+// checkUseAttributeSetsStreamable checks that attribute sets used in a streaming
+// context are themselves streamable. An attribute set is non-streamable if any
+// of its attribute instructions contain non-streamable expressions (downward
+// navigation, last(), etc.), or if the combined downward selections from the
+// instruction and attribute set exceed 1.
+func checkUseAttributeSetsStreamable(ss *Stylesheet, inst Instruction) error {
+	var attrSetNames []string
+	switch v := inst.(type) {
+	case *CopyInst:
+		attrSetNames = v.UseAttrSets
+	case *ElementInst:
+		attrSetNames = v.UseAttrSets
+	case *LiteralResultElement:
+		attrSetNames = v.UseAttrSets
+	}
+	if len(attrSetNames) == 0 {
+		return nil
+	}
+
+	// Count downward selections in the instruction's own expressions
+	instDown := 0
+	for _, expr := range getInstructionExprs(inst) {
+		instDown += countStreamingDownwardSelections(expr.AST())
+	}
+
+	for _, name := range attrSetNames {
+		asDef := ss.attributeSets[name]
+		if asDef == nil {
+			continue
+		}
+
+		// Check individual expressions for streamability violations
+		for _, attrInst := range asDef.Attrs {
+			for _, expr := range getInstructionExprs(attrInst) {
+				if err := checkStreamableExpr(expr); err != nil {
+					return staticError(errCodeXTSE3430,
+						"attribute set %q is not streamable: %s", asDef.Name, err.Error())
+				}
+			}
+		}
+
+		// Any attribute set with downward navigation used in streaming context
+		// is non-streamable (the attribute set would consume the stream).
+		asDown := countAttributeSetDownward(ss, asDef)
+		if asDown > 0 {
+			return staticError(errCodeXTSE3430,
+				"use-attribute-sets %q has downward navigation, which is not streamable", name)
+		}
+
+		// Check transitively-used attribute sets
+		for _, usedName := range asDef.UseAttrSets {
+			used := ss.attributeSets[usedName]
+			if used == nil {
+				continue
+			}
+			for _, attrInst := range used.Attrs {
+				for _, expr := range getInstructionExprs(attrInst) {
+					if err := checkStreamableExpr(expr); err != nil {
+						return staticError(errCodeXTSE3430,
+							"attribute set %q is not streamable: %s", usedName, err.Error())
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// countAttributeSetDownward counts total streaming downward selections in an
+// attribute set's instructions.
+func countAttributeSetDownward(ss *Stylesheet, asDef *AttributeSetDef) int {
+	total := 0
+	for _, attrInst := range asDef.Attrs {
+		for _, expr := range getInstructionExprs(attrInst) {
+			total += countStreamingDownwardSelections(expr.AST())
+		}
+	}
+	// Include transitively used attribute sets
+	for _, usedName := range asDef.UseAttrSets {
+		used := ss.attributeSets[usedName]
+		if used != nil {
+			total += countAttributeSetDownward(ss, used)
+		}
+	}
+	return total
+}
+
+// checkForEachStreamable checks for-each and iterate instructions for:
+// - crawling select expression (//a/b = descendant-or-self then child)
+// - variable bound to streamed node used consumingly in loop body
+// - xsl:sequence select="." returning streamed nodes from for-each body
+func checkForEachStreamable(_ *Stylesheet, inst Instruction) error {
+	switch v := inst.(type) {
+	case *ForEachInst:
+		// Check if select expression is crawling AND body consumes context.
+		// But if the select grounds its result (e.g., snapshot(//...)), the body
+		// operates on grounded data and consuming is fine.
+		if v.Select != nil && xpath3.ExprUsesDescendantOrSelf(v.Select) &&
+			!exprEndsWithGrounding(v.Select.AST()) {
+			if forEachBodyConsumesContext(v.Body) {
+				return staticError(errCodeXTSE3430,
+					"xsl:for-each with crawling select expression %q and consuming body is not streamable", v.Select.String())
+			}
+		}
+		// Check for xsl:sequence select="." returning streamed nodes
+		for _, bi := range v.Body {
+			if seq, ok := bi.(*XSLSequenceInst); ok && seq.Select != nil {
+				ast := seq.Select.AST()
+				if _, ok := ast.(xpath3.ContextItemExpr); ok {
+					return staticError(errCodeXTSE3430,
+						"xsl:for-each body returns streamed nodes via xsl:sequence select=\".\", which is not streamable")
+				}
+			}
+		}
+		// Check for variable bound to streaming context used in loop body
+		if err := checkStreamingVarInLoop(v.Body); err != nil {
+			return err
+		}
+	case *IterateInst:
+		// Check for variable bound to streaming context used in loop body
+		if err := checkStreamingVarInLoop(v.Body); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// forEachBodyConsumesContext returns true if any instruction in the body
+// consumes the context item (e.g., value-of select="."). This is checked
+// when a for-each has a crawling select expression.
+func forEachBodyConsumesContext(body []Instruction) bool {
+	for _, inst := range body {
+		for _, expr := range getInstructionExprs(inst) {
+			if expr == nil {
+				continue
+			}
+			// Check if the expression accesses "." (context item) — consuming it
+			if exprReferencesContextItem(expr.AST()) {
+				return true
+			}
+		}
+		for _, children := range getChildInstructions(inst) {
+			if forEachBodyConsumesContext(children) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// checkStreamingVarInLoop checks if a variable is bound to the streaming context
+// node (select=".") and then used consumingly (downward navigation) in a loop body.
+// This is non-streamable because the loop iterates over a non-streaming range but
+// accesses the streamed variable repeatedly.
+func checkStreamingVarInLoop(body []Instruction) error {
+	// Collect variables bound to streaming context (select=".")
+	streamingVars := make(map[string]bool)
+	for _, inst := range body {
+		if vi, ok := inst.(*VariableInst); ok && vi.Select != nil {
+			ast := vi.Select.AST()
+			if _, ok := ast.(xpath3.ContextItemExpr); ok {
+				streamingVars[vi.Name] = true
+			}
+		}
+	}
+	if len(streamingVars) == 0 {
+		return nil
+	}
+	// Check if any subsequent for-each/iterate loop uses these vars consumingly
+	for _, inst := range body {
+		switch v := inst.(type) {
+		case *ForEachInst:
+			if err := checkVarConsumingInBody(streamingVars, v.Body); err != nil {
+				return err
+			}
+		case *IterateInst:
+			if err := checkVarConsumingInBody(streamingVars, v.Body); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// checkVarConsumingInBody checks if any streaming variable is used consumingly
+// in a set of instructions.
+func checkVarConsumingInBody(streamingVars map[string]bool, body []Instruction) error {
+	for _, inst := range body {
+		for _, expr := range getInstructionExprs(inst) {
+			if expr == nil {
+				continue
+			}
+			for varName := range streamingVars {
+				if exprUsesVarConsumingly(expr, varName) {
+					return staticError(errCodeXTSE3430,
+						"variable $%s bound to streaming context is used consumingly in a loop, which is not streamable", varName)
+				}
+			}
+		}
+		for _, children := range getChildInstructions(inst) {
+			if err := checkVarConsumingInBody(streamingVars, children); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// checkForEachGroupStreamable checks for-each-group specific streamability constraints:
+// - group-by/group-adjacent with consuming grouping expression
+// - group-starting-with/group-ending-with with consuming pattern
+// - sorted for-each-group in streaming context
+// - nested for-each-group consuming current-group()
+// - for-each-group inside fork with crawling select
+// - for-each-group with non-motionless grouping key (e.g., PRICE/text())
+func checkForEachGroupStreamable(_ *Stylesheet, inst Instruction) error {
+	fg, ok := inst.(*ForEachGroupInst)
+	if !ok {
+		return nil
+	}
+
+	// Check if group-adjacent with position() in grouping key
+	if fg.GroupAdjacent != nil {
+		if xpath3.ExprUsesFunction(fg.GroupAdjacent, "position") {
+			return staticError(errCodeXTSE3430,
+				"xsl:for-each-group group-adjacent uses position(), which is not streamable")
+		}
+	}
+
+	// Check if sort is used with for-each-group in streaming (non-streamable)
+	if len(fg.Sort) > 0 {
+		return staticError(errCodeXTSE3430,
+			"xsl:for-each-group with sort is not streamable")
+	}
+
+	// Check if grouping key navigates downward (e.g., PRICE/text())
+	if fg.GroupBy != nil && xpath3.ExprHasDownwardStep(fg.GroupBy) {
+		return staticError(errCodeXTSE3430,
+			"xsl:for-each-group group-by expression %q navigates downward, which is not streamable",
+			fg.GroupBy.String())
+	}
+	if fg.GroupAdjacent != nil && xpath3.ExprHasDownwardStep(fg.GroupAdjacent) {
+		return staticError(errCodeXTSE3430,
+			"xsl:for-each-group group-adjacent expression %q navigates downward, which is not streamable",
+			fg.GroupAdjacent.String())
+	}
+
+	// Check if select uses descendant-or-self (crawling) for grouped streaming,
+	// but only when the select doesn't ground its result via copy-of/snapshot.
+	if fg.Select != nil && xpath3.ExprUsesDescendantOrSelf(fg.Select) && !exprEndsWithGrounding(fg.Select.AST()) {
+		return staticError(errCodeXTSE3430,
+			"xsl:for-each-group select expression %q is crawling, which is not streamable", fg.Select.String())
+	}
+
+	// Check for nested for-each-group that consumes current-group(),
+	// but only when the outer for-each-group select doesn't ground its data.
+	if fg.Select == nil || !exprEndsWithGrounding(fg.Select.AST()) {
+		for _, bi := range fg.Body {
+			if innerFg, ok := bi.(*ForEachGroupInst); ok {
+				if innerFg.Select != nil {
+					if exprUsesCurrentGroup(innerFg.Select) {
+						// Nested for-each-group selecting from current-group() is consuming
+						cgRefs := countCurrentGroupConsumingRefs(innerFg.Body)
+						if cgRefs > 0 {
+							return staticError(errCodeXTSE3430,
+								"nested xsl:for-each-group consuming current-group() is not streamable")
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Check if for-each-group body has source-document with streaming that uses current-group()
+	for _, bi := range fg.Body {
+		if sd, ok := bi.(*SourceDocumentInst); ok && sd.Streamable {
+			for _, sdi := range sd.Body {
+				for _, expr := range getInstructionExprs(sdi) {
+					if exprUsesCurrentGroup(expr) {
+						return staticError(errCodeXTSE3430,
+							"xsl:source-document streamable body uses current-group() from outer for-each-group, which is not streamable")
+					}
+				}
+			}
+		}
+	}
+
+	// Check for-each-group with group-starting-with: copy-of(current-group()) is not streamable
+	// because group-starting-with needs to buffer and the pattern-matching consumes nodes
+	if fg.GroupStartingWith != nil {
+		for _, bi := range fg.Body {
+			if err := checkGroupStartingWithBody(bi); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// checkGroupStartingWithBody checks if a for-each-group group-starting-with body
+// uses current-group() in a consuming way that requires buffering.
+func checkGroupStartingWithBody(inst Instruction) error {
+	for _, expr := range getInstructionExprs(inst) {
+		if expr == nil {
+			continue
+		}
+		if exprUsesCurrentGroupConsumingly(expr) {
+			return staticError(errCodeXTSE3430,
+				"xsl:for-each-group group-starting-with body consumes current-group(), which is not streamable")
+		}
+	}
+	for _, children := range getChildInstructions(inst) {
+		for _, child := range children {
+			if err := checkGroupStartingWithBody(child); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// exprUsesCurrentGroupConsumingly checks if an expression uses current-group()
+// in a consuming way (copy-of, downward navigation, apply-templates, etc.).
+func exprUsesCurrentGroupConsumingly(expr *xpath3.Expression) bool {
+	found := false
+	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		// copy-of(current-group()) is consuming
+		if fc, ok := e.(xpath3.FunctionCall); ok {
+			if fc.Prefix == "" && (fc.Name == "copy-of" || fc.Name == "snapshot") {
+				for _, arg := range fc.Args {
+					if isCurrentGroupCall(arg) {
+						found = true
+						return false
+					}
+				}
+			}
+		}
+		// current-group()/something is consuming
+		if ps, ok := e.(xpath3.PathStepExpr); ok {
+			if isCurrentGroupCall(ps.Left) {
+				found = true
+				return false
+			}
+		}
+		// apply-templates select="current-group()" is consuming (can't check from XPath,
+		// but current-group() passed to apply-templates will appear in instruction exprs)
+		return true
+	})
+	return found
+}
+
+// exprUsesCurrentGroup returns true if the expression calls current-group() anywhere.
+func exprUsesCurrentGroup(expr *xpath3.Expression) bool {
+	return xpath3.ExprUsesFunction(expr, "current-group")
+}
+
+// checkMapStreamable checks xsl:map instructions for streamability violations:
+// - Multiple map-entry children with consuming expressions
+// - Non-map-entry children (like xsl:if wrapping map-entry)
+func checkMapStreamable(_ *Stylesheet, inst Instruction) error {
+	mapInst, ok := inst.(*MapInst)
+	if !ok {
+		return nil
+	}
+
+	consumingEntries := 0
+	hasNonEntryChildren := false
+	for _, child := range mapInst.Body {
+		if me, ok := child.(*MapEntryInst); ok {
+			consuming := false
+			if me.Select != nil {
+				if countStreamingDownwardSelections(me.Select.AST()) > 0 {
+					consuming = true
+				}
+			}
+			if me.Key != nil {
+				if countStreamingDownwardSelections(me.Key.AST()) > 0 {
+					consuming = true
+				}
+			}
+			// Also check child instructions of map-entry for consuming patterns
+			if !consuming {
+				for _, meChild := range me.Body {
+					for _, expr := range getInstructionExprs(meChild) {
+						if countStreamingDownwardSelections(expr.AST()) > 0 {
+							consuming = true
+							break
+						}
+					}
+					if consuming {
+						break
+					}
+				}
+			}
+			if consuming {
+				consumingEntries++
+			}
+		} else {
+			hasNonEntryChildren = true
+		}
+	}
+
+	if consumingEntries > 1 {
+		return staticError(errCodeXTSE3430,
+			"xsl:map has multiple map-entry elements with consuming expressions, which is not streamable")
+	}
+
+	if hasNonEntryChildren && consumingEntries > 0 {
+		return staticError(errCodeXTSE3430,
+			"xsl:map has non-map-entry children with consuming map entries, which is not streamable")
+	}
+
+	return nil
+}
+
+// checkIterateStreamable checks xsl:iterate for violations where streamed nodes
+// are accumulated via xsl:with-param, creating non-streamable patterns.
+func checkIterateStreamable(_ *Stylesheet, inst Instruction) error {
+	iter, ok := inst.(*IterateInst)
+	if !ok {
+		return nil
+	}
+
+	// Check if any iterate param is typed as element()* and the body uses
+	// the context item (.) in a with-param, which means streamed nodes accumulate.
+	// This pattern: <xsl:param name="x" as="element()*"/>
+	//               <xsl:with-param name="x" select="($x, .)"/>
+	// is non-streamable because it accumulates streamed nodes across iterations.
+	elemParams := make(map[string]bool)
+	for _, p := range iter.Params {
+		as := strings.TrimSpace(p.As)
+		if strings.Contains(as, "element") && (strings.Contains(as, "*") || strings.Contains(as, "+")) {
+			elemParams[p.Name] = true
+		}
+	}
+	if len(elemParams) == 0 {
+		return nil
+	}
+
+	// Look for next-iteration with-param that includes "." (context item)
+	// This is the pattern where streamed nodes accumulate
+	if bodyAccumulatesStreamedNodes(iter.Body, elemParams) {
+		return staticError(errCodeXTSE3430,
+			"xsl:iterate accumulates streamed nodes in element()* parameter, which is not streamable")
+	}
+
+	return nil
+}
+
+// bodyAccumulatesStreamedNodes checks if an iterate body accumulates streamed
+// nodes by passing context items to element()* parameters via next-iteration.
+func bodyAccumulatesStreamedNodes(body []Instruction, elemParams map[string]bool) bool {
+	for _, inst := range body {
+		if ni, ok := inst.(*NextIterationInst); ok {
+			for _, wp := range ni.Params {
+				if !elemParams[wp.Name] {
+					continue
+				}
+				if wp.Select != nil && exprReferencesContextItem(wp.Select.AST()) {
+					return true
+				}
+			}
+		}
+		// Recurse into child instructions (e.g., inside choose/if)
+		for _, children := range getChildInstructions(inst) {
+			if bodyAccumulatesStreamedNodes(children, elemParams) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// exprReferencesContextItem returns true if the expression references "." (context item).
+func exprReferencesContextItem(expr xpath3.Expr) bool {
+	found := false
+	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		if _, ok := e.(xpath3.ContextItemExpr); ok {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
 }
 
 // countDownwardInInstructions counts total streaming downward selections across instructions.
@@ -570,9 +1255,9 @@ func countCurrentGroupConsumingRefs(body []Instruction) int {
 }
 
 // countCurrentGroupConsumingInExpr counts consuming uses of current-group()
-// in an expression. A "consuming" use is one where current-group() result
-// is navigated into (current-group()/AUTHOR), copied (copy-of(current-group())),
-// or otherwise used with downward navigation.
+// in an expression. In streaming, any use of current-group() that requires
+// enumerating the group members is consuming. This includes count(),
+// current-group()/AUTHOR, copy-of(current-group()), etc.
 func countCurrentGroupConsumingInExpr(expr xpath3.Expr) int {
 	expr = derefXPathExpr(expr)
 	count := 0
@@ -586,30 +1271,14 @@ func countCurrentGroupConsumingInExpr(expr xpath3.Expr) int {
 		}
 		count += countCurrentGroupConsumingInExpr(e.Right)
 	case xpath3.FunctionCall:
-		// Check if current-group() is passed to a consuming function
 		if e.Prefix == "" {
 			switch e.Name {
-			case "copy-of", "string-join", "deep-equal", "serialize":
-				for _, arg := range e.Args {
-					if isCurrentGroupCall(arg) {
-						count++
-					} else {
-						count += countCurrentGroupConsumingInExpr(arg)
-					}
-				}
-				return count
-			case "count", "empty", "exists", "boolean":
-				// These are non-consuming — they just inspect the sequence
-				for _, arg := range e.Args {
-					if !isCurrentGroupCall(arg) {
-						count += countCurrentGroupConsumingInExpr(arg)
-					}
-				}
-				return count
 			case "current-group":
-				// bare current-group() — consuming if used in a context that
-				// will navigate into it. Just count as a reference.
+				// Any reference to current-group() is consuming in streaming
 				return 1
+			case "current-grouping-key":
+				// current-grouping-key() is motionless — it doesn't consume the stream
+				return 0
 			}
 		}
 		for _, arg := range e.Args {
@@ -653,6 +1322,133 @@ func countCurrentGroupConsumingInExpr(expr xpath3.Expr) int {
 func isCurrentGroupCall(expr xpath3.Expr) bool {
 	fc, ok := expr.(xpath3.FunctionCall)
 	return ok && fc.Prefix == "" && fc.Name == "current-group"
+}
+
+// exprEndsWithGrounding returns true if the outermost expression grounds its
+// result (e.g., ends with copy-of() or snapshot()). This means the crawling
+// is followed by grounding, making it streamable for grouping.
+func exprEndsWithGrounding(expr xpath3.Expr) bool {
+	expr = derefXPathExpr(expr)
+	switch e := expr.(type) {
+	case xpath3.PathStepExpr:
+		// Check if the rightmost step is a grounding function
+		return exprEndsWithGrounding(e.Right)
+	case xpath3.PathExpr:
+		if e.Path != nil {
+			lp := *e.Path
+			return exprEndsWithGrounding(lp)
+		}
+		return isGroundingExpr(e.Filter)
+	case xpath3.FunctionCall:
+		return isGroundingExpr(e)
+	case xpath3.LocationPath:
+		// A LocationPath ending with a grounding step? Not typical.
+		// Check last step for function-like patterns.
+		return false
+	}
+	return false
+}
+
+// countDownwardFromCurrentGroup counts how many distinct downward selections
+// occur after current-group() in a single expression. For example,
+// current-group()/(AUTHOR||TITLE) has 2 downward selections (AUTHOR and TITLE).
+func countDownwardFromCurrentGroup(expr xpath3.Expr) int {
+	expr = derefXPathExpr(expr)
+	count := 0
+	switch e := expr.(type) {
+	case xpath3.PathStepExpr:
+		if isCurrentGroupCall(e.Left) {
+			// Count downward selections in the RHS after current-group()
+			count += countDownwardSelectionsInPathRHS(e.Right)
+		} else {
+			count += countDownwardFromCurrentGroup(e.Left)
+		}
+		count += countDownwardFromCurrentGroup(e.Right)
+	case xpath3.FunctionCall:
+		for _, arg := range e.Args {
+			count += countDownwardFromCurrentGroup(arg)
+		}
+	case xpath3.BinaryExpr:
+		count += countDownwardFromCurrentGroup(e.Left)
+		count += countDownwardFromCurrentGroup(e.Right)
+	case xpath3.ConcatExpr:
+		count += countDownwardFromCurrentGroup(e.Left)
+		count += countDownwardFromCurrentGroup(e.Right)
+	case xpath3.FilterExpr:
+		count += countDownwardFromCurrentGroup(e.Expr)
+	case xpath3.SequenceExpr:
+		for _, item := range e.Items {
+			count += countDownwardFromCurrentGroup(item)
+		}
+	case xpath3.IfExpr:
+		count += countDownwardFromCurrentGroup(e.Cond)
+		thenCount := countDownwardFromCurrentGroup(e.Then)
+		elseCount := countDownwardFromCurrentGroup(e.Else)
+		if thenCount > elseCount {
+			count += thenCount
+		} else {
+			count += elseCount
+		}
+	}
+	return count
+}
+
+// countDownwardSelectionsInPathRHS counts how many distinct downward selections
+// are in the right-hand side of a path expression. ConcatExpr with 2 child axes
+// counts as 2 selections.
+func countDownwardSelectionsInPathRHS(expr xpath3.Expr) int {
+	expr = derefXPathExpr(expr)
+	switch e := expr.(type) {
+	case xpath3.LocationPath:
+		for _, step := range e.Steps {
+			switch step.Axis {
+			case xpath3.AxisChild, xpath3.AxisDescendant, xpath3.AxisDescendantOrSelf:
+				return 1
+			}
+		}
+		return 0
+	case xpath3.ConcatExpr:
+		return countDownwardSelectionsInPathRHS(e.Left) + countDownwardSelectionsInPathRHS(e.Right)
+	case xpath3.BinaryExpr:
+		return countDownwardSelectionsInPathRHS(e.Left) + countDownwardSelectionsInPathRHS(e.Right)
+	case xpath3.SequenceExpr:
+		total := 0
+		for _, item := range e.Items {
+			total += countDownwardSelectionsInPathRHS(item)
+		}
+		return total
+	case xpath3.FunctionCall:
+		total := 0
+		for _, arg := range e.Args {
+			total += countDownwardSelectionsInPathRHS(arg)
+		}
+		return total
+	case xpath3.PathStepExpr:
+		return countDownwardSelectionsInPathRHS(e.Left) + countDownwardSelectionsInPathRHS(e.Right)
+	}
+	return 0
+}
+
+// exprHasContextDownward returns true if the expression accesses child/descendant
+// steps from the context item (not from a variable or function call).
+func exprHasContextDownward(expr xpath3.Expr) bool {
+	found := false
+	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		if lp, ok := e.(xpath3.LocationPath); ok {
+			for _, step := range lp.Steps {
+				switch step.Axis {
+				case xpath3.AxisChild, xpath3.AxisDescendant, xpath3.AxisDescendantOrSelf:
+					found = true
+					return false
+				}
+			}
+		}
+		return true
+	})
+	return found
 }
 
 // checkStreamableFunctionBody checks a function declared with streamability
@@ -712,6 +1508,17 @@ func checkAbsorbingFunction(fn *XSLFunction) error {
 // checkInspectionFunction checks that an inspection function's body
 // only inspects properties of the streaming argument without consuming it.
 func checkInspectionFunction(fn *XSLFunction) error {
+	// First param must be a singleton node (node()?), not a sequence (node()*).
+	if err := checkStreamingParamIsSingleton(fn, "inspection"); err != nil {
+		return err
+	}
+
+	// Inspection must not return the streaming parameter itself.
+	if functionReturnsStreamingParam(fn) {
+		return staticError(errCodeXTSE3430,
+			"inspection function %q returns a streaming parameter, violating its declared streamability", fn.Name.Name)
+	}
+
 	for _, inst := range fn.Body {
 		for _, expr := range getInstructionExprs(inst) {
 			if exprConsumesParam(expr, fn.Params) {
@@ -726,6 +1533,17 @@ func checkInspectionFunction(fn *XSLFunction) error {
 // checkFilterFunction checks that a filter function's body only filters
 // the streaming argument without consuming it.
 func checkFilterFunction(fn *XSLFunction) error {
+	// First param must be a singleton node (node()?), not a sequence (node()*).
+	if err := checkStreamingParamIsSingleton(fn, "filter"); err != nil {
+		return err
+	}
+
+	// Filter function must not navigate upward from param (return climbing nodes).
+	if functionUsesUpwardFromParam(fn) {
+		return staticError(errCodeXTSE3430,
+			"filter function %q navigates upward from streaming parameter, violating its declared streamability", fn.Name.Name)
+	}
+
 	for _, inst := range fn.Body {
 		for _, expr := range getInstructionExprs(inst) {
 			if exprConsumesParam(expr, fn.Params) {
@@ -770,7 +1588,8 @@ func checkShallowDescentFunction(fn *XSLFunction) error {
 	}
 
 	// Check that additional params don't receive streaming nodes.
-	// Only flag if the param type allows nodes (not if it's xs:string etc.)
+	// For shallow-descent, additional parameters that could receive nodes
+	// are not allowed because the caller might pass streaming nodes.
 	for i := 1; i < len(fn.Params); i++ {
 		p := fn.Params[i]
 		as := strings.TrimSpace(p.As)
@@ -779,17 +1598,11 @@ func checkShallowDescentFunction(fn *XSLFunction) error {
 		if isAtomicTypeConstraint(as) {
 			continue
 		}
-		// If param has no type constraint or allows nodes, check if body consumes it
-		paramName := p.Name
-		for _, inst := range fn.Body {
-			for _, expr := range getInstructionExprs(inst) {
-				if exprUsesVarConsumingly(expr, paramName) {
-					return staticError(errCodeXTSE3430,
-						"shallow-descent function %q additional parameter %q is used in a consuming way, violating its declared streamability",
-						fn.Name.Name, paramName)
-				}
-			}
-		}
+		// Additional parameter with no type or node type is not allowed
+		// for shallow-descent because the caller could pass streaming nodes.
+		return staticError(errCodeXTSE3430,
+			"shallow-descent function %q additional parameter %q could receive streaming nodes, violating its declared streamability",
+			fn.Name.Name, p.Name)
 	}
 
 	return nil
@@ -947,6 +1760,17 @@ func isAtomicTypeConstraint(as string) bool {
 // checkAscentFunction checks that an ascent function's body navigates
 // upward from the streaming argument without consuming it.
 func checkAscentFunction(fn *XSLFunction) error {
+	// First param must be a singleton node (node()?), not a sequence (node()*).
+	if err := checkStreamingParamIsSingleton(fn, "ascent"); err != nil {
+		return err
+	}
+
+	// Ascent must not return the streaming parameter itself.
+	if functionReturnsStreamingParam(fn) {
+		return staticError(errCodeXTSE3430,
+			"ascent function %q returns a streaming parameter, violating its declared streamability", fn.Name.Name)
+	}
+
 	for _, inst := range fn.Body {
 		for _, expr := range getInstructionExprs(inst) {
 			if exprConsumesParam(expr, fn.Params) {
@@ -956,6 +1780,135 @@ func checkAscentFunction(fn *XSLFunction) error {
 		}
 	}
 	return nil
+}
+
+// checkStreamingParamIsSingleton checks that the first parameter of a streamable
+// function accepts a singleton node (node()?), not a sequence (node()*).
+// Functions declared with streamability categories like filter, inspection, ascent,
+// and absorbing must receive a single streaming node, not a sequence.
+func checkStreamingParamIsSingleton(fn *XSLFunction, category string) error {
+	if len(fn.Params) == 0 {
+		return nil
+	}
+	firstParam := fn.Params[0]
+	as := strings.TrimSpace(firstParam.As)
+	// node()* or node()+ — sequence of nodes — not allowed for streaming
+	if as != "" && (strings.HasSuffix(as, "*") || strings.HasSuffix(as, "+")) {
+		base := strings.TrimRight(as, "*+")
+		// Only flag if it's a node type (not xs:string*, etc.)
+		if !strings.HasPrefix(base, "xs:") {
+			return staticError(errCodeXTSE3430,
+				"%s function %q first parameter type %q accepts a sequence, violating its declared streamability",
+				category, fn.Name.Name, firstParam.As)
+		}
+	}
+	return nil
+}
+
+// functionReturnsStreamingParam returns true if the function body can return
+// the streaming parameter directly (not wrapped in a grounding function).
+func functionReturnsStreamingParam(fn *XSLFunction) bool {
+	if len(fn.Params) == 0 {
+		return false
+	}
+	// If the function has a return type that is an atomic type, it can't return nodes.
+	if fn.As != "" {
+		as := strings.TrimRight(strings.TrimSpace(fn.As), "?*+")
+		if strings.HasPrefix(as, "xs:") {
+			return false
+		}
+	}
+
+	paramNames := make(map[string]bool)
+	for _, p := range fn.Params {
+		paramNames[p.Name] = true
+	}
+
+	for _, inst := range fn.Body {
+		if seq, ok := inst.(*XSLSequenceInst); ok && seq.Select != nil {
+			if exprReturnsParam(seq.Select.AST(), paramNames) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// functionUsesUpwardFromParam returns true if the function navigates upward
+// (parent/ancestor) from a streaming parameter.
+func functionUsesUpwardFromParam(fn *XSLFunction) bool {
+	if len(fn.Params) == 0 {
+		return false
+	}
+	paramNames := make(map[string]bool)
+	for _, p := range fn.Params {
+		paramNames[p.Name] = true
+	}
+
+	for _, inst := range fn.Body {
+		for _, expr := range getInstructionExprs(inst) {
+			if expr == nil {
+				continue
+			}
+			found := false
+			xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+				if found {
+					return false
+				}
+				// $param/.. or $param/parent::* (PathStepExpr form)
+				if ps, ok := e.(xpath3.PathStepExpr); ok {
+					if ve, ok := ps.Left.(xpath3.VariableExpr); ok {
+						if paramNames[ve.Name] {
+							if exprHasUpwardAxis(ps.Right) {
+								found = true
+								return false
+							}
+						}
+					}
+				}
+				// $param/.. (PathExpr form: FilterExpr($param) / LocationPath(..))
+				if pe, ok := e.(xpath3.PathExpr); ok {
+					if fe, ok := pe.Filter.(xpath3.FilterExpr); ok {
+						if ve, ok := fe.Expr.(xpath3.VariableExpr); ok {
+							if paramNames[ve.Name] && pe.Path != nil {
+								lp := *pe.Path
+								if exprHasUpwardAxis(lp) {
+									found = true
+									return false
+								}
+							}
+						}
+					}
+				}
+				return true
+			})
+			if found {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// exprHasUpwardAxis returns true if the expression contains any upward axis step.
+func exprHasUpwardAxis(expr xpath3.Expr) bool {
+	found := false
+	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		if lp, ok := e.(xpath3.LocationPath); ok {
+			for _, step := range lp.Steps {
+				switch step.Axis {
+				case xpath3.AxisParent, xpath3.AxisAncestor, xpath3.AxisAncestorOrSelf:
+					found = true
+					return false
+				}
+			}
+		}
+		return true
+	})
+	return found
 }
 
 // functionBodyIsGrounded returns true if the function body produces grounded output.
@@ -1074,10 +2027,11 @@ func exprHasParamInLoop(expr xpath3.Expr, paramNames map[string]bool) bool {
 }
 
 // countParamDownwardRefs counts how many times a parameter variable is used
-// with downward navigation.
+// in a consuming way (downward navigation, function arguments, etc.).
 func countParamDownwardRefs(expr *xpath3.Expression, paramName string) int {
 	count := 0
 	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+		// $param/child or $param/* (PathStepExpr)
 		if ps, ok := e.(xpath3.PathStepExpr); ok {
 			if ve, ok := ps.Left.(xpath3.VariableExpr); ok {
 				if ve.Name == paramName {
@@ -1086,11 +2040,40 @@ func countParamDownwardRefs(expr *xpath3.Expression, paramName string) int {
 				}
 			}
 		}
+		// $param/child or $param/* (PathExpr)
+		if pe, ok := e.(xpath3.PathExpr); ok {
+			if fe, ok := pe.Filter.(xpath3.FilterExpr); ok {
+				if ve, ok := fe.Expr.(xpath3.VariableExpr); ok {
+					if ve.Name == paramName && pe.Path != nil {
+						count++
+						return false
+					}
+				}
+			}
+		}
+		// $param[pred] — filtering
 		if fe, ok := e.(xpath3.FilterExpr); ok {
 			if ve, ok := fe.Expr.(xpath3.VariableExpr); ok {
 				if ve.Name == paramName && len(fe.Predicates) > 0 {
 					count++
 					return false
+				}
+			}
+		}
+		// head($param), tail($param), etc. — consuming functions
+		if fc, ok := e.(xpath3.FunctionCall); ok {
+			if fc.Prefix == "" {
+				switch fc.Name {
+				case "head", "tail", "copy-of", "snapshot", "string-join",
+					"serialize", "deep-equal", "sort", "reverse":
+					for _, arg := range fc.Args {
+						if ve, ok := arg.(xpath3.VariableExpr); ok {
+							if ve.Name == paramName {
+								count++
+								return false
+							}
+						}
+					}
 				}
 			}
 		}
@@ -1125,6 +2108,20 @@ func exprConsumesParam(expr *xpath3.Expression, params []*Param) bool {
 				}
 			}
 		}
+		// $param[predicate] — predicate accessing context consumes it
+		if fe, ok := e.(xpath3.FilterExpr); ok {
+			if ve, ok := fe.Expr.(xpath3.VariableExpr); ok {
+				if paramNames[ve.Name] && len(fe.Predicates) > 0 {
+					// Check if any predicate is non-motionless (accesses "." etc.)
+					for _, pred := range fe.Predicates {
+						if predicateIsNonMotionless(pred) {
+							found = true
+							return false
+						}
+					}
+				}
+			}
+		}
 		// string($param) — string() on a node consumes it
 		if fc, ok := e.(xpath3.FunctionCall); ok {
 			if fc.Prefix == "" && fc.Name == "string" && len(fc.Args) > 0 {
@@ -1149,12 +2146,23 @@ func exprUsesVarConsumingly(expr *xpath3.Expression, varName string) bool {
 		if found {
 			return false
 		}
-		// $var/child or $var/* — downward navigation
+		// $var/child or $var/* — downward navigation (PathStepExpr form)
 		if ps, ok := e.(xpath3.PathStepExpr); ok {
 			if ve, ok := ps.Left.(xpath3.VariableExpr); ok {
 				if ve.Name == varName {
 					found = true
 					return false
+				}
+			}
+		}
+		// $var/child or $var/* — downward navigation (PathExpr form)
+		if pe, ok := e.(xpath3.PathExpr); ok {
+			if fe, ok := pe.Filter.(xpath3.FilterExpr); ok {
+				if ve, ok := fe.Expr.(xpath3.VariableExpr); ok {
+					if ve.Name == varName && pe.Path != nil {
+						found = true
+						return false
+					}
 				}
 			}
 		}

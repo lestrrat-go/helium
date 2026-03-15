@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<log>
+    <day date="2009-08-20">
+        <record>
+            <time>12:01:01-00:00</time>
+            <message>Temperature 15.4C</message>
+        </record>
+        <record>
+            <time>12:03:00-00:00</time>
+            <message>Temperature 18.2C</message>
+        </record>
+    </day>
+</log>
