@@ -572,6 +572,12 @@ func nodeMatchesStep(ctx *execContext, step xpath3.Step, node helium.Node) bool 
 	// on the self axis (as in match=".").  On the child/descendant axes,
 	// document nodes are never selected.
 	if node.Type() == helium.DocumentNode {
+		// child::document-node() and descendant::document-node() never match
+		// because document nodes cannot be children or descendants.
+		if step.Axis == xpath3.AxisChild || step.Axis == xpath3.AxisDescendant ||
+			step.Axis == xpath3.AxisDescendantOrSelf || step.Axis == xpath3.AxisAttribute {
+			return false
+		}
 		if _, ok := step.NodeTest.(xpath3.DocumentTest); !ok {
 			// Allow self::node() to match document nodes.
 			if step.Axis == xpath3.AxisSelf {
