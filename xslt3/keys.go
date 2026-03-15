@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lestrrat-go/helium"
@@ -56,16 +57,32 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 		}
 		ec.contextNode = node
 		ec.currentNode = node
-		xpathCtx := ec.newXPathContext(node)
-		result, err := kd.Use.Evaluate(xpathCtx, node)
-		if err != nil {
-			return err
-		}
-		// The use expression may return a sequence of values;
-		// index the node under each value.
-		for _, item := range result.Sequence() {
-			keyVal := stringifyItem(item)
-			kt.entries[keyVal] = append(kt.entries[keyVal], node)
+
+		if kd.Use != nil {
+			// use="expr" form
+			xpathCtx := ec.newXPathContext(node)
+			result, err := kd.Use.Evaluate(xpathCtx, node)
+			if err != nil {
+				return err
+			}
+			for _, item := range result.Sequence() {
+				keyVal := stringifyItem(item)
+				kt.entries[keyVal] = append(kt.entries[keyVal], node)
+			}
+		} else if len(kd.Body) > 0 {
+			// Content constructor form: evaluate body as sequence
+			ctx := ec.transformCtx
+			if ctx == nil {
+				ctx = context.Background()
+			}
+			seq, err := ec.evaluateBody(ctx, kd.Body)
+			if err != nil {
+				return err
+			}
+			for _, item := range seq {
+				keyVal := stringifyItem(item)
+				kt.entries[keyVal] = append(kt.entries[keyVal], node)
+			}
 		}
 		return nil
 	})

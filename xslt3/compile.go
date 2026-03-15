@@ -562,30 +562,34 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 		return staticError(errCodeXTSE0110, "xsl:key requires match attribute")
 	}
 
-	useAttr := getAttr(elem, "use")
-	if useAttr == "" {
-		// XSLT 2.0+: key may use body content instead of use attribute.
-		// TODO: compile body as sequence constructor for key value.
-		// For now, skip keys without use attribute.
-		return nil
-	}
-
 	matchPat, err := compilePattern(matchAttr, c.nsBindings, c.xpathDefaultNS)
 	if err != nil {
 		return err
 	}
 
-	useExpr, err := compileXPath(useAttr, c.nsBindings)
-	if err != nil {
-		return err
-	}
-
 	expandedName := resolveQName(name, c.nsBindings)
-	c.stylesheet.keys[expandedName] = &KeyDef{
+	kd := &KeyDef{
 		Name:  expandedName,
 		Match: matchPat,
-		Use:   useExpr,
 	}
+
+	useAttr := getAttr(elem, "use")
+	if useAttr != "" {
+		useExpr, err := compileXPath(useAttr, c.nsBindings)
+		if err != nil {
+			return err
+		}
+		kd.Use = useExpr
+	} else {
+		// XSLT 2.0+: key may use body content instead of use attribute.
+		body, _, err := c.compileTemplateBody(elem)
+		if err != nil {
+			return err
+		}
+		kd.Body = body
+	}
+
+	c.stylesheet.keys[expandedName] = kd
 	return nil
 }
 
