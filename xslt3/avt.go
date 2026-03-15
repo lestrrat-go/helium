@@ -175,7 +175,7 @@ func (a *AVT) evaluate(ctx context.Context, node helium.Node) (string, error) {
 		if p.expr != nil {
 			result, err := p.expr.Evaluate(xpathCtx, node)
 			if err != nil {
-				return "", dynamicError(errCodeXTDE0045, "AVT evaluation error: %v", err)
+				return "", &XSLTError{Code: errCodeXTDE0045, Message: "AVT evaluation error: " + err.Error(), Cause: err}
 			}
 			sb.WriteString(stringifyResult(result))
 		} else {
