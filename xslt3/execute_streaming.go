@@ -94,23 +94,38 @@ func (ec *execContext) execIterate(ctx context.Context, inst *IterateInst) error
 
 	// Initialize iterate params from their defaults.
 	paramVals := make(map[string]xpath3.Sequence, len(inst.Params))
+	paramTypes := make(map[string]string, len(inst.Params))
 	for _, p := range inst.Params {
+		if p.As != "" {
+			paramTypes[p.Name] = p.As
+		}
+		var val xpath3.Sequence
 		if p.Select != nil {
 			pCtx := ec.newXPathContext(ec.contextNode)
 			pResult, err := p.Select.Evaluate(pCtx, ec.contextNode)
 			if err != nil {
 				return err
 			}
-			paramVals[p.Name] = pResult.Sequence()
+			val = pResult.Sequence()
 		} else if len(p.Body) > 0 {
-			val, err := ec.evaluateBody(ctx, p.Body)
+			v, err := ec.evaluateBody(ctx, p.Body)
 			if err != nil {
 				return err
 			}
-			paramVals[p.Name] = val
+			val = v
 		} else {
-			paramVals[p.Name] = xpath3.EmptySequence()
+			val = xpath3.EmptySequence()
 		}
+		// Apply type coercion if as= is declared.
+		if p.As != "" && len(val) > 0 {
+			st := parseSequenceType(p.As)
+			coerced, err := checkSequenceType(val, st, errCodeXTTE0570, "xsl:iterate parameter $"+p.Name)
+			if err != nil {
+				return err
+			}
+			val = coerced
+		}
+		paramVals[p.Name] = val
 	}
 
 	// Save and restore context.
@@ -168,6 +183,15 @@ func (ec *execContext) execIterate(ctx context.Context, inst *IterateInst) error
 				// Update params from next-iteration with-params.
 				if ec.nextIterParams != nil {
 					for name, val := range ec.nextIterParams {
+						// Apply type coercion if as= is declared.
+						if asType, ok := paramTypes[name]; ok && asType != "" && len(val) > 0 {
+							st := parseSequenceType(asType)
+							coerced, coerceErr := checkSequenceType(val, st, errCodeXTTE0570, "xsl:next-iteration parameter $"+name)
+							if coerceErr != nil {
+								return coerceErr
+							}
+							val = coerced
+						}
 						paramVals[name] = val
 					}
 					ec.nextIterParams = nil
