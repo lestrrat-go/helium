@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -3078,6 +3079,22 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 
 	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 
+	// xsl:break and xsl:next-iteration are control flow signals, not errors.
+	// If one occurred inside the try body, copy the buffered output (produced
+	// before the signal) to the real output and propagate the signal.
+	if tryErr != nil && (errors.Is(tryErr, errBreak) || errors.Is(tryErr, errNextIter)) {
+		for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
+			copied, copyErr := helium.CopyNode(child, ec.resultDoc)
+			if copyErr != nil {
+				return copyErr
+			}
+			if err := ec.addNode(copied); err != nil {
+				return err
+			}
+		}
+		return tryErr
+	}
+
 	if tryErr == nil {
 		// Success — copy buffered output to real output
 		for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
@@ -3092,7 +3109,9 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 		return nil
 	}
 
-	// Extract error code and QName from the error
+	// Extract error code and QName from the error.
+	// Unwrap wrapper errors (e.g., AVT XTDE0045 wrapping FOAR0001) to find
+	// the most specific XPath/XSLT error code for catch clause matching.
 	const errNS = "http://www.w3.org/2005/xqt-errors"
 	errCode := "XSLT0000"
 	errDesc := tryErr.Error()
@@ -3101,6 +3120,19 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 		errCode = xErr.Code
 		errDesc = xErr.Message
 		errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: errCode}
+		// If this is a wrapper error (like XTDE0045 for AVT), check inner
+		// cause for a more specific error code.
+		if xErr.Cause != nil {
+			if innerXP, ok := xErr.Cause.(*xpath3.XPathError); ok {
+				errCode = innerXP.Code
+				errDesc = innerXP.Message
+				errQName = innerXP.CodeQName()
+			} else if innerXS, ok := xErr.Cause.(*XSLTError); ok {
+				errCode = innerXS.Code
+				errDesc = innerXS.Message
+				errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: innerXS.Code}
+			}
+		}
 	} else if xpErr, ok := tryErr.(*xpath3.XPathError); ok {
 		errCode = xpErr.Code
 		errDesc = xpErr.Message

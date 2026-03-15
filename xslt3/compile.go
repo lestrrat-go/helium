@@ -28,6 +28,8 @@ type compiler struct {
 	resolver       URIResolver
 	localExcludes  map[string]struct{} // accumulated LRE-level exclude-result-prefixes
 	defaultMode    string              // current default-mode (inherited through instruction nesting)
+	iterateDepth   int                 // nesting depth of xsl:iterate (for xsl:break/next-iteration validation)
+	breakAllowed   bool                // true when xsl:break/xsl:next-iteration are allowed at this position
 }
 
 // resolveMode resolves mode name QNames to expanded Clark notation.

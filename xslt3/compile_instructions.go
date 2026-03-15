@@ -311,12 +311,19 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (Instruction, er
 		return c.compileNextIteration(elem)
 	case "merge":
 		return c.compileMerge(elem)
-	case "merge-source", "merge-action", "merge-key":
-		// Handled as part of xsl:merge compilation
-		return nil, nil
+	case "merge-source":
+		// xsl:merge-source must be a direct child of xsl:merge
+		return nil, staticError(errCodeXTSE0010, "xsl:merge-source must be a direct child of xsl:merge")
+	case "merge-action":
+		// xsl:merge-action must be a direct child of xsl:merge
+		return nil, staticError(errCodeXTSE0010, "xsl:merge-action must be a direct child of xsl:merge")
+	case "merge-key":
+		// xsl:merge-key must be a direct child of xsl:merge-source
+		return nil, staticError(errCodeXTSE0010, "xsl:merge-key must be a direct child of xsl:merge-source")
 	case "on-completion":
-		// Handled as part of xsl:iterate compilation
-		return nil, nil
+		// xsl:on-completion must be a direct child of xsl:iterate — if we reach
+		// here, it was encountered outside that context.
+		return nil, staticError(errCodeXTSE0010, "xsl:on-completion must be a direct child of xsl:iterate")
 	default:
 		return nil, staticError(errCodeXTSE0090, "unknown XSLT instruction xsl:%s", elem.LocalName())
 	}
@@ -325,6 +332,7 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (Instruction, er
 // compileChildren compiles all children of an element into instructions.
 func (c *compiler) compileChildren(parent *helium.Element) ([]Instruction, error) {
 	var body []Instruction
+	sawTerminator := false // true after xsl:break or xsl:next-iteration
 	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
 		switch v := child.(type) {
 		case *helium.Element:
@@ -333,11 +341,22 @@ func (c *compiler) compileChildren(parent *helium.Element) ([]Instruction, error
 				return nil, err
 			}
 			if inst != nil {
+				// XTSE3120: nothing may follow xsl:break or xsl:next-iteration.
+				if sawTerminator {
+					return nil, staticError(errCodeXTSE3120, "no instruction may follow xsl:break or xsl:next-iteration")
+				}
 				body = append(body, inst)
+				switch inst.(type) {
+				case *BreakInst, *NextIterationInst:
+					sawTerminator = true
+				}
 			}
 		case *helium.Text:
 			text := string(v.Content())
 			if !c.shouldStripText(text) {
+				if sawTerminator {
+					return nil, staticError(errCodeXTSE3120, "no instruction may follow xsl:break or xsl:next-iteration")
+				}
 				inst := &LiteralTextInst{Value: text}
 				if c.expandText && strings.ContainsAny(text, "{}") {
 					avt, err := compileAVT(text, c.nsBindings)
@@ -349,6 +368,9 @@ func (c *compiler) compileChildren(parent *helium.Element) ([]Instruction, error
 				body = append(body, inst)
 			}
 		case *helium.CDATASection:
+			if sawTerminator {
+				return nil, staticError(errCodeXTSE3120, "no instruction may follow xsl:break or xsl:next-iteration")
+			}
 			text := string(v.Content())
 			inst := &LiteralTextInst{Value: text}
 			if c.expandText && strings.ContainsAny(text, "{}") {
@@ -510,6 +532,11 @@ func (c *compiler) compileText(elem *helium.Element) (*TextInst, error) {
 }
 
 func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
+	// xsl:break / xsl:next-iteration not allowed inside element constructors.
+	savedBreak := c.breakAllowed
+	c.breakAllowed = false
+	defer func() { c.breakAllowed = savedBreak }()
+
 	// Validate boolean attributes (including empty string)
 	if inAttr, hasIn := elem.GetAttribute("inherit-namespaces"); hasIn {
 		if err := validateBooleanAttr("xsl:element", "inherit-namespaces", inAttr); err != nil {
@@ -763,6 +790,11 @@ func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 }
 
 func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
+	// xsl:break / xsl:next-iteration not allowed inside xsl:for-each.
+	savedBreak := c.breakAllowed
+	c.breakAllowed = false
+	defer func() { c.breakAllowed = savedBreak }()
+
 	selectAttr := getAttr(elem, "select")
 	if selectAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:for-each requires select attribute")
@@ -1522,6 +1554,11 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 }
 
 func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralResultElement, error) {
+	// xsl:break / xsl:next-iteration not allowed inside element constructors.
+	savedBreak := c.breakAllowed
+	c.breakAllowed = false
+	defer func() { c.breakAllowed = savedBreak }()
+
 	lre := &LiteralResultElement{
 		Name:       elem.Name(),
 		Namespace:  elem.URI(),
