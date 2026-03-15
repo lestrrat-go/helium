@@ -1565,7 +1565,11 @@ func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
 				continue
 			}
 			f := math.Round(dv.DoubleVal())
-			if f > math.MaxInt64 || f < math.MinInt64 || math.IsInf(f, 0) || math.IsNaN(f) {
+			// XTDE0980: value must be non-negative
+			if math.IsNaN(f) || math.IsInf(f, 0) || f < 0 {
+				return dynamicError("XTDE0980", "xsl:number value is not a non-negative integer: %v", dv.DoubleVal())
+			}
+			if f > math.MaxInt64 || f < math.MinInt64 {
 				// For values outside int64 range, format directly as big integer
 				bf := new(big.Float).SetFloat64(f)
 				bi, _ := bf.Int(nil)
