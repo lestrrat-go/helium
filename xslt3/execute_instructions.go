@@ -1489,6 +1489,10 @@ func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
 // If no count pattern, matches nodes with the same type and name as the context node.
 func (ec *execContext) numberNodeMatches(inst *NumberInst, target helium.Node, contextNode helium.Node) bool {
 	if inst.Count != nil {
+		// Special case: count="." matches any non-document node
+		if inst.Count.source == "." && target.Type() != helium.DocumentNode {
+			return true
+		}
 		return inst.Count.matchPattern(ec, target)
 	}
 	// Default: same node type and expanded name
