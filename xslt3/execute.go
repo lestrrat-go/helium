@@ -2,10 +2,18 @@ package xslt3
 
 import (
 	"context"
-	"fmt"
+	"io"
+	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -13,45 +21,123 @@ type execContextKey struct{}
 
 // execContext holds XSLT transformation state. Stored inside context.Context.
 type execContext struct {
-	stylesheet        *Stylesheet
-	sourceDoc         *helium.Document
-	resultDoc         *helium.Document
-	currentNode       helium.Node // XSLT current() node
-	contextNode       helium.Node // XPath context node
-	contextItem       xpath3.Item // non-nil when context is an atomic value (for-each over atomics)
-	position          int
-	size              int
-	localVars         *varScope
-	globalVars        map[string]xpath3.Sequence
-	globalVarDefs     map[string]*Variable // unevaluated global variable definitions (lazy)
-	globalParamDefs   map[string]*Param    // unevaluated global param definitions (lazy)
-	globalEvaluating  map[string]bool      // circular dependency detection
-	collectingVars    bool                 // reentrancy guard for collectAllVars
-	currentMode       string
-	currentTemplate   *Template                  // currently executing template (for next-match)
-	xpathDefaultNS    string                     // current xpath-default-namespace
-	hasXPathDefaultNS bool                       // true when xpathDefaultNS is explicitly set
-	tunnelParams      map[string]xpath3.Sequence // tunnel parameters passed through apply-templates
-	currentGroup      xpath3.Sequence            // current-group() value during for-each-group
-	currentGroupKey   xpath3.Sequence            // current-grouping-key() value during for-each-group
-	inGroupContext    bool                       // true when inside for-each-group body
-	depth             int                        // recursion depth
-	outputStack       []*outputFrame
-	keyTables         map[string]*keyTable
-	docCache          map[string]*helium.Document
-	cachedFns         map[string]xpath3.Function         // cached xsltFunctions() result
-	cachedFnsNS       map[xpath3.QualifiedName]xpath3.Function // cached xsltFunctionsNS() result
-	globalVarsGen     uint64                             // incremented when globalVars changes
-	cachedVarsMap     map[string]xpath3.Sequence         // cached result of collectAllVars (globals only)
-	cachedVarsGen     uint64                             // globalVarsGen at time cachedVarsMap was built
-	accumulatorState  map[string]xpath3.Sequence         // accumulator name -> current value
-	regexGroups       []string                           // captured groups for regex-group() inside xsl:matching-substring
-	breakValue        xpath3.Sequence                    // value produced by xsl:break
-	nextIterParams    map[string]xpath3.Sequence         // param values from xsl:next-iteration
-	msgHandler        func(string, bool)
-	transformCfg      *transformConfig
-	transformCtx      context.Context                  // parent context from Transform caller (for cancellation/deadlines)
-	typeAnnotations   map[helium.Node]string           // node → xs:... type annotation (schema-aware)
+	stylesheet                   *Stylesheet // immutable after construction; do not reassign
+	sourceDoc                    *helium.Document
+	resultDoc                    *helium.Document
+	currentNode                  helium.Node // XSLT current() node
+	contextNode                  helium.Node // XPath context node
+	contextItem                  xpath3.Item // non-nil when context is an atomic value (for-each over atomics)
+	position                     int
+	size                         int
+	localVars                    *varScope
+	globalVars                   map[string]xpath3.Sequence
+	globalVarDefs                map[string]*variable // unevaluated global variable definitions (lazy)
+	globalParamDefs              map[string]*param    // unevaluated global param definitions (lazy)
+	globalEvaluating             map[string]bool      // circular dependency detection
+	collectingVars               bool                 // reentrancy guard for collectAllVars
+	currentMode                  string
+	currentTemplate              *template                  // use setCurrentTemplate(); do not assign directly
+	currentTemplateBaseDir       string                     // use baseDir(); computed by setCurrentTemplate()
+	currentPackage               *Stylesheet                // owning package of currently executing template/function
+	xpathDefaultNS               string                     // current xpath-default-namespace
+	hasXPathDefaultNS            bool                       // true when xpathDefaultNS is explicitly set
+	defaultValidation            string                     // runtime copy of stylesheet.defaultValidation (save/restore per scope)
+	defaultCollation             string                     // current default-collation URI (empty = codepoint)
+	tunnelParams                 map[string]xpath3.Sequence // tunnel parameters passed through apply-templates
+	currentGroup                 xpath3.Sequence            // current-group() value during for-each-group
+	currentGroupKey              xpath3.Sequence            // current-grouping-key() value during for-each-group
+	inGroupContext               bool                       // true when inside for-each-group body
+	groupHasKey                  bool                       // true when innermost for-each-group uses group-by or group-adjacent
+	depth                        int                        // recursion depth
+	outputStack                  []*outputFrame
+	keyTables                    map[string]*keyTable
+	keyBuildingDepth             int // >0 when inside buildKeyTable (use-expr may recurse)
+	keyUseExprDepth              int // >0 when evaluating a key's use-expression (self-ref returns empty)
+	docCache                     map[string]*helium.Document
+	functionResultCache          map[string]xpath3.Sequence
+	cachedFns                    map[string]xpath3.Function               // cached xsltFunctions() result
+	cachedFnsNS                  map[xpath3.QualifiedName]xpath3.Function // cached xsltFunctionsNS() result
+	globalVarsGen                uint64                                   // incremented when globalVars changes
+	cachedVarsMap                map[string]xpath3.Sequence               // cached result of collectAllVars (globals only)
+	cachedVarsGen                uint64                                   // globalVarsGen at time cachedVarsMap was built
+	accumulatorState             map[string]xpath3.Sequence               // accumulator name -> current value
+	accumulatorStateError        map[string]error                         // accumulator name -> deferred error
+	accumulatorBeforeByNode      map[helium.Node]map[string]xpath3.Sequence
+	accumulatorAfterByNode       map[helium.Node]map[string]xpath3.Sequence
+	accumulatorBeforeErrorByNode map[helium.Node]map[string]error // deferred errors for accumulator-before
+	accumulatorAfterErrorByNode  map[helium.Node]map[string]error // deferred errors for accumulator-after
+	accumulatorComputedDocs      map[helium.Node]struct{}         // document roots for which accumulator states have been computed
+	activeAccumulators           map[string]struct{}              // accumulator names allowed in current source-document context
+	requireStreamableAccums      bool                             // require streamable="yes" for current accumulator access context
+	evaluatingAccumulator        bool
+	evaluatingMergeKey           bool
+	regexGroups                  []string                   // captured groups for regex-group() inside xsl:matching-substring
+	breakValue                   xpath3.Sequence            // value produced by xsl:break
+	nextIterParams               map[string]xpath3.Sequence // param values from xsl:next-iteration
+	inMergeAction                bool                       // true inside xsl:merge-action (for XTDE3480/XTDE3510)
+	errSourceLine                int                        // source line of last-executed instruction (for xsl:catch)
+	errSourceModule              string                     // source module of last-executed instruction (for xsl:catch)
+	msgHandler                   MessageHandler
+	transformCfg                 *transformConfig
+	transformCtx                 context.Context             // parent context from Transform caller (for cancellation/deadlines)
+	currentTime                  time.Time                   // stable fn:current-* value for whole transformation
+	schemaRegistry               *schemaRegistry             // merged schema registry for schema-aware processing
+	typeAnnotations              map[helium.Node]string      // node → xs:... type annotation (schema-aware)
+	preservedIDAnnotations       map[helium.Node]string      // ID/IDREF annotations preserved after input-type-annotations="strip"
+	nilledElements               map[*helium.Element]struct{} // elements with xsi:nil="true" confirmed by XSD validation
+	validatedDocs                map[*helium.Document]struct{} // documents that have been schema-validated
+	resultDocuments              map[string]*helium.Document // secondary result documents keyed by href
+	resultDocItems               map[string]xpath3.Sequence  // secondary result document items for json/adaptive serialization
+	resultDocOutputDefs          map[string]*OutputDef       // effective output definition per secondary result document
+	usedResultURIs               map[string]struct{}         // URIs already written by xsl:result-document (includes "")
+	insideResultDocPrimary       bool                        // true while executing result-document body targeting primary URI
+	currentResultDocMethod       string                      // effective output method during result-document body execution
+	temporaryOutputDepth         int                         // >0 when inside a temporary output state (XTDE1480)
+	primaryClaimedImplicitly     bool                        // true when implicit content has been written to primary output
+	staticBaseURIOverride        string                      // non-empty when xml:base on an LRE overrides the template's base URI
+	currentOutputURI             string                      // current output URI for current-output-uri() function
+	inPatternMatch               bool                        // true during pattern matching (current-output-uri() returns empty)
+	patternMatchErr              error                       // non-nil if a fatal error occurred during pattern matching
+	inSortKeyEval                bool                        // true during sort key evaluation (current-output-uri() returns empty)
+	atomicTextNodes              map[helium.Node]struct{}    // text nodes created from atomic item serialization
+	nodeMemoIDs                  map[helium.Node]uint64      // stable per-transform node identities for function caching
+	nextNodeMemoID               uint64
+	paramDocOutputDefs           map[*resultDocumentInst]*OutputDef // per-invocation cache for parameter-document output defs
+	primaryCharacterMaps         []string                     // character map names from xsl:result-document targeting primary output
+	primaryResolvedCharMap       map[rune]string              // resolved character map from parameter-document for primary output
+	primaryOutputOverrides       *OutputDef                   // serialization param overrides from primary xsl:result-document
+	rawResultSequence            xpath3.Sequence              // raw XDM result sequence (set when initial template has as="...")
+	nsFixupAllowed               map[*helium.Element]struct{} // elements whose prefix NS was auto-generated (fixup eligible)
+	overridingTemplate           *template                    // currently executing overriding template (for xsl:original)
+	overridingVarDef             *variable                    // currently evaluating overriding variable (for $xsl:original)
+	originalFunc                 xpath3.Function              // current xsl:original function (set during overriding function call)
+	docOrderCache                *xpath3.DocOrderCache        // shared document-order cache for consistent cross-document ordering
+	traceWriter                  io.Writer                    // destination for fn:trace output (nil = os.Stderr)
+
+	// cached base XPath evaluator — rebuilt when invalidation keys change
+	cachedBaseEval                  xpath3.Evaluator
+	cachedBaseEvalValid             bool
+	cachedBaseEvalXPathDefaultNS    string
+	cachedBaseEvalHasXPathDefaultNS bool
+	cachedBaseEvalBaseURI           string
+}
+
+func (ec *execContext) setCurrentTemplate(tmpl *template) {
+	ec.currentTemplate = tmpl
+	if tmpl != nil && tmpl.BaseURI != "" {
+		ec.currentTemplateBaseDir = filepath.Dir(tmpl.BaseURI)
+	} else if ec.stylesheet.baseURI != "" {
+		ec.currentTemplateBaseDir = filepath.Dir(ec.stylesheet.baseURI)
+	} else {
+		ec.currentTemplateBaseDir = ""
+	}
+}
+
+// baseDir returns the base directory for resolving relative URIs.
+// The value is computed by setCurrentTemplate from the current template's
+// base URI, falling back to the stylesheet's base URI.
+func (ec *execContext) baseDir() string {
+	return ec.currentTemplateBaseDir
 }
 
 func withExecContext(ctx context.Context, ec *execContext) context.Context {
@@ -61,6 +147,45 @@ func withExecContext(ctx context.Context, ec *execContext) context.Context {
 func getExecContext(ctx context.Context) *execContext {
 	v, _ := ctx.Value(execContextKey{}).(*execContext)
 	return v
+}
+
+func normalizeNode(node helium.Node) helium.Node {
+	if node == nil {
+		return nil
+	}
+	v := reflect.ValueOf(node)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		if v.IsNil() {
+			return nil
+		}
+	}
+	return node
+}
+
+func (ec *execContext) markAtomicTextNode(node helium.Node) {
+	if node == nil {
+		return
+	}
+	if ec.atomicTextNodes == nil {
+		ec.atomicTextNodes = make(map[helium.Node]struct{})
+	}
+	ec.atomicTextNodes[node] = struct{}{}
+}
+
+func (ec *execContext) isAtomicTextNode(node helium.Node) bool {
+	if node == nil || ec.atomicTextNodes == nil {
+		return false
+	}
+	_, ok := ec.atomicTextNodes[node]
+	return ok
+}
+
+func (ec *execContext) clearAtomicTextNode(node helium.Node) {
+	if node == nil || ec.atomicTextNodes == nil {
+		return
+	}
+	delete(ec.atomicTextNodes, node)
 }
 
 // annotateAttr applies a type annotation to a just-set attribute on an element.
@@ -81,12 +206,25 @@ func (ec *execContext) annotateAttr(elem *helium.Element, typeName, localName, n
 			}
 		}
 	}
-	if typeName == "xs:ID" {
+	if ec.annotationIsID(typeName) {
 		// Register on the document that owns this element (may be a
 		// temporary document during variable/function body evaluation).
 		out := ec.currentOutput()
 		out.doc.RegisterID(value, elem)
 	}
+}
+
+func (ec *execContext) annotationIsID(typeName string) bool {
+	if typeName == "" {
+		return false
+	}
+	if xpath3.BuiltinIsSubtypeOf(typeName, xpath3.TypeID) {
+		return true
+	}
+	if ec.schemaRegistry == nil {
+		return false
+	}
+	return ec.schemaRegistry.IsSubtypeOf(typeName, xpath3.TypeID)
 }
 
 // annotateNode records a type annotation for a result-tree node.
@@ -100,28 +238,208 @@ func (ec *execContext) annotateNode(node helium.Node, typeName string) {
 	ec.typeAnnotations[node] = typeName
 }
 
-// transferAnnotations copies the type annotation for srcNode to the most
-// recently appended child of the current output node. Used when
-// validation="preserve" is in effect during copy-of.
-func (ec *execContext) transferAnnotations(srcNode helium.Node) {
+// markNilled records that an element was confirmed nilled by XSD validation.
+func (ec *execContext) markNilled(elem *helium.Element) {
+	if ec.nilledElements == nil {
+		ec.nilledElements = make(map[*helium.Element]struct{})
+	}
+	ec.nilledElements[elem] = struct{}{}
+}
+
+// preserveIDAnnotations populates the document-level ID index and sets
+// attribute AType for IDREF/IDREFS attributes based on schema type annotations.
+// This ensures fn:id() and fn:idref() still work after input-type-annotations="strip".
+func (ec *execContext) preserveIDAnnotations() {
 	if ec.typeAnnotations == nil {
 		return
 	}
-	ann, ok := ec.typeAnnotations[srcNode]
-	if !ok || ann == "" {
+	for node, ann := range ec.typeAnnotations {
+		isID := isIDType(ann, ec.schemaRegistry)
+		isIDRef := isIDRefType(ann, ec.schemaRegistry)
+		isIDRefs := isIDRefsType(ann, ec.schemaRegistry)
+		if !isID && !isIDRef && !isIDRefs {
+			continue
+		}
+
+		switch typed := node.(type) {
+		case *helium.Attribute:
+			if isID {
+				typed.SetAType(enum.AttrID)
+				parent, ok := typed.Parent().(*helium.Element)
+				if ok {
+					if doc, ok := documentRoot(parent).(*helium.Document); ok {
+						doc.RegisterID(strings.TrimSpace(typed.Value()), parent)
+					}
+				}
+			}
+			if isIDRef {
+				typed.SetAType(enum.AttrIDRef)
+			}
+			if isIDRefs {
+				typed.SetAType(enum.AttrIDRefs)
+			}
+		case *helium.Element:
+			if isID {
+				if doc, ok := documentRoot(typed).(*helium.Document); ok {
+					doc.RegisterID(strings.TrimSpace(string(typed.Content())), typed)
+				}
+			}
+		}
+	}
+}
+
+func isIDType(ann string, reg *schemaRegistry) bool {
+	if ann == "xs:ID" {
+		return true
+	}
+	if reg == nil {
+		return false
+	}
+	return reg.IsSubtypeOf(ann, "xs:ID")
+}
+
+func isIDRefType(ann string, reg *schemaRegistry) bool {
+	if ann == "xs:IDREF" {
+		return true
+	}
+	if reg == nil {
+		return false
+	}
+	return reg.IsSubtypeOf(ann, "xs:IDREF")
+}
+
+func isIDRefsType(ann string, reg *schemaRegistry) bool {
+	if ann == "xs:IDREFS" {
+		return true
+	}
+	if reg == nil {
+		return false
+	}
+	return reg.IsSubtypeOf(ann, "xs:IDREFS")
+}
+
+// transferNilledStatus transfers the nilled property from a source subtree to
+// a destination subtree (used when copy-of/snapshot creates a deep copy).
+func (ec *execContext) transferNilledStatus(src, dst helium.Node) {
+	if ec.nilledElements == nil {
 		return
 	}
-	out := ec.currentOutput()
-	last := out.current.LastChild()
-	if last != nil {
-		ec.annotateNode(last, ann)
+	if srcElem, ok := src.(*helium.Element); ok {
+		if dstElem, ok := dst.(*helium.Element); ok {
+			if _, nilled := ec.nilledElements[srcElem]; nilled {
+				ec.markNilled(dstElem)
+			}
+			// Recursively transfer for child elements.
+			srcChild := srcElem.FirstChild()
+			dstChild := dstElem.FirstChild()
+			for srcChild != nil && dstChild != nil {
+				ec.transferNilledStatus(srcChild, dstChild)
+				srcChild = srcChild.NextSibling()
+				dstChild = dstChild.NextSibling()
+			}
+		}
+	}
+	// For document nodes, transfer nilled status for all children.
+	if srcDoc, ok := src.(*helium.Document); ok {
+		if dstDoc, ok := dst.(*helium.Document); ok {
+			srcChild := srcDoc.FirstChild()
+			dstChild := dstDoc.FirstChild()
+			for srcChild != nil && dstChild != nil {
+				ec.transferNilledStatus(srcChild, dstChild)
+				srcChild = srcChild.NextSibling()
+				dstChild = dstChild.NextSibling()
+			}
+		}
+	}
+}
+
+// isNilled returns true if the element was confirmed nilled during XSD validation.
+func (ec *execContext) isNilled(elem *helium.Element) bool {
+	if ec.nilledElements == nil {
+		return false
+	}
+	_, ok := ec.nilledElements[elem]
+	return ok
+}
+
+// deepTransferAnnotations recursively copies type annotations from a source
+// subtree to a destination subtree. The trees must have the same structure.
+func (ec *execContext) deepTransferAnnotations(src, dst helium.Node) {
+	if ec.typeAnnotations == nil {
+		return
+	}
+	if ann, ok := ec.typeAnnotations[src]; ok {
+		ec.annotateNode(dst, ann)
+	}
+	// Transfer attribute annotations
+	if srcElem, ok := src.(*helium.Element); ok {
+		if dstElem, ok := dst.(*helium.Element); ok {
+			for _, srcAttr := range srcElem.Attributes() {
+				if ann, ok := ec.typeAnnotations[srcAttr]; ok {
+					for _, dstAttr := range dstElem.Attributes() {
+						if srcAttr.LocalName() == dstAttr.LocalName() && srcAttr.URI() == dstAttr.URI() {
+							ec.annotateNode(dstAttr, ann)
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+	// Transfer child annotations recursively
+	srcChild := src.FirstChild()
+	dstChild := dst.FirstChild()
+	for srcChild != nil && dstChild != nil {
+		ec.deepTransferAnnotations(srcChild, dstChild)
+		srcChild = srcChild.NextSibling()
+		dstChild = dstChild.NextSibling()
+	}
+}
+
+// transferAnnotationsForCopy transfers type annotations from a source node to
+// newly-copied children of parent. lastBefore is the last child of parent
+// before the copy (nil if parent was empty). For document-node sources, the
+// children of the document are matched pairwise with the newly-added children.
+// For non-document sources, the single new child (parent's last child) is
+// matched with the source.
+func (ec *execContext) transferAnnotationsForCopy(src helium.Node, parent helium.Node, lastBefore helium.Node) {
+	if ec.typeAnnotations == nil {
+		return
+	}
+	if src.Type() == helium.DocumentNode {
+		// Document node: children were copied individually.
+		// Walk src children and match them to the newly-added children.
+		var firstNew helium.Node
+		if lastBefore == nil {
+			firstNew = parent.FirstChild()
+		} else {
+			firstNew = lastBefore.NextSibling()
+		}
+		srcChild := src.FirstChild()
+		dstChild := firstNew
+		for srcChild != nil && dstChild != nil {
+			ec.deepTransferAnnotations(srcChild, dstChild)
+			srcChild = srcChild.NextSibling()
+			dstChild = dstChild.NextSibling()
+		}
+	} else {
+		// Non-document: a single node was copied as the last child.
+		last := parent.LastChild()
+		if last != nil {
+			ec.deepTransferAnnotations(src, last)
+		}
 	}
 }
 
 // varScope is a variable scope chain.
 type varScope struct {
-	vars   map[string]xpath3.Sequence
-	parent *varScope
+	vars           map[string]xpath3.Sequence
+	deferredErrors map[string]error // errors deferred until variable is actually used
+	parent         *varScope
+}
+
+var varScopePool = sync.Pool{
+	New: func() any { return &varScope{} },
 }
 
 func (vs *varScope) lookup(name string) (xpath3.Sequence, bool) {
@@ -133,29 +451,70 @@ func (vs *varScope) lookup(name string) (xpath3.Sequence, bool) {
 	return nil, false
 }
 
-func (ec *execContext) pushVarScope() {
-	ec.localVars = &varScope{
-		vars:   make(map[string]xpath3.Sequence),
-		parent: ec.localVars,
+// lookupDeferred returns a deferred error for a variable, if one exists.
+func (vs *varScope) lookupDeferred(name string) error {
+	for s := vs; s != nil; s = s.parent {
+		if s.deferredErrors != nil {
+			if err, ok := s.deferredErrors[name]; ok {
+				return err
+			}
+		}
 	}
+	return nil
+}
+
+func (ec *execContext) pushVarScope() {
+	vs := varScopePool.Get().(*varScope)
+	vs.parent = ec.localVars
+	ec.localVars = vs
 }
 
 func (ec *execContext) popVarScope() {
-	if ec.localVars != nil {
-		ec.localVars = ec.localVars.parent
+	if ec.localVars == nil {
+		return
 	}
+	old := ec.localVars
+	ec.localVars = old.parent
+	old.parent = nil
+	clear(old.vars)
+	clear(old.deferredErrors)
+	varScopePool.Put(old)
 }
 
 func (ec *execContext) setVar(name string, value xpath3.Sequence) {
 	if ec.localVars == nil {
-		ec.localVars = &varScope{vars: make(map[string]xpath3.Sequence)}
+		ec.localVars = varScopePool.Get().(*varScope)
+	}
+	if ec.localVars.vars == nil {
+		ec.localVars.vars = make(map[string]xpath3.Sequence, 4)
 	}
 	ec.localVars.vars[name] = value
+}
+
+// setVarDeferred stores a variable with a deferred error. The variable
+// is set to an empty sequence; the error is raised only when the variable
+// is actually referenced via ResolveVariable.
+func (ec *execContext) setVarDeferred(name string, err error) {
+	if ec.localVars == nil {
+		ec.localVars = varScopePool.Get().(*varScope)
+	}
+	if ec.localVars.vars == nil {
+		ec.localVars.vars = make(map[string]xpath3.Sequence, 4)
+	}
+	ec.localVars.vars[name] = xpath3.EmptySequence()
+	if ec.localVars.deferredErrors == nil {
+		ec.localVars.deferredErrors = make(map[string]error, 2)
+	}
+	ec.localVars.deferredErrors[name] = err
 }
 
 func (ec *execContext) resolvePrefix(prefix string) string {
 	if uri, ok := ec.stylesheet.namespaces[prefix]; ok {
 		return uri
+	}
+	// The xml prefix is universally predeclared per XML Namespaces spec.
+	if prefix == lexicon.PrefixXML {
+		return lexicon.NamespaceXML
 	}
 	return ""
 }
@@ -165,143 +524,539 @@ func (ec *execContext) currentOutput() *outputFrame {
 	return ec.outputStack[len(ec.outputStack)-1]
 }
 
+func (ec *execContext) addNodeUntracked(node helium.Node) error {
+	out := ec.currentOutput()
+	if err := out.current.AddChild(node); err != nil {
+		return err
+	}
+	// Record text nodes in the active conditional scope so that separator
+	// artifacts can be removed when on-empty fires (separators between
+	// zero-length strings must not make content non-empty per XSLT 3.0).
+	// Comment nodes (used as on-empty/on-non-empty placeholders) are
+	// excluded — they are managed by resolveConditionalScope directly.
+	if node.Type() == helium.TextNode {
+		if n := len(out.conditionalScopes); n > 0 {
+			out.conditionalScopes[n-1].untrackedNodes = append(out.conditionalScopes[n-1].untrackedNodes, node)
+		}
+	}
+	return nil
+}
+
 // addNode adds a node to the current output insertion point.
 func (ec *execContext) addNode(node helium.Node) error {
 	out := ec.currentOutput()
+	// When sequenceMode is set, capture all nodes as separate items in
+	// the pending list. This prevents DOM text-node merging and keeps
+	// attributes, comments, PIs, and elements as distinct sequence items.
+	// Used by variable/param/with-param with an as attribute.
+	if out.sequenceMode {
+		out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: node})
+		out.noteOutput()
+		return nil
+	}
+
+	nodeType := node.Type()
+	isText := nodeType == helium.TextNode
+
 	// When separateTextNodes is set, capture each text node as a separate
 	// string item to avoid DOM text-node merging.  This is needed by
 	// xsl:value-of with separator + body content so that each produced
 	// text value remains a distinct item for separator insertion.
-	if out.separateTextNodes && node.Type() == helium.TextNode {
-		out.pendingItems = append(out.pendingItems, xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: string(node.Content())})
+	if out.separateTextNodes && isText {
+		// Keep as NodeItem so that mergeAdjacentTextNodes can merge them.
+		out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: node})
+		out.noteOutput()
 		return nil
 	}
-	// Reset atomic adjacency tracking when a non-text node (e.g., element)
-	// breaks the sequence of adjacent atomic values from xsl:sequence.
-	if node.Type() != helium.TextNode {
-		out.prevWasAtomic = false
+	// Reset atomic adjacency tracking when any node (text or element)
+	// is added via addNode. Text nodes from xsl:value-of or xsl:text
+	// break the "consecutive atomic" chain from xsl:sequence outputs.
+	out.prevWasAtomic = false
+
+	// For text nodes, compute whitespace-only once; used by multiple checks below.
+	isNonWhitespaceText := isText && strings.TrimSpace(string(node.Content())) != ""
+
+	// When item-separator is explicitly set, insert it between any pair
+	// of adjacent items in the result sequence (XSLT 3.0 serialization).
+	// This covers nodes produced by instructions like xsl:comment, xsl:element,
+	// xsl:processing-instruction that don't go through execXSLSequence.
+	// Only non-text nodes trigger this; text nodes from xsl:text/xsl:value-of
+	// are not separate "items" in the serialization sense.
+	if out.itemSeparator != nil && out.prevHadOutput && !isText && nodeType != helium.AttributeNode {
+		sepStr := *out.itemSeparator
+		if sepStr != "" {
+			sep, tErr := ec.resultDoc.CreateText([]byte(sepStr))
+			if tErr != nil {
+				return tErr
+			}
+			if err := out.current.AddChild(sep); err != nil {
+				return err
+			}
+		}
 	}
-	return out.current.AddChild(node)
+	// XTRE1495: if the primary output was claimed by an xsl:result-document
+	// and we are writing implicit content to the base (primary) frame, error.
+	if len(ec.outputStack) == 1 && !ec.insideResultDocPrimary {
+		if _, claimed := ec.usedResultURIs[""]; claimed {
+			if isText && !isNonWhitespaceText {
+				return nil
+			}
+			return dynamicError(errCodeXTRE1495, "cannot write to primary output: URI already used by xsl:result-document")
+		}
+		if !isText || isNonWhitespaceText {
+			ec.primaryClaimedImplicitly = true
+		}
+	}
+	// Zero-length text nodes are discarded from the result tree
+	// (XSLT 3.0 §11.4.1: "If the result ... is a zero-length string,
+	// then no text node is created").
+	if isText && len(node.Content()) == 0 {
+		return nil
+	}
+	// When a text node is about to be merged (via addChild) with an
+	// existing text node that was marked as atomic (from xsl:on-empty /
+	// xsl:sequence splice), clear the atomic marker.  The DOM's addChild
+	// merges adjacent text nodes, so the combined text is no longer purely
+	// an atomic serialization and must not trigger inter-atomic space
+	// separators in subsequent splice operations.
+	if isText {
+		if last := out.current.LastChild(); last != nil && last.Type() == helium.TextNode {
+			ec.clearAtomicTextNode(last)
+		}
+	}
+	if err := out.current.AddChild(node); err != nil {
+		return err
+	}
+	out.noteOutput()
+	// Track that output was produced for item-separator insertion
+	// between non-atomic items (e.g., comment→atomic, element→atomic).
+	// Whitespace-only text nodes between instructions don't count.
+	if !isText || isNonWhitespaceText {
+		out.prevHadOutput = true
+	}
+	return nil
 }
 
-// newXPathContext creates a context.Context with xpath3 settings for evaluating
-// XPath expressions within the XSLT transformation.
-func (ec *execContext) newXPathContext(node helium.Node) context.Context {
-	vars := ec.collectAllVars()
-	ctx := ec.transformCtx
-	if ctx == nil {
-		ctx = context.Background()
+func (ec *execContext) executeSequenceConstructor(ctx context.Context, body []instruction) error {
+	if len(body) == 0 {
+		return nil
 	}
-	ctx = withExecContext(ctx, ec)
-	ctx = xpath3.WithVariablesBorrowed(ctx, vars)
-	ctx = xpath3.WithFunctionsBorrowed(ctx, ec.xsltFunctions())
-	if fnsNS := ec.xsltFunctionsNS(); len(fnsNS) > 0 {
-		ctx = xpath3.WithFunctionsNSBorrowed(ctx, fnsNS)
-	}
-	if len(ec.typeAnnotations) > 0 {
-		ctx = xpath3.WithTypeAnnotations(ctx, ec.typeAnnotations)
-	}
-	if len(ec.stylesheet.namespaces) > 0 || ec.hasXPathDefaultNS {
-		ns := make(map[string]string, len(ec.stylesheet.namespaces)+1)
-		for k, v := range ec.stylesheet.namespaces {
-			// Skip the default namespace binding unless xpath-default-namespace
-			// is explicitly set; otherwise the stylesheet's xmlns="..." leaks
-			// into XPath name tests and changes how unprefixed names resolve.
-			if k == "" && !ec.hasXPathDefaultNS {
-				continue
-			}
-			ns[k] = v
+	out := ec.currentOutput()
+	out.seqConstructorGen++
+	scopeIdx := len(out.conditionalScopes)
+	out.conditionalScopes = append(out.conditionalScopes, conditionalScope{})
+	for _, inst := range body {
+		_, isOnEmpty := inst.(*onEmptyInst)
+		_, isOnNonEmpty := inst.(*onNonEmptyInst)
+		snap := out.outputSerial
+		if err := ec.executeInstruction(ctx, inst); err != nil {
+			out.conditionalScopes = out.conditionalScopes[:scopeIdx]
+			return err
 		}
-		if ec.hasXPathDefaultNS {
-			ns[""] = ec.xpathDefaultNS
+		if !isOnEmpty && !isOnNonEmpty && out.outputSerial != snap {
+			out.conditionalScopes[scopeIdx].hasOutput = true
 		}
-		ctx = xpath3.WithNamespaces(ctx, ns)
 	}
-	if ec.position > 0 {
-		ctx = xpath3.WithPosition(ctx, ec.position)
-	}
-	if ec.size > 0 {
-		ctx = xpath3.WithSize(ctx, ec.size)
-	}
-	if ec.contextItem != nil {
-		ctx = xpath3.WithContextItem(ctx, ec.contextItem)
-	}
-	// Use the current template's module base URI when available,
-	// falling back to the main stylesheet base URI.
-	if ec.currentTemplate != nil && ec.currentTemplate.BaseURI != "" {
-		ctx = xpath3.WithBaseURI(ctx, ec.currentTemplate.BaseURI)
-	} else if ec.stylesheet.baseURI != "" {
-		ctx = xpath3.WithBaseURI(ctx, ec.stylesheet.baseURI)
-	}
-	if len(ec.stylesheet.decimalFormats) > 0 {
-		// Separate default from named formats
-		for qn, df := range ec.stylesheet.decimalFormats {
-			if qn == (xpath3.QualifiedName{}) {
-				ctx = xpath3.WithDefaultDecimalFormat(ctx, df)
-			}
-		}
-		ctx = xpath3.WithNamedDecimalFormats(ctx, ec.stylesheet.decimalFormats)
-	}
-	return ctx
+	scope := out.conditionalScopes[scopeIdx]
+	out.conditionalScopes = out.conditionalScopes[:scopeIdx]
+	return ec.resolveConditionalScope(scope)
 }
 
-// baseXPathContext builds the invariant portion of an XPath evaluation context.
-// It includes variables, functions, namespace bindings, and the exec context carrier.
-// Position, size, and context item are layered by the caller when needed.
-func (ec *execContext) baseXPathContext() context.Context {
-	vars := ec.collectAllVars()
-	ctx := ec.transformCtx
-	if ctx == nil {
-		ctx = context.Background()
+func (ec *execContext) resolveConditionalScope(scope conditionalScope) error {
+	// When on-empty fires (!scope.hasOutput), remove nodes that were added
+	// via addNodeUntracked. These are separator artifacts inserted between
+	// zero-length atomic values and must not appear in the output (XSLT 3.0:
+	// "Separators between zero-length strings do not make the content
+	// non-empty").
+	if !scope.hasOutput {
+		for _, n := range scope.untrackedNodes {
+			helium.UnlinkNode(n)
+		}
 	}
-	ctx = withExecContext(ctx, ec)
-	ctx = xpath3.WithVariablesBorrowed(ctx, vars)
-	ctx = xpath3.WithFunctionsBorrowed(ctx, ec.xsltFunctions())
-	if fnsNS := ec.xsltFunctionsNS(); len(fnsNS) > 0 {
-		ctx = xpath3.WithFunctionsNSBorrowed(ctx, fnsNS)
+
+	for _, action := range scope.actions {
+		shouldRun := (action.kind == conditionalOnEmpty && !scope.hasOutput) ||
+			(action.kind == conditionalOnNonEmpty && scope.hasOutput)
+		if !shouldRun {
+			if action.placeholder != nil {
+				helium.UnlinkNode(action.placeholder)
+			}
+			continue
+		}
+
+		if err := ec.spliceConditionalSequence(action.placeholder, action.content, action.prevWasAtomic); err != nil {
+			return err
+		}
 	}
-	if len(ec.typeAnnotations) > 0 {
-		ctx = xpath3.WithTypeAnnotations(ctx, ec.typeAnnotations)
+	return nil
+}
+
+func (ec *execContext) spliceConditionalSequence(placeholder helium.Node, seq xpath3.Sequence, prevWasAtomic bool) error {
+	if placeholder == nil {
+		return ec.outputSequence(seq)
 	}
-	if len(ec.stylesheet.namespaces) > 0 || ec.hasXPathDefaultNS {
-		ns := make(map[string]string, len(ec.stylesheet.namespaces)+1)
-		for k, v := range ec.stylesheet.namespaces {
-			if k == "" && !ec.hasXPathDefaultNS {
+
+	parent := placeholder.Parent()
+	out := ec.currentOutput()
+	savedCurrent := out.current
+	if parent != nil {
+		out.current = parent
+		defer func() {
+			out.current = savedCurrent
+		}()
+	}
+
+	seq = flattenArraysInSequence(seq)
+	var nodes []helium.Node
+	// Determine whether the content preceding this splice was an atomic value.
+	// We use two signals:
+	//   (a) prevWasAtomic captured at registration time (reflects the
+	//       xsl:sequence / xsl:value-of state at the point on-empty was seen)
+	//   (b) isAtomicTextNode on the placeholder's previous DOM sibling
+	//       (reflects spliced atomic text that hasn't been merged away)
+	// Either being true means we need an inter-atomic space separator.
+	prevAtomic := prevWasAtomic || ec.isAtomicTextNode(placeholder.PrevSibling())
+	for item := range sequence.Items(seq) {
+		switch v := item.(type) {
+		case xpath3.NodeItem:
+			prevAtomic = false
+			switch v.Node.Type() {
+			case helium.DocumentNode:
+				for child := v.Node.FirstChild(); child != nil; child = child.NextSibling() {
+					copied, err := helium.CopyNode(child, ec.resultDoc)
+					if err != nil {
+						return err
+					}
+					nodes = append(nodes, copied)
+				}
+			case helium.AttributeNode:
+				elem, ok := parent.(*helium.Element)
+				if !ok {
+					return dynamicError(errCodeXTDE0410, "cannot add attribute to a non-element node")
+				}
+				copyAttributeToElement(elem, v.Node.(*helium.Attribute))
+				out.noteOutput()
+			default:
+				copied, err := helium.CopyNode(v.Node, ec.resultDoc)
+				if err != nil {
+					return err
+				}
+				nodes = append(nodes, copied)
+			}
+		case xpath3.AtomicValue:
+			s, err := xpath3.AtomicToString(v)
+			if err != nil {
+				return err
+			}
+			if s == "" {
+				// Empty-string atomics produce no text, but if preceded by
+				// another atomic, insert an inter-atomic separator so that
+				// on-non-empty select="''" properly contributes to the
+				// inter-atomic space chain.
+				if prevAtomic {
+					sep, sErr := ec.resultDoc.CreateText([]byte(" "))
+					if sErr != nil {
+						return sErr
+					}
+					nodes = append(nodes, sep)
+				}
+				prevAtomic = true
 				continue
 			}
-			ns[k] = v
+			if prevAtomic {
+				sep, err := ec.resultDoc.CreateText([]byte(" "))
+				if err != nil {
+					return err
+				}
+				nodes = append(nodes, sep)
+			}
+			text, err := ec.resultDoc.CreateText([]byte(s))
+			if err != nil {
+				return err
+			}
+			nodes = append(nodes, text)
+			ec.markAtomicTextNode(text)
+			prevAtomic = true
 		}
-		if ec.hasXPathDefaultNS {
-			ns[""] = ec.xpathDefaultNS
+	}
+
+	if len(nodes) == 0 {
+		// Even though no DOM nodes were produced, update prevWasAtomic
+		// if an empty-string atomic was seen. This ensures that
+		// subsequent xsl:sequence or on-empty instructions see the
+		// correct atomic adjacency state (e.g., on-non-empty with
+		// select="''" should contribute to the inter-atomic chain).
+		if prevAtomic {
+			out.prevWasAtomic = true
 		}
-		ctx = xpath3.WithNamespaces(ctx, ns)
+		helium.UnlinkNode(placeholder)
+		return nil
 	}
-	// Use the current template's module base URI when available.
-	if ec.currentTemplate != nil && ec.currentTemplate.BaseURI != "" {
-		ctx = xpath3.WithBaseURI(ctx, ec.currentTemplate.BaseURI)
-	} else if ec.stylesheet.baseURI != "" {
-		ctx = xpath3.WithBaseURI(ctx, ec.stylesheet.baseURI)
+
+	spliceReplace(placeholder, nodes)
+	// Fix namespace declarations on spliced elements that moved into a
+	// context with a different default namespace (e.g. a no-namespace
+	// element placed under a parent with xmlns="...").
+	for _, n := range nodes {
+		if elem, ok := n.(*helium.Element); ok {
+			ec.fixNamespacesAfterCopy(elem)
+		}
 	}
-	if len(ec.stylesheet.decimalFormats) > 0 {
-		for qn, df := range ec.stylesheet.decimalFormats {
-			if qn == (xpath3.QualifiedName{}) {
-				ctx = xpath3.WithDefaultDecimalFormat(ctx, df)
+	// Update prevWasAtomic to reflect the spliced content so that
+	// subsequent instructions see the correct atomic adjacency state.
+	out.prevWasAtomic = prevAtomic
+	out.noteOutput()
+	return nil
+}
+
+func spliceReplace(target helium.Node, nodes []helium.Node) {
+	if len(nodes) == 0 {
+		helium.UnlinkNode(target)
+		return
+	}
+
+	afterTarget := target.NextSibling()
+	_ = target.Replace(nodes[0])
+
+	prev := nodes[0]
+	for i := 1; i < len(nodes); i++ {
+		cur := nodes[i]
+		cur.SetParent(prev.Parent())
+		cur.SetPrevSibling(prev)
+		prev.SetNextSibling(cur)
+		prev = cur
+	}
+
+	last := nodes[len(nodes)-1]
+	last.SetNextSibling(afterTarget)
+	if afterTarget != nil {
+		afterTarget.SetPrevSibling(last)
+	}
+	// Update parent's LastChild if the target was the last child.
+	// Replace only updates LastChild for nodes[0]; when additional
+	// nodes were spliced after it, the parent's LastChild must point
+	// to the true last node.
+	if afterTarget == nil && len(nodes) > 1 {
+		if parent := last.Parent(); parent != nil {
+			helium.SetLastChild(parent, last)
+		}
+	}
+}
+
+// collectPackageNamespaces recursively collects all namespace bindings from
+// used packages into the provided map. Main stylesheet bindings take precedence.
+func collectPackageNamespaces(ss *Stylesheet, ns map[string]string) {
+	for _, pkg := range ss.usedPackages {
+		collectPackageNamespaces(pkg, ns)
+		for k, v := range pkg.namespaces {
+			if k == "" {
+				continue
+			}
+			if _, exists := ns[k]; !exists {
+				ns[k] = v
 			}
 		}
-		ctx = xpath3.WithNamedDecimalFormats(ctx, ec.stylesheet.decimalFormats)
 	}
-	return ctx
+}
+
+func (ec *execContext) collectionResolver() xpath3.CollectionResolver {
+	if ec.transformCfg == nil || ec.transformCfg.collectionResolver == nil {
+		return nil
+	}
+	if len(ec.stylesheet.stripSpace) == 0 && len(ec.stylesheet.preserveSpace) == 0 {
+		return ec.transformCfg.collectionResolver
+	}
+	return strippingCollectionResolver{
+		base: ec.transformCfg.collectionResolver,
+		ec:   ec,
+	}
+}
+
+type strippingCollectionResolver struct {
+	base xpath3.CollectionResolver
+	ec   *execContext
+}
+
+func (r strippingCollectionResolver) ResolveCollection(uri string) (xpath3.Sequence, error) {
+	seq, err := r.base.ResolveCollection(uri)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make(xpath3.ItemSlice, 0, sequence.Len(seq))
+	for item := range sequence.Items(seq) {
+		ni, ok := item.(xpath3.NodeItem)
+		if !ok {
+			out = append(out, item)
+			continue
+		}
+
+		copied, err := r.ec.copyCollectionNode(ni.Node)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, xpath3.NodeItem{Node: copied})
+	}
+	return out, nil
+}
+
+func (r strippingCollectionResolver) ResolveURICollection(uri string) ([]string, error) {
+	return r.base.ResolveURICollection(uri)
+}
+
+func (ec *execContext) copyCollectionNode(node helium.Node) (helium.Node, error) {
+	if node == nil {
+		return nil, nil
+	}
+
+	if doc, ok := node.(*helium.Document); ok {
+		copied, err := helium.CopyDoc(doc)
+		if err != nil {
+			return nil, err
+		}
+		copied.SetURL(doc.URL())
+		ec.stripWhitespaceFromDoc(copied)
+		return copied, nil
+	}
+
+	dst := helium.NewDefaultDocument()
+	copied, err := helium.CopyNode(node, dst)
+	if err != nil {
+		return nil, err
+	}
+	if err := dst.AddChild(copied); err != nil {
+		return nil, err
+	}
+	if owner := node.OwnerDocument(); owner != nil {
+		dst.SetURL(owner.URL())
+	}
+	ec.stripWhitespaceFromDoc(dst)
+	return copied, nil
 }
 
 // sortXPathEvalState creates a reusable xpath3.EvalState from the base context.
 // Used by sort to avoid per-item newEvalContext allocations.
 func (ec *execContext) sortXPathEvalState() *xpath3.EvalState {
-	return xpath3.NewEvalState(ec.baseXPathContext(), nil)
+	return ec.xpathEvaluator().NewEvalState(ec.xpathContext(), nil)
+}
+
+// xpathContext returns a context.Context suitable for XPath evaluation.
+// It carries cancellation/deadlines and the xslt3 exec context, but
+// NOT XPath config (that comes from the Evaluator).
+func (ec *execContext) xpathContext() context.Context {
+	ctx := ec.transformCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return withExecContext(ctx, ec)
+}
+
+// baseXPathEvaluator returns the cached base XPath evaluator, rebuilding
+// it only when the invalidation keys change (variable generation, xpath
+// default namespace, or effective base URI).
+func (ec *execContext) baseXPathEvaluator() xpath3.Evaluator {
+	baseURI := ec.effectiveStaticBaseURI()
+	if ec.cachedBaseEvalValid &&
+		ec.cachedBaseEvalXPathDefaultNS == ec.xpathDefaultNS &&
+		ec.cachedBaseEvalHasXPathDefaultNS == ec.hasXPathDefaultNS &&
+		ec.cachedBaseEvalBaseURI == baseURI {
+		return ec.cachedBaseEval
+	}
+
+	eval := ec.buildBaseXPathEvaluator(baseURI)
+
+	ec.cachedBaseEval = eval
+	ec.cachedBaseEvalValid = true
+	ec.cachedBaseEvalXPathDefaultNS = ec.xpathDefaultNS
+	ec.cachedBaseEvalHasXPathDefaultNS = ec.hasXPathDefaultNS
+	ec.cachedBaseEvalBaseURI = baseURI
+	return eval
+}
+
+// buildBaseXPathEvaluator constructs the base evaluator from scratch.
+// Variables and functions are NOT included — they change per-scope
+// and are applied in xpathEvaluator() as per-call overlays.
+func (ec *execContext) buildBaseXPathEvaluator(baseURI string) xpath3.Evaluator {
+	eval := xpath3.NewEvaluator(xpath3.EvalBorrowing).
+		VariableResolver(ec).
+		FunctionResolver(ec).
+		CurrentTime(ec.currentTime).
+		ImplicitTimezone(ec.currentTime.Location()).
+		AllowXML11Chars().
+		TraceWriter(ec.traceWriter)
+
+	if len(ec.stylesheet.namespaces) > 0 || ec.hasXPathDefaultNS {
+		ns := make(map[string]string, len(ec.stylesheet.namespaces)+1)
+		collectPackageNamespaces(ec.stylesheet, ns)
+		for k, v := range ec.stylesheet.namespaces {
+			if k == "" && !ec.hasXPathDefaultNS {
+				continue
+			}
+			ns[k] = v
+		}
+		if ec.hasXPathDefaultNS {
+			ns[""] = ec.xpathDefaultNS
+		}
+		eval = eval.Namespaces(ns).StrictPrefixes()
+	}
+	if baseURI != "" {
+		eval = eval.BaseURI(ensureFileURI(baseURI))
+	}
+	if len(ec.stylesheet.decimalFormats) > 0 {
+		for qn, df := range ec.stylesheet.decimalFormats {
+			if qn == (xpath3.QualifiedName{}) {
+				eval = eval.DefaultDecimalFormat(df)
+			}
+		}
+		eval = eval.NamedDecimalFormats(ec.stylesheet.decimalFormats)
+	}
+	if resolver := ec.collectionResolver(); resolver != nil {
+		eval = eval.CollectionResolver(resolver)
+	}
+	return eval
+}
+
+// xpathEvaluator returns the base evaluator with per-call overlays
+// (variables, position, size, context item, collation, doc-order cache).
+func (ec *execContext) xpathEvaluator() xpath3.Evaluator {
+	eval := ec.baseXPathEvaluator().
+		Variables(xpath3.VariablesFromMap(ec.collectAllVars())).
+		Functions(xpath3.FunctionLibraryFromMaps(ec.xsltFunctions(), ec.xsltFunctionsNS()))
+	if ec.typeAnnotations != nil {
+		eval = eval.TypeAnnotations(ec.typeAnnotations)
+	}
+	if ec.preservedIDAnnotations != nil {
+		eval = eval.PreservedIDAnnotations(ec.preservedIDAnnotations)
+	}
+	if ec.schemaRegistry != nil {
+		eval = eval.SchemaDeclarations(ec.schemaRegistry)
+	}
+	if ec.position > 0 {
+		eval = eval.Position(ec.position)
+	}
+	if ec.size > 0 {
+		eval = eval.Size(ec.size)
+	}
+	if ec.contextItem != nil {
+		eval = eval.ContextItem(ec.contextItem)
+	}
+	if ec.defaultCollation != "" {
+		eval = eval.DefaultCollation(ec.defaultCollation)
+	}
+	if ec.docOrderCache != nil {
+		eval = eval.DocOrderCache(ec.docOrderCache)
+	}
+	return eval
+}
+
+// evalXPath evaluates an XPath expression using the Evaluator-based path.
+func (ec *execContext) evalXPath(expr *xpath3.Expression, node helium.Node) (*xpath3.Result, error) {
+	return ec.xpathEvaluator().Evaluate(ec.xpathContext(), expr, node)
 }
 
 func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
 	// Eagerly evaluate all pending global vars/params, but only at the
-	// top level. Nested calls (from within evaluateGlobalVar/Param →
+	// top level. Nested calls (from within evaluateGlobalVar/param →
 	// newXPathContext → collectAllVars) just snapshot what's available;
 	// the lazy lookupVar path handles remaining references on demand.
 	if !ec.collectingVars && (len(ec.globalVarDefs) > 0 || len(ec.globalParamDefs) > 0) {
@@ -309,12 +1064,34 @@ func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
 		defer func() { ec.collectingVars = false }()
 		for len(ec.globalVarDefs) > 0 || len(ec.globalParamDefs) > 0 {
 			progress := false
-			for _, v := range ec.globalVarDefs {
+			// Iterate in sorted key order so that temporary trees created
+			// during variable evaluation are registered in the DocOrderCache
+			// deterministically. Without this, cross-document ordering in
+			// unions (e.g. $v1 | $v2) depends on Go's randomized map iteration.
+			varNames := make([]string, 0, len(ec.globalVarDefs))
+			for name := range ec.globalVarDefs {
+				varNames = append(varNames, name)
+			}
+			slices.Sort(varNames)
+			for _, name := range varNames {
+				v, ok := ec.globalVarDefs[name]
+				if !ok {
+					continue
+				}
 				if _, err := ec.evaluateGlobalVar(v); err == nil {
 					progress = true
 				}
 			}
-			for _, p := range ec.globalParamDefs {
+			paramNames := make([]string, 0, len(ec.globalParamDefs))
+			for name := range ec.globalParamDefs {
+				paramNames = append(paramNames, name)
+			}
+			slices.Sort(paramNames)
+			for _, name := range paramNames {
+				p, ok := ec.globalParamDefs[name]
+				if !ok {
+					continue
+				}
 				if _, err := ec.evaluateGlobalParam(p); err == nil {
 					progress = true
 				}
@@ -356,910 +1133,57 @@ func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
 	return vars
 }
 
-// executeTransform performs the XSLT transformation.
-func executeTransform(ctx context.Context, source *helium.Document, ss *Stylesheet, cfg *transformConfig) (*helium.Document, error) {
-	resultDoc := helium.NewDefaultDocument()
-
-	ec := &execContext{
-		stylesheet:   ss,
-		sourceDoc:    source,
-		resultDoc:    resultDoc,
-		currentNode:  source,
-		contextNode:  source,
-		position:     1,
-		size:         1,
-		globalVars:   make(map[string]xpath3.Sequence),
-		currentMode:  "",
-		outputStack:  []*outputFrame{{doc: resultDoc, current: resultDoc}},
-		keyTables:        make(map[string]*keyTable),
-		docCache:         make(map[string]*helium.Document),
-		accumulatorState: make(map[string]xpath3.Sequence),
-		transformCtx:     ctx,
+// ResolveFunction implements xpath3.FunctionResolver. It resolves
+// xsl:original() calls without exposing the function to function-lookup.
+func (ec *execContext) ResolveFunction(_ context.Context, uri, name string, arity int) (xpath3.Function, bool, error) {
+	if uri == lexicon.NamespaceXSLT && name == "original" && ec.originalFunc != nil {
+		return ec.originalFunc, true, nil
 	}
-
-	if cfg != nil && cfg.msgHandler != nil {
-		ec.msgHandler = cfg.msgHandler
-	}
-
-	// Apply xsl:strip-space to the source document so that whitespace-only
-	// text nodes are removed before template matching and XPath evaluation.
-	if len(ss.stripSpace) > 0 && source != nil {
-		ec.stripWhitespaceFromDoc(source)
-	}
-
-	// Store exec context in Go context for AVT evaluation
-	ctx = withExecContext(ctx, ec)
-
-	// Initialize global variables
-	if err := ec.initGlobalVars(ctx, cfg); err != nil {
-		return nil, err
-	}
-
-	// Either call the initial-template or apply templates to the document root
-	initialTemplateName := ""
-	if cfg != nil && cfg.initialTemplate != "" {
-		initialTemplateName = cfg.initialTemplate
-	}
-
-	// XSLT 3.0: if no explicit initial template, check for xsl:initial-template
-	if initialTemplateName == "" {
-		xsltInitial := "{" + NSXSLT + "}initial-template"
-		if _, ok := ec.stylesheet.namedTemplates[xsltInitial]; ok {
-			initialTemplateName = xsltInitial
-		} else if _, ok := ec.stylesheet.namedTemplates["xsl:initial-template"]; ok {
-			initialTemplateName = "xsl:initial-template"
-		}
-	}
-
-	if initialTemplateName != "" {
-		tmpl := ec.stylesheet.namedTemplates[initialTemplateName]
-		if tmpl == nil {
-			return nil, dynamicError(errCodeXTDE0820, "initial template %q not found", initialTemplateName)
-		}
-		if err := ec.executeTemplate(ctx, tmpl, source, ""); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := ec.applyTemplates(ctx, source, ""); err != nil {
-			return nil, err
-		}
-	}
-
-	return resultDoc, nil
+	return nil, false, nil
 }
 
-// initGlobalVars registers global variables and parameters for lazy evaluation.
-// castParamValue casts a string param value to the declared XSD type.
-// Handles simple atomic types like "xs:integer", "xs:double", "xs:string".
-// Occurrence indicators (*, +, ?) are stripped.
-func castParamValue(s string, asType string) (xpath3.Sequence, error) {
-	// Strip occurrence indicator
-	t := strings.TrimRight(asType, "*+?")
-	t = strings.TrimSpace(t)
-	if t == "" {
-		return nil, fmt.Errorf("empty type")
-	}
-	av, err := xpath3.CastFromString(s, t)
-	if err != nil {
-		return nil, err
-	}
-	return xpath3.Sequence{av}, nil
-}
-
-// Params with caller-provided values are set immediately; all others are
-// evaluated on first access to support arbitrary declaration order.
-func (ec *execContext) initGlobalVars(ctx context.Context, cfg *transformConfig) error {
-	ec.transformCfg = cfg
-	ec.globalVarDefs = make(map[string]*Variable, len(ec.stylesheet.globalVars))
-	ec.globalParamDefs = make(map[string]*Param, len(ec.stylesheet.globalParams))
-	ec.globalEvaluating = make(map[string]bool)
-
-	// Register params — set immediately if caller provided a value
-	for _, p := range ec.stylesheet.globalParams {
-		if cfg != nil && cfg.params != nil {
-			if sv, ok := cfg.params[p.Name]; ok {
-				val := xpath3.SingleString(sv)
-				// Cast to declared type if specified
-				if p.As != "" {
-					castVal, err := castParamValue(sv, p.As)
-					if err == nil {
-						val = castVal
-					}
-				}
-				ec.globalVars[p.Name] = val
-				continue
-			}
-		}
-		ec.globalParamDefs[p.Name] = p
-	}
-
-	// Register variables for lazy evaluation
-	for _, v := range ec.stylesheet.globalVars {
-		ec.globalVarDefs[v.Name] = v
-	}
-
-	return nil
-}
-
-// evaluateGlobalVar evaluates a global variable on first access.
-func (ec *execContext) evaluateGlobalVar(v *Variable) (xpath3.Sequence, error) {
-	if ec.globalEvaluating[v.Name] {
-		return nil, fmt.Errorf("circular dependency in global variable %q", v.Name)
-	}
-	ec.globalEvaluating[v.Name] = true
-	defer delete(ec.globalEvaluating, v.Name)
-
-	var val xpath3.Sequence
-	ctx := ec.transformCtx
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	ctx = withExecContext(ctx, ec)
-	if v.Select != nil {
-		xpathCtx := ec.newXPathContext(ec.sourceDoc)
-		result, err := v.Select.Evaluate(xpathCtx, ec.sourceDoc)
+// ResolveVariable implements xpath3.VariableResolver. It lazily evaluates
+// global variables and parameters that have not yet been evaluated, allowing
+// XPath expressions to reference globals that aren't in the snapshot built
+// by collectAllVars (e.g. during circular-but-unused variable scenarios).
+func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.Sequence, bool, error) {
+	// Handle $xsl:original — resolve to the original overridden variable's value
+	if name == "{"+lexicon.NamespaceXSLT+"}original" && ec.overridingVarDef != nil && ec.overridingVarDef.OriginalVar != nil {
+		val, err := ec.evaluateGlobalVar(ec.overridingVarDef.OriginalVar)
 		if err != nil {
-			return nil, fmt.Errorf("error evaluating global variable %q: %w", v.Name, err)
+			return nil, false, err
 		}
-		val = result.Sequence()
-	} else if len(v.Body) > 0 {
-		var err error
-		if v.As != "" {
-			// With as attribute: evaluate as raw sequence
-			val, err = ec.evaluateBody(ctx, v.Body)
-		} else {
-			// No as: wrap in document node (temporary tree)
-			val, err = ec.evaluateBodyAsDocument(ctx, v.Body)
+		return val, true, nil
+	}
+	// Check if the variable is already evaluated as a global
+	if v, ok := ec.globalVars[name]; ok {
+		return v, true, nil
+	}
+	// Check local vars (in case the scope was pushed after the snapshot)
+	if ec.localVars != nil {
+		if v, ok := ec.localVars.lookup(name); ok {
+			// Check for deferred errors — raised only on actual use
+			if err := ec.localVars.lookupDeferred(name); err != nil {
+				return nil, false, err
+			}
+			return v, true, nil
 		}
+	}
+	// Try to lazily evaluate a pending global variable
+	if def, ok := ec.globalVarDefs[name]; ok {
+		val, err := ec.evaluateGlobalVar(def)
 		if err != nil {
-			return nil, fmt.Errorf("error evaluating global variable %q body: %w", v.Name, err)
+			return nil, false, err
 		}
-	} else {
-		val = xpath3.SingleString("")
+		return val, true, nil
 	}
-
-	ec.globalVars[v.Name] = val
-	ec.globalVarsGen++
-	delete(ec.globalVarDefs, v.Name)
-	return val, nil
-}
-
-// evaluateGlobalParam evaluates a global param on first access.
-func (ec *execContext) evaluateGlobalParam(p *Param) (xpath3.Sequence, error) {
-	if ec.globalEvaluating[p.Name] {
-		return nil, fmt.Errorf("circular dependency in global param %q", p.Name)
-	}
-	ec.globalEvaluating[p.Name] = true
-	defer delete(ec.globalEvaluating, p.Name)
-
-	var val xpath3.Sequence
-	ctx := ec.transformCtx
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	ctx = withExecContext(ctx, ec)
-	if p.Select != nil {
-		xpathCtx := ec.newXPathContext(ec.sourceDoc)
-		result, err := p.Select.Evaluate(xpathCtx, ec.sourceDoc)
+	// Try to lazily evaluate a pending global parameter
+	if def, ok := ec.globalParamDefs[name]; ok {
+		val, err := ec.evaluateGlobalParam(def)
 		if err != nil {
-			return nil, fmt.Errorf("error evaluating global param %q: %w", p.Name, err)
+			return nil, false, err
 		}
-		val = result.Sequence()
-	} else if len(p.Body) > 0 {
-		var err error
-		if p.As != "" {
-			// With as attribute: evaluate as raw sequence
-			val, err = ec.evaluateBody(ctx, p.Body)
-		} else {
-			// No as: wrap in document node (temporary tree)
-			val, err = ec.evaluateBodyAsDocument(ctx, p.Body)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("error evaluating global param %q body: %w", p.Name, err)
-		}
+		return val, true, nil
 	}
-
-	ec.globalVars[p.Name] = val
-	ec.globalVarsGen++
-	delete(ec.globalParamDefs, p.Name)
-	return val, nil
-}
-
-// evaluateBody executes instructions and captures the result as a sequence.
-// When instructions produce nodes, they are wrapped as a temporary tree.
-func (ec *execContext) evaluateBody(ctx context.Context, body []Instruction) (xpath3.Sequence, error) {
-	// Create a temporary document to capture output
-	tmpDoc := helium.NewDefaultDocument()
-	tmpRoot, err := tmpDoc.CreateElement("_tmp")
-	if err != nil {
-		return nil, err
-	}
-	if err := tmpDoc.AddChild(tmpRoot); err != nil {
-		return nil, err
-	}
-
-	// Push a new output frame with capture mode enabled
-	frame := &outputFrame{doc: tmpDoc, current: tmpRoot, captureItems: true}
-	ec.outputStack = append(ec.outputStack, frame)
-	defer func() {
-		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
-	}()
-
-	for _, inst := range body {
-		if err := ec.executeInstruction(ctx, inst); err != nil {
-			return nil, err
-		}
-	}
-
-	// If we captured atomic items via xsl:sequence, return them directly
-	if len(frame.pendingItems) > 0 {
-		// TODO(xslt3): when the body produces both DOM nodes and atomic
-		// items, this concatenates all nodes first then all atomics,
-		// which loses the original construction order (e.g., node,
-		// atomic, node becomes node, node, atomic). To fully conform
-		// to XSLT sequence-constructor semantics, the capture mechanism
-		// should record a single ordered stream of items (nodes and
-		// atomics interleaved) rather than two separate buckets. This
-		// is a known limitation of the initial implementation.
-		if tmpRoot.FirstChild() != nil {
-			var seq xpath3.Sequence
-			for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
-				seq = append(seq, xpath3.NodeItem{Node: child})
-			}
-			seq = append(seq, frame.pendingItems...)
-			return seq, nil
-		}
-		return frame.pendingItems, nil
-	}
-
-	// Return all children as node items
-	var seq xpath3.Sequence
-	for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
-		seq = append(seq, xpath3.NodeItem{Node: child})
-	}
-	// Also collect attributes that were set on the temporary root
-	// (e.g., from xsl:attribute with as="attribute()")
-	for _, attr := range tmpRoot.Attributes() {
-		seq = append(seq, xpath3.NodeItem{Node: attr})
-	}
-	if len(seq) > 0 {
-		return seq, nil
-	}
-
-	return xpath3.EmptySequence(), nil
-}
-
-// evaluateBodySeparateText is like evaluateBody but keeps each produced
-// text node as a separate string item instead of letting the DOM merge
-// adjacent text nodes.  This is needed by xsl:value-of with separator
-// so that each text value is a distinct item for separator insertion.
-func (ec *execContext) evaluateBodySeparateText(ctx context.Context, body []Instruction) (xpath3.Sequence, error) {
-	tmpDoc := helium.NewDefaultDocument()
-	tmpRoot, err := tmpDoc.CreateElement("_tmp")
-	if err != nil {
-		return nil, err
-	}
-	if err := tmpDoc.AddChild(tmpRoot); err != nil {
-		return nil, err
-	}
-
-	frame := &outputFrame{doc: tmpDoc, current: tmpRoot, captureItems: true, separateTextNodes: true}
-	ec.outputStack = append(ec.outputStack, frame)
-	defer func() {
-		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
-	}()
-
-	for _, inst := range body {
-		if err := ec.executeInstruction(ctx, inst); err != nil {
-			return nil, err
-		}
-	}
-
-	// Collect DOM children (non-text) and pending items in order
-	if tmpRoot.FirstChild() != nil {
-		var seq xpath3.Sequence
-		for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
-			seq = append(seq, xpath3.NodeItem{Node: child})
-		}
-		seq = append(seq, frame.pendingItems...)
-		return seq, nil
-	}
-	if len(frame.pendingItems) > 0 {
-		return frame.pendingItems, nil
-	}
-	return xpath3.EmptySequence(), nil
-}
-
-// evaluateBodyAsDocument executes instructions and wraps the result in a
-// document node (temporary tree), as required by the XSLT spec for variables
-// and params with content body and no select/as attributes.
-func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []Instruction) (xpath3.Sequence, error) {
-	tmpDoc := helium.NewDefaultDocument()
-
-	frame := &outputFrame{doc: tmpDoc, current: tmpDoc, captureItems: true}
-	ec.outputStack = append(ec.outputStack, frame)
-	defer func() {
-		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
-	}()
-
-	for _, inst := range body {
-		if err := ec.executeInstruction(ctx, inst); err != nil {
-			return nil, err
-		}
-	}
-
-	// Per XSLT spec: in document-node context (variable/param without as),
-	// atomic items from xsl:sequence are converted to text nodes and added
-	// to the document node as space-separated text.
-	if len(frame.pendingItems) > 0 {
-		var sb strings.Builder
-		for i, item := range frame.pendingItems {
-			if i > 0 {
-				sb.WriteByte(' ')
-			}
-			av, err := xpath3.AtomizeItem(item)
-			if err != nil {
-				_, _ = fmt.Fprint(&sb, item)
-				continue
-			}
-			s, err := xpath3.AtomicToString(av)
-			if err != nil {
-				_, _ = fmt.Fprint(&sb, item)
-			} else {
-				sb.WriteString(s)
-			}
-		}
-		if sb.Len() > 0 {
-			text, err := tmpDoc.CreateText([]byte(sb.String()))
-			if err != nil {
-				return nil, err
-			}
-			if err := tmpDoc.AddChild(text); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return xpath3.Sequence{xpath3.NodeItem{Node: tmpDoc}}, nil
-}
-
-// applyTemplates matches and executes templates for a node.
-func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mode string, paramValues ...map[string]xpath3.Sequence) error {
-	// Strip whitespace-only text nodes per xsl:strip-space
-	if ec.shouldStripWhitespace(node) {
-		return nil
-	}
-
-	ec.depth++
-	if ec.depth > maxRecursionDepth {
-		ec.depth--
-		return dynamicError(errCodeXTDE0820, "recursion depth exceeded")
-	}
-	defer func() { ec.depth-- }()
-
-	switch mode {
-	case "#current":
-		mode = ec.currentMode
-	case "#default", "#unnamed", "":
-		mode = ec.stylesheet.defaultMode
-	}
-
-	// Collect param values if any
-	var pv map[string]xpath3.Sequence
-	if len(paramValues) > 0 {
-		pv = paramValues[0]
-	}
-
-	// Find best matching template
-	tmpl := ec.findBestTemplate(node, mode)
-	if tmpl != nil {
-		return ec.executeTemplate(ctx, tmpl, node, mode, pv)
-	}
-
-	// Use built-in template rules
-	return ec.applyBuiltinRules(ctx, node, mode, paramValues...)
-}
-
-// findBestTemplate finds the highest-priority matching template for a node.
-func (ec *execContext) findBestTemplate(node helium.Node, mode string) *Template {
-	// Set currentNode to the candidate so current() works in pattern predicates
-	savedCurrent := ec.currentNode
-	ec.currentNode = node
-	defer func() { ec.currentNode = savedCurrent }()
-
-	templates := ec.stylesheet.modeTemplates[mode]
-	for _, tmpl := range templates {
-		if tmpl.Match != nil && tmpl.Match.matchPattern(ec, node) {
-			return tmpl
-		}
-	}
-
-	// Also check #all mode templates that might not be registered in this mode
-	if mode != "#all" {
-		for _, tmpl := range ec.stylesheet.modeTemplates["#all"] {
-			if tmpl.Match != nil && tmpl.Match.matchPattern(ec, node) {
-				return tmpl
-			}
-		}
-	}
-
-	return nil
-}
-
-// findAtomicTemplate finds a template matching an atomic value.
-// XSLT 3.0 patterns like ".[. instance of xs:integer]" can match atomic items.
-func (ec *execContext) findAtomicTemplate(item xpath3.Item, mode string) *Template {
-	templates := ec.stylesheet.modeTemplates[mode]
-	for _, tmpl := range templates {
-		if tmpl.Match != nil && ec.matchAtomicPattern(tmpl.Match, item) {
-			return tmpl
-		}
-	}
-	if mode != "#all" {
-		for _, tmpl := range ec.stylesheet.modeTemplates["#all"] {
-			if tmpl.Match != nil && ec.matchAtomicPattern(tmpl.Match, item) {
-				return tmpl
-			}
-		}
-	}
-	return nil
-}
-
-// matchAtomicPattern checks if an atomic item matches a pattern.
-func (ec *execContext) matchAtomicPattern(p *Pattern, item xpath3.Item) bool {
-	for _, alt := range p.Alternatives {
-		compiled := xpath3.CompileExpr(alt.expr)
-		// Evaluate the pattern as a boolean predicate with the item as context
-		ctx := ec.newXPathContext(nil)
-		ctx = xpath3.WithContextItem(ctx, item)
-		result, err := compiled.Evaluate(ctx, nil)
-		if err != nil {
-			continue
-		}
-		// The pattern ".[. instance of xs:integer]" evaluates to the item
-		// itself when matched, or empty when not. Check non-empty.
-		if len(result.Sequence()) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
-// executeAtomicTemplate executes a template with an atomic item as context.
-func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *Template, item xpath3.Item, mode string) error {
-	savedContext := ec.contextNode
-	savedCurrent := ec.currentNode
-	savedMode := ec.currentMode
-	savedItem := ec.contextItem
-	savedTemplate := ec.currentTemplate
-	ec.contextItem = item
-	ec.currentMode = mode
-	ec.currentTemplate = tmpl
-	defer func() {
-		ec.contextNode = savedContext
-		ec.currentNode = savedCurrent
-		ec.currentMode = savedMode
-		ec.contextItem = savedItem
-		ec.currentTemplate = savedTemplate
-	}()
-
-	ec.pushVarScope()
-	defer ec.popVarScope()
-
-	for _, bodyInst := range tmpl.Body {
-		if err := ec.executeInstruction(ctx, bodyInst); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// executeTemplate executes a template with the given node as context.
-const maxRecursionDepth = 1000
-
-func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node helium.Node, mode string, paramOverrides ...map[string]xpath3.Sequence) error {
-	// Save and restore context
-	savedCurrent := ec.currentNode
-	savedContext := ec.contextNode
-	savedMode := ec.currentMode
-	savedPos := ec.position
-	savedSize := ec.size
-	savedTemplate := ec.currentTemplate
-	savedTunnel := ec.tunnelParams
-	savedXPathDefaultNS := ec.xpathDefaultNS
-	savedHasXPathDefaultNS := ec.hasXPathDefaultNS
-	savedGroup := ec.currentGroup
-	savedGroupKey := ec.currentGroupKey
-	ec.currentNode = node
-	ec.contextNode = node
-	ec.currentMode = mode
-	ec.currentTemplate = tmpl
-	ec.xpathDefaultNS = tmpl.XPathDefaultNS
-	ec.hasXPathDefaultNS = tmpl.XPathDefaultNS != ""
-	// XSLT spec: current-group() and current-grouping-key() are only
-	// available within the body of xsl:for-each-group, not in templates
-	// called from it.
-	ec.currentGroup = nil
-	ec.currentGroupKey = nil
-	defer func() {
-		ec.currentNode = savedCurrent
-		ec.contextNode = savedContext
-		ec.currentMode = savedMode
-		ec.currentTemplate = savedTemplate
-		ec.xpathDefaultNS = savedXPathDefaultNS
-		ec.hasXPathDefaultNS = savedHasXPathDefaultNS
-		ec.position = savedPos
-		ec.size = savedSize
-		ec.tunnelParams = savedTunnel
-		ec.currentGroup = savedGroup
-		ec.currentGroupKey = savedGroupKey
-	}()
-
-	ec.pushVarScope()
-	defer ec.popVarScope()
-
-	// Collect param overrides
-	var po map[string]xpath3.Sequence
-	if len(paramOverrides) > 0 {
-		po = paramOverrides[0]
-	}
-
-	// Set param values: use with-param overrides when available, else defaults.
-	// Tunnel params receive from ec.tunnelParams, not from regular param overrides.
-	for _, p := range tmpl.Params {
-		if p.Tunnel {
-			// Tunnel param: receive from tunnel context
-			if ec.tunnelParams != nil {
-				if val, ok := ec.tunnelParams[p.Name]; ok {
-					ec.setVar(p.Name, val)
-					continue
-				}
-			}
-		} else if po != nil {
-			if val, ok := po[p.Name]; ok {
-				ec.setVar(p.Name, val)
-				continue
-			}
-		}
-		// Use default value
-		if p.Select != nil {
-			xpathCtx := ec.newXPathContext(node)
-			result, err := p.Select.Evaluate(xpathCtx, node)
-			if err != nil {
-				return err
-			}
-			ec.setVar(p.Name, result.Sequence())
-		} else if len(p.Body) > 0 {
-			val, err := ec.evaluateBody(ctx, p.Body)
-			if err != nil {
-				return err
-			}
-			ec.setVar(p.Name, val)
-		} else {
-			ec.setVar(p.Name, xpath3.EmptySequence())
-		}
-	}
-
-	// Execute template body
-	for _, inst := range tmpl.Body {
-		if err := ec.executeInstruction(ctx, inst); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// applyBuiltinRules applies the built-in template rules per XSLT spec.
-func (ec *execContext) applyBuiltinRules(ctx context.Context, node helium.Node, mode string, paramValues ...map[string]xpath3.Sequence) error {
-	// Check for xsl:mode on-no-match behavior
-	onNoMatch := "text-only-copy" // XSLT 3.0 default
-	if md := ec.stylesheet.modeDefs[mode]; md != nil {
-		if md.OnNoMatch != "" {
-			onNoMatch = md.OnNoMatch
-		}
-	} else if mode == "" {
-		if md := ec.stylesheet.modeDefs["#default"]; md != nil {
-			if md.OnNoMatch != "" {
-				onNoMatch = md.OnNoMatch
-			}
-		}
-	}
-	return ec.applyOnNoMatch(ctx, node, mode, onNoMatch, paramValues...)
-}
-
-func (ec *execContext) applyOnNoMatch(ctx context.Context, node helium.Node, mode, behavior string, paramValues ...map[string]xpath3.Sequence) error {
-	switch behavior {
-	case "shallow-copy":
-		return ec.onNoMatchShallowCopy(ctx, node, mode, paramValues...)
-	case "deep-copy":
-		return ec.onNoMatchDeepCopy(node)
-	case "shallow-skip":
-		if node.Type() == helium.ElementNode {
-			// XSLT 3.0: shallow-skip for elements applies templates to
-			// attributes and children (but does not copy the element).
-			srcElem := node.(*helium.Element)
-			for _, attr := range srcElem.Attributes() {
-				if err := ec.applyTemplates(ctx, attr, mode, paramValues...); err != nil {
-					return err
-				}
-			}
-			for child := node.FirstChild(); child != nil; child = child.NextSibling() {
-				if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
-					return err
-				}
-			}
-		} else if node.Type() == helium.DocumentNode {
-			for child := node.FirstChild(); child != nil; child = child.NextSibling() {
-				if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	case "deep-skip":
-		return nil
-	case "fail":
-		return dynamicError("XTDE0555", "no matching template in mode %q (on-no-match=fail)", mode)
-	default: // "text-only-copy"
-		return ec.onNoMatchTextOnlyCopy(ctx, node, mode, paramValues...)
-	}
-}
-
-func (ec *execContext) onNoMatchTextOnlyCopy(ctx context.Context, node helium.Node, mode string, paramValues ...map[string]xpath3.Sequence) error {
-	switch node.Type() {
-	case helium.DocumentNode, helium.ElementNode:
-		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
-			if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
-				return err
-			}
-		}
-		return nil
-	case helium.TextNode, helium.CDATASectionNode:
-		if ec.shouldStripWhitespace(node) {
-			return nil
-		}
-		text, err := ec.resultDoc.CreateText(node.Content())
-		if err != nil {
-			return err
-		}
-		return ec.addNode(text)
-	case helium.AttributeNode:
-		attr, ok := node.(*helium.Attribute)
-		if !ok {
-			return nil
-		}
-		text, err := ec.resultDoc.CreateText([]byte(attr.Value()))
-		if err != nil {
-			return err
-		}
-		return ec.addNode(text)
-	default:
-		return nil
-	}
-}
-
-func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Node, mode string, paramValues ...map[string]xpath3.Sequence) error {
-	switch node.Type() {
-	case helium.DocumentNode:
-		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
-			if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
-				return err
-			}
-		}
-		return nil
-	case helium.ElementNode:
-		srcElem := node.(*helium.Element)
-		newElem, err := ec.resultDoc.CreateElement(srcElem.LocalName())
-		if err != nil {
-			return err
-		}
-		for _, ns := range srcElem.Namespaces() {
-			_ = newElem.DeclareNamespace(ns.Prefix(), ns.URI())
-		}
-		if srcElem.URI() != "" {
-			_ = newElem.SetActiveNamespace(srcElem.Prefix(), srcElem.URI())
-		}
-		if err := ec.addNode(newElem); err != nil {
-			return err
-		}
-		out := ec.currentOutput()
-		savedCurrent := out.current
-		out.current = newElem
-		defer func() { out.current = savedCurrent }()
-		// Apply templates to attributes first (so user templates can
-		// intercept attribute nodes, e.g. match="w/@id"), then children.
-		for _, attr := range srcElem.Attributes() {
-			if err := ec.applyTemplates(ctx, attr, mode, paramValues...); err != nil {
-				return err
-			}
-		}
-		for child := srcElem.FirstChild(); child != nil; child = child.NextSibling() {
-			if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
-				return err
-			}
-		}
-		return nil
-	case helium.TextNode, helium.CDATASectionNode:
-		text, err := ec.resultDoc.CreateText(node.Content())
-		if err != nil {
-			return err
-		}
-		return ec.addNode(text)
-	case helium.CommentNode:
-		comment, err := ec.resultDoc.CreateComment(node.Content())
-		if err != nil {
-			return err
-		}
-		return ec.addNode(comment)
-	case helium.ProcessingInstructionNode:
-		pi, err := ec.resultDoc.CreatePI(node.Name(), string(node.Content()))
-		if err != nil {
-			return err
-		}
-		return ec.addNode(pi)
-	case helium.AttributeNode:
-		attr := node.(*helium.Attribute)
-		out := ec.currentOutput()
-		if outElem, ok := out.current.(*helium.Element); ok {
-			_ = copyAttributeToElement(outElem, attr)
-		}
-		return nil
-	default:
-		return nil
-	}
-}
-
-func (ec *execContext) onNoMatchDeepCopy(node helium.Node) error {
-	// Deep copy: copy the entire subtree to the output without template matching.
-	switch node.Type() {
-	case helium.DocumentNode:
-		// For document nodes, deep-copy each child.
-		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
-			if err := ec.onNoMatchDeepCopy(child); err != nil {
-				return err
-			}
-		}
-		return nil
-	case helium.ElementNode, helium.TextNode, helium.CDATASectionNode,
-		helium.CommentNode, helium.ProcessingInstructionNode:
-		copied, err := helium.CopyNode(node, ec.resultDoc)
-		if err != nil {
-			return err
-		}
-		return ec.addNode(copied)
-	case helium.AttributeNode:
-		attr, ok := node.(*helium.Attribute)
-		if !ok {
-			return nil
-		}
-		out := ec.currentOutput()
-		if outElem, ok := out.current.(*helium.Element); ok {
-			return copyAttributeToElement(outElem, attr)
-		}
-		return nil
-	default:
-		return nil
-	}
-}
-
-// shouldStripWhitespace returns true if a text node is whitespace-only
-// and its parent element matches a strip-space pattern.
-func (ec *execContext) shouldStripWhitespace(node helium.Node) bool {
-	// Only strip text/CDATA nodes, not elements or other node types
-	if node.Type() != helium.TextNode && node.Type() != helium.CDATASectionNode {
-		return false
-	}
-	content := node.Content()
-	// Check if whitespace-only
-	for _, b := range content {
-		if b != ' ' && b != '\t' && b != '\n' && b != '\r' {
-			return false
-		}
-	}
-	// Check parent element against strip/preserve space rules
-	parent := node.Parent()
-	if parent == nil || parent.Type() != helium.ElementNode {
-		return false
-	}
-	elem := parent.(*helium.Element)
-	return ec.isElementStripped(elem)
-}
-
-// isElementStripped checks if an element matches strip-space rules.
-// preserve-space overrides strip-space for the same element.
-func (ec *execContext) isElementStripped(elem *helium.Element) bool {
-	ss := ec.stylesheet
-	if len(ss.stripSpace) == 0 {
-		return false
-	}
-
-	stripped := false
-	stripPriority := -1
-	for _, nt := range ss.stripSpace {
-		if matchSpaceNameTest(nt, elem, ss.namespaces) {
-			p := nameTestPriority(nt)
-			if p > stripPriority {
-				stripPriority = p
-				stripped = true
-			}
-		}
-	}
-
-	if !stripped {
-		return false
-	}
-
-	// Check if preserve-space overrides
-	for _, nt := range ss.preserveSpace {
-		if matchSpaceNameTest(nt, elem, ss.namespaces) {
-			p := nameTestPriority(nt)
-			if p >= stripPriority {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-// matchSpaceNameTest checks if an element matches a strip/preserve-space NameTest pattern.
-func matchSpaceNameTest(nt NameTest, elem *helium.Element, nsBindings map[string]string) bool {
-	if nt.Local == "*" && nt.Prefix == "" {
-		return true // "*" matches all
-	}
-	if nt.Local == "*" && nt.Prefix != "" {
-		// "prefix:*" matches elements in that namespace
-		nsURI := nsBindings[nt.Prefix]
-		return elem.URI() == nsURI
-	}
-	if nt.Prefix != "" {
-		// "prefix:local" matches specific element in namespace
-		nsURI := nsBindings[nt.Prefix]
-		return elem.LocalName() == nt.Local && elem.URI() == nsURI
-	}
-	// "local" matches elements with that local name (no namespace)
-	return elem.LocalName() == nt.Local && elem.URI() == ""
-}
-
-// nameTestPriority returns the priority of a NameTest for conflict resolution.
-// Specific names > prefix:* > *
-func nameTestPriority(nt NameTest) int {
-	if nt.Local == "*" && nt.Prefix == "" {
-		return 0 // "*"
-	}
-	if nt.Local == "*" {
-		return 1 // "prefix:*"
-	}
-	return 2 // specific name
-}
-
-// stripWhitespaceFromDoc removes whitespace-only text nodes from a document
-// tree according to the stylesheet's xsl:strip-space and xsl:preserve-space rules.
-// This is called when loading documents so that XPath evaluation sees the
-// correctly stripped tree.
-func (ec *execContext) stripWhitespaceFromDoc(doc *helium.Document) {
-	ec.stripWhitespaceFromNode(doc)
-}
-
-func (ec *execContext) stripWhitespaceFromNode(node helium.Node) {
-	child := node.FirstChild()
-	for child != nil {
-		next := child.NextSibling()
-		if ec.shouldStripWhitespace(child) {
-			helium.UnlinkNode(child)
-		} else {
-			ec.stripWhitespaceFromNode(child)
-		}
-		child = next
-	}
-}
-
-// selectDefaultNodes returns the default node-set for apply-templates
-// (child::node()).
-func selectDefaultNodes(node helium.Node) []helium.Node {
-	var nodes []helium.Node
-	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
-		nodes = append(nodes, child)
-	}
-	return nodes
+	return nil, false, nil
 }
