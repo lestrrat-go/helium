@@ -224,12 +224,16 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 
 // CastFromString casts a string value to the target atomic type.
 func CastFromString(s string, targetType string) (AtomicValue, error) {
-	s = strings.TrimSpace(s)
 	switch targetType {
 	case TypeString:
 		return AtomicValue{TypeName: TypeString, Value: s}, nil
 	case TypeUntypedAtomic:
 		return AtomicValue{TypeName: TypeUntypedAtomic, Value: s}, nil
+	default:
+		// All other types collapse leading/trailing whitespace before parsing
+		s = strings.TrimSpace(s)
+	}
+	switch targetType {
 	case TypeInteger:
 		n, ok := new(big.Int).SetString(s, 10)
 		if !ok {
