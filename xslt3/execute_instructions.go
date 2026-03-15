@@ -1481,16 +1481,20 @@ func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error
 		xpathCtx := ec.newXPathContext(ec.contextNode)
 		result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
 		if err != nil {
-			return err
+			// Errors evaluating message content are recoverable
+			value = err.Error()
+		} else {
+			value = stringifyResult(result)
 		}
-		value = stringifyResult(result)
 	}
 	if len(inst.Body) > 0 {
 		val, err := ec.evaluateBody(ctx, inst.Body)
 		if err != nil {
-			return err
+			// Errors evaluating message body are recoverable
+			value += err.Error()
+		} else {
+			value += stringifySequence(val)
 		}
-		value += stringifySequence(val)
 	}
 
 	terminate := false
