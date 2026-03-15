@@ -1,0 +1,14 @@
+<account nr="76543210" xmlns="http://www.w3.org/xsl-tests/grouped-transactions-e">
+  <account-number>01234567</account-number>
+  <transaction><value>13.24 8.12</value><date>2006-02-13</date></transaction>
+  <transaction><value>-15.00</value><date>2006-02-15</date></transaction>
+  <transaction><value>6.00</value><date>2006-02-16</date></transaction>
+  <transaction><value>0.50 2.33 4.44</value><date>2006-02-17</date></transaction>
+  <transaction><value>-5.00</value><date>2006-02-20</date></transaction>
+  <transaction><value>8.99</value><date>2006-02-21</date></transaction>                
+  <transaction><value>16.00</value><date>2006-02-22</date></transaction>
+  <transaction><value>-2.33 5.60 4.32</value><date>2006-02-23</date></transaction>
+  <transaction><value>6.78 12.20 -248.05</value><date>2006-02-24</date></transaction>
+  <transaction><value>12.00 13.99</value><date>2006-02-25</date></transaction>
+  <transaction><value>14.20</value><date>2006-02-26</date></transaction>
+</account>                      
