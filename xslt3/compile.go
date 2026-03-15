@@ -114,6 +114,56 @@ func resolveQName(qname string, nsBindings map[string]string) string {
 	return qname
 }
 
+// isValidQName checks whether s is a valid xs:QName (NCName or NCName:NCName).
+// A minimal check: must be non-empty, no whitespace, no leading/trailing dots,
+// and if there is a colon there must be valid NCName parts on both sides.
+func isValidQName(s string) bool {
+	if s == "" {
+		return false
+	}
+	parts := strings.SplitN(s, ":", 2)
+	for _, p := range parts {
+		if !isValidNCName(p) {
+			return false
+		}
+	}
+	return true
+}
+
+// isValidNCName checks whether s is a valid XML NCName (no colons).
+func isValidNCName(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		if i == 0 {
+			if !isNameStart(r) {
+				return false
+			}
+		} else {
+			if !isNameChar(r) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func isNameStart(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '_' ||
+		(r >= 0xC0 && r <= 0xD6) || (r >= 0xD8 && r <= 0xF6) ||
+		(r >= 0xF8 && r <= 0x2FF) || (r >= 0x370 && r <= 0x37D) ||
+		(r >= 0x37F && r <= 0x1FFF) || (r >= 0x200C && r <= 0x200D) ||
+		(r >= 0x2070 && r <= 0x218F) || (r >= 0x2C00 && r <= 0x2FEF) ||
+		(r >= 0x3001 && r <= 0xD7FF) || (r >= 0xF900 && r <= 0xFDCF) ||
+		(r >= 0xFDF0 && r <= 0xFFFD) || (r >= 0x10000 && r <= 0xEFFFF)
+}
+
+func isNameChar(r rune) bool {
+	return isNameStart(r) || r == '-' || r == '.' || (r >= '0' && r <= '9') ||
+		r == 0xB7 || (r >= 0x300 && r <= 0x36F) || (r >= 0x203F && r <= 0x2040)
+}
+
 // compileXPath compiles an XPath expression with the given namespace bindings.
 func compileXPath(expr string, nsBindings map[string]string) (*xpath3.Expression, error) {
 	compiled, err := xpath3.Compile(expr)

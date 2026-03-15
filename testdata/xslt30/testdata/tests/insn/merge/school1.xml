@@ -1,0 +1,113 @@
+<school id="s1">
+    <class id="c1">
+        <pupil>
+            <firstname>D</firstname>
+            <surname>Bart</surname>
+            <age></age>
+            <tests>
+                <test id="test1">
+                    <mark>70</mark>
+                </test>
+            </tests>
+        </pupil>
+        <pupil>
+            <firstname>G</firstname>
+            <surname>Smith</surname>
+            <age></age>
+            <tests>
+                <test id="test1">
+                    <mark>63</mark>
+                </test>
+            </tests>
+        </pupil>
+        <pupil>
+            <firstname>S</firstname>
+            <surname>Adams</surname>
+            <age></age>
+            <tests>
+                <test id="test1">
+                    <mark>60</mark>
+                </test>
+            </tests>
+        </pupil>
+        
+        <pupil>
+            <firstname>E</firstname>
+            <surname>Gilchrist</surname>
+            <age></age>
+            <tests>
+                <test id="test1">
+                    <mark>60</mark>
+                </test>
+            </tests>
+        </pupil>
+        <pupil>
+            <firstname>F</firstname>
+            <surname>Mbogo</surname>
+            <age></age>
+            <tests>
+                <test id="test1">
+                    <mark>55</mark>
+                </test>
+            </tests>
+        </pupil>
+        
+        
+    </class>
+    <class id="c2">
+        <pupil>
+            <firstname>J</firstname>
+            <surname>Rogers</surname>
+            <age></age>
+            <tests>
+                <test id="test1">
+                    <mark>93</mark>
+                </test>
+            </tests>
+        </pupil>
+        <pupil>
+            <firstname>T</firstname>
+            <surname>Green</surname>
+            <age></age>
+            <tests>
+                <test id="test1">
+                    <mark>80</mark>
+                </test>
+            </tests>
+        </pupil>
+        <pupil>
+            <firstname>S</firstname>
+            <surname>Todd</surname>
+            <age></age>
+            <tests>
+                <test id="test1">
+                    <mark>60</mark>
+                </test>
+            </tests>
+        </pupil>
+        
+        <pupil>
+            <firstname>L</firstname>
+            <surname>Gilchrist</surname>
+            <age></age>
+            <tests>
+                <test id="test1">
+                    <mark>49</mark>
+                </test>
+            </tests>
+        </pupil>
+        <pupil>
+            <firstname>H</firstname>
+            <surname>Goach</surname>
+            <age></age>
+            <tests>
+                <test id="test1">
+                    <mark>49</mark>
+                </test>
+            </tests>
+        </pupil>
+        
+    </class>      
+    
+</school>
+
