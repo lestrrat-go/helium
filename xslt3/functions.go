@@ -34,7 +34,7 @@ func (ec *execContext) xsltFunctions() map[string]xpath3.Function {
 		"accumulator-before":   &xsltFunc{min: 1, max: 1, fn: ec.fnAccumulatorBefore},
 		"accumulator-after":    &xsltFunc{min: 1, max: 1, fn: ec.fnAccumulatorAfter},
 		"copy-of":              &xsltFunc{min: 0, max: 1, fn: ec.fnCopyOf},
-		"snapshot":             &xsltFunc{min: 0, max: 1, fn: ec.fnCopyOf},
+		"snapshot":             &xsltFunc{min: 0, max: 1, fn: ec.fnSnapshot},
 	}
 	return ec.cachedFns
 }
@@ -592,6 +592,144 @@ func (ec *execContext) fnCopyOf(ctx context.Context, args []xpath3.Sequence) (xp
 		result = append(result, xpath3.NodeItem{Node: copied})
 	}
 	return result, nil
+}
+
+// snapshot() produces a deep copy of the node that also preserves ancestor
+// information.  Each ancestor element is shallow-copied (name, attributes,
+// namespace declarations) and the chain is connected so that
+// ancestor::*/parent::*/.. navigation works on the snapshot.
+func (ec *execContext) fnSnapshot(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	var nodes []helium.Node
+	if len(args) > 0 {
+		if len(args[0]) == 0 {
+			return xpath3.EmptySequence(), nil
+		}
+		for _, item := range args[0] {
+			ni, ok := item.(xpath3.NodeItem)
+			if !ok {
+				continue
+			}
+			nodes = append(nodes, ni.Node)
+		}
+	} else {
+		if n := xpath3.FnContextNode(ctx); n != nil {
+			nodes = append(nodes, n)
+		} else if ec.contextNode != nil {
+			nodes = append(nodes, ec.contextNode)
+		} else {
+			return xpath3.EmptySequence(), nil
+		}
+	}
+
+	var result xpath3.Sequence
+	for _, node := range nodes {
+		snapped, err := ec.snapshotNode(node)
+		if err != nil {
+			// Fall back to the original node on error.
+			result = append(result, xpath3.NodeItem{Node: node})
+			continue
+		}
+		result = append(result, xpath3.NodeItem{Node: snapped})
+	}
+	return result, nil
+}
+
+// snapshotNode creates a deep copy of node and wraps it in shallow copies
+// of all its ancestors up to and including the document root.
+func (ec *execContext) snapshotNode(node helium.Node) (helium.Node, error) {
+	// For a document node, just do a full deep copy.
+	if node.Type() == helium.DocumentNode {
+		doc, ok := node.(*helium.Document)
+		if !ok {
+			return nil, fmt.Errorf("unexpected DocumentNode type %T", node)
+		}
+		return helium.CopyDoc(doc)
+	}
+
+	// Build the ancestor chain from node's parent up to (but not including)
+	// the document node, collecting elements in bottom-up order.
+	var ancestors []*helium.Element
+	for p := node.Parent(); p != nil; p = p.Parent() {
+		if elem, ok := p.(*helium.Element); ok {
+			ancestors = append(ancestors, elem)
+		}
+	}
+
+	// Create a new document to own the snapshot.
+	snapDoc := helium.NewDefaultDocument()
+
+	// Deep-copy the target node itself.
+	copied, err := helium.CopyNode(node, snapDoc)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build the ancestor chain: for each ancestor (bottom-up), create a
+	// shallow copy (name + attributes + namespace declarations) and attach
+	// the previous level as its only child.
+	current := copied
+	for _, anc := range ancestors {
+		shell, err := shallowCopyElement(anc, snapDoc)
+		if err != nil {
+			return nil, err
+		}
+		if err := shell.AddChild(current); err != nil {
+			return nil, err
+		}
+		current = shell
+	}
+
+	// Attach the top-level element (or the copied node itself if no
+	// ancestors) to the snapshot document.
+	if err := snapDoc.AddChild(current); err != nil {
+		return nil, err
+	}
+
+	return copied, nil
+}
+
+// shallowCopyElement copies an element's name, namespace declarations, and
+// attributes but none of its children.
+func shallowCopyElement(src *helium.Element, doc *helium.Document) (*helium.Element, error) {
+	elem, err := doc.CreateElement(src.LocalName())
+	if err != nil {
+		return nil, err
+	}
+
+	declaredPrefixes := make(map[string]bool)
+
+	// Copy namespace declarations.
+	if nc, ok := helium.Node(src).(helium.NamespaceContainer); ok {
+		for _, ns := range nc.Namespaces() {
+			if err := elem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
+				return nil, err
+			}
+			declaredPrefixes[ns.Prefix()] = true
+		}
+	}
+
+	// Copy the active namespace.
+	if nsr, ok := helium.Node(src).(helium.Namespacer); ok {
+		if ns := nsr.Namespace(); ns != nil {
+			if ns.Prefix() != "" && !declaredPrefixes[ns.Prefix()] {
+				if err := elem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
+					return nil, err
+				}
+			}
+			if err := elem.SetActiveNamespace(ns.Prefix(), ns.URI()); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// Copy attributes.
+	for _, a := range src.Attributes() {
+		if err := elem.SetAttribute(a.Name(), a.Value()); err != nil {
+			return nil, err
+		}
+	}
+
+	return elem, nil
 }
 
 // xsltFunctionsNS returns user-defined xsl:function definitions as xpath3 functions

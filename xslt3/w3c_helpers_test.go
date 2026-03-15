@@ -369,14 +369,27 @@ func nodesEqual(a, b helium.Node) bool {
 		}
 		childA := ea.FirstChild()
 		childB := eb.FirstChild()
-		for childA != nil && childB != nil {
+		for childA != nil || childB != nil {
+			// Skip whitespace-only text nodes on both sides.
+			for childA != nil && isWhitespaceOnlyText(childA) {
+				childA = childA.NextSibling()
+			}
+			for childB != nil && isWhitespaceOnlyText(childB) {
+				childB = childB.NextSibling()
+			}
+			if childA == nil && childB == nil {
+				return true
+			}
+			if childA == nil || childB == nil {
+				return false
+			}
 			if !nodesEqual(childA, childB) {
 				return false
 			}
 			childA = childA.NextSibling()
 			childB = childB.NextSibling()
 		}
-		return childA == nil && childB == nil
+		return true
 	case helium.TextNode:
 		return string(a.Content()) == string(b.Content())
 	case helium.CommentNode:
@@ -386,6 +399,18 @@ func nodesEqual(a, b helium.Node) bool {
 	default:
 		return string(a.Content()) == string(b.Content())
 	}
+}
+
+func isWhitespaceOnlyText(n helium.Node) bool {
+	if n.Type() != helium.TextNode {
+		return false
+	}
+	for _, b := range n.Content() {
+		if b != ' ' && b != '\t' && b != '\n' && b != '\r' {
+			return false
+		}
+	}
+	return true
 }
 
 func collectAttrs(e *helium.Element) map[string]string {
