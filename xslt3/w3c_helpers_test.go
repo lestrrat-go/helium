@@ -276,16 +276,9 @@ func w3cCheckXPath(expr string) w3cCheck {
 			return false
 		}
 		ctx := context.TODO()
-		if root := doc.DocumentElement(); root != nil {
-			ns := make(map[string]string)
-			for _, n := range root.Namespaces() {
-				if n.Prefix() != "" {
-					ns[n.Prefix()] = n.URI()
-				}
-			}
-			if len(ns) > 0 {
-				ctx = xpath3.WithNamespaces(ctx, ns)
-			}
+		ns := gatherDocNamespaces(doc)
+		if len(ns) > 0 {
+			ctx = xpath3.WithNamespaces(ctx, ns)
 		}
 		res, err := compiled.Evaluate(ctx, doc)
 		if err != nil {
@@ -653,18 +646,13 @@ func evalXPathAssert(t *testing.T, expr string, resultXML string) bool {
 		return false
 	}
 
-	// Extract namespace bindings from the document element for XPath evaluation
+	// Gather ALL in-scope namespace bindings from the document tree,
+	// not just from the root element. This ensures prefixed assertions
+	// work even when namespace declarations appear on child elements.
 	ctx := context.TODO()
-	if root := doc.DocumentElement(); root != nil {
-		ns := make(map[string]string)
-		for _, n := range root.Namespaces() {
-			if n.Prefix() != "" {
-				ns[n.Prefix()] = n.URI()
-			}
-		}
-		if len(ns) > 0 {
-			ctx = xpath3.WithNamespaces(ctx, ns)
-		}
+	ns := gatherDocNamespaces(doc)
+	if len(ns) > 0 {
+		ctx = xpath3.WithNamespaces(ctx, ns)
 	}
 
 	res, err := compiled.Evaluate(ctx, doc)
@@ -683,6 +671,65 @@ func evalXPathAssert(t *testing.T, expr string, resultXML string) bool {
 		return false
 	}
 	return true
+}
+
+// gatherDocNamespaces walks the entire document tree and collects all namespace
+// declarations (both prefixed and default). For default namespace declarations
+// (empty prefix), assigns well-known prefixes for common URIs.
+func gatherDocNamespaces(doc *helium.Document) map[string]string {
+	ns := make(map[string]string)
+	var defaultNS string
+	var walk func(n helium.Node)
+	walk = func(n helium.Node) {
+		if n == nil {
+			return
+		}
+		if elem, ok := n.(*helium.Element); ok {
+			for _, nsDecl := range elem.Namespaces() {
+				prefix := nsDecl.Prefix()
+				uri := nsDecl.URI()
+				if prefix != "" {
+					if _, exists := ns[prefix]; !exists {
+						ns[prefix] = uri
+					}
+				} else if uri != "" {
+					defaultNS = uri
+				}
+			}
+			for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+				walk(child)
+			}
+		}
+	}
+	if root := doc.DocumentElement(); root != nil {
+		walk(root)
+	}
+
+	// If there's a default namespace and no prefix binding for it yet,
+	// assign well-known prefixes for common URIs used in W3C test assertions.
+	if defaultNS != "" {
+		found := false
+		for _, uri := range ns {
+			if uri == defaultNS {
+				found = true
+				break
+			}
+		}
+		if !found {
+			knownPrefixes := map[string]string{
+				"http://www.w3.org/1999/xhtml":       "h",
+				"http://www.w3.org/2000/svg":         "svg",
+				"http://www.w3.org/1998/Math/MathML": "math",
+			}
+			if prefix, ok := knownPrefixes[defaultNS]; ok {
+				if _, exists := ns[prefix]; !exists {
+					ns[prefix] = defaultNS
+				}
+			}
+		}
+	}
+
+	return ns
 }
 
 // w3cCompileCached compiles a stylesheet, caching the result by path.
