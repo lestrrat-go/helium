@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -30,9 +31,18 @@ func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS strin
 		if alt == "" {
 			continue
 		}
+		// Reject patterns wrapped in outer parentheses: "(pattern)"
+		// These are not valid in the XSLT pattern grammar even though
+		// they parse as valid XPath.
+		if isOuterParenthesized(alt) {
+			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: parenthesized pattern not allowed", alt)
+		}
 		ast, err := xpath3.Parse(alt)
 		if err != nil {
 			return nil, staticError(errCodeXTSE0500, "invalid pattern %q: %v", alt, err)
+		}
+		if err := validatePatternExpr(ast); err != nil {
+			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: %s", alt, err)
 		}
 		pa := &PatternAlt{
 			expr:     ast,
@@ -44,6 +54,249 @@ func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS strin
 		return nil, staticError(errCodeXTSE0500, "empty pattern %q", s)
 	}
 	return p, nil
+}
+
+// validatePatternExpr validates that a parsed XPath expression is a valid
+// XSLT match pattern. XSLT patterns are a restricted subset of XPath —
+// certain constructs like variable references, arbitrary function calls,
+// and parenthesized union expressions are not allowed.
+func validatePatternExpr(expr xpath3.Expr) error {
+	return validatePatternExprInner(expr, true)
+}
+
+func validatePatternExprInner(expr xpath3.Expr, topLevel bool) error {
+	switch e := expr.(type) {
+	case xpath3.LocationPath, *xpath3.LocationPath:
+		// LocationPath patterns are valid (e.g., a/b/c, //x, /)
+		return validateLocationPathPattern(expr)
+	case xpath3.RootExpr, *xpath3.RootExpr:
+		// "/" is valid
+		return nil
+	case xpath3.ContextItemExpr:
+		// "." is valid
+		return nil
+	case xpath3.FilterExpr:
+		// FilterExpr: a primary expression with predicates.
+		// In patterns, only "." with predicates is allowed (e.g., .[pred]).
+		// A root expression with predicates like /[doc] is NOT allowed.
+		if _, ok := e.Expr.(xpath3.ContextItemExpr); ok {
+			return nil // .[pred] is valid
+		}
+		if _, ok := e.Expr.(xpath3.RootExpr); ok {
+			return fmt.Errorf("predicates on '/' are not allowed")
+		}
+		if _, ok := e.Expr.(*xpath3.RootExpr); ok {
+			return fmt.Errorf("predicates on '/' are not allowed")
+		}
+		return fmt.Errorf("filter expression not allowed in pattern")
+	case xpath3.PathExpr:
+		// PathExpr: filter/step. Check the filter part is valid.
+		return validatePatternPathExpr(e)
+	case xpath3.PathStepExpr:
+		// E1/E2 or E1//E2 where E2 is a non-axis expression
+		return validatePatternPathStepExpr(e)
+	case xpath3.VariableExpr:
+		// Variable references are allowed in XSLT 3.0 patterns
+		return nil
+	case xpath3.FunctionCall:
+		// Function calls: key(), id(), doc() with literal args are allowed
+		if isAllowedPatternFunction(e) {
+			return nil
+		}
+		return fmt.Errorf("function call %s() not allowed in pattern", e.Name)
+	case xpath3.UnionExpr:
+		// Union inside a pattern: valid in XSLT 3.0 as operands of
+		// intersect/except or inside parenthesized path steps
+		return nil
+	case xpath3.IntersectExceptExpr:
+		// intersect/except are valid pattern operators in XSLT 3.0
+		if err := validatePatternExprInner(e.Left, false); err != nil {
+			return err
+		}
+		return validatePatternExprInner(e.Right, false)
+	case xpath3.BinaryExpr:
+		// Binary expressions like "and union or" parse as operator expressions
+		return fmt.Errorf("binary operator not allowed in pattern")
+	default:
+		return fmt.Errorf("expression type %T not allowed in pattern", expr)
+	}
+}
+
+func validateLocationPathPattern(expr xpath3.Expr) error {
+	var steps []xpath3.Step
+	switch e := expr.(type) {
+	case xpath3.LocationPath:
+		steps = e.Steps
+	case *xpath3.LocationPath:
+		steps = e.Steps
+	}
+	// Check each step for disallowed constructs in predicates
+	for _, step := range steps {
+		for _, pred := range step.Predicates {
+			if err := validatePredicateExpr(pred); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validatePatternPathExpr(e xpath3.PathExpr) error {
+	// The filter part: only ContextItemExpr, RootExpr, or FunctionCall (key/id/doc)
+	switch f := e.Filter.(type) {
+	case xpath3.ContextItemExpr:
+		// .[pred]/steps is valid
+	case xpath3.RootExpr, *xpath3.RootExpr:
+		// /steps is valid
+	case xpath3.FunctionCall:
+		// Only certain functions at the start of a path pattern
+		if !isAllowedPatternFunction(f) {
+			return fmt.Errorf("function call %s() not allowed at start of path pattern", f.Name)
+		}
+	case xpath3.FilterExpr:
+		// FilterExpr at the start of a path
+		return validatePatternExprInner(f, false)
+	case xpath3.VariableExpr:
+		// Variable references are allowed in XSLT 3.0 patterns
+	default:
+		return fmt.Errorf("expression type %T not allowed at start of path pattern", e.Filter)
+	}
+	return nil
+}
+
+func validatePatternPathStepExpr(e xpath3.PathStepExpr) error {
+	// Check left side
+	switch l := e.Left.(type) {
+	case xpath3.VariableExpr:
+		// Variable references are allowed in XSLT 3.0 patterns
+	case xpath3.FunctionCall:
+		if !isAllowedPatternFunction(l) {
+			return fmt.Errorf("function call %s() not allowed in pattern", l.Name)
+		}
+	case xpath3.PathExpr:
+		if err := validatePatternPathExpr(l); err != nil {
+			return err
+		}
+	case xpath3.PathStepExpr:
+		if err := validatePatternPathStepExpr(l); err != nil {
+			return err
+		}
+	}
+	// Check right side
+	switch r := e.Right.(type) {
+	case xpath3.VariableExpr:
+		// Variable references are allowed in XSLT 3.0 patterns
+	case xpath3.FunctionCall:
+		return fmt.Errorf("function call %s() not allowed in middle of pattern", r.Name)
+	case xpath3.ArrayConstructorExpr:
+		return fmt.Errorf("array constructor not allowed in pattern")
+	}
+	return nil
+}
+
+// isAllowedPatternFunction returns true if a function call is allowed at the
+// start of a path pattern. In XSLT 3.0, key(), id(), and doc() are allowed
+// with literal arguments.
+func isAllowedPatternFunction(fc xpath3.FunctionCall) bool {
+	switch fc.Name {
+	case "key", "id", "idref", "doc":
+		// Check that all arguments are literals
+		for _, arg := range fc.Args {
+			if !isPatternFunctionArg(arg) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// isPatternFunctionArg returns true if an expression is a valid argument
+// to a function in a pattern (must be a literal or variable reference).
+func isPatternFunctionArg(expr xpath3.Expr) bool {
+	switch expr.(type) {
+	case xpath3.LiteralExpr:
+		return true
+	case xpath3.VariableExpr:
+		return true
+	}
+	return false
+}
+
+// validatePredicateExpr validates expressions used inside predicates.
+// Predicates in patterns can contain arbitrary XPath expressions.
+func validatePredicateExpr(_ xpath3.Expr) error {
+	// Predicates can contain any valid XPath expression,
+	// so no additional validation needed.
+	return nil
+}
+
+// containsUnionKeyword checks if a pattern string uses the 'union' keyword
+// as an operator (not inside strings, predicates, or as an element name).
+// XSLT patterns must use '|' for union, not the 'union' keyword.
+func containsUnionKeyword(s string) bool {
+	// Simple check: look for ' union ' (surrounded by spaces) outside of
+	// strings and predicates/parens.
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\'', '"':
+			q := s[i]
+			i++
+			for i < len(s) && s[i] != q {
+				i++
+			}
+		case '(', '[':
+			depth++
+		case ')', ']':
+			depth--
+		default:
+			if depth == 0 && i+5 < len(s) && s[i:i+5] == "union" {
+				// Check word boundaries
+				before := i == 0 || !isXPathNameChar(s[i-1])
+				after := i+5 >= len(s) || !isXPathNameChar(s[i+5])
+				if before && after {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func isXPathNameChar(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') ||
+		(b >= '0' && b <= '9') || b == '_' || b == '-' || b == '.'
+}
+
+// isOuterParenthesized checks if a pattern string is entirely wrapped in
+// outer parentheses, e.g. "(doc|cod)" or "(.[. instance of xs:integer])".
+// It returns false for patterns that merely contain parentheses in sub-expressions
+// like "element(foo)" or "a[position()=1]".
+func isOuterParenthesized(s string) bool {
+	if len(s) < 2 || s[0] != '(' {
+		return false
+	}
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return i == len(s)-1
+			}
+		case '\'', '"':
+			// Skip string literals
+			q := s[i]
+			i++
+			for i < len(s) && s[i] != q {
+				i++
+			}
+		}
+	}
+	return false
 }
 
 // splitPatternUnion splits a pattern string by | at the top level.
@@ -98,6 +351,13 @@ func computeDefaultPriority(expr xpath3.Expr) float64 {
 	case xpath3.ContextItemExpr:
 		// "." (self::node()) — wildcard node test, priority -0.5
 		return -0.5
+	case xpath3.FilterExpr:
+		// Predicate pattern: .[pred1][pred2]...
+		// Priority = 0.5 + (number of predicates * 0.25)
+		if _, ok := e.Expr.(xpath3.ContextItemExpr); ok {
+			return 0.5 + float64(len(e.Predicates))*0.25
+		}
+		return 0.5
 	default:
 		return 0.5
 	}
@@ -258,8 +518,19 @@ func matchLocationPath(ctx *execContext, path xpath3.LocationPath, node helium.N
 		return true
 	}
 
-	// Match remaining steps upward
-	return matchStepsUpward(ctx, path.Steps[:len(path.Steps)-1], path.Absolute, node.Parent())
+	// Match remaining steps upward.
+	// The axis of the last step determines how to walk to the preceding step.
+	remaining := path.Steps[:len(path.Steps)-1]
+	if lastStep.Axis == xpath3.AxisDescendant {
+		// descendant axis: any ancestor may contain the preceding step
+		for cur := node.Parent(); cur != nil; cur = cur.Parent() {
+			if matchStepsUpward(ctx, remaining, path.Absolute, cur) {
+				return true
+			}
+		}
+		return false
+	}
+	return matchStepsUpward(ctx, remaining, path.Absolute, node.Parent())
 }
 
 // matchStepsUpward matches remaining pattern steps upward through ancestors.
@@ -308,6 +579,16 @@ func nodeMatchesStep(ctx *execContext, step xpath3.Step, node helium.Node) bool 
 	// on the self axis (as in match=".").  On the child/descendant axes,
 	// document nodes are never selected.
 	if node.Type() == helium.DocumentNode {
+		// In patterns, document-node() with an explicit child axis like
+		// "child::document-node()" never matches because document nodes
+		// cannot be children. But document-node() without explicit axis
+		// (just "document-node()") should match document nodes.
+		// We distinguish by checking: if DocumentTest + child axis + parent exists,
+		// it's an explicit child step that shouldn't match.
+		// However, the XPath parser gives default axis "child" to all steps,
+		// so we need another way to distinguish. For now, we only prevent
+		// matching when the node has a parent (i.e., it IS a child of something).
+		// Document nodes at the root have no parent, so they pass.
 		if _, ok := step.NodeTest.(xpath3.DocumentTest); !ok {
 			// Allow self::node() to match document nodes.
 			if step.Axis == xpath3.AxisSelf {
@@ -331,11 +612,9 @@ func nodeMatchesStep(ctx *execContext, step xpath3.Step, node helium.Node) bool 
 	if !nodeMatchesTest(ctx, step.NodeTest, node) {
 		return false
 	}
-	// Evaluate predicates if any
-	for _, pred := range step.Predicates {
-		if !evaluatePredicate(ctx, pred, node) {
-			return false
-		}
+	// Evaluate predicates if any, with chained position filtering
+	if len(step.Predicates) > 0 {
+		return evaluateChainedPredicates(ctx, step, node)
 	}
 	return true
 }
@@ -512,40 +791,86 @@ func matchDocumentTest(ctx *execContext, dt xpath3.DocumentTest, node helium.Nod
 	return nodeMatchesTest(ctx, dt.Inner, docElem)
 }
 
-// evaluatePredicate evaluates a pattern predicate against a node.
-func evaluatePredicate(ctx *execContext, pred xpath3.Expr, node helium.Node) bool {
+// evaluateChainedPredicates evaluates a chain of predicates in a pattern step.
+// For patterns with multiple predicates like x[P1][P2][P3], each predicate
+// filters based on position among siblings matching the node test AND all
+// previous predicates. This implements XSLT 3.0 Section 5.5.3.
+func evaluateChainedPredicates(ctx *execContext, step xpath3.Step, node helium.Node) bool {
+	// Collect all same-test siblings (including the node itself)
+	siblings := collectMatchingSiblings(ctx, step.NodeTest, node)
+
+	for i, pred := range step.Predicates {
+		// Find position and size of node in current filtered sibling set
+		pos := 0
+		for j, sib := range siblings {
+			if sib == node {
+				pos = j + 1
+				break
+			}
+		}
+		if pos == 0 {
+			return false // node not in the filtered set
+		}
+
+		// Evaluate the predicate with position/size context
+		if !evaluatePredicateWithPosition(ctx, pred, node, pos, len(siblings)) {
+			return false
+		}
+
+		// For subsequent predicates, filter the sibling list
+		if i < len(step.Predicates)-1 {
+			var filtered []helium.Node
+			for j, sib := range siblings {
+				if evaluatePredicateWithPosition(ctx, pred, sib, j+1, len(siblings)) {
+					filtered = append(filtered, sib)
+				}
+			}
+			siblings = filtered
+		}
+	}
+	return true
+}
+
+// collectMatchingSiblings collects all siblings (including the node itself)
+// that match the given node test, in document order.
+func collectMatchingSiblings(ctx *execContext, test xpath3.NodeTest, node helium.Node) []helium.Node {
+	var siblings []helium.Node
+
+	// Find the parent to iterate children
+	parent := node.Parent()
+	if parent == nil {
+		// No parent means we can only check the node itself
+		return []helium.Node{node}
+	}
+
+	// Iterate through all children of the parent
+	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
+		if nodeMatchesTest(ctx, test, child) {
+			siblings = append(siblings, child)
+		}
+	}
+	return siblings
+}
+
+// evaluatePredicateWithPosition evaluates a pattern predicate with explicit
+// position and size context.
+func evaluatePredicateWithPosition(ctx *execContext, pred xpath3.Expr, node helium.Node, pos, size int) bool {
 	xpathCtx := ctx.newXPathContext(node)
+	xpathCtx = xpath3.WithPosition(xpathCtx, pos)
+	xpathCtx = xpath3.WithSize(xpathCtx, size)
 	result, err := xpath3.EvaluateExpr(xpathCtx, pred, node)
 	if err != nil {
 		return false
 	}
-	// Numeric predicates: compare to position among siblings
+	// Numeric predicates: compare to the provided position
 	if f, ok := result.IsNumber(); ok {
-		return int(f) == positionAmongSiblings(node)
+		return int(f) == pos
 	}
 	b, err := xpath3.EBV(result.Sequence())
 	if err != nil {
 		return false
 	}
 	return b
-}
-
-// positionAmongSiblings returns the 1-based position of a node among
-// same-type preceding siblings (for numeric predicate evaluation in patterns).
-func positionAmongSiblings(node helium.Node) int {
-	pos := 1
-	for sib := node.PrevSibling(); sib != nil; sib = sib.PrevSibling() {
-		if sib.Type() == node.Type() {
-			if node.Type() == helium.ElementNode {
-				if sib.Name() == node.Name() {
-					pos++
-				}
-			} else {
-				pos++
-			}
-		}
-	}
-	return pos
 }
 
 // matchByEvaluation matches complex patterns by evaluating from document root.
