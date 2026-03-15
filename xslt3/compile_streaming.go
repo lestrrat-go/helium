@@ -564,9 +564,15 @@ func (c *compiler) compileMergeSource(elem *helium.Element) (*MergeSource, error
 		BaseURI: stylesheetBaseURI(elem, c.baseURI),
 	}
 
-	// Parse streamable attribute — accept "yes", "true", "1" (with whitespace trimming)
-	streamVal := strings.TrimSpace(getAttr(elem, "streamable"))
-	src.StreamableAttr = streamVal == "yes" || streamVal == "true" || streamVal == "1"
+	// Parse streamable attribute — must be a valid xs:boolean.
+	if streamRaw := getAttr(elem, "streamable"); streamRaw != "" {
+		streamVal := strings.TrimSpace(streamRaw)
+		if v, ok := parseXSDBool(streamVal); ok {
+			src.StreamableAttr = v
+		} else {
+			return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:merge-source/@streamable", streamVal)
+		}
+	}
 
 	if sortAttr, hasSBM := elem.GetAttribute("sort-before-merge"); hasSBM {
 		sortVal := strings.TrimSpace(sortAttr)
@@ -628,6 +634,11 @@ func (c *compiler) compileMergeSource(elem *helium.Element) (*MergeSource, error
 		return nil, staticError(errCodeXTSE0010, "xsl:merge-source requires at least one of select, for-each-source, or for-each-item attributes")
 	}
 
+	// XTSE3195: for-each-source and for-each-item are mutually exclusive.
+	if src.ForEachSource != nil && src.ForEachItem != nil {
+		return nil, staticError("XTSE3195", "xsl:merge-source must not have both for-each-source and for-each-item attributes")
+	}
+
 	return src, nil
 }
 
@@ -648,6 +659,17 @@ func (c *compiler) compileMergeKey(elem *helium.Element) (*MergeKey, error) {
 
 	mk := &MergeKey{
 		Order: "ascending", // default
+	}
+
+	// Track collation-related attributes for sort verification.
+	// When a non-codepoint collation or locale-specific sorting is used,
+	// we can't reliably verify sort order so we skip the check.
+	collation := getAttr(elem, "collation")
+	codepointCollation := "http://www.w3.org/2005/xpath-functions/collation/codepoint"
+	if getAttr(elem, "lang") != "" || getAttr(elem, "case-order") != "" {
+		mk.HasCollation = true
+	} else if collation != "" && collation != codepointCollation {
+		mk.HasCollation = true
 	}
 
 	selAttr := getAttr(elem, "select")
@@ -679,7 +701,15 @@ func (c *compiler) compileMergeKey(elem *helium.Element) (*MergeKey, error) {
 	}
 
 	if order := getAttr(elem, "order"); order != "" {
-		mk.Order = order
+		if strings.Contains(order, "{") {
+			avt, err := compileAVT(order, c.nsBindings)
+			if err != nil {
+				return nil, err
+			}
+			mk.OrderAVT = avt
+		} else {
+			mk.Order = order
+		}
 	}
 
 	return mk, nil

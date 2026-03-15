@@ -302,9 +302,10 @@ type mergeKeyValue struct {
 // mergeSourceItems holds the items from one merge source along with
 // their pre-extracted sort keys and the source name.
 type mergeSourceItems struct {
-	name  string
-	items xpath3.Sequence
-	keys  [][]mergeKeyValue // keys[i] corresponds to items[i]
+	name            string
+	items           xpath3.Sequence
+	keys            [][]mergeKeyValue // keys[i] corresponds to items[i]
+	sortBeforeMerge bool              // from parent MergeSource
 }
 
 // mergeGroup represents one group of items that share the same merge key.
@@ -409,33 +410,67 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 	}
 
 	// Determine sort orders from first source's key definitions.
+	// Order can be an AVT, so evaluate it at runtime.
 	keyDefs := inst.Sources[0].Keys
 	orders := make([]mergeKeyOrder, len(keyDefs))
 	for i, mk := range keyDefs {
-		orders[i] = mergeKeyOrder{desc: mk.Order == "descending"}
+		orderStr := mk.Order
+		if mk.OrderAVT != nil {
+			evaluated, err := mk.OrderAVT.evaluate(ctx, ec.contextNode)
+			if err != nil {
+				return err
+			}
+			orderStr = evaluated
+		}
+		orders[i] = mergeKeyOrder{desc: orderStr == "descending"}
 	}
 
-	// Sort each source's items by merge keys.
+	// Sort or verify sort order for each source's items.
 	for si := range allSources {
 		src := &allSources[si]
 		if len(src.items) <= 1 {
 			continue
 		}
+
 		type indexedEntry struct {
 			idx  int
 			item xpath3.Item
 			keys []mergeKeyValue
 		}
-		entries := make([]indexedEntry, len(src.items))
-		for i := range src.items {
-			entries[i] = indexedEntry{idx: i, item: src.items[i], keys: src.keys[i]}
-		}
-		slices.SortStableFunc(entries, func(a, b indexedEntry) int {
-			return compareMergeKeyValues(a.keys, b.keys, orders)
-		})
-		for i, e := range entries {
-			src.items[i] = e.item
-			src.keys[i] = e.keys
+
+		if src.sortBeforeMerge {
+			// sort-before-merge="yes": sort the items by merge keys.
+			entries := make([]indexedEntry, len(src.items))
+			for i := range src.items {
+				entries[i] = indexedEntry{idx: i, item: src.items[i], keys: src.keys[i]}
+			}
+			slices.SortStableFunc(entries, func(a, b indexedEntry) int {
+				return compareMergeKeyValues(a.keys, b.keys, orders)
+			})
+			for i, e := range entries {
+				src.items[i] = e.item
+				src.keys[i] = e.keys
+			}
+		} else {
+			// Default: verify items are already sorted (XTDE2210).
+			// Skip verification when merge keys use collation attributes
+			// (lang, collation, case-order) that we don't fully support,
+			// since data may be validly sorted in a locale-specific order.
+			hasCollation := false
+			for _, mk := range keyDefs {
+				if mk.HasCollation {
+					hasCollation = true
+					break
+				}
+			}
+			if !hasCollation {
+				for i := 1; i < len(src.keys); i++ {
+					cmp := compareMergeKeyValues(src.keys[i-1], src.keys[i], orders)
+					if cmp > 0 {
+						return dynamicError("XTDE2210", "merge input is not sorted according to the declared merge key")
+					}
+				}
+			}
 		}
 	}
 
@@ -451,35 +486,15 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 	var currentMergeGroupByName map[string]xpath3.Sequence
 	var currentMergeKeySeq xpath3.Sequence
 
-	ec.cachedFns["current-merge-group"] = &xsltFunc{
-		min: 0, max: 1,
-		fn: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
-			if len(args) > 0 && len(args[0]) > 0 {
-				// current-merge-group('source-name')
-				av, err := xpath3.AtomizeItem(args[0][0])
-				if err != nil {
-					return xpath3.EmptySequence(), nil
-				}
-				name, err := xpath3.AtomicToString(av)
-				if err != nil {
-					return xpath3.EmptySequence(), nil
-				}
-				if items, ok := currentMergeGroupByName[name]; ok {
-					return items, nil
-				}
-				return xpath3.EmptySequence(), nil
-			}
-			return currentMergeGroupAll, nil
-		},
-	}
-	ec.cachedFns["current-merge-key"] = &xsltFunc{
-		min: 0, max: 0,
-		fn: func(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
-			return currentMergeKeySeq, nil
-		},
+	// Collect valid merge-source names for XTDE3490 validation.
+	validSourceNames := make(map[string]struct{})
+	for _, src := range inst.Sources {
+		if src.Name != "" {
+			validSourceNames[src.Name] = struct{}{}
+		}
 	}
 
-	// Save previous merge functions (for nested xsl:merge) and restore on exit.
+	// Save previous merge functions BEFORE setting new ones (for nested xsl:merge).
 	savedMergeGroup := ec.cachedFns["current-merge-group"]
 	savedMergeKey := ec.cachedFns["current-merge-key"]
 	defer func() {
@@ -495,17 +510,59 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 		}
 	}()
 
+	ec.cachedFns["current-merge-group"] = &xsltFunc{
+		min: 0, max: 1,
+		fn: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+			// XTDE3480: current-merge-group() is not available outside merge-action.
+			if !ec.inMergeAction {
+				return nil, dynamicError("XTDE3480", "current-merge-group() is not available outside the body of xsl:merge-action")
+			}
+			if len(args) > 0 && len(args[0]) > 0 {
+				// current-merge-group('source-name')
+				av, err := xpath3.AtomizeItem(args[0][0])
+				if err != nil {
+					return nil, dynamicError("XTDE3490", "current-merge-group(): cannot atomize argument: %v", err)
+				}
+				name, err := xpath3.AtomicToString(av)
+				if err != nil {
+					return nil, dynamicError("XTDE3490", "current-merge-group(): cannot convert argument to string: %v", err)
+				}
+				// XTDE3490: the argument must match a merge-source name.
+				if _, ok := validSourceNames[name]; !ok {
+					return nil, dynamicError("XTDE3490", "current-merge-group(%q): no xsl:merge-source with this name", name)
+				}
+				if items, ok := currentMergeGroupByName[name]; ok {
+					return items, nil
+				}
+				return xpath3.EmptySequence(), nil
+			}
+			return currentMergeGroupAll, nil
+		},
+	}
+	ec.cachedFns["current-merge-key"] = &xsltFunc{
+		min: 0, max: 0,
+		fn: func(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
+			// XTDE3510: current-merge-key() is not available outside merge-action.
+			if !ec.inMergeAction {
+				return nil, dynamicError("XTDE3510", "current-merge-key() is not available outside the body of xsl:merge-action")
+			}
+			return currentMergeKeySeq, nil
+		},
+	}
+
 	// Save/restore context.
 	savedCurrent := ec.currentNode
 	savedContext := ec.contextNode
 	savedPos := ec.position
 	savedSize := ec.size
+	savedInMerge := ec.inMergeAction
 	ec.size = len(groups)
 	defer func() {
 		ec.currentNode = savedCurrent
 		ec.contextNode = savedContext
 		ec.position = savedPos
 		ec.size = savedSize
+		ec.inMergeAction = savedInMerge
 	}()
 
 	for i, g := range groups {
@@ -522,6 +579,7 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 			}
 		}
 
+		ec.inMergeAction = true
 		ec.pushVarScope()
 		for _, child := range inst.Action {
 			if err := ec.executeInstruction(ctx, child); err != nil {
@@ -574,8 +632,9 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *MergeSou
 			}
 
 			result = append(result, mergeSourceItems{
-				name:  src.Name,
-				items: items,
+				name:            src.Name,
+				items:           items,
+				sortBeforeMerge: src.SortBeforeMerge,
 			})
 		}
 	} else if src.ForEachItem != nil {
@@ -598,10 +657,10 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *MergeSou
 			if err != nil {
 				return nil, err
 			}
-
 			result = append(result, mergeSourceItems{
-				name:  src.Name,
-				items: items,
+				name:            src.Name,
+				items:           items,
+				sortBeforeMerge: src.SortBeforeMerge,
 			})
 		}
 	} else if src.Select != nil {
@@ -613,8 +672,9 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *MergeSou
 		}
 
 		result = append(result, mergeSourceItems{
-			name:  src.Name,
-			items: selResult.Sequence(),
+			name:            src.Name,
+			items:           selResult.Sequence(),
+			sortBeforeMerge: src.SortBeforeMerge,
 		})
 	}
 
@@ -759,6 +819,10 @@ func (ec *execContext) evaluateMergeKeys(ctx context.Context, src *mergeSourceIt
 			}
 
 			seq := result.Sequence()
+			// XTTE1020: merge key must evaluate to a single atomic value.
+			if len(seq) > 1 {
+				return nil, dynamicError("XTTE1020", "xsl:merge-key select expression must return a single atomic value, got %d items", len(seq))
+			}
 			// Extract the key value, preserving the atomic type.
 			if len(seq) == 1 {
 				if av, ok := seq[0].(xpath3.AtomicValue); ok {
