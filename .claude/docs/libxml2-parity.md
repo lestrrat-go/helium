@@ -22,7 +22,7 @@ These affect multiple packages (especially C14N test skips):
 
 1. **Duplicate namespace declarations** — helium rejects, libxml2 uses last. Affects 6 C14N tests.
 2. **Entity refs in single-quoted attributes** — not expanded. Affects 3 C14N tests.
-3. **External entity resolution** — limited; requires explicit config. ParseNoXXE blocks all.
+3. **External entity resolution** — limited; requires explicit config. External subsets need `ParseDTDLoad`, and inline expansion of parsed external entities needs `ParseNoEnt`. `ParseNoXXE` blocks all.
 
 ## Feature Status
 
