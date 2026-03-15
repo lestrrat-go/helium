@@ -238,6 +238,8 @@ type NumberInst struct {
 	Ordinal           *AVT
 	StartAt           *AVT              // XSLT 3.0 start-at attribute
 	Select            *xpath3.Expression // XSLT 3.0 select attribute
+	Lang              *AVT              // language for word/ordinal numbering
+	LetterValue       *AVT              // "alphabetic" or "traditional"
 }
 
 func (*NumberInst) instructionTag() {}

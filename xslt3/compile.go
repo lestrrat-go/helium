@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -290,6 +291,22 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 		return nil, err
 	}
 
+	// XTSE1290: check deferred decimal-format conflicts after all imports
+	for qn, conflictPrec := range c.stylesheet.decimalFmtConflicts {
+		actualPrec := c.stylesheet.decimalFmtPrec[qn]
+		if actualPrec == conflictPrec {
+			return nil, staticError(errCodeXTSE1290,
+				"conflicting xsl:decimal-format declarations")
+		}
+	}
+
+	// XTSE1300: validate decimal format character uniqueness after all declarations
+	for _, df := range c.stylesheet.decimalFormats {
+		if err := checkDecimalFormatCharConflicts(df); err != nil {
+			return nil, err
+		}
+	}
+
 	// Sort templates by import precedence (desc) then priority (desc)
 	c.sortTemplates()
 
@@ -402,7 +419,9 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 				return err
 			}
 		case "decimal-format":
-			c.compileDecimalFormat(elem)
+			if err := c.compileDecimalFormat(elem); err != nil {
+				return err
+			}
 		case "mode":
 			if err := c.compileMode(elem); err != nil {
 				return err
@@ -1154,7 +1173,11 @@ func (c *compiler) compileAttributeSet(elem *helium.Element) error {
 	return nil
 }
 
-func (c *compiler) compileDecimalFormat(elem *helium.Element) {
+func (c *compiler) compileDecimalFormat(elem *helium.Element) error {
+	// Push element-local namespace declarations so prefixed names resolve correctly
+	saved := c.pushElementNamespaces(elem)
+	defer func() { c.nsBindings = saved }()
+
 	name := getAttr(elem, "name")
 	qn := xpath3.QualifiedName{}
 	if name != "" {
@@ -1172,50 +1195,190 @@ func (c *compiler) compileDecimalFormat(elem *helium.Element) {
 
 	if c.stylesheet.decimalFormats == nil {
 		c.stylesheet.decimalFormats = make(map[xpath3.QualifiedName]xpath3.DecimalFormat)
+		c.stylesheet.decimalFmtPrec = make(map[xpath3.QualifiedName]int)
+		c.stylesheet.decimalFmtSet = make(map[xpath3.QualifiedName]map[string]struct{})
 	}
 
-	// XSLT allows multiple xsl:decimal-format declarations with the same
-	// name as long as they don't conflict. Merge into the existing entry.
-	df, ok := c.stylesheet.decimalFormats[qn]
-	if !ok {
+	// XTSE1295: zero-digit must be a Unicode character with digit value zero
+	if v := getAttr(elem, "zero-digit"); v != "" {
+		zd := firstRune(v)
+		if !unicode.IsDigit(zd) || !isDigitZero(zd) {
+			return staticError(errCodeXTSE1295,
+				"zero-digit %q is not a Unicode digit-zero character", string(zd))
+		}
+	}
+
+	// Get or create the merged format
+	df, exists := c.stylesheet.decimalFormats[qn]
+	existingPrec := c.stylesheet.decimalFmtPrec[qn]
+	if !exists {
 		df = xpath3.DefaultDecimalFormat()
 	}
 
-	if v := getAttr(elem, "decimal-separator"); v != "" {
-		df.DecimalSeparator = firstRune(v)
-	}
-	if v := getAttr(elem, "grouping-separator"); v != "" {
-		df.GroupingSeparator = firstRune(v)
-	}
-	if v := getAttr(elem, "percent"); v != "" {
-		df.Percent = firstRune(v)
-	}
-	if v := getAttr(elem, "per-mille"); v != "" {
-		df.PerMille = firstRune(v)
-	}
-	if v := getAttr(elem, "zero-digit"); v != "" {
-		df.ZeroDigit = firstRune(v)
-	}
-	if v := getAttr(elem, "digit"); v != "" {
-		df.Digit = firstRune(v)
-	}
-	if v := getAttr(elem, "pattern-separator"); v != "" {
-		df.PatternSeparator = firstRune(v)
-	}
-	if v := getAttr(elem, "exponent-separator"); v != "" {
-		df.ExponentSeparator = firstRune(v)
-	}
-	if v := getAttr(elem, "infinity"); v != "" {
-		df.Infinity = v
-	}
-	if v := getAttr(elem, "NaN"); v != "" {
-		df.NaN = v
-	}
-	if v := getAttr(elem, "minus-sign"); v != "" {
-		df.MinusSign = firstRune(v)
+	// XTSE1290: record potential conflicts for deferred checking after all imports.
+	// Higher precedence declarations can override lower-precedence conflicts.
+	if exists && c.importPrec == existingPrec {
+		prevSet := c.stylesheet.decimalFmtSet[qn]
+		if err := checkDecimalFormatConflictExplicit(df, elem, prevSet); err != nil {
+			// Record the conflict and its precedence for deferred checking
+			if c.stylesheet.decimalFmtConflicts == nil {
+				c.stylesheet.decimalFmtConflicts = make(map[xpath3.QualifiedName]int)
+			}
+			c.stylesheet.decimalFmtConflicts[qn] = c.importPrec
+		}
 	}
 
-	c.stylesheet.decimalFormats[qn] = df
+	// If current declaration has higher or equal import precedence, merge properties.
+	// Lower precedence declarations' explicitly-set properties are inherited.
+	if !exists || c.importPrec >= existingPrec {
+
+		// Merge explicitly-set properties
+		if v := getAttr(elem, "decimal-separator"); v != "" {
+			df.DecimalSeparator = firstRune(v)
+		}
+		if v := getAttr(elem, "grouping-separator"); v != "" {
+			df.GroupingSeparator = firstRune(v)
+		}
+		if v := getAttr(elem, "percent"); v != "" {
+			df.Percent = firstRune(v)
+		}
+		if v := getAttr(elem, "per-mille"); v != "" {
+			df.PerMille = firstRune(v)
+		}
+		if v := getAttr(elem, "zero-digit"); v != "" {
+			df.ZeroDigit = firstRune(v)
+		}
+		if v := getAttr(elem, "digit"); v != "" {
+			df.Digit = firstRune(v)
+		}
+		if v := getAttr(elem, "pattern-separator"); v != "" {
+			df.PatternSeparator = firstRune(v)
+		}
+		if v := getAttr(elem, "exponent-separator"); v != "" {
+			df.ExponentSeparator = firstRune(v)
+		}
+		if v := getAttr(elem, "infinity"); v != "" {
+			df.Infinity = v
+		}
+		if v := getAttr(elem, "NaN"); v != "" {
+			df.NaN = v
+		}
+		if v := getAttr(elem, "minus-sign"); v != "" {
+			df.MinusSign = firstRune(v)
+		}
+
+		c.stylesheet.decimalFormats[qn] = df
+		c.stylesheet.decimalFmtPrec[qn] = c.importPrec
+
+		// Track which properties were explicitly set
+		if c.stylesheet.decimalFmtSet[qn] == nil {
+			c.stylesheet.decimalFmtSet[qn] = make(map[string]struct{})
+		}
+		// If higher precedence, clear previously tracked properties
+		if exists && c.importPrec > existingPrec {
+			c.stylesheet.decimalFmtSet[qn] = make(map[string]struct{})
+		}
+		setProps := c.stylesheet.decimalFmtSet[qn]
+		for _, attr := range []string{"decimal-separator", "grouping-separator", "percent",
+			"per-mille", "zero-digit", "digit", "pattern-separator", "exponent-separator",
+			"infinity", "NaN", "minus-sign"} {
+			if getAttr(elem, attr) != "" {
+				setProps[attr] = struct{}{}
+			}
+		}
+	}
+	return nil
+}
+
+// isDigitZero returns true if r is a Unicode digit with numeric value 0.
+func isDigitZero(r rune) bool {
+	// Unicode digit blocks are contiguous runs of 10 codepoints.
+	// The zero digit is at a position where (r - block_start) == 0.
+	// We check that r-1 is NOT a digit (meaning r is the first in its block).
+	return r == '0' || (r > '0' && unicode.IsDigit(r) && !unicode.IsDigit(r-1))
+}
+
+// checkDecimalFormatCharConflicts raises XTSE1300 if any two formatting characters
+// in the decimal format are the same.
+func checkDecimalFormatCharConflicts(df xpath3.DecimalFormat) error {
+	// Collect all formatting characters and check for duplicates
+	type charRole struct {
+		char rune
+		role string
+	}
+	roles := []charRole{
+		{df.DecimalSeparator, "decimal-separator"},
+		{df.GroupingSeparator, "grouping-separator"},
+		{df.Percent, "percent"},
+		{df.PerMille, "per-mille"},
+		{df.ZeroDigit, "zero-digit"},
+		{df.Digit, "digit"},
+		{df.PatternSeparator, "pattern-separator"},
+		{df.ExponentSeparator, "exponent-separator"},
+	}
+	for i := 0; i < len(roles); i++ {
+		for j := i + 1; j < len(roles); j++ {
+			if roles[i].char == roles[j].char {
+				return staticError(errCodeXTSE1300,
+					"%s and %s use the same character %q",
+					roles[i].role, roles[j].role, string(roles[i].char))
+			}
+		}
+	}
+	return nil
+}
+
+// checkDecimalFormatConflictExplicit raises XTSE1290 if any property
+// explicitly set in elem conflicts with a property explicitly set in a prior
+// declaration of the same name at the same import precedence.
+func checkDecimalFormatConflictExplicit(existing xpath3.DecimalFormat, elem *helium.Element, prevSet map[string]struct{}) error {
+	type runeCheck struct {
+		attr string
+		cur  rune
+	}
+	runeChecks := []runeCheck{
+		{"decimal-separator", existing.DecimalSeparator},
+		{"grouping-separator", existing.GroupingSeparator},
+		{"percent", existing.Percent},
+		{"per-mille", existing.PerMille},
+		{"zero-digit", existing.ZeroDigit},
+		{"digit", existing.Digit},
+		{"pattern-separator", existing.PatternSeparator},
+		{"exponent-separator", existing.ExponentSeparator},
+		{"minus-sign", existing.MinusSign},
+	}
+	for _, rc := range runeChecks {
+		v := getAttr(elem, rc.attr)
+		if v == "" {
+			continue
+		}
+		// Only conflict if the property was explicitly set in a prior declaration
+		if _, wasSet := prevSet[rc.attr]; !wasSet {
+			continue
+		}
+		newVal := firstRune(v)
+		if newVal != rc.cur {
+			return staticError(errCodeXTSE1290,
+				"conflicting xsl:decimal-format declarations: %s was %q, now %q",
+				rc.attr, string(rc.cur), string(newVal))
+		}
+	}
+	// String properties
+	if v := getAttr(elem, "infinity"); v != "" {
+		if _, wasSet := prevSet["infinity"]; wasSet && v != existing.Infinity {
+			return staticError(errCodeXTSE1290,
+				"conflicting xsl:decimal-format declarations: infinity was %q, now %q",
+				existing.Infinity, v)
+		}
+	}
+	if v := getAttr(elem, "NaN"); v != "" {
+		if _, wasSet := prevSet["NaN"]; wasSet && v != existing.NaN {
+			return staticError(errCodeXTSE1290,
+				"conflicting xsl:decimal-format declarations: NaN was %q, now %q",
+				existing.NaN, v)
+		}
+	}
+	return nil
 }
 
 func firstRune(s string) rune {

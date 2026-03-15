@@ -27,7 +27,10 @@ type Stylesheet struct {
 	preserveSpace   []NameTest
 	namespaces      map[string]string   // prefix -> URI from stylesheet
 	excludePrefixes map[string]struct{} // prefixes excluded from output
-	decimalFormats  map[xpath3.QualifiedName]xpath3.DecimalFormat // named decimal formats
+	decimalFormats      map[xpath3.QualifiedName]xpath3.DecimalFormat   // named decimal formats
+	decimalFmtPrec      map[xpath3.QualifiedName]int                  // import precedence of each decimal format
+	decimalFmtSet       map[xpath3.QualifiedName]map[string]struct{}  // explicitly set properties per format
+	decimalFmtConflicts map[xpath3.QualifiedName]int                  // pending XTSE1290 conflicts (value = precedence)
 	modeDefs        map[string]*ModeDef                         // mode name -> mode definition
 	attributeSets     map[string]*AttributeSetDef                 // xsl:attribute-set definitions
 	accumulators      map[string]*AccumulatorDef                  // accumulator name -> definition
