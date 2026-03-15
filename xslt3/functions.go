@@ -46,8 +46,12 @@ func (f *xsltFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.Seq
 	return f.fn(ctx, args)
 }
 
-// current() returns the current node (the node being matched/processed).
+// current() returns the current item (node or atomic value being processed).
 func (ec *execContext) fnCurrent(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
+	// For-each over atomic values: return the current atomic item
+	if ec.contextItem != nil {
+		return xpath3.Sequence{ec.contextItem}, nil
+	}
 	if ec.currentNode == nil {
 		return xpath3.EmptySequence(), nil
 	}
