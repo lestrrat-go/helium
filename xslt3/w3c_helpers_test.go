@@ -51,14 +51,14 @@ type w3cTest struct {
 
 // w3cAssertion is an assertion to check against the transform result.
 type w3cAssertion struct {
-	Type  string // "assert-xml", "assert-string-value", "any-of", "assert-message", "skip"
+	Type  string // "assert-xml", "assert-string-value", "any-of", "assert-message", "assert-result-document", "assert-serialization", "skip"
 	Value string
-	Check func(t *testing.T, result string, messages []string) bool
+	Check func(t *testing.T, result string, messages []string, resultDocs map[string]*helium.Document) bool
 }
 
 // w3cCheck is used inside any-of assertions.
 type w3cCheck struct {
-	fn func(result string, messages []string) bool
+	fn func(result string, messages []string, resultDocs map[string]*helium.Document) bool
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ func w3cAssertXML(expected string) w3cAssertion {
 	return w3cAssertion{
 		Type:  "assert-xml",
 		Value: expected,
-		Check: func(t *testing.T, result string, _ []string) bool {
+		Check: func(t *testing.T, result string, _ []string, _ map[string]*helium.Document) bool {
 			t.Helper()
 			if xmlEqual(result, expected) {
 				return true
@@ -84,7 +84,7 @@ func w3cAssertStringValue(expected string) w3cAssertion {
 	return w3cAssertion{
 		Type:  "assert-string-value",
 		Value: expected,
-		Check: func(t *testing.T, result string, _ []string) bool {
+		Check: func(t *testing.T, result string, _ []string, _ map[string]*helium.Document) bool {
 			t.Helper()
 			actual := extractTextContent(result)
 			if actual == expected {
@@ -104,11 +104,11 @@ func w3cAssertStringValue(expected string) w3cAssertion {
 func w3cAssertMessage(checks ...w3cCheck) w3cAssertion {
 	return w3cAssertion{
 		Type: "assert-message",
-		Check: func(t *testing.T, _ string, messages []string) bool {
+		Check: func(t *testing.T, _ string, messages []string, resultDocs map[string]*helium.Document) bool {
 			t.Helper()
 			combined := strings.Join(messages, "")
 			for _, chk := range checks {
-				if !chk.fn(combined, messages) {
+				if !chk.fn(combined, messages, resultDocs) {
 					t.Errorf("assert-message failed: messages=%q", messages)
 					return false
 				}
@@ -121,10 +121,10 @@ func w3cAssertMessage(checks ...w3cCheck) w3cAssertion {
 func w3cAnyOf(checks ...w3cCheck) w3cAssertion {
 	return w3cAssertion{
 		Type: "any-of",
-		Check: func(t *testing.T, result string, messages []string) bool {
+		Check: func(t *testing.T, result string, messages []string, resultDocs map[string]*helium.Document) bool {
 			t.Helper()
 			for _, chk := range checks {
-				if chk.fn(result, messages) {
+				if chk.fn(result, messages, resultDocs) {
 					return true
 				}
 			}
@@ -137,7 +137,7 @@ func w3cAnyOf(checks ...w3cCheck) w3cAssertion {
 func w3cAssertSkip() w3cAssertion {
 	return w3cAssertion{
 		Type: "skip",
-		Check: func(t *testing.T, _ string, _ []string) bool {
+		Check: func(t *testing.T, _ string, _ []string, _ map[string]*helium.Document) bool {
 			t.Helper()
 			t.Skip("assertion type not yet supported")
 			return true
@@ -149,11 +149,99 @@ func w3cAssertXPath(expr string) w3cAssertion {
 	return w3cAssertion{
 		Type:  "assert",
 		Value: expr,
-		Check: func(t *testing.T, result string, _ []string) bool {
+		Check: func(t *testing.T, result string, _ []string, _ map[string]*helium.Document) bool {
 			t.Helper()
 			return evalXPathAssert(t, expr, result)
 		},
 	}
+}
+
+func w3cAssertResultDocument(uri string, checks ...w3cCheck) w3cAssertion {
+	return w3cAssertion{
+		Type:  "assert-result-document",
+		Value: uri,
+		Check: func(t *testing.T, _ string, messages []string, resultDocs map[string]*helium.Document) bool {
+			t.Helper()
+			doc, ok := resultDocs[uri]
+			if !ok {
+				// Try matching by suffix — result-document URIs may be absolute
+				for href, d := range resultDocs {
+					if strings.HasSuffix(href, "/"+uri) || strings.HasSuffix(href, "\\"+uri) || href == uri {
+						doc = d
+						ok = true
+						break
+					}
+				}
+			}
+			if !ok {
+				t.Errorf("assert-result-document: no result document for URI %q (have: %v)", uri, resultDocKeys(resultDocs))
+				return false
+			}
+			var buf bytes.Buffer
+			if err := doc.XML(&buf, helium.WithNoDecl()); err != nil {
+				t.Errorf("assert-result-document: cannot serialize result document %q: %v", uri, err)
+				return false
+			}
+			rdResult := strings.TrimSpace(buf.String())
+			for _, chk := range checks {
+				if !chk.fn(rdResult, messages, resultDocs) {
+					t.Errorf("assert-result-document failed for URI %q: got %s", uri, rdResult)
+					return false
+				}
+			}
+			return true
+		},
+	}
+}
+
+func w3cAssertSerialization(method string, expected string) w3cAssertion {
+	return w3cAssertion{
+		Type:  "assert-serialization",
+		Value: expected,
+		Check: func(t *testing.T, result string, _ []string, _ map[string]*helium.Document) bool {
+			t.Helper()
+			if checkSerializationResult(method, result, expected) {
+				return true
+			}
+			t.Errorf("assert-serialization (method=%s) failed:\n  got:    %q\n  expect: %q", method, result, expected)
+			return false
+		},
+	}
+}
+
+// checkSerializationResult checks whether result matches expected for a given
+// serialization method. For "text" method, comparison is by text content.
+// For "xml"/"html"/"xhtml", comparison uses XML equality.
+func checkSerializationResult(method string, result string, expected string) bool {
+	switch method {
+	case "text":
+		// Text output: compare plain text content
+		actual := extractTextContent(result)
+		if actual == expected {
+			return true
+		}
+		// Also try the raw result for text-method serialization
+		if strings.TrimSpace(result) == strings.TrimSpace(expected) {
+			return true
+		}
+		return normalizeSpace(actual) == normalizeSpace(expected)
+	case "xml", "xhtml", "html":
+		return xmlEqual(result, expected)
+	case "adaptive":
+		// Adaptive serialization: compare as string
+		return strings.TrimSpace(result) == strings.TrimSpace(expected)
+	default:
+		// Unknown method: compare as string
+		return strings.TrimSpace(result) == strings.TrimSpace(expected)
+	}
+}
+
+func resultDocKeys(m map[string]*helium.Document) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -161,13 +249,13 @@ func w3cAssertXPath(expr string) w3cAssertion {
 // ──────────────────────────────────────────────────────────────────────
 
 func w3cCheckXML(expected string) w3cCheck {
-	return w3cCheck{fn: func(result string, _ []string) bool {
+	return w3cCheck{fn: func(result string, _ []string, _ map[string]*helium.Document) bool {
 		return xmlEqual(result, expected)
 	}}
 }
 
 func w3cCheckStringValue(expected string) w3cCheck {
-	return w3cCheck{fn: func(result string, _ []string) bool {
+	return w3cCheck{fn: func(result string, _ []string, _ map[string]*helium.Document) bool {
 		actual := extractTextContent(result)
 		if actual == expected {
 			return true
@@ -178,7 +266,7 @@ func w3cCheckStringValue(expected string) w3cCheck {
 }
 
 func w3cCheckXPath(expr string) w3cCheck {
-	return w3cCheck{fn: func(result string, _ []string) bool {
+	return w3cCheck{fn: func(result string, _ []string, _ map[string]*helium.Document) bool {
 		doc, err := helium.Parse(context.TODO(), []byte(result))
 		if err != nil {
 			return false
@@ -208,9 +296,32 @@ func w3cCheckXPath(expr string) w3cCheck {
 	}}
 }
 
+func w3cCheckError(code string) w3cCheck {
+	return w3cCheck{fn: func(_ string, _ []string, _ map[string]*helium.Document) bool {
+		return false // error checks are handled at the transform level
+	}}
+}
+
 func w3cCheckSkip() w3cCheck {
-	return w3cCheck{fn: func(_ string, _ []string) bool {
+	return w3cCheck{fn: func(_ string, _ []string, _ map[string]*helium.Document) bool {
 		return true // skip = pass
+	}}
+}
+
+func w3cCheckSerialization(method string, expected string) w3cCheck {
+	return w3cCheck{fn: func(result string, _ []string, _ map[string]*helium.Document) bool {
+		return checkSerializationResult(method, result, expected)
+	}}
+}
+
+func w3cCheckAllOf(checks ...w3cCheck) w3cCheck {
+	return w3cCheck{fn: func(result string, messages []string, resultDocs map[string]*helium.Document) bool {
+		for _, chk := range checks {
+			if !chk.fn(result, messages, resultDocs) {
+				return false
+			}
+		}
+		return true
 	}}
 }
 
@@ -312,6 +423,12 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		messages = append(messages, msg)
 	})
 
+	// Capture secondary result documents
+	resultDocs := make(map[string]*helium.Document)
+	ctx = xslt3.WithResultDocumentHandler(ctx, func(href string, doc *helium.Document) {
+		resultDocs[href] = doc
+	})
+
 	// Transform
 	resultDoc, err := xslt3.Transform(ctx, sourceDoc, ss)
 	if err != nil {
@@ -333,7 +450,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 
 	// Check assertions
 	for _, a := range tc.Assertions {
-		a.Check(t, result, messages)
+		a.Check(t, result, messages, resultDocs)
 	}
 }
 
