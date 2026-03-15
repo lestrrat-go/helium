@@ -14,14 +14,21 @@ type URIResolver interface {
 	Resolve(uri string) (io.ReadCloser, error)
 }
 
+// PackageResolver resolves package name URIs to file paths or readers.
+// Used during compilation when xsl:use-package is encountered.
+type PackageResolver interface {
+	ResolvePackage(name string, version string) (io.ReadCloser, string, error)
+}
+
 // --- Compile configuration (context-based) ---
 
 // compileConfigKey is used to store compile configuration in context.Context.
 type compileConfigKey struct{}
 
 type compileConfig struct {
-	baseURI  string
-	resolver URIResolver
+	baseURI         string
+	resolver        URIResolver
+	packageResolver PackageResolver
 }
 
 func getCompileConfig(ctx context.Context) *compileConfig {
@@ -63,6 +70,15 @@ func WithCompileBaseURI(ctx context.Context, uri string) context.Context {
 func WithCompileURIResolver(ctx context.Context, r URIResolver) context.Context {
 	return updateCompileConfig(ctx, func(c *compileConfig) {
 		c.resolver = r
+	})
+}
+
+// WithPackageResolver sets a package resolver for resolving xsl:use-package
+// references during compilation. The resolver maps package name URIs and
+// versions to file paths or readers.
+func WithPackageResolver(ctx context.Context, r PackageResolver) context.Context {
+	return updateCompileConfig(ctx, func(c *compileConfig) {
+		c.packageResolver = r
 	})
 }
 

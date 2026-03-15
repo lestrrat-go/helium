@@ -1,0 +1,14 @@
+<xsl:package
+  name="http://www.w3.org/xslt30tests/accept-902"  
+  package-version="1.0.0"
+  version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+
+    <!-- tests error XTDE3052 to be raised on abstract component -->
+
+    <xsl:use-package name="http://www.w3.org/xslt30tests/package-901" package-version="1.0.0">
+        <xsl:accept names="xsl:initial-template" visibility="public" component="template" />
+        <!-- visibility abstract becomes hidden if not explicitly accepted -->
+    </xsl:use-package>  
+
+</xsl:package>    
