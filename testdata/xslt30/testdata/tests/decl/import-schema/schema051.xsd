@@ -1,0 +1,15 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://schema051.uri/"
+           elementFormDefault="qualified">
+
+<xs:complexType name="choice-of-3">
+    <xs:choice>
+      <xs:element name="p" minOccurs="1" maxOccurs="3"/>
+      <xs:element name="q" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="r" minOccurs="1" maxOccurs="1"/>
+    </xs:choice>
+</xs:complexType>
+
+
+</xs:schema>

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+			targetNamespace="http://www.schemanodetest.example.com/ns/attributes"
+			xmlns:my="http://www.schemanodetest.example.com/ns/attributes"
+			attributeFormDefault="qualified">
+
+	<xsd:annotation>
+		<xsd:documentation>
+      		Schema for attribute node tests
+		</xsd:documentation>
+	</xsd:annotation>
+
+<!-- Begin definitions -->
+	<xsd:element name="people" type="my:peopleType"/>
+	<xsd:attribute name="nationality" type="xsd:string" />
+	
+	<xsd:complexType name="peopleType">
+		<xsd:sequence>
+			<xsd:element name="person" type="my:personType" minOccurs="0" maxOccurs="unbounded"/>
+   		</xsd:sequence>
+   			<xsd:attribute ref="my:nationality" />
+	</xsd:complexType>
+				
+	<xsd:complexType name="personType">
+		<xsd:sequence>
+			<xsd:element name="name" type="my:nameType" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="age" type="my:ageType" minOccurs="0" maxOccurs="1"/>
+   		</xsd:sequence>
+   			<xsd:attribute name="nationality" type="xsd:token" />
+	</xsd:complexType>
+	
+	<xsd:complexType name="nameType">
+    <xsd:simpleContent>
+      <xsd:extension base="xsd:NMTOKENS">
+        <xsd:attribute name="nationality" type="my:derivedNameNationality" use="optional"/>
+      </xsd:extension>
+    </xsd:simpleContent>
+  </xsd:complexType>
+	
+	<xsd:simpleType name="nameNationality">
+    <xsd:restriction base="xsd:token">
+      <xsd:enumeration value="latin"/>
+      <xsd:enumeration value="roman"/>
+      <xsd:enumeration value="slavic"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  
+  <xsd:simpleType name="derivedNameNationality">
+    <xsd:restriction base="my:nameNationality">
+      <xsd:enumeration value="latin"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  
+  <xsd:complexType name="ageType">
+    <xsd:simpleContent>
+      <xsd:extension base="xsd:integer">
+        <xsd:attribute name="nationality" type="xsd:double" use="optional"/>
+      </xsd:extension>
+    </xsd:simpleContent>
+  </xsd:complexType>
+  
+</xsd:schema>

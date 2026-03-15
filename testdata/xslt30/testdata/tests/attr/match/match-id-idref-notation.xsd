@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+			targetNamespace="http://www.example.com/ns/match/id-idref-notation"
+			xmlns:my="http://www.example.com/ns/match/id-idref-notation">
+
+	<xs:annotation>
+		<xs:documentation>
+      		Define elements that have attributes of type ID, IDREF, NOTATION, ENTITY. 
+		</xs:documentation>
+	</xs:annotation>
+
+	<xs:element name="docid" type="my:docidType" />
+	
+	<xs:attribute name="id" type="xs:ID"/>
+	<xs:attribute name="ref" type="xs:IDREF"/>
+	<xs:attribute name="refs" type="xs:IDREFS"/>
+	<xs:attribute name="filetype" type="my:nota"/>
+	<xs:attribute name="entitytype" type="xs:ENTITY"/>
+	<xs:attribute name="entities" type="xs:ENTITIES"/>
+	<xs:attribute name="tok" type="xs:NMTOKEN"/>
+	<xs:attribute name="toks" type="xs:NMTOKENS"/>
+	<xs:attribute name="list" type="my:myListType"/>
+	
+	<xs:attribute name="attr-token" type="xs:token" />
+	<xs:attribute name="attr-language" type="xs:language" />
+	<xs:attribute name="attr-positiveInteger" type="xs:positiveInteger" />
+	
+	<xs:complexType name="docidType">
+		<xs:sequence>
+			<xs:element name="derived-elem" type="my:derived-element" minOccurs="0" maxOccurs="unbounded"/>
+			<xs:element name="id-elem" type="my:id-element" minOccurs="0" maxOccurs="unbounded"/>
+			<xs:element name="idref-elem" type="my:idref-element" minOccurs="0" maxOccurs="unbounded"/>
+			<xs:element name="idrefs-elem" type="my:idrefs-element" minOccurs="0" maxOccurs="unbounded"/>
+			<xs:element name="notation-elem" type="my:notation-element" minOccurs="0" maxOccurs="unbounded"/>
+			<xs:element name="entity-elem" type="my:entity-element" minOccurs="0" maxOccurs="unbounded"/>
+			<xs:element name="nmtoken-elem" type="my:nmtoken-element" minOccurs="0" maxOccurs="unbounded"/>
+			<xs:element name="user-list-elem" type="my:user-list-element" minOccurs="0" maxOccurs="unbounded"/>
+   			<xs:element name="id-elem-only" type="xs:ID" minOccurs="0" maxOccurs="unbounded"/>
+   			<xs:element name="id-attrib-only" type="my:id-attribute-only" minOccurs="0" maxOccurs="unbounded"/>
+   		</xs:sequence>
+	</xs:complexType>
+	
+	<xs:complexType name="derived-element">
+		<xs:simpleContent>
+      		<xs:extension base="xs:string">
+        		<xs:attribute ref="my:attr-token"/>
+        		<xs:attribute ref="my:attr-language"/>
+        		<xs:attribute ref="my:attr-positiveInteger"/>
+      		</xs:extension>
+    	</xs:simpleContent>
+	</xs:complexType>
+	
+	<xs:complexType name="id-element">
+		<xs:simpleContent>
+      		<xs:extension base="xs:ID">
+        		<xs:attribute ref="my:id"/>
+      		</xs:extension>
+    	</xs:simpleContent>
+	</xs:complexType>
+	
+	<xs:complexType name="id-attribute-only">
+		<xs:simpleContent>
+      		<xs:extension base="xs:string">
+        		<xs:attribute ref="my:id"/>
+      		</xs:extension>
+    	</xs:simpleContent>
+	</xs:complexType>
+	
+	<xs:complexType name="idref-element">
+		<xs:simpleContent>
+      		<xs:extension base="xs:string">
+        		<xs:attribute ref="my:ref"/>
+      		</xs:extension>
+    	</xs:simpleContent>
+	</xs:complexType>
+	
+	<xs:complexType name="idrefs-element">
+		<xs:simpleContent>
+      		<xs:extension base="xs:string">
+        		<xs:attribute ref="my:refs"/>
+      		</xs:extension>
+    	</xs:simpleContent>
+	</xs:complexType>
+	
+	<xs:complexType name="notation-element">
+	 <xs:simpleContent>
+      		<xs:extension base="xs:string">
+    			<xs:attribute ref="my:filetype" use="required"/> 
+     		</xs:extension>
+     </xs:simpleContent>
+    </xs:complexType>
+    
+    <xs:complexType name="entity-element">
+     <xs:simpleContent>
+      		<xs:extension base="xs:string">
+    			<xs:attribute ref="my:entitytype" use="optional"/>
+    			<xs:attribute ref="my:entities" use="optional"/>
+     		</xs:extension>
+     </xs:simpleContent>
+    </xs:complexType>
+    
+    <xs:complexType name="nmtoken-element">
+		<xs:simpleContent>
+      		<xs:extension base="xs:string">
+        		<xs:attribute ref="my:tok"/>
+        		<xs:attribute ref="my:toks"/>
+      		</xs:extension>
+    	</xs:simpleContent>
+	</xs:complexType>
+	
+	<xs:complexType name="user-list-element">
+     <xs:simpleContent>
+      		<xs:extension base="xs:string">
+    			<xs:attribute ref="my:list" use="optional"/>
+     		</xs:extension>
+     </xs:simpleContent>
+    </xs:complexType>
+  
+  <xs:simpleType name="nota">
+    <xs:restriction base="xs:NOTATION">
+      <xs:enumeration value="my:rar" />
+      <xs:enumeration value="my:jpeg" />
+      <xs:enumeration value="my:exe" />
+    </xs:restriction>
+  </xs:simpleType>
+  
+  <xs:simpleType name="partNumberType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="\d{3}-[A-Z]{2}"/>
+    </xs:restriction>
+  </xs:simpleType>
+  
+  <xs:simpleType name="myListType">
+  	<xs:list itemType="my:partNumberType"/>
+  </xs:simpleType>
+  
+  	<xs:notation name="rar" public="audio/mid" system="mplay.exe"/>
+    <xs:notation name="jpeg" public="image" system="viewer.exe"/>
+    <xs:notation name="exe" public="executable" system="cmd"/>
+  
+</xs:schema>

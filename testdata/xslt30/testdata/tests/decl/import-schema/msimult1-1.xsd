@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!-- =========================================================================
+Test Type  : Multiple Import
+Description: Single namespaces, multiple schemaLocation per namespace
+========================================================================== -->
+<schema xmlns          ="http://www.w3.org/2001/XMLSchema"
+        xmlns:svimp    ="http://www.multImpTest.org/msimult1_imp"
+        targetNamespace ="http://www.multImpTest.org/msimult1_imp">
+
+
+<element name="elem1" type="string"/>
+
+<element name="elem2" type="string"/>
+
+</schema>

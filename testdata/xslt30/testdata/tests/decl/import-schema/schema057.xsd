@@ -1,0 +1,25 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://schema057.uri/"
+           elementFormDefault="qualified"
+           xmlns:s="http://schema057.uri/">
+
+<xs:complexType name="extended">
+  <xs:complexContent>
+    <xs:extension base="s:origin">
+      <xs:sequence>
+        <xs:element name="c" minOccurs="0"/>
+      </xs:sequence>
+    </xs:extension>
+  </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="origin">
+  <xs:choice>
+  <xs:element name="j"/>
+  <xs:element name="k"/>
+  </xs:choice>
+</xs:complexType>
+
+
+</xs:schema>

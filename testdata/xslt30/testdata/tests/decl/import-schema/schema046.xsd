@@ -1,0 +1,47 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://schema046.uri/"
+           elementFormDefault="qualified"
+           xmlns:s="http://schema046.uri/">
+
+<xs:simpleType name="methods">
+  <xs:list itemType="s:method"/>
+</xs:simpleType>
+
+
+<xs:simpleType name="method">
+  <xs:annotation>
+    <xs:documentation>
+      The method attribute of xsl:output:
+      Either one of the recognized names "xml", "xhtml", "html", "text",
+      or an integer in range 10-20. (The QName complexities have been removed for simplicity
+    </xs:documentation>
+  </xs:annotation>
+  <xs:union memberTypes="s:standardMethod s:int10-20"/>
+</xs:simpleType>
+
+    <xs:simpleType name="standardMethod">
+      <xs:restriction base="xs:NCName">
+        <xs:enumeration value="xml"/>
+        <xs:enumeration value="xhtml"/>
+        <xs:enumeration value="html"/>
+        <xs:enumeration value="text"/>
+      </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="int10-20">
+      <xs:restriction base="xs:integer">
+        <xs:minInclusive value="10"/>
+        <xs:maxInclusive value="20"/>
+      </xs:restriction>
+    </xs:simpleType>
+    
+    <xs:complexType name="methodsC">
+       <xs:simpleContent>
+         <xs:extension base="s:methods">
+            <xs:attribute name="att" type="xs:string" use="optional"/>
+         </xs:extension>
+       </xs:simpleContent>
+    </xs:complexType>
+
+</xs:schema>

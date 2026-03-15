@@ -1,0 +1,11 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://schema076.uri/"
+           elementFormDefault="qualified" attributeFormDefault="qualified"
+           xmlns:s="http://schema076.uri/">
+
+<xs:simpleType name="numbers">
+  <xs:list itemType="xs:decimal"/>
+</xs:simpleType>
+
+</xs:schema>

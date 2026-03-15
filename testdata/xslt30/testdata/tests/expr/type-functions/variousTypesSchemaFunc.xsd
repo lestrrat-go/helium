@@ -1,0 +1,443 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+	targetNamespace="http://www.schemafunc.example.com/ns/various"
+	xmlns:my="http://www.schemafunc.example.com/ns/various">
+
+	<xsd:annotation>
+		<xsd:documentation> Schema for various types for node tests </xsd:documentation>
+	</xsd:annotation>
+
+	<!-- Begin definitions -->
+
+	<xsd:attribute name="specialPart" type="my:partNumberType"/>
+	<xsd:attribute name="colors" type="xsd:NMTOKENS"/>
+	<xsd:attribute name="count" type="xsd:string"/>
+
+	<xsd:element name="userNode" type="my:userType" nillable="true"/>
+
+	<xsd:element name="simpleBuiltin" type="xsd:anyURI"/>
+	<xsd:element name="simpleUserElem" type="my:partNumberType"/>
+	<xsd:element name="derivedPart" type="my:specialPartNumber"/>
+
+	<xsd:element name="de1-decimal-enumeration-inline" type="my:elem-decimal-derived-Type"/>
+	<xsd:element name="de2-decimal-maxExclusive-inline"
+		type="my:elem-decimal-maxExclusive-Inline-Type"/>
+	<xsd:element name="de3-decimal-maxInclusive-minExclusive-inline"
+		type="my:elem-decimal-maxInclusive-minExclusive-Inline-Type"/>
+	<xsd:element name="de4-decimal-minInclusive-pattern-inline"
+		type="my:elem-decimal-minInclusive-pattern-Inline-Type"/>
+	<xsd:element name="de5-decimal-fractionDigits-totalDigits-inline"
+		type="my:elem-decimal-fractionDigits-totalDigits-Inline-Type"/>
+	<xsd:element name="de6-decimal-whiteSpace-inline" type="my:elem-decimal-whiteSpace-Inline-Type"/>
+	<xsd:element name="derived-float" type="my:elem-float-derived-Type"/>
+
+	<xsd:complexType name="userType">
+		<xsd:sequence>
+			<xsd:element name="elem-anyURI" type="xsd:anyURI" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-base64Binary" type="xsd:base64Binary" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-boolean" type="xsd:boolean" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-date" type="xsd:date" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-dateTime" type="xsd:dateTime" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-decimal" type="xsd:decimal" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-double" type="xsd:double" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-duration" type="xsd:duration" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-float" type="xsd:float" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-gDay" type="xsd:gDay" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-gMonth" type="xsd:string" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-gMonthDay" type="xsd:gMonthDay" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-gYear" type="xsd:gYear" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-gYearMonth" type="xsd:gYearMonth" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-hexBinary" type="xsd:hexBinary" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-integer" type="xsd:integer" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-QName" type="xsd:QName" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-string" type="xsd:string" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-time" type="xsd:time" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-normalizedString" type="xsd:normalizedString" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-token" type="xsd:token" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-language" type="xsd:language" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-Name" type="xsd:Name" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-NCName" type="xsd:NCName" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-NMTOKEN" type="xsd:NMTOKEN" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-int" type="xsd:int" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-nonPositiveInteger" type="xsd:nonPositiveInteger" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-positiveInteger" type="xsd:positiveInteger" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-nonNegativeInteger" type="xsd:nonNegativeInteger" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-negativeInteger" type="xsd:negativeInteger" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-long" type="xsd:long" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-unsignedLong" type="xsd:unsignedLong" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-unsignedInt" type="xsd:unsignedInt" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-short" type="xsd:short" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-unsignedShort" type="xsd:unsignedShort" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-byte" type="xsd:byte" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-unsignedByte" type="xsd:unsignedByte" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-ID-attr" minOccurs="0" maxOccurs="unbounded">
+				<xsd:complexType>
+					<xsd:attribute name="attr1" type="xsd:ID"/>
+				</xsd:complexType>
+			</xsd:element>
+			<xsd:element name="elem-IDREF-attr" minOccurs="0" maxOccurs="1">
+				<xsd:complexType>
+					<xsd:attribute name="attr1" type="xsd:IDREF"/>
+				</xsd:complexType>
+			</xsd:element>
+
+			<!-- derived types-->
+			<xsd:element name="elem-date-derived" type="my:elem-date-derived-Type" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-time-derived" type="my:elem-time-derived-Type" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-decimal-derived" type="my:elem-decimal-derived-Type"
+				minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-double-derived" type="my:elem-double-derived-Type" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-float-derived" type="my:elem-float-derived-Type" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-integer-derived" type="my:elem-integer-derived-Type"
+				minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-int-derived" type="my:elem-int-derived-Type" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-nonPositiveInteger-derived"
+				type="my:elem-nonPositiveInteger-derived-Type" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-positiveInteger-derived"
+				type="my:elem-positiveInteger-derived-Type" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-negativeInteger-derived"
+				type="my:elem-negativeInteger-derived-Type" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-long-derived" type="my:elem-long-derived-Type" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-unsignedInt-derived" type="my:elem-unsignedInt-derived-Type"
+				minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-short-derived" type="my:elem-short-derived-Type" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-string-derived" type="my:elem-string-derived-Type" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-normalizedString-derived"
+				type="my:elem-normalizedString-derived-Type" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-token-derived" type="my:elem-token-derived-Type" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-language-derived" type="my:elem-language-derived-Type"
+				minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-Name-derived" type="my:elem-Name-derived-Type" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-NCName-derived" type="my:elem-NCName-derived-Type" minOccurs="0"
+				maxOccurs="unbounded"/>
+			<xsd:element name="elem-NMTOKEN-derived" type="my:elem-NMTOKEN-derived-Type"
+				minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-ID-attr-derived" minOccurs="0" maxOccurs="unbounded">
+				<xsd:complexType>
+					<xsd:attribute name="attr1" type="my:id2-ID-length-Type"/>
+				</xsd:complexType>
+			</xsd:element>
+			<xsd:element name="elem-IDREF-attr-derived" minOccurs="0" maxOccurs="unbounded">
+				<xsd:complexType>
+					<xsd:attribute name="attr1" type="my:ir1-IDREF-enumeration-Type"/>
+				</xsd:complexType>
+			</xsd:element>
+			<xsd:element name="elem-duration-derived" type="my:elem-duration-derived-Type"
+				minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-QName-derived" type="my:elem-QName-derived-Type" minOccurs="0"
+				maxOccurs="unbounded"/>
+
+			<xsd:element ref="my:simpleBuiltin" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:simpleUserElem" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:derivedPart" minOccurs="0" maxOccurs="unbounded"/>
+		</xsd:sequence>
+		<xsd:attribute ref="my:specialPart" use="optional"/>
+		<xsd:attribute name="my_decimal" type="my:elem-decimal-derived-Type" use="optional"/>
+	</xsd:complexType>
+
+	<xsd:simpleType name="elem-date-derived-Type">
+		<xsd:restriction base="xsd:date">
+			<xsd:enumeration value="1948-11-02"/>
+			<xsd:enumeration value="1956-11-06"/>
+			<xsd:enumeration value="1960-11-08"/>
+			<xsd:enumeration value="1964-11-03"/>
+			<xsd:enumeration value="1968-11-05"/>
+			<xsd:enumeration value="1992-11-03"/>
+			<xsd:enumeration value="1996-11-05"/>
+			<xsd:enumeration value="2000-11-07"/>
+			<xsd:enumeration value="2004-11-02"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-time-derived-Type">
+		<xsd:restriction base="xsd:time">
+			<xsd:minInclusive value="19:27:00"/>
+			<xsd:pattern value="\d\d:\d\d:00"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="partNumberType">
+		<xsd:restriction base="xsd:string">
+			<xsd:pattern value="\d{3}-[A-Z]{2}"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="derivedURI">
+		<xsd:restriction base="xsd:anyURI">
+			<xsd:enumeration value="http://test1.org"/>
+			<xsd:enumeration value="http://test2.org"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+
+	<xsd:simpleType name="specialPartNumber">
+		<xsd:restriction base="my:partNumberType">
+			<xsd:enumeration value="000-AB"/>
+			<xsd:enumeration value="000-CD"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-decimal-derived-Type">
+		<xsd:restriction base="xsd:decimal">
+			<xsd:enumeration value="1"/>
+			<xsd:enumeration value="-1"/>
+			<xsd:enumeration value="0"/>
+			<xsd:enumeration value="1.1"/>
+			<xsd:enumeration value="-1.1"/>
+			<xsd:enumeration value="1.01"/>
+			<xsd:enumeration value="-1.01"/>
+			<xsd:enumeration value="1.001"/>
+			<xsd:enumeration value="-1.001"/>
+			<xsd:enumeration value="1.0001"/>
+			<xsd:enumeration value="-1.0001"/>
+			<xsd:enumeration value="1.0101"/>
+			<xsd:enumeration value="-1.0101"/>
+			<xsd:enumeration value="11111"/>
+			<xsd:enumeration value="-11111"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-decimal-maxExclusive-Inline-Type">
+		<xsd:restriction base="xsd:decimal">
+			<xsd:maxExclusive value="123.456789"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-decimal-maxInclusive-minExclusive-Inline-Type">
+		<xsd:restriction base="xsd:decimal">
+			<xsd:minExclusive value="-1"/>
+			<xsd:maxInclusive value="1048.576"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-decimal-minInclusive-pattern-Inline-Type">
+		<xsd:restriction base="xsd:decimal">
+			<xsd:pattern value="\d{4}\.\d{3}"/>
+			<xsd:minInclusive value="1000.000"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-decimal-fractionDigits-totalDigits-Inline-Type">
+		<xsd:restriction base="xsd:decimal">
+			<xsd:totalDigits value="11"/>
+			<xsd:fractionDigits value="4"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-decimal-whiteSpace-Inline-Type">
+		<xsd:restriction base="xsd:decimal">
+			<xsd:whiteSpace value="collapse"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-double-derived-Type">
+		<xsd:restriction base="xsd:double">
+			<xsd:minInclusive value="-1"/>
+			<xsd:maxInclusive value="2"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-float-derived-Type">
+		<xsd:restriction base="xsd:float">
+			<xsd:enumeration value="1"/>
+			<xsd:enumeration value="-1"/>
+			<xsd:enumeration value="0"/>
+			<xsd:enumeration value="-0"/>
+			<xsd:enumeration value="INF"/>
+			<xsd:enumeration value="-INF"/>
+			<xsd:enumeration value="NaN"/>
+			<xsd:enumeration value="7"/>
+			<xsd:enumeration value="1267.43233E12"/>
+			<xsd:enumeration value="12.78e-2"/>
+			<xsd:enumeration value="-12.78e-2"/>
+			<xsd:enumeration value="12345"/>
+			<xsd:enumeration value="-1.000000000000001E-14"/>
+			<xsd:enumeration value="-22222"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-integer-derived-Type">
+		<xsd:restriction base="xsd:integer">
+			<xsd:minExclusive value="-1000"/>
+			<xsd:maxExclusive value="1000"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-int-derived-Type">
+		<xsd:restriction base="xsd:int">
+			<xsd:pattern value="\-\d{5}"/>
+			<xsd:minExclusive value="-10485"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-nonPositiveInteger-derived-Type">
+		<xsd:restriction base="xsd:nonPositiveInteger">
+			<xsd:whiteSpace value="collapse"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-positiveInteger-derived-Type">
+		<xsd:restriction base="xsd:positiveInteger">
+			<xsd:minInclusive value="1000"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-negativeInteger-derived-Type">
+		<xsd:restriction base="xsd:negativeInteger">
+			<xsd:enumeration value="-555"/>
+			<xsd:enumeration value="-1"/>
+			<xsd:enumeration value="-9"/>
+			<xsd:enumeration value="-32767"/>
+			<xsd:enumeration value="-74146434249484"/>
+			<xsd:enumeration value="-5643"/>
+			<xsd:enumeration value="-83457734435"/>
+			<xsd:enumeration value="-6972334"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-long-derived-Type">
+		<xsd:restriction base="xsd:long">
+			<xsd:totalDigits value="17"/>
+			<xsd:fractionDigits value="0"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-unsignedInt-derived-Type">
+		<xsd:restriction base="xsd:unsignedInt">
+			<xsd:enumeration value="573231403"/>
+			<xsd:enumeration value="1686"/>
+			<xsd:enumeration value="51567634"/>
+			<xsd:enumeration value="1248481"/>
+			<xsd:enumeration value="1"/>
+			<xsd:enumeration value="26"/>
+			<xsd:enumeration value="94173"/>
+			<xsd:enumeration value="327"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-short-derived-Type">
+		<xsd:restriction base="xsd:short">
+			<xsd:minInclusive value="-25000"/>
+			<xsd:maxInclusive value="25000"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-string-derived-Type">
+		<xsd:restriction base="xsd:string">
+			<xsd:minLength value="3"/>
+			<xsd:maxLength value="25"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-normalizedString-derived-Type">
+		<xsd:restriction base="xsd:normalizedString">
+			<xsd:minLength value="3"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-token-derived-Type">
+		<xsd:restriction base="xsd:token">
+			<xsd:pattern value="([A-Z][a-z]{1,2}\s){2},\s[A-Z]{2}\s13121-1314"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-language-derived-Type">
+		<xsd:restriction base="xsd:language">
+			<xsd:maxLength value="2"/>
+			<xsd:whiteSpace value="collapse"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-Name-derived-Type">
+		<xsd:restriction base="xsd:Name">
+			<xsd:enumeration value="abcdefg"/>
+			<xsd:enumeration value="colon:name"/>
+			<xsd:enumeration value="_underscore_"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-NCName-derived-Type">
+		<xsd:restriction base="xsd:NCName">
+			<xsd:pattern value="i\c{19}"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-NMTOKEN-derived-Type">
+		<xsd:restriction base="xsd:NMTOKEN">
+			<xsd:enumeration value="development"/>
+			<xsd:enumeration value="file"/>
+			<xsd:enumeration value="DOM:co"/>
+			<xsd:enumeration value="issues_of:XML"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="id2-ID-length-Type">
+		<xsd:restriction base="xsd:ID">
+			<xsd:length value="6"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="ir1-IDREF-enumeration-Type">
+		<xsd:restriction base="xsd:IDREF">
+			<xsd:enumeration value="_a1234"/>
+			<xsd:enumeration value="def"/>
+			<xsd:enumeration value="ghi"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+
+	<xsd:simpleType name="elem-duration-derived-Type">
+		<xsd:restriction base="xsd:duration">
+			<xsd:enumeration value="P1Y2MT4H"/>
+			<xsd:enumeration value="P1Y2MT5M"/>
+			<xsd:enumeration value="P1Y2MT6S"/>
+			<xsd:enumeration value="P1Y3D"/>
+			<xsd:enumeration value="P1Y3DT5M"/>
+			<xsd:enumeration value="P1Y3DT6S"/>
+			<xsd:enumeration value="P2M3DT4H"/>
+			<xsd:enumeration value="P2M3DT5M"/>
+			<xsd:enumeration value="P2MT4H"/>
+			<xsd:enumeration value="P2MT4H5M"/>
+			<xsd:enumeration value="P2MT4H6S"/>
+			<xsd:enumeration value="P2MT5M"/>
+			<xsd:enumeration value="P2MT5M6S"/>
+			<xsd:enumeration value="PT4H6S"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="elem-QName-derived-Type">
+		<xsd:restriction base="xsd:QName">
+			<xsd:enumeration value="the"/>
+			<xsd:enumeration value="quick"/>
+			<xsd:enumeration value="my:brown-bear"/>
+			<xsd:enumeration value="my:dog"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+</xsd:schema>

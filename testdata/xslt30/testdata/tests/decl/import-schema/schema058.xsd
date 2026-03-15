@@ -1,0 +1,29 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://schema058.uri/"
+           elementFormDefault="qualified"
+           xmlns:s="http://schema058.uri/">
+
+<xs:complexType name="extended">
+  <xs:complexContent>
+    <xs:extension base="s:origin">
+      <xs:sequence>
+        <xs:element name="c" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attribute name="price" type="xs:decimal"/>
+      <xs:attribute name="discount" type="xs:decimal" fixed="0.01" use="optional"/>
+      <xs:attribute name="rebate" type="xs:decimal" fixed="0.01" use="required"/>
+      <xs:attribute name="cost" type="xs:decimal" default="20.01" use="optional"/>
+    </xs:extension>
+  </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="origin">
+  <xs:choice>
+  <xs:element name="j"/>
+  <xs:element name="k"/>
+  </xs:choice>
+</xs:complexType>
+
+
+</xs:schema>

@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<s:schema targetNamespace="http://ns.example.com/sch002" xmlns:tn="http://ns.example.com/sch002"
+  xmlns:s="http://www.w3.org/2001/XMLSchema">
+
+  <s:element name="complexTest" type="tn:complexTestType"/>
+  
+  <s:complexType name="complexTestType">
+    <s:sequence>
+      <s:element name="subject" type="tn:subjectType"/>
+      <s:element name="size" type="s:integer"/>
+    </s:sequence>
+    <s:attribute ref="tn:type"/>
+  </s:complexType>
+  
+  <s:simpleType name="subjectType">
+    <s:restriction base="s:string">
+      <s:enumeration value="math"/>
+      <s:enumeration value="language"/>
+      <s:enumeration value="chemistry"/>
+      <s:enumeration value="geography"/>
+    </s:restriction>
+  </s:simpleType>
+  
+  <s:element name="myTest" type="tn:testType"/>
+  <s:attribute name="type" type="tn:testType"/>
+
+  <s:simpleType name="testType">
+    <s:restriction base="s:positiveInteger">
+      <s:minInclusive value="1"/>
+      <s:maxInclusive value="10000"/>
+    </s:restriction>
+  </s:simpleType>
+
+</s:schema>

@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+
+	<xsd:annotation>
+		<xsd:documentation> One-of-each approach for constructing a test schema for built-in types
+		</xsd:documentation>
+	</xsd:annotation>
+
+	<!-- Begin definitions -->
+
+	<xsd:attribute name="attr-anyURI-match" type="xsd:anyURI"/>
+	<xsd:attribute name="attr-base64Binary-match" type="xsd:base64Binary"/>
+	<xsd:attribute name="attr-boolean-match" type="xsd:boolean"/>
+	<xsd:attribute name="attr-date-match" type="xsd:date"/>
+	<xsd:attribute name="attr-dateTime-match" type="xsd:dateTime"/>
+	<xsd:attribute name="attr-decimal-match" type="xsd:decimal"/>
+	<xsd:attribute name="attr-double-match" type="xsd:double"/>
+	<xsd:attribute name="attr-duration-match" type="xsd:duration"/>
+	<xsd:attribute name="attr-float-match" type="xsd:float"/>
+	<xsd:attribute name="attr-gDay-match" type="xsd:gDay"/>
+	<xsd:attribute name="attr-gMonth-match" type="xsd:string"/>
+	<xsd:attribute name="attr-gMonthDay-match" type="xsd:gMonthDay"/>
+	<xsd:attribute name="attr-gYear-match" type="xsd:gYear"/>
+	<xsd:attribute name="attr-gYearMonth-match" type="xsd:gYearMonth"/>
+	<xsd:attribute name="attr-hexBinary-match" type="xsd:hexBinary"/>
+	<xsd:attribute name="attr-integer-match" type="xsd:integer"/>
+	<xsd:attribute name="attr-QName-match" type="xsd:QName"/>
+	<xsd:attribute name="attr-string-match" type="xsd:string"/>
+	<xsd:attribute name="attr-time-match" type="xsd:time"/>
+	<xsd:attribute name="attr-normalizedString-match" type="xsd:normalizedString"/>
+	<xsd:attribute name="attr-token-match" type="xsd:token"/>
+	<xsd:attribute name="attr-language-match" type="xsd:language"/>
+	<xsd:attribute name="attr-Name-match" type="xsd:Name"/>
+	<xsd:attribute name="attr-NCName-match" type="xsd:NCName"/>
+	<xsd:attribute name="attr-NMTOKEN-match" type="xsd:NMTOKEN"/>
+	<xsd:attribute name="attr-int-match" type="xsd:int"/>
+	<xsd:attribute name="attr-nonPositiveInteger-match" type="xsd:nonPositiveInteger"/>
+	<xsd:attribute name="attr-positiveInteger-match" type="xsd:positiveInteger"/>
+	<xsd:attribute name="attr-nonNegativeInteger-match" type="xsd:nonNegativeInteger"/>
+	<xsd:attribute name="attr-negativeInteger-match" type="xsd:negativeInteger"/>
+	<xsd:attribute name="attr-long-match" type="xsd:long"/>
+	<xsd:attribute name="attr-unsignedLong-match" type="xsd:unsignedLong"/>
+	<xsd:attribute name="attr-unsignedInt-match" type="xsd:unsignedInt"/>
+	<xsd:attribute name="attr-short-match" type="xsd:short"/>
+	<xsd:attribute name="attr-unsignedShort-match" type="xsd:unsignedShort"/>
+	<xsd:attribute name="attr-byte-match" type="xsd:byte"/>
+	<xsd:attribute name="attr-unsignedByte-match" type="xsd:unsignedByte"/>
+	<xsd:attribute name="attr-de1-decimal-enumeration-match" type="de1-decimal-enumeration-Match"/>
+
+	<xsd:element name="doc-match" type="docType-match"/>
+
+	<xsd:element name="elem-anyURI-match" type="xsd:anyURI"/>
+	<xsd:element name="elem-base64Binary-match" type="xsd:base64Binary"/>
+	<xsd:element name="elem-boolean-match" type="xsd:boolean"/>
+	<xsd:element name="elem-date-match" type="xsd:date"/>
+	<xsd:element name="elem-dateTime-match" type="xsd:dateTime"/>
+	<xsd:element name="elem-decimal-match" type="xsd:decimal"/>
+	<xsd:element name="elem-double-match" type="xsd:double"/>
+	<xsd:element name="elem-duration-match" type="xsd:duration"/>
+	<xsd:element name="elem-float-match" type="xsd:float"/>
+	<xsd:element name="elem-gDay-match" type="xsd:gDay"/>
+	<xsd:element name="elem-gMonth-match" type="xsd:string"/>
+	<xsd:element name="elem-gMonthDay-match" type="xsd:gMonthDay"/>
+	<xsd:element name="elem-gYear-match" type="xsd:gYear"/>
+	<xsd:element name="elem-gYearMonth-match" type="xsd:gYearMonth"/>
+	<xsd:element name="elem-hexBinary-match" type="xsd:hexBinary"/>
+	<xsd:element name="elem-integer-match" type="xsd:integer"/>
+	<xsd:element name="elem-QName-match" type="xsd:QName"/>
+	<xsd:element name="elem-string-match" type="xsd:string"/>
+	<xsd:element name="elem-time-match" type="xsd:time"/>
+	<xsd:element name="elem-normalizedString-match" type="xsd:normalizedString"/>
+	<xsd:element name="elem-token-match" type="xsd:token"/>
+	<xsd:element name="elem-language-match" type="xsd:language"/>
+	<xsd:element name="elem-Name-match" type="xsd:Name"/>
+	<xsd:element name="elem-NCName-match" type="xsd:NCName"/>
+	<xsd:element name="elem-NMTOKEN-match" type="xsd:NMTOKEN"/>
+	<xsd:element name="elem-int-match" type="xsd:int"/>
+	<xsd:element name="elem-nonPositiveInteger-match" type="xsd:nonPositiveInteger"/>
+	<xsd:element name="elem-positiveInteger-match" type="xsd:positiveInteger"/>
+	<xsd:element name="elem-nonNegativeInteger-match" type="xsd:nonNegativeInteger"/>
+	<xsd:element name="elem-negativeInteger-match" type="xsd:negativeInteger"/>
+	<xsd:element name="elem-long-match" type="xsd:long"/>
+	<xsd:element name="elem-unsignedLong-match" type="xsd:unsignedLong"/>
+	<xsd:element name="elem-unsignedInt-match" type="xsd:unsignedInt"/>
+	<xsd:element name="elem-short-match" type="xsd:short"/>
+	<xsd:element name="elem-unsignedShort-match" type="xsd:unsignedShort"/>
+	<xsd:element name="elem-byte-match" type="xsd:byte"/>
+	<xsd:element name="elem-unsignedByte-match" type="xsd:unsignedByte"/>
+
+	<xsd:element name="de1-decimal-enumeration-match" type="de1-decimal-enumeration-Match"/>
+	<xsd:element name="de2-decimal-maxExclusive-match" type="de2-decimal-maxExclusive-Match"/>
+	<xsd:element name="de3-decimal-maxInclusive-minExclusive-match"
+		type="de3-decimal-maxInclusive-minExclusive-Match"/>
+	<xsd:element name="de4-decimal-minInclusive-pattern-match"
+		type="de4-decimal-minInclusive-pattern-Match"/>
+	<xsd:element name="de5-decimal-fractionDigits-totalDigits-match"
+		type="de5-decimal-fractionDigits-totalDigits-Match"/>
+	<xsd:element name="de6-decimal-whiteSpace-match" type="de6-decimal-whiteSpace-Match"/>
+
+	<xsd:complexType name="docType-match">
+		<xsd:sequence>
+			<xsd:element ref="elem-anyURI-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-base64Binary-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-boolean-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-date-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-dateTime-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-decimal-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-double-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-duration-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-float-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-gDay-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-gMonth-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-gMonthDay-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-gYear-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-gYearMonth-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-hexBinary-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-integer-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-QName-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-string-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-time-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-normalizedString-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-token-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-language-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-Name-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-NCName-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-NMTOKEN-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-int-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-nonPositiveInteger-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-positiveInteger-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-nonNegativeInteger-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-negativeInteger-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-long-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-unsignedLong-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-unsignedInt-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-short-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-unsignedShort-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-byte-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-unsignedByte-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-ID-attr-match" minOccurs="0" maxOccurs="1">
+				<xsd:complexType>
+					<xsd:attribute name="attr1" type="xsd:ID"/>
+					<xsd:attribute name="attr2" type="xsd:integer"/>
+				</xsd:complexType>
+			</xsd:element>
+			<xsd:element name="elem-IDREF-attr-match" minOccurs="0" maxOccurs="1">
+				<xsd:complexType>
+					<xsd:attribute name="attr1" type="xsd:IDREF"/>
+					<xsd:attribute name="attr2" type="xsd:byte"/>
+				</xsd:complexType>
+			</xsd:element>
+			<xsd:element name="elem-ALL-attr-Types-match" minOccurs="0" maxOccurs="1">
+				<xsd:complexType>
+					<xsd:attribute ref="attr-anyURI-match" use="optional"/>
+					<xsd:attribute ref="attr-base64Binary-match" use="optional"/>
+					<xsd:attribute ref="attr-boolean-match" use="optional"/>
+					<xsd:attribute ref="attr-date-match" use="optional"/>
+					<xsd:attribute ref="attr-dateTime-match" use="optional"/>
+					<xsd:attribute ref="attr-decimal-match" use="optional"/>
+					<xsd:attribute ref="attr-double-match" use="optional"/>
+					<xsd:attribute ref="attr-duration-match" use="optional"/>
+					<xsd:attribute ref="attr-float-match" use="optional"/>
+					<xsd:attribute ref="attr-gDay-match" use="optional"/>
+					<xsd:attribute ref="attr-gMonth-match" use="optional"/>
+					<xsd:attribute ref="attr-gMonthDay-match" use="optional"/>
+					<xsd:attribute ref="attr-gYear-match" use="optional"/>
+					<xsd:attribute ref="attr-gYearMonth-match" use="optional"/>
+					<xsd:attribute ref="attr-hexBinary-match" use="optional"/>
+					<xsd:attribute ref="attr-integer-match" use="optional"/>
+					<xsd:attribute ref="attr-QName-match" use="optional"/>
+					<xsd:attribute ref="attr-string-match" use="optional"/>
+					<xsd:attribute ref="attr-time-match" use="optional"/>
+					<xsd:attribute ref="attr-normalizedString-match" use="optional"/>
+					<xsd:attribute ref="attr-token-match" use="optional"/>
+					<xsd:attribute ref="attr-language-match" use="optional"/>
+					<xsd:attribute ref="attr-Name-match" use="optional"/>
+					<xsd:attribute ref="attr-NCName-match" use="optional"/>
+					<xsd:attribute ref="attr-NMTOKEN-match" use="optional"/>
+					<xsd:attribute ref="attr-int-match" use="optional"/>
+					<xsd:attribute ref="attr-nonPositiveInteger-match" use="optional"/>
+					<xsd:attribute ref="attr-positiveInteger-match" use="optional"/>
+					<xsd:attribute ref="attr-nonNegativeInteger-match" use="optional"/>
+					<xsd:attribute ref="attr-negativeInteger-match" use="optional"/>
+					<xsd:attribute ref="attr-long-match" use="optional"/>
+					<xsd:attribute ref="attr-unsignedLong-match" use="optional"/>
+					<xsd:attribute ref="attr-unsignedInt-match" use="optional"/>
+					<xsd:attribute ref="attr-short-match" use="optional"/>
+					<xsd:attribute ref="attr-unsignedShort-match" use="optional"/>
+					<xsd:attribute ref="attr-byte-match" use="optional"/>
+					<xsd:attribute ref="attr-unsignedByte-match" use="optional"/>
+					<xsd:attribute ref="attr-de1-decimal-enumeration-match" use="optional"/>
+				</xsd:complexType>
+			</xsd:element>
+			<xsd:element ref="de1-decimal-enumeration-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="de2-decimal-maxExclusive-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="de3-decimal-maxInclusive-minExclusive-match" minOccurs="0"
+				maxOccurs="1"/>
+			<xsd:element ref="de4-decimal-minInclusive-pattern-match" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="de5-decimal-fractionDigits-totalDigits-match" minOccurs="0"
+				maxOccurs="1"/>
+			<xsd:element ref="de6-decimal-whiteSpace-match" minOccurs="0" maxOccurs="1"/>
+		</xsd:sequence>
+	</xsd:complexType>
+
+	<!-- Following are types derived from decimal -->
+
+	<xsd:simpleType name="de1-decimal-enumeration-Match">
+		<xsd:restriction base="xsd:decimal">
+			<xsd:enumeration value="0"/>
+			<xsd:enumeration value="1"/>
+			<xsd:enumeration value="-1"/>
+			<xsd:enumeration value="1.0001"/>
+			<xsd:enumeration value="-1.0001"/>
+			<xsd:enumeration value="1.001"/>
+			<xsd:enumeration value="-1.001"/>			
+			<xsd:enumeration value="1.1"/>
+			<xsd:enumeration value="-1.1"/>
+			<xsd:enumeration value="1.01"/>
+			<xsd:enumeration value="-1.01"/>			
+			<xsd:enumeration value="1.0101"/>
+			<xsd:enumeration value="-1.0101"/>
+			<xsd:enumeration value="11111"/>
+			<xsd:enumeration value="-11111"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="de2-decimal-maxExclusive-Match">
+		<xsd:restriction base="xsd:decimal">
+			<xsd:maxExclusive value="123.456789"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="de3-decimal-maxInclusive-minExclusive-Match">
+		<xsd:restriction base="xsd:decimal">
+			<xsd:minExclusive value="-1"/>
+			<xsd:maxInclusive value="1048.576"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="de4-decimal-minInclusive-pattern-Match">
+		<xsd:restriction base="xsd:decimal">
+			<xsd:pattern value="\d{4}\.\d{3}"/>
+			<xsd:minInclusive value="1000.000"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="de5-decimal-fractionDigits-totalDigits-Match">
+		<xsd:restriction base="xsd:decimal">
+			<xsd:totalDigits value="11"/>
+			<xsd:fractionDigits value="4"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="de6-decimal-whiteSpace-Match">
+		<xsd:restriction base="xsd:decimal">
+			<xsd:whiteSpace value="collapse"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+</xsd:schema>

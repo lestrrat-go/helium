@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+			targetNamespace="http://www.example.com/ns/union-list"
+			xmlns:my="http://www.example.com/ns/union-list">
+
+	<xsd:annotation>
+		<xsd:documentation>
+      		Schema for various types for node tests 
+		</xsd:documentation>
+	</xsd:annotation>
+
+<!-- Begin definitions -->
+	<xsd:element name="userNode" type="my:userType" nillable="true" />
+	
+	<xsd:element name="list-builtin" type="xsd:NMTOKENS"/>
+	<xsd:element name="list-primitive" type="my:myPrimitiveListType"/>
+	<xsd:element name="list-derived" type="my:myDerivedListType"/>
+	<xsd:element name="list-user-defined" type="my:myListType"/>
+	<xsd:element name="list-union" type="my:myUnionListType"/>
+	
+	<xsd:element name="union-primitive" type="my:primitiveUnionType"/>
+	<xsd:element name="union-derived" type="my:derivedUnionType"/>
+	<xsd:element name="union-user-defined" type="my:user-definedUnionType"/>
+	<xsd:element name="union-list" type="my:listUnionType"/>
+	<xsd:element name="part-integer-union" type="my:partIntegerUnionType"/>
+	<xsd:element name="union-complex" type="my:complexUnionType"/>
+	
+	<xsd:attribute name="listParts" type="my:myListType"/>
+	<xsd:attribute name="colors" type="xsd:NMTOKENS"/>
+	<xsd:attribute name="union" type="my:partIntegerUnionType"/>
+			
+	 
+	<xsd:complexType name="userType">
+		<xsd:sequence>
+			<xsd:element ref="my:list-builtin" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:list-primitive" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:list-derived" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:list-user-defined" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:list-union" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:union-primitive" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:union-derived" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:union-user-defined" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:union-list" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:part-integer-union" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:union-complex" minOccurs="0" maxOccurs="unbounded"/>
+   		</xsd:sequence>
+			<xsd:attribute ref="my:listParts" />
+	</xsd:complexType>
+	
+	<xsd:simpleType name="partNumberType">
+    <xsd:restriction base="xsd:string">
+      <xsd:pattern value="\d{3}-[A-Z]{2}"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+
+  <xsd:simpleType name="myPrimitiveListType">
+  	<xsd:list itemType="xsd:double"/>
+  </xsd:simpleType>
+  
+  <xsd:simpleType name="myDerivedListType">
+  	<xsd:list itemType="xsd:language"/>
+  </xsd:simpleType>
+
+  <xsd:simpleType name="myListType">
+  	<xsd:list itemType="my:partNumberType"/>
+  </xsd:simpleType>
+  
+  <xsd:simpleType name="myUnionListType">
+  	<xsd:list itemType="my:partIntegerUnionType"/>
+  </xsd:simpleType>
+
+  <xsd:simpleType name="primitiveUnionType">
+  	<xsd:union memberTypes="xsd:string xsd:integer"/>
+  </xsd:simpleType>
+  
+  <xsd:simpleType name="derivedUnionType">
+  	<xsd:union memberTypes="xsd:Name xsd:byte"/>
+  </xsd:simpleType>
+  
+  <xsd:simpleType name="user-definedUnionType">
+  	<xsd:union memberTypes="my:partNumberType my:derived-float-Type"/>
+  </xsd:simpleType>
+  
+  <xsd:simpleType name="listUnionType">
+  	<xsd:union memberTypes="my:myPrimitiveListType my:myDerivedListType my:myListType"/>
+  </xsd:simpleType>
+
+  <xsd:simpleType name="partIntegerUnionType">
+  	<xsd:union memberTypes="my:partNumberType xsd:integer"/>
+  </xsd:simpleType>
+  
+  <xsd:simpleType name="complexUnionType">
+  	<xsd:union memberTypes="xsd:integer xsd:byte my:partNumberType my:myPrimitiveListType"/>
+  </xsd:simpleType>
+  
+  <xsd:simpleType name="derived-float-Type">
+		<xsd:restriction base="xsd:float">
+			<xsd:enumeration value="1" />
+			<xsd:enumeration value="-1" />
+			<xsd:enumeration value="0" />
+			<xsd:enumeration value="-0" />
+			<xsd:enumeration value="INF" />
+			<xsd:enumeration value="-INF" />
+			<xsd:enumeration value="NaN" />
+			<xsd:enumeration value="7" />
+			<xsd:enumeration value="1267.43233E12" />
+			<xsd:enumeration value="12.78e-2" />
+			<xsd:enumeration value="-12.78e-2" />
+			<xsd:enumeration value="12345" />
+			<xsd:enumeration value="-1.000000000000001E-14" />
+			<xsd:enumeration value="-22222" />
+		</xsd:restriction>
+	</xsd:simpleType>
+</xsd:schema>
