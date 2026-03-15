@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -97,6 +98,10 @@ func (ec *execContext) executeInstruction(ctx context.Context, inst Instruction)
 		return ec.execBreak(ctx, v)
 	case *NextIterationInst:
 		return ec.execNextIteration(ctx, v)
+	case *MapInst:
+		return ec.execMap(ctx, v)
+	case *MapEntryInst:
+		return ec.execMapEntry(ctx, v)
 	default:
 		return dynamicError(errCodeXTDE0820, "unsupported instruction type %T", inst)
 	}
@@ -368,7 +373,7 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 				return err
 			}
 		}
-		val, err := ec.evaluateBody(ctx, inst.Body)
+		val, err := ec.evaluateBodySeparateText(ctx, inst.Body)
 		if err != nil {
 			return err
 		}
@@ -486,6 +491,13 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 	savedCurrent := out.current
 	out.current = elem
 	defer func() { out.current = savedCurrent }()
+
+	// Apply attribute sets
+	if len(inst.UseAttrSets) > 0 {
+		if err := ec.applyAttributeSets(ctx, inst.UseAttrSets); err != nil {
+			return err
+		}
+	}
 
 	for _, child := range inst.Body {
 		if err := ec.executeInstruction(ctx, child); err != nil {
@@ -988,10 +1000,10 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		return nil
 	}
 
-	return ec.execCopyNode(ctx, ec.contextNode, inst.Body)
+	return ec.execCopyNode(ctx, ec.contextNode, inst.Body, inst.UseAttrSets)
 }
 
-func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body []Instruction) error {
+func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body []Instruction, useAttrSets ...[]string) error {
 	if node == nil {
 		return nil
 	}
@@ -1026,6 +1038,13 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body 
 		savedCurrent := out.current
 		out.current = elem
 		defer func() { out.current = savedCurrent }()
+
+		// Apply attribute sets if specified
+		if len(useAttrSets) > 0 && len(useAttrSets[0]) > 0 {
+			if err := ec.applyAttributeSets(ctx, useAttrSets[0]); err != nil {
+				return err
+			}
+		}
 
 		for _, child := range body {
 			if err := ec.executeInstruction(ctx, child); err != nil {
@@ -1246,12 +1265,42 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *Liter
 		out.current = savedCurrent
 	}()
 
+	// Apply attribute sets (before body so body can override)
+	if len(inst.UseAttrSets) > 0 {
+		if err := ec.applyAttributeSets(ctx, inst.UseAttrSets); err != nil {
+			return err
+		}
+	}
+
 	for _, child := range inst.Body {
 		if err := ec.executeInstruction(ctx, child); err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+// applyAttributeSets applies named attribute sets to the current output element.
+func (ec *execContext) applyAttributeSets(ctx context.Context, names []string) error {
+	for _, name := range names {
+		asDef := ec.stylesheet.attributeSets[name]
+		if asDef == nil {
+			continue
+		}
+		// Apply referenced attribute sets first (use-attribute-sets on the set itself)
+		if len(asDef.UseAttrSets) > 0 {
+			if err := ec.applyAttributeSets(ctx, asDef.UseAttrSets); err != nil {
+				return err
+			}
+		}
+		// Execute the attribute instructions
+		for _, inst := range asDef.Attrs {
+			if err := ec.executeInstruction(ctx, inst); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
@@ -2613,4 +2662,95 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 		return nil
 	}
 	return elem.DeclareNamespace(name, value)
+}
+
+// execMap executes an xsl:map instruction, producing a MapItem from child
+// xsl:map-entry instructions.
+func (ec *execContext) execMap(ctx context.Context, inst *MapInst) error {
+	var entries []xpath3.MapEntry
+	for _, child := range inst.Body {
+		me, ok := child.(*MapEntryInst)
+		if !ok {
+			// Non-map-entry children are executed normally (e.g., xsl:variable)
+			if err := ec.executeInstruction(ctx, child); err != nil {
+				return err
+			}
+			continue
+		}
+		// Evaluate the key
+		xpathCtx := ec.newXPathContext(ec.contextNode)
+		keyResult, err := me.Key.Evaluate(xpathCtx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		keySeq := keyResult.Sequence()
+		if len(keySeq) != 1 {
+			return dynamicError("XPTY0004", "xsl:map-entry key must be a single atomic value")
+		}
+		keyAV, err := xpath3.AtomizeItem(keySeq[0])
+		if err != nil {
+			return err
+		}
+
+		// Evaluate the value
+		var valSeq xpath3.Sequence
+		if me.Select != nil {
+			valResult, err := me.Select.Evaluate(xpathCtx, ec.contextNode)
+			if err != nil {
+				return err
+			}
+			valSeq = valResult.Sequence()
+		} else if len(me.Body) > 0 {
+			valSeq, err = ec.evaluateBody(ctx, me.Body)
+			if err != nil {
+				return err
+			}
+		}
+
+		entries = append(entries, xpath3.MapEntry{Key: keyAV, Value: valSeq})
+	}
+
+	m := xpath3.NewMap(entries)
+	out := ec.currentOutput()
+	if out.captureItems {
+		out.pendingItems = append(out.pendingItems, m)
+		return nil
+	}
+	// If not in capture mode, maps can't be added to DOM — produce string representation
+	text, err := ec.resultDoc.CreateText([]byte(fmt.Sprint(m)))
+	if err != nil {
+		return err
+	}
+	return ec.addNode(text)
+}
+
+// execMapEntry is a no-op when called outside xsl:map; entries are handled
+// by execMap directly.
+func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) error {
+	// When called standalone (outside xsl:map), evaluate and produce output
+	xpathCtx := ec.newXPathContext(ec.contextNode)
+	var valSeq xpath3.Sequence
+	var err error
+	if inst.Select != nil {
+		valResult, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		valSeq = valResult.Sequence()
+	} else if len(inst.Body) > 0 {
+		valSeq, err = ec.evaluateBody(ctx, inst.Body)
+		if err != nil {
+			return err
+		}
+	}
+	// Output the value as text
+	s := stringifySequenceWithSep(valSeq, " ")
+	if s != "" {
+		text, err := ec.resultDoc.CreateText([]byte(s))
+		if err != nil {
+			return err
+		}
+		return ec.addNode(text)
+	}
+	return nil
 }

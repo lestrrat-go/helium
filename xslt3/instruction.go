@@ -79,9 +79,10 @@ func (*LiteralTextInst) instructionTag() {}
 
 // ElementInst represents xsl:element.
 type ElementInst struct {
-	Name      *AVT
-	Namespace *AVT
-	Body      []Instruction
+	Name        *AVT
+	Namespace   *AVT
+	Body        []Instruction
+	UseAttrSets []string
 }
 
 func (*ElementInst) instructionTag() {}
@@ -174,8 +175,9 @@ func (*ParamInst) instructionTag() {}
 
 // CopyInst represents xsl:copy.
 type CopyInst struct {
-	Select *xpath3.Expression
-	Body   []Instruction
+	Select      *xpath3.Expression
+	Body        []Instruction
+	UseAttrSets []string
 }
 
 func (*CopyInst) instructionTag() {}
@@ -189,13 +191,14 @@ func (*CopyOfInst) instructionTag() {}
 
 // LiteralResultElement represents a non-XSLT element in the stylesheet body.
 type LiteralResultElement struct {
-	Name       string // qualified name (prefix:local)
-	Namespace  string // namespace URI
-	Prefix     string
-	LocalName  string
-	Attrs      []*LiteralAttribute
-	Namespaces map[string]string // prefix -> URI declarations to copy
-	Body       []Instruction
+	Name         string // qualified name (prefix:local)
+	Namespace    string // namespace URI
+	Prefix       string
+	LocalName    string
+	Attrs        []*LiteralAttribute
+	Namespaces   map[string]string // prefix -> URI declarations to copy
+	Body         []Instruction
+	UseAttrSets  []string // names of attribute sets to apply
 }
 
 func (*LiteralResultElement) instructionTag() {}
@@ -257,6 +260,23 @@ type XSLSequenceInst struct {
 }
 
 func (*XSLSequenceInst) instructionTag() {}
+
+// MapInst represents xsl:map.
+type MapInst struct {
+	Body []Instruction // child xsl:map-entry instructions
+}
+
+func (*MapInst) instructionTag() {}
+
+// MapEntryInst represents xsl:map-entry.
+type MapEntryInst struct {
+	xpathNS
+	Key    *xpath3.Expression // key expression
+	Select *xpath3.Expression // optional select expression for value
+	Body   []Instruction      // optional body for value
+}
+
+func (*MapEntryInst) instructionTag() {}
 
 // PerformSortInst represents xsl:perform-sort.
 type PerformSortInst struct {

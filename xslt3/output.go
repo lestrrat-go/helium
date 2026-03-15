@@ -10,10 +10,11 @@ import (
 
 // outputFrame represents the current output target during transformation.
 type outputFrame struct {
-	doc          *helium.Document // result document being built
-	current      helium.Node      // current insertion point
-	captureItems bool             // when true, xsl:sequence adds to pendingItems instead of DOM
-	pendingItems xpath3.Sequence  // captured items from xsl:sequence
+	doc               *helium.Document // result document being built
+	current           helium.Node      // current insertion point
+	captureItems      bool             // when true, xsl:sequence adds to pendingItems instead of DOM
+	separateTextNodes bool             // when true, text nodes are captured as separate string items (prevents DOM merging)
+	pendingItems      xpath3.Sequence  // captured items from xsl:sequence
 }
 
 // serializeResult writes the result document to a writer according to the

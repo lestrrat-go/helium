@@ -267,7 +267,11 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 			if err := c.compileAccumulator(elem); err != nil {
 				return err
 			}
-		case "namespace-alias", "attribute-set":
+		case "attribute-set":
+			if err := c.compileAttributeSet(elem); err != nil {
+				return err
+			}
+		case "namespace-alias":
 			// TODO: implement in later phases
 		default:
 			// Unknown top-level element - ignore for forward compatibility
@@ -304,6 +308,11 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 
 	tmpl.Name = resolveQName(getAttr(elem, "name"), c.nsBindings)
 	tmpl.Mode = getAttr(elem, "mode")
+	// XSLT 3.0 §6.7: if the stylesheet has xsl:stylesheet/@default-mode,
+	// templates without an explicit mode attribute belong to the default mode.
+	if tmpl.Mode == "" && c.stylesheet.defaultMode != "" {
+		tmpl.Mode = c.stylesheet.defaultMode
+	}
 
 	if prio := getAttr(elem, "priority"); prio != "" {
 		f, err := strconv.ParseFloat(prio, 64)
@@ -651,6 +660,41 @@ func (c *compiler) compileMode(elem *helium.Element) {
 		c.stylesheet.modeDefs = make(map[string]*ModeDef)
 	}
 	c.stylesheet.modeDefs[name] = md
+}
+
+func (c *compiler) compileAttributeSet(elem *helium.Element) error {
+	name := getAttr(elem, "name")
+	if name == "" {
+		return staticError(errCodeXTSE0010, "xsl:attribute-set requires name attribute")
+	}
+	name = resolveQName(name, c.nsBindings)
+
+	asDef := &AttributeSetDef{
+		Name:        name,
+		UseAttrSets: strings.Fields(getAttr(elem, "use-attribute-sets")),
+	}
+
+	// Compile child xsl:attribute elements
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Type() != helium.ElementNode {
+			continue
+		}
+		childElem := child.(*helium.Element)
+		if childElem.URI() != NSXSLT || childElem.LocalName() != "attribute" {
+			continue
+		}
+		inst, err := c.compileAttribute(childElem)
+		if err != nil {
+			return err
+		}
+		asDef.Attrs = append(asDef.Attrs, inst)
+	}
+
+	if c.stylesheet.attributeSets == nil {
+		c.stylesheet.attributeSets = make(map[string]*AttributeSetDef)
+	}
+	c.stylesheet.attributeSets[name] = asDef
+	return nil
 }
 
 func (c *compiler) compileDecimalFormat(elem *helium.Element) {

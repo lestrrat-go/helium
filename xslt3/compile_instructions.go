@@ -187,10 +187,9 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (Instruction, er
 	case "for-each-group":
 		return c.compileForEachGroup(elem)
 	case "map":
-		// xsl:map: stub for now
-		return &SequenceInst{}, nil
+		return c.compileMap(elem)
 	case "map-entry":
-		return &SequenceInst{}, nil
+		return c.compileMapEntry(elem)
 	case "sort":
 		// xsl:sort is handled by parent instructions
 		return nil, nil
@@ -404,6 +403,10 @@ func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
 		return nil, err
 	}
 	inst.Body = body
+
+	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
+		inst.UseAttrSets = strings.Fields(uas)
+	}
 
 	return inst, nil
 }
@@ -718,6 +721,11 @@ func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
 		return nil, err
 	}
 	inst.Body = body
+
+	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
+		inst.UseAttrSets = strings.Fields(uas)
+	}
+
 	return inst, nil
 }
 
@@ -1069,6 +1077,46 @@ func (c *compiler) compileApplyImports(elem *helium.Element) (*ApplyImportsInst,
 	return inst, nil
 }
 
+func (c *compiler) compileMap(elem *helium.Element) (*MapInst, error) {
+	body, err := c.compileChildren(elem)
+	if err != nil {
+		return nil, err
+	}
+	return &MapInst{Body: body}, nil
+}
+
+func (c *compiler) compileMapEntry(elem *helium.Element) (*MapEntryInst, error) {
+	inst := &MapEntryInst{}
+
+	keyAttr := getAttr(elem, "key")
+	if keyAttr != "" {
+		expr, err := compileXPath(keyAttr, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.Key = expr
+	} else {
+		return nil, staticError(errCodeXTSE0010, "xsl:map-entry requires key attribute")
+	}
+
+	selectAttr := getAttr(elem, "select")
+	if selectAttr != "" {
+		expr, err := compileXPath(selectAttr, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.Select = expr
+	} else {
+		body, err := c.compileChildren(elem)
+		if err != nil {
+			return nil, err
+		}
+		inst.Body = body
+	}
+
+	return inst, nil
+}
+
 func (c *compiler) compileTry(elem *helium.Element) (*TryCatchInst, error) {
 	inst := &TryCatchInst{}
 
@@ -1286,6 +1334,11 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 			LocalName: attr.LocalName(),
 			Value:     avt,
 		})
+	}
+
+	// Handle xsl:use-attribute-sets
+	if uas, ok := elem.GetAttributeNS("use-attribute-sets", NSXSLT); ok {
+		lre.UseAttrSets = strings.Fields(uas)
 	}
 
 	// Compile children

@@ -28,6 +28,7 @@ type Stylesheet struct {
 	excludePrefixes map[string]struct{} // prefixes excluded from output
 	decimalFormats  map[xpath3.QualifiedName]xpath3.DecimalFormat // named decimal formats
 	modeDefs        map[string]*ModeDef                         // mode name -> mode definition
+	attributeSets   map[string]*AttributeSetDef                  // name -> attribute set definition
 	accumulators    map[string]*AccumulatorDef                  // accumulator name -> definition
 	sourceDoc       *helium.Document                            // the parsed stylesheet document (for document(""))
 	baseURI         string                                      // base URI for resolving relative document references
@@ -118,6 +119,13 @@ type AccumulatorRule struct {
 	Select *xpath3.Expression
 	Body   []Instruction
 	New    bool // new="yes" starts a fresh value
+}
+
+// AttributeSetDef is a compiled xsl:attribute-set.
+type AttributeSetDef struct {
+	Name         string
+	Attrs        []Instruction // xsl:attribute instructions
+	UseAttrSets  []string      // names of other attribute sets to use
 }
 
 // NameTest is used for xsl:strip-space and xsl:preserve-space element names.
