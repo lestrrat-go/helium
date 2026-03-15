@@ -40,11 +40,18 @@ func compileAVT(s string, nsBindings map[string]string) (*AVT, error) {
 				return nil, staticError(errCodeXTSE0580, "unterminated AVT expression in %q", s)
 			}
 			exprStr := s[i+1 : i+1+end]
-			expr, err := compileXPath(exprStr, nsBindings)
-			if err != nil {
-				return nil, staticError(errCodeXTSE0580, "invalid XPath in AVT: %v", err)
+			// Empty expression {} or comment-only expression {(: ... :)}
+			// produce empty string per XSLT 3.0 spec.
+			trimmed := strings.TrimSpace(exprStr)
+			if trimmed == "" || isXPathCommentOnly(trimmed) {
+				parts = appendLiteral(parts, "")
+			} else {
+				expr, err := compileXPath(exprStr, nsBindings)
+				if err != nil {
+					return nil, staticError(errCodeXTSE0580, "invalid XPath in AVT: %v", err)
+				}
+				parts = append(parts, avtPart{expr: expr})
 			}
-			parts = append(parts, avtPart{expr: expr})
 			i = i + 1 + end + 1
 		case '}':
 			if i+1 < len(s) && s[i+1] == '}' {
@@ -72,11 +79,26 @@ func compileAVT(s string, nsBindings map[string]string) (*AVT, error) {
 // skipping braces inside string literals.
 func findAVTExprEnd(s string) int {
 	depth := 0
+	commentDepth := 0
 	inSingle := false
 	inDouble := false
 	for i := 0; i < len(s); i++ {
 		ch := s[i]
+		// Handle XPath comments (: ... :)
+		if commentDepth > 0 {
+			if i+1 < len(s) && ch == ':' && s[i+1] == ')' {
+				commentDepth--
+				i++ // skip ')'
+			} else if i+1 < len(s) && ch == '(' && s[i+1] == ':' {
+				commentDepth++
+				i++ // skip ':'
+			}
+			continue
+		}
 		switch {
+		case i+1 < len(s) && ch == '(' && s[i+1] == ':' && !inSingle && !inDouble:
+			commentDepth++
+			i++ // skip ':'
 		case ch == '\'' && !inDouble:
 			inSingle = !inSingle
 		case ch == '"' && !inSingle:
@@ -91,6 +113,41 @@ func findAVTExprEnd(s string) int {
 		}
 	}
 	return -1
+}
+
+// isXPathCommentOnly checks if a string consists only of XPath comments.
+// E.g., "(: this is a comment :)" or "(: nested (: comment :) :)"
+func isXPathCommentOnly(s string) bool {
+	i := 0
+	for i < len(s) {
+		if i+1 < len(s) && s[i] == '(' && s[i+1] == ':' {
+			// Find matching :)
+			depth := 1
+			j := i + 2
+			for j < len(s) && depth > 0 {
+				if j+1 < len(s) && s[j] == '(' && s[j+1] == ':' {
+					depth++
+					j += 2
+					continue
+				}
+				if j+1 < len(s) && s[j] == ':' && s[j+1] == ')' {
+					depth--
+					j += 2
+					continue
+				}
+				j++
+			}
+			if depth != 0 {
+				return false
+			}
+			i = j
+		} else if s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r' {
+			i++
+		} else {
+			return false
+		}
+	}
+	return i > 0
 }
 
 func appendLiteral(parts []avtPart, s string) []avtPart {
