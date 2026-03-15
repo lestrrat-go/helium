@@ -46,6 +46,7 @@ type XSLFunction struct {
 	Name          xpath3.QualifiedName
 	Params        []*Param
 	Body          []Instruction
+	As            string // return type constraint (e.g., "xs:string?")
 	Streamability string // "absorbing", "inspection", etc.; "" = unspecified
 }
 

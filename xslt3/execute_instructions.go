@@ -200,11 +200,23 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 
 	savedPos := ec.position
 	savedSize := ec.size
+	savedGroupKey := ec.currentGroupKey
+	savedGroup := ec.currentGroup
+	savedInGroupCtx := ec.inGroupContext
 	ec.size = len(nodes)
+	// Per XSLT 3.0: current-grouping-key() and current-group() are only
+	// available in the body of xsl:for-each-group itself, not in templates
+	// invoked by apply-templates within that body.
+	ec.currentGroupKey = nil
+	ec.currentGroup = nil
+	ec.inGroupContext = false
 	defer func() {
 		ec.position = savedPos
 		ec.size = savedSize
 		ec.tunnelParams = savedTunnel
+		ec.currentGroupKey = savedGroupKey
+		ec.currentGroup = savedGroup
+		ec.inGroupContext = savedInGroupCtx
 	}()
 
 	for i, node := range nodes {
@@ -2385,7 +2397,9 @@ func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupI
 	savedSize := ec.size
 	savedGroup := ec.currentGroup
 	savedGroupKey := ec.currentGroupKey
+	savedInGroupCtx := ec.inGroupContext
 	ec.size = len(groups)
+	ec.inGroupContext = true
 	defer func() {
 		ec.currentNode = savedCurrent
 		ec.contextNode = savedContext
@@ -2393,6 +2407,7 @@ func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupI
 		ec.size = savedSize
 		ec.currentGroup = savedGroup
 		ec.currentGroupKey = savedGroupKey
+		ec.inGroupContext = savedInGroupCtx
 	}()
 
 	for i, g := range groups {

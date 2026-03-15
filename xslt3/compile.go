@@ -636,6 +636,7 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 		Name:          qn,
 		Params:        params,
 		Body:          body,
+		As:            getAttr(elem, "as"),
 		Streamability: getAttr(elem, "streamability"),
 	}
 

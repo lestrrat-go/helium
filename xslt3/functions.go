@@ -372,12 +372,17 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 		}
 	}
 
-	// Execute the function body, collecting result into a temporary document
+	// Execute the function body, collecting result into a temporary document.
+	// For functions returning atomic types, use captureItems mode so that
+	// attribute nodes returned by xsl:sequence are preserved directly
+	// (writing them to a DOM tree loses them as attributes of the wrapper).
 	tmpDoc := helium.NewDefaultDocument()
 	tmpRoot, _ := tmpDoc.CreateElement("_xsl_fn_result")
 	_ = tmpDoc.SetDocumentElement(tmpRoot)
 
-	ec.outputStack = append(ec.outputStack, &outputFrame{current: tmpRoot, doc: tmpDoc})
+	useCapture := f.def.As != "" && isAtomicTypeName(f.def.As)
+	frame := &outputFrame{current: tmpRoot, doc: tmpDoc, captureItems: useCapture}
+	ec.outputStack = append(ec.outputStack, frame)
 	defer func() {
 		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 	}()
@@ -388,8 +393,14 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 		}
 	}
 
-	// Collect results from the temporary tree
-	return ec.collectSequenceFromNode(tmpRoot), nil
+	var result xpath3.Sequence
+	if useCapture && len(frame.pendingItems) > 0 {
+		// Atomize the captured items for atomic return types.
+		result = atomizeSequence(frame.pendingItems)
+	} else {
+		result = ec.collectSequenceFromNode(tmpRoot)
+	}
+	return result, nil
 }
 
 // collectSequenceFromNode converts children of a node to an XPath sequence.
@@ -405,6 +416,26 @@ func (ec *execContext) collectSequenceFromNode(node helium.Node) xpath3.Sequence
 		}
 	}
 	return seq
+}
+
+// isAtomicTypeName returns true if the given type name (from an as="" attribute)
+// represents an atomic/simple type (not a node type or function type).
+// Handles occurrence indicators (?, *, +) and xs: prefixed types.
+func isAtomicTypeName(as string) bool {
+	// Strip occurrence indicator
+	name := strings.TrimRight(as, "?*+")
+	name = strings.TrimSpace(name)
+	// xs:string, xs:integer, xs:boolean, xs:double, etc.
+	if strings.HasPrefix(name, "xs:") {
+		return true
+	}
+	// unprefixed atomic types (rare but possible)
+	switch name {
+	case "string", "integer", "boolean", "double", "float", "decimal",
+		"date", "dateTime", "time", "duration", "anyURI":
+		return true
+	}
+	return false
 }
 
 // XSLT instruction elements recognized by element-available().
@@ -506,10 +537,14 @@ func (ec *execContext) fnCurrentGroup(_ context.Context, _ []xpath3.Sequence) (x
 
 // current-grouping-key() returns the grouping key for the current group.
 func (ec *execContext) fnCurrentGroupingKey(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
-	if ec.currentGroupKey != nil {
-		return ec.currentGroupKey, nil
+	if ec.inGroupContext {
+		if ec.currentGroupKey != nil {
+			return ec.currentGroupKey, nil
+		}
+		// Key is absent (e.g., group-starting-with, group-ending-with)
+		return nil, dynamicError("XTDE1071", "current-grouping-key() is not available for group-starting-with/group-ending-with")
 	}
-	return xpath3.EmptySequence(), nil
+	return nil, dynamicError("XTDE1071", "current-grouping-key() called outside xsl:for-each-group")
 }
 
 // accumulator-before(name) returns the pre-descent value of a named accumulator.
