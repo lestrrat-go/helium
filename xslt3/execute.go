@@ -965,37 +965,63 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 	// Set param values: use with-param overrides when available, else defaults.
 	// Tunnel params receive from ec.tunnelParams, not from regular param overrides.
 	for _, p := range tmpl.Params {
+		var val xpath3.Sequence
+		fromCaller := false
+
 		if p.Tunnel {
 			// Tunnel param: receive from tunnel context
 			if ec.tunnelParams != nil {
-				if val, ok := ec.tunnelParams[p.Name]; ok {
-					ec.setVar(p.Name, val)
-					continue
+				if v, ok := ec.tunnelParams[p.Name]; ok {
+					val = v
+					fromCaller = true
 				}
 			}
 		} else if po != nil {
-			if val, ok := po[p.Name]; ok {
-				ec.setVar(p.Name, val)
-				continue
+			if v, ok := po[p.Name]; ok {
+				val = v
+				fromCaller = true
 			}
 		}
-		// Use default value
-		if p.Select != nil {
-			xpathCtx := ec.newXPathContext(node)
-			result, err := p.Select.Evaluate(xpathCtx, node)
+
+		if !fromCaller {
+			// Use default value
+			if p.Select != nil {
+				xpathCtx := ec.newXPathContext(node)
+				result, err := p.Select.Evaluate(xpathCtx, node)
+				if err != nil {
+					return err
+				}
+				val = result.Sequence()
+			} else if len(p.Body) > 0 {
+				var err error
+				if p.As != "" {
+					val, err = ec.evaluateBodyAsSequence(ctx, p.Body)
+				} else {
+					val, err = ec.evaluateBody(ctx, p.Body)
+				}
+				if err != nil {
+					return err
+				}
+			} else {
+				val = xpath3.EmptySequence()
+			}
+		}
+
+		// Type check against the declared as type
+		if p.As != "" && len(val) > 0 {
+			st := parseSequenceType(p.As)
+			errCode := errCodeXTTE0570
+			if fromCaller {
+				errCode = "XTTE0590"
+			}
+			checked, err := checkSequenceType(val, st, errCode, "param $"+p.Name)
 			if err != nil {
 				return err
 			}
-			ec.setVar(p.Name, result.Sequence())
-		} else if len(p.Body) > 0 {
-			val, err := ec.evaluateBody(ctx, p.Body)
-			if err != nil {
-				return err
-			}
-			ec.setVar(p.Name, val)
-		} else {
-			ec.setVar(p.Name, xpath3.EmptySequence())
+			val = checked
 		}
+
+		ec.setVar(p.Name, val)
 	}
 
 	// Execute template body
