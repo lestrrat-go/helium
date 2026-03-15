@@ -272,8 +272,22 @@ func (c *compiler) collectNamespaces(elem *helium.Element) {
 
 // compileTopLevel processes all top-level elements in the stylesheet.
 func (c *compiler) compileTopLevel(root *helium.Element) error {
-	// First pass: imports and includes (must come before templates so that
-	// import precedence is properly assigned before any template registration).
+	// First pass: namespace-alias declarations, then imports and includes.
+	// Namespace-alias must be collected before imports/includes because
+	// included stylesheets' templates need the including module's aliases.
+	// Process namespace-alias first for THIS module, then process imports/includes
+	// which recursively collect aliases from their modules.
+	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+		elem, ok := child.(*helium.Element)
+		if !ok || elem.URI() != NSXSLT {
+			continue
+		}
+		if elem.LocalName() == "namespace-alias" {
+			if err := c.compileNamespaceAlias(elem); err != nil {
+				return err
+			}
+		}
+	}
 	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := child.(*helium.Element)
 		if !ok || elem.URI() != NSXSLT {
@@ -351,11 +365,96 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 				return err
 			}
 		case "namespace-alias":
-			// TODO: implement namespace-alias
+			// Already processed in pass 1
 		default:
 			// Unknown top-level element - ignore for forward compatibility
 		}
 	}
+
+	return nil
+}
+
+// resolveNamespaceAlias looks up the namespace alias for a given stylesheet URI.
+// Returns the result URI, result prefix, and true if an alias was found.
+// If multiple aliases target the same stylesheet URI, the one with the highest
+// import precedence wins.
+func (c *compiler) resolveNamespaceAlias(stylesheetURI string) (string, string, bool) {
+	bestPrec := -1
+	var bestURI, bestPrefix string
+	found := false
+	for _, alias := range c.stylesheet.namespaceAliases {
+		if alias.StylesheetURI == stylesheetURI {
+			if !found || alias.ImportPrec > bestPrec {
+				bestPrec = alias.ImportPrec
+				bestURI = alias.ResultURI
+				bestPrefix = alias.ResultPrefix
+				found = true
+			}
+		}
+	}
+	return bestURI, bestPrefix, found
+}
+
+// compileNamespaceAlias compiles an xsl:namespace-alias declaration.
+func (c *compiler) compileNamespaceAlias(elem *helium.Element) error {
+	stylesheetPrefix, hasStylesheetPrefix := elem.GetAttribute("stylesheet-prefix")
+	resultPrefix, hasResultPrefix := elem.GetAttribute("result-prefix")
+
+	if !hasStylesheetPrefix {
+		return staticError(errCodeXTSE0010, "xsl:namespace-alias requires stylesheet-prefix attribute")
+	}
+	if !hasResultPrefix {
+		return staticError(errCodeXTSE0010, "xsl:namespace-alias requires result-prefix attribute")
+	}
+
+	// Build a local namespace map from the element's in-scope namespaces.
+	// This is critical because namespace-alias prefixes are resolved in the
+	// namespace context of the xsl:namespace-alias element itself, not the
+	// stylesheet root (test namespace-alias-0903).
+	localNS := make(map[string]string)
+	for prefix, uri := range c.nsBindings {
+		localNS[prefix] = uri
+	}
+	for _, ns := range elem.Namespaces() {
+		localNS[ns.Prefix()] = ns.URI()
+	}
+
+	// Resolve stylesheet-prefix to a URI
+	var stylesheetURI string
+	if stylesheetPrefix == "#default" {
+		stylesheetURI = localNS[""]
+	} else {
+		uri, ok := localNS[stylesheetPrefix]
+		if !ok {
+			return staticError(errCodeXTSE0010, "xsl:namespace-alias: stylesheet-prefix %q is not bound to a namespace", stylesheetPrefix)
+		}
+		stylesheetURI = uri
+	}
+
+	// Resolve result-prefix to a URI and preferred prefix
+	var resultURI string
+	var resultPfx string
+	if resultPrefix == "#default" {
+		resultURI = localNS[""]
+		resultPfx = ""
+	} else if resultPrefix == "xml" {
+		resultURI = "http://www.w3.org/XML/1998/namespace"
+		resultPfx = "xml"
+	} else {
+		uri, ok := localNS[resultPrefix]
+		if !ok {
+			return staticError(errCodeXTSE0010, "xsl:namespace-alias: result-prefix %q is not bound to a namespace", resultPrefix)
+		}
+		resultURI = uri
+		resultPfx = resultPrefix
+	}
+
+	c.stylesheet.namespaceAliases = append(c.stylesheet.namespaceAliases, NamespaceAlias{
+		StylesheetURI: stylesheetURI,
+		ResultURI:     resultURI,
+		ResultPrefix:  resultPfx,
+		ImportPrec:    c.importPrec,
+	})
 
 	return nil
 }
