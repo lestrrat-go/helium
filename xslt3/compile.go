@@ -44,6 +44,19 @@ func getAttr(elem *helium.Element, name string) string {
 	return v
 }
 
+// parseXSDBool parses an xs:boolean value ("yes"/"no", "true"/"false", "1"/"0")
+// with whitespace trimming per the XSD specification.
+func parseXSDBool(s string) (bool, bool) {
+	switch strings.TrimSpace(s) {
+	case "yes", "true", "1":
+		return true, true
+	case "no", "false", "0":
+		return false, true
+	default:
+		return false, false
+	}
+}
+
 // resolveQName resolves a QName (prefix:local or just local) to an expanded name.
 // If the QName has a prefix, it is resolved using the given namespace bindings
 // and the result is returned in Clark notation: {uri}local.
@@ -135,8 +148,10 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 	}
 
 	// Read expand-text from stylesheet root (XSLT 3.0)
-	if et := getAttr(root, "expand-text"); et == "yes" {
-		c.expandText = true
+	if et := getAttr(root, "expand-text"); et != "" {
+		if v, ok := parseXSDBool(et); ok {
+			c.expandText = v
+		}
 	}
 
 	// Read default-validation from stylesheet root (XSLT 3.0)
@@ -343,8 +358,17 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		c.localExcludes = newExcludes
 	}
 
+	// Handle expand-text on xsl:template
+	savedExpandText := c.expandText
+	if et := getAttr(elem, "expand-text"); et != "" {
+		if v, ok := parseXSDBool(et); ok {
+			c.expandText = v
+		}
+	}
+
 	// Compile template body: first xsl:param elements, then instructions
 	body, params, err := c.compileTemplateBody(elem)
+	c.expandText = savedExpandText
 	c.localExcludes = savedExcludes
 	if err != nil {
 		return err
@@ -442,7 +466,16 @@ func (c *compiler) compileTemplateBody(elem *helium.Element) ([]Instruction, []*
 			}
 		case *helium.CDATASection:
 			inParams = false
-			body = append(body, &LiteralTextInst{Value: string(v.Content())})
+			text := string(v.Content())
+			inst := &LiteralTextInst{Value: text}
+			if c.expandText && strings.ContainsAny(text, "{}") {
+				avt, err := compileAVT(text, c.nsBindings)
+				if err != nil {
+					return nil, nil, err
+				}
+				inst.TVT = avt
+			}
+			body = append(body, inst)
 		}
 	}
 
@@ -614,8 +647,17 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 		return staticError(errCodeXTSE0010, "xsl:function name %q must have a namespace prefix", name)
 	}
 
+	// Handle expand-text on xsl:function
+	savedExpandText := c.expandText
+	if et := getAttr(elem, "expand-text"); et != "" {
+		if v, ok := parseXSDBool(et); ok {
+			c.expandText = v
+		}
+	}
+
 	// Compile function body (params + instructions)
 	body, params, err := c.compileTemplateBody(elem)
+	c.expandText = savedExpandText
 	if err != nil {
 		return err
 	}

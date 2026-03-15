@@ -23,9 +23,13 @@ func (c *compiler) compileInstruction(elem *helium.Element) (Instruction, error)
 	// Handle expand-text inheritance (check both unprefixed and xsl:-prefixed for LREs)
 	savedExpandText := c.expandText
 	if et := getAttr(elem, "expand-text"); et != "" {
-		c.expandText = (et == "yes")
+		if v, ok := parseXSDBool(et); ok {
+			c.expandText = v
+		}
 	} else if et, ok := elem.GetAttributeNS("expand-text", NSXSLT); ok {
-		c.expandText = (et == "yes")
+		if v, ok := parseXSDBool(et); ok {
+			c.expandText = v
+		}
 	}
 	defer func() { c.expandText = savedExpandText }()
 
@@ -240,7 +244,16 @@ func (c *compiler) compileChildren(parent *helium.Element) ([]Instruction, error
 				body = append(body, inst)
 			}
 		case *helium.CDATASection:
-			body = append(body, &LiteralTextInst{Value: string(v.Content())})
+			text := string(v.Content())
+			inst := &LiteralTextInst{Value: text}
+			if c.expandText && strings.ContainsAny(text, "{}") {
+				avt, err := compileAVT(text, c.nsBindings)
+				if err != nil {
+					return nil, err
+				}
+				inst.TVT = avt
+			}
+			body = append(body, inst)
 		}
 	}
 	return body, nil
@@ -325,12 +338,13 @@ func (c *compiler) compileValueOf(elem *helium.Element) (*ValueOfInst, error) {
 		inst.Select = expr
 	}
 
-	if sep := getAttr(elem, "separator"); sep != "" {
+	if sep, ok := elem.GetAttribute("separator"); ok {
 		avt, err := compileAVT(sep, c.nsBindings)
 		if err != nil {
 			return nil, err
 		}
 		inst.Separator = avt
+		inst.HasSeparator = true
 	}
 
 	// XTSE0350: xsl:value-of with select must not have non-whitespace content
@@ -365,10 +379,21 @@ func (c *compiler) compileText(elem *helium.Element) (*TextInst, error) {
 		}
 	}
 
-	return &TextInst{
-		Value:                 sb.String(),
+	text := sb.String()
+	inst := &TextInst{
+		Value:                 text,
 		DisableOutputEscaping: getAttr(elem, "disable-output-escaping") == "yes",
-	}, nil
+	}
+
+	if c.expandText && strings.ContainsAny(text, "{}") {
+		avt, err := compileAVT(text, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.TVT = avt
+	}
+
+	return inst, nil
 }
 
 func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
@@ -550,19 +575,27 @@ func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 		switch childElem.LocalName() {
 		case "when":
 			savedNS := c.xpathDefaultNS
+			savedET := c.expandText
 			hasLocal := false
 			if xdn, ok := childElem.GetAttribute("xpath-default-namespace"); ok {
 				c.xpathDefaultNS = xdn
 				hasLocal = true
 			}
+			if et := getAttr(childElem, "expand-text"); et != "" {
+				if v, ok := parseXSDBool(et); ok {
+					c.expandText = v
+				}
+			}
 			testAttr := getAttr(childElem, "test")
 			if testAttr == "" {
 				c.xpathDefaultNS = savedNS
+				c.expandText = savedET
 				return nil, staticError(errCodeXTSE0110, "xsl:when requires test attribute")
 			}
 			expr, err := compileXPath(testAttr, c.nsBindings)
 			if err != nil {
 				c.xpathDefaultNS = savedNS
+				c.expandText = savedET
 				return nil, err
 			}
 			body, err := c.compileChildren(childElem)
@@ -570,16 +603,23 @@ func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 			wc.XPathDefaultNS = c.xpathDefaultNS
 			wc.HasXPathDefaultNS = hasLocal
 			c.xpathDefaultNS = savedNS
+			c.expandText = savedET
 			if err != nil {
 				return nil, err
 			}
 			inst.When = append(inst.When, wc)
 		case "otherwise":
 			savedNS := c.xpathDefaultNS
+			savedET := c.expandText
 			hasLocal := false
 			if xdn, ok := childElem.GetAttribute("xpath-default-namespace"); ok {
 				c.xpathDefaultNS = xdn
 				hasLocal = true
+			}
+			if et := getAttr(childElem, "expand-text"); et != "" {
+				if v, ok := parseXSDBool(et); ok {
+					c.expandText = v
+				}
 			}
 			body, err := c.compileChildren(childElem)
 			if hasLocal {
@@ -587,6 +627,7 @@ func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 				inst.HasOtherwiseXPNS = true
 			}
 			c.xpathDefaultNS = savedNS
+			c.expandText = savedET
 			if err != nil {
 				return nil, err
 			}

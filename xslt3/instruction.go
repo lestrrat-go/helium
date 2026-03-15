@@ -55,16 +55,18 @@ type WithParam struct {
 // ValueOfInst represents xsl:value-of.
 type ValueOfInst struct {
 	xpathNS
-	Select    *xpath3.Expression
-	Separator *AVT // default " " for 3.0, absent for 1.0
-	Body      []Instruction
+	Select       *xpath3.Expression
+	Separator    *AVT // default " " for 3.0, absent for 1.0
+	HasSeparator bool // true when separator attribute is explicitly specified
+	Body         []Instruction
 }
 
 func (*ValueOfInst) instructionTag() {}
 
 // TextInst represents xsl:text.
 type TextInst struct {
-	Value                string
+	Value                 string
+	TVT                   *AVT // text value template (non-nil when expand-text is active)
 	DisableOutputEscaping bool
 }
 

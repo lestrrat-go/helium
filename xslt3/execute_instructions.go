@@ -349,11 +349,15 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 	if inst.Select != nil {
 		// Default separator for select is " "
 		separator := " "
-		if inst.Separator != nil {
-			var err error
-			separator, err = inst.Separator.evaluate(ctx, ec.contextNode)
-			if err != nil {
-				return err
+		if inst.HasSeparator {
+			if inst.Separator != nil {
+				var err error
+				separator, err = inst.Separator.evaluate(ctx, ec.contextNode)
+				if err != nil {
+					return err
+				}
+			} else {
+				separator = ""
 			}
 		}
 		xpathCtx := ec.newXPathContext(ec.contextNode)
@@ -365,7 +369,7 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 	} else if len(inst.Body) > 0 {
 		// Default separator for body content is "" (zero-length string)
 		separator := ""
-		if inst.Separator != nil {
+		if inst.HasSeparator && inst.Separator != nil {
 			var err error
 			separator, err = inst.Separator.evaluate(ctx, ec.contextNode)
 			if err != nil {
@@ -391,10 +395,23 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 }
 
 func (ec *execContext) execText(inst *TextInst) error {
-	if inst.Value == "" {
+	value := inst.Value
+	if inst.TVT != nil {
+		ctx := ec.transformCtx
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		ctx = withExecContext(ctx, ec)
+		var err error
+		value, err = inst.TVT.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+	}
+	if value == "" {
 		return nil
 	}
-	text, err := ec.resultDoc.CreateText([]byte(inst.Value))
+	text, err := ec.resultDoc.CreateText([]byte(value))
 	if err != nil {
 		return err
 	}
