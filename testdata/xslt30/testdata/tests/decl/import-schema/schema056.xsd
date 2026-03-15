@@ -1,0 +1,22 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://schema056.uri/"
+           elementFormDefault="qualified"
+           xmlns:s="http://schema056.uri/">
+
+<xs:complexType name="single-choice">
+    <xs:choice minOccurs="1" maxOccurs="1">
+      <xs:group ref="s:g"/>
+      <xs:any namespace="##local" processContents="skip"/> 
+    </xs:choice>
+</xs:complexType>
+
+<xs:group name="g">
+  <xs:sequence>
+  <xs:element name="j"/>
+  <xs:element name="k"/>
+  </xs:sequence>
+</xs:group>
+
+
+</xs:schema>

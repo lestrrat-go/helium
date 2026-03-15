@@ -3,6 +3,7 @@ package xpath3
 import (
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/lestrrat-go/helium"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
@@ -24,8 +25,26 @@ func evalLiteral(e LiteralExpr) (Sequence, error) {
 
 func evalVariable(ec *evalContext, e VariableExpr) (Sequence, error) {
 	if ec.vars != nil {
+		// Try exact name first
 		if v, ok := ec.vars.Lookup(e.Name); ok {
 			return v, nil
+		}
+		// If EQName (Q{uri}local), normalize to {uri}local and retry
+		if strings.HasPrefix(e.Name, "Q{") {
+			resolved := e.Name[1:] // strip leading "Q"
+			if v, ok := ec.vars.Lookup(resolved); ok {
+				return v, nil
+			}
+		}
+		// If prefixed, resolve to {uri}local and retry
+		if e.Prefix != "" {
+			if uri, ok := ec.namespaces[e.Prefix]; ok {
+				local := e.Name[len(e.Prefix)+1:] // strip "prefix:"
+				resolved := "{" + uri + "}" + local
+				if v, ok := ec.vars.Lookup(resolved); ok {
+					return v, nil
+				}
+			}
 		}
 	}
 	return nil, fmt.Errorf("%w: $%s", ErrUndefinedVariable, e.Name)
@@ -76,7 +95,11 @@ func evalLocationPath(ec *evalContext, lp *LocationPath) (Sequence, error) {
 
 	result := make(Sequence, len(nodes))
 	for i, n := range nodes {
-		result[i] = NodeItem{Node: n}
+		ni := NodeItem{Node: n}
+		if ec.typeAnnotations != nil {
+			ni.TypeAnnotation = ec.typeAnnotations[n]
+		}
+		result[i] = ni
 	}
 	return result, nil
 }
@@ -151,6 +174,15 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 				return false
 			}
 		}
+		if test.TypeName != "" {
+			ann := nodeTypeAnnotation(n, ec)
+			if ann == "" {
+				ann = TypeUntypedAtomic
+			}
+			if !isSubtypeOf(ann, resolveTestTypeName(test.TypeName, ec)) {
+				return false
+			}
+		}
 		return true
 	case AttributeTest:
 		if _, ok := n.(*helium.Attribute); !ok {
@@ -158,6 +190,15 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 		}
 		if test.Name != "" && test.Name != "*" {
 			if ixpath.LocalNameOf(n) != test.Name {
+				return false
+			}
+		}
+		if test.TypeName != "" {
+			ann := nodeTypeAnnotation(n, ec)
+			if ann == "" {
+				ann = TypeUntypedAtomic
+			}
+			if !isSubtypeOf(ann, resolveTestTypeName(test.TypeName, ec)) {
 				return false
 			}
 		}
@@ -227,6 +268,14 @@ func matchNameTest(test NameTest, n helium.Node, axis AxisType, ec *evalContext)
 	if test.Prefix != "" {
 		return matchPrefix(test.Prefix, n, ec)
 	}
+	// Check for default element namespace (xpath-default-namespace).
+	// Only applies to element axis, not attributes.
+	// Per XPath 3.1 §3.3.2.1: when default element namespace is absent,
+	// unprefixed names match only no-namespace elements.
+	if axis != AxisAttribute && ec.namespaces != nil {
+		return ixpath.NodeNamespaceURI(n) == ec.namespaces[""]
+	}
+	// No namespace context at all: permissive match (any namespace).
 	return true
 }
 
@@ -236,7 +285,18 @@ func matchPrefix(prefix string, n helium.Node, ec *evalContext) bool {
 			return ixpath.NodeNamespaceURI(n) == uri
 		}
 	}
-	return ixpath.NodePrefix(n) == prefix
+	// The xml prefix is always bound per the XML Namespaces spec.
+	if prefix == "xml" {
+		return ixpath.NodeNamespaceURI(n) == helium.XMLNamespace
+	}
+	// Check built-in XPath prefixes (fn, xs, math, map, array, err).
+	if uri, ok := defaultPrefixNS[prefix]; ok {
+		return ixpath.NodeNamespaceURI(n) == uri
+	}
+	// Per XPath spec, prefix resolution must come from the static/evaluation
+	// namespace bindings, not the document's lexical prefixes. If the prefix
+	// is not declared in the namespace context, it cannot match.
+	return false
 }
 
 func matchTypeTest(test TypeTest, n helium.Node) bool {
@@ -274,6 +334,36 @@ func applyPredicate(ec *evalContext, nodes []helium.Node, pred Expr) ([]helium.N
 		}
 	}
 	return result, nil
+}
+
+// nodeTypeAnnotation returns the type annotation for a node from the
+// evalContext's type annotation map.
+func nodeTypeAnnotation(n helium.Node, ec *evalContext) string {
+	if ec == nil || ec.typeAnnotations == nil {
+		return ""
+	}
+	return ec.typeAnnotations[n]
+}
+
+// resolveTestTypeName normalizes a type name from an ElementTest/AttributeTest
+// to the canonical "xs:..." form.
+func resolveTestTypeName(raw string, ec *evalContext) string {
+	if strings.HasPrefix(raw, "xs:") {
+		return raw
+	}
+	if idx := strings.IndexByte(raw, ':'); idx >= 0 {
+		prefix := raw[:idx]
+		local := raw[idx+1:]
+		if prefix == "xsd" {
+			return "xs:" + local
+		}
+		if ec != nil && ec.namespaces != nil {
+			if uri, ok := ec.namespaces[prefix]; ok && uri == "http://www.w3.org/2001/XMLSchema" {
+				return "xs:" + local
+			}
+		}
+	}
+	return raw
 }
 
 // predicateTrue evaluates a predicate result per XPath spec:

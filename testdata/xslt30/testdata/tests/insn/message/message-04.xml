@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<doc>
+  <item text="ab" target="ab"  num="1" />
+  <item text="cd" target="cd"  num="2" />
+  <item text="ef" target="ef"  num="3" />
+  <item text="gh" target="gh"  num="4" />
+  <item text="ij" target="ij"  num="5" />
+</doc>

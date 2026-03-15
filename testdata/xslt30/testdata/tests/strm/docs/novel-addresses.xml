@@ -1,0 +1,36 @@
+<Root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="Scheme.xsd">
+    <Book>
+        <BookInfo>
+            <Novel>
+                <NovelTitle>abc</NovelTitle>
+                <Author>def</Author>
+                <Address>
+                    <LastName>ghi</LastName>
+                    <FirstName>jklm</FirstName>
+                </Address>
+                <Address>
+                    <LastName>opqr</LastName>
+                    <FirstName>stuv</FirstName>
+                </Address>
+                <Customer>
+                    <CustomerNumber>1000</CustomerNumber>
+                    <Address>
+                        <LastName>wxy</LastName>
+                        <FirstName>zzzz</FirstName>
+                    </Address>
+                    <Address>
+                        <LastName>aaaaa</LastName>
+                        <FirstName>bbbb</FirstName>
+                    </Address>
+                    <Address>
+                        <LastName>ghi</LastName>
+                        <FirstName>jklm</FirstName>
+                    </Address>
+                </Customer>
+                .
+                .
+                .
+            </Novel>
+        </BookInfo>
+    </Book>
+</Root>

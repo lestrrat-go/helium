@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<data>
+  <foodata>
+    <datum value="a"/>
+    <datum value="b"/>
+    <datum value="c"/>
+    <datum value="d"/>
+  </foodata>
+  <bardata>
+    <datum value="k"/>
+    <datum value="l"/>
+    <datum value="m"/>
+    <datum value="n"/>
+  </bardata>
+  <bazdata>
+    <datum value="w"/>
+    <datum value="x"/>
+    <datum value="y"/>
+    <datum value="z"/>
+  </bazdata>
+</data>

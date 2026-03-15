@@ -1,0 +1,30 @@
+<categories>
+    <cat n="Business Services">
+      <node n="ws"/>
+      <node n="am"/>
+      <node n="sb"/>
+    </cat>
+    <cat n="Java Sources">
+      <node n="java" d="Java Sources"/>
+      <node n="prop" d="Java Sources"/>
+    </cat>
+    <cat n="Database Resources">
+      <node n="sql"/>
+    </cat>
+    <cat n="UML Diagrams">
+      <node n="diag" d="UML Diagrams"/>
+    </cat>
+    <cat n="Business Objects">
+      <node n="eo" d="Business Objects"/>
+      <node n="eb" d="Business Objects"/>
+      <node n="as" d="Associations"/>
+    </cat>
+    <cat n="Data Access Components">
+      <node n="vo" d="Data Access Components"/>
+      <node n="vl" d="Data Access Components"/>
+    </cat>
+    <cat n="Custom Datatypes">
+      <node n="dm"/>
+    </cat>
+</categories>
+

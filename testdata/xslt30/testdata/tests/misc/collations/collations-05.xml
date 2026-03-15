@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<!-- Test for xsl:sort -->
+<doc>
+  <!-- simple -->
+  <item target="ab"  num="1" />
+  <item target="cd"  num="2" />
+  <item target="dc"  num="3" />
+  <item target="cd"  num="4" />
+  <item target="ab"  num="5" />
+  
+  <!-- secondary difference Accents -->
+  <item target="ab"  num="6" />
+  <item target="äb"  num="7" />
+  <item target="zb"  num="8" />
+  <item target="a"  num="9" />
+  <item target="ä"  num="10" />
+  
+  <!-- tertiary difference - case-->
+  <item target="Äb"  num="11" />
+  <item target="Ab"  num="12" />
+  <item target="ab"  num="13" />
+  <item target="Az"  num="14" />
+  
+  <!-- Quaternary difference - punctuation-->
+  <item target="a-b"  num="15" />
+  <item target="a-c"  num="16" />
+  <item target="a  b- "  num="17" />
+  <item target="--a--"  num="18" />
+  <item target="ab!c!d!"  num="19" />
+  <item target="-a-bcd"  num="20" />
+  <item target="ab!"  num="21" />
+  <item target="  a b "  num="22" />
+  
+</doc>

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ns9:SomeRS xmlns="some1" xmlns:ns1="some1" xmlns:ns2="some2" xmlns:ns3="some3" xmlns:ns4="some4" xmlns:ns5="some5" xmlns:ns6="some6" xmlns:ns7="some7" xmlns:ns8="some8" xmlns:ns9="some9" xmlns:ns10="some10" xmlns:ns11="some11" xmlns:ns12="some12">
+    <ns9:SomeContext>
+        <ns9:Context>
+            <ns9:mama>daddy</ns9:mama>
+        </ns9:Context>
+        <Part type="a" aa="bb">
+            <s>
+                <a>
+                    <c>a</c>
+                    <d>67</d>
+                </a>
+                <b>
+                    <e>T</e>
+                </b>
+            </s>
+        </Part>
+        <ns11:f id="sm1">
+            <ns11:g>smp1</ns11:g>
+            <ns11:h id="s1">
+                <ns11:i>A</ns11:i>
+            </ns11:h>
+        <ns11:j id="smp1">
+            <k id="a" type="ddd">
+                <i>
+                    <j>abc</j>
+                </i>
+                <k>80</k>
+            </k>
+        </ns11:j>
+        </ns11:f>
+    </ns9:SomeContext>
+</ns9:SomeRS>

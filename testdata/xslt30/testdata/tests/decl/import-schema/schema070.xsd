@@ -1,0 +1,24 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://schema070.uri/"
+           elementFormDefault="qualified" attributeFormDefault="qualified"
+           xmlns:s="http://schema070.uri/">
+
+<xs:attribute name="dob" type="xs:date"/>
+<xs:attribute name="tob" type="xs:time"/>
+
+<xs:element name="out">
+  <xs:complexType>
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute ref="s:dob"/>
+        <xs:attribute ref="s:tob"/>
+        <xs:anyAttribute namespace="##other"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+</xs:element>
+
+
+
+</xs:schema>

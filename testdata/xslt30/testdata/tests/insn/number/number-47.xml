@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?thing?>
+<top>
+     <?thing?>
+     <child>
+         <?thing?>
+         <child><?thing?></child>
+     </child>
+     <child>
+         <?thing?>
+     </child>
+</top>
+<?thing?>

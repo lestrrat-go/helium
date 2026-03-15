@@ -29,6 +29,15 @@ func Compile(expr string) (*Expression, error) {
 	}, nil
 }
 
+// CompileExpr wraps a pre-parsed AST Expr into an Expression.
+func CompileExpr(ast Expr) *Expression {
+	return &Expression{
+		source:     "",
+		ast:        ast,
+		prefixPlan: buildPrefixValidationPlan(ast),
+	}
+}
+
 // MustCompile is like Compile but panics on error.
 func MustCompile(expr string) *Expression {
 	e, err := Compile(expr)
@@ -179,4 +188,16 @@ func Evaluate(ctx context.Context, node helium.Node, expr string) (*Result, erro
 		return nil, err
 	}
 	return compiled.Evaluate(ctx, node)
+}
+
+// EvaluateExpr evaluates a parsed AST expression directly against a node.
+// This is useful when you already have the parsed Expr (e.g., from Parse)
+// and want to evaluate it without going through Compile.
+func EvaluateExpr(ctx context.Context, expr Expr, node helium.Node) (*Result, error) {
+	ec := newEvalContext(ctx, node)
+	seq, err := eval(ec, expr)
+	if err != nil {
+		return nil, err
+	}
+	return &Result{seq: seq}, nil
 }

@@ -1,0 +1,26 @@
+<books>
+  <book>
+    <title>Pirates of Penzance</title>
+    <author>Gilbert</author>
+    <author>Sullivan</author>
+  </book>
+  <book>
+    <title>Mikado</title>
+    <author>Gilbert</author>
+    <author>Sullivan</author>
+  </book>
+  <book>
+    <title>Oxford English Dictionary</title>
+  </book>
+  <book>
+    <title>Pygmalion</title>
+    <author>Shaw</author>
+  </book>
+  <book>
+    <title>Imaginations</title>
+    <author>Bacon</author>
+    <author>Gilbert</author>
+    <author>Shaw</author>
+    <author>Bacon</author>    
+  </book>
+</books>   

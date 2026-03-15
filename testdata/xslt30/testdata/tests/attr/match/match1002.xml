@@ -1,0 +1,13 @@
+<?xml version="1.0"?> 
+<doc>
+  <foo>
+    <a><num6 val="6"/></a>
+    <a><num2 val="2"/></a>
+    <a><num4 val="4"/></a>
+  </foo>
+  <foo>
+    <a><num3 val="3"/></a>
+    <a><num1 val="1"/></a>
+    <a><num5 val="5"/></a>
+  </foo>
+</doc>

@@ -1,0 +1,26 @@
+<bugs>
+  <bug dev="ace" team="ui">
+    <desc>Border shows white when it should be grey</desc>
+  </bug>
+  <bug dev="tom" team="core">
+    <desc>Incorrectly handling nulls on entry</desc>
+  </bug>
+  <bug dev="gary" team="ui">
+    <desc>Preferences dialog has two Cancel buttons</desc>
+  </bug>
+  <bug dev="ace" team="ui">
+    <desc>Drag and drop cursor never changes back</desc>
+  </bug>
+  <bug dev="tim" team="core">
+    <desc>Infinite loop in validation code</desc>
+  </bug>
+  <bug dev="gary" team="ui">
+    <desc>Resizing dialog doesn't resize text box</desc>
+  </bug>
+  <bug dev="ace" team="ui">
+    <desc>German text is truncated</desc>
+  </bug>
+  <bug dev="tim" team="core">
+    <desc>Data inserted twice</desc>
+  </bug>
+</bugs>

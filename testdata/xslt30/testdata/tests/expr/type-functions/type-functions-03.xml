@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:userNode xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://www.schemafunc.example.com/ns/various variousTypesSchemaFunc.xsd"
+		  xmlns:my="http://www.schemafunc.example.com/ns/various">
+	  
+	<elem-string>hello</elem-string>
+	<elem-normalizedString>like,</elem-normalizedString>
+	<elem-token>two organizations</elem-token>
+	<elem-language>PT</elem-language>
+	<elem-Name>a:_underscore_</elem-Name>
+	<elem-NCName>vwxyz12</elem-NCName>
+	<elem-NMTOKEN>business-enforcement::link-chain.common</elem-NMTOKEN>
+	<elem-ID-attr attr1="_ab"/>
+	<elem-IDREF-attr attr1="_ab"/>
+	<elem-double-derived>2</elem-double-derived>
+	<elem-string-derived>Hello There</elem-string-derived>
+	<elem-normalizedString-derived>car_</elem-normalizedString-derived>
+	<elem-token-derived>Az Az , AA 13121-1314</elem-token-derived>
+	<elem-language-derived>EN</elem-language-derived>
+	<elem-Name-derived>colon:name</elem-Name-derived>
+	<elem-NCName-derived>internationalization</elem-NCName-derived>
+	<elem-NMTOKEN-derived>DOM:co</elem-NMTOKEN-derived>
+	<elem-ID-attr-derived attr1="_a1234"/>
+	<elem-IDREF-attr-derived attr1="_a1234"/>
+</my:userNode>

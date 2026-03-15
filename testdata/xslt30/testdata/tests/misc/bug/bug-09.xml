@@ -1,0 +1,499 @@
+<?xml version="1.0"?>
+<!DOCTYPE TEI.2 SYSTEM "xteixlite.dtd"
+[ 
+ <!ENTITY mdash "&#8212;">
+ <!ENTITY egrave "&#232;">
+]> 
+<TEI.2>
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title>TUG 99 Poems</title>
+      </titleStmt>
+      <publicationStmt>
+        <p> </p>
+      </publicationStmt>
+      <sourceDesc>
+        <p></p>
+      </sourceDesc>
+    </fileDesc>
+    <revisionDesc>
+      <list>
+        <item><date>September 7th 1999</date></item>
+        <item><date>August 19th 1999</date></item>
+      </list>
+    </revisionDesc>
+  </teiHeader>
+  <text>
+<front>
+<titlePage>
+<docTitle>
+ <titlePart type="main">TUG 99 Poetry Workshop</titlePart>
+</docTitle>
+<docAuthor>edited by Ross Moore, Wendy McKay, Sebastian Rahtz</docAuthor>
+<docDate>August 1999</docDate>
+</titlePage>
+</front>
+<body>
+<div1>
+<head>Introduction</head>
+<p>
+I suppose it happens to all of us. Most days we just go through our
+drab lives, writing LaTeX code, running dvips, staring at
+laser-printer output, arguing about XML; but then something cracks,
+our brain spins, and we pretend for whole moments at a time that we
+are, after all, the rightful poetic heirs to Shakespeare and
+Goethe. Luckily, we do not often get our masterpieces onto paper, but
+at the TUG 1999 conference delegates were treated to a rare display of 
+collective insane poetasting.</p><p>
+Ross Moore and Wendy McKay started it all,
+by setting up a poetry competition before the meeting, but they had
+the idea that people would take it <emph>seriously</emph>, and compose
+`masterpieces of the poetic art'. When it came to the line, though,
+entries were thin on the ground, so what to do? Appeal to people's
+worst instincts, of course, by reading doggerel to them between
+talks! This was proving amusing enough by the Wednesday of the
+conference that we had the idea of a public reading in the Rose Garden
+of the University Campus, overlooking the sea. It seemed an innocent
+enough idea.
+</p><p>
+TeX people are, however, nothing if not perfectionists. No, not just a 
+reading, it had to be a proper party; no, we could not just read
+poetry, we had to dress up in bardic uniform; no, not just any
+uniform, but like that wretched lion in The Book; yes, with the laurel 
+twigs. &lt;sigh&gt;, as the say on the Internet. Worst of all, people
+brought cameras!
+</p><p>
+The results, poetic and photographic, follow. Great art it ain't,
+mostly, but we hope you'll be a little amused by it all. Myself, I
+think the beer (illegal in a public place in Canada) helped; about 
+the local mango cider, I am less sure. I wonder what the bemused
+passers-by made of it all? 
+</p>
+<p>Prizes? Yes, we had some winners. For unadulerated audacious
+stealing, Fred Bartlett's Hamlet bore away a token; for pure cool
+<emph>style</emph>, Michael Downes' haiku gained the wreath; for
+poetic talent, Pierre Mackay probably came as near art as anyone; and
+for his out-and-out politically incorrect (but hideously funny)
+`goodness gracious me' readings, Kaveh Bazargan surely got the most applause.
+</p>
+<byline>Sebastian Rahtz</byline>
+</div1>
+<div1><head>`Borrowings'</head>
+<div2>
+<head>The Rape of the Package</head>
+<lg><l>WHAT dire options from am'rous macros springs, </l>
+<l>What mighty errors rise from a Trivial \special, </l>
+<l>I sing &mdash; This Verse to Don Knuth, Muse! is due; </l>
+<l>This, ev'n <hi rend="i">Carlisle</hi> may vouchsafe to view: </l>
+<l>Slight is the markup, but not so the PDF, </l>
+<l>If Frank inspire, and Chris approve my docstrip.</l>
+<l>Say what strange catcodes, Fine! cou'd compel </l>
+<l>A well-bred <hi rend="i">hacker</hi> t'assault a gentle 
+ <hi rend="i">LaTeX?</hi> </l>
+<l>Oh say what stranger keyword value, yet unprogramm'd, </l>
+<l>Cou'd make <hi rend="i">CTAN</hi> reject a 
+  <hi rend="i">non-free</hi> package ? </l>
+<l>And dwells such power in active characters then? </l>
+<l>And do XML and XSL excite so much?</l></lg>
+<byline>stolen by Sebastian Rahtz </byline>
+</div2>
+<div2><head>The Journey of the TeXxies</head>
+<lg>
+<l>"A cold coding we had of it,</l>
+<l>Just the worst package from TeXLive</l>
+<l>For a document, and such a long document:</l>
+<l>The macros long and the braces many,</l>
+<l>The very pits of TeX."</l>
+<l>And the tables hard, badly-aligned, refractory,</l>
+<l>Misplaced \omit in every \multicolumn.</l>
+<l>There were times we regretted</l>
+<l>The dependence on longtable, the use of pdfmark,</l>
+<l>And the hyperref macros breaking our \cite s.</l>
+<l>Then the authors cursing and grumbling</l>
+<l>And using Macintoshes, and wanting their Framemaker and Word,</l>
+<l>And the editor crashing, and the graphics corrupted,</l>
+<l>And the setup.exe hostile and CTAN unfriendly</l>
+<l>And the usergroups dirty and charging high prices:</l>
+<l>A hard time we had of it.</l>
+<l>At the end we preferred to work in XML,</l>
+<l>Validating as we went,</l>
+<l>With the voices singing in our ears, saying</l>
+<l>That this was all folly.</l>
+<l>Then at <![CDATA[</tei.2>]]> we came to the end of the process,</l>
+<l>valid, with all elements ended, all IDREFs satisfied,</l>
+<l>With an XSL stylesheet, and even a version for IE5</l>
+<l>And three HTML versions already on the Web.</l>
+<l>And an old white horse galloped away in the meadow.</l>
+</lg>
+<byline>stolen by Sebastian Rahtz </byline>
+</div2>
+<div2>
+<head>To TeX or not to TeX</head>
+<lg>
+<l>To TeX, or not to TeX: that is the question:</l>
+<l>Whether 'tis nobler on the page to suffer</l>
+<l>The slings and arrows of outrageous software,</l>
+<l>Or to write code against a sea of troubles,</l>
+<l>And by opposing end them? Use Word? Use Quark?</l>
+<l>No more! For such as they could never end</l>
+<l>The heartache and the thousand unnatural shocks</l>
+<l>That type is heir to.</l>
+<l rend="indent(2)">LaTeXe*?</l>
+<l>Devoutly to be wish'd! Or Quark to TeX?</l>
+<l>To TeX? Now there's a dream. And here's the rub:</l>
+<l>From that disguis&egrave;d TeX the dream may come</l>
+<l>That TeX should shuffle off this mortal coil,</l>
+<l>So should we pause? There's no respect</l>
+<l>For TeX in all of its long life;</l>
+<l>For who would bear the whips and scorns of Frame,</l>
+<l>WordPerfect's wrong, Microsoft's contumely,</l>
+<l>The pangs of despis'd TeX, Incontext's delay,</l>
+<l>The insolence of Active TeX and the spurns</l>
+<l>That patient Wizards of th' <hi rend="sc">wysiwyg</hi>ers take,</l>
+<l>When he himself might his quietus make</l>
+<l>In a plain TeX style? Who would authors bear,</l>
+<l>To grunt and sweat under a weary life,</l>
+<l>But that the dread of something after TeX,</l>
+<l>The undiscover'd standard from <hi rend="sc">iso</hi></l>
+<l>And W3C, puzzles the will</l>
+<l>And makes us rather love the type we have</l>
+<l>Than fly to others that we know not of?</l>
+<l rend="indent(1)">TeX's enterprise of great pith and moment</l>
+<l>With <hi rend="sc">xml</hi> its currents join anon,</l>
+<l>And gain the funds of moguls.</l>
+</lg>
+<byline>stolen by Fred Bartlett </byline>
+</div2>
+<div2>
+<head>Purple \haze</head>
+<lg>
+<l>Purple haze is in my BRAIN</l>
+<l>MathML is such a PAIN</l>
+<l>Give me TeX, and DVI</l>
+<l>'Scuse me while I kiss Blue Sky</l>
+</lg>
+<byline>stolen by Don Deland </byline>
+</div2>
+
+</div1>
+<div1><head>Doggerel</head>
+
+<div2><head>The Young Lady of Stanford</head>
+<lg>
+<l>There was a young lady from Stanford</l>
+<l rend="indent(2)">who delighted to play with Mac Word</l>
+<l rend="indent(2)">she met a Don Knuth</l>
+<l rend="indent(2)">who told her the truth</l>
+<l>and now what she enjoys is absurd</l>
+</lg>
+<byline>Sebastian Rahtz and Patrick Ion </byline>
+</div2>
+<div2><head>The TUG conference</head>
+<lg>
+<l>Down the TeXing path we go</l>
+<l rend="indent(2)">with a Sparc its not so slow</l>
+<l>Up the network nodes we run</l>
+<l rend="indent(2)">\href links can be so much fun</l>
+<l>Round the browser wars we dodge</l>
+<l rend="indent(2)"><hi rend="i">Sans</hi> MathML&mdash;a real hodge-podge</l>
+<l>Home at last&mdash;the Web is <hi rend="i">fast</hi>&mdash;we wait for LaTeX3</l>
+<l rend="indent(2)">While Frank and David trade ideas, Chris seeks terminology</l>
+</lg>
+<byline>Christina Thiele </byline>
+</div2>
+
+<div2><head>The Young Man of Vancouver</head>
+<lg>
+<l>There was a young man of Vancouver</l>
+<l rend="indent(2)">who thought he admired Anita Hoover</l>
+<l rend="indent(2)">but he looked at some macros</l>
+<l rend="indent(2)">which ran under Windows</l>
+<l>and now all he can think of is \over s</l>
+</lg>
+<byline>Sebastian Rahtz </byline>
+</div2>
+<div2><head>The macros called LaTeX</head>
+<lg>
+<l>There was a package of macros called LaTeX</l>
+<l rend="indent(2)">whose styles produced utter dreck</l>
+<l rend="indent(2)">But some day we'll see</l>
+<l rend="indent(2)">that with LaTeX3</l>
+<l>to typographic nirvana we'll trek</l>
+</lg>
+<byline>Fred Bartlett </byline>
+</div2>
+<div2><head>Love, Again</head>
+<lg>
+<l>A young maid desired to woo:</l>
+<l rend="indent(2)">`Give me TeX', she would heatedly coo</l>
+<l rend="indent(2)">his code became tangled</l>
+<l rend="indent(2)">in her macros new-fangled</l>
+<l>in a passion of boxes and glue</l>
+</lg>
+<byline>Richard Kinch </byline>
+</div2>
+<div2><head>The Young Woman of TeX</head>
+<lg>
+<l>A certain young woman learned TeX;</l>
+<l rend="indent(2)">her code, on occasion, was Dreck.</l>
+<l rend="indent(2)">Along came the Web</l>
+<l rend="indent(2)">&mdash;`Oh God! Now I'm dead!</l>
+<l>my files won't ever meet the MathML spec.'</l>
+</lg>
+<byline>Christina Thiele </byline>
+</div2>
+<div2><head>Under the volcano</head>
+<lg>
+<l>Those daring young men and their computing machines,</l>
+<l rend="indent(2)">All night long new code they dispute.</l>
+<l rend="indent(2)">All day in their dreams</l>
+<l rend="indent(2)">screen flow extremes</l>
+<l>beat the code till it pleads, `Please reboot!'</l>
+</lg>
+<byline>Christina Thiele</byline>
+</div2>
+</div1>
+<div1><head>Haikus</head>
+<div2>
+<head>A TeX Haiku</head>
+<lg>
+<l>\expandafter\def</l>
+<l>\csname def\endcsname</l>
+<l>{\message{farewell}}\bye</l>
+</lg>
+<byline>Sebastian Rahtz</byline>
+</div2>
+
+<div2>
+<head>A TeXnicians Haiku</head>
+<p> This haiku for TeXnicians consists entirely of TeX control sequences;
+furthermore, it forms a valid TeX assignment statement &mdash; provided that
+a certain control sequence that is normally undefined is defined in an
+obvious way. Can you identify the control sequence in question?
+</p>
+<lg>
+<l>\catcode\csname</l>
+<l>\romannumeral\parshape</l>
+<l>\endcsname\month</l>
+</lg>
+<byline>Michael Downes </byline>
+</div2>
+</div1>
+<div1><head>TeX musings</head>
+
+<div2>
+<head>Musings from the Bard</head>
+<lg>
+<l>Oh,  what a tangled web is TeX,</l>
+<l>or so it seems at the outset;</l>
+<l>for highest quality, the best to look,</l>
+<l>Oh why did I choose to typeset my own book!</l>
+<l> ..... </l>
+<l>For Macintosh users the skies are quite blue,</l>
+<l>with Barry to help you and Ben Salzburg too.</l>
+<l>With Art, Ross, and Uwe ready to assist,</l>
+<l>just send a short email to Gary Gray's (Textures) list.</l>
+<l> ..... </l>
+<l>If shareware type software is more to your taste,</l>
+<l>your super-fast Power-Mac need not go to waste.</l>
+<l>There's CMac- and Direct-TeX to lessen the sorrow,</l>
+<l>and that great program OzTeX, by Andrew Trevorrow.</l>
+<l> ..... </l>
+<l>For Unix-like platforms the software's all free,</l>
+<l>with a teTeX installation from the TeX-Live CD,</l>
+<l>which collects all the pieces and orders all parts,</l>
+<l>Thanks to Thomas Esser, Kaja, and Sebastian Rahtz.</l>
+<l> ..... </l>
+<l>Leslie Lamport created LaTeX nearly fifteen years ago.</l>
+<l>It evolved into 2-epsilon by a process rather slow.</l>
+<l>Improvements are numerous; results you can see.</l>
+<l>Thanks to Carlisle, Mittelbach and Rowley, </l>
+<l>It'll be even  better with release LaTeX3. </l>
+<l> ..... </l>
+<l>For PostScript Type1 fonts exquisitely drawn,</l>
+<l>The expert is Berthold, whose surname is Horn.</l>
+<l>Where the yin meets the yang in the great cosmic goo,</l>
+<l>Don't get this name mixed-up with Louis Vosloo.</l>
+<l> ..... </l>
+</lg>
+<byline>Ross Moore</byline>
+</div2>
+<!-- Bill Kempker <kempker@osagecon.missouri.org>
+Peggy Kempker
+star rt box 48c
+chamois mo 65024-->
+<div2><head>(untitled)</head>
+<lg>
+<l>Oh, what a tangled web is TeX,</l>
+<l>what you need to reach success.</l>
+<l>To make sure you don't get a reject,</l>
+<l>why not get some help from TeX.</l>
+</lg>
+<byline>Peggy Kempker</byline>
+</div2>
+<!--From: debra kaufman <djk@math.duke.edu>
+Debra Kaufman
+Duke Mathematical Journal
+International Mathematics Research Notices
+Duke University Press
+
+I don't have a TeX-themed poem, ala, but I do have one appropriate to
+another TeX theme this year- -mathematics and publishing. Here's my
+tribute to the unsung sexy heroes of mathematics. All phrases are bona
+fide mathematics terms of art. Really!
+-->
+<div2>
+<head>The Hidden Passions of Mathematicians</head>
+<lg>
+<l>Step into the garden of conjectures and see</l>
+<l>my Julia sets are uniformly perfect. </l>
+<l>Forget your nilpotence and steenrod algebras,</l>
+<l>my theta divisor is very ample.</l>
+<l>In this land of lemmata,</l>
+<l>you'll glide with the smoothness of Kelley</l>
+<l>while I, I'll gather the perverse sheaves</l>
+<l>and quivers, and we'll dance</l>
+<l>'til our zeta functions converge.</l>
+<l>Sipping modular moonshine, we'll reach </l>
+<l>the highest eigenvalue without effort.</l>
+<l>In this holomorphic vector field</l>
+<l>with totally degenerate zeroes,</l>
+<l>we may even discover the essence of chaos.</l>
+</lg>
+<byline>Debra Kaufman</byline>
+</div2>
+<!--From: Joseph Haubrich <joseph.g.haubrich@clev.frb.org>
+To: tug99-poetry@tug.org
+Subject: poetry-->
+<div2>
+<head>Sonnet from the ill-at-ease.</head>
+<lg>
+<l>Oh what a tangled web we get</l>
+<l>when first we practice to typeset.</l>
+<l>And so we read TeX master Knuth</l>
+<l>Hoping to Obtain some truth.</l>
+<l>Or else we read through the book of Spivak</l>
+<l>but end up simply crying Alack!</l>
+<l>And then we go and join the TUG</l>
+<l>trying to make our process chug.</l>
+<l>Beginners know why the rhyme for TeX</l>
+<l>is often the frustrated Blecchh.</l>
+<l>I can't even get a .dvi file,</l>
+<l>and you think TeX to HTML will make me smile?</l>
+</lg>
+<lg>
+<l>And yet I know if I abandon the Lion,</l>
+<l>With any other package I'll surely be cryin'.</l>
+</lg>
+<byline>Joseph Haubrich</byline>
+</div2>
+<div2>
+<head>(untitled)</head>
+<lg>
+<l>Breathes there the man with the eye so blind</l>
+<l>Who never for himself can find</l>
+<l>The $cos$sine, `c' times `o' times `s'</l>
+<l>The \acronym run on to the rest</l>
+<l>The sentence ending at <hi rend="it">et al</hi></l>
+<l>Although no verb shall yet befall</l>
+<l>Until a phrase two lines below</l>
+<l>The endquotes where the quotes should go?</l>
+</lg>
+<lg>
+<l>If such there be, away go he</l>
+<l>To Delaware for a Ph.D.!</l>
+<l>The thesis clerk no more shall check;</l>
+<l>The only folks to judge his TeX</l>
+<l>Are senior faculty, by norm</l>
+<l>Concerned with content, not with form</l>
+<l>His approval page they'll surely sign;</l>
+<l>The publisher, with wit sublime,</l>
+<l>His words in XML encases;</l>
+<l>And, should he be obscure in places,</l>
+<l>With sentence structure ill-prepared,</l>
+<l>His authorship will now be shared:</l>
+</lg>
+<lg>
+<l>Credit will to the copy editor belong</l>
+<l>Grammatically correct, but scientifically wrong.</l>
+</lg>
+<byline>Stephen Fulling </byline>
+</div2>
+</div1>
+<div1><head>Conference reflections</head>
+<div2>
+<head>Ode to a special</head>
+<lg>
+<l>Oh what a tangled web we get</l>
+<l>When first we find \def and \futurelet.</l>
+<l>We turn to eTeX, we turn to Omega,</l>
+<l>They both look good, we start to get eager.</l>
+<l>But no, whats this, a misplaced \omit?</l>
+<l>Did we miss a brace, does \vbox still not fit?</l>
+<l>Help me fix my macros, bracket heroes all!</l>
+<l>But Pierre's font is calling, Lamport's left the hall</l>
+<l>Barbara says use \downcase, Downes just strokes his beard.</l>
+<l>Erik sells me 4TeX, pretends he never heard.</l>
+<l>David's hacking tables, Frank is fixing floats,</l>
+<l>Ogawa's talking slowly, Kacvinsky wants his oats.</l>
+<l>Will Kaveh help me out? no, his dhoti's dirty,</l>
+<l>Nelson's feeding awks, Mimi's feeling flirty.</l>
+<l>Flynn says use a rubber, Wendy needs a hug,</l> 
+<l>Kath has got the answer, no it's just another mug.</l>
+<l>Young Ross is such a hoot, he says use xypic</l>
+<l>Why not turn to Sojka, he's sure to know the trick. </l>
+<l>Anita, a Hoover, what use to me's a dam?</l>
+<l>Send me out with Kiran, we'll both go on the lam.</l>
+<l>Irina claims `for us in Mir is no problem',</l>
+<l>TRIUMF uses \mathcode but \hspaces just one em.</l>
+<l>TrueTeX does it both ways, and you can trust the Blue Sky</l>
+<l>but hyperref the backend, oh why oh why oh why?</l>
+</lg>
+<lg>
+<l>ActiveTeX, PassiveTeX, what a great to do,</l>
+<l>Can there be yet some way through?</l>
+<l>MathML has pointies, XSL can claim its templates</l>
+<l>ExerQuiz is <hi rend="i">so</hi> cute&mdash;so screw you Billy Gates.</l>
+</lg>
+<byline>Sebastian Rahtz</byline>
+</div2>
+<div2>
+<head>TUG 99 musings</head>
+<lg>
+<l>Mr. Fine, with the eye of the sleuth</l>
+<l>has discovered why TeX is uncouth,</l>
+<l rend="indent(1)">that its catcodes are many</l>
+<l rend="indent(1)">when there shouldn't be any</l>
+<l>Has anyone told Donald Knuth?</l>
+</lg>
+<lg>
+<l>Mr. Flynn is now running on La-</l>
+<l>TeX, and finds, when the tread starts to fray,</l>
+<l rend="indent(1)">he can patch up the rules</l>
+<l rend="indent(1)">with his vulcanize tools</l>
+<l>pump them up, and be back on his way</l>
+</lg>
+<lg>
+<l>Though some of you authors may fret</l>
+<l>about how every page should be set</l>
+<l rend="indent(1)">and think what you see</l>
+<l rend="indent(1)">and what it must be</l>
+<l>Mr. Bazargan says what you get</l>
+</lg>
+<byline>Pierre Mackay </byline>
+</div2>
+<div2>
+<head>(untitled)</head>
+<lg>
+<l>I thought I would never see</l>
+<l>poetry, written by Chimpanzee</l>
+<l>But given TeX and infinite time</l>
+<l>I'll steal it and call it mine</l>
+</lg>
+<byline>Donald Arseneau </byline>
+</div2>
+</div1>
+</body>
+</text>
+</TEI.2>

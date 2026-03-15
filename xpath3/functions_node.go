@@ -837,6 +837,10 @@ func resolveCollectionURI(ctx context.Context, uri, fnName string) (string, erro
 
 func resolveDocURI(ctx context.Context, uri string) (string, error) {
 	if uri == "" {
+		// doc("") returns the document at the base URI (XSLT §14.1, XPath §14.1.1)
+		if ec := getFnContext(ctx); ec != nil && ec.baseURI != "" {
+			return ec.baseURI, nil
+		}
 		return "", &XPathError{Code: errCodeFODC0002, Message: "fn:doc: empty URI"}
 	}
 

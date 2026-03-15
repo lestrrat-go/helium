@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<characterSet xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xmlns="http://xoev.de/latinchars"
+              xsi:schemaLocation="http://xoev.de/latinchars lc-simple.xsd">
+  <char>
+      <name>LATIN CAPITAL LETTER A</name>
+      <extension>
+         <nfd>
+            <base>Base 1</base>
+         </nfd>
+      </extension>
+   </char>
+  <sequence>
+      <name>LATIN CAPITAL LETTER A WITH COMBINING DOUBLE ACUTE ACCENT</name>
+      <extension>
+         <nfd>
+            <base>Base 2</base>
+         </nfd>
+      </extension>
+   </sequence>
+  <char>
+      <name>LATIN CAPITAL LETTER B</name>
+      <extension>
+         <nfd>
+            <base>Base 3</base>
+         </nfd>
+      </extension>
+   </char>
+</characterSet>

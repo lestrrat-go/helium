@@ -1,5 +1,9 @@
 package xsd
 
+import (
+	"github.com/lestrrat-go/helium/xpath1"
+)
+
 // QName represents a namespace-qualified name.
 type QName struct {
 	Local string
@@ -121,6 +125,9 @@ type IDConstraint struct {
 	Fields     []string          // XPath field expressions
 	Refer      string            // for keyref: the name of the referenced key/unique
 	Namespaces map[string]string // prefix → URI from the schema document (for XPath evaluation)
+
+	SelectorExpr *xpath1.Expression   // pre-compiled selector XPath
+	FieldExprs   []*xpath1.Expression // pre-compiled field XPaths (parallel to Fields)
 }
 
 // DerivationKind describes how a type is derived from its base.

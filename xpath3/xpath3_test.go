@@ -935,6 +935,20 @@ func TestContextNamespaces(t *testing.T) {
 	require.Len(t, nodes, 1)
 }
 
+func TestUndeclaredPrefixInPathStep(t *testing.T) {
+	t.Parallel()
+	doc, err := helium.Parse(t.Context(), []byte(`<root xmlns:b="urn:b"><b:item/></root>`))
+	require.NoError(t, err)
+
+	// "p" is not declared in namespaces — must produce XPST0081
+	ctx := xpath3.WithNamespaces(t.Context(), map[string]string{
+		"a": "urn:a",
+	})
+	_, err = xpath3.Find(ctx, doc, `/root/p:item`)
+	require.Error(t, err, "undeclared prefix in path step must be rejected")
+	require.Contains(t, err.Error(), "XPST0081")
+}
+
 // --- Op limit ---
 
 func TestOpLimit(t *testing.T) {

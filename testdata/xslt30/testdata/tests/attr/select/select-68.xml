@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<doc>
+<OL real="yes">
+  <LI flag="yes">item1</LI>
+  <LI>item2</LI>
+  <LI flag="yes">item3</LI>
+  <OL real="no">
+    <LI flag="yes">subitem1n</LI>
+    <LI>subitem2n</LI>
+    <OL real="yes">
+      <LI flag="yes">subsubitem-not-last</LI>
+      <LI flag="yes">subsubitem-early</LI>
+      <tag/>
+    </OL>
+  </OL>
+</OL>
+<OL real="no">
+  <LI flag="yes">item1n</LI>
+  <LI>item2n</LI>
+  <OL real="yes">
+    <LI flag="yes">subitem1</LI>
+    <LI>subitem2</LI>
+    <OL real="yes">
+      <LI gag="yes">subsubitem-late</LI>
+      <tag/>
+    </OL>
+  </OL>
+</OL>
+</doc>

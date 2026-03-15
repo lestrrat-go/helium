@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<chapter>
+  <section id="1">
+    <head>Section 1</head>
+    <para>Intro to Section 1</para>
+    <section id="1.1">
+      <head>Section 1.1</head>
+      <para>Intro to Section 1.1</para>
+      <foot>End of Section 1.1</foot>
+    </section>
+    <section id="1.2">
+      <head>Section 1.2</head>
+      <para>Intro to Section 1.2</para>
+      <section id="1.2.1">
+        <head>Section 1.2.1</head>
+        <para>Content of Section 1.2.1</para>
+        <foot>End of Section 1.2.1</foot>
+      </section>
+      <section id="1.2.2">
+        <head>Section 1.2.2</head>
+        <para>Content of Section 1.2.2</para>
+        <foot>End of Section 1.2.2</foot>
+      </section>
+      <foot>End of Section 1.2</foot>
+    </section>
+    <section id="1.3">
+      <head>Section 1.3</head>
+      <para>Intro to Section 1.3</para>
+      <foot>End of Section 1.3</foot>
+    </section>
+    <foot>End of Section 1</foot>
+  </section>    
+</chapter>

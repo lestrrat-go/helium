@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <header>
+        <header-item>
+            <id>1</id>
+            <value>header 1</value>
+        </header-item>
+        <header-item>
+            <id>2</id>
+            <value>header 2</value>
+        </header-item>       
+    </header>
+    <body>
+        <items>
+            <item>
+                <id>i1</id>
+                <header-ref idref="1"/>
+            </item>
+        </items>
+    </body>
+</root>

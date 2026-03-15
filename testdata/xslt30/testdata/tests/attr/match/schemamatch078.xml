@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<my:derived-doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://www.example.com/ns/match/subgroup subgroupTypeSchemaMatch.xsd"
+     xmlns:my="http://www.example.com/ns/match/subgroup">
+	 <elem-URI>
+	 	<elem-anyURI>http://test1.org</elem-anyURI>		
+	 </elem-URI>
+	 <elem-INT>
+		<elem-anyURI>5</elem-anyURI>
+	 </elem-INT>
+	<my:elem-anyURI>http://www.example.com/test</my:elem-anyURI>
+	<my:book>
+		<title>My first Book</title>
+		<uri>http://www.first.example.com</uri>
+		<price>99.99</price>
+	</my:book>
+	<my:audio-book>
+		<title>My first Audio Book</title>
+		<uri>http://www.audio.example.com</uri>
+		<price>19.99</price>
+	</my:audio-book>
+	<my:article>
+		<title>My first Article</title>
+		<uri>http://www.article.example.com</uri>
+		<price>4.99</price>
+		<magazine>Times Magazine</magazine>
+		<page>5</page>
+		<level>intermediate</level>
+	</my:article>
+</my:derived-doc>

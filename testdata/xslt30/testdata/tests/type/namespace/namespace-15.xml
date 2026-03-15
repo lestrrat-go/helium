@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<doc>
+ <e a:a="1" xmlns:a="http://a.uri/"/>
+ <e b:a="2" xmlns:b="http://b.uri/"/> 
+ <e A:b="3" xmlns:A="http://a.uri/"/>
+ <e B:b="4" xmlns:B="http://b.uri/"/>
+ <e a="5"/>
+ <f a:a="1" xmlns:a="http://a.uri/"/>
+ <f b:a="2" xmlns:b="http://b.uri/"/> 
+ <f A:b="3" xmlns:A="http://a.uri/"/>
+ <f B:b="4" xmlns:B="http://b.uri/"/>
+ <f a="5"/>
+</doc>

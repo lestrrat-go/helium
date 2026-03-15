@@ -1,0 +1,153 @@
+<?xml version='1.0'?>
+<xsl:stylesheet version="2.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+   xsi:schemaLocation="http://www.w3.org/1999/XSL/Transform schema-for-xslt20.xsd"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+ <xsl:template match="xsl:stylesheet" mode="f"/>
+
+ <xsl:key name="fk" match="function" use="name"/>
+ 
+ <xsl:template match="functions" mode="f">
+   <html><xsl:comment>123</xsl:comment>
+    <head>
+    <title>XSLT 2.0 and XPath 2.0 Functions</title>
+    <link rel="stylesheet" type="text/css" href="saxon-style.css"/>
+    </head>   
+   
+   <body>
+    <div align="right"><a href="index.html">Saxon home page</a></div>
+
+   <h1>XSLT 2.0 and XPath 2.0 Functions</h1>
+   <p>The list on this page indicates which functions are implemented in this Saxon release,
+   and any restrictions in the current implementation.</p>
+   
+   <p>It includes both the core functions defined in XPath 2.0, and the additional
+   functions defined in the XSLT 2.0 specification.</p>
+
+   <page>   
+   <h2 id="intro">Index of Functions</h2>
+   
+   <xsl:variable name="fns" select="function[starts-with(name, 'fn:') or starts-with(name, 'xslt:')]"/>
+   <xsl:variable name="sfns" as="element()*">
+     <xsl:perform-sort select="$fns[. is key('fk', name)[1]]">
+       <xsl:sort select="substring-after(name, ':')"/>
+     </xsl:perform-sort>
+   </xsl:variable>
+   <xsl:variable name="colsize" select="xs:integer(ceiling(count($sfns) div 2))"/>
+   
+   <table>
+   <tr class="body">
+   <td valign="top"><xsl:apply-templates select="$sfns[(position()-1) idiv $colsize eq 0]" mode="index"/></td> 
+   <td valign="top"><xsl:apply-templates select="$sfns[(position()-1) idiv $colsize eq 1]" mode="index"/></td>   
+   <!--<td valign="top"><xsl:apply-templates select="$sfns[(position()-1) idiv $colsize eq 2]" mode="index"/></td>-->   
+   <!--<td valign="top"><xsl:apply-templates select="$sfns[(position()-1) idiv $colsize ge 3]" mode="index"/></td>-->
+   </tr>
+   </table>   
+
+   <!--<hr />
+   <h2>Function Definitions</h2> -->  
+   <xsl:apply-templates select="$sfns" mode="f"/>
+   </page>
+
+   </body></html>
+ </xsl:template>
+ 
+ <xsl:template match="function" mode="index">
+ <xref section="functions" page="intro" subpage="{translate(name, ':', '_')}"><xsl:value-of select="name"/></xref><br/>
+ </xsl:template>
+ 
+ <!--<xsl:template match="function">
+ 
+      <xsl:apply-templates select="signature"/>
+      <p><i><xsl:copy-of select="description"/></i></p>
+      <xsl:variable name="fname" select="substring-before(substring-after(signature,':'),'(')"/>
+      <xsl:choose>
+      <xsl:when test="starts-with(signature, 'fn:')">
+        <p><a href="http://www.w3.org/TR/xpath-functions/#func-{$fname}">XPath 2.0 Specification</a></p>
+      </xsl:when>
+      <xsl:otherwise>
+        <p><a href="http://www.w3.org/TR/xslt20/#function-{$fname}">XSLT 2.0 Specification</a></p>
+      </xsl:otherwise>
+      </xsl:choose>
+      <xsl:apply-templates select="status" mode="f"/>
+      <xsl:apply-templates select="notes" mode="f"/>
+      <hr/>
+
+ </xsl:template>-->
+ 
+  <xsl:template match="function[name]" priority="5" mode="f">
+  <subpage id="{translate(name,':','_')}" title="{name}">
+    <xsl:for-each select="key('fk', name)">
+      <h3><xsl:value-of select="replace(signature, '=>', '&#x2192;') "/></h3>
+      <p><i>Function signature</i></p>
+      <table>
+        <xsl:for-each select="arg">
+          <tr><td width="120">$<xsl:value-of select="@name"/></td>
+              <td width="150"><xsl:value-of select="concat(@type, ' ', @occurs)"/></td>
+          </tr>
+        </xsl:for-each>
+          <tr><td width="120"><b>Result</b></td>
+              <td width="150"><xsl:value-of select="concat(result/@type, ' ', result/@occurs)"/></td>
+          </tr>
+      </table>        
+
+      <p><i><xsl:copy-of select="description"/></i></p>
+      <xsl:variable name="fname" select="substring-after(name,':')"/>
+      <xsl:choose>
+      <xsl:when test="starts-with(name, 'fn:')">
+        <p><a href="http://www.w3.org/TR/xpath-functions/#func-{$fname}">XPath 2.0 Specification</a></p>
+      </xsl:when>
+      <xsl:otherwise>
+        <p><a href="http://www.w3.org/TR/xslt20/#function-{$fname}">XSLT 2.0 Specification</a></p>
+      </xsl:otherwise>
+      </xsl:choose>
+      <xsl:apply-templates select="status" mode="f"/>
+      <xsl:apply-templates select="notes" mode="f"/>
+      <hr/>
+    </xsl:for-each>
+    </subpage>
+ </xsl:template>
+ 
+ <xsl:template match="function[starts-with(signature, 'op:')]" priority="6" mode="f"/>
+
+ <xsl:template match="signature" mode="f">
+   <p><b><a name="{../name}"><xsl:apply-templates mode="f"/></a></b></p>
+ </xsl:template>
+ 
+ <xsl:template match="status" mode="f">
+   <p><xsl:copy-of select="child::node()"/></p>
+ </xsl:template>
+ 
+  <xsl:template match="status[.='y']" mode="f"/>
+ 
+  <xsl:template match="status[.='n']" mode="f">
+   <p>** Not yet implemented **</p>
+ </xsl:template>
+ 
+  <xsl:template match="notes" mode="f">
+   <p><b>Note: </b><xsl:apply-templates mode="f"/></p>
+ </xsl:template>
+ 
+ <!-- Generate list of functions in main table of contents -->
+ <xsl:template name="make-function-contents-page">
+   <xsl:variable name="fns" select="conformance/functions/function[starts-with(name, 'fn:') or starts-with(name, 'xslt:')]"/>
+   <xsl:variable name="sfns" as="element()*">
+     <xsl:perform-sort select="$fns[. is key('fk', name)[1]]">
+       <xsl:sort select="substring-after(name, ':')"/>
+     </xsl:perform-sort>
+   </xsl:variable>
+   <ul>
+   <xsl:for-each select="$sfns">
+     <li><a href="functions/intro/{translate(name, ':', '_')}.html">
+       <xsl:value-of select="name"/>
+     </a></li>
+   </xsl:for-each>
+   </ul>
+ </xsl:template>
+   
+ 
+</xsl:stylesheet> <!-- Stylus Studio meta-information - (c)1998-2004. Sonic Software Corporation. All rights reserved.
+<metaInformation>
+<scenarios/><MapperInfo srcSchemaPathIsRelative="yes" srcSchemaInterpretAsXML="no" destSchemaPath="" destSchemaRoot="" destSchemaPathIsRelative="yes" destSchemaInterpretAsXML="no"/>
+</metaInformation>
+-->

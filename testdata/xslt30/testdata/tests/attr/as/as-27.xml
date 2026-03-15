@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<doc-schemaas xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:noNamespaceSchemaLocation="builtinTypeSchemaAs.xsd"
+     xmlns:my="http://www.example.com/ns/test">
+	<elem-ID-attr attr1="_ab" attr2="5" />
+	<elem-ID-attr attr1="c1" attr2="3" />
+	<elem-ID-attr attr1="myid" attr2="50" />
+</doc-schemaas>

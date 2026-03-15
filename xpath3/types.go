@@ -44,7 +44,8 @@ func cloneSequences(seqs []Sequence) []Sequence {
 
 // NodeItem wraps a helium.Node as an XPath item.
 type NodeItem struct {
-	Node helium.Node
+	Node           helium.Node
+	TypeAnnotation string // optional xs:... type annotation (schema-aware)
 }
 
 func (NodeItem) itemTag() {}
@@ -111,6 +112,12 @@ const (
 	TypeDateTimeStamp = "xs:dateTimeStamp"
 	TypeError         = "xs:error"
 	TypeNumeric       = "xs:numeric"
+
+	// Non-atomic / structural types
+	TypeAnyType       = "xs:anyType"
+	TypeAnySimpleType = "xs:anySimpleType"
+	TypeUntyped       = "xs:untyped"
+	TypeNOTATION      = "xs:NOTATION"
 )
 
 // isSubtypeOf returns true if actualType is the same as or a subtype of targetType
@@ -696,12 +703,35 @@ func (a ArrayItem) Flatten() Sequence {
 
 // --- Atomization ---
 
+// IsKnownXSDType returns true if name is a recognized XSD type in the
+// xpath3 type hierarchy (the xsdTypeParent map or a base type).
+func IsKnownXSDType(name string) bool {
+	if _, ok := xsdTypeParent[name]; ok {
+		return true
+	}
+	switch name {
+	case TypeAnyAtomicType, TypeNumeric,
+		TypeAnyType, TypeAnySimpleType, TypeUntyped,
+		TypeNOTATION, TypeError,
+		TypeNMTOKENS, TypeENTITIES, TypeIDREFS:
+		return true
+	}
+	return false
+}
+
 // AtomizeItem converts a single item to an atomic value per XPath 3.1 Section 2.6.2.
 func AtomizeItem(item Item) (AtomicValue, error) {
 	switch v := item.(type) {
 	case AtomicValue:
 		return v, nil
 	case NodeItem:
+		if v.TypeAnnotation != "" && v.TypeAnnotation != TypeUntypedAtomic {
+			s := ixpath.StringValue(v.Node)
+			cast, err := CastFromString(s, v.TypeAnnotation)
+			if err == nil {
+				return cast, nil
+			}
+		}
 		return AtomicValue{
 			TypeName: TypeUntypedAtomic,
 			Value:    ixpath.StringValue(v.Node),

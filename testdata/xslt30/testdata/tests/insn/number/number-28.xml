@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<doc>
+  <note>aaa</note>
+  <note>bbb</note>
+  <note>ccc</note>
+  <chapter>
+    <note>ddd</note>
+    <note>eee</note>
+    <note>fff</note>
+  </chapter>
+  <note>ggg</note>
+  <note>hhh</note>
+  <note>iii</note>
+  <chapter>
+    <note>jjj</note>
+    <note>kkk</note>
+    <note>lll</note>
+  </chapter>
+  <note>mmm</note>
+  <note>nnn</note>
+  <note>ooo</note>
+</doc>

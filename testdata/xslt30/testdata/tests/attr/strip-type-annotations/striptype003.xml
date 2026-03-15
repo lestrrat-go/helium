@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<doc-striptype xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:noNamespaceSchemaLocation="allBuiltinTypes.xsd"
+     xmlns:my="http://www.example.com/ns/test">
+	<elem-anyURI>http://www.example.org/ns/test</elem-anyURI>
+	<elem-base64Binary>PM24</elem-base64Binary>
+	<elem-boolean>true</elem-boolean>
+	<elem-date>-0012-12-03-05:00</elem-date>
+	<elem-dateTime>2000-01-16T00:00:00Z</elem-dateTime>
+	<elem-decimal>-3.420100</elem-decimal>
+	<elem-double>-0.0E0</elem-double>
+	<elem-duration>-P12M23DT0M59.123S</elem-duration>
+	<elem-float>1.1234E99</elem-float>
+	<elem-gDay>---31Z</elem-gDay>
+	<elem-gMonth>--12-14:00</elem-gMonth>
+	<elem-gMonthDay>--05-31+14:00</elem-gMonthDay>
+	<elem-gYear>-0012-05:00</elem-gYear>
+	<elem-gYearMonth>21999-05+14:00</elem-gYearMonth>
+	<elem-hexBinary>07FF</elem-hexBinary>
+	<elem-integer>3345</elem-integer>
+	<elem-QName>my:test</elem-QName>
+	<elem-string>hello</elem-string>
+	<elem-time>13:20:00-05:00</elem-time>
+	<elem-normalizedString>like,</elem-normalizedString>
+	<elem-token>two organizations</elem-token>
+	<elem-language>PT</elem-language>
+	<elem-Name>a:_underscore_</elem-Name>
+	<elem-NCName>vwxyz12</elem-NCName>
+	<elem-NMTOKEN>business-enforcement::link-chain.common</elem-NMTOKEN>
+	<elem-int>131072</elem-int>
+	<elem-nonPositiveInteger>-763246023412394</elem-nonPositiveInteger>
+	<elem-positiveInteger>18446744073709551617</elem-positiveInteger>
+	<elem-nonNegativeInteger>444444444444</elem-nonNegativeInteger>
+	<elem-negativeInteger>-74146434249484</elem-negativeInteger>
+	<elem-long>-9223372036854775808</elem-long>
+	<elem-unsignedLong>18446744073709551615</elem-unsignedLong>
+	<elem-unsignedInt>573231403</elem-unsignedInt>
+	<elem-short>-32768</elem-short>
+	<elem-unsignedShort>65535</elem-unsignedShort>
+	<elem-byte>-128</elem-byte>
+	<elem-unsignedByte>110</elem-unsignedByte>
+	<elem-ID-attr attr1="_ab" attr2="5" />
+	<elem-IDREF-attr attr1="_ab" attr2="12" />
+</doc-striptype>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE doc [
+<!NOTATION XML SYSTEM 'http://www.w3.org/TR/REC-xml'>
+<!NOTATION text SYSTEM 'http://example.org/test/'>
+<!ELEMENT doc (#PCDATA)>
+<!ATTLIST doc bar NOTATION (XML|text) #REQUIRED>
+]>
+<doc bar="text"></doc>

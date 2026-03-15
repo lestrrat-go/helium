@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<docs>
+<doc>
+  <foo att1="c">
+    <foo att1="b">
+      <foo att1="a">
+        <baz att1="wrong"/>
+      </foo>
+    </foo>
+  </foo>
+</doc>
+<doc>
+  <inner att1="wrong">
+    <foo att1="a">
+      <baz att1="wrong"/>
+    </foo>
+  </inner>
+</doc>
+</docs>
+   

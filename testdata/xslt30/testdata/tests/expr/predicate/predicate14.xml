@@ -1,0 +1,9 @@
+<?xml version="1.0"?> 
+<doc>
+  <a squish="heavy" squash="butternut">1</a>
+  <a squish="heavy" squeesh="virus">2</a>
+  <a squash="butternut" squeesh="virus">3</a>
+  <a squish="heavy">4</a>
+  <a squeesh="virus">5</a>
+  <a squash="butternut">6</a>
+</doc>

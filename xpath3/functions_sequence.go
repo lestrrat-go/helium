@@ -109,9 +109,19 @@ func fnReverse(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 	seq := args[0]
+	if len(args[1]) == 0 {
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: starting position is required"}
+	}
 	a, err := AtomizeItem(args[1][0])
 	if err != nil {
 		return nil, err
+	}
+	// Cast untypedAtomic to double (per XPath function calling convention)
+	if a.TypeName == TypeUntypedAtomic {
+		a, err = CastAtomic(a, TypeDouble)
+		if err != nil {
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: starting position must be numeric"}
+		}
 	}
 	if !isSubtypeOf(a.TypeName, TypeNumeric) {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: starting position must be numeric"}
@@ -119,11 +129,20 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 	startF := math.Round(a.ToFloat64())
 
 	hasLength := len(args) > 2
+	if hasLength && len(args[2]) == 0 {
+		hasLength = false // $length is xs:double? — empty means no bound
+	}
 	var lengthF float64
 	if hasLength {
 		la, err := AtomizeItem(args[2][0])
 		if err != nil {
 			return nil, err
+		}
+		if la.TypeName == TypeUntypedAtomic {
+			la, err = CastAtomic(la, TypeDouble)
+			if err != nil {
+				return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: length must be numeric"}
+			}
 		}
 		if !isSubtypeOf(la.TypeName, TypeNumeric) {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: length must be numeric"}

@@ -11,6 +11,7 @@ const errCodeXPDY0002 = "XPDY0002"
 const errCodeXPDY0050 = "XPDY0050"
 const errCodeXPST0080 = "XPST0080"
 const errCodeXPST0081 = "XPST0081"
+const errCodeFOAR0001 = "FOAR0001"
 const errCodeFOAR0002 = "FOAR0002"
 const errCodeFOAP0001 = "FOAP0001"
 const errCodeFOCA0002 = "FOCA0002"
@@ -103,6 +104,11 @@ func (e *XPathError) Is(target error) bool {
 		return actual.Local == want.Local
 	}
 	return false
+}
+
+// CodeQName returns the error code as a QNameValue.
+func (e *XPathError) CodeQName() QNameValue {
+	return e.qname()
 }
 
 func (e *XPathError) qname() QNameValue {

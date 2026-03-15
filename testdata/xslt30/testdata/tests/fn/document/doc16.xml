@@ -1,0 +1,38 @@
+<?xml version='1.0'?>
+<table>
+  <!-- FileName: doc16.xml -->
+  <!-- Purpose: To be referenced by tests such as mdocs16 -->
+<expand>
+  <gentext key="TableofContents" text="TOC"/>
+  <gentext key="tableofcontents" text="TOC"/>
+</expand>
+<expand language="en">
+  <gentext key="Abstract" text="Abstract"/>
+  <gentext key="abstract" text="Abstract"/>
+  <gentext key="Bibliography" text="Bibliography"/>
+  <gentext key="bibliography" text="Bibliography"/>
+  <gentext key="Book" text="Book"/>
+  <gentext key="book" text="Book"/>
+  <gentext key="Chapter" text="Chapter"/>
+  <gentext key="Figure" text="Figure"/>
+  <gentext key="figure" text="Figure"/>
+  <gentext key="Index" text="Index"/>
+  <gentext key="index" text="Index"/>
+  <gentext key="LegalNotice" text="Legal Notice"/>
+  <gentext key="legalnotice" text="Legal Notice"/>
+  <gentext key="Preface" text="Preface"/>
+  <gentext key="preface" text="Preface"/>
+  <gentext key="Section" text="Section"/>
+  <gentext key="Table" text="Table"/>
+  <gentext key="table" text="Table"/>
+  <gentext key="chapter" text="chapter"/>
+  <gentext key="section" text="Section"/>
+  <gentext key="TableofContents" text="Table of Contents"/>
+  <gentext key="tableofcontents" text="Table of Contents"/>
+</expand>
+<expand language="FOO">
+  <gentext key="TableofContents" text="Tableaux du Content"/>
+  <gentext key="tableofcontents" text="Tableaux du Content"/>
+</expand>
+</table>
+

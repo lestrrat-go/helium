@@ -1,0 +1,64 @@
+<?xml version="1.0"?>
+<xsd:schema
+	xmlns="http://ns.example.com/sch185"
+	targetNamespace="http://ns.example.com/sch185"
+	xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+
+	<xsd:element name="doc">
+		<xsd:complexType>
+			<xsd:sequence>
+				<xsd:element name="book" type="bookType" minOccurs="1" maxOccurs="unbounded"/>
+			</xsd:sequence>
+		</xsd:complexType>
+	</xsd:element>
+
+	<xsd:complexType name="chapterType">
+		<xsd:sequence>
+			<xsd:element name="name" type="xsd:string"/>
+			<xsd:element name="number" type="xsd:string"/>
+			<xsd:element name="pages" type="pageType"/>
+		</xsd:sequence>
+		<xsd:attribute name="lang" type="xsd:NMTOKEN" fixed="en"/>
+	</xsd:complexType>
+
+	<xsd:complexType name="bookType">
+		<xsd:sequence>
+			<xsd:element name="title" type="xsd:string"/>
+			<xsd:element name="pages" type="pageType"/>
+			<xsd:element name="chapter" type="chapterType" minOccurs="1" maxOccurs="unbounded"/>
+			<xsd:element name="copyright">
+			<xsd:complexType>
+				<xsd:sequence>
+					<xsd:element name="year" type="yearType"/>
+					<xsd:element name="company" type="xsd:string"/>
+				</xsd:sequence>
+			</xsd:complexType>
+			</xsd:element>
+		</xsd:sequence>
+	</xsd:complexType>	
+
+	<xsd:simpleType name="pageType">
+		<xsd:restriction base="xsd:positiveInteger">
+			<xsd:minInclusive value="5"/>
+			<xsd:maxInclusive value="1000"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="yearType">
+		<xsd:restriction base="xsd:positiveInteger">
+			<xsd:minInclusive value="1"/>
+			<xsd:maxInclusive value="5000"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="testType">
+		<xsd:restriction base="xsd:string">
+			<xsd:pattern value="[a-zA-Z]+"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:element name="myBook" type="bookType"/>
+	<xsd:element name="myYear" type="yearType"/>
+	<xsd:element name="myTest" type="testType"/>
+
+</xsd:schema>

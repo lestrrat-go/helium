@@ -1,0 +1,21 @@
+<br:Bridge xmlns:gml="http://www.opengis.net/gml/3.2"
+                  xmlns:br="http://www.bridge.org"
+                 gml:id="Iowa-IllinoisMemorialBridge">
+   <gml:description>
+       The Interstate 74 Bridge, originally known as the Iowa-Illinois Memorial Bridge,
+       and often called The Twin Bridges, or the I-74 Bridge, is a pair of suspension
+       bridges that cross the Mississippi River and connect Bettendorf, Iowa and Moline, Illinois.
+   </gml:description>
+   <gml:identifier codeSpace="http://iowadot.gov">#8205,OL074  8205,OR074</gml:identifier>    
+   <gml:name>I-74 Bridge</gml:name>    
+   <gml:name>Twin Bridge</gml:name>
+   <gml:boundedBy>   
+       <gml:Envelope srsName="http://earth-info.nga.mil/GandG/wgs84/index.html">
+           <gml:lowerCorner>41.512674 -90.513161</gml:lowerCorner>
+           <gml:upperCorner>41.524113 -90.51299</gml:upperCorner>
+       </gml:Envelope>
+   </gml:boundedBy>
+   <br:length>3,372 feet (1,028 m)</br:length>
+   <br:width>27 feet (8 m)</br:width>
+   <br:spans>Mississippi River</br:spans>
+</br:Bridge>

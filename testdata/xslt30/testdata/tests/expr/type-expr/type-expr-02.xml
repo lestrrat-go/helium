@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:userNode xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://www.schemaexpr.example.com/ns/various variousTypesSchemaExpr.xsd"
+		  xmlns:my="http://www.schemaexpr.example.com/ns/various">
+
+	<elem-boolean>true</elem-boolean>
+	<elem-boolean>false</elem-boolean>
+	<elem-boolean-derived>   true   </elem-boolean-derived>
+	<elem-boolean-derived>      false  </elem-boolean-derived>
+</my:userNode>

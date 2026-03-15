@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xpath-data>
+    <xpath>/data/product[@type='pencil']</xpath>
+    <xpath>/data/product[@type='note'][string(@unitPrice) eq '150']</xpath>
+</xpath-data>

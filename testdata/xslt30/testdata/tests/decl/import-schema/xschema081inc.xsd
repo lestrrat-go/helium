@@ -1,0 +1,9 @@
+  <xs:schema targetNamespace="http://schema081.uri/"
+             xmlns:xs="http://www.w3.org/2001/XMLSchema">
+    <xs:simpleType name="blackOrWhite">
+      <xs:restriction base="xs:string">
+        <xs:enumeration value="black"/>
+        <xs:enumeration value="white"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:schema>

@@ -1,0 +1,28 @@
+<cemetery>
+<stone number="1" zona="z_A" plot="0" height="79" breadth="54" width="71" form="PLB" material="ST" cond="c_1" bits="1" dec="1" faces="E">
+<person sex="m"><name><fnm>Francis d'Arcy Godolphin</fnm><snm>Osborne</snm></name><born><date><day>16</day><mon> 9</mon><yr>1884</yr></date></born><died><date><day>20</day><mon> 3</mon><yr>1964</yr></date></died><pb><cty>London </cty><cny>England</cny></pb><pd><cty>Rome </cty><cny>Italy</cny></pd><cause></cause><age status="1">79 </age><nat status="1" idref="GB"/><profess>diplomat</profess><comment>12th and last Duke of Leeds;K.C.M.G., K.ST.J, K.C.S.G.</comment></person>
+<inscrip  face="f_E" cond="c_2" manner="m_IF" type="t_P" lang="l_EN">
+<l p="c"><ntag>FRANCIS</ntag> <ntag>D'ARCY</ntag> <ntag>GODOLPHIN</ntag></l>
+<l p="c"><ntag>OSBORNE</ntag></l>
+<l p="c">K.C.M.G. K.ST.J. K.C.S.G.</l>
+<l p="c">12TH. AND LAST DUKE OF <ptag>LEEDS.</ptag></l>
+<l p="c">MINISTER TO THE HOLY SEE</l>
+<l p="c">1936--1947</l>
+<l p="c"><ptag>LONDON</ptag> 16.9.1884</l>
+<l p="c"><ptag>ROME</ptag> 20.3.1964</l></inscrip><deco>
+<icon face="f_T" occs="1" type="it_B"
+      key="i164"></icon></deco><desc>(vol 1, plate 1)</desc><photo
+								   film="*H" neg="26268"></photo>
+</stone>
+<stone number="88" zona="z_V" plot="0" height="61" breadth="8" width="35" form="HEAD" material="ST" cond="c_2" bits="1" dec="1" faces="S">
+<person sex="m"><name><fnm>Ian</fnm><snm>Angus</snm></name><born><date><day>0</day><mon>0</mon><yr status="1">1953</yr></date></born><died><date><day>24</day><mon> 5</mon><yr>1956</yr></date></died><pb><cty></cty><cny>Australia</cny></pb><cause>drowned</cause><age>3 </age><nat status="1" idref="AU"/></person>
+<inscrip  face="f_S" cond="c_2" manner="m_I" type="t_P" lang="l_EN">
+<l p="c">IAN ANGUS</l>
+<l p="c">AN AUSTRALIAN</l>
+<l p="c">BOY OF 3 1/2 YEARS</l>
+<l p="c">DROWNED</l>
+<l p="c">24.5.1956</l></inscrip><deco>
+<icon face="f_S" occs="1" type="it_B" key="i113"> </icon></deco><photo film="K" neg="30"></photo>
+</stone>
+</cemetery>
+

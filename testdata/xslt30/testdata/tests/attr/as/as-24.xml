@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:userNode xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://www.example.com/ns/various variousTypesSchemaAs.xsd"
+		  xmlns:my="http://www.example.com/ns/various"
+	 	  my:specialPart="123-AB" my:listParts="000-SS 000-RR"
+	 	  my_decimal="-1">
+		<my:derivedPart>000-AB</my:derivedPart>
+</my:userNode>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cities>
+    <city name="Milano"  country="Italia"  year="1950"   pop="5.23"/>
+    <city name="Milano"  country="Italia"  year="1960"   pop="5.29"/>  
+    <city name="Padova"  country="Italia"  year="1950"   pop="0.69"/>
+    <city name="Padova"  country="Italia"  year="1960"   pop="0.93"/>    
+    <city name="Paris"   country="France"  year="1951"   pop="7.2"/>
+    <city name="Paris"   country="France"  year="1961"   pop="7.6"/>
+</cities>

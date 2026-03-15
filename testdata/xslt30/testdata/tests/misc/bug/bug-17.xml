@@ -1,0 +1,34 @@
+<results group="A">
+<match>
+<date>10-Jun-98</date>
+<team score="2">Brazil</team>
+<team score="1">Scotland</team>
+</match>
+<match>
+<date>10-Jun-98</date>
+<team score="2">Morocco</team>
+<team score="2">Norway</team>
+</match>
+<match>
+<date>16-Jun-98</date>
+<team score="1">Scotland</team>
+<team score="1">Norway</team>
+</match>
+<match>
+<date>16-Jun-98</date>
+<team score="3">Brazil</team>
+<team score="0">Morocco</team>
+</match>
+<match>
+<date>23-Jun-98</date>
+<team score="1">Brazil</team>
+<team score="2">Norway</team>
+</match>
+<match>
+<date>23-Jun-98</date>
+<team score="0">Scotland</team>
+<team score="3">Morocco</team>
+</match>
+</results>
+
+

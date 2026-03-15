@@ -1,0 +1,18 @@
+<m:math xmlns:m="http://www.w3.org/1998/Math/MathML" style='background-color:#'>
+ <m:semantics>
+  <m:mrow>
+   <m:msup>
+     <m:mn>10</m:mn>
+     <m:mmultiscripts>
+      <m:mn>4</m:mn>
+      <m:mprescripts />
+
+      <m:none />
+      <m:mo>*</m:mo>
+     </m:mmultiscripts>
+   </m:msup>
+   
+  </m:mrow>
+ <m:annotation encoding='MathType-MTEF'/>
+ </m:semantics>
+</m:math>

@@ -1,0 +1,13 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://schema055.uri/"
+           elementFormDefault="qualified">
+
+<xs:complexType name="repeated-choice">
+    <xs:choice minOccurs="1" maxOccurs="unbounded">
+      <xs:any namespace="##targetNamespace ##local" processContents="skip"/> 
+    </xs:choice>
+</xs:complexType>
+
+
+</xs:schema>

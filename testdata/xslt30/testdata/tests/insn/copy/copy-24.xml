@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!-- Comment-1 -->
+<far-north> Level-1
+  <!-- Comment-2 --> Level-2
+  <?a-pi pi-2?>
+  <north>
+	 <!-- Comment-3 --> Level-3
+	 <?a-pi pi-3?>
+     <near-north>
+	    <!-- Comment-4 --> Level-4
+	    <?a-pi pi-4?>
+        <center>
+           <near-south-west/>
+		   <!-- Comment-5 -->   Level-5
+		   <?a-pi pi-5?>
+           <near-south>
+		      <!-- Comment-6 -->   Level-6
+		      <?a-pi pi-6?>
+	      <south attr1="First" attr2="Last">
+              </south>
+           </near-south>
+        </center>
+     </near-north>
+  </north>
+</far-north>

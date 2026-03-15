@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<doc-schemaas xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:noNamespaceSchemaLocation="builtinTypeSchemaAs.xsd"
+     xmlns:my="http://www.example.com/ns/test">
+	<elem-token>one</elem-token>
+	<elem-token>two</elem-token>
+	<elem-token>two organizations</elem-token>
+	<elem-language>PT</elem-language>
+	<elem-int>131072</elem-int>
+	<elem-negativeInteger>-74146</elem-negativeInteger>
+	<elem-byte>-128</elem-byte>
+	<elem-byte>127</elem-byte>
+	<elem-ID-attr attr1="_ab" attr2="5" />
+</doc-schemaas>

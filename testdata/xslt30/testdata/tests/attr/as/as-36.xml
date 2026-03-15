@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<my:people xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://www.example.com/ns/attr attributesSchemaAs.xsd"
+     xmlns:my="http://www.example.com/ns/attr"
+     my:nationality="americans">
+	 <person my:nationality="american"
+	 		 my:string-int-union="hello"
+	 		 my:string-int-derived="bye"
+	 		 my:nationality-decimal-union="latin">
+	 	<name>Peter Greenberg</name>
+	 	<age my:nationality="1.2">22</age>
+	 </person>
+</my:people>

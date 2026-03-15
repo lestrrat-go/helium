@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!DOCTYPE t04 [
+  <!ELEMENT t04 (a|b)*>
+  <!ELEMENT a EMPTY>
+  <!ATTLIST a  id ID #REQUIRED>
+  <!ELEMENT b EMPTY>
+  <!ATTLIST b ref IDREFS #REQUIRED>
+]>
+<t04>  
+  <a id="a"/>
+  <a id="b"/>
+  <a id="c"/>
+  <a id="d"/>
+  <a id="e"/>
+  <a id="f"/>
+  <a id="g"/>
+  <a id="h"/>
+  <a id="i"/>
+  <a id="j"/>
+  <a id="k"/>
+  <a id="l"/>
+  <a id="m"/>
+  <b ref="a b c"/>
+  <b ref="d e f"/>
+</t04>

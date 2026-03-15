@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<data>
+    <product type="pencil" maker="Mitubishi" unitPrice="100"/>
+    <product type="pencil" maker="Corin"     unitPrice="90"/>
+    <product type="pencil" maker="Tombo"     unitPrice="110"/>
+    <product type="pencil" maker="KitaBoshi" unitPrice="105"/>
+    <product type="note"   maker="Kokuyo"    unitPrice="200"/>
+    <product type="note"   maker="Tsubame"   unitPrice="180"/>
+    <product type="note"   maker="Maruman"   unitPrice="150"/>
+</data>

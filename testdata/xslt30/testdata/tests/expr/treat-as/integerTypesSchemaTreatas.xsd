@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+			targetNamespace="http://www.schematreatas.example.com/ns/integer"
+			xmlns:my="http://www.schematreatas.example.com/ns/integer">
+
+	<xsd:annotation>
+		<xsd:documentation>
+      		Schema for integers for treat as 
+		</xsd:documentation>
+	</xsd:annotation>
+
+	<xsd:element name="userNode" type="my:userType" nillable="true" />
+	 
+	<xsd:complexType name="userType">
+		<xsd:sequence>
+			<xsd:element name="elem-decimal" type="xsd:decimal" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-integer" type="xsd:integer" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-integer-derived" type="my:elem-integer-derived-Type" minOccurs="0" maxOccurs="unbounded"/>
+   		</xsd:sequence>
+	</xsd:complexType>
+	
+	<xsd:simpleType name="elem-integer-derived-Type">
+		<xsd:restriction base="xsd:integer">
+			<xsd:minInclusive value="20" />
+			<xsd:maxExclusive value="101" />
+		</xsd:restriction>
+	</xsd:simpleType>
+</xsd:schema>

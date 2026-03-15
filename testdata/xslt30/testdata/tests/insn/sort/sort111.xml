@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- Test for xsl:sort -->
+<doc>
+  <item>2</item>
+  <item>40</item>
+  <item>01</item>
+  <item>0101</item>
+  <item>4</item>
+  <item>0100</item>
+  <item>4000</item>
+  <item>001</item>
+  <item>020</item>
+  <item>00100</item>
+  <item>0110</item>
+  <item>20</item>
+  <item>04</item>
+  <item>002</item>
+</doc>
+

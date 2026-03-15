@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<doc>
+  <div>
+    <title>Introduction</title>
+	<x>25</x>
+	<y>39</y>
+	<z>25</z>
+    <p>Intro Section</p>
+	<q>1</q>
+  </div>
+  <div>
+    <title>Structure</title>
+	<x>14</x>
+	<y>89</y>
+	<z>75</z>
+    <p>Struc Section</p>
+	<q>2</q>
+  </div>
+  <div>
+    <title>Expressions</title>
+	<x>44</x>
+	<y>25</y>
+	<z>46</z>
+    <p>Exp Section</p>
+	<q>3</q>
+  </div>
+  <div>
+    <title>Numbers</title>
+	<x>25</x>
+	<y>44</y>
+	<z>75</z>
+    <p>Num Section</p>
+	<q>3.7</q>
+  </div>
+</doc>

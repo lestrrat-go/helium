@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<z:doc xmlns:z="http://z.test.com/">
+  <z:chapter>
+    <z:note>aaa</z:note>
+    <z:note>bbb</z:note>
+    <z:note>ccc</z:note>
+  </z:chapter>
+  <z:chapter>
+    <z:note>ddd</z:note>
+    <z:note>eee</z:note>
+    <z:note>fff</z:note>
+  </z:chapter>
+</z:doc>

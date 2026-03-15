@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+	targetNamespace="http://www.example.com/ns/match/attributes"
+	xmlns:my="http://www.example.com/ns/match/attributes" attributeFormDefault="qualified">
+
+	<xsd:annotation>
+		<xsd:documentation> Schema for attribute node tests </xsd:documentation>
+	</xsd:annotation>
+
+	<!-- Begin definitions -->
+	<xsd:element name="people" type="my:peopleType"/>
+	<xsd:attribute name="nationality" type="xsd:string"/>
+
+	<xsd:attribute name="id" type="xsd:string"/>
+	<xsd:attribute name="ref" type="xsd:string"/>
+	<xsd:attribute name="refs" type="xsd:IDREFS"/>
+	<xsd:attribute name="tok" type="xsd:string"/>
+	<xsd:attribute name="toks" type="xsd:string"/>
+	<xsd:attribute name="language" type="xsd:string"/>
+	<xsd:attribute name="positiveInteger" type="xsd:integer"/>
+	<xsd:attribute name="unsignedShort" type="xsd:decimal"/>
+	<xsd:attribute name="long" type="xsd:long"/>
+	<xsd:attribute name="string-int-union" type="xsd:string"/>
+	<xsd:attribute name="string-int-derived" type="my:string-int-type"/>
+	<xsd:attribute name="nationality-decimal-union" type="my:nationality-decimal-type"/>
+
+	<xsd:complexType name="ageType">
+		<xsd:simpleContent>
+			<xsd:extension base="xsd:integer">
+				<xsd:attribute name="nationality" type="xsd:double" use="optional"/>
+			</xsd:extension>
+		</xsd:simpleContent>
+	</xsd:complexType>
+	
+	<xsd:simpleType name="derivedNameNationality">
+		<xsd:restriction base="my:nameNationality">
+			<xsd:enumeration value="latin"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:complexType name="nameType">
+		<xsd:simpleContent>
+			<xsd:extension base="xsd:NMTOKENS">
+				<xsd:attribute name="nationality" type="my:derivedNameNationality" use="optional"/>
+			</xsd:extension>
+		</xsd:simpleContent>
+	</xsd:complexType>
+
+	<xsd:simpleType name="nameNationality">
+		<xsd:restriction base="xsd:token">
+			<xsd:enumeration value="latin"/>
+			<xsd:enumeration value="roman"/>
+			<xsd:enumeration value="slavic"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	
+	<xsd:simpleType name="nationality-decimal-type">
+		<xsd:union memberTypes="my:nameNationality xsd:decimal"/>
+	</xsd:simpleType>
+	
+	<xsd:complexType name="peopleType">
+		<xsd:sequence>
+			<xsd:element name="person" type="my:personType" minOccurs="0" maxOccurs="unbounded"/>
+		</xsd:sequence>
+		<xsd:attribute ref="my:nationality"/>
+	</xsd:complexType>
+	
+	<xsd:complexType name="personType">
+		<xsd:sequence>
+			<xsd:element name="name" type="my:nameType" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="age" type="my:ageType" minOccurs="0" maxOccurs="1"/>
+		</xsd:sequence>
+		<xsd:attribute name="nationality" type="xsd:token" use="optional"/>
+		<xsd:attribute name="id" type="xsd:ID" use="optional"/>
+		<xsd:attribute name="ref" type="xsd:IDREF" use="optional"/>
+		<xsd:attribute ref="my:refs" use="optional"/>
+		<xsd:attribute name="tok" type="xsd:NMTOKEN" use="optional"/>
+		<xsd:attribute name="toks" type="xsd:NMTOKENS" use="optional"/>
+		<xsd:attribute name="language" type="xsd:language" use="optional"/>
+		<xsd:attribute name="positiveInteger" type="xsd:positiveInteger" use="optional"/>
+		<xsd:attribute name="unsignedShort" type="xsd:unsignedShort" use="optional"/>
+		<xsd:attribute ref="my:long" use="optional"/>
+		<xsd:attribute name="string-int-union" type="my:string-int-type" use="optional"/>
+		<xsd:attribute name="string-int-derived" type="my:string-int-derived-type" use="optional"/>
+		<xsd:attribute ref="my:nationality-decimal-union" use="optional"/>
+	</xsd:complexType>
+
+	<xsd:simpleType name="string-int-type">
+		<xsd:union memberTypes="xsd:string xsd:integer"/>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="string-int-derived-type">
+		<xsd:restriction base="my:string-int-type"/>
+	</xsd:simpleType>
+
+</xsd:schema>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:userNode xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://www.schemafunc.example.com/ns/various variousTypesSchemaFunc.xsd"
+		  xmlns:my="http://www.schemafunc.example.com/ns/various">
+	  
+	<elem-date>-0012-12-03-05:00</elem-date>
+	<elem-date-derived>1992-11-03</elem-date-derived>
+</my:userNode>

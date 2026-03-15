@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:simpleUserUnion xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://www.example.com/ns/match/var variousTypesSchemaMatch.xsd"
+		  xmlns:my="http://www.example.com/ns/match/var">
+	100
+</my:simpleUserUnion>

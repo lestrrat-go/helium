@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<s:schema xmlns:s="http://www.w3.org/2001/XMLSchema">
+
+	<s:annotation>
+		<s:documentation>
+      		Simple Schema with no target namespace 
+		</s:documentation>
+	</s:annotation>
+
+<!-- Begin definitions -->
+	<s:element name="doc-inline" type="docType-inline" />
+	
+	<s:element name="de1-decimal-enumeration-inline" type="de1-decimal-enumeration-Inline" />
+	<s:element name="de2-decimal-maxExclusive-inline" type="de2-decimal-maxExclusive-Inline" />
+	<s:element name="de3-decimal-maxInclusive-minExclusive-inline" type="de3-decimal-maxInclusive-minExclusive-Inline" />
+	<s:element name="de4-decimal-minInclusive-pattern-inline" type="de4-decimal-minInclusive-pattern-Inline" />
+	<s:element name="de5-decimal-fractionDigits-totalDigits-inline" type="de5-decimal-fractionDigits-totalDigits-Inline" />
+	<s:element name="de6-decimal-whiteSpace-inline" type="de6-decimal-whiteSpace-Inline" />
+	
+	<s:attribute name="attr1" type="de1-decimal-enumeration-Inline"/>
+    <s:attribute name="attr2" type="de2-decimal-maxExclusive-Inline"/>
+	
+	
+	<s:complexType name="docType-inline">
+		<s:sequence>
+			<s:element name="elem-attr-inline" minOccurs="0" maxOccurs="1">
+				<s:complexType>
+    				<s:attribute ref="attr1" use="optional"/>
+    				<s:attribute ref="attr2" use="optional"/>
+  				</s:complexType>
+			</s:element>
+			<s:element ref="de1-decimal-enumeration-inline" minOccurs="0" maxOccurs="1"/>
+			<s:element ref="de2-decimal-maxExclusive-inline" minOccurs="0" maxOccurs="1"/>
+			<s:element ref="de3-decimal-maxInclusive-minExclusive-inline" minOccurs="0" maxOccurs="1"/>
+			<s:element ref="de4-decimal-minInclusive-pattern-inline" minOccurs="0" maxOccurs="1"/>
+			<s:element ref="de5-decimal-fractionDigits-totalDigits-inline" minOccurs="0" maxOccurs="1"/>
+			<s:element ref="de6-decimal-whiteSpace-inline" minOccurs="0" maxOccurs="1"/>
+   		</s:sequence>
+	</s:complexType>
+
+	<!-- Following are types derived from decimal -->
+
+	<s:simpleType name="de1-decimal-enumeration-Inline">
+
+		<s:restriction base="s:decimal">
+
+			<s:enumeration value="1" />
+
+			<s:enumeration value="-1" />
+
+			<s:enumeration value="0" />
+
+			<s:enumeration value="1.1" />
+
+			<s:enumeration value="-1.1" />
+
+			<s:enumeration value="1.01" />
+
+			<s:enumeration value="-1.01" />
+
+			<s:enumeration value="1.001" />
+
+			<s:enumeration value="-1.001" />
+
+			<s:enumeration value="1.0001" />
+
+			<s:enumeration value="-1.0001" />
+
+			<s:enumeration value="1.0101" />
+
+			<s:enumeration value="-1.0101" />
+
+			<s:enumeration value="11111" />
+
+			<s:enumeration value="-11111" />
+
+		</s:restriction>
+
+	</s:simpleType>
+
+	<s:simpleType name="de2-decimal-maxExclusive-Inline">
+
+		<s:restriction base="s:decimal">
+
+			<s:maxExclusive value="123.456789" />
+
+		</s:restriction>
+
+	</s:simpleType>
+
+	<s:simpleType name="de3-decimal-maxInclusive-minExclusive-Inline">
+
+		<s:restriction base="s:decimal">
+
+			<s:minExclusive value="-1" />
+
+			<s:maxInclusive value="1048.576" />
+
+		</s:restriction>
+
+	</s:simpleType>
+
+	<s:simpleType name="de4-decimal-minInclusive-pattern-Inline">
+
+		<s:restriction base="s:decimal">
+
+			<s:pattern value="\d{4}\.\d{3}" />
+
+			<s:minInclusive value="1000.000" />
+
+		</s:restriction>
+
+	</s:simpleType>
+
+	<s:simpleType name="de5-decimal-fractionDigits-totalDigits-Inline">
+
+		<s:restriction base="s:decimal">
+
+			<s:totalDigits value="11" />
+
+			<s:fractionDigits value="4" />
+
+		</s:restriction>
+
+	</s:simpleType>
+
+	<s:simpleType name="de6-decimal-whiteSpace-Inline">
+
+		<s:restriction base="s:decimal">
+
+			<s:whiteSpace value="collapse" />
+
+		</s:restriction>
+
+	</s:simpleType>
+</s:schema>

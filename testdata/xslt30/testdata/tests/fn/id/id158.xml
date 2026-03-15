@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<!DOCTYPE main [
+  <!ELEMENT main (a*)>
+  <!ELEMENT a (#PCDATA)>
+  <!ATTLIST a id ID #REQUIRED>
+]>
+<main>
+  <a id="w">W</a>
+  <a id="x">X</a>
+  <a id="y">Y</a>
+  <a id="z">Z</a>
+</main>

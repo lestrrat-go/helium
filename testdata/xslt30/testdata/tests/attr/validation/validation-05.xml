@@ -1,0 +1,434 @@
+<?xml version='1.0'?>
+<xsl:stylesheet version="2.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+   xsi:schemaLocation="http://www.w3.org/1999/XSL/Transform schema-for-xslt20.xsd"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+<xsl:output method="html" encoding="iso-8859-1"
+            doctype-public="-//W3C//DTD HTML 4.01 Transitional//EN"/>
+
+<xsl:variable name="sections" select="/catalog/section/@ref"/>
+
+<xsl:template match="/">
+	<xsl:apply-templates/>
+	<xsl:call-template name="generate-contents"/>
+</xsl:template>
+
+<xsl:template match="catalog">
+  <xsl:for-each select="section/@ref">
+    <xsl:apply-templates select="document(concat(., '.xml'))/((html/body)|conformance)">
+       <xsl:with-param name="this-doc" select="string(.)" tunnel="yes"/>
+    </xsl:apply-templates>
+  </xsl:for-each>
+</xsl:template>
+
+<xsl:template match="*">
+  <xsl:copy>
+    <xsl:copy-of select="@*"/>
+	  <xsl:apply-templates/>
+  </xsl:copy>
+</xsl:template>
+
+<xsl:template match="a[starts-with(@href, 'http://') or starts-with(@href, '../javadoc')]">
+  <xsl:copy>
+    <xsl:copy-of select="@*"/>
+    <xsl:attribute name="target" select="'_blank'"/>
+    <xsl:attribute name="class" select="'bodylink'"/>
+	  <xsl:apply-templates/>
+  </xsl:copy>
+</xsl:template>
+
+<xsl:template match="a[starts-with(@href, '#')]">
+  <xsl:param name="this-doc" required="yes" tunnel="yes"/>
+  <xsl:variable name="frag" select="substring-after(@href, '#')"/>
+  <xsl:variable name="anchor" select="
+          (//h2[@id = $frag]/@id | //a[@name=$frag]/@name)[1]"/>
+  <xsl:variable name="page" select="
+          if (name($anchor) = 'name')
+          then string($anchor/ancestor::page/h2/@id)
+          else $frag"/>
+  <xsl:variable name="subpage" select="
+          if (name($anchor) = 'name')
+          then concat('#', string($anchor))
+          else ''"/>
+  <xsl:if test="not($anchor)">
+    <xsl:message>*** Dangling local link <xsl:value-of select="@href"/>
+    <!--Found: <xsl:for-each select="//h2"><xsl:value-of select="@id"/>, </xsl:for-each>-->
+    </xsl:message>
+  </xsl:if>
+  <xsl:variable name="up" select="
+         if (ancestor::subpage) then '../../'
+         else if (ancestor::page) then '../'
+         else ''"/> 
+
+  <xsl:copy>
+    <xsl:copy-of select="@* except @href"/>
+    <xsl:attribute name="href" select="concat($up, $this-doc, '/', $page, '.html', $subpage)"/>
+    <xsl:attribute name="target" select="'_self'"/>
+    <xsl:attribute name="class" select="'bodylink'"/>
+	  <xsl:apply-templates/>
+  </xsl:copy>
+</xsl:template>
+
+<xsl:template match="a[matches(@href, '^[A-Za-z\-]+.html#.+$')]">
+  <xsl:param name="this-doc" required="yes" tunnel="yes"/>
+  <xsl:variable name="section" select="substring-before(@href, '.html')"/>
+  <xsl:variable name="page" select="substring-after(@href, '#')"/>
+  <xsl:if test="not($sections[.=$section])">
+    <xsl:message>*** Dangling section in link <xsl:value-of select="@href"/></xsl:message>
+  </xsl:if>
+  <xsl:variable name="target-section" select="document(concat($section, '.xml'))"/>
+  <xsl:if test="not($target-section//h2[@id=$page])">
+    <xsl:message>*** Dangling page in link <xsl:value-of select="@href"/></xsl:message>
+  </xsl:if>
+  <xsl:copy>
+    <xsl:copy-of select="@* except @href"/>
+    <xsl:attribute name="class" select="'bodylink'"/>
+    <xsl:attribute name="href">
+      <xsl:text>javascript:topage('</xsl:text>
+      <xsl:value-of select="$section"/>
+      <xsl:text>', '</xsl:text>
+      <xsl:value-of select="$page"/>
+      <xsl:text>')</xsl:text>
+    </xsl:attribute>
+	  <xsl:apply-templates/>
+  </xsl:copy>
+</xsl:template>
+
+<xsl:template match="a[matches(@href, '^[A-Za-z\-]+\.html$')]">
+  <xsl:param name="this-doc" required="yes" tunnel="yes"/>
+  <xsl:variable name="section" select="substring-before(@href, '.html')"/>
+  <xsl:copy>
+    <xsl:copy-of select="@* except @href"/>
+    <xsl:attribute name="class" select="'bodylink'"/>
+    <xsl:attribute name="href">
+      <xsl:text>javascript:topage('</xsl:text>
+      <xsl:value-of select="$section"/>
+      <xsl:text>', 'intro')</xsl:text>
+    </xsl:attribute>
+	<xsl:apply-templates/>
+  </xsl:copy>
+</xsl:template>
+
+<xsl:template match="body">
+  <xsl:call-template name="make-menu"/>
+  <xsl:apply-templates select="page"/>
+</xsl:template>
+
+<xsl:template match="page">
+  <xsl:param name="this-doc" required="yes" tunnel="yes"/>
+  <xsl:variable name="pgid" select="(h2/@id, position())[1]"/>
+  <xsl:result-document href="{$this-doc}/{$pgid}.html">
+    <html>
+    <head>
+	<xsl:comment>
+		<xsl:value-of select="$this-doc, $pgid" separator="/"/>
+		Generated at <xsl:value-of select="current-dateTime()"/>
+	</xsl:comment>
+    <title>Saxonica: XSLT and XQuery Processing: <xsl:value-of select="h2"/></title>
+    <meta name="coverage" content="Worldwide"/>
+    <meta name="title" content="Saxonica: XSLT and XQuery Processing: {h2}"/>
+    <meta name="robots" content="noindex,nofollow"/>
+    <link rel="stylesheet" href="../saxondocs.css" type="text/css"/>
+      <script type="text/javascript" language="JavaScript">
+            function topage(section, page) {
+                parent.frames['menu'].location="../" + section + "_menu.html";
+                parent.frames['content'].location="../" + section + "/" + page + ".html";
+            }
+            function tosubpage(section, page, subpage) {
+                parent.frames['menu'].location="../" + section + "_menu.html";
+                parent.frames['content'].location="../" + section + "/" + page + "/" + subpage + ".html";
+            }
+      </script>
+
+    </head>
+    <body class="main">
+      <xsl:apply-templates/>
+	  <table width="100%">
+	  <tr><td>
+	     <p align="left">
+		   <a class="nav" href="{$pgid}.html" target="_blank">Expand</a>
+		 </p>
+	  </td><td>
+		  <p align="right">
+			<xsl:choose>
+			<xsl:when test="following-sibling::page">
+			  <a class="nav"  href="{following-sibling::page[1]/h2/@id}.html">Next</a>
+			</xsl:when>
+			</xsl:choose>
+		  </p>
+	  </td></tr>
+	  </table>
+    </body>
+    </html>
+  </xsl:result-document>
+</xsl:template>
+
+<xsl:template match="subpage">
+  <xsl:param name="this-doc" required="yes" tunnel="yes"/>
+  <xsl:variable name="pgid" select="../h2/@id"/>
+  <xsl:result-document href="{$this-doc}/{$pgid}/{@id}.html">
+    <html>
+    <head>
+	<xsl:comment>
+		<xsl:value-of select="$this-doc, $pgid, @id" separator="/"/>
+		Generated at <xsl:value-of select="format-dateTime(current-dateTime(), '[D] [MNn] [Y0001] at [H01]:[m01]')"/>
+	</xsl:comment>
+    <title>Saxonica: XSLT and XQuery Processing: <xsl:value-of select="@title"/></title>
+    <meta name="coverage" content="Worldwide"/>
+    <meta name="title" content="Saxonica: XSLT and XQuery Processing: {@title}"/>
+    <meta name="robots" content="noindex,nofollow"/>
+    <link rel="stylesheet" href="../../saxondocs.css" type="text/css"/>
+      <script type="text/javascript" language="JavaScript">
+            function topage(section, page) {
+                parent.frames['menu'].location="../../" + section + "_menu.html";
+                parent.frames['content'].location="../../" + section + "/" + page + ".html";
+            }
+            function tosubpage(section, page, subpage) {
+                parent.frames['menu'].location="../../" + section + "_menu.html";
+                parent.frames['content'].location="../../" + section + "/" + page + "/" + subpage + ".html";
+            }
+      </script>
+
+    </head>
+    <body class="main">
+	  <h1><xsl:value-of select="@title"/></h1>
+      <xsl:apply-templates/>
+	  <table width="100%">
+	  <tr><td>
+	     <p align="left">
+		   <a href="{@id}.html" class="nav" target="_blank">Expand</a>
+		 </p>
+	  </td><td>
+		  <p align="right">
+		    <a  class="nav" href="../{$pgid}.html">Up</a>
+			<xsl:text>&#xa0;&#xa0;</xsl:text>
+			<xsl:choose>
+			<xsl:when test="following-sibling::subpage">
+			  <a  class="nav" href="{following-sibling::subpage[1]/@id}.html">Next</a>
+			</xsl:when>
+			<xsl:when test="../following-sibling::page">
+			  <a  class="nav" href="../{../following-sibling::page[1]/h2/@id}.html">Next</a>
+			</xsl:when>
+			</xsl:choose>
+		  </p>
+	  </td></tr>
+	  </table>
+
+
+    </body>
+    </html>
+  </xsl:result-document>
+</xsl:template>
+
+<xsl:template name="test">
+<s>&#xa0;&#xa0;</s>
+</xsl:template>
+
+<xsl:template match="subpageindex">
+<ul>
+  <xsl:for-each select="../subpage">
+  <li><p><a class="bodylink" href="{ancestor::page/h2/@id}/{@id}.html">
+    <xsl:value-of select="@title"/></a>
+    <xsl:if test="@summary">
+	    <xsl:value-of select="':', @summary" separator=" "/>
+    </xsl:if>
+  </p></li>
+  </xsl:for-each>
+</ul>
+</xsl:template>
+
+<xsl:template match="xref[@section and @page and @subpage]">
+  <a class="bodylink" 
+     href="javascript:tosubpage('{@section}','{@page}','{@subpage}')">
+     <xsl:value-of select="."/>
+  </a>
+</xsl:template>
+
+<xsl:template name="make-menu">
+  <xsl:param name="this-doc" required="no" tunnel="yes"/>
+  <xsl:result-document href="{concat($this-doc, '_menu.html')}">
+    <html>
+    <head>
+		<xsl:comment>
+			<xsl:value-of select="$this-doc"/> Menu
+			Generated at <xsl:value-of select="current-dateTime()"/>
+		</xsl:comment>
+	    <title>Saxonica: XSLT and XQuery Processing</title>
+	    <meta name="coverage" content="Worldwide"/>
+	    <meta name="title" content="Saxonica: XSLT and XQuery Processing"/>
+	    <meta name="robots" content="noindex,nofollow"/>
+	    <link rel="stylesheet" href="saxondocs.css" type="text/css"/>
+      <script type="text/javascript" language="JavaScript">
+            function topage(section, page) {
+                parent.frames['menu'].location = section + "_menu.html";
+                parent.frames['content'].location = section + "/" + page + ".html";
+            }
+            function tosubpage(section, page, subpage) {
+                parent.frames['menu'].location = section + "_menu.html";
+                parent.frames['content'].location = + section + "/" + page + "/" + subpage + ".html";
+            }
+      </script>
+    </head>
+    <body class="menu">
+    <table width="164" border="0" bgcolor="#3D5B96" cellspacing="1" cellpadding="1">
+    <tr bgcolor="#f6fffb"><td style="padding-left:5px"><a href="../index.html" target="_top">Main Menu</a></td></tr>
+    </table>
+    <br/>
+    <table border="0" cellspacing="0" cellpadding="1">
+    <tr>
+    <td class="title" colspan="2">Saxon Documentation</td></tr>
+    <tr><td colspan="2"><img src="../img/spacer.gif" width="120" height="10" border="0" alt=""/></td></tr>
+ 
+    <xsl:for-each select="document('catalog.xml')/catalog/section/@ref">
+      <tr>
+	  <xsl:variable name="target" select="document(concat(., '.xml'))"/>
+      <td colspan="2"><a href="javascript:topage('{.}', 'intro')">
+         <xsl:value-of select="($target//h1)[1]"/>
+      </a></td></tr>
+
+	  <xsl:if test=". = $this-doc">
+        <xsl:for-each select="document(concat(., '.xml'))//page/h2">
+          <tr>
+          <td><img src="../img/spacer.gif" width="10" height="5" border="0" alt="Saxonica"/></td>
+          <td><a href="{$this-doc}/{@id}.html" target="content"><xsl:value-of select="."/></a></td>
+		  </tr>
+        </xsl:for-each>
+      </xsl:if>
+      <tr><td colspan="2"><img src="../img/text_blue_dot.gif" width="164" height="1" border="0" alt=""/></td></tr>         
+    </xsl:for-each>
+    <tr><td colspan="2"><a href="contents.html" target="content">Full Contents</a></td></tr>
+    <tr><td colspan="2"><img src="../img/text_blue_dot.gif" width="164" height="1" border="0" alt=""/></td></tr>         
+    </table>
+  <br/>
+  </body>
+  </html>
+  </xsl:result-document>
+</xsl:template>
+
+<xsl:template match="h2">
+  <h1><xsl:apply-templates/></h1>
+</xsl:template>
+
+<xsl:template match="h3">
+  <p class="subhead"><xsl:apply-templates/></p>
+</xsl:template>
+
+<xsl:template match="code[pre]">
+  <div class="codeblock"><pre><code>
+  <xsl:apply-templates select="pre/*"/>
+  </code></pre></div>
+</xsl:template>
+
+<xsl:template match="pre">
+  <div style="border: solid thin; background-color: #B1CCC7; padding: 2px" class="codeblock">
+  <xsl:next-match/>
+  </div>
+</xsl:template>
+
+<xsl:template match="example">
+  <div class="codeblock" style="border: solid thin; background-color: #B1CCC7; padding: 2px"><pre><code>
+  <xsl:apply-templates/>
+  </code></pre></div>
+</xsl:template>
+
+<xsl:template match="box">
+  <div class="boxed" style="border: solid thin; background-color: #B1CCC7; padding: 2px">
+  <xsl:apply-templates/>
+  </div>
+</xsl:template>
+
+<xsl:template match="command">
+  <p class="command">
+    <xsl:apply-templates/>
+  </p>
+</xsl:template>
+
+<xsl:template match="defect">
+  <p><a href="http://sourceforge.net/tracker/index.php?func=detail&amp;aid={@id}&amp;group_id=29872&amp;atid=397617"
+        target="_new" class="bodylink"><xsl:value-of select="@id"/></a>&#xa0;
+		<xsl:apply-templates/>
+  </p>
+</xsl:template>
+
+<!-- add <p> elements inside a <td> or <li> if not there already -->
+
+<xsl:template match="td[not(p) and not(@align='center')]">
+  <!-- the test on "align" is to avoid changing the knight's tour diagram -->
+  <xsl:copy>
+  <xsl:copy-of select="@*"/>
+  <p><xsl:apply-templates/></p>
+  </xsl:copy>
+</xsl:template>
+
+<xsl:template match="li[not(p)]">
+  <xsl:copy>
+  <xsl:copy-of select="@*"/>
+  <p><xsl:apply-templates/></p>
+  </xsl:copy>
+</xsl:template>
+
+<xsl:template match="conformance">
+  <xsl:variable name="temp">
+    <xsl:apply-templates select="functions" mode="f"/>
+  </xsl:variable>
+  <xsl:apply-templates select="$temp//body"/>
+</xsl:template>
+
+<xsl:template name="generate-contents">
+<xsl:result-document href="contents.html">
+    <html>
+    <head>
+	<xsl:comment>
+		Generated at <xsl:value-of select="format-dateTime(current-dateTime(), '[D] [MNn] [Y0001] at [H01]:[m01]')"/>
+	</xsl:comment>
+    <title>Saxonica: XSLT and XQuery Processing: <xsl:value-of select="@title"/></title>
+    <meta name="coverage" content="Worldwide"/>
+    <meta name="title" content="Saxonica: XSLT and XQuery Processing: {@title}"/>
+    <meta name="robots" content="noindex,nofollow"/>
+    <link rel="stylesheet" href="saxondocs.css" type="text/css"/>
+
+    </head>
+    <body class="main">
+	  <h1>Saxon Documentation</h1>
+      <xsl:for-each select="$sections">
+        <xsl:variable name="sname" select="string(.)"/>
+        <xsl:variable name="sect" select="document(concat(., '.xml'))"/>
+        <p class="subhead"><xsl:value-of select="($sect//h1)[1]"/></p>
+        <xsl:choose>
+        <xsl:when test="$sname = 'functions'">
+          <xsl:for-each select="$sect">
+            <xsl:call-template name="make-function-contents-page"/>
+          </xsl:for-each>
+        </xsl:when>
+        <xsl:otherwise>
+        <ul>
+          <xsl:for-each select="$sect/html/body/page">
+            <xsl:variable name="h" select="h2[1]"/>
+            <li><a class="toc2" href="{concat($sname, '/', $h/@id, '.html')}">
+               <xsl:value-of select="$h"/>
+               </a>
+               <xsl:if test="subpage">
+               <ul>
+                 <xsl:for-each select="subpage">
+                   <li><a href="{concat($sname, '/', $h/@id, '/', @id, '.html')}">
+                     <xsl:value-of select="@title"/>
+                   </a></li>
+                 </xsl:for-each>
+               </ul>
+               </xsl:if>
+            </li>
+          </xsl:for-each>
+        </ul>
+        </xsl:otherwise>
+        </xsl:choose>
+      </xsl:for-each>
+    </body>
+    </html>
+  </xsl:result-document>
+</xsl:template>  
+
+</xsl:stylesheet><!-- Stylus Studio meta-information - (c)1998-2004. Sonic Software Corporation. All rights reserved.
+<metaInformation>
+<scenarios ><scenario default="yes" name="render&#x2D;page" userelativepaths="yes" externalpreview="no" url="changes.xml" htmlbaseurl="" outputurl="" processortype="saxon7" profilemode="0" urlprofilexml="" commandline="" additionalpath="" additionalclasspath="" postprocessortype="none" postprocesscommandline="" postprocessadditionalpath="" postprocessgeneratedext=""/></scenarios><MapperInfo srcSchemaPathIsRelative="yes" srcSchemaInterpretAsXML="no" destSchemaPath="" destSchemaRoot="" destSchemaPathIsRelative="yes" destSchemaInterpretAsXML="no"/>
+</metaInformation>
+-->

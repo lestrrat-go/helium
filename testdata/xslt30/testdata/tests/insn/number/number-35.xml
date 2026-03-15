@@ -1,0 +1,153 @@
+<?xml version="1.0"?> 
+
+<!-- Test for source tree numbering -->
+<doc>
+  <title>Test for source tree numbering</title>
+  <chapter>
+    <title>First Chapter</title>
+    <section>
+      <title>First Section In first Chapter</title>
+      <subsection>
+        <title>First Subsection in first Section In first Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Second Subsection in first Section In first Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Third Subsection in first Section In first Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Fourth Subsection in first Section In first Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Fifth Subsection in first Section In first Chapter</title>
+      </subsection>
+    </section>
+    <section>
+      <title>Second Section In first Chapter</title>
+      <subsection>
+        <title>First Subsection in second Section In first Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Second Subsection in second Section In first Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Third Subsection in second Section In first Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Fourth Subsection in second Section In first Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Fifth Subsection in second Section In first Chapter</title>
+      </subsection>
+    </section>
+    <section>
+      <title>Third Section In first Chapter</title>
+      <subsection>
+        <title>First Subsection in third Section In first Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Second Subsection in third Section In first Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Third Subsection in third Section In first Chapter</title>
+      </subsection>
+    </section>
+    <section>
+      <title>Fourth Section In first Chapter</title>
+      <subsection>
+        <title>First Subsection in fourth Section In first Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Second Subsection in fourth Section In first Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Third Subsection in fourth Section In first Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Fourth Subsection in fourth Section In first Chapter</title>
+      </subsection>
+    </section>
+  </chapter>
+  <chapter>
+    <title>Second Chapter</title>
+    <section>
+      <title>First Section In second Chapter</title>
+      <subsection>
+        <title>First Subsection in first Section In second Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Second Subsection in first Section In second Chapter</title>
+      </subsection>
+    </section>
+    <section>
+      <title>Second Section In second Chapter</title>
+      <subsection>
+        <title>First Subsection in second Section In second Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Second Subsection in second Section In second Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Third Subsection in second Section In second Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Fourth Subsection in second Section In second Chapter</title>
+      </subsection>
+    </section>
+    <section>
+      <title>Third Section In second Chapter</title>
+      <subsection>
+        <title>First Subsection in third Section In second Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Second Subsection in third Section In second Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Third Subsection in third Section In second Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Fourth Subsection in third Section In second Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Fifth Subsection in third Section In second Chapter</title>
+      </subsection>
+    </section>
+    <section>
+      <title>Fouth Section In second Chapter</title>
+      <subsection>
+        <title>First Subsection in fourth Section In second Chapter</title>
+      </subsection>
+      <subsection>
+        <title>Second Subsection in fourth Section In second Chapter</title>
+      </subsection>
+    </section>
+  </chapter>
+  <chapter>
+    <title>Third Chapter</title>
+    <section>
+      <title>First Section In third Chapter</title>
+      <subsection>
+        <title>First Subsection in first Section In third Chapter</title>
+      </subsection>
+    </section>
+  </chapter>
+  <chapter>
+    <title>Fourth Chapter</title>
+    <section>
+      <title>First Section In fourth Chapter</title>
+      <subsection>
+        <title>First Subsection in first Section In fourth Chapter</title>
+      </subsection>
+    </section>
+  </chapter>
+  <chapter>
+    <title>Fifth Chapter</title>
+    <section>
+      <title>First Section In fifth Chapter</title>
+      <subsection>
+        <title>First Subsection in first Section In fifth Chapter</title>
+      </subsection>
+    </section>
+  </chapter>
+</doc>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doc_collection>
+	<item href="a.xml"/>
+  	<item href="b.xml"/>
+  	<item href="collectinput/a.xml"/>
+  	<item href="collectinput/b.xml"/>
+</doc_collection>

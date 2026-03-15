@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<far-north> Level-1
+  <north-north-west1/>
+  <north-north-west2/>
+  <!-- Comment-2 --> Level-2
+  <?a-pi pi-2?>
+  <north>
+	 <!-- Comment-3 --> Level-3
+	 <?a-pi pi-3?>
+     <near-north>
+        <far-west/>
+        <west/>
+        <near-west/>
+	    <!-- Comment-4 --> Level-4
+	    <?a-pi pi-4?>
+        <center center-attr-1="c1" center-attr-2="c2" center-attr-3="c3"> Still Level-4
+           <near-south-west/>
+		   <!--Comment-5-->   Level-5
+		   <?a-pi pi-5?>
+           <near-south>
+		      <!--Comment-6-->   Level-6
+		      <?a-pi pi-6?>
+		      <south attr1="First" attr2="Last">
+                 <far-south/>
+              </south>
+           </near-south>
+           <near-south-east/>
+        </center>
+        <near-east/>
+        <east/>
+        <far-east/>
+     </near-north>
+  </north>
+  <north-north-east1/>
+  <north-north-east2/>
+</far-north>

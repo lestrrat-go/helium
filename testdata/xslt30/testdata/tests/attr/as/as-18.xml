@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:userNode xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://www.example.com/ns/various variousTypesSchemaAs.xsd"
+		  xmlns:my="http://www.example.com/ns/various"
+	 	  my:specialPart="123-AB" my:listParts="000-SS 000-RR"
+	 	  my_decimal="-1">
+		<my:elem-anyURI>http://www.uri.com</my:elem-anyURI>	
+		<my:elem-boolean>true</my:elem-boolean>
+		<my:elem-date>0012-12-03-05:00</my:elem-date>
+		<my:elem-double>-0.0E0</my:elem-double>
+		<my:elem-duration>-P12M23DT0M59.123S</my:elem-duration>
+		<my:elem-QName>my:local</my:elem-QName>
+		<my:elem-string>my string</my:elem-string>
+		<my:elem-NCName>a</my:elem-NCName>
+		<my:elem-NMTOKEN>hello</my:elem-NMTOKEN>
+		<my:elem-int>100</my:elem-int>
+		<my:elem-nonPositiveInteger>-7632460</my:elem-nonPositiveInteger>
+		<my:elem-long>-9223372</my:elem-long>
+		<my:elem-unsignedLong>1844674</my:elem-unsignedLong>
+		<my:simple-derived>000-TM</my:simple-derived>
+		<my:simpleBuiltin>http://www.example.com/ns/test</my:simpleBuiltin>
+		<my:simpleUserElem>123-AB</my:simpleUserElem>
+		<my:simpleUserList>345-PT 675-RT 897-GB</my:simpleUserList>
+		<my:simpleUserUnion>100</my:simpleUserUnion>
+		<my:complexMixedUserElem age="44">
+			<description>Mr <name>Peter</name> has brown hair</description>
+			<company>He works at a <name>Notorios</name> company</company>
+		</my:complexMixedUserElem>
+		<my:complexUserElem age="75">
+			<firstName>Hello</firstName>
+      		<familyName>There</familyName>
+		</my:complexUserElem>
+		<my:complexSimpleContentElem my:count="five">5</my:complexSimpleContentElem>
+		<my:onlyAttributes my:colors="red blue green" specialPart="123-AB" />
+		<my:de1-decimal-enumeration-inline>1.0001</my:de1-decimal-enumeration-inline>
+		<my:de2-decimal-maxExclusive-inline>123.456788</my:de2-decimal-maxExclusive-inline>
+		<my:de3-decimal-maxInclusive-minExclusive-inline>1048.576</my:de3-decimal-maxInclusive-minExclusive-inline>
+		<my:de4-decimal-minInclusive-pattern-inline>1000.000</my:de4-decimal-minInclusive-pattern-inline>
+		<my:derived-float>-1</my:derived-float>
+</my:userNode>

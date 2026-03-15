@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:userNode xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://www.schemaexpr.example.com/ns/various variousTypesSchemaExpr.xsd"
+		  xmlns:my="http://www.schemaexpr.example.com/ns/various">
+
+	<elem-decimal>-3.4</elem-decimal>
+	<elem-double>-0.0E0</elem-double>
+	<elem-float>-1.12</elem-float>
+	<elem-integer>-4</elem-integer>
+	<elem-int>-131072</elem-int>
+	<elem-nonPositiveInteger>-76</elem-nonPositiveInteger>
+	<elem-positiveInteger>184</elem-positiveInteger>
+	<elem-nonNegativeInteger>3</elem-nonNegativeInteger>
+	<elem-negativeInteger>-74</elem-negativeInteger>
+	<elem-long>-922337</elem-long>
+	<elem-unsignedLong>922337</elem-unsignedLong>
+	<elem-unsignedInt>57</elem-unsignedInt>
+	<elem-short>-327</elem-short>
+	<elem-unsignedShort>327</elem-unsignedShort>
+	<elem-byte>110</elem-byte>
+	<elem-unsignedByte>110</elem-unsignedByte>
+	<elem-decimal-derived>-1.1</elem-decimal-derived>
+	<elem-double-derived>0.99</elem-double-derived>
+	<elem-float-derived>-0</elem-float-derived>
+	<elem-integer-derived>-999</elem-integer-derived>
+	<elem-int-derived>-8</elem-int-derived>
+	<elem-nonPositiveInteger-derived>    -100    </elem-nonPositiveInteger-derived>
+	<elem-positiveInteger-derived>1000</elem-positiveInteger-derived>
+	<elem-nonNegativeInteger-derived>   30   </elem-nonNegativeInteger-derived>
+	<elem-negativeInteger-derived>-555</elem-negativeInteger-derived>
+	<elem-long-derived>-12233</elem-long-derived>
+	<elem-unsignedLong-derived>12233</elem-unsignedLong-derived>
+	<elem-unsignedInt-derived>1686</elem-unsignedInt-derived>
+	<elem-short-derived>-25000</elem-short-derived>
+	<elem-unsignedShort-derived>2000</elem-unsignedShort-derived>
+	<elem-byte-derived>1</elem-byte-derived>
+	<elem-unsignedByte-derived>110</elem-unsignedByte-derived>
+</my:userNode>

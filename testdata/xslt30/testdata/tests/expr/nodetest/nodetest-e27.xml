@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<my:people xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://www.schemanodetest.example.com/ns/attributes attributesNodeTest.xsd"
+     xmlns:my="http://www.schemanodetest.example.com/ns/attributes"
+     my:nationality="americans">
+	 <person my:nationality="american">
+	 	<name my:nationality="latin">Peter Greenberg</name>
+	 	<age>22</age>
+	 </person>
+</my:people>

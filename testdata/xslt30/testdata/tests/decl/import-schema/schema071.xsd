@@ -1,0 +1,17 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://schema071.uri/"
+           elementFormDefault="qualified" attributeFormDefault="qualified"
+           xmlns:s="http://schema071.uri/">
+
+<xs:simpleType name="subQName">
+  <xs:restriction base="xs:QName">
+    <xs:pattern value="([a-z][a-z]:)?[a-z]*"/>
+       <!-- restriction of QName so that if there is a prefix it must be two letters, and the local
+            name must be lower-case alphabetic -->
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:attribute name="the-qname" type="s:subQName"/>
+
+</xs:schema>

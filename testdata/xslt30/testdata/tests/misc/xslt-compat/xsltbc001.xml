@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DATA>
+  <item name="text">Some</item>
+  <item name="text">string</item>
+  <item name="text">value</item>
+  <item name="number">1</item>
+  <item name="number">2</item>
+  <item name="number">3</item>
+  <item name="sortit">ac</item>
+  <item name="sortit">ab</item>
+  <item name="sortit">ad</item>
+  <item name="sortit">aa</item>
+</DATA>

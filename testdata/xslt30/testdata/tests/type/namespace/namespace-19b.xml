@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<b:request xmlns:b="http://test.com/b">
+    <header><x>HEADER</x></header>
+    <b:service>SERVICE</b:service>
+</b:request>

@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<docs>
+  <doc xmlns:ext="http://somebody.elses.extension">
+    <section xmlns:foo="http://foo.com">
+      <inner xmlns:whiz="http://whiz.com/special/page"/>
+    </section>
+  </doc>
+</docs>

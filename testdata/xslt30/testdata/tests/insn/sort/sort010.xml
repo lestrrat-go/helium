@@ -1,0 +1,27 @@
+<?xml version="1.0"?> 
+
+<!-- Test for xsl:sort -->
+<doc>
+  <num>99</num>
+  <num>3</num>
+  <num>100</num>
+  <num>40</num>
+  <num>69</num>
+  <num>82</num>
+  <num>1</num>
+  <num>0</num>
+  <num>803.23</num>
+  <num>803.05</num>
+  <num>803.33333333</num>
+  <num>803.33333332</num>
+  <num>23</num>
+  <num>1001001001</num>
+  <num>0008</num>
+  <num>5</num>
+  <num>04</num>
+  <num>002</num>
+  <num>666</num>
+  <num>777</num>
+  <num>-13</num>
+  <num>-47</num>
+</doc>

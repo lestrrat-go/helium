@@ -1,6 +1,7 @@
 package helium_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -109,6 +110,40 @@ func TestDumpNsSkipsXmlPrefix(t *testing.T) {
 	// The xml: namespace declaration must NOT appear in the output.
 	// libxml2's xmlNsDumpOutput skips prefix "xml" unconditionally.
 	require.NotContains(t, str, "xmlns:xml")
+}
+
+func TestDumpNsPropagatesWriteError(t *testing.T) {
+	doc := helium.NewDefaultDocument()
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	require.NoError(t, doc.SetDocumentElement(root))
+	require.NoError(t, root.DeclareNamespace("p", "urn:test"))
+
+	writer := helium.NewWriter(helium.WithNoDecl())
+	err = writer.WriteDoc(&namespaceFailWriter{failOn: "xmlns"}, doc)
+	require.ErrorIs(t, err, errNamespaceWrite)
+}
+
+var errNamespaceWrite = errors.New("namespace write failed")
+
+type namespaceFailWriter struct {
+	failOn string
+	tail   string
+}
+
+func (w *namespaceFailWriter) Write(p []byte) (int, error) {
+	window := w.tail + string(p)
+	if strings.Contains(window, w.failOn) {
+		return 0, errNamespaceWrite
+	}
+	if keep := len(w.failOn) - 1; keep > 0 {
+		if len(window) > keep {
+			w.tail = window[len(window)-keep:]
+		} else {
+			w.tail = window
+		}
+	}
+	return len(p), nil
 }
 
 func TestFormatOutput(t *testing.T) {

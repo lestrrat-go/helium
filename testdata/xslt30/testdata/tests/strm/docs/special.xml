@@ -1,0 +1,10 @@
+<special>
+  <!-- first comment -->
+  <!---->
+  <?first pi?>
+  <?second?>
+  <e/>
+  <f a=""/>
+  <codepointCollation>http://www.w3.org/2005/xpath-functions/collation/codepoint</codepointCollation>
+  <unknownCollation>http://www.w3.org/2005/xpath-functions/collation/unknown</unknownCollation>
+</special>  

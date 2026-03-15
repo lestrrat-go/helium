@@ -1,0 +1,40 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://schema067.uri/"
+           elementFormDefault="qualified"
+                      attributeFormDefault="qualified"
+           xmlns:s="http://schema067.uri/">
+
+<xs:import namespace="xhttp://schema067.uri/" schemaLocation="schema067a.xsd"/>
+
+<xs:element name="address" type="s:addressType"/>
+
+
+<xs:complexType name="addressType">
+   <xs:sequence>
+     <xs:element ref="s:person"/>   
+     <xs:element name="age" type="xs:integer"/>
+   </xs:sequence>               
+   <xs:attribute name="zip" type="xs:string" use="required" form="unqualified"/>
+   <xs:attribute name="color" type="is:colors" use="optional" xmlns:is="xhttp://schema067.uri/"/>
+</xs:complexType>
+
+<xs:element name="person">
+  <xs:complexType>
+    <xs:sequence>
+        <xs:element name="first" type="xs:string"/>
+        <xs:element name="middle" minOccurs="0">
+          <xs:simpleType>
+           <xs:restriction base="xs:string">
+              <xs:length value="1"/>
+           </xs:restriction>
+          </xs:simpleType>
+        </xs:element>
+        <xs:element name="last" type="xs:string"/>
+        
+    </xs:sequence>
+  </xs:complexType>
+</xs:element>  
+
+
+</xs:schema>

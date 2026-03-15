@@ -1,0 +1,6 @@
+<doc attribute="attr_val">
+<text-elem1 att="1"><inner1><inner2/></inner1></text-elem1>
+<text-elem2 att="2">22<inner1>21</inner1></text-elem2>
+<text-elem3 att="3">33<inner1/></text-elem3>
+<text-elem4 att="4">44<inner1/></text-elem4>
+</doc>

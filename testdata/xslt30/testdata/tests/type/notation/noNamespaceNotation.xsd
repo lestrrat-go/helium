@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:notation name="wav" public="audio/wav" system="mplay32.exe"/>
+  <xsd:notation name="mp3" public="audio/wav" system="mplay32.exe"/>
+  <xsd:notation name="rmi" public="audio/mid" system="mplay32.exe"/>
+  <xsd:notation name="rar" public="audio/mid" system="mplay.exe"/>
+  <xsd:notation name="jpeg" public="image" system="viewer.exe"/>
+  <xsd:notation name="exe" public="executable" system="cmd"/>
+  
+  <xsd:element name="doc" type="notated" />
+
+  <xsd:complexType name="notated">
+    <xsd:sequence>
+      <xsd:element name="sub" type="subnotated" minOccurs="1" maxOccurs="unbounded"/> 
+    </xsd:sequence>
+  </xsd:complexType>
+  
+  <xsd:complexType name="subnotated">
+    <xsd:sequence>
+      <xsd:element name="subinner" type="xsd:string"/> 
+    </xsd:sequence>
+    <xsd:attribute name="filetype" type="nota" use="required"/>
+    <xsd:attribute name="notetype" type="nota-type2" use="optional"/>
+    <xsd:attribute name="name" type="xsd:string" use="optional"/>
+  </xsd:complexType>
+  
+  <xsd:simpleType name="nota">
+    <xsd:restriction base="xsd:NOTATION">
+      <xsd:enumeration value="mp3" />
+      <xsd:enumeration value="wav" />
+      <xsd:enumeration value="rmi" />
+      <xsd:enumeration value="rar" />
+      <xsd:enumeration value="jpeg" />
+    </xsd:restriction>
+  </xsd:simpleType>
+  
+  <xsd:simpleType name="nota-type2">
+    <xsd:restriction base="xsd:NOTATION">
+      <xsd:enumeration value="mp3" />
+      <xsd:enumeration value="wav" />
+      <xsd:enumeration value="exe" />
+    </xsd:restriction>
+  </xsd:simpleType>
+</xsd:schema>

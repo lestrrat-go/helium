@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <node id="a">
+        <section id="a_1" method="run">
+            <item id="0" method="a">
+                <attribute>
+                    <color>Red</color>
+                    <status>1</status>
+                    <condition>good</condition>
+                </attribute>
+                
+            </item>
+            
+            <item id="0" method="a">
+                <attribute>
+                    <color>Red</color>
+                    <status>1</status>
+                    <condition>good</condition>
+                </attribute>
+                
+            </item>
+        </section>
+        
+        <section id="a_2" method="run">
+            <item id="0" method="a">
+                <attribute>
+                    <color>Red</color>
+                    <status>1</status>
+                    <condition>good</condition>
+                </attribute>
+                
+            </item>
+        </section>
+        
+    </node>
+    
+    <node id="b">
+        <section id="b_1" method="create">
+            <user id="b_1a" method="x">
+                <attribute>
+                    
+                    <origin>us</origin>
+                </attribute>
+                
+            </user>
+            <user id="b_1a" method="x">
+                <attribute> 
+                    <origin>us</origin>
+                </attribute>
+            </user>
+            <user id="b_1b">
+                <attribute>a</attribute>
+            </user>
+        </section>
+        
+        <section id="b_2">
+            <user id="b_1a" method="x">
+                <attribute>
+                    <name>John</name>
+                    <origin>us</origin>
+                </attribute>
+            </user>
+        </section>
+    </node>
+</root>

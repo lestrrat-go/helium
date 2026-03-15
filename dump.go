@@ -8,8 +8,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	henc "github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/enum"
+	henc "github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/pdebug"
 )
 
@@ -838,9 +838,14 @@ func (d *Writer) dumpNsList(out io.Writer, nslist []*Namespace) error {
 }
 
 func (d *Writer) dumpNs(out io.Writer, ns *Namespace) error {
-	if ns.href == "" {
-		// no op
+	if ns.href == "" && ns.prefix != "" {
+		// Prefixed namespace with empty URI — skip (invalid)
 		return nil
+	}
+	if ns.href == "" && ns.prefix == "" {
+		// xmlns="" — namespace undeclaration; emit it
+		_, err := io.WriteString(out, ` xmlns=""`)
+		return err
 	}
 
 	// Skip the implicit xml: prefix namespace declaration.
@@ -849,17 +854,31 @@ func (d *Writer) dumpNs(out io.Writer, ns *Namespace) error {
 		return nil
 	}
 
-	_, _ = io.WriteString(out, " ")
+	if _, err := io.WriteString(out, " "); err != nil {
+		return err
+	}
 
 	if ns.prefix == "" {
-		_, _ = io.WriteString(out, "xmlns")
+		if _, err := io.WriteString(out, "xmlns"); err != nil {
+			return err
+		}
 	} else {
-		_, _ = io.WriteString(out, "xmlns:")
-		_, _ = io.WriteString(out, ns.prefix)
+		if _, err := io.WriteString(out, "xmlns:"); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(out, ns.prefix); err != nil {
+			return err
+		}
 	}
-	_, _ = io.WriteString(out, `="`)
-	_ = escapeAttrValue(out, []byte(ns.href), d.escapeNonASCII)
-	_, _ = io.WriteString(out, `"`)
+	if _, err := io.WriteString(out, `="`); err != nil {
+		return err
+	}
+	if err := escapeAttrValue(out, []byte(ns.href), d.escapeNonASCII); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(out, `"`); err != nil {
+		return err
+	}
 	return nil
 }
 

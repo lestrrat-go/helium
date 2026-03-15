@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<characters>
+   <c cp="01C5" d="453" v="1.1" cat="Lt" c="ǅ"/>
+   <c cp="01C8" d="456" v="1.1" cat="Lt" c="ǈ"/>
+   <c cp="01CB" d="459" v="1.1" cat="Lt" c="ǋ"/>
+   <c cp="01F2" d="498" v="1.1" cat="Lt" c="ǲ"/>
+   <c cp="1F88" d="8072" v="1.1" cat="Lt" c="ᾈ"/>
+   <c cp="1F89" d="8073" v="1.1" cat="Lt" c="ᾉ"/>
+   <c cp="1F8A" d="8074" v="1.1" cat="Lt" c="ᾊ"/>
+   <c cp="1F8B" d="8075" v="1.1" cat="Lt" c="ᾋ"/>
+   <c cp="1F8C" d="8076" v="1.1" cat="Lt" c="ᾌ"/>
+   <c cp="1F8D" d="8077" v="1.1" cat="Lt" c="ᾍ"/>
+   <c cp="1F8E" d="8078" v="1.1" cat="Lt" c="ᾎ"/>
+   <c cp="1F8F" d="8079" v="1.1" cat="Lt" c="ᾏ"/>
+   <c cp="1F98" d="8088" v="1.1" cat="Lt" c="ᾘ"/>
+   <c cp="1F99" d="8089" v="1.1" cat="Lt" c="ᾙ"/>
+   <c cp="1F9A" d="8090" v="1.1" cat="Lt" c="ᾚ"/>
+   <c cp="1F9B" d="8091" v="1.1" cat="Lt" c="ᾛ"/>
+   <c cp="1F9C" d="8092" v="1.1" cat="Lt" c="ᾜ"/>
+   <c cp="1F9D" d="8093" v="1.1" cat="Lt" c="ᾝ"/>
+   <c cp="1F9E" d="8094" v="1.1" cat="Lt" c="ᾞ"/>
+   <c cp="1F9F" d="8095" v="1.1" cat="Lt" c="ᾟ"/>
+   <c cp="1FA8" d="8104" v="1.1" cat="Lt" c="ᾨ"/>
+   <c cp="1FA9" d="8105" v="1.1" cat="Lt" c="ᾩ"/>
+   <c cp="1FAA" d="8106" v="1.1" cat="Lt" c="ᾪ"/>
+   <c cp="1FAB" d="8107" v="1.1" cat="Lt" c="ᾫ"/>
+   <c cp="1FAC" d="8108" v="1.1" cat="Lt" c="ᾬ"/>
+   <c cp="1FAD" d="8109" v="1.1" cat="Lt" c="ᾭ"/>
+   <c cp="1FAE" d="8110" v="1.1" cat="Lt" c="ᾮ"/>
+   <c cp="1FAF" d="8111" v="1.1" cat="Lt" c="ᾯ"/>
+   <c cp="1FBC" d="8124" v="1.1" cat="Lt" c="ᾼ"/>
+   <c cp="1FCC" d="8140" v="1.1" cat="Lt" c="ῌ"/>
+   <c cp="1FFC" d="8188" v="1.1" cat="Lt" c="ῼ"/>
+</characters>

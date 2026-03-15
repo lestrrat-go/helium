@@ -1,0 +1,38 @@
+<book>
+  <title>XSLT</title>
+  <section id="1">
+    <title>Introduction</title>
+    <section id="1.1">
+      <title>What is XSLT?</title>
+      <para>XSLT is a programming language</para>
+      <section id="1.1.1">
+        <title>Why XSLT 2.1?</title>
+        <para>Because streaming is cool.</para>
+        <section id="1.1.1.1">
+          <title>What is streaming?</title>
+          <para>Processing the data in finite memory</para>
+          <author>Anders</author>
+        </section>
+        <section id="1.1.1.2">
+          <title>Why is streaming important?</title>
+          <para>Because memory is finite</para>
+          <author>Sharon</author>
+        </section>
+        <author>Mike</author>
+      </section>
+      <section id="1.1.2">
+        <title>What's new?</title>
+        <para>Streaming is new.</para>
+        <author>Petr</author>
+      </section>
+      <author>Oliver</author>
+    </section>
+    <section id="2">
+      <title>Concepts</title>
+      <para>Streaming rocks</para>
+      <author>Edward</author>
+    </section>
+    <author>Nikolay</author>
+  </section>  
+  <author>Howard</author>
+</book>       

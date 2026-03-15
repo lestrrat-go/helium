@@ -122,6 +122,10 @@ func fnResolveURI(_ context.Context, args []Sequence) (Sequence, error) {
 		return SingleString(relative), nil
 	}
 
+	// Convert absolute file paths to file: URIs
+	if strings.HasPrefix(base, "/") && !strings.Contains(base, "://") {
+		base = "file://" + base
+	}
 	parsedBase, err := parseURIReference(base)
 	if err != nil {
 		return nil, &XPathError{Code: "FORG0002", Message: "invalid base URI: " + base}

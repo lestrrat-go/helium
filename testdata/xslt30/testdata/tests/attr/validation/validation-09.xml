@@ -1,0 +1,734 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<GEDCOM xmlns:xs="http://www.w3.org/2001/XMLSchema">
+   <HeaderRec>
+      <FileCreation Date="13 JAN 2004"/>
+      <Submitter>
+         <Link Target="ContactRec" Ref="Contact-Submitter"/>
+      </Submitter>
+   </HeaderRec>
+   <FamilyRec Id="F1">
+      <HusbFath>
+         <Link Target="IndividualRec" Ref="I1"/>
+      </HusbFath>
+      <WifeMoth>
+         <Link Target="IndividualRec" Ref="I2"/>
+      </WifeMoth>
+      <Child>
+         <Link Target="IndividualRec" Ref="I5"/>
+      </Child>
+      <Child>
+         <Link Target="IndividualRec" Ref="I6"/>
+      </Child>
+      <Child>
+         <Link Target="IndividualRec" Ref="I7"/>
+      </Child>
+   </FamilyRec>
+   <FamilyRec Id="F2">
+      <HusbFath>
+         <Link Target="IndividualRec" Ref="I8"/>
+      </HusbFath>
+      <WifeMoth>
+         <Link Target="IndividualRec" Ref="I9"/>
+      </WifeMoth>
+      <Child>
+         <Link Target="IndividualRec" Ref="I10"/>
+      </Child>
+      <Child>
+         <Link Target="IndividualRec" Ref="I1"/>
+      </Child>
+      <Child>
+         <Link Target="IndividualRec" Ref="I11"/>
+      </Child>
+      <Child>
+         <Link Target="IndividualRec" Ref="I12"/>
+      </Child>
+      <Child>
+         <Link Target="IndividualRec" Ref="I13"/>
+      </Child>
+      <Child>
+         <Link Target="IndividualRec" Ref="I17"/>
+      </Child>
+      <Child>
+         <Link Target="IndividualRec" Ref="I19"/>
+      </Child>
+      <Child>
+         <Link Target="IndividualRec" Ref="I21"/>
+      </Child>
+      <Child>
+         <Link Target="IndividualRec" Ref="I23"/>
+      </Child>
+   </FamilyRec>
+   <FamilyRec Id="F3">
+      <HusbFath>
+         <Link Target="IndividualRec" Ref="I15"/>
+      </HusbFath>
+      <WifeMoth>
+         <Link Target="IndividualRec" Ref="I2"/>
+      </WifeMoth>
+   </FamilyRec>
+   <FamilyRec Id="F4">
+      <HusbFath>
+         <Link Target="IndividualRec" Ref="I3"/>
+      </HusbFath>
+      <WifeMoth>
+         <Link Target="IndividualRec" Ref="I4"/>
+      </WifeMoth>
+      <Child>
+         <Link Target="IndividualRec" Ref="I2"/>
+      </Child>
+   </FamilyRec>
+   <FamilyRec Id="F5">
+      <HusbFath>
+         <Link Target="IndividualRec" Ref="I14"/>
+      </HusbFath>
+      <WifeMoth>
+         <Link Target="IndividualRec" Ref="I13"/>
+      </WifeMoth>
+   </FamilyRec>
+   <FamilyRec Id="F6">
+      <HusbFath>
+         <Link Target="IndividualRec" Ref="I18"/>
+      </HusbFath>
+      <WifeMoth>
+         <Link Target="IndividualRec" Ref="I17"/>
+      </WifeMoth>
+   </FamilyRec>
+   <FamilyRec Id="F7">
+      <HusbFath>
+         <Link Target="IndividualRec" Ref="I19"/>
+      </HusbFath>
+      <WifeMoth>
+         <Link Target="IndividualRec" Ref="I20"/>
+      </WifeMoth>
+   </FamilyRec>
+   <FamilyRec Id="F8">
+      <HusbFath>
+         <Link Target="IndividualRec" Ref="I22"/>
+      </HusbFath>
+      <WifeMoth>
+         <Link Target="IndividualRec" Ref="I21"/>
+      </WifeMoth>
+   </FamilyRec>
+   <FamilyRec Id="F9">
+      <HusbFath>
+         <Link Target="IndividualRec" Ref="I23"/>
+      </HusbFath>
+      <WifeMoth>
+         <Link Target="IndividualRec" Ref="I24"/>
+      </WifeMoth>
+   </FamilyRec>
+   <FamilyRec Id="F10">
+      <HusbFath>
+         <Link Target="IndividualRec" Ref="I23"/>
+      </HusbFath>
+      <WifeMoth>
+         <Link Target="IndividualRec" Ref="I25"/>
+      </WifeMoth>
+   </FamilyRec>
+   <IndividualRec Id="I1">
+      <IndivName>John Fitzgerald <NamePart Type="surname" Level="1">Kennedy</NamePart> 
+      </IndivName>
+      <Gender>M</Gender>
+      <ExternalID Type="REFN" Id="1"/>
+      <Note>Educated at Harvard University. Elected Congressman in 1945
+aged 29; served three terms in the House of Representatives.
+Elected Senator in 1952. Elected President in 1960, the
+youngest ever President of the United States.</Note>
+      <Changed Date="13 JAN 2004" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I2">
+      <IndivName>Jaqueline Lee <NamePart Type="surname" Level="1">Bouvier</NamePart> 
+      </IndivName>
+      <IndivName> 
+         <NamePart Type="surname" Level="1">Kennedy</NamePart> 
+      </IndivName>
+      <IndivName> 
+         <NamePart Type="surname" Level="1">Onassis</NamePart> 
+      </IndivName>
+      <Gender>F</Gender>
+      <ExternalID Type="REFN" Id="2"/>
+      <Changed Date="13 JAN 2004" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I3">
+      <IndivName>John Vernou <NamePart Type="surname" Level="1">Bouvier</NamePart> III</IndivName>
+      <Gender>M</Gender>
+      <ExternalID Type="REFN" Id="3"/>
+      <Changed Date="12 FEB 2000" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I4">
+      <IndivName>Janet Norton <NamePart Type="surname" Level="1">Lee</NamePart> 
+      </IndivName>
+      <Gender>F</Gender>
+      <ExternalID Type="REFN" Id="4"/>
+      <Changed Date="12 FEB 2000" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I5">
+      <IndivName>Caroline Bouvier <NamePart Type="surname" Level="1">Kennedy</NamePart> 
+      </IndivName>
+      <Gender>F</Gender>
+      <ExternalID Type="REFN" Id="5"/>
+      <Changed Date="13 FEB 2000" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I6">
+      <IndivName>John Fitzgerald <NamePart Type="surname" Level="1">Kennedy</NamePart> 
+      </IndivName>
+      <Gender>M</Gender>
+      <ExternalID Type="REFN" Id="6"/>
+      <Changed Date="12 FEB 2000" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I7">
+      <IndivName>Patrick Bouvier <NamePart Type="surname" Level="1">Kennedy</NamePart> 
+      </IndivName>
+      <Gender>M</Gender>
+      <ExternalID Type="REFN" Id="7"/>
+      <Changed Date="12 FEB 2000" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I8">
+      <IndivName>Joseph Patrick <NamePart Type="surname" Level="1">Kennedy</NamePart> 
+      </IndivName>
+      <Gender>M</Gender>
+      <ExternalID Type="REFN" Id="8"/>
+      <Changed Date="12 FEB 2000" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I9">
+      <IndivName>Rose Elizabeth <NamePart Type="surname" Level="1">Fitzgerald</NamePart> 
+      </IndivName>
+      <IndivName> 
+         <NamePart Type="surname" Level="1">Kennedy</NamePart> 
+      </IndivName>
+      <Gender>F</Gender>
+      <ExternalID Type="REFN" Id="9"/>
+      <Changed Date="12 FEB 2000" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I10">
+      <IndivName>Joseph Patrick <NamePart Type="surname" Level="1">Kennedy</NamePart> Jr</IndivName>
+      <Gender>M</Gender>
+      <ExternalID Type="REFN" Id="10"/>
+      <Changed Date="13 JAN 2004" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I11">
+      <IndivName>Rosemary <NamePart Type="surname" Level="1">Kennedy</NamePart> 
+      </IndivName>
+      <Gender>F</Gender>
+      <ExternalID Type="REFN" Id="11"/>
+      <Changed Date="13 JAN 2004" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I12">
+      <IndivName>Kathleen Agnes <NamePart Type="surname" Level="1">Kennedy</NamePart> 
+      </IndivName>
+      <Gender>F</Gender>
+      <ExternalID Type="REFN" Id="12"/>
+      <Changed Date="13 JAN 2004" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I13">
+      <IndivName>Eunice Mary <NamePart Type="surname" Level="1">Kennedy</NamePart> 
+      </IndivName>
+      <IndivName> 
+         <NamePart Type="surname" Level="1">Shriver</NamePart> 
+      </IndivName>
+      <Gender>F</Gender>
+      <ExternalID Type="REFN" Id="13"/>
+      <Changed Date="13 JAN 2004" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I14">
+      <IndivName>Robert Sargent <NamePart Type="surname" Level="1">Shriver</NamePart> Jr</IndivName>
+      <Gender>M</Gender>
+      <ExternalID Type="REFN" Id="14"/>
+      <Changed Date="13 JAN 2004" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I15">
+      <IndivName>Aristotle <NamePart Type="surname" Level="1">Onassis</NamePart> 
+      </IndivName>
+      <Gender>M</Gender>
+      <ExternalID Type="REFN" Id="15"/>
+      <Changed Date="13 FEB 2000" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I17">
+      <IndivName>Patricia <NamePart Type="surname" Level="1">Kennedy</NamePart> 
+      </IndivName>
+      <Gender>F</Gender>
+      <ExternalID Type="REFN" Id="17"/>
+      <Changed Date="13 JAN 2004" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I18">
+      <IndivName>Peter <NamePart Type="surname" Level="1"/> 
+      </IndivName>
+      <Gender>M</Gender>
+      <ExternalID Type="REFN" Id="18"/>
+      <Changed Date="13 JAN 2004" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I19">
+      <IndivName>Robert Francis <NamePart Type="surname" Level="1">Kennedy</NamePart> 
+      </IndivName>
+      <Gender>M</Gender>
+      <ExternalID Type="REFN" Id="19"/>
+      <Changed Date="13 JAN 2004" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I20">
+      <IndivName>Ethel <NamePart Type="surname" Level="1">Skakel</NamePart> 
+      </IndivName>
+      <IndivName> 
+         <NamePart Type="surname" Level="1">Kennedy</NamePart> 
+      </IndivName>
+      <Gender>F</Gender>
+      <ExternalID Type="REFN" Id="20"/>
+      <Changed Date="13 JAN 2004" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I21">
+      <IndivName>Jean Ann <NamePart Type="surname" Level="1">Kennedy</NamePart> 
+      </IndivName>
+      <Gender>F</Gender>
+      <ExternalID Type="REFN" Id="21"/>
+      <Changed Date="13 JAN 2004" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I22">
+      <IndivName>Stephen Edward <NamePart Type="surname" Level="1">Smith</NamePart> 
+      </IndivName>
+      <Gender>M</Gender>
+      <ExternalID Type="REFN" Id="22"/>
+      <Changed Date="13 JAN 2004" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I23">
+      <IndivName>Edward Moore <NamePart Type="surname" Level="1">Kennedy</NamePart> 
+      </IndivName>
+      <Gender>M</Gender>
+      <ExternalID Type="REFN" Id="23"/>
+      <Changed Date="13 JAN 2004" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I24">
+      <IndivName>Virginia Joan <NamePart Type="surname" Level="1">Bennett</NamePart> 
+      </IndivName>
+      <IndivName> 
+         <NamePart Type="surname" Level="1">Kennedy</NamePart> 
+      </IndivName>
+      <Gender>F</Gender>
+      <ExternalID Type="REFN" Id="24"/>
+      <Changed Date="13 JAN 2004" Time="00:00"/>
+   </IndividualRec>
+   <IndividualRec Id="I25">
+      <IndivName>Victoria <NamePart Type="surname" Level="1">Reggie</NamePart> 
+      </IndivName>
+      <Gender>F</Gender>
+      <ExternalID Type="REFN" Id="25"/>
+      <Changed Date="13 JAN 2004" Time="00:00"/>
+   </IndividualRec>
+   <EventRec Id="I1-5" Type="birth" VitalType="birth">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I1"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>29 MAY 1917</Date>
+      <Place>
+         <PlaceName>
+            <PlacePart Type="country" Level="1">USA</PlacePart>
+            <PlacePart Type="state" Level="2">MA</PlacePart>
+            <PlacePart Level="6">Brookline</PlacePart>
+         </PlaceName>
+      </Place>
+   </EventRec>
+   <EventRec Id="I1-6" Type="death" VitalType="death">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I1"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>22 NOV 1963</Date>
+      <Place>
+         <PlaceName>
+            <PlacePart Type="country" Level="1">USA</PlacePart>
+            <PlacePart Type="state" Level="2">TX</PlacePart>
+            <PlacePart Level="6">Dallas</PlacePart>
+         </PlaceName>
+      </Place>
+      <Note>Assassinated by Lee Harvey Oswald.</Note>
+   </EventRec>
+   <EventRec Id="I2-7" Type="birth" VitalType="birth">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I2"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>28 JUL 1929</Date>
+      <Place>
+         <PlaceName>
+            <PlacePart Type="country" Level="1">USA</PlacePart>
+            <PlacePart Type="state" Level="2">NY</PlacePart>
+            <PlacePart Level="6">Long Island</PlacePart>
+            <PlacePart Level="7">Southampton</PlacePart>
+         </PlaceName>
+      </Place>
+   </EventRec>
+   <EventRec Id="I2-8" Type="death" VitalType="death">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I2"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>19 MAY 1994</Date>
+      <Place>
+         <PlaceName>
+            <PlacePart Type="country" Level="1">USA</PlacePart>
+            <PlacePart Type="state" Level="2">NY</PlacePart>
+            <PlacePart Level="6">New York City</PlacePart>
+         </PlaceName>
+      </Place>
+   </EventRec>
+   <EventRec Id="I2-9" Type="burial" VitalType="death">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I2"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>23 MAY 1994</Date>
+      <Place>
+         <PlaceName>
+            <PlacePart Type="country" Level="1">USA</PlacePart>
+            <PlacePart Type="state" Level="2">VA</PlacePart>
+            <PlacePart Level="6">Arlington National</PlacePart>
+         </PlaceName>
+      </Place>
+   </EventRec>
+   <EventRec Id="I5-5" Type="birth" VitalType="birth">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I5"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>27 NOV 1957</Date>
+      <Place>
+         <PlaceName>
+            <PlacePart Type="country" Level="1">USA</PlacePart>
+            <PlacePart Type="state" Level="2">NY</PlacePart>
+            <PlacePart Level="6">New York</PlacePart>
+         </PlaceName>
+      </Place>
+      <Religion>   </Religion>
+   </EventRec>
+   <EventRec Id="I6-5" Type="birth" VitalType="birth">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I6"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>25 NOV 1960</Date>
+      <Place>
+         <PlaceName>
+            <PlacePart Type="country" Level="1">USA</PlacePart>
+            <PlacePart Type="state" Level="2">DC</PlacePart>
+            <PlacePart Level="6">Washington</PlacePart>
+         </PlaceName>
+      </Place>
+   </EventRec>
+   <EventRec Id="I6-6" Type="death" VitalType="death">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I6"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>16 JUL 1999</Date>
+      <Place>
+         <PlaceName>
+            <PlacePart Type="country" Level="1">USA</PlacePart>
+            <PlacePart Type="state" Level="2">MA</PlacePart>
+            <PlacePart Level="6">near Aquinnah</PlacePart>
+            <PlacePart Level="7">over the Atlantic Ocean</PlacePart>
+         </PlaceName>
+      </Place>
+   </EventRec>
+   <EventRec Id="I7-5" Type="birth" VitalType="birth">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I7"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>07 AUG 1963</Date>
+   </EventRec>
+   <EventRec Id="I7-6" Type="death" VitalType="death">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I7"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>09 AUG 1963</Date>
+   </EventRec>
+   <EventRec Id="I8-5" Type="birth" VitalType="birth">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I8"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>06 SEP 1888</Date>
+      <Place>
+         <PlaceName>
+            <PlacePart Type="country" Level="1">USA</PlacePart>
+            <PlacePart Type="state" Level="2">MA</PlacePart>
+            <PlacePart Level="6">East Boston</PlacePart>
+         </PlaceName>
+      </Place>
+   </EventRec>
+   <EventRec Id="I8-6" Type="death" VitalType="death">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I8"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>16 NOV 1969</Date>
+      <Place>
+         <PlaceName>
+            <PlacePart Type="country" Level="1">USA</PlacePart>
+            <PlacePart Type="state" Level="2">MA</PlacePart>
+            <PlacePart Level="6">Hyannis Port</PlacePart>
+         </PlaceName>
+      </Place>
+   </EventRec>
+   <EventRec Id="I9-6" Type="birth" VitalType="birth">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I9"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>22 JUL 1890</Date>
+      <Place>
+         <PlaceName>
+            <PlacePart Type="country" Level="1">USA</PlacePart>
+            <PlacePart Type="state" Level="2">MA</PlacePart>
+            <PlacePart Level="6">Boston</PlacePart>
+            <PlacePart Level="7">North End</PlacePart>
+         </PlaceName>
+      </Place>
+   </EventRec>
+   <EventRec Id="I9-7" Type="death" VitalType="death">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I9"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>22 JAN 1995</Date>
+      <Place>
+         <PlaceName>
+            <PlacePart Type="country" Level="1">USA</PlacePart>
+            <PlacePart Type="state" Level="2">MA</PlacePart>
+            <PlacePart Level="6">Hyannis Port</PlacePart>
+         </PlaceName>
+      </Place>
+   </EventRec>
+   <EventRec Id="I10-5" Type="birth" VitalType="birth">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I10"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>25 JUL 1915</Date>
+   </EventRec>
+   <EventRec Id="I10-6" Type="death" VitalType="death">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I10"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>12 AUG 1944</Date>
+      <Note>Died when his bomber blew up over the English Channel</Note>
+   </EventRec>
+   <EventRec Id="I11-5" Type="birth" VitalType="birth">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I11"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>13 SEP 1918</Date>
+   </EventRec>
+   <EventRec Id="I12-5" Type="birth" VitalType="birth">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I12"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>20 FEB 1920</Date>
+   </EventRec>
+   <EventRec Id="I12-6" Type="death" VitalType="death">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I12"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>13 MAY 1948</Date>
+      <Note>Died in a plane crash.</Note>
+   </EventRec>
+   <EventRec Id="I13-6" Type="birth" VitalType="birth">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I13"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>10 JUL 1921</Date>
+      <Place>
+         <PlaceName>
+            <PlacePart Type="country" Level="1">USA</PlacePart>
+            <PlacePart Type="state" Level="2">MA</PlacePart>
+            <PlacePart Level="6">Brookline</PlacePart>
+         </PlaceName>
+      </Place>
+   </EventRec>
+   <EventRec Id="I17-5" Type="birth" VitalType="birth">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I17"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>06 MAY 1924</Date>
+   </EventRec>
+   <EventRec Id="I19-5" Type="birth" VitalType="birth">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I19"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>20 NOV 1925</Date>
+   </EventRec>
+   <EventRec Id="I19-6" Type="death" VitalType="death">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I19"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>06 JUN 1968</Date>
+   </EventRec>
+   <EventRec Id="I21-5" Type="birth" VitalType="birth">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I21"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>20 FEB 1928</Date>
+   </EventRec>
+   <EventRec Id="I23-5" Type="birth" VitalType="birth">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I23"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>22 FEB 1932</Date>
+   </EventRec>
+   <EventRec Id="F1-6" Type="marriage" VitalType="marriage">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I1"/>
+         <Role>husband</Role>
+      </Participant>
+      <Participant>
+         <Link Target="IndividualRec" Ref="I2"/>
+         <Role>wife</Role>
+      </Participant>
+      <Date>12 SEP 1953</Date>
+      <Place>
+         <PlaceName>
+            <PlacePart Type="country" Level="1">USA</PlacePart>
+            <PlacePart Type="state" Level="2">RI</PlacePart>
+            <PlacePart Level="6">Newport</PlacePart>
+         </PlaceName>
+      </Place>
+   </EventRec>
+   <EventRec Id="F2-12" Type="marriage" VitalType="marriage">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I8"/>
+         <Role>husband</Role>
+      </Participant>
+      <Participant>
+         <Link Target="IndividualRec" Ref="I9"/>
+         <Role>wife</Role>
+      </Participant>
+      <Date>07 OCT 1914</Date>
+      <Place>
+         <PlaceName>
+            <PlacePart Type="country" Level="1">USA</PlacePart>
+            <PlacePart Type="state" Level="2">MA</PlacePart>
+            <PlacePart Level="6">Boston</PlacePart>
+         </PlaceName>
+      </Place>
+   </EventRec>
+   <EventRec Id="F3-3" Type="marriage" VitalType="marriage">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I15"/>
+         <Role>husband</Role>
+      </Participant>
+      <Participant>
+         <Link Target="IndividualRec" Ref="I2"/>
+         <Role>wife</Role>
+      </Participant>
+      <Date>AFT 1964</Date>
+   </EventRec>
+   <EventRec Id="F5-3" Type="marriage" VitalType="marriage">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I14"/>
+         <Role>husband</Role>
+      </Participant>
+      <Participant>
+         <Link Target="IndividualRec" Ref="I13"/>
+         <Role>wife</Role>
+      </Participant>
+      <Date>23 MAY 1953</Date>
+      <Place>
+         <PlaceName>
+            <PlacePart Type="country" Level="1">USA</PlacePart>
+            <PlacePart Type="state" Level="2">NY</PlacePart>
+            <PlacePart Level="6">New York</PlacePart>
+         </PlaceName>
+      </Place>
+      <Note>They had five children including the TV journalist Maria
+Shriver</Note>
+   </EventRec>
+   <EventRec Id="F6-3" Type="marriage" VitalType="marriage">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I18"/>
+         <Role>husband</Role>
+      </Participant>
+      <Participant>
+         <Link Target="IndividualRec" Ref="I17"/>
+         <Role>wife</Role>
+      </Participant>
+      <Date>24 APR 1954</Date>
+   </EventRec>
+   <EventRec Id="F7-3" Type="marriage" VitalType="marriage">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I19"/>
+         <Role>husband</Role>
+      </Participant>
+      <Participant>
+         <Link Target="IndividualRec" Ref="I20"/>
+         <Role>wife</Role>
+      </Participant>
+      <Date>17 JUN 1950</Date>
+      <Note>They had 11 children</Note>
+   </EventRec>
+   <EventRec Id="F8-3" Type="marriage" VitalType="marriage">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I22"/>
+         <Role>husband</Role>
+      </Participant>
+      <Participant>
+         <Link Target="IndividualRec" Ref="I21"/>
+         <Role>wife</Role>
+      </Participant>
+      <Date>19 MAY 1956</Date>
+   </EventRec>
+   <EventRec Id="F9-3" Type="marriage" VitalType="marriage">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I23"/>
+         <Role>husband</Role>
+      </Participant>
+      <Participant>
+         <Link Target="IndividualRec" Ref="I24"/>
+         <Role>wife</Role>
+      </Participant>
+      <Date>29 NOV 1958</Date>
+   </EventRec>
+   <EventRec Id="F9-4" Type="divorce" VitalType="divorce">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I23"/>
+         <Role>husband</Role>
+      </Participant>
+      <Participant>
+         <Link Target="IndividualRec" Ref="I24"/>
+         <Role>wife</Role>
+      </Participant>
+      <Date>1984</Date>
+   </EventRec>
+   <EventRec Id="F10-3" Type="marriage" VitalType="marriage">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I23"/>
+         <Role>husband</Role>
+      </Participant>
+      <Participant>
+         <Link Target="IndividualRec" Ref="I25"/>
+         <Role>wife</Role>
+      </Participant>
+      <Date>1992</Date>
+   </EventRec>
+   <EventRec Id="I11-6" Type="Illness">
+      <Participant>
+         <Link Target="IndividualRec" Ref="I11"/>
+         <Role>principal</Role>
+      </Participant>
+      <Date>1941</Date>
+      <Note>Institutionalised since 1941 "because of retardation and a
+failed lobotomy"</Note>
+   </EventRec>
+   <ContactRec Id="Contact-Submitter">
+      <Name>Michael Kay</Name>
+   </ContactRec>
+</GEDCOM>

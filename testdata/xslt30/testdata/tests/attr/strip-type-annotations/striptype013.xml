@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:userNode xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://ns.example.com/strip-type varietyOfTypes.xsd"
+		  xmlns:my="http://ns.example.com/strip-type"
+	 	  specialPart="123-AB" listParts="000-SS 000-RR" xsi:nil="true"/>

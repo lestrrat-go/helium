@@ -119,6 +119,19 @@ func fnDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Coerce xs:untypedAtomic to xs:date / xs:time.
+	if dateA.TypeName == TypeUntypedAtomic || dateA.TypeName == TypeString {
+		dateA, err = CastAtomic(dateA, TypeDate)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if timeA.TypeName == TypeUntypedAtomic || timeA.TypeName == TypeString {
+		timeA, err = CastAtomic(timeA, TypeTime)
+		if err != nil {
+			return nil, err
+		}
+	}
 	d, ok := dateA.Value.(time.Time)
 	if !ok || dateA.TypeName != TypeDate {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "first arg must be xs:date, got " + dateA.TypeName}

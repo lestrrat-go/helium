@@ -460,7 +460,7 @@ func (l *lexer) scanNameOrKeyword() {
 	// EXCEPT after '/' or '//' where they must be treated as element name tests,
 	// unless immediately followed by '{' (curly array/map constructor).
 	if tokType, ok := alwaysKeywords[name]; ok {
-		if !l.isAfterSlash() {
+		if !l.isNameTestContext() {
 			l.emit(tokType, name)
 			return
 		}
@@ -474,14 +474,16 @@ func (l *lexer) scanNameOrKeyword() {
 	l.emit(TokenName, name)
 }
 
-// isAfterSlash returns true if the previous token is '/' or '//'.
-// In this context, keywords must be treated as element name tests.
-func (l *lexer) isAfterSlash() bool {
+// isNameTestContext returns true if the previous token indicates that the
+// next name should be treated as a name test rather than a keyword.
+// This occurs after '/', '//', '@', and '::'.
+func (l *lexer) isNameTestContext() bool {
 	if len(l.tokens) == 0 {
 		return false
 	}
 	prev := l.tokens[len(l.tokens)-1]
-	return prev.Type == TokenSlash || prev.Type == TokenSlashSlash
+	return prev.Type == TokenSlash || prev.Type == TokenSlashSlash ||
+		prev.Type == TokenAt || prev.Type == TokenColonColon
 }
 
 // isOperatorContext returns true if an operator keyword is expected at

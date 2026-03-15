@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+   <list>
+      <item>a</item>
+      <item>b</item>
+      <item>c</item>
+   </list>
+   <list type="ordered"></list>
+</root>

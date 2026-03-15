@@ -1,0 +1,15 @@
+<?xml version="1.0"?> 
+<OL length="4">
+  <LI>item1</LI>
+  <LI>item2</LI>
+  <LI>item3</LI>
+  <OL length="3">
+    <LI>subitem1</LI>
+    <LI>subitem2</LI>
+    <OL length="1">
+      <!-- a comment -->
+      <LI>subitem3</LI>
+    </OL>
+  </OL>
+</OL>
+<?a processing instruction?>

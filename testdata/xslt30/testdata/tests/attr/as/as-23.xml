@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:integer-main xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://www.example.com/ns/integer integerSchemaAs.xsd"
+		  xmlns:my="http://www.example.com/ns/integer">
+	<int2-int-maxExclusive>1048575</int2-int-maxExclusive>
+</my:integer-main>

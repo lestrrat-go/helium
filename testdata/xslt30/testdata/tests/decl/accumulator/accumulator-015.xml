@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<purchase-order>
+   <item>
+       <cost>10</cost>
+   </item>
+   <item>
+       <cost>20</cost>
+   </item>
+   <item>
+       <cost>19</cost>
+   </item>
+   <item>
+       <cost>25</cost>
+   </item>
+   <item>
+       <cost>17</cost>
+   </item>
+</purchase-order>

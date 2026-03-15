@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <record>
+    <id>1</id>
+    <foo>foo 1, "quoted 1", bar 1</foo>
+    <unimportant>...</unimportant>
+    <data>a</data>
+  </record>
+  <record>
+    <id>2</id>
+    <foo>foo 2, "quoted 2", bar 2</foo>
+    <unimportant>...</unimportant>
+    <data>b</data>
+  </record>
+  <record>
+    <id>3</id>
+    <foo>foo 3, "quoted 3", bar 3</foo>
+    <unimportant>...</unimportant>
+    <data>c</data>
+  </record>
+</root>

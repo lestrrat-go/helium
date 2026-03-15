@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<doc>
+ <title>Test for source tree depth</title>
+ <a>
+  <title>Level A</title>
+  <b>
+   <title>Level B</title>
+   <c>
+    <title>Level C</title>
+    <d>
+     <title>Level D</title>
+     <e>
+      <title>Level E</title>
+      <f>
+       <title>Level F</title>
+       <g>
+        <title>Level G</title>
+        <h>
+         <title>Level H</title>
+         <i>
+          <title>Level I</title>
+          <j>
+           <title>Level J</title>
+           <k>
+            <title>Level K</title>
+            <l>
+             <title>Level L</title>
+             <m>
+              <title>Level M</title>
+              <n>
+               <title>Level N</title>
+               <o>
+                <title>Level O</title>
+               </o>
+              </n>
+             </m>
+            </l>
+           </k>
+          </j>
+         </i>
+        </h>
+       </g>
+      </f>
+     </e>
+    </d>
+   </c>
+  </b>
+ </a>
+</doc>

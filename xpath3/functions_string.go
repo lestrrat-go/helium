@@ -79,26 +79,55 @@ func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnCodepointsToString(_ context.Context, args []Sequence) (Sequence, error) {
-	var b strings.Builder
-	for _, item := range args[0] {
-		a, err := AtomizeItem(item)
+	seq := args[0]
+
+	// Fast path: singleton integer (common in unicode-90 where each codepoint
+	// is mapped individually via codepoints-to-string(.))
+	if len(seq) == 1 {
+		cp, err := itemToCodepoint(seq[0])
 		if err != nil {
 			return nil, err
 		}
-		// Function coercion: cast untypedAtomic to integer
-		if a.TypeName == TypeUntypedAtomic {
-			a, err = CastAtomic(a, TypeInteger)
-			if err != nil {
-				return nil, err
-			}
+		if !isValidXMLCodepoint(cp) {
+			return nil, &XPathError{Code: "FOCH0001", Message: fmt.Sprintf("invalid XML character [x%X]", cp)}
 		}
-		cp := int(a.ToFloat64())
+		return SingleString(string(rune(cp))), nil
+	}
+
+	var b strings.Builder
+	for _, item := range seq {
+		cp, err := itemToCodepoint(item)
+		if err != nil {
+			return nil, err
+		}
 		if !isValidXMLCodepoint(cp) {
 			return nil, &XPathError{Code: "FOCH0001", Message: fmt.Sprintf("invalid XML character [x%X]", cp)}
 		}
 		b.WriteRune(rune(cp))
 	}
 	return SingleString(b.String()), nil
+}
+
+// itemToCodepoint extracts an integer codepoint from an item, avoiding
+// expensive big.Float conversion when the value is already a *big.Int.
+func itemToCodepoint(item Item) (int, error) {
+	a, err := AtomizeItem(item)
+	if err != nil {
+		return 0, err
+	}
+	if a.TypeName == TypeUntypedAtomic {
+		a, err = CastAtomic(a, TypeInteger)
+		if err != nil {
+			return 0, err
+		}
+	}
+	// Fast path: extract int64 directly from *big.Int (avoids big.Float allocation)
+	if isIntegerDerived(a.TypeName) {
+		if n, ok := a.Value.(*big.Int); ok {
+			return int(n.Int64()), nil
+		}
+	}
+	return int(a.ToFloat64()), nil
 }
 
 // isValidXMLCodepoint returns true if the codepoint is a valid XML character.
@@ -191,16 +220,19 @@ func fnStringJoin(_ context.Context, args []Sequence) (Sequence, error) {
 			return nil, err
 		}
 	}
-	parts := make([]string, 0, len(args[0]))
-	for _, item := range args[0] {
+	var b strings.Builder
+	for i, item := range args[0] {
+		if i > 0 && sep != "" {
+			b.WriteString(sep)
+		}
 		a, err := AtomizeItem(item)
 		if err != nil {
 			return nil, err
 		}
 		s, _ := atomicToString(a)
-		parts = append(parts, s)
+		b.WriteString(s)
 	}
-	return SingleString(strings.Join(parts, sep)), nil
+	return SingleString(b.String()), nil
 }
 
 func fnSubstring(_ context.Context, args []Sequence) (Sequence, error) {
@@ -564,6 +596,15 @@ func fnMatches(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Fast path: simple \p{Name}/\P{Name} pattern against single-rune input
+	if re.isSimple && utf8.RuneCountInString(s) == 1 {
+		r, _ := utf8.DecodeRuneInString(s)
+		match := unicode.Is(re.unicodeTable, r)
+		if re.negated {
+			match = !match
+		}
+		return SingleBoolean(match), nil
+	}
 	ok, err := re.MatchString(s)
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
@@ -624,6 +665,21 @@ func fnReplace(_ context.Context, args []Sequence) (Sequence, error) {
 	re, err := compileXPathRegex(pattern, flags)
 	if err != nil {
 		return nil, err
+	}
+
+	// Fast path: simple \p{Name}/\P{Name} with empty replacement — filter runes directly
+	if re.isSimple && replacement == "" {
+		var b strings.Builder
+		for _, r := range s {
+			match := unicode.Is(re.unicodeTable, r)
+			if re.negated {
+				match = !match
+			}
+			if !match {
+				b.WriteRune(r)
+			}
+		}
+		return SingleString(b.String()), nil
 	}
 
 	// XPath spec: error if pattern matches empty string
@@ -961,9 +1017,12 @@ func appendAnalyzeStringTextElement(doc *helium.Document, parent *helium.Element
 // Maps XPath flags (i,m,s,x) to Go regexp equivalents.
 // Translates XPath/XML Schema regex features to Go-compatible patterns.
 type compiledXPathRegex struct {
-	std       *regexp.Regexp
-	backtrack *regexp2.Regexp
-	numGroups int
+	std          *regexp.Regexp
+	backtrack    *regexp2.Regexp
+	numGroups    int
+	unicodeTable *unicode.RangeTable // non-nil for simple \p{Name} or \P{Name} patterns
+	negated      bool                // true when the simple pattern is \P{...}
+	isSimple     bool                // true when unicodeTable is usable for single-rune fast paths
 }
 
 type xpathRegexCacheKey struct {
@@ -1066,11 +1125,62 @@ func runeByteOffsets(s string) []int {
 	return offsets
 }
 
+// resolveUnicodeProperty maps a Unicode property name to a *unicode.RangeTable.
+// It checks unicode.Categories, unicode.Scripts, and the unicodeBlocks map.
+// Returns nil if the name is not recognized.
+func resolveUnicodeProperty(name string) *unicode.RangeTable {
+	if rt, ok := unicode.Categories[name]; ok {
+		return rt
+	}
+	if rt, ok := unicode.Scripts[name]; ok {
+		return rt
+	}
+	return nil
+}
+
+// detectSimpleUnicodePattern checks whether pattern (before flag processing)
+// is exactly \p{Name} or \P{Name} with no flags other than possibly empty.
+// Returns (table, negated, true) when the pattern is simple.
+func detectSimpleUnicodePattern(pattern, flags string) (*unicode.RangeTable, bool, bool) {
+	// Only patterns with no flags (or empty flags) qualify
+	if flags != "" {
+		return nil, false, false
+	}
+	runes := []rune(pattern)
+	if len(runes) < 5 {
+		return nil, false, false
+	}
+	if runes[0] != '\\' {
+		return nil, false, false
+	}
+	neg := false
+	switch runes[1] {
+	case 'p':
+		// ok
+	case 'P':
+		neg = true
+	default:
+		return nil, false, false
+	}
+	if runes[2] != '{' || runes[len(runes)-1] != '}' {
+		return nil, false, false
+	}
+	name := string(runes[3 : len(runes)-1])
+	rt := resolveUnicodeProperty(name)
+	if rt == nil {
+		return nil, false, false
+	}
+	return rt, neg, true
+}
+
 func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 	cacheKey := xpathRegexCacheKey{pattern: pattern, flags: flags}
 	if cached, ok := compiledXPathRegexCache.Load(cacheKey); ok {
 		return cached.(*compiledXPathRegex), nil
 	}
+
+	// Detect simple \p{Name} / \P{Name} patterns for single-rune fast paths
+	simpleTable, simpleNegated, simpleOk := detectSimpleUnicodePattern(pattern, flags)
 
 	// Check for 'q' flag early to skip validation for literal patterns
 	hasQ := strings.ContainsRune(flags, 'q')
@@ -1146,8 +1256,11 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 			return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("invalid regular expression: %s", err)}
 		}
 		compiled := &compiledXPathRegex{
-			backtrack: re,
-			numGroups: len(re.GetGroupNumbers()) - 1,
+			backtrack:    re,
+			numGroups:    len(re.GetGroupNumbers()) - 1,
+			unicodeTable: simpleTable,
+			negated:      simpleNegated,
+			isSimple:     simpleOk,
 		}
 		actual, _ := compiledXPathRegexCache.LoadOrStore(cacheKey, compiled)
 		return actual.(*compiledXPathRegex), nil
@@ -1156,7 +1269,12 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("invalid regular expression: %s", err)}
 	}
-	compiled := &compiledXPathRegex{std: re}
+	compiled := &compiledXPathRegex{
+		std:          re,
+		unicodeTable: simpleTable,
+		negated:      simpleNegated,
+		isSimple:     simpleOk,
+	}
 	actual, _ := compiledXPathRegexCache.LoadOrStore(cacheKey, compiled)
 	return actual.(*compiledXPathRegex), nil
 }

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doc>
+	<str1 href="doc02.xml">File one</str1>
+	<str2 href="doc03.xml">File two</str2>
+	<str3 href="doc01.xsl">File three</str3>
+	<str4 href="doc04.xml">File four</str4>
+</doc>

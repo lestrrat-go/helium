@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Items Title="Title" Icon="Icon" Description="Description">
+    <Item Value="01" Name="Agriculture"/>
+    <Item Value="011" Name="Horticulture and Fruit Growing"/>
+    <Item Value="0111" Name="Plant Nurseries"/>
+    <Item Value="011101" Name="Bulb Propagating"/>
+    <Item Value="0112" Name="Cut Flower and Flower Seed Growing"/>
+    <Item Value="011201" Name="Display Foliage Growing"/>
+</Items>

@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+
+	<xsd:annotation>
+		<xsd:documentation>
+      		One-of-each approach for constructing a test schema for built-in types
+		</xsd:documentation>
+	</xsd:annotation>
+
+<!-- Begin definitions -->
+	<xsd:element name="doc" type="docType" />
+	
+	<xsd:element name="elem-anyURI" type="xsd:anyURI" />
+	<xsd:element name="elem-base64Binary" type="xsd:base64Binary" />
+	<xsd:element name="elem-boolean" type="xsd:boolean" />
+	<xsd:element name="elem-date" type="xsd:date" />
+	<xsd:element name="elem-dateTime" type="xsd:dateTime" />
+	<xsd:element name="elem-decimal" type="xsd:decimal" />
+	<xsd:element name="elem-double" type="xsd:double" />
+	<xsd:element name="elem-duration" type="xsd:duration" />
+	<xsd:element name="elem-float" type="xsd:float" />
+	<xsd:element name="elem-gDay" type="xsd:gDay" />
+	<xsd:element name="elem-gMonth" type="xsd:string" />
+	<xsd:element name="elem-gMonthDay" type="xsd:gMonthDay" />
+	<xsd:element name="elem-gYear" type="xsd:gYear" />
+	<xsd:element name="elem-gYearMonth" type="xsd:gYearMonth" />
+	<xsd:element name="elem-hexBinary" type="xsd:hexBinary" />
+	<xsd:element name="elem-integer" type="xsd:integer" />
+	<xsd:element name="elem-QName" type="xsd:QName" />
+	<xsd:element name="elem-string" type="xsd:string" />
+	<xsd:element name="elem-time" type="xsd:time" />
+	<xsd:element name="elem-normalizedString" type="xsd:normalizedString" />
+	<xsd:element name="elem-token" type="xsd:token" />
+	<xsd:element name="elem-language" type="xsd:language" />
+	<xsd:element name="elem-Name" type="xsd:Name" />
+	<xsd:element name="elem-NCName" type="xsd:NCName" />
+	<xsd:element name="elem-NMTOKEN" type="xsd:NMTOKEN" />
+	<xsd:element name="elem-int" type="xsd:int" />
+	<xsd:element name="elem-nonPositiveInteger" type="xsd:nonPositiveInteger" />
+	<xsd:element name="elem-positiveInteger" type="xsd:positiveInteger" />
+	<xsd:element name="elem-nonNegativeInteger" type="xsd:nonNegativeInteger" />
+	<xsd:element name="elem-negativeInteger" type="xsd:negativeInteger" />
+	<xsd:element name="elem-long" type="xsd:long" />
+	<xsd:element name="elem-unsignedLong" type="xsd:unsignedLong" />
+	<xsd:element name="elem-unsignedInt" type="xsd:unsignedInt" />
+	<xsd:element name="elem-short" type="xsd:short" />
+	<xsd:element name="elem-unsignedShort" type="xsd:unsignedShort" />
+	<xsd:element name="elem-byte" type="xsd:byte" />
+	<xsd:element name="elem-unsignedByte" type="xsd:unsignedByte" />
+			
+			
+	<xsd:attribute name="attr-anyURI" type="xsd:anyURI" />
+	<xsd:attribute name="attr-base64Binary" type="xsd:base64Binary" />
+	<xsd:attribute name="attr-boolean" type="xsd:boolean" />
+	<xsd:attribute name="attr-date" type="xsd:date" />
+	<xsd:attribute name="attr-dateTime" type="xsd:dateTime" />
+	<xsd:attribute name="attr-decimal" type="xsd:decimal" />
+	<xsd:attribute name="attr-double" type="xsd:double" />
+	<xsd:attribute name="attr-duration" type="xsd:duration" />
+	<xsd:attribute name="attr-float" type="xsd:float" />
+	<xsd:attribute name="attr-gDay" type="xsd:gDay" />
+	<xsd:attribute name="attr-gMonth" type="xsd:string" />
+	<xsd:attribute name="attr-gMonthDay" type="xsd:gMonthDay" />
+	<xsd:attribute name="attr-gYear" type="xsd:gYear" />
+	<xsd:attribute name="attr-gYearMonth" type="xsd:gYearMonth" />
+	<xsd:attribute name="attr-hexBinary" type="xsd:hexBinary" />
+	<xsd:attribute name="attr-integer" type="xsd:integer" />
+	<xsd:attribute name="attr-QName" type="xsd:QName" />
+	<xsd:attribute name="attr-string" type="xsd:string" />
+	<xsd:attribute name="attr-time" type="xsd:time" />
+	<xsd:attribute name="attr-normalizedString" type="xsd:normalizedString" />
+	<xsd:attribute name="attr-token" type="xsd:token" />
+	<xsd:attribute name="attr-language" type="xsd:language" />
+	<xsd:attribute name="attr-Name" type="xsd:Name" />
+	<xsd:attribute name="attr-NCName" type="xsd:NCName" />
+	<xsd:attribute name="attr-NMTOKEN" type="xsd:NMTOKEN" />
+	<xsd:attribute name="attr-int" type="xsd:int" />
+	<xsd:attribute name="attr-nonPositiveInteger" type="xsd:nonPositiveInteger" />
+	<xsd:attribute name="attr-positiveInteger" type="xsd:positiveInteger" />
+	<xsd:attribute name="attr-nonNegativeInteger" type="xsd:nonNegativeInteger" />
+	<xsd:attribute name="attr-negativeInteger" type="xsd:negativeInteger" />
+	<xsd:attribute name="attr-long" type="xsd:long" />
+	<xsd:attribute name="attr-unsignedLong" type="xsd:unsignedLong" />
+	<xsd:attribute name="attr-unsignedInt" type="xsd:unsignedInt" />
+	<xsd:attribute name="attr-short" type="xsd:short" />
+	<xsd:attribute name="attr-unsignedShort" type="xsd:unsignedShort" />
+	<xsd:attribute name="attr-byte" type="xsd:byte" />
+	<xsd:attribute name="attr-unsignedByte" type="xsd:unsignedByte" />
+	
+	<xsd:complexType name="docType">
+		<xsd:sequence>
+			<xsd:element ref="elem-anyURI" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-base64Binary" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-boolean" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-date" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-dateTime" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-decimal" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-double" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-duration" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-float" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-gDay" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-gMonth" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-gMonthDay" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-gYear" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-gYearMonth" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-hexBinary" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-integer" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-QName" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-string" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-time" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-normalizedString" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-token" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-language" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-Name" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-NCName" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-NMTOKEN" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-int" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-nonPositiveInteger" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-positiveInteger" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-nonNegativeInteger" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-negativeInteger" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-long" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-unsignedLong" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-unsignedInt" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-short" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-unsignedShort" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-byte" minOccurs="0" maxOccurs="1"/>
+			<xsd:element ref="elem-unsignedByte" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-ID-attr" minOccurs="0" maxOccurs="1">
+				<xsd:complexType>
+    				<xsd:attribute name="attr1" type="xsd:ID"/>
+    				<xsd:attribute name="attr2" type="xsd:integer"/>
+  				</xsd:complexType>
+			</xsd:element>
+			<xsd:element name="elem-IDREF-attr" minOccurs="0" maxOccurs="1">
+				<xsd:complexType>
+    				<xsd:attribute name="attr1" type="xsd:IDREF"/>
+    				<xsd:attribute name="attr2" type="xsd:byte"/>
+  				</xsd:complexType>
+			</xsd:element>
+			<xsd:element name="elem-ALL-attr-Types" minOccurs="0" maxOccurs="1">
+				<xsd:complexType>
+    				<xsd:attribute ref="attr-anyURI" use="optional"/>
+					<xsd:attribute ref="attr-base64Binary" use="optional"/>
+					<xsd:attribute ref="attr-boolean" use="optional"/>
+					<xsd:attribute ref="attr-date" use="optional"/>
+					<xsd:attribute ref="attr-dateTime" use="optional"/>
+					<xsd:attribute ref="attr-decimal" use="optional"/>
+					<xsd:attribute ref="attr-double" use="optional" />
+					<xsd:attribute ref="attr-duration" use="optional"/>
+					<xsd:attribute ref="attr-float" use="optional"/>
+					<xsd:attribute ref="attr-gDay" use="optional"/>
+					<xsd:attribute ref="attr-gMonth" use="optional"/>
+					<xsd:attribute ref="attr-gMonthDay" use="optional"/>
+					<xsd:attribute ref="attr-gYear" use="optional"/>
+					<xsd:attribute ref="attr-gYearMonth" use="optional"/>
+					<xsd:attribute ref="attr-hexBinary" use="optional"/>
+					<xsd:attribute ref="attr-integer" use="optional"/>
+					<xsd:attribute ref="attr-QName" use="optional"/>
+					<xsd:attribute ref="attr-string" use="optional"/>
+					<xsd:attribute ref="attr-time" use="optional"/>
+					<xsd:attribute ref="attr-normalizedString" use="optional"/>
+					<xsd:attribute ref="attr-token" use="optional"/>
+					<xsd:attribute ref="attr-language" use="optional"/>
+					<xsd:attribute ref="attr-Name" use="optional"/>
+					<xsd:attribute ref="attr-NCName" use="optional"/>
+					<xsd:attribute ref="attr-NMTOKEN" use="optional"/>
+					<xsd:attribute ref="attr-int" use="optional"/>
+					<xsd:attribute ref="attr-nonPositiveInteger" use="optional"/>
+					<xsd:attribute ref="attr-positiveInteger" use="optional"/>
+					<xsd:attribute ref="attr-nonNegativeInteger" use="optional"/>
+					<xsd:attribute ref="attr-negativeInteger" use="optional"/>
+					<xsd:attribute ref="attr-long" use="optional"/>
+					<xsd:attribute ref="attr-unsignedLong" use="optional"/>
+					<xsd:attribute ref="attr-unsignedInt" use="optional"/>
+					<xsd:attribute ref="attr-short" use="optional"/>
+					<xsd:attribute ref="attr-unsignedShort" use="optional"/>
+					<xsd:attribute ref="attr-byte" use="optional"/>
+					<xsd:attribute ref="attr-unsignedByte" use="optional"/>
+  				</xsd:complexType>
+			</xsd:element>
+   		</xsd:sequence>
+	</xsd:complexType>
+</xsd:schema>

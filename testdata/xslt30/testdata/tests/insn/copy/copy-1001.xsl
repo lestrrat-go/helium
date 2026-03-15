@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+
+<?spec xslt#shallow-copy?>    
+  <!-- Purpose: Test for identity transformation exactly as in spec. -->
+
+<xsl:template match="/">
+  <out>
+    <xsl:apply-templates/>
+  </out>
+</xsl:template>
+
+<xsl:template match="@*|node()">
+  <xsl:copy>
+    <xsl:apply-templates select="@*|node()"/>
+  </xsl:copy>
+</xsl:template>
+
+</xsl:stylesheet>

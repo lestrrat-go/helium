@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<s:schema xmlns:s="http://www.w3.org/2001/XMLSchema" targetNamespace="http://hats.uri/"
+  xmlns:tn="http://hats.uri/">
+
+  <s:simpleType name="hatsize">
+    <s:restriction base="s:integer">
+      <s:minInclusive value="4"/>
+      <s:maxInclusive value="10"/>
+    </s:restriction>
+  </s:simpleType>
+
+  <s:simpleType name="bighatsize">
+    <s:restriction base="tn:hatsize">
+      <s:minInclusive value="7"/>
+      <!-- inherit the maxInclusive facet -->
+    </s:restriction>
+  </s:simpleType>
+
+  <s:simpleType name="shoesize">
+    <s:restriction base="s:negativeInteger">
+      <s:minExclusive value="-8"/>
+      <s:maxExclusive value="-2"/>
+    </s:restriction>
+  </s:simpleType>
+
+  <s:simpleType name="date2003">
+    <s:restriction base="s:date">
+      <s:minInclusive value="2003-01-01"/>
+      <s:maxInclusive value="2003-12-31"/>
+    </s:restriction>
+  </s:simpleType>
+
+  <s:simpleType name="vreg">
+    <s:restriction base="s:string">
+      <s:pattern value="[a-z]{3}[0-9]{3}"/>
+    </s:restriction>
+  </s:simpleType>
+
+</s:schema>

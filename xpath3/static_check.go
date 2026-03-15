@@ -122,7 +122,7 @@ func appendPrefixChecks(plan *prefixPlanBuilder, node Expr) {
 	case TreatAsExpr:
 		appendSequenceTypePrefixChecks(plan, n.Type)
 		appendPrefixChecks(plan, n.Expr)
-	case LocationPath:
+	case *LocationPath:
 		for i := range n.Steps {
 			appendStepPrefixChecks(plan, &n.Steps[i])
 		}

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<books>
+    <book>
+        <title>book 1</title>
+        <subject>XSLT</subject>
+    </book>
+    <book>
+        <title>book 2</title>
+        <subject>XQuery</subject>
+    </book>
+    <book>
+        <title>book 3</title>
+        <subject>XSLT</subject>
+    </book>
+    <book>
+        <title>book 4</title>
+        <subject>C#</subject>
+    </book>
+</books>

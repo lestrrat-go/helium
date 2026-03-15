@@ -1,0 +1,20 @@
+<transactions>
+  <transaction date="2012-03-21" amount="12.52"/>
+  <transaction date="2012-03-22" amount="8.30"/>
+  <transaction date="2012-03-23" amount="-1.00"/>
+  <transaction date="2012-03-23" amount="5.36"/>
+  <transaction date="2012-03-24" amount="182.00"/>
+  <transaction date="2012-03-24" amount="13.00"/>
+  <transaction date="2012-03-24" amount="12.59"/>
+  <transaction date="2012-03-26" amount="1.40"/>
+  <transaction date="2012-03-27" amount="-16.00"/>
+  <transaction date="2012-03-29" amount="15.00"/>
+  <transaction date="2012-03-29" amount="22.52"/>
+  <transaction date="2012-03-29" amount="22.54"/>
+  <transaction date="2012-04-01" amount="6.80"/>
+  <transaction date="2012-04-01" amount="7.40"/>
+  <transaction date="2012-04-02" amount="-13.00"/>
+  <transaction date="2012-04-02" amount="-2.00"/>
+</transactions>
+
+

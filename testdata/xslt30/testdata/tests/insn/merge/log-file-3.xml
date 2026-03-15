@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<logs>
+<events order ="ascending" data-type="text">
+    <event timestamp="2009-08-20T12:01:01Z">Transaction T1234 started</event>
+    <event timestamp="2009-08-20T12:01:08Z">Transaction T1235 started</event>
+    <event timestamp="2009-08-20T12:01:12Z">Transaction T1235 ended</event>
+    <event timestamp="2009-08-20T12:01:15Z">Transaction T1234 ended</event>
+    <myDataType data-type="text"/>
+</events>
+    <events  order ="descending" data-type="text">
+        <event timestamp="2009-08-20T12:01:15Z">Transaction T1234 ended</event>
+        <event timestamp="2009-08-20T12:01:12Z">Transaction T1235 ended</event>    
+        <event timestamp="2009-08-20T12:01:08Z">Transaction T1235 started</event>
+        <event timestamp="2009-08-20T12:01:01Z">Transaction T1234 started</event>
+</events>
+</logs>
+

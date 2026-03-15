@@ -1,0 +1,14 @@
+<?xml version="1.0"?> 
+<doc>
+  <side att="view"><!-- This is the side comment -->text-in-side<?s-pi side ?></side>
+  <begin bat="top"><?a-pi some data?>
+  <!-- This is the 2nd comment -->
+  text-in-begin
+  <inner blat="blob">
+    inner-text
+    <!-- This is the 3rd comment -->
+    <sub latte="glub">subtext</sub>
+  </inner>
+  text-in-begin2
+  </begin>
+</doc>
