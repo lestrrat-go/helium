@@ -128,14 +128,15 @@ func (ec *execContext) fnKey(ctx context.Context, args []xpath3.Sequence) (xpath
 		return xpath3.EmptySequence(), nil
 	}
 
-	// Determine the document root for key lookup.
+	// Determine the root for key lookup.
 	// Default: use the document containing the context node (per XSLT spec §16.3).
-	// When the 3rd argument is provided, use that node's document.
+	// When the 3rd argument is provided, use that node directly as the search root.
+	// This allows scoping to a subtree (e.g., key('k', 'v', $tree/sub)).
 	var root helium.Node = ec.sourceDoc
 	if len(args) >= 3 && len(args[2]) > 0 {
 		ni, ok := args[2][0].(xpath3.NodeItem)
 		if ok {
-			root = documentRoot(ni.Node)
+			root = ni.Node
 		}
 	} else if xpathNode := xpath3.FnContextNode(ctx); xpathNode != nil {
 		root = documentRoot(xpathNode)
