@@ -2479,10 +2479,22 @@ func (ec *execContext) execOnEmpty(ctx context.Context, inst *OnEmptyInst) error
 }
 
 func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) error {
-	// Execute try body; if it fails, execute catch
+	// Execute try body into a temporary output buffer.
+	// If the try succeeds, copy the buffered output to the real output.
+	// If it fails, discard the buffer and execute the catch.
+	tmpDoc := helium.NewDefaultDocument()
+	tmpRoot, err := tmpDoc.CreateElement("_try")
+	if err != nil {
+		return err
+	}
+	if err := tmpDoc.AddChild(tmpRoot); err != nil {
+		return err
+	}
+
+	ec.outputStack = append(ec.outputStack, &outputFrame{doc: tmpDoc, current: tmpRoot})
+
 	tryErr := func() error {
 		if inst.Select != nil {
-			// xsl:try select="..." — evaluate expression and output result
 			xpathCtx := ec.newXPathContext(ec.contextNode)
 			result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
 			if err != nil {
@@ -2498,7 +2510,19 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 		return nil
 	}()
 
+	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+
 	if tryErr == nil {
+		// Success — copy buffered output to real output
+		for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
+			copied, copyErr := helium.CopyNode(child, ec.resultDoc)
+			if copyErr != nil {
+				return copyErr
+			}
+			if err := ec.addNode(copied); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 
