@@ -518,6 +518,12 @@ func (c *compiler) compileMerge(elem *helium.Element) (Instruction, error) {
 				return nil, err
 			}
 			inst.Action = body
+		case "fallback":
+			// xsl:fallback is allowed only after xsl:merge-action (XTSE0010).
+			if actionCount == 0 {
+				return nil, staticError(errCodeXTSE0010, "xsl:fallback in xsl:merge must follow xsl:merge-action")
+			}
+			continue
 		default:
 			return nil, staticError(errCodeXTSE0010, "unexpected child element xsl:%s in xsl:merge", childElem.LocalName())
 		}
@@ -528,6 +534,23 @@ func (c *compiler) compileMerge(elem *helium.Element) (Instruction, error) {
 	}
 	if len(inst.Action) == 0 {
 		return nil, staticError(errCodeXTSE0110, "xsl:merge requires an xsl:merge-action child")
+	}
+
+	// XTSE2200: all merge-sources must have the same number of merge-keys.
+	if len(inst.Sources) > 1 {
+		keyCount := len(inst.Sources[0].Keys)
+		for i := 1; i < len(inst.Sources); i++ {
+			if len(inst.Sources[i].Keys) != keyCount {
+				return nil, staticError("XTSE2200", "all xsl:merge-source children must have the same number of xsl:merge-key children")
+			}
+		}
+	}
+
+	// XTSE0020: merge-source name must be a valid xs:QName.
+	for _, src := range inst.Sources {
+		if src.Name != "" && !isValidQName(src.Name) {
+			return nil, staticError(errCodeXTSE0020, "xsl:merge-source @name %q is not a valid xs:QName", src.Name)
+		}
 	}
 
 	return inst, nil
@@ -608,6 +631,19 @@ func (c *compiler) compileMergeSource(elem *helium.Element) (*MergeSource, error
 
 // compileMergeKey compiles an xsl:merge-key element.
 func (c *compiler) compileMergeKey(elem *helium.Element) (*MergeKey, error) {
+	// XTSE0090: validate permitted attributes on xsl:merge-key.
+	for _, attr := range elem.Attributes() {
+		if attr.URI() != "" {
+			continue // namespace-qualified attributes are allowed
+		}
+		switch attr.LocalName() {
+		case "select", "order", "collation", "data-type", "lang", "case-order":
+			// permitted
+		default:
+			return nil, staticError("XTSE0090", "attribute %q is not permitted on xsl:merge-key", attr.LocalName())
+		}
+	}
+
 	mk := &MergeKey{
 		Order: "ascending", // default
 	}
