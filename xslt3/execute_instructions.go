@@ -2418,6 +2418,32 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *NextMatchInst) e
 	}
 	defer func() { ec.tunnelParams = savedTunnel }()
 
+	// Handle atomic context items (e.g., xsl:next-match when processing integers)
+	if ec.contextItem != nil {
+		templates := ec.stylesheet.modeTemplates[mode]
+		foundCurrent := false
+		for _, tmpl := range templates {
+			if tmpl == ec.currentTemplate {
+				foundCurrent = true
+				continue
+			}
+			if foundCurrent && tmpl.Match != nil && ec.matchAtomicPattern(tmpl.Match, ec.contextItem) {
+				return ec.executeAtomicTemplate(ctx, tmpl, ec.contextItem, mode)
+			}
+		}
+		// No next match for atomic items — output string value as built-in rule
+		av, ok := ec.contextItem.(xpath3.AtomicValue)
+		if !ok {
+			return nil
+		}
+		s := fmt.Sprintf("%v", av.Value)
+		text, err := ec.resultDoc.CreateText([]byte(s))
+		if err != nil {
+			return err
+		}
+		return ec.addNode(text)
+	}
+
 	templates := ec.stylesheet.modeTemplates[mode]
 	foundCurrent := false
 	for _, tmpl := range templates {
