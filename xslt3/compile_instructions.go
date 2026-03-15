@@ -1153,20 +1153,33 @@ func (c *compiler) compileTry(elem *helium.Element) (*TryCatchInst, error) {
 			continue
 		}
 		if childElem.URI() == NSXSLT && childElem.LocalName() == "catch" {
+			clause := &CatchClause{}
+
+			// Parse errors attribute (space-separated list of error codes)
+			if errAttr := getAttr(childElem, "errors"); errAttr != "" {
+				for _, code := range strings.Fields(errAttr) {
+					clause.Errors = append(clause.Errors, resolveQName(code, c.nsBindings))
+				}
+			}
+
 			// xsl:catch select attribute
 			if sel := getAttr(childElem, "select"); sel != "" {
 				expr, err := compileXPath(sel, c.nsBindings)
 				if err != nil {
 					return nil, err
 				}
-				inst.CatchSelect = expr
+				clause.Select = expr
 			} else {
 				body, err := c.compileChildren(childElem)
 				if err != nil {
 					return nil, err
 				}
-				inst.Catch = body
+				clause.Body = body
 			}
+			inst.Catches = append(inst.Catches, clause)
+		} else if childElem.URI() == NSXSLT && childElem.LocalName() == "fallback" {
+			// xsl:fallback inside xsl:try is silently ignored
+			continue
 		} else {
 			childInst, err := c.compileInstruction(childElem)
 			if err != nil {

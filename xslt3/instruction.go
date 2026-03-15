@@ -309,13 +309,19 @@ func (*OnEmptyInst) instructionTag() {}
 
 // TryCatchInst represents xsl:try/xsl:catch.
 type TryCatchInst struct {
-	Select     *xpath3.Expression // xsl:try select attribute
-	Try        []Instruction
-	Catch      []Instruction
-	CatchSelect *xpath3.Expression // xsl:catch select attribute
+	Select  *xpath3.Expression // xsl:try select attribute
+	Try     []Instruction
+	Catches []*CatchClause // multiple catch clauses (matched in order)
 }
 
 func (*TryCatchInst) instructionTag() {}
+
+// CatchClause represents a single xsl:catch clause.
+type CatchClause struct {
+	Errors []string           // error codes to match (empty = "*")
+	Select *xpath3.Expression // xsl:catch select attribute
+	Body   []Instruction      // xsl:catch body
+}
 
 // ForEachGroupInst represents xsl:for-each-group.
 type ForEachGroupInst struct {
