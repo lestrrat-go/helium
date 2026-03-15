@@ -18,9 +18,6 @@ var (
 	variableAllowedAttrs = map[string]struct{}{
 		"name": {}, "select": {}, "as": {}, "static": {}, "visibility": {},
 	}
-	copyOfAllowedAttrs = map[string]struct{}{
-		"select": {}, "copy-namespaces": {}, "type": {}, "validation": {},
-	}
 	// XSLT-namespace attributes allowed on literal result elements
 	lreAllowedXSLTAttrs = map[string]struct{}{
 		"use-attribute-sets":        {},
@@ -888,9 +885,15 @@ func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
 }
 
 func (c *compiler) compileCopyOf(elem *helium.Element) (*CopyOfInst, error) {
-	// Validate attributes
-	if err := validateXSLTAttrs(elem, copyOfAllowedAttrs); err != nil {
-		return nil, err
+	// XTSE0090: reject specific attributes that are not allowed on xsl:copy-of
+	for _, attr := range elem.Attributes() {
+		if attr.URI() != "" {
+			continue
+		}
+		if attr.LocalName() == "match" || attr.LocalName() == "count" || attr.LocalName() == "from" {
+			return nil, staticError(errCodeXTSE0090,
+				"attribute %q is not allowed on xsl:copy-of", attr.LocalName())
+		}
 	}
 
 	// Validate boolean attribute: copy-namespaces
