@@ -112,6 +112,12 @@ const (
 	TypeDateTimeStamp = "xs:dateTimeStamp"
 	TypeError         = "xs:error"
 	TypeNumeric       = "xs:numeric"
+
+	// Non-atomic / structural types
+	TypeAnyType       = "xs:anyType"
+	TypeAnySimpleType = "xs:anySimpleType"
+	TypeUntyped       = "xs:untyped"
+	TypeNOTATION      = "xs:NOTATION"
 )
 
 // isSubtypeOf returns true if actualType is the same as or a subtype of targetType
@@ -703,7 +709,14 @@ func IsKnownXSDType(name string) bool {
 	if _, ok := xsdTypeParent[name]; ok {
 		return true
 	}
-	return name == TypeAnyAtomicType || name == TypeNumeric
+	switch name {
+	case TypeAnyAtomicType, TypeNumeric,
+		TypeAnyType, TypeAnySimpleType, TypeUntyped,
+		TypeNOTATION, TypeError,
+		TypeNMTOKENS, TypeENTITIES, TypeIDREFS:
+		return true
+	}
+	return false
 }
 
 // AtomizeItem converts a single item to an atomic value per XPath 3.1 Section 2.6.2.

@@ -457,8 +457,7 @@ func specSupported(spec string) bool {
 
 func featureSupported(feature string) bool {
 	switch feature {
-	case "schema_aware", "schema-aware",
-		"higher_order_functions",
+	case "higher_order_functions",
 		"backwards_compatibility",
 		"dynamic_evaluation",
 		"Saxon-PE", "Saxon-EE":

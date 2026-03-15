@@ -769,11 +769,24 @@ func (ec *execContext) fnTypeAvailable(_ context.Context, args []xpath3.Sequence
 	// Check imported schemas
 	for _, schema := range ec.stylesheet.schemas {
 		local := resolved
-		ns := "http://www.w3.org/2001/XMLSchema"
+		ns := ""
 		if strings.HasPrefix(resolved, "xs:") {
 			local = resolved[3:]
+			ns = "http://www.w3.org/2001/XMLSchema"
+		} else if strings.HasPrefix(resolved, "{") {
+			// {uri}local form from resolveQName
+			closeIdx := strings.IndexByte(resolved, '}')
+			if closeIdx > 0 {
+				ns = resolved[1:closeIdx]
+				local = resolved[closeIdx+1:]
+			}
 		} else if idx := strings.IndexByte(resolved, ':'); idx >= 0 {
 			local = resolved[idx+1:]
+			// prefix was not resolved to a namespace — try schema target namespace
+			ns = schema.TargetNamespace()
+		} else {
+			// No prefix — look up in the schema's target namespace
+			ns = schema.TargetNamespace()
 		}
 		if _, ok := schema.LookupType(local, ns); ok {
 			return xpath3.SingleBoolean(true), nil
