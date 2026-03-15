@@ -194,3 +194,28 @@ func TestRemoveAttributeNS(t *testing.T) {
 	ok = e.RemoveAttributeNS("attr", "http://example.com")
 	require.False(t, ok)
 }
+
+func TestForEachAttribute(t *testing.T) {
+	doc := helium.NewDefaultDocument()
+	e, err := doc.CreateElement("root")
+	require.NoError(t, err)
+
+	require.NoError(t, e.SetAttribute("a", "1"))
+	require.NoError(t, e.SetAttribute("b", "2"))
+	require.NoError(t, e.SetAttribute("c", "3"))
+
+	expected := e.Attributes()
+	var iterated []*helium.Attribute
+	e.ForEachAttribute(func(attr *helium.Attribute) bool {
+		iterated = append(iterated, attr)
+		return true
+	})
+	require.Equal(t, expected, iterated)
+
+	var stopped []*helium.Attribute
+	e.ForEachAttribute(func(attr *helium.Attribute) bool {
+		stopped = append(stopped, attr)
+		return len(stopped) < 2
+	})
+	require.Equal(t, expected[:2], stopped)
+}
