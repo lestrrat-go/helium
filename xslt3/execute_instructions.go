@@ -2544,10 +2544,16 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 		errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: errCode}
 	}
 
+	// Build Clark-notation error code for matching against compiled catch patterns
+	errClark := errCode
+	if errQName.URI != "" {
+		errClark = "{" + errQName.URI + "}" + errQName.Local
+	}
+
 	// Find matching catch clause
 	var matchedCatch *CatchClause
 	for _, clause := range inst.Catches {
-		if catchMatches(clause, errCode) {
+		if catchMatches(clause, errClark) {
 			matchedCatch = clause
 			break
 		}
@@ -2591,7 +2597,8 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 }
 
 // catchMatches returns true if a catch clause matches the given error code.
-func catchMatches(clause *CatchClause, errCode string) bool {
+// errClark is the error code in Clark notation: "{uri}local" or just "local" if no namespace.
+func catchMatches(clause *CatchClause, errClark string) bool {
 	if len(clause.Errors) == 0 {
 		return true // no errors attribute = match all
 	}
@@ -2599,19 +2606,11 @@ func catchMatches(clause *CatchClause, errCode string) bool {
 		if pattern == "*" {
 			return true
 		}
-		// Match by local name (QName form)
-		if pattern == errCode {
+		// Both errClark and pattern are in the same format from resolveQName:
+		// - Prefixed names → "{uri}local" (Clark notation)
+		// - Unprefixed names → "local" (no namespace)
+		if pattern == errClark {
 			return true
-		}
-		// Match by Clark notation: {uri}local
-		if strings.HasPrefix(pattern, "{") {
-			// Extract local name from Clark notation
-			if idx := strings.Index(pattern, "}"); idx >= 0 {
-				local := pattern[idx+1:]
-				if local == errCode {
-					return true
-				}
-			}
 		}
 	}
 	return false
