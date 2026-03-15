@@ -763,7 +763,8 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 	}
 
 	// Validate boolean attributes on xsl:mode (using GetAttribute to catch empty values)
-	for _, boolAttr := range []string{"streamable", "warning-on-no-match", "warning-on-multiple-match", "typed"} {
+	// Note: "typed" is NOT a simple boolean — it accepts "strict", "lax", "unspecified" as well
+	for _, boolAttr := range []string{"streamable", "warning-on-no-match", "warning-on-multiple-match"} {
 		if v, has := elem.GetAttribute(boolAttr); has {
 			if err := validateBooleanAttr("xsl:mode", boolAttr, v); err != nil {
 				return err
