@@ -722,7 +722,13 @@ func (c *compiler) compileAttributeSet(elem *helium.Element) error {
 	if c.stylesheet.attributeSets == nil {
 		c.stylesheet.attributeSets = make(map[string]*AttributeSetDef)
 	}
-	c.stylesheet.attributeSets[name] = asd
+	// Merge same-named attribute-sets (XSLT spec: union of all definitions)
+	if existing, ok := c.stylesheet.attributeSets[name]; ok {
+		existing.Attrs = append(existing.Attrs, asd.Attrs...)
+		existing.UseAttrSets = append(existing.UseAttrSets, asd.UseAttrSets...)
+	} else {
+		c.stylesheet.attributeSets[name] = asd
+	}
 	return nil
 }
 
