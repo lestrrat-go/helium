@@ -39,7 +39,7 @@ const (
 	errCodeXTDE1140 = "XTDE1140" // sort key comparison error
 	errCodeXTDE1170 = "XTDE1170" // key function lookup error
 	errCodeXTSE0260 = "XTSE0260" // invalid use of copy instruction
-	errCodeXTSE0545 = "XTSE0545" // invalid mode attribute value
+	errCodeXTSE0545 = "XTSE0545" // conflicting xsl:mode declarations
 	errCodeXTSE0805 = "XTSE0805" // conflicting namespace binding on LRE
 	errCodeXTSE1060 = "XTSE1060" // for-each-group missing grouping attribute
 	errCodeXTSE1070 = "XTSE1070" // for-each-group multiple grouping attributes

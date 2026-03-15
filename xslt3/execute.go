@@ -734,7 +734,7 @@ func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mod
 	switch mode {
 	case "#current":
 		mode = ec.currentMode
-	case "#default", "":
+	case "#default", "#unnamed", "":
 		mode = ec.stylesheet.defaultMode
 	}
 
@@ -947,15 +947,19 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 // applyBuiltinRules applies the built-in template rules per XSLT spec.
 func (ec *execContext) applyBuiltinRules(ctx context.Context, node helium.Node, mode string, paramValues ...map[string]xpath3.Sequence) error {
 	// Check for xsl:mode on-no-match behavior
+	onNoMatch := "text-only-copy" // XSLT 3.0 default
 	if md := ec.stylesheet.modeDefs[mode]; md != nil {
-		return ec.applyOnNoMatch(ctx, node, mode, md.OnNoMatch, paramValues...)
-	}
-	if mode == "" {
+		if md.OnNoMatch != "" {
+			onNoMatch = md.OnNoMatch
+		}
+	} else if mode == "" {
 		if md := ec.stylesheet.modeDefs["#default"]; md != nil {
-			return ec.applyOnNoMatch(ctx, node, mode, md.OnNoMatch, paramValues...)
+			if md.OnNoMatch != "" {
+				onNoMatch = md.OnNoMatch
+			}
 		}
 	}
-	return ec.applyOnNoMatch(ctx, node, mode, "text-only-copy", paramValues...)
+	return ec.applyOnNoMatch(ctx, node, mode, onNoMatch, paramValues...)
 }
 
 func (ec *execContext) applyOnNoMatch(ctx context.Context, node helium.Node, mode, behavior string, paramValues ...map[string]xpath3.Sequence) error {
@@ -965,7 +969,21 @@ func (ec *execContext) applyOnNoMatch(ctx context.Context, node helium.Node, mod
 	case "deep-copy":
 		return ec.onNoMatchDeepCopy(node)
 	case "shallow-skip":
-		if node.Type() == helium.DocumentNode || node.Type() == helium.ElementNode {
+		if node.Type() == helium.ElementNode {
+			// XSLT 3.0: shallow-skip for elements applies templates to
+			// attributes and children (but does not copy the element).
+			srcElem := node.(*helium.Element)
+			for _, attr := range srcElem.Attributes() {
+				if err := ec.applyTemplates(ctx, attr, mode, paramValues...); err != nil {
+					return err
+				}
+			}
+			for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+				if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
+					return err
+				}
+			}
+		} else if node.Type() == helium.DocumentNode {
 			for child := node.FirstChild(); child != nil; child = child.NextSibling() {
 				if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
 					return err

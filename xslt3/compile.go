@@ -27,6 +27,30 @@ type compiler struct {
 	baseURI        string
 	resolver       URIResolver
 	localExcludes  map[string]struct{} // accumulated LRE-level exclude-result-prefixes
+	defaultMode    string              // current default-mode (inherited through instruction nesting)
+}
+
+// resolveMode resolves mode name QNames to expanded Clark notation.
+// Special mode names (#all, #default, #unnamed, #current) are returned as-is.
+// Whitespace-separated lists are handled: each token is resolved independently.
+func (c *compiler) resolveMode(mode string) string {
+	modes := strings.Fields(mode)
+	if len(modes) <= 1 {
+		mode = strings.TrimSpace(mode)
+		if mode == "" || mode[0] == '#' {
+			return mode // special names
+		}
+		return resolveQName(mode, c.nsBindings)
+	}
+	resolved := make([]string, len(modes))
+	for i, m := range modes {
+		if m[0] == '#' {
+			resolved[i] = m
+		} else {
+			resolved[i] = resolveQName(m, c.nsBindings)
+		}
+	}
+	return strings.Join(resolved, " ")
 }
 
 // shouldStripText returns true if a whitespace-only text node should be stripped
@@ -175,7 +199,9 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 
 	// Read default-mode from stylesheet root (XSLT 3.0)
 	if dm := getAttr(root, "default-mode"); dm != "" {
-		c.stylesheet.defaultMode = dm
+		resolved := resolveQName(dm, c.nsBindings)
+		c.stylesheet.defaultMode = resolved
+		c.defaultMode = resolved
 	}
 
 	// Read version
@@ -361,12 +387,23 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 	}
 
 	tmpl.Name = resolveQName(getAttr(elem, "name"), c.nsBindings)
-	tmpl.Mode = getAttr(elem, "mode")
-	// XSLT 3.0 §6.7: if the stylesheet has xsl:stylesheet/@default-mode,
-	// templates without an explicit mode attribute belong to the default mode.
-	if tmpl.Mode == "" && c.stylesheet.defaultMode != "" {
-		tmpl.Mode = c.stylesheet.defaultMode
+	modeAttr := getAttr(elem, "mode")
+	if modeAttr != "" {
+		// Resolve mode QNames to Clark notation for namespace-aware matching
+		tmpl.Mode = c.resolveMode(modeAttr)
 	}
+	// XSLT 3.0 §6.7: if the stylesheet (or an included/imported module) has
+	// default-mode, templates without an explicit mode attribute belong to it.
+	if tmpl.Mode == "" && c.defaultMode != "" {
+		tmpl.Mode = c.resolveMode(c.defaultMode)
+	}
+
+	// XSLT 3.0: default-mode on xsl:template affects apply-templates within
+	savedDefaultMode := c.defaultMode
+	if dm := getAttr(elem, "default-mode"); dm != "" {
+		c.defaultMode = dm
+	}
+	defer func() { c.defaultMode = savedDefaultMode }()
 
 	if prio := getAttr(elem, "priority"); prio != "" {
 		f, err := strconv.ParseFloat(prio, 64)
@@ -443,20 +480,27 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 				c.stylesheet.modeTemplates[m] = append(c.stylesheet.modeTemplates[m], tmpl)
 			}
 			c.stylesheet.modeTemplates[""] = append(c.stylesheet.modeTemplates[""], tmpl)
+			// Also store under the "#all" key so findBestTemplate's fallback
+			// can find these templates for modes that don't exist yet.
+			c.stylesheet.modeTemplates["#all"] = append(c.stylesheet.modeTemplates["#all"], tmpl)
 		} else {
 			// XSLT 2.0+: mode can be a whitespace-separated list of mode names.
-			// Each mode name can be a QName, "#default", or "#all".
+			// Each mode name can be a QName, "#default", "#unnamed", or "#all".
 			modes := strings.Fields(mode)
 			if len(modes) <= 1 {
 				// Single mode (or empty = default mode)
-				if mode == "#default" {
+				if mode == "#default" || mode == "#unnamed" {
 					mode = ""
 				}
 				c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], tmpl)
 			} else {
 				for _, m := range modes {
-					if m == "#default" {
+					if m == "#default" || m == "#unnamed" {
 						m = ""
+					} else if m == "#all" {
+						// In a mode list, #all means register in all modes
+						c.stylesheet.modeTemplates["#all"] = append(c.stylesheet.modeTemplates["#all"], tmpl)
+						continue
 					}
 					c.stylesheet.modeTemplates[m] = append(c.stylesheet.modeTemplates[m], tmpl)
 				}
@@ -777,90 +821,138 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 }
 
 func (c *compiler) compileMode(elem *helium.Element) error {
-	name := getAttr(elem, "name")
+	// xsl:mode must be empty (no children)
+	if elem.FirstChild() != nil {
+		return staticError(errCodeXTSE0010, "xsl:mode must be empty")
+	}
+
+	name := strings.TrimSpace(getAttr(elem, "name"))
 	if name == "" {
 		name = "#default"
 	}
 
-	// Validate boolean attributes on xsl:mode (using GetAttribute to catch empty values)
-	// Note: "typed" is NOT a simple boolean — it accepts "strict", "lax", "unspecified" as well
-	for _, boolAttr := range []string{"streamable", "warning-on-no-match", "warning-on-multiple-match"} {
-		if v, has := elem.GetAttribute(boolAttr); has {
-			if err := validateBooleanAttr("xsl:mode", boolAttr, v); err != nil {
-				return err
+	// Parse streamable with proper xs:boolean validation
+	streamableStr := strings.TrimSpace(getAttr(elem, "streamable"))
+	streamable := false
+	if streamableStr != "" {
+		v, ok := parseXSDBool(streamableStr)
+		if !ok {
+			return staticError(errCodeXTSE0020, "invalid value %q for streamable on xsl:mode", streamableStr)
+		}
+		streamable = v
+	}
+
+	// Validate on-no-match
+	onNoMatch := strings.TrimSpace(getAttr(elem, "on-no-match"))
+	if onNoMatch != "" {
+		switch onNoMatch {
+		case "text-only-copy", "shallow-copy", "deep-copy", "shallow-skip", "deep-skip", "fail":
+			// valid
+		default:
+			return staticError(errCodeXTSE0020, "invalid value %q for on-no-match on xsl:mode", onNoMatch)
+		}
+	}
+	// Note: we keep onNoMatch as "" when not specified, so we can detect
+	// conflicts properly. The default "text-only-copy" is applied later.
+
+	// Validate boolean attributes
+	if v := getAttr(elem, "warning-on-no-match"); v != "" {
+		if _, ok := parseXSDBool(v); !ok {
+			return staticError(errCodeXTSE0020, "invalid value %q for warning-on-no-match on xsl:mode", v)
+		}
+	}
+	if v := getAttr(elem, "warning-on-multiple-match"); v != "" {
+		if _, ok := parseXSDBool(v); !ok {
+			return staticError(errCodeXTSE0020, "invalid value %q for warning-on-multiple-match on xsl:mode", v)
+		}
+	}
+	if v := getAttr(elem, "typed"); v != "" {
+		// typed accepts "yes", "no", "true", "false", "1", "0",
+		// "strict", "lax", "unspecified"
+		switch v {
+		case "strict", "lax", "unspecified":
+			// valid non-boolean values
+		default:
+			if _, ok := parseXSDBool(v); !ok {
+				return staticError(errCodeXTSE0020, "invalid value %q for typed on xsl:mode", v)
 			}
 		}
 	}
 
-	// XTSE0020: visibility constraints on mode
-	if vis := getAttr(elem, "visibility"); vis != "" {
-		if name == "#default" && (vis == "public" || vis == "final") {
-			return staticError(errCodeXTSE0020, "the unnamed mode cannot have visibility=%q", vis)
-		}
-		if name != "#default" && vis == "abstract" {
-			return staticError(errCodeXTSE0020, "a named mode cannot have visibility=%q", vis)
+	visibility := strings.TrimSpace(getAttr(elem, "visibility"))
+	// XTSE0020: unnamed mode cannot have visibility="public" or "final"
+	if name == "#default" && (visibility == "public" || visibility == "final") {
+		return staticError(errCodeXTSE0020, "unnamed mode cannot have visibility %q", visibility)
+	}
+
+	onMultipleMatch := strings.TrimSpace(getAttr(elem, "on-multiple-match"))
+	if onMultipleMatch != "" {
+		switch onMultipleMatch {
+		case "use-last", "fail":
+			// valid
+		default:
+			return staticError(errCodeXTSE0020, "invalid value %q for on-multiple-match on xsl:mode", onMultipleMatch)
 		}
 	}
 
-	onNoMatch := getAttr(elem, "on-no-match")
-	if onNoMatch == "" {
-		onNoMatch = "text-only-copy" // XSLT 3.0 default
-	}
-
-	useAccum := getAttr(elem, "use-accumulators")
-	onMultipleMatch := getAttr(elem, "on-multiple-match")
+	useAccumulators := getAttr(elem, "use-accumulators")
 
 	md := &ModeDef{
 		Name:            name,
 		OnNoMatch:       onNoMatch,
-		Streamable:      getAttr(elem, "streamable") == "yes",
-		UseAccumulators: useAccum,
+		Streamable:      streamable,
+		Visibility:      visibility,
 		OnMultipleMatch: onMultipleMatch,
+		UseAccumulators: useAccumulators,
+		ImportPrec:      c.importPrec,
 	}
 
 	if c.stylesheet.modeDefs == nil {
 		c.stylesheet.modeDefs = make(map[string]*ModeDef)
 	}
 
-	// XTSE0545: conflicting mode declarations at same import precedence
+	// Check for conflicting declarations at the same import precedence
 	if existing, ok := c.stylesheet.modeDefs[name]; ok {
-		explicitOnNoMatch := getAttr(elem, "on-no-match")
-		// Check for conflicting on-no-match values
-		if explicitOnNoMatch != "" && existing.OnNoMatch != "" && existing.OnNoMatch != onNoMatch {
-			return staticError(errCodeXTSE0545,
-				"conflicting on-no-match values for mode %q: %q vs %q", name, existing.OnNoMatch, onNoMatch)
+		if existing.ImportPrec == c.importPrec {
+			// Same precedence: check for conflicting attribute values (XTSE0545)
+			if existing.OnNoMatch != "" && md.OnNoMatch != "" && existing.OnNoMatch != md.OnNoMatch {
+				return staticError(errCodeXTSE0545, "conflicting on-no-match values for mode %q: %q vs %q", name, existing.OnNoMatch, md.OnNoMatch)
+			}
+			if streamableStr != "" && existing.Streamable != md.Streamable {
+				return staticError(errCodeXTSE0545, "conflicting streamable values for mode %q", name)
+			}
+			if existing.Visibility != "" && md.Visibility != "" && existing.Visibility != md.Visibility {
+				return staticError(errCodeXTSE0545, "conflicting visibility values for mode %q: %q vs %q", name, existing.Visibility, md.Visibility)
+			}
+			if existing.OnMultipleMatch != "" && md.OnMultipleMatch != "" && existing.OnMultipleMatch != md.OnMultipleMatch {
+				return staticError(errCodeXTSE0545, "conflicting on-multiple-match values for mode %q", name)
+			}
+			if existing.UseAccumulators != "" && md.UseAccumulators != "" && existing.UseAccumulators != md.UseAccumulators {
+				return staticError(errCodeXTSE0545, "conflicting use-accumulators values for mode %q", name)
+			}
+			// Non-conflicting: merge attributes (use non-empty values from new decl)
+			if md.OnNoMatch != "" {
+				existing.OnNoMatch = md.OnNoMatch
+			}
+			if md.Visibility != "" {
+				existing.Visibility = md.Visibility
+			}
+			if md.OnMultipleMatch != "" {
+				existing.OnMultipleMatch = md.OnMultipleMatch
+			}
+			if md.UseAccumulators != "" {
+				existing.UseAccumulators = md.UseAccumulators
+			}
+			return nil
 		}
-		// Check for conflicting streamable values
-		if getAttr(elem, "streamable") != "" && existing.Streamable != md.Streamable {
-			return staticError(errCodeXTSE0545,
-				"conflicting streamable values for mode %q", name)
+		// Different precedence: higher precedence wins
+		if c.importPrec > existing.ImportPrec {
+			c.stylesheet.modeDefs[name] = md
 		}
-		// Check for conflicting use-accumulators values
-		if useAccum != "" && existing.UseAccumulators != "" && existing.UseAccumulators != useAccum {
-			return staticError(errCodeXTSE0545,
-				"conflicting use-accumulators values for mode %q: %q vs %q", name, existing.UseAccumulators, useAccum)
-		}
-		// Check for conflicting on-multiple-match values
-		if onMultipleMatch != "" && existing.OnMultipleMatch != "" && existing.OnMultipleMatch != onMultipleMatch {
-			return staticError(errCodeXTSE0545,
-				"conflicting on-multiple-match values for mode %q: %q vs %q", name, existing.OnMultipleMatch, onMultipleMatch)
-		}
-		// Merge: keep existing, only update explicitly specified attributes
-		if explicitOnNoMatch != "" {
-			existing.OnNoMatch = onNoMatch
-		}
-		if getAttr(elem, "streamable") != "" {
-			existing.Streamable = md.Streamable
-		}
-		if useAccum != "" {
-			existing.UseAccumulators = useAccum
-		}
-		if onMultipleMatch != "" {
-			existing.OnMultipleMatch = onMultipleMatch
-		}
-	} else {
-		c.stylesheet.modeDefs[name] = md
+		return nil
 	}
+
+	c.stylesheet.modeDefs[name] = md
 	return nil
 }
 
@@ -1073,6 +1165,14 @@ func (c *compiler) loadExternalStylesheet(href string, isImport bool) error {
 		return staticError(errCodeXTSE0010, "imported document %q is not a stylesheet", uri)
 	}
 
+	// Save/restore default-mode: included/imported stylesheets may have
+	// their own default-mode that affects only their templates.
+	savedDefaultMode := c.defaultMode
+	if dm := getAttr(importedRoot, "default-mode"); dm != "" {
+		c.defaultMode = resolveQName(dm, c.nsBindings)
+	}
+	defer func() { c.defaultMode = savedDefaultMode }()
+
 	if isImport {
 		// For imports: the imported stylesheet gets current (lower) precedence.
 		// After compiling, increment so the importing module's remaining
@@ -1230,6 +1330,30 @@ func resolveXSDTypeName(qname string, nsBindings map[string]string) string {
 }
 
 func (c *compiler) sortTemplates() {
+	// Ensure #all templates are registered in every mode (including modes
+	// that were created after the #all template was compiled).
+	allTemplates := c.stylesheet.modeTemplates["#all"]
+	if len(allTemplates) > 0 {
+		for mode := range c.stylesheet.modeTemplates {
+			if mode == "#all" {
+				continue
+			}
+			existing := c.stylesheet.modeTemplates[mode]
+			for _, at := range allTemplates {
+				found := false
+				for _, et := range existing {
+					if et == at {
+						found = true
+						break
+					}
+				}
+				if !found {
+					c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], at)
+				}
+			}
+		}
+	}
+
 	for mode := range c.stylesheet.modeTemplates {
 		templates := c.stylesheet.modeTemplates[mode]
 		sort.SliceStable(templates, func(i, j int) bool {

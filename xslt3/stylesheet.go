@@ -43,8 +43,10 @@ type ModeDef struct {
 	Name            string
 	OnNoMatch       string // "shallow-copy", "deep-copy", "shallow-skip", "deep-skip", "text-only-copy", "fail"
 	Streamable      bool
-	UseAccumulators string // space-separated list of accumulator names
+	Visibility      string // "public", "private", "final"
 	OnMultipleMatch string // "use-last", "fail"
+	UseAccumulators string // accumulator names
+	ImportPrec      int
 }
 
 // AttributeSetDef is a compiled xsl:attribute-set.
