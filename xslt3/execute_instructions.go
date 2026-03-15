@@ -2020,6 +2020,9 @@ func (ec *execContext) numberNodeMatches(inst *NumberInst, target helium.Node, c
 		return inst.Count.matchPattern(ec, target)
 	}
 	// Default: same node type and expanded name
+	if contextNode == nil {
+		return false
+	}
 	if target.Type() != contextNode.Type() {
 		return false
 	}
