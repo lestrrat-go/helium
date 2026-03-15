@@ -417,6 +417,9 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 				c.stylesheet.modeTemplates[m] = append(c.stylesheet.modeTemplates[m], tmpl)
 			}
 			c.stylesheet.modeTemplates[""] = append(c.stylesheet.modeTemplates[""], tmpl)
+			// Also store under the "#all" key so findBestTemplate's fallback
+			// can find these templates for modes that don't exist yet.
+			c.stylesheet.modeTemplates["#all"] = append(c.stylesheet.modeTemplates["#all"], tmpl)
 		} else {
 			// XSLT 2.0+: mode can be a whitespace-separated list of mode names.
 			// Each mode name can be a QName, "#default", or "#all".
@@ -1082,6 +1085,30 @@ func resolveXSDTypeName(qname string, nsBindings map[string]string) string {
 }
 
 func (c *compiler) sortTemplates() {
+	// Ensure #all templates are registered in every mode (including modes
+	// that were created after the #all template was compiled).
+	allTemplates := c.stylesheet.modeTemplates["#all"]
+	if len(allTemplates) > 0 {
+		for mode := range c.stylesheet.modeTemplates {
+			if mode == "#all" {
+				continue
+			}
+			existing := c.stylesheet.modeTemplates[mode]
+			for _, at := range allTemplates {
+				found := false
+				for _, et := range existing {
+					if et == at {
+						found = true
+						break
+					}
+				}
+				if !found {
+					c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], at)
+				}
+			}
+		}
+	}
+
 	for mode := range c.stylesheet.modeTemplates {
 		templates := c.stylesheet.modeTemplates[mode]
 		sort.SliceStable(templates, func(i, j int) bool {
