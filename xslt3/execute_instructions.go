@@ -1971,6 +1971,15 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 
 // outputSequence writes a sequence of items to the current output.
 func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
+	out := ec.currentOutput()
+
+	// In capture mode, accumulate items directly (handles maps, arrays,
+	// functions, and other non-DOM items that cannot be serialized to a tree).
+	if out.captureItems {
+		out.pendingItems = append(out.pendingItems, seq...)
+		return nil
+	}
+
 	prevWasAtomic := false
 	for _, item := range seq {
 		switch v := item.(type) {

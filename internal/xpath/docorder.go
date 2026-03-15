@@ -176,13 +176,138 @@ func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) (
 	if len(result) > maxNodes {
 		return nil, ErrNodeSetLimit
 	}
-	for _, n := range result {
-		cache.BuildFrom(n)
+
+	// If the document is already indexed in the cache, use the fast
+	// position-based sort. Otherwise, use ancestor-chain comparison
+	// which avoids the expensive full-document indexing.
+	if len(result) > 0 && cache.isIndexed(result[0]) {
+		sort.SliceStable(result, func(i, j int) bool {
+			return cache.Less(result[i], result[j])
+		})
+	} else {
+		sort.SliceStable(result, func(i, j int) bool {
+			return CompareNodeOrder(result[i], result[j]) < 0
+		})
 	}
-	sort.SliceStable(result, func(i, j int) bool {
-		return cache.Less(result[i], result[j])
-	})
 	return result, nil
+}
+
+// isIndexed returns true if the document containing n is already indexed.
+func (c *DocOrderCache) isIndexed(n helium.Node) bool {
+	if c.documents == nil {
+		return false
+	}
+	root := DocumentRoot(n)
+	_, ok := c.documents[root]
+	return ok
+}
+
+// CompareNodeOrder compares two nodes by document order using ancestor-chain
+// walking. Returns -1 if a comes before b, +1 if after, 0 if same node.
+// This is O(depth) per call, avoiding the need to index the entire document.
+func CompareNodeOrder(a, b helium.Node) int {
+	if a == b {
+		return 0
+	}
+
+	// Handle attribute nodes: attributes come after their parent element
+	// but before the element's children.
+	aIsAttr := a.Type() == helium.AttributeNode
+	bIsAttr := b.Type() == helium.AttributeNode
+
+	// Handle namespace nodes similarly to attributes.
+	aIsNS := a.Type() == helium.NamespaceNode
+	bIsNS := b.Type() == helium.NamespaceNode
+
+	// Get the "element-level" ancestor for attrs/ns nodes
+	aElem, bElem := a, b
+	if aIsAttr || aIsNS {
+		aElem = a.Parent()
+	}
+	if bIsAttr || bIsNS {
+		bElem = b.Parent()
+	}
+
+	// If both are attrs/ns of the same element
+	if aElem == bElem && (aIsAttr || aIsNS) && (bIsAttr || bIsNS) {
+		// Namespace nodes come before attribute nodes
+		if aIsNS && bIsAttr {
+			return -1
+		}
+		if aIsAttr && bIsNS {
+			return 1
+		}
+		// Same-type: preserve input order (SliceStable handles this)
+		return 0
+	}
+
+	// If one is an attr/ns of the other's element
+	if aElem == b && (aIsAttr || aIsNS) {
+		return 1 // attr/ns comes after its element
+	}
+	if bElem == a && (bIsAttr || bIsNS) {
+		return -1
+	}
+
+	// Compare the element-level ancestors
+	if aElem != bElem {
+		cmp := compareElementOrder(aElem, bElem)
+		if cmp != 0 {
+			return cmp
+		}
+	}
+
+	// Same element, one is attr/ns and the other is the element itself
+	if aIsAttr || aIsNS {
+		return 1
+	}
+	if bIsAttr || bIsNS {
+		return -1
+	}
+	return 0
+}
+
+// compareElementOrder compares two non-attribute nodes by document order.
+func compareElementOrder(a, b helium.Node) int {
+	if a == b {
+		return 0
+	}
+
+	// Compute depths
+	depthA := nodeDepth(a)
+	depthB := nodeDepth(b)
+
+	// Walk both to the same depth
+	ancA, ancB := a, b
+	dA, dB := depthA, depthB
+	for dA > dB {
+		ancA = ancA.Parent()
+		dA--
+	}
+	for dB > dA {
+		ancB = ancB.Parent()
+		dB--
+	}
+
+	// If they converge, one is an ancestor of the other
+	if ancA == ancB {
+		// The deeper original node is a descendant
+		if depthA < depthB {
+			return -1 // a is ancestor of b
+		}
+		return 1 // b is ancestor of a
+	}
+
+	// Walk up until we find siblings under a common parent
+	for ancA.Parent() != ancB.Parent() {
+		ancA = ancA.Parent()
+		ancB = ancB.Parent()
+	}
+
+	// ancA and ancB are siblings; determine order by interleaved
+	// forward/backward search. This is O(distance) between them
+	// rather than O(total_siblings).
+	return compareSiblingOrder(ancA, ancB)
 }
 
 // MergeNodeSets merges two node slices, deduplicates, and sorts by document order.
@@ -215,13 +340,51 @@ func MergeNodeSets(a, b []helium.Node, cache *DocOrderCache, maxNodes int) ([]he
 	if len(result) > maxNodes {
 		return nil, ErrNodeSetLimit
 	}
-	for _, n := range result {
-		cache.BuildFrom(n)
+	if len(result) > 0 && cache.isIndexed(result[0]) {
+		sort.SliceStable(result, func(i, j int) bool {
+			return cache.Less(result[i], result[j])
+		})
+	} else {
+		sort.SliceStable(result, func(i, j int) bool {
+			return CompareNodeOrder(result[i], result[j]) < 0
+		})
 	}
-	sort.SliceStable(result, func(i, j int) bool {
-		return cache.Less(result[i], result[j])
-	})
 	return result, nil
+}
+
+// compareSiblingOrder determines the order of two sibling nodes by
+// walking forward and backward from both simultaneously. This is
+// O(distance) between the two nodes rather than O(total_siblings).
+func compareSiblingOrder(a, b helium.Node) int {
+	// Interleave: walk NextSibling from a and PrevSibling from a.
+	// Also walk NextSibling from b and PrevSibling from b.
+	fwdA := a.NextSibling()
+	fwdB := b.NextSibling()
+	for fwdA != nil || fwdB != nil {
+		if fwdA == b {
+			return -1 // a comes before b
+		}
+		if fwdB == a {
+			return 1 // b comes before a
+		}
+		if fwdA != nil {
+			fwdA = fwdA.NextSibling()
+		}
+		if fwdB != nil {
+			fwdB = fwdB.NextSibling()
+		}
+	}
+	// Should not reach here if a and b are truly siblings
+	return 0
+}
+
+// nodeDepth returns the depth of a node in the tree (0 for root).
+func nodeDepth(n helium.Node) int {
+	depth := 0
+	for p := n.Parent(); p != nil; p = p.Parent() {
+		depth++
+	}
+	return depth
 }
 
 // DocumentRoot returns the owning Document or the topmost ancestor.
