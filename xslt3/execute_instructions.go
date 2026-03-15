@@ -1015,30 +1015,7 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		return nil
 	}
 
-	// For xsl:copy of element nodes, apply attribute sets before body
-	if len(inst.UseAttributeSets) > 0 && ec.contextNode != nil && ec.contextNode.Type() == helium.ElementNode {
-		// Wrap body with attribute set application
-		origBody := inst.Body
-		err := ec.execCopyNode(ctx, ec.contextNode, nil)
-		if err != nil {
-			return err
-		}
-		// Apply attribute sets to the just-created element
-		out := ec.currentOutput()
-		if elem, ok := out.current.(*helium.Element); ok {
-			if err := ec.applyAttributeSets(ctx, elem, inst.UseAttributeSets); err != nil {
-				return err
-			}
-		}
-		// Execute body
-		for _, child := range origBody {
-			if err := ec.executeInstruction(ctx, child); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-	return ec.execCopyNode(ctx, ec.contextNode, inst.Body)
+	return ec.execCopyNodeWithAttrSets(ctx, ec.contextNode, inst.Body, inst.UseAttributeSets)
 }
 
 // effectiveValidation returns the validation mode for a copy/copy-of instruction,
@@ -1048,6 +1025,44 @@ func (ec *execContext) effectiveValidation(instValidation string) string {
 		return instValidation
 	}
 	return ec.stylesheet.defaultValidation
+}
+
+func (ec *execContext) execCopyNodeWithAttrSets(ctx context.Context, node helium.Node, body []Instruction, useAttrSets []string) error {
+	if node == nil {
+		return nil
+	}
+	if len(useAttrSets) == 0 || node.Type() != helium.ElementNode {
+		return ec.execCopyNode(ctx, node, body)
+	}
+	// For elements with attribute sets: create element, apply attr sets, then body
+	srcElem := node.(*helium.Element)
+	elem, err := ec.resultDoc.CreateElement(srcElem.LocalName())
+	if err != nil {
+		return err
+	}
+	for _, ns := range srcElem.Namespaces() {
+		_ = elem.DeclareNamespace(ns.Prefix(), ns.URI())
+	}
+	if srcElem.URI() != "" {
+		_ = elem.SetActiveNamespace(srcElem.Prefix(), srcElem.URI())
+	}
+	// Apply attribute sets before body
+	if err := ec.applyAttributeSets(ctx, elem, useAttrSets); err != nil {
+		return err
+	}
+	if err := ec.addNode(elem); err != nil {
+		return err
+	}
+	out := ec.currentOutput()
+	savedCurrent := out.current
+	out.current = elem
+	defer func() { out.current = savedCurrent }()
+	for _, child := range body {
+		if err := ec.executeInstruction(ctx, child); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body []Instruction) error {
