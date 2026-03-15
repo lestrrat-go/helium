@@ -767,7 +767,31 @@ func (c *compiler) compileAttributeSet(elem *helium.Element) error {
 }
 
 func (c *compiler) compileDecimalFormat(elem *helium.Element) {
-	df := xpath3.DefaultDecimalFormat()
+	name := getAttr(elem, "name")
+	qn := xpath3.QualifiedName{}
+	if name != "" {
+		qn = xpath3.QualifiedName{Name: name}
+		if idx := strings.IndexByte(name, ':'); idx >= 0 {
+			prefix := name[:idx]
+			local := name[idx+1:]
+			if uri, ok := c.nsBindings[prefix]; ok {
+				qn = xpath3.QualifiedName{URI: uri, Name: local}
+			} else {
+				qn.Name = local
+			}
+		}
+	}
+
+	if c.stylesheet.decimalFormats == nil {
+		c.stylesheet.decimalFormats = make(map[xpath3.QualifiedName]xpath3.DecimalFormat)
+	}
+
+	// XSLT allows multiple xsl:decimal-format declarations with the same
+	// name as long as they don't conflict. Merge into the existing entry.
+	df, ok := c.stylesheet.decimalFormats[qn]
+	if !ok {
+		df = xpath3.DefaultDecimalFormat()
+	}
 
 	if v := getAttr(elem, "decimal-separator"); v != "" {
 		df.DecimalSeparator = firstRune(v)
@@ -803,29 +827,6 @@ func (c *compiler) compileDecimalFormat(elem *helium.Element) {
 		df.MinusSign = firstRune(v)
 	}
 
-	name := getAttr(elem, "name")
-	if name == "" {
-		// Default (unnamed) decimal format
-		if c.stylesheet.decimalFormats == nil {
-			c.stylesheet.decimalFormats = make(map[xpath3.QualifiedName]xpath3.DecimalFormat)
-		}
-		c.stylesheet.decimalFormats[xpath3.QualifiedName{}] = df
-		return
-	}
-
-	qn := xpath3.QualifiedName{Name: name}
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
-		prefix := name[:idx]
-		local := name[idx+1:]
-		if uri, ok := c.nsBindings[prefix]; ok {
-			qn = xpath3.QualifiedName{URI: uri, Name: local}
-		} else {
-			qn.Name = local
-		}
-	}
-	if c.stylesheet.decimalFormats == nil {
-		c.stylesheet.decimalFormats = make(map[xpath3.QualifiedName]xpath3.DecimalFormat)
-	}
 	c.stylesheet.decimalFormats[qn] = df
 }
 
