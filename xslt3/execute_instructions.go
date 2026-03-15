@@ -270,23 +270,42 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 }
 
 func (ec *execContext) evaluateWithParam(ctx context.Context, wp *WithParam) (xpath3.Sequence, error) {
+	var val xpath3.Sequence
 	if wp.Select != nil {
 		xpathCtx := ec.newXPathContext(ec.contextNode)
 		result, err := wp.Select.Evaluate(xpathCtx, ec.contextNode)
 		if err != nil {
 			return nil, err
 		}
-		return result.Sequence(), nil
-	}
-	if len(wp.Body) > 0 {
+		val = result.Sequence()
+	} else if len(wp.Body) > 0 {
+		var err error
 		if wp.As != "" {
-			// With as attribute: evaluate as raw sequence (individual items)
-			return ec.evaluateBody(ctx, wp.Body)
+			// With as attribute: evaluate as sequence constructor,
+			// keeping each node as a separate item
+			val, err = ec.evaluateBodyAsSequence(ctx, wp.Body)
+		} else {
+			// No as: wrap in document node (temporary tree)
+			val, err = ec.evaluateBodyAsDocument(ctx, wp.Body)
 		}
-		// No as: wrap in document node (temporary tree)
-		return ec.evaluateBodyAsDocument(ctx, wp.Body)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		val = xpath3.EmptySequence()
 	}
-	return xpath3.EmptySequence(), nil
+
+	// Type check against the declared as type
+	if wp.As != "" {
+		st := parseSequenceType(wp.As)
+		checked, err := checkSequenceType(val, st, errCodeXTTE0570, "with-param $"+wp.Name)
+		if err != nil {
+			return nil, err
+		}
+		val = checked
+	}
+
+	return val, nil
 }
 
 func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateInst) error {
@@ -542,11 +561,18 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 		ec.annotateNode(elem, inst.TypeName)
 	}
 
-	// Push new output context for children
+	// Push new output context for children.
+	// Temporarily disable sequenceMode so that children are added to this
+	// element normally (not captured as separate items in the sequence).
 	out := ec.currentOutput()
 	savedCurrent := out.current
+	savedSeqMode := out.sequenceMode
 	out.current = elem
-	defer func() { out.current = savedCurrent }()
+	out.sequenceMode = false
+	defer func() {
+		out.current = savedCurrent
+		out.sequenceMode = savedSeqMode
+	}()
 
 	// Apply attribute sets (before body so body can override)
 	if len(inst.UseAttributeSets) > 0 {
@@ -605,8 +631,19 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 		value = stringifySequenceWithSep(val, sep)
 	}
 
-	// The current output node must be an element
+	// In sequence mode (variable/param with as), capture the attribute as a
+	// standalone item rather than attaching it to an element.
 	out := ec.currentOutput()
+	if out.sequenceMode {
+		attr, attrErr := out.doc.CreateAttribute(name, value, nil)
+		if attrErr != nil {
+			return attrErr
+		}
+		out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: attr})
+		return nil
+	}
+
+	// The current output node must be an element
 	elem, ok := out.current.(*helium.Element)
 	if !ok {
 		return dynamicError(errCodeXTDE0820, "xsl:attribute must be added to an element")
@@ -1011,15 +1048,26 @@ func (ec *execContext) execVariable(ctx context.Context, inst *VariableInst) err
 				return err
 			}
 		} else {
-			// With as attribute: evaluate as raw sequence
+			// With as attribute: evaluate as sequence constructor,
+			// keeping each node as a separate item
 			var err error
-			val, err = ec.evaluateBody(ctx, inst.Body)
+			val, err = ec.evaluateBodyAsSequence(ctx, inst.Body)
 			if err != nil {
 				return err
 			}
 		}
 	} else {
 		val = xpath3.SingleString("")
+	}
+
+	// Type check against the declared as type
+	if inst.As != "" {
+		st := parseSequenceType(inst.As)
+		checked, err := checkSequenceType(val, st, errCodeXTTE0570, "variable $"+inst.Name)
+		if err != nil {
+			return err
+		}
+		val = checked
 	}
 
 	ec.setVar(inst.Name, val)
@@ -1036,6 +1084,7 @@ func (ec *execContext) execParam(ctx context.Context, inst *ParamInst) error {
 		Name:   inst.Name,
 		Select: inst.Select,
 		Body:   inst.Body,
+		As:     inst.As,
 	})
 }
 
@@ -1380,14 +1429,19 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *Liter
 		return err
 	}
 
-	// Execute body in element context with a new variable scope
+	// Execute body in element context with a new variable scope.
+	// Temporarily disable sequenceMode so that children are added to this
+	// element normally (not captured as separate items in the sequence).
 	out := ec.currentOutput()
 	savedCurrent := out.current
+	savedSeqMode := out.sequenceMode
 	out.current = elem
+	out.sequenceMode = false
 	ec.pushVarScope()
 	defer func() {
 		ec.popVarScope()
 		out.current = savedCurrent
+		out.sequenceMode = savedSeqMode
 	}()
 
 	// Apply attribute sets (before body so body can override)

@@ -14,6 +14,7 @@ type outputFrame struct {
 	current           helium.Node      // current insertion point
 	captureItems      bool             // when true, xsl:sequence adds to pendingItems instead of DOM
 	separateTextNodes bool             // when true, text nodes are captured as separate string items (prevents DOM merging)
+	sequenceMode      bool             // when true, all nodes (text, element, attr, comment, PI) are captured as separate items
 	pendingItems      xpath3.Sequence  // captured items from xsl:sequence
 }
 

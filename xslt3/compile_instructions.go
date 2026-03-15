@@ -847,6 +847,11 @@ func (c *compiler) compileLocalParam(elem *helium.Element) (*ParamInst, error) {
 	inst := &ParamInst{
 		Name:     resolveQName(name, c.nsBindings),
 		Required: getAttr(elem, "required") == "yes",
+		As:       getAttr(elem, "as"),
+	}
+
+	if tunnelAttr := getAttr(elem, "tunnel"); tunnelAttr == "yes" {
+		inst.Tunnel = true
 	}
 
 	selectAttr := getAttr(elem, "select")

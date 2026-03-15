@@ -167,6 +167,14 @@ func (ec *execContext) currentOutput() *outputFrame {
 // addNode adds a node to the current output insertion point.
 func (ec *execContext) addNode(node helium.Node) error {
 	out := ec.currentOutput()
+	// When sequenceMode is set, capture all nodes as separate items in
+	// the pending list. This prevents DOM text-node merging and keeps
+	// attributes, comments, PIs, and elements as distinct sequence items.
+	// Used by variable/param/with-param with an as attribute.
+	if out.sequenceMode {
+		out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: node})
+		return nil
+	}
 	// When separateTextNodes is set, capture each text node as a separate
 	// string item to avoid DOM text-node merging.  This is needed by
 	// xsl:value-of with separator + body content so that each produced
@@ -499,8 +507,9 @@ func (ec *execContext) evaluateGlobalVar(v *Variable) (xpath3.Sequence, error) {
 	} else if len(v.Body) > 0 {
 		var err error
 		if v.As != "" {
-			// With as attribute: evaluate as raw sequence
-			val, err = ec.evaluateBody(ctx, v.Body)
+			// With as attribute: evaluate as sequence constructor,
+			// keeping each node as a separate item
+			val, err = ec.evaluateBodyAsSequence(ctx, v.Body)
 		} else {
 			// No as: wrap in document node (temporary tree)
 			val, err = ec.evaluateBodyAsDocument(ctx, v.Body)
@@ -510,6 +519,16 @@ func (ec *execContext) evaluateGlobalVar(v *Variable) (xpath3.Sequence, error) {
 		}
 	} else {
 		val = xpath3.SingleString("")
+	}
+
+	// Type check against the declared as type
+	if v.As != "" {
+		st := parseSequenceType(v.As)
+		checked, err := checkSequenceType(val, st, errCodeXTTE0570, "variable $"+v.Name)
+		if err != nil {
+			return nil, err
+		}
+		val = checked
 	}
 
 	ec.globalVars[v.Name] = val
@@ -542,8 +561,9 @@ func (ec *execContext) evaluateGlobalParam(p *Param) (xpath3.Sequence, error) {
 	} else if len(p.Body) > 0 {
 		var err error
 		if p.As != "" {
-			// With as attribute: evaluate as raw sequence
-			val, err = ec.evaluateBody(ctx, p.Body)
+			// With as attribute: evaluate as sequence constructor,
+			// keeping each node as a separate item
+			val, err = ec.evaluateBodyAsSequence(ctx, p.Body)
 		} else {
 			// No as: wrap in document node (temporary tree)
 			val, err = ec.evaluateBodyAsDocument(ctx, p.Body)
@@ -551,6 +571,16 @@ func (ec *execContext) evaluateGlobalParam(p *Param) (xpath3.Sequence, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error evaluating global param %q body: %w", p.Name, err)
 		}
+	}
+
+	// Type check against the declared as type
+	if p.As != "" {
+		st := parseSequenceType(p.As)
+		checked, err := checkSequenceType(val, st, errCodeXTTE0570, "param $"+p.Name)
+		if err != nil {
+			return nil, err
+		}
+		val = checked
 	}
 
 	ec.globalVars[p.Name] = val
@@ -715,6 +745,40 @@ func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []Instru
 	}
 
 	return xpath3.Sequence{xpath3.NodeItem{Node: tmpDoc}}, nil
+}
+
+// evaluateBodyAsSequence executes instructions and captures the result as a
+// flat sequence of items. Unlike evaluateBody, this keeps each produced node
+// (text, element, attribute, comment, PI) as a separate item without DOM
+// merging. This is needed for variables/params with an "as" attribute, where
+// the body is a sequence constructor per the XSLT spec.
+func (ec *execContext) evaluateBodyAsSequence(ctx context.Context, body []Instruction) (xpath3.Sequence, error) {
+	tmpDoc := helium.NewDefaultDocument()
+	tmpRoot, err := tmpDoc.CreateElement("_tmp")
+	if err != nil {
+		return nil, err
+	}
+	if err := tmpDoc.AddChild(tmpRoot); err != nil {
+		return nil, err
+	}
+
+	// Use sequenceMode to capture all nodes as separate items
+	frame := &outputFrame{doc: tmpDoc, current: tmpRoot, captureItems: true, sequenceMode: true}
+	ec.outputStack = append(ec.outputStack, frame)
+	defer func() {
+		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+	}()
+
+	for _, inst := range body {
+		if err := ec.executeInstruction(ctx, inst); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(frame.pendingItems) > 0 {
+		return frame.pendingItems, nil
+	}
+	return xpath3.EmptySequence(), nil
 }
 
 // applyTemplates matches and executes templates for a node.
