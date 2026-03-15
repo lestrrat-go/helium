@@ -330,7 +330,7 @@ func (c *compiler) compileValueOf(elem *helium.Element) (*ValueOfInst, error) {
 		inst.Select = expr
 	}
 
-	if sep := getAttr(elem, "separator"); sep != "" {
+	if sep, hasSep := elem.GetAttribute("separator"); hasSep {
 		avt, err := compileAVT(sep, c.nsBindings)
 		if err != nil {
 			return nil, err

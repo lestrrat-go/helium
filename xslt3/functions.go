@@ -108,7 +108,7 @@ func (ec *execContext) fnDocument(ctx context.Context, args []xpath3.Sequence) (
 }
 
 // key(name, value, doc?) looks up nodes by key.
-func (ec *execContext) fnKey(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+func (ec *execContext) fnKey(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 	if len(args) < 2 {
 		return nil, dynamicError(errCodeXTDE1170, "key() requires at least 2 arguments")
 	}
@@ -129,14 +129,19 @@ func (ec *execContext) fnKey(_ context.Context, args []xpath3.Sequence) (xpath3.
 		return xpath3.EmptySequence(), nil
 	}
 
-	// Determine the document root for key lookup. When the 3rd argument
-	// is provided, use the document containing that node.
+	// Determine the document root for key lookup.
+	// Default: use the document containing the context node (per XSLT spec §16.3).
+	// When the 3rd argument is provided, use that node's document.
 	var root helium.Node = ec.sourceDoc
 	if len(args) >= 3 && len(args[2]) > 0 {
 		ni, ok := args[2][0].(xpath3.NodeItem)
 		if ok {
 			root = documentRoot(ni.Node)
 		}
+	} else if xpathNode := xpath3.FnContextNode(ctx); xpathNode != nil {
+		root = documentRoot(xpathNode)
+	} else if ec.contextNode != nil {
+		root = documentRoot(ec.contextNode)
 	}
 
 	// When the second argument is a sequence, look up each value and
@@ -380,8 +385,8 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 	tmpRoot, _ := tmpDoc.CreateElement("_xsl_fn_result")
 	_ = tmpDoc.SetDocumentElement(tmpRoot)
 
-	useCapture := f.def.As != "" && isAtomicTypeName(f.def.As)
-	frame := &outputFrame{current: tmpRoot, doc: tmpDoc, captureItems: useCapture}
+	atomicReturn := f.def.As != "" && isAtomicTypeName(f.def.As)
+	frame := &outputFrame{current: tmpRoot, doc: tmpDoc, captureItems: true}
 	ec.outputStack = append(ec.outputStack, frame)
 	defer func() {
 		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
@@ -393,10 +398,26 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 		}
 	}
 
+	// Return captured items if any, otherwise collect from DOM.
+	// For atomic return types, atomize the captured items.
 	var result xpath3.Sequence
-	if useCapture && len(frame.pendingItems) > 0 {
-		// Atomize the captured items for atomic return types.
-		result = atomizeSequence(frame.pendingItems)
+	if len(frame.pendingItems) > 0 {
+		if tmpRoot.FirstChild() != nil {
+			var seq xpath3.Sequence
+			for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
+				seq = append(seq, xpath3.NodeItem{Node: child})
+			}
+			seq = append(seq, frame.pendingItems...)
+			if atomicReturn {
+				result = atomizeSequence(seq)
+			} else {
+				result = seq
+			}
+		} else if atomicReturn {
+			result = atomizeSequence(frame.pendingItems)
+		} else {
+			result = frame.pendingItems
+		}
 	} else {
 		result = ec.collectSequenceFromNode(tmpRoot)
 	}
