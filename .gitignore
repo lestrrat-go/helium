@@ -43,5 +43,6 @@ testdata/xslt30/source/
 # Scratch/design markdown files in root (keep only README.md)
 /*.md
 !README.md
+!THIRD_PARTY_NOTICES.md
 !AGENTS.md
 !CLAUDE.md
