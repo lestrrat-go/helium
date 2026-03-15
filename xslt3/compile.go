@@ -199,7 +199,7 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 		stylesheet: &Stylesheet{
 			namedTemplates: make(map[string]*Template),
 			modeTemplates:  make(map[string][]*Template),
-			keys:           make(map[string]*KeyDef),
+			keys:           make(map[string][]*KeyDef),
 			outputs:        make(map[string]*OutputDef),
 			functions:      make(map[xpath3.QualifiedName]*XSLFunction),
 			namespaces:     make(map[string]string),
@@ -855,6 +855,9 @@ func (c *compiler) compileGlobalParam(elem *helium.Element) error {
 }
 
 func (c *compiler) compileKey(elem *helium.Element) error {
+	// Collect local namespace declarations (e.g., xmlns:ex="..." on xsl:key)
+	c.collectNamespaces(elem)
+
 	name := getAttr(elem, "name")
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:key requires name attribute")
@@ -871,13 +874,32 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 	}
 
 	expandedName := resolveQName(name, c.nsBindings)
+	composite := getAttr(elem, "composite") == "yes"
+
+	// XTSE1222: if there is already a key with the same name, the composite
+	// attribute must agree
+	if existingDefs, ok := c.stylesheet.keys[expandedName]; ok && len(existingDefs) > 0 {
+		if existingDefs[0].Composite != composite {
+			return staticError("XTSE1222",
+				"xsl:key declarations with name %q have conflicting composite attributes", expandedName)
+		}
+	}
+
 	kd := &KeyDef{
-		Name:  expandedName,
-		Match: matchPat,
+		Name:      expandedName,
+		Match:     matchPat,
+		Composite: composite,
 	}
 
 	useAttr := getAttr(elem, "use")
 	if useAttr != "" {
+		// XTSE0010: xsl:key with use attribute must not have child elements
+		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+			if child.Type() == helium.ElementNode {
+				return staticError("XTSE0010",
+					"xsl:key with use attribute must not have child elements")
+			}
+		}
 		useExpr, err := compileXPath(useAttr, c.nsBindings)
 		if err != nil {
 			return err
@@ -892,7 +914,7 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 		kd.Body = body
 	}
 
-	c.stylesheet.keys[expandedName] = kd
+	c.stylesheet.keys[expandedName] = append(c.stylesheet.keys[expandedName], kd)
 	return nil
 }
 
@@ -1564,7 +1586,7 @@ func compileSimplified(doc *helium.Document, root *helium.Element, cfg *compileC
 			version:        "3.0",
 			namedTemplates: make(map[string]*Template),
 			modeTemplates:  make(map[string][]*Template),
-			keys:           make(map[string]*KeyDef),
+			keys:           make(map[string][]*KeyDef),
 			outputs:        make(map[string]*OutputDef),
 			functions:      make(map[xpath3.QualifiedName]*XSLFunction),
 			namespaces:     make(map[string]string),

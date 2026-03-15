@@ -20,7 +20,7 @@ type Stylesheet struct {
 	defaultMode     string
 	globalVars      []*Variable // topologically sorted
 	globalParams    []*Param
-	keys            map[string]*KeyDef
+	keys            map[string][]*KeyDef
 	outputs         map[string]*OutputDef                 // "" = default output
 	functions       map[xpath3.QualifiedName]*XSLFunction // xsl:function defs
 	stripSpace      []NameTest
@@ -111,10 +111,11 @@ type Param struct {
 
 // KeyDef is a compiled xsl:key.
 type KeyDef struct {
-	Name  string
-	Match *Pattern
-	Use   *xpath3.Expression
-	Body  []Instruction // content constructor (when use attribute is absent)
+	Name      string
+	Match     *Pattern
+	Use       *xpath3.Expression
+	Body      []Instruction // content constructor (when use attribute is absent)
+	Composite bool          // composite="yes" on xsl:key
 }
 
 // OutputDef is a compiled xsl:output.

@@ -447,6 +447,15 @@ type MergeKey struct {
 	Order  string // "ascending" or "descending"
 }
 
+// DocumentInst represents xsl:document.
+// It creates a document node wrapping its content body.
+type DocumentInst struct {
+	Validation string // "strict", "lax", "preserve", "strip"
+	Body       []Instruction
+}
+
+func (*DocumentInst) instructionTag() {}
+
 // AnalyzeStringInst represents xsl:analyze-string.
 type AnalyzeStringInst struct {
 	Select          *xpath3.Expression
