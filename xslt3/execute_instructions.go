@@ -2010,9 +2010,9 @@ type ordinalSystem struct {
 var knownOrdinalSystems = map[rune]ordinalSystem{
 	// Circled digits: ①-⑳, ㉑-㉟, ㊱-㊿
 	0x2460: {oneChar: 0x2460, zero: 0x24EA, ranges: []rune{0x2460, 0x2473, 0x3251, 0x325F, 0x32B1, 0x32BF}},
-	// Parenthesized digits: ⑴-⒇
-	0x2474: {oneChar: 0x2474, zero: 0x1F100, ranges: []rune{0x2474, 0x2487}},
-	// Full-stop digits: ⒈-⒛
+	// Parenthesized digits: ⑴-⒇ (no special zero)
+	0x2474: {oneChar: 0x2474, zero: 0, ranges: []rune{0x2474, 0x2487}},
+	// Full-stop digits: ⒈-⒛, zero: 🄀 (U+1F100)
 	0x2488: {oneChar: 0x2488, zero: 0x1F100, ranges: []rune{0x2488, 0x249B}},
 	// Double circled digits: ⓵-⓾ (no special zero)
 	0x24F5: {oneChar: 0x24F5, zero: 0, ranges: []rune{0x24F5, 0x24FE}},
@@ -2026,6 +2026,22 @@ var knownOrdinalSystems = map[rune]ordinalSystem{
 	0x3220: {oneChar: 0x3220, zero: 0, ranges: []rune{0x3220, 0x3229}},
 	// Circled ideograph: ㊀-㊉
 	0x3280: {oneChar: 0x3280, zero: 0, ranges: []rune{0x3280, 0x3289}},
+	// Aegean numbers: 𐄇-𐄐 (1-10)
+	0x10107: {oneChar: 0x10107, zero: 0, ranges: []rune{0x10107, 0x10110}},
+	// Coptic Epact numbers: 𐋡-𐋪 (1-10)
+	0x102E1: {oneChar: 0x102E1, zero: 0, ranges: []rune{0x102E1, 0x102EA}},
+	// Rumi numerals: 𐹠-𐹩 (1-10)
+	0x10E60: {oneChar: 0x10E60, zero: 0, ranges: []rune{0x10E60, 0x10E69}},
+	// Brahmi number signs: 𑁒-𑁛 (1-10)
+	0x11052: {oneChar: 0x11052, zero: 0, ranges: []rune{0x11052, 0x1105B}},
+	// Sinhala archaic numbers: 𑇡-𑇪 (1-10)
+	0x111E1: {oneChar: 0x111E1, zero: 0, ranges: []rune{0x111E1, 0x111EA}},
+	// Counting rod unit digits: 𝍠-𝍨 (1-9)
+	0x1D360: {oneChar: 0x1D360, zero: 0, ranges: []rune{0x1D360, 0x1D368}},
+	// Mende Kikakui digits: 𞣇-𞣏 (1-9)
+	0x1E8C7: {oneChar: 0x1E8C7, zero: 0, ranges: []rune{0x1E8C7, 0x1E8CF}},
+	// Digit comma: 🄂-🄊 (1-9), zero: 🄁
+	0x1F102: {oneChar: 0x1F102, zero: 0x1F101, ranges: []rune{0x1F102, 0x1F10A}},
 }
 
 // formatWithOrdinalSystem formats using a known ordinal numbering system.
@@ -2038,14 +2054,28 @@ func formatWithOrdinalSystem(num int, start rune) string {
 	// Look up the system by the start character (which represents 1)
 	sys, ok := knownOrdinalSystems[start]
 	if !ok {
-		// Unknown system: detect range by scanning consecutive same-category
-		// characters, then fall back to decimal on overflow.
+		// Unknown system: detect range by finding the block boundaries.
+		// First check if start-1 is also a numbering character (the zero).
+		hasZero := false
+		prev := start - 1
+		if prev > 0 && (unicode.IsNumber(prev) || unicode.IsLetter(prev)) {
+			hasZero = true
+		}
+		// Count consecutive same-category characters from start, capped at 10.
 		rangeLen := ordinalRangeLength(start)
+		// If we have a zero predecessor, the system is (zero, 1..N).
+		// The range from start to the end of the system is one less than
+		// the total block size starting at zero.
+		if hasZero {
+			totalFromZero := ordinalRangeLength(prev)
+			rangeFromStart := totalFromZero - 1
+			if rangeFromStart < rangeLen {
+				rangeLen = rangeFromStart
+			}
+		}
 
 		if num == 0 {
-			// Check if start-1 is a valid zero character in the same category
-			prev := start - 1
-			if prev > 0 && (unicode.IsNumber(prev) || unicode.IsLetter(prev)) {
+			if hasZero {
 				return string(prev)
 			}
 			return strconv.Itoa(0)
