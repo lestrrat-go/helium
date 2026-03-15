@@ -880,7 +880,17 @@ func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
 		}
 	}
 
-	inst := &CopyInst{}
+	inst := &CopyInst{
+		CopyNamespaces:    true,
+		InheritNamespaces: true,
+	}
+
+	if cn := getAttr(elem, "copy-namespaces"); cn == "no" {
+		inst.CopyNamespaces = false
+	}
+	if in := getAttr(elem, "inherit-namespaces"); in == "no" {
+		inst.InheritNamespaces = false
+	}
 
 	if v := getAttr(elem, "validation"); v != "" {
 		inst.Validation = v
@@ -914,6 +924,20 @@ func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
 }
 
 func (c *compiler) compileCopyOf(elem *helium.Element) (*CopyOfInst, error) {
+	// XTSE0260: xsl:copy-of must have no significant content
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		switch child.Type() {
+		case helium.ElementNode:
+			return nil, staticError(errCodeXTSE0260,
+				"xsl:copy-of must be empty, but contains child element %s", child.Name())
+		case helium.TextNode, helium.CDATASectionNode:
+			if strings.TrimSpace(string(child.Content())) != "" {
+				return nil, staticError(errCodeXTSE0260,
+					"xsl:copy-of must be empty, but contains text content")
+			}
+		}
+	}
+
 	// XTSE0090: reject specific attributes that are not allowed on xsl:copy-of
 	for _, attr := range elem.Attributes() {
 		if attr.URI() != "" {
@@ -942,7 +966,13 @@ func (c *compiler) compileCopyOf(elem *helium.Element) (*CopyOfInst, error) {
 		return nil, err
 	}
 
-	inst := &CopyOfInst{Select: expr}
+	inst := &CopyOfInst{
+		Select:         expr,
+		CopyNamespaces: true,
+	}
+	if cn := getAttr(elem, "copy-namespaces"); cn == "no" {
+		inst.CopyNamespaces = false
+	}
 	if v := getAttr(elem, "validation"); v != "" {
 		inst.Validation = v
 	}

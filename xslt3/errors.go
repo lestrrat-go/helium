@@ -48,6 +48,10 @@ const (
 	errCodeXTSE3441 = "XTSE3441" // streamability error in accumulator
 	errCodeXTDE3630 = "XTDE3630" // source-document runtime error
 	errCodeXTDE3635 = "XTDE3635" // source-document URI resolution error
+	errCodeXTTE0945 = "XTTE0945" // xsl:copy with no context item
+	errCodeXTDE0420 = "XTDE0420" // namespace conflict
+	errCodeXTTE3180 = "XTTE3180" // type error in streaming
+	errCodeXTDE3362 = "XTDE3362" // streaming accumulator error
 )
 
 // Sentinel errors for the xslt3 package.

@@ -1075,6 +1075,9 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		return nil
 	}
 
+	if ec.contextNode == nil {
+		return dynamicError(errCodeXTTE0945, "xsl:copy: no context item")
+	}
 	return ec.execCopyNode(ctx, ec.contextNode, inst.Body, inst.UseAttrSets)
 }
 
@@ -1208,7 +1211,14 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body 
 		out := ec.currentOutput()
 		elem, ok := out.current.(*helium.Element)
 		if !ok {
-			return nil
+			// XTDE0410: adding attribute to non-element
+			return dynamicError(errCodeXTDE0410,
+				"cannot add attribute %s to a non-element node", attr.Name())
+		}
+		if elem.FirstChild() != nil {
+			// XTDE0410: adding attribute after child content
+			return dynamicError(errCodeXTDE0410,
+				"cannot add attribute %s after child nodes have been added", attr.Name())
 		}
 		return copyAttributeToElement(elem, attr)
 	}
@@ -1283,7 +1293,14 @@ func (ec *execContext) copyNodeToOutput(node helium.Node) error {
 		out := ec.currentOutput()
 		elem, ok := out.current.(*helium.Element)
 		if !ok {
-			return nil
+			// XTDE0410: adding attribute to non-element
+			return dynamicError(errCodeXTDE0410,
+				"cannot add attribute %s to a non-element node", attr.Name())
+		}
+		if elem.FirstChild() != nil {
+			// XTDE0410: adding attribute after child content
+			return dynamicError(errCodeXTDE0410,
+				"cannot add attribute %s after child nodes have been added", attr.Name())
 		}
 		return copyAttributeToElement(elem, attr)
 	case helium.NamespaceNode:
@@ -2711,25 +2728,14 @@ func (ec *execContext) execWherePopulated(ctx context.Context, inst *WherePopula
 }
 
 // isPopulated checks if a node is "populated" per XSLT 3.0 xsl:where-populated semantics.
-// An element is populated if it has at least one child element or non-empty text node.
-// A text node is populated if its content has non-zero length.
-// Comments, PIs, and other node types are not considered populated.
+// A sequence is populated if it contains at least one node other than an attribute or
+// namespace node that has non-empty content. Elements are always populated.
+// Text, comment, and PI nodes are populated only if their content is non-empty.
 func isPopulated(node helium.Node) bool {
 	switch node.Type() {
 	case helium.ElementNode:
-		elem := node.(*helium.Element)
-		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-			switch child.Type() {
-			case helium.ElementNode:
-				return true
-			case helium.TextNode:
-				if len(child.Content()) > 0 {
-					return true
-				}
-			}
-		}
-		return false
-	case helium.TextNode:
+		return true
+	case helium.TextNode, helium.CommentNode, helium.ProcessingInstructionNode:
 		return len(node.Content()) > 0
 	default:
 		return false

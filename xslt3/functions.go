@@ -502,6 +502,8 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 	savedSize := ec.size
 	savedTunnel := ec.tunnelParams
 	savedMode := ec.currentMode
+	ec.contextNode = nil
+	ec.currentNode = nil
 	ec.tunnelParams = nil
 	ec.currentMode = ec.stylesheet.defaultMode
 	defer func() {

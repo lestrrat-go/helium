@@ -181,19 +181,22 @@ func (*ParamInst) instructionTag() {}
 
 // CopyInst represents xsl:copy.
 type CopyInst struct {
-	Select           *xpath3.Expression
-	Body             []Instruction
-	Validation       string   // "strict", "lax", "preserve", "strip"
-	UseAttributeSets []string // xsl:use-attribute-sets (resolved QNames)
-	UseAttrSets      []string // attribute set names (raw)
+	Select            *xpath3.Expression
+	Body              []Instruction
+	Validation        string   // "strict", "lax", "preserve", "strip"
+	UseAttributeSets  []string // xsl:use-attribute-sets (resolved QNames)
+	UseAttrSets       []string // attribute set names (raw)
+	CopyNamespaces    bool     // copy-namespaces="yes" (default true)
+	InheritNamespaces bool     // inherit-namespaces="yes" (default true)
 }
 
 func (*CopyInst) instructionTag() {}
 
 // CopyOfInst represents xsl:copy-of.
 type CopyOfInst struct {
-	Select     *xpath3.Expression
-	Validation string // "strict", "lax", "preserve", "strip"
+	Select         *xpath3.Expression
+	Validation     string // "strict", "lax", "preserve", "strip"
+	CopyNamespaces bool   // copy-namespaces="yes" (default true)
 }
 
 func (*CopyOfInst) instructionTag() {}
