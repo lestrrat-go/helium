@@ -1998,20 +1998,77 @@ func formatWithDigitSystem(num int, zero rune, minWidth int) string {
 	return string(runes)
 }
 
-// formatWithOrdinalSystem formats using consecutive codepoints from start.
-// E.g., ① (U+2460) maps 1→①, 2→②, etc.
+// ordinalSystem describes a Unicode numbering system with potentially
+// non-contiguous ranges and a special zero character.
+type ordinalSystem struct {
+	oneChar rune   // the character representing 1
+	zero    rune   // the character representing 0 (0 if none)
+	ranges  []rune // pairs of (first, last) codepoints for contiguous ranges starting at 1
+}
+
+// knownOrdinalSystems maps the "1" character to its ordinal system definition.
+var knownOrdinalSystems = map[rune]ordinalSystem{
+	// Circled digits: ①-⑳, ㉑-㉟, ㊱-㊿
+	0x2460: {oneChar: 0x2460, zero: 0x24EA, ranges: []rune{0x2460, 0x2473, 0x3251, 0x325F, 0x32B1, 0x32BF}},
+	// Parenthesized digits: ⑴-⒇
+	0x2474: {oneChar: 0x2474, zero: 0x1F100, ranges: []rune{0x2474, 0x2487}},
+	// Full-stop digits: ⒈-⒛
+	0x2488: {oneChar: 0x2488, zero: 0x1F100, ranges: []rune{0x2488, 0x249B}},
+	// Double circled digits: ⓵-⓾
+	0x24F5: {oneChar: 0x24F5, zero: 0x24FF, ranges: []rune{0x24F5, 0x24FE}},
+	// Dingbat negative circled: ❶-❿
+	0x2776: {oneChar: 0x2776, zero: 0x24FF, ranges: []rune{0x2776, 0x277F}},
+	// Dingbat negative circled sans-serif: ➊-➓
+	0x278A: {oneChar: 0x278A, zero: 0x1F10C, ranges: []rune{0x278A, 0x2793}},
+	// Dingbat negative circled sans-serif (alt, starting from ➀): ➀-➉
+	0x2780: {oneChar: 0x2780, zero: 0x1F10B, ranges: []rune{0x2780, 0x2789}},
+	// Parenthesized ideograph: ㈠-㈩
+	0x3220: {oneChar: 0x3220, zero: 0, ranges: []rune{0x3220, 0x3229}},
+	// Circled ideograph: ㊀-㊉
+	0x3280: {oneChar: 0x3280, zero: 0, ranges: []rune{0x3280, 0x3289}},
+}
+
+// formatWithOrdinalSystem formats using a known ordinal numbering system.
+// Falls back to decimal when the number exceeds the system's range.
 func formatWithOrdinalSystem(num int, start rune) string {
 	if num < 0 {
 		return strconv.Itoa(num)
 	}
-	if num == 0 {
-		// Circled digits: ① (U+2460) → ⓪ (U+24EA) for zero
-		if start == 0x2460 {
-			return "\u24EA"
+
+	// Look up the system by the start character (which represents 1)
+	sys, ok := knownOrdinalSystems[start]
+	if !ok {
+		// Unknown system: simple offset, fall back to decimal on overflow
+		if num == 0 {
+			if start == 0x2460 {
+				return "\u24EA"
+			}
+			return strconv.Itoa(0)
 		}
-		return string(start - 1)
+		return string(start + rune(num-1))
 	}
-	return string(start + rune(num-1))
+
+	if num == 0 {
+		if sys.zero != 0 {
+			return string(sys.zero)
+		}
+		return strconv.Itoa(0)
+	}
+
+	// Map num to the correct codepoint across potentially non-contiguous ranges
+	pos := num // 1-based position in the sequence
+	for i := 0; i+1 < len(sys.ranges); i += 2 {
+		rangeStart := sys.ranges[i]
+		rangeEnd := sys.ranges[i+1]
+		rangeLen := int(rangeEnd - rangeStart + 1)
+		if pos <= rangeLen {
+			return string(rangeStart + rune(pos-1))
+		}
+		pos -= rangeLen
+	}
+
+	// Number exceeds ordinal system range: fall back to decimal
+	return strconv.Itoa(num)
 }
 
 // numberToWords converts a number to English words.
