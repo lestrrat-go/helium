@@ -414,8 +414,6 @@ func frenchOrdinal(n int, _ string) string {
 	}
 	card := frenchCardinal(n)
 	// Add -ième suffix (drop trailing -e if present)
-	if strings.HasSuffix(card, "e") {
-		card = card[:len(card)-1]
-	}
+	card = strings.TrimSuffix(card, "e")
 	return card + "ième"
 }
