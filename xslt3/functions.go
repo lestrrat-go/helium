@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -35,6 +36,7 @@ func (ec *execContext) xsltFunctions() map[string]xpath3.Function {
 		"accumulator-after":    &xsltFunc{min: 1, max: 1, fn: ec.fnAccumulatorAfter},
 		"copy-of":              &xsltFunc{min: 0, max: 1, fn: ec.fnCopyOf},
 		"snapshot":             &xsltFunc{min: 0, max: 1, fn: ec.fnSnapshot},
+		"regex-group":          &xsltFunc{min: 1, max: 1, fn: ec.fnRegexGroup},
 	}
 	return ec.cachedFns
 }
@@ -502,8 +504,10 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 	savedSize := ec.size
 	savedTunnel := ec.tunnelParams
 	savedMode := ec.currentMode
+	savedGroups := ec.regexGroups
 	ec.tunnelParams = nil
 	ec.currentMode = ec.stylesheet.defaultMode
+	ec.regexGroups = nil // regex-group() returns empty inside xsl:function
 	defer func() {
 		ec.contextNode = savedContext
 		ec.currentNode = savedCurrent
@@ -511,6 +515,7 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 		ec.size = savedSize
 		ec.tunnelParams = savedTunnel
 		ec.currentMode = savedMode
+		ec.regexGroups = savedGroups
 	}()
 
 	// Push new variable scope for parameters
@@ -1003,6 +1008,31 @@ func shallowCopyElement(src *helium.Element, doc *helium.Document) (*helium.Elem
 	}
 
 	return elem, nil
+}
+
+// regex-group(n) returns the nth captured group from the current regex match.
+// Returns empty string if called outside xsl:matching-substring or if the
+// group number is out of range.
+func (ec *execContext) fnRegexGroup(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	if len(args) == 0 || len(args[0]) == 0 {
+		return xpath3.SingleString(""), nil
+	}
+	av, err := xpath3.AtomizeItem(args[0][0])
+	if err != nil {
+		return xpath3.SingleString(""), nil
+	}
+	s, err := xpath3.AtomicToString(av)
+	if err != nil {
+		return xpath3.SingleString(""), nil
+	}
+	idx, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil {
+		return xpath3.SingleString(""), nil
+	}
+	if idx < 0 || idx >= len(ec.regexGroups) {
+		return xpath3.SingleString(""), nil
+	}
+	return xpath3.SingleString(ec.regexGroups[idx]), nil
 }
 
 // xsltFunctionsNS returns user-defined xsl:function definitions and

@@ -45,6 +45,7 @@ type execContext struct {
 	cachedVarsMap     map[string]xpath3.Sequence         // cached result of collectAllVars (globals only)
 	cachedVarsGen     uint64                             // globalVarsGen at time cachedVarsMap was built
 	accumulatorState  map[string]xpath3.Sequence         // accumulator name -> current value
+	regexGroups       []string                           // captured groups for regex-group() inside xsl:matching-substring
 	breakValue        xpath3.Sequence                    // value produced by xsl:break
 	nextIterParams    map[string]xpath3.Sequence         // param values from xsl:next-iteration
 	msgHandler        func(string, bool)
@@ -174,6 +175,11 @@ func (ec *execContext) addNode(node helium.Node) error {
 	if out.separateTextNodes && node.Type() == helium.TextNode {
 		out.pendingItems = append(out.pendingItems, xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: string(node.Content())})
 		return nil
+	}
+	// Reset atomic adjacency tracking when a non-text node (e.g., element)
+	// breaks the sequence of adjacent atomic values from xsl:sequence.
+	if node.Type() != helium.TextNode {
+		out.prevWasAtomic = false
 	}
 	return out.current.AddChild(node)
 }

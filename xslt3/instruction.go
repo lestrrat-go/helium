@@ -440,3 +440,14 @@ type MergeKey struct {
 	Select *xpath3.Expression
 	Order  string // "ascending" or "descending"
 }
+
+// AnalyzeStringInst represents xsl:analyze-string.
+type AnalyzeStringInst struct {
+	Select          *xpath3.Expression
+	Regex           *AVT
+	Flags           *AVT
+	MatchingBody    []Instruction
+	NonMatchingBody []Instruction
+}
+
+func (*AnalyzeStringInst) instructionTag() {}
