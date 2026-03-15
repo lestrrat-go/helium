@@ -11,6 +11,22 @@ import (
 
 const maxParseDepth = 200
 
+// isNameLikeToken returns true if the token type can be used as a local name
+// after a prefix ':' in a QName. XPath 3.1 keywords are context-sensitive:
+// e.g. "my:function()" is a valid prefixed function call, not a keyword.
+func isNameLikeToken(t TokenType) bool {
+	switch t {
+	case TokenName, TokenFunction, TokenMap, TokenArray,
+		TokenIf, TokenThen, TokenElse,
+		TokenFor, TokenLet, TokenSome, TokenEvery, TokenReturn,
+		TokenIn, TokenSatisfies,
+		TokenIs, TokenAs, TokenOf,
+		TokenTry, TokenCatch:
+		return true
+	}
+	return false
+}
+
 // parser builds an AST from a token stream.
 type parser struct {
 	lexer *lexer
@@ -391,14 +407,14 @@ func (p *parser) parseArrowTarget() (Expr, string, string, error) {
 		}
 		return expr, "", "", nil
 	}
-	if tok.Type == TokenName || tok.Type == TokenMap || tok.Type == TokenArray {
+	if isNameLikeToken(tok.Type) {
 		p.lexer.Next()
 		prefix := ""
 		name := tok.Value
 		if p.lexer.Peek().Type == TokenColon {
 			p.lexer.Next() // consume ':'
 			localTok := p.lexer.Next()
-			if localTok.Type != TokenName {
+			if !isNameLikeToken(localTok.Type) {
 				return nil, "", "", fmt.Errorf("%w: name after '%s:' in arrow but got %s", ErrExpectedToken, name, localTok)
 			}
 			prefix = name
@@ -729,7 +745,7 @@ func (p *parser) parseNamePrimary() (Expr, error) {
 	if p.lexer.Peek().Type == TokenColon {
 		p.lexer.Next() // consume ':'
 		localTok := p.lexer.Peek()
-		if localTok.Type == TokenName {
+		if isNameLikeToken(localTok.Type) {
 			p.lexer.Next()
 			prefix = name
 			name = localTok.Value
@@ -1305,7 +1321,7 @@ func (p *parser) parseQNameTest(prefix string) (NodeTest, error) {
 		p.lexer.Next()
 		return NameTest{Prefix: prefix, Local: "*"}, nil
 	}
-	if next.Type == TokenName {
+	if isNameLikeToken(next.Type) {
 		p.lexer.Next()
 		return NameTest{Prefix: prefix, Local: next.Value}, nil
 	}
