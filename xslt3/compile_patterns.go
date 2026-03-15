@@ -586,6 +586,13 @@ func nodeMatchesStep(ctx *execContext, step xpath3.Step, node helium.Node) bool 
 	if node.Type() != helium.AttributeNode && step.Axis == xpath3.AxisAttribute {
 		return false
 	}
+	// Namespace nodes are only matched by the namespace axis or namespace-node() test.
+	if node.Type() == helium.NamespaceNode && step.Axis != xpath3.AxisNamespace {
+		return false
+	}
+	if node.Type() != helium.NamespaceNode && step.Axis == xpath3.AxisNamespace {
+		return false
+	}
 	if !nodeMatchesTest(ctx, step.NodeTest, node) {
 		return false
 	}
@@ -618,6 +625,8 @@ func nodeMatchesTest(ctx *execContext, test xpath3.NodeTest, node helium.Node) b
 		return matchAttributeTest(ctx, nt, node)
 	case xpath3.DocumentTest:
 		return matchDocumentTest(ctx, nt, node)
+	case xpath3.NamespaceNodeTest:
+		return node.Type() == helium.NamespaceNode
 	default:
 		return false
 	}
