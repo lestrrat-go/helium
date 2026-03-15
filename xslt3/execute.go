@@ -965,7 +965,21 @@ func (ec *execContext) applyOnNoMatch(ctx context.Context, node helium.Node, mod
 	case "deep-copy":
 		return ec.onNoMatchDeepCopy(node)
 	case "shallow-skip":
-		if node.Type() == helium.DocumentNode || node.Type() == helium.ElementNode {
+		if node.Type() == helium.ElementNode {
+			// XSLT 3.0: shallow-skip for elements applies templates to
+			// attributes and children (but does not copy the element).
+			srcElem := node.(*helium.Element)
+			for _, attr := range srcElem.Attributes() {
+				if err := ec.applyTemplates(ctx, attr, mode, paramValues...); err != nil {
+					return err
+				}
+			}
+			for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+				if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
+					return err
+				}
+			}
+		} else if node.Type() == helium.DocumentNode {
 			for child := node.FirstChild(); child != nil; child = child.NextSibling() {
 				if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
 					return err
