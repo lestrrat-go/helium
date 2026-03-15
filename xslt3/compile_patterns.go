@@ -331,11 +331,9 @@ func nodeMatchesStep(ctx *execContext, step xpath3.Step, node helium.Node) bool 
 	if !nodeMatchesTest(ctx, step.NodeTest, node) {
 		return false
 	}
-	// Evaluate predicates if any
-	for _, pred := range step.Predicates {
-		if !evaluatePredicate(ctx, pred, node) {
-			return false
-		}
+	// Evaluate predicates if any, with chained position filtering
+	if len(step.Predicates) > 0 {
+		return evaluateChainedPredicates(ctx, step, node)
 	}
 	return true
 }
@@ -512,40 +510,86 @@ func matchDocumentTest(ctx *execContext, dt xpath3.DocumentTest, node helium.Nod
 	return nodeMatchesTest(ctx, dt.Inner, docElem)
 }
 
-// evaluatePredicate evaluates a pattern predicate against a node.
-func evaluatePredicate(ctx *execContext, pred xpath3.Expr, node helium.Node) bool {
+// evaluateChainedPredicates evaluates a chain of predicates in a pattern step.
+// For patterns with multiple predicates like x[P1][P2][P3], each predicate
+// filters based on position among siblings matching the node test AND all
+// previous predicates. This implements XSLT 3.0 Section 5.5.3.
+func evaluateChainedPredicates(ctx *execContext, step xpath3.Step, node helium.Node) bool {
+	// Collect all same-test siblings (including the node itself)
+	siblings := collectMatchingSiblings(ctx, step.NodeTest, node)
+
+	for i, pred := range step.Predicates {
+		// Find position and size of node in current filtered sibling set
+		pos := 0
+		for j, sib := range siblings {
+			if sib == node {
+				pos = j + 1
+				break
+			}
+		}
+		if pos == 0 {
+			return false // node not in the filtered set
+		}
+
+		// Evaluate the predicate with position/size context
+		if !evaluatePredicateWithPosition(ctx, pred, node, pos, len(siblings)) {
+			return false
+		}
+
+		// For subsequent predicates, filter the sibling list
+		if i < len(step.Predicates)-1 {
+			var filtered []helium.Node
+			for j, sib := range siblings {
+				if evaluatePredicateWithPosition(ctx, pred, sib, j+1, len(siblings)) {
+					filtered = append(filtered, sib)
+				}
+			}
+			siblings = filtered
+		}
+	}
+	return true
+}
+
+// collectMatchingSiblings collects all siblings (including the node itself)
+// that match the given node test, in document order.
+func collectMatchingSiblings(ctx *execContext, test xpath3.NodeTest, node helium.Node) []helium.Node {
+	var siblings []helium.Node
+
+	// Find the parent to iterate children
+	parent := node.Parent()
+	if parent == nil {
+		// No parent means we can only check the node itself
+		return []helium.Node{node}
+	}
+
+	// Iterate through all children of the parent
+	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
+		if nodeMatchesTest(ctx, test, child) {
+			siblings = append(siblings, child)
+		}
+	}
+	return siblings
+}
+
+// evaluatePredicateWithPosition evaluates a pattern predicate with explicit
+// position and size context.
+func evaluatePredicateWithPosition(ctx *execContext, pred xpath3.Expr, node helium.Node, pos, size int) bool {
 	xpathCtx := ctx.newXPathContext(node)
+	xpathCtx = xpath3.WithPosition(xpathCtx, pos)
+	xpathCtx = xpath3.WithSize(xpathCtx, size)
 	result, err := xpath3.EvaluateExpr(xpathCtx, pred, node)
 	if err != nil {
 		return false
 	}
-	// Numeric predicates: compare to position among siblings
+	// Numeric predicates: compare to the provided position
 	if f, ok := result.IsNumber(); ok {
-		return int(f) == positionAmongSiblings(node)
+		return int(f) == pos
 	}
 	b, err := xpath3.EBV(result.Sequence())
 	if err != nil {
 		return false
 	}
 	return b
-}
-
-// positionAmongSiblings returns the 1-based position of a node among
-// same-type preceding siblings (for numeric predicate evaluation in patterns).
-func positionAmongSiblings(node helium.Node) int {
-	pos := 1
-	for sib := node.PrevSibling(); sib != nil; sib = sib.PrevSibling() {
-		if sib.Type() == node.Type() {
-			if node.Type() == helium.ElementNode {
-				if sib.Name() == node.Name() {
-					pos++
-				}
-			} else {
-				pos++
-			}
-		}
-	}
-	return pos
 }
 
 // matchByEvaluation matches complex patterns by evaluating from document root.
