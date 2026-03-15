@@ -678,6 +678,10 @@ func (d *Document) RegisterID(id string, elem *Element) {
 	if d.ids == nil {
 		d.ids = make(map[string]*Element)
 	}
+	// Normalize the ID value: xs:ID is derived from xs:NCName which
+	// collapses whitespace. Strip leading/trailing whitespace so that
+	// xml:id="id3 " is findable as "id3".
+	id = strings.TrimSpace(id)
 	d.ids[id] = elem
 }
 
@@ -698,8 +702,8 @@ func (d *Document) GetElementByID(id string) *Element {
 		}
 		elem := n.(*Element)
 		for _, a := range elem.Attributes() {
-			// Check xml:id
-			if a.Name() == "xml:id" && a.Value() == id {
+			// Check xml:id (normalize value — xs:ID collapses whitespace)
+			if a.Name() == "xml:id" && strings.TrimSpace(a.Value()) == id {
 				found = elem
 				return errors.New("found")
 			}

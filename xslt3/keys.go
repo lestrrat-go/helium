@@ -3,11 +3,15 @@ package xslt3
 import (
 	"context"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 // keyEntry pairs a typed atomic key value with the node it indexes.
@@ -25,7 +29,7 @@ type compositeKeyEntry struct {
 
 // keyTable is a built key index for a specific xsl:key name.
 type keyTable struct {
-	defs           []*KeyDef
+	defs           []*keyDef
 	entries        map[string][]keyEntry          // canonicalKey -> entries (non-composite)
 	compositeEntry map[string][]compositeKeyEntry // compositeCanonical -> entries (composite)
 	building       bool
@@ -37,6 +41,11 @@ type keyTable struct {
 // Values that could be equal under XPath eq semantics (including
 // untypedAtomic promotion) must share the same canonical key.
 func canonicalKey(av xpath3.AtomicValue) string {
+	if qv, ok := canonicalQNameValue(av); ok {
+		// QName equality is based on URI and local name, not lexical prefix.
+		return xpath3.TypeQName + ":" + qv.URI + "\x00" + qv.Local
+	}
+
 	// For date/time types, normalize to UTC so that equivalent instants
 	// in different timezones share the same canonical key.
 	switch av.TypeName {
@@ -56,9 +65,15 @@ func canonicalKey(av xpath3.AtomicValue) string {
 
 	s, _ := xpath3.AtomicToString(av)
 	// Group numerics together so integer 4 and double 4.0 can be
-	// compared in the same bucket.
+	// compared in the same bucket. Use the float64 representation as
+	// the canonical key so that cross-type comparisons (e.g.
+	// xs:float vs xs:double vs xs:decimal) use value equality.
 	if av.IsNumeric() {
-		return "N:" + s
+		f := av.ToFloat64()
+		if math.IsNaN(f) {
+			return "N:NaN"
+		}
+		return "N:" + strconv.FormatFloat(f, 'g', -1, 64)
 	}
 	// Group untypedAtomic, string, and all string-derived types together
 	// since untypedAtomic is promoted to string for eq comparison.
@@ -72,6 +87,19 @@ func canonicalKey(av xpath3.AtomicValue) string {
 		return "S:" + s
 	}
 	return av.TypeName + ":" + s
+}
+
+func canonicalQNameValue(av xpath3.AtomicValue) (xpath3.QNameValue, bool) {
+	if qv, ok := av.Value.(xpath3.QNameValue); ok {
+		return qv, true
+	}
+
+	promoted := xpath3.PromoteSchemaType(av)
+	qv, ok := promoted.Value.(xpath3.QNameValue)
+	if !ok || promoted.TypeName != xpath3.TypeQName {
+		return xpath3.QNameValue{}, false
+	}
+	return qv, true
 }
 
 // compositeCanonicalKey produces a canonical key for a sequence of atomic values
@@ -107,8 +135,25 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 	// Cache key includes both the key name and the document identity
 	cacheKey := fmt.Sprintf("%s@%p", name, root)
 	if kt, ok := ec.keyTables[cacheKey]; ok {
-		if kt.built || kt.building {
+		if kt.built {
 			return kt, nil
+		}
+		if kt.building {
+			isV3 := ec.stylesheet.version >= "3.0" || ec.stylesheet.version == ""
+			if isV3 && ec.keyUseExprDepth > 0 {
+				// XSLT 3.0 spec (section 20.1.3): when a key's
+				// use-expression references a key that is currently
+				// being built, the key function returns empty (the
+				// index is not yet populated).
+				empty := &keyTable{built: true, entries: make(map[string][]keyEntry)}
+				return empty, nil
+			}
+			// XTDE0640: circular key reference detected. In XSLT 2.0,
+			// any key circularity is an error. In XSLT 3.0, circularity
+			// outside use-expression context (e.g., in a match pattern
+			// or variable binding) is also an error.
+			return nil, dynamicError(errCodeXTDE0640,
+				"circular reference in key %q", name)
 		}
 	}
 
@@ -128,14 +173,19 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 		kt.compositeEntry = make(map[string][]compositeKeyEntry)
 	}
 	ec.keyTables[cacheKey] = kt
+	ec.keyBuildingDepth++
 
 	// Walk the document and build the index.
-	// Save/restore contextNode and currentNode so current() works in use expr.
+	// Save/restore contextNode, currentNode, and contextItem so current() works
+	// in use expr and so that an outer atomic context item (e.g., from
+	// xsl:for-each over integers) does not leak into the key use evaluation.
 	savedContext := ec.contextNode
 	savedCurrent := ec.currentNode
+	savedItem := ec.contextItem
 	defer func() {
 		ec.contextNode = savedContext
 		ec.currentNode = savedCurrent
+		ec.contextItem = savedItem
 	}()
 
 	// Track which nodes have been added for each canonical key to avoid
@@ -146,36 +196,58 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 	}
 	seen := make(map[seenKey]struct{})
 
+	// Check whether any key definition matches attribute nodes so we know
+	// whether to visit attributes during the walk.
+	needsAttrs := false
+	for _, kd := range defs {
+		if kd.Match.matchesAttributes() {
+			needsAttrs = true
+			break
+		}
+	}
+
 	// indexNode tries to match a single node against all key defs and index it.
 	indexNode := func(node helium.Node) error {
 		for _, kd := range defs {
 			if !kd.Match.matchPattern(ec, node) {
+				// Check if a fatal error occurred during pattern matching
+				if ec.patternMatchErr != nil {
+					err := ec.patternMatchErr
+					ec.patternMatchErr = nil
+					return err
+				}
 				continue
 			}
 			ec.contextNode = node
 			ec.currentNode = node
+			ec.contextItem = nil // clear atomic context; the key use context is a node
 
 			var items []xpath3.Item
+			ec.keyUseExprDepth++
 			if kd.Use != nil {
 				// use="expr" form
-				xpathCtx := ec.newXPathContext(node)
-				result, err := kd.Use.Evaluate(xpathCtx, node)
+				result, err := ec.evalXPath(kd.Use, node)
 				if err != nil {
+					ec.keyUseExprDepth--
 					return err
 				}
-				items = result.Sequence()
+				items = sequence.Materialize(result.Sequence())
 			} else if len(kd.Body) > 0 {
 				// Content constructor form: evaluate body as sequence
 				ctx := ec.transformCtx
 				if ctx == nil {
 					ctx = context.Background()
 				}
+				ec.temporaryOutputDepth++
 				seq, err := ec.evaluateBody(ctx, kd.Body)
+				ec.temporaryOutputDepth--
 				if err != nil {
+					ec.keyUseExprDepth--
 					return err
 				}
-				items = seq
+				items = sequence.Materialize(seq)
 			}
+			ec.keyUseExprDepth--
 
 			if composite {
 				// Composite key: the entire sequence forms a single key tuple
@@ -223,7 +295,7 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 	}
 
 	// Walk the document, also visiting attribute and namespace nodes.
-	err := helium.Walk(root, func(node helium.Node) error {
+	err := helium.Walk(root, helium.NodeWalkerFunc(func(node helium.Node) error {
 		if err := indexNode(node); err != nil {
 			return err
 		}
@@ -231,9 +303,11 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 		// helium.Walk only visits child nodes; key patterns can match
 		// attribute::* and namespace-node() which require explicit iteration.
 		if elem, ok := node.(*helium.Element); ok {
-			for _, attr := range elem.Attributes() {
-				if err := indexNode(attr); err != nil {
-					return err
+			if needsAttrs {
+				for _, attr := range elem.Attributes() {
+					if err := indexNode(attr); err != nil {
+						return err
+					}
 				}
 			}
 			// Collect in-scope namespace nodes (including inherited ones)
@@ -246,12 +320,14 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 			}
 		}
 		return nil
-	})
+	}))
 	if err != nil {
+		ec.keyBuildingDepth--
 		delete(ec.keyTables, cacheKey)
 		return nil, err
 	}
 
+	ec.keyBuildingDepth--
 	kt.building = false
 	kt.built = true
 	return kt, nil
@@ -259,10 +335,6 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 
 // lookupKey looks up nodes by key name and typed value in the given document root.
 func (ec *execContext) lookupKey(name string, value xpath3.AtomicValue, root helium.Node) ([]helium.Node, error) {
-	cacheKey := fmt.Sprintf("%s@%p", name, root)
-	if kt, ok := ec.keyTables[cacheKey]; ok && kt.building {
-		return nil, nil
-	}
 	kt, err := ec.buildKeyTable(name, root)
 	if err != nil {
 		return nil, err
@@ -291,10 +363,6 @@ func (ec *execContext) lookupKey(name string, value xpath3.AtomicValue, root hel
 
 // lookupCompositeKey looks up nodes by composite key (sequence of values).
 func (ec *execContext) lookupCompositeKey(name string, values []xpath3.AtomicValue, root helium.Node) ([]helium.Node, error) {
-	cacheKey := fmt.Sprintf("%s@%p", name, root)
-	if kt, ok := ec.keyTables[cacheKey]; ok && kt.building {
-		return nil, nil
-	}
 	kt, err := ec.buildKeyTable(name, root)
 	if err != nil {
 		return nil, err
@@ -348,8 +416,8 @@ func collectInScopeNSNodes(elem *helium.Element) []helium.Node {
 	}
 
 	// Add the implicit xml namespace if not already present.
-	if _, exists := seen["xml"]; !exists {
-		xmlNS := helium.NewNamespace("xml", "http://www.w3.org/XML/1998/namespace")
+	if _, exists := seen[lexicon.PrefixXML]; !exists {
+		xmlNS := helium.NewNamespace(lexicon.PrefixXML, lexicon.NamespaceXML)
 		result = append(result, helium.NewNamespaceNodeWrapper(xmlNS, elem))
 	}
 

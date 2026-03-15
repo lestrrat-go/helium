@@ -438,6 +438,13 @@ func (p *Pattern) matchPattern(ctx *execContext, node helium.Node) bool {
 	return false
 }
 
+// matchesAttributes returns true if the pattern source could potentially match
+// attribute nodes. This is a conservative heuristic used by key table building
+// to decide whether to visit attribute nodes during the document walk.
+func (p *Pattern) matchesAttributes() bool {
+	return strings.Contains(p.source, "@") || strings.Contains(p.source, "attribute")
+}
+
 // matchPatternAlt tests whether a node matches a single pattern alternative.
 // XSLT patterns evaluate by checking if the node would be selected by the
 // equivalent XPath expression when evaluated in the right context.
