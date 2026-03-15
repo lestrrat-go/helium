@@ -457,8 +457,8 @@ func (c *compiler) compileText(elem *helium.Element) (*TextInst, error) {
 }
 
 func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
-	// Validate boolean attributes
-	if inAttr := getAttr(elem, "inherit-namespaces"); inAttr != "" {
+	// Validate boolean attributes (including empty string)
+	if inAttr, hasIn := elem.GetAttribute("inherit-namespaces"); hasIn {
 		if err := validateBooleanAttr("xsl:element", "inherit-namespaces", inAttr); err != nil {
 			return nil, err
 		}
@@ -823,8 +823,8 @@ func (c *compiler) compileLocalParam(elem *helium.Element) (*ParamInst, error) {
 }
 
 func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
-	// Validate boolean attribute: inherit-namespaces
-	if inAttr := getAttr(elem, "inherit-namespaces"); inAttr != "" {
+	// Validate boolean attribute: inherit-namespaces (including empty string)
+	if inAttr, hasIn := elem.GetAttribute("inherit-namespaces"); hasIn {
 		if err := validateBooleanAttr("xsl:copy", "inherit-namespaces", inAttr); err != nil {
 			return nil, err
 		}
@@ -1035,8 +1035,8 @@ func (c *compiler) compileNamespace(elem *helium.Element) (*NamespaceInst, error
 }
 
 func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
-	// Validate boolean attribute: stable
-	if stableAttr := getAttr(elem, "stable"); stableAttr != "" {
+	// Validate boolean attribute: stable (including empty string)
+	if stableAttr, hasStable := elem.GetAttribute("stable"); hasStable {
 		if err := validateBooleanAttr("xsl:sort", "stable", stableAttr); err != nil {
 			return nil, err
 		}
@@ -1114,8 +1114,8 @@ func (c *compiler) compileWithParam(elem *helium.Element) (*WithParam, error) {
 		return nil, staticError(errCodeXTSE0110, "xsl:with-param requires name attribute")
 	}
 
-	// Validate tunnel attribute value if present
-	if tunnelAttr := getAttr(elem, "tunnel"); tunnelAttr != "" {
+	// Validate tunnel attribute value if present (including empty string)
+	if tunnelAttr, hasTunnel := elem.GetAttribute("tunnel"); hasTunnel {
 		if err := validateBooleanAttr("xsl:with-param", "tunnel", tunnelAttr); err != nil {
 			return nil, err
 		}

@@ -514,13 +514,13 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
 		return nil, staticError(errCodeXTSE0110, "xsl:param requires name attribute")
 	}
 
-	// Validate boolean attribute values
-	if reqAttr := getAttr(elem, "required"); reqAttr != "" {
+	// Validate boolean attribute values (including empty string)
+	if reqAttr, hasReq := elem.GetAttribute("required"); hasReq {
 		if err := validateBooleanAttr("xsl:param", "required", reqAttr); err != nil {
 			return nil, err
 		}
 	}
-	if tunnelAttr := getAttr(elem, "tunnel"); tunnelAttr != "" {
+	if tunnelAttr, hasTunnel := elem.GetAttribute("tunnel"); hasTunnel {
 		if err := validateBooleanAttr("xsl:param", "tunnel", tunnelAttr); err != nil {
 			return nil, err
 		}
@@ -762,10 +762,12 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 		name = "#default"
 	}
 
-	// Validate boolean attribute: streamable
-	if sa := getAttr(elem, "streamable"); sa != "" {
-		if err := validateBooleanAttr("xsl:mode", "streamable", sa); err != nil {
-			return err
+	// Validate boolean attributes on xsl:mode
+	for _, boolAttr := range []string{"streamable", "warning-on-no-match", "typed"} {
+		if v := getAttr(elem, boolAttr); v != "" {
+			if err := validateBooleanAttr("xsl:mode", boolAttr, v); err != nil {
+				return err
+			}
 		}
 	}
 
