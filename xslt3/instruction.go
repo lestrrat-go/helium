@@ -194,13 +194,14 @@ func (*CopyOfInst) instructionTag() {}
 
 // LiteralResultElement represents a non-XSLT element in the stylesheet body.
 type LiteralResultElement struct {
-	Name       string // qualified name (prefix:local)
-	Namespace  string // namespace URI
-	Prefix     string
-	LocalName  string
-	Attrs      []*LiteralAttribute
-	Namespaces map[string]string // prefix -> URI declarations to copy
-	Body       []Instruction
+	Name             string // qualified name (prefix:local)
+	Namespace        string // namespace URI
+	Prefix           string
+	LocalName        string
+	Attrs            []*LiteralAttribute
+	Namespaces       map[string]string // prefix -> URI declarations to copy
+	UseAttributeSets []string          // xsl:use-attribute-sets
+	Body             []Instruction
 }
 
 func (*LiteralResultElement) instructionTag() {}

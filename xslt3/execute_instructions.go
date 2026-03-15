@@ -1252,6 +1252,13 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *Liter
 		}
 	}
 
+	// Apply attribute sets before adding to output
+	if len(inst.UseAttributeSets) > 0 {
+		if err := ec.applyAttributeSets(ctx, elem, inst.UseAttributeSets); err != nil {
+			return err
+		}
+	}
+
 	if err := ec.addNode(elem); err != nil {
 		return err
 	}
@@ -1272,6 +1279,34 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *Liter
 		}
 	}
 
+	return nil
+}
+
+// applyAttributeSets applies named attribute sets to an element.
+func (ec *execContext) applyAttributeSets(ctx context.Context, elem *helium.Element, names []string) error {
+	for _, name := range names {
+		asd := ec.stylesheet.attributeSets[name]
+		if asd == nil {
+			continue
+		}
+		// Apply inherited attribute sets first
+		if len(asd.UseAttrSets) > 0 {
+			if err := ec.applyAttributeSets(ctx, elem, asd.UseAttrSets); err != nil {
+				return err
+			}
+		}
+		// Execute attribute instructions with elem as current output
+		out := ec.currentOutput()
+		savedCurrent := out.current
+		out.current = elem
+		for _, inst := range asd.Attrs {
+			if err := ec.executeInstruction(ctx, inst); err != nil {
+				out.current = savedCurrent
+				return err
+			}
+		}
+		out.current = savedCurrent
+	}
 	return nil
 }
 
