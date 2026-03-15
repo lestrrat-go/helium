@@ -36,6 +36,15 @@ type Stylesheet struct {
 	baseURI           string                                      // base URI for resolving relative document references
 	schemas           []*xsd.Schema                               // imported schemas (xsl:import-schema)
 	defaultValidation string                                      // "strict", "lax", "preserve", "strip" (default-validation attr)
+	namespaceAliases  []NamespaceAlias                            // xsl:namespace-alias declarations
+}
+
+// NamespaceAlias maps a stylesheet namespace URI to a result namespace URI.
+type NamespaceAlias struct {
+	StylesheetURI string // namespace URI used in stylesheet
+	ResultURI     string // namespace URI to use in output
+	ResultPrefix  string // preferred prefix for the result namespace
+	ImportPrec    int    // import precedence for conflict resolution
 }
 
 // ModeDef is a compiled xsl:mode declaration.

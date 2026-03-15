@@ -1615,6 +1615,55 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 		})
 	}
 
+	// Apply namespace aliases (xsl:namespace-alias).
+	// This must happen after namespace declarations and attributes are collected,
+	// but before children are compiled.
+	if len(c.stylesheet.namespaceAliases) > 0 {
+		// Alias the element itself
+		if resultURI, resultPfx, ok := c.resolveNamespaceAlias(lre.Namespace); ok {
+			lre.Namespace = resultURI
+			if resultPfx != "" {
+				lre.Prefix = resultPfx
+				lre.Name = resultPfx + ":" + lre.LocalName
+			} else {
+				lre.Prefix = ""
+				lre.Name = lre.LocalName
+			}
+		}
+
+		// Alias attributes
+		for _, attr := range lre.Attrs {
+			if attr.Namespace == "" {
+				continue
+			}
+			if resultURI, resultPfx, ok := c.resolveNamespaceAlias(attr.Namespace); ok {
+				attr.Namespace = resultURI
+				if resultPfx != "" {
+					attr.Prefix = resultPfx
+					attr.Name = resultPfx + ":" + attr.LocalName
+				} else {
+					attr.Prefix = ""
+					attr.Name = attr.LocalName
+				}
+			}
+		}
+
+		// Alias namespace declarations
+		aliasedNS := make(map[string]string)
+		for prefix, uri := range lre.Namespaces {
+			if resultURI, resultPfx, ok := c.resolveNamespaceAlias(uri); ok {
+				if resultPfx != "" {
+					aliasedNS[resultPfx] = resultURI
+				} else {
+					aliasedNS[prefix] = resultURI
+				}
+			} else {
+				aliasedNS[prefix] = uri
+			}
+		}
+		lre.Namespaces = aliasedNS
+	}
+
 	// Handle xsl:use-attribute-sets
 	if uas, ok := elem.GetAttributeNS("use-attribute-sets", NSXSLT); ok {
 		for _, name := range strings.Fields(uas) {
