@@ -738,9 +738,8 @@ func (ec *execContext) matchAtomicPattern(p *Pattern, item xpath3.Item) bool {
 			continue
 		}
 		// The pattern ".[. instance of xs:integer]" evaluates to the item
-		// itself when matched, or empty when not. Use EBV to check.
-		ebv, ebvErr := xpath3.EBV(result.Sequence())
-		if ebvErr == nil && ebv {
+		// itself when matched, or empty when not. Check non-empty.
+		if len(result.Sequence()) > 0 {
 			return true
 		}
 	}
