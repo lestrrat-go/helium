@@ -748,31 +748,3 @@ func AtomizeItem(item Item) (AtomicValue, error) {
 		}
 	}
 }
-
-// atomizeItemTyped atomizes an item using the evalContext's type annotation map.
-func atomizeItemTyped(item Item, ec *evalContext) (AtomicValue, error) {
-	ni, ok := item.(NodeItem)
-	if !ok {
-		return AtomizeItem(item)
-	}
-	if ni.TypeAnnotation != "" && ni.TypeAnnotation != TypeUntypedAtomic {
-		s := ixpath.StringValue(ni.Node)
-		cast, err := CastFromString(s, ni.TypeAnnotation)
-		if err == nil {
-			return cast, nil
-		}
-	}
-	if ec != nil && ec.typeAnnotations != nil && ni.Node != nil {
-		if ann, found := ec.typeAnnotations[ni.Node]; found && ann != TypeUntypedAtomic {
-			s := ixpath.StringValue(ni.Node)
-			cast, err := CastFromString(s, ann)
-			if err == nil {
-				return cast, nil
-			}
-		}
-	}
-	return AtomicValue{
-		TypeName: TypeUntypedAtomic,
-		Value:    ixpath.StringValue(ni.Node),
-	}, nil
-}
