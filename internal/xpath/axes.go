@@ -283,7 +283,9 @@ func axisAttribute(node helium.Node) []helium.Node {
 	if !ok {
 		return nil
 	}
-	var result []helium.Node // no prealloc: most elements have 1-3 attrs
+	// Keep the zero-attribute case allocation-free; the small append growth
+	// cost for the common 1-3 attribute case is an acceptable tradeoff here.
+	var result []helium.Node
 	elem.ForEachAttribute(func(attr *helium.Attribute) bool {
 		result = append(result, attr)
 		return true
