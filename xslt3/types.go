@@ -173,7 +173,12 @@ func castAtomicToType(av xpath3.AtomicValue, targetType string) (xpath3.Item, er
 		return av, nil
 	}
 
-	// xs:untypedAtomic can be cast to any type
+	// xs:anyURI -> xs:string promotion (per XPath spec)
+	if av.TypeName == xpath3.TypeAnyURI && target == xpath3.TypeString {
+		return xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: av.StringVal()}, nil
+	}
+
+	// xs:untypedAtomic and xs:string can be cast to any type
 	if av.TypeName == xpath3.TypeUntypedAtomic || av.TypeName == xpath3.TypeString {
 		s := av.StringVal()
 		cast, err := xpath3.CastFromString(s, target)
@@ -196,7 +201,16 @@ func castAtomicToType(av xpath3.AtomicValue, targetType string) (xpath3.Item, er
 		return cast, nil
 	}
 
-	return nil, fmt.Errorf("cannot convert %s to %s", av.TypeName, targetType)
+	// General fallback: try string-based casting
+	s, err := xpath3.AtomicToString(av)
+	if err != nil {
+		return nil, fmt.Errorf("cannot convert %s to %s", av.TypeName, targetType)
+	}
+	cast, err := xpath3.CastFromString(s, target)
+	if err != nil {
+		return nil, fmt.Errorf("cannot convert %s to %s", av.TypeName, targetType)
+	}
+	return cast, nil
 }
 
 // normalizeTypeName normalizes a type name to include the xs: prefix.
