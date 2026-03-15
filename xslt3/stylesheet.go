@@ -70,6 +70,7 @@ type Template struct {
 	Params         []*Param
 	Body           []Instruction
 	XPathDefaultNS string // xpath-default-namespace (inherited or explicit)
+	BaseURI        string // base URI of the stylesheet module that defined this template
 }
 
 // Variable is a compiled xsl:variable.

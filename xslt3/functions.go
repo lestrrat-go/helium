@@ -64,36 +64,87 @@ func (ec *execContext) fnCurrent(_ context.Context, _ []xpath3.Sequence) (xpath3
 }
 
 // document(uri, base?) loads an external XML document.
+// Per XSLT spec 14.1:
+//   - First argument can be a string or a sequence of strings/nodes.
+//   - When it is a sequence, each item is atomized to a URI and the
+//     corresponding documents are returned as a sequence.
+//   - An empty string returns the stylesheet document itself.
+//   - Fragment identifiers (#frag) are stripped before loading.
+//   - Second argument (optional) is a node whose base URI is used for
+//     resolving relative URIs instead of the stylesheet base URI.
 func (ec *execContext) fnDocument(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 	if len(args) == 0 || len(args[0]) == 0 {
 		return xpath3.EmptySequence(), nil
 	}
 
-	av, err := xpath3.AtomizeItem(args[0][0])
-	if err != nil {
-		return nil, err
+	// Determine the base URI for resolving relative URIs.
+	// Default: the base URI of the current template's module, falling
+	// back to the main stylesheet base URI.
+	// If a second argument is provided, use that node's document's URL
+	// as the base URI instead.
+	baseDir := ""
+	if ec.currentTemplate != nil && ec.currentTemplate.BaseURI != "" {
+		baseDir = filepath.Dir(ec.currentTemplate.BaseURI)
+	} else if ec.stylesheet.baseURI != "" {
+		baseDir = filepath.Dir(ec.stylesheet.baseURI)
 	}
-	uri, err := xpath3.AtomicToString(av)
-	if err != nil {
-		return nil, err
+	if len(args) >= 2 && len(args[1]) > 0 {
+		if ni, ok := args[1][0].(xpath3.NodeItem); ok {
+			if nodeBase := documentBaseURI(ni.Node); nodeBase != "" {
+				baseDir = filepath.Dir(nodeBase)
+			}
+		}
 	}
 
-	// Empty string means the stylesheet document itself (XSLT spec §14.1)
+	// Iterate over all items in the first argument sequence.
+	seen := make(map[string]struct{})
+	var result xpath3.Sequence
+	for _, item := range args[0] {
+		av, err := xpath3.AtomizeItem(item)
+		if err != nil {
+			return nil, err
+		}
+		uri, err := xpath3.AtomicToString(av)
+		if err != nil {
+			return nil, err
+		}
+
+		doc, err := ec.loadDocument(ctx, uri, baseDir)
+		if err != nil {
+			return nil, err
+		}
+
+		// Deduplicate by resolved URI (same document returned once).
+		resolvedKey := ec.resolveDocumentURI(uri, baseDir)
+		if _, dup := seen[resolvedKey]; dup {
+			continue
+		}
+		seen[resolvedKey] = struct{}{}
+		result = append(result, xpath3.NodeItem{Node: doc})
+	}
+	return result, nil
+}
+
+// loadDocument loads a single XML document by URI, using baseDir for
+// resolving relative paths.
+func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir string) (*helium.Document, error) {
+	// Empty string means the stylesheet document itself (XSLT spec 14.1).
 	if uri == "" {
-		return xpath3.SingleNode(ec.stylesheet.sourceDoc), nil
+		return ec.stylesheet.sourceDoc, nil
 	}
 
-	// Check cache
-	if doc, ok := ec.docCache[uri]; ok {
-		return xpath3.SingleNode(doc), nil
+	// Strip fragment identifier before loading.
+	cleanURI := uri
+	if idx := strings.IndexByte(cleanURI, '#'); idx >= 0 {
+		cleanURI = cleanURI[:idx]
 	}
 
-	// Resolve relative URI against stylesheet base URI
-	resolvedURI := uri
-	if ec.stylesheet.baseURI != "" && !strings.Contains(uri, "://") && !filepath.IsAbs(uri) {
-		baseDir := filepath.Dir(ec.stylesheet.baseURI)
-		resolvedURI = filepath.Join(baseDir, uri)
+	// Check cache by clean URI.
+	resolvedURI := ec.resolveDocumentURI(cleanURI, baseDir)
+	if doc, ok := ec.docCache[resolvedURI]; ok {
+		return doc, nil
 	}
+
 	data, err := os.ReadFile(resolvedURI)
 	if err != nil {
 		return nil, dynamicError("FODC0002", "cannot load document %q: %v", uri, err)
@@ -104,11 +155,43 @@ func (ec *execContext) fnDocument(ctx context.Context, args []xpath3.Sequence) (
 		return nil, dynamicError("FODC0002", "cannot parse document %q: %v", uri, err)
 	}
 
+	doc.SetURL(resolvedURI)
+
 	if ec.docCache == nil {
 		ec.docCache = make(map[string]*helium.Document)
 	}
-	ec.docCache[uri] = doc
-	return xpath3.SingleNode(doc), nil
+	ec.docCache[resolvedURI] = doc
+	return doc, nil
+}
+
+// resolveDocumentURI resolves a URI against a base directory.
+func (ec *execContext) resolveDocumentURI(uri string, baseDir string) string {
+	if uri == "" {
+		return ""
+	}
+	// Strip fragment identifier.
+	cleanURI := uri
+	if idx := strings.IndexByte(cleanURI, '#'); idx >= 0 {
+		cleanURI = cleanURI[:idx]
+	}
+	if strings.Contains(cleanURI, "://") || filepath.IsAbs(cleanURI) {
+		return cleanURI
+	}
+	if baseDir != "" {
+		return filepath.Join(baseDir, cleanURI)
+	}
+	return cleanURI
+}
+
+// documentBaseURI walks up a node to its owning Document and returns its URL.
+func documentBaseURI(n helium.Node) string {
+	for n != nil {
+		if doc, ok := n.(*helium.Document); ok {
+			return doc.URL()
+		}
+		n = n.Parent()
+	}
+	return ""
 }
 
 // key(name, value, doc?) looks up nodes by key.
@@ -858,16 +941,18 @@ func shallowCopyElement(src *helium.Element, doc *helium.Document) (*helium.Elem
 	return elem, nil
 }
 
-// xsltFunctionsNS returns user-defined xsl:function definitions as xpath3 functions
-// keyed by qualified name.
+// xsltFunctionsNS returns user-defined xsl:function definitions and
+// XSLT built-in functions that need to be callable in the fn: namespace
+// as xpath3 functions keyed by qualified name.
 func (ec *execContext) xsltFunctionsNS() map[xpath3.QualifiedName]xpath3.Function {
 	if ec.cachedFnsNS != nil {
 		return ec.cachedFnsNS
 	}
-	if len(ec.stylesheet.functions) == 0 {
-		return nil
-	}
-	ec.cachedFnsNS = make(map[xpath3.QualifiedName]xpath3.Function, len(ec.stylesheet.functions))
+	ec.cachedFnsNS = make(map[xpath3.QualifiedName]xpath3.Function, len(ec.stylesheet.functions)+1)
+
+	// Register XSLT document() in the fn: namespace so fn:document() works.
+	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "document"}] = &xsltFunc{min: 1, max: 2, fn: ec.fnDocument}
+
 	for qn, def := range ec.stylesheet.functions {
 		ec.cachedFnsNS[qn] = &xslUserFunc{def: def, ec: ec}
 	}

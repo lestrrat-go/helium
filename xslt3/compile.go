@@ -314,6 +314,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 func (c *compiler) compileTemplate(elem *helium.Element) error {
 	tmpl := &Template{
 		ImportPrec: c.importPrec,
+		BaseURI:    c.baseURI,
 	}
 
 	// Collect namespace declarations from this template
@@ -986,7 +987,8 @@ func compileSimplified(doc *helium.Document, root *helium.Element, cfg *compileC
 				},
 			},
 		},
-		Body: []Instruction{inst},
+		Body:    []Instruction{inst},
+		BaseURI: c.baseURI,
 	}
 
 	c.stylesheet.templates = append(c.stylesheet.templates, tmpl)
