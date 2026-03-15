@@ -5709,8 +5709,6 @@ func (pctx *parserCtx) replayEntityNode(ctx context.Context, n Node) error {
 	default:
 		return nil
 	}
-
-	return nil
 }
 
 func accumulateDecimalCharRef(val int32, c rune) (int32, error) {
