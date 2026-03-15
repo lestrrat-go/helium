@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"golang.org/x/net/html/charset"
 )
@@ -62,9 +63,10 @@ type xslDependency struct {
 }
 
 type xslEnvironment struct {
-	Name    string      `xml:"name,attr"`
-	Ref     string      `xml:"ref,attr"`
-	Sources []xslSource `xml:"source"`
+	Name        string          `xml:"name,attr"`
+	Ref         string          `xml:"ref,attr"`
+	Sources     []xslSource     `xml:"source"`
+	Stylesheets []xslStylesheet `xml:"stylesheet"`
 }
 
 type xslSource struct {
@@ -119,6 +121,8 @@ type xslResult struct {
 type assertion struct {
 	Type     string
 	Value    string
+	URI      string // for assert-result-document
+	Method   string // for assert-serialization
 	Children []assertion
 }
 
@@ -130,6 +134,8 @@ type xmlAssertion struct {
 	XMLName  xml.Name
 	Code     string         `xml:"code,attr"`
 	File     string         `xml:"file,attr"`
+	URI      string         `xml:"uri,attr"`
+	Method   string         `xml:"method,attr"`
 	Inner    []byte         `xml:",innerxml"`
 	Children []xmlAssertion `xml:",any"`
 }
@@ -183,6 +189,26 @@ func main() {
 		localEnvs := make(map[string]*xslEnvironment)
 		for i := range ts.Environments {
 			localEnvs[ts.Environments[i].Name] = &ts.Environments[i]
+			// Track environment-level stylesheet and source assets
+			for _, ss := range ts.Environments[i].Stylesheets {
+				if ss.File != "" {
+					relPath := filepath.Join(tsDir, ss.File)
+					assetFiles[relPath] = struct{}{}
+					absPath := filepath.Join(sourceDir, relPath)
+					for _, dep := range collectTransitiveDeps(absPath) {
+						relDep, err := filepath.Rel(sourceDir, dep)
+						if err == nil {
+							assetFiles[relDep] = struct{}{}
+						}
+					}
+				}
+			}
+			for _, src := range ts.Environments[i].Sources {
+				if src.File != "" {
+					relPath := filepath.Join(tsDir, src.File)
+					assetFiles[relPath] = struct{}{}
+				}
+			}
 		}
 
 		// Test-set-level skip reason
@@ -217,6 +243,24 @@ func main() {
 			// If only one stylesheet and no explicit role, it's the primary
 			if gt.StylesheetPath == "" && len(tc.Test.Stylesheets) == 1 {
 				gt.StylesheetPath = filepath.Join(tsDir, tc.Test.Stylesheets[0].File)
+			}
+
+			// Fall back to environment-level stylesheet if test has none
+			if gt.StylesheetPath == "" {
+				env := resolveEnvironment(tc.Environment, localEnvs)
+				if env != nil {
+					for _, ss := range env.Stylesheets {
+						relPath := filepath.Join(tsDir, ss.File)
+						if ss.Role == "secondary" {
+							gt.SecondaryStylesheets = append(gt.SecondaryStylesheets, relPath)
+						} else {
+							gt.StylesheetPath = relPath
+						}
+					}
+					if gt.StylesheetPath == "" && len(env.Stylesheets) == 1 {
+						gt.StylesheetPath = filepath.Join(tsDir, env.Stylesheets[0].File)
+					}
+				}
 			}
 
 			if gt.StylesheetPath == "" {
@@ -698,9 +742,30 @@ func convertAssertion(xa xmlAssertion, tsDir string) assertion {
 			a.Children = append(a.Children, convertAssertion(child, tsDir))
 		}
 	case "assert-result-document":
-		a.Value = "skip: assert-result-document not supported"
+		a.URI = xa.URI
+		for _, child := range xa.Children {
+			a.Children = append(a.Children, convertAssertion(child, tsDir))
+		}
 	case "assert-serialization":
-		a.Value = "skip: assert-serialization not supported"
+		a.Method = xa.Method
+		if xa.File != "" {
+			outPath := filepath.Join(tsDir, xa.File)
+			data, err := os.ReadFile(outPath)
+			if err != nil {
+				a.Value = fmt.Sprintf("ERROR: cannot read %s: %v", xa.File, err)
+			} else if !utf8.Valid(data) {
+				// Non-UTF-8 serialization output cannot be embedded in Go source.
+				a.Type = "assert-posture-and-sweep"
+				a.Value = "skip: non-UTF-8 serialization comparison"
+			} else {
+				a.Value = string(data)
+			}
+		} else {
+			a.Value = decodeXMLText(string(xa.Inner))
+		}
+	case "assert-serialization-error":
+		a.Type = "error"
+		a.Value = xa.Code
 	case "assert-posture-and-sweep":
 		a.Value = "skip: streaming not supported"
 	default:
@@ -758,10 +823,6 @@ func classifyUnsupportedAssertions(gt *generatedTest) {
 func unsupportedAssertionReason(assertions []assertion) string {
 	for _, a := range assertions {
 		switch a.Type {
-		case "assert-result-document":
-			return "unsupported assertion: assert-result-document"
-		case "assert-serialization":
-			return "unsupported assertion: assert-serialization"
 		case "assert-posture-and-sweep":
 			return "unsupported assertion: assert-posture-and-sweep"
 		case "all-of":
@@ -1018,7 +1079,18 @@ func emitAssertion(a assertion) []string {
 		return []string{fmt.Sprintf("w3cAssertMessage(%s)", strings.Join(msgChecks, ", "))}
 	case "assert":
 		return []string{fmt.Sprintf("w3cAssertXPath(%s)", goStringLiteral(strings.TrimSpace(a.Value)))}
-	case "assert-result-document", "assert-serialization", "assert-posture-and-sweep":
+	case "assert-result-document":
+		var childChecks []string
+		for _, child := range a.Children {
+			childChecks = append(childChecks, emitCheck(child))
+		}
+		if len(childChecks) == 0 {
+			return []string{"w3cAssertSkip()"}
+		}
+		return []string{fmt.Sprintf("w3cAssertResultDocument(%q, %s)", a.URI, strings.Join(childChecks, ", "))}
+	case "assert-serialization":
+		return []string{fmt.Sprintf("w3cAssertSerialization(%q, %s)", a.Method, goStringLiteral(a.Value))}
+	case "assert-posture-and-sweep":
 		return []string{"w3cAssertSkip()"}
 	default:
 		return []string{"w3cAssertSkip()"}
@@ -1035,6 +1107,14 @@ func emitCheck(a assertion) string {
 		return fmt.Sprintf("w3cCheckXPath(%s)", goStringLiteral(strings.TrimSpace(a.Value)))
 	case "error":
 		return fmt.Sprintf("w3cCheckError(%q)", a.Value)
+	case "assert-serialization":
+		return fmt.Sprintf("w3cCheckSerialization(%q, %s)", a.Method, goStringLiteral(a.Value))
+	case "all-of":
+		var checks []string
+		for _, child := range a.Children {
+			checks = append(checks, emitCheck(child))
+		}
+		return fmt.Sprintf("w3cCheckAllOf(%s)", strings.Join(checks, ", "))
 	default:
 		return "w3cCheckSkip()"
 	}
@@ -1145,7 +1225,7 @@ func goIdentifier(s string) string {
 }
 
 func goStringLiteral(s string) string {
-	if strings.Contains(s, "\n") && !strings.Contains(s, "`") && !strings.Contains(s, "\r") {
+	if strings.Contains(s, "\n") && !strings.Contains(s, "`") && !strings.Contains(s, "\r") && utf8.ValidString(s) {
 		return "`" + s + "`"
 	}
 	return fmt.Sprintf("%q", s)

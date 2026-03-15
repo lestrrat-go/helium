@@ -996,7 +996,7 @@ func TestW3C_expression(t *testing.T) {
 </doc>
 `, Assertions: []w3cAssertion{w3cAssertXML(`<out>;
         </out>`)}},
-		{Name: "expression-2101", StylesheetPath: "tests/expr/expression/expression-2101.xsl", SourceContent: "<doc xmlns:ns=\"http://some_ns/\" ns:att=\"att value\"/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "expression-2101", StylesheetPath: "tests/expr/expression/expression-2101.xsl", SourceContent: "<doc xmlns:ns=\"http://some_ns/\" ns:att=\"att value\"/>", Assertions: []w3cAssertion{w3cAssertSerialization("text", "\r\n    \r\n    [false]\r\n    [false]\r\n\r\n    \r\n    true;\r\n    true;\r\n")}},
 		{Name: "expression-2201", StylesheetPath: "tests/expr/expression/expression-2201.xsl", SourceContent: ` <doc>
    <sub1>
      <child1>child1</child1>
