@@ -111,9 +111,41 @@ func (ec *execContext) executeInstruction(ctx context.Context, inst Instruction)
 		return ec.execMapEntry(ctx, v)
 	case *AnalyzeStringInst:
 		return ec.execAnalyzeString(ctx, v)
+	case *DocumentInst:
+		return ec.execDocument(ctx, v)
 	default:
 		return dynamicError(errCodeXTDE0820, "unsupported instruction type %T", inst)
 	}
+}
+
+// execDocument implements xsl:document: creates a document node wrapping
+// the result of executing the body.
+func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) error {
+	tmpDoc := helium.NewDefaultDocument()
+	frame := &outputFrame{doc: tmpDoc, current: tmpDoc}
+	ec.outputStack = append(ec.outputStack, frame)
+	for _, child := range inst.Body {
+		if err := ec.executeInstruction(ctx, child); err != nil {
+			ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+			return err
+		}
+	}
+	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+
+	// Emit the document node as an item in the parent output frame.
+	// sequenceMode means we are in evaluateBodyAsSequence — emit as item.
+	// Otherwise (DOM mode or evaluateBodyAsDocument) copy children directly.
+	out := ec.currentOutput()
+	if out.sequenceMode {
+		out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: tmpDoc})
+	} else {
+		for child := tmpDoc.FirstChild(); child != nil; child = child.NextSibling() {
+			if err := ec.copyNodeToOutput(child); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (ec *execContext) execAnalyzeString(ctx context.Context, inst *AnalyzeStringInst) error {
@@ -572,6 +604,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error {
 	var value string
 
+	emptySequence := false
 	if inst.Select != nil {
 		// Default separator for select is " "
 		separator := " "
@@ -591,7 +624,14 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 		if err != nil {
 			return err
 		}
-		value = stringifyResultWithSep(result, separator)
+		seq := result.Sequence()
+		if len(seq) == 0 {
+			emptySequence = true
+		}
+		// XSLT spec §11.3: zero-length text nodes in the result sequence
+		// are discarded before stringification.
+		filtered := filterZeroLengthTextNodes(seq)
+		value = stringifySequenceWithSep(filtered, separator)
 	} else if len(inst.Body) > 0 {
 		// Default separator for body content is "" (zero-length string)
 		separator := ""
@@ -608,9 +648,10 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 		}
 		value = stringifySequenceWithSep(val, separator)
 	}
-	// XSLT 3.0: xsl:value-of always produces a text node, even if empty.
-	// Skip only when select evaluates to empty sequence.
-	if value == "" && inst.Select != nil {
+	// Skip text node only when select evaluates to an empty sequence;
+	// an empty string from select="''" should still produce a zero-length
+	// text node (important for as="xs:string" variables).
+	if emptySequence {
 		return nil
 	}
 	text, err := ec.resultDoc.CreateText([]byte(value))
@@ -618,6 +659,21 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 		return err
 	}
 	return ec.addNode(text)
+}
+
+// filterZeroLengthTextNodes removes zero-length text nodes from a sequence.
+// Per XSLT spec §11.3, these are discarded during xsl:value-of processing.
+func filterZeroLengthTextNodes(seq xpath3.Sequence) xpath3.Sequence {
+	result := make(xpath3.Sequence, 0, len(seq))
+	for _, item := range seq {
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			if ni.Node.Type() == helium.TextNode && len(ni.Node.Content()) == 0 {
+				continue
+			}
+		}
+		result = append(result, item)
+	}
+	return result
 }
 
 func (ec *execContext) execText(inst *TextInst) error {
@@ -633,10 +689,14 @@ func (ec *execContext) execText(inst *TextInst) error {
 		if err != nil {
 			return err
 		}
+		// For TVTs that evaluate to empty, skip the text node
+		if value == "" {
+			return nil
+		}
 	}
-	if value == "" {
-		return nil
-	}
+	// Note: xsl:text with empty literal content still produces a zero-length
+	// text node. This is needed for variables with as="text()" to receive
+	// exactly 1 item. Only TVT-expanded empty values are skipped (above).
 	text, err := ec.resultDoc.CreateText([]byte(value))
 	if err != nil {
 		return err
@@ -3704,7 +3764,41 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 		return dynamicError(errCodeXTDE0420,
 			"cannot add namespace node to a non-element node")
 	}
+
+	// If the new namespace binding conflicts with the element's own prefix
+	// (same prefix, different URI), rename the element's prefix to avoid
+	// the collision. Per XSLT spec §11.1.4: if a namespace node clashes
+	// with the element's namespace, the processor must change the element
+	// prefix.
+	if name != "" && elem.Prefix() == name && elem.URI() != value {
+		origURI := elem.URI()
+		// Generate a unique replacement prefix
+		newPrefix := name + "_0"
+		for i := 1; ec.prefixInUse(elem, newPrefix); i++ {
+			newPrefix = fmt.Sprintf("%s_%d", name, i)
+		}
+		// Remove the old namespace declaration for the conflicting prefix
+		elem.RemoveNamespaceByPrefix(name)
+		// Re-bind the element to the new prefix
+		if err := elem.DeclareNamespace(newPrefix, origURI); err != nil {
+			return err
+		}
+		if err := elem.SetActiveNamespace(newPrefix, origURI); err != nil {
+			return err
+		}
+	}
+
 	return elem.DeclareNamespace(name, value)
+}
+
+// prefixInUse checks if a namespace prefix is already declared on an element.
+func (ec *execContext) prefixInUse(elem *helium.Element, prefix string) bool {
+	for _, ns := range elem.Namespaces() {
+		if ns.Prefix() == prefix {
+			return true
+		}
+	}
+	return false
 }
 
 // execMap executes an xsl:map instruction, producing a MapItem from child

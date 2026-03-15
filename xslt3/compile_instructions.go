@@ -234,8 +234,7 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (Instruction, er
 	case "apply-imports":
 		return c.compileApplyImports(elem)
 	case "document":
-		// xsl:document is deprecated in XSLT 3.0, treat like xsl:sequence
-		return c.compileSequence(elem)
+		return c.compileDocument(elem)
 	case "result-document":
 		inst := &ResultDocumentInst{}
 		if href := getAttr(elem, "href"); href != "" {
@@ -1293,6 +1292,18 @@ func (c *compiler) compileWithParam(elem *helium.Element) (*WithParam, error) {
 	}
 
 	return wp, nil
+}
+
+func (c *compiler) compileDocument(elem *helium.Element) (*DocumentInst, error) {
+	inst := &DocumentInst{
+		Validation: getAttr(elem, "validation"),
+	}
+	body, err := c.compileChildren(elem)
+	if err != nil {
+		return nil, err
+	}
+	inst.Body = body
+	return inst, nil
 }
 
 func (c *compiler) compileSequence(elem *helium.Element) (Instruction, error) {
