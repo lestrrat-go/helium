@@ -77,16 +77,21 @@ func validatePatternExprInner(expr xpath3.Expr, topLevel bool) error {
 		return nil
 	case xpath3.FilterExpr:
 		// FilterExpr: a primary expression with predicates.
-		// In patterns, only "." with predicates is allowed (e.g., .[pred]).
-		// A root expression with predicates like /[doc] is NOT allowed.
+		// In patterns, "." and "/" with predicates are allowed in XSLT 3.0.
+		// E.g., .[pred] or (/)[doc]
 		if _, ok := e.Expr.(xpath3.ContextItemExpr); ok {
 			return nil // .[pred] is valid
 		}
-		if _, ok := e.Expr.(xpath3.RootExpr); ok {
-			return fmt.Errorf("predicates on '/' are not allowed")
+		// (/)[pred] — root with predicate: the parser represents (/) as
+		// LocationPath{Absolute: true, Steps: nil}
+		if lp, ok := e.Expr.(xpath3.LocationPath); ok && lp.Absolute && len(lp.Steps) == 0 {
+			return nil
 		}
-		if _, ok := e.Expr.(*xpath3.RootExpr); ok {
-			return fmt.Errorf("predicates on '/' are not allowed")
+		if lp, ok := e.Expr.(*xpath3.LocationPath); ok && lp.Absolute && len(lp.Steps) == 0 {
+			return nil
+		}
+		if _, ok := e.Expr.(xpath3.RootExpr); ok {
+			return nil
 		}
 		return fmt.Errorf("filter expression not allowed in pattern")
 	case xpath3.PathExpr:
@@ -487,6 +492,16 @@ func matchPatternAlt(ctx *execContext, alt *PatternAlt, node helium.Node) bool {
 	case xpath3.ContextItemExpr:
 		// "." matches any node (equivalent to self::node()).
 		return true
+	case xpath3.FilterExpr:
+		// FilterExpr with root inner: (/)[pred] — matches document node
+		// when predicate is true.
+		if lp, ok := e.Expr.(xpath3.LocationPath); ok && lp.Absolute && len(lp.Steps) == 0 {
+			if node.Type() != helium.DocumentNode {
+				return false
+			}
+			return matchByEvaluation(ctx, alt, node)
+		}
+		return matchByEvaluation(ctx, alt, node)
 	default:
 		// For complex expressions, try evaluating from document root
 		// and checking if node is in the result set.
@@ -884,9 +899,19 @@ func evaluatePredicateWithPosition(ctx *execContext, pred xpath3.Expr, node heli
 func matchByEvaluation(ctx *execContext, alt *PatternAlt, node helium.Node) bool {
 	compiled := xpath3.CompileExpr(alt.expr)
 
-	// Try evaluating from each ancestor up to the document root.
-	// This handles nodes in variable trees where the document root
-	// has a synthetic wrapper element.
+	// Try evaluating with the node itself as context first.
+	// Needed for document-node patterns like (/)[doc].
+	xpathCtx := ctx.newXPathContext(node)
+	result, err := compiled.Evaluate(xpathCtx, node)
+	if err == nil {
+		for _, item := range result.Sequence() {
+			if ni, ok := item.(xpath3.NodeItem); ok && ni.Node == node {
+				return true
+			}
+		}
+	}
+
+	// Then try evaluating from each ancestor up to the document root.
 	for ancestor := node.Parent(); ancestor != nil; ancestor = ancestor.Parent() {
 		xpathCtx := ctx.newXPathContext(ancestor)
 		result, err := compiled.Evaluate(xpathCtx, ancestor)
