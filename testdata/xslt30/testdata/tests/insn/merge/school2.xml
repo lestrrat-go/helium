@@ -1,0 +1,59 @@
+<school id="s2">
+    <class id="c1">
+        <pupil>
+            <firstname>D</firstname>
+            <surname>Harry</surname>
+            <age></age>
+            <tests>
+                <test id="test1">
+                    <mark>70</mark>
+                </test>
+            </tests>
+        </pupil>
+        <pupil>
+            <firstname>G</firstname>
+            <surname>Goo</surname>
+            <age></age>
+            <tests>
+                <test id="test1">
+                    <mark>69</mark>
+                </test>
+            </tests>
+        </pupil>
+        <pupil>
+            <firstname>S</firstname>
+            <surname>Joop</surname>
+            <age></age>
+            <tests>
+                <test id="test1">
+                    <mark>69</mark>
+                </test>
+            </tests>
+        </pupil>
+        <pupil>
+            <firstname>A</firstname>
+            <surname>Smith</surname>
+            <age></age>
+            <tests>
+                <test id="test1">
+                    <mark>34</mark>
+                </test>
+            </tests>
+        </pupil>
+        <pupil>
+            <firstname>E</firstname>
+            <surname>Smith</surname>
+            <age></age>
+            <tests>
+                <test id="test1">
+                    <mark>34</mark>
+                </test>
+            </tests>
+        </pupil>
+       
+     
+        
+    </class>
+   
+</school>
+

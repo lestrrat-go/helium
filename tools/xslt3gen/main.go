@@ -70,6 +70,7 @@ type xslEnvironment struct {
 type xslSource struct {
 	Role    string      `xml:"role,attr"`
 	File    string      `xml:"file,attr"`
+	URI     string      `xml:"uri,attr"`
 	Content *xslContent `xml:"content"`
 }
 
@@ -239,12 +240,16 @@ func main() {
 			env := resolveEnvironment(tc.Environment, localEnvs)
 			if env != nil {
 				for _, src := range env.Sources {
+					if src.File != "" {
+						relPath := filepath.Join(tsDir, src.File)
+						// Always copy source files as assets (for document()/fn:doc() etc.)
+						assetFiles[relPath] = struct{}{}
+					}
 					if src.Role != "." {
 						continue
 					}
 					if src.File != "" {
 						gt.SourceDocPath = filepath.Join(tsDir, src.File)
-						assetFiles[gt.SourceDocPath] = struct{}{}
 					} else if src.Content != nil {
 						gt.SourceContent = decodeXMLText(string(src.Content.Inner))
 					}

@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<!DOCTYPE docs [
+<!ELEMENT docs (item*)>
+<!ELEMENT item EMPTY>
+<!ATTLIST item id ID #REQUIRED>
+]>
+<docs>
+<item id="a1"/>
+<item id="a2"/>
+<item id="a3"/>
+<item id="a4"/>
+</docs>
