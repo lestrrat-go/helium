@@ -221,10 +221,6 @@ func matchPatternAlt(ctx *execContext, alt *PatternAlt, node helium.Node) bool {
 		return node.Type() == helium.DocumentNode
 	case *xpath3.RootExpr:
 		return node.Type() == helium.DocumentNode
-	case xpath3.ContextItemExpr:
-		// "." matches any node (XSLT 3.0 §5.5.3)
-		_ = e
-		return true
 	default:
 		// For complex expressions, try evaluating from document root
 		// and checking if node is in the result set.
