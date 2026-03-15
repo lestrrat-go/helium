@@ -148,8 +148,8 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 		c.xpathDefaultNS = xdn
 	}
 
-	// Read expand-text from stylesheet root (XSLT 3.0)
-	if et := getAttr(root, "expand-text"); et != "" {
+	// Read expand-text from stylesheet root (XSLT 3.0, using GetAttribute to catch empty values)
+	if et, hasET := root.GetAttribute("expand-text"); hasET {
 		if v, ok := parseXSDBool(et); ok {
 			c.expandText = v
 		} else {
@@ -377,9 +377,9 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		c.localExcludes = newExcludes
 	}
 
-	// Handle expand-text on xsl:template
+	// Handle expand-text on xsl:template (using GetAttribute to catch empty values)
 	savedExpandText := c.expandText
-	if et := getAttr(elem, "expand-text"); et != "" {
+	if et, hasET := elem.GetAttribute("expand-text"); hasET {
 		if v, ok := parseXSDBool(et); ok {
 			c.expandText = v
 		} else {
@@ -727,9 +727,9 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 		return staticError(errCodeXTSE0010, "xsl:function name %q must have a namespace prefix", name)
 	}
 
-	// Handle expand-text on xsl:function
+	// Handle expand-text on xsl:function (using GetAttribute to catch empty values)
 	savedExpandText := c.expandText
-	if et := getAttr(elem, "expand-text"); et != "" {
+	if et, hasET := elem.GetAttribute("expand-text"); hasET {
 		if v, ok := parseXSDBool(et); ok {
 			c.expandText = v
 		} else {
@@ -763,7 +763,7 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 	}
 
 	// Validate boolean attributes on xsl:mode (using GetAttribute to catch empty values)
-	for _, boolAttr := range []string{"streamable", "warning-on-no-match", "typed"} {
+	for _, boolAttr := range []string{"streamable", "warning-on-no-match", "warning-on-multiple-match", "typed"} {
 		if v, has := elem.GetAttribute(boolAttr); has {
 			if err := validateBooleanAttr("xsl:mode", boolAttr, v); err != nil {
 				return err

@@ -18,6 +18,9 @@ var (
 	variableAllowedAttrs = map[string]struct{}{
 		"name": {}, "select": {}, "as": {}, "static": {}, "visibility": {},
 	}
+	copyOfAllowedAttrs = map[string]struct{}{
+		"select": {}, "copy-namespaces": {}, "type": {}, "validation": {},
+	}
 	// XSLT-namespace attributes allowed on literal result elements
 	lreAllowedXSLTAttrs = map[string]struct{}{
 		"use-attribute-sets":        {},
@@ -82,7 +85,7 @@ func (c *compiler) compileInstruction(elem *helium.Element) (Instruction, error)
 
 	// Handle expand-text inheritance (check both unprefixed and xsl:-prefixed for LREs)
 	savedExpandText := c.expandText
-	if et := getAttr(elem, "expand-text"); et != "" {
+	if et, hasET := elem.GetAttribute("expand-text"); hasET {
 		if v, ok := parseXSDBool(et); ok {
 			c.expandText = v
 		} else if elem.URI() == NSXSLT {
@@ -839,9 +842,14 @@ func (c *compiler) compileLocalParam(elem *helium.Element) (*ParamInst, error) {
 }
 
 func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
-	// Validate boolean attribute: inherit-namespaces (including empty string)
+	// Validate boolean attributes (including empty string)
 	if inAttr, hasIn := elem.GetAttribute("inherit-namespaces"); hasIn {
 		if err := validateBooleanAttr("xsl:copy", "inherit-namespaces", inAttr); err != nil {
+			return nil, err
+		}
+	}
+	if cn, hasCN := elem.GetAttribute("copy-namespaces"); hasCN {
+		if err := validateBooleanAttr("xsl:copy", "copy-namespaces", cn); err != nil {
 			return nil, err
 		}
 	}
@@ -880,6 +888,18 @@ func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
 }
 
 func (c *compiler) compileCopyOf(elem *helium.Element) (*CopyOfInst, error) {
+	// Validate attributes
+	if err := validateXSLTAttrs(elem, copyOfAllowedAttrs); err != nil {
+		return nil, err
+	}
+
+	// Validate boolean attribute: copy-namespaces
+	if cn, hasCN := elem.GetAttribute("copy-namespaces"); hasCN {
+		if err := validateBooleanAttr("xsl:copy-of", "copy-namespaces", cn); err != nil {
+			return nil, err
+		}
+	}
+
 	selectAttr := getAttr(elem, "select")
 	if selectAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:copy-of requires select attribute")
@@ -1388,8 +1408,14 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 
 	inst := &ForEachGroupInst{Select: expr}
 
-	if comp := getAttr(elem, "composite"); comp == "yes" || comp == "true" || comp == "1" {
-		inst.Composite = true
+	// Validate boolean attribute: composite
+	if comp, hasComp := elem.GetAttribute("composite"); hasComp {
+		if err := validateBooleanAttr("xsl:for-each-group", "composite", comp); err != nil {
+			return nil, err
+		}
+		if comp == "yes" || comp == "true" || comp == "1" {
+			inst.Composite = true
+		}
 	}
 
 	if gb := getAttr(elem, "group-by"); gb != "" {
