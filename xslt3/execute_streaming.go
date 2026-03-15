@@ -456,9 +456,20 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 		},
 	}
 
+	// Save previous merge functions (for nested xsl:merge) and restore on exit.
+	savedMergeGroup := ec.cachedFns["current-merge-group"]
+	savedMergeKey := ec.cachedFns["current-merge-key"]
 	defer func() {
-		delete(ec.cachedFns, "current-merge-group")
-		delete(ec.cachedFns, "current-merge-key")
+		if savedMergeGroup != nil {
+			ec.cachedFns["current-merge-group"] = savedMergeGroup
+		} else {
+			delete(ec.cachedFns, "current-merge-group")
+		}
+		if savedMergeKey != nil {
+			ec.cachedFns["current-merge-key"] = savedMergeKey
+		} else {
+			delete(ec.cachedFns, "current-merge-key")
+		}
 	}()
 
 	// Save/restore context.

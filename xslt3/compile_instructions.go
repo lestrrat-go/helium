@@ -303,9 +303,15 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (Instruction, er
 		return c.compileNextIteration(elem)
 	case "merge":
 		return c.compileMerge(elem)
-	case "merge-source", "merge-action", "merge-key":
-		// Handled as part of xsl:merge compilation
-		return nil, nil
+	case "merge-source":
+		// xsl:merge-source must be a direct child of xsl:merge
+		return nil, staticError(errCodeXTSE0010, "xsl:merge-source must be a direct child of xsl:merge")
+	case "merge-action":
+		// xsl:merge-action must be a direct child of xsl:merge
+		return nil, staticError(errCodeXTSE0010, "xsl:merge-action must be a direct child of xsl:merge")
+	case "merge-key":
+		// xsl:merge-key must be a direct child of xsl:merge-source
+		return nil, staticError(errCodeXTSE0010, "xsl:merge-key must be a direct child of xsl:merge-source")
 	case "on-completion":
 		// xsl:on-completion must be a direct child of xsl:iterate — if we reach
 		// here, it was encountered outside that context.
