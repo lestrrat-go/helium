@@ -3390,7 +3390,8 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 	out := ec.currentOutput()
 	elem, ok := out.current.(*helium.Element)
 	if !ok {
-		return nil
+		return dynamicError(errCodeXTDE0420,
+			"cannot add namespace node to a non-element node")
 	}
 	return elem.DeclareNamespace(name, value)
 }
