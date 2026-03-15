@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -243,6 +244,14 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (Instruction, er
 				return nil, err
 			}
 			inst.Href = avt
+		}
+		// Validate html-version: must be a decimal number if present and not an AVT
+		if hv := getAttr(elem, "html-version"); hv != "" {
+			if !strings.ContainsAny(hv, "{}") {
+				if _, err := strconv.ParseFloat(hv, 64); err != nil {
+					return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:result-document/@html-version", hv)
+				}
+			}
 		}
 		body, err := c.compileChildren(elem)
 		if err != nil {

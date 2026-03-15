@@ -2797,19 +2797,50 @@ func (ec *execContext) execOnEmpty(ctx context.Context, inst *OnEmptyInst) error
 }
 
 func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocumentInst) error {
-	// xsl:result-document redirects output to a secondary destination.
-	// Execute the body into a temporary document so it doesn't pollute
-	// the primary output. TODO: actually store/serialize secondary results.
-	tmpDoc := helium.NewDefaultDocument()
-	tmpRoot, err := tmpDoc.CreateElement("_result")
-	if err != nil {
-		return err
-	}
-	if err := tmpDoc.AddChild(tmpRoot); err != nil {
-		return err
+	// Evaluate the href AVT to determine the output URI.
+	href := ""
+	if inst.Href != nil {
+		var err error
+		href, err = inst.Href.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
 	}
 
-	ec.outputStack = append(ec.outputStack, &outputFrame{doc: tmpDoc, current: tmpRoot})
+	// Check for duplicate URI (XTRE1495).
+	if _, used := ec.usedResultURIs[href]; used {
+		return dynamicError(errCodeXTRE1495, "two result documents written to same URI: %q", href)
+	}
+
+	isPrimary := href == ""
+
+	if isPrimary && ec.primaryClaimedImplicitly {
+		return dynamicError(errCodeXTRE1495, "primary output URI already has implicit content")
+	}
+
+	ec.usedResultURIs[href] = struct{}{}
+
+	if isPrimary {
+		// Write directly to the primary output (base frame).
+		savedStack := ec.outputStack
+		ec.outputStack = ec.outputStack[:1] // keep only the base frame
+		ec.insideResultDocPrimary = true
+		for _, child := range inst.Body {
+			if err := ec.executeInstruction(ctx, child); err != nil {
+				ec.insideResultDocPrimary = false
+				ec.outputStack = savedStack
+				return err
+			}
+		}
+		ec.insideResultDocPrimary = false
+		ec.outputStack = savedStack
+		return nil
+	}
+
+	// Secondary output: execute body into a temporary document.
+	tmpDoc := helium.NewDefaultDocument()
+
+	ec.outputStack = append(ec.outputStack, &outputFrame{doc: tmpDoc, current: tmpDoc})
 	for _, child := range inst.Body {
 		if err := ec.executeInstruction(ctx, child); err != nil {
 			ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
@@ -2818,8 +2849,8 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 	}
 	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 
-	// TODO: store the secondary result in a map keyed by the evaluated href,
-	// and make it available via assert-result-document in the test harness.
+	// Store the secondary result document.
+	ec.resultDocuments[href] = tmpDoc
 	return nil
 }
 
