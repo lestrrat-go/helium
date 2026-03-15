@@ -111,6 +111,8 @@ func (ec *execContext) executeInstruction(ctx context.Context, inst Instruction)
 		return ec.execMapEntry(ctx, v)
 	case *AnalyzeStringInst:
 		return ec.execAnalyzeString(ctx, v)
+	case *EvaluateInst:
+		return ec.execEvaluate(ctx, v)
 	default:
 		return dynamicError(errCodeXTDE0820, "unsupported instruction type %T", inst)
 	}
@@ -3796,4 +3798,237 @@ func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) err
 		return ec.addNode(text)
 	}
 	return nil
+}
+
+// execEvaluate implements xsl:evaluate — dynamically compile and evaluate
+// an XPath expression string at runtime.
+func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) error {
+	// 1. Evaluate the xpath attribute expression to get the XPath string.
+	xpathCtx := ec.newXPathContext(ec.contextNode)
+	xpathResult, err := inst.XPath.Evaluate(xpathCtx, ec.contextNode)
+	if err != nil {
+		return err
+	}
+	xpathStr, ok := xpathResult.IsString()
+	if !ok {
+		// Atomize and convert to string
+		seq := xpathResult.Sequence()
+		if len(seq) == 0 {
+			return dynamicError("XTDE3160", "xsl:evaluate: xpath attribute evaluated to empty sequence")
+		}
+		av, atomErr := xpath3.AtomizeItem(seq[0])
+		if atomErr != nil {
+			return atomErr
+		}
+		s, sErr := xpath3.AtomicToString(av)
+		if sErr != nil {
+			return sErr
+		}
+		xpathStr = s
+	}
+
+	if strings.TrimSpace(xpathStr) == "" {
+		return dynamicError("XTDE3160", "xsl:evaluate: xpath expression is empty")
+	}
+
+	// 2. Determine the context item for dynamic evaluation.
+	var dynContextNode helium.Node
+	var dynContextItem xpath3.Item
+	hasContextItem := true
+	if inst.ContextItem != nil {
+		ciResult, ciErr := inst.ContextItem.Evaluate(xpathCtx, ec.contextNode)
+		if ciErr != nil {
+			return ciErr
+		}
+		ciSeq := ciResult.Sequence()
+		if len(ciSeq) == 1 {
+			switch v := ciSeq[0].(type) {
+			case xpath3.NodeItem:
+				dynContextNode = v.Node
+			default:
+				dynContextItem = v
+			}
+		} else if len(ciSeq) > 1 {
+			return dynamicError("XTTE3210", "xsl:evaluate: context-item must be a single item, got %d items", len(ciSeq))
+		} else {
+			// Empty sequence: no context item
+			hasContextItem = false
+		}
+	} else {
+		// Default: use the current context node
+		dynContextNode = ec.contextNode
+	}
+
+	// 3. Build namespace bindings for the dynamic expression.
+	nsBindings := make(map[string]string)
+
+	// Start with stylesheet namespace bindings
+	for k, v := range ec.stylesheet.namespaces {
+		if k == "" {
+			continue // don't inherit default namespace by default
+		}
+		nsBindings[k] = v
+	}
+
+	// If namespace-context is specified, collect namespaces from that node
+	if inst.NamespaceContext != nil {
+		ncResult, ncErr := inst.NamespaceContext.Evaluate(xpathCtx, ec.contextNode)
+		if ncErr != nil {
+			return ncErr
+		}
+		ncSeq := ncResult.Sequence()
+		if len(ncSeq) > 0 {
+			if ni, nodeOK := ncSeq[0].(xpath3.NodeItem); nodeOK {
+				nsNode := ni.Node
+				// Walk up to find an element
+				for nsNode != nil {
+					if elem, elemOK := nsNode.(*helium.Element); elemOK {
+						// Collect in-scope namespaces walking up
+						seen := make(map[string]struct{})
+						var cur helium.Node = elem
+						for cur != nil {
+							if e, eOK := cur.(*helium.Element); eOK {
+								for _, ns := range e.Namespaces() {
+									prefix := ns.Prefix()
+									if _, exists := seen[prefix]; !exists {
+										seen[prefix] = struct{}{}
+										nsBindings[prefix] = ns.URI()
+									}
+								}
+							}
+							cur = cur.Parent()
+						}
+						break
+					}
+					nsNode = nsNode.Parent()
+				}
+			}
+		}
+	}
+
+	// 4. Handle xpath-default-namespace from the instruction
+	if inst.HasXPathDefaultNS {
+		nsBindings[""] = inst.XPathDefaultNS
+	} else if ec.hasXPathDefaultNS {
+		nsBindings[""] = ec.xpathDefaultNS
+	}
+
+	// 5. Compile the dynamic XPath expression.
+	dynExpr, compileErr := xpath3.Compile(xpathStr)
+	if compileErr != nil {
+		return dynamicError("XTDE3160", "xsl:evaluate: cannot compile XPath expression %q: %v", xpathStr, compileErr)
+	}
+
+	// 6. Build evaluation context with variables from xsl:with-param.
+	dynCtx := ec.transformCtx
+	if dynCtx == nil {
+		dynCtx = context.Background()
+	}
+	dynCtx = withExecContext(dynCtx, ec)
+
+	if len(nsBindings) > 0 {
+		dynCtx = xpath3.WithNamespaces(dynCtx, nsBindings)
+	}
+
+	// Collect variables: start with current XSLT variables
+	vars := ec.collectAllVars()
+
+	// Add xsl:with-param variables (lower priority)
+	for _, wp := range inst.Params {
+		paramVal, paramErr := ec.evaluateWithParam(ctx, wp)
+		if paramErr != nil {
+			return paramErr
+		}
+		vars[wp.Name] = paramVal
+	}
+
+	// Add with-params map variables (higher priority, overrides xsl:with-param)
+	if inst.WithParamsExpr != nil {
+		wpResult, wpErr := inst.WithParamsExpr.Evaluate(xpathCtx, ec.contextNode)
+		if wpErr != nil {
+			return wpErr
+		}
+		wpSeq := wpResult.Sequence()
+		if len(wpSeq) == 1 {
+			if wpMap, mapOK := wpSeq[0].(xpath3.MapItem); mapOK {
+				forEachErr := wpMap.ForEach(func(key xpath3.AtomicValue, value xpath3.Sequence) error {
+					var paramName string
+					if key.TypeName == xpath3.TypeQName {
+						qn := key.QNameVal()
+						paramName = qn.Local
+					} else {
+						s, sErr := xpath3.AtomicToString(key)
+						if sErr != nil {
+							return sErr
+						}
+						paramName = s
+					}
+					vars[paramName] = value
+					return nil
+				})
+				if forEachErr != nil {
+					return forEachErr
+				}
+			}
+		}
+	}
+
+	dynCtx = xpath3.WithVariablesBorrowed(dynCtx, vars)
+	dynCtx = xpath3.WithFunctionsBorrowed(dynCtx, ec.xsltFunctions())
+	if fnsNS := ec.xsltFunctionsNS(); len(fnsNS) > 0 {
+		dynCtx = xpath3.WithFunctionsNSBorrowed(dynCtx, fnsNS)
+	}
+
+	if len(ec.typeAnnotations) > 0 {
+		dynCtx = xpath3.WithTypeAnnotations(dynCtx, ec.typeAnnotations)
+	}
+
+	// Handle base-uri
+	if inst.BaseURI != nil {
+		baseURI, buErr := inst.BaseURI.evaluate(dynCtx, ec.contextNode)
+		if buErr != nil {
+			return buErr
+		}
+		if baseURI != "" {
+			dynCtx = xpath3.WithBaseURI(dynCtx, baseURI)
+		}
+	} else if ec.stylesheet.baseURI != "" {
+		dynCtx = xpath3.WithBaseURI(dynCtx, ec.stylesheet.baseURI)
+	}
+
+	// Decimal formats
+	if len(ec.stylesheet.decimalFormats) > 0 {
+		for qn, df := range ec.stylesheet.decimalFormats {
+			if qn == (xpath3.QualifiedName{}) {
+				dynCtx = xpath3.WithDefaultDecimalFormat(dynCtx, df)
+			}
+		}
+		dynCtx = xpath3.WithNamedDecimalFormats(dynCtx, ec.stylesheet.decimalFormats)
+	}
+
+	// Set context item if it's an atomic value
+	if dynContextItem != nil {
+		dynCtx = xpath3.WithContextItem(dynCtx, dynContextItem)
+	}
+
+	if hasContextItem {
+		dynCtx = xpath3.WithPosition(dynCtx, 1)
+		dynCtx = xpath3.WithSize(dynCtx, 1)
+	}
+
+	// 7. Evaluate the dynamic expression.
+	var evalNode helium.Node
+	if dynContextNode != nil {
+		evalNode = dynContextNode
+	} else if hasContextItem && ec.contextNode != nil {
+		evalNode = ec.contextNode
+	}
+
+	result, evalErr := dynExpr.Evaluate(dynCtx, evalNode)
+	if evalErr != nil {
+		return evalErr
+	}
+
+	// 8. Output the result sequence.
+	return ec.outputSequence(result.Sequence())
 }

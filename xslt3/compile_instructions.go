@@ -157,6 +157,8 @@ func (c *compiler) setInstructionXPathNS(inst Instruction, hasLocal bool) {
 		set(&v.xpathNS)
 	case *ChooseInst:
 		set(&v.xpathNS)
+	case *EvaluateInst:
+		set(&v.xpathNS)
 	}
 }
 
@@ -299,6 +301,8 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (Instruction, er
 		return nil, nil
 	case "analyze-string":
 		return c.compileAnalyzeString(elem)
+	case "evaluate":
+		return c.compileEvaluate(elem)
 	case "source-document":
 		return c.compileSourceDocument(elem)
 	case "iterate":
@@ -1843,6 +1847,85 @@ func (c *compiler) compileAnalyzeString(elem *helium.Element) (*AnalyzeStringIns
 	// XTSE1130: at least one of matching-substring or non-matching-substring is required
 	if len(inst.MatchingBody) == 0 && len(inst.NonMatchingBody) == 0 {
 		return nil, staticError("XTSE1130", "xsl:analyze-string must contain xsl:matching-substring or xsl:non-matching-substring")
+	}
+
+	return inst, nil
+}
+
+// compileEvaluate compiles xsl:evaluate.
+func (c *compiler) compileEvaluate(elem *helium.Element) (Instruction, error) {
+	inst := &EvaluateInst{}
+
+	// xpath attribute is required
+	xpathAttr := getAttr(elem, "xpath")
+	if xpathAttr == "" {
+		return nil, staticError(errCodeXTSE0010, "xsl:evaluate requires an xpath attribute")
+	}
+	expr, err := compileXPath(xpathAttr, c.nsBindings)
+	if err != nil {
+		return nil, err
+	}
+	inst.XPath = expr
+
+	// context-item (optional)
+	if ci := getAttr(elem, "context-item"); ci != "" {
+		ciExpr, err := compileXPath(ci, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.ContextItem = ciExpr
+	}
+
+	// base-uri (optional AVT)
+	if bu := getAttr(elem, "base-uri"); bu != "" {
+		avt, err := compileAVT(bu, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.BaseURI = avt
+	}
+
+	// namespace-context (optional XPath expression producing a node)
+	if nc := getAttr(elem, "namespace-context"); nc != "" {
+		ncExpr, err := compileXPath(nc, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.NamespaceContext = ncExpr
+	}
+
+	// with-params (optional map expression)
+	if wp := getAttr(elem, "with-params"); wp != "" {
+		wpExpr, err := compileXPath(wp, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.WithParamsExpr = wpExpr
+	}
+
+	// as (optional type name)
+	inst.As = getAttr(elem, "as")
+
+	// Compile child xsl:with-param elements
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		childElem, ok := child.(*helium.Element)
+		if !ok {
+			continue
+		}
+		if childElem.URI() != NSXSLT {
+			continue
+		}
+		if childElem.LocalName() == "with-param" {
+			wp, err := c.compileWithParam(childElem)
+			if err != nil {
+				return nil, err
+			}
+			inst.Params = append(inst.Params, wp)
+		} else if childElem.LocalName() == "fallback" {
+			// skip
+		} else {
+			return nil, staticError(errCodeXTSE0010, "xsl:evaluate may only contain xsl:with-param or xsl:fallback, found xsl:%s", childElem.LocalName())
+		}
 	}
 
 	return inst, nil

@@ -614,7 +614,7 @@ func TestW3C_expand_text(t *testing.T) {
 		{Name: "cvt-011", StylesheetPath: "tests/attr/expand-text/cvt-011.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = '2'")}},
 		{Name: "cvt-012", StylesheetPath: "tests/attr/expand-text/cvt-012.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = '2'")}},
 		{Name: "cvt-013", StylesheetPath: "tests/attr/expand-text/cvt-013.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0350"},
-		{Name: "cvt-014", StylesheetPath: "tests/attr/expand-text/cvt-014.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = '4'")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "cvt-014", StylesheetPath: "tests/attr/expand-text/cvt-014.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = '4'")}},
 		{Name: "cvt-015", StylesheetPath: "tests/attr/expand-text/cvt-015.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out = '4'"))}},
 		{Name: "cvt-016", StylesheetPath: "tests/attr/expand-text/cvt-016.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out = '4'"))}},
 		{Name: "cvt-017", StylesheetPath: "tests/attr/expand-text/cvt-017.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = '4'")}},

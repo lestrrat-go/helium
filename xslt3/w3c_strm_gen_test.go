@@ -324,9 +324,9 @@ func TestW3C_sf_exactly_one(t *testing.T) {
 func TestW3C_sf_filter(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "sf-filter-001", StylesheetPath: "tests/strm/sf-filter/sf-filter-001.xsl", InitialTemplate: "r-001", ExpectError: true, ErrorCode: "XTSE3430", Skip: "unsupported feature: higher_order_functions"},
-		{Name: "sf-filter-002", StylesheetPath: "tests/strm/sf-filter/sf-filter-002.xsl", InitialTemplate: "r-002", Assertions: []w3cAssertion{w3cAssertXML("<out><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "sf-filter-003", StylesheetPath: "tests/strm/sf-filter/sf-filter-003.xsl", InitialTemplate: "r-003", Assertions: []w3cAssertion{w3cAssertXML("<out>22.5 18.0</out>")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "sf-filter-001", StylesheetPath: "tests/strm/sf-filter/sf-filter-001.xsl", InitialTemplate: "r-001", ExpectError: true, ErrorCode: "XTSE3430"},
+		{Name: "sf-filter-002", StylesheetPath: "tests/strm/sf-filter/sf-filter-002.xsl", InitialTemplate: "r-002", Assertions: []w3cAssertion{w3cAssertXML("<out><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>")}},
+		{Name: "sf-filter-003", StylesheetPath: "tests/strm/sf-filter/sf-filter-003.xsl", InitialTemplate: "r-003", Assertions: []w3cAssertion{w3cAssertXML("<out>22.5 18.0</out>")}},
 	})
 }
 
@@ -359,7 +359,7 @@ func TestW3C_sf_fold_left(t *testing.T) {
 func TestW3C_sf_fold_right(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "sf-fold-right-003", StylesheetPath: "tests/strm/sf-fold-right/sf-fold-right-A.xsl", InitialTemplate: "s-003", Assertions: []w3cAssertion{w3cAssertXML("<out>54.37</out>")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "sf-fold-right-003", StylesheetPath: "tests/strm/sf-fold-right/sf-fold-right-A.xsl", InitialTemplate: "s-003", Assertions: []w3cAssertion{w3cAssertXML("<out>54.37</out>")}},
 	})
 }
 

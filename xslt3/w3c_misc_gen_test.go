@@ -430,7 +430,7 @@ func TestW3C_catalog(t *testing.T) {
 		{Name: "catalog-007", StylesheetPath: "tests/misc/catalog/catalog-007.xsl", InitialTemplate: "showAbsentPairs", Assertions: []w3cAssertion{w3cAssertXPath("/out/absent = ''")}},
 		{Name: "catalog-008", StylesheetPath: "tests/misc/catalog/catalog-008.xsl", InitialTemplate: "showDifferences", Assertions: []w3cAssertion{w3cAssertXPath("/out/absentFromSchema = ''"), w3cAssertXPath("/out/absentFromSyntax = ''")}},
 		{Name: "catalog-009", StylesheetPath: "tests/misc/catalog/catalog-009.xsl", SourceDocPath: "catalog.xml", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("empty(/out/error)")}, Skip: "unsupported feature: schema_aware"},
-		{Name: "catalog-010", StylesheetPath: "tests/misc/catalog/catalog-010.xsl", SourceDocPath: "catalog.xml", Assertions: []w3cAssertion{w3cAssertXPath("not(/out/invalid)")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "catalog-010", StylesheetPath: "tests/misc/catalog/catalog-010.xsl", SourceDocPath: "catalog.xml", Assertions: []w3cAssertion{w3cAssertXPath("not(/out/invalid)")}},
 		{Name: "catalog-012", StylesheetPath: "tests/misc/catalog/catalog-012.xsl", SourceDocPath: "catalog.xml", Assertions: []w3cAssertion{w3cAssertXPath("not(/out/backwards)")}},
 	})
 }
@@ -1045,7 +1045,7 @@ func TestW3C_error(t *testing.T) {
 		{Name: "error-0440b", StylesheetPath: "tests/misc/error/error-0440b.xsl", SourceContent: `<doc>
   <element attribute="3"/>
 </doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE0440"},
-		{Name: "error-0450a", StylesheetPath: "tests/misc/error/error-0450a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE0450", Skip: "unsupported feature: higher_order_functions"},
+		{Name: "error-0450a", StylesheetPath: "tests/misc/error/error-0450a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE0450"},
 		{Name: "error-0500a", StylesheetPath: "tests/misc/error/error-0500a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
 </doc>`, ExpectError: true, ErrorCode: "XTSE0500"},
@@ -1838,7 +1838,7 @@ func TestW3C_error(t *testing.T) {
 		{Name: "error-3155a", StylesheetPath: "tests/misc/error/error-3155a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3155"},
 		{Name: "error-3160a", StylesheetPath: "tests/misc/error/error-3160a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE3160"},
 		{Name: "error-3170a", StylesheetPath: "tests/misc/error/error-3170a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE3170"},
-		{Name: "error-3175a", StylesheetPath: "tests/misc/error/error-3175a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE3175"},
+		{Name: "error-3175a", StylesheetPath: "tests/misc/error/error-3175a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE3175", Skip: "feature present but test requires absent: dynamic_evaluation"},
 		{Name: "error-3180a", StylesheetPath: "tests/misc/error/error-3180a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE3180"},
 		{Name: "error-3185a", StylesheetPath: "tests/misc/error/error-3185a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3185"},
 		{Name: "error-3190a", StylesheetPath: "tests/misc/error/error-3190a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3190"},
@@ -2526,8 +2526,8 @@ It put its sooty foot
 		{Name: "regex-086b", StylesheetPath: "", SourceContent: "<doc><str1>abraacadabra</str1></doc>", Assertions: []w3cAssertion{w3cAssertXPath("/out/A = \"true\""), w3cAssertXPath("/out/B = \"true\""), w3cAssertXPath("/out/C = \"true\""), w3cAssertXPath("/out/D = \"true\""), w3cAssertXPath("/out/E = \"true\""), w3cAssertXPath("/out/F = \"true\"")}, Skip: "no stylesheet"},
 		{Name: "regex-086c", StylesheetPath: "", SourceContent: "<doc><str1>abraacadabra</str1></doc>", Assertions: []w3cAssertion{w3cAssertXPath("/out/A = \"true\""), w3cAssertXPath("/out/B = \"true\""), w3cAssertXPath("/out/C = \"true\""), w3cAssertXPath("/out/D = \"true\""), w3cAssertXPath("/out/E = \"true\""), w3cAssertXPath("/out/F = \"true\""), w3cAssertXPath("/out/G = \"false\""), w3cAssertXPath("/out/H = \"true\"")}, Skip: "no stylesheet"},
 		{Name: "regex-086d", StylesheetPath: "", SourceContent: "<doc><str1>abraacadabra</str1></doc>", Assertions: []w3cAssertion{w3cAssertXPath("/out/A = \"true\""), w3cAssertXPath("/out/B = \"true\""), w3cAssertXPath("/out/C = \"true\""), w3cAssertXPath("/out/D = \"true\""), w3cAssertXPath("/out/E = \"true\""), w3cAssertXPath("/out/F = \"true\"")}, Skip: "no stylesheet"},
-		{Name: "regex-090", StylesheetPath: "tests/misc/regex/regex-090.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out and not(/out/node())")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "regex-091", StylesheetPath: "tests/misc/regex/regex-091.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out and not(/out/node())")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "regex-090", StylesheetPath: "tests/misc/regex/regex-090.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out and not(/out/node())")}},
+		{Name: "regex-091", StylesheetPath: "tests/misc/regex/regex-091.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out and not(/out/node())")}},
 	})
 }
 
@@ -4599,15 +4599,15 @@ func TestW3C_seqtor(t *testing.T) {
 		{Name: "seqtor-040e", StylesheetPath: "tests/misc/seqtor/seqtor-040e.xsl", Assertions: []w3cAssertion{w3cAssertXML("<bar>||</bar>")}},
 		{Name: "seqtor-041", StylesheetPath: "tests/misc/seqtor/seqtor-041.xsl", Assertions: []w3cAssertion{w3cAssertXML("<result><count>3</count><text/></result>")}},
 		{Name: "seqtor-042", StylesheetPath: "tests/misc/seqtor/seqtor-042.xsl", Assertions: []w3cAssertion{w3cAssertXML("<result><count>3</count><text>non-empty and more</text></result>")}},
-		{Name: "seqtor-043a", StylesheetPath: "tests/misc/seqtor/seqtor-043a.xsl", Assertions: []w3cAssertion{w3cAssertXML("<result>42 84 126 168 210 252 294 336 378 420</result>"), w3cAssertStringValue("42 84 126 168 210 252 294 336 378 420")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "seqtor-043b", StylesheetPath: "tests/misc/seqtor/seqtor-043b.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "seqtor-043c", StylesheetPath: "tests/misc/seqtor/seqtor-043c.xsl", Assertions: []w3cAssertion{w3cAssertXML("42 84 126 168 210 252 294 336 378 420"), w3cAssertStringValue("42 84 126 168 210 252 294 336 378 420")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "seqtor-043d", StylesheetPath: "tests/misc/seqtor/seqtor-043d.xsl", Assertions: []w3cAssertion{w3cAssertXML("4284126168210252294336378420"), w3cAssertStringValue("4284126168210252294336378420")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "seqtor-043e", StylesheetPath: "tests/misc/seqtor/seqtor-043e.xsl", Assertions: []w3cAssertion{w3cAssertXML("42 84 126 168 210 252 294 336 378 420"), w3cAssertStringValue("42 84 126 168 210 252 294 336 378 420")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "seqtor-043f", StylesheetPath: "tests/misc/seqtor/seqtor-043f.xsl", Assertions: []w3cAssertion{w3cAssertXML("42 84 126 168 210 252 294 336 378 420"), w3cAssertStringValue("42 84 126 168 210 252 294 336 378 420")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "seqtor-043g", StylesheetPath: "tests/misc/seqtor/seqtor-043g.xsl", Assertions: []w3cAssertion{w3cAssertXML("42 84 126 168 210 252 294 336 378 420"), w3cAssertStringValue("42 84 126 168 210 252 294 336 378 420")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "seqtor-043h", StylesheetPath: "tests/misc/seqtor/seqtor-043h.xsl", Assertions: []w3cAssertion{w3cAssertXML("42 84 126 168 210 252 294 336 378 420"), w3cAssertStringValue("  42 84 126 168 210 252 294 336 378 420  ")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "seqtor-043i", StylesheetPath: "tests/misc/seqtor/seqtor-043i.xsl", Assertions: []w3cAssertion{w3cAssertXML("42   84   126   168   210   252   294   336   378   420"), w3cAssertStringValue(" 42   84   126   168   210   252   294   336   378   420 ")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "seqtor-043a", StylesheetPath: "tests/misc/seqtor/seqtor-043a.xsl", Assertions: []w3cAssertion{w3cAssertXML("<result>42 84 126 168 210 252 294 336 378 420</result>"), w3cAssertStringValue("42 84 126 168 210 252 294 336 378 420")}},
+		{Name: "seqtor-043b", StylesheetPath: "tests/misc/seqtor/seqtor-043b.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion type"},
+		{Name: "seqtor-043c", StylesheetPath: "tests/misc/seqtor/seqtor-043c.xsl", Assertions: []w3cAssertion{w3cAssertXML("42 84 126 168 210 252 294 336 378 420"), w3cAssertStringValue("42 84 126 168 210 252 294 336 378 420")}},
+		{Name: "seqtor-043d", StylesheetPath: "tests/misc/seqtor/seqtor-043d.xsl", Assertions: []w3cAssertion{w3cAssertXML("4284126168210252294336378420"), w3cAssertStringValue("4284126168210252294336378420")}},
+		{Name: "seqtor-043e", StylesheetPath: "tests/misc/seqtor/seqtor-043e.xsl", Assertions: []w3cAssertion{w3cAssertXML("42 84 126 168 210 252 294 336 378 420"), w3cAssertStringValue("42 84 126 168 210 252 294 336 378 420")}},
+		{Name: "seqtor-043f", StylesheetPath: "tests/misc/seqtor/seqtor-043f.xsl", Assertions: []w3cAssertion{w3cAssertXML("42 84 126 168 210 252 294 336 378 420"), w3cAssertStringValue("42 84 126 168 210 252 294 336 378 420")}},
+		{Name: "seqtor-043g", StylesheetPath: "tests/misc/seqtor/seqtor-043g.xsl", Assertions: []w3cAssertion{w3cAssertXML("42 84 126 168 210 252 294 336 378 420"), w3cAssertStringValue("42 84 126 168 210 252 294 336 378 420")}},
+		{Name: "seqtor-043h", StylesheetPath: "tests/misc/seqtor/seqtor-043h.xsl", Assertions: []w3cAssertion{w3cAssertXML("42 84 126 168 210 252 294 336 378 420"), w3cAssertStringValue("  42 84 126 168 210 252 294 336 378 420  ")}},
+		{Name: "seqtor-043i", StylesheetPath: "tests/misc/seqtor/seqtor-043i.xsl", Assertions: []w3cAssertion{w3cAssertXML("42   84   126   168   210   252   294   336   378   420"), w3cAssertStringValue(" 42   84   126   168   210   252   294   336   378   420 ")}},
 		{Name: "seqtor-101", StylesheetPath: "tests/misc/seqtor/seqtor-101.xsl", Assertions: []w3cAssertion{w3cAssertXML("<!---->")}},
 	})
 }

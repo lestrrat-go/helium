@@ -37,6 +37,7 @@ func (ec *execContext) xsltFunctions() map[string]xpath3.Function {
 		"copy-of":              &xsltFunc{min: 0, max: 1, fn: ec.fnCopyOf},
 		"snapshot":             &xsltFunc{min: 0, max: 1, fn: ec.fnSnapshot},
 		"regex-group":          &xsltFunc{min: 1, max: 1, fn: ec.fnRegexGroup},
+		"transform":            &xsltFunc{min: 1, max: 1, fn: ec.fnTransform},
 	}
 	return ec.cachedFns
 }
@@ -1069,5 +1070,296 @@ func (ec *execContext) xsltFunctionsNS() map[xpath3.QualifiedName]xpath3.Functio
 		ec.cachedFnsNS[qn] = &xslUserFunc{def: def, ec: ec}
 	}
 	return ec.cachedFnsNS
+}
+
+type transformDepthKey struct{}
+
+const maxTransformDepth = 10
+
+// fnTransform implements fn:transform() — dynamically compile and execute
+// an XSLT stylesheet.
+func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	// Check recursion depth
+	depth := 0
+	if d, ok := ctx.Value(transformDepthKey{}).(int); ok {
+		depth = d
+	}
+	if depth >= maxTransformDepth {
+		return nil, dynamicError("FOXT0004", "fn:transform: maximum recursion depth (%d) exceeded", maxTransformDepth)
+	}
+	ctx = context.WithValue(ctx, transformDepthKey{}, depth+1)
+	if len(args) != 1 || len(args[0]) != 1 {
+		return nil, dynamicError("FOXT0001", "fn:transform requires a single map argument")
+	}
+	m, ok := args[0][0].(xpath3.MapItem)
+	if !ok {
+		return nil, dynamicError("FOXT0001", "fn:transform argument must be a map")
+	}
+
+	// Extract option values from the map
+	getStr := func(key string) string {
+		k := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: key}
+		seq, ok := m.Get(k)
+		if !ok || len(seq) == 0 {
+			return ""
+		}
+		av, err := xpath3.AtomizeItem(seq[0])
+		if err != nil {
+			return ""
+		}
+		s, err := xpath3.AtomicToString(av)
+		if err != nil {
+			return ""
+		}
+		return s
+	}
+
+	getSeq := func(key string) xpath3.Sequence {
+		k := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: key}
+		seq, ok := m.Get(k)
+		if !ok {
+			return nil
+		}
+		return seq
+	}
+
+	stylesheetLoc := getStr("stylesheet-location")
+	initialTemplate := getStr("initial-template")
+	deliveryFormat := getStr("delivery-format")
+	initialMatchSel := getSeq("initial-match-selection")
+	sourceNode := getSeq("source-node")
+
+	// Compile the stylesheet
+	var ss *Stylesheet
+	if stylesheetLoc != "" {
+		// Resolve relative to the current stylesheet base URI
+		loc := stylesheetLoc
+		if ec.stylesheet.baseURI != "" && !filepath.IsAbs(loc) {
+			loc = filepath.Join(filepath.Dir(ec.stylesheet.baseURI), loc)
+		}
+		var compileErr error
+		ss, compileErr = CompileFile(ctx, loc)
+		if compileErr != nil {
+			return nil, dynamicError("FOXT0003", "fn:transform: cannot compile stylesheet %q: %v", stylesheetLoc, compileErr)
+		}
+	} else {
+		// Check for stylesheet-node
+		ssNodeSeq := getSeq("stylesheet-node")
+		if len(ssNodeSeq) > 0 {
+			if ni, ok := ssNodeSeq[0].(xpath3.NodeItem); ok {
+				// Find the document containing this node
+				var doc *helium.Document
+				n := ni.Node
+				for n != nil {
+					if d, ok := n.(*helium.Document); ok {
+						doc = d
+						break
+					}
+					n = n.Parent()
+				}
+				if doc == nil {
+					return nil, dynamicError("FOXT0003", "fn:transform: stylesheet-node is not part of a document")
+				}
+				var compileErr error
+				ss, compileErr = CompileStylesheet(ctx, doc)
+				if compileErr != nil {
+					return nil, dynamicError("FOXT0003", "fn:transform: cannot compile stylesheet: %v", compileErr)
+				}
+			}
+		}
+	}
+
+	if ss == nil {
+		return nil, dynamicError("FOXT0002", "fn:transform: no stylesheet specified (stylesheet-location or stylesheet-node required)")
+	}
+
+	// Determine the source document
+	var sourceDoc *helium.Document
+	if len(sourceNode) > 0 {
+		if ni, ok := sourceNode[0].(xpath3.NodeItem); ok {
+			n := ni.Node
+			for n != nil {
+				if d, ok := n.(*helium.Document); ok {
+					sourceDoc = d
+					break
+				}
+				n = n.Parent()
+			}
+		}
+	}
+
+	// Build transform context
+	tCtx := ctx
+	if initialTemplate != "" {
+		tCtx = WithInitialTemplate(tCtx, initialTemplate)
+	}
+
+	// Handle secondary result documents
+	secondaryResults := make(map[string]*helium.Document)
+	tCtx = WithResultDocumentHandler(tCtx, func(href string, doc *helium.Document) {
+		secondaryResults[href] = doc
+	})
+
+	// Execute the transform
+	var resultDoc *helium.Document
+	if len(initialMatchSel) > 0 {
+		// initial-match-selection: create a document wrapper for non-node items
+		// or apply templates to the selection
+		if len(initialMatchSel) == 1 {
+			if ni, ok := initialMatchSel[0].(xpath3.NodeItem); ok {
+				n := ni.Node
+				for n != nil {
+					if d, ok := n.(*helium.Document); ok {
+						sourceDoc = d
+						break
+					}
+					n = n.Parent()
+				}
+			}
+		}
+		// For atomic values, we need to create a temporary document and
+		// use a different execution path. For now, wrap in a document.
+		if sourceDoc == nil {
+			sourceDoc = helium.NewDefaultDocument()
+		}
+
+		cfg := getTransformConfig(tCtx)
+		// Set up the initial match selection on the exec context
+		var execErr error
+		resultDoc, execErr = executeTransformWithSelection(ctx, sourceDoc, ss, cfg, initialMatchSel)
+		if execErr != nil {
+			return nil, execErr
+		}
+	} else {
+		if sourceDoc == nil {
+			sourceDoc = helium.NewDefaultDocument()
+		}
+		var execErr error
+		resultDoc, execErr = Transform(tCtx, sourceDoc, ss)
+		if execErr != nil {
+			return nil, execErr
+		}
+	}
+
+	// Build result map
+	outputKey := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "output"}
+	result := xpath3.MapItem{}
+
+	if deliveryFormat == "raw" {
+		// Raw delivery: return the document element's children as a sequence
+		if resultDoc != nil {
+			var seq xpath3.Sequence
+			root := resultDoc.DocumentElement()
+			if root != nil {
+				for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+					seq = append(seq, xpath3.NodeItem{Node: child})
+				}
+			}
+			if len(seq) == 0 {
+				for child := resultDoc.FirstChild(); child != nil; child = child.NextSibling() {
+					seq = append(seq, xpath3.NodeItem{Node: child})
+				}
+			}
+			result = result.Put(outputKey, seq)
+		}
+	} else {
+		// Default: return the result document
+		if resultDoc != nil {
+			result = result.Put(outputKey, xpath3.Sequence{xpath3.NodeItem{Node: resultDoc}})
+		}
+	}
+
+	// Add secondary results
+	for href, doc := range secondaryResults {
+		hrefKey := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: href}
+		result = result.Put(hrefKey, xpath3.Sequence{xpath3.NodeItem{Node: doc}})
+	}
+
+	return xpath3.Sequence{result}, nil
+}
+
+// executeTransformWithSelection runs a transform where the initial match
+// selection is an explicit sequence (not derived from a source document root).
+func executeTransformWithSelection(ctx context.Context, source *helium.Document, ss *Stylesheet, cfg *transformConfig, selection xpath3.Sequence) (*helium.Document, error) {
+	resultDoc := helium.NewDefaultDocument()
+
+	ec := &execContext{
+		stylesheet:   ss,
+		sourceDoc:    source,
+		resultDoc:    resultDoc,
+		currentNode:  source,
+		contextNode:  source,
+		position:     1,
+		size:         1,
+		globalVars:   make(map[string]xpath3.Sequence),
+		currentMode:  "",
+		outputStack:  []*outputFrame{{doc: resultDoc, current: resultDoc}},
+		keyTables:        make(map[string]*keyTable),
+		docCache:         make(map[string]*helium.Document),
+		accumulatorState: make(map[string]xpath3.Sequence),
+		transformCtx:     ctx,
+		resultDocuments:  make(map[string]*helium.Document),
+		usedResultURIs:   make(map[string]struct{}),
+	}
+
+	if cfg != nil && cfg.msgHandler != nil {
+		ec.msgHandler = cfg.msgHandler
+	}
+
+	if len(ss.stripSpace) > 0 && source != nil {
+		ec.stripWhitespaceFromDoc(source)
+	}
+
+	ctx = withExecContext(ctx, ec)
+
+	if err := ec.initGlobalVars(ctx, cfg); err != nil {
+		return nil, err
+	}
+
+	// Check for initial template
+	initialTemplateName := ""
+	if cfg != nil && cfg.initialTemplate != "" {
+		initialTemplateName = cfg.initialTemplate
+	}
+
+	if initialTemplateName != "" {
+		tmpl := ss.namedTemplates[initialTemplateName]
+		if tmpl == nil {
+			return nil, dynamicError(errCodeXTDE0820, "initial template %q not found", initialTemplateName)
+		}
+		if err := ec.executeTemplate(ctx, tmpl, source, ""); err != nil {
+			return nil, err
+		}
+	} else {
+		// Apply templates to the initial match selection
+		for i, item := range selection {
+			switch v := item.(type) {
+			case xpath3.NodeItem:
+				ec.contextNode = v.Node
+				ec.currentNode = v.Node
+				ec.position = i + 1
+				ec.size = len(selection)
+				if err := ec.applyTemplates(ctx, v.Node, ""); err != nil {
+					return nil, err
+				}
+			case xpath3.AtomicValue:
+				// For atomic values, set as context item and apply templates
+				ec.contextItem = v
+				ec.position = i + 1
+				ec.size = len(selection)
+				if err := ec.applyTemplates(ctx, source, ""); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+
+	if cfg != nil && cfg.resultDocHandler != nil {
+		for href, doc := range ec.resultDocuments {
+			cfg.resultDocHandler(href, doc)
+		}
+	}
+
+	return resultDoc, nil
 }
 
