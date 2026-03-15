@@ -1644,6 +1644,7 @@ func countStreamingDownwardSelectionsInner(expr xpath3.Expr, grounded bool) int 
 		if e.DescOrSelf && !leftGrounding {
 			// The // shorthand adds a descendant-or-self step
 			// Only count if not after a grounding function
+			count++
 		}
 	case xpath3.PathExpr:
 		filterGrounding := isGroundingExpr(e.Filter)
