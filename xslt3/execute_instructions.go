@@ -1895,15 +1895,29 @@ func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
 			return err
 		}
 		seq := result.Sequence()
-		if len(seq) > 0 {
-			if ni, ok := seq[0].(xpath3.NodeItem); ok {
-				node = ni.Node
-			}
+		if len(seq) == 0 {
+			// XTTE1000: select evaluates to empty sequence
+			return dynamicError(errCodeXTTE1000,
+				"xsl:number select expression returned empty sequence")
+		}
+		if len(seq) > 1 {
+			// XTTE1000: select must return exactly one node
+			return dynamicError(errCodeXTTE1000,
+				"xsl:number select expression returned more than one item")
+		}
+		if ni, ok := seq[0].(xpath3.NodeItem); ok {
+			node = ni.Node
+		} else {
+			// XTTE0990: select result is not a node
+			return dynamicError(errCodeXTTE0990,
+				"xsl:number select expression did not return a node")
 		}
 	}
 
-	if node == nil && inst.Value == nil {
-		return nil
+	// XTTE0990: context item must be a node when value is absent
+	if inst.Value == nil && node == nil {
+		return dynamicError(errCodeXTTE0990,
+			"xsl:number requires a node context when value is not specified")
 	}
 
 	var nums []int
@@ -1919,16 +1933,20 @@ func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
 		for _, item := range seq {
 			av, err := xpath3.AtomizeItem(item)
 			if err != nil {
-				continue
+				// XTDE0980: value is not numeric
+				return dynamicError(errCodeXTDE0980,
+					"xsl:number value is not numeric")
 			}
 			dv, err := xpath3.CastAtomic(av, xpath3.TypeDouble)
 			if err != nil {
-				continue
+				// XTDE0980: value cannot be cast to double
+				return dynamicError(errCodeXTDE0980,
+					"xsl:number value %q cannot be converted to a number", av.StringVal())
 			}
 			f := math.Round(dv.DoubleVal())
 			// XTDE0980: value must be non-negative
 			if math.IsNaN(f) || math.IsInf(f, 0) || f < 0 {
-				return dynamicError("XTDE0980", "xsl:number value is not a non-negative integer: %v", dv.DoubleVal())
+				return dynamicError(errCodeXTDE0980, "xsl:number value is not a non-negative integer: %v", dv.DoubleVal())
 			}
 			if f > math.MaxInt64 || f < math.MinInt64 {
 				// For values outside int64 range, format directly as big integer
@@ -2002,7 +2020,25 @@ func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
 		groupSize, _ = strconv.Atoi(gsStr)
 	}
 
-	text, err := ec.resultDoc.CreateText([]byte(formatNumberList(nums, format, groupSep, groupSize)))
+	lang := ""
+	if inst.Lang != nil {
+		var err error
+		lang, err = inst.Lang.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+	}
+
+	ordinal := ""
+	if inst.Ordinal != nil {
+		var err error
+		ordinal, err = inst.Ordinal.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+	}
+
+	text, err := ec.resultDoc.CreateText([]byte(formatNumberList(nums, format, groupSep, groupSize, lang, ordinal)))
 	if err != nil {
 		return err
 	}
@@ -2185,7 +2221,7 @@ func (ec *execContext) hasFromAncestor(inst *NumberInst, node helium.Node) bool 
 
 // formatNumberList formats a list of numbers according to an XSLT format string.
 // The format string is parsed into prefix, (format-token, separator)* pairs, and suffix.
-func formatNumberList(nums []int, format string, groupSep string, groupSize int) string {
+func formatNumberList(nums []int, format string, groupSep string, groupSize int, lang string, ordinal string) string {
 	// Parse format string into tokens
 	type fmtToken struct {
 		format    string // e.g. "1", "a", "A", "i", "I"
@@ -2260,7 +2296,7 @@ func formatNumberList(nums []int, format string, groupSep string, groupSize int)
 		if tokIdx >= len(tokens) {
 			tokIdx = len(tokens) - 1
 		}
-		buf.WriteString(formatSingleNumber(num, tokens[tokIdx].format, groupSep, groupSize))
+		buf.WriteString(formatSingleNumber(num, tokens[tokIdx].format, groupSep, groupSize, lang, ordinal))
 	}
 	buf.WriteString(suffix)
 	return buf.String()
@@ -2273,7 +2309,7 @@ func isAlphanumeric(r rune) bool {
 	return r > 127 && (unicode.IsLetter(r) || unicode.IsNumber(r))
 }
 
-func formatSingleNumber(num int, token string, groupSep string, groupSize int) string {
+func formatSingleNumber(num int, token string, groupSep string, groupSize int, lang string, ordinal string) string {
 	switch token {
 	case "a":
 		return toLowerAlpha(num)
@@ -2284,21 +2320,11 @@ func formatSingleNumber(num int, token string, groupSep string, groupSize int) s
 	case "I":
 		return toRoman(num)
 	case "w":
-		return numberToWords(num, false)
+		return numberToWordsLang(num, "lower", lang, ordinal)
 	case "W":
-		return numberToWords(num, true)
+		return numberToWordsLang(num, "upper", lang, ordinal)
 	case "Ww":
-		w := numberToWords(num, false)
-		// Title case: capitalize first letter of each word
-		words := strings.Fields(w)
-		for i, word := range words {
-			if len(word) > 0 {
-				runes := []rune(word)
-				runes[0] = unicode.ToUpper(runes[0])
-				words[i] = string(runes)
-			}
-		}
-		return strings.Join(words, " ")
+		return numberToWordsLang(num, "title", lang, ordinal)
 	default:
 		runes := []rune(token)
 		firstRune := runes[0]
@@ -2581,12 +2607,17 @@ func applyGroupingSeparator(s string, sep string, size int) string {
 	if size <= 0 || sep == "" {
 		return s
 	}
-	var result []byte
-	for i, j := len(s)-1, 0; i >= 0; i, j = i-1, j+1 {
+	runes := []rune(s)
+	var result []rune
+	for i, j := len(runes)-1, 0; i >= 0; i, j = i-1, j+1 {
 		if j > 0 && j%size == 0 {
-			result = append(result, []byte(sep)...)
+			// Prepend separator (reversed, will be re-reversed)
+			sepRunes := []rune(sep)
+			for k := len(sepRunes) - 1; k >= 0; k-- {
+				result = append(result, sepRunes[k])
+			}
 		}
-		result = append(result, s[i])
+		result = append(result, runes[i])
 	}
 	// Reverse
 	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {

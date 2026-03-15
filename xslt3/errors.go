@@ -60,6 +60,13 @@ const (
 	errCodeXTDE0420  = "XTDE0420" // namespace conflict
 	errCodeXTTE3180  = "XTTE3180" // type error in streaming
 	errCodeXTDE3362  = "XTDE3362" // streaming accumulator error
+	errCodeXTSE1290  = "XTSE1290" // conflicting decimal-format declarations
+	errCodeXTSE1295  = "XTSE1295" // zero-digit is not a Unicode digit-zero character
+	errCodeXTSE1300  = "XTSE1300" // decimal-format characters conflict (same char for two roles)
+	errCodeXTTE0990  = "XTTE0990" // xsl:number value is not a positive integer
+	errCodeXTTE1000  = "XTTE1000" // xsl:number level/count/from requires a node context
+	errCodeXTDE0030  = "XTDE0030" // xsl:number invalid number value
+	errCodeXTDE0980  = "XTDE0980" // xsl:number value is NaN or negative
 )
 
 // Sentinel errors for the xslt3 package.

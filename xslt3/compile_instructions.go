@@ -1104,6 +1104,22 @@ func (c *compiler) compileNumber(elem *helium.Element) (*NumberInst, error) {
 		inst.Select = expr
 	}
 
+	if lang := getAttr(elem, "lang"); lang != "" {
+		avt, err := compileAVT(lang, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.Lang = avt
+	}
+
+	if lv := getAttr(elem, "letter-value"); lv != "" {
+		avt, err := compileAVT(lv, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		inst.LetterValue = avt
+	}
+
 	return inst, nil
 }
 
