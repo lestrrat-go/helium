@@ -32,6 +32,7 @@ type Stylesheet struct {
 	attributeSets     map[string]*AttributeSetDef                 // xsl:attribute-set definitions
 	accumulators      map[string]*AccumulatorDef                  // accumulator name -> definition
 	sourceDoc         *helium.Document                            // the parsed stylesheet document (for document(""))
+	moduleDocs        map[string]*helium.Document                 // module base URI -> parsed stylesheet document
 	baseURI           string                                      // base URI for resolving relative document references
 	schemas           []*xsd.Schema                               // imported schemas (xsl:import-schema)
 	defaultValidation string                                      // "strict", "lax", "preserve", "strip" (default-validation attr)

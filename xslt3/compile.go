@@ -135,6 +135,17 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 		c.resolver = cfg.resolver
 	}
 
+	// Process xml:base on the stylesheet root element to adjust the
+	// static base URI for all expressions in this module.
+	// xml:base="innerdoc/" on a stylesheet at /a/b/style.xsl means
+	// the effective base URI becomes /a/b/innerdoc/style.xsl, so that
+	// filepath.Dir() returns /a/b/innerdoc for relative URI resolution.
+	if xmlBase := getAttr(root, "xml:base"); xmlBase != "" && c.baseURI != "" {
+		baseDir := filepath.Dir(c.baseURI)
+		baseName := filepath.Base(c.baseURI)
+		c.baseURI = filepath.Join(baseDir, xmlBase, baseName)
+	}
+
 	// Collect namespace declarations from root
 	c.collectNamespaces(root)
 
@@ -202,6 +213,14 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 	// Store the stylesheet source document and base URI
 	c.stylesheet.sourceDoc = doc
 	c.stylesheet.baseURI = c.baseURI
+
+	// Store the main module document in moduleDocs for document("") resolution.
+	if c.stylesheet.moduleDocs == nil {
+		c.stylesheet.moduleDocs = make(map[string]*helium.Document)
+	}
+	if c.baseURI != "" {
+		c.stylesheet.moduleDocs[c.baseURI] = doc
+	}
 
 	// Post-compilation streamability analysis: check for XTSE3430 errors.
 	if err := analyzeStreamability(c.stylesheet); err != nil {
@@ -921,6 +940,12 @@ func (c *compiler) loadExternalStylesheet(href string, isImport bool) error {
 	savedBase := c.baseURI
 	c.baseURI = uri
 	defer func() { c.baseURI = savedBase }()
+
+	// Store the module document for document("") resolution.
+	if c.stylesheet.moduleDocs == nil {
+		c.stylesheet.moduleDocs = make(map[string]*helium.Document)
+	}
+	c.stylesheet.moduleDocs[uri] = doc
 
 	importedRoot := doc.DocumentElement()
 	if importedRoot == nil || importedRoot.URI() != NSXSLT {

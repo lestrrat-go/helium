@@ -128,8 +128,15 @@ func (ec *execContext) fnDocument(ctx context.Context, args []xpath3.Sequence) (
 // loadDocument loads a single XML document by URI, using baseDir for
 // resolving relative paths.
 func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir string) (*helium.Document, error) {
-	// Empty string means the stylesheet document itself (XSLT spec 14.1).
+	// Empty string means the stylesheet module itself (XSLT spec 14.1).
+	// When called from an included/imported module, return that module's
+	// document, not the top-level stylesheet.
 	if uri == "" {
+		if ec.currentTemplate != nil && ec.currentTemplate.BaseURI != "" {
+			if modDoc, ok := ec.stylesheet.moduleDocs[ec.currentTemplate.BaseURI]; ok {
+				return modDoc, nil
+			}
+		}
 		return ec.stylesheet.sourceDoc, nil
 	}
 

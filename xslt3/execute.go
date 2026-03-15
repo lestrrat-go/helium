@@ -220,7 +220,11 @@ func (ec *execContext) newXPathContext(node helium.Node) context.Context {
 	if ec.contextItem != nil {
 		ctx = xpath3.WithContextItem(ctx, ec.contextItem)
 	}
-	if ec.stylesheet.baseURI != "" {
+	// Use the current template's module base URI when available,
+	// falling back to the main stylesheet base URI.
+	if ec.currentTemplate != nil && ec.currentTemplate.BaseURI != "" {
+		ctx = xpath3.WithBaseURI(ctx, ec.currentTemplate.BaseURI)
+	} else if ec.stylesheet.baseURI != "" {
 		ctx = xpath3.WithBaseURI(ctx, ec.stylesheet.baseURI)
 	}
 	if len(ec.stylesheet.decimalFormats) > 0 {
@@ -266,7 +270,10 @@ func (ec *execContext) baseXPathContext() context.Context {
 		}
 		ctx = xpath3.WithNamespaces(ctx, ns)
 	}
-	if ec.stylesheet.baseURI != "" {
+	// Use the current template's module base URI when available.
+	if ec.currentTemplate != nil && ec.currentTemplate.BaseURI != "" {
+		ctx = xpath3.WithBaseURI(ctx, ec.currentTemplate.BaseURI)
+	} else if ec.stylesheet.baseURI != "" {
 		ctx = xpath3.WithBaseURI(ctx, ec.stylesheet.baseURI)
 	}
 	if len(ec.stylesheet.decimalFormats) > 0 {
