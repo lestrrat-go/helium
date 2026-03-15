@@ -1757,12 +1757,16 @@ func formatSingleNumber(num int, token string, groupSep string, groupSize int) s
 		return numberToWords(num, true)
 	case "Ww":
 		w := numberToWords(num, false)
-		if len(w) > 0 {
-			runes := []rune(w)
-			runes[0] = unicode.ToUpper(runes[0])
-			w = string(runes)
+		// Title case: capitalize first letter of each word
+		words := strings.Fields(w)
+		for i, word := range words {
+			if len(word) > 0 {
+				runes := []rune(word)
+				runes[0] = unicode.ToUpper(runes[0])
+				words[i] = string(runes)
+			}
 		}
-		return w
+		return strings.Join(words, " ")
 	default:
 		runes := []rune(token)
 		firstRune := runes[0]
@@ -1893,6 +1897,20 @@ func numberToWords(n int, upper bool) string {
 			w := words(n/1000) + " thousand"
 			if n%1000 != 0 {
 				w += " " + words(n%1000)
+			}
+			return w
+		}
+		if n < 1000000000 {
+			w := words(n/1000000) + " million"
+			if n%1000000 != 0 {
+				w += " " + words(n%1000000)
+			}
+			return w
+		}
+		if n < 1000000000000 {
+			w := words(n/1000000000) + " billion"
+			if n%1000000000 != 0 {
+				w += " " + words(n%1000000000)
 			}
 			return w
 		}
