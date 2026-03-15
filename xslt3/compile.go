@@ -453,6 +453,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 	}
 	tmpl.Params = params
 	tmpl.Body = body
+	tmpl.As = getAttr(elem, "as")
 
 	// Register the template
 	c.stylesheet.templates = append(c.stylesheet.templates, tmpl)

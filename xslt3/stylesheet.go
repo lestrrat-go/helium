@@ -74,6 +74,7 @@ type Template struct {
 	ImportPrec     int
 	Params         []*Param
 	Body           []Instruction
+	As             string // return type constraint (e.g., "element()")
 	XPathDefaultNS string // xpath-default-namespace (inherited or explicit)
 	BaseURI        string // base URI of the stylesheet module that defined this template
 }

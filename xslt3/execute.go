@@ -999,12 +999,56 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 	}
 
 	// Execute template body
+	if tmpl.As != "" {
+		// Template has return type constraint — capture output and validate
+		return ec.executeTemplateBodyWithAs(ctx, tmpl)
+	}
+
 	for _, inst := range tmpl.Body {
 		if err := ec.executeInstruction(ctx, inst); err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+// executeTemplateBodyWithAs runs the template body in capture mode,
+// checks the result against the declared as type, then writes the
+// validated items to the real output.
+func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *Template) error {
+	seq, err := ec.evaluateBodyAsSequence(ctx, tmpl.Body)
+	if err != nil {
+		return err
+	}
+
+	st := parseSequenceType(tmpl.As)
+	checked, err := checkSequenceType(seq, st, errCodeXTTE0505, "template")
+	if err != nil {
+		return err
+	}
+
+	// Write the validated items to the real output
+	for _, item := range checked {
+		switch v := item.(type) {
+		case xpath3.NodeItem:
+			if err := ec.addNode(v.Node); err != nil {
+				return err
+			}
+		case xpath3.AtomicValue:
+			s, err := xpath3.AtomicToString(v)
+			if err != nil {
+				return err
+			}
+			text, err := ec.resultDoc.CreateText([]byte(s))
+			if err != nil {
+				return err
+			}
+			if err := ec.addNode(text); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
