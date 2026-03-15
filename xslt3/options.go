@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"maps"
+
+	"github.com/lestrrat-go/helium"
 )
 
 // URIResolver resolves URIs to readable content. Used for xsl:import
@@ -73,6 +75,7 @@ type transformConfig struct {
 	params          map[string]string
 	msgHandler      func(msg string, terminate bool)
 	initialTemplate string
+	resultDocHandler func(href string, doc *helium.Document)
 }
 
 func getTransformConfig(ctx context.Context) *transformConfig {
@@ -125,5 +128,14 @@ func WithInitialTemplate(ctx context.Context, name string) context.Context {
 func WithMessageHandler(ctx context.Context, fn func(msg string, terminate bool)) context.Context {
 	return updateTransformConfig(ctx, func(c *transformConfig) {
 		c.msgHandler = fn
+	})
+}
+
+// WithResultDocumentHandler sets a handler for secondary result documents
+// produced by xsl:result-document instructions. The handler is called with
+// the evaluated href and the result document for each secondary output.
+func WithResultDocumentHandler(ctx context.Context, fn func(href string, doc *helium.Document)) context.Context {
+	return updateTransformConfig(ctx, func(c *transformConfig) {
+		c.resultDocHandler = fn
 	})
 }

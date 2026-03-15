@@ -48,6 +48,8 @@ const (
 	errCodeXTSE3441 = "XTSE3441" // streamability error in accumulator
 	errCodeXTDE3630 = "XTDE3630" // source-document runtime error
 	errCodeXTDE3635 = "XTDE3635" // source-document URI resolution error
+	errCodeXTRE1495 = "XTRE1495" // two result documents with same URI
+	errCodeSERE0022 = "SERE0022" // serialization error: duplicate keys in JSON map
 )
 
 // Sentinel errors for the xslt3 package.

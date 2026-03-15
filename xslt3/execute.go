@@ -52,6 +52,10 @@ type execContext struct {
 	transformCfg      *transformConfig
 	transformCtx      context.Context                  // parent context from Transform caller (for cancellation/deadlines)
 	typeAnnotations   map[helium.Node]string           // node → xs:... type annotation (schema-aware)
+	resultDocuments        map[string]*helium.Document  // secondary result documents keyed by href
+	usedResultURIs         map[string]struct{}         // URIs already written by xsl:result-document (includes "")
+	insideResultDocPrimary bool                        // true while executing result-document body targeting primary URI
+	primaryClaimedImplicitly bool                      // true when implicit content has been written to primary output
 }
 
 func withExecContext(ctx context.Context, ec *execContext) context.Context {
@@ -180,6 +184,19 @@ func (ec *execContext) addNode(node helium.Node) error {
 	// breaks the sequence of adjacent atomic values from xsl:sequence.
 	if node.Type() != helium.TextNode {
 		out.prevWasAtomic = false
+	}
+	// XTRE1495: if the primary output was claimed by an xsl:result-document
+	// and we are writing implicit content to the base (primary) frame, error.
+	if len(ec.outputStack) == 1 && !ec.insideResultDocPrimary {
+		if _, claimed := ec.usedResultURIs[""]; claimed {
+			if node.Type() == helium.TextNode && strings.TrimSpace(string(node.Content())) == "" {
+				return nil
+			}
+			return dynamicError(errCodeXTRE1495, "cannot write to primary output: URI already used by xsl:result-document")
+		}
+		if node.Type() != helium.TextNode || strings.TrimSpace(string(node.Content())) != "" {
+			ec.primaryClaimedImplicitly = true
+		}
 	}
 	return out.current.AddChild(node)
 }
@@ -375,6 +392,8 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		docCache:         make(map[string]*helium.Document),
 		accumulatorState: make(map[string]xpath3.Sequence),
 		transformCtx:     ctx,
+		resultDocuments:  make(map[string]*helium.Document),
+		usedResultURIs:   make(map[string]struct{}),
 	}
 
 	if cfg != nil && cfg.msgHandler != nil {
@@ -422,6 +441,13 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	} else {
 		if err := ec.applyTemplates(ctx, source, ""); err != nil {
 			return nil, err
+		}
+	}
+
+	// Deliver secondary result documents to the handler.
+	if cfg != nil && cfg.resultDocHandler != nil {
+		for href, doc := range ec.resultDocuments {
+			cfg.resultDocHandler(href, doc)
 		}
 	}
 
