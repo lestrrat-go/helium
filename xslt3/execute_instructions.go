@@ -2526,16 +2526,22 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 		return nil
 	}
 
-	// Extract error code from the error
+	// Extract error code and QName from the error
 	const errNS = "http://www.w3.org/2005/xqt-errors"
 	errCode := "XSLT0000"
 	errDesc := tryErr.Error()
+	var errQName xpath3.QNameValue
 	if xErr, ok := tryErr.(*XSLTError); ok {
 		errCode = xErr.Code
 		errDesc = xErr.Message
+		errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: errCode}
 	} else if xpErr, ok := tryErr.(*xpath3.XPathError); ok {
 		errCode = xpErr.Code
 		errDesc = xpErr.Message
+		errQName = xpErr.CodeQName()
+	}
+	if errQName.Local == "" {
+		errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: errCode}
 	}
 
 	// Find matching catch clause
@@ -2556,11 +2562,11 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 	defer ec.popVarScope()
 
 	// $err:code is an xs:QName value with the error code
-	errCodeQName := xpath3.Sequence{xpath3.AtomicValue{
+	errCodeSeq := xpath3.Sequence{xpath3.AtomicValue{
 		TypeName: xpath3.TypeQName,
-		Value:    xpath3.QNameValue{Prefix: "err", URI: errNS, Local: errCode},
+		Value:    errQName,
 	}}
-	ec.setVar("{"+errNS+"}code", errCodeQName)
+	ec.setVar("{"+errNS+"}code", errCodeSeq)
 	ec.setVar("{"+errNS+"}description", xpath3.SingleString(errDesc))
 	ec.setVar("{"+errNS+"}value", xpath3.EmptySequence())
 	ec.setVar("{"+errNS+"}module", xpath3.SingleString(""))

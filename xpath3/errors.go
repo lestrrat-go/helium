@@ -106,6 +106,11 @@ func (e *XPathError) Is(target error) bool {
 	return false
 }
 
+// CodeQName returns the error code as a QNameValue.
+func (e *XPathError) CodeQName() QNameValue {
+	return e.qname()
+}
+
 func (e *XPathError) qname() QNameValue {
 	if e == nil {
 		return QNameValue{}
