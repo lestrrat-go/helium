@@ -1998,20 +1998,141 @@ func formatWithDigitSystem(num int, zero rune, minWidth int) string {
 	return string(runes)
 }
 
-// formatWithOrdinalSystem formats using consecutive codepoints from start.
-// E.g., ① (U+2460) maps 1→①, 2→②, etc.
+// ordinalSystem describes a Unicode numbering system with potentially
+// non-contiguous ranges and a special zero character.
+type ordinalSystem struct {
+	oneChar rune   // the character representing 1
+	zero    rune   // the character representing 0 (0 if none)
+	ranges  []rune // pairs of (first, last) codepoints for contiguous ranges starting at 1
+}
+
+// knownOrdinalSystems maps the "1" character to its ordinal system definition.
+var knownOrdinalSystems = map[rune]ordinalSystem{
+	// Circled digits: ①-⑳, ㉑-㉟, ㊱-㊿
+	0x2460: {oneChar: 0x2460, zero: 0x24EA, ranges: []rune{0x2460, 0x2473, 0x3251, 0x325F, 0x32B1, 0x32BF}},
+	// Parenthesized digits: ⑴-⒇ (no special zero)
+	0x2474: {oneChar: 0x2474, zero: 0, ranges: []rune{0x2474, 0x2487}},
+	// Full-stop digits: ⒈-⒛, zero: 🄀 (U+1F100)
+	0x2488: {oneChar: 0x2488, zero: 0x1F100, ranges: []rune{0x2488, 0x249B}},
+	// Double circled digits: ⓵-⓾ (no special zero)
+	0x24F5: {oneChar: 0x24F5, zero: 0, ranges: []rune{0x24F5, 0x24FE}},
+	// Dingbat negative circled: ❶-❿, ⓫-⓴
+	0x2776: {oneChar: 0x2776, zero: 0x24FF, ranges: []rune{0x2776, 0x277F, 0x24EB, 0x24F4}},
+	// Dingbat negative circled sans-serif: ➊-➓
+	0x278A: {oneChar: 0x278A, zero: 0x1F10C, ranges: []rune{0x278A, 0x2793}},
+	// Dingbat negative circled sans-serif (alt, starting from ➀): ➀-➉
+	0x2780: {oneChar: 0x2780, zero: 0x1F10B, ranges: []rune{0x2780, 0x2789}},
+	// Parenthesized ideograph: ㈠-㈩
+	0x3220: {oneChar: 0x3220, zero: 0, ranges: []rune{0x3220, 0x3229}},
+	// Circled ideograph: ㊀-㊉
+	0x3280: {oneChar: 0x3280, zero: 0, ranges: []rune{0x3280, 0x3289}},
+	// Aegean numbers: 𐄇-𐄐 (1-10)
+	0x10107: {oneChar: 0x10107, zero: 0, ranges: []rune{0x10107, 0x10110}},
+	// Coptic Epact numbers: 𐋡-𐋪 (1-10)
+	0x102E1: {oneChar: 0x102E1, zero: 0, ranges: []rune{0x102E1, 0x102EA}},
+	// Rumi numerals: 𐹠-𐹩 (1-10)
+	0x10E60: {oneChar: 0x10E60, zero: 0, ranges: []rune{0x10E60, 0x10E69}},
+	// Brahmi number signs: 𑁒-𑁛 (1-10)
+	0x11052: {oneChar: 0x11052, zero: 0, ranges: []rune{0x11052, 0x1105B}},
+	// Sinhala archaic numbers: 𑇡-𑇪 (1-10)
+	0x111E1: {oneChar: 0x111E1, zero: 0, ranges: []rune{0x111E1, 0x111EA}},
+	// Counting rod unit digits: 𝍠-𝍨 (1-9)
+	0x1D360: {oneChar: 0x1D360, zero: 0, ranges: []rune{0x1D360, 0x1D368}},
+	// Mende Kikakui digits: 𞣇-𞣏 (1-9)
+	0x1E8C7: {oneChar: 0x1E8C7, zero: 0, ranges: []rune{0x1E8C7, 0x1E8CF}},
+	// Digit comma: 🄂-🄊 (1-9), zero: 🄁
+	0x1F102: {oneChar: 0x1F102, zero: 0x1F101, ranges: []rune{0x1F102, 0x1F10A}},
+}
+
+// formatWithOrdinalSystem formats using a known ordinal numbering system.
+// Falls back to decimal when the number exceeds the system's range.
 func formatWithOrdinalSystem(num int, start rune) string {
 	if num < 0 {
 		return strconv.Itoa(num)
 	}
-	if num == 0 {
-		// Circled digits: ① (U+2460) → ⓪ (U+24EA) for zero
-		if start == 0x2460 {
-			return "\u24EA"
+
+	// Look up the system by the start character (which represents 1)
+	sys, ok := knownOrdinalSystems[start]
+	if !ok {
+		// Unknown system: detect range by finding the block boundaries.
+		// First check if start-1 is also a numbering character (the zero).
+		hasZero := false
+		prev := start - 1
+		if prev > 0 && (unicode.IsNumber(prev) || unicode.IsLetter(prev)) {
+			hasZero = true
 		}
-		return string(start - 1)
+		// Count consecutive same-category characters from start, capped at 10.
+		rangeLen := ordinalRangeLength(start)
+		// If we have a zero predecessor, the system is (zero, 1..N).
+		// The range from start to the end of the system is one less than
+		// the total block size starting at zero.
+		if hasZero {
+			totalFromZero := ordinalRangeLength(prev)
+			rangeFromStart := totalFromZero - 1
+			if rangeFromStart < rangeLen {
+				rangeLen = rangeFromStart
+			}
+		}
+
+		if num == 0 {
+			if hasZero {
+				return string(prev)
+			}
+			return strconv.Itoa(0)
+		}
+		if num <= rangeLen {
+			return string(start + rune(num-1))
+		}
+		return strconv.Itoa(num)
 	}
-	return string(start + rune(num-1))
+
+	if num == 0 {
+		if sys.zero != 0 {
+			return string(sys.zero)
+		}
+		return strconv.Itoa(0)
+	}
+
+	// Map num to the correct codepoint across potentially non-contiguous ranges
+	pos := num // 1-based position in the sequence
+	for i := 0; i+1 < len(sys.ranges); i += 2 {
+		rangeStart := sys.ranges[i]
+		rangeEnd := sys.ranges[i+1]
+		rangeLen := int(rangeEnd - rangeStart + 1)
+		if pos <= rangeLen {
+			return string(rangeStart + rune(pos-1))
+		}
+		pos -= rangeLen
+	}
+
+	// Number exceeds ordinal system range: fall back to decimal
+	return strconv.Itoa(num)
+}
+
+// ordinalRangeLength returns how many consecutive characters starting at r
+// belong to the same Unicode category (Number or Letter). This determines
+// the range of an ordinal numbering system. For unknown systems, the range
+// is capped at 10 to avoid accidentally including characters from adjacent
+// but unrelated numbering systems.
+func ordinalRangeLength(r rune) int {
+	isNum := unicode.IsNumber(r)
+	count := 0
+	for c := r; ; c++ {
+		if isNum {
+			if !unicode.IsNumber(c) {
+				break
+			}
+		} else {
+			if !unicode.IsLetter(c) {
+				break
+			}
+		}
+		count++
+		if count >= 10 {
+			break // cap unknown systems at 10
+		}
+	}
+	return count
 }
 
 // numberToWords converts a number to English words.

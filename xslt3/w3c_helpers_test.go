@@ -90,6 +90,11 @@ func w3cAssertStringValue(expected string) w3cAssertion {
 			if actual == expected {
 				return true
 			}
+			// W3C test catalog assert-string-value defaults normalize-space="true":
+			// collapse whitespace sequences and trim leading/trailing whitespace.
+			if normalizeSpace(actual) == normalizeSpace(expected) {
+				return true
+			}
 			t.Errorf("assert-string-value failed:\n  got:    %q\n  expect: %q", actual, expected)
 			return false
 		},
@@ -163,7 +168,12 @@ func w3cCheckXML(expected string) w3cCheck {
 
 func w3cCheckStringValue(expected string) w3cCheck {
 	return w3cCheck{fn: func(result string, _ []string) bool {
-		return extractTextContent(result) == expected
+		actual := extractTextContent(result)
+		if actual == expected {
+			return true
+		}
+		// W3C test catalog assert-string-value defaults normalize-space="true"
+		return normalizeSpace(actual) == normalizeSpace(expected)
 	}}
 }
 
@@ -477,6 +487,12 @@ func normalizeXMLString(s string) string {
 	s = strings.ReplaceAll(s, " >", ">")
 	s = strings.ReplaceAll(s, " />", "/>")
 	return s
+}
+
+// normalizeSpace mimics fn:normalize-space: collapse whitespace runs to a
+// single space and trim leading/trailing whitespace.
+func normalizeSpace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // extractTextContent extracts all text content from an XML string,
