@@ -128,6 +128,15 @@ func WithAdditionalNamespaces(ctx context.Context, ns map[string]string) context
 	})
 }
 
+// GetNamespaces retrieves the namespace bindings from the context.
+func GetNamespaces(ctx context.Context) map[string]string {
+	ec := getEvalConfig(ctx)
+	if ec == nil {
+		return nil
+	}
+	return ec.namespaces
+}
+
 // WithVariables binds variable names to pre-constructed Sequence values.
 // The map is defensively copied to prevent caller mutation from affecting evaluation.
 func WithVariables(ctx context.Context, vars map[string]Sequence) context.Context {
