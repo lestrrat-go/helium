@@ -25,12 +25,19 @@ func numberToWordsLang(n int, caseMode string, lang string, ordinal string) stri
 
 	switch caseMode {
 	case "upper":
-		return strings.ToUpper(result)
+		return germanAwareToUpper(result)
 	case "title":
 		return toTitleCase(result)
 	default:
 		return result
 	}
+}
+
+// germanAwareToUpper uppercases a string, handling ß → SS since Go's
+// strings.ToUpper does not perform full case folding for ß.
+func germanAwareToUpper(s string) string {
+	s = strings.ReplaceAll(s, "ß", "SS")
+	return strings.ToUpper(s)
 }
 
 func toTitleCase(s string) string {
@@ -222,16 +229,88 @@ func germanCardinal(n int) string {
 	return strconv.Itoa(n)
 }
 
-func germanOrdinal(n int, _ string) string {
-	// German ordinals append -te (1-19) or -ste (20+) to the cardinal stem
+func germanOrdinal(n int, ordinal string) string {
 	if n <= 0 {
 		return germanCardinal(n)
 	}
+
+	// Determine the ordinal suffix from the hint.
+	// Hints: "-e" (feminine/base), "-er" (masculine), "-es" (neuter), "-en" (dative/genitive)
+	// "%spellout-ordinal" → base form with "-e" ending
+	suffix := "e" // default base ordinal ending
+	if strings.HasPrefix(ordinal, "-") {
+		suffix = ordinal[1:] // strip leading dash: "-er" → "er"
+	}
+
+	stem := germanOrdinalStem(n)
+	return stem + suffix
+}
+
+// germanOrdinalStem returns the ordinal stem for n, ready for suffix attachment.
+// Irregular stems: erst, dritt, siebt, acht.
+// Regular: cardinal + "t" (1-19) or cardinal + "st" (20+).
+func germanOrdinalStem(n int) string {
+	// Handle compound numbers recursively: only the last component is ordinal
+	if n >= 1000000 {
+		q := n / 1000000
+		r := n % 1000000
+		w := ""
+		if q == 1 {
+			w = "eine Million "
+		} else {
+			w = germanCardinal(q) + " Millionen "
+		}
+		if r == 0 {
+			return strings.TrimRight(w, " ") + "st"
+		}
+		return w + germanOrdinalStem(r)
+	}
+	if n >= 1000 {
+		q := n / 1000
+		r := n % 1000
+		w := ""
+		if q == 1 {
+			w = "ein"
+		} else {
+			w = germanCardinal(q)
+		}
+		w += "tausend"
+		if r == 0 {
+			return w + "st"
+		}
+		return w + germanOrdinalStem(r)
+	}
+	if n >= 100 {
+		q := n / 100
+		r := n % 100
+		ones := []string{"", "eins", "zwei", "drei", "vier", "fünf", "sechs", "sieben", "acht", "neun"}
+		w := ones[q]
+		if w == "eins" {
+			w = "ein"
+		}
+		w += "hundert"
+		if r == 0 {
+			return w + "st"
+		}
+		return w + germanOrdinalStem(r)
+	}
+
+	// For numbers < 100: apply irregular stems and -t-/-st- suffix base
+	switch n {
+	case 1:
+		return "erst"
+	case 3:
+		return "dritt"
+	case 7:
+		return "siebt"
+	case 8:
+		return "acht"
+	}
 	card := germanCardinal(n)
 	if n < 20 {
-		return card + "te"
+		return card + "t"
 	}
-	return card + "ste"
+	return card + "st"
 }
 
 // ============================================================
