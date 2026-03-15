@@ -351,6 +351,7 @@ type IterateParam struct {
 	Name   string
 	Select *xpath3.Expression
 	Body   []Instruction
+	As     string // type declaration (e.g., "element()*")
 }
 
 // BreakInst represents xsl:break.
@@ -389,3 +390,28 @@ type ForEachGroupInst struct {
 }
 
 func (*ForEachGroupInst) instructionTag() {}
+
+// MergeInst represents xsl:merge.
+type MergeInst struct {
+	Sources []*MergeSource
+	Action  []Instruction
+}
+
+func (*MergeInst) instructionTag() {}
+
+// MergeSource represents xsl:merge-source.
+type MergeSource struct {
+	Name            string
+	ForEachSource   *xpath3.Expression // XPath expr evaluating to sequence of URIs
+	ForEachItem     *xpath3.Expression // XPath expr evaluating to sequence of items (nodes)
+	Select          *xpath3.Expression
+	StreamableAttr  bool
+	SortBeforeMerge bool
+	Keys            []*MergeKey
+}
+
+// MergeKey represents xsl:merge-key.
+type MergeKey struct {
+	Select *xpath3.Expression
+	Order  string // "ascending" or "descending"
+}

@@ -347,12 +347,18 @@ func evalPathExpr(ec *evalContext, e PathExpr) (Sequence, error) {
 		subNodes, _ := NodesFrom(subResult)
 		result = append(result, subNodes...)
 	}
-	result, err = ixpath.DeduplicateNodes(result, ec.docOrder, ec.maxNodes)
-	if err != nil {
-		return nil, err
+	// PathExpr filter expression: deduplicate without re-sorting to
+	// preserve the order from the filter (e.g. reverse() stays reversed).
+	seen := make(map[helium.Node]struct{}, len(result))
+	deduped := make([]helium.Node, 0, len(result))
+	for _, n := range result {
+		if _, ok := seen[n]; !ok {
+			seen[n] = struct{}{}
+			deduped = append(deduped, n)
+		}
 	}
-	seq := make(Sequence, len(result))
-	for i, n := range result {
+	seq := make(Sequence, len(deduped))
+	for i, n := range deduped {
 		seq[i] = NodeItem{Node: n}
 	}
 	return seq, nil

@@ -210,6 +210,11 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (Instruction, er
 		return c.compileBreak(elem)
 	case "next-iteration":
 		return c.compileNextIteration(elem)
+	case "merge":
+		return c.compileMerge(elem)
+	case "merge-source", "merge-action", "merge-key":
+		// Handled as part of xsl:merge compilation
+		return nil, nil
 	case "on-completion":
 		// Handled as part of xsl:iterate compilation
 		return nil, nil

@@ -98,6 +98,8 @@ func (ec *execContext) executeInstruction(ctx context.Context, inst Instruction)
 		return ec.execBreak(ctx, v)
 	case *NextIterationInst:
 		return ec.execNextIteration(ctx, v)
+	case *MergeInst:
+		return ec.execMerge(ctx, v)
 	case *MapInst:
 		return ec.execMap(ctx, v)
 	case *MapEntryInst:
@@ -1088,7 +1090,42 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body 
 		return ec.addNode(newPI)
 
 	case helium.DocumentNode:
-		// Copy document: just process body
+		// xsl:copy of a document node creates a new document node.
+		// DTD information (including unparsed entities) is preserved.
+		srcDoc, _ := node.(*helium.Document)
+		newDoc := helium.NewDefaultDocument()
+		if srcDoc != nil {
+			// Copy DTD information to preserve unparsed entities.
+			helium.CopyDTDInfo(srcDoc, newDoc)
+			newDoc.SetURL(srcDoc.URL())
+		}
+
+		out := ec.currentOutput()
+		if out.captureItems {
+			// We're inside a variable or function body — capture the
+			// document node as an item.
+			savedDoc := ec.resultDoc
+			savedOutput := out.current
+			ec.resultDoc = newDoc
+			docRoot := newDoc.DocumentElement()
+			if docRoot == nil {
+				// No doc element yet; use the document node itself as output target.
+				out.current = newDoc
+			}
+			for _, child := range body {
+				if err := ec.executeInstruction(ctx, child); err != nil {
+					ec.resultDoc = savedDoc
+					out.current = savedOutput
+					return err
+				}
+			}
+			ec.resultDoc = savedDoc
+			out.current = savedOutput
+			out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: newDoc})
+			return nil
+		}
+
+		// Not in capture mode — process body in current context.
 		for _, child := range body {
 			if err := ec.executeInstruction(ctx, child); err != nil {
 				return err
@@ -1856,8 +1893,12 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 
 	out := ec.currentOutput()
 
-	// In capture mode, accumulate items directly instead of writing to DOM
-	if out.captureItems {
+	// In capture mode, accumulate items directly instead of writing to DOM.
+	// Only capture when we are at the function's root output level (the
+	// document element wrapper). When nested inside a result element
+	// (e.g. an LRE or xsl:copy body), items must be written to the DOM
+	// as children of that element.
+	if out.captureItems && out.doc != nil && out.current == out.doc.DocumentElement() {
 		out.pendingItems = append(out.pendingItems, result.Sequence()...)
 		return nil
 	}
@@ -1873,6 +1914,21 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 				elem, ok := out.current.(*helium.Element)
 				if ok {
 					if err := copyAttributeToElement(elem, attr); err != nil {
+						return err
+					}
+				}
+				continue
+			}
+			if v.Node.Type() == helium.DocumentNode {
+				// Document nodes: output their children (per XSLT spec,
+				// a document node in a sequence constructor is replaced
+				// by its children).
+				for child := v.Node.FirstChild(); child != nil; child = child.NextSibling() {
+					copied, copyErr := helium.CopyNode(child, ec.resultDoc)
+					if copyErr != nil {
+						return copyErr
+					}
+					if err := ec.addNode(copied); err != nil {
 						return err
 					}
 				}
@@ -1920,6 +1976,19 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 		switch v := item.(type) {
 		case xpath3.NodeItem:
 			prevWasAtomic = false
+			if v.Node.Type() == helium.DocumentNode {
+				// Document nodes: output their children.
+				for child := v.Node.FirstChild(); child != nil; child = child.NextSibling() {
+					copied, copyErr := helium.CopyNode(child, ec.resultDoc)
+					if copyErr != nil {
+						return copyErr
+					}
+					if err := ec.addNode(copied); err != nil {
+						return err
+					}
+				}
+				continue
+			}
 			copied, copyErr := helium.CopyNode(v.Node, ec.resultDoc)
 			if copyErr != nil {
 				return copyErr
