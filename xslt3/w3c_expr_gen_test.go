@@ -496,8 +496,8 @@ func TestW3C_castable(t *testing.T) {
 		{Name: "castable-002", StylesheetPath: "tests/expr/castable/castable-002.xsl", SourceDocPath: "tests/expr/castable/castbl01.xml", Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"UTF-8\"?><out xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a></out>")}},
 		{Name: "castable-003", StylesheetPath: "tests/expr/castable/castable-003.xsl", SourceDocPath: "tests/expr/castable/castbl01.xml", Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"UTF-8\"?><out xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><a>true</a><b>false</b><b>false</b><b>false</b></out>")}},
 		{Name: "castable-004", StylesheetPath: "tests/expr/castable/castable-004.xsl", SourceDocPath: "tests/expr/castable/castbl01.xml", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><a>true</a><a>true</a><a>true</a><a>true</a><b>false</b><b>false</b><b>false</b><b>false</b></out>")}},
-		{Name: "castable-005", StylesheetPath: "tests/expr/castable/castable-005.xsl", Assertions: []w3cAssertion{w3cAssertXPath("empty(/out/failure)")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "castable-006", StylesheetPath: "tests/expr/castable/castable-006.xsl", Assertions: []w3cAssertion{w3cAssertXPath("empty(/out/failure)")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "castable-005", StylesheetPath: "tests/expr/castable/castable-005.xsl", Assertions: []w3cAssertion{w3cAssertXPath("empty(/out/failure)")}},
+		{Name: "castable-006", StylesheetPath: "tests/expr/castable/castable-006.xsl", Assertions: []w3cAssertion{w3cAssertXPath("empty(/out/failure)")}},
 		{Name: "castable-007", StylesheetPath: "tests/expr/castable/castable-007.xsl", Assertions: []w3cAssertion{w3cAssertXPath("every $e in //t satisfies $e = 'true'"), w3cAssertXPath("every $e in //f satisfies $e = 'false'")}},
 		{Name: "castable-008", StylesheetPath: "tests/expr/castable/castable-008.xsl", Assertions: []w3cAssertion{w3cAssertXPath("every $e in //t satisfies $e = 'true'"), w3cAssertXPath("every $e in //f satisfies $e = 'false'")}},
 		{Name: "castable-009", StylesheetPath: "tests/expr/castable/castable-009.xsl", Assertions: []w3cAssertion{w3cAssertXPath("every $e in //t satisfies $e = 'true'"), w3cAssertXPath("every $e in //f satisfies $e = 'false'")}},
@@ -996,7 +996,7 @@ func TestW3C_expression(t *testing.T) {
 </doc>
 `, Assertions: []w3cAssertion{w3cAssertXML(`<out>;
         </out>`)}},
-		{Name: "expression-2101", StylesheetPath: "tests/expr/expression/expression-2101.xsl", SourceContent: "<doc xmlns:ns=\"http://some_ns/\" ns:att=\"att value\"/>", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
+		{Name: "expression-2101", StylesheetPath: "tests/expr/expression/expression-2101.xsl", SourceContent: "<doc xmlns:ns=\"http://some_ns/\" ns:att=\"att value\"/>", Assertions: []w3cAssertion{w3cAssertSerialization("text", "\r\n    \r\n    [false]\r\n    [false]\r\n\r\n    \r\n    true;\r\n    true;\r\n")}},
 		{Name: "expression-2201", StylesheetPath: "tests/expr/expression/expression-2201.xsl", SourceContent: ` <doc>
    <sub1>
      <child1>child1</child1>
@@ -1261,7 +1261,7 @@ func TestW3C_higher_order_functions(t *testing.T) {
 		{Name: "higher-order-functions-004", StylesheetPath: "tests/expr/higher-order-functions/higher-order-functions-004.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:local=\"http://local/\">1</out>")}},
 		{Name: "higher-order-functions-005", StylesheetPath: "tests/expr/higher-order-functions/higher-order-functions-005.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:local=\"http://local/\">abcdefgh</out>")}},
 		{Name: "higher-order-functions-006", StylesheetPath: "tests/expr/higher-order-functions/higher-order-functions-006.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:local=\"http://local/\">2008-01-31</out>")}},
-		{Name: "higher-order-functions-007", StylesheetPath: "tests/expr/higher-order-functions/higher-order-functions-007.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:local=\"http://local/\">xyz987</out>")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "higher-order-functions-007", StylesheetPath: "tests/expr/higher-order-functions/higher-order-functions-007.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:local=\"http://local/\">xyz987</out>")}},
 		{Name: "higher-order-functions-008", StylesheetPath: "tests/expr/higher-order-functions/higher-order-functions-008.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:local=\"http://local/\">3</out>")}},
 		{Name: "higher-order-functions-009", StylesheetPath: "tests/expr/higher-order-functions/higher-order-functions-009.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:local=\"http://local/\">5</out>")}},
 		{Name: "higher-order-functions-010", StylesheetPath: "tests/expr/higher-order-functions/higher-order-functions-010.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:local=\"http://local/\">7</out>")}},
