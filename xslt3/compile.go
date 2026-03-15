@@ -1161,7 +1161,26 @@ func (c *compiler) loadExternalStylesheet(href string, isImport bool) error {
 	c.stylesheet.moduleDocs[uri] = doc
 
 	importedRoot := doc.DocumentElement()
-	if importedRoot == nil || importedRoot.URI() != NSXSLT {
+	if importedRoot == nil {
+		return staticError(errCodeXTSE0010, "imported document %q is not a stylesheet", uri)
+	}
+	// If the root is not in the XSLT namespace, check for simplified stylesheet
+	if importedRoot.URI() != NSXSLT {
+		if _, ok := importedRoot.GetAttributeNS("version", NSXSLT); ok {
+			// Simplified stylesheet — compile as a single template matching "/"
+			simplified, err := compileSimplified(doc, importedRoot, &compileConfig{baseURI: uri})
+			if err != nil {
+				return err
+			}
+			// Merge the simplified stylesheet's templates into ours
+			for _, tmpl := range simplified.templates {
+				tmpl.ImportPrec = c.importPrec
+				c.stylesheet.templates = append(c.stylesheet.templates, tmpl)
+				mode := tmpl.Mode
+				c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], tmpl)
+			}
+			return nil
+		}
 		return staticError(errCodeXTSE0010, "imported document %q is not a stylesheet", uri)
 	}
 
