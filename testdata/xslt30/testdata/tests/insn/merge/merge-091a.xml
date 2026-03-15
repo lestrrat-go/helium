@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+	<list>
+		<cast subject="C#" title="cast 1"/>
+		<cast subject="VB" title="cast 2"/>
+		<cast subject="XQuery" title="cast 3"/>
+		<cast subject="XSLT" title="cast 4"/>
+		<cast subject="XSLT" title="cast 5"/>
+	</list>
+</root>

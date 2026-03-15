@@ -1,0 +1,18 @@
+<Customer>
+ <CustId>1</CustId>
+ <CustName>Acme</CustName>
+ <Addresses>
+  <Address>
+   <AddressesId>1</AddressesId>
+   <Street>123 Main</Street>
+  </Address>
+  <Address>
+   <AddressesId>2</AddressesId>
+   <Street>999 Updated St.</Street>
+  </Address>
+  <Address>
+   <AddressesId>3</AddressesId>
+   <Street>3999 New St.</Street>
+  </Address>
+ </Addresses>
+</Customer>
