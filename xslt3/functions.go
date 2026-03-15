@@ -505,6 +505,8 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 	savedTunnel := ec.tunnelParams
 	savedMode := ec.currentMode
 	savedGroups := ec.regexGroups
+	ec.contextNode = nil
+	ec.currentNode = nil
 	ec.tunnelParams = nil
 	ec.currentMode = ec.stylesheet.defaultMode
 	ec.regexGroups = nil // regex-group() returns empty inside xsl:function
