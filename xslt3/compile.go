@@ -203,6 +203,11 @@ func compile(doc *helium.Document, cfg *compileConfig) (*Stylesheet, error) {
 	c.stylesheet.sourceDoc = doc
 	c.stylesheet.baseURI = c.baseURI
 
+	// Post-compilation streamability analysis: check for XTSE3430 errors.
+	if err := analyzeStreamability(c.stylesheet); err != nil {
+		return nil, err
+	}
+
 	return c.stylesheet, nil
 }
 
