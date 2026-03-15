@@ -365,26 +365,36 @@ func (ec *execContext) collectSequenceFromNode(node helium.Node) xpath3.Sequence
 	return seq
 }
 
-// XSLT instruction elements recognized by element-available().
-var xsltElements = map[string]struct{}{
-	"analyze-string": {}, "apply-imports": {}, "apply-templates": {},
-	"attribute": {}, "call-template": {}, "choose": {}, "comment": {},
-	"copy": {}, "copy-of": {}, "document": {}, "element": {},
-	"fallback": {}, "for-each": {}, "for-each-group": {}, "if": {},
-	"import": {}, "include": {}, "message": {}, "namespace": {},
-	"next-match": {}, "number": {}, "otherwise": {}, "output": {},
-	"param": {}, "perform-sort": {}, "processing-instruction": {},
-	"result-document": {}, "sequence": {}, "sort": {}, "strip-space": {},
-	"preserve-space": {}, "stylesheet": {}, "template": {}, "text": {},
-	"transform": {}, "value-of": {}, "variable": {}, "when": {},
-	"with-param": {}, "try": {}, "catch": {}, "where-populated": {},
-	"on-empty": {}, "on-non-empty": {}, "merge": {}, "merge-source": {},
-	"merge-action": {}, "merge-key": {}, "assert": {}, "accumulator": {},
-	"accumulator-rule": {}, "fork": {}, "iterate": {}, "break": {},
-	"next-iteration": {}, "map": {}, "map-entry": {}, "array": {},
-	"accept": {}, "expose": {}, "override": {}, "use-package": {},
-	"package": {}, "global-context-item": {}, "context-item": {},
-	"source-document": {},
+// xsltElementVersion maps XSLT elements to the minimum version that supports them.
+// Elements not in this map are assumed to be available in version 1.0+.
+var xsltElementVersion = map[string]string{
+	// XSLT 1.0 elements (available in all versions)
+	"apply-imports": "1.0", "apply-templates": "1.0", "attribute": "1.0",
+	"call-template": "1.0", "choose": "1.0", "comment": "1.0",
+	"copy": "1.0", "copy-of": "1.0", "element": "1.0",
+	"fallback": "1.0", "for-each": "1.0", "if": "1.0",
+	"import": "1.0", "include": "1.0", "message": "1.0",
+	"number": "1.0", "otherwise": "1.0", "output": "1.0",
+	"param": "1.0", "processing-instruction": "1.0",
+	"sort": "1.0", "strip-space": "1.0",
+	"preserve-space": "1.0", "stylesheet": "1.0", "template": "1.0",
+	"text": "1.0", "transform": "1.0", "value-of": "1.0",
+	"variable": "1.0", "when": "1.0", "with-param": "1.0",
+	// XSLT 2.0 elements
+	"analyze-string": "2.0", "document": "2.0", "for-each-group": "2.0",
+	"namespace": "2.0", "next-match": "2.0", "perform-sort": "2.0",
+	"result-document": "2.0", "sequence": "2.0",
+	// XSLT 3.0 elements
+	"try": "3.0", "catch": "3.0", "where-populated": "3.0",
+	"on-empty": "3.0", "on-non-empty": "3.0", "merge": "3.0",
+	"merge-source": "3.0", "merge-action": "3.0", "merge-key": "3.0",
+	"assert": "3.0", "accumulator": "3.0", "accumulator-rule": "3.0",
+	"fork": "3.0", "iterate": "3.0", "break": "3.0",
+	"next-iteration": "3.0", "map": "3.0", "map-entry": "3.0",
+	"array": "3.0", "accept": "3.0", "expose": "3.0",
+	"override": "3.0", "use-package": "3.0", "package": "3.0",
+	"global-context-item": "3.0", "context-item": "3.0",
+	"source-document": "3.0",
 }
 
 // element-available(name) returns true if the named XSLT element is available.
@@ -411,8 +421,15 @@ func (ec *execContext) fnElementAvailable(_ context.Context, args []xpath3.Seque
 	if ns != NSXSLT {
 		return xpath3.SingleBoolean(false), nil
 	}
-	_, ok := xsltElements[local]
-	return xpath3.SingleBoolean(ok), nil
+	minVersion, ok := xsltElementVersion[local]
+	if !ok {
+		return xpath3.SingleBoolean(false), nil
+	}
+	// Check if the element is available in the current stylesheet version
+	if ec.stylesheet.version != "" && ec.stylesheet.version < minVersion {
+		return xpath3.SingleBoolean(false), nil
+	}
+	return xpath3.SingleBoolean(true), nil
 }
 
 // function-available(name, arity?) returns true if the named function is available.
