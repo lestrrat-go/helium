@@ -434,13 +434,14 @@ func (c *compiler) compileNamespaceAlias(elem *helium.Element) error {
 	// Resolve result-prefix to a URI and preferred prefix
 	var resultURI string
 	var resultPfx string
-	if resultPrefix == "#default" {
+	switch resultPrefix {
+	case "#default":
 		resultURI = localNS[""]
 		resultPfx = ""
-	} else if resultPrefix == "xml" {
+	case "xml":
 		resultURI = "http://www.w3.org/XML/1998/namespace"
 		resultPfx = "xml"
-	} else {
+	default:
 		uri, ok := localNS[resultPrefix]
 		if !ok {
 			return staticError(errCodeXTSE0010, "xsl:namespace-alias: result-prefix %q is not bound to a namespace", resultPrefix)
