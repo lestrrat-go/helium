@@ -411,25 +411,25 @@ empty-CORRECT!
 	Print this only once.
 </out>`)}},
 		{Name: "built-in-templates-0202", StylesheetPath: "tests/misc/built-in-templates/built-in-templates-0202.xsl", SourceDocPath: "tests/misc/built-in-templates/built-in-templates-02.xml", Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"UTF-8\"?><out>\r\n\tprocessing-instruction-CORRECT!\r\n\r\n\tempty-CORRECT!\r\n\tParam1:Temporaty tree\r\n\tParam2:Temporaty tree\r\n\tParam1 is string:false\r\n\tParam2 is string:true\r\n\tParam1 nodes: param temp </out>")}},
-		{Name: "built-in-templates-0301", StylesheetPath: "tests/misc/built-in-templates/built-in-templates-0301.xsl", SourceDocPath: "tests/misc/built-in-templates/built-in-templates-02.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out='true'")}},
-		{Name: "built-in-templates-0302", StylesheetPath: "tests/misc/built-in-templates/built-in-templates-0302.xsl", SourceDocPath: "tests/misc/built-in-templates/built-in-templates-02.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out='false'")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "built-in-templates-0301", StylesheetPath: "tests/misc/built-in-templates/built-in-templates-0301.xsl", SourceDocPath: "tests/misc/built-in-templates/built-in-templates-02.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out='true'")}, Skip: "feature present but test requires absent: schema_aware"},
+		{Name: "built-in-templates-0302", StylesheetPath: "tests/misc/built-in-templates/built-in-templates-0302.xsl", SourceDocPath: "tests/misc/built-in-templates/built-in-templates-02.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out='false'")}},
 	})
 }
 
 func TestW3C_catalog(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "catalog-001", StylesheetPath: "tests/misc/catalog/catalog-001.xsl", SourceDocPath: "catalog.xml", Assertions: []w3cAssertion{w3cAssertXPath("/ok[not(*)]")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "catalog-001", StylesheetPath: "tests/misc/catalog/catalog-001.xsl", SourceDocPath: "catalog.xml", Assertions: []w3cAssertion{w3cAssertXPath("/ok[not(*)]")}, Skip: "requires schema-element/schema-attribute node tests"},
 		{Name: "catalog-002", StylesheetPath: "tests/misc/catalog/catalog-002.xsl", SourceDocPath: "catalog.xml", Assertions: []w3cAssertion{w3cAssertXPath("not(/ok/mismatch)")}},
 		{Name: "catalog-003", StylesheetPath: "tests/misc/catalog/catalog-003.xsl", SourceDocPath: "catalog.xml", Assertions: []w3cAssertion{w3cAssertXPath("not(/out/duplicate)")}},
 		{Name: "catalog-004", StylesheetPath: "tests/misc/catalog/catalog-004.xsl", SourceDocPath: "catalog.xml", Assertions: []w3cAssertion{w3cAssertXPath("not(/out/indenting)")}},
-		{Name: "catalog-005", StylesheetPath: "tests/misc/catalog/catalog-005.xsl", SourceDocPath: "catalog.xml", Params: map[string]string{"supports_xml1.1": "true()"}, Assertions: []w3cAssertion{w3cAssertXML("<out/>")}, Skip: "unsupported feature: schema_aware"},
-		{Name: "catalog-005b", StylesheetPath: "tests/misc/catalog/catalog-005.xsl", SourceDocPath: "catalog.xml", Params: map[string]string{"supports_xml1.1": "false()"}, Assertions: []w3cAssertion{w3cAssertXML("<out/>")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "catalog-005", StylesheetPath: "tests/misc/catalog/catalog-005.xsl", SourceDocPath: "catalog.xml", Params: map[string]string{"supports_xml1.1": "true()"}, Assertions: []w3cAssertion{w3cAssertXML("<out/>")}, Skip: "requires schema validation (strict/lax)"},
+		{Name: "catalog-005b", StylesheetPath: "tests/misc/catalog/catalog-005.xsl", SourceDocPath: "catalog.xml", Params: map[string]string{"supports_xml1.1": "false()"}, Assertions: []w3cAssertion{w3cAssertXML("<out/>")}, Skip: "feature present but test requires absent: XML_1.1"},
 		{Name: "catalog-006", StylesheetPath: "tests/misc/catalog/catalog-006.xsl", SourceDocPath: "catalog.xml", Params: map[string]string{"supports_xml1.1": "true()"}, Assertions: []w3cAssertion{w3cAssertXPath("not(/out/unavailable)")}},
-		{Name: "catalog-006b", StylesheetPath: "tests/misc/catalog/catalog-006.xsl", SourceDocPath: "catalog.xml", Params: map[string]string{"supports_xml1.1": "false()"}, Assertions: []w3cAssertion{w3cAssertXPath("not(/out/unavailable)")}},
+		{Name: "catalog-006b", StylesheetPath: "tests/misc/catalog/catalog-006.xsl", SourceDocPath: "catalog.xml", Params: map[string]string{"supports_xml1.1": "false()"}, Assertions: []w3cAssertion{w3cAssertXPath("not(/out/unavailable)")}, Skip: "feature present but test requires absent: XML_1.1"},
 		{Name: "catalog-007", StylesheetPath: "tests/misc/catalog/catalog-007.xsl", InitialTemplate: "showAbsentPairs", Assertions: []w3cAssertion{w3cAssertXPath("/out/absent = ''")}},
 		{Name: "catalog-008", StylesheetPath: "tests/misc/catalog/catalog-008.xsl", InitialTemplate: "showDifferences", Assertions: []w3cAssertion{w3cAssertXPath("/out/absentFromSchema = ''"), w3cAssertXPath("/out/absentFromSyntax = ''")}},
-		{Name: "catalog-009", StylesheetPath: "tests/misc/catalog/catalog-009.xsl", SourceDocPath: "catalog.xml", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("empty(/out/error)")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "catalog-009", StylesheetPath: "tests/misc/catalog/catalog-009.xsl", SourceDocPath: "catalog.xml", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("empty(/out/error)")}, Skip: "requires schema validation (strict/lax)"},
 		{Name: "catalog-010", StylesheetPath: "tests/misc/catalog/catalog-010.xsl", SourceDocPath: "catalog.xml", Assertions: []w3cAssertion{w3cAssertXPath("not(/out/invalid)")}, Skip: "unsupported feature: higher_order_functions"},
 		{Name: "catalog-012", StylesheetPath: "tests/misc/catalog/catalog-012.xsl", SourceDocPath: "catalog.xml", Assertions: []w3cAssertion{w3cAssertXPath("not(/out/backwards)")}},
 	})
@@ -962,11 +962,11 @@ func TestW3C_error(t *testing.T) {
 		{Name: "error-0210f", StylesheetPath: "tests/misc/error/error-0210f.xsl", SourceContent: `<doc>
   <element attribute="3"/>
 </doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0210"},
-		{Name: "error-0215a", StylesheetPath: "tests/misc/error/error-0215a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0215", Skip: "unsupported feature: schema_aware"},
-		{Name: "error-0215b", StylesheetPath: "tests/misc/error/error-0215b.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0215", Skip: "unsupported feature: schema_aware"},
+		{Name: "error-0215a", StylesheetPath: "tests/misc/error/error-0215a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0215", Skip: "requires schema-aware static checking: XTSE0215"},
+		{Name: "error-0215b", StylesheetPath: "tests/misc/error/error-0215b.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0215", Skip: "requires schema-aware static checking: XTSE0215"},
 		{Name: "error-0220a", StylesheetPath: "tests/misc/error/error-0220a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0220", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0220", Skip: "requires schema-aware static checking: XTSE0220"},
 		{Name: "error-0260a", StylesheetPath: "tests/misc/error/error-0260a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
 </doc>`, ExpectError: true, ErrorCode: "XTSE0260"},
@@ -1115,10 +1115,10 @@ func TestW3C_error(t *testing.T) {
 </doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE0560"},
 		{Name: "error-0570a", StylesheetPath: "tests/misc/error/error-0570a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, ExpectError: true, ErrorCode: "XTTE0570", Skip: "unsupported feature: schema_aware"},
+</doc>`, ExpectError: true, ErrorCode: "XTTE0570", Skip: "requires runtime type checking: XTTE0570"},
 		{Name: "error-0570b", StylesheetPath: "tests/misc/error/error-0570b.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, ExpectError: true, ErrorCode: "XTTE0570", Skip: "unsupported feature: schema_aware"},
+</doc>`, ExpectError: true, ErrorCode: "XTTE0570", Skip: "requires runtime type checking: XTTE0570"},
 		{Name: "error-0570c", StylesheetPath: "tests/misc/error/error-0570c.xsl", SourceContent: `<doc>
   <element attribute="3"/>
 </doc>`, ExpectError: true, ErrorCode: "XTTE0570"},
@@ -1371,7 +1371,7 @@ func TestW3C_error(t *testing.T) {
 </doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE0890"},
 		{Name: "error-0905a", StylesheetPath: "tests/misc/error/error-0905a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE0905"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE0905", Skip: "feature present but test requires absent: XSD_1.1"},
 		{Name: "error-0905b", StylesheetPath: "tests/misc/error/error-0905a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
 </doc>`, InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/*:out/namespace::ns=\"####\"")}},
@@ -1402,10 +1402,10 @@ func TestW3C_error(t *testing.T) {
 		{Name: "error-0945a", StylesheetPath: "tests/misc/error/error-0945a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE0945"},
 		{Name: "error-0950a", StylesheetPath: "tests/misc/error/error-0950a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE0950", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE0950", Skip: "requires runtime type checking: XTTE0950"},
 		{Name: "error-0950b", StylesheetPath: "tests/misc/error/error-0950b.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE0950", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE0950", Skip: "requires runtime type checking: XTTE0950"},
 		{Name: "error-0975a", StylesheetPath: "tests/misc/error/error-0975a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
 </doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0975"},
@@ -1721,60 +1721,60 @@ func TestW3C_error(t *testing.T) {
 		{Name: "error-1500a", StylesheetPath: "tests/misc/error/error-1500a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE1500"},
 		{Name: "error-1505a", StylesheetPath: "tests/misc/error/error-1505a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1505", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1505", Skip: "requires schema validation (strict/lax)"},
 		{Name: "error-1505b", StylesheetPath: "tests/misc/error/error-1505b.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1505", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1505"},
 		{Name: "error-1510a", StylesheetPath: "tests/misc/error/error-1510a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1510", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1510", Skip: "requires runtime type checking: XTTE1510"},
 		{Name: "error-1510b", StylesheetPath: "tests/misc/error/error-1510b.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1510", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1510", Skip: "requires runtime type checking: XTTE1510"},
 		{Name: "error-1510c", StylesheetPath: "tests/misc/error/error-1510c.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1510", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1510", Skip: "requires runtime type checking: XTTE1510"},
 		{Name: "error-1512a", StylesheetPath: "tests/misc/error/error-1512a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1512", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1512", Skip: "requires runtime type checking: XTTE1512"},
 		{Name: "error-1515a", StylesheetPath: "tests/misc/error/error-1515a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1515", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1515", Skip: "requires runtime type checking: XTTE1515"},
 		{Name: "error-1520a", StylesheetPath: "tests/misc/error/error-1520a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1520", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1520"},
 		{Name: "error-1520b", StylesheetPath: "tests/misc/error/error-1520b.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1520", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1520"},
 		{Name: "error-1520c", StylesheetPath: "tests/misc/error/error-1520c.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1520", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1520"},
 		{Name: "error-1530a", StylesheetPath: "tests/misc/error/error-1530a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1530", Skip: "unsupported feature: schema_aware"},
-		{Name: "error-1535a", StylesheetPath: "tests/misc/error/error-1535a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1535", Skip: "unsupported feature: schema_aware"},
-		{Name: "error-1535b", StylesheetPath: "tests/misc/error/error-1535a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1650"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1530"},
+		{Name: "error-1535a", StylesheetPath: "tests/misc/error/error-1535a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1535", Skip: "requires runtime type checking: XTTE1535"},
+		{Name: "error-1535b", StylesheetPath: "tests/misc/error/error-1535a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1650", Skip: "feature present but test requires absent: schema_aware"},
 		{Name: "error-1540a", StylesheetPath: "tests/misc/error/error-1540a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1540", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1540", Skip: "requires runtime type checking: XTTE1540"},
 		{Name: "error-1545a", StylesheetPath: "tests/misc/error/error-1545a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1545", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1545", Skip: "requires runtime type checking: XTTE1545"},
 		{Name: "error-1550a", StylesheetPath: "tests/misc/error/error-1550a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1550", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1550", Skip: "requires runtime type checking: XTTE1550"},
 		{Name: "error-1550b", StylesheetPath: "tests/misc/error/error-1550b.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1550", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1550", Skip: "requires runtime type checking: XTTE1550"},
 		{Name: "error-1555a", StylesheetPath: "tests/misc/error/error-1555a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1555", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1555", Skip: "requires runtime type checking: XTTE1555"},
 		{Name: "error-1555b", StylesheetPath: "tests/misc/error/error-1555b.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1555", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1555", Skip: "requires runtime type checking: XTTE1555"},
 		{Name: "error-1555c", StylesheetPath: "tests/misc/error/error-1555c.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1510", Skip: "unsupported feature: schema_aware"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1510", Skip: "requires runtime type checking: XTTE1510"},
 		{Name: "error-1560a", StylesheetPath: "tests/misc/error/error-1560a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
 </doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1560"},
@@ -1793,17 +1793,17 @@ func TestW3C_error(t *testing.T) {
 		{Name: "error-1600a", StylesheetPath: "tests/misc/error/error-1600a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
 </doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1600"},
-		{Name: "error-1620a", StylesheetPath: "tests/misc/error/error-1620a.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXML("<out>&lt;a/&gt;</out>"))}},
-		{Name: "error-1620b", StylesheetPath: "tests/misc/error/error-1620a.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>&lt;a/&gt;</out>")}},
-		{Name: "error-1630a", StylesheetPath: "tests/misc/error/error-1630a.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXML("<out>&lt;a/&gt;</out>"))}},
-		{Name: "error-1630b", StylesheetPath: "tests/misc/error/error-1630a.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>&lt;a/&gt;</out>")}},
-		{Name: "error-1650a", StylesheetPath: "tests/misc/error/error-1650a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1650"},
-		{Name: "error-1660a", StylesheetPath: "tests/misc/error/error-1660a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1660"},
-		{Name: "error-1660b", StylesheetPath: "tests/misc/error/error-1660b.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1660"},
-		{Name: "error-1660c", StylesheetPath: "tests/misc/error/error-1660c.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1660"},
-		{Name: "error-1660d", StylesheetPath: "tests/misc/error/error-1660d.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1660"},
-		{Name: "error-1660e", StylesheetPath: "tests/misc/error/error-1660e.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1660"},
-		{Name: "error-1665a", StylesheetPath: "tests/misc/error/error-1665a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE1665"},
+		{Name: "error-1620a", StylesheetPath: "tests/misc/error/error-1620a.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXML("<out>&lt;a/&gt;</out>"))}, Skip: "feature present but test requires absent: disabling_output_escaping"},
+		{Name: "error-1620b", StylesheetPath: "tests/misc/error/error-1620a.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>&lt;a/&gt;</out>")}, Skip: "feature present but test requires absent: disabling_output_escaping"},
+		{Name: "error-1630a", StylesheetPath: "tests/misc/error/error-1630a.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXML("<out>&lt;a/&gt;</out>"))}, Skip: "feature present but test requires absent: disabling_output_escaping"},
+		{Name: "error-1630b", StylesheetPath: "tests/misc/error/error-1630a.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>&lt;a/&gt;</out>")}, Skip: "feature present but test requires absent: disabling_output_escaping"},
+		{Name: "error-1650a", StylesheetPath: "tests/misc/error/error-1650a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1650", Skip: "feature present but test requires absent: schema_aware"},
+		{Name: "error-1660a", StylesheetPath: "tests/misc/error/error-1660a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1660", Skip: "feature present but test requires absent: schema_aware"},
+		{Name: "error-1660b", StylesheetPath: "tests/misc/error/error-1660b.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1660", Skip: "feature present but test requires absent: schema_aware"},
+		{Name: "error-1660c", StylesheetPath: "tests/misc/error/error-1660c.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1660", Skip: "feature present but test requires absent: schema_aware"},
+		{Name: "error-1660d", StylesheetPath: "tests/misc/error/error-1660d.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1660", Skip: "feature present but test requires absent: schema_aware"},
+		{Name: "error-1660e", StylesheetPath: "tests/misc/error/error-1660e.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1660", Skip: "feature present but test requires absent: schema_aware"},
+		{Name: "error-1665a", StylesheetPath: "tests/misc/error/error-1665a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE1665", Skip: "feature present but test requires absent: schema_aware"},
 		{Name: "error-2200a", StylesheetPath: "tests/misc/error/error-2200a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE2200"},
 		{Name: "error-2210a", StylesheetPath: "tests/misc/error/error-2210a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE2210"},
 		{Name: "error-2220a", StylesheetPath: "tests/misc/error/error-2220a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE2220"},
@@ -1826,9 +1826,9 @@ func TestW3C_error(t *testing.T) {
 		{Name: "error-3090a", StylesheetPath: "tests/misc/error/error-3090a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE3090"},
 		{Name: "error-3100a", StylesheetPath: "tests/misc/error/error-3100a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, ExpectError: true, ErrorCode: "XTTE3100", Skip: "unsupported feature: schema_aware"},
-		{Name: "error-3105a", StylesheetPath: "tests/misc/error/error-3105a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3105", Skip: "unsupported feature: schema_aware"},
-		{Name: "error-3110a", StylesheetPath: "tests/misc/error/error-3110a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE3110", Skip: "unsupported feature: schema_aware"},
+</doc>`, ExpectError: true, ErrorCode: "XTTE3100", Skip: "requires runtime type checking: XTTE3100"},
+		{Name: "error-3105a", StylesheetPath: "tests/misc/error/error-3105a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3105"},
+		{Name: "error-3110a", StylesheetPath: "tests/misc/error/error-3110a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE3110", Skip: "requires runtime type checking: XTTE3110"},
 		{Name: "error-3120a", StylesheetPath: "tests/misc/error/error-3120a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3120"},
 		{Name: "error-3125a", StylesheetPath: "tests/misc/error/error-3125a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3125"},
 		{Name: "error-3125b", StylesheetPath: "tests/misc/error/error-3125b.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3125"},
@@ -1846,7 +1846,7 @@ func TestW3C_error(t *testing.T) {
 		{Name: "error-3200a", StylesheetPath: "tests/misc/error/error-3200a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3200"},
 		{Name: "error-3210a", StylesheetPath: "tests/misc/error/error-3210a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE3210"},
 		{Name: "error-3240a", StylesheetPath: "tests/misc/error/error-3240a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "FOJS0001"},
-		{Name: "error-3245a", StylesheetPath: "tests/misc/error/error-3245a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "FOJS0004"},
+		{Name: "error-3245a", StylesheetPath: "tests/misc/error/error-3245a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "FOJS0004", Skip: "feature present but test requires absent: schema_aware"},
 		{Name: "error-3250a", StylesheetPath: "tests/misc/error/error-3250a.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("out/* instance of element(Q{http://www.w3.org/2005/xpath-functions}array)"), w3cAssertXPath("out//Q{http://www.w3.org/2005/xpath-functions}string = 'xx�xx'")}},
 		{Name: "error-3255a", StylesheetPath: "tests/misc/error/error-3255a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XPTY0004"},
 		{Name: "error-3260a", StylesheetPath: "tests/misc/error/error-3260a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XPTY0004"},

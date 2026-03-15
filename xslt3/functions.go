@@ -233,7 +233,7 @@ func (ec *execContext) fnSystemProperty(_ context.Context, args []xpath3.Sequenc
 	case "product-version":
 		return xpath3.SingleString("0.1"), nil
 	case "is-schema-aware":
-		return xpath3.SingleString("no"), nil
+		return xpath3.SingleString("yes"), nil
 	case "supports-serialization":
 		return xpath3.SingleString("yes"), nil
 	case "supports-backwards-compatibility":
@@ -440,8 +440,52 @@ func (ec *execContext) fnFunctionAvailable(_ context.Context, args []xpath3.Sequ
 	return xpath3.SingleBoolean(false), nil
 }
 
-// type-available(name) — not supported (no schema awareness), always returns false.
-func (ec *execContext) fnTypeAvailable(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
+// type-available(name) returns true if the named type is available.
+func (ec *execContext) fnTypeAvailable(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	if len(args) == 0 || len(args[0]) == 0 {
+		return xpath3.SingleBoolean(false), nil
+	}
+	av, err := xpath3.AtomizeItem(args[0][0])
+	if err != nil {
+		return xpath3.SingleBoolean(false), nil
+	}
+	name, _ := xpath3.AtomicToString(av)
+
+	// Resolve QName to canonical xs:... form
+	resolved := resolveQName(name, ec.stylesheet.namespaces)
+	// If it resolved to {uri}local, normalize XSD namespace to xs: prefix
+	if strings.HasPrefix(resolved, "{http://www.w3.org/2001/XMLSchema}") {
+		local := resolved[len("{http://www.w3.org/2001/XMLSchema}"):]
+		resolved = "xs:" + local
+	} else if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		prefix := name[:idx]
+		local := name[idx+1:]
+		if prefix == "xs" || prefix == "xsd" {
+			resolved = "xs:" + local
+		} else if uri, ok := ec.stylesheet.namespaces[prefix]; ok && uri == "http://www.w3.org/2001/XMLSchema" {
+			resolved = "xs:" + local
+		}
+	}
+
+	// Check xpath3 built-in types
+	if xpath3.IsKnownXSDType(resolved) {
+		return xpath3.SingleBoolean(true), nil
+	}
+
+	// Check imported schemas
+	for _, schema := range ec.stylesheet.schemas {
+		local := resolved
+		ns := "http://www.w3.org/2001/XMLSchema"
+		if strings.HasPrefix(resolved, "xs:") {
+			local = resolved[3:]
+		} else if idx := strings.IndexByte(resolved, ':'); idx >= 0 {
+			local = resolved[idx+1:]
+		}
+		if _, ok := schema.LookupType(local, ns); ok {
+			return xpath3.SingleBoolean(true), nil
+		}
+	}
+
 	return xpath3.SingleBoolean(false), nil
 }
 

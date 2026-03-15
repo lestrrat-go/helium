@@ -95,7 +95,11 @@ func evalLocationPath(ec *evalContext, lp *LocationPath) (Sequence, error) {
 
 	result := make(Sequence, len(nodes))
 	for i, n := range nodes {
-		result[i] = NodeItem{Node: n}
+		ni := NodeItem{Node: n}
+		if ec.typeAnnotations != nil {
+			ni.TypeAnnotation = ec.typeAnnotations[n]
+		}
+		result[i] = ni
 	}
 	return result, nil
 }
@@ -170,6 +174,15 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 				return false
 			}
 		}
+		if test.TypeName != "" {
+			ann := nodeTypeAnnotation(n, ec)
+			if ann == "" {
+				ann = TypeUntypedAtomic
+			}
+			if !isSubtypeOf(ann, resolveTestTypeName(test.TypeName, ec)) {
+				return false
+			}
+		}
 		return true
 	case AttributeTest:
 		if _, ok := n.(*helium.Attribute); !ok {
@@ -177,6 +190,15 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 		}
 		if test.Name != "" && test.Name != "*" {
 			if ixpath.LocalNameOf(n) != test.Name {
+				return false
+			}
+		}
+		if test.TypeName != "" {
+			ann := nodeTypeAnnotation(n, ec)
+			if ann == "" {
+				ann = TypeUntypedAtomic
+			}
+			if !isSubtypeOf(ann, resolveTestTypeName(test.TypeName, ec)) {
 				return false
 			}
 		}
@@ -312,6 +334,36 @@ func applyPredicate(ec *evalContext, nodes []helium.Node, pred Expr) ([]helium.N
 		}
 	}
 	return result, nil
+}
+
+// nodeTypeAnnotation returns the type annotation for a node from the
+// evalContext's type annotation map.
+func nodeTypeAnnotation(n helium.Node, ec *evalContext) string {
+	if ec == nil || ec.typeAnnotations == nil {
+		return ""
+	}
+	return ec.typeAnnotations[n]
+}
+
+// resolveTestTypeName normalizes a type name from an ElementTest/AttributeTest
+// to the canonical "xs:..." form.
+func resolveTestTypeName(raw string, ec *evalContext) string {
+	if strings.HasPrefix(raw, "xs:") {
+		return raw
+	}
+	if idx := strings.IndexByte(raw, ':'); idx >= 0 {
+		prefix := raw[:idx]
+		local := raw[idx+1:]
+		if prefix == "xsd" {
+			return "xs:" + local
+		}
+		if ec != nil && ec.namespaces != nil {
+			if uri, ok := ec.namespaces[prefix]; ok && uri == "http://www.w3.org/2001/XMLSchema" {
+				return "xs:" + local
+			}
+		}
+	}
+	return raw
 }
 
 // predicateTrue evaluates a predicate result per XPath spec:

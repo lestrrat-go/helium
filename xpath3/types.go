@@ -44,7 +44,8 @@ func cloneSequences(seqs []Sequence) []Sequence {
 
 // NodeItem wraps a helium.Node as an XPath item.
 type NodeItem struct {
-	Node helium.Node
+	Node           helium.Node
+	TypeAnnotation string // optional xs:... type annotation (schema-aware)
 }
 
 func (NodeItem) itemTag() {}
@@ -696,12 +697,28 @@ func (a ArrayItem) Flatten() Sequence {
 
 // --- Atomization ---
 
+// IsKnownXSDType returns true if name is a recognized XSD type in the
+// xpath3 type hierarchy (the xsdTypeParent map or a base type).
+func IsKnownXSDType(name string) bool {
+	if _, ok := xsdTypeParent[name]; ok {
+		return true
+	}
+	return name == TypeAnyAtomicType || name == TypeNumeric
+}
+
 // AtomizeItem converts a single item to an atomic value per XPath 3.1 Section 2.6.2.
 func AtomizeItem(item Item) (AtomicValue, error) {
 	switch v := item.(type) {
 	case AtomicValue:
 		return v, nil
 	case NodeItem:
+		if v.TypeAnnotation != "" && v.TypeAnnotation != TypeUntypedAtomic {
+			s := ixpath.StringValue(v.Node)
+			cast, err := CastFromString(s, v.TypeAnnotation)
+			if err == nil {
+				return cast, nil
+			}
+		}
 		return AtomicValue{
 			TypeName: TypeUntypedAtomic,
 			Value:    ixpath.StringValue(v.Node),
@@ -730,4 +747,32 @@ func AtomizeItem(item Item) (AtomicValue, error) {
 			Message: fmt.Sprintf("cannot atomize %T", item),
 		}
 	}
+}
+
+// atomizeItemTyped atomizes an item using the evalContext's type annotation map.
+func atomizeItemTyped(item Item, ec *evalContext) (AtomicValue, error) {
+	ni, ok := item.(NodeItem)
+	if !ok {
+		return AtomizeItem(item)
+	}
+	if ni.TypeAnnotation != "" && ni.TypeAnnotation != TypeUntypedAtomic {
+		s := ixpath.StringValue(ni.Node)
+		cast, err := CastFromString(s, ni.TypeAnnotation)
+		if err == nil {
+			return cast, nil
+		}
+	}
+	if ec != nil && ec.typeAnnotations != nil && ni.Node != nil {
+		if ann, found := ec.typeAnnotations[ni.Node]; found && ann != TypeUntypedAtomic {
+			s := ixpath.StringValue(ni.Node)
+			cast, err := CastFromString(s, ann)
+			if err == nil {
+				return cast, nil
+			}
+		}
+	}
+	return AtomicValue{
+		TypeName: TypeUntypedAtomic,
+		Value:    ixpath.StringValue(ni.Node),
+	}, nil
 }
