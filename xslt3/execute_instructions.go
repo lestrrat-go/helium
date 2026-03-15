@@ -2531,7 +2531,12 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 	ec.pushVarScope()
 	defer ec.popVarScope()
 
-	ec.setVar("{"+errNS+"}code", xpath3.SingleString(errCode))
+	// $err:code is an xs:QName value with the error code
+	errCodeQName := xpath3.Sequence{xpath3.AtomicValue{
+		TypeName: xpath3.TypeQName,
+		Value:    xpath3.QNameValue{Prefix: "err", URI: errNS, Local: errCode},
+	}}
+	ec.setVar("{"+errNS+"}code", errCodeQName)
 	ec.setVar("{"+errNS+"}description", xpath3.SingleString(errDesc))
 	ec.setVar("{"+errNS+"}value", xpath3.EmptySequence())
 	ec.setVar("{"+errNS+"}module", xpath3.SingleString(""))
