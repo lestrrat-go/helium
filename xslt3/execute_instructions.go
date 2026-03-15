@@ -715,8 +715,13 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 	// Push new output context for children
 	out := ec.currentOutput()
 	savedCurrent := out.current
+	savedPrevAtomic := out.prevWasAtomic
 	out.current = elem
-	defer func() { out.current = savedCurrent }()
+	out.prevWasAtomic = false
+	defer func() {
+		out.current = savedCurrent
+		out.prevWasAtomic = savedPrevAtomic
+	}()
 
 	// Apply attribute sets (before body so body can override)
 	if len(inst.UseAttributeSets) > 0 {
@@ -1290,8 +1295,13 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, body 
 		// Execute body in element context
 		out := ec.currentOutput()
 		savedCurrent := out.current
+		savedPrevAtomic := out.prevWasAtomic
 		out.current = elem
-		defer func() { out.current = savedCurrent }()
+		out.prevWasAtomic = false
+		defer func() {
+			out.current = savedCurrent
+			out.prevWasAtomic = savedPrevAtomic
+		}()
 
 		// Apply attribute sets if specified
 		if len(useAttrSets) > 0 && len(useAttrSets[0]) > 0 {
@@ -1553,11 +1563,14 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *Liter
 	// Execute body in element context with a new variable scope
 	out := ec.currentOutput()
 	savedCurrent := out.current
+	savedPrevAtomic := out.prevWasAtomic
 	out.current = elem
+	out.prevWasAtomic = false
 	ec.pushVarScope()
 	defer func() {
 		ec.popVarScope()
 		out.current = savedCurrent
+		out.prevWasAtomic = savedPrevAtomic
 	}()
 
 	// Apply attribute sets (before body so body can override)
@@ -2465,7 +2478,7 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 		return nil
 	}
 
-	prevWasAtomic := false
+	prevWasAtomic := out.prevWasAtomic
 	for _, item := range result.Sequence() {
 		switch v := item.(type) {
 		case xpath3.NodeItem:
@@ -2528,6 +2541,7 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 			prevWasAtomic = true
 		}
 	}
+	out.prevWasAtomic = prevWasAtomic
 	return nil
 }
 
@@ -2542,7 +2556,7 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 		return nil
 	}
 
-	prevWasAtomic := false
+	prevWasAtomic := out.prevWasAtomic
 	for _, item := range seq {
 		switch v := item.(type) {
 		case xpath3.NodeItem:
@@ -2591,6 +2605,7 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 			prevWasAtomic = true
 		}
 	}
+	out.prevWasAtomic = prevWasAtomic
 	return nil
 }
 

@@ -15,6 +15,7 @@ type outputFrame struct {
 	captureItems      bool             // when true, xsl:sequence adds to pendingItems instead of DOM
 	separateTextNodes bool             // when true, text nodes are captured as separate string items (prevents DOM merging)
 	pendingItems      xpath3.Sequence  // captured items from xsl:sequence
+	prevWasAtomic     bool             // true when last xsl:sequence output was an atomic value (for inter-call space separation)
 }
 
 // serializeResult writes the result document to a writer according to the
