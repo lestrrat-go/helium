@@ -108,10 +108,11 @@ Special cases:
    - Already-checked entities use cached `expandedSize`
 3. Parse entity content if needed (`parseBalancedChunkInternal`)
    - Recursively parse entity text
+   - Seed in-scope namespaces from the surrounding element before parsing
    - Fill `ent.firstChild` (parsed nodes)
    - Mark `ent.checked = 2`, cache `ent.expandedSize`
 4. Deliver to SAX
-   - `replaceEntities=true`: expand inline (copy children, fire Characters)
+   - `replaceEntities=true`: expand inline and replay parsed node children through SAX (`StartElementNS`/`EndElementNS`, `Characters`, `CDataBlock`, `Comment`, `PI`)
    - `replaceEntities=false`: fire Reference callback only
 
 ### Attribute Value Entities (`decodeEntities()`)
@@ -135,6 +136,7 @@ Expands `&#NNN;`, `&#xHHH;`, `&name;`, `%name;` based on substitution type. Recu
 - `ProcessingInstruction` → create PI
 - `InternalSubset` → create internal DTD
 - `ExternalSubset` → load external DTD, parse declarations
+  - Temporarily switches parser `baseURI` to the resolved DTD path while parsing the subset so entity system IDs resolve relative to the DTD file
 - `GetEntity`/`GetParameterEntity` → lookup in document entity table
 
 ### Parent Selection
@@ -191,8 +193,8 @@ On error in `parseContent()`:
 | Flag | Effect |
 |------|--------|
 | ParseNoBlanks | keepBlanks=false (discard ignorable whitespace) |
-| ParseNoEnt | replaceEntities=true (expand entities inline) |
-| ParseDTDLoad | loadsubset.Set(DetectIDs) (load external DTD) |
+| ParseNoEnt | replaceEntities=true (expand entities inline; external parsed entities are replayed as full SAX node subtrees) |
+| ParseDTDLoad | loadsubset.Set(DetectIDs) (load external DTD; external subset system IDs resolve relative to the DTD base URI) |
 | ParseDTDAttr | loadsubset.Set(CompleteAttrs) (apply default attrs) |
 | ParseDTDValid | validate content models after parse |
 | ParseHuge | maxAmpl=0 (disable amplification checks) |

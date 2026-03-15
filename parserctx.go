@@ -5288,6 +5288,11 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 	newctx.options = pctx.options
 	newctx.depth = pctx.depth + 1
 	newctx.external = true
+	if pctx.elem != nil {
+		for _, ns := range collectInScopeNamespaces(pctx.elem) {
+			newctx.pushNS(ns.Prefix(), ns.URI())
+		}
+	}
 
 	// External parsed entities may have a text declaration (XML decl without
 	// standalone). Try to detect and parse encoding.
@@ -5332,6 +5337,13 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 			for e := grandchild; e != nil; e = e.NextSibling() {
 				e.SetTreeDoc(pctx.doc)
 				e.SetParent(nil)
+				if uri != "" {
+					if elem, ok := e.(*Element); ok {
+						if _, exists := elem.GetAttributeNS("base", XMLNamespace); !exists {
+							_ = elem.SetAttributeNS("base", uri, newNamespace("xml", XMLNamespace))
+						}
+					}
+				}
 			}
 			return grandchild, nil
 		}
@@ -5384,6 +5396,11 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	newctx.sax = pctx.sax
 	newctx.attsDefault = pctx.attsDefault
 	newctx.depth = pctx.depth + 1
+	if pctx.elem != nil {
+		for _, ns := range collectInScopeNamespaces(pctx.elem) {
+			newctx.pushNS(ns.Prefix(), ns.URI())
+		}
+	}
 	// Propagate entity amplification tracking from parent context,
 	// and collect the accumulated counter back when done.
 	newctx.sizeentcopy = pctx.sizeentcopy
@@ -5620,14 +5637,77 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 
 	if pctx.replaceEntities {
 		for n := ent.firstChild; n != nil; n = n.NextSibling() {
-			if s := pctx.sax; s != nil {
-				if n.Type() == TextNode {
-					if err := pctx.deliverCharacters(ctx, s.Characters, n.Content()); err != nil {
-						return err
-					}
-				}
+			if err := pctx.replayEntityNode(ctx, n); err != nil {
+				return err
 			}
 		}
+	}
+
+	return nil
+}
+
+func (pctx *parserCtx) replayEntityNode(ctx context.Context, n Node) error {
+	if n == nil || pctx.sax == nil {
+		return nil
+	}
+
+	switch v := n.(type) {
+	case *Element:
+		namespaces := make([]sax.Namespace, 0, len(v.Namespaces()))
+		for _, ns := range v.Namespaces() {
+			namespaces = append(namespaces, ns)
+		}
+
+		var attrs []sax.Attribute
+		for attr := v.properties; attr != nil; attr = attr.NextAttribute() {
+			attrs = append(attrs, attr)
+		}
+
+		switch err := pctx.sax.StartElementNS(ctx, v.LocalName(), v.Prefix(), v.URI(), namespaces, attrs); err {
+		case nil, sax.ErrHandlerUnspecified:
+		default:
+			return err
+		}
+
+		for child := v.FirstChild(); child != nil; child = child.NextSibling() {
+			if err := pctx.replayEntityNode(ctx, child); err != nil {
+				return err
+			}
+		}
+
+		switch err := pctx.sax.EndElementNS(ctx, v.LocalName(), v.Prefix(), v.URI()); err {
+		case nil, sax.ErrHandlerUnspecified:
+			return nil
+		default:
+			return err
+		}
+	case *Text:
+		return pctx.deliverCharacters(ctx, pctx.sax.Characters, v.Content())
+	case *CDATASection:
+		switch err := pctx.sax.CDataBlock(ctx, v.Content()); err {
+		case nil:
+			return nil
+		case sax.ErrHandlerUnspecified:
+			return pctx.deliverCharacters(ctx, pctx.sax.Characters, v.Content())
+		default:
+			return err
+		}
+	case *Comment:
+		switch err := pctx.sax.Comment(ctx, v.Content()); err {
+		case nil, sax.ErrHandlerUnspecified:
+			return nil
+		default:
+			return err
+		}
+	case *ProcessingInstruction:
+		switch err := pctx.sax.ProcessingInstruction(ctx, v.Name(), string(v.Content())); err {
+		case nil, sax.ErrHandlerUnspecified:
+			return nil
+		default:
+			return err
+		}
+	default:
+		return nil
 	}
 
 	return nil

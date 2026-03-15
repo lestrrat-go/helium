@@ -10,6 +10,15 @@ import (
 	"github.com/lestrrat-go/helium"
 )
 
+func parseStylesheetDocument(ctx context.Context, data []byte, baseURI string) (*helium.Document, error) {
+	p := helium.NewParser()
+	p.SetOption(helium.ParseDTDLoad | helium.ParseNoEnt)
+	if baseURI != "" {
+		p.SetBaseURI(baseURI)
+	}
+	return p.Parse(ctx, data)
+}
+
 // CompileStylesheet compiles a parsed XSLT stylesheet document into a
 // reusable Stylesheet. Use WithCompileBaseURI and WithCompileURIResolver
 // to configure compilation via ctx.
@@ -22,20 +31,20 @@ func CompileStylesheet(ctx context.Context, doc *helium.Document) (*Stylesheet, 
 // Use WithCompileBaseURI and WithCompileURIResolver to configure
 // compilation via ctx.
 func CompileFile(ctx context.Context, path string) (*Stylesheet, error) {
+	absPath, absErr := filepath.Abs(path)
+	if absErr != nil {
+		absPath = path
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	doc, err := helium.Parse(ctx, data)
+	doc, err := parseStylesheetDocument(ctx, data, absPath)
 	if err != nil {
 		return nil, err
 	}
 	cfg := deriveCompileConfig(ctx)
 	if cfg.baseURI == "" {
-		absPath, absErr := filepath.Abs(path)
-		if absErr != nil {
-			absPath = path
-		}
 		cfg.baseURI = absPath
 	}
 	return compile(doc, cfg)

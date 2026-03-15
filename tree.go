@@ -511,7 +511,9 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	// Parse markup declarations from the DTD content.
 	// Push content onto the input stack and loop until exhausted.
 	savedExternal := ctx.external
+	savedBaseURI := ctx.baseURI
 	ctx.external = true
+	ctx.baseURI = resolved
 
 	baseLen := ctx.inputTab.Len()
 	ctx.pushInput(strcursor.NewByteCursor(bytes.NewReader(data)))
@@ -551,6 +553,7 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	}
 
 	ctx.external = savedExternal
+	ctx.baseURI = savedBaseURI
 
 	return nil
 }

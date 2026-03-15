@@ -1096,7 +1096,7 @@ func (c *compiler) compileImport(elem *helium.Element) error {
 	if href == "" {
 		return staticError(errCodeXTSE0110, "xsl:import requires href attribute")
 	}
-	return c.loadExternalStylesheet(href, true)
+	return c.loadExternalStylesheet(stylesheetBaseURI(elem, c.baseURI), href, true)
 }
 
 func (c *compiler) compileInclude(elem *helium.Element) error {
@@ -1104,14 +1104,40 @@ func (c *compiler) compileInclude(elem *helium.Element) error {
 	if href == "" {
 		return staticError(errCodeXTSE0110, "xsl:include requires href attribute")
 	}
-	return c.loadExternalStylesheet(href, false)
+	return c.loadExternalStylesheet(stylesheetBaseURI(elem, c.baseURI), href, false)
 }
 
-func (c *compiler) loadExternalStylesheet(href string, isImport bool) error {
+func stylesheetBaseURI(n helium.Node, fallback string) string {
+	base := fallback
+	var bases []string
+	for cur := n; cur != nil; cur = cur.Parent() {
+		elem, ok := cur.(*helium.Element)
+		if !ok {
+			continue
+		}
+		if xmlBase, ok := elem.GetAttributeNS("base", helium.XMLNamespace); ok && xmlBase != "" {
+			bases = append(bases, xmlBase)
+		}
+	}
+	for i := len(bases) - 1; i >= 0; i-- {
+		if filepath.IsAbs(bases[i]) || strings.Contains(bases[i], "://") {
+			base = bases[i]
+			continue
+		}
+		if base == "" {
+			base = bases[i]
+			continue
+		}
+		base = helium.BuildURI(bases[i], base)
+	}
+	return base
+}
+
+func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) error {
 	// Resolve URI relative to base
 	uri := href
-	if c.baseURI != "" && !strings.Contains(href, "://") {
-		baseDir := filepath.Dir(c.baseURI)
+	if baseURI != "" && !strings.Contains(href, "://") && !filepath.IsAbs(href) {
+		baseDir := filepath.Dir(baseURI)
 		uri = filepath.Join(baseDir, href)
 	}
 
@@ -1145,7 +1171,7 @@ func (c *compiler) loadExternalStylesheet(href string, isImport bool) error {
 		}
 	}
 
-	doc, err := helium.Parse(ctx, data)
+	doc, err := parseStylesheetDocument(ctx, data, uri)
 	if err != nil {
 		return fmt.Errorf("cannot parse %q: %w", uri, err)
 	}
