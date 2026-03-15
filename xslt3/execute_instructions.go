@@ -1707,10 +1707,11 @@ func formatNumberList(nums []int, format string, groupSep string, groupSize int)
 		tokens = []fmtToken{{format: "1"}}
 	}
 
-	// Default separator between levels is "."
+	// Default separator: propagate the last separator for additional levels
 	defaultSep := "."
 	if len(tokens) > 1 {
-		defaultSep = tokens[0].separator
+		// Use the last token's separator (the one before the final format token)
+		defaultSep = tokens[len(tokens)-2].separator
 		if defaultSep == "" {
 			defaultSep = "."
 		}
