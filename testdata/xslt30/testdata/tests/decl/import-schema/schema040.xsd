@@ -1,0 +1,22 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://schema040.uri/"
+           elementFormDefault="qualified">
+
+
+
+<xs:simpleType name="validation">
+  <xs:annotation>
+    <xs:documentation>
+      Describes different ways of type-annotating an element or attribute.
+    </xs:documentation>
+  </xs:annotation>
+  <xs:restriction base="xs:token">
+    <xs:enumeration value="strict"/>
+    <xs:enumeration value="lax"/>
+    <xs:enumeration value="preserve"/>
+    <xs:enumeration value="strip"/>    
+  </xs:restriction>
+</xs:simpleType>
+
+</xs:schema>

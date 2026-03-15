@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<schema xmlns="http://www.w3.org/2001/XMLSchema"
+		xmlns:tn="http://ns.example.com/redefine"
+        targetNamespace="http://ns.example.com/redefine">
+
+<redefine schemaLocation="schema190b.xsd">
+	<simpleType name="subject">
+		<restriction base="tn:subject">
+			<enumeration value="1" />
+			<enumeration value="-1" />
+		</restriction>
+    </simpleType>
+</redefine>
+        
+    <redefine schemaLocation="schema189b.xsd"/>       
+
+    <complexType name="rootType">
+		<sequence>
+			<element ref="tn:elem1" maxOccurs="unbounded"/>
+			<element ref="tn:elem2" maxOccurs="unbounded"/>
+			<element ref="tn:elem3" maxOccurs="unbounded"/>
+			<element ref="tn:elem4" maxOccurs="unbounded"/>
+		</sequence>
+	</complexType>
+	
+	<element name="elem5" type="string"/>
+
+    <element name="root" type="tn:rootType" />
+
+</schema>

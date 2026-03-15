@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
+targetNamespace="http://mhk015.uri/"
+elementFormDefault="qualified"
+xmlns:t="http://mhk015.uri/">
+	<xsd:element name="root">
+		<xsd:complexType>
+			<xsd:choice maxOccurs="unbounded">
+				<xsd:element name="key" type="t:key_ct" />
+		        <xsd:element name="keyref" type="t:keyref_ct" />
+		        <xsd:element name="test" type="xsd:ID" />
+		    </xsd:choice>
+		</xsd:complexType>
+
+	</xsd:element>
+
+	<xsd:complexType name="key_ct">
+		<xsd:attribute name="key" type="xsd:IDREFS"/>
+	</xsd:complexType>
+
+	<xsd:complexType name="keyref_ct">
+		<xsd:attribute name="keyref" type="t:notat"/>
+	</xsd:complexType>
+
+	<xsd:notation name="foo" public="pub"/>
+	<xsd:notation name="true" public="pub"/>
+	<xsd:notation name="en" public="pub"/>
+	<xsd:notation name="P1999Y" public="pub"/>
+
+	<xsd:simpleType name="notat">
+		<xsd:restriction base="xsd:NOTATION">
+			<xsd:enumeration value="t:foo" />
+			<xsd:enumeration value="t:true" />
+			<xsd:enumeration value="t:en" />
+			<xsd:enumeration value="t:P1999Y" />
+		</xsd:restriction>		
+	</xsd:simpleType>
+</xsd:schema>

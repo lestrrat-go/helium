@@ -1,0 +1,11 @@
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                 targetNamespace="http://ns.example.com/val03/"
+                 xmlns:nr="http://ns.example.com/val03/">
+  
+<xs:element name="numbers" type="nr:number-list"/>
+
+<xs:simpleType name="number-list">
+  <xs:list itemType="xs:decimal"/>
+</xs:simpleType>
+
+</xs:schema>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://www.example.com/ns/anyuri" 
+		xmlns:one="http://www.example.com/ns/anyuri">
+
+
+<xsd:element name="anyUri-main" type="one:anyUri-main-Type" />
+
+
+	
+	<xsd:complexType name="anyUri-main-Type">
+		<xsd:sequence>
+			<xsd:element name="au1-anyURI-enumeration" type="one:au1-anyURI-enumeration-Type" />
+			<xsd:element name="au2-anyURI-length" type="one:au2-anyURI-length-Type" />
+			<xsd:element name="au3-anyURI-minLength-pattern" type="one:au3-anyURI-minLength-pattern-Type" />
+			<xsd:element name="au4-anyURI-maxLength-whiteSpace" type="one:au4-anyURI-maxLength-whiteSpace-Type" />
+		</xsd:sequence>
+	</xsd:complexType>
+	
+	<xsd:simpleType name="au1-anyURI-enumeration-Type">
+		<xsd:restriction base="xsd:anyURI">
+			<xsd:enumeration value="http://SmokeTest.research.example.com" />
+			<xsd:enumeration value="http://xsl.lotus.com" />
+			<xsd:enumeration value="http://xml.apache.org" />
+			<xsd:enumeration value="http://www.nist.gov/schemas/test" />
+		</xsd:restriction>
+	</xsd:simpleType>
+	
+	<xsd:simpleType name="au2-anyURI-length-Type">
+		<xsd:restriction base="xsd:anyURI">
+			<xsd:length value="20" />
+		</xsd:restriction>
+	</xsd:simpleType>
+	
+	<xsd:simpleType name="au3-anyURI-minLength-pattern-Type">
+		<xsd:restriction base="xsd:anyURI">
+			<xsd:minLength value="16" />
+			<xsd:pattern value="ftp://ftp.[a-z]{6}.com" />
+		</xsd:restriction>
+	</xsd:simpleType>
+	
+	<xsd:simpleType name="au4-anyURI-maxLength-whiteSpace-Type">
+		<xsd:restriction base="xsd:anyURI">
+			<xsd:maxLength value="11" />
+			<xsd:whiteSpace value="collapse" />
+		</xsd:restriction>
+	</xsd:simpleType>
+</xsd:schema>

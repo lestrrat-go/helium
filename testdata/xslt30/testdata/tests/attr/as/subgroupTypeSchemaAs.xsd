@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+			targetNamespace="http://www.example.com/ns/sub-group"
+			xmlns:my="http://www.example.com/ns/sub-group">
+
+	<xsd:annotation>
+		<xsd:documentation>
+      		Schema with substritution groups for elements
+		</xsd:documentation>
+	</xsd:annotation>
+
+<!-- Begin definitions -->
+	<xsd:element name="doc" type="my:docType"/>
+	<xsd:element name="derived-doc" type="my:derived-docType"/>
+	<xsd:element name="elem-anyURI" type="xsd:anyURI"/>
+	<xsd:element name="nillable-elem-anyURI" type="xsd:anyURI" nillable="true"/>
+	 
+	<xsd:element name="elem-anyURI-sub" type="xsd:anyURI" substitutionGroup="my:elem-anyURI"/>
+	<xsd:element name="elem-anyURI-sub1" type="my:derivedURI" substitutionGroup="my:elem-anyURI"/>
+	<xsd:element name="elem-anyURI-sub2" type="my:derivedURI2" substitutionGroup="my:elem-anyURI"/>
+	<xsd:element name="elem-anyURI-sub3" type="my:derivedURI3" substitutionGroup="my:elem-anyURI"/>
+	
+	<xsd:element name="book" type="my:book-Type" />
+	<xsd:element name="audio-book" type="my:book-Type" substitutionGroup="my:book"/>
+	<xsd:element name="article" type="my:derivedArticle" substitutionGroup="my:book"/>
+	
+	<xsd:complexType name="docType">
+		<xsd:sequence>
+			<xsd:element name="elem-URI" type="my:elem-URI-Type" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="elem-INT" type="my:elem-INT-Type" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:elem-anyURI" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:nillable-elem-anyURI" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:book" minOccurs="0" maxOccurs="unbounded"/>
+   		</xsd:sequence>
+	</xsd:complexType>
+	
+	<xsd:complexType name="derived-docType">
+		<xsd:complexContent>
+			<xsd:extension base="my:docType">
+				<xsd:sequence>
+					<xsd:element name="extension" type="xsd:string" minOccurs="0" maxOccurs="unbounded"/>
+				</xsd:sequence>
+			</xsd:extension>
+		</xsd:complexContent>
+	</xsd:complexType>
+	
+	
+	<xsd:complexType name="book-Type">
+		<xsd:sequence>
+			<xsd:element name="title" type="xsd:string"/>
+			<xsd:element name="uri" type="xsd:anyURI"/>
+			<xsd:element name="price" type="xsd:double"/>
+   		</xsd:sequence>
+	</xsd:complexType>
+	
+	<xsd:complexType name="article-Type">
+		<xsd:complexContent>
+			<xsd:extension base="my:book-Type">
+				<xsd:sequence>
+					<xsd:element name="magazine" type="xsd:string" />
+					<xsd:element name="page" type="xsd:integer" />
+				</xsd:sequence>
+			</xsd:extension>
+		</xsd:complexContent>	
+	</xsd:complexType>
+	
+	<xsd:complexType name="derivedArticle">
+		<xsd:complexContent>
+			<xsd:extension base="my:article-Type">
+				<xsd:sequence>
+					<xsd:element name="level" type="xsd:token" />
+				</xsd:sequence>
+			</xsd:extension>
+		</xsd:complexContent>	
+	</xsd:complexType>
+				
+	<xsd:complexType name="elem-URI-Type">
+		<xsd:sequence>
+			<xsd:element name="elem-anyURI" type="my:derivedURI" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="book" type="xsd:string" minOccurs="0" maxOccurs="1"/>
+   		</xsd:sequence>
+	</xsd:complexType>
+	
+	<xsd:complexType name="elem-INT-Type">
+		<xsd:sequence>
+			<xsd:element name="elem-anyURI" type="xsd:integer" minOccurs="0" maxOccurs="1"/>
+   		</xsd:sequence>
+	</xsd:complexType>
+	
+	<xsd:simpleType name="derivedURI">
+    <xsd:restriction base="xsd:anyURI">
+      <xsd:enumeration value="http://test1.org"/>
+      <xsd:enumeration value="http://test2.org"/>
+      <xsd:enumeration value="http://test3.org"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  
+  <xsd:simpleType name="derivedURI2">
+    <xsd:restriction base="my:derivedURI">
+      <xsd:enumeration value="http://test2.org"/>
+      <xsd:enumeration value="http://test3.org"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  
+  <xsd:simpleType name="derivedURI3">
+    <xsd:restriction base="my:derivedURI2">
+      <xsd:enumeration value="http://test3.org"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  
+</xsd:schema>

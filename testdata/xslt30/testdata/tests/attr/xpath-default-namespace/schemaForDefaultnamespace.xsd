@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+			xmlns:my="http://www.defaultnamespace.example.com/ns/schema" targetNamespace="http://www.defaultnamespace.example.com/ns/schema"
+			elementFormDefault="qualified">
+
+	<xsd:annotation>
+		<xsd:documentation>
+      		One-of-each approach for constructing a test schema for primitive types
+		</xsd:documentation>
+	</xsd:annotation>
+
+<!-- Begin definitions -->
+	<xsd:element name="doc-default" type="my:docType-default" />
+	
+	<xsd:complexType name="docType-default">
+		<xsd:sequence>
+			<xsd:element name="elem" type="my:myPartNumberType" minOccurs="0" maxOccurs="1"/>
+   			<xsd:element name="item" type="xsd:string" />
+   		</xsd:sequence>
+	</xsd:complexType>
+	
+	<xsd:simpleType name="myPartNumberType">
+    <xsd:restriction base="xsd:string">
+      <xsd:pattern value="\d{3}-[A-Z]{2}"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  	
+</xsd:schema>

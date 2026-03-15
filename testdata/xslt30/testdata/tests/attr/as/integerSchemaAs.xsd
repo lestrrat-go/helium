@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://www.example.com/ns/integer" 
+		xmlns:one="http://www.example.com/ns/integer">
+
+
+<xsd:element name="integer-main" type="one:integer-main-Type" />
+
+	<xsd:complexType name="integer-main-Type">
+		<xsd:sequence>
+			<xsd:element name="i1-integer-enumeration" type="one:i1-integer-enumeration-Type" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="i2-integer-maxExclusive-minExclusive" type="one:i2-integer-maxExclusive-minExclusive-Type" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="i3-integer-maxInclusive-minInclusive" type="one:i3-integer-maxInclusive-minInclusive-Type" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="i4-integer-pattern" type="one:i4-integer-pattern-Type" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="i5-integer-fractionDigits-totalDigits" type="one:i5-integer-fractionDigits-totalDigits-Type" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="i6-integer-whiteSpace" type="one:i6-integer-whiteSpace-Type" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="int2-int-maxExclusive" type="one:int2-int-maxExclusive-Type" minOccurs="0" maxOccurs="unbounded"/>
+		</xsd:sequence>
+	</xsd:complexType>
+	
+	<xsd:simpleType name="i1-integer-enumeration-Type">
+		<xsd:restriction base="xsd:integer">
+			<xsd:enumeration value="1" />
+			<xsd:enumeration value="22" />
+			<xsd:enumeration value="333" />
+			<xsd:enumeration value="4444" />
+			<xsd:enumeration value="55555" />
+			<xsd:enumeration value="666666" />
+			<xsd:enumeration value="7777777" />
+			<xsd:enumeration value="88888888" />
+			<xsd:enumeration value="999999999" />
+			<xsd:enumeration value="0" />
+			<xsd:enumeration value="-1" />
+			<xsd:enumeration value="-22" />
+			<xsd:enumeration value="-333" />
+			<xsd:enumeration value="-4444" />
+			<xsd:enumeration value="-55555" />
+			<xsd:enumeration value="-666666" />
+			<xsd:enumeration value="-7777777" />
+			<xsd:enumeration value="-88888888" />
+			<xsd:enumeration value="-999999999" />
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="i2-integer-maxExclusive-minExclusive-Type">
+		<xsd:restriction base="xsd:integer">
+			<xsd:minExclusive value="-100000000" />
+			<xsd:maxExclusive value="100000000" />
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="i3-integer-maxInclusive-minInclusive-Type">
+		<xsd:restriction base="xsd:integer">
+			<xsd:minInclusive value="-1000000" />
+			<xsd:maxInclusive value="1000000" />
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="i4-integer-pattern-Type">
+
+		<xsd:restriction base="xsd:integer">
+			<xsd:pattern value="\-\d{8}" />
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="i5-integer-fractionDigits-totalDigits-Type">
+		<xsd:restriction base="xsd:integer">
+			<xsd:totalDigits value="4" />
+			<xsd:fractionDigits value="0" />
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="i6-integer-whiteSpace-Type">
+		<xsd:restriction base="xsd:integer">
+			<xsd:whiteSpace value="collapse" />
+		</xsd:restriction>
+	</xsd:simpleType>
+	
+	<xsd:simpleType name="int2-int-maxExclusive-Type">
+		<xsd:restriction base="xsd:int">
+			<xsd:maxExclusive value="1048576" />
+		</xsd:restriction>
+	</xsd:simpleType>
+</xsd:schema>

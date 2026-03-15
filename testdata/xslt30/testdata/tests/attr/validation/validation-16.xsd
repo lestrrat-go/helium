@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://ns.example.com/val16/" 
+  xmlns:v16="http://ns.example.com/val16/"
+  elementFormDefault="qualified">
+  
+  <xs:element name="doc" type="v16:docType"/>
+
+  <xs:complexType name="docType">
+    <xs:sequence>
+      <xs:element ref="v16:test" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+<xs:element name="test">
+  <xs:complexType>
+    <xs:attribute name="id" type="xs:ID"></xs:attribute>
+  </xs:complexType>
+</xs:element>
+
+</xs:schema>
