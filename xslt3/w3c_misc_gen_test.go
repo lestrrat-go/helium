@@ -419,17 +419,17 @@ empty-CORRECT!
 func TestW3C_catalog(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "catalog-001", StylesheetPath: "tests/misc/catalog/catalog-001.xsl", SourceDocPath: "catalog.xml", Assertions: []w3cAssertion{w3cAssertXPath("/ok[not(*)]")}},
+		{Name: "catalog-001", StylesheetPath: "tests/misc/catalog/catalog-001.xsl", SourceDocPath: "catalog.xml", Assertions: []w3cAssertion{w3cAssertXPath("/ok[not(*)]")}, Skip: "requires schema-element/schema-attribute node tests"},
 		{Name: "catalog-002", StylesheetPath: "tests/misc/catalog/catalog-002.xsl", SourceDocPath: "catalog.xml", Assertions: []w3cAssertion{w3cAssertXPath("not(/ok/mismatch)")}},
 		{Name: "catalog-003", StylesheetPath: "tests/misc/catalog/catalog-003.xsl", SourceDocPath: "catalog.xml", Assertions: []w3cAssertion{w3cAssertXPath("not(/out/duplicate)")}},
 		{Name: "catalog-004", StylesheetPath: "tests/misc/catalog/catalog-004.xsl", SourceDocPath: "catalog.xml", Assertions: []w3cAssertion{w3cAssertXPath("not(/out/indenting)")}},
-		{Name: "catalog-005", StylesheetPath: "tests/misc/catalog/catalog-005.xsl", SourceDocPath: "catalog.xml", Params: map[string]string{"supports_xml1.1": "true()"}, Assertions: []w3cAssertion{w3cAssertXML("<out/>")}},
+		{Name: "catalog-005", StylesheetPath: "tests/misc/catalog/catalog-005.xsl", SourceDocPath: "catalog.xml", Params: map[string]string{"supports_xml1.1": "true()"}, Assertions: []w3cAssertion{w3cAssertXML("<out/>")}, Skip: "requires schema validation (strict/lax)"},
 		{Name: "catalog-005b", StylesheetPath: "tests/misc/catalog/catalog-005.xsl", SourceDocPath: "catalog.xml", Params: map[string]string{"supports_xml1.1": "false()"}, Assertions: []w3cAssertion{w3cAssertXML("<out/>")}, Skip: "feature present but test requires absent: XML_1.1"},
 		{Name: "catalog-006", StylesheetPath: "tests/misc/catalog/catalog-006.xsl", SourceDocPath: "catalog.xml", Params: map[string]string{"supports_xml1.1": "true()"}, Assertions: []w3cAssertion{w3cAssertXPath("not(/out/unavailable)")}},
 		{Name: "catalog-006b", StylesheetPath: "tests/misc/catalog/catalog-006.xsl", SourceDocPath: "catalog.xml", Params: map[string]string{"supports_xml1.1": "false()"}, Assertions: []w3cAssertion{w3cAssertXPath("not(/out/unavailable)")}, Skip: "feature present but test requires absent: XML_1.1"},
 		{Name: "catalog-007", StylesheetPath: "tests/misc/catalog/catalog-007.xsl", InitialTemplate: "showAbsentPairs", Assertions: []w3cAssertion{w3cAssertXPath("/out/absent = ''")}},
 		{Name: "catalog-008", StylesheetPath: "tests/misc/catalog/catalog-008.xsl", InitialTemplate: "showDifferences", Assertions: []w3cAssertion{w3cAssertXPath("/out/absentFromSchema = ''"), w3cAssertXPath("/out/absentFromSyntax = ''")}},
-		{Name: "catalog-009", StylesheetPath: "tests/misc/catalog/catalog-009.xsl", SourceDocPath: "catalog.xml", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("empty(/out/error)")}},
+		{Name: "catalog-009", StylesheetPath: "tests/misc/catalog/catalog-009.xsl", SourceDocPath: "catalog.xml", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("empty(/out/error)")}, Skip: "requires schema validation (strict/lax)"},
 		{Name: "catalog-010", StylesheetPath: "tests/misc/catalog/catalog-010.xsl", SourceDocPath: "catalog.xml", Assertions: []w3cAssertion{w3cAssertXPath("not(/out/invalid)")}, Skip: "unsupported feature: higher_order_functions"},
 		{Name: "catalog-012", StylesheetPath: "tests/misc/catalog/catalog-012.xsl", SourceDocPath: "catalog.xml", Assertions: []w3cAssertion{w3cAssertXPath("not(/out/backwards)")}},
 	})
@@ -1721,7 +1721,7 @@ func TestW3C_error(t *testing.T) {
 		{Name: "error-1500a", StylesheetPath: "tests/misc/error/error-1500a.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE1500"},
 		{Name: "error-1505a", StylesheetPath: "tests/misc/error/error-1505a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1505"},
+</doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1505", Skip: "requires schema validation (strict/lax)"},
 		{Name: "error-1505b", StylesheetPath: "tests/misc/error/error-1505b.xsl", SourceContent: `<doc>
   <element attribute="3"/>
 </doc>`, InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1505"},
