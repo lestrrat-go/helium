@@ -38,7 +38,7 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 		maps = append(maps, m)
 	}
-	duplicates := MergeUseLast
+	duplicates := MergeUseFirst
 	if len(args) > 1 {
 		if len(args[1]) == 0 {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:merge: options argument must be a map, got empty sequence"}
