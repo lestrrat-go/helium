@@ -760,8 +760,8 @@ func (ec *execContext) fnCurrentGroupingKey(_ context.Context, _ []xpath3.Sequen
 		if ec.currentGroupKey != nil {
 			return ec.currentGroupKey, nil
 		}
-		// Key is absent (e.g., group-starting-with, group-ending-with)
-		return nil, dynamicError("XTDE1071", "current-grouping-key() is not available for group-starting-with/group-ending-with")
+		// For group-starting-with/group-ending-with, return empty sequence
+		return xpath3.EmptySequence(), nil
 	}
 	return nil, dynamicError("XTDE1071", "current-grouping-key() called outside xsl:for-each-group")
 }
