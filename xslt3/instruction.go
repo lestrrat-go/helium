@@ -479,3 +479,17 @@ type AssertInst struct {
 }
 
 func (*AssertInst) instructionTag() {}
+
+// EvaluateInst represents xsl:evaluate.
+type EvaluateInst struct {
+	xpathNS
+	XPath            *xpath3.Expression // xpath attribute (expression producing the XPath string)
+	ContextItem      *xpath3.Expression // context-item attribute (optional)
+	BaseURI          *AVT              // base-uri attribute (optional)
+	NamespaceContext *xpath3.Expression // namespace-context attribute (optional, expression producing a node)
+	WithParamsExpr   *xpath3.Expression // with-params attribute (optional, map expression)
+	As               string             // as attribute (optional sequence type)
+	Params           []*WithParam       // child xsl:with-param elements
+}
+
+func (*EvaluateInst) instructionTag() {}

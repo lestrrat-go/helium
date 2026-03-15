@@ -396,7 +396,7 @@ func TestW3C_apply_templates(t *testing.T) {
 </simplelist>
 </doc>`, Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><fo:root xmlns:fo=\"http://www.w3.org/1999/XSL/Format\" xmlns=\"http://www.w3.org/1999/xhtml\"><fo:layout-master-set><fo:simple-page-master page-height=\"11in\" page-width=\"8.5in\" master-name=\"all-pages\" margin-left=\"1in\" margin-right=\"1in\" margin-top=\"50pt\" margin-bottom=\"50pt\"><fo:region-body margin-bottom=\"25pt\" margin-top=\"25pt\"/><fo:region-after extent=\"25pt\"/></fo:simple-page-master></fo:layout-master-set><fo:page-sequence master-reference=\"all-pages\" font-family=\"serif\" font-size=\"12pt\" line-height=\"13pt\"><fo:flow flow-name=\"xsl-region-body\">\r\n<fo:block>\r\n<fo:block text-align=\"justify\" color=\"black\" pos=\"2\" last=\"9\">11111111</fo:block>\r\n<fo:block text-align=\"justify\" color=\"black\" pos=\"4\" last=\"9\">22222222</fo:block>\r\n<fo:block text-align=\"justify\" color=\"black\" pos=\"6\" last=\"9\">33333333</fo:block>\r\n<fo:block text-align=\"justify\" color=\"blue\" pos=\"8\" last=\"9\">44444444</fo:block>\r\n</fo:block>\r\n</fo:flow></fo:page-sequence></fo:root>")}},
 		{Name: "conflict-resolution-1401", StylesheetPath: "tests/insn/apply-templates/conflict-resolution-1401.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<h2 xmlns=\"http://www.w3.org/1999/xhtml\">ChapterTitle</h2>")}},
-		{Name: "conflict-resolution-1402", StylesheetPath: "tests/insn/apply-templates/conflict-resolution-1402.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out>!Match-of-attribute-x-integer:e1!Match-any-attribute:e2!Match-e4-x!Match-any-attribute:e5</out>")}},
+		{Name: "conflict-resolution-1402", StylesheetPath: "tests/insn/apply-templates/conflict-resolution-1402.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out>!Match-of-attribute-x-integer:e1!Match-any-attribute:e2!Match-e4-x!Match-any-attribute:e5</out>")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "conflict-resolution-1501", StylesheetPath: "tests/insn/apply-templates/conflict-resolution-1501.xsl", SourceContent: "<doc><a><a/></a><a><a/></a><a><b/></a></doc>", Assertions: []w3cAssertion{w3cAssertXPath("/doc/a[2]/a[1][@parent-recursive=\"yes\"]"), w3cAssertXPath("count(//@parent-recursive) = 1")}},
 		{Name: "conflict-resolution-1601", StylesheetPath: "tests/insn/apply-templates/conflict-resolution-1601.xsl", SourceContent: "<doc><a x4=\"big\" x5=\"medium\" x6=\"small\" /><b x4=\"red\" x5=\"yellow\" x6=\"blue\" /></doc>", Assertions: []w3cAssertion{w3cAssertXML("<out>big</out>")}},
 		{Name: "conflict-resolution-1602", StylesheetPath: "tests/insn/apply-templates/conflict-resolution-1602.xsl", SourceContent: "<doc><a x4=\"big\" x5=\"medium\" x6=\"small\" /><b x4=\"red\" x5=\"yellow\" x6=\"blue\" /></doc>", Assertions: []w3cAssertion{w3cAssertXML("<out>big</out>")}},
@@ -464,13 +464,13 @@ func TestW3C_attribute(t *testing.T) {
 		{Name: "attribute-1301", StylesheetPath: "tests/insn/attribute/attribute-1301.xsl", SourceContent: "<docs><b>bdd:attr</b></docs>", Assertions: []w3cAssertion{w3cAssertXML("<ans xmlns:bdd=\"http://bdd.test.com\" bdd=\"http://bdd.test.com\" attr-ns=\"http://xyz.com\"/>")}},
 		{Name: "attribute-1302", StylesheetPath: "tests/insn/attribute/attribute-1302.xsl", SourceContent: "<docs><b>bdd:attr</b></docs>", Assertions: []w3cAssertion{w3cAssertXML("<out xmlns:bdd=\"http://bdd.test.com\"><ans local=\"attr\" ns=\"http://xyz.com\" good-prefix=\"true\"/></out>")}},
 		{Name: "attribute-1401", StylesheetPath: "tests/insn/attribute/attribute-1401.xsl", SourceContent: "<docs><doc/><a>X</a><a>Y</a><a>Z</a></docs>", Assertions: []w3cAssertion{w3cAssertXML("<out test1=\"XYZ\"/>")}},
-		{Name: "attribute-1501", StylesheetPath: "tests/insn/attribute/attribute-1501.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out/e1/@xml:lang='en-US'"), w3cAssertXPath("/out/e2/@xml:lang=''"), w3cAssertXPath("/out/e3/@xml:space='preserve'"), w3cAssertXPath("/out/e4/@xml:space='default'"), w3cAssertXPath("/out/e5/@xml:id='ID001'"), w3cAssertXPath("/out/id-ok='true'")}, Skip: "requires schema validation (strict/lax)"},
-		{Name: "attribute-1502", StylesheetPath: "tests/insn/attribute/attribute-1502.xsl", ExpectError: true, ErrorCode: "XTTE1510", Skip: "requires runtime type checking: XTTE1510"},
-		{Name: "attribute-1503", StylesheetPath: "tests/insn/attribute/attribute-1503.xsl", ExpectError: true, ErrorCode: "XTTE1510", Skip: "requires runtime type checking: XTTE1510"},
-		{Name: "attribute-1504", StylesheetPath: "tests/insn/attribute/attribute-1504.xsl", ExpectError: true, ErrorCode: "XTTE1510", Skip: "requires runtime type checking: XTTE1510"},
-		{Name: "attribute-1505", StylesheetPath: "tests/insn/attribute/attribute-1505.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out/doc/e5")}, Skip: "requires schema validation (strict/lax)"},
-		{Name: "attribute-1506", StylesheetPath: "tests/insn/attribute/attribute-1506.xsl", ExpectError: true, ErrorCode: "XTTE1555", Skip: "requires runtime type checking: XTTE1555"},
-		{Name: "attribute-1507", StylesheetPath: "tests/insn/attribute/attribute-1507.xsl", ExpectError: true, ErrorCode: "XTTE1555", Skip: "requires runtime type checking: XTTE1555"},
+		{Name: "attribute-1501", StylesheetPath: "tests/insn/attribute/attribute-1501.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out/e1/@xml:lang='en-US'"), w3cAssertXPath("/out/e2/@xml:lang=''"), w3cAssertXPath("/out/e3/@xml:space='preserve'"), w3cAssertXPath("/out/e4/@xml:space='default'"), w3cAssertXPath("/out/e5/@xml:id='ID001'"), w3cAssertXPath("/out/id-ok='true'")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "attribute-1502", StylesheetPath: "tests/insn/attribute/attribute-1502.xsl", ExpectError: true, ErrorCode: "XTTE1510", Skip: "unsupported feature: schema_aware"},
+		{Name: "attribute-1503", StylesheetPath: "tests/insn/attribute/attribute-1503.xsl", ExpectError: true, ErrorCode: "XTTE1510", Skip: "unsupported feature: schema_aware"},
+		{Name: "attribute-1504", StylesheetPath: "tests/insn/attribute/attribute-1504.xsl", ExpectError: true, ErrorCode: "XTTE1510", Skip: "unsupported feature: schema_aware"},
+		{Name: "attribute-1505", StylesheetPath: "tests/insn/attribute/attribute-1505.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out/doc/e5")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "attribute-1506", StylesheetPath: "tests/insn/attribute/attribute-1506.xsl", ExpectError: true, ErrorCode: "XTTE1555", Skip: "unsupported feature: schema_aware"},
+		{Name: "attribute-1507", StylesheetPath: "tests/insn/attribute/attribute-1507.xsl", ExpectError: true, ErrorCode: "XTTE1555", Skip: "unsupported feature: schema_aware"},
 	})
 }
 
@@ -1688,75 +1688,75 @@ func TestW3C_copy(t *testing.T) {
 func TestW3C_evaluate(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "evaluate-001", StylesheetPath: "tests/insn/evaluate/evaluate-001.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>42</out>")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-002", StylesheetPath: "tests/insn/evaluate/evaluate-002.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/*[1][self::z][. = \"STATIC setting1=[value1]\"]"), w3cAssertXPath("/out/*[2][self::z][. = \"STATIC setting2=[value2]\"]"), w3cAssertXPath("/out/*[3][self::a][. = \"DYNAMIC(A-all) setting1=[value1]\"]"), w3cAssertXPath("/out/*[4][self::a][. = \"DYNAMIC(A-all) setting2=[value2]\"]"), w3cAssertXPath("/out/*[5][self::a][. = \"DYNAMIC(B) count=2\"]"), w3cAssertXPath("/out/*[6][self::b][. = \"DYNAMIC(B-for) setting1=[value1]\"]"), w3cAssertXPath("/out/*[7][self::b][. = \"DYNAMIC(B-for) setting2=[value2]\"]"), w3cAssertXPath("/out/*[8][self::d][. = \"DYNAMIC(B-top) setting1=[value1]\"]"), w3cAssertXPath("/out/*[9][self::d][. = \"DYNAMIC(B-top) setting2=[value2]\"]"), w3cAssertXPath("/out/*[10][self::d][. = \"DYNAMIC(B-1) setting1=[value1]\"]"), w3cAssertXPath("/out/*[11][self::d][. = \"DYNAMIC(B-2) setting2=[value2]\"]"), w3cAssertXPath("/out/*[12][self::e][. = \"DYNAMIC(C) count=2\"]"), w3cAssertXPath("/out/*[13][self::f][. = \"DYNAMIC(C-for) setting1=[value1]\"]"), w3cAssertXPath("/out/*[14][self::f][. = \"DYNAMIC(C-for) setting2=[value2]\"]"), w3cAssertXPath("/out/*[15][self::g][. = \"DYNAMIC(C-top) setting1=[value1]\"]"), w3cAssertXPath("/out/*[16][self::g][. = \"DYNAMIC(C-top) setting1=[value2]\"]"), w3cAssertXPath("/out/*[17][self::h][. = \"DYNAMIC(D) setting1=[value1]\"]"), w3cAssertXPath("/out/*[18][self::h][. = \"DYNAMIC(D) setting1=[value2]\"]")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-003", StylesheetPath: "tests/insn/evaluate/evaluate-003.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><td>SVC board vhdl code consolidation</td><td>IOgen template incorporation</td></out>")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-004", StylesheetPath: "tests/insn/evaluate/evaluate-004.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out id=\"c\"/>")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-005", StylesheetPath: "tests/insn/evaluate/evaluate-005.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>1 1 2 2</out>")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-006", StylesheetPath: "tests/insn/evaluate/evaluate-006.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><a>true</a><a>ab</a><a>1</a><a>3</a><a>25</a><a>1728</a></out>")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-007", StylesheetPath: "tests/insn/evaluate/evaluate-007.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE3160", Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-008", StylesheetPath: "tests/insn/evaluate/evaluate-008.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<Result xmlns:Math=\"java:java.lang.Math\">1</Result>")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-009", StylesheetPath: "tests/insn/evaluate/evaluate-009.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<Result><value>true</value></Result>")}, Skip: "unsupported feature: dynamic_evaluation"},
+		{Name: "evaluate-001", StylesheetPath: "tests/insn/evaluate/evaluate-001.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>42</out>")}},
+		{Name: "evaluate-002", StylesheetPath: "tests/insn/evaluate/evaluate-002.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/*[1][self::z][. = \"STATIC setting1=[value1]\"]"), w3cAssertXPath("/out/*[2][self::z][. = \"STATIC setting2=[value2]\"]"), w3cAssertXPath("/out/*[3][self::a][. = \"DYNAMIC(A-all) setting1=[value1]\"]"), w3cAssertXPath("/out/*[4][self::a][. = \"DYNAMIC(A-all) setting2=[value2]\"]"), w3cAssertXPath("/out/*[5][self::a][. = \"DYNAMIC(B) count=2\"]"), w3cAssertXPath("/out/*[6][self::b][. = \"DYNAMIC(B-for) setting1=[value1]\"]"), w3cAssertXPath("/out/*[7][self::b][. = \"DYNAMIC(B-for) setting2=[value2]\"]"), w3cAssertXPath("/out/*[8][self::d][. = \"DYNAMIC(B-top) setting1=[value1]\"]"), w3cAssertXPath("/out/*[9][self::d][. = \"DYNAMIC(B-top) setting2=[value2]\"]"), w3cAssertXPath("/out/*[10][self::d][. = \"DYNAMIC(B-1) setting1=[value1]\"]"), w3cAssertXPath("/out/*[11][self::d][. = \"DYNAMIC(B-2) setting2=[value2]\"]"), w3cAssertXPath("/out/*[12][self::e][. = \"DYNAMIC(C) count=2\"]"), w3cAssertXPath("/out/*[13][self::f][. = \"DYNAMIC(C-for) setting1=[value1]\"]"), w3cAssertXPath("/out/*[14][self::f][. = \"DYNAMIC(C-for) setting2=[value2]\"]"), w3cAssertXPath("/out/*[15][self::g][. = \"DYNAMIC(C-top) setting1=[value1]\"]"), w3cAssertXPath("/out/*[16][self::g][. = \"DYNAMIC(C-top) setting1=[value2]\"]"), w3cAssertXPath("/out/*[17][self::h][. = \"DYNAMIC(D) setting1=[value1]\"]"), w3cAssertXPath("/out/*[18][self::h][. = \"DYNAMIC(D) setting1=[value2]\"]")}},
+		{Name: "evaluate-003", StylesheetPath: "tests/insn/evaluate/evaluate-003.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><td>SVC board vhdl code consolidation</td><td>IOgen template incorporation</td></out>")}},
+		{Name: "evaluate-004", StylesheetPath: "tests/insn/evaluate/evaluate-004.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out id=\"c\"/>")}},
+		{Name: "evaluate-005", StylesheetPath: "tests/insn/evaluate/evaluate-005.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>1 1 2 2</out>")}},
+		{Name: "evaluate-006", StylesheetPath: "tests/insn/evaluate/evaluate-006.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out><a>true</a><a>ab</a><a>1</a><a>3</a><a>25</a><a>1728</a></out>")}},
+		{Name: "evaluate-007", StylesheetPath: "tests/insn/evaluate/evaluate-007.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE3160"},
+		{Name: "evaluate-008", StylesheetPath: "tests/insn/evaluate/evaluate-008.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<Result xmlns:Math=\"java:java.lang.Math\">1</Result>")}},
+		{Name: "evaluate-009", StylesheetPath: "tests/insn/evaluate/evaluate-009.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<Result><value>true</value></Result>")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "evaluate-010", StylesheetPath: "tests/insn/evaluate/evaluate-010.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML(`<Result><out>http://www.w3.org/?0</out><out>http://example.com/#1</out
             ><out>http://www.w3.org/?2</out><out>http://example.com/?3</out><out>http://www.w3.org/?4</out
             ><out>http://example.com/?0</out><out>http://www.w3.org/?1</out><out>http://example.com/?2</out
-            ><out>http://www.w3.org/#3</out><out>http://example.com/?4</out></Result>`)}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-011", StylesheetPath: "tests/insn/evaluate/evaluate-011.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "FODF1280", Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-012", StylesheetPath: "tests/insn/evaluate/evaluate-012.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE3160", Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-013", StylesheetPath: "tests/insn/evaluate/evaluate-013.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE3160", Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-014", StylesheetPath: "tests/insn/evaluate/evaluate-014.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE0030", Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-015", StylesheetPath: "tests/insn/evaluate/evaluate-015.xsl", SourceDocPath: "tests/insn/evaluate/eval003.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><ans>4</ans><ans>1</ans><ans>eval003.xml</ans><ans>eval003.xml</ans><ans>17</ans><ans>4</ans><ans>1 4 9</ans></out>")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-016", StylesheetPath: "tests/insn/evaluate/evaluate-016.xsl", SourceDocPath: "tests/insn/evaluate/eval004.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><city name=\"Salzburg\" country=\"Austria\"/></out>")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-017", StylesheetPath: "tests/insn/evaluate/evaluate-017.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out>OK</out>")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-018", StylesheetPath: "tests/insn/evaluate/evaluate-018.xsl", SourceContent: "<add>$p1 + $p2</add>", Assertions: []w3cAssertion{w3cAssertXML("<out>13</out>")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-018a", StylesheetPath: "tests/insn/evaluate/evaluate-018a.xsl", SourceContent: "<add>$p1 + $p2</add>", Assertions: []w3cAssertion{w3cAssertXML("<out>13</out>")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-018b", StylesheetPath: "tests/insn/evaluate/evaluate-018b.xsl", SourceContent: "<add>$p1 + $p2</add>", Assertions: []w3cAssertion{w3cAssertXML("<out>13</out>")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-018c", StylesheetPath: "tests/insn/evaluate/evaluate-018c.xsl", SourceContent: "<add>$p1 + $p2</add>", Assertions: []w3cAssertion{w3cAssertXML("<out>49</out>")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-018d", StylesheetPath: "tests/insn/evaluate/evaluate-018d.xsl", SourceContent: "<add>$p1 + $p2</add>", ExpectError: true, ErrorCode: "XPTY0004", Skip: "unsupported feature: dynamic_evaluation"},
+            ><out>http://www.w3.org/#3</out><out>http://example.com/?4</out></Result>`)}, Skip: "unsupported feature: schema_aware"},
+		{Name: "evaluate-011", StylesheetPath: "tests/insn/evaluate/evaluate-011.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "FODF1280"},
+		{Name: "evaluate-012", StylesheetPath: "tests/insn/evaluate/evaluate-012.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE3160", Skip: "unsupported feature: schema_aware"},
+		{Name: "evaluate-013", StylesheetPath: "tests/insn/evaluate/evaluate-013.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE3160", Skip: "unsupported feature: schema_aware"},
+		{Name: "evaluate-014", StylesheetPath: "tests/insn/evaluate/evaluate-014.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE0030", Skip: "unsupported feature: schema_aware"},
+		{Name: "evaluate-015", StylesheetPath: "tests/insn/evaluate/evaluate-015.xsl", SourceDocPath: "tests/insn/evaluate/eval003.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><ans>4</ans><ans>1</ans><ans>eval003.xml</ans><ans>eval003.xml</ans><ans>17</ans><ans>4</ans><ans>1 4 9</ans></out>")}},
+		{Name: "evaluate-016", StylesheetPath: "tests/insn/evaluate/evaluate-016.xsl", SourceDocPath: "tests/insn/evaluate/eval004.xml", Assertions: []w3cAssertion{w3cAssertXML("<out><city name=\"Salzburg\" country=\"Austria\"/></out>")}},
+		{Name: "evaluate-017", StylesheetPath: "tests/insn/evaluate/evaluate-017.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out>OK</out>")}},
+		{Name: "evaluate-018", StylesheetPath: "tests/insn/evaluate/evaluate-018.xsl", SourceContent: "<add>$p1 + $p2</add>", Assertions: []w3cAssertion{w3cAssertXML("<out>13</out>")}},
+		{Name: "evaluate-018a", StylesheetPath: "tests/insn/evaluate/evaluate-018a.xsl", SourceContent: "<add>$p1 + $p2</add>", Assertions: []w3cAssertion{w3cAssertXML("<out>13</out>")}},
+		{Name: "evaluate-018b", StylesheetPath: "tests/insn/evaluate/evaluate-018b.xsl", SourceContent: "<add>$p1 + $p2</add>", Assertions: []w3cAssertion{w3cAssertXML("<out>13</out>")}},
+		{Name: "evaluate-018c", StylesheetPath: "tests/insn/evaluate/evaluate-018c.xsl", SourceContent: "<add>$p1 + $p2</add>", Assertions: []w3cAssertion{w3cAssertXML("<out>49</out>")}},
+		{Name: "evaluate-018d", StylesheetPath: "tests/insn/evaluate/evaluate-018d.xsl", SourceContent: "<add>$p1 + $p2</add>", ExpectError: true, ErrorCode: "XPTY0004"},
 		{Name: "evaluate-019", StylesheetPath: "tests/insn/evaluate/evaluate-019.xsl", SourceContent: ` 
 <document>
 <data>Saxon is great</data> 
-</document>`, Assertions: []w3cAssertion{w3cAssertXPath("/h:html/h:body/h:p[1] = \"normal xpath/xslt : Saxon is great\""), w3cAssertXPath("/h:html/h:body/h:p[2] = \"evaluate : Saxon is great\""), w3cAssertXPath("/h:html/h:body/h:p[3] = \"evaluate without namespaces : Saxon is great\"")}, Skip: "unsupported feature: dynamic_evaluation"},
+</document>`, Assertions: []w3cAssertion{w3cAssertXPath("/h:html/h:body/h:p[1] = \"normal xpath/xslt : Saxon is great\""), w3cAssertXPath("/h:html/h:body/h:p[2] = \"evaluate : Saxon is great\""), w3cAssertXPath("/h:html/h:body/h:p[3] = \"evaluate without namespaces : Saxon is great\"")}},
 		{Name: "evaluate-020", StylesheetPath: "tests/insn/evaluate/evaluate-020.xsl", SourceContent: ` 
 <document xmlns="http://saxon097.uri/">
 <path>following-sibling::data</path>
 <data>Saxon is great</data> 
-</document>`, Assertions: []w3cAssertion{w3cAssertXPath("//*:p = \"evaluate-node : Saxon is great\"")}, Skip: "unsupported feature: dynamic_evaluation"},
+</document>`, Assertions: []w3cAssertion{w3cAssertXPath("//*:p = \"evaluate-node : Saxon is great\"")}},
 		{Name: "evaluate-021", StylesheetPath: "tests/insn/evaluate/evaluate-021.xsl", SourceContent: ` 
 <document xmlns="http://saxon097.uri/">
 <path>following-sibling::data</path>
 <data>Saxon is great</data> 
-</document>`, Assertions: []w3cAssertion{w3cAssertXPath("//*:p = \"evaluate : Saxon is great\"")}, Skip: "unsupported feature: dynamic_evaluation"},
+</document>`, Assertions: []w3cAssertion{w3cAssertXPath("//*:p = \"evaluate : Saxon is great\"")}},
 		{Name: "evaluate-022", StylesheetPath: "tests/insn/evaluate/evaluate-022.xsl", SourceContent: ` 
 <document xmlns="http://saxon097.uri/">
 <path>following-sibling::data</path>
 <data>Saxon is great</data> 
-</document>`, ExpectError: true, ErrorCode: "XPTY0004", Skip: "unsupported feature: dynamic_evaluation"},
+</document>`, ExpectError: true, ErrorCode: "XPTY0004"},
 		{Name: "evaluate-023", StylesheetPath: "tests/insn/evaluate/evaluate-023.xsl", SourceContent: ` 
 <document xmlns="http://saxon097.uri/">
 <path>following-sibling::data</path>
 <data>Saxon is great</data> 
-</document>`, ExpectError: true, ErrorCode: "XPTY0004", Skip: "unsupported feature: dynamic_evaluation"},
+</document>`, ExpectError: true, ErrorCode: "XPTY0004"},
 		{Name: "evaluate-024", StylesheetPath: "tests/insn/evaluate/evaluate-024.xsl", SourceContent: ` 
 <document xmlns="http://saxon097.uri/">
 <path>following-sibling::data</path>
 <data>Saxon is great</data> 
-</document>`, ExpectError: true, ErrorCode: "XPDY0002", Skip: "unsupported feature: dynamic_evaluation"},
+</document>`, ExpectError: true, ErrorCode: "XPDY0002"},
 		{Name: "evaluate-025", StylesheetPath: "tests/insn/evaluate/evaluate-025.xsl", SourceContent: ` 
 <document xmlns="http://saxon097.uri/">
 <path>following-sibling::data</path>
 <data>Saxon is great</data> 
-</document>`, ExpectError: true, ErrorCode: "XPDY0002", Skip: "unsupported feature: dynamic_evaluation"},
+</document>`, ExpectError: true, ErrorCode: "XPDY0002"},
 		{Name: "evaluate-025a", StylesheetPath: "tests/insn/evaluate/evaluate-025a.xsl", SourceContent: ` 
 <document xmlns="http://saxon097.uri/">
 <path>following-sibling::data</path>
 <data>Saxon is great</data> 
-</document>`, ExpectError: true, ErrorCode: "XPDY0002", Skip: "unsupported feature: dynamic_evaluation"},
+</document>`, ExpectError: true, ErrorCode: "XPDY0002"},
 		{Name: "evaluate-026", StylesheetPath: "tests/insn/evaluate/evaluate-026.xsl", SourceContent: ` 
 <document xmlns="http://saxon097.uri/">
 <path>following-sibling::data</path>
 <data>Saxon is great</data> 
-</document>`, ExpectError: true, ErrorCode: "XTTE3210", Skip: "unsupported feature: dynamic_evaluation"},
+</document>`, ExpectError: true, ErrorCode: "XTTE3210"},
 		{Name: "evaluate-027", StylesheetPath: "tests/insn/evaluate/evaluate-027.xsl", SourceContent: ` 
 <a xmlns="http://a.uri/">
   <b xmlns="http://b.uri/">
@@ -1764,54 +1764,54 @@ func TestW3C_evaluate(t *testing.T) {
       <d xmlns="http://d.uri/">42</d>
     </c>
   </b>
-</a>`, Assertions: []w3cAssertion{w3cAssertXML("<out xmlns=\"http://www.w3.org/1999/xhtml\">42</out>")}, Skip: "unsupported feature: dynamic_evaluation"},
+</a>`, Assertions: []w3cAssertion{w3cAssertXML("<out xmlns=\"http://www.w3.org/1999/xhtml\">42</out>")}},
 		{Name: "evaluate-028", StylesheetPath: "tests/insn/evaluate/evaluate-028.xsl", SourceContent: `<sales>
 <sale qty="10" price="15.00"/>
 <sale qty="2" price="12.00"/>
 <sale qty="1" price="10.00"/>
-</sales>`, Assertions: []w3cAssertion{w3cAssertXML("<out><gt0>true</gt0><gt15>true</gt15><gt1500>false</gt1500></out>")}, Skip: "unsupported feature: dynamic_evaluation"},
+</sales>`, Assertions: []w3cAssertion{w3cAssertXML("<out><gt0>true</gt0><gt15>true</gt15><gt1500>false</gt1500></out>")}},
 		{Name: "evaluate-029", StylesheetPath: "tests/insn/evaluate/evaluate-029.xsl", SourceContent: `<sales>
 <sale qty="10" price="15.00"/>
 <sale qty="2" price="12.00"/>
 <sale qty="1" price="10.00"/>
-</sales>`, Assertions: []w3cAssertion{w3cAssertXML("<out><gt0>true</gt0><gt15>false</gt15><gt1500>false</gt1500></out>")}, Skip: "unsupported feature: dynamic_evaluation"},
+</sales>`, Assertions: []w3cAssertion{w3cAssertXML("<out><gt0>true</gt0><gt15>false</gt15><gt1500>false</gt1500></out>")}},
 		{Name: "evaluate-030", StylesheetPath: "tests/insn/evaluate/evaluate-030.xsl", SourceContent: `<sales>
 <sale qty="10" price="15.00"/>
 <sale qty="2" price="12.00"/>
 <sale qty="1" price="10.00"/>
-</sales>`, Assertions: []w3cAssertion{w3cAssertXML("<out>http://www.w3.org/base</out>")}, Skip: "unsupported feature: dynamic_evaluation"},
+</sales>`, Assertions: []w3cAssertion{w3cAssertXML("<out>http://www.w3.org/base</out>")}},
 		{Name: "evaluate-031", StylesheetPath: "tests/insn/evaluate/evaluate-031.xsl", SourceContent: `<sales>
 <sale qty="10" price="15.00"/>
 <sale qty="2" price="12.00"/>
 <sale qty="1" price="10.00"/>
-</sales>`, Assertions: []w3cAssertion{w3cAssertXPath("/out = '9'")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-032", StylesheetPath: "tests/insn/evaluate/evaluate-032.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-033", StylesheetPath: "tests/insn/evaluate/evaluate-033.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'false'")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-034", StylesheetPath: "tests/insn/evaluate/evaluate-034.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-035", StylesheetPath: "tests/insn/evaluate/evaluate-035.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'false'")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-036", StylesheetPath: "tests/insn/evaluate/evaluate-036.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-037", StylesheetPath: "tests/insn/evaluate/evaluate-037.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'false'")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-038", StylesheetPath: "tests/insn/evaluate/evaluate-038.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0020", Skip: "unsupported feature: dynamic_evaluation"},
+</sales>`, Assertions: []w3cAssertion{w3cAssertXPath("/out = '9'")}},
+		{Name: "evaluate-032", StylesheetPath: "tests/insn/evaluate/evaluate-032.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "evaluate-033", StylesheetPath: "tests/insn/evaluate/evaluate-033.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'false'")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "evaluate-034", StylesheetPath: "tests/insn/evaluate/evaluate-034.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "evaluate-035", StylesheetPath: "tests/insn/evaluate/evaluate-035.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'false'")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "evaluate-036", StylesheetPath: "tests/insn/evaluate/evaluate-036.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "evaluate-037", StylesheetPath: "tests/insn/evaluate/evaluate-037.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'false'")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "evaluate-038", StylesheetPath: "tests/insn/evaluate/evaluate-038.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0020", Skip: "unsupported feature: schema_aware"},
 		{Name: "evaluate-039", StylesheetPath: "tests/insn/evaluate/evaluate-039.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML(`<Result><out>http://www.w3.org/?0</out><out>http://example.com/#1</out
             ><out>http://www.w3.org/?2</out><out>http://example.com/?3</out><out>http://www.w3.org/?4</out
             ><out>http://example.com/?0</out><out>http://www.w3.org/?1</out><out>http://example.com/?2</out
-            ><out>http://www.w3.org/#3</out><out>http://example.com/?4</out></Result>`)}, Skip: "unsupported feature: dynamic_evaluation"},
+            ><out>http://www.w3.org/#3</out><out>http://example.com/?4</out></Result>`)}, Skip: "unsupported feature: schema_aware"},
 		{Name: "evaluate-040", StylesheetPath: "tests/insn/evaluate/evaluate-040.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML(`<Result><out>http://www.w3.org/?0</out><out>http://example.com/#1</out
             ><out>http://www.w3.org/?2</out><out>http://example.com/?3</out><out>http://www.w3.org/?4</out
             ><out>http://example.com/?0</out><out>http://www.w3.org/?1</out><out>http://example.com/?2</out
-            ><out>http://www.w3.org/#3</out><out>http://example.com/?4</out></Result>`)}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-041", StylesheetPath: "tests/insn/evaluate/evaluate-041.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("every $o in /Result/out satisfies $o eq \"21\"")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-042", StylesheetPath: "tests/insn/evaluate/evaluate-042.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XPST0008", Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-043", StylesheetPath: "tests/insn/evaluate/evaluate-043.xsl", ExpectError: true, ErrorCode: "XTTE3165", Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-044", StylesheetPath: "tests/insn/evaluate/evaluate-044.xsl", InitialTemplate: "go", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'string'")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-045", StylesheetPath: "tests/insn/evaluate/evaluate-045.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE3160", Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-046", StylesheetPath: "tests/insn/evaluate/evaluate-046.xsl", SourceDocPath: "tests/insn/evaluate/evaluate-046.xml", Assertions: []w3cAssertion{w3cAssertXPath("//*:variable[@name='parity'][@static='yes'][@select='17']"), w3cAssertXPath("//*:variable[@name='streamable'][@static='yes'][@select='$parity gt 12']"), w3cAssertXPath("//*:function/*:sequence[@select='$x - 1']"), w3cAssertXPath("not(//*:function/*:sequence[@select='$x + 1'])"), w3cAssertXPath("//*:mode[@streamable='true']")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-047", StylesheetPath: "tests/insn/evaluate/evaluate-047.xsl", ExpectError: true, ErrorCode: "XTDE3160", Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-048", StylesheetPath: "tests/insn/evaluate/evaluate-048.xsl", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out/*:html"))}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-049", StylesheetPath: "tests/insn/evaluate/evaluate-049.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-050", StylesheetPath: "tests/insn/evaluate/evaluate-050.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'false'")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-051", StylesheetPath: "tests/insn/evaluate/evaluate-051.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out/in = '60'")}, Skip: "unsupported feature: dynamic_evaluation"},
-		{Name: "evaluate-052", StylesheetPath: "tests/insn/evaluate/evaluate-052.xsl", SourceDocPath: "tests/insn/evaluate/evaluate-052.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/result = 'foo 1'")}, Skip: "unsupported feature: dynamic_evaluation"},
+            ><out>http://www.w3.org/#3</out><out>http://example.com/?4</out></Result>`)}, Skip: "unsupported feature: schema_aware"},
+		{Name: "evaluate-041", StylesheetPath: "tests/insn/evaluate/evaluate-041.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("every $o in /Result/out satisfies $o eq \"21\"")}},
+		{Name: "evaluate-042", StylesheetPath: "tests/insn/evaluate/evaluate-042.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XPST0008"},
+		{Name: "evaluate-043", StylesheetPath: "tests/insn/evaluate/evaluate-043.xsl", ExpectError: true, ErrorCode: "XTTE3165"},
+		{Name: "evaluate-044", StylesheetPath: "tests/insn/evaluate/evaluate-044.xsl", InitialTemplate: "go", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'string'")}},
+		{Name: "evaluate-045", StylesheetPath: "tests/insn/evaluate/evaluate-045.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE3160"},
+		{Name: "evaluate-046", StylesheetPath: "tests/insn/evaluate/evaluate-046.xsl", SourceDocPath: "tests/insn/evaluate/evaluate-046.xml", Assertions: []w3cAssertion{w3cAssertXPath("//*:variable[@name='parity'][@static='yes'][@select='17']"), w3cAssertXPath("//*:variable[@name='streamable'][@static='yes'][@select='$parity gt 12']"), w3cAssertXPath("//*:function/*:sequence[@select='$x - 1']"), w3cAssertXPath("not(//*:function/*:sequence[@select='$x + 1'])"), w3cAssertXPath("//*:mode[@streamable='true']")}},
+		{Name: "evaluate-047", StylesheetPath: "tests/insn/evaluate/evaluate-047.xsl", ExpectError: true, ErrorCode: "XTDE3160"},
+		{Name: "evaluate-048", StylesheetPath: "tests/insn/evaluate/evaluate-048.xsl", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out/*:html"))}},
+		{Name: "evaluate-049", StylesheetPath: "tests/insn/evaluate/evaluate-049.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}},
+		{Name: "evaluate-050", StylesheetPath: "tests/insn/evaluate/evaluate-050.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'false'")}},
+		{Name: "evaluate-051", StylesheetPath: "tests/insn/evaluate/evaluate-051.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out/in = '60'")}},
+		{Name: "evaluate-052", StylesheetPath: "tests/insn/evaluate/evaluate-052.xsl", SourceDocPath: "tests/insn/evaluate/evaluate-052.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/result = 'foo 1'")}},
 	})
 }
 
@@ -1999,9 +1999,9 @@ while you are in the cinema.</p></o>`)}},
 		{Name: "for-each-group-074", StylesheetPath: "tests/insn/for-each-group/for-each-group-074.xsl", SourceDocPath: "tests/insn/for-each-group/group001.xml", Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"UTF-8\"?><table><tr><th>Position</th><th>Country</th><th>City List</th><th>Population</th></tr><tr><td>1</td><td>italy</td><td>milan, venice</td><td>6</td></tr><tr><td>2</td><td>france</td><td>paris, lyon</td><td>9</td></tr><tr><td>3</td><td>germany</td><td>munich</td><td>4</td></tr></table>")}},
 		{Name: "for-each-group-075", StylesheetPath: "tests/insn/for-each-group/for-each-group-075.xsl", SourceDocPath: "tests/insn/for-each-group/group001.xml", Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"UTF-8\"?><table><tr><th>Position</th><th>Country</th><th>City List</th><th>Population</th></tr><tr><td>1</td><td>italy</td><td>milan, venice</td><td>6</td></tr><tr><td>2</td><td>france</td><td>paris, lyon</td><td>9</td></tr><tr><td>3</td><td>germany</td><td>munich</td><td>4</td></tr></table>")}},
 		{Name: "for-each-group-076", StylesheetPath: "tests/insn/for-each-group/for-each-group-076.xsl", SourceDocPath: "tests/insn/for-each-group/group020.xml", ExpectError: true, ErrorCode: "XTSE0020"},
-		{Name: "for-each-group-078a", StylesheetPath: "tests/insn/for-each-group/for-each-group-078.xsl", SourceDocPath: "tests/insn/for-each-group/group020.xml", InitialTemplate: "one", Assertions: []w3cAssertion{w3cAssertXML("<a/>")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "for-each-group-078a", StylesheetPath: "tests/insn/for-each-group/for-each-group-078.xsl", SourceDocPath: "tests/insn/for-each-group/group020.xml", InitialTemplate: "one", Assertions: []w3cAssertion{w3cAssertXML("<a/>")}},
 		{Name: "for-each-group-078b", StylesheetPath: "tests/insn/for-each-group/for-each-group-078.xsl", SourceDocPath: "tests/insn/for-each-group/group020.xml", InitialTemplate: "two", ExpectError: true, ErrorCode: "XTDE1061"},
-		{Name: "for-each-group-079a", StylesheetPath: "tests/insn/for-each-group/for-each-group-079.xsl", SourceDocPath: "tests/insn/for-each-group/group020.xml", InitialTemplate: "one", Assertions: []w3cAssertion{w3cAssertXML("<a/>")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "for-each-group-079a", StylesheetPath: "tests/insn/for-each-group/for-each-group-079.xsl", SourceDocPath: "tests/insn/for-each-group/group020.xml", InitialTemplate: "one", Assertions: []w3cAssertion{w3cAssertXML("<a/>")}},
 		{Name: "for-each-group-079b", StylesheetPath: "tests/insn/for-each-group/for-each-group-079.xsl", SourceDocPath: "tests/insn/for-each-group/group020.xml", InitialTemplate: "two", ExpectError: true, ErrorCode: "XTDE1071"},
 		{Name: "for-each-group-080", StylesheetPath: "tests/insn/for-each-group/for-each-group-080.xsl", SourceContent: `
 <root>
@@ -2042,7 +2042,7 @@ while you are in the cinema.</p></o>`)}},
             /><b:line xmlns:b="http://example.com" att="16" accumulator="136"
             /><a:line3 xmlns:a="http://example.com" att="14" accumulator="105"
             /><b:line3 xmlns:b="http://example.com" att="15" accumulator="120"/></out>`)}},
-		{Name: "for-each-group-090", StylesheetPath: "tests/insn/for-each-group/for-each-group-090.xsl", ExpectError: true, ErrorCode: "XTDE1061", Skip: "unsupported feature: higher_order_functions"},
+		{Name: "for-each-group-090", StylesheetPath: "tests/insn/for-each-group/for-each-group-090.xsl", ExpectError: true, ErrorCode: "XTDE1061"},
 		{Name: "for-each-group-091", StylesheetPath: "tests/insn/for-each-group/for-each-group-091.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out/group[@key=\"A\"]/@total = '30'"), w3cAssertXPath("/out/group[@key=\"B\"]/@total = '70'")}},
 	})
 }
@@ -2158,7 +2158,7 @@ func TestW3C_lre(t *testing.T) {
 <_an_elem xmlns="http://www.ped.com"/>
 <_ped:_an_elem/></root>`)}},
 		{Name: "lre-025", StylesheetPath: "tests/insn/lre/lre-025.xsl", ExpectError: true, ErrorCode: "XTDE0450"},
-		{Name: "lre-026", StylesheetPath: "tests/insn/lre/lre-026.xsl", ExpectError: true, ErrorCode: "XTDE0450", Skip: "unsupported feature: higher_order_functions"},
+		{Name: "lre-026", StylesheetPath: "tests/insn/lre/lre-026.xsl", ExpectError: true, ErrorCode: "XTDE0450"},
 		{Name: "lre-027", StylesheetPath: "tests/insn/lre/lre-027.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/namespace::four=\"http://four.com\""), w3cAssertXPath("empty(/out/namespace::one)"), w3cAssertXPath("empty(/out/namespace::two)"), w3cAssertXPath("empty(/out/namespace::three)")}},
 		{Name: "lre-028", StylesheetPath: "tests/insn/lre/lre-028.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/namespace::one=\"http://eins.com\""), w3cAssertXPath("/out/namespace::four=\"http://vier.com\""), w3cAssertXPath("/out/namespace::quatre=\"http://four.com\""), w3cAssertXPath("empty(/out/namespace::two)"), w3cAssertXPath("empty(/out/namespace::three)"), w3cAssertXPath("empty(/out/namespace::un)"), w3cAssertXPath("empty(/out/namespace::deux)"), w3cAssertXPath("empty(/out/namespace::trois)")}},
 		{Name: "lre-104", StylesheetPath: "tests/insn/lre/lre-104.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><one><name><e/></name></one><two/></out>")}},
@@ -2250,7 +2250,7 @@ func TestW3C_merge(t *testing.T) {
 		{Name: "merge-048", StylesheetPath: "tests/insn/merge/merge-048.xsl", SourceDocPath: "tests/insn/merge/merge001.xml", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE3490"},
 		{Name: "merge-049", StylesheetPath: "tests/insn/merge/merge-049.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip())}},
 		{Name: "merge-050", StylesheetPath: "tests/insn/merge/merge-050.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1510"},
-		{Name: "merge-051", StylesheetPath: "tests/insn/merge/merge-051.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("count(/books/ok) = 4"), w3cAssertXPath("count(/books/bad) = 0")}, Skip: "requires schema-element/schema-attribute node tests"},
+		{Name: "merge-051", StylesheetPath: "tests/insn/merge/merge-051.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("count(/books/ok) = 4"), w3cAssertXPath("count(/books/bad) = 0")}, Skip: "unsupported feature: schema_aware"},
 		{Name: "merge-052", StylesheetPath: "tests/insn/merge/merge-052.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1540"},
 		{Name: "merge-053", StylesheetPath: "tests/insn/merge/merge-053.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE1505"},
 		{Name: "merge-054", StylesheetPath: "tests/insn/merge/merge-054.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0020"},
@@ -5924,7 +5924,7 @@ func TestW3C_result_document(t *testing.T) {
 		{Name: "result-document-1404", StylesheetPath: "tests/insn/result-document/result-document-1404.xsl", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckSkip(), w3cCheckSkip())}},
 		{Name: "result-document-1405", StylesheetPath: "tests/insn/result-document/result-document-1405.xsl", ExpectError: true, ErrorCode: "SERE0022"},
 		{Name: "result-document-1406", StylesheetPath: "tests/insn/result-document/result-document-1406.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
-		{Name: "result-document-1407", StylesheetPath: "tests/insn/result-document/result-document-1407.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "result-document-1407", StylesheetPath: "tests/insn/result-document/result-document-1407.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "result-document-1408", StylesheetPath: "tests/insn/result-document/result-document-1408.xsl", Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
 		{Name: "result-document-1409", StylesheetPath: "tests/insn/result-document/result-document-1408.xsl", Params: map[string]string{"twiddle": `'
 '`}, Assertions: []w3cAssertion{w3cAssertSkip()}, Skip: "unsupported assertion type"},
@@ -6622,8 +6622,8 @@ func TestW3C_try(t *testing.T) {
 		{Name: "try-003", StylesheetPath: "tests/insn/try/try-003.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "FOAR0001"},
 		{Name: "try-004", StylesheetPath: "tests/insn/try/try-004.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML(`<o><validation-error><err:error xmlns:err="http://www.w3.org/2005/xqt-errors" code="err:XTTE1540"
                  module="try-004.xsl"
-                 line="0"><message>true</message></err:error></validation-error></o>`)}},
-		{Name: "try-005", StylesheetPath: "tests/insn/try/try-005.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1540", Skip: "requires runtime type checking: XTTE1540"},
+                 line="0"><message>true</message></err:error></validation-error></o>`)}, Skip: "unsupported feature: schema_aware"},
+		{Name: "try-005", StylesheetPath: "tests/insn/try/try-005.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE1540", Skip: "unsupported feature: schema_aware"},
 		{Name: "try-006", StylesheetPath: "tests/insn/try/try-006.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>Infinity</out>")}},
 		{Name: "try-007", StylesheetPath: "tests/insn/try/try-007.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>Infinity</out>")}},
 		{Name: "try-008", StylesheetPath: "tests/insn/try/try-008.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>Infinity</out>")}},
@@ -6633,9 +6633,9 @@ func TestW3C_try(t *testing.T) {
 		{Name: "try-012", StylesheetPath: "tests/insn/try/try-012.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out try=\"true\" catch=\"true\"/>")}},
 		{Name: "try-013", StylesheetPath: "tests/insn/try/try-013.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out try=\"false\" catch=\"false\"/>")}},
 		{Name: "try-014", StylesheetPath: "tests/insn/try/try-014.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>4</out>")}},
-		{Name: "try-015", StylesheetPath: "tests/insn/try/try-014.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>5</out>")}, Skip: "feature present but test requires absent: schema_aware"},
+		{Name: "try-015", StylesheetPath: "tests/insn/try/try-014.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>5</out>")}},
 		{Name: "try-016", StylesheetPath: "tests/insn/try/try-016.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>4</out>")}},
-		{Name: "try-017", StylesheetPath: "tests/insn/try/try-017.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>5</out>")}, Skip: "feature present but test requires absent: schema_aware"},
+		{Name: "try-017", StylesheetPath: "tests/insn/try/try-017.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>5</out>")}},
 		{Name: "try-018", StylesheetPath: "tests/insn/try/try-018.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/code[@ns=\"http://www.w3.org/2005/xqt-errors\" and @local=\"FODC0002\"]"), w3cAssertXPath("/out/description[contains(., 'try-018-rubbish.xml')]"), w3cAssertXPath("/out/module[ends-with(., 'try-018.xsl')]"), w3cAssertXPath("/out/line = \"11\"")}},
 		{Name: "try-019", StylesheetPath: "tests/insn/try/try-019.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("contains(/out, \"FODC0002\")"), w3cAssertXPath("contains(/out, 'rubbish.xml')"), w3cAssertXPath("contains(/out, 'try-019.xsl')"), w3cAssertXPath("contains(/out, '#11#')")}},
 		{Name: "try-020", StylesheetPath: "tests/insn/try/try-020.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<output xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><ERROR message=\"Division by 0 error caught!\"/></output>")}},
@@ -6646,9 +6646,9 @@ func TestW3C_try(t *testing.T) {
 		{Name: "try-022", StylesheetPath: "tests/insn/try/try-022.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/result/*:error[@code=\"err:FOAR0001\" and @module=\"try-022.xsl\" and @line=\"21\"]"), w3cAssertXPath("contains(/result/*:error/message, \"zero\")"), w3cAssertXPath("/result/output = \"main document\""), w3cAssertSkip()}},
 		{Name: "try-023", StylesheetPath: "tests/insn/try/try-023.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion: assert-result-document"},
 		{Name: "try-024", StylesheetPath: "tests/insn/try/try-024.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion: assert-result-document"},
-		{Name: "try-025", StylesheetPath: "tests/insn/try/try-025.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0010", Skip: "feature present but test requires absent: schema_aware"},
-		{Name: "try-026", StylesheetPath: "tests/insn/try/try-026.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>5</out>")}, Skip: "feature present but test requires absent: schema_aware"},
-		{Name: "try-027", StylesheetPath: "tests/insn/try/try-027.xsl", SourceDocPath: "tests/insn/try/try020.xml", Assertions: []w3cAssertion{w3cAssertXML("<output xmlns:err=\"http://www.w3.org/2005/xqt-errors\"/>")}, Skip: "unsupported feature: dynamic_evaluation"},
+		{Name: "try-025", StylesheetPath: "tests/insn/try/try-025.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0010"},
+		{Name: "try-026", StylesheetPath: "tests/insn/try/try-026.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXML("<out>5</out>")}},
+		{Name: "try-027", StylesheetPath: "tests/insn/try/try-027.xsl", SourceDocPath: "tests/insn/try/try020.xml", Assertions: []w3cAssertion{w3cAssertXML("<output xmlns:err=\"http://www.w3.org/2005/xqt-errors\"/>")}},
 		{Name: "try-028", StylesheetPath: "tests/insn/try/try-028.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "FOAR0001"},
 		{Name: "try-029", StylesheetPath: "tests/insn/try/try-029.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "FOAR0001"},
 		{Name: "try-030", StylesheetPath: "tests/insn/try/try-030.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "FOAR0001"},

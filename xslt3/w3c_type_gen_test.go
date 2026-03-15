@@ -758,12 +758,12 @@ func TestW3C_maps(t *testing.T) {
 		{Name: "maps-007", StylesheetPath: "tests/type/maps/maps-007.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTTE3375"},
 		{Name: "maps-008", StylesheetPath: "tests/type/maps/maps-008.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE3280"},
 		{Name: "maps-009", StylesheetPath: "tests/type/maps/maps-009.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/size[.='2']) = 2")}},
-		{Name: "maps-010", StylesheetPath: "tests/type/maps/maps-010.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/a = \"2\""), w3cAssertXPath("/out/b = \"2:2\""), w3cAssertXPath("/out/c = \"2:2\""), w3cAssertXPath("/out/d = \"1:\""), w3cAssertXPath("/out/e = \"0:\"")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "maps-010", StylesheetPath: "tests/type/maps/maps-010.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/a = \"2\""), w3cAssertXPath("/out/b = \"2:2\""), w3cAssertXPath("/out/c = \"2:2\""), w3cAssertXPath("/out/d = \"1:\""), w3cAssertXPath("/out/e = \"0:\"")}},
 		{Name: "maps-011", StylesheetPath: "tests/type/maps/maps-011.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = '51'")}},
 		{Name: "maps-012", StylesheetPath: "", SourceContent: "<doc><e ref='1'/></doc>", Params: map[string]string{"param": "'map'"}, Assertions: []w3cAssertion{w3cAssertXML("<out>1st</out>")}, Skip: "no stylesheet"},
 		{Name: "maps-013", StylesheetPath: "", SourceContent: "<doc><e ref='1'/></doc>", Params: map[string]string{"param": "'array'"}, Assertions: []w3cAssertion{w3cAssertXML("<out>first</out>")}, Skip: "no stylesheet"},
 		{Name: "maps-014", StylesheetPath: "tests/type/maps/maps-014.xsl", Assertions: []w3cAssertion{w3cAssertXML("<out>22</out>")}},
-		{Name: "maps-015", StylesheetPath: "tests/type/maps/maps-015.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0080", Skip: "unsupported feature: higher_order_functions"},
+		{Name: "maps-015", StylesheetPath: "tests/type/maps/maps-015.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTSE0080"},
 		{Name: "maps-016", StylesheetPath: "tests/type/maps/maps-016.xsl", Assertions: []w3cAssertion{w3cAssertXML("<out><contains>false</contains><get/></out>")}},
 		{Name: "maps-017", StylesheetPath: "tests/type/maps/maps-017.xsl", SourceContent: `<foo:root xmlns:foo='http://www.example.com'>
       <foo:bar>Hello world</foo:bar>

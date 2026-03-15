@@ -101,8 +101,8 @@ func TestW3C_accessor(t *testing.T) {
 func TestW3C_available_system_properties(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "available-system-properties-001", StylesheetPath: "tests/fn/available-system-properties/available-system-properties-001.xsl", Params: map[string]string{"use-static": "true()"}, Assertions: []w3cAssertion{w3cAssertXML("<result>truetruetruetruetrue</result>")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "available-system-properties-002", StylesheetPath: "tests/fn/available-system-properties/available-system-properties-001.xsl", Params: map[string]string{"use-static": "false()"}, Assertions: []w3cAssertion{w3cAssertXML("<result>truetruetruetruetrue</result>")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "available-system-properties-001", StylesheetPath: "tests/fn/available-system-properties/available-system-properties-001.xsl", Params: map[string]string{"use-static": "true()"}, Assertions: []w3cAssertion{w3cAssertXML("<result>truetruetruetruetrue</result>")}},
+		{Name: "available-system-properties-002", StylesheetPath: "tests/fn/available-system-properties/available-system-properties-001.xsl", Params: map[string]string{"use-static": "false()"}, Assertions: []w3cAssertion{w3cAssertXML("<result>truetruetruetruetrue</result>")}},
 		{Name: "available-system-properties-003", StylesheetPath: "tests/fn/available-system-properties/available-system-properties-002.xsl", Params: map[string]string{"propname": "'version'"}, Assertions: []w3cAssertion{w3cAssertXML("<result>Q{http://www.w3.org/1999/XSL/Transform}version</result>")}},
 		{Name: "available-system-properties-004", StylesheetPath: "tests/fn/available-system-properties/available-system-properties-002.xsl", Params: map[string]string{"propname": "'vendor'"}, Assertions: []w3cAssertion{w3cAssertXML("<result>Q{http://www.w3.org/1999/XSL/Transform}vendor</result>")}},
 		{Name: "available-system-properties-005", StylesheetPath: "tests/fn/available-system-properties/available-system-properties-002.xsl", Params: map[string]string{"propname": "'vendor-url'"}, Assertions: []w3cAssertion{w3cAssertXML("<result>Q{http://www.w3.org/1999/XSL/Transform}vendor-url</result>")}},
@@ -386,7 +386,7 @@ func TestW3C_copy_of(t *testing.T) {
 		{Name: "copy-of-010", StylesheetPath: "tests/fn/copy-of/copy-of-010.xsl", SourceDocPath: "tests/fn/copy-of/copy-of-001.xml", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/*:subelem) = 2")}},
 		{Name: "copy-of-011", StylesheetPath: "tests/fn/copy-of/copy-of-011.xsl", SourceDocPath: "tests/fn/copy-of/copy-of-001.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out = '17'")}},
 		{Name: "copy-of-012", StylesheetPath: "tests/fn/copy-of/copy-of-012.xsl", SourceDocPath: "tests/fn/copy-of/copy-of-001.xml", ExpectError: true, ErrorCode: "XPDY0002"},
-		{Name: "copy-of-013", StylesheetPath: "tests/fn/copy-of/copy-of-013.xsl", SourceDocPath: "tests/fn/copy-of/copy-of-001.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "copy-of-013", StylesheetPath: "tests/fn/copy-of/copy-of-013.xsl", SourceDocPath: "tests/fn/copy-of/copy-of-001.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}},
 	})
 }
 
@@ -413,8 +413,8 @@ func TestW3C_current_output_uri(t *testing.T) {
 		{Name: "current-output-uri-013", StylesheetPath: "tests/fn/current-output-uri/current-output-uri-013.xsl", Assertions: []w3cAssertion{w3cAssertXML("<out>empty: true</out>")}},
 		{Name: "current-output-uri-014", StylesheetPath: "tests/fn/current-output-uri/current-output-uri-014.xsl", Assertions: []w3cAssertion{w3cAssertXPath("contains(/out/text(), 'fn/current-output-uri')")}},
 		{Name: "current-output-uri-015", StylesheetPath: "tests/fn/current-output-uri/current-output-uri-015.xsl", Assertions: []w3cAssertion{w3cAssertXML("<out>empty: true</out>")}},
-		{Name: "current-output-uri-016", StylesheetPath: "tests/fn/current-output-uri/current-output-uri-016.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'current-output-uri-is-empty=true'")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "current-output-uri-017", StylesheetPath: "tests/fn/current-output-uri/current-output-uri-017.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'current-output-uri-is-empty=true'")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "current-output-uri-016", StylesheetPath: "tests/fn/current-output-uri/current-output-uri-016.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'current-output-uri-is-empty=true'")}},
+		{Name: "current-output-uri-017", StylesheetPath: "tests/fn/current-output-uri/current-output-uri-017.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'current-output-uri-is-empty=true'")}},
 		{Name: "current-output-uri-901", StylesheetPath: "tests/fn/current-output-uri/current-output-uri-901.xsl", ExpectError: true, ErrorCode: "XPST0017"},
 		{Name: "current-output-uri-902", StylesheetPath: "tests/fn/current-output-uri/current-output-uri-902.xsl", Params: map[string]string{"xpathExpr": "'current-output-uri()'"}, ExpectError: true, ErrorCode: "XTDE3160"},
 	})
@@ -2414,21 +2414,21 @@ func TestW3C_function_available(t *testing.T) {
 		{Name: "function-available-1015", StylesheetPath: "tests/fn/function-available/function-available-1015.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out><a>true</a><b>true</b><a>true</a><b>true</b><a>false</a><b>false</b><a>true</a><b>true</b></out>")}},
 		{Name: "function-available-1016", StylesheetPath: "tests/fn/function-available/function-available-1016.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXPath("/out/a = 'false'"), w3cAssertXPath("/out/b = 'false'"), w3cAssertXPath("/out/c = 'false'"), w3cAssertXPath("/out/d = 'false'"), w3cAssertXPath("/out/e = 'false'"), w3cAssertXPath("/out/f = 'false'")}},
 		{Name: "function-available-1017", StylesheetPath: "tests/fn/function-available/function-available-1017.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXPath("every $n in /out/*/*[not(self::z)] satisfies $n = 'true'"), w3cAssertXPath("every $n in /out/*/z satisfies $n = 'false'")}},
-		{Name: "function-available-1018", StylesheetPath: "tests/fn/function-available/function-available-1018.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXPath("every $n in /out/* satisfies $n = 'true'")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "function-available-1018", StylesheetPath: "tests/fn/function-available/function-available-1018.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXPath("every $n in /out/* satisfies $n = 'true'")}},
 	})
 }
 
 func TestW3C_function_lookup(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "function-lookup-001", StylesheetPath: "tests/fn/function-lookup/function-lookup-001.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out = '15'")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "function-lookup-002", StylesheetPath: "tests/fn/function-lookup/function-lookup-002.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out = '15'")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "function-lookup-003", StylesheetPath: "tests/fn/function-lookup/function-lookup-003.xsl", Assertions: []w3cAssertion{w3cAssertXPath("not(/out/one)")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "function-lookup-001", StylesheetPath: "tests/fn/function-lookup/function-lookup-001.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out = '15'")}},
+		{Name: "function-lookup-002", StylesheetPath: "tests/fn/function-lookup/function-lookup-002.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out = '15'")}},
+		{Name: "function-lookup-003", StylesheetPath: "tests/fn/function-lookup/function-lookup-003.xsl", Assertions: []w3cAssertion{w3cAssertXPath("not(/out/one)")}},
 		{Name: "function-lookup-004", StylesheetPath: "", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'false'")}, Skip: "no stylesheet"},
 		{Name: "function-lookup-005", StylesheetPath: "", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/sub/multiply/@exists = 'true'"), w3cAssertXPath("/out/sub/divide/@exists = 'false'"), w3cAssertXPath("/out/sub/add/@exists = 'true'"), w3cAssertXPath("/out/sub/add/@effect = '7'"), w3cAssertXPath("/out/sub/subtract/@exists = 'false'")}, Skip: "no stylesheet"},
 		{Name: "function-lookup-006", StylesheetPath: "", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/@result = '7'")}, Skip: "no stylesheet"},
-		{Name: "function-lookup-007", StylesheetPath: "tests/fn/function-lookup/function-lookup-007.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'pferd'")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "function-lookup-008", StylesheetPath: "tests/fn/function-lookup/function-lookup-008.xsl", SourceDocPath: "tests/fn/function-lookup/function-lookup-008.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/example = 'abc'")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "function-lookup-007", StylesheetPath: "tests/fn/function-lookup/function-lookup-007.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'pferd'")}},
+		{Name: "function-lookup-008", StylesheetPath: "tests/fn/function-lookup/function-lookup-008.xsl", SourceDocPath: "tests/fn/function-lookup/function-lookup-008.xml", Assertions: []w3cAssertion{w3cAssertXPath("/root/example = 'abc'")}},
 	})
 }
 
@@ -3151,10 +3151,10 @@ Namespace "" used in 3
 func TestW3C_load_xquery_module(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "load-xquery-module-001", StylesheetPath: "tests/fn/load-xquery-module/load-xquery-module-001.xsl", ExpectError: true, ErrorCode: "XQST0059", Skip: "unsupported feature: higher_order_functions"},
-		{Name: "load-xquery-module-002", StylesheetPath: "tests/fn/load-xquery-module/load-xquery-module-002.xsl", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out = \"var1\""))}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "load-xquery-module-003", StylesheetPath: "tests/fn/load-xquery-module/load-xquery-module-003.xsl", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out = \"func1\""))}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "load-xquery-module-004", StylesheetPath: "tests/fn/load-xquery-module/load-xquery-module-004.xsl", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out = \"func1\""))}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "load-xquery-module-001", StylesheetPath: "tests/fn/load-xquery-module/load-xquery-module-001.xsl", ExpectError: true, ErrorCode: "XQST0059"},
+		{Name: "load-xquery-module-002", StylesheetPath: "tests/fn/load-xquery-module/load-xquery-module-002.xsl", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out = \"var1\""))}},
+		{Name: "load-xquery-module-003", StylesheetPath: "tests/fn/load-xquery-module/load-xquery-module-003.xsl", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out = \"func1\""))}},
+		{Name: "load-xquery-module-004", StylesheetPath: "tests/fn/load-xquery-module/load-xquery-module-004.xsl", Assertions: []w3cAssertion{w3cAnyOf(w3cCheckXPath("/out = \"func1\""))}},
 	})
 }
 
@@ -4269,7 +4269,7 @@ func TestW3C_snapshot(t *testing.T) {
    <br:width>27 feet (8 m)</br:width>
    <br:spans>Mississippi River</br:spans>
 </br:Bridge>
-`, InitialTemplate: "a", Assertions: []w3cAssertion{w3cAssertXPath("/ok")}, Skip: "unsupported feature: higher_order_functions"},
+`, InitialTemplate: "a", Assertions: []w3cAssertion{w3cAssertXPath("/ok")}},
 		{Name: "snapshot-0101b", StylesheetPath: "tests/fn/snapshot/snapshot-0101.xsl", SourceContent: ` 
 <br:Bridge xmlns:gml="http://www.opengis.net/gml/3.2"
                   xmlns:br="http://www.bridge.org"
@@ -4292,7 +4292,7 @@ func TestW3C_snapshot(t *testing.T) {
    <br:width>27 feet (8 m)</br:width>
    <br:spans>Mississippi River</br:spans>
 </br:Bridge>
-`, InitialTemplate: "b", Assertions: []w3cAssertion{w3cAssertXPath("/ok"), w3cAssertXPath("/ok/@doc = 'true'")}, Skip: "unsupported feature: higher_order_functions"},
+`, InitialTemplate: "b", Assertions: []w3cAssertion{w3cAssertXPath("/ok"), w3cAssertXPath("/ok/@doc = 'true'")}},
 		{Name: "snapshot-0101c", StylesheetPath: "tests/fn/snapshot/snapshot-0101.xsl", SourceContent: ` 
 <br:Bridge xmlns:gml="http://www.opengis.net/gml/3.2"
                   xmlns:br="http://www.bridge.org"
@@ -4318,7 +4318,7 @@ func TestW3C_snapshot(t *testing.T) {
 `, InitialTemplate: "c", Assertions: []w3cAssertion{w3cAssertXML(`<br:Bridge xmlns:gml="http://www.opengis.net/gml/3.2"
            xmlns:br="http://www.bridge.org"
            gml:id="Iowa-IllinoisMemorialBridge"
-><gml:identifier codeSpace="http://iowadot.gov">#8205,OL074  8205,OR074</gml:identifier></br:Bridge>`)}, Skip: "unsupported feature: higher_order_functions"},
+><gml:identifier codeSpace="http://iowadot.gov">#8205,OL074  8205,OR074</gml:identifier></br:Bridge>`)}},
 		{Name: "snapshot-0101d", StylesheetPath: "tests/fn/snapshot/snapshot-0101.xsl", SourceContent: ` 
 <br:Bridge xmlns:gml="http://www.opengis.net/gml/3.2"
                   xmlns:br="http://www.bridge.org"
@@ -4341,7 +4341,7 @@ func TestW3C_snapshot(t *testing.T) {
    <br:width>27 feet (8 m)</br:width>
    <br:spans>Mississippi River</br:spans>
 </br:Bridge>
-`, InitialTemplate: "d", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "unsupported feature: higher_order_functions"},
+`, InitialTemplate: "d", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}},
 		{Name: "snapshot-0101e", StylesheetPath: "tests/fn/snapshot/snapshot-0101.xsl", SourceContent: ` 
 <br:Bridge xmlns:gml="http://www.opengis.net/gml/3.2"
                   xmlns:br="http://www.bridge.org"
@@ -4364,7 +4364,7 @@ func TestW3C_snapshot(t *testing.T) {
    <br:width>27 feet (8 m)</br:width>
    <br:spans>Mississippi River</br:spans>
 </br:Bridge>
-`, InitialTemplate: "e", Assertions: []w3cAssertion{w3cAssertXPath("/out/a='true'"), w3cAssertXPath("/out/b='true'"), w3cAssertXPath("/out/c='true'"), w3cAssertXPath("/out/d='true'")}, Skip: "unsupported feature: higher_order_functions"},
+`, InitialTemplate: "e", Assertions: []w3cAssertion{w3cAssertXPath("/out/a='true'"), w3cAssertXPath("/out/b='true'"), w3cAssertXPath("/out/c='true'"), w3cAssertXPath("/out/d='true'")}},
 		{Name: "snapshot-0101f", StylesheetPath: "tests/fn/snapshot/snapshot-0101.xsl", SourceContent: ` 
 <br:Bridge xmlns:gml="http://www.opengis.net/gml/3.2"
                   xmlns:br="http://www.bridge.org"
@@ -4387,7 +4387,7 @@ func TestW3C_snapshot(t *testing.T) {
    <br:width>27 feet (8 m)</br:width>
    <br:spans>Mississippi River</br:spans>
 </br:Bridge>
-`, InitialTemplate: "f", Assertions: []w3cAssertion{w3cAssertXPath("/out/a='true'"), w3cAssertXPath("/out/b='true'"), w3cAssertXPath("/out/c='true'"), w3cAssertXPath("/out/d='true'"), w3cAssertXPath("/out/e='true'"), w3cAssertXPath("/out/f='true'")}, Skip: "unsupported feature: higher_order_functions"},
+`, InitialTemplate: "f", Assertions: []w3cAssertion{w3cAssertXPath("/out/a='true'"), w3cAssertXPath("/out/b='true'"), w3cAssertXPath("/out/c='true'"), w3cAssertXPath("/out/d='true'"), w3cAssertXPath("/out/e='true'"), w3cAssertXPath("/out/f='true'")}},
 		{Name: "snapshot-0102", StylesheetPath: "tests/fn/snapshot/snapshot-0102.xsl", SourceContent: ` 
 <br:Bridge xmlns:gml="http://www.opengis.net/gml/3.2"
                   xmlns:br="http://www.bridge.org"
@@ -4433,7 +4433,7 @@ func TestW3C_snapshot(t *testing.T) {
    <br:width>27 feet (8 m)</br:width>
    <br:spans>Mississippi River</br:spans>
 </br:Bridge>
-`, Assertions: []w3cAssertion{w3cAssertXPath("/out"), w3cAssertXPath("not(/out/wrong)")}, Skip: "unsupported feature: higher_order_functions"},
+`, Assertions: []w3cAssertion{w3cAssertXPath("/out"), w3cAssertXPath("not(/out/wrong)")}},
 		{Name: "snapshot-0103", StylesheetPath: "tests/fn/snapshot/snapshot-0103.xsl", SourceContent: ` 
 <br:Bridge xmlns:gml="http://www.opengis.net/gml/3.2"
                   xmlns:br="http://www.bridge.org"
@@ -4716,21 +4716,21 @@ func TestW3C_system_property(t *testing.T) {
 		{Name: "system-property-009", StylesheetPath: "tests/fn/system-property/system-property-009.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out/>")}},
 		{Name: "system-property-010", StylesheetPath: "tests/fn/system-property/system-property-010.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<a:out xmlns:a=\"http://example.org/test\"/>")}},
 		{Name: "system-property-011", StylesheetPath: "tests/fn/system-property/system-property-011.xsl", SourceDocPath: "tests/fn/system-property/systemprop009.xml", Assertions: []w3cAssertion{w3cAssertXML("<?xml version=\"1.0\" encoding=\"UTF-8\"?><out>\r\n<version>truetruetrue</version>\r\n<vendor>truetruetrue</vendor>\r\n<ven-url>truetruetrue</ven-url>\r\n<name>truetruetrue</name>\r\n<pr-version>truetruetrue</pr-version>\r\n<is-SA>truetruetrue</is-SA>\r\n<serial>truetruetrue</serial>\r\n<bc>truetruetrue</bc>\r\n</out>")}},
-		{Name: "system-property-012", StylesheetPath: "tests/fn/system-property/system-property-012.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'yes'")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "system-property-013", StylesheetPath: "tests/fn/system-property/system-property-012.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'no'")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "system-property-014a", StylesheetPath: "tests/fn/system-property/system-property-014.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = '4yes'")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "system-property-014b", StylesheetPath: "tests/fn/system-property/system-property-014.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'no'")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "system-property-015", StylesheetPath: "tests/fn/system-property/system-property-015.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out>truetrue</out>")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "system-property-016", StylesheetPath: "tests/fn/system-property/system-property-016.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out>truetrue</out>")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "system-property-017", StylesheetPath: "tests/fn/system-property/system-property-017.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out>truetrue</out>")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "system-property-018", StylesheetPath: "tests/fn/system-property/system-property-018.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "system-property-012", StylesheetPath: "tests/fn/system-property/system-property-012.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'yes'")}},
+		{Name: "system-property-013", StylesheetPath: "tests/fn/system-property/system-property-012.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'no'")}, Skip: "feature present but test requires absent: streaming"},
+		{Name: "system-property-014a", StylesheetPath: "tests/fn/system-property/system-property-014.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = '4yes'")}},
+		{Name: "system-property-014b", StylesheetPath: "tests/fn/system-property/system-property-014.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'no'")}, Skip: "feature present but test requires absent: dynamic_evaluation"},
+		{Name: "system-property-015", StylesheetPath: "tests/fn/system-property/system-property-015.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out>truetrue</out>")}},
+		{Name: "system-property-016", StylesheetPath: "tests/fn/system-property/system-property-016.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out>truetrue</out>")}},
+		{Name: "system-property-017", StylesheetPath: "tests/fn/system-property/system-property-017.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXML("<out>truetrue</out>")}},
+		{Name: "system-property-018", StylesheetPath: "tests/fn/system-property/system-property-018.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}},
 		{Name: "system-property-019", StylesheetPath: "tests/fn/system-property/system-property-019.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXPath("/out=\"yes\"")}, Skip: "unsupported feature: backwards_compatibility"},
 		{Name: "system-property-019a", StylesheetPath: "tests/fn/system-property/system-property-019.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXPath("/out=\"no\"")}},
 		{Name: "system-property-020", StylesheetPath: "tests/fn/system-property/system-property-020.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/a[.='']) = 3")}},
 		{Name: "system-property-021", StylesheetPath: "tests/fn/system-property/system-property-021.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXPath("/out/ok")}},
 		{Name: "system-property-022", StylesheetPath: "tests/fn/system-property/system-property-022.xsl", SourceContent: "<doc/>", ExpectError: true, ErrorCode: "XTDE3160"},
-		{Name: "system-property-023", StylesheetPath: "tests/fn/system-property/system-property-023.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "system-property-024", StylesheetPath: "tests/fn/system-property/system-property-024.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "system-property-023", StylesheetPath: "tests/fn/system-property/system-property-023.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}},
+		{Name: "system-property-024", StylesheetPath: "tests/fn/system-property/system-property-024.xsl", SourceContent: "<doc/>", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}},
 		{Name: "system-property-025", StylesheetPath: "tests/fn/system-property/system-property-025.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/out[matches(., 'Run with [3-9]\\.[0-9]')]")}},
 	})
 }
@@ -4738,15 +4738,15 @@ func TestW3C_system_property(t *testing.T) {
 func TestW3C_transform(t *testing.T) {
 	t.Parallel()
 	w3cRunTests(t, []w3cTest{
-		{Name: "transform-001", StylesheetPath: "tests/fn/transform/transform-001.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "FOXT0002", Skip: "unsupported feature: higher_order_functions"},
-		{Name: "transform-002", StylesheetPath: "tests/fn/transform/transform-002.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/in = 59")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "transform-003", StylesheetPath: "tests/fn/transform/transform-003.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 3.142")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "transform-004", StylesheetPath: "tests/fn/transform/transform-004.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 42")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "transform-005", StylesheetPath: "tests/fn/transform/transform-005.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/in")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "transform-006", StylesheetPath: "tests/fn/transform/transform-006.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/in = '1.0.5'")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "transform-007", StylesheetPath: "tests/fn/transform/transform-007.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE0040", Skip: "unsupported feature: higher_order_functions"},
-		{Name: "transform-008", StylesheetPath: "tests/fn/transform/transform-008.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/result/primary/a = '892'"), w3cAssertXPath("/result/secondary/out = '479'")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "transform-009", StylesheetPath: "tests/fn/transform/transform-009.xsl", SourceDocPath: "tests/fn/transform/transform-001.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "transform-001", StylesheetPath: "tests/fn/transform/transform-001.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "FOXT0002"},
+		{Name: "transform-002", StylesheetPath: "tests/fn/transform/transform-002.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/in = 59")}},
+		{Name: "transform-003", StylesheetPath: "tests/fn/transform/transform-003.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 3.142")}},
+		{Name: "transform-004", StylesheetPath: "tests/fn/transform/transform-004.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 42")}},
+		{Name: "transform-005", StylesheetPath: "tests/fn/transform/transform-005.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/in")}},
+		{Name: "transform-006", StylesheetPath: "tests/fn/transform/transform-006.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/in = '1.0.5'")}},
+		{Name: "transform-007", StylesheetPath: "tests/fn/transform/transform-007.xsl", InitialTemplate: "main", ExpectError: true, ErrorCode: "XTDE0040"},
+		{Name: "transform-008", StylesheetPath: "tests/fn/transform/transform-008.xsl", Assertions: []w3cAssertion{w3cAssertXPath("/result/primary/a = '892'"), w3cAssertXPath("/result/secondary/out = '479'")}},
+		{Name: "transform-009", StylesheetPath: "tests/fn/transform/transform-009.xsl", SourceDocPath: "tests/fn/transform/transform-001.xsl", Assertions: []w3cAssertion{w3cAssertSkip(), w3cAssertSkip()}, Skip: "unsupported assertion: assert-serialization"},
 	})
 }
 
@@ -4774,8 +4774,8 @@ func TestW3C_unparsed_entity_uri(t *testing.T) {
 		{Name: "unparsed-entity-06", StylesheetPath: "tests/fn/unparsed-entity-uri/unparsed-entity-06.xsl", SourceDocPath: "tests/fn/unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/a = 'true'"), w3cAssertXPath("/out/b = ''"), w3cAssertXPath("/out/c = 'false'"), w3cAssertXPath("/out/d = '-//Textuality//TEXT standard boilerplate//EN'")}},
 		{Name: "unparsed-entity-07", StylesheetPath: "tests/fn/unparsed-entity-uri/unparsed-entity-07.xsl", SourceDocPath: "tests/fn/unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/a = 'true'"), w3cAssertXPath("/out/b = ''"), w3cAssertXPath("/out/c = 'false'"), w3cAssertXPath("/out/d = '-//Textuality//TEXT standard boilerplate//EN'")}},
 		{Name: "unparsed-entity-08", StylesheetPath: "tests/fn/unparsed-entity-uri/unparsed-entity-08.xsl", SourceDocPath: "tests/fn/unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/a = 'true'"), w3cAssertXPath("/out/b = ''"), w3cAssertXPath("/out/c = 'false'"), w3cAssertXPath("/out/d = '-//Textuality//TEXT standard boilerplate//EN'")}},
-		{Name: "unparsed-entity-09", StylesheetPath: "tests/fn/unparsed-entity-uri/unparsed-entity-09.xsl", SourceDocPath: "tests/fn/unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/in = 'true'")}, Skip: "unsupported feature: higher_order_functions"},
-		{Name: "unparsed-entity-10", StylesheetPath: "tests/fn/unparsed-entity-uri/unparsed-entity-10.xsl", SourceDocPath: "tests/fn/unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/in = 'true'")}, Skip: "unsupported feature: higher_order_functions"},
+		{Name: "unparsed-entity-09", StylesheetPath: "tests/fn/unparsed-entity-uri/unparsed-entity-09.xsl", SourceDocPath: "tests/fn/unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/in = 'true'")}},
+		{Name: "unparsed-entity-10", StylesheetPath: "tests/fn/unparsed-entity-uri/unparsed-entity-10.xsl", SourceDocPath: "tests/fn/unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out/in = 'true'")}},
 		{Name: "unparsed-entity-11", StylesheetPath: "tests/fn/unparsed-entity-uri/unparsed-entity-11.xsl", SourceDocPath: "tests/fn/unparsed-entity-uri/unparsed-entity-A.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'true'")}},
 		{Name: "unparsed-entity-50", StylesheetPath: "tests/fn/unparsed-entity-uri/unparsed-entity-uri-050.xsl", SourceDocPath: "tests/fn/unparsed-entity-uri/unparsed-entity-uri-050.xml", Assertions: []w3cAssertion{w3cAssertXPath("//img/@src=\"images\\epub\\dgr-en-08sdexample06-a.jpg\"")}},
 	})
