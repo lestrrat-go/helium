@@ -2257,6 +2257,8 @@ func getInstructionExprs(inst Instruction) []*xpath3.Expression {
 		}
 	case *OnEmptyInst:
 		exprs = append(exprs, v.Select)
+	case *OnNonEmptyInst:
+		exprs = append(exprs, v.Select)
 	case *CallTemplateInst:
 		for _, wp := range v.Params {
 			exprs = append(exprs, wp.Select)
@@ -2345,6 +2347,8 @@ func getChildInstructions(inst Instruction) [][]Instruction {
 			children = append(children, c.Body)
 		}
 	case *OnEmptyInst:
+		children = append(children, v.Body)
+	case *OnNonEmptyInst:
 		children = append(children, v.Body)
 	case *WherePopulatedInst:
 		children = append(children, v.Body)
