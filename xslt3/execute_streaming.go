@@ -335,45 +335,50 @@ type mergeKeyOrder struct {
 }
 
 // compareMergeKeyValues compares two merge key value arrays using the
-// specified orders. Returns -1, 0, or +1.
-func compareMergeKeyValues(a, b []mergeKeyValue, orders []mergeKeyOrder) int {
+// specified orders. Returns -1, 0, or +1. Returns an error (XTTE2230)
+// when keys from different sources have incompatible types.
+func compareMergeKeyValues(a, b []mergeKeyValue, orders []mergeKeyOrder) (int, error) {
 	for i, ord := range orders {
 		if i >= len(a) || i >= len(b) {
 			break
 		}
-		c := compareSingleMergeKey(a[i], b[i])
+		c, err := compareSingleMergeKey(a[i], b[i])
+		if err != nil {
+			return 0, err
+		}
 		if ord.desc {
 			c = -c
 		}
 		if c != 0 {
-			return c
+			return c, nil
 		}
 	}
-	return 0
+	return 0, nil
 }
 
 // compareSingleMergeKey compares two single merge key values.
-func compareSingleMergeKey(a, b mergeKeyValue) int {
+// Returns XTTE2230 when the key types are incomparable.
+func compareSingleMergeKey(a, b mergeKeyValue) (int, error) {
 	// Numeric mode: use float64 comparison with NaN handling.
 	if a.numeric || b.numeric {
 		aNaN := a.isNaN
 		bNaN := b.isNaN
 		if aNaN && bNaN {
-			return 0
+			return 0, nil
 		}
 		if aNaN {
-			return -1 // NaN sorts before non-NaN in ascending
+			return -1, nil // NaN sorts before non-NaN in ascending
 		}
 		if bNaN {
-			return 1
+			return 1, nil
 		}
 		if a.num < b.num {
-			return -1
+			return -1, nil
 		}
 		if a.num > b.num {
-			return 1
+			return 1, nil
 		}
-		return 0
+		return 0, nil
 	}
 
 	// If both have typed atomic values, use XPath value comparison.
@@ -381,15 +386,16 @@ func compareSingleMergeKey(a, b mergeKeyValue) int {
 		lt, err := xpath3.ValueCompare(xpath3.TokenLt, a.atom, b.atom)
 		if err == nil {
 			if lt {
-				return -1
+				return -1, nil
 			}
 			eq, err2 := xpath3.ValueCompare(xpath3.TokenEq, a.atom, b.atom)
 			if err2 == nil && eq {
-				return 0
+				return 0, nil
 			}
-			return 1
+			return 1, nil
 		}
-		// Fall back to string comparison if type comparison fails.
+		// Types are incomparable — raise XTTE2230.
+		return 0, dynamicError("XTTE2230", "merge keys are not comparable: %s vs %s", a.atom.TypeName, b.atom.TypeName)
 	}
 
 	// Fall back to string comparison.
@@ -408,12 +414,12 @@ func compareSingleMergeKey(a, b mergeKeyValue) int {
 		}
 	}
 	if aStr < bStr {
-		return -1
+		return -1, nil
 	}
 	if aStr > bStr {
-		return 1
+		return 1, nil
 	}
-	return 0
+	return 0, nil
 }
 
 // applyNumericMergeKey converts a merge key value to numeric mode.
@@ -572,9 +578,21 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 			for i := range src.items {
 				entries[i] = indexedEntry{idx: i, item: src.items[i], keys: verifyKeys[i]}
 			}
+			var sortErr error
 			slices.SortStableFunc(entries, func(a, b indexedEntry) int {
-				return compareMergeKeyValues(a.keys, b.keys, orders)
+				if sortErr != nil {
+					return 0
+				}
+				c, err := compareMergeKeyValues(a.keys, b.keys, orders)
+				if err != nil {
+					sortErr = err
+					return 0
+				}
+				return c
 			})
+			if sortErr != nil {
+				return sortErr
+			}
 			// Rebuild items and keys in sorted order using a temporary copy
 			// of the original keys to avoid in-place overwrite corruption.
 			origKeys := make([][]mergeKeyValue, len(src.keys))
@@ -598,7 +616,10 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 			}
 			if !hasCollation {
 				for i := 1; i < len(verifyKeys); i++ {
-					cmp := compareMergeKeyValues(verifyKeys[i-1], verifyKeys[i], orders)
+					cmp, cmpErr := compareMergeKeyValues(verifyKeys[i-1], verifyKeys[i], orders)
+					if cmpErr != nil {
+						return cmpErr
+					}
 					if cmp > 0 {
 						return dynamicError("XTDE2210", "merge input is not sorted according to the declared merge key")
 					}
@@ -621,7 +642,10 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 	}
 
 	// 3. N-way merge: use cursors to walk through all sources.
-	groups := ec.nWayMerge(allSources, orders)
+	groups, mergeErr := ec.nWayMerge(allSources, orders)
+	if mergeErr != nil {
+		return mergeErr
+	}
 
 	// 4. Execute the action body for each group.
 	// Register current-merge-group() and current-merge-key() as XSLT functions.
@@ -975,6 +999,12 @@ func (ec *execContext) evaluateMergeKeys(ctx context.Context, src *mergeSourceIt
 					itemKeys[k] = mergeKeyValue{atom: av}
 					continue
 				}
+				// Atomize node items to get typed atomic values.
+				av, atomErr := xpath3.AtomizeItem(seq[0])
+				if atomErr == nil {
+					itemKeys[k] = mergeKeyValue{atom: av}
+					continue
+				}
 			}
 			// Fall back to string value.
 			itemKeys[k] = mergeKeyValue{str: result.StringValue()}
@@ -986,8 +1016,9 @@ func (ec *execContext) evaluateMergeKeys(ctx context.Context, src *mergeSourceIt
 }
 
 // nWayMerge performs an n-way merge of pre-sorted sources, grouping items
-// that share the same key values.
-func (ec *execContext) nWayMerge(sources []mergeSourceItems, orders []mergeKeyOrder) []mergeGroup {
+// that share the same key values. Returns XTTE2230 if keys from different
+// sources are not comparable.
+func (ec *execContext) nWayMerge(sources []mergeSourceItems, orders []mergeKeyOrder) ([]mergeGroup, error) {
 	// Cursors: one per source, tracking current position.
 	cursors := make([]int, len(sources))
 	var groups []mergeGroup
@@ -1006,7 +1037,10 @@ func (ec *execContext) nWayMerge(sources []mergeSourceItems, orders []mergeKeyOr
 				minKeys = curKeys
 				minFound = true
 			} else {
-				cmp := compareMergeKeyValues(curKeys, minKeys, orders)
+				cmp, err := compareMergeKeyValues(curKeys, minKeys, orders)
+				if err != nil {
+					return nil, err
+				}
 				if cmp < 0 {
 					minKeys = curKeys
 				}
@@ -1025,7 +1059,11 @@ func (ec *execContext) nWayMerge(sources []mergeSourceItems, orders []mergeKeyOr
 		for si, src := range sources {
 			for cursors[si] < len(src.items) {
 				curKeys := src.keys[cursors[si]]
-				if compareMergeKeyValues(curKeys, minKeys, orders) != 0 {
+				cmp, err := compareMergeKeyValues(curKeys, minKeys, orders)
+				if err != nil {
+					return nil, err
+				}
+				if cmp != 0 {
 					break
 				}
 				item := src.items[cursors[si]]
@@ -1045,7 +1083,7 @@ func (ec *execContext) nWayMerge(sources []mergeSourceItems, orders []mergeKeyOr
 		groups = append(groups, g)
 	}
 
-	return groups
+	return groups, nil
 }
 
 // mergeKeyValueToSequence converts a mergeKeyValue to an XPath sequence for
