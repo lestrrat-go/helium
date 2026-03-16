@@ -459,13 +459,7 @@ func w3cCheckXPath(expr string) w3cCheck {
 	evalOnDoc := func(doc *helium.Document) bool {
 		compiled, err := xpath3.NewCompiler().Compile(expr)
 		if err != nil {
-			// Result may be plain text (e.g. from xsl:message); wrap in a
-			// root element so XPath expressions like `. = "..."` can evaluate
-			// against it.
-			doc, err = helium.Parse(context.TODO(), []byte("<_r>"+result+"</_r>"))
-			if err != nil {
-				return false
-			}
+			return false
 		}
 		eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 		ns := gatherDocNamespaces(doc)
