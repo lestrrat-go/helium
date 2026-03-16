@@ -712,5 +712,17 @@ func (c *compiler) compileMergeKey(elem *helium.Element) (*MergeKey, error) {
 		}
 	}
 
+	if dataType := getAttr(elem, "data-type"); dataType != "" {
+		if strings.Contains(dataType, "{") {
+			avt, err := compileAVT(dataType, c.nsBindings)
+			if err != nil {
+				return nil, err
+			}
+			mk.DataTypeAVT = avt
+		} else {
+			mk.DataType = dataType
+		}
+	}
+
 	return mk, nil
 }

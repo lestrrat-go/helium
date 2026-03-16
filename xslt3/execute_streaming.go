@@ -3,6 +3,7 @@ package xslt3
 import (
 	"context"
 	"errors"
+	"math"
 	"os"
 	"slices"
 
@@ -304,8 +305,11 @@ func (ec *execContext) execNextIteration(ctx context.Context, inst *NextIteratio
 // mergeKeyValue holds a single merge key as an XPath atomic value for
 // type-aware comparison (dates, numbers, strings, etc.).
 type mergeKeyValue struct {
-	atom xpath3.AtomicValue // the actual typed atomic value
-	str  string             // string fallback (used when atom is zero)
+	atom    xpath3.AtomicValue // the actual typed atomic value
+	str     string             // string fallback (used when atom is zero)
+	num     float64            // numeric value (used when numeric is true)
+	numeric bool               // true when data-type="number" was applied
+	isNaN   bool               // true when numeric conversion produced NaN
 }
 
 // mergeSourceItems holds the items from one merge source along with
@@ -315,6 +319,7 @@ type mergeSourceItems struct {
 	items           xpath3.Sequence
 	keys            [][]mergeKeyValue // keys[i] corresponds to items[i]
 	sortBeforeMerge bool              // from parent MergeSource
+	sourceIdx       int               // index into inst.Sources
 }
 
 // mergeGroup represents one group of items that share the same merge key.
@@ -349,6 +354,28 @@ func compareMergeKeyValues(a, b []mergeKeyValue, orders []mergeKeyOrder) int {
 
 // compareSingleMergeKey compares two single merge key values.
 func compareSingleMergeKey(a, b mergeKeyValue) int {
+	// Numeric mode: use float64 comparison with NaN handling.
+	if a.numeric || b.numeric {
+		aNaN := a.isNaN
+		bNaN := b.isNaN
+		if aNaN && bNaN {
+			return 0
+		}
+		if aNaN {
+			return -1 // NaN sorts before non-NaN in ascending
+		}
+		if bNaN {
+			return 1
+		}
+		if a.num < b.num {
+			return -1
+		}
+		if a.num > b.num {
+			return 1
+		}
+		return 0
+	}
+
 	// If both have typed atomic values, use XPath value comparison.
 	if a.atom.TypeName != "" && b.atom.TypeName != "" {
 		lt, err := xpath3.ValueCompare(xpath3.TokenLt, a.atom, b.atom)
@@ -389,6 +416,48 @@ func compareSingleMergeKey(a, b mergeKeyValue) int {
 	return 0
 }
 
+// applyNumericMergeKey converts a merge key value to numeric mode.
+// When data-type="number", the key's string value is parsed as a number.
+// Non-numeric values become NaN, and two NaN values are treated as equal
+// during comparison (per XSLT sort specification).
+func applyNumericMergeKey(mkv *mergeKeyValue) {
+	mkv.numeric = true
+
+	// If we have a typed atomic value, try to extract its numeric value.
+	if mkv.atom.TypeName != "" {
+		if mkv.atom.IsNumeric() {
+			f := mkv.atom.ToFloat64()
+			if math.IsNaN(f) {
+				mkv.isNaN = true
+				return
+			}
+			mkv.num = f
+			return
+		}
+		// Non-numeric atomic value: get string representation and parse.
+		s, err := xpath3.AtomicToString(mkv.atom)
+		if err != nil {
+			mkv.isNaN = true
+			return
+		}
+		f := parseNumber(s)
+		if math.IsNaN(f) {
+			mkv.isNaN = true
+			return
+		}
+		mkv.num = f
+		return
+	}
+
+	// String fallback.
+	f := parseNumber(mkv.str)
+	if math.IsNaN(f) {
+		mkv.isNaN = true
+		return
+	}
+	mkv.num = f
+}
+
 // execMerge executes xsl:merge by loading, sorting, and merging items from
 // multiple sources, then executing the merge-action for each group of items
 // sharing the same key.
@@ -410,16 +479,17 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 			items[i].keys = keys
 		}
 
-		// For sources after the first, we still need keys evaluated using
-		// the source's own key definitions. The comparison uses the key
-		// values which are type-compatible across sources.
-		_ = srcIdx
+		// Tag each mergeSourceItems with its source index for per-source
+		// data-type resolution during sort verification.
+		for i := range items {
+			items[i].sourceIdx = srcIdx
+		}
 
 		allSources = append(allSources, items...)
 	}
 
-	// Determine sort orders from first source's key definitions.
-	// Order can be an AVT, so evaluate it at runtime.
+	// Determine sort orders and data-types from first source's key definitions.
+	// Order and data-type can be AVTs, so evaluate them at runtime.
 	keyDefs := inst.Sources[0].Keys
 	orders := make([]mergeKeyOrder, len(keyDefs))
 	for i, mk := range keyDefs {
@@ -434,11 +504,60 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 		orders[i] = mergeKeyOrder{desc: orderStr == "descending"}
 	}
 
+	// Resolve per-source data-types for each key level.
+	// Each source uses its own data-type for sort verification (XTDE2210).
+	// The first source's data-type is used for the n-way merge comparison.
+	perSourceDataTypes := make([][]string, len(inst.Sources))
+	for si, src := range inst.Sources {
+		dts := make([]string, len(src.Keys))
+		for k, mk := range src.Keys {
+			dt := mk.DataType
+			if mk.DataTypeAVT != nil {
+				evaluated, err := mk.DataTypeAVT.evaluate(ctx, ec.contextNode)
+				if err != nil {
+					return err
+				}
+				dt = evaluated
+			}
+			dts[k] = dt
+		}
+		perSourceDataTypes[si] = dts
+	}
+
+	// XTDE2210: detect inconsistent data-type between sources.
+	// Per XSLT spec, if data-type differs between corresponding merge-key
+	// elements for different merge sources, the processor may raise XTDE2210.
+	if len(perSourceDataTypes) > 1 {
+		first := perSourceDataTypes[0]
+		for si := 1; si < len(perSourceDataTypes); si++ {
+			for k := range first {
+				if k < len(perSourceDataTypes[si]) && first[k] != perSourceDataTypes[si][k] {
+					return dynamicError("XTDE2210", "merge sources have inconsistent data-type for merge key %d: %q vs %q", k+1, first[k], perSourceDataTypes[si][k])
+				}
+			}
+		}
+	}
+
 	// Sort or verify sort order for each source's items.
+	// Each source uses its OWN data-type for sort verification.
 	for si := range allSources {
 		src := &allSources[si]
 		if len(src.items) <= 1 {
 			continue
+		}
+
+		// Build per-source keys with data-type applied for verification.
+		srcDTs := perSourceDataTypes[src.sourceIdx]
+		verifyKeys := make([][]mergeKeyValue, len(src.keys))
+		for i := range src.keys {
+			vk := make([]mergeKeyValue, len(src.keys[i]))
+			copy(vk, src.keys[i])
+			for k := range vk {
+				if k < len(srcDTs) && srcDTs[k] == "number" {
+					applyNumericMergeKey(&vk[k])
+				}
+			}
+			verifyKeys[i] = vk
 		}
 
 		type indexedEntry struct {
@@ -451,33 +570,51 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 			// sort-before-merge="yes": sort the items by merge keys.
 			entries := make([]indexedEntry, len(src.items))
 			for i := range src.items {
-				entries[i] = indexedEntry{idx: i, item: src.items[i], keys: src.keys[i]}
+				entries[i] = indexedEntry{idx: i, item: src.items[i], keys: verifyKeys[i]}
 			}
 			slices.SortStableFunc(entries, func(a, b indexedEntry) int {
 				return compareMergeKeyValues(a.keys, b.keys, orders)
 			})
+			// Rebuild items and keys in sorted order using a temporary copy
+			// of the original keys to avoid in-place overwrite corruption.
+			origKeys := make([][]mergeKeyValue, len(src.keys))
+			copy(origKeys, src.keys)
 			for i, e := range entries {
 				src.items[i] = e.item
-				src.keys[i] = e.keys
+				src.keys[i] = origKeys[e.idx]
 			}
 		} else {
 			// Default: verify items are already sorted (XTDE2210).
 			// Skip verification when merge keys use collation attributes
 			// (lang, collation, case-order) that we don't fully support,
 			// since data may be validly sorted in a locale-specific order.
+			srcKeyDefs := inst.Sources[src.sourceIdx].Keys
 			hasCollation := false
-			for _, mk := range keyDefs {
+			for _, mk := range srcKeyDefs {
 				if mk.HasCollation {
 					hasCollation = true
 					break
 				}
 			}
 			if !hasCollation {
-				for i := 1; i < len(src.keys); i++ {
-					cmp := compareMergeKeyValues(src.keys[i-1], src.keys[i], orders)
+				for i := 1; i < len(verifyKeys); i++ {
+					cmp := compareMergeKeyValues(verifyKeys[i-1], verifyKeys[i], orders)
 					if cmp > 0 {
 						return dynamicError("XTDE2210", "merge input is not sorted according to the declared merge key")
 					}
+				}
+			}
+		}
+	}
+
+	// Apply the first source's data-type for the n-way merge comparison.
+	firstDTs := perSourceDataTypes[0]
+	for si := range allSources {
+		src := &allSources[si]
+		for i := range src.keys {
+			for k := range src.keys[i] {
+				if k < len(firstDTs) && firstDTs[k] == "number" {
+					applyNumericMergeKey(&src.keys[i][k])
 				}
 			}
 		}
