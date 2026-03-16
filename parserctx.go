@@ -5288,6 +5288,9 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 	newctx.options = pctx.options
 	newctx.depth = pctx.depth + 1
 	newctx.external = true
+	// Derive option-dependent flags that init() only sets when p != nil.
+	newctx.replaceEntities = pctx.replaceEntities
+	newctx.loadsubset = pctx.loadsubset
 	if pctx.elem != nil {
 		for _, ns := range collectInScopeNamespaces(pctx.elem) {
 			newctx.pushNS(ns.Prefix(), ns.URI())
