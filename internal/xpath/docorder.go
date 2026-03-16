@@ -237,7 +237,26 @@ func CompareNodeOrder(a, b helium.Node) int {
 		if aIsAttr && bIsNS {
 			return 1
 		}
-		// Same-type: preserve input order (SliceStable handles this)
+		// Both are same-type (attr or ns) on the same element.
+		// Walk forward from each to find the other; the one found
+		// first when walking forward from the other is later in
+		// document order.
+		fwdA := a.NextSibling()
+		fwdB := b.NextSibling()
+		for fwdA != nil || fwdB != nil {
+			if fwdA == b {
+				return -1 // a comes before b
+			}
+			if fwdB == a {
+				return 1 // b comes before a
+			}
+			if fwdA != nil {
+				fwdA = fwdA.NextSibling()
+			}
+			if fwdB != nil {
+				fwdB = fwdB.NextSibling()
+			}
+		}
 		return 0
 	}
 
