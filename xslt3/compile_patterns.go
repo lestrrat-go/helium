@@ -455,6 +455,48 @@ func (p *Pattern) matchPattern(ctx *execContext, node helium.Node) bool {
 	return false
 }
 
+// matchPatternItem tests whether an arbitrary item (node or atomic value)
+// matches the pattern. For node items it delegates to matchPattern; for atomic
+// values it evaluates the pattern expression with the item as context and
+// checks whether it produces a non-empty result. This is needed for
+// group-starting-with / group-ending-with over non-node sequences (XSLT 3.0).
+func (p *Pattern) matchPatternItem(ctx *execContext, item xpath3.Item) bool {
+	if ni, ok := item.(xpath3.NodeItem); ok {
+		return p.matchPattern(ctx, ni.Node)
+	}
+
+	// Atomic item: evaluate each alternative's expression with the item as
+	// context. A FilterExpr like .[pred] returns the item when pred is true.
+	saved := ctx.xpathDefaultNS
+	savedHas := ctx.hasXPathDefaultNS
+	savedGroups := ctx.regexGroups
+	savedItem := ctx.contextItem
+	ctx.xpathDefaultNS = p.xpathDefaultNS
+	ctx.hasXPathDefaultNS = p.xpathDefaultNS != ""
+	ctx.regexGroups = nil
+	ctx.contextItem = item
+	defer func() {
+		ctx.xpathDefaultNS = saved
+		ctx.hasXPathDefaultNS = savedHas
+		ctx.regexGroups = savedGroups
+		ctx.contextItem = savedItem
+	}()
+
+	for _, alt := range p.Alternatives {
+		compiled := xpath3.CompileExpr(alt.expr)
+		xpathCtx := ctx.newXPathContext(nil)
+		result, err := compiled.Evaluate(xpathCtx, nil)
+		if err != nil {
+			continue
+		}
+		seq := result.Sequence()
+		if len(seq) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // matchesAttributes returns true if the pattern source could potentially match
 // attribute nodes. This is a conservative heuristic used by key table building
 // to decide whether to visit attribute nodes during the document walk.
