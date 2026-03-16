@@ -145,10 +145,7 @@ func componentNameMatches(compName, pattern string) bool {
 	// {ns}* pattern — matches any local name in that namespace
 	if strings.HasSuffix(pattern, "}*") && strings.HasPrefix(pattern, "{") {
 		ns := pattern[1 : len(pattern)-2]
-		if strings.HasPrefix(compNameBase, "{"+ns+"}") {
-			return true
-		}
-		return false
+		return strings.HasPrefix(compNameBase, "{"+ns+"}")
 	}
 
 	// *:local pattern — matches any namespace with that local name
@@ -462,11 +459,6 @@ func isWildcard(pattern string) bool {
 // functionVisKey creates a visibility map key for a function (name#arity).
 func functionVisKey(qn xpath3.QualifiedName, arity int) string {
 	return fmt.Sprintf("{%s}%s#%d", qn.URI, qn.Name, arity)
-}
-
-// functionVisKeyStr creates a visibility key from a string name and arity.
-func functionVisKeyStr(name string, arity int) string {
-	return fmt.Sprintf("%s#%d", name, arity)
 }
 
 // collectOverrideNames scans xsl:override children of xsl:use-package and returns
