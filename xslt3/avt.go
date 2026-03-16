@@ -158,6 +158,23 @@ func appendLiteral(parts []avtPart, s string) []avtPart {
 	return append(parts, avtPart{literal: s})
 }
 
+// staticValue returns the literal string value if the AVT contains no
+// dynamic XPath expressions, and true. If the AVT contains any dynamic
+// parts, it returns ("", false).
+func (a *AVT) staticValue() (string, bool) {
+	if a == nil {
+		return "", false
+	}
+	var sb strings.Builder
+	for _, p := range a.parts {
+		if p.expr != nil {
+			return "", false
+		}
+		sb.WriteString(p.literal)
+	}
+	return sb.String(), true
+}
+
 // evaluate evaluates the AVT in the given context.
 func (a *AVT) evaluate(ctx context.Context, node helium.Node) (string, error) {
 	if a == nil {
