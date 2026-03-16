@@ -380,10 +380,16 @@ func stepPriority(step xpath3.Step) float64 {
 		if nt.Name == "" || nt.Name == "*" {
 			return -0.5 // element() or element(*)
 		}
+		if nt.TypeName != "" {
+			return 0.25 // element(name, type)
+		}
 		return 0 // element(specific-name)
 	case xpath3.AttributeTest:
 		if nt.Name == "" || nt.Name == "*" {
 			return -0.5 // attribute() or attribute(*)
+		}
+		if nt.TypeName != "" {
+			return 0.25 // attribute(name, type)
 		}
 		return 0 // attribute(specific-name)
 	case xpath3.DocumentTest:
@@ -721,6 +727,9 @@ func matchElementTest(ctx *execContext, et xpath3.ElementTest, node helium.Node)
 		return false
 	}
 	if et.Name == "" || et.Name == "*" {
+		if et.TypeName != "" {
+			return matchTypeAnnotation(ctx, node, et.TypeName)
+		}
 		return true
 	}
 	elem, ok := node.(*helium.Element)
@@ -729,6 +738,7 @@ func matchElementTest(ctx *execContext, et xpath3.ElementTest, node helium.Node)
 	}
 	// Check local name match (may contain prefix:local)
 	name := et.Name
+	nameMatch := false
 	if idx := strings.IndexByte(name, ':'); idx >= 0 {
 		prefix := name[:idx]
 		local := name[idx+1:]
@@ -736,9 +746,18 @@ func matchElementTest(ctx *execContext, et xpath3.ElementTest, node helium.Node)
 		if ctx != nil {
 			uri = ctx.resolvePrefix(prefix)
 		}
-		return elem.LocalName() == local && elem.URI() == uri
+		nameMatch = elem.LocalName() == local && elem.URI() == uri
+	} else {
+		nameMatch = elem.LocalName() == name
 	}
-	return elem.LocalName() == name
+	if !nameMatch {
+		return false
+	}
+	// Check type annotation if specified
+	if et.TypeName != "" {
+		return matchTypeAnnotation(ctx, node, et.TypeName)
+	}
+	return true
 }
 
 // matchAttributeTest checks if a node matches an attribute() test.
@@ -747,6 +766,9 @@ func matchAttributeTest(ctx *execContext, at xpath3.AttributeTest, node helium.N
 		return false
 	}
 	if at.Name == "" || at.Name == "*" {
+		if at.TypeName != "" {
+			return matchTypeAnnotation(ctx, node, at.TypeName)
+		}
 		return true
 	}
 	attr, ok := node.(*helium.Attribute)
@@ -754,6 +776,7 @@ func matchAttributeTest(ctx *execContext, at xpath3.AttributeTest, node helium.N
 		return false
 	}
 	name := at.Name
+	nameMatch := false
 	if idx := strings.IndexByte(name, ':'); idx >= 0 {
 		prefix := name[:idx]
 		local := name[idx+1:]
@@ -761,9 +784,39 @@ func matchAttributeTest(ctx *execContext, at xpath3.AttributeTest, node helium.N
 		if ctx != nil {
 			uri = ctx.resolvePrefix(prefix)
 		}
-		return attr.LocalName() == local && attr.URI() == uri
+		nameMatch = attr.LocalName() == local && attr.URI() == uri
+	} else {
+		nameMatch = attr.LocalName() == name
 	}
-	return attr.LocalName() == name
+	if !nameMatch {
+		return false
+	}
+	// Check type annotation if specified
+	if at.TypeName != "" {
+		return matchTypeAnnotation(ctx, node, at.TypeName)
+	}
+	return true
+}
+
+// matchTypeAnnotation checks if a node's type annotation matches the given type name.
+func matchTypeAnnotation(ctx *execContext, node helium.Node, typeName string) bool {
+	if ctx == nil || ctx.typeAnnotations == nil {
+		return false
+	}
+	ann, ok := ctx.typeAnnotations[node]
+	if !ok {
+		return false
+	}
+	// Normalize both to compare: strip "xs:" prefix if present
+	normalize := func(s string) string {
+		for _, prefix := range []string{"xs:", "xsd:", "http://www.w3.org/2001/XMLSchema:"} {
+			if strings.HasPrefix(s, prefix) {
+				return s[len(prefix):]
+			}
+		}
+		return s
+	}
+	return normalize(ann) == normalize(typeName)
 }
 
 // matchDocumentTest checks if a node matches a document-node() test.
