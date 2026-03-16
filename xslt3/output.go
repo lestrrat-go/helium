@@ -17,6 +17,7 @@ type outputFrame struct {
 	sequenceMode      bool             // when true, all nodes (text, element, attr, comment, PI) are captured as separate items
 	pendingItems      xpath3.Sequence  // captured items from xsl:sequence
 	prevWasAtomic     bool             // true when last xsl:sequence output was an atomic value (for inter-call space separation)
+	wherePopulated    bool             // when true, xsl:document emits document node (not children) so xsl:where-populated can check emptiness
 }
 
 // serializeResult writes the result document to a writer according to the
