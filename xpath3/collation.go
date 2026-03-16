@@ -603,6 +603,14 @@ func buildCaseFirstKey(s, caseFirst string) []byte {
 	return key
 }
 
+// IsCollationSupported reports whether the given collation URI is recognized
+// by the evaluator.  This is useful for XSLT default-collation resolution
+// where the first supported URI from a list should be selected.
+func IsCollationSupported(uri string) bool {
+	_, err := resolveCollation(uri, "")
+	return err == nil
+}
+
 // codepointCollationURI is the default XPath collation URI.
 const codepointCollationURI = "http://www.w3.org/2005/xpath-functions/collation/codepoint"
 

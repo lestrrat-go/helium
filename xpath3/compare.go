@@ -27,7 +27,8 @@ func evalGeneralComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	result, err := GeneralCompare(e.Op, left, right)
+	coll := ec.resolveDefaultCollation()
+	result, err := generalCompareWithCollation(e.Op, left, right, coll)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +173,9 @@ func evalValueComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	}
 	la := leftAtoms[0]
 	ra := rightAtoms[0]
-	result, err := ValueCompareWithImplicitTimezone(e.Op, la, ra, ec.getImplicitTimezone())
+	pa, pb := promoteForValueComparison(la, ra)
+	coll := ec.resolveDefaultCollation()
+	result, err := compareAtomicCollation(e.Op, pa, pb, ec.getImplicitTimezone(), coll)
 	if err != nil {
 		return nil, err
 	}
@@ -222,6 +225,12 @@ func evalNodeComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
 // Atomizes both sides and returns true if any pair of atomic values
 // satisfies the operator.
 func GeneralCompare(op TokenType, left, right Sequence) (bool, error) {
+	return generalCompareWithCollation(op, left, right, nil)
+}
+
+// generalCompareWithCollation is the collation-aware implementation of
+// general comparison.  When coll is nil, codepoint collation is used.
+func generalCompareWithCollation(op TokenType, left, right Sequence, coll *collationImpl) (bool, error) {
 	leftIter := newAtomicSequenceIter(left)
 	rightAtoms := newCachedAtomicSequence(right)
 	for {
@@ -244,7 +253,7 @@ func GeneralCompare(op TokenType, left, right Sequence) (bool, error) {
 			if err != nil {
 				return false, err
 			}
-			match, err := compareAtomic(op, pa, pb)
+			match, err := compareAtomicCollation(op, pa, pb, nil, coll)
 			if err != nil {
 				return false, err
 			}
@@ -598,6 +607,30 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 		Code:    errCodeXPTY0004,
 		Message: fmt.Sprintf("cannot compare %s with %s", a.TypeName, b.TypeName),
 	}
+}
+
+// compareAtomicCollation compares two atomic values using the given collation
+// for string comparisons.  When coll is nil, codepoint collation is used.
+func compareAtomicCollation(op TokenType, a, b AtomicValue, implicitTZ *time.Location, coll *collationImpl) (bool, error) {
+	if coll == nil {
+		return compareAtomicWithImplicitTimezone(op, a, b, implicitTZ)
+	}
+	// Normalize the operator
+	op = normalizeCompareOp(op)
+
+	// String comparison with collation
+	aStr := isStringDerived(a.TypeName) || a.TypeName == TypeAnyURI
+	bStr := isStringDerived(b.TypeName) || b.TypeName == TypeAnyURI
+	if aStr && bStr {
+		sa := stringFromAtomic(a)
+		sb := stringFromAtomic(b)
+		cmp := coll.compare(sa, sb)
+		return applyCompare(op, cmp), nil
+	}
+
+	// For non-string types, collation doesn't apply — delegate to the
+	// standard comparison which handles numerics, dates, etc.
+	return compareAtomicWithImplicitTimezone(op, a, b, implicitTZ)
 }
 
 // compareDate compares xs:date values by their UTC instants.

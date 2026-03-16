@@ -205,6 +205,20 @@ func (ec *evalContext) getImplicitTimezone() *time.Location {
 	return time.Local
 }
 
+// resolveDefaultCollation returns the collation implementation for the
+// dynamic context's default collation URI.  Returns nil when the default
+// is the codepoint collation (the XPath default), so callers can fast-path.
+func (ec *evalContext) resolveDefaultCollation() *collationImpl {
+	if ec.defaultCollation == "" || ec.defaultCollation == codepointCollationURI {
+		return nil
+	}
+	coll, err := resolveCollation(ec.defaultCollation, "")
+	if err != nil {
+		return nil
+	}
+	return coll
+}
+
 func (ec *evalContext) getDefaultLanguage() string {
 	if ec.defaultLanguage != "" {
 		return ec.defaultLanguage
