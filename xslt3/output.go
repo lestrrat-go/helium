@@ -18,6 +18,7 @@ type outputFrame struct {
 	pendingItems      xpath3.Sequence  // captured items from xsl:sequence
 	prevWasAtomic     bool             // true when last xsl:sequence output was an atomic value (for inter-call space separation)
 	wherePopulated    bool             // when true, xsl:document emits document node (not children) so xsl:where-populated can check emptiness
+	itemSeparator     *string          // item-separator serialization parameter; nil means default (" " between adjacent atomics)
 }
 
 // serializeResult writes the result document to a writer according to the
