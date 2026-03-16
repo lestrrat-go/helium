@@ -5340,7 +5340,7 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 			for e := grandchild; e != nil; e = e.NextSibling() {
 				e.SetTreeDoc(pctx.doc)
 				e.SetParent(nil)
-				if uri != "" {
+				if uri != "" && !pctx.options.IsSet(ParseNoBaseFix) {
 					if elem, ok := e.(*Element); ok {
 						if _, exists := elem.GetAttributeNS("base", XMLNamespace); !exists {
 							_ = elem.SetAttributeNS("base", uri, newNamespace("xml", XMLNamespace))
