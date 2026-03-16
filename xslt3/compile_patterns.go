@@ -941,14 +941,10 @@ func evaluatePredicateWithPosition(ctx *execContext, pred xpath3.Expr, node heli
 	return b
 }
 
-// matchByEvaluation matches complex patterns by evaluating from document root.
-//
-// TODO(xslt3): implement evaluation-based pattern matching for non-LocationPath
-// patterns (e.g., key(), id(), doc()). This requires evaluating the pattern
-// expression from the document root and checking whether the candidate node
-// appears in the result sequence. Currently returns false, so templates with
-// these pattern forms will never match. This is a known limitation of the
-// initial XSLT 3.0 implementation — not a bug to be fixed in isolation.
+// matchByEvaluation matches complex patterns (e.g., id(), key(), doc()) by
+// evaluating the pattern expression and checking whether the candidate node
+// appears in the result sequence. It tries the candidate node as context first,
+// then walks up the ancestor chain trying each ancestor as context.
 func matchByEvaluation(ctx *execContext, alt *PatternAlt, node helium.Node) bool {
 	compiled := xpath3.CompileExpr(alt.expr)
 
@@ -963,7 +959,6 @@ func matchByEvaluation(ctx *execContext, alt *PatternAlt, node helium.Node) bool
 			}
 		}
 	}
-
 	// Then try evaluating from each ancestor up to the document root.
 	for ancestor := node.Parent(); ancestor != nil; ancestor = ancestor.Parent() {
 		xpathCtx := ctx.newXPathContext(ancestor)

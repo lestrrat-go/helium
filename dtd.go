@@ -56,6 +56,12 @@ type ElementDecl struct {
 	// xmlRegexpPtr contModel
 }
 
+// DeclType returns the element content type declared in the DTD
+// (e.g., ElementElementType for element-only content).
+func (e *ElementDecl) DeclType() enum.ElementType {
+	return e.decltype
+}
+
 type ElementContentType int
 
 const (
