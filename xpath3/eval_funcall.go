@@ -134,6 +134,12 @@ func evalDynamicFunctionCall(ec *evalContext, e DynamicFunctionCall) (Sequence, 
 		if err != nil {
 			return nil, err
 		}
+		if key.TypeName == TypeUntypedAtomic {
+			key, err = CastAtomic(key, TypeInteger)
+			if err != nil {
+				return nil, &XPathError{Code: errCodeXPTY0004, Message: "array lookup requires xs:integer index"}
+			}
+		}
 		if !isIntegerDerived(key.TypeName) {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "array lookup requires xs:integer index"}
 		}

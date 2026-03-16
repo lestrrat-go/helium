@@ -99,6 +99,12 @@ func lookupItem(ec *evalContext, item Item, keyExpr Expr, all bool) (Sequence, e
 			if err != nil {
 				return nil, err
 			}
+			if ka.TypeName == TypeUntypedAtomic {
+				ka, err = CastAtomic(ka, TypeInteger)
+				if err != nil {
+					return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("array lookup key must be xs:integer, got %s", ka.TypeName)}
+				}
+			}
 			if !isIntegerDerived(ka.TypeName) {
 				return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("array lookup key must be xs:integer, got %s", ka.TypeName)}
 			}
