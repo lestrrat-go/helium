@@ -36,6 +36,13 @@ type CollectionResolver interface {
 	ResolveURICollection(uri string) ([]string, error)
 }
 
+// VariableResolver provides lazy variable resolution for variables not found
+// in the static variable scope. This is used by the XSLT executor to lazily
+// evaluate global variables on demand.
+type VariableResolver interface {
+	ResolveVariable(ctx context.Context, name string) (Sequence, bool, error)
+}
+
 type evalConfig struct {
 	namespaces         map[string]string
 	variables          map[string]Sequence
@@ -56,6 +63,7 @@ type evalConfig struct {
 	size               int  // initial context size (0 = use default 1)
 	contextItem        Item // non-nil when context is an atomic value, not a node
 	typeAnnotations    map[helium.Node]string // node → xs:... type annotation (set by xslt3)
+	variableResolver   VariableResolver       // lazy resolver for variables not in static scope
 }
 
 func getEvalConfig(ctx context.Context) *evalConfig {
@@ -168,6 +176,15 @@ func WithAdditionalVariables(ctx context.Context, vars map[string]Sequence) cont
 			c.variables[name] = append(Sequence(nil), seq...)
 		}
 		return true
+	})
+}
+
+// WithVariableResolver sets a callback for lazy variable resolution.
+// When a variable is not found in the static scope, the resolver is called.
+func WithVariableResolver(ctx context.Context, resolver VariableResolver) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) bool {
+		c.variableResolver = resolver
+		return false
 	})
 }
 

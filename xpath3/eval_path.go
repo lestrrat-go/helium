@@ -47,6 +47,14 @@ func evalVariable(ec *evalContext, e VariableExpr) (Sequence, error) {
 			}
 		}
 	}
+	// Fallback to lazy variable resolver (e.g. for XSLT global variables)
+	if ec.variableResolver != nil {
+		if v, ok, err := ec.variableResolver.ResolveVariable(ec.goCtx, e.Name); err != nil {
+			return nil, err
+		} else if ok {
+			return v, nil
+		}
+	}
 	return nil, fmt.Errorf("%w: $%s", ErrUndefinedVariable, e.Name)
 }
 
