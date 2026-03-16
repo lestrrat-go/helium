@@ -199,8 +199,9 @@ func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet
 // compileOverrideTemplate compiles a template inside xsl:override.
 func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet) (*Template, error) {
 	tmpl := &Template{
-		ImportPrec: c.importPrec,
-		BaseURI:    c.baseURI,
+		ImportPrec:    c.importPrec,
+		MinImportPrec: c.minImportPrec,
+		BaseURI:       c.baseURI,
 	}
 
 	c.collectNamespaces(elem)
