@@ -233,7 +233,9 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 		ec.currentNode = node
 		ec.contextNode = node
 	}
+	ec.temporaryOutputDepth++
 	val, err := ec.evaluateBody(ctx, sk.Body)
+	ec.temporaryOutputDepth--
 	ec.currentNode = savedCurrent
 	ec.contextNode = savedContext
 	if err != nil {

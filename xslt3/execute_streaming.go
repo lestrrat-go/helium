@@ -117,7 +117,9 @@ func (ec *execContext) execIterate(ctx context.Context, inst *IterateInst) error
 			}
 			val = pResult.Sequence()
 		} else if len(p.Body) > 0 {
+			ec.temporaryOutputDepth++
 			v, err := ec.evaluateBody(ctx, p.Body)
+			ec.temporaryOutputDepth--
 			if err != nil {
 				return err
 			}
