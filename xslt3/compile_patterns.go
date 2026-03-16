@@ -800,14 +800,7 @@ func matchAttributeTest(ctx *execContext, at xpath3.AttributeTest, node helium.N
 
 // matchTypeAnnotation checks if a node's type annotation matches the given type name.
 func matchTypeAnnotation(ctx *execContext, node helium.Node, typeName string) bool {
-	if ctx == nil || ctx.typeAnnotations == nil {
-		return false
-	}
-	ann, ok := ctx.typeAnnotations[node]
-	if !ok {
-		return false
-	}
-	// Normalize both to compare: strip "xs:" prefix if present
+	// Normalize type name: strip "xs:" prefix if present
 	normalize := func(s string) string {
 		for _, prefix := range []string{"xs:", "xsd:", "http://www.w3.org/2001/XMLSchema:"} {
 			if strings.HasPrefix(s, prefix) {
@@ -815,6 +808,24 @@ func matchTypeAnnotation(ctx *execContext, node helium.Node, typeName string) bo
 			}
 		}
 		return s
+	}
+
+	var ann string
+	if ctx != nil && ctx.typeAnnotations != nil {
+		ann = ctx.typeAnnotations[node]
+	}
+	if ann == "" {
+		// In a non-schema-aware processor, elements have implicit type
+		// xs:untyped and attributes have implicit type xs:untypedAtomic
+		// (XDM 3.1 Section 6.2.1 / 6.3.1).
+		switch node.Type() {
+		case helium.ElementNode:
+			ann = "untyped"
+		case helium.AttributeNode:
+			ann = "untypedAtomic"
+		default:
+			return false
+		}
 	}
 	return normalize(ann) == normalize(typeName)
 }
