@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+
+	"github.com/lestrrat-go/helium/internal/catalog"
 )
 
 // Function is the interface for XPath 3.1 functions, both built-in and user-defined.
@@ -16,12 +18,12 @@ type Function interface {
 
 // Namespace URIs for standard XPath 3.1 function namespaces.
 const (
-	NSFn    = "http://www.w3.org/2005/xpath-functions"
-	NSMath  = "http://www.w3.org/2005/xpath-functions/math"
-	NSMap   = "http://www.w3.org/2005/xpath-functions/map"
-	NSArray = "http://www.w3.org/2005/xpath-functions/array"
-	NSErr   = "http://www.w3.org/2005/xqt-errors"
-	NSXS    = "http://www.w3.org/2001/XMLSchema"
+	NSFn    = catalog.Fn
+	NSMath  = catalog.Math
+	NSMap   = catalog.Map
+	NSArray = catalog.Array
+	NSErr   = catalog.Err
+	NSXS    = catalog.XSD
 )
 
 // Default prefix → URI mappings.

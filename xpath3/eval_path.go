@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/catalog"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -366,7 +367,7 @@ func resolveTestTypeName(raw string, ec *evalContext) string {
 			return "xs:" + local
 		}
 		if ec != nil && ec.namespaces != nil {
-			if uri, ok := ec.namespaces[prefix]; ok && uri == "http://www.w3.org/2001/XMLSchema" {
+			if uri, ok := ec.namespaces[prefix]; ok && uri == catalog.XSD {
 				return "xs:" + local
 			}
 		}

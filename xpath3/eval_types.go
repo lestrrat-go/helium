@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/lestrrat-go/helium/internal/catalog"
 )
 
 func evalInstanceOfExpr(ec *evalContext, e InstanceOfExpr) (Sequence, error) {
@@ -130,7 +132,7 @@ func resolveAtomicTypeName(tn AtomicTypeName, ec *evalContext) string {
 	// Resolve via namespace context
 	if ec.namespaces != nil {
 		if uri, ok := ec.namespaces[tn.Prefix]; ok {
-			if uri == "http://www.w3.org/2001/XMLSchema" {
+			if uri == catalog.XSD {
 				return "xs:" + tn.Name
 			}
 		}
