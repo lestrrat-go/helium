@@ -46,6 +46,7 @@ func WithNoWarning() ParseOption {
 // dumpConfig holds configuration for HTML serialization.
 type dumpConfig struct {
 	noDefaultDTD bool
+	noFormat     bool
 }
 
 // WriteOption configures HTML serialization behavior.
@@ -56,5 +57,12 @@ type WriteOption func(*dumpConfig)
 func WithNoDefaultDTD() WriteOption {
 	return func(c *dumpConfig) {
 		c.noDefaultDTD = true
+	}
+}
+
+// WithNoFormat suppresses formatting whitespace (newlines) in HTML output.
+func WithNoFormat() WriteOption {
+	return func(c *dumpConfig) {
+		c.noFormat = true
 	}
 }

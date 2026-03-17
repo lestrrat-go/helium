@@ -59,26 +59,35 @@ func WriteDoc(out io.Writer, doc *helium.Document, options ...WriteOption) error
 		_, _ = io.WriteString(out, defaultHTMLDTD)
 	}
 
+	d := htmlDumper{format: !cfg.noFormat}
+
 	// Serialize all children of the document
 	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
 		if child.Type() == helium.DTDNode {
 			continue // already handled above
 		}
-		if err := dumpNode(out, child); err != nil {
+		if err := d.dumpNode(out, child); err != nil {
 			return err
 		}
 	}
-	_, _ = io.WriteString(out, "\n")
+	if d.format {
+		_, _ = io.WriteString(out, "\n")
+	}
 	return nil
+}
+
+type htmlDumper struct {
+	format bool
 }
 
 // WriteNode serializes an HTML node to the writer
 // (libxml2: htmlNodeDumpOutput).
 func WriteNode(out io.Writer, n helium.Node) error {
-	return dumpNode(out, n)
+	d := htmlDumper{format: true}
+	return d.dumpNode(out, n)
 }
 
-func dumpNode(out io.Writer, n helium.Node) error {
+func (d *htmlDumper) dumpNode(out io.Writer, n helium.Node) error {
 	switch n.Type() {
 	case helium.DocumentNode, helium.HTMLDocumentNode:
 		return WriteDoc(out, n.(*helium.Document))
@@ -104,9 +113,9 @@ func dumpNode(out io.Writer, n helium.Node) error {
 		_, _ = io.WriteString(out, ";")
 		return nil
 	case helium.TextNode:
-		return dumpText(out, n)
+		return d.dumpText(out, n)
 	case helium.ElementNode:
-		return dumpElement(out, n.(*helium.Element))
+		return d.dumpElement(out, n.(*helium.Element))
 	}
 	return nil
 }
@@ -138,7 +147,7 @@ func dumpDTD(out io.Writer, dtd *helium.DTD) error {
 }
 
 // dumpText outputs text content, escaping &, <, > unless inside a raw text element.
-func dumpText(out io.Writer, n helium.Node) error {
+func (d *htmlDumper) dumpText(out io.Writer, n helium.Node) error {
 	parent := n.Parent()
 	if parent != nil && parent.Type() == helium.ElementNode {
 		parentName := strings.ToLower(parent.Name())
@@ -244,7 +253,7 @@ func htmlEscapeAttrValue(w io.Writer, s string, isURI bool) error {
 }
 
 // dumpElement serializes an HTML element.
-func dumpElement(out io.Writer, e *helium.Element) error {
+func (d *htmlDumper) dumpElement(out io.Writer, e *helium.Element) error {
 	name := strings.ToLower(e.Name())
 	info := lookupElement(name)
 
@@ -260,8 +269,7 @@ func dumpElement(out io.Writer, e *helium.Element) error {
 	// Void element: no closing tag
 	if info != nil && info.empty {
 		_, _ = io.WriteString(out, ">")
-		// Format newline after void element
-		if shouldNewlineAfterVoid(e, info) {
+		if d.format && shouldNewlineAfterVoid(e, info) {
 			_, _ = io.WriteString(out, "\n")
 		}
 		return nil
@@ -269,20 +277,18 @@ func dumpElement(out io.Writer, e *helium.Element) error {
 
 	_, _ = io.WriteString(out, ">")
 
-	// Format newline after opening tag (before children)
-	if shouldNewlineAfterOpen(e, info) {
+	if d.format && shouldNewlineAfterOpen(e, info) {
 		_, _ = io.WriteString(out, "\n")
 	}
 
 	// Children
 	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
-		if err := dumpNode(out, child); err != nil {
+		if err := d.dumpNode(out, child); err != nil {
 			return err
 		}
 	}
 
-	// Format newline before closing tag
-	if shouldNewlineBeforeClose(e, info) {
+	if d.format && shouldNewlineBeforeClose(e, info) {
 		_, _ = io.WriteString(out, "\n")
 	}
 
@@ -291,8 +297,7 @@ func dumpElement(out io.Writer, e *helium.Element) error {
 	_, _ = io.WriteString(out, name)
 	_, _ = io.WriteString(out, ">")
 
-	// Format newline after closing tag
-	if shouldNewlineAfterClose(e, info) {
+	if d.format && shouldNewlineAfterClose(e, info) {
 		_, _ = io.WriteString(out, "\n")
 	}
 

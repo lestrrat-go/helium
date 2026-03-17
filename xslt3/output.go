@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/lestrrat-go/helium"
+	htmlpkg "github.com/lestrrat-go/helium/html"
 	"github.com/lestrrat-go/helium/stream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -48,8 +49,12 @@ func (out *outputFrame) noteOutput() {
 	out.outputSerial++
 }
 
-// serializeResult writes the result document to a writer according to the
-// output definition.
+// SerializeResult writes the result document to a writer according to the
+// output definition. If outDef is nil, defaults to XML output.
+func SerializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
+	return serializeResult(w, doc, outDef)
+}
+
 func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 	if outDef == nil {
 		outDef = defaultOutputDef()
@@ -101,11 +106,9 @@ func serializeText(w io.Writer, doc *helium.Document) error {
 }
 
 func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
-	// For now, use XML serialization with some HTML tweaks
-	var opts []helium.WriteOption
-	if outDef.Indent {
-		opts = append(opts, helium.WithFormat())
+	opts := []htmlpkg.WriteOption{
+		htmlpkg.WithNoDefaultDTD(),
+		htmlpkg.WithNoFormat(),
 	}
-	opts = append(opts, helium.WithNoDecl())
-	return doc.XML(w, opts...)
+	return htmlpkg.WriteDoc(w, doc, opts...)
 }
