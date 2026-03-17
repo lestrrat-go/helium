@@ -234,8 +234,12 @@ func castAtomicToType(av xpath3.AtomicValue, targetType string) (xpath3.Item, er
 		return cast, nil
 	}
 
-	// Numeric promotion: integer -> decimal -> float -> double
+	// Numeric promotion: only upward — integer→decimal→float→double.
+	// Demotion (e.g., double→float) is not allowed (XTTE0570).
 	if isNumericType(target) && isNumericType(av.TypeName) {
+		if numericRank(av.TypeName) > numericRank(target) {
+			return nil, fmt.Errorf("cannot convert %s to %s", av.TypeName, targetType)
+		}
 		s, err := xpath3.AtomicToString(av)
 		if err != nil {
 			return nil, fmt.Errorf("cannot convert to %s: %w", targetType, err)
@@ -296,6 +300,22 @@ func normalizeTypeName(name string) string {
 		return xpath3.TypeUntypedAtomic
 	}
 	return name
+}
+
+// numericRank returns the promotion rank of a numeric type.
+// Higher rank = wider type. Promotion is only valid from lower to higher rank.
+func numericRank(t string) int {
+	switch t {
+	case xpath3.TypeInteger:
+		return 1
+	case xpath3.TypeDecimal:
+		return 2
+	case xpath3.TypeFloat:
+		return 3
+	case xpath3.TypeDouble:
+		return 4
+	}
+	return 0
 }
 
 // isNumericType returns true for xs:integer, xs:decimal, xs:float, xs:double.
