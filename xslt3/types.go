@@ -214,6 +214,11 @@ func castAtomicToType(av xpath3.AtomicValue, targetType string) (xpath3.Item, er
 		return av, nil
 	}
 
+	// xs:anyAtomicType matches any atomic value
+	if target == "xs:anyAtomicType" {
+		return av, nil
+	}
+
 	// xs:anyURI -> xs:string promotion (per XPath spec)
 	if av.TypeName == xpath3.TypeAnyURI && target == xpath3.TypeString {
 		return xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: av.StringVal()}, nil
