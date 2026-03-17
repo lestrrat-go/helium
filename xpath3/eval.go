@@ -49,6 +49,7 @@ type evalContext struct {
 	httpClient       *http.Client
 	typeAnnotations  map[helium.Node]string // node → xs:... type (from xslt3 schema awareness)
 	variableResolver VariableResolver       // lazy resolver for variables not in static scope
+	strictPrefixes   bool                   // skip defaultPrefixNS fallback in prefix validation
 }
 
 type variableScope struct {
@@ -137,6 +138,7 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 		ec.httpClient = cfg.httpClient
 		ec.typeAnnotations = cfg.typeAnnotations
 		ec.variableResolver = cfg.variableResolver
+		ec.strictPrefixes = cfg.strictPrefixes
 		if cfg.position > 0 {
 			ec.position = cfg.position
 		}

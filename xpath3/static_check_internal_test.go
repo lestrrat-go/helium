@@ -12,5 +12,5 @@ func TestCompileBuildsPrefixValidationPlan(t *testing.T) {
 	require.NotEmpty(t, expr.prefixPlan.prefixes)
 	require.NoError(t, expr.prefixPlan.Validate(map[string]string{
 		"p": "urn:test",
-	}))
+	}, false))
 }

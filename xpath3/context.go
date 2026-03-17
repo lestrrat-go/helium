@@ -64,6 +64,7 @@ type evalConfig struct {
 	contextItem        Item // non-nil when context is an atomic value, not a node
 	typeAnnotations    map[helium.Node]string // node → xs:... type annotation (set by xslt3)
 	variableResolver   VariableResolver       // lazy resolver for variables not in static scope
+	strictPrefixes     bool                   // when true, only user-declared namespaces are valid (no defaultPrefixNS fallback)
 }
 
 func getEvalConfig(ctx context.Context) *evalConfig {
@@ -118,6 +119,17 @@ func (c *evalConfig) rebuildVariableScope() {
 func WithNamespaces(ctx context.Context, ns map[string]string) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) bool {
 		c.namespaces = maps.Clone(ns)
+		return false
+	})
+}
+
+// WithStrictPrefixes disables the default prefix→namespace fallback (fn:, xs:,
+// math:, map:, array:, err:). When set, only prefixes explicitly declared via
+// WithNamespaces are considered valid. This is used by XSLT, where namespace
+// prefixes must be declared on the stylesheet element.
+func WithStrictPrefixes(ctx context.Context) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) bool {
+		c.strictPrefixes = true
 		return false
 	})
 }

@@ -38,9 +38,9 @@ type prefixValidationPlan struct {
 	atomicTypes []atomicTypeRequirement
 }
 
-func (p prefixValidationPlan) Validate(namespaces map[string]string) error {
+func (p prefixValidationPlan) Validate(namespaces map[string]string, strict bool) error {
 	for _, prefix := range p.prefixes {
-		if err := validatePrefix(prefix, namespaces); err != nil {
+		if err := validatePrefix(prefix, namespaces, strict); err != nil {
 			return err
 		}
 	}
@@ -69,7 +69,7 @@ func (p prefixValidationPlan) Validate(namespaces map[string]string) error {
 				}
 			}
 		}
-		if err := validatePrefix(req.prefix, namespaces); err != nil {
+		if err := validatePrefix(req.prefix, namespaces, strict); err != nil {
 			return err
 		}
 	}
@@ -336,7 +336,8 @@ func addAtomicOrUnionTypeCheck(plan *prefixPlanBuilder, t AtomicOrUnionType) {
 }
 
 // validatePrefix checks if a non-empty prefix is bound in user namespaces or defaultPrefixNS.
-func validatePrefix(prefix string, namespaces map[string]string) error {
+// When strict is true, the defaultPrefixNS fallback is skipped (XSLT mode).
+func validatePrefix(prefix string, namespaces map[string]string, strict bool) error {
 	if prefix == "" || prefix == "*" {
 		return nil
 	}
@@ -345,8 +346,10 @@ func validatePrefix(prefix string, namespaces map[string]string) error {
 			return nil
 		}
 	}
-	if _, ok := defaultPrefixNS[prefix]; ok {
-		return nil
+	if !strict {
+		if _, ok := defaultPrefixNS[prefix]; ok {
+			return nil
+		}
 	}
 	if prefix == "xml" || prefix == "xmlns" {
 		return nil
