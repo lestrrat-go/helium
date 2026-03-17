@@ -130,7 +130,48 @@ func resolveLevel1(ctx context.Context, ec *execContext, sk *SortKey) (resolvedL
 			return resolvedLevel{}, err
 		}
 	}
+	// XTDE0030: validate lang attribute value
+	if sk.Lang != nil {
+		lang, err := sk.Lang.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return resolvedLevel{}, err
+		}
+		if !isValidLanguageTag(lang) {
+			return resolvedLevel{}, dynamicError("XTDE0030",
+				"invalid language tag %q in xsl:sort", lang)
+		}
+	}
 	return resolvedLevel{desc: order == "descending"}, nil
+}
+
+// validateSortKeyAttrs validates sort key attribute values (lang, etc.)
+// regardless of whether there are nodes to sort.
+func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *SortKey) error {
+	if sk.Lang != nil {
+		lang, err := sk.Lang.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		if !isValidLanguageTag(lang) {
+			return dynamicError("XTDE0030",
+				"invalid language tag %q in xsl:sort", lang)
+		}
+	}
+	return nil
+}
+
+// isValidLanguageTag checks if s is a plausible BCP47 language tag.
+// Rejects obviously invalid values (empty, contains quotes, whitespace).
+func isValidLanguageTag(s string) bool {
+	if s == "" {
+		return true // empty = implementation default
+	}
+	for _, r := range s {
+		if r == '\'' || r == '"' || r == ' ' || r == '\t' || r == '\n' {
+			return false
+		}
+	}
+	return true
 }
 
 // --- Comparators ---
@@ -406,6 +447,12 @@ func finalizeLevel1Items(level *resolvedLevel, dtMode dataTypeMode, entries []ke
 // --- Public dispatch ---
 
 func sortNodes(ctx context.Context, ec *execContext, nodes []helium.Node, sortKeys []*SortKey) ([]helium.Node, error) {
+	// Validate sort key attributes even if there are no nodes (XTDE0030).
+	for _, sk := range sortKeys {
+		if err := validateSortKeyAttrs(ctx, ec, sk); err != nil {
+			return nil, err
+		}
+	}
 	if len(sortKeys) == 0 || len(nodes) == 0 {
 		return nodes, nil
 	}
