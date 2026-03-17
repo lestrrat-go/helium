@@ -540,6 +540,10 @@ func (ec *execContext) execPI(ctx context.Context, inst *PIInst) error {
 		value = stringifySequence(val)
 	}
 
+	// XSLT 3.0 §11.6: replace "?>" in PI content with "? >" to avoid
+	// premature termination of the processing instruction.
+	value = strings.ReplaceAll(value, "?>", "? >")
+
 	pi, err := ec.resultDoc.CreatePI(name, value)
 	if err != nil {
 		return err
