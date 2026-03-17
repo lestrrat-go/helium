@@ -995,9 +995,7 @@ func validateCalendarName(calendar string) error {
 		}
 		return nil
 	}
-	// Unknown calendar names are accepted — fall back to Gregorian.
-	// Per F&O §9.8.4, this is implementation-defined behavior.
-	return nil
+	return &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid calendar: %s", calendar)}
 }
 
 func isNCName(s string) bool {

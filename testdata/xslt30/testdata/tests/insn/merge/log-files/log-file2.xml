@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<events>
+    <event timestamp="2009-08-20T12:01:05Z">Transaction T1236 started</event>
+    <event timestamp="2009-08-20T12:01:09Z">Transaction T1236 ended</event>
+    <event timestamp="2009-08-20T12:01:11Z">Transaction T1237 started</event>
+    <event timestamp="2009-08-20T12:01:17Z">Transaction T1237 ended</event>
+    <myOrder order="ascending"/>
+</events>
+

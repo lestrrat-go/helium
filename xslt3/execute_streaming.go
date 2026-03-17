@@ -23,18 +23,17 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *SourceDocum
 	if err != nil {
 		return err
 	}
+	docURI, fragment := splitURIFragment(uri)
 
 	// Check the document cache first.
-	doc, ok := ec.docCache[uri]
-	if !ok {
-		// Resolve URI relative to the instruction's effective base URI,
-		// which accounts for xml:base attributes on ancestor elements.
-		effectiveBase := inst.BaseURI
-		if effectiveBase == "" {
-			effectiveBase = ec.stylesheet.baseURI
-		}
-		resolvedURI := resolveAgainstBaseURI(uri, effectiveBase)
+	effectiveBase := inst.BaseURI
+	if effectiveBase == "" {
+		effectiveBase = ec.stylesheet.baseURI
+	}
+	resolvedURI := resolveAgainstBaseURI(docURI, effectiveBase)
 
+	doc, ok := ec.docCache[resolvedURI]
+	if !ok {
 		data, err := os.ReadFile(resolvedURI)
 		if err != nil {
 			return dynamicError("FODC0002", "xsl:source-document cannot load %q: %v", uri, err)
@@ -56,7 +55,16 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *SourceDocum
 		if ec.docCache == nil {
 			ec.docCache = make(map[string]*helium.Document)
 		}
-		ec.docCache[uri] = doc
+		ec.docCache[resolvedURI] = doc
+	}
+
+	startNode := helium.Node(doc)
+	if fragment != "" {
+		elem := doc.GetElementByID(fragment)
+		if elem == nil {
+			return dynamicError("FODC0002", "xsl:source-document fragment %q not found in %q", fragment, uri)
+		}
+		startNode = elem
 	}
 
 	// Save and restore source document, context nodes, and context item.
@@ -67,8 +75,8 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *SourceDocum
 	savedPos := ec.position
 	savedSize := ec.size
 	ec.sourceDoc = doc
-	ec.contextNode = doc
-	ec.currentNode = doc
+	ec.contextNode = startNode
+	ec.currentNode = startNode
 	ec.contextItem = nil // document node is the context, not an atomic item
 	ec.position = 1
 	ec.size = 1

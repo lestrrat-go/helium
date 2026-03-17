@@ -60,7 +60,7 @@ func copyElement(src *Element, doc *Document) (*Element, error) {
 	// Copy the active namespace, adding a declaration if not already present.
 	if nsr, ok := Node(src).(Namespacer); ok {
 		if ns := nsr.Namespace(); ns != nil {
-			if ns.Prefix() != "" && !declaredPrefixes[ns.Prefix()] {
+			if ns.URI() != "" && !declaredPrefixes[ns.Prefix()] {
 				if err := elem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
 					return nil, err
 				}
