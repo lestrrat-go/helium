@@ -231,6 +231,7 @@ func stringifyItem(item xpath3.Item) string {
 }
 
 func stringifySequenceWithSep(seq xpath3.Sequence, sep string) string {
+	seq = flattenArraysInSequence(seq)
 	if len(seq) == 0 {
 		return ""
 	}
@@ -250,4 +251,31 @@ func stringifySequenceWithSep(seq xpath3.Sequence, sep string) string {
 		sb.WriteString(s)
 	}
 	return sb.String()
+}
+
+// flattenArraysInSequence recursively replaces any ArrayItem in the
+// sequence with its flattened members.  Non-array items pass through
+// unchanged.  This implements the XSLT 3.0 rule that arrays appearing
+// in sequence constructors, apply-templates select, value-of, etc.
+// are expanded before further processing.
+func flattenArraysInSequence(seq xpath3.Sequence) xpath3.Sequence {
+	hasArray := false
+	for _, item := range seq {
+		if _, ok := item.(xpath3.ArrayItem); ok {
+			hasArray = true
+			break
+		}
+	}
+	if !hasArray {
+		return seq
+	}
+	var result xpath3.Sequence
+	for _, item := range seq {
+		if arr, ok := item.(xpath3.ArrayItem); ok {
+			result = append(result, arr.Flatten()...)
+		} else {
+			result = append(result, item)
+		}
+	}
+	return result
 }
