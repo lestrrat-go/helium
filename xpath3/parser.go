@@ -704,8 +704,13 @@ func (p *parser) parsePrimaryExpr() (Expr, error) {
 		return UnaryLookupExpr{Key: key, All: all}, nil
 
 	case TokenFunction:
-		// Could be inline function or function(*)
-		return p.parseFunctionKeyword()
+		// "function" followed by "(" is an inline function or function test.
+		// Otherwise it's a name test (e.g., child::function or xs:QName(function)).
+		if p.lexer.PeekAt(1).Type == TokenLParen {
+			return p.parseFunctionKeyword()
+		}
+		// Treat as a regular name (name test / path step).
+		return p.parseNamePrimary()
 
 	case TokenMap:
 		// map:func(...) is a namespace-prefixed function call, not a constructor
@@ -1086,7 +1091,7 @@ func (p *parser) parseStep() (Step, error) {
 	case TokenAt:
 		axis = AxisAttribute
 		p.lexer.Next()
-	case TokenName:
+	case TokenName, TokenFunction, TokenMap, TokenArray:
 		p.lexer.Next()
 		if p.lexer.Peek().Type == TokenColonColon {
 			if a, ok := ixpath.AxisFromName(tok.Value); ok {
@@ -1148,7 +1153,7 @@ func (p *parser) parseNodeTest(_ AxisType) (NodeTest, error) {
 		return NameTest{Local: "*"}, nil
 	}
 
-	if tok.Type != TokenName {
+	if !isNameLikeToken(tok.Type) {
 		return nil, fmt.Errorf("%w: node test but got %s", ErrExpectedToken, tok)
 	}
 
@@ -2078,7 +2083,7 @@ func (p *parser) looksLikeStep() bool {
 	switch tok.Type {
 	case TokenDotDot, TokenAt, TokenStar:
 		return true
-	case TokenName:
+	case TokenName, TokenFunction, TokenMap, TokenArray:
 		p.lexer.Next()
 		next := p.lexer.Peek()
 		p.lexer.Backup()
@@ -2124,6 +2129,10 @@ func (p *parser) looksLikeStep() bool {
 		}
 		if next.Type == TokenHash {
 			return false // named function ref: name#arity
+		}
+		// map{} and array{} are constructors, not name tests
+		if next.Type == TokenLBrace && (tok.Type == TokenMap || tok.Type == TokenArray) {
+			return false
 		}
 		return true // plain name test
 	}
