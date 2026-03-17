@@ -371,10 +371,27 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *TryCatc
 	ec.pushVarScope()
 	defer ec.popVarScope()
 
+	errNS := catalog.Err
 	errCode := "XSLT0000"
+	errDesc := tryErr.Error()
+	var errQName xpath3.QNameValue
 	if xErr, ok := tryErr.(*XSLTError); ok {
 		errCode = xErr.Code
+		errDesc = xErr.Message
+		errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: errCode}
 	}
+	errCodeSeq := xpath3.Sequence{xpath3.AtomicValue{
+		TypeName: xpath3.TypeQName,
+		Value:    errQName,
+	}}
+
+	ec.setVar("{"+errNS+"}code", errCodeSeq)
+	ec.setVar("{"+errNS+"}description", xpath3.SingleString(errDesc))
+	ec.setVar("{"+errNS+"}value", xpath3.EmptySequence())
+	ec.setVar("{"+errNS+"}module", xpath3.SingleString(ec.errSourceModule))
+	ec.setVar("{"+errNS+"}line-number", xpath3.SingleInteger(int64(ec.errSourceLine)))
+	ec.setVar("{"+errNS+"}column-number", xpath3.SingleInteger(0))
+
 	for _, c := range inst.Catches {
 		if catchMatches(c, errCode) {
 			return ec.executeSequenceConstructor(ctx, c.Body)
