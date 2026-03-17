@@ -1,0 +1,622 @@
+package xslt3
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath3"
+)
+
+func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error {
+	name, err := inst.Name.evaluate(ctx, ec.contextNode)
+	if err != nil {
+		return err
+	}
+
+	// XTDE0820: validate computed name is a valid QName
+	name = strings.TrimSpace(name)
+	if name == "" || !isValidQName(name) {
+		return dynamicError(errCodeXTDE0820,
+			"invalid element name %q: not a valid QName", name)
+	}
+
+	// Extract local name for element creation so SetActiveNamespace doesn't double the prefix
+	localName := name
+	prefix := ""
+	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		prefix = name[:idx]
+		localName = name[idx+1:]
+	}
+
+	elem, err := ec.resultDoc.CreateElement(localName)
+	if err != nil {
+		return err
+	}
+
+	hasNS := false
+	if inst.Namespace != nil {
+		nsURI, err := inst.Namespace.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		if nsURI != "" {
+			hasNS = true
+			if err := elem.DeclareNamespace(prefix, nsURI); err != nil {
+				return err
+			}
+			if err := elem.SetActiveNamespace(prefix, nsURI); err != nil {
+				return err
+			}
+		}
+	} else {
+		// No namespace attribute: resolve from compile-time namespace context.
+		uri := ""
+		if inst.NSBindings != nil {
+			uri = inst.NSBindings[prefix]
+		}
+		if uri == "" {
+			uri = ec.resolvePrefix(prefix)
+		}
+		if uri != "" {
+			hasNS = true
+			if !ec.isNSDeclaredInScope(prefix, uri) {
+				if err := elem.DeclareNamespace(prefix, uri); err != nil {
+					return err
+				}
+			}
+			if err := elem.SetActiveNamespace(prefix, uri); err != nil {
+				return err
+			}
+		} else if prefix != "" {
+			// XTDE0830: prefix in computed element name is undeclared
+			return dynamicError("XTDE0830",
+				"undeclared namespace prefix %q in element name %q", prefix, name)
+		}
+	}
+
+	// If this element has no namespace but there's a default namespace in scope,
+	// we need to undeclare it with xmlns=""
+	if !hasNS && prefix == "" && ec.hasDefaultNSInScope() {
+		if err := elem.DeclareNamespace("", ""); err != nil {
+			return err
+		}
+	}
+
+	if err := ec.addNode(elem); err != nil {
+		return err
+	}
+
+	if inst.TypeName != "" {
+		ec.annotateNode(elem, inst.TypeName)
+	}
+
+	// Push new output context for children.
+	// Temporarily disable sequenceMode so that children are added to this
+	// element normally (not captured as separate items in the sequence).
+	out := ec.currentOutput()
+	savedCurrent := out.current
+	savedPrevAtomic := out.prevWasAtomic
+	savedSeqMode := out.sequenceMode
+	savedWherePop := out.wherePopulated
+	out.current = elem
+	out.prevWasAtomic = false
+	out.sequenceMode = false
+	// Clear wherePopulated inside the element body so that xsl:document
+	// unwraps its children normally (same rationale as LRE — see
+	// execLiteralResultElement).
+	out.wherePopulated = false
+	defer func() {
+		out.current = savedCurrent
+		out.prevWasAtomic = savedPrevAtomic
+		out.sequenceMode = savedSeqMode
+		out.wherePopulated = savedWherePop
+	}()
+
+	// Apply attribute sets (before body so body can override)
+	if len(inst.UseAttributeSets) > 0 {
+		if err := ec.applyAttributeSets(ctx, inst.UseAttributeSets); err != nil {
+			return err
+		}
+	}
+	if len(inst.UseAttrSets) > 0 {
+		if err := ec.applyAttributeSets(ctx, inst.UseAttrSets); err != nil {
+			return err
+		}
+	}
+
+	return ec.executeSequenceConstructor(ctx, inst.Body)
+}
+
+func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) error {
+	name, err := inst.Name.evaluate(ctx, ec.contextNode)
+	if err != nil {
+		return err
+	}
+
+	var value string
+	if inst.Select != nil {
+		sep := " "
+		if inst.Separator != nil {
+			sep, err = inst.Separator.evaluate(ctx, ec.contextNode)
+			if err != nil {
+				return err
+			}
+		}
+		xpathCtx := ec.newXPathContext(ec.contextNode)
+		result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		value = stringifyResultWithSep(result, sep)
+	} else if len(inst.Body) > 0 {
+		sep := ""
+		if inst.Separator != nil {
+			sep, err = inst.Separator.evaluate(ctx, ec.contextNode)
+			if err != nil {
+				return err
+			}
+		}
+		// XSLT 2.0: attribute body is temporary output state (XTDE1480).
+		// XSLT 3.0 relaxes this restriction.
+		isV2TempOutput := ec.stylesheet.version != "" && ec.stylesheet.version < "3.0"
+		if isV2TempOutput {
+			ec.temporaryOutputDepth++
+		}
+		val, err := ec.evaluateBody(ctx, inst.Body)
+		if isV2TempOutput {
+			ec.temporaryOutputDepth--
+		}
+		if err != nil {
+			return err
+		}
+		value = stringifySequenceWithSep(val, sep)
+	}
+
+	// When a type annotation is present (e.g. type="xs:integer"), cast the
+	// string value to the target type and back so that the canonical lexical
+	// form is used (e.g. "0023" → 23 → "23").
+	if inst.TypeName != "" {
+		av, castErr := xpath3.CastFromString(value, inst.TypeName)
+		if castErr == nil {
+			if s, sErr := xpath3.AtomicToString(av); sErr == nil {
+				value = s
+			}
+		}
+	}
+
+	// In sequence mode (variable/param with as), capture the attribute as a
+	// standalone item rather than attaching it to an element.
+	out := ec.currentOutput()
+	if out.sequenceMode {
+		attr, attrErr := out.doc.CreateAttribute(name, value, nil)
+		if attrErr != nil {
+			return attrErr
+		}
+		out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: attr})
+		out.noteOutput()
+		return nil
+	}
+
+	// The current output node must be an element
+	elem, ok := out.current.(*helium.Element)
+	if !ok {
+		return dynamicError(errCodeXTDE0820, "xsl:attribute must be added to an element")
+	}
+
+	// XTRE0540: cannot add attribute after child content has been added
+	if elem.FirstChild() != nil {
+		return dynamicError(errCodeXTRE0540, "cannot add attribute to element after children have been added")
+	}
+
+	if inst.Namespace != nil {
+		nsURI, err := inst.Namespace.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		if nsURI != "" {
+			prefix := ""
+			localName := name
+			if idx := strings.IndexByte(name, ':'); idx >= 0 {
+				prefix = name[:idx]
+				localName = name[idx+1:]
+			}
+			// Attributes in a namespace require a non-empty prefix (unlike
+			// elements, the default namespace does not apply to attributes).
+			if prefix == "" {
+				prefix = "ns0"
+			}
+			// If the prefix is already bound to a different URI on this element,
+			// generate a unique prefix to avoid conflicts.
+			prefix = uniqueNSPrefix(elem, prefix, nsURI)
+			// Ensure the namespace is declared on the element
+			if !hasNSDecl(elem, prefix, nsURI) {
+				if err := elem.DeclareNamespace(prefix, nsURI); err != nil {
+					return err
+				}
+			}
+			// Remove existing attribute with same expanded name to allow replacement
+			elem.RemoveAttributeNS(localName, nsURI)
+			ns, err := ec.resultDoc.CreateNamespace(prefix, nsURI)
+			if err != nil {
+				return err
+			}
+			if err := elem.SetAttributeNS(localName, value, ns); err != nil {
+				return err
+			}
+			ec.annotateAttr(elem, inst.TypeName, localName, nsURI, value)
+			out.noteOutput()
+			return nil
+		}
+		// namespace="" explicitly: strip prefix, use no-namespace attribute
+		if idx := strings.IndexByte(name, ':'); idx >= 0 {
+			name = name[idx+1:]
+		}
+		elem.RemoveAttribute(name)
+		if err := elem.SetAttribute(name, value); err != nil {
+			return err
+		}
+		ec.annotateAttr(elem, inst.TypeName, name, "", value)
+		out.noteOutput()
+		return nil
+	}
+
+	// Handle prefixed attribute names without explicit namespace
+	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		prefix := name[:idx]
+		localName := name[idx+1:]
+		uri := ec.resolvePrefix(prefix)
+		if uri == "" {
+			// XTDE0860: prefix in computed attribute name is undeclared
+			return dynamicError("XTDE0860",
+				"undeclared namespace prefix %q in attribute name %q", prefix, name)
+		}
+		// Ensure the namespace is declared on the element
+		if !hasNSDecl(elem, prefix, uri) {
+			if err := elem.DeclareNamespace(prefix, uri); err != nil {
+				return err
+			}
+		}
+		// Remove existing attribute with same expanded name to allow replacement
+		elem.RemoveAttributeNS(localName, uri)
+		ns, err := ec.resultDoc.CreateNamespace(prefix, uri)
+		if err != nil {
+			return err
+		}
+		if err := elem.SetAttributeNS(localName, value, ns); err != nil {
+			return err
+		}
+		ec.annotateAttr(elem, inst.TypeName, localName, uri, value)
+		out.noteOutput()
+		return nil
+	}
+
+	// Remove existing attribute with same name to allow replacement
+	elem.RemoveAttribute(name)
+	if err := elem.SetAttribute(name, value); err != nil {
+		return err
+	}
+	ec.annotateAttr(elem, inst.TypeName, name, "", value)
+	out.noteOutput()
+	return nil
+}
+
+// copyAttributeToElement copies an attribute to an element, preserving its
+// namespace URI and prefix. For non-namespaced attributes, falls back to
+// SetAttribute.
+func copyAttributeToElement(elem *helium.Element, attr *helium.Attribute) error {
+	if uri := attr.URI(); uri != "" {
+		prefix := attr.Prefix()
+		// Extract local name by stripping prefix from Name()
+		name := attr.Name()
+		localName := name
+		if prefix != "" {
+			localName = name[len(prefix)+1:]
+		}
+		ns := helium.NewNamespace(prefix, uri)
+		return elem.SetAttributeNS(localName, attr.Value(), ns)
+	}
+	return elem.SetAttribute(attr.Name(), attr.Value())
+}
+
+// hasNSDecl checks if an element already has a namespace declaration for
+// the given prefix and URI.
+func hasNSDecl(elem *helium.Element, prefix, uri string) bool {
+	for _, ns := range elem.Namespaces() {
+		if ns.Prefix() == prefix && ns.URI() == uri {
+			return true
+		}
+	}
+	return false
+}
+
+// collectInScopeNamespaces collects all in-scope namespace declarations for
+// an element, walking up the ancestor chain.  Declarations closer to the
+// element take precedence (first-seen prefix wins).
+func collectInScopeNamespaces(elem *helium.Element) []*helium.Namespace {
+	seen := make(map[string]struct{})
+	var result []*helium.Namespace
+	for cur := elem; cur != nil; {
+		for _, ns := range cur.Namespaces() {
+			if _, ok := seen[ns.Prefix()]; !ok {
+				seen[ns.Prefix()] = struct{}{}
+				result = append(result, ns)
+			}
+		}
+		p := cur.Parent()
+		if p == nil {
+			break
+		}
+		pe, ok := p.(*helium.Element)
+		if !ok {
+			break
+		}
+		cur = pe
+	}
+	return result
+}
+
+// undeclareInheritedNamespaces adds namespace undeclarations (xmlns:p="") on
+// each direct child element for every in-scope namespace visible from parent
+// that the child does not itself declare.  This implements the XSLT 3.0
+// inherit-namespaces="no" semantics: children must not inherit ANY namespace
+// reachable through the parent in the DOM tree.
+func undeclareInheritedNamespaces(parent *helium.Element) {
+	// Collect all in-scope namespace prefixes visible from the parent,
+	// including those inherited from grandparent and beyond.
+	inScope := make(map[string]struct{})
+	for cur := parent; cur != nil; {
+		for _, ns := range cur.Namespaces() {
+			if _, ok := inScope[ns.Prefix()]; !ok {
+				inScope[ns.Prefix()] = struct{}{}
+			}
+		}
+		p := cur.Parent()
+		if p == nil {
+			break
+		}
+		pe, ok := p.(*helium.Element)
+		if !ok {
+			break
+		}
+		cur = pe
+	}
+	if len(inScope) == 0 {
+		return
+	}
+	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
+		childElem, ok := child.(*helium.Element)
+		if !ok {
+			continue
+		}
+		for prefix := range inScope {
+			// Skip if the child already has an explicit declaration for this prefix.
+			alreadyDeclared := false
+			for _, cns := range childElem.Namespaces() {
+				if cns.Prefix() == prefix {
+					alreadyDeclared = true
+					break
+				}
+			}
+			if alreadyDeclared {
+				continue
+			}
+			// Add an undeclaration (empty URI) so the prefix is not visible
+			// when walking the ancestor chain.
+			_ = childElem.DeclareNamespace(prefix, "")
+		}
+	}
+}
+
+// uniqueNSPrefix returns a prefix for nsURI that doesn't conflict with
+// in-scope namespace declarations on elem or its ancestors. If prefix is
+// already bound to nsURI, it's returned as-is. If it's bound to a different
+// URI, a suffix like _1, _2, ... is appended until a unique prefix is found.
+func uniqueNSPrefix(elem *helium.Element, prefix, nsURI string) string {
+	if prefixBoundTo(elem, prefix) == nsURI {
+		return prefix
+	}
+	if uri := prefixBoundTo(elem, prefix); uri != "" && uri != nsURI {
+		for i := 1; ; i++ {
+			candidate := prefix + "_" + strconv.Itoa(i)
+			if prefixBoundTo(elem, candidate) == "" {
+				return candidate
+			}
+		}
+	}
+	return prefix
+}
+
+// prefixBoundTo walks the element and its ancestors to find what URI
+// a prefix is bound to. Returns "" if not found.
+func prefixBoundTo(elem *helium.Element, prefix string) string {
+	for node := helium.Node(elem); node != nil; node = node.Parent() {
+		e, ok := node.(*helium.Element)
+		if !ok {
+			continue
+		}
+		for _, ns := range e.Namespaces() {
+			if ns.Prefix() == prefix {
+				return ns.URI()
+			}
+		}
+	}
+	return ""
+}
+
+func (ec *execContext) execComment(ctx context.Context, inst *CommentInst) error {
+	var value string
+	if inst.Select != nil {
+		xpathCtx := ec.newXPathContext(ec.contextNode)
+		result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		value = stringifyResult(result)
+	} else if len(inst.Body) > 0 {
+		// XSLT 2.0: comment body is temporary output state (XTDE1480).
+		// XSLT 3.0 relaxes this restriction.
+		isV2TempOutput := ec.stylesheet.version != "" && ec.stylesheet.version < "3.0"
+		if isV2TempOutput {
+			ec.temporaryOutputDepth++
+		}
+		val, err := ec.evaluateBody(ctx, inst.Body)
+		if isV2TempOutput {
+			ec.temporaryOutputDepth--
+		}
+		if err != nil {
+			return err
+		}
+		value = stringifySequence(val)
+	}
+
+	// Sanitize comment content per XSLT 3.0 spec §11.1:
+	// Replace any occurrence of "--" with "- -" and ensure the value
+	// doesn't end with "-" (add a trailing space if so).
+	value = sanitizeComment(value)
+
+	comment, err := ec.resultDoc.CreateComment([]byte(value))
+	if err != nil {
+		return err
+	}
+	return ec.addNode(comment)
+}
+
+// sanitizeComment replaces "--" sequences with "- -" and ensures the
+// value does not end with "-", per XSLT comment construction rules.
+func sanitizeComment(s string) string {
+	var sb strings.Builder
+	sb.Grow(len(s))
+	prevDash := false
+	for i := 0; i < len(s); i++ {
+		if s[i] == '-' {
+			if prevDash {
+				sb.WriteByte(' ')
+			}
+			sb.WriteByte('-')
+			prevDash = true
+		} else {
+			sb.WriteByte(s[i])
+			prevDash = false
+		}
+	}
+	result := sb.String()
+	if len(result) > 0 && result[len(result)-1] == '-' {
+		result += " "
+	}
+	return result
+}
+
+func (ec *execContext) execPI(ctx context.Context, inst *PIInst) error {
+	name, err := inst.Name.evaluate(ctx, ec.contextNode)
+	if err != nil {
+		return err
+	}
+
+	var value string
+	if inst.Select != nil {
+		xpathCtx := ec.newXPathContext(ec.contextNode)
+		result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		value = stringifyResult(result)
+	} else if len(inst.Body) > 0 {
+		// XSLT 2.0: PI body is temporary output state (XTDE1480).
+		// XSLT 3.0 relaxes this restriction.
+		isV2TempOutput := ec.stylesheet.version != "" && ec.stylesheet.version < "3.0"
+		if isV2TempOutput {
+			ec.temporaryOutputDepth++
+		}
+		val, err := ec.evaluateBody(ctx, inst.Body)
+		if isV2TempOutput {
+			ec.temporaryOutputDepth--
+		}
+		if err != nil {
+			return err
+		}
+		value = stringifySequence(val)
+	}
+
+	pi, err := ec.resultDoc.CreatePI(name, value)
+	if err != nil {
+		return err
+	}
+	return ec.addNode(pi)
+}
+
+func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) error {
+	name, err := inst.Name.evaluate(ctx, ec.contextNode)
+	if err != nil {
+		return err
+	}
+
+	var value string
+	if inst.Select != nil {
+		xpathCtx := ec.newXPathContext(ec.contextNode)
+		result, evalErr := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+		if evalErr != nil {
+			return evalErr
+		}
+		value = stringifyResult(result)
+	} else if len(inst.Body) > 0 {
+		// XSLT 2.0: namespace body is temporary output state (XTDE1480).
+		// XSLT 3.0 relaxes this restriction.
+		isV2TempOutput := ec.stylesheet.version != "" && ec.stylesheet.version < "3.0"
+		if isV2TempOutput {
+			ec.temporaryOutputDepth++
+		}
+		val, bodyErr := ec.evaluateBody(ctx, inst.Body)
+		if isV2TempOutput {
+			ec.temporaryOutputDepth--
+		}
+		if bodyErr != nil {
+			return bodyErr
+		}
+		value = stringifySequence(val)
+	}
+
+	out := ec.currentOutput()
+	elem, ok := out.current.(*helium.Element)
+	if !ok {
+		return dynamicError(errCodeXTDE0420,
+			"cannot add namespace node to a non-element node")
+	}
+
+	// If the new namespace binding conflicts with the element's own prefix
+	// (same prefix, different URI), rename the element's prefix to avoid
+	// the collision. Per XSLT spec §11.1.4: if a namespace node clashes
+	// with the element's namespace, the processor must change the element
+	// prefix.
+	if name != "" && elem.Prefix() == name && elem.URI() != value {
+		origURI := elem.URI()
+		// Generate a unique replacement prefix
+		newPrefix := name + "_0"
+		for i := 1; ec.prefixInUse(elem, newPrefix); i++ {
+			newPrefix = fmt.Sprintf("%s_%d", name, i)
+		}
+		// Remove the old namespace declaration for the conflicting prefix
+		elem.RemoveNamespaceByPrefix(name)
+		// Re-bind the element to the new prefix
+		if err := elem.DeclareNamespace(newPrefix, origURI); err != nil {
+			return err
+		}
+		if err := elem.SetActiveNamespace(newPrefix, origURI); err != nil {
+			return err
+		}
+	}
+
+	return elem.DeclareNamespace(name, value)
+}
+
+// prefixInUse checks if a namespace prefix is already declared on an element.
+func (ec *execContext) prefixInUse(elem *helium.Element, prefix string) bool {
+	for _, ns := range elem.Namespaces() {
+		if ns.Prefix() == prefix {
+			return true
+		}
+	}
+	return false
+}

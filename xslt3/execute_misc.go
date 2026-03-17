@@ -1,0 +1,785 @@
+package xslt3
+
+import (
+	"context"
+	"strings"
+
+	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath3"
+)
+
+func (ec *execContext) execAnalyzeString(ctx context.Context, inst *AnalyzeStringInst) error {
+	// Evaluate the select expression
+	xpathCtx := ec.newXPathContext(ec.contextNode)
+	result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+	if err != nil {
+		return err
+	}
+	seq := result.Sequence()
+
+	// The select expression must produce a single xs:string value.
+	// A sequence of more than one item, or a non-string item, is XPTY0004.
+	isV2 := ec.stylesheet.version != "" && ec.stylesheet.version < "3.0"
+	if len(seq) == 0 {
+		if isV2 {
+			// XSLT 2.0: empty sequence is XPTY0004
+			return dynamicError("XPTY0004", "xsl:analyze-string select must be a single xs:string, got empty sequence")
+		}
+		// XSLT 3.0: empty sequence treated as ""
+		return nil
+	}
+	if len(seq) > 1 {
+		return dynamicError("XPTY0004", "xsl:analyze-string select must be a single xs:string, got sequence of %d items", len(seq))
+	}
+	av, err := xpath3.AtomizeItem(seq[0])
+	if err != nil {
+		return dynamicError("XPTY0004", "xsl:analyze-string select must be xs:string: %v", err)
+	}
+	// Reject non-string atomic types (xs:integer, etc.)
+	if av.TypeName != xpath3.TypeString && av.TypeName != xpath3.TypeUntypedAtomic && av.TypeName != xpath3.TypeAnyURI {
+		return dynamicError("XPTY0004", "xsl:analyze-string select must be xs:string, got %s", av.TypeName)
+	}
+	input, err := xpath3.AtomicToString(av)
+	if err != nil {
+		return dynamicError("XPTY0004", "xsl:analyze-string select must be xs:string: %v", err)
+	}
+
+	// Evaluate regex AVT
+	regex, err := inst.Regex.evaluate(ctx, ec.contextNode)
+	if err != nil {
+		return err
+	}
+
+	// Evaluate flags AVT
+	flags := ""
+	if inst.Flags != nil {
+		flags, err = inst.Flags.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Version 2.0 restrictions
+	if isV2 {
+		// XSLT 2.0: 'q' flag is not allowed (XTDE1145)
+		if strings.ContainsRune(flags, 'q') {
+			return dynamicError("XTDE1145", "xsl:analyze-string flag 'q' is not allowed in XSLT 2.0")
+		}
+		// XSLT 2.0: non-capturing groups (?:...) are not allowed (XTDE1140)
+		if strings.Contains(regex, "(?:") {
+			return dynamicError("XTDE1140", "non-capturing groups are not allowed in XSLT 2.0 regex")
+		}
+	}
+
+	// Compile the regex using XPath regex semantics
+	re, err := xpath3.CompileRegex(regex, flags)
+	if err != nil {
+		// Map XPath regex errors to XSLT error codes
+		return dynamicError("XTDE1140", "xsl:analyze-string invalid regex: %v", err)
+	}
+
+	// Check if regex matches the empty string
+	if isV2 {
+		matchesEmpty, emptyErr := re.MatchString("")
+		if emptyErr != nil {
+			return dynamicError("XTDE1140", "xsl:analyze-string regex error: %v", emptyErr)
+		}
+		if matchesEmpty {
+			return dynamicError("XTDE1150", "xsl:analyze-string regex must not match a zero-length string")
+		}
+	}
+
+	// Find all matches.
+	// In XSLT 3.0, zero-length matches are allowed (unlike XSLT 2.0
+	// which raised XTDE1150). We handle them by advancing past each
+	// zero-length match to avoid infinite loops.
+	matches, err := re.FindAllSubmatchIndex(input, -1)
+	if err != nil {
+		return dynamicError("XTDE1140", "xsl:analyze-string regex match error: %v", err)
+	}
+
+	// Save and restore context state
+	savedNode := ec.contextNode
+	savedCurrent := ec.currentNode
+	savedItem := ec.contextItem
+	savedPos := ec.position
+	savedSize := ec.size
+	savedGroups := ec.regexGroups
+	defer func() {
+		ec.contextNode = savedNode
+		ec.currentNode = savedCurrent
+		ec.contextItem = savedItem
+		ec.position = savedPos
+		ec.size = savedSize
+		ec.regexGroups = savedGroups
+	}()
+
+	// Build segments: alternating non-match/match segments
+	type segment struct {
+		text    string
+		isMatch bool
+		groups  []string // captured groups (only for matches)
+	}
+	var segments []segment
+	pos := 0
+	for _, m := range matches {
+		start, end := m[0], m[1]
+		if start > pos {
+			segments = append(segments, segment{text: input[pos:start], isMatch: false})
+		}
+		// Collect captured groups
+		var groups []string
+		groups = append(groups, input[start:end]) // group 0 = full match
+		for g := 1; g < len(m)/2; g++ {
+			gs, ge := m[2*g], m[2*g+1]
+			if gs < 0 || ge < 0 {
+				groups = append(groups, "")
+			} else {
+				groups = append(groups, input[gs:ge])
+			}
+		}
+		segments = append(segments, segment{text: input[start:end], isMatch: true, groups: groups})
+		pos = end
+	}
+	if pos < len(input) {
+		segments = append(segments, segment{text: input[pos:], isMatch: false})
+	}
+
+	// Set size = total number of segments
+	totalSegments := len(segments)
+
+	// Execute appropriate body for each segment
+	for i, seg := range segments {
+		ec.position = i + 1
+		ec.size = totalSegments
+		ec.contextItem = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: seg.text}
+		ec.contextNode = nil
+		ec.currentNode = nil
+
+		if seg.isMatch {
+			ec.regexGroups = seg.groups
+			for _, bodyInst := range inst.MatchingBody {
+				if err := ec.executeInstruction(ctx, bodyInst); err != nil {
+					return err
+				}
+			}
+		} else {
+			ec.regexGroups = nil
+			for _, bodyInst := range inst.NonMatchingBody {
+				if err := ec.executeInstruction(ctx, bodyInst); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (ec *execContext) execWherePopulated(ctx context.Context, inst *WherePopulatedInst) error {
+	// Execute body into a temporary document, then filter per XSLT 3.0 section 8.4.
+	tmpDoc := helium.NewDefaultDocument()
+	tmpRoot, err := tmpDoc.CreateElement("_tmp")
+	if err != nil {
+		return err
+	}
+	if err := tmpDoc.AddChild(tmpRoot); err != nil {
+		return err
+	}
+
+	ec.outputStack = append(ec.outputStack, &outputFrame{doc: tmpDoc, current: tmpRoot, wherePopulated: true})
+
+	if err := ec.executeSequenceConstructor(ctx, inst.Body); err != nil {
+		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+		return err
+	}
+
+	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+
+	// XSLT 3.0 section 8.4: filter the produced nodes. Element and document
+	// nodes are kept only when non-empty (have at least one significant child:
+	// a child element, non-zero-length text, comment, or PI). Text, comment,
+	// and PI nodes are always kept. If nothing survives the filter the whole
+	// result is discarded.
+	hasSignificant := false
+	for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
+		if isPopulated(child) {
+			hasSignificant = true
+			break
+		}
+	}
+	if !hasSignificant {
+		return nil
+	}
+
+	// Copy significant nodes to real output. Empty elements/documents are
+	// stripped. Document nodes are unwrapped (their children are emitted).
+	for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
+		if !isPopulated(child) {
+			continue
+		}
+		// Document nodes are unwrapped: emit their children rather than the
+		// document node itself, since documents can't be children of elements.
+		if child.Type() == helium.DocumentNode {
+			doc := child.(*helium.Document)
+			for dc := doc.FirstChild(); dc != nil; dc = dc.NextSibling() {
+				copied, copyErr := helium.CopyNode(dc, ec.resultDoc)
+				if copyErr != nil {
+					return copyErr
+				}
+				if err := ec.addNode(copied); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		copied, copyErr := helium.CopyNode(child, ec.resultDoc)
+		if copyErr != nil {
+			return copyErr
+		}
+		if err := ec.addNode(copied); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// isPopulated checks if a node is "populated" per XSLT 3.0 xsl:where-populated semantics
+// (section 11.1.8). A node N is significant unless:
+//   - N is a text node with zero-length string value
+//   - N is a comment node with zero-length string value
+//   - N is a processing-instruction node with zero-length string value
+//   - N is an element or document node with no significant children
+//
+// Element nodes are always significant.
+func isPopulated(node helium.Node) bool {
+	switch node.Type() {
+	case helium.ElementNode, helium.DocumentNode:
+		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+			switch child.Type() {
+			case helium.ElementNode:
+				return true
+			case helium.TextNode:
+				if len(child.Content()) > 0 {
+					return true
+				}
+			case helium.CommentNode, helium.ProcessingInstructionNode:
+				if len(child.Content()) > 0 {
+					return true
+				}
+			case helium.DocumentNode:
+				// Document nodes can appear as children when xsl:document is
+				// used inside xsl:where-populated. Recursively check if the
+				// document itself is populated.
+				if isPopulated(child) {
+					return true
+				}
+			}
+		}
+		return false
+	case helium.TextNode:
+		return len(node.Content()) > 0
+	case helium.CommentNode, helium.ProcessingInstructionNode:
+		return len(node.Content()) > 0
+	default:
+		return false
+	}
+}
+
+func (ec *execContext) evaluateConditionalInstruction(ctx context.Context, selectExpr *xpath3.Expression, body []Instruction) (xpath3.Sequence, error) {
+	if selectExpr != nil {
+		xpathCtx := ec.newXPathContext(ec.contextNode)
+		result, err := selectExpr.Evaluate(xpathCtx, ec.contextNode)
+		if err != nil {
+			return nil, err
+		}
+		return result.Sequence(), nil
+	}
+	return ec.evaluateBodyAsSequence(ctx, body)
+}
+
+func (ec *execContext) execOnEmpty(ctx context.Context, inst *OnEmptyInst) error {
+	out := ec.currentOutput()
+	if len(out.conditionalScopes) == 0 || out.current == nil {
+		return nil
+	}
+	content, err := ec.evaluateConditionalInstruction(ctx, inst.Select, inst.Body)
+	if err != nil {
+		return err
+	}
+	placeholder, err := out.doc.CreateComment(nil)
+	if err != nil {
+		return err
+	}
+	if err := ec.addNodeUntracked(placeholder); err != nil {
+		return err
+	}
+	scopeIdx := len(out.conditionalScopes) - 1
+	out.conditionalScopes[scopeIdx].actions = append(out.conditionalScopes[scopeIdx].actions, conditionalAction{
+		ctx:         ctx,
+		kind:        conditionalOnEmpty,
+		content:     content,
+		placeholder: placeholder,
+	})
+	return nil
+}
+
+func (ec *execContext) execOnNonEmpty(ctx context.Context, inst *OnNonEmptyInst) error {
+	out := ec.currentOutput()
+	if len(out.conditionalScopes) == 0 || out.current == nil {
+		return nil
+	}
+	content, err := ec.evaluateConditionalInstruction(ctx, inst.Select, inst.Body)
+	if err != nil {
+		return err
+	}
+	placeholder, err := out.doc.CreateComment(nil)
+	if err != nil {
+		return err
+	}
+	if err := ec.addNodeUntracked(placeholder); err != nil {
+		return err
+	}
+	scopeIdx := len(out.conditionalScopes) - 1
+	out.conditionalScopes[scopeIdx].actions = append(out.conditionalScopes[scopeIdx].actions, conditionalAction{
+		ctx:         ctx,
+		kind:        conditionalOnNonEmpty,
+		content:     content,
+		placeholder: placeholder,
+	})
+	return nil
+}
+
+// execMap executes an xsl:map instruction, producing a MapItem from child
+// xsl:map-entry instructions.
+func (ec *execContext) execMap(ctx context.Context, inst *MapInst) error {
+	tmpDoc := helium.NewDefaultDocument()
+	tmpRoot, err := tmpDoc.CreateElement("_tmp")
+	if err != nil {
+		return err
+	}
+	if err := tmpDoc.AddChild(tmpRoot); err != nil {
+		return err
+	}
+
+	frame := &outputFrame{
+		doc:            tmpDoc,
+		current:        tmpRoot,
+		captureItems:   true,
+		sequenceMode:   true,
+		mapConstructor: true,
+	}
+	ec.outputStack = append(ec.outputStack, frame)
+	if err := ec.executeSequenceConstructor(ctx, inst.Body); err != nil {
+		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+		return err
+	}
+	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+
+	var entries []xpath3.MapEntry
+	for _, item := range frame.pendingItems {
+		m, ok := item.(xpath3.MapItem)
+		if !ok {
+			return dynamicError("XTDE0450", "xsl:map body produced non-map item %T", item)
+		}
+		if err := m.ForEach(func(k xpath3.AtomicValue, v xpath3.Sequence) error {
+			entries = append(entries, xpath3.MapEntry{Key: k, Value: v})
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+
+	m := xpath3.NewMap(entries)
+	out := ec.currentOutput()
+	if out.captureItems {
+		out.pendingItems = append(out.pendingItems, m)
+		out.noteOutput()
+		return nil
+	}
+	return dynamicError("XTDE0450", "cannot add a map to the result tree")
+}
+
+// execMapEntry is a no-op when called outside xsl:map; entries are handled
+// by execMap directly.
+func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) error {
+	out := ec.currentOutput()
+	if out.captureItems && out.mapConstructor {
+		xpathCtx := ec.newXPathContext(ec.contextNode)
+		keyResult, err := inst.Key.Evaluate(xpathCtx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		keySeq := keyResult.Sequence()
+		if len(keySeq) != 1 {
+			return dynamicError("XPTY0004", "xsl:map-entry key must be a single atomic value")
+		}
+		keyAV, err := xpath3.AtomizeItem(keySeq[0])
+		if err != nil {
+			return err
+		}
+
+		var valSeq xpath3.Sequence
+		if inst.Select != nil {
+			valResult, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+			if err != nil {
+				return err
+			}
+			valSeq = valResult.Sequence()
+		} else if len(inst.Body) > 0 {
+			valSeq, err = ec.evaluateBodyAsSequence(ctx, inst.Body)
+			if err != nil {
+				return err
+			}
+		}
+
+		out.pendingItems = append(out.pendingItems, xpath3.NewMap([]xpath3.MapEntry{{
+			Key:   keyAV,
+			Value: valSeq,
+		}}))
+		out.noteOutput()
+		return nil
+	}
+
+	// When called standalone (outside xsl:map), evaluate and produce output
+	xpathCtx := ec.newXPathContext(ec.contextNode)
+	var valSeq xpath3.Sequence
+	var err error
+	if inst.Select != nil {
+		valResult, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		valSeq = valResult.Sequence()
+	} else if len(inst.Body) > 0 {
+		valSeq, err = ec.evaluateBody(ctx, inst.Body)
+		if err != nil {
+			return err
+		}
+	}
+	// Output the value as text
+	s := stringifySequenceWithSep(valSeq, " ")
+	if s != "" {
+		text, err := ec.resultDoc.CreateText([]byte(s))
+		if err != nil {
+			return err
+		}
+		return ec.addNode(text)
+	}
+	return nil
+}
+
+// execAssert implements xsl:assert.
+// Per XSLT 3.0 spec section 4.9: a non-schema-aware processor MUST ignore
+// xsl:assert instructions. Since this processor is not schema-aware,
+// assertions are no-ops by default.
+//
+//nolint:unused
+func (ec *execContext) execAssert(_ context.Context, _ *AssertInst) error {
+	// Non-schema-aware processor: ignore xsl:assert
+	return nil
+}
+
+// execEvaluate implements xsl:evaluate — dynamically compile and evaluate
+// an XPath expression string at runtime.
+func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) error {
+	// 1. Evaluate the xpath attribute expression to get the XPath string.
+	xpathCtx := ec.newXPathContext(ec.contextNode)
+	xpathResult, err := inst.XPath.Evaluate(xpathCtx, ec.contextNode)
+	if err != nil {
+		return err
+	}
+	xpathStr, ok := xpathResult.IsString()
+	if !ok {
+		// Atomize and convert to string
+		seq := xpathResult.Sequence()
+		if len(seq) == 0 {
+			return dynamicError("XTDE3160", "xsl:evaluate: xpath attribute evaluated to empty sequence")
+		}
+		av, atomErr := xpath3.AtomizeItem(seq[0])
+		if atomErr != nil {
+			return atomErr
+		}
+		s, sErr := xpath3.AtomicToString(av)
+		if sErr != nil {
+			return sErr
+		}
+		xpathStr = s
+	}
+
+	if strings.TrimSpace(xpathStr) == "" {
+		return dynamicError("XTDE3160", "xsl:evaluate: xpath expression is empty")
+	}
+
+	// 2. Determine the context item for dynamic evaluation.
+	var dynContextNode helium.Node
+	var dynContextItem xpath3.Item
+	hasContextItem := true
+	if inst.ContextItem != nil {
+		ciResult, ciErr := inst.ContextItem.Evaluate(xpathCtx, ec.contextNode)
+		if ciErr != nil {
+			return ciErr
+		}
+		ciSeq := ciResult.Sequence()
+		if len(ciSeq) == 1 {
+			switch v := ciSeq[0].(type) {
+			case xpath3.NodeItem:
+				dynContextNode = v.Node
+			default:
+				dynContextItem = v
+			}
+		} else if len(ciSeq) > 1 {
+			return dynamicError("XTTE3210", "xsl:evaluate: context-item must be a single item, got %d items", len(ciSeq))
+		} else {
+			// Empty sequence: no context item
+			hasContextItem = false
+		}
+	} else {
+		// Default: use the current context node
+		dynContextNode = ec.contextNode
+	}
+
+	// 3. Build namespace bindings for the dynamic expression.
+	nsBindings := make(map[string]string)
+
+	// Start with stylesheet namespace bindings
+	for k, v := range ec.stylesheet.namespaces {
+		if k == "" {
+			continue // don't inherit default namespace by default
+		}
+		nsBindings[k] = v
+	}
+
+	// If namespace-context is specified, collect namespaces from that node
+	if inst.NamespaceContext != nil {
+		ncResult, ncErr := inst.NamespaceContext.Evaluate(xpathCtx, ec.contextNode)
+		if ncErr != nil {
+			return ncErr
+		}
+		ncSeq := ncResult.Sequence()
+		if len(ncSeq) > 0 {
+			if ni, nodeOK := ncSeq[0].(xpath3.NodeItem); nodeOK {
+				nsNode := ni.Node
+				// Walk up to find an element
+				for nsNode != nil {
+					if elem, elemOK := nsNode.(*helium.Element); elemOK {
+						// Collect in-scope namespaces walking up
+						seen := make(map[string]struct{})
+						var cur helium.Node = elem
+						for cur != nil {
+							if e, eOK := cur.(*helium.Element); eOK {
+								for _, ns := range e.Namespaces() {
+									prefix := ns.Prefix()
+									if _, exists := seen[prefix]; !exists {
+										seen[prefix] = struct{}{}
+										nsBindings[prefix] = ns.URI()
+									}
+								}
+							}
+							cur = cur.Parent()
+						}
+						break
+					}
+					nsNode = nsNode.Parent()
+				}
+			}
+		}
+	}
+
+	// 4. Handle xpath-default-namespace from the instruction
+	if inst.HasXPathDefaultNS {
+		nsBindings[""] = inst.XPathDefaultNS
+	} else if ec.hasXPathDefaultNS {
+		nsBindings[""] = ec.xpathDefaultNS
+	}
+
+	// 4b. Evaluate schema-aware AVT if present
+	if inst.HasSchemaAware && inst.SchemaAwareAVT != nil {
+		saStr, saErr := inst.SchemaAwareAVT.evaluate(ctx, ec.contextNode)
+		if saErr != nil {
+			return saErr
+		}
+		if _, ok := parseXSDBool(saStr); !ok {
+			return staticError(errCodeXTSE0020, "xsl:evaluate: invalid value %q for schema-aware attribute", saStr)
+		}
+	}
+
+	// 5. Compile the dynamic XPath expression.
+	dynExpr, compileErr := xpath3.Compile(xpathStr)
+	if compileErr != nil {
+		return dynamicError("XTDE3160", "xsl:evaluate: cannot compile XPath expression %q: %v", xpathStr, compileErr)
+	}
+
+	// 5a. XTDE3160: current() is not allowed in xsl:evaluate
+	if xpath3.ExprUsesFunction(dynExpr, "current") {
+		return dynamicError("XTDE3160", "xsl:evaluate: current() is not allowed in dynamically evaluated expressions")
+	}
+
+	// 6. Build evaluation context with variables from xsl:with-param.
+	dynCtx := ec.transformCtx
+	if dynCtx == nil {
+		dynCtx = context.Background()
+	}
+	dynCtx = withExecContext(dynCtx, ec)
+
+	if len(nsBindings) > 0 {
+		dynCtx = xpath3.WithNamespaces(dynCtx, nsBindings)
+	}
+
+	// Collect variables: start with current XSLT variables plus xsl:with-param
+	vars := ec.collectAllVars()
+
+	// Add xsl:with-param variables
+	for _, wp := range inst.Params {
+		paramVal, paramErr := ec.evaluateWithParam(ctx, wp)
+		if paramErr != nil {
+			return paramErr
+		}
+		vars[wp.Name] = paramVal
+	}
+
+	// Add with-params map variables (higher priority, overrides xsl:with-param)
+	if inst.WithParamsExpr != nil {
+		wpResult, wpErr := inst.WithParamsExpr.Evaluate(xpathCtx, ec.contextNode)
+		if wpErr != nil {
+			return wpErr
+		}
+		wpSeq := wpResult.Sequence()
+		if len(wpSeq) == 1 {
+			if wpMap, mapOK := wpSeq[0].(xpath3.MapItem); mapOK {
+				forEachErr := wpMap.ForEach(func(key xpath3.AtomicValue, value xpath3.Sequence) error {
+					// XTTE3165: with-params map keys must be xs:QName
+					if key.TypeName != xpath3.TypeQName {
+						return dynamicError("XTTE3165", "xsl:evaluate: with-params map key must be xs:QName, got %s", key.TypeName)
+					}
+					qn := key.QNameVal()
+					vars[qn.Local] = value
+					return nil
+				})
+				if forEachErr != nil {
+					return forEachErr
+				}
+			}
+		}
+	}
+
+	dynCtx = xpath3.WithVariablesBorrowed(dynCtx, vars)
+
+	// Per XSLT 3.0 section 20.3: the available functions include all
+	// functions defined in the static context of the xsl:evaluate instruction
+	// EXCEPT current(). User-defined stylesheet functions ARE available.
+	evalFns := ec.xsltEvaluateFunctions()
+	dynCtx = xpath3.WithFunctionsBorrowed(dynCtx, evalFns)
+
+	if fnsNS := ec.xsltFunctionsNS(); len(fnsNS) > 0 {
+		dynCtx = xpath3.WithFunctionsNSBorrowed(dynCtx, fnsNS)
+	}
+
+	if len(ec.typeAnnotations) > 0 {
+		dynCtx = xpath3.WithTypeAnnotations(dynCtx, ec.typeAnnotations)
+	}
+
+	// Handle base-uri
+	if inst.BaseURI != nil {
+		baseURI, buErr := inst.BaseURI.evaluate(dynCtx, ec.contextNode)
+		if buErr != nil {
+			return buErr
+		}
+		if baseURI != "" {
+			dynCtx = xpath3.WithBaseURI(dynCtx, baseURI)
+		}
+	} else if ec.stylesheet.baseURI != "" {
+		dynCtx = xpath3.WithBaseURI(dynCtx, ec.stylesheet.baseURI)
+	}
+
+	// Decimal formats
+	if len(ec.stylesheet.decimalFormats) > 0 {
+		for qn, df := range ec.stylesheet.decimalFormats {
+			if qn == (xpath3.QualifiedName{}) {
+				dynCtx = xpath3.WithDefaultDecimalFormat(dynCtx, df)
+			}
+		}
+		dynCtx = xpath3.WithNamedDecimalFormats(dynCtx, ec.stylesheet.decimalFormats)
+	}
+
+	// Set context item if it's an atomic value
+	if dynContextItem != nil {
+		dynCtx = xpath3.WithContextItem(dynCtx, dynContextItem)
+	}
+
+	if hasContextItem {
+		dynCtx = xpath3.WithPosition(dynCtx, 1)
+		dynCtx = xpath3.WithSize(dynCtx, 1)
+	}
+
+	// 7. Evaluate the dynamic expression.
+	var evalNode helium.Node
+	if dynContextNode != nil {
+		evalNode = dynContextNode
+	} else if hasContextItem && ec.contextNode != nil {
+		evalNode = ec.contextNode
+	}
+
+	result, evalErr := dynExpr.Evaluate(dynCtx, evalNode)
+	if evalErr != nil {
+		return evalErr
+	}
+
+	// 8. Check as type constraint (XPTY0004).
+	seq := result.Sequence()
+	if inst.As != "" {
+		if typeErr := ec.checkEvaluateAsType(inst.As, seq); typeErr != nil {
+			return typeErr
+		}
+	}
+
+	// 9. Output the result sequence.
+	return ec.outputSequence(seq)
+}
+
+// checkEvaluateAsType checks the xsl:evaluate as= type constraint.
+// Returns XPTY0004 if the result does not match the expected type.
+// Per XSLT 3.0, the result is coerced to the target type.
+// For now, only check obvious mismatches.
+func (ec *execContext) checkEvaluateAsType(asType string, seq xpath3.Sequence) error {
+	switch asType {
+	case "xs:string":
+		// xs:string: nodes atomize to xs:untypedAtomic which coerces to string.
+		// xs:untypedAtomic also coerces. Other atomic types do NOT coerce.
+		for _, item := range seq {
+			if _, ok := item.(xpath3.NodeItem); ok {
+				continue // nodes atomize to xs:untypedAtomic → coerces to string
+			}
+			if av, ok := item.(xpath3.AtomicValue); ok {
+				switch av.TypeName {
+				case xpath3.TypeString, xpath3.TypeUntypedAtomic, xpath3.TypeAnyURI:
+					continue
+				}
+			}
+			return dynamicError("XPTY0004", "xsl:evaluate: result does not match as=%q", asType)
+		}
+	case "xs:integer":
+		for _, item := range seq {
+			if av, ok := item.(xpath3.AtomicValue); ok {
+				switch av.TypeName {
+				case xpath3.TypeInteger, xpath3.TypeUntypedAtomic:
+					continue
+				}
+			}
+			return dynamicError("XPTY0004", "xsl:evaluate: result does not match as=%q", asType)
+		}
+	case "xs:boolean":
+		for _, item := range seq {
+			if av, ok := item.(xpath3.AtomicValue); ok {
+				switch av.TypeName {
+				case xpath3.TypeBoolean, xpath3.TypeUntypedAtomic:
+					continue
+				}
+			}
+			return dynamicError("XPTY0004", "xsl:evaluate: result does not match as=%q", asType)
+		}
+	case "item()", "item()*":
+		// Any item matches
+	}
+	return nil
+}
