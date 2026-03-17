@@ -23,7 +23,6 @@ type outputFrame struct {
 	itemSeparator       *string          // item-separator serialization parameter; nil means default (" " between adjacent atomics)
 	outputSerial        int              // monotonically increases whenever visible output is produced
 	conditionalScopes   []conditionalScope
-	conditionalSequence int
 }
 
 type conditionalKind int
