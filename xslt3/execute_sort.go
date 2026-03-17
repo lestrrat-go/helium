@@ -17,9 +17,10 @@ func (ec *execContext) execPerformSort(ctx context.Context, inst *PerformSortIns
 		}
 		seq = result.Sequence()
 	} else if len(inst.Body) > 0 {
-		// Body acts as sequence constructor: evaluate to get the items to sort
+		// Body acts as sequence constructor: evaluate items individually
+		// so that each text item remains a separate sortable unit.
 		var err error
-		seq, err = ec.evaluateBody(ctx, inst.Body)
+		seq, err = ec.evaluateBodyAsSequence(ctx, inst.Body)
 		if err != nil {
 			return err
 		}
