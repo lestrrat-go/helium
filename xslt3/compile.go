@@ -1258,14 +1258,6 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 			c.stylesheet.excludeURIs[uri] = struct{}{}
 		}
 	}
-	// Resolve excluded prefixes to URIs now, before template processing
-	// can mutate c.stylesheet.namespaces. XSLT spec: exclude-result-prefixes
-	// identifies namespace URIs, not prefix names.
-	for prefix := range c.stylesheet.excludePrefixes {
-		if uri, ok := c.stylesheet.namespaces[prefix]; ok {
-			c.stylesheet.excludeURIs[uri] = struct{}{}
-		}
-	}
 
 	// Process top-level elements
 	if err := c.compileTopLevel(root); err != nil {
