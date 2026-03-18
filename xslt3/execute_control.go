@@ -248,6 +248,10 @@ func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupI
 				ec.currentNode = ni.Node
 				ec.contextNode = ni.Node
 				ec.contextItem = nil // clear atomic context when entering node context
+			} else {
+				ec.contextItem = g.items[0]
+				ec.contextNode = nil
+				ec.currentNode = nil
 			}
 		}
 
@@ -335,10 +339,16 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 
 	savedPos := ec.position
 	savedSize := ec.size
+	savedItem := ec.contextItem
+	savedContext := ec.contextNode
+	savedCurrent := ec.currentNode
 	ec.size = len(seq)
 	defer func() {
 		ec.position = savedPos
 		ec.size = savedSize
+		ec.contextItem = savedItem
+		ec.contextNode = savedContext
+		ec.currentNode = savedCurrent
 	}()
 
 	for i, item := range seq {
@@ -346,6 +356,13 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 		var node helium.Node
 		if ni, ok := item.(xpath3.NodeItem); ok {
 			node = ni.Node
+			ec.contextNode = node
+			ec.currentNode = node
+			ec.contextItem = nil
+		} else {
+			ec.contextItem = item
+			ec.contextNode = nil
+			ec.currentNode = nil
 		}
 		xpathCtx := ec.newXPathContext(node)
 		result, err := groupByExpr.Evaluate(xpathCtx, node)
@@ -415,10 +432,16 @@ func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, a
 
 	savedPos := ec.position
 	savedSize := ec.size
+	savedItem := ec.contextItem
+	savedContext := ec.contextNode
+	savedCurrent := ec.currentNode
 	ec.size = len(seq)
 	defer func() {
 		ec.position = savedPos
 		ec.size = savedSize
+		ec.contextItem = savedItem
+		ec.contextNode = savedContext
+		ec.currentNode = savedCurrent
 	}()
 
 	for i, item := range seq {
@@ -426,6 +449,13 @@ func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, a
 		var node helium.Node
 		if ni, ok := item.(xpath3.NodeItem); ok {
 			node = ni.Node
+			ec.contextNode = node
+			ec.currentNode = node
+			ec.contextItem = nil
+		} else {
+			ec.contextItem = item
+			ec.contextNode = nil
+			ec.currentNode = nil
 		}
 		xpathCtx := ec.newXPathContext(node)
 		result, err := adjExpr.Evaluate(xpathCtx, node)
