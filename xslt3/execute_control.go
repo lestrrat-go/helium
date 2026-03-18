@@ -193,6 +193,13 @@ func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupI
 		return err
 	}
 
+	if len(inst.Sort) > 0 {
+		groups, err = sortGroups(ctx, ec, groups, inst.Sort, inst.GroupBy != nil || inst.GroupAdjacent != nil)
+		if err != nil {
+			return err
+		}
+	}
+
 	savedCurrent := ec.currentNode
 	savedContext := ec.contextNode
 	savedItem := ec.contextItem
@@ -237,6 +244,59 @@ func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupI
 			return err
 		}
 		ec.popVarScope()
+	}
+	return nil
+}
+
+func (ec *execContext) withSortGroupContext(groups []fegGroup, hasKey bool, fn func(i int, node helium.Node) error) error {
+	savedCurrent := ec.currentNode
+	savedContext := ec.contextNode
+	savedItem := ec.contextItem
+	savedPos := ec.position
+	savedSize := ec.size
+	savedGroup := ec.currentGroup
+	savedGroupKey := ec.currentGroupKey
+	savedInGroupCtx := ec.inGroupContext
+	savedGroupHasKey := ec.groupHasKey
+	defer func() {
+		ec.currentNode = savedCurrent
+		ec.contextNode = savedContext
+		ec.contextItem = savedItem
+		ec.position = savedPos
+		ec.size = savedSize
+		ec.currentGroup = savedGroup
+		ec.currentGroupKey = savedGroupKey
+		ec.inGroupContext = savedInGroupCtx
+		ec.groupHasKey = savedGroupHasKey
+	}()
+
+	ec.size = len(groups)
+	ec.inGroupContext = true
+	ec.groupHasKey = hasKey
+
+	for i, g := range groups {
+		ec.position = i + 1
+		ec.currentGroup = g.items
+		ec.currentGroupKey = g.key
+		ec.currentNode = nil
+		ec.contextNode = nil
+		ec.contextItem = nil
+
+		var node helium.Node
+		if len(g.items) > 0 {
+			switch v := g.items[0].(type) {
+			case xpath3.NodeItem:
+				node = v.Node
+				ec.currentNode = v.Node
+				ec.contextNode = v.Node
+			default:
+				ec.contextItem = g.items[0]
+			}
+		}
+
+		if err := fn(i, node); err != nil {
+			return err
+		}
 	}
 	return nil
 }

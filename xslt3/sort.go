@@ -26,7 +26,7 @@ type SortKey struct {
 type sortMode uint8
 
 const (
-	sortModeText   sortMode = iota
+	sortModeText sortMode = iota
 	sortModeNumber
 )
 
@@ -43,7 +43,7 @@ const (
 type sortValueKind uint8
 
 const (
-	sortValueText   sortValueKind = iota
+	sortValueText sortValueKind = iota
 	sortValueNumber
 	sortValueNaN
 )
@@ -101,6 +101,33 @@ type keyedItem struct {
 	item  xpath3.Item
 	keys  []sortValue
 	index int
+}
+
+// keyedGroup1 pairs a for-each-group group with a single inline sort key.
+type keyedGroup1 struct {
+	group fegGroup
+	key   sortValue
+	index int
+}
+
+func (k keyedGroup1) keyType() string { return k.key.typeName }
+
+// keyedGroup pairs a for-each-group group with its pre-extracted sort keys.
+type keyedGroup struct {
+	group fegGroup
+	keys  []sortValue
+	index int
+}
+
+type keyedGroups []keyedGroup
+
+func (kg keyedGroups) convertAutoNumeric(level int) {
+	for j := range kg {
+		sv := &kg[j].keys[level]
+		if sv.kind == sortValueText {
+			*sv = parseToNumericSortValue(sv.str)
+		}
+	}
 }
 
 // --- Sort level resolution ---
@@ -486,6 +513,20 @@ func finalizeLevel1Items(level *resolvedLevel, dtMode dataTypeMode, entries []ke
 	}
 }
 
+func finalizeLevel1Groups(level *resolvedLevel, dtMode dataTypeMode, entries []keyedGroup1) {
+	switch dtMode {
+	case dataTypeNumber:
+		level.mode = sortModeNumber
+		for i := range entries {
+			if entries[i].key.kind == sortValueText {
+				entries[i].key = parseToNumericSortValue(entries[i].key.str)
+			}
+		}
+	default:
+		level.mode = sortModeText
+	}
+}
+
 // --- Public dispatch ---
 
 func sortNodes(ctx context.Context, ec *execContext, nodes []helium.Node, sortKeys []*SortKey) ([]helium.Node, error) {
@@ -512,6 +553,21 @@ func sortItems(ctx context.Context, ec *execContext, items xpath3.Sequence, sort
 		return sortItems1(ctx, ec, items, sortKeys[0])
 	}
 	return sortItemsN(ctx, ec, items, sortKeys)
+}
+
+func sortGroups(ctx context.Context, ec *execContext, groups []fegGroup, sortKeys []*SortKey, hasKey bool) ([]fegGroup, error) {
+	for _, sk := range sortKeys {
+		if err := validateSortKeyAttrs(ctx, ec, sk); err != nil {
+			return nil, err
+		}
+	}
+	if len(sortKeys) == 0 || len(groups) == 0 {
+		return groups, nil
+	}
+	if len(sortKeys) == 1 {
+		return sortGroups1(ctx, ec, groups, sortKeys[0], hasKey)
+	}
+	return sortGroupsN(ctx, ec, groups, sortKeys, hasKey)
 }
 
 // --- Single-key sort paths ---
@@ -688,6 +744,81 @@ func sortItemsN(ctx context.Context, ec *execContext, items xpath3.Sequence, sor
 		items[i] = e.item
 	}
 	return items, nil
+}
+
+func sortGroups1(ctx context.Context, ec *execContext, groups []fegGroup, sk *SortKey, hasKey bool) ([]fegGroup, error) {
+	dtMode, err := initDataTypeMode1(ctx, ec, sk)
+	if err != nil {
+		return nil, err
+	}
+
+	entries := make([]keyedGroup1, len(groups))
+	if err := ec.withSortGroupContext(groups, hasKey, func(i int, node helium.Node) error {
+		sv, err := evaluateSortKey(ctx, ec, sk, node, &dtMode, nil)
+		if err != nil {
+			return err
+		}
+		entries[i] = keyedGroup1{group: groups[i], key: sv, index: i}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := checkSortKeyTypeConsistency(entries); err != nil {
+		return nil, err
+	}
+
+	level, err := resolveLevel1(ctx, ec, sk)
+	if err != nil {
+		return nil, err
+	}
+	finalizeLevel1Groups(&level, dtMode, entries)
+
+	slices.SortFunc(entries, func(a, b keyedGroup1) int {
+		if c := compareSortValues(a.key, b.key, level); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.index, b.index)
+	})
+
+	for i, e := range entries {
+		groups[i] = e.group
+	}
+	return groups, nil
+}
+
+func sortGroupsN(ctx context.Context, ec *execContext, groups []fegGroup, sortKeys []*SortKey, hasKey bool) ([]fegGroup, error) {
+	dtModes, err := initDataTypeModes(ctx, ec, sortKeys)
+	if err != nil {
+		return nil, err
+	}
+
+	entries := make(keyedGroups, len(groups))
+	if err := ec.withSortGroupContext(groups, hasKey, func(i int, node helium.Node) error {
+		keys, err := extractSortValues(ctx, ec, sortKeys, node, dtModes, nil)
+		if err != nil {
+			return err
+		}
+		entries[i] = keyedGroup{group: groups[i], keys: keys, index: i}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	rs, err := buildResolvedSort(ctx, ec, sortKeys)
+	if err != nil {
+		return nil, err
+	}
+	finalizeLevels(&rs, dtModes, entries)
+
+	slices.SortFunc(entries, func(a, b keyedGroup) int {
+		return rs.compareKeys(a.keys, b.keys, a.index, b.index)
+	})
+
+	for i, e := range entries {
+		groups[i] = e.group
+	}
+	return groups, nil
 }
 
 func parseNumber(s string) float64 {
