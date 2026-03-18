@@ -544,7 +544,7 @@ func xsdTypeName(td *TypeDef) string {
 		return "Q{" + td.Name.NS + "}" + td.Name.Local
 	}
 	if td.Name.Local != "" {
-		return "Q{}" + td.Name.Local
+		return td.Name.Local
 	}
 	return "xs:untyped"
 }
