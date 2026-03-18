@@ -61,6 +61,9 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 		if err != nil {
 			return err
 		}
+		// XSLT spec §11.3: adjacent text nodes in the result are merged
+		// before the separator is applied.
+		val = mergeAdjacentTextNodes(val)
 		value = stringifySequenceWithSep(val, separator)
 	}
 	// Skip text node only when select evaluates to an empty sequence;
@@ -87,6 +90,48 @@ func filterZeroLengthTextNodes(seq xpath3.Sequence) xpath3.Sequence {
 			}
 		}
 		result = append(result, item)
+	}
+	return result
+}
+
+// mergeAdjacentTextNodes merges consecutive text node items in a sequence
+// into single text nodes. Per XSLT spec §11.3, adjacent text nodes are
+// merged before separator insertion in xsl:value-of.
+func mergeAdjacentTextNodes(seq xpath3.Sequence) xpath3.Sequence {
+	if len(seq) <= 1 {
+		return seq
+	}
+	result := make(xpath3.Sequence, 0, len(seq))
+	for i := 0; i < len(seq); i++ {
+		ni, ok := seq[i].(xpath3.NodeItem)
+		if !ok || ni.Node.Type() != helium.TextNode {
+			result = append(result, seq[i])
+			continue
+		}
+		// Merge consecutive text nodes
+		merged := string(ni.Node.Content())
+		j := i + 1
+		for j < len(seq) {
+			nj, ok := seq[j].(xpath3.NodeItem)
+			if !ok || nj.Node.Type() != helium.TextNode {
+				break
+			}
+			merged += string(nj.Node.Content())
+			j++
+		}
+		if j > i+1 {
+			// Create a merged text node
+			doc := ni.Node.OwnerDocument()
+			text, err := doc.CreateText([]byte(merged))
+			if err == nil {
+				result = append(result, xpath3.NodeItem{Node: text})
+			} else {
+				result = append(result, seq[i])
+			}
+			i = j - 1
+		} else {
+			result = append(result, seq[i])
+		}
 	}
 	return result
 }
