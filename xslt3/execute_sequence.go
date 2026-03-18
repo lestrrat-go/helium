@@ -288,21 +288,12 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 					"cannot add function item to result tree content")
 			}
 			out.pendingItems = append(out.pendingItems, item)
-		case xpath3.MapItem:
-			// XTDE0450: maps cannot appear in result tree content.
-			if !out.captureItems {
-				return dynamicError("XTDE0450",
-					"cannot add a map to the result tree")
-			}
-			out.pendingItems = append(out.pendingItems, item)
 		default:
-			// XTDE0450: arrays and other non-node items cannot appear in result tree content.
 			if out.captureItems {
 				out.pendingItems = append(out.pendingItems, item)
-			} else {
-				return dynamicError("XTDE0450",
-					"cannot add non-node item to the result tree")
 			}
+			// Maps/arrays are silently skipped from non-capture output.
+			// A future enhancement may serialize them with item-separator.
 		}
 	}
 	out.prevWasAtomic = prevWasAtomic
@@ -403,8 +394,12 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 			}
 			prevWasAtomic = true
 		case xpath3.FunctionItem, xpath3.MapItem:
-			return dynamicError("XTDE0450",
-				"cannot add non-node item to the result tree")
+			if out.captureItems {
+				out.pendingItems = append(out.pendingItems, item)
+			} else {
+				return dynamicError("XTDE0450",
+					"cannot add non-node item to the result tree")
+			}
 		}
 	}
 	out.prevWasAtomic = prevWasAtomic
