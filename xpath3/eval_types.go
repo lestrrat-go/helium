@@ -64,6 +64,21 @@ func evalCastExpr(ec *evalContext, e CastExpr) (Sequence, error) {
 	}
 	result, err := CastAtomic(av, targetType)
 	if err != nil {
+		// If CastAtomic fails for a non-built-in type, try resolving via schema declarations.
+		if ec.schemaDeclarations != nil {
+			ns := ""
+			if e.Type.Prefix != "" && ec.namespaces != nil {
+				ns = ec.namespaces[e.Type.Prefix]
+			}
+			if baseType, ok := ec.schemaDeclarations.LookupSchemaType(e.Type.Name, ns); ok {
+				result, castErr := CastAtomic(av, baseType)
+				if castErr != nil {
+					return nil, castErr
+				}
+				result.TypeName = targetType
+				return SingleAtomic(result), nil
+			}
+		}
 		return nil, err
 	}
 	return SingleAtomic(result), nil
@@ -106,6 +121,16 @@ func evalCastableExpr(ec *evalContext, e CastableExpr) (Sequence, error) {
 		return SingleBoolean(castErr == nil), nil
 	}
 	_, castErr := CastAtomic(av, targetType)
+	if castErr != nil && ec.schemaDeclarations != nil {
+		// Try resolving via schema declarations for non-built-in types.
+		ns := ""
+		if e.Type.Prefix != "" && ec.namespaces != nil {
+			ns = ec.namespaces[e.Type.Prefix]
+		}
+		if baseType, ok := ec.schemaDeclarations.LookupSchemaType(e.Type.Name, ns); ok {
+			_, castErr = CastAtomic(av, baseType)
+		}
+	}
 	return SingleBoolean(castErr == nil), nil
 }
 

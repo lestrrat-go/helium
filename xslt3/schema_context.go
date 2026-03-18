@@ -52,6 +52,11 @@ func (r *schemaRegistry) LookupSchemaAttribute(local, ns string) (typeName strin
 	return r.LookupAttribute(local, ns)
 }
 
+// LookupSchemaType implements xpath3.SchemaDeclarations.
+func (r *schemaRegistry) LookupSchemaType(local, ns string) (baseType string, ok bool) {
+	return r.LookupType(local, ns)
+}
+
 // LookupAttribute returns the attribute declaration type name from the
 // first schema that declares a matching global attribute.
 func (r *schemaRegistry) LookupAttribute(local, ns string) (typeName string, ok bool) {

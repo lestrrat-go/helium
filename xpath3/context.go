@@ -43,11 +43,12 @@ type VariableResolver interface {
 	ResolveVariable(ctx context.Context, name string) (Sequence, bool, error)
 }
 
-// SchemaDeclarations provides schema element/attribute lookup for
-// schema-element() and schema-attribute() node tests.
+// SchemaDeclarations provides schema element/attribute/type lookup for
+// schema-element(), schema-attribute() node tests and schema-aware casting.
 type SchemaDeclarations interface {
 	LookupSchemaElement(local, ns string) (typeName string, ok bool)
 	LookupSchemaAttribute(local, ns string) (typeName string, ok bool)
+	LookupSchemaType(local, ns string) (baseType string, ok bool)
 }
 
 type evalConfig struct {
