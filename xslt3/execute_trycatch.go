@@ -406,14 +406,42 @@ func catchMatches(clause *CatchClause, errClark string) bool {
 	if len(clause.Errors) == 0 {
 		return true // no errors attribute = match all
 	}
+
+	// Extract local name from Clark notation for wildcard matching.
+	errLocal := errClark
+	if strings.HasPrefix(errClark, "{") {
+		if idx := strings.IndexByte(errClark, '}'); idx >= 0 {
+			errLocal = errClark[idx+1:]
+		}
+	}
+
 	for _, pattern := range clause.Errors {
 		if pattern == "*" {
 			return true
+		}
+		// *:local — match any namespace with this local name
+		if strings.HasPrefix(pattern, "*:") {
+			if pattern[2:] == errLocal {
+				return true
+			}
+			continue
+		}
+		// Q{ns}* — match any local name in this namespace
+		if strings.HasSuffix(pattern, "}*") {
+			ns := pattern[1 : len(pattern)-2]
+			if strings.HasPrefix(errClark, "{"+ns+"}") {
+				return true
+			}
+			continue
 		}
 		// Both errClark and pattern are in the same format from resolveQName:
 		// - Prefixed names → "{uri}local" (Clark notation)
 		// - Unprefixed names → "local" (no namespace)
 		if pattern == errClark {
+			return true
+		}
+		// Also match by local name alone (for bare error codes like FOUT1190)
+		if pattern == errLocal {
 			return true
 		}
 	}
