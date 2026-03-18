@@ -17,6 +17,22 @@ const (
 	visFinal    = "final"
 	visAbstract = "abstract"
 	visHidden   = "hidden"
+
+	xslAttrComponent  = "component"
+	xslAttrNames      = "names"
+	xslAttrVisibility = "visibility"
+
+	xslElemAccept       = "accept"
+	xslElemExpose       = "expose"
+	xslElemOverride     = "override"
+	xslElemTemplate     = "template"
+	xslElemFunction     = "function"
+	xslElemVariable     = "variable"
+	xslElemParam        = "param"
+	xslElemAttributeSet = "attribute-set"
+	xslElemMode         = "mode"
+
+	xslWildcard = "*"
 )
 
 // defaultComponentVisibility returns the default visibility for a component
@@ -40,12 +56,12 @@ func parseAcceptRules(usePackageElem *helium.Element, nsBindings map[string]stri
 	var rules []acceptRule
 	for child := usePackageElem.FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := child.(*helium.Element)
-		if !ok || elem.URI() != NSXSLT || elem.LocalName() != "accept" {
+		if !ok || elem.URI() != NSXSLT || elem.LocalName() != xslElemAccept {
 			continue
 		}
-		comp := getAttr(elem, "component")
-		names := getAttr(elem, "names")
-		vis := getAttr(elem, "visibility")
+		comp := getAttr(elem, xslAttrComponent)
+		names := getAttr(elem, xslAttrNames)
+		vis := getAttr(elem, xslAttrVisibility)
 		// Resolve namespace prefixes in names
 		for _, name := range strings.Fields(names) {
 			resolvedName := resolveComponentName(name, nsBindings, elem)
@@ -69,8 +85,8 @@ func resolveComponentName(name string, nsBindings map[string]string, elem *heliu
 		name = name[:idx]
 	}
 
-	if name == "*" {
-		return "*" + arity
+	if name == xslWildcard {
+		return xslWildcard + arity
 	}
 
 	// Handle *:local pattern
@@ -120,7 +136,7 @@ func resolveComponentName(name string, nsBindings map[string]string, elem *heliu
 // Patterns: "*" matches all, "{ns}*" matches all in namespace, "*:local" matches
 // any namespace with that local name, "{ns}local" matches exactly.
 func componentNameMatches(compName, pattern string) bool {
-	if pattern == "*" {
+	if pattern == xslWildcard {
 		return true
 	}
 
@@ -172,7 +188,7 @@ func applyAcceptRules(compType, compName string, rules []acceptRule, defaultVis 
 
 	for _, rule := range rules {
 		// Check component type matches
-		if rule.component != "*" && rule.component != compType {
+		if rule.component != xslWildcard && rule.component != compType {
 			continue
 		}
 		if !componentNameMatches(compName, rule.names) {
@@ -181,7 +197,7 @@ func applyAcceptRules(compType, compName string, rules []acceptRule, defaultVis 
 
 		// Calculate specificity: exact name > prefix:* > *
 		spec := 0
-		if rule.names == "*" {
+		if rule.names == xslWildcard {
 			spec = 0
 		} else if strings.HasSuffix(rule.names, "}*") || strings.HasPrefix(rule.names, "*:") {
 			spec = 1
@@ -189,7 +205,7 @@ func applyAcceptRules(compType, compName string, rules []acceptRule, defaultVis 
 			spec = 2
 		}
 		// Component type specificity
-		if rule.component != "*" {
+		if rule.component != xslWildcard {
 			spec += 3
 		}
 
@@ -262,7 +278,7 @@ func (c *compiler) processExpose(root *helium.Element) error {
 	// Process xsl:expose children
 	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := child.(*helium.Element)
-		if !ok || elem.URI() != NSXSLT || elem.LocalName() != "expose" {
+		if !ok || elem.URI() != NSXSLT || elem.LocalName() != xslElemExpose {
 			continue
 		}
 		if err := c.compileExpose(elem); err != nil {
@@ -300,9 +316,9 @@ func (c *compiler) processExpose(root *helium.Element) error {
 
 // compileExpose processes a single xsl:expose element.
 func (c *compiler) compileExpose(elem *helium.Element) error {
-	component := getAttr(elem, "component")
-	names := getAttr(elem, "names")
-	visibility := getAttr(elem, "visibility")
+	component := getAttr(elem, xslAttrComponent)
+	names := getAttr(elem, xslAttrNames)
+	visibility := getAttr(elem, xslAttrVisibility)
 
 	if component == "" || names == "" || visibility == "" {
 		return staticError(errCodeXTSE0010, "xsl:expose requires component, names, and visibility attributes")
@@ -318,8 +334,8 @@ func (c *compiler) compileExpose(elem *helium.Element) error {
 
 	// Validate component type
 	validComponents := map[string]struct{}{
-		"template": {}, "function": {}, "variable": {},
-		"attribute-set": {}, "mode": {}, "*": {},
+		xslElemTemplate: {}, xslElemFunction: {}, xslElemVariable: {},
+		xslElemAttributeSet: {}, xslElemMode: {}, xslWildcard: {},
 	}
 	if _, ok := validComponents[component]; !ok {
 		return staticError(errCodeXTSE0020, "invalid component type %q on xsl:expose", component)
@@ -332,32 +348,32 @@ func (c *compiler) compileExpose(elem *helium.Element) error {
 		resolvedName := resolveComponentName(name, nsBindings, elem)
 
 		switch component {
-		case "template", "*":
-			if component == "template" || component == "*" {
-				if err := c.applyExposeToTemplates(resolvedName, visibility, component == "*"); err != nil {
+		case xslElemTemplate, xslWildcard:
+			if component == xslElemTemplate || component == xslWildcard {
+				if err := c.applyExposeToTemplates(resolvedName, visibility, component == xslWildcard); err != nil {
 					return err
 				}
 			}
-		case "function":
+		case xslElemFunction:
 			if err := c.applyExposeToFunctions(resolvedName, visibility); err != nil {
 				return err
 			}
-		case "variable":
+		case xslElemVariable:
 			if err := c.applyExposeToVariables(resolvedName, visibility); err != nil {
 				return err
 			}
-		case "attribute-set":
+		case xslElemAttributeSet:
 			if err := c.applyExposeToAttrSets(resolvedName, visibility); err != nil {
 				return err
 			}
-		case "mode":
+		case xslElemMode:
 			if err := c.applyExposeToModes(resolvedName, visibility); err != nil {
 				return err
 			}
 		}
 
 		// When component="*", apply to all component types
-		if component == "*" {
+		if component == xslWildcard {
 			_ = c.applyExposeToFunctions(resolvedName, visibility)
 			_ = c.applyExposeToVariables(resolvedName, visibility)
 			_ = c.applyExposeToAttrSets(resolvedName, visibility)
@@ -453,7 +469,7 @@ func (c *compiler) applyExposeToModes(pattern, visibility string) error {
 }
 
 func isWildcard(pattern string) bool {
-	return pattern == "*" || strings.HasSuffix(pattern, "}*") || strings.HasPrefix(pattern, "*:")
+	return pattern == xslWildcard || strings.HasSuffix(pattern, "}*") || strings.HasPrefix(pattern, "*:")
 }
 
 // functionVisKey creates a visibility map key for a function (name#arity).
@@ -467,7 +483,7 @@ func (c *compiler) collectOverrideNames(usePackageElem *helium.Element, nsBindin
 	names := make(map[string]struct{})
 	for child := usePackageElem.FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := child.(*helium.Element)
-		if !ok || elem.URI() != NSXSLT || elem.LocalName() != "override" {
+		if !ok || elem.URI() != NSXSLT || elem.LocalName() != xslElemOverride {
 			continue
 		}
 		for oc := elem.FirstChild(); oc != nil; oc = oc.NextSibling() {
@@ -476,31 +492,31 @@ func (c *compiler) collectOverrideNames(usePackageElem *helium.Element, nsBindin
 				continue
 			}
 			switch oe.LocalName() {
-			case "template":
+			case xslElemTemplate:
 				name := resolveQName(getAttr(oe, "name"), nsBindings)
 				if name != "" {
-					names["template:"+name] = struct{}{}
+					names[xslElemTemplate+":"+name] = struct{}{}
 				}
-			case "function":
+			case xslElemFunction:
 				name := getAttr(oe, "name")
 				if name != "" {
 					resolved := resolveQName(name, nsBindings)
-					names["function:"+resolved] = struct{}{}
+					names[xslElemFunction+":"+resolved] = struct{}{}
 				}
-			case "variable":
+			case xslElemVariable:
 				name := resolveQName(getAttr(oe, "name"), nsBindings)
 				if name != "" {
-					names["variable:"+name] = struct{}{}
+					names[xslElemVariable+":"+name] = struct{}{}
 				}
-			case "param":
+			case xslElemParam:
 				name := resolveQName(getAttr(oe, "name"), nsBindings)
 				if name != "" {
-					names["variable:"+name] = struct{}{}
+					names[xslElemVariable+":"+name] = struct{}{}
 				}
-			case "attribute-set":
+			case xslElemAttributeSet:
 				name := resolveQName(getAttr(oe, "name"), nsBindings)
 				if name != "" {
-					names["attribute-set:"+name] = struct{}{}
+					names[xslElemAttributeSet+":"+name] = struct{}{}
 				}
 			}
 		}

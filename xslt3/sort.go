@@ -167,7 +167,7 @@ func resolveLevel1(ctx context.Context, ec *execContext, sk *SortKey) (resolvedL
 			return resolvedLevel{}, err
 		}
 		if !isValidLanguageTag(lang) {
-			return resolvedLevel{}, dynamicError("XTDE0030",
+			return resolvedLevel{}, dynamicError(errCodeXTDE0030,
 				"invalid language tag %q in xsl:sort", lang)
 		}
 	}
@@ -183,7 +183,7 @@ func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *SortKey) err
 			return err
 		}
 		if !isValidLanguageTag(lang) {
-			return dynamicError("XTDE0030",
+			return dynamicError(errCodeXTDE0030,
 				"invalid language tag %q in xsl:sort", lang)
 		}
 	}
@@ -203,7 +203,7 @@ func checkSortKeyTypeConsistency[T interface{ keyType() string }](entries []T) e
 		if firstNonString == "" {
 			firstNonString = tn
 		} else if firstNonString != tn {
-			return dynamicError("XTDE1030",
+			return dynamicError(errCodeXTDE1030,
 				"sort keys have incompatible types: %s and %s", firstNonString, tn)
 		}
 	}
@@ -212,7 +212,7 @@ func checkSortKeyTypeConsistency[T interface{ keyType() string }](entries []T) e
 		for _, e := range entries {
 			tn := e.keyType()
 			if tn == xpath3.TypeUntypedAtomic || tn == xpath3.TypeString {
-				return dynamicError("XTDE1030",
+				return dynamicError(errCodeXTDE1030,
 					"sort keys have incompatible types: %s and %s", firstNonString, tn)
 			}
 		}

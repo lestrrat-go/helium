@@ -63,11 +63,11 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *AnalyzeStrin
 	if isV2 {
 		// XSLT 2.0: 'q' flag is not allowed (XTDE1145)
 		if strings.ContainsRune(flags, 'q') {
-			return dynamicError("XTDE1145", "xsl:analyze-string flag 'q' is not allowed in XSLT 2.0")
+			return dynamicError(errCodeXTDE1145, "xsl:analyze-string flag 'q' is not allowed in XSLT 2.0")
 		}
 		// XSLT 2.0: non-capturing groups (?:...) are not allowed (XTDE1140)
 		if strings.Contains(regex, "(?:") {
-			return dynamicError("XTDE1140", "non-capturing groups are not allowed in XSLT 2.0 regex")
+			return dynamicError(errCodeXTDE1140, "non-capturing groups are not allowed in XSLT 2.0 regex")
 		}
 	}
 
@@ -75,17 +75,17 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *AnalyzeStrin
 	re, err := xpath3.CompileRegex(regex, flags)
 	if err != nil {
 		// Map XPath regex errors to XSLT error codes
-		return dynamicError("XTDE1140", "xsl:analyze-string invalid regex: %v", err)
+		return dynamicError(errCodeXTDE1140, "xsl:analyze-string invalid regex: %v", err)
 	}
 
 	// Check if regex matches the empty string
 	if isV2 {
 		matchesEmpty, emptyErr := re.MatchString("")
 		if emptyErr != nil {
-			return dynamicError("XTDE1140", "xsl:analyze-string regex error: %v", emptyErr)
+			return dynamicError(errCodeXTDE1140, "xsl:analyze-string regex error: %v", emptyErr)
 		}
 		if matchesEmpty {
-			return dynamicError("XTDE1150", "xsl:analyze-string regex must not match a zero-length string")
+			return dynamicError(errCodeXTDE1150, "xsl:analyze-string regex must not match a zero-length string")
 		}
 	}
 
@@ -95,7 +95,7 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *AnalyzeStrin
 	// zero-length match to avoid infinite loops.
 	matches, err := re.FindAllSubmatchIndex(input, -1)
 	if err != nil {
-		return dynamicError("XTDE1140", "xsl:analyze-string regex match error: %v", err)
+		return dynamicError(errCodeXTDE1140, "xsl:analyze-string regex match error: %v", err)
 	}
 
 	// Save and restore context state
@@ -380,7 +380,7 @@ func (ec *execContext) execMap(ctx context.Context, inst *MapInst) error {
 	for _, item := range frame.pendingItems {
 		m, ok := item.(xpath3.MapItem)
 		if !ok {
-			return dynamicError("XTDE0450", "xsl:map body produced non-map item %T", item)
+			return dynamicError(errCodeXTDE0450, "xsl:map body produced non-map item %T", item)
 		}
 		if err := m.ForEach(func(k xpath3.AtomicValue, v xpath3.Sequence) error {
 			entries = append(entries, xpath3.MapEntry{Key: k, Value: v})
@@ -397,7 +397,7 @@ func (ec *execContext) execMap(ctx context.Context, inst *MapInst) error {
 		out.noteOutput()
 		return nil
 	}
-	return dynamicError("XTDE0450", "cannot add a map to the result tree")
+	return dynamicError(errCodeXTDE0450, "cannot add a map to the result tree")
 }
 
 // execMapEntry is a no-op when called outside xsl:map; entries are handled
@@ -488,7 +488,7 @@ func (ec *execContext) execAssert(ctx context.Context, inst *AssertInst) error {
 	if !b {
 		errCode := inst.ErrorCode
 		if errCode == "" {
-			errCode = "XTMM9001"
+			errCode = errCodeXTMM9001
 		}
 		// Build error message from body or select
 		msg := "assertion failed"
@@ -522,7 +522,7 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 		// Atomize and convert to string
 		seq := xpathResult.Sequence()
 		if len(seq) == 0 {
-			return dynamicError("XTDE3160", "xsl:evaluate: xpath attribute evaluated to empty sequence")
+			return dynamicError(errCodeXTDE3160, "xsl:evaluate: xpath attribute evaluated to empty sequence")
 		}
 		av, atomErr := xpath3.AtomizeItem(seq[0])
 		if atomErr != nil {
@@ -536,7 +536,7 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 	}
 
 	if strings.TrimSpace(xpathStr) == "" {
-		return dynamicError("XTDE3160", "xsl:evaluate: xpath expression is empty")
+		return dynamicError(errCodeXTDE3160, "xsl:evaluate: xpath expression is empty")
 	}
 
 	// 2. Determine the context item for dynamic evaluation.
@@ -557,7 +557,7 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 				dynContextItem = v
 			}
 		} else if len(ciSeq) > 1 {
-			return dynamicError("XTTE3210", "xsl:evaluate: context-item must be a single item, got %d items", len(ciSeq))
+			return dynamicError(errCodeXTTE3210, "xsl:evaluate: context-item must be a single item, got %d items", len(ciSeq))
 		} else {
 			// Empty sequence: no context item
 			hasContextItem = false
@@ -635,12 +635,12 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 	// 5. Compile the dynamic XPath expression.
 	dynExpr, compileErr := xpath3.Compile(xpathStr)
 	if compileErr != nil {
-		return dynamicError("XTDE3160", "xsl:evaluate: cannot compile XPath expression %q: %v", xpathStr, compileErr)
+		return dynamicError(errCodeXTDE3160, "xsl:evaluate: cannot compile XPath expression %q: %v", xpathStr, compileErr)
 	}
 
 	// 5a. XTDE3160: current() is not allowed in xsl:evaluate
 	if xpath3.ExprUsesFunction(dynExpr, "current") {
-		return dynamicError("XTDE3160", "xsl:evaluate: current() is not allowed in dynamically evaluated expressions")
+		return dynamicError(errCodeXTDE3160, "xsl:evaluate: current() is not allowed in dynamically evaluated expressions")
 	}
 
 	// 6. Build evaluation context with variables from xsl:with-param.
@@ -678,7 +678,7 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 				forEachErr := wpMap.ForEach(func(key xpath3.AtomicValue, value xpath3.Sequence) error {
 					// XTTE3165: with-params map keys must be xs:QName
 					if key.TypeName != xpath3.TypeQName {
-						return dynamicError("XTTE3165", "xsl:evaluate: with-params map key must be xs:QName, got %s", key.TypeName)
+						return dynamicError(errCodeXTTE3165, "xsl:evaluate: with-params map key must be xs:QName, got %s", key.TypeName)
 					}
 					qn := key.QNameVal()
 					vars[qn.Local] = value

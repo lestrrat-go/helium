@@ -36,14 +36,14 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *SourceDocum
 	if !ok {
 		data, err := os.ReadFile(resolvedURI)
 		if err != nil {
-			return dynamicError("FODC0002", "xsl:source-document cannot load %q: %v", uri, err)
+			return dynamicError(errCodeFODC0002, "xsl:source-document cannot load %q: %v", uri, err)
 		}
 
 		p := helium.NewParser()
 		p.SetBaseURI(resolvedURI)
 		doc, err = p.Parse(ctx, data)
 		if err != nil {
-			return dynamicError("FODC0002", "xsl:source-document cannot parse %q: %v", uri, err)
+			return dynamicError(errCodeFODC0002, "xsl:source-document cannot parse %q: %v", uri, err)
 		}
 
 		// Apply xsl:strip-space to the loaded document so that whitespace-only
@@ -62,7 +62,7 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *SourceDocum
 	if fragment != "" {
 		elem := doc.GetElementByID(fragment)
 		if elem == nil {
-			return dynamicError("FODC0002", "xsl:source-document fragment %q not found in %q", fragment, uri)
+			return dynamicError(errCodeFODC0002, "xsl:source-document fragment %q not found in %q", fragment, uri)
 		}
 		startNode = elem
 	}
@@ -417,7 +417,7 @@ func compareSingleMergeKey(a, b mergeKeyValue) (int, error) {
 			return 1, nil
 		}
 		// Types are incomparable — raise XTTE2230.
-		return 0, dynamicError("XTTE2230", "merge keys are not comparable: %s vs %s", a.atom.TypeName, b.atom.TypeName)
+		return 0, dynamicError(errCodeXTTE2230, "merge keys are not comparable: %s vs %s", a.atom.TypeName, b.atom.TypeName)
 	}
 
 	// Fall back to string comparison.
@@ -560,7 +560,7 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 		for si := 1; si < len(perSourceDataTypes); si++ {
 			for k := range first {
 				if k < len(perSourceDataTypes[si]) && first[k] != perSourceDataTypes[si][k] {
-					return dynamicError("XTDE2210", "merge sources have inconsistent data-type for merge key %d: %q vs %q", k+1, first[k], perSourceDataTypes[si][k])
+					return dynamicError(errCodeXTDE2210, "merge sources have inconsistent data-type for merge key %d: %q vs %q", k+1, first[k], perSourceDataTypes[si][k])
 				}
 			}
 		}
@@ -643,7 +643,7 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 						return cmpErr
 					}
 					if cmp > 0 {
-						return dynamicError("XTDE2210", "merge input is not sorted according to the declared merge key")
+						return dynamicError(errCodeXTDE2210, "merge input is not sorted according to the declared merge key")
 					}
 				}
 			}
@@ -707,21 +707,21 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 		fn: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 			// XTDE3480: current-merge-group() is not available outside merge-action.
 			if !ec.inMergeAction {
-				return nil, dynamicError("XTDE3480", "current-merge-group() is not available outside the body of xsl:merge-action")
+				return nil, dynamicError(errCodeXTDE3480, "current-merge-group() is not available outside the body of xsl:merge-action")
 			}
 			if len(args) > 0 && len(args[0]) > 0 {
 				// current-merge-group('source-name')
 				av, err := xpath3.AtomizeItem(args[0][0])
 				if err != nil {
-					return nil, dynamicError("XTDE3490", "current-merge-group(): cannot atomize argument: %v", err)
+					return nil, dynamicError(errCodeXTDE3490, "current-merge-group(): cannot atomize argument: %v", err)
 				}
 				name, err := xpath3.AtomicToString(av)
 				if err != nil {
-					return nil, dynamicError("XTDE3490", "current-merge-group(): cannot convert argument to string: %v", err)
+					return nil, dynamicError(errCodeXTDE3490, "current-merge-group(): cannot convert argument to string: %v", err)
 				}
 				// XTDE3490: the argument must match a merge-source name.
 				if _, ok := validSourceNames[name]; !ok {
-					return nil, dynamicError("XTDE3490", "current-merge-group(%q): no xsl:merge-source with this name", name)
+					return nil, dynamicError(errCodeXTDE3490, "current-merge-group(%q): no xsl:merge-source with this name", name)
 				}
 				if items, ok := currentMergeGroupByName[name]; ok {
 					return items, nil
@@ -736,7 +736,7 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 		fn: func(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
 			// XTDE3510: current-merge-key() is not available outside merge-action.
 			if !ec.inMergeAction {
-				return nil, dynamicError("XTDE3510", "current-merge-key() is not available outside the body of xsl:merge-action")
+				return nil, dynamicError(errCodeXTDE3510, "current-merge-key() is not available outside the body of xsl:merge-action")
 			}
 			return currentMergeKeySeq, nil
 		},
@@ -1115,14 +1115,14 @@ func (ec *execContext) loadMergeDocument(ctx context.Context, uri string, effect
 
 	data, readErr := os.ReadFile(resolvedURI)
 	if readErr != nil {
-		return nil, dynamicError("FODC0002", "xsl:merge cannot load %q: %v", uri, readErr)
+		return nil, dynamicError(errCodeFODC0002, "xsl:merge cannot load %q: %v", uri, readErr)
 	}
 
 	p := helium.NewParser()
 	p.SetBaseURI(resolvedURI)
 	doc, parseErr := p.Parse(ctx, data)
 	if parseErr != nil {
-		return nil, dynamicError("FODC0002", "xsl:merge cannot parse %q: %v", uri, parseErr)
+		return nil, dynamicError(errCodeFODC0002, "xsl:merge cannot parse %q: %v", uri, parseErr)
 	}
 
 	// Apply xsl:strip-space.
@@ -1242,7 +1242,7 @@ func (ec *execContext) evaluateMergeKeys(ctx context.Context, src *mergeSourceIt
 			seq := result.Sequence()
 			// XTTE1020: merge key must evaluate to a single atomic value.
 			if len(seq) > 1 {
-				return nil, dynamicError("XTTE1020", "xsl:merge-key select expression must return a single atomic value, got %d items", len(seq))
+				return nil, dynamicError(errCodeXTTE1020, "xsl:merge-key select expression must return a single atomic value, got %d items", len(seq))
 			}
 			// Extract the key value, preserving the atomic type.
 			if len(seq) == 1 {

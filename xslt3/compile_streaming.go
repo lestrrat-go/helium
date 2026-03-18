@@ -550,7 +550,7 @@ func (c *compiler) compileMerge(elem *helium.Element) (Instruction, error) {
 		keyCount := len(inst.Sources[0].Keys)
 		for i := 1; i < len(inst.Sources); i++ {
 			if len(inst.Sources[i].Keys) != keyCount {
-				return nil, staticError("XTSE2200", "all xsl:merge-source children must have the same number of xsl:merge-key children")
+				return nil, staticError(errCodeXTSE2200, "all xsl:merge-source children must have the same number of xsl:merge-key children")
 			}
 		}
 	}
@@ -650,7 +650,7 @@ func (c *compiler) compileMergeSource(elem *helium.Element) (*MergeSource, error
 
 	// XTSE3195: for-each-source and for-each-item are mutually exclusive.
 	if src.ForEachSource != nil && src.ForEachItem != nil {
-		return nil, staticError("XTSE3195", "xsl:merge-source must not have both for-each-source and for-each-item attributes")
+		return nil, staticError(errCodeXTSE3195, "xsl:merge-source must not have both for-each-source and for-each-item attributes")
 	}
 
 	return src, nil
@@ -667,7 +667,7 @@ func (c *compiler) compileMergeKey(elem *helium.Element) (*MergeKey, error) {
 		case "select", "order", "collation", "data-type", "lang", "case-order":
 			// permitted
 		default:
-			return nil, staticError("XTSE0090", "attribute %q is not permitted on xsl:merge-key", attr.LocalName())
+			return nil, staticError(errCodeXTSE0090, "attribute %q is not permitted on xsl:merge-key", attr.LocalName())
 		}
 	}
 
@@ -695,12 +695,12 @@ func (c *compiler) compileMergeKey(elem *helium.Element) (*MergeKey, error) {
 				if chElem.URI() == NSXSLT && chElem.LocalName() == "fallback" {
 					continue
 				}
-				return nil, staticError("XTSE3200", "xsl:merge-key must not have both select attribute and sequence constructor")
+				return nil, staticError(errCodeXTSE3200, "xsl:merge-key must not have both select attribute and sequence constructor")
 			}
 			if txt, ok := ch.(*helium.Text); ok {
 				t := string(txt.Content())
 				if !c.shouldStripText(t) {
-					return nil, staticError("XTSE3200", "xsl:merge-key must not have both select attribute and sequence constructor")
+					return nil, staticError(errCodeXTSE3200, "xsl:merge-key must not have both select attribute and sequence constructor")
 				}
 			}
 		}

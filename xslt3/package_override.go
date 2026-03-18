@@ -32,7 +32,7 @@ func (c *compiler) processOverrides(usePackageElem *helium.Element, pkg *Stylesh
 
 	for child := usePackageElem.FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := child.(*helium.Element)
-		if !ok || elem.URI() != NSXSLT || elem.LocalName() != "override" {
+		if !ok || elem.URI() != NSXSLT || elem.LocalName() != xslElemOverride {
 			continue
 		}
 
@@ -66,14 +66,14 @@ func (c *compiler) compileOverrideChildren(overrideElem *helium.Element, pkg *St
 		}
 
 		switch elem.LocalName() {
-		case "function":
+		case xslElemFunction:
 			fn, qn, err := c.compileOverrideFunction(elem, pkg)
 			if err != nil {
 				return err
 			}
 			oset.functions[qn] = fn
 
-		case "template":
+		case xslElemTemplate:
 			tmpl, err := c.compileOverrideTemplate(elem, pkg)
 			if err != nil {
 				return err
@@ -85,21 +85,21 @@ func (c *compiler) compileOverrideChildren(overrideElem *helium.Element, pkg *St
 				oset.matchTemplates = append(oset.matchTemplates, tmpl)
 			}
 
-		case "variable":
+		case xslElemVariable:
 			v, err := c.compileOverrideVariable(elem, pkg)
 			if err != nil {
 				return err
 			}
 			oset.variables[v.Name] = v
 
-		case "param":
+		case xslElemParam:
 			p, err := c.compileOverrideParam(elem, pkg)
 			if err != nil {
 				return err
 			}
 			oset.params[p.Name] = p
 
-		case "attribute-set":
+		case xslElemAttributeSet:
 			as, err := c.compileOverrideAttributeSet(elem, pkg)
 			if err != nil {
 				return err
@@ -167,7 +167,7 @@ func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet
 	}
 
 	// Check visibility: cannot override final
-	if pkgFn != nil && pkgFn.Visibility == "final" {
+	if pkgFn != nil && pkgFn.Visibility == visFinal {
 		return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE3070,
 			"cannot override final function %q", name)
 	}
@@ -245,7 +245,7 @@ func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet
 				"xsl:override template %q not found in used package", tmpl.Name)
 		}
 		// Check visibility: cannot override final template
-		if existing := pkg.namedTemplates[tmpl.Name]; existing != nil && existing.Visibility == "final" {
+		if existing := pkg.namedTemplates[tmpl.Name]; existing != nil && existing.Visibility == visFinal {
 			return nil, staticError(errCodeXTSE3070,
 				"cannot override final template %q", tmpl.Name)
 		}

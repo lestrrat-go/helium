@@ -284,7 +284,7 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 		case xpath3.FunctionItem:
 			// XTDE0450: function items cannot appear in result tree content.
 			if !out.captureItems {
-				return dynamicError("XTDE0450",
+				return dynamicError(errCodeXTDE0450,
 					"cannot add function item to result tree content")
 			}
 			out.pendingItems = append(out.pendingItems, item)
@@ -397,7 +397,7 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 			if out.captureItems {
 				out.pendingItems = append(out.pendingItems, item)
 			} else {
-				return dynamicError("XTDE0450",
+				return dynamicError(errCodeXTDE0450,
 					"cannot add non-node item to the result tree")
 			}
 		}

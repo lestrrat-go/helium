@@ -64,7 +64,7 @@ func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error
 	}
 
 	if terminate {
-		errorCode := "XTMM9000"
+		errorCode := errCodeXTMM9000
 		if inst.ErrorCode != nil {
 			code, err := inst.ErrorCode.evaluate(ctx, ec.contextNode)
 			if err == nil && code != "" {
@@ -219,7 +219,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 	// Unwrap wrapper errors (e.g., AVT XTDE0045 wrapping FOAR0001) to find
 	// the most specific XPath/XSLT error code for catch clause matching.
 	errNS := catalog.Err
-	errCode := "XSLT0000"
+	errCode := errCodeXSLT0000
 	errDesc := tryErr.Error()
 	var errQName xpath3.QNameValue
 	if xErr, ok := tryErr.(*XSLTError); ok {
@@ -362,7 +362,7 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *TryCatc
 
 	// XTDE3530: output was written and cannot be rolled back.
 	if out.outputSerial != snapSerial {
-		return dynamicError("XTDE3530",
+		return dynamicError(errCodeXTDE3530,
 			"xsl:try with rollback-output='no': output was written before error and cannot be rolled back")
 	}
 
@@ -372,7 +372,7 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *TryCatc
 	defer ec.popVarScope()
 
 	errNS := catalog.Err
-	errCode := "XSLT0000"
+	errCode := errCodeXSLT0000
 	errDesc := tryErr.Error()
 	var errQName xpath3.QNameValue
 	if xErr, ok := tryErr.(*XSLTError); ok {

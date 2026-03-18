@@ -72,7 +72,7 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 			}
 		} else if prefix != "" {
 			// XTDE0830: prefix in computed element name is undeclared
-			return dynamicError("XTDE0830",
+			return dynamicError(errCodeXTDE0830,
 				"undeclared namespace prefix %q in element name %q", prefix, name)
 		}
 	}
@@ -270,7 +270,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 		uri := ec.resolvePrefix(prefix)
 		if uri == "" {
 			// XTDE0860: prefix in computed attribute name is undeclared
-			return dynamicError("XTDE0860",
+			return dynamicError(errCodeXTDE0860,
 				"undeclared namespace prefix %q in attribute name %q", prefix, name)
 		}
 		// Ensure the namespace is declared on the element
