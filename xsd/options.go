@@ -30,6 +30,7 @@ type ValidateOption func(*validateConfig)
 type validateConfig struct {
 	filename     string
 	errorHandler helium.ErrorHandler
+	annotations  *TypeAnnotations
 }
 
 // WithFilename sets the filename used in error messages.
@@ -43,5 +44,19 @@ func WithFilename(name string) ValidateOption {
 func WithValidateErrorHandler(h helium.ErrorHandler) ValidateOption {
 	return func(c *validateConfig) {
 		c.errorHandler = h
+	}
+}
+
+// TypeAnnotations maps document nodes to their XSD type names.
+// Type names use the "xs:localName" format for built-in types and
+// "Q{ns}localName" for user-defined types.
+type TypeAnnotations map[helium.Node]string
+
+// WithAnnotations enables collection of per-node type annotations during
+// validation. The caller must provide a non-nil pointer to a TypeAnnotations
+// value; the map is populated during validation.
+func WithAnnotations(ann *TypeAnnotations) ValidateOption {
+	return func(c *validateConfig) {
+		c.annotations = ann
 	}
 }

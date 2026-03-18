@@ -13,6 +13,11 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 	var out strings.Builder
 	valid := true
 
+	// Initialize annotations map if requested.
+	if cfg.annotations != nil && *cfg.annotations == nil {
+		*cfg.annotations = make(TypeAnnotations)
+	}
+
 	root := findDocumentElement(doc)
 	if root == nil {
 		out.WriteString(filename + " fails to validate\n")
@@ -25,7 +30,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 			return nil
 		}
 		elem := n.(*helium.Element)
-		if err := validateElement(elem, schema, filename, &out); err != nil {
+		if err := validateElement(elem, schema, cfg, filename, &out); err != nil {
 			valid = false
 		}
 		return nil
@@ -54,17 +59,17 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 	return out.String(), valid
 }
 
-func validateElement(elem *helium.Element, schema *Schema, filename string, out *strings.Builder) error {
+func validateElement(elem *helium.Element, schema *Schema, cfg *validateConfig, filename string, out *strings.Builder) error {
 	parent := elem.Parent()
 	if parent == nil || parent.Type() == helium.DocumentNode {
 		// Root element — must match a global element declaration.
-		return validateRootElement(elem, schema, filename, out)
+		return validateRootElement(elem, schema, cfg, filename, out)
 	}
 	// Non-root elements are validated by their parent's content model.
 	return nil
 }
 
-func validateRootElement(elem *helium.Element, schema *Schema, filename string, out *strings.Builder) error {
+func validateRootElement(elem *helium.Element, schema *Schema, cfg *validateConfig, filename string, out *strings.Builder) error {
 	local := elem.LocalName()
 	ns := elem.URI()
 	edecl, ok := schema.LookupElement(local, ns)
@@ -97,16 +102,20 @@ func validateRootElement(elem *helium.Element, schema *Schema, filename string, 
 		out.WriteString(validityError(filename, elem.Line(), elemDisplayName(elem), msg))
 		return fmt.Errorf("abstract type")
 	}
+
+	// Annotate root element with its type.
+	annotateElement(cfg, elem, td)
+
 	if hasXsiNil(elem) {
-		return validateNilledElement(elem, edecl, td, schema, filename, out)
+		return validateNilledElement(elem, edecl, td, schema, cfg, filename, out)
 	}
 
-	return validateElementContent(elem, edecl, td, schema, filename, out)
+	return validateElementContent(elem, edecl, td, schema, cfg, filename, out)
 }
 
-func validateElementContent(elem *helium.Element, edecl *ElementDecl, td *TypeDef, schema *Schema, filename string, out *strings.Builder) error {
-	// Validate attributes.
-	if err := validateAttributes(elem, td, schema, filename, out); err != nil {
+func validateElementContent(elem *helium.Element, edecl *ElementDecl, td *TypeDef, schema *Schema, cfg *validateConfig, filename string, out *strings.Builder) error {
+	// Validate attributes and annotate them.
+	if err := validateAttributes(elem, td, schema, cfg, filename, out); err != nil {
 		return err
 	}
 
@@ -123,7 +132,7 @@ func validateElementContent(elem *helium.Element, edecl *ElementDecl, td *TypeDe
 			}
 			return nil
 		}
-		return validateContentModel(elem, td.ContentModel, schema, filename, out)
+		return validateContentModel(elem, td.ContentModel, schema, cfg, filename, out)
 	}
 	return nil
 }
@@ -185,9 +194,9 @@ func validateEmptyContent(elem *helium.Element, filename string, out *strings.Bu
 	return nil
 }
 
-func validateContentModel(elem *helium.Element, mg *ModelGroup, schema *Schema, filename string, out *strings.Builder) error {
+func validateContentModel(elem *helium.Element, mg *ModelGroup, schema *Schema, cfg *validateConfig, filename string, out *strings.Builder) error {
 	children := collectChildElements(elem)
-	return validateContentModelTop(elem, mg, children, schema, filename, out)
+	return validateContentModelTop(elem, mg, children, schema, cfg, filename, out)
 }
 
 type childElem struct {
@@ -238,7 +247,7 @@ func attrDisplayName(a *helium.Attribute) string {
 	return a.LocalName()
 }
 
-func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, filename string, out *strings.Builder) error {
+func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, cfg *validateConfig, filename string, out *strings.Builder) error {
 	var hasErr bool
 
 	if len(td.Attributes) == 0 && td.AnyAttribute == nil {
@@ -278,6 +287,8 @@ func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, filen
 				out.WriteString(validityErrorAttr(filename, elem.Line(), elemDisplayName(elem), ad, msg))
 				hasErr = true
 			}
+			// Annotate the attribute with its declared type.
+			annotateAttrUse(cfg, a, au, schema)
 			continue
 		}
 		// Not in explicit declarations — check anyAttribute wildcard.
@@ -417,7 +428,7 @@ func hasXsiNil(elem *helium.Element) bool {
 // If the declaration is nillable, validates that the element has no character
 // or element content (attributes are still checked).  If not nillable,
 // reports a validity error.
-func validateNilledElement(elem *helium.Element, edecl *ElementDecl, td *TypeDef, schema *Schema, filename string, out *strings.Builder) error {
+func validateNilledElement(elem *helium.Element, edecl *ElementDecl, td *TypeDef, schema *Schema, cfg *validateConfig, filename string, out *strings.Builder) error {
 	dn := elemDisplayName(elem)
 
 	if !edecl.Nillable {
@@ -428,7 +439,7 @@ func validateNilledElement(elem *helium.Element, edecl *ElementDecl, td *TypeDef
 
 	// Validate attributes even for nilled elements.
 	if td != nil {
-		if err := validateAttributes(elem, td, schema, filename, out); err != nil {
+		if err := validateAttributes(elem, td, schema, cfg, filename, out); err != nil {
 			return err
 		}
 	}
@@ -519,4 +530,44 @@ func resolveXsiType(elem *helium.Element, declaredType *TypeDef, schema *Schema,
 	}
 
 	return td, nil
+}
+
+// xsdTypeName converts a TypeDef to a type name string suitable for annotations.
+func xsdTypeName(td *TypeDef) string {
+	if td == nil {
+		return "xs:untyped"
+	}
+	if td.Name.NS == xsdNS {
+		return "xs:" + td.Name.Local
+	}
+	if td.Name.NS != "" {
+		return "Q{" + td.Name.NS + "}" + td.Name.Local
+	}
+	if td.Name.Local != "" {
+		return td.Name.Local
+	}
+	return "xs:untyped"
+}
+
+// annotateElement records a type annotation for an element node.
+func annotateElement(cfg *validateConfig, elem *helium.Element, td *TypeDef) {
+	if cfg == nil || cfg.annotations == nil {
+		return
+	}
+	(*cfg.annotations)[elem] = xsdTypeName(td)
+}
+
+// annotateAttrUse records a type annotation for an attribute node based on its AttrUse declaration.
+func annotateAttrUse(cfg *validateConfig, a *helium.Attribute, au *AttrUse, schema *Schema) {
+	if cfg == nil || cfg.annotations == nil {
+		return
+	}
+	if au.TypeName.Local == "" {
+		return
+	}
+	td, ok := schema.types[au.TypeName]
+	if !ok {
+		return
+	}
+	(*cfg.annotations)[a] = xsdTypeName(td)
 }
