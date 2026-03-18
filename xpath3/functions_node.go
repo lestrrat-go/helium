@@ -243,6 +243,9 @@ func buildNodePath(n helium.Node) string {
 	if root.Type() == helium.DocumentNode {
 		return "/" + strings.Join(parts, "/")
 	}
+	if len(parts) == 0 {
+		return fnRoot
+	}
 	return fnRoot + "/" + strings.Join(parts, "/")
 }
 
