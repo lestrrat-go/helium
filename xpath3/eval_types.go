@@ -390,6 +390,12 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 			return false
 		}
 		return matchNodeTest(t, ni.Node, AxisChild, ec)
+	case PITest:
+		ni, ok := item.(NodeItem)
+		if !ok {
+			return false
+		}
+		return matchNodeTest(t, ni.Node, AxisChild, ec)
 	case AtomicOrUnionType:
 		av, ok := item.(AtomicValue)
 		if !ok {
