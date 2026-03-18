@@ -236,7 +236,7 @@ func buildNodePath(n helium.Node) string {
 	// Check if the node is rooted in a document node.
 	// Per XPath 3.1: document root → path starts with "/",
 	// non-document root (orphan tree) → path starts with "Q{...}root()".
-	var root helium.Node = n
+	root := n
 	for root.Parent() != nil {
 		root = root.Parent()
 	}
