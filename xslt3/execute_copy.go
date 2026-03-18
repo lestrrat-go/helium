@@ -382,6 +382,9 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 		prefix := nsw.Name()
 		uri := string(nsw.Content())
 		return elem.DeclareNamespace(prefix, uri)
+	case helium.DTDNode:
+		// DTDs are not copied to the result tree in XSLT
+		return nil
 	default:
 		if !copyNS && node.Type() == helium.ElementNode {
 			return ec.copyElementNoNamespaces(node.(*helium.Element))
