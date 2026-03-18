@@ -441,10 +441,23 @@ func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) err
 		return nil
 	}
 
-	// When called standalone (outside xsl:map), evaluate and produce output
+	// When called standalone (outside xsl:map), produce a single-entry map.
+	// Per XSLT 3.0 §11.9.4, xsl:map-entry always produces a map item.
 	xpathCtx := ec.newXPathContext(ec.contextNode)
+	keyResult, err := inst.Key.Evaluate(xpathCtx, ec.contextNode)
+	if err != nil {
+		return err
+	}
+	keySeq := keyResult.Sequence()
+	if len(keySeq) != 1 {
+		return dynamicError("XPTY0004", "xsl:map-entry key must be a single atomic value")
+	}
+	keyAV, err := xpath3.AtomizeItem(keySeq[0])
+	if err != nil {
+		return err
+	}
+
 	var valSeq xpath3.Sequence
-	var err error
 	if inst.Select != nil {
 		valResult, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
 		if err != nil {
@@ -452,13 +465,24 @@ func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) err
 		}
 		valSeq = valResult.Sequence()
 	} else if len(inst.Body) > 0 {
-		valSeq, err = ec.evaluateBody(ctx, inst.Body)
+		valSeq, err = ec.evaluateBodyAsSequence(ctx, inst.Body)
 		if err != nil {
 			return err
 		}
 	}
-	// Output the value as text
-	s := stringifySequenceWithSep(valSeq, " ")
+
+	mapItem := xpath3.NewMap([]xpath3.MapEntry{{
+		Key:   keyAV,
+		Value: valSeq,
+	}})
+
+	if out.captureItems {
+		out.pendingItems = append(out.pendingItems, mapItem)
+		out.noteOutput()
+		return nil
+	}
+	// If not capturing items, output the map as text (fallback)
+	s := stringifySequenceWithSep(xpath3.Sequence{mapItem}, " ")
 	if s != "" {
 		text, err := ec.resultDoc.CreateText([]byte(s))
 		if err != nil {
