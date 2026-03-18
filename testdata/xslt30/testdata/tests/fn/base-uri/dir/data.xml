@@ -1,0 +1,7 @@
+<para>
+    <list>
+        <item>two</item>
+        <item xml:base="dir2/data.xml">three</item>
+    </list>
+</para>
+<para xml:base="dir5/data.xml">five</para>
