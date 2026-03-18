@@ -7,6 +7,20 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
+// checkAtomizable returns FOTY0013 if the sequence contains any map or
+// function items, which cannot be atomized.
+func checkAtomizable(seq xpath3.Sequence) error {
+	for _, item := range seq {
+		switch item.(type) {
+		case xpath3.MapItem:
+			return dynamicError("FOTY0013", "cannot atomize a map item")
+		case xpath3.FunctionItem:
+			return dynamicError("FOTY0013", "cannot atomize a function item")
+		}
+	}
+	return nil
+}
+
 func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error {
 	var value string
 
@@ -33,6 +47,10 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 		seq := result.Sequence()
 		if len(seq) == 0 {
 			emptySequence = true
+		}
+		// FOTY0013: maps and functions cannot be atomized
+		if err := checkAtomizable(seq); err != nil {
+			return err
 		}
 		// XSLT spec §11.3: zero-length text nodes in the result sequence
 		// are discarded before stringification.
