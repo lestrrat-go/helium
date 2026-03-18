@@ -440,10 +440,6 @@ func catchMatches(clause *CatchClause, errClark string) bool {
 		if pattern == errClark {
 			return true
 		}
-		// Also match by local name alone (for bare error codes like FOUT1190)
-		if pattern == errLocal {
-			return true
-		}
 	}
 	return false
 }
