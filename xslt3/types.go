@@ -297,6 +297,10 @@ func normalizeTypeName(name string) string {
 	if strings.HasPrefix(name, "xs:") {
 		return name
 	}
+	// Normalize xsd: prefix to xs: (both map to XML Schema namespace)
+	if strings.HasPrefix(name, "xsd:") {
+		return "xs:" + name[4:]
+	}
 	// Map unprefixed names to xs: prefixed
 	switch name {
 	case "string":
