@@ -85,6 +85,10 @@ func checkSequenceType(seq xpath3.Sequence, st SequenceType, errCode string, con
 // coerceItem checks that a single item matches the expected type, applying
 // atomization and casting as needed per the XSLT function conversion rules.
 func coerceItem(item xpath3.Item, itemType string) (xpath3.Item, error) {
+	// Strip outer parentheses from the type (e.g., "(function(...) as ...)" → "function(...) as ...")
+	if len(itemType) > 2 && itemType[0] == '(' && itemType[len(itemType)-1] == ')' {
+		itemType = itemType[1 : len(itemType)-1]
+	}
 	switch itemType {
 	case "item()":
 		// Anything matches item()
