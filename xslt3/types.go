@@ -234,21 +234,19 @@ func castAtomicToType(av xpath3.AtomicValue, targetType string) (xpath3.Item, er
 		return cast, nil
 	}
 
-	// Numeric promotion: only upward — integer→decimal→float→double.
-	// Demotion (e.g., double→float) is not allowed (XTTE0570).
+	// Numeric subtype acceptance: a value whose type is a subtype of the
+	// target is accepted without changing its type (e.g., xs:integer IS xs:decimal).
+	// Only demotion (wider→narrower, e.g., double→float) is rejected (XTTE0570).
 	if isNumericType(target) && isNumericType(av.TypeName) {
-		if numericRank(av.TypeName) > numericRank(target) {
+		srcRank := numericRank(av.TypeName)
+		tgtRank := numericRank(target)
+		if srcRank > tgtRank {
 			return nil, fmt.Errorf("cannot convert %s to %s", av.TypeName, targetType)
 		}
-		s, err := xpath3.AtomicToString(av)
-		if err != nil {
-			return nil, fmt.Errorf("cannot convert to %s: %w", targetType, err)
+		if srcRank <= tgtRank {
+			// Subtype: accept as-is without casting (preserves original type)
+			return av, nil
 		}
-		cast, err := xpath3.CastFromString(s, target)
-		if err != nil {
-			return nil, fmt.Errorf("cannot cast to %s: %w", targetType, err)
-		}
-		return cast, nil
 	}
 
 	// General fallback: try string-based casting
