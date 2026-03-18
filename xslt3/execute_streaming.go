@@ -954,13 +954,21 @@ func (ec *execContext) computeAccumulatorStates(ctx context.Context, doc helium.
 			if err != nil {
 				return err
 			}
-			state[name] = cloneAccumulatorSequence(result.Sequence())
+			checked, err := ec.checkAccumulatorType(def, result.Sequence())
+			if err != nil {
+				return err
+			}
+			state[name] = cloneAccumulatorSequence(checked)
 		case len(def.InitialBody) > 0:
 			seq, err := ec.evaluateBodyAsSequence(ctx, def.InitialBody)
 			if err != nil {
 				return err
 			}
-			state[name] = cloneAccumulatorSequence(seq)
+			checked, err := ec.checkAccumulatorType(def, seq)
+			if err != nil {
+				return err
+			}
+			state[name] = cloneAccumulatorSequence(checked)
 		default:
 			state[name] = xpath3.EmptySequence()
 		}
@@ -1063,11 +1071,22 @@ func (ec *execContext) applyAccumulatorPhase(ctx context.Context, node helium.No
 			if err != nil {
 				return err
 			}
-			ec.accumulatorState[name] = newValue
+			checked, err := ec.checkAccumulatorType(def, newValue)
+			if err != nil {
+				return err
+			}
+			ec.accumulatorState[name] = checked
 		}
 	}
 
 	return nil
+}
+
+func (ec *execContext) checkAccumulatorType(def *AccumulatorDef, seq xpath3.Sequence) (xpath3.Sequence, error) {
+	if def == nil || def.As == "" {
+		return seq, nil
+	}
+	return checkSequenceType(seq, parseSequenceType(def.As), "XPTY0004", "accumulator "+def.Name)
 }
 
 // loadMergeDocument loads an XML document from a URI, resolving it relative

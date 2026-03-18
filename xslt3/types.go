@@ -130,10 +130,7 @@ func coerceItem(item xpath3.Item, itemType string) (xpath3.Item, error) {
 
 	// Handle map(*) — any map
 	if strings.HasPrefix(itemType, "map(") {
-		if _, ok := item.(xpath3.MapItem); ok {
-			return item, nil
-		}
-		return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
+		return checkMapItemType(item, itemType)
 	}
 
 	// Handle array(*) — any array
@@ -352,6 +349,169 @@ func describeItem(item xpath3.Item) string {
 	default:
 		return fmt.Sprintf("%T", item)
 	}
+}
+
+func checkMapItemType(item xpath3.Item, itemType string) (xpath3.Item, error) {
+	m, ok := item.(xpath3.MapItem)
+	if !ok {
+		return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
+	}
+
+	keyType, valueType, hasMembers, err := parseMapItemType(itemType)
+	if err != nil {
+		return nil, err
+	}
+	if !hasMembers {
+		return item, nil
+	}
+
+	for _, key := range m.Keys() {
+		if !atomicMatchesType(key, keyType) {
+			return nil, fmt.Errorf("map key %q does not match %s", key.StringVal(), keyType)
+		}
+		value, _ := m.Get(key)
+		if !sequenceMatchesTypeStrict(value, valueType) {
+			return nil, fmt.Errorf("map entry for key %q does not match %s", key.StringVal(), formatSequenceType(valueType))
+		}
+	}
+	return item, nil
+}
+
+func parseMapItemType(itemType string) (string, SequenceType, bool, error) {
+	inner := strings.TrimSpace(itemType[len("map(") : len(itemType)-1])
+	if inner == "*" {
+		return "", SequenceType{}, false, nil
+	}
+
+	parts := splitTopLevelTypeArgs(inner)
+	if len(parts) != 2 {
+		return "", SequenceType{}, false, fmt.Errorf("invalid map type %q", itemType)
+	}
+	return strings.TrimSpace(parts[0]), parseSequenceType(strings.TrimSpace(parts[1])), true, nil
+}
+
+func splitTopLevelTypeArgs(s string) []string {
+	var parts []string
+	depth := 0
+	start := 0
+	for i, r := range s {
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		case ',':
+			if depth == 0 {
+				parts = append(parts, s[start:i])
+				start = i + 1
+			}
+		}
+	}
+	parts = append(parts, s[start:])
+	return parts
+}
+
+func sequenceMatchesTypeStrict(seq xpath3.Sequence, st SequenceType) bool {
+	count := len(seq)
+	switch st.Occurrence {
+	case 0:
+		if count != 1 {
+			return false
+		}
+	case '?':
+		if count > 1 {
+			return false
+		}
+	case '+':
+		if count == 0 {
+			return false
+		}
+	}
+
+	for _, item := range seq {
+		if !itemMatchesTypeStrict(item, st.ItemType) {
+			return false
+		}
+	}
+	return true
+}
+
+func itemMatchesTypeStrict(item xpath3.Item, itemType string) bool {
+	switch itemType {
+	case "item()":
+		return true
+	case "node()":
+		_, ok := item.(xpath3.NodeItem)
+		return ok
+	case "element()":
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			return ni.Node.Type() == helium.ElementNode
+		}
+		return false
+	case "attribute()":
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			return ni.Node.Type() == helium.AttributeNode
+		}
+		return false
+	case "text()":
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			return ni.Node.Type() == helium.TextNode || ni.Node.Type() == helium.CDATASectionNode
+		}
+		return false
+	case "comment()":
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			return ni.Node.Type() == helium.CommentNode
+		}
+		return false
+	case "processing-instruction()":
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			return ni.Node.Type() == helium.ProcessingInstructionNode
+		}
+		return false
+	case "document-node()":
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			return ni.Node.Type() == helium.DocumentNode
+		}
+		return false
+	}
+
+	if strings.HasPrefix(itemType, "map(") {
+		_, err := checkMapItemType(item, itemType)
+		return err == nil
+	}
+	if strings.HasPrefix(itemType, "array(") || strings.HasPrefix(itemType, "function(") {
+		return true
+	}
+
+	av, ok := item.(xpath3.AtomicValue)
+	if !ok {
+		return false
+	}
+	return atomicMatchesType(av, itemType)
+}
+
+func atomicMatchesType(av xpath3.AtomicValue, targetType string) bool {
+	target := normalizeTypeName(strings.TrimSpace(targetType))
+	switch target {
+	case "xs:anyAtomicType":
+		return true
+	case "xs:numeric":
+		return isNumericType(av.TypeName)
+	}
+	if av.TypeName == target {
+		return true
+	}
+	if target == xpath3.TypeDecimal && av.TypeName == xpath3.TypeInteger {
+		return true
+	}
+	return false
+}
+
+func formatSequenceType(st SequenceType) string {
+	if st.Occurrence == 0 {
+		return st.ItemType
+	}
+	return st.ItemType + string(st.Occurrence)
 }
 
 // XSLT type error codes.
