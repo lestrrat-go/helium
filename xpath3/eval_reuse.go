@@ -85,6 +85,12 @@ func (s *EvalState) SetContextItem(item Item) {
 	}
 }
 
+// SetPosition sets the context position on the eval state.
+func (s *EvalState) SetPosition(pos int) { s.ec.position = pos }
+
+// SetSize sets the context size on the eval state.
+func (s *EvalState) SetSize(size int) { s.ec.size = size }
+
 // EvaluateReuse evaluates the expression using pre-allocated state,
 // resetting per-evaluation fields rather than allocating new.
 // The node parameter replaces the context node for this evaluation.
