@@ -236,6 +236,21 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 		return dynamicError(errCodeXTDE0060, "named template %q not found", inst.Name)
 	}
 
+	// Switch package function scope if the template belongs to a different package.
+	savedFnsNS := ec.cachedFnsNS
+	savedPackage := ec.currentPackage
+	savedTemplate := ec.currentTemplate
+	if tmpl.OwnerPackage != nil && tmpl.OwnerPackage != ec.currentPackage {
+		ec.cachedFnsNS = nil
+		ec.currentPackage = tmpl.OwnerPackage
+	}
+	ec.currentTemplate = tmpl
+	defer func() {
+		ec.cachedFnsNS = savedFnsNS
+		ec.currentPackage = savedPackage
+		ec.currentTemplate = savedTemplate
+	}()
+
 	ec.pushVarScope()
 	defer ec.popVarScope()
 
