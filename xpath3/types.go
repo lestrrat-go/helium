@@ -8,6 +8,7 @@ import (
 	"math"
 	"math/big"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lestrrat-go/helium"
@@ -122,10 +123,24 @@ const (
 
 // isSubtypeOf returns true if actualType is the same as or a subtype of targetType
 // per the XSD type hierarchy.
+// subtypeCache caches isSubtypeOf results. The type hierarchy is static,
+// so results are deterministic and safe to cache globally.
+var subtypeCache sync.Map // key: [2]string{actual,target} → bool
+
 func isSubtypeOf(actualType, targetType string) bool {
 	if actualType == targetType {
 		return true
 	}
+	key := [2]string{actualType, targetType}
+	if v, ok := subtypeCache.Load(key); ok {
+		return v.(bool)
+	}
+	result := computeIsSubtypeOf(actualType, targetType)
+	subtypeCache.Store(key, result)
+	return result
+}
+
+func computeIsSubtypeOf(actualType, targetType string) bool {
 	// xs:numeric is a union of xs:integer, xs:decimal, xs:float, xs:double
 	if targetType == TypeNumeric {
 		return isSubtypeOf(actualType, TypeDecimal) ||
