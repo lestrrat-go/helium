@@ -43,6 +43,13 @@ type VariableResolver interface {
 	ResolveVariable(ctx context.Context, name string) (Sequence, bool, error)
 }
 
+// SchemaDeclarations provides schema element/attribute lookup for
+// schema-element() and schema-attribute() node tests.
+type SchemaDeclarations interface {
+	LookupSchemaElement(local, ns string) (typeName string, ok bool)
+	LookupSchemaAttribute(local, ns string) (typeName string, ok bool)
+}
+
 type evalConfig struct {
 	namespaces         map[string]string
 	variables          map[string]Sequence
@@ -66,6 +73,7 @@ type evalConfig struct {
 	typeAnnotations    map[helium.Node]string // node → xs:... type annotation (set by xslt3)
 	variableResolver   VariableResolver       // lazy resolver for variables not in static scope
 	strictPrefixes     bool                   // when true, only user-declared namespaces are valid (no defaultPrefixNS fallback)
+	schemaDeclarations SchemaDeclarations     // schema element/attribute declarations for schema-element()/schema-attribute() tests
 }
 
 func getEvalConfig(ctx context.Context) *evalConfig {
@@ -429,6 +437,15 @@ func FnContextNode(ctx context.Context) helium.Node {
 func WithTypeAnnotations(ctx context.Context, annotations map[helium.Node]string) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) bool {
 		c.typeAnnotations = annotations
+		return false
+	})
+}
+
+// WithSchemaDeclarations sets the schema declarations provider used for
+// schema-element() and schema-attribute() node tests in XPath expressions.
+func WithSchemaDeclarations(ctx context.Context, decls SchemaDeclarations) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) bool {
+		c.schemaDeclarations = decls
 		return false
 	})
 }

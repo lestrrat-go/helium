@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/catalog"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
 func evalInstanceOfExpr(ec *evalContext, e InstanceOfExpr) (Sequence, error) {
@@ -384,6 +386,58 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 			}
 		}
 		return matchNodeTest(t, ni.Node, AxisAttribute, ec)
+	case SchemaElementTest:
+		ni, ok := item.(NodeItem)
+		if !ok || ni.Node.Type() != helium.ElementNode {
+			return false
+		}
+		if ec == nil || ec.schemaDeclarations == nil {
+			return false
+		}
+		prefix, local := splitQName(t.Name)
+		ns := ""
+		if prefix != "" && ec.namespaces != nil {
+			ns = ec.namespaces[prefix]
+		}
+		// The node must have the same name as the declared element.
+		if ixpath.LocalNameOf(ni.Node) != local || ixpath.NodeNamespaceURI(ni.Node) != ns {
+			return false
+		}
+		typeName, found := ec.schemaDeclarations.LookupSchemaElement(local, ns)
+		if !found {
+			return false
+		}
+		ann := ni.TypeAnnotation
+		if ann == "" {
+			ann = TypeUntyped
+		}
+		return isSubtypeOf(ann, typeName)
+	case SchemaAttributeTest:
+		ni, ok := item.(NodeItem)
+		if !ok || ni.Node.Type() != helium.AttributeNode {
+			return false
+		}
+		if ec == nil || ec.schemaDeclarations == nil {
+			return false
+		}
+		prefix, local := splitQName(t.Name)
+		ns := ""
+		if prefix != "" && ec.namespaces != nil {
+			ns = ec.namespaces[prefix]
+		}
+		// The node must have the same name as the declared attribute.
+		if ixpath.LocalNameOf(ni.Node) != local || ixpath.NodeNamespaceURI(ni.Node) != ns {
+			return false
+		}
+		typeName, found := ec.schemaDeclarations.LookupSchemaAttribute(local, ns)
+		if !found {
+			return false
+		}
+		ann := ni.TypeAnnotation
+		if ann == "" {
+			ann = TypeUntypedAtomic
+		}
+		return isSubtypeOf(ann, typeName)
 	case DocumentTest:
 		ni, ok := item.(NodeItem)
 		if !ok {

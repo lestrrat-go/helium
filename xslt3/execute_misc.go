@@ -706,6 +706,9 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 	if len(ec.typeAnnotations) > 0 {
 		dynCtx = xpath3.WithTypeAnnotations(dynCtx, ec.typeAnnotations)
 	}
+	if ec.schemaRegistry != nil {
+		dynCtx = xpath3.WithSchemaDeclarations(dynCtx, ec.schemaRegistry)
+	}
 
 	// Handle base-uri
 	if inst.BaseURI != nil {

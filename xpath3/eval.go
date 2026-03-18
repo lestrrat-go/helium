@@ -47,9 +47,10 @@ type evalContext struct {
 	// withNode/withContextItem are negligible. The net/http dependency is
 	// already transitively required by golang.org/x/text.
 	httpClient       *http.Client
-	typeAnnotations  map[helium.Node]string // node → xs:... type (from xslt3 schema awareness)
-	variableResolver VariableResolver       // lazy resolver for variables not in static scope
-	strictPrefixes   bool                   // skip defaultPrefixNS fallback in prefix validation
+	typeAnnotations    map[helium.Node]string // node → xs:... type (from xslt3 schema awareness)
+	variableResolver   VariableResolver       // lazy resolver for variables not in static scope
+	strictPrefixes     bool                   // skip defaultPrefixNS fallback in prefix validation
+	schemaDeclarations SchemaDeclarations     // schema element/attribute declarations for schema-element()/schema-attribute() tests
 }
 
 type variableScope struct {
@@ -142,6 +143,7 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 		ec.typeAnnotations = cfg.typeAnnotations
 		ec.variableResolver = cfg.variableResolver
 		ec.strictPrefixes = cfg.strictPrefixes
+		ec.schemaDeclarations = cfg.schemaDeclarations
 		if cfg.position > 0 {
 			ec.position = cfg.position
 		}
