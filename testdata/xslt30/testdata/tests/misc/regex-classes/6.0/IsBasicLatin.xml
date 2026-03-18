@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsBasicLatin">
+      <match from="9" to="127"/>
+   </ranges>
+   <ranges complement="IsBasicLatin">
+      <match from="128" to="1114111"/>
+   </ranges>
+</out>

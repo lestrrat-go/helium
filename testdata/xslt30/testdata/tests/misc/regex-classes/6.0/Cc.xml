@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="Cc">
+      <match from="9" to="13"/>
+      <match from="127" to="159"/>
+   </ranges>
+   <ranges complement="Cc">
+      <match from="32" to="126"/>
+      <match from="160" to="1114111"/>
+   </ranges>
+</out>

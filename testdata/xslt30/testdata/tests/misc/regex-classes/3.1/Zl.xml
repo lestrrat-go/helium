@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="Zl">
+      <match from="8232" to="8232"/>
+   </ranges>
+   <ranges complement="Zl">
+      <match from="9" to="8231"/>
+      <match from="8233" to="1114111"/>
+   </ranges>
+</out>

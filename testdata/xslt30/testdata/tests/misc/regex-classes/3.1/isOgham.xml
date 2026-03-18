@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsOgham">
+      <match from="5760" to="5791"/>
+   </ranges>
+   <ranges complement="IsOgham">
+      <match from="9" to="5759"/>
+      <match from="5792" to="1114111"/>
+   </ranges>
+</out>

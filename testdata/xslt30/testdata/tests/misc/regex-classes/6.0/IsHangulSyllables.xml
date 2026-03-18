@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsHangulSyllables">
+      <match from="44032" to="55215"/>
+   </ranges>
+   <ranges complement="IsHangulSyllables">
+      <match from="9" to="44031"/>
+      <match from="55216" to="1114111"/>
+   </ranges>
+</out>

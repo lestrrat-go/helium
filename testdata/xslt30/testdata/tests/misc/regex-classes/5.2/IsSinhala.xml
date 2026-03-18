@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsSinhala">
+      <match from="3456" to="3583"/>
+   </ranges>
+   <ranges complement="IsSinhala">
+      <match from="9" to="3455"/>
+      <match from="3584" to="1114111"/>
+   </ranges>
+</out>

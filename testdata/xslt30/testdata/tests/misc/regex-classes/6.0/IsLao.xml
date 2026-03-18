@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsLao">
+      <match from="3712" to="3839"/>
+   </ranges>
+   <ranges complement="IsLao">
+      <match from="9" to="3711"/>
+      <match from="3840" to="1114111"/>
+   </ranges>
+</out>

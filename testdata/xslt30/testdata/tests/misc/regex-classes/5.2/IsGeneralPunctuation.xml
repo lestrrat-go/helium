@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsGeneralPunctuation">
+      <match from="8192" to="8303"/>
+   </ranges>
+   <ranges complement="IsGeneralPunctuation">
+      <match from="9" to="8191"/>
+      <match from="8304" to="1114111"/>
+   </ranges>
+</out>

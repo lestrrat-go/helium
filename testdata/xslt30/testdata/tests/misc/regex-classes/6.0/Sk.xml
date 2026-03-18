@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="Sk">
+      <match from="94" to="94"/>
+      <match from="96" to="96"/>
+      <match from="168" to="168"/>
+      <match from="175" to="175"/>
+      <match from="180" to="180"/>
+      <match from="184" to="184"/>
+      <match from="706" to="709"/>
+      <match from="722" to="735"/>
+      <match from="741" to="747"/>
+      <match from="749" to="749"/>
+      <match from="751" to="767"/>
+      <match from="885" to="885"/>
+      <match from="900" to="901"/>
+      <match from="8125" to="8125"/>
+      <match from="8127" to="8129"/>
+      <match from="8141" to="8143"/>
+      <match from="8157" to="8159"/>
+      <match from="8173" to="8175"/>
+      <match from="8189" to="8190"/>
+      <match from="12443" to="12444"/>
+      <match from="42752" to="42774"/>
+      <match from="42784" to="42785"/>
+      <match from="42889" to="42890"/>
+      <match from="64434" to="64449"/>
+      <match from="65342" to="65342"/>
+      <match from="65344" to="65344"/>
+      <match from="65507" to="65507"/>
+   </ranges>
+   <ranges complement="Sk">
+      <match from="9" to="93"/>
+      <match from="95" to="95"/>
+      <match from="97" to="167"/>
+      <match from="169" to="174"/>
+      <match from="176" to="179"/>
+      <match from="181" to="183"/>
+      <match from="185" to="705"/>
+      <match from="710" to="721"/>
+      <match from="736" to="740"/>
+      <match from="748" to="748"/>
+      <match from="750" to="750"/>
+      <match from="768" to="884"/>
+      <match from="886" to="899"/>
+      <match from="902" to="8124"/>
+      <match from="8126" to="8126"/>
+      <match from="8130" to="8140"/>
+      <match from="8144" to="8156"/>
+      <match from="8160" to="8172"/>
+      <match from="8176" to="8188"/>
+      <match from="8191" to="12442"/>
+      <match from="12445" to="42751"/>
+      <match from="42775" to="42783"/>
+      <match from="42786" to="42888"/>
+      <match from="42891" to="64433"/>
+      <match from="64450" to="65341"/>
+      <match from="65343" to="65343"/>
+      <match from="65345" to="65506"/>
+      <match from="65508" to="1114111"/>
+   </ranges>
+</out>

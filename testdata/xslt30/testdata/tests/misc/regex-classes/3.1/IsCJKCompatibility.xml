@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsCJKCompatibility">
+      <match from="13056" to="13311"/>
+   </ranges>
+   <ranges complement="IsCJKCompatibility">
+      <match from="9" to="13055"/>
+      <match from="13312" to="1114111"/>
+   </ranges>
+</out>

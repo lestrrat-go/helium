@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsGeometricShapes">
+      <match from="9632" to="9727"/>
+   </ranges>
+   <ranges complement="IsGeometricShapes">
+      <match from="9" to="9631"/>
+      <match from="9728" to="1114111"/>
+   </ranges>
+</out>

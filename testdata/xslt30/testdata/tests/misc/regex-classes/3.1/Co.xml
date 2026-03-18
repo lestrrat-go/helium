@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="Co">
+      <match from="57344" to="63743"/>
+      <match from="983040" to="1048573"/>
+      <match from="1048576" to="1114109"/>
+   </ranges>
+   <ranges complement="Co">
+      <match from="9" to="55295"/>
+      <match from="63744" to="983039"/>
+      <match from="1048574" to="1048575"/>
+      <match from="1114110" to="1114111"/>
+   </ranges>
+</out>

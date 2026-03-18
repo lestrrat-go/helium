@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsCJKSymbolsandPunctuation">
+      <match from="12288" to="12351"/>
+   </ranges>
+   <ranges complement="IsCJKSymbolsandPunctuation">
+      <match from="9" to="12287"/>
+      <match from="12352" to="1114111"/>
+   </ranges>
+</out>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsTelugu">
+      <match from="3072" to="3199"/>
+   </ranges>
+   <ranges complement="IsTelugu">
+      <match from="9" to="3071"/>
+      <match from="3200" to="1114111"/>
+   </ranges>
+</out>

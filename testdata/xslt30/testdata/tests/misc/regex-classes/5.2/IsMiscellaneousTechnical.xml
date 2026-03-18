@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsMiscellaneousTechnical">
+      <match from="8960" to="9215"/>
+   </ranges>
+   <ranges complement="IsMiscellaneousTechnical">
+      <match from="9" to="8959"/>
+      <match from="9216" to="1114111"/>
+   </ranges>
+</out>

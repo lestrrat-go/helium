@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsHebrew">
+      <match from="1424" to="1535"/>
+   </ranges>
+   <ranges complement="IsHebrew">
+      <match from="9" to="1423"/>
+      <match from="1536" to="1114111"/>
+   </ranges>
+</out>

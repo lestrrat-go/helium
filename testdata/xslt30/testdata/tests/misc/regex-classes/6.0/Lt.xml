@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="Lt">
+      <match from="453" to="453"/>
+      <match from="456" to="456"/>
+      <match from="459" to="459"/>
+      <match from="498" to="498"/>
+      <match from="8072" to="8079"/>
+      <match from="8088" to="8095"/>
+      <match from="8104" to="8111"/>
+      <match from="8124" to="8124"/>
+      <match from="8140" to="8140"/>
+      <match from="8188" to="8188"/>
+   </ranges>
+   <ranges complement="Lt">
+      <match from="9" to="452"/>
+      <match from="454" to="455"/>
+      <match from="457" to="458"/>
+      <match from="460" to="497"/>
+      <match from="499" to="8071"/>
+      <match from="8080" to="8087"/>
+      <match from="8096" to="8103"/>
+      <match from="8112" to="8123"/>
+      <match from="8125" to="8139"/>
+      <match from="8141" to="8187"/>
+      <match from="8189" to="1114111"/>
+   </ranges>
+</out>

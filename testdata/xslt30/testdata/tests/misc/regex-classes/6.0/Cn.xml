@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="us-ascii"?>
 <out>
-   <ranges category="C">
-      <match from="9" to="13"/>
-      <match from="127" to="159"/>
-      <match from="173" to="173"/>
+   <ranges category="Cn">
       <match from="888" to="889"/>
       <match from="895" to="899"/>
       <match from="907" to="907"/>
@@ -16,10 +13,10 @@
       <match from="1419" to="1424"/>
       <match from="1480" to="1487"/>
       <match from="1515" to="1519"/>
-      <match from="1525" to="1541"/>
+      <match from="1525" to="1535"/>
+      <match from="1540" to="1541"/>
       <match from="1564" to="1565"/>
-      <match from="1757" to="1757"/>
-      <match from="1806" to="1807"/>
+      <match from="1806" to="1806"/>
       <match from="1867" to="1868"/>
       <match from="1970" to="1983"/>
       <match from="2043" to="2047"/>
@@ -209,7 +206,6 @@
       <match from="5997" to="5997"/>
       <match from="6001" to="6001"/>
       <match from="6004" to="6015"/>
-      <match from="6068" to="6069"/>
       <match from="6110" to="6111"/>
       <match from="6122" to="6127"/>
       <match from="6138" to="6143"/>
@@ -259,9 +255,7 @@
       <match from="8176" to="8177"/>
       <match from="8181" to="8181"/>
       <match from="8191" to="8191"/>
-      <match from="8203" to="8207"/>
-      <match from="8234" to="8238"/>
-      <match from="8288" to="8303"/>
+      <match from="8293" to="8297"/>
       <match from="8306" to="8307"/>
       <match from="8335" to="8335"/>
       <match from="8349" to="8351"/>
@@ -342,7 +336,7 @@
       <match from="44026" to="44031"/>
       <match from="55204" to="55215"/>
       <match from="55239" to="55242"/>
-      <match from="55292" to="63743"/>
+      <match from="55292" to="55295"/>
       <match from="64046" to="64047"/>
       <match from="64110" to="64111"/>
       <match from="64218" to="64255"/>
@@ -364,14 +358,15 @@
       <match from="65127" to="65127"/>
       <match from="65132" to="65135"/>
       <match from="65141" to="65141"/>
-      <match from="65277" to="65280"/>
+      <match from="65277" to="65278"/>
+      <match from="65280" to="65280"/>
       <match from="65471" to="65473"/>
       <match from="65480" to="65481"/>
       <match from="65488" to="65489"/>
       <match from="65496" to="65497"/>
       <match from="65501" to="65503"/>
       <match from="65511" to="65511"/>
-      <match from="65519" to="65531"/>
+      <match from="65519" to="65528"/>
       <match from="65548" to="65548"/>
       <match from="65575" to="65575"/>
       <match from="65595" to="65595"/>
@@ -421,7 +416,6 @@
       <match from="69247" to="69631"/>
       <match from="69710" to="69713"/>
       <match from="69744" to="69759"/>
-      <match from="69821" to="69821"/>
       <match from="69826" to="73727"/>
       <match from="74607" to="74751"/>
       <match from="74851" to="74863"/>
@@ -431,7 +425,6 @@
       <match from="110594" to="118783"/>
       <match from="119030" to="119039"/>
       <match from="119079" to="119080"/>
-      <match from="119155" to="119162"/>
       <match from="119262" to="119295"/>
       <match from="119366" to="119551"/>
       <match from="119639" to="119647"/>
@@ -514,15 +507,13 @@
       <match from="720896" to="786429"/>
       <match from="786432" to="851965"/>
       <match from="851968" to="917501"/>
-      <match from="917504" to="917759"/>
+      <match from="917504" to="917504"/>
+      <match from="917506" to="917535"/>
+      <match from="917632" to="917759"/>
       <match from="918000" to="983037"/>
-      <match from="983040" to="1048573"/>
-      <match from="1048576" to="1114109"/>
    </ranges>
-   <ranges complement="C">
-      <match from="32" to="126"/>
-      <match from="160" to="172"/>
-      <match from="174" to="887"/>
+   <ranges complement="Cn">
+      <match from="9" to="887"/>
       <match from="890" to="894"/>
       <match from="900" to="906"/>
       <match from="908" to="908"/>
@@ -535,10 +526,10 @@
       <match from="1425" to="1479"/>
       <match from="1488" to="1514"/>
       <match from="1520" to="1524"/>
+      <match from="1536" to="1539"/>
       <match from="1542" to="1563"/>
-      <match from="1566" to="1756"/>
-      <match from="1758" to="1805"/>
-      <match from="1808" to="1866"/>
+      <match from="1566" to="1805"/>
+      <match from="1807" to="1866"/>
       <match from="1869" to="1969"/>
       <match from="1984" to="2042"/>
       <match from="2048" to="2093"/>
@@ -727,8 +718,7 @@
       <match from="5984" to="5996"/>
       <match from="5998" to="6000"/>
       <match from="6002" to="6003"/>
-      <match from="6016" to="6067"/>
-      <match from="6070" to="6109"/>
+      <match from="6016" to="6109"/>
       <match from="6112" to="6121"/>
       <match from="6128" to="6137"/>
       <match from="6144" to="6158"/>
@@ -777,10 +767,8 @@
       <match from="8157" to="8175"/>
       <match from="8178" to="8180"/>
       <match from="8182" to="8190"/>
-      <match from="8192" to="8202"/>
-      <match from="8208" to="8233"/>
-      <match from="8239" to="8287"/>
-      <match from="8304" to="8305"/>
+      <match from="8192" to="8292"/>
+      <match from="8298" to="8305"/>
       <match from="8308" to="8334"/>
       <match from="8336" to="8348"/>
       <match from="8352" to="8377"/>
@@ -861,7 +849,7 @@
       <match from="44032" to="55203"/>
       <match from="55216" to="55238"/>
       <match from="55243" to="55291"/>
-      <match from="63744" to="64045"/>
+      <match from="57344" to="64045"/>
       <match from="64048" to="64109"/>
       <match from="64112" to="64217"/>
       <match from="64256" to="64262"/>
@@ -883,6 +871,7 @@
       <match from="65128" to="65131"/>
       <match from="65136" to="65140"/>
       <match from="65142" to="65276"/>
+      <match from="65279" to="65279"/>
       <match from="65281" to="65470"/>
       <match from="65474" to="65479"/>
       <match from="65482" to="65487"/>
@@ -890,7 +879,7 @@
       <match from="65498" to="65500"/>
       <match from="65504" to="65510"/>
       <match from="65512" to="65518"/>
-      <match from="65532" to="65547"/>
+      <match from="65529" to="65547"/>
       <match from="65549" to="65574"/>
       <match from="65576" to="65594"/>
       <match from="65596" to="65597"/>
@@ -939,8 +928,7 @@
       <match from="69216" to="69246"/>
       <match from="69632" to="69709"/>
       <match from="69714" to="69743"/>
-      <match from="69760" to="69820"/>
-      <match from="69822" to="69825"/>
+      <match from="69760" to="69825"/>
       <match from="73728" to="74606"/>
       <match from="74752" to="74850"/>
       <match from="74864" to="74867"/>
@@ -949,8 +937,7 @@
       <match from="110592" to="110593"/>
       <match from="118784" to="119029"/>
       <match from="119040" to="119078"/>
-      <match from="119081" to="119154"/>
-      <match from="119163" to="119261"/>
+      <match from="119081" to="119261"/>
       <match from="119296" to="119365"/>
       <match from="119552" to="119638"/>
       <match from="119648" to="119665"/>
@@ -1033,9 +1020,9 @@
       <match from="786430" to="786431"/>
       <match from="851966" to="851967"/>
       <match from="917502" to="917503"/>
+      <match from="917505" to="917505"/>
+      <match from="917536" to="917631"/>
       <match from="917760" to="917999"/>
-      <match from="983038" to="983039"/>
-      <match from="1048574" to="1048575"/>
-      <match from="1114110" to="1114111"/>
+      <match from="983038" to="1114111"/>
    </ranges>
 </out>

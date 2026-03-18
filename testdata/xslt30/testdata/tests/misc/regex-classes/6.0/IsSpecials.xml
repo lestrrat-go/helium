@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsSpecials">
+      <match from="65279" to="65279"/>
+      <match from="65520" to="65533"/>
+   </ranges>
+   <ranges complement="IsSpecials">
+      <match from="9" to="65278"/>
+      <match from="65280" to="65519"/>
+      <match from="65536" to="1114111"/>
+   </ranges>
+</out>

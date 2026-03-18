@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsThaana">
+      <match from="1920" to="1983"/>
+   </ranges>
+   <ranges complement="IsThaana">
+      <match from="9" to="1919"/>
+      <match from="1984" to="1114111"/>
+   </ranges>
+</out>

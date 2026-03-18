@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsKanbun">
+      <match from="12688" to="12703"/>
+   </ranges>
+   <ranges complement="IsKanbun">
+      <match from="9" to="12687"/>
+      <match from="12704" to="1114111"/>
+   </ranges>
+</out>

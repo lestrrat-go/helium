@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="Pd">
+      <match from="45" to="45"/>
+      <match from="1418" to="1418"/>
+      <match from="1470" to="1470"/>
+      <match from="5120" to="5120"/>
+      <match from="6150" to="6150"/>
+      <match from="8208" to="8213"/>
+      <match from="11799" to="11799"/>
+      <match from="11802" to="11802"/>
+      <match from="12316" to="12316"/>
+      <match from="12336" to="12336"/>
+      <match from="12448" to="12448"/>
+      <match from="65073" to="65074"/>
+      <match from="65112" to="65112"/>
+      <match from="65123" to="65123"/>
+      <match from="65293" to="65293"/>
+   </ranges>
+   <ranges complement="Pd">
+      <match from="9" to="44"/>
+      <match from="46" to="1417"/>
+      <match from="1419" to="1469"/>
+      <match from="1471" to="5119"/>
+      <match from="5121" to="6149"/>
+      <match from="6151" to="8207"/>
+      <match from="8214" to="11798"/>
+      <match from="11800" to="11801"/>
+      <match from="11803" to="12315"/>
+      <match from="12317" to="12335"/>
+      <match from="12337" to="12447"/>
+      <match from="12449" to="65072"/>
+      <match from="65075" to="65111"/>
+      <match from="65113" to="65122"/>
+      <match from="65124" to="65292"/>
+      <match from="65294" to="1114111"/>
+   </ranges>
+</out>

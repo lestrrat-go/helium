@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsYiRadicals">
+      <match from="42128" to="42191"/>
+   </ranges>
+   <ranges complement="IsYiRadicals">
+      <match from="9" to="42127"/>
+      <match from="42192" to="1114111"/>
+   </ranges>
+</out>

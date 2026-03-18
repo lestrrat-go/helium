@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="Zs">
+      <match from="32" to="32"/>
+      <match from="160" to="160"/>
+      <match from="5760" to="5760"/>
+      <match from="6158" to="6158"/>
+      <match from="8192" to="8202"/>
+      <match from="8239" to="8239"/>
+      <match from="8287" to="8287"/>
+      <match from="12288" to="12288"/>
+   </ranges>
+   <ranges complement="Zs">
+      <match from="9" to="13"/>
+      <match from="33" to="159"/>
+      <match from="161" to="5759"/>
+      <match from="5761" to="6157"/>
+      <match from="6159" to="8191"/>
+      <match from="8203" to="8238"/>
+      <match from="8240" to="8286"/>
+      <match from="8288" to="12287"/>
+      <match from="12289" to="1114111"/>
+   </ranges>
+</out>

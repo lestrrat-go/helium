@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsEnclosedCJKLettersandMonths">
+      <match from="12800" to="13055"/>
+   </ranges>
+   <ranges complement="IsEnclosedCJKLettersandMonths">
+      <match from="9" to="12799"/>
+      <match from="13056" to="1114111"/>
+   </ranges>
+</out>

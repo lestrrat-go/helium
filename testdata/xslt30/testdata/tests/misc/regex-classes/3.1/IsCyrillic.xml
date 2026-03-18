@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsCyrillic">
+      <match from="1024" to="1279"/>
+   </ranges>
+   <ranges complement="IsCyrillic">
+      <match from="9" to="1023"/>
+      <match from="1280" to="1114111"/>
+   </ranges>
+</out>
