@@ -103,6 +103,13 @@ func checkStreamableInstruction(ss *Stylesheet, inst Instruction) error {
 			return staticError(errCodeXTSE3430,
 				"xsl:apply-templates with crawling select expression %q is not streamable", v.Select.String())
 		}
+	case *NumberInst:
+		// xsl:number without an explicit value computes numbering from node
+		// relationships, which is consuming and therefore not streamable.
+		if v.Value == nil {
+			return staticError(errCodeXTSE3430,
+				"xsl:number without value is not streamable")
+		}
 	}
 
 	for _, expr := range getInstructionExprs(inst) {
