@@ -19,10 +19,11 @@ func analyzeStreamability(ss *Stylesheet) error {
 
 	// Check templates in streamable modes for non-streamable constructs.
 	for _, tmpl := range ss.templates {
-		if tmpl.Mode == "" || tmpl.Mode == "#all" {
+		modeName, ok := streamabilityModeNameForTemplate(tmpl)
+		if !ok || modeName == "#all" {
 			continue
 		}
-		md := ss.modeDefs[tmpl.Mode]
+		md := ss.modeDefs[modeName]
 		if md == nil || !md.Streamable {
 			continue
 		}
@@ -41,6 +42,19 @@ func analyzeStreamability(ss *Stylesheet) error {
 	}
 
 	return nil
+}
+
+// streamabilityModeNameForTemplate returns the mode name that should be used
+// for streamability checks. Only match templates participate in mode-based
+// streamability; named templates are handled separately where relevant.
+func streamabilityModeNameForTemplate(tmpl *Template) (string, bool) {
+	if tmpl == nil || tmpl.Match == nil {
+		return "", false
+	}
+	if tmpl.Mode == "" {
+		return "#default", true
+	}
+	return tmpl.Mode, true
 }
 
 // checkInstructionsForStreamableSourceDoc walks instructions looking for
@@ -82,6 +96,15 @@ func checkStreamableTemplateBody(ss *Stylesheet, body []Instruction) error {
 
 // checkStreamableInstruction checks a single instruction for streamability violations.
 func checkStreamableInstruction(ss *Stylesheet, inst Instruction) error {
+	switch v := inst.(type) {
+	case *ApplyTemplatesInst:
+		if v.Select != nil && xpath3.ExprUsesDescendantOrSelf(v.Select) &&
+			!exprEndsWithGrounding(v.Select.AST()) {
+			return staticError(errCodeXTSE3430,
+				"xsl:apply-templates with crawling select expression %q is not streamable", v.Select.String())
+		}
+	}
+
 	for _, expr := range getInstructionExprs(inst) {
 		if err := checkStreamableExpr(expr); err != nil {
 			return err
