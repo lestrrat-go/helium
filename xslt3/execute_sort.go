@@ -70,6 +70,18 @@ func (ec *execContext) execPerformSort(ctx context.Context, inst *PerformSortIns
 		}
 	}
 
+	// In capture mode (e.g. inside xsl:function), push sorted items
+	// directly so the caller receives a proper sequence of atomic values
+	// rather than merged text nodes.
+	out := ec.currentOutput()
+	if out.captureItems && out.doc != nil && out.current == out.doc.DocumentElement() {
+		out.pendingItems = append(out.pendingItems, seq...)
+		if len(seq) > 0 {
+			out.noteOutput()
+		}
+		return nil
+	}
+
 	// Output atomic items separated by spaces
 	for i, item := range seq {
 		if i > 0 {
