@@ -53,13 +53,14 @@ func init() {
 		{"unsignedInt", TypeUnsignedInt, 0, 4294967295},
 		{"unsignedShort", TypeUnsignedShort, 0, 65535},
 		{"unsignedByte", TypeUnsignedByte, 0, 255},
-		{"nonNegativeInteger", TypeNonNegativeInteger, 0, math.MaxInt64},
-		{"nonPositiveInteger", TypeNonPositiveInteger, math.MinInt64, 0},
-		{"positiveInteger", TypePositiveInteger, 1, math.MaxInt64},
-		{"negativeInteger", TypeNegativeInteger, math.MinInt64, -1},
 	} {
 		registerNS(NSXS, entry.name, 1, 1, makeXSIntegerRange(entry.typeName, entry.min, entry.max))
 	}
+	// Unbounded integer subtypes need big.Int constructor (no fixed max/min)
+	registerNS(NSXS, "nonNegativeInteger", 1, 1, makeXSIntegerRangeBig(TypeNonNegativeInteger, big.NewInt(0), nil))
+	registerNS(NSXS, "nonPositiveInteger", 1, 1, makeXSIntegerRangeBig(TypeNonPositiveInteger, nil, big.NewInt(0)))
+	registerNS(NSXS, "positiveInteger", 1, 1, makeXSIntegerRangeBig(TypePositiveInteger, big.NewInt(1), nil))
+	registerNS(NSXS, "negativeInteger", 1, 1, makeXSIntegerRangeBig(TypeNegativeInteger, nil, big.NewInt(-1)))
 
 	// xs:unsignedLong needs big.Int max since MaxUint64 exceeds int64
 	registerNS(NSXS, "unsignedLong", 1, 1, makeXSIntegerRangeBig(TypeUnsignedLong, big.NewInt(0), new(big.Int).SetUint64(math.MaxUint64)))
@@ -170,7 +171,7 @@ func makeXSIntegerRangeBig(typeName string, minBig, maxBig *big.Int) func(contex
 			return nil, err
 		}
 		n := iv.BigInt()
-		if n.Cmp(minBig) < 0 || n.Cmp(maxBig) > 0 {
+		if (minBig != nil && n.Cmp(minBig) < 0) || (maxBig != nil && n.Cmp(maxBig) > 0) {
 			return nil, &XPathError{
 				Code:    errCodeFORG0001,
 				Message: fmt.Sprintf("value %s out of range for %s", n.String(), typeName),
