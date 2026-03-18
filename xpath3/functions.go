@@ -164,6 +164,16 @@ func IsBuiltinFunctionNS(uri, name string) bool {
 	return ok
 }
 
+// BuiltinFunctionAcceptsArity returns true if a built-in function accepts
+// the given arity.
+func BuiltinFunctionAcceptsArity(uri, name string, arity int) bool {
+	fn, ok := builtinFunctions3[QualifiedName{URI: uri, Name: name}]
+	if !ok {
+		return false
+	}
+	return arity >= fn.MinArity() && arity <= fn.MaxArity()
+}
+
 // registerFn is a convenience for registering a built-in function in the fn: namespace.
 func registerFn(name string, min, max int, fn func(context.Context, []Sequence) (Sequence, error)) {
 	builtinFunctions3[QualifiedName{URI: NSFn, Name: name}] = &builtinFunc{
