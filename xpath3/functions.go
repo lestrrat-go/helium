@@ -171,7 +171,7 @@ func BuiltinFunctionAcceptsArity(uri, name string, arity int) bool {
 	if !ok {
 		return false
 	}
-	return arity >= fn.MinArity() && arity <= fn.MaxArity()
+	return arity >= fn.MinArity() && (fn.MaxArity() < 0 || arity <= fn.MaxArity())
 }
 
 // registerFn is a convenience for registering a built-in function in the fn: namespace.
