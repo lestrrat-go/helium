@@ -77,12 +77,19 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *SourceDocum
 	savedItem := ec.contextItem
 	savedPos := ec.position
 	savedSize := ec.size
+	savedActiveAccums := ec.activeAccumulators
+	savedRequireStreamable := ec.requireStreamableAccums
 	ec.sourceDoc = doc
 	ec.contextNode = startNode
 	ec.currentNode = startNode
 	ec.contextItem = nil // document node is the context, not an atomic item
 	ec.position = 1
 	ec.size = 1
+	ec.activeAccumulators = make(map[string]struct{}, len(inst.UseAccumulators))
+	for _, name := range inst.UseAccumulators {
+		ec.activeAccumulators[name] = struct{}{}
+	}
+	ec.requireStreamableAccums = inst.Streamable
 	defer func() {
 		ec.sourceDoc = savedSource
 		ec.contextNode = savedContext
@@ -90,6 +97,8 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *SourceDocum
 		ec.contextItem = savedItem
 		ec.position = savedPos
 		ec.size = savedSize
+		ec.activeAccumulators = savedActiveAccums
+		ec.requireStreamableAccums = savedRequireStreamable
 	}()
 
 	// Execute the body with the loaded document as context.
