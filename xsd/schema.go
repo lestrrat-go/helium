@@ -1,6 +1,8 @@
 package xsd
 
 import (
+	"slices"
+
 	"github.com/lestrrat-go/helium/xpath1"
 )
 
@@ -15,7 +17,7 @@ type BlockFlags uint8
 
 // BlockFlags values.
 const (
-	BlockExtension    BlockFlags = 1 << iota
+	BlockExtension BlockFlags = 1 << iota
 	BlockRestriction
 	BlockSubstitution
 )
@@ -25,7 +27,7 @@ type FinalFlags uint8
 
 // FinalFlags values.
 const (
-	FinalExtension  FinalFlags = 1 << iota
+	FinalExtension FinalFlags = 1 << iota
 	FinalRestriction
 	FinalList  // simpleType only
 	FinalUnion // simpleType only
@@ -44,7 +46,7 @@ type Schema struct {
 	groups            map[QName]*ModelGroup
 	attrGroups        map[QName][]*AttrUse
 	globalAttrs       map[QName]*AttrUse
-	substGroups map[QName][]*ElementDecl // head QName → member element declarations
+	substGroups       map[QName][]*ElementDecl // head QName → member element declarations
 }
 
 // LookupElement returns the global element declaration for the given name.
@@ -57,6 +59,33 @@ func (s *Schema) LookupElement(local, ns string) (*ElementDecl, bool) {
 func (s *Schema) LookupType(local, ns string) (*TypeDef, bool) {
 	t, ok := s.types[QName{Local: local, NS: ns}]
 	return t, ok
+}
+
+// NamedTypes returns the schema's named type definitions.
+func (s *Schema) NamedTypes() []QName {
+	if len(s.types) == 0 {
+		return nil
+	}
+	names := make([]QName, 0, len(s.types))
+	for qn := range s.types {
+		names = append(names, qn)
+	}
+	slices.SortFunc(names, func(a, b QName) int {
+		if a.NS != b.NS {
+			if a.NS < b.NS {
+				return -1
+			}
+			return 1
+		}
+		if a.Local < b.Local {
+			return -1
+		}
+		if a.Local > b.Local {
+			return 1
+		}
+		return 0
+	})
+	return names
 }
 
 // TargetNamespace returns the schema's target namespace.
