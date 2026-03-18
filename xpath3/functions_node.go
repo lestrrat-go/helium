@@ -189,11 +189,16 @@ func fnPath(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func buildNodePath(n helium.Node) string {
+	const fnRoot = "Q{http://www.w3.org/2005/xpath-functions}root()"
 	if n.Type() == helium.DocumentNode {
 		return "/"
 	}
 	var parts []string
 	for cur := n; cur != nil && cur.Type() != helium.DocumentNode; cur = cur.Parent() {
+		// Skip the root of a non-document tree — it is represented by Q{...}root()
+		if cur.Parent() == nil {
+			break
+		}
 		switch cur.Type() {
 		case helium.ElementNode:
 			local := ixpath.LocalNameOf(cur)
@@ -228,7 +233,17 @@ func buildNodePath(n helium.Node) string {
 	for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
 		parts[i], parts[j] = parts[j], parts[i]
 	}
-	return "/" + strings.Join(parts, "/")
+	// Check if the node is rooted in a document node.
+	// Per XPath 3.1: document root → path starts with "/",
+	// non-document root (orphan tree) → path starts with "Q{...}root()".
+	var root helium.Node = n
+	for root.Parent() != nil {
+		root = root.Parent()
+	}
+	if root.Type() == helium.DocumentNode {
+		return "/" + strings.Join(parts, "/")
+	}
+	return fnRoot + "/" + strings.Join(parts, "/")
 }
 
 func elementPosition(n helium.Node) int {
