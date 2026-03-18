@@ -152,6 +152,12 @@ func (f *builtinFunc) Call(ctx context.Context, args []Sequence) (Sequence, erro
 	return f.fn(ctx, args)
 }
 
+// IsBuiltinFunction returns true if name is a registered XPath built-in function.
+func IsBuiltinFunction(name string) bool {
+	_, ok := builtinFunctions3[QualifiedName{URI: NSFn, Name: name}]
+	return ok
+}
+
 // registerFn is a convenience for registering a built-in function in the fn: namespace.
 func registerFn(name string, min, max int, fn func(context.Context, []Sequence) (Sequence, error)) {
 	builtinFunctions3[QualifiedName{URI: NSFn, Name: name}] = &builtinFunc{
