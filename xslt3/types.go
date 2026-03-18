@@ -16,11 +16,16 @@ type SequenceType struct {
 }
 
 // parseSequenceType parses an "as" attribute value into a SequenceType.
-// Examples: "item()*", "xs:string", "element()+", "xs:integer?", "text()".
+// Examples: "item()*", "xs:string", "element()+", "xs:integer?", "text()", "empty-sequence()".
 func parseSequenceType(as string) SequenceType {
 	s := strings.TrimSpace(as)
 	if s == "" {
 		return SequenceType{ItemType: "item()", Occurrence: '*'}
+	}
+
+	// empty-sequence() is a special type that matches only the empty sequence
+	if s == "empty-sequence()" {
+		return SequenceType{ItemType: "empty-sequence()", Occurrence: 'E'}
 	}
 
 	// Check for occurrence indicator at the end
@@ -41,6 +46,11 @@ func checkSequenceType(seq xpath3.Sequence, st SequenceType, errCode string, con
 	// Check cardinality
 	count := len(seq)
 	switch st.Occurrence {
+	case 'E': // empty-sequence() — must be empty
+		if count != 0 {
+			return nil, dynamicError(errCode, "%s: required empty-sequence(), got %d items", context, count)
+		}
+		return seq, nil
 	case 0: // exactly one
 		if count != 1 {
 			return nil, dynamicError(errCode, "%s: required exactly 1 item, got %d", context, count)
