@@ -21,7 +21,7 @@ func TestSplitLines(t *testing.T) {
 		input    string
 		expected []string
 	}{
-		{"empty string", "", []string{""}},
+		{"empty string", "", nil},
 		{"no newlines", "hello", []string{"hello"}},
 		{"lf ending", "a\nb\n", []string{"a", "b"}},
 		{"crlf ending", "a\r\nb\r\n", []string{"a", "b"}},
