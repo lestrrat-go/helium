@@ -23,6 +23,11 @@ func (c *compiler) compileSourceDocument(elem *helium.Element) (Instruction, err
 		Streamable: getAttr(elem, "streamable") == "yes",
 		BaseURI:    stylesheetBaseURI(elem, c.baseURI),
 	}
+	if useAccumulators := getAttr(elem, "use-accumulators"); useAccumulators != "" {
+		for _, name := range strings.Fields(useAccumulators) {
+			inst.UseAccumulators = append(inst.UseAccumulators, resolveQName(name, c.nsBindings))
+		}
+	}
 
 	body, err := c.compileChildren(elem)
 	if err != nil {

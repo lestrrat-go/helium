@@ -66,6 +66,9 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *SourceDocum
 		}
 		startNode = elem
 	}
+	if err := ec.prepareSourceDocumentAccumulators(ctx, inst, doc); err != nil {
+		return err
+	}
 
 	// Save and restore source document, context nodes, and context item.
 	savedSource := ec.sourceDoc
@@ -912,6 +915,20 @@ func (ec *execContext) prepareMergeSourceAccumulators(ctx context.Context, src *
 
 	names := append([]string(nil), ec.stylesheet.accumulatorOrder...)
 
+	return ec.computeAccumulatorStates(ctx, doc, names)
+}
+
+func (ec *execContext) prepareSourceDocumentAccumulators(ctx context.Context, inst *SourceDocumentInst, doc helium.Node) error {
+	if len(inst.UseAccumulators) == 0 || len(ec.stylesheet.accumulators) == 0 || doc == nil {
+		return nil
+	}
+	if ec.accumulatorBeforeByNode != nil {
+		if _, ok := ec.accumulatorBeforeByNode[doc]; ok {
+			return nil
+		}
+	}
+
+	names := append([]string(nil), ec.stylesheet.accumulatorOrder...)
 	return ec.computeAccumulatorStates(ctx, doc, names)
 }
 

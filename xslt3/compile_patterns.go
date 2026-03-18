@@ -435,15 +435,21 @@ func (p *Pattern) matchPattern(ctx *execContext, node helium.Node) bool {
 	saved := ctx.xpathDefaultNS
 	savedHas := ctx.hasXPathDefaultNS
 	savedGroups := ctx.regexGroups
+	savedContext := ctx.contextNode
+	savedCurrent := ctx.currentNode
 	savedItem := ctx.contextItem
 	ctx.xpathDefaultNS = p.xpathDefaultNS
 	ctx.hasXPathDefaultNS = p.xpathDefaultNS != ""
 	ctx.regexGroups = nil
+	ctx.contextNode = node
+	ctx.currentNode = node
 	ctx.contextItem = nil
 	defer func() {
 		ctx.xpathDefaultNS = saved
 		ctx.hasXPathDefaultNS = savedHas
 		ctx.regexGroups = savedGroups
+		ctx.contextNode = savedContext
+		ctx.currentNode = savedCurrent
 		ctx.contextItem = savedItem
 	}()
 
