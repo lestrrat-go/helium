@@ -173,14 +173,27 @@ func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupI
 
 	seq := result.Sequence()
 
+	// Resolve collation key function if collation attribute is present
+	var collationKeyFn func(string) string
+	if inst.Collation != nil {
+		collationURI, collErr := inst.Collation.evaluate(ctx, ec.contextNode)
+		if collErr != nil {
+			return collErr
+		}
+		collationKeyFn, err = xpath3.ResolveCollationKeyFunc(collationURI)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Build groups based on the grouping mode
 	var groups []fegGroup
 
 	switch {
 	case inst.GroupBy != nil:
-		groups, err = ec.groupBy(ctx, seq, inst.GroupBy, inst.Composite)
+		groups, err = ec.groupBy(ctx, seq, inst.GroupBy, inst.Composite, collationKeyFn)
 	case inst.GroupAdjacent != nil:
-		groups, err = ec.groupAdjacent(ctx, seq, inst.GroupAdjacent, inst.Composite)
+		groups, err = ec.groupAdjacent(ctx, seq, inst.GroupAdjacent, inst.Composite, collationKeyFn)
 	case inst.GroupStartingWith != nil:
 		groups = ec.groupStartingWith(seq, inst.GroupStartingWith)
 	case inst.GroupEndingWith != nil:
@@ -311,7 +324,7 @@ type fegGroup struct {
 // false and the expression returns a sequence of multiple values, the item is
 // added to a group for each value. When composite is true, the entire sequence
 // is treated as a single composite key.
-func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByExpr *xpath3.Expression, composite bool) ([]fegGroup, error) {
+func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByExpr *xpath3.Expression, composite bool, collationKeyFn func(string) string) ([]fegGroup, error) {
 	type entry struct {
 		key    string
 		keySeq xpath3.Sequence
@@ -348,21 +361,29 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 		if composite {
 			// Composite: entire sequence is a single key
 			keyVal := compositeKeyString(resultSeq)
-			if e, ok := groupMap[keyVal]; ok {
+			lookupKey := keyVal
+			if collationKeyFn != nil {
+				lookupKey = collationKeyFn(keyVal)
+			}
+			if e, ok := groupMap[lookupKey]; ok {
 				e.items = append(e.items, item)
 			} else {
-				groupMap[keyVal] = &entry{key: keyVal, keySeq: atomizeSequence(resultSeq), items: xpath3.Sequence{item}}
-				order = append(order, keyVal)
+				groupMap[lookupKey] = &entry{key: keyVal, keySeq: atomizeSequence(resultSeq), items: xpath3.Sequence{item}}
+				order = append(order, lookupKey)
 			}
 		} else {
 			// Non-composite: each value creates a separate group key
 			for _, keyItem := range resultSeq {
 				keyVal := stringifyItem(keyItem)
-				if e, ok := groupMap[keyVal]; ok {
+				lookupKey := keyVal
+				if collationKeyFn != nil {
+					lookupKey = collationKeyFn(keyVal)
+				}
+				if e, ok := groupMap[lookupKey]; ok {
 					e.items = append(e.items, item)
 				} else {
-					groupMap[keyVal] = &entry{key: keyVal, items: xpath3.Sequence{item}}
-					order = append(order, keyVal)
+					groupMap[lookupKey] = &entry{key: keyVal, items: xpath3.Sequence{item}}
+					order = append(order, lookupKey)
 				}
 			}
 		}
@@ -386,7 +407,7 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 // groupAdjacent implements group-adjacent: consecutive items with equal
 // grouping key values form a group. When composite is true, the key
 // expression returns a sequence treated as a single composite key.
-func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, adjExpr *xpath3.Expression, composite bool) ([]fegGroup, error) {
+func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, adjExpr *xpath3.Expression, composite bool, collationKeyFn func(string) string) ([]fegGroup, error) {
 	var groups []fegGroup
 	var currentKey string
 	var currentKeySeq xpath3.Sequence
@@ -422,7 +443,12 @@ func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, a
 			keyVal = stringifyResult(result)
 		}
 
-		if keyVal == currentKey && len(currentItems) > 0 {
+		lookupKey := keyVal
+		if collationKeyFn != nil {
+			lookupKey = collationKeyFn(keyVal)
+		}
+
+		if lookupKey == currentKey && len(currentItems) > 0 {
 			currentItems = append(currentItems, item)
 		} else {
 			if len(currentItems) > 0 {
@@ -434,7 +460,7 @@ func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, a
 				}
 				groups = append(groups, fegGroup{key: gKey, items: currentItems})
 			}
-			currentKey = keyVal
+			currentKey = lookupKey
 			currentKeySeq = keySeq
 			currentItems = xpath3.Sequence{item}
 		}

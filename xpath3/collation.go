@@ -662,3 +662,17 @@ func resolveCollation(uri, baseURI string) (*collationImpl, error) {
 		return nil, &XPathError{Code: errCodeFOCH0002, Message: fmt.Sprintf("unsupported collation: %s", uri)}
 	}
 }
+
+// ResolveCollationKeyFunc resolves a collation URI and returns a function that
+// maps strings to their collation sort keys (as strings). Two strings that are
+// equal under the collation will produce identical keys.
+// This is intended for use by xslt3 for-each-group collation-based grouping.
+func ResolveCollationKeyFunc(uri string) (func(string) string, error) {
+	coll, err := resolveCollation(uri, "")
+	if err != nil {
+		return nil, err
+	}
+	return func(s string) string {
+		return string(coll.key(s))
+	}, nil
+}
