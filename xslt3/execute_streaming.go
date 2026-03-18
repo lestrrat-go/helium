@@ -335,9 +335,9 @@ type mergeSourceItems struct {
 	sourceIdx       int               // index into inst.Sources
 }
 
-// mergeGroup represents one group of items that share the same merge key.
+// mergeGroup represents one group of items that share the same merge key tuple.
 type mergeGroup struct {
-	key      xpath3.Sequence            // the merge key value (first key of group)
+	key      xpath3.Sequence            // the merge key tuple for current-merge-key()
 	allItems xpath3.Sequence            // all items across all sources
 	byName   map[string]xpath3.Sequence // items per named source
 }
@@ -1317,9 +1317,9 @@ func (ec *execContext) nWayMerge(sources []mergeSourceItems, orders []mergeKeyOr
 			}
 		}
 
-		// Convert the first key to a sequence for current-merge-key().
+		// Convert the full key tuple to a sequence for current-merge-key().
 		if len(minKeys) > 0 {
-			g.key = mergeKeyValueToSequence(minKeys[0])
+			g.key = mergeKeyValuesToSequence(minKeys)
 		}
 
 		groups = append(groups, g)
@@ -1328,8 +1328,16 @@ func (ec *execContext) nWayMerge(sources []mergeSourceItems, orders []mergeKeyOr
 	return groups, nil
 }
 
-// mergeKeyValueToSequence converts a mergeKeyValue to an XPath sequence for
-// current-merge-key().
+// mergeKeyValuesToSequence converts the merge key tuple to the XPath sequence
+// exposed by current-merge-key().
+func mergeKeyValuesToSequence(keys []mergeKeyValue) xpath3.Sequence {
+	var seq xpath3.Sequence
+	for _, mkv := range keys {
+		seq = append(seq, mergeKeyValueToSequence(mkv)...)
+	}
+	return seq
+}
+
 func mergeKeyValueToSequence(mkv mergeKeyValue) xpath3.Sequence {
 	if mkv.atom.TypeName != "" {
 		return xpath3.SingleAtomic(mkv.atom)
