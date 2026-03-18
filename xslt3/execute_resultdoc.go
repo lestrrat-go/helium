@@ -90,6 +90,11 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 		itemSep = outDef.ItemSeparator
 	}
 
+	// Track the current output URI for current-output-uri()
+	savedOutputURI := ec.currentOutputURI
+	ec.currentOutputURI = href
+	defer func() { ec.currentOutputURI = savedOutputURI }()
+
 	if isPrimary {
 		// Write directly to the primary output (base frame).
 		savedStack := ec.outputStack
