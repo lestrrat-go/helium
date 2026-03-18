@@ -51,9 +51,10 @@ const (
 // sortValue is a pre-extracted, typed sort key. Numeric values are parsed
 // once at extraction time; no string→float conversion happens during comparison.
 type sortValue struct {
-	kind sortValueKind
-	str  string
-	num  float64
+	kind     sortValueKind
+	str      string
+	num      float64
+	typeName string // original XSD type name (for XTDE1030 checking)
 }
 
 // resolvedLevel holds the fully resolved configuration for one sort level.
@@ -83,6 +84,8 @@ type keyedItem1 struct {
 	key   sortValue
 	index int
 }
+
+func (k keyedItem1) keyType() string { return k.key.typeName }
 
 // --- Multi-key entry types ---
 
@@ -155,6 +158,36 @@ func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *SortKey) err
 		if !isValidLanguageTag(lang) {
 			return dynamicError("XTDE0030",
 				"invalid language tag %q in xsl:sort", lang)
+		}
+	}
+	return nil
+}
+
+// checkSortKeyTypeConsistency raises XTDE1030 if sort keys have incompatible types.
+// For example, mixing xs:untypedAtomic with xs:date is invalid because they
+// can't be compared using the lt operator without explicit casting.
+func checkSortKeyTypeConsistency[T interface{ keyType() string }](entries []T) error {
+	var firstNonString string
+	for _, e := range entries {
+		tn := e.keyType()
+		if tn == "" || tn == xpath3.TypeString || tn == xpath3.TypeUntypedAtomic {
+			continue
+		}
+		if firstNonString == "" {
+			firstNonString = tn
+		} else if firstNonString != tn {
+			return dynamicError("XTDE1030",
+				"sort keys have incompatible types: %s and %s", firstNonString, tn)
+		}
+	}
+	// If we have a non-string type AND string/untypedAtomic types, they're incompatible
+	if firstNonString != "" {
+		for _, e := range entries {
+			tn := e.keyType()
+			if tn == xpath3.TypeUntypedAtomic || tn == xpath3.TypeString {
+				return dynamicError("XTDE1030",
+					"sort keys have incompatible types: %s and %s", firstNonString, tn)
+			}
 		}
 	}
 	return nil
@@ -253,9 +286,18 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 		}
 
 		sv := sortValue{kind: sortValueText, str: result.StringValue()}
-		if *dtMode == dataTypeAuto && len(seq) == 1 {
-			if av, ok := seq[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
-				*dtMode = dataTypeNumber
+		if len(seq) == 1 {
+			switch v := seq[0].(type) {
+			case xpath3.AtomicValue:
+				sv.typeName = v.TypeName
+				if *dtMode == dataTypeAuto && v.IsNumeric() {
+					*dtMode = dataTypeNumber
+				}
+			case xpath3.NodeItem:
+				// Atomize to get the typed value for type consistency checks
+				if av, err := xpath3.AtomizeItem(v); err == nil {
+					sv.typeName = av.TypeName
+				}
 			}
 		}
 		return sv, nil
@@ -541,6 +583,11 @@ func sortItems1(ctx context.Context, ec *execContext, items xpath3.Sequence, sk 
 			return nil, err
 		}
 		entries[i] = keyedItem1{item: item, key: sv, index: i}
+	}
+
+	// XTDE1030: check for heterogeneous sort key types that can't be compared.
+	if err := checkSortKeyTypeConsistency(entries); err != nil {
+		return nil, err
 	}
 
 	level, err := resolveLevel1(ctx, ec, sk)
