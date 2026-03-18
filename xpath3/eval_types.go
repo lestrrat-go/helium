@@ -440,7 +440,13 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		if ann == "" {
 			ann = TypeUntyped
 		}
-		return isSubtypeOf(ann, typeName)
+		if !isSubtypeOf(ann, typeName) {
+			if ec != nil && ec.schemaDeclarations != nil {
+				return ec.schemaDeclarations.IsSubtypeOf(ann, typeName)
+			}
+			return false
+		}
+		return true
 	case SchemaAttributeTest:
 		ni, ok := item.(NodeItem)
 		if !ok || ni.Node.Type() != helium.AttributeNode {
@@ -466,7 +472,13 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		if ann == "" {
 			ann = TypeUntypedAtomic
 		}
-		return isSubtypeOf(ann, typeName)
+		if !isSubtypeOf(ann, typeName) {
+			if ec != nil && ec.schemaDeclarations != nil {
+				return ec.schemaDeclarations.IsSubtypeOf(ann, typeName)
+			}
+			return false
+		}
+		return true
 	case DocumentTest:
 		ni, ok := item.(NodeItem)
 		if !ok {
