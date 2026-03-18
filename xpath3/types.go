@@ -237,13 +237,35 @@ func (a AtomicValue) IntegerVal() int64 {
 }
 
 // BigInt returns the backing *big.Int value.
+// If the value is stored as a string, it attempts to parse it.
 func (a AtomicValue) BigInt() *big.Int {
-	return a.Value.(*big.Int)
+	if n, ok := a.Value.(*big.Int); ok {
+		return n
+	}
+	if s, ok := a.Value.(string); ok {
+		n, ok := new(big.Int).SetString(s, 10)
+		if ok {
+			return n
+		}
+	}
+	return new(big.Int)
 }
 
 // BigRat returns the backing *big.Rat value.
+// If the value is stored as a string (e.g. from a type annotation mismatch),
+// it attempts to parse it.
 func (a AtomicValue) BigRat() *big.Rat {
-	return a.Value.(*big.Rat)
+	if r, ok := a.Value.(*big.Rat); ok {
+		return r
+	}
+	if s, ok := a.Value.(string); ok {
+		r, ok := new(big.Rat).SetString(s)
+		if ok {
+			return r
+		}
+	}
+	// Last resort: return zero
+	return new(big.Rat)
 }
 
 // DoubleVal returns the backing float64 value (extracts from *FloatValue).

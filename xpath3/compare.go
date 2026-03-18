@@ -517,6 +517,38 @@ func AtomicEquals(a, b AtomicValue) bool {
 	return result
 }
 
+// coerceTimePair safely extracts time.Time from two AtomicValues,
+// handling the case where the value is stored as a string by re-parsing.
+func coerceTimePair(a, b AtomicValue) (time.Time, time.Time, error) {
+	ta, err := coerceToTime(a)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	tb, err := coerceToTime(b)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	return ta, tb, nil
+}
+
+func coerceToTime(v AtomicValue) (time.Time, error) {
+	if t, ok := v.Value.(time.Time); ok {
+		return t, nil
+	}
+	// Value stored as string — re-parse
+	if s, ok := v.Value.(string); ok {
+		switch v.TypeName {
+		case TypeDate:
+			return parseXSDDate(s)
+		case TypeDateTime, TypeDateTimeStamp:
+			return parseXSDDateTime(s)
+		case TypeTime:
+			return parseXSDTime(s)
+		}
+	}
+	return time.Time{}, fmt.Errorf("cannot coerce %T to time.Time for %s", v.Value, v.TypeName)
+}
+
 func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitTZ *time.Location) (bool, error) {
 	// Map general comparison operators to value comparison operators
 	op = normalizeCompareOp(op)
@@ -545,16 +577,22 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 	if a.TypeName == b.TypeName {
 		switch a.TypeName {
 		case TypeDate:
-			ta := a.Value.(time.Time)
-			tb := b.Value.(time.Time)
+			ta, tb, err := coerceTimePair(a, b)
+			if err != nil {
+				return false, err
+			}
 			return compareDate(op, ta, tb, implicitTZ), nil
 		case TypeDateTime:
-			ta := a.Value.(time.Time)
-			tb := b.Value.(time.Time)
+			ta, tb, err := coerceTimePair(a, b)
+			if err != nil {
+				return false, err
+			}
 			return compareTime(op, applyImplicitTZ(ta, implicitTZ), applyImplicitTZ(tb, implicitTZ)), nil
 		case TypeTime:
-			ta := a.Value.(time.Time)
-			tb := b.Value.(time.Time)
+			ta, tb, err := coerceTimePair(a, b)
+			if err != nil {
+				return false, err
+			}
 			return compareTimeOfDay(op, ta, tb, implicitTZ), nil
 		case TypeYearMonthDuration, TypeDayTimeDuration:
 			return compareDuration(op, a.DurationVal(), b.DurationVal())
