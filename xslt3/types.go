@@ -138,6 +138,26 @@ func coerceItem(item xpath3.Item, itemType string) (xpath3.Item, error) {
 		return nil, fmt.Errorf("expected document-node(), got %s", describeItem(item))
 	}
 
+	// Handle document-node(element(...)) — document with specific element child
+	if strings.HasPrefix(itemType, "document-node(") {
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			if ni.Node.Type() == helium.DocumentNode {
+				return item, nil // simplified: accept any document node
+			}
+		}
+		return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
+	}
+
+	// Handle attribute(name, type) patterns
+	if strings.HasPrefix(itemType, "attribute(") {
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			if ni.Node.Type() == helium.AttributeNode {
+				return item, nil
+			}
+		}
+		return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
+	}
+
 	// Handle map(*) — any map
 	if strings.HasPrefix(itemType, "map(") {
 		return checkMapItemType(item, itemType)
