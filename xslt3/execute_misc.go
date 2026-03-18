@@ -470,13 +470,41 @@ func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) err
 }
 
 // execAssert implements xsl:assert.
-// Per XSLT 3.0 spec section 4.9: a non-schema-aware processor MUST ignore
-// xsl:assert instructions. Since this processor is not schema-aware,
-// assertions are no-ops by default.
-//
-//nolint:unused
-func (ec *execContext) execAssert(_ context.Context, _ *AssertInst) error {
-	// Non-schema-aware processor: ignore xsl:assert
+// If the test expression evaluates to false, an error is raised with the
+// specified error code (default XTMM9001).
+func (ec *execContext) execAssert(ctx context.Context, inst *AssertInst) error {
+	if inst.Test == nil {
+		return nil
+	}
+	xpathCtx := ec.newXPathContext(ec.contextNode)
+	result, err := inst.Test.Evaluate(xpathCtx, ec.contextNode)
+	if err != nil {
+		return err
+	}
+	b, err := xpath3.EBV(result.Sequence())
+	if err != nil {
+		return err
+	}
+	if !b {
+		errCode := inst.ErrorCode
+		if errCode == "" {
+			errCode = "XTMM9001"
+		}
+		// Build error message from body or select
+		msg := "assertion failed"
+		if inst.Select != nil {
+			sel, selErr := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+			if selErr == nil {
+				msg = stringifySequence(sel.Sequence())
+			}
+		} else if len(inst.Body) > 0 {
+			seq, bodyErr := ec.evaluateBody(ctx, inst.Body)
+			if bodyErr == nil {
+				msg = stringifySequence(seq)
+			}
+		}
+		return dynamicError(errCode, "%s", msg)
+	}
 	return nil
 }
 
