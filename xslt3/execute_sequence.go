@@ -236,6 +236,19 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 				return err
 			}
 			prevWasAtomic = true
+		case xpath3.FunctionItem:
+			// XTDE0450: function items cannot appear in the content of
+			// a result element (maps and arrays are allowed in XSLT 3.0).
+			if !out.captureItems {
+				return dynamicError("XTDE0450",
+					"cannot add function item to result tree content")
+			}
+			out.pendingItems = append(out.pendingItems, item)
+		default:
+			if out.captureItems {
+				out.pendingItems = append(out.pendingItems, item)
+			}
+			// Maps/arrays silently skipped from non-capture output
 		}
 	}
 	out.prevWasAtomic = prevWasAtomic
