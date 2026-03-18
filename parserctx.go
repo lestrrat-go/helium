@@ -2840,6 +2840,10 @@ func isChar(r rune) bool {
 	}
 
 	c := uint32(r)
+	return isXMLCharValue(c)
+}
+
+func isXMLCharValue(c uint32) bool {
 	if c < 0x100 {
 		return (0x9 <= c && c <= 0xa) || c == 0xd || 0x20 <= c
 	}
@@ -5788,7 +5792,7 @@ func parseStringCharRef(s []byte) (r rune, width int, err error) {
 	}
 
 	r = rune(val)
-	if !isChar(val) {
+	if !isXMLCharValue(uint32(val)) {
 		return utf8.RuneError, 0, fmt.Errorf("invalid XML char value %d", val)
 	}
 	return
@@ -6143,7 +6147,7 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 		return
 	}
 
-	if isChar(val) && val <= unicode.MaxRune {
+	if isXMLCharValue(uint32(val)) && val <= unicode.MaxRune {
 		r = rune(val)
 		return
 	}

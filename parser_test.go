@@ -115,6 +115,15 @@ func TestParseMisc(t *testing.T) {
 	}
 }
 
+func TestParseCharRefReplacementCharacter(t *testing.T) {
+	doc, err := helium.Parse(t.Context(), []byte("<root>&#xFFFD;</root>"))
+	require.NoError(t, err)
+
+	root := doc.DocumentElement()
+	require.NotNil(t, root)
+	require.Equal(t, "�", string(root.Content()))
+}
+
 func TestParse(t *testing.T) {
 	const input = `<?xml version="1.0"?>
 <root foo="bar">
