@@ -50,6 +50,7 @@ type evalConfig struct {
 	functions          map[string]Function
 	functionsNS        map[QualifiedName]Function
 	opLimit            int
+	currentTime        *time.Time
 	implicitTimezone   *time.Location
 	defaultLanguage    string
 	defaultCollation   string
@@ -59,9 +60,9 @@ type evalConfig struct {
 	uriResolver        URIResolver
 	collectionResolver CollectionResolver
 	httpClient         *http.Client
-	position           int  // initial context position (0 = use default 1)
-	size               int  // initial context size (0 = use default 1)
-	contextItem        Item // non-nil when context is an atomic value, not a node
+	position           int                    // initial context position (0 = use default 1)
+	size               int                    // initial context size (0 = use default 1)
+	contextItem        Item                   // non-nil when context is an atomic value, not a node
 	typeAnnotations    map[helium.Node]string // node → xs:... type annotation (set by xslt3)
 	variableResolver   VariableResolver       // lazy resolver for variables not in static scope
 	strictPrefixes     bool                   // when true, only user-declared namespaces are valid (no defaultPrefixNS fallback)
@@ -205,6 +206,16 @@ func WithVariableResolver(ctx context.Context, resolver VariableResolver) contex
 func WithOpLimit(ctx context.Context, limit int) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) bool {
 		c.opLimit = limit
+		return false
+	})
+}
+
+// WithCurrentTime sets the dynamic current time for fn:current-dateTime,
+// fn:current-date, fn:current-time, and fn:implicit-timezone.
+func WithCurrentTime(ctx context.Context, now time.Time) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) bool {
+		t := now
+		c.currentTime = &t
 		return false
 	})
 }

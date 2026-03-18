@@ -122,6 +122,9 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 		ec.namespaces = cfg.namespaces
 		ec.vars = cfg.varScope
 		ec.opLimit = cfg.opLimit
+		if cfg.currentTime != nil {
+			ec.currentTime = cfg.currentTime
+		}
 		ec.functions = cfg.functions
 		ec.fnsNS = cfg.functionsNS
 		ec.implicitTimezone = cfg.implicitTimezone
