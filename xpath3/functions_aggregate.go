@@ -213,6 +213,18 @@ func avgDurations(seq Sequence, family string) (Sequence, error) {
 
 // promoteForAggregate promotes an atomic value for aggregate operations.
 func promoteForAggregate(a AtomicValue) (AtomicValue, error) {
+	if a.TypeName == TypeDecimal {
+		if s, ok := a.Value.(string); ok {
+			dec, err := CastFromString(s, TypeDecimal)
+			if err != nil {
+				return AtomicValue{}, &XPathError{
+					Code:    errCodeFORG0001,
+					Message: fmt.Sprintf("cannot promote %q to xs:decimal", s),
+				}
+			}
+			return dec, nil
+		}
+	}
 	if a.TypeName == TypeUntypedAtomic {
 		f, err := castToDouble(a)
 		if err != nil {
