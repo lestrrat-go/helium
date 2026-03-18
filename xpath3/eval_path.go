@@ -188,8 +188,11 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 			if ann == "" {
 				ann = TypeUntyped // elements default to xs:untyped
 			}
-			if !isSubtypeOf(ann, resolveTestTypeName(test.TypeName, ec)) {
-				return false
+			target := resolveTestTypeName(test.TypeName, ec)
+			if !isSubtypeOf(ann, target) {
+				if ec == nil || ec.schemaDeclarations == nil || !ec.schemaDeclarations.IsSubtypeOf(ann, target) {
+					return false
+				}
 			}
 		}
 		return true
@@ -207,8 +210,11 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 			if ann == "" {
 				ann = TypeUntypedAtomic
 			}
-			if !isSubtypeOf(ann, resolveTestTypeName(test.TypeName, ec)) {
-				return false
+			target := resolveTestTypeName(test.TypeName, ec)
+			if !isSubtypeOf(ann, target) {
+				if ec == nil || ec.schemaDeclarations == nil || !ec.schemaDeclarations.IsSubtypeOf(ann, target) {
+					return false
+				}
 			}
 		}
 		return true
@@ -355,7 +361,10 @@ func nodeTypeAnnotation(n helium.Node, ec *evalContext) string {
 }
 
 // resolveTestTypeName normalizes a type name from an ElementTest/AttributeTest
-// to the canonical "xs:..." form.
+// to the canonical annotation format:
+//   - "xs:localName" for types in the XSD namespace
+//   - "Q{ns}localName" for types in any other namespace
+//   - the raw name for names without a prefix (treated as no-namespace)
 func resolveTestTypeName(raw string, ec *evalContext) string {
 	if strings.HasPrefix(raw, "xs:") {
 		return raw
@@ -367,8 +376,11 @@ func resolveTestTypeName(raw string, ec *evalContext) string {
 			return "xs:" + local
 		}
 		if ec != nil && ec.namespaces != nil {
-			if uri, ok := ec.namespaces[prefix]; ok && uri == catalog.XSD {
-				return "xs:" + local
+			if uri, ok := ec.namespaces[prefix]; ok {
+				if uri == catalog.XSD {
+					return "xs:" + local
+				}
+				return "Q{" + uri + "}" + local
 			}
 		}
 	}

@@ -140,6 +140,14 @@ func isSubtypeOf(actualType, targetType string) bool {
 	return result
 }
 
+// BuiltinIsSubtypeOf reports whether actualType is the same as or a subtype of
+// targetType using only the built-in XSD type hierarchy (no schema lookup).
+// This is exported for use by schema-aware backends (e.g. xslt3) that need to
+// check the final leg of a type ancestry chain against a built-in base type.
+func BuiltinIsSubtypeOf(actualType, targetType string) bool {
+	return isSubtypeOf(actualType, targetType)
+}
+
 func computeIsSubtypeOf(actualType, targetType string) bool {
 	// xs:numeric is a union of xs:integer, xs:decimal, xs:float, xs:double
 	if targetType == TypeNumeric {

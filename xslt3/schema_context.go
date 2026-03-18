@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
 
@@ -55,6 +56,68 @@ func (r *schemaRegistry) LookupSchemaAttribute(local, ns string) (typeName strin
 // LookupSchemaType implements xpath3.SchemaDeclarations.
 func (r *schemaRegistry) LookupSchemaType(local, ns string) (baseType string, ok bool) {
 	return r.LookupType(local, ns)
+}
+
+// IsSubtypeOf implements xpath3.SchemaDeclarations.
+// It checks whether typeName is the same as or a subtype of baseTypeName using
+// the annotation format ("xs:localName" for built-ins, "Q{ns}localName" for user-defined).
+func (r *schemaRegistry) IsSubtypeOf(typeName, baseTypeName string) bool {
+	if typeName == baseTypeName {
+		return true
+	}
+	// Delegate built-in XSD types to the static hierarchy.
+	if isXSBuiltin(typeName) {
+		return isBuiltinSubtypeOf(typeName, baseTypeName)
+	}
+	// For user-defined types, walk the BaseType chain in the schemas.
+	local, ns := splitAnnotationName(typeName)
+	for _, s := range r.schemas {
+		td, found := s.LookupType(local, ns)
+		if !found {
+			continue
+		}
+		cur := td.BaseType
+		for cur != nil {
+			curName := xsdTypeNameFromDef(cur)
+			if curName == baseTypeName {
+				return true
+			}
+			if isXSBuiltin(curName) {
+				return isBuiltinSubtypeOf(curName, baseTypeName)
+			}
+			cur = cur.BaseType
+		}
+		return false
+	}
+	return false
+}
+
+// isXSBuiltin returns true if the annotation name is an xs: built-in type.
+func isXSBuiltin(name string) bool {
+	return len(name) > 3 && name[:3] == "xs:"
+}
+
+// isBuiltinSubtypeOf delegates to the xpath3 built-in type hierarchy.
+func isBuiltinSubtypeOf(typeName, baseTypeName string) bool {
+	return xpath3.BuiltinIsSubtypeOf(typeName, baseTypeName)
+}
+
+// splitAnnotationName parses an annotation name in the form "Q{ns}local" or
+// "xs:local" (xs: already handled by isXSBuiltin) and returns local and ns.
+func splitAnnotationName(name string) (local, ns string) {
+	if len(name) > 2 && name[0] == 'Q' && name[1] == '{' {
+		end := -1
+		for i := 2; i < len(name); i++ {
+			if name[i] == '}' {
+				end = i
+				break
+			}
+		}
+		if end >= 0 {
+			return name[end+1:], name[2:end]
+		}
+	}
+	return name, ""
 }
 
 // LookupAttribute returns the attribute declaration type name from the
@@ -131,7 +194,7 @@ func xsdTypeNameFromDef(td *xsd.TypeDef) string {
 		return "Q{" + td.Name.NS + "}" + td.Name.Local
 	}
 	if td.Name.Local != "" {
-		return td.Name.Local
+		return "Q{}" + td.Name.Local
 	}
 	return "xs:untyped"
 }

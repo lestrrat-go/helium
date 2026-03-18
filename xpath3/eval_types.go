@@ -391,7 +391,9 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 			}
 			target := resolveTestTypeName(t.TypeName, ec)
 			if !isSubtypeOf(ann, target) {
-				return false
+				if ec == nil || ec.schemaDeclarations == nil || !ec.schemaDeclarations.IsSubtypeOf(ann, target) {
+					return false
+				}
 			}
 		}
 		return matchNodeTest(t, ni.Node, AxisChild, ec)
@@ -407,7 +409,9 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 			}
 			target := resolveTestTypeName(t.TypeName, ec)
 			if !isSubtypeOf(ann, target) {
-				return false
+				if ec == nil || ec.schemaDeclarations == nil || !ec.schemaDeclarations.IsSubtypeOf(ann, target) {
+					return false
+				}
 			}
 		}
 		return matchNodeTest(t, ni.Node, AxisAttribute, ec)

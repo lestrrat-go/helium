@@ -49,6 +49,10 @@ type SchemaDeclarations interface {
 	LookupSchemaElement(local, ns string) (typeName string, ok bool)
 	LookupSchemaAttribute(local, ns string) (typeName string, ok bool)
 	LookupSchemaType(local, ns string) (baseType string, ok bool)
+	// IsSubtypeOf returns true if typeName is the same as or a subtype of baseTypeName.
+	// Both names use the annotation format: "xs:localName" for XSD built-ins,
+	// "Q{ns}localName" for user-defined types.
+	IsSubtypeOf(typeName, baseTypeName string) bool
 }
 
 type evalConfig struct {
