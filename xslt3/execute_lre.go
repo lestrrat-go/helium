@@ -131,24 +131,41 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *Liter
 }
 
 // applyAttributeSets applies named attribute sets to the current output element.
+// Each call starts a fresh cycle-detection scope so that body instructions
+// (e.g., an LRE inside the attribute set that itself uses an attribute set)
+// are allowed to re-enter without being flagged as cycles.
 func (ec *execContext) applyAttributeSets(ctx context.Context, names []string) error {
+	return ec.applyAttributeSetsGuarded(ctx, names, make(map[string]struct{}))
+}
+
+// applyAttributeSetsGuarded is the recursive core that tracks which attribute
+// sets are currently being expanded via use-attribute-sets (defense in depth).
+func (ec *execContext) applyAttributeSetsGuarded(ctx context.Context, names []string, active map[string]struct{}) error {
 	for _, name := range names {
 		asDef := ec.stylesheet.attributeSets[name]
 		if asDef == nil {
 			continue
 		}
+		if _, ok := active[name]; ok {
+			return dynamicError(errCodeXTSE0720,
+				"attribute-set %q has a circular use-attribute-sets reference (runtime)", name)
+		}
+		active[name] = struct{}{}
 		// Apply referenced attribute sets first (use-attribute-sets on the set itself)
 		if len(asDef.UseAttrSets) > 0 {
-			if err := ec.applyAttributeSets(ctx, asDef.UseAttrSets); err != nil {
+			if err := ec.applyAttributeSetsGuarded(ctx, asDef.UseAttrSets, active); err != nil {
+				delete(active, name)
 				return err
 			}
 		}
 		// Execute the attribute instructions
 		for _, inst := range asDef.Attrs {
 			if err := ec.executeInstruction(ctx, inst); err != nil {
+				delete(active, name)
 				return err
 			}
 		}
+		delete(active, name)
 	}
 	return nil
 }
