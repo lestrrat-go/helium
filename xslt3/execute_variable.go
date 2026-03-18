@@ -3,6 +3,7 @@ package xslt3
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -31,6 +32,9 @@ func (ec *execContext) execVariable(ctx context.Context, inst *VariableInst) err
 		if inst.As == "" {
 			// Per XSLT spec: variable with content body (no select, no as)
 			// produces a document node (temporary tree)
+			val, evalErr = ec.evaluateBodyAsDocument(ctx, inst.Body)
+		} else if strings.HasPrefix(inst.As, "document-node") {
+			// document-node() type: wrap body in document node
 			val, evalErr = ec.evaluateBodyAsDocument(ctx, inst.Body)
 		} else {
 			// With as attribute: evaluate as sequence constructor,
