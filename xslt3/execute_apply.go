@@ -320,7 +320,10 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 		}
 	}
 
-	// Execute template body
+	if tmpl.As != "" {
+		return ec.executeTemplateBodyWithAs(ctx, tmpl)
+	}
+
 	return ec.executeSequenceConstructor(ctx, tmpl.Body)
 }
 
