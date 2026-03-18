@@ -131,8 +131,58 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 		return err
 	}
 
+	// F.2: Type-based content validation and normalization.
+	// When type="xs:integer" (or similar) is set, validate and normalize the
+	// element's text content against the declared type, raising XTTE1510 on
+	// failure.
+	if inst.TypeName != "" {
+		if err := ec.validateAndNormalizeElementContent(elem, inst.TypeName); err != nil {
+			return err
+		}
+	}
+
 	if inst.Validation != "" {
 		return ec.validateConstructedElement(ctx, elem, inst.Validation)
+	}
+	return nil
+}
+
+// validateAndNormalizeElementContent validates the text content of elem against
+// the declared XSD type name (e.g., "xs:integer") and normalizes it to the
+// canonical lexical form.  It raises XTTE1510 when the content is invalid.
+func (ec *execContext) validateAndNormalizeElementContent(elem *helium.Element, typeName string) error {
+	// Collect the string value of the element's content.
+	content := strings.TrimSpace(string(elem.Content()))
+
+	// Attempt to cast the string to the target type.
+	av, castErr := xpath3.CastFromString(content, typeName)
+	if castErr != nil {
+		return dynamicError(errCodeXTTE1510,
+			"content %q is not a valid value for type %s: %v", content, typeName, castErr)
+	}
+
+	// Convert the cast value back to its canonical string form.
+	normalized, strErr := xpath3.AtomicToString(av)
+	if strErr != nil {
+		// If we can't get a string back, keep the original.
+		return nil
+	}
+
+	// Replace all text children with the normalized value.
+	if normalized != content {
+		// Collect text children to unlink.
+		var textNodes []helium.Node
+		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+			if child.Type() == helium.TextNode {
+				textNodes = append(textNodes, child)
+			}
+		}
+		for _, tn := range textNodes {
+			helium.UnlinkNode(tn)
+		}
+		if err := elem.AppendText([]byte(normalized)); err != nil {
+			return err
+		}
 	}
 	return nil
 }
