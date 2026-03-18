@@ -443,6 +443,9 @@ func (c *compiler) compileAccumulator(elem *helium.Element) error {
 		}
 	}
 
+	if _, exists := c.stylesheet.accumulators[expandedName]; !exists {
+		c.stylesheet.accumulatorOrder = append(c.stylesheet.accumulatorOrder, expandedName)
+	}
 	c.stylesheet.accumulators[expandedName] = acc
 	return nil
 }
@@ -608,6 +611,12 @@ func (c *compiler) compileMergeSource(elem *helium.Element) (*MergeSource, error
 			return nil, err
 		}
 		src.Select = expr
+	}
+
+	if useAccumulators := getAttr(elem, "use-accumulators"); useAccumulators != "" {
+		for _, name := range strings.Fields(useAccumulators) {
+			src.UseAccumulators = append(src.UseAccumulators, resolveQName(name, c.nsBindings))
+		}
 	}
 
 	// Parse xsl:merge-key children — only xsl:merge-key is allowed

@@ -804,6 +804,9 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *MergeSou
 			if err != nil {
 				return nil, err
 			}
+			if err := ec.prepareMergeSourceAccumulators(ctx, src, doc); err != nil {
+				return nil, err
+			}
 
 			// Evaluate select against the document.
 			items, err := ec.evaluateMergeSelect(ctx, src, doc)
@@ -830,6 +833,9 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *MergeSou
 			var contextNode helium.Node
 			if ni, ok := sourceItem.(xpath3.NodeItem); ok {
 				contextNode = ni.Node
+				if err := ec.prepareMergeSourceAccumulators(ctx, src, contextNode); err != nil {
+					return nil, err
+				}
 			}
 
 			// Evaluate select against this item.
@@ -859,6 +865,192 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *MergeSou
 	}
 
 	return result, nil
+}
+
+func cloneAccumulatorSequence(seq xpath3.Sequence) xpath3.Sequence {
+	if len(seq) == 0 {
+		return nil
+	}
+	return append(xpath3.Sequence(nil), seq...)
+}
+
+func cloneAccumulatorSnapshot(state map[string]xpath3.Sequence) map[string]xpath3.Sequence {
+	if len(state) == 0 {
+		return nil
+	}
+	snapshot := make(map[string]xpath3.Sequence, len(state))
+	for name, value := range state {
+		snapshot[name] = cloneAccumulatorSequence(value)
+	}
+	return snapshot
+}
+
+func (ec *execContext) storeAccumulatorSnapshot(dst map[helium.Node]map[string]xpath3.Sequence, node helium.Node, state map[string]xpath3.Sequence) {
+	if node == nil {
+		return
+	}
+	dst[node] = cloneAccumulatorSnapshot(state)
+}
+
+func (ec *execContext) prepareMergeSourceAccumulators(ctx context.Context, src *MergeSource, node helium.Node) error {
+	if len(src.UseAccumulators) == 0 || len(ec.stylesheet.accumulators) == 0 || node == nil {
+		return nil
+	}
+
+	doc := node.OwnerDocument()
+	if docNode, ok := node.(*helium.Document); ok {
+		doc = docNode
+	}
+	if doc == nil {
+		return nil
+	}
+	if ec.accumulatorBeforeByNode != nil {
+		if _, ok := ec.accumulatorBeforeByNode[doc]; ok {
+			return nil
+		}
+	}
+
+	names := append([]string(nil), ec.stylesheet.accumulatorOrder...)
+
+	return ec.computeAccumulatorStates(ctx, doc, names)
+}
+
+func (ec *execContext) computeAccumulatorStates(ctx context.Context, doc helium.Node, names []string) error {
+	if ec.accumulatorBeforeByNode == nil {
+		ec.accumulatorBeforeByNode = make(map[helium.Node]map[string]xpath3.Sequence)
+	}
+	if ec.accumulatorAfterByNode == nil {
+		ec.accumulatorAfterByNode = make(map[helium.Node]map[string]xpath3.Sequence)
+	}
+
+	state := make(map[string]xpath3.Sequence, len(names))
+	for _, name := range names {
+		def, ok := ec.stylesheet.accumulators[name]
+		if !ok {
+			continue
+		}
+
+		switch {
+		case def.Initial != nil:
+			xpathCtx := ec.newXPathContext(doc)
+			result, err := def.Initial.Evaluate(xpathCtx, doc)
+			if err != nil {
+				return err
+			}
+			state[name] = cloneAccumulatorSequence(result.Sequence())
+		case len(def.InitialBody) > 0:
+			seq, err := ec.evaluateBodyAsSequence(ctx, def.InitialBody)
+			if err != nil {
+				return err
+			}
+			state[name] = cloneAccumulatorSequence(seq)
+		default:
+			state[name] = xpath3.EmptySequence()
+		}
+	}
+
+	savedState := ec.accumulatorState
+	savedCurrent := ec.currentNode
+	savedContext := ec.contextNode
+	savedItem := ec.contextItem
+	savedEval := ec.evaluatingAccumulator
+	ec.accumulatorState = state
+	ec.currentNode = doc
+	ec.contextNode = doc
+	ec.contextItem = nil
+	ec.evaluatingAccumulator = true
+	defer func() {
+		ec.accumulatorState = savedState
+		ec.currentNode = savedCurrent
+		ec.contextNode = savedContext
+		ec.contextItem = savedItem
+		ec.evaluatingAccumulator = savedEval
+	}()
+
+	return ec.walkAccumulatorTree(ctx, doc, names)
+}
+
+func (ec *execContext) walkAccumulatorTree(ctx context.Context, node helium.Node, names []string) error {
+	ec.storeAccumulatorSnapshot(ec.accumulatorBeforeByNode, node, ec.accumulatorState)
+
+	if err := ec.applyAccumulatorPhase(ctx, node, names, "start"); err != nil {
+		return err
+	}
+
+	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		if err := ec.walkAccumulatorTree(ctx, child, names); err != nil {
+			return err
+		}
+	}
+
+	if err := ec.applyAccumulatorPhase(ctx, node, names, "end"); err != nil {
+		return err
+	}
+
+	ec.storeAccumulatorSnapshot(ec.accumulatorAfterByNode, node, ec.accumulatorState)
+	return nil
+}
+
+func (ec *execContext) applyAccumulatorPhase(ctx context.Context, node helium.Node, names []string, phase string) error {
+	savedCurrent := ec.currentNode
+	savedContext := ec.contextNode
+	savedItem := ec.contextItem
+	ec.currentNode = node
+	ec.contextNode = node
+	ec.contextItem = nil
+	defer func() {
+		ec.currentNode = savedCurrent
+		ec.contextNode = savedContext
+		ec.contextItem = savedItem
+	}()
+
+	for _, name := range names {
+		def, ok := ec.stylesheet.accumulators[name]
+		if !ok {
+			continue
+		}
+
+		for _, rule := range def.Rules {
+			if rule.Phase != phase || !rule.Match.matchPattern(ec, node) {
+				continue
+			}
+
+			currentValue := ec.accumulatorState[name]
+			if rule.New {
+				currentValue = xpath3.EmptySequence()
+			}
+
+			ec.pushVarScope()
+			ec.setVar("value", currentValue)
+
+			var (
+				newValue xpath3.Sequence
+				err      error
+			)
+			switch {
+			case rule.Select != nil:
+				xpathCtx := ec.newXPathContext(node)
+				result, evalErr := rule.Select.Evaluate(xpathCtx, node)
+				if evalErr != nil {
+					err = evalErr
+				} else {
+					newValue = cloneAccumulatorSequence(result.Sequence())
+				}
+			case len(rule.Body) > 0:
+				newValue, err = ec.evaluateBodyAsSequence(ctx, rule.Body)
+			default:
+				newValue = xpath3.EmptySequence()
+			}
+
+			ec.popVarScope()
+			if err != nil {
+				return err
+			}
+			ec.accumulatorState[name] = newValue
+		}
+	}
+
+	return nil
 }
 
 // loadMergeDocument loads an XML document from a URI, resolving it relative
@@ -966,10 +1158,12 @@ func (ec *execContext) evaluateMergeKeys(ctx context.Context, src *mergeSourceIt
 	savedContext := ec.contextNode
 	savedCurrent := ec.currentNode
 	savedItem := ec.contextItem
+	savedMergeKey := ec.evaluatingMergeKey
 	defer func() {
 		ec.contextNode = savedContext
 		ec.currentNode = savedCurrent
 		ec.contextItem = savedItem
+		ec.evaluatingMergeKey = savedMergeKey
 	}()
 
 	for i, item := range src.items {
@@ -992,8 +1186,10 @@ func (ec *execContext) evaluateMergeKeys(ctx context.Context, src *mergeSourceIt
 				continue
 			}
 
+			ec.evaluatingMergeKey = true
 			xpathCtx := ec.newXPathContext(node)
 			result, err := mk.Select.Evaluate(xpathCtx, node)
+			ec.evaluatingMergeKey = false
 			if err != nil {
 				return nil, err
 			}
