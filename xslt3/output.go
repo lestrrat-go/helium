@@ -79,6 +79,10 @@ func defaultOutputDef() *OutputDef {
 }
 
 func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
+	// Set encoding on the document so the XML declaration includes it.
+	if outDef.Encoding != "" && doc.Encoding() == "utf8" {
+		doc.SetEncoding(outDef.Encoding)
+	}
 	var opts []helium.WriteOption
 	if outDef.Indent {
 		opts = append(opts, helium.WithFormat())
