@@ -86,12 +86,28 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 	if ec.contextNode == nil {
 		return dynamicError(errCodeXTTE0945, "xsl:copy: no context item")
 	}
-	return ec.execCopyNode(ctx, ec.contextNode, copyNodeOpts{
+	if err := ec.execCopyNode(ctx, ec.contextNode, copyNodeOpts{
 		body:              inst.Body,
 		useAttrSets:       inst.UseAttrSets,
 		copyNamespaces:    copyNS,
 		inheritNamespaces: inheritNS,
-	})
+	}); err != nil {
+		return err
+	}
+
+	// Apply validation if specified and context node is an element.
+	if v := ec.effectiveValidation(inst.Validation); v != "" && v != "preserve" {
+		out := ec.currentOutput()
+		// The most recently added child of the current output is the copy.
+		if copied := out.current.LastChild(); copied != nil {
+			if copiedElem, ok := copied.(*helium.Element); ok {
+				if err := ec.validateConstructedElement(ctx, copiedElem, v); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // effectiveValidation returns the validation mode for a copy/copy-of instruction,
@@ -285,7 +301,8 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 		}
 	}
 
-	preserve := ec.effectiveValidation(inst.Validation) == "preserve"
+	effectiveVal := ec.effectiveValidation(inst.Validation)
+	preserve := effectiveVal == "preserve"
 
 	out := ec.currentOutput()
 	prevWasAtomic := out.prevWasAtomic
@@ -299,6 +316,15 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 			}
 			if preserve {
 				ec.transferAnnotations(v.Node)
+			} else if effectiveVal == "strict" || effectiveVal == "lax" || effectiveVal == "strip" {
+				// Apply validation/strip to the most recently added node in output.
+				if copied := out.current.LastChild(); copied != nil {
+					if copiedElem, ok := copied.(*helium.Element); ok {
+						if err := ec.validateConstructedElement(ctx, copiedElem, effectiveVal); err != nil {
+							return err
+						}
+					}
+				}
 			}
 		case xpath3.AtomicValue:
 			s, err := xpath3.AtomicToString(v)

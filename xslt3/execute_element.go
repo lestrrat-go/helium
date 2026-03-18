@@ -127,7 +127,67 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 		}
 	}
 
-	return ec.executeSequenceConstructor(ctx, inst.Body)
+	if err := ec.executeSequenceConstructor(ctx, inst.Body); err != nil {
+		return err
+	}
+
+	if inst.Validation != "" {
+		return ec.validateConstructedElement(ctx, elem, inst.Validation)
+	}
+	return nil
+}
+
+// validateConstructedElement validates a constructed element node against the
+// imported schemas and applies type annotations to the result tree.
+func (ec *execContext) validateConstructedElement(ctx context.Context, elem *helium.Element, validation string) error {
+	switch validation {
+	case "strip":
+		ec.stripAnnotations(elem)
+		return nil
+	case "preserve":
+		// preserve: keep any existing type annotations unchanged; nothing to do here
+		return nil
+	case "strict", "lax":
+		if ec.schemaRegistry == nil {
+			return nil
+		}
+		// Create a temporary document containing a deep copy of the element.
+		tmpDoc := helium.NewDefaultDocument()
+		copied, err := helium.CopyNode(elem, tmpDoc)
+		if err != nil {
+			return err
+		}
+		if err := tmpDoc.AddChild(copied); err != nil {
+			return err
+		}
+		ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
+		if valErr != nil && validation == "strict" {
+			return dynamicError(errCodeXTTE1510, "validation of constructed element failed: %v", valErr)
+		}
+		// Merge type annotations for the actual (non-copy) element.
+		// The copied element maps correspond to the tmpDoc nodes, so we apply
+		// annotations by matching position. For now, annotate the top-level elem
+		// with the type found for the copied root element.
+		if len(ann) > 0 {
+			for _, typeName := range ann {
+				ec.annotateNode(elem, typeName)
+				break // only use the first/root annotation for the element itself
+			}
+		}
+		return nil
+	}
+	return nil
+}
+
+// stripAnnotations removes type annotations from a node and all its descendants.
+func (ec *execContext) stripAnnotations(node helium.Node) {
+	if ec.typeAnnotations == nil {
+		return
+	}
+	delete(ec.typeAnnotations, node)
+	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		ec.stripAnnotations(child)
+	}
 }
 
 func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) error {

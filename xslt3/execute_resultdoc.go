@@ -135,6 +135,24 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 	}
 	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 
+	// Validate the result document if requested.
+	if v := inst.Validation; v == "strict" || v == "lax" {
+		if ec.schemaRegistry != nil {
+			ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
+			if valErr != nil && v == "strict" {
+				return dynamicError(errCodeXTTE1540, "validation of result document failed: %v", valErr)
+			}
+			for node, typeName := range ann {
+				ec.annotateNode(node, typeName)
+			}
+		}
+	} else if inst.Validation == "strip" {
+		root := findDocumentElement(tmpDoc)
+		if root != nil {
+			ec.stripAnnotations(root)
+		}
+	}
+
 	// Store the secondary result document.
 	ec.resultDocuments[href] = tmpDoc
 	return nil
