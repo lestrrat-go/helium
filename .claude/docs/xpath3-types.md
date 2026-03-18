@@ -27,8 +27,15 @@ type Sequence []Item
 ## NodeItem
 
 ```go
-type NodeItem struct { Node helium.Node }
+type NodeItem struct {
+    Node           helium.Node
+    TypeAnnotation string
+    AtomizedType   string
+}
 ```
+
+- `TypeAnnotation` → schema-aware node type annotation (`xs:*` or `Q{ns}local`)
+- `AtomizedType` → built-in base type used when atomizing schema-derived node types
 
 ## AtomicValue
 
@@ -149,7 +156,9 @@ Per XPath 3.1 Section 2.4.3:
 ## Atomization
 
 Per XPath 3.1 Section 2.6.2:
-- Node → `xs:untypedAtomic` with `StringValue(node)`
+- Node → typed cast via `TypeAnnotation` when available
+- Schema-derived node type → fallback to `AtomizedType` built-in base for atomization
+- Unannotated node → `xs:untypedAtomic` with `StringValue(node)`
 - Atomic → identity
 - Function/map/array → error `FOTY0013`
 

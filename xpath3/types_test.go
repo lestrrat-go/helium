@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -32,6 +33,26 @@ func TestAtomicValueAccessors(t *testing.T) {
 	t.Run("boolean", func(t *testing.T) {
 		v := xpath3.AtomicValue{TypeName: xpath3.TypeBoolean, Value: true}
 		require.True(t, v.BooleanVal())
+	})
+
+	t.Run("schema-derived fallback atomization", func(t *testing.T) {
+		doc, err := helium.Parse(t.Context(), []byte(`<root>-0</root>`))
+		require.NoError(t, err)
+
+		root := doc.FirstChild()
+		require.NotNil(t, root)
+
+		av, err := xpath3.AtomizeItem(xpath3.NodeItem{
+			Node:           root,
+			TypeAnnotation: "Q{urn:test}derived-float",
+			AtomizedType:   xpath3.TypeFloat,
+		})
+		require.NoError(t, err)
+		require.Equal(t, xpath3.TypeFloat, av.TypeName)
+
+		s, err := xpath3.AtomicToString(av)
+		require.NoError(t, err)
+		require.Equal(t, "-0", s)
 	})
 }
 

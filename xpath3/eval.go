@@ -46,7 +46,7 @@ type evalContext struct {
 	// indirection. It is pointer-sized and nil when unused, so copies via
 	// withNode/withContextItem are negligible. The net/http dependency is
 	// already transitively required by golang.org/x/text.
-	httpClient       *http.Client
+	httpClient         *http.Client
 	typeAnnotations    map[helium.Node]string // node → xs:... type (from xslt3 schema awareness)
 	variableResolver   VariableResolver       // lazy resolver for variables not in static scope
 	strictPrefixes     bool                   // skip defaultPrefixNS fallback in prefix validation
@@ -282,12 +282,12 @@ func eval(ec *evalContext, expr Expr) (Sequence, error) {
 		if ec.node == nil {
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
-		return Sequence{NodeItem{Node: ec.node}}, nil
+		return Sequence{nodeItemFor(ec, ec.node)}, nil
 	case RootExpr:
 		if ec.node == nil {
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
-		return Sequence{NodeItem{Node: ixpath.DocumentRoot(ec.node)}}, nil
+		return Sequence{nodeItemFor(ec, ixpath.DocumentRoot(ec.node))}, nil
 	case SequenceExpr:
 		return evalSequenceExpr(ec, e)
 	case *LocationPath:

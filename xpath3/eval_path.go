@@ -104,13 +104,19 @@ func evalLocationPath(ec *evalContext, lp *LocationPath) (Sequence, error) {
 
 	result := make(Sequence, len(nodes))
 	for i, n := range nodes {
-		ni := NodeItem{Node: n}
-		if ec.typeAnnotations != nil {
-			ni.TypeAnnotation = ec.typeAnnotations[n]
-		}
-		result[i] = ni
+		result[i] = nodeItemFor(ec, n)
 	}
 	return result, nil
+}
+
+func nodeItemFor(ec *evalContext, n helium.Node) NodeItem {
+	ni := NodeItem{Node: n}
+	if ec == nil || ec.typeAnnotations == nil {
+		return ni
+	}
+	ni.TypeAnnotation = ec.typeAnnotations[n]
+	ni.AtomizedType = atomizedTypeForAnnotation(ni.TypeAnnotation, ec.schemaDeclarations)
+	return ni
 }
 
 func evalStepWithPredicates(ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {

@@ -47,6 +47,7 @@ func cloneSequences(seqs []Sequence) []Sequence {
 type NodeItem struct {
 	Node           helium.Node
 	TypeAnnotation string // optional xs:... type annotation (schema-aware)
+	AtomizedType   string // optional built-in base type used for typed atomization
 }
 
 func (NodeItem) itemTag() {}
@@ -777,22 +778,82 @@ func IsKnownXSDType(name string) bool {
 	return false
 }
 
+func schemaAnnotationParts(name string) (local, ns string, ok bool) {
+	if strings.HasPrefix(name, "Q{") {
+		end := strings.IndexByte(name, '}')
+		if end <= 1 || end == len(name)-1 {
+			return "", "", false
+		}
+		return name[end+1:], name[2:end], true
+	}
+	if strings.HasPrefix(name, "xs:") || strings.HasPrefix(name, "xsd:") {
+		return "", "", false
+	}
+	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		return name[idx+1:], "", true
+	}
+	if name == "" {
+		return "", "", false
+	}
+	return name, "", true
+}
+
+func atomizedTypeForAnnotation(annotation string, decls SchemaDeclarations) string {
+	switch annotation {
+	case "", TypeUntypedAtomic, TypeUntyped:
+		return ""
+	}
+	if IsKnownXSDType(annotation) {
+		return annotation
+	}
+	if decls == nil {
+		return ""
+	}
+
+	current := annotation
+	for i := 0; i < 32; i++ {
+		local, ns, ok := schemaAnnotationParts(current)
+		if !ok {
+			return ""
+		}
+		baseType, ok := decls.LookupSchemaType(local, ns)
+		if !ok || baseType == "" || baseType == current {
+			return ""
+		}
+		switch baseType {
+		case TypeUntypedAtomic, TypeUntyped:
+			return ""
+		}
+		if IsKnownXSDType(baseType) {
+			return baseType
+		}
+		current = baseType
+	}
+	return ""
+}
+
 // AtomizeItem converts a single item to an atomic value per XPath 3.1 Section 2.6.2.
 func AtomizeItem(item Item) (AtomicValue, error) {
 	switch v := item.(type) {
 	case AtomicValue:
 		return v, nil
 	case NodeItem:
+		s := ixpath.StringValue(v.Node)
 		if v.TypeAnnotation != "" && v.TypeAnnotation != TypeUntypedAtomic {
-			s := ixpath.StringValue(v.Node)
 			cast, err := CastFromString(s, v.TypeAnnotation)
+			if err == nil {
+				return cast, nil
+			}
+		}
+		if v.AtomizedType != "" && v.AtomizedType != TypeUntypedAtomic && v.AtomizedType != v.TypeAnnotation {
+			cast, err := CastFromString(s, v.AtomizedType)
 			if err == nil {
 				return cast, nil
 			}
 		}
 		return AtomicValue{
 			TypeName: TypeUntypedAtomic,
-			Value:    ixpath.StringValue(v.Node),
+			Value:    s,
 		}, nil
 	case ArrayItem:
 		// XPath 3.1: atomizing an array atomizes each member and concatenates

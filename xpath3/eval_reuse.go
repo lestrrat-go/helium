@@ -116,7 +116,7 @@ func (e *Expression) EvaluateReuse(state *EvalState, node helium.Node) (Result, 
 		if ec.node == nil {
 			return Result{}, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
-		state.oneItem[0] = NodeItem{Node: ec.node}
+		state.oneItem[0] = nodeItemFor(ec, ec.node)
 		return Result{seq: state.oneItem[:]}, nil
 	}
 
