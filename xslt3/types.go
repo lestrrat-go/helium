@@ -198,6 +198,9 @@ func coerceItem(item xpath3.Item, itemType string) (xpath3.Item, error) {
 				if idx := strings.IndexByte(reqName, ','); idx >= 0 {
 					reqName = strings.TrimSpace(reqName[:idx]) // element(name, type) — just use name
 				}
+				if reqName == "*" {
+					return item, nil // element(*, type) matches any element
+				}
 				if idx := strings.IndexByte(reqName, ':'); idx >= 0 {
 					reqName = reqName[idx+1:] // strip prefix
 				}
@@ -205,6 +208,27 @@ func coerceItem(item xpath3.Item, itemType string) (xpath3.Item, error) {
 					return item, nil
 				}
 				return nil, fmt.Errorf("expected %s, got element %q", itemType, elemName)
+			}
+		}
+		return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
+	}
+
+	// Handle schema-element(name) — a node test, not an atomic type; match by node kind only.
+	// Schema-aware validation of the element's type is not performed here.
+	if strings.HasPrefix(itemType, "schema-element(") {
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			if ni.Node.Type() == helium.ElementNode {
+				return item, nil
+			}
+		}
+		return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
+	}
+
+	// Handle schema-attribute(name) — a node test, not an atomic type; match by node kind only.
+	if strings.HasPrefix(itemType, "schema-attribute(") {
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			if ni.Node.Type() == helium.AttributeNode {
+				return item, nil
 			}
 		}
 		return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
