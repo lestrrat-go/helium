@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?><out>
+<static-base>http://www.example.org/main/</static-base>
+<example1>http://www.example.org/xxx/: <abc xml:base="/xxx/">http://www.example.org/xxx/</abc></example1>
+<example2>http://www.example.org/yyy/: <abc xml:base="/yyy/">http://www.example.org/</abc></example2></out>     

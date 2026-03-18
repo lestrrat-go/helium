@@ -1,0 +1,1279 @@
+namespace local = ""
+default namespace xsl = "http://www.w3.org/1999/XSL/Transform"
+namespace xs = "http://www.w3.org/2001/XMLSchema"
+
+start =
+  stylesheet.element
+  | transform.element
+  | package.element  
+  | literal-result-element-as-stylesheet
+  
+sequence-constructor.model = (instruction.category | literal-result-element | text)*
+
+literal-result-element-as-stylesheet =
+  element * - xsl:* {
+    attribute xsl:version { decimal.datatype },
+    literal-result-element-no-version.atts,
+    sequence-constructor.model
+  }
+
+literal-result-element =
+  element * - xsl:* {
+     literal-result-element.atts,
+     sequence-constructor.model
+  }
+
+literal-result-element.atts =
+  literal-result-element-no-version.atts,
+  attribute xsl:version { text }?
+
+# These attributes may also appear on a literal result element, but in this case, to distinguish them from user-defined attributes, 
+# the names of the attributes are in the XSLT namespace. They are thus typically written as 
+# xsl:default-collation,
+# xsl:default-mode,
+# xsl:default-validation,
+# xsl:exclude-result-prefixes,
+# xsl:expand-text,
+# xsl:extension-element-prefixes,
+# xsl:use-when,
+# xsl:version,
+# or xsl:xpath-default-namespace.
+literal-result-element-no-version.atts =
+   attribute * - xsl:* { avt.datatype }*
+ & attribute xsl:default-collation { uris.datatype }?
+ & attribute xsl:default-mode { eqname.datatype | '#unnamed' }?
+ & attribute xsl:default-validation  { "preserve" | "strip" }?
+ & attribute xsl:exclude-result-prefixes { exclude.prefixes.datatype }? # or prefixes.datatype ?
+ & attribute xsl:expand-text { boolean.datatype }?
+ & attribute xsl:extension-element-prefixes { extension.prefixes.datatype }? # or prefixes.datatype ?
+ & attribute xsl:inherit-namespaces { boolean.datatype }?
+ & attribute xsl:on-empty { expression.datatype }?
+ & attribute xsl:use-attribute-sets { eqnames.datatype }?
+ & attribute xsl:use-when { expression.datatype }?
+ & attribute xsl:xpath-default-namespace { xsd:anyURI }?
+ & (attribute xsl:type { eqname.datatype }
+    | attribute xsl:validation { "strict" | "lax" | "preserve" | "strip" })?
+
+
+top-level-extension =
+  element * - (xsl:* | local:*) {
+     anyElement
+  }
+
+anyElement =
+   grammar {
+      start = any
+      any =
+        (attribute * { text }
+         | text
+         | element * { any })*
+    }
+    
+extension.atts = attribute * - (xsl:* | local:*) { text }*
+
+declarations.model = (declaration.category | top-level-extension)*
+
+# [Definition: There are a number of standard attributes that may appear on any XSLT element: specifically 
+# default-collation, 
+# default-mode, 
+# default-validation, 
+# exclude-result-prefixes, 
+# expand-text, 
+# extension-element-prefixes, 
+# use-when, 
+# version, 
+# and xpath-default-namespace.]
+
+global.atts = 
+   attribute default-collation { uris.datatype }?,
+   attribute _default-collation { avt.datatype }?,
+   attribute default-mode { eqname.datatype | '#unnamed' }?,
+   attribute _default-mode { avt.datatype }?,
+   attribute default-validation  { "preserve" | "strip" }?,
+   attribute _default-validation { avt.datatype }?,   
+   attribute exclude-result-prefixes { exclude.prefixes.datatype }?,
+   attribute _exclude-result-prefixes { avt.datatype }?, # or prefixes.datatype ?
+   attribute expand-text { boolean.datatype }?,
+   attribute _expand-text { avt.datatype }?,
+   attribute extension-element-prefixes { extension.prefixes.datatype }?,
+   attribute _extension-element-prefixes { avt.datatype }?, # or prefixes.datatype ?
+   attribute use-when { expression.datatype }?,
+   attribute _use-when { avt.datatype }?,
+   attribute version { decimal.datatype }?,
+   attribute _version { avt.datatype }?,
+   attribute xpath-default-namespace { uri.datatype }?,
+   attribute _xpath-default-namespace { avt.datatype }?
+   
+
+global.atts.except.version = 
+   attribute default-collation { uris.datatype }?,
+   attribute _default-collation { avt.datatype }?,
+   attribute exclude-result-prefixes { exclude.prefixes.datatype }?,
+   attribute _exclude-result-prefixes { avt.datatype }?, # or prefixes.datatype ?
+   attribute expand-text { boolean.datatype }?,
+   attribute _expand-text { avt.datatype }?,
+   attribute extension-element-prefixes { extension.prefixes.datatype }?,
+   attribute _extension-element-prefixes { avt.datatype }?, # or prefixes.datatype ?
+   attribute use-when { expression.datatype }?,
+   attribute _use-when { avt.datatype }?,
+   attribute xpath-default-namespace { uri.datatype }?,
+   attribute _xpath-default-namespace { avt.datatype }?
+   
+
+
+qname.datatype = xsd:QName
+# Extract from XPath 3.0
+#[94]   EQName           ::= QName | URIQualifiedName
+#[104]  QName            ::= [http://www.w3.org/TR/REC-xml-names/#NT-QName]Names
+#[105]  NCName           ::= [http://www.w3.org/TR/REC-xml-names/#NT-NCName]Names
+#[99]   URIQualifiedName ::= BracedURILiteral NCName
+#[100]  BracedURILiteral ::= "Q" "{" [^{}]* "}"
+
+uri.qualified.name = xsd:token { pattern = "Q\{[^\{\}]*\}[\i-[:]][\c-[:]]*" } 
+qname.strict = xsd:token { pattern = "[\i-[:]][\c-[:]]:[\i-[:]][\c-[:]]" }
+eqname.datatype = xsd:QName | uri.qualified.name | qname.strict 
+qnames.datatype = list { qname.datatype* }
+eqnames.datatype = list { eqname.datatype* }
+ncname.datatype = xsd:NCName
+prefix.datatype = xsd:NCName
+boolean.datatype = "yes" | "no" | "true" | "false" | "0" | "1" 
+expression.datatype = text
+char.datatype = xsd:string { length = "1" }
+string.datatype = text
+id.datatype = xsd:NCName
+tokens.datatype = list { token* }
+prefixes.datatype = list { token* }
+extension.prefixes.datatype = list { xsd:NCName* }
+exclude.prefixes.datatype = list { "#all" | (xsd:NCName | "#default")* }
+token.datatype = token
+language.datatype = xsd:language
+nmtoken.datatype = xsd:NMTOKEN
+decimal.datatype = xsd:decimal
+integer.datatype = xsd:integer
+uri.datatype = xsd:anyURI
+uris.datatype = list { xsd:anyURI* }
+pattern.datatype = text
+qname-but-not-ncname.datatype = xsd:QName { pattern = ".*:.*" }
+xs_schema.element = element xs:schema { anyElement* }
+item-type.datatype = text
+sequence-type.datatype = text
+
+declaration.category =
+   use-package.element
+ | include.element
+ | import.element
+ | import-schema.element
+ | strip-space.element
+ | preserve-space.element
+ | decimal-format.element
+ | template.element
+ | mode.element
+ | global-context-item.element
+ | variable.element
+ | param.element
+ | attribute-set.element
+ | function.element
+ | namespace-alias.element
+ | accumulator.element
+ | key.element
+ | output.element
+ | character-map.element
+
+instruction.category =
+   apply-templates.element
+ | apply-imports.element
+ | next-match.element
+ | for-each.element
+ | iterate.element
+ | next-iteration.element
+ | break.element
+ | if.element
+ | choose.element
+ | try.element
+ | variable.element
+ | call-template.element
+ | evaluate.element
+ | element.element
+ | attribute.element
+ | text.element
+ | value-of.element
+ | document.element
+ | processing-instruction.element
+ | namespace.element
+ | comment.element
+ | copy.element
+ | copy-of.element
+ | sequence.element
+ | where-populated.element
+ | on-empty.element
+ | on-non-empty.element
+ | number.element
+ | perform-sort.element
+ | for-each-group.element
+ | merge.element
+ | fork.element
+ | analyze-string.element
+ | source-document.element
+ | map.element
+ | map-entry.element
+ | message.element
+ | assert.element
+ | fallback.element
+ | result-document.element
+package.element =
+   element package {
+      extension.atts,
+      attribute id { id.datatype }?,
+      attribute _id { avt.datatype }?,
+      attribute name { uri.datatype }?,
+      attribute _name { avt.datatype }?,
+      attribute package-version { string.datatype }?,
+      attribute _package-version { avt.datatype }?,
+      attribute version { decimal.datatype }?,
+      attribute _version { avt.datatype }?,
+      attribute input-type-annotations { "preserve" | "strip" | "unspecified" }?,
+      attribute _input-type-annotations { avt.datatype }?,
+      attribute declared-modes { boolean.datatype }?,
+      attribute _declared-modes { avt.datatype }?,
+      attribute default-mode { eqname.datatype | "#unnamed" }?,
+      attribute _default-mode { avt.datatype }?,
+      attribute default-validation { "preserve" | "strip" }?,
+      attribute _default-validation { avt.datatype }?,
+      attribute default-collation { uris.datatype }?,
+      attribute _default-collation { avt.datatype }?,
+      attribute extension-element-prefixes { prefixes.datatype }?,
+      attribute _extension-element-prefixes { avt.datatype }?,
+      attribute exclude-result-prefixes { prefixes.datatype }?,
+      attribute _exclude-result-prefixes { avt.datatype }?,
+      attribute expand-text { boolean.datatype }?,
+      attribute _expand-text { avt.datatype }?,
+      attribute use-when { expression.datatype }?,
+      attribute _use-when { avt.datatype }?,
+      attribute xpath-default-namespace { uri.datatype }?,
+      attribute _xpath-default-namespace { avt.datatype }?,
+      ((expose.element | declarations.model)*)
+   }
+use-package.element =
+   element use-package {
+      extension.atts,
+      global.atts,
+      attribute name { uri.datatype }?,
+      attribute _name { avt.datatype }?,
+      attribute package-version { string.datatype }?,
+      attribute _package-version { avt.datatype }?,
+      (accept.element | override.element)*
+   }
+expose.element =
+   element expose {
+      extension.atts,
+      global.atts,
+      attribute component { "template" | "function" | "attribute-set" | "variable" | "mode" | "*" }?,
+      attribute _component { avt.datatype }?,
+      attribute names { tokens.datatype }?,
+      attribute _names { avt.datatype }?,
+      attribute visibility { "public" | "private" | "final" | "abstract" }?,
+      attribute _visibility { avt.datatype }?,
+      empty
+   }
+accept.element =
+   element accept {
+      extension.atts,
+      global.atts,
+      (attribute component { "template" | "function" | "attribute-set" | "variable" | "mode" | "*" } |
+      attribute _component { avt.datatype })+,
+      (attribute names { tokens.datatype } |
+      attribute _names { avt.datatype })+,
+      (attribute visibility { "public" | "private" | "final" | "abstract" | "hidden" } |
+      attribute _visibility { avt.datatype })+,
+      empty
+   }
+override.element =
+   element override {
+      extension.atts,
+      global.atts,
+      (template.element | function.element | variable.element | param.element | attribute-set.element)*
+   }
+stylesheet.element =
+   element stylesheet {
+      extension.atts,
+      attribute id { id.datatype }?,
+      attribute _id { avt.datatype }?,
+      attribute version { decimal.datatype }?,
+      attribute _version { avt.datatype }?,
+      attribute default-mode { eqname.datatype | "#unnamed" }?,
+      attribute _default-mode { avt.datatype }?,
+      attribute default-validation { "preserve" | "strip" }?,
+      attribute _default-validation { avt.datatype }?,
+      attribute input-type-annotations { "preserve" | "strip" | "unspecified" }?,
+      attribute _input-type-annotations { avt.datatype }?,
+      attribute default-collation { uris.datatype }?,
+      attribute _default-collation { avt.datatype }?,
+      attribute extension-element-prefixes { prefixes.datatype }?,
+      attribute _extension-element-prefixes { avt.datatype }?,
+      attribute exclude-result-prefixes { prefixes.datatype }?,
+      attribute _exclude-result-prefixes { avt.datatype }?,
+      attribute expand-text { boolean.datatype }?,
+      attribute _expand-text { avt.datatype }?,
+      attribute use-when { expression.datatype }?,
+      attribute _use-when { avt.datatype }?,
+      attribute xpath-default-namespace { uri.datatype }?,
+      attribute _xpath-default-namespace { avt.datatype }?,
+      (declarations.model)
+   }
+transform.element =
+   element transform {
+      extension.atts,
+      attribute id { id.datatype }?,
+      attribute _id { avt.datatype }?,
+      attribute version { decimal.datatype }?,
+      attribute _version { avt.datatype }?,
+      attribute default-mode { eqname.datatype | "#unnamed" }?,
+      attribute _default-mode { avt.datatype }?,
+      attribute default-validation { "preserve" | "strip" }?,
+      attribute _default-validation { avt.datatype }?,
+      attribute input-type-annotations { "preserve" | "strip" | "unspecified" }?,
+      attribute _input-type-annotations { avt.datatype }?,
+      attribute default-collation { uris.datatype }?,
+      attribute _default-collation { avt.datatype }?,
+      attribute extension-element-prefixes { prefixes.datatype }?,
+      attribute _extension-element-prefixes { avt.datatype }?,
+      attribute exclude-result-prefixes { prefixes.datatype }?,
+      attribute _exclude-result-prefixes { avt.datatype }?,
+      attribute expand-text { boolean.datatype }?,
+      attribute _expand-text { avt.datatype }?,
+      attribute use-when { expression.datatype }?,
+      attribute _use-when { avt.datatype }?,
+      attribute xpath-default-namespace { uri.datatype }?,
+      attribute _xpath-default-namespace { avt.datatype }?,
+      (declarations.model)
+   }
+include.element =
+   element include {
+      extension.atts,
+      global.atts,
+      attribute href { uri.datatype }?,
+      attribute _href { avt.datatype }?,
+      empty
+   }
+import.element =
+   element import {
+      extension.atts,
+      global.atts,
+      (attribute href { uri.datatype }
+      | attribute _href { avt.datatype })+,
+      empty
+   }
+import-schema.element =
+   element import-schema {
+      extension.atts,
+      global.atts,
+      attribute namespace { uri.datatype }?,
+      attribute _namespace { avt.datatype }?,
+      attribute schema-location { uri.datatype }?,
+      attribute _schema-location { avt.datatype }?,
+      xs_schema.element?
+   }
+strip-space.element =
+   element strip-space {
+      extension.atts,
+      global.atts,
+      (attribute elements { tokens.datatype }
+      | attribute _elements { avt.datatype })+,
+      empty
+   }
+preserve-space.element =
+   element preserve-space {
+      extension.atts,
+      global.atts,
+      (attribute elements { tokens.datatype }
+      | attribute _elements { avt.datatype })+,
+      empty
+   }
+decimal-format.element =
+   element decimal-format {
+      extension.atts,
+      global.atts,
+      attribute name { eqname.datatype }?,
+      attribute _name { avt.datatype }?,
+      attribute decimal-separator { char.datatype }?,
+      attribute _decimal-separator { avt.datatype }?,
+      attribute grouping-separator { char.datatype }?,
+      attribute _grouping-separator { avt.datatype }?,
+      attribute infinity { string.datatype }?,
+      attribute _infinity { avt.datatype }?,
+      attribute minus-sign { char.datatype }?,
+      attribute _minus-sign { avt.datatype }?,
+      attribute exponent-separator { char.datatype }?,
+      attribute _exponent-separator { avt.datatype }?,
+      attribute NaN { string.datatype }?,
+      attribute _NaN { avt.datatype }?,
+      attribute percent { char.datatype }?,
+      attribute _percent { avt.datatype }?,
+      attribute per-mille { char.datatype }?,
+      attribute _per-mille { avt.datatype }?,
+      attribute zero-digit { char.datatype }?,
+      attribute _zero-digit { avt.datatype }?,
+      attribute digit { char.datatype }?,
+      attribute _digit { avt.datatype }?,
+      attribute pattern-separator { char.datatype }?,
+      attribute _pattern-separator { avt.datatype }?,
+      empty
+   }
+template.element =
+   element template {
+      extension.atts,
+      global.atts,
+      (attribute match { pattern.datatype }
+      | attribute _match { avt.datatype }
+      | attribute name { eqname.datatype }
+      | attribute _name { avt.datatype })+,
+      attribute priority { decimal.datatype }?,
+      attribute _priority { avt.datatype }?,
+      attribute mode { list { '#all' | ('#default' | '#unnamed' | eqname.datatype)* } }?,
+      attribute _mode { avt.datatype }?,
+      attribute as { sequence-type.datatype }?,
+      attribute _as { avt.datatype }?,
+      attribute visibility { "public" | "private" | "final" | "abstract" }?,
+      attribute _visibility { avt.datatype }?,
+      (context-item.element?, param.element*, sequence-constructor.model)
+   }
+apply-templates.element =
+   element apply-templates {
+      extension.atts,
+      global.atts,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      attribute mode { (eqname.datatype | '#unnamed' | '#default' | '#current') }?,
+      attribute _mode { avt.datatype }?,
+      (sort.element | with-param.element)*
+   }
+mode.element =
+   element mode {
+      extension.atts,
+      global.atts,
+      attribute name { eqname.datatype }?,
+      attribute _name { avt.datatype }?,
+      attribute streamable { boolean.datatype }?,
+      attribute _streamable { avt.datatype }?,
+      attribute on-no-match { "deep-copy" | "shallow-copy" | "deep-skip" | "shallow-skip" | "text-only-copy" | "fail" }?,
+      attribute _on-no-match { avt.datatype }?,
+      attribute on-multiple-match { "use-last" | "fail" }?,
+      attribute _on-multiple-match { avt.datatype }?,
+      attribute warning-on-no-match { boolean.datatype }?,
+      attribute _warning-on-no-match { avt.datatype }?,
+      attribute warning-on-multiple-match { boolean.datatype }?,
+      attribute _warning-on-multiple-match { avt.datatype }?,
+      attribute typed { boolean.datatype | "strict" | "lax" | "unspecified" }?,
+      attribute _typed { avt.datatype }?,
+      attribute visibility { "public" | "private" | "final" }?,
+      attribute _visibility { avt.datatype }?,
+      attribute use-accumulators { tokens.datatype }?,
+      attribute _use-accumulators { avt.datatype }?,
+      empty
+   }
+context-item.element =
+   element context-item {
+      extension.atts,
+      global.atts,
+      attribute as { item-type.datatype }?,
+      attribute _as { avt.datatype }?,
+      attribute use { "required" | "optional" | "absent" }?,
+      attribute _use { avt.datatype }?,
+      empty
+   }
+global-context-item.element =
+   element global-context-item {
+      extension.atts,
+      global.atts,
+      attribute as { item-type.datatype }?,
+      attribute _as { avt.datatype }?,
+      attribute use { "required" | "optional" | "absent" }?,
+      attribute _use { avt.datatype }?,
+      empty
+   }
+apply-imports.element =
+   element apply-imports {
+      extension.atts,
+      global.atts,
+      with-param.element*
+   }
+next-match.element =
+   element next-match {
+      extension.atts,
+      global.atts,
+      (with-param.element | fallback.element)*
+   }
+for-each.element =
+   element for-each {
+      extension.atts,
+      global.atts,
+      (attribute select { expression.datatype }
+      | attribute _select { avt.datatype })+,
+      (sort.element*, sequence-constructor.model)
+   }
+iterate.element =
+   element iterate {
+      extension.atts,
+      global.atts,
+      (attribute select { expression.datatype }
+      | attribute _select { avt.datatype })+,
+      (param.element*, on-completion.element?, sequence-constructor.model)
+   }
+next-iteration.element =
+   element next-iteration {
+      extension.atts,
+      global.atts,
+      (with-param.element*)
+   }
+break.element =
+   element break {
+      extension.atts,
+      global.atts,
+      (attribute select { expression.datatype }
+      | attribute _select { avt.datatype })?,
+      sequence-constructor.model
+   }
+on-completion.element =
+   element on-completion {
+      extension.atts,
+      global.atts,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      sequence-constructor.model
+   }
+if.element =
+   element if {
+      extension.atts,
+      global.atts,
+      (attribute test { expression.datatype }
+      | attribute _test { avt.datatype })+,
+      sequence-constructor.model
+   }
+choose.element =
+   element choose {
+      extension.atts,
+      global.atts,
+      (when.element+, otherwise.element?)
+   }
+when.element =
+   element when {
+      extension.atts,
+      global.atts,
+      (attribute test { expression.datatype }
+      | attribute _test { avt.datatype })+,
+      sequence-constructor.model
+   }
+otherwise.element =
+   element otherwise {
+      extension.atts,
+      global.atts,
+      sequence-constructor.model
+   }
+try.element =
+   element try {
+      extension.atts,
+      global.atts,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      attribute rollback-output { boolean.datatype }?,
+      attribute _rollback-output { avt.datatype }?,
+      (sequence-constructor.model, catch.element, (catch.element | fallback.element)*)
+   }
+catch.element =
+   element catch {
+      extension.atts,
+      global.atts,
+      attribute errors { tokens.datatype }?,
+      attribute _errors { avt.datatype }?,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      sequence-constructor.model
+   }
+variable.element =
+   element variable {
+      extension.atts,
+      global.atts,
+      (attribute name { eqname.datatype }
+      | attribute _name { avt.datatype })+,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      attribute as { sequence-type.datatype }?,
+      attribute _as { avt.datatype }?,
+      attribute static { boolean.datatype }?,
+      attribute _static { avt.datatype }?,
+      attribute visibility { "public" | "private" | "final" | "abstract" }?,
+      attribute _visibility { avt.datatype }?,
+      sequence-constructor.model
+   }
+param.element =
+   element param {
+      extension.atts,
+      global.atts,
+      (attribute name { eqname.datatype }
+      | attribute _name { avt.datatype })+,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      attribute as { sequence-type.datatype }?,
+      attribute _as { avt.datatype }?,
+      attribute required { boolean.datatype }?,
+      attribute _required { avt.datatype }?,
+      attribute tunnel { boolean.datatype }?,
+      attribute _tunnel { avt.datatype }?,
+      attribute static { boolean.datatype }?,
+      attribute _static { avt.datatype }?,
+      sequence-constructor.model
+   }
+with-param.element =
+   element with-param {
+      extension.atts,
+      global.atts,
+      (attribute name { eqname.datatype }
+      | attribute _name { avt.datatype })+,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      attribute as { sequence-type.datatype }?,
+      attribute _as { avt.datatype }?,
+      attribute tunnel { boolean.datatype }?,
+      attribute _tunnel { avt.datatype }?,
+      sequence-constructor.model
+   }
+call-template.element =
+   element call-template {
+      extension.atts,
+      global.atts,
+      (attribute name { eqname.datatype }
+      | attribute _name { avt.datatype })+,
+      with-param.element*
+   }
+attribute-set.element =
+   element attribute-set {
+      extension.atts,
+      global.atts,
+      (attribute name { eqname.datatype }
+      | attribute _name { avt.datatype })+,
+      attribute use-attribute-sets { eqnames.datatype }?,
+      attribute _use-attribute-sets { avt.datatype }?,
+      attribute visibility { "public" | "private" | "final" | "abstract" }?,
+      attribute _visibility { avt.datatype }?,
+      attribute streamable { boolean.datatype }?,
+      attribute _streamable { avt.datatype }?,
+      attribute.element*
+   }
+function.element =
+   element function {
+      extension.atts,
+      global.atts,
+      (attribute name { eqname.datatype }
+      | attribute _name { avt.datatype })+,
+      attribute as { sequence-type.datatype }?,
+      attribute _as { avt.datatype }?,
+      attribute visibility { "public" | "private" | "final" | "abstract" }?,
+      attribute _visibility { avt.datatype }?,
+      attribute streamability { "unclassified" | "absorbing" | "inspection" | "filter" | "shallow-descent" | "deep-descent" | "ascent" | eqname.datatype }?,
+      attribute _streamability { avt.datatype }?,
+      attribute override-extension-function { boolean.datatype }?,
+      attribute _override-extension-function { avt.datatype }?,
+      attribute override { boolean.datatype }?,
+      attribute _override { avt.datatype }?,
+      attribute new-each-time { "yes" | "true" | "1" | "no" | "false" | "0" | "maybe" }?,
+      attribute _new-each-time { avt.datatype }?,
+      attribute cache { boolean.datatype }?,
+      attribute _cache { avt.datatype }?,
+      (param.element*, sequence-constructor.model)
+   }
+evaluate.element =
+   element evaluate {
+      extension.atts,
+      global.atts,
+      (attribute xpath { expression.datatype }
+      | attribute _xpath { avt.datatype })+,
+      attribute as { sequence-type.datatype }?,
+      attribute _as { avt.datatype }?,
+      attribute base-uri { uri.datatype | avt.datatype }?,
+      attribute _base-uri { avt.datatype }?,
+      attribute with-params { expression.datatype }?,
+      attribute _with-params { avt.datatype }?,
+      attribute context-item { expression.datatype }?,
+      attribute _context-item { avt.datatype }?,
+      attribute namespace-context { expression.datatype }?,
+      attribute _namespace-context { avt.datatype }?,
+      attribute schema-aware { boolean.datatype | avt.datatype }?,
+      attribute _schema-aware { avt.datatype }?,
+      (with-param.element | fallback.element)*
+   }
+namespace-alias.element =
+   element namespace-alias {
+      extension.atts,
+      global.atts,
+      (attribute stylesheet-prefix { prefix.datatype | "#default" }
+      | attribute _stylesheet-prefix { avt.datatype })+,
+      (attribute result-prefix { prefix.datatype | "#default" }
+      | attribute _result-prefix { avt.datatype })+,
+      empty
+   }
+element.element =
+   element element {
+      extension.atts,
+      global.atts,
+      (attribute name { qname.datatype | avt.datatype }
+      | attribute _name { avt.datatype })+,
+      attribute namespace { uri.datatype | avt.datatype }?,
+      attribute _namespace { avt.datatype }?,
+      attribute inherit-namespaces { boolean.datatype }?,
+      attribute _inherit-namespaces { avt.datatype }?,
+      attribute use-attribute-sets { eqnames.datatype }?,
+      attribute _use-attribute-sets { avt.datatype }?,
+      ((attribute type { eqname.datatype }?,
+      attribute _type { avt.datatype }?) |
+      (attribute validation { "strict" | "lax" | "preserve" | "strip" }?,
+      attribute _validation { avt.datatype }? )), # type and validation are mutually exclusive
+      sequence-constructor.model
+   }
+attribute.element =
+   element attribute {
+      extension.atts,
+      global.atts,
+      (attribute name { qname.datatype | avt.datatype }
+      | attribute _name { avt.datatype })+,
+      attribute namespace { uri.datatype | avt.datatype }?,
+      attribute _namespace { avt.datatype }?,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      attribute separator { string.datatype | avt.datatype }?,
+      attribute _separator { avt.datatype }?,
+      ((attribute type { eqname.datatype }?,
+      attribute _type { avt.datatype }?) |
+      (attribute validation { "strict" | "lax" | "preserve" | "strip" }?,
+      attribute _validation { avt.datatype }? )), # type and validation are mutually exclusive
+      sequence-constructor.model
+   }
+text.element =
+   element text {
+      extension.atts,
+      global.atts,
+      attribute disable-output-escaping { boolean.datatype }?,
+      attribute _disable-output-escaping { avt.datatype }?,
+      text
+   }
+value-of.element =
+   element value-of {
+      extension.atts,
+      global.atts,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      attribute separator { string.datatype | avt.datatype }?,
+      attribute _separator { avt.datatype }?,
+      attribute disable-output-escaping { boolean.datatype }?,
+      attribute _disable-output-escaping { avt.datatype }?,
+      sequence-constructor.model
+   }
+document.element =
+   element document {
+      extension.atts,
+      global.atts,
+      ((attribute type { eqname.datatype }?,
+      attribute _type { avt.datatype }?) |
+      (attribute validation { "strict" | "lax" | "preserve" | "strip" }?,
+      attribute _validation { avt.datatype }? )), # type and validation are mutually exclusive
+      sequence-constructor.model
+   }
+processing-instruction.element =
+   element processing-instruction {
+      extension.atts,
+      global.atts,
+      (attribute name { ncname.datatype | avt.datatype }
+      | attribute _name { avt.datatype })+,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      sequence-constructor.model
+   }
+namespace.element =
+   element namespace {
+      extension.atts,
+      global.atts,
+      (attribute name { ncname.datatype | avt.datatype }
+      | attribute _name { avt.datatype })+,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      sequence-constructor.model
+   }
+comment.element =
+   element comment {
+      extension.atts,
+      global.atts,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      sequence-constructor.model
+   }
+copy.element =
+   element copy {
+      extension.atts,
+      global.atts,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      attribute copy-namespaces { boolean.datatype }?,
+      attribute _copy-namespaces { avt.datatype }?,
+      attribute inherit-namespaces { boolean.datatype }?,
+      attribute _inherit-namespaces { avt.datatype }?,
+      attribute use-attribute-sets { eqnames.datatype }?,
+      attribute _use-attribute-sets { avt.datatype }?,
+      ((attribute type { eqname.datatype }?,
+      attribute _type { avt.datatype }?) |
+      (attribute validation { "strict" | "lax" | "preserve" | "strip" }?,
+      attribute _validation { avt.datatype }? )), # type and validation are mutually exclusive
+      sequence-constructor.model
+   }
+copy-of.element =
+   element copy-of {
+      extension.atts,
+      global.atts,
+      (attribute select { expression.datatype }
+      | attribute _select { avt.datatype })+,
+      attribute copy-accumulators { boolean.datatype }?,
+      attribute _copy-accumulators { avt.datatype }?,
+      attribute copy-namespaces { boolean.datatype }?,
+      attribute _copy-namespaces { avt.datatype }?,
+      ((attribute type { eqname.datatype }?,
+      attribute _type { avt.datatype }?) |
+      (attribute validation { "strict" | "lax" | "preserve" | "strip" }?,
+      attribute _validation { avt.datatype }? )), # type and validation are mutually exclusive
+      empty
+   }
+sequence.element =
+   element sequence {
+      extension.atts,
+      global.atts,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      sequence-constructor.model
+   }
+where-populated.element =
+   element where-populated {
+      extension.atts,
+      global.atts,
+      sequence-constructor.model
+   }
+on-empty.element =
+   element on-empty {
+      extension.atts,
+      global.atts,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      sequence-constructor.model
+   }
+on-non-empty.element =
+   element on-non-empty {
+      extension.atts,
+      global.atts,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      sequence-constructor.model
+   }
+number.element =
+   element number {
+      extension.atts,
+      global.atts,
+      attribute value { expression.datatype }?,
+      attribute _value { avt.datatype }?,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      attribute level { "single" | "multiple" | "any" }?,
+      attribute _level { avt.datatype }?,
+      attribute count { pattern.datatype }?,
+      attribute _count { avt.datatype }?,
+      attribute from { pattern.datatype }?,
+      attribute _from { avt.datatype }?,
+      attribute format { string.datatype | avt.datatype }?,
+      attribute _format { avt.datatype }?,
+      attribute lang { language.datatype | avt.datatype }?,
+      attribute _lang { avt.datatype }?,
+      attribute letter-value { "alphabetic" | "traditional" | avt.datatype }?,
+      attribute _letter-value { avt.datatype }?,
+      attribute ordinal { string.datatype | avt.datatype }?,
+      attribute _ordinal { avt.datatype }?,
+      attribute start-at { integer.datatype | avt.datatype }?,
+      attribute _start-at { avt.datatype }?,
+      attribute grouping-separator { char.datatype | avt.datatype }?,
+      attribute _grouping-separator { avt.datatype }?,
+      attribute grouping-size { integer.datatype | avt.datatype }?,
+      attribute _grouping-size { avt.datatype }?,
+      empty
+   }
+sort.element =
+   element sort {
+      extension.atts,
+      global.atts,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      attribute lang { language.datatype | avt.datatype }?,
+      attribute _lang { avt.datatype }?,
+      attribute order { "ascending" | "descending" | avt.datatype }?,
+      attribute _order { avt.datatype }?,
+      attribute collation { uri.datatype | avt.datatype }?,
+      attribute _collation { avt.datatype }?,
+      attribute stable { boolean.datatype | avt.datatype }?,
+      attribute _stable { avt.datatype }?,
+      attribute case-order { "upper-first" | "lower-first" | avt.datatype }?,
+      attribute _case-order { avt.datatype }?,
+      attribute data-type { "text" | "number" | eqname.datatype | avt.datatype }?,
+      attribute _data-type { avt.datatype }?,
+      sequence-constructor.model
+   }
+perform-sort.element =
+   element perform-sort {
+      extension.atts,
+      global.atts,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      (sort.element+, sequence-constructor.model)
+   }
+for-each-group.element =
+   element for-each-group {
+      extension.atts,
+      global.atts,
+      (attribute select { expression.datatype }
+      | attribute _select { avt.datatype })+,
+      ((attribute group-by { expression.datatype }?,
+      attribute _group-by { avt.datatype }?) |
+      (attribute group-adjacent { expression.datatype }?,
+      attribute _group-adjacent { avt.datatype }?) |
+      (attribute group-starting-with { pattern.datatype }?,
+      attribute _group-starting-with { avt.datatype }?) |
+      (attribute group-ending-with { pattern.datatype }?,
+      attribute _group-ending-with { avt.datatype }?)),
+      attribute composite { boolean.datatype }?,
+      attribute _composite { avt.datatype }?,
+      attribute collation { uri.datatype | avt.datatype }?,
+      attribute _collation { avt.datatype }?,
+      (sort.element*, sequence-constructor.model)
+   }
+merge.element =
+   element merge {
+      extension.atts,
+      global.atts,
+      (merge-source.element+, merge-action.element, fallback.element*)
+   }
+merge-source.element =
+   element merge-source {
+      extension.atts,
+      global.atts,
+      attribute name { ncname.datatype }?,
+      attribute _name { avt.datatype }?,
+      attribute for-each-item { expression.datatype }?,
+      attribute _for-each-item { avt.datatype }?,
+      attribute for-each-stream { expression.datatype }?,
+      attribute _for-each-stream { avt.datatype }?,
+      (attribute select { expression.datatype }
+      | attribute _select { avt.datatype })+,
+      attribute streamable { boolean.datatype }?,
+      attribute _streamable { avt.datatype }?,
+      attribute use-accumulators { tokens.datatype }?,
+      attribute _use-accumulators { avt.datatype }?,
+      attribute sort-before-merge { boolean.datatype }?,
+      attribute _sort-before-merge { avt.datatype }?,
+      attribute validation { "strict" | "lax" | "preserve" | "strip" }?,
+      attribute _validation { avt.datatype }?,
+      attribute type { eqname.datatype }?,
+      attribute _type { avt.datatype }?,
+      attribute for-each-source { expression.datatype }?,
+      attribute _for-each-source { avt.datatype }?,
+      merge-key.element+
+   }
+merge-key.element =
+   element merge-key {
+      extension.atts,
+      global.atts,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      attribute lang { language.datatype | avt.datatype }?,
+      attribute _lang { avt.datatype }?,
+      attribute order { "ascending" | "descending" | avt.datatype }?,
+      attribute _order { avt.datatype }?,
+      attribute collation { uri.datatype | avt.datatype }?,
+      attribute _collation { avt.datatype }?,
+      attribute case-order { "upper-first" | "lower-first" | avt.datatype }?,
+      attribute _case-order { avt.datatype }?,
+      attribute data-type { "text" | "number" | eqname.datatype | avt.datatype }?,
+      attribute _data-type { avt.datatype }?,
+      sequence-constructor.model
+   }
+merge-action.element =
+   element merge-action {
+      extension.atts,
+      global.atts,
+      sequence-constructor.model
+   }
+fork.element =
+   element fork {
+      extension.atts,
+      global.atts,
+      (fallback.element*, ((sequence.element, fallback.element*)* | (for-each-group.element, fallback.element*)))
+   }
+analyze-string.element =
+   element analyze-string {
+      extension.atts,
+      global.atts,
+      (attribute select { expression.datatype }
+      | attribute _select { avt.datatype })+,
+      (attribute regex { string.datatype | avt.datatype }
+      | attribute _regex { avt.datatype })+,
+      attribute flags { string.datatype | avt.datatype }?,
+      attribute _flags { avt.datatype }?,
+      (matching-substring.element?, non-matching-substring.element?, fallback.element*)
+   }
+matching-substring.element =
+   element matching-substring {
+      extension.atts,
+      global.atts,
+      sequence-constructor.model
+   }
+non-matching-substring.element =
+   element non-matching-substring {
+      extension.atts,
+      global.atts,
+      sequence-constructor.model
+   }
+source-document.element =
+   element source-document {
+      extension.atts,
+      global.atts,
+      (attribute href { uri.datatype | avt.datatype }
+      | attribute _href { avt.datatype })+,
+      attribute use-accumulators { tokens.datatype }?,
+      attribute _use-accumulators { avt.datatype }?,
+      ((attribute type { eqname.datatype }?,
+      attribute _type { avt.datatype }?) |
+      (attribute validation { "strict" | "lax" | "preserve" | "strip" }?,
+      attribute _validation { avt.datatype }? )), # type and validation are mutually exclusive
+      attribute streamable { boolean.datatype }?,
+      attribute _streamable { avt.datatype }?,
+      sequence-constructor.model
+   }
+accumulator.element =
+   element accumulator {
+      extension.atts,
+      global.atts,
+      (attribute name { eqname.datatype }
+      | attribute _name { avt.datatype }),
+      (attribute initial-value { expression.datatype }
+      | attribute _initial-value { avt.datatype }),
+      attribute as { sequence-type.datatype }?,
+      attribute _as { avt.datatype }?,
+      attribute streamable { boolean.datatype }?,
+      attribute _streamable { avt.datatype }?,
+      accumulator-rule.element+
+   }
+accumulator-rule.element =
+   element accumulator-rule {
+      extension.atts,
+      global.atts,
+      (attribute match { pattern.datatype } |
+      attribute _match { avt.datatype })+,
+      attribute phase { "start" | "end" }?,
+      attribute _phase { avt.datatype }?,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      sequence-constructor.model
+   }
+key.element =
+   element key {
+      extension.atts,
+      global.atts,
+      (attribute name { eqname.datatype }
+      | attribute _name { avt.datatype })+,
+      (attribute match { pattern.datatype }
+      | attribute _match { avt.datatype })+,
+      attribute use { expression.datatype }?,
+      attribute _use { avt.datatype }?,
+      attribute composite { boolean.datatype }?,
+      attribute _composite { avt.datatype }?,
+      attribute collation { uri.datatype }?,
+      attribute _collation { avt.datatype }?,
+      sequence-constructor.model
+   }
+map.element =
+   element map {
+      extension.atts,
+      global.atts,
+      sequence-constructor.model
+   }
+map-entry.element =
+   element map-entry {
+      extension.atts,
+      global.atts,
+      (attribute key { expression.datatype }
+      | attribute _key { avt.datatype }),
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      sequence-constructor.model
+   }
+message.element =
+   element message {
+      extension.atts,
+      global.atts,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      attribute terminate { boolean.datatype | avt.datatype }?,
+      attribute _terminate { avt.datatype }?,
+      attribute error-code { eqname.datatype | avt.datatype }?,
+      attribute _error-code { avt.datatype }?,
+      sequence-constructor.model
+   }
+assert.element =
+   element assert {
+      extension.atts,
+      global.atts,
+      (attribute test { expression.datatype }
+      | attribute _test { avt.datatype })+,
+      attribute select { expression.datatype }?,
+      attribute _select { avt.datatype }?,
+      attribute error-code { eqname.datatype | avt.datatype }?,
+      attribute _error-code { avt.datatype }?,
+      sequence-constructor.model
+   }
+fallback.element =
+   element fallback {
+      extension.atts,
+      global.atts,
+      sequence-constructor.model
+   }
+result-document.element =
+   element result-document {
+      extension.atts,
+      global.atts,
+      attribute format { eqname.datatype | avt.datatype }?,
+      attribute _format { avt.datatype }?,
+      attribute href { uri.datatype | avt.datatype }?,
+      attribute _href { avt.datatype }?,
+      ((attribute type { eqname.datatype }?,
+      attribute _type { avt.datatype }?) |
+      (attribute validation { "strict" | "lax" | "preserve" | "strip" }?,
+      attribute _validation { avt.datatype }? )), # type and validation are mutually exclusive      
+      attribute method { "xml" | "html" | "xhtml" | "text" | "json" | "adaptive" | eqname.datatype | avt.datatype }?,
+      attribute _method { avt.datatype }?,
+      attribute allow-duplicate-names { boolean.datatype | avt.datatype }?,
+      attribute _allow-duplicate-names { avt.datatype }?,
+      attribute build-tree { boolean.datatype | avt.datatype }?,
+      attribute _build-tree { avt.datatype }?,
+      attribute byte-order-mark { boolean.datatype | avt.datatype }?,
+      attribute _byte-order-mark { avt.datatype }?,
+      attribute cdata-section-elements { eqnames.datatype | avt.datatype }?,
+      attribute _cdata-section-elements { avt.datatype }?,
+      attribute doctype-public { string.datatype | avt.datatype }?,
+      attribute _doctype-public { avt.datatype }?,
+      attribute doctype-system { string.datatype | avt.datatype }?,
+      attribute _doctype-system { avt.datatype }?,
+      attribute encoding { string.datatype | avt.datatype }?,
+      attribute _encoding { avt.datatype }?,
+      attribute escape-uri-attributes { boolean.datatype | avt.datatype }?,
+      attribute _escape-uri-attributes { avt.datatype }?,
+      attribute html-version { decimal.datatype | avt.datatype }?,
+      attribute _html-version { avt.datatype }?,
+      attribute include-content-type { boolean.datatype | avt.datatype }?,
+      attribute _include-content-type { avt.datatype }?,
+      attribute indent { boolean.datatype | avt.datatype }?,
+      attribute _indent { avt.datatype }?,
+      attribute item-separator { string.datatype | avt.datatype }?,
+      attribute _item-separator { avt.datatype }?,
+      attribute json-node-output-method { "xml" | "html" | "xhtml" | "text" | eqname.datatype | avt.datatype }?,
+      attribute _json-node-output-method { avt.datatype }?,
+      attribute media-type { string.datatype | avt.datatype }?,
+      attribute _media-type { avt.datatype }?,
+      attribute normalization-form { "NFC" | "NFD" | "NFKC" | "NFKD" | "fully-normalized" | "none" | nmtoken.datatype | avt.datatype }?,
+      attribute _normalization-form { avt.datatype }?,
+      attribute omit-xml-declaration { boolean.datatype | avt.datatype }?,
+      attribute _omit-xml-declaration { avt.datatype }?,
+      attribute parameter-document { uri.datatype | avt.datatype }?,
+      attribute _parameter-document { avt.datatype }?,
+      attribute standalone { boolean.datatype | "omit" | avt.datatype }?,
+      attribute _standalone { avt.datatype }?,
+      attribute suppress-indentation { eqnames.datatype | avt.datatype }?,
+      attribute _suppress-indentation { avt.datatype }?,
+      attribute undeclare-prefixes { boolean.datatype | avt.datatype }?,
+      attribute _undeclare-prefixes { avt.datatype }?,
+      attribute use-character-maps { eqnames.datatype }?,
+      attribute _use-character-maps { avt.datatype }?,
+      attribute output-version { nmtoken.datatype | avt.datatype }?,
+      attribute _output-version { avt.datatype }?,
+      sequence-constructor.model
+   }
+output.element =
+   element output {
+      extension.atts,
+      global.atts.except.version,
+      attribute name { eqname.datatype }?,
+      attribute _name { avt.datatype }?,
+      attribute method { "xml" | "html" | "xhtml" | "text" | "json" | "adaptive" | eqname.datatype }?,
+      attribute _method { avt.datatype }?,
+      attribute allow-duplicate-names { boolean.datatype }?,
+      attribute _allow-duplicate-names { avt.datatype }?,
+      attribute build-tree { boolean.datatype }?,
+      attribute _build-tree { avt.datatype }?,
+      attribute byte-order-mark { boolean.datatype }?,
+      attribute _byte-order-mark { avt.datatype }?,
+      attribute cdata-section-elements { eqnames.datatype }?,
+      attribute _cdata-section-elements { avt.datatype }?,
+      attribute doctype-public { string.datatype }?,
+      attribute _doctype-public { avt.datatype }?,
+      attribute doctype-system { string.datatype }?,
+      attribute _doctype-system { avt.datatype }?,
+      attribute encoding { string.datatype }?,
+      attribute _encoding { avt.datatype }?,
+      attribute escape-uri-attributes { boolean.datatype }?,
+      attribute _escape-uri-attributes { avt.datatype }?,
+      attribute html-version { decimal.datatype }?,
+      attribute _html-version { avt.datatype }?,
+      attribute include-content-type { boolean.datatype }?,
+      attribute _include-content-type { avt.datatype }?,
+      attribute indent { boolean.datatype }?,
+      attribute _indent { avt.datatype }?,
+      attribute item-separator { string.datatype }?,
+      attribute _item-separator { avt.datatype }?,
+      attribute json-node-output-method { "xml" | "html" | "xhtml" | "text" | eqname.datatype }?,
+      attribute _json-node-output-method { avt.datatype }?,
+      attribute media-type { string.datatype }?,
+      attribute _media-type { avt.datatype }?,
+      attribute normalization-form { "NFC" | "NFD" | "NFKC" | "NFKD" | "fully-normalized" | "none" | nmtoken.datatype }?,
+      attribute _normalization-form { avt.datatype }?,
+      attribute omit-xml-declaration { boolean.datatype }?,
+      attribute _omit-xml-declaration { avt.datatype }?,
+      attribute parameter-document { uri.datatype }?,
+      attribute _parameter-document { avt.datatype }?,
+      attribute standalone { boolean.datatype | "omit" }?,
+      attribute _standalone { avt.datatype }?,
+      attribute suppress-indentation { eqnames.datatype }?,
+      attribute _suppress-indentation { avt.datatype }?,
+      attribute undeclare-prefixes { boolean.datatype }?,
+      attribute _undeclare-prefixes { avt.datatype }?,
+      attribute use-character-maps { eqnames.datatype }?,
+      attribute _use-character-maps { avt.datatype }?,
+      attribute version { nmtoken.datatype }?,
+      attribute _version { avt.datatype }?,
+      empty
+   }
+character-map.element =
+   element character-map {
+      extension.atts,
+      global.atts,
+      (attribute name { eqname.datatype }
+      | attribute _name { avt.datatype })+,
+      attribute use-character-maps { eqnames.datatype }?,
+      attribute _use-character-maps { avt.datatype }?,
+      (output-character.element*)
+   }
+output-character.element =
+   element output-character {
+      extension.atts,
+      global.atts,
+      (attribute character { char.datatype }
+      | attribute _character { avt.datatype })+,
+      (attribute string { string.datatype }
+      | attribute _string { avt.datatype })+,
+      empty
+   }
+avt.datatype =
+  xsd:string
+# {
+#    pattern =
+#      """([^\{\}]|\{\{|\}\}|\{([^"'\{\}]|"[^"]*"|'[^']*')+\})*""" # this regexp will not work in all the case.
+#      }

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?><out>
+Element node substring1: http://b.org/
+Attribute node attr2: http://b.org/
+Comment node: http://a.org/
+PI node: http://a.org/
+Text node: http://a.org/
+Namespace node: 
+</out>

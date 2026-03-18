@@ -1,0 +1,45 @@
+<Notifications>
+    <BatchId>DOCATTR.BATCHID</BatchId>
+    <Notification>
+        <NotifId>1</NotifId>
+        <Cid>DOCATTR.CID</Cid>
+        <EmailNotification>
+            <CcAddress>DOCATTR.EMAILCC</CcAddress>
+            <CcName>DOCATTR.EMAILCCNAME</CcName>
+            <BccAddress>DOCATTR.EMAILBCC</BccAddress>
+            <SenderAddress>DOCATTR.SENDERADDRESS</SenderAddress>
+            <SenderName>DOCATTR.SENDERNAME</SenderName>
+            <MsgText>old text 1</MsgText>
+            <Expiration>DOCATTR.EXPIRATION</Expiration>
+            <Priority>DOCATTR.PRIORITYNC</Priority>
+        </EmailNotification>
+    </Notification>
+    <Notification>
+        <NotifId>2</NotifId>
+        <Cid>DOCATTR.CID</Cid>
+        <EmailNotification>
+            <CcAddress>DOCATTR.EMAILCC</CcAddress>
+            <CcName>DOCATTR.EMAILCCNAME</CcName>
+            <BccAddress>DOCATTR.EMAILBCC</BccAddress>
+            <SenderAddress>DOCATTR.SENDERADDRESS</SenderAddress>
+            <SenderName>DOCATTR.SENDERNAME</SenderName>
+            <MsgText>old text 2</MsgText>
+            <Expiration>DOCATTR.EXPIRATION</Expiration>
+            <Priority>DOCATTR.PRIORITYNC</Priority>
+        </EmailNotification>
+    </Notification>
+    <Notification>
+        <NotifId>3</NotifId>
+        <Cid>DOCATTR.CID</Cid>
+        <EmailNotification>
+            <CcAddress>DOCATTR.EMAILCC</CcAddress>
+            <CcName>DOCATTR.EMAILCCNAME</CcName>
+            <BccAddress>DOCATTR.EMAILBCC</BccAddress>
+            <SenderAddress>DOCATTR.SENDERADDRESS</SenderAddress>
+            <SenderName>DOCATTR.SENDERNAME</SenderName>
+            <MsgText>old text 3</MsgText>
+            <Expiration>DOCATTR.EXPIRATION</Expiration>
+            <Priority>DOCATTR.PRIORITYNC</Priority>
+        </EmailNotification>
+    </Notification>
+</Notifications>
