@@ -197,6 +197,10 @@ var xsdTypeParent = map[string]string{
 	TypeGMonthDay:  TypeAnyAtomicType,
 	TypeGYear:      TypeAnyAtomicType,
 	TypeGYearMonth: TypeAnyAtomicType,
+	// Complex type hierarchy (for element/attribute type tests)
+	TypeUntyped:       TypeAnyType,
+	TypeAnySimpleType: TypeAnyType,
+	TypeAnyAtomicType: TypeAnySimpleType,
 }
 
 // AtomicValue represents an XSD atomic value with its type name.
