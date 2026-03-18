@@ -284,7 +284,7 @@ func SplitLines(text string) []string {
 	normalized := b.String()
 
 	if normalized == "" {
-		return []string{""}
+		return nil
 	}
 	lines := strings.Split(normalized, "\n")
 	if len(lines) > 0 && lines[len(lines)-1] == "" {
