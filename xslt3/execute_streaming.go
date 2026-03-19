@@ -1005,11 +1005,15 @@ func (ec *execContext) computeAccumulatorStates(ctx context.Context, doc helium.
 }
 
 func (ec *execContext) walkAccumulatorTree(ctx context.Context, node helium.Node, names []string) error {
-	ec.storeAccumulatorSnapshot(ec.accumulatorBeforeByNode, node, ec.accumulatorState)
-
+	// Fire start-phase rules first, then snapshot "before" state.
+	// Per XSLT 3.0 §14.1, accumulator-before() returns the value AFTER start-phase
+	// rules for the current node have fired (i.e., the value "before" descending into
+	// the node's children), not the value before the node's own rules run.
 	if err := ec.applyAccumulatorPhase(ctx, node, names, "start"); err != nil {
 		return err
 	}
+
+	ec.storeAccumulatorSnapshot(ec.accumulatorBeforeByNode, node, ec.accumulatorState)
 
 	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
 		if err := ec.walkAccumulatorTree(ctx, child, names); err != nil {

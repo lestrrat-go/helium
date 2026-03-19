@@ -473,9 +473,9 @@ func (c *compiler) compileAccumulatorRule(parent *AccumulatorDef, elem *helium.E
 		New:   getAttr(elem, "new-value") == "yes",
 	}
 
-	// Default phase is "end" if not specified
+	// Default phase is "start" per XSLT 3.0 spec §14
 	if rule.Phase == "" {
-		rule.Phase = "end"
+		rule.Phase = "start"
 	}
 
 	selectAttr := getAttr(elem, "select")
