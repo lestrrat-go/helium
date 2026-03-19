@@ -1,0 +1,288 @@
+package xslt3
+
+import (
+	"strings"
+
+	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath3"
+)
+
+func (c *compiler) compileGlobalContextItem(elem *helium.Element) error {
+	asAttr := getAttr(elem, "as")
+	if err := c.validateAsSequenceType(asAttr, "xsl:global-context-item"); err != nil {
+		return err
+	}
+	def := &GlobalContextItemDef{
+		Use: getAttr(elem, "use"),
+		As:  asAttr,
+	}
+	if def.Use == "" {
+		def.Use = "optional"
+	}
+	// XTSE3087: duplicate xsl:global-context-item declarations must agree
+	if existing := c.stylesheet.globalContextItem; existing != nil {
+		// Same values (after whitespace normalization) are OK — ignore duplicate
+		normalizeAs := func(s string) string {
+			return strings.Join(strings.Fields(strings.NewReplacer(" ", "").Replace(s)), "")
+		}
+		if existing.Use == def.Use && normalizeAs(existing.As) == normalizeAs(def.As) {
+			return nil
+		}
+		return staticError(errCodeXTSE3087, "conflicting xsl:global-context-item declarations")
+	}
+	c.stylesheet.globalContextItem = def
+	return nil
+}
+
+// isReservedFunctionNS returns true if the given namespace URI is reserved
+// by the XSLT 3.0 spec and may not be used for user-defined functions.
+func isReservedFunctionNS(uri string) bool {
+	switch uri {
+	case NSXSLT, xpath3.NSFn, xpath3.NSMath, xpath3.NSMap, xpath3.NSArray, xpath3.NSXS:
+		return true
+	}
+	return false
+}
+
+func (c *compiler) compileFunction(elem *helium.Element) error {
+	name := getAttr(elem, "name")
+	if name == "" {
+		return staticError(errCodeXTSE0110, "xsl:function requires name attribute")
+	}
+
+	// Collect namespace declarations from this element
+	c.collectNamespaces(elem)
+
+	// Resolve the prefixed name to a QualifiedName
+	var qn xpath3.QualifiedName
+	if strings.HasPrefix(name, "Q{") {
+		// EQName: Q{uri}local
+		closeBrace := strings.IndexByte(name, '}')
+		if closeBrace < 0 {
+			return staticError(errCodeXTSE0010, "malformed EQName in xsl:function name %q", name)
+		}
+		uri := name[2:closeBrace]
+		local := name[closeBrace+1:]
+		if uri == "" {
+			return staticError(errCodeXTSE0010, "xsl:function name %q must be in a non-null namespace", name)
+		}
+		qn = xpath3.QualifiedName{URI: uri, Name: local}
+	} else if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		prefix := name[:idx]
+		local := name[idx+1:]
+		uri := c.nsBindings[prefix]
+		if uri == "" {
+			uri = c.stylesheet.namespaces[prefix]
+		}
+		if uri == "" {
+			return staticError(errCodeXTSE0010, "unresolved namespace prefix %q in xsl:function name %q", prefix, name)
+		}
+		qn = xpath3.QualifiedName{URI: uri, Name: local}
+	} else {
+		return staticError(errCodeXTSE0010, "xsl:function name %q must have a namespace prefix", name)
+	}
+
+	// XTSE0080: function name must not be in a reserved namespace
+	if isReservedFunctionNS(qn.URI) {
+		return staticError(errCodeXTSE0080, "xsl:function name %q is in a reserved namespace", name)
+	}
+
+	// Handle expand-text on xsl:function (using GetAttribute to catch empty values)
+	savedExpandText := c.expandText
+	if et, hasET := elem.GetAttribute("expand-text"); hasET {
+		if v, ok := parseXSDBool(et); ok {
+			c.expandText = v
+		} else {
+			return staticError(errCodeXTSE0020, "%q is not a valid value for xsl:function/@expand-text", et)
+		}
+	}
+
+	// Compile function body (params + instructions)
+	body, params, err := c.compileTemplateBody(elem)
+	c.expandText = savedExpandText
+	if err != nil {
+		return err
+	}
+
+	fnAs := getAttr(elem, "as")
+	if err := c.validateAsSequenceType(fnAs, "xsl:function "+name); err != nil {
+		return err
+	}
+
+	fn := &XSLFunction{
+		Name:          qn,
+		Params:        params,
+		Body:          body,
+		As:            fnAs,
+		Cache:         xsdBoolTrue(getAttr(elem, "cache")),
+		Streamability: getAttr(elem, "streamability"),
+		Visibility:    getAttr(elem, "visibility"),
+	}
+	if c.stylesheet.isPackage {
+		fn.OwnerPackage = c.stylesheet
+	}
+
+	c.stylesheet.functions[qn] = fn
+	return nil
+}
+
+func (c *compiler) compileMode(elem *helium.Element) error {
+	// xsl:mode must be empty (no children)
+	if elem.FirstChild() != nil {
+		return staticError(errCodeXTSE0010, "xsl:mode must be empty")
+	}
+
+	name := strings.TrimSpace(getAttr(elem, "name"))
+	if name == "" {
+		name = "#default"
+	}
+
+	// Parse streamable with proper xs:boolean validation
+	streamableStr := strings.TrimSpace(getAttr(elem, "streamable"))
+	streamable := false
+	if streamableStr != "" {
+		v, ok := parseXSDBool(streamableStr)
+		if !ok {
+			return staticError(errCodeXTSE0020, "invalid value %q for streamable on xsl:mode", streamableStr)
+		}
+		streamable = v
+	}
+
+	// Validate on-no-match
+	onNoMatch := strings.TrimSpace(getAttr(elem, "on-no-match"))
+	if onNoMatch != "" {
+		switch onNoMatch {
+		case "text-only-copy", "shallow-copy", "deep-copy", "shallow-skip", "deep-skip", "fail":
+			// valid
+		default:
+			return staticError(errCodeXTSE0020, "invalid value %q for on-no-match on xsl:mode", onNoMatch)
+		}
+	}
+	// Note: we keep onNoMatch as "" when not specified, so we can detect
+	// conflicts properly. The default "text-only-copy" is applied later.
+
+	// Validate boolean attributes
+	if v := getAttr(elem, "warning-on-no-match"); v != "" {
+		if _, ok := parseXSDBool(v); !ok {
+			return staticError(errCodeXTSE0020, "invalid value %q for warning-on-no-match on xsl:mode", v)
+		}
+	}
+	if v := getAttr(elem, "warning-on-multiple-match"); v != "" {
+		if _, ok := parseXSDBool(v); !ok {
+			return staticError(errCodeXTSE0020, "invalid value %q for warning-on-multiple-match on xsl:mode", v)
+		}
+	}
+	if v := getAttr(elem, "typed"); v != "" {
+		// typed accepts "yes", "no", "true", "false", "1", "0",
+		// "strict", "lax", "unspecified"
+		switch v {
+		case "strict", "lax", "unspecified":
+			// valid non-boolean values
+		default:
+			if _, ok := parseXSDBool(v); !ok {
+				return staticError(errCodeXTSE0020, "invalid value %q for typed on xsl:mode", v)
+			}
+		}
+	}
+
+	visibility := strings.TrimSpace(getAttr(elem, "visibility"))
+	// XTSE0020: unnamed mode cannot have visibility="public" or "final"
+	if name == "#default" && (visibility == visPublic || visibility == visFinal) {
+		return staticError(errCodeXTSE0020, "unnamed mode cannot have visibility %q", visibility)
+	}
+
+	onMultipleMatch := strings.TrimSpace(getAttr(elem, "on-multiple-match"))
+	if onMultipleMatch != "" {
+		switch onMultipleMatch {
+		case "use-last", "fail":
+			// valid
+		default:
+			return staticError(errCodeXTSE0020, "invalid value %q for on-multiple-match on xsl:mode", onMultipleMatch)
+		}
+	}
+
+	useAccumulators := getAttr(elem, "use-accumulators")
+
+	md := &ModeDef{
+		Name:            name,
+		OnNoMatch:       onNoMatch,
+		Streamable:      streamable,
+		Visibility:      visibility,
+		OnMultipleMatch: onMultipleMatch,
+		UseAccumulators: useAccumulators,
+		ImportPrec:      c.importPrec,
+	}
+
+	if c.stylesheet.modeDefs == nil {
+		c.stylesheet.modeDefs = make(map[string]*ModeDef)
+	}
+
+	// Check for conflicting declarations at the same import precedence
+	if existing, ok := c.stylesheet.modeDefs[name]; ok {
+		if existing.ImportPrec == c.importPrec {
+			// Same precedence: check for conflicting attribute values (XTSE0545)
+			if existing.OnNoMatch != "" && md.OnNoMatch != "" && existing.OnNoMatch != md.OnNoMatch {
+				return staticError(errCodeXTSE0545, "conflicting on-no-match values for mode %q: %q vs %q", name, existing.OnNoMatch, md.OnNoMatch)
+			}
+			if streamableStr != "" && existing.Streamable != md.Streamable {
+				return staticError(errCodeXTSE0545, "conflicting streamable values for mode %q", name)
+			}
+			if existing.Visibility != "" && md.Visibility != "" && existing.Visibility != md.Visibility {
+				return staticError(errCodeXTSE0545, "conflicting visibility values for mode %q: %q vs %q", name, existing.Visibility, md.Visibility)
+			}
+			if existing.OnMultipleMatch != "" && md.OnMultipleMatch != "" && existing.OnMultipleMatch != md.OnMultipleMatch {
+				return staticError(errCodeXTSE0545, "conflicting on-multiple-match values for mode %q", name)
+			}
+			if existing.UseAccumulators != "" && md.UseAccumulators != "" && !sameAccumulatorSet(existing.UseAccumulators, md.UseAccumulators) {
+				return staticError(errCodeXTSE0545, "conflicting use-accumulators values for mode %q", name)
+			}
+			// Non-conflicting: merge attributes (use non-empty values from new decl)
+			if md.OnNoMatch != "" {
+				existing.OnNoMatch = md.OnNoMatch
+			}
+			if md.Visibility != "" {
+				existing.Visibility = md.Visibility
+			}
+			if md.OnMultipleMatch != "" {
+				existing.OnMultipleMatch = md.OnMultipleMatch
+			}
+			if md.UseAccumulators != "" {
+				existing.UseAccumulators = md.UseAccumulators
+			}
+			return nil
+		}
+		// Different precedence: higher precedence wins
+		if c.importPrec > existing.ImportPrec {
+			c.stylesheet.modeDefs[name] = md
+		}
+		return nil
+	}
+
+	c.stylesheet.modeDefs[name] = md
+	return nil
+}
+
+// sameAccumulatorSet checks whether two use-accumulators values contain
+// the same set of accumulator names (order-independent).
+func sameAccumulatorSet(a, b string) bool {
+	if a == b {
+		return true
+	}
+	as := make(map[string]struct{})
+	for _, s := range strings.Fields(a) {
+		as[s] = struct{}{}
+	}
+	bs := make(map[string]struct{})
+	for _, s := range strings.Fields(b) {
+		bs[s] = struct{}{}
+	}
+	if len(as) != len(bs) {
+		return false
+	}
+	for k := range as {
+		if _, ok := bs[k]; !ok {
+			return false
+		}
+	}
+	return true
+}

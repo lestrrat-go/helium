@@ -85,7 +85,7 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
 - Schema awareness: `xsl:import-schema` compiles XSD schemas, `type=` on `xsl:element`/`xsl:attribute` annotates result nodes, `validation=` on `xsl:copy`/`xsl:copy-of`, `default-validation` stylesheet attribute, `type-available()` function, type annotations flow to xpath3 via `WithTypeAnnotations`
 - Runtime helpers: `current()`, `document()`, `key()`, `generate-id()`, `system-property()`, `unparsed-entity-uri()`, `type-available()`
 - Output methods: `xml`, `html`, `text`
-- Files: `xslt3.go` (API), `options.go` (context config), `compile.go`, `compile_instructions.go`, `compile_patterns.go`, `execute.go`, `execute_instructions.go`, `output.go`, `functions.go`, `keys.go`, `avt.go`, `stylesheet.go`, `instruction.go`, `sort.go`, `errors.go`
+- Files: `xslt3.go` (API), `options.go` (context config), `compile.go` (orchestration + shared helpers), `compile_imports.go`, `compile_packages.go`, `compile_schema.go`, `compile_templates.go`, `compile_functions_modes.go`, `compile_formats.go`, `compile_instructions.go` (dispatch + static context helpers), `compile_instructions_flow.go`, `compile_instructions_nodes.go`, `compile_instructions_vars.go`, `compile_patterns.go`, `execute.go`, `execute_instructions.go`, `output.go`, `functions.go`, `keys.go`, `avt.go`, `stylesheet.go`, `instruction.go`, `sort.go`, `errors.go`
 - Imports: helium, xpath3, xsd
 - Tests: `xslt3_test.go` runs phase-1 W3C XSLT 3.0 test sets from `testdata/xslt30/source/` when fetched
 

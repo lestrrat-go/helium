@@ -101,7 +101,7 @@ type Stylesheet struct {
 
 `schemas` accumulates compiled `*xsd.Schema` values in `compileImportSchema`. `defaultValidation` is set from the `default-validation` attribute on the root `xsl:stylesheet` element.
 
-#### 3.2.2 `compileImportSchema` (`xslt3/compile.go`)
+#### 3.2.2 `compileImportSchema` (`xslt3/compile_schema.go`)
 
 **Partially implemented. Gap: inline schema not supported.**
 
@@ -138,7 +138,7 @@ type AttributeInst struct {
 
 `TypeName` is populated during compilation by `resolveXSDTypeName(getAttr(elem, "type"), c.nsBindings)`.
 
-#### 3.2.4 `resolveXSDTypeName` (`xslt3/compile.go`)
+#### 3.2.4 `resolveXSDTypeName` (`xslt3/compile_schema.go`)
 
 **Already implemented.** Normalizes QName references:
 
@@ -338,8 +338,8 @@ The `xslt3.Transform`, `xslt3.CompileStylesheet` etc. signatures are unchanged. 
 
 ### 4.1 Coding Standards Compliance
 
-- Follow the `getAttr` / `compileXPath` / `resolveQName` patterns already in `compile.go`.
-- New helper functions in `compile.go` follow the `(c *compiler) compileXxx` receiver pattern.
+- Follow the `getAttr` / `compileXPath` / `resolveQName` patterns already in `xslt3/compile*.go`.
+- New helper functions in `xslt3/compile*.go` follow the `(c *compiler) compileXxx` receiver pattern.
 - Runtime helpers on `execContext` use `(ec *execContext) xxxYyy` receivers.
 - Type name constants use the `TypeXxx = "xs:xxx"` format from `xpath3/types.go`.
 - No new exported symbols in `xpath3` unless strictly necessary.
@@ -431,7 +431,7 @@ func (ec *execContext) transferAnnotations(srcNode helium.Node) {
 
 ### Task 3: Implement inline schema support in `compileImportSchema` [Moderate]
 
-**File:** `xslt3/compile.go`
+**File:** `xslt3/compile_schema.go`
 
 **Problem:** When `schema-location` is absent, the element may contain an inline `xs:schema` child. The current code returns early with `nil` without checking for it.
 
@@ -515,7 +515,7 @@ Apply the same pattern in `evalStepWithPredicates` and `evalStepNoPredicates` wh
 
 ### Task 5: Validate `type=` against imported schemas at compile time [Simple]
 
-**File:** `xslt3/compile_instructions.go`
+**File:** `xslt3/compile_instructions_nodes.go`
 
 **Current behavior:** `compileElement` and `compileAttribute` accept any `type=` value, including unknown types, and store the raw normalized string. No validation against `c.stylesheet.schemas` occurs.
 

@@ -241,8 +241,13 @@ Several non-streaming features were implemented or fixed as side effects:
 ### Heavily modified files
 - `xslt3/instruction.go` — new instruction types
 - `xslt3/stylesheet.go` — AccumulatorDef, AttributeSetDef, mode/function fields
-- `xslt3/compile.go` — mode/function/accumulator/attribute-set compilation
-- `xslt3/compile_instructions.go` — new instruction dispatch
+- `xslt3/compile.go` — compile orchestration + shared helpers
+- `xslt3/compile_functions_modes.go` — mode/function/global-context-item compilation
+- `xslt3/compile_formats.go` — key/output/attribute-set/decimal-format/space handling compilation
+- `xslt3/compile_instructions.go` — instruction dispatch + use-when/static context helpers
+- `xslt3/compile_instructions_flow.go` — apply/call/choose/for-each/group/sort/try/evaluate compilation
+- `xslt3/compile_instructions_nodes.go` — node-constructor/copy/number/LRE compilation
+- `xslt3/compile_instructions_vars.go` — local variable/param/message/map/assert compilation
 - `xslt3/execute.go` — execContext fields, strip-space, deep-copy mode
 - `xslt3/execute_instructions.go` — new instruction dispatch, copy/sequence fixes
 - `xslt3/functions.go` — new XSLT functions, copy-of/snapshot, key() fix
