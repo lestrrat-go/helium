@@ -53,6 +53,10 @@ type SchemaDeclarations interface {
 	// Both names use the annotation format: "xs:localName" for XSD built-ins,
 	// "Q{ns}localName" for user-defined types.
 	IsSubtypeOf(typeName, baseTypeName string) bool
+	// ValidateCast checks whether a string value is valid for a user-defined
+	// schema type (including facet constraints). Returns nil if valid or the
+	// type is not found; returns an error if the value violates facets.
+	ValidateCast(value, typeName string) error
 }
 
 type evalConfig struct {

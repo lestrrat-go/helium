@@ -322,14 +322,13 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 		switch v := item.(type) {
 		case xpath3.NodeItem:
 			prevWasAtomic = false
+			// Remember the last child before copying so we can identify new nodes.
+			lastBefore := out.current.LastChild()
 			if err := ec.copyNodeToOutput(v.Node, copyNS); err != nil {
 				return err
 			}
 			if preserve {
-				last := out.current.LastChild()
-				if last != nil {
-					ec.deepTransferAnnotations(v.Node, last)
-				}
+				ec.transferAnnotationsForCopy(v.Node, out.current, lastBefore)
 			} else if effectiveVal == "strict" || effectiveVal == "lax" || effectiveVal == "strip" {
 				// Apply validation/strip to the most recently added node in output.
 				if copied := out.current.LastChild(); copied != nil {

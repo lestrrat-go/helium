@@ -382,7 +382,7 @@ func TestW3C_copy_of(t *testing.T) {
 		{Name: "copy-of-006", StylesheetPath: "tests/fn/copy-of/copy-of-006.xsl", SourceDocPath: "tests/fn/copy-of/copy-of-001.xml", Assertions: []w3cAssertion{w3cAssertXML("<out>false</out>")}},
 		{Name: "copy-of-007", StylesheetPath: "tests/fn/copy-of/copy-of-007.xsl", SourceDocPath: "tests/fn/copy-of/copy-of-001.xml", Assertions: []w3cAssertion{w3cAssertXML("<out>true</out>")}},
 		{Name: "copy-of-008", StylesheetPath: "tests/fn/copy-of/copy-of-008.xsl", SourceDocPath: "tests/fn/copy-of/copy-of-001.xml", Assertions: []w3cAssertion{w3cAssertXML("<out/>")}},
-		{Name: "copy-of-009", StylesheetPath: "tests/fn/copy-of/copy-of-009.xsl", SourceDocPath: "tests/fn/copy-of/copy-of-001.xml", ExpectError: true, ErrorCode: "XTTE0950", Skip: "unsupported feature: schema_aware"},
+		{Name: "copy-of-009", StylesheetPath: "tests/fn/copy-of/copy-of-009.xsl", SourceDocPath: "tests/fn/copy-of/copy-of-001.xml", ExpectError: true, ErrorCode: "XTTE0950"},
 		{Name: "copy-of-010", StylesheetPath: "tests/fn/copy-of/copy-of-010.xsl", SourceDocPath: "tests/fn/copy-of/copy-of-001.xml", Assertions: []w3cAssertion{w3cAssertXPath("count(/out/*:subelem) = 2")}},
 		{Name: "copy-of-011", StylesheetPath: "tests/fn/copy-of/copy-of-011.xsl", SourceDocPath: "tests/fn/copy-of/copy-of-001.xml", Assertions: []w3cAssertion{w3cAssertXPath("/out = '17'")}},
 		{Name: "copy-of-012", StylesheetPath: "tests/fn/copy-of/copy-of-012.xsl", SourceDocPath: "tests/fn/copy-of/copy-of-001.xml", ExpectError: true, ErrorCode: "XPDY0002"},

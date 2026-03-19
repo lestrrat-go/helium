@@ -173,40 +173,51 @@ func (ec *execContext) validateConstructedAttribute(localName, nsURI, value, val
 }
 
 // validateAndNormalizeElementContent validates the text content of elem against
-// the declared XSD type name (e.g., "xs:integer") and normalizes it to the
-// canonical lexical form.  It raises XTTE1510 when the content is invalid.
+// the declared XSD type name (e.g., "xs:integer"). It raises XTTE1510 when the
+// content is invalid. The original text content is preserved in the DOM; the
+// type annotation (stored separately) controls typed-value extraction via
+// data()/atomization at runtime.
 func (ec *execContext) validateAndNormalizeElementContent(elem *helium.Element, typeName string) error {
 	// xs:anyType and xs:untyped accept any content — skip validation entirely.
 	if typeName == "xs:anyType" || typeName == "xs:untyped" {
 		return nil
 	}
-	// Collect the string value of the element's content.
-	content := strings.TrimSpace(string(elem.Content()))
 
-	// Attempt to cast the string to the target type.
-	av, castErr := xpath3.CastFromString(content, typeName)
+	// For user-defined types, look up the TypeDef from the schema registry.
+	// Complex types need structural validation, not just string casting.
+	if ec.schemaRegistry != nil {
+		td, schema, found := ec.schemaRegistry.LookupTypeDef(typeName)
+		if found {
+			switch td.ContentType {
+			case xsd.ContentTypeElementOnly, xsd.ContentTypeMixed, xsd.ContentTypeEmpty:
+				// Complex type: validate element structure against the content model.
+				if err := xsd.ValidateElementAgainstType(elem, td, schema); err != nil {
+					return dynamicError(errCodeXTTE1510,
+						"element content does not match declared type %s: %v", typeName, err)
+				}
+				return nil
+			case xsd.ContentTypeSimple:
+				// Simple content in a complex type: validate text content.
+				content := strings.TrimSpace(string(elem.Content()))
+				if err := xsd.ValidateSimpleValue(content, td); err != nil {
+					return dynamicError(errCodeXTTE1510,
+						"content %q is not a valid value for type %s: %v", content, typeName, err)
+				}
+				return nil
+			}
+		}
+	}
+
+	// Built-in XSD type: validate by attempting to cast.
+	content := strings.TrimSpace(string(elem.Content()))
+	_, castErr := xpath3.CastFromString(content, typeName)
 	if castErr != nil {
-		// Fall back to schema-defined type validation for user-defined types.
+		// Fall back to schema-defined simple type validation.
 		if ec.schemaRegistry != nil {
-			normalized, schemaErr := ec.schemaRegistry.CastToSchemaType(content, typeName)
+			_, schemaErr := ec.schemaRegistry.CastToSchemaType(content, typeName)
 			if schemaErr != nil {
 				return dynamicError(errCodeXTTE1510,
 					"content %q is not a valid value for type %s: %v", content, typeName, schemaErr)
-			}
-			// Replace text children with the normalized value if it changed.
-			if normalized != content {
-				var textNodes []helium.Node
-				for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-					if child.Type() == helium.TextNode {
-						textNodes = append(textNodes, child)
-					}
-				}
-				for _, tn := range textNodes {
-					helium.UnlinkNode(tn)
-				}
-				if err := elem.AppendText([]byte(normalized)); err != nil {
-					return err
-				}
 			}
 			return nil
 		}
@@ -214,29 +225,7 @@ func (ec *execContext) validateAndNormalizeElementContent(elem *helium.Element, 
 			"content %q is not a valid value for type %s: %v", content, typeName, castErr)
 	}
 
-	// Convert the cast value back to its canonical string form.
-	normalized, strErr := xpath3.AtomicToString(av)
-	if strErr != nil {
-		// If we can't get a string back, keep the original.
-		return nil
-	}
-
-	// Replace all text children with the normalized value.
-	if normalized != content {
-		// Collect text children to unlink.
-		var textNodes []helium.Node
-		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-			if child.Type() == helium.TextNode {
-				textNodes = append(textNodes, child)
-			}
-		}
-		for _, tn := range textNodes {
-			helium.UnlinkNode(tn)
-		}
-		if err := elem.AppendText([]byte(normalized)); err != nil {
-			return err
-		}
-	}
+	// Content is valid — original text is preserved in the DOM.
 	return nil
 }
 

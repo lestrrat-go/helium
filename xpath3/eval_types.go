@@ -70,10 +70,16 @@ func evalCastExpr(ec *evalContext, e CastExpr) (Sequence, error) {
 			if e.Type.Prefix != "" && ec.namespaces != nil {
 				ns = ec.namespaces[e.Type.Prefix]
 			}
-			if baseType, ok := ec.schemaDeclarations.LookupSchemaType(e.Type.Name, ns); ok {
-				result, castErr := CastAtomic(av, baseType)
+			if builtinBase := resolveToBuiltinBase(e.Type.Name, ns, ec.schemaDeclarations); builtinBase != "" {
+				result, castErr := CastAtomic(av, builtinBase)
 				if castErr != nil {
 					return nil, castErr
+				}
+				// Validate facets for user-defined types using Q{ns}local format.
+				s, _ := AtomicToString(result)
+				annName := "Q{" + ns + "}" + e.Type.Name
+				if facetErr := ec.schemaDeclarations.ValidateCast(s, annName); facetErr != nil {
+					return nil, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, facetErr)}
 				}
 				result.TypeName = targetType
 				return SingleAtomic(result), nil
@@ -122,13 +128,19 @@ func evalCastableExpr(ec *evalContext, e CastableExpr) (Sequence, error) {
 	}
 	_, castErr := CastAtomic(av, targetType)
 	if castErr != nil && ec.schemaDeclarations != nil {
-		// Try resolving via schema declarations for non-built-in types.
 		ns := ""
 		if e.Type.Prefix != "" && ec.namespaces != nil {
 			ns = ec.namespaces[e.Type.Prefix]
 		}
-		if baseType, ok := ec.schemaDeclarations.LookupSchemaType(e.Type.Name, ns); ok {
-			_, castErr = CastAtomic(av, baseType)
+		annName := "Q{" + ns + "}" + e.Type.Name
+		if builtinBase := resolveToBuiltinBase(e.Type.Name, ns, ec.schemaDeclarations); builtinBase != "" {
+			result, baseErr := CastAtomic(av, builtinBase)
+			if baseErr == nil {
+				s, _ := AtomicToString(result)
+				castErr = ec.schemaDeclarations.ValidateCast(s, annName)
+			} else {
+				castErr = baseErr
+			}
 		}
 	}
 	return SingleBoolean(castErr == nil), nil
@@ -143,6 +155,31 @@ func evalTreatAsExpr(ec *evalContext, e TreatAsExpr) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeXPDY0050, Message: fmt.Sprintf("treat as: sequence does not match required type %v (actual length %d)", e.Type, len(seq))}
 	}
 	return seq, nil
+}
+
+// resolveToBuiltinBase walks the schema type hierarchy from a user-defined type
+// to find the ultimate built-in XSD base type (e.g., xs:integer). Returns ""
+// if the type is not found in schema declarations.
+func resolveToBuiltinBase(local, ns string, decls SchemaDeclarations) string {
+	current := local
+	currentNS := ns
+	for i := 0; i < 32; i++ {
+		baseType, ok := decls.LookupSchemaType(current, currentNS)
+		if !ok {
+			return ""
+		}
+		if IsKnownXSDType(baseType) {
+			return baseType
+		}
+		// Parse the Q{ns}local format for the next iteration.
+		newLocal, newNS, parsed := schemaAnnotationParts(baseType)
+		if !parsed {
+			return ""
+		}
+		current = newLocal
+		currentNS = newNS
+	}
+	return ""
 }
 
 // resolveAtomicTypeName maps an AtomicTypeName to an internal xs:-prefixed type string.

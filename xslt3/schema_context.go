@@ -45,6 +45,18 @@ func (r *schemaRegistry) LookupType(local, ns string) (baseType string, ok bool)
 	return "", false
 }
 
+// LookupTypeDef returns the raw TypeDef for a type name in annotation format.
+func (r *schemaRegistry) LookupTypeDef(typeName string) (*xsd.TypeDef, *xsd.Schema, bool) {
+	local, ns := splitAnnotationName(typeName)
+	for _, s := range r.schemas {
+		td, found := s.LookupType(local, ns)
+		if found {
+			return td, s, true
+		}
+	}
+	return nil, nil, false
+}
+
 // CastToSchemaType validates and normalizes a string value against a
 // user-defined schema type. Returns the normalized value and nil on success,
 // or an error if the value is invalid. The typeName must be in annotation
@@ -136,6 +148,19 @@ func (r *schemaRegistry) IsSubtypeOf(typeName, baseTypeName string) bool {
 		return false
 	}
 	return false
+}
+
+// ValidateCast implements xpath3.SchemaDeclarations.
+// It validates a string value against a user-defined schema type's facets.
+func (r *schemaRegistry) ValidateCast(value, typeName string) error {
+	td, _, found := r.LookupTypeDef(typeName)
+	if !found {
+		return nil // type not found — no facet check possible
+	}
+	if td.ContentType != xsd.ContentTypeSimple {
+		return nil // complex types don't constrain string values
+	}
+	return xsd.ValidateSimpleValue(value, td)
 }
 
 // isXSBuiltin returns true if the annotation name is an xs: built-in type.
