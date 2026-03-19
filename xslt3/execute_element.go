@@ -186,6 +186,30 @@ func (ec *execContext) validateAndNormalizeElementContent(elem *helium.Element, 
 	// Attempt to cast the string to the target type.
 	av, castErr := xpath3.CastFromString(content, typeName)
 	if castErr != nil {
+		// Fall back to schema-defined type validation for user-defined types.
+		if ec.schemaRegistry != nil {
+			normalized, schemaErr := ec.schemaRegistry.CastToSchemaType(content, typeName)
+			if schemaErr != nil {
+				return dynamicError(errCodeXTTE1510,
+					"content %q is not a valid value for type %s: %v", content, typeName, schemaErr)
+			}
+			// Replace text children with the normalized value if it changed.
+			if normalized != content {
+				var textNodes []helium.Node
+				for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+					if child.Type() == helium.TextNode {
+						textNodes = append(textNodes, child)
+					}
+				}
+				for _, tn := range textNodes {
+					helium.UnlinkNode(tn)
+				}
+				if err := elem.AppendText([]byte(normalized)); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
 		return dynamicError(errCodeXTTE1510,
 			"content %q is not a valid value for type %s: %v", content, typeName, castErr)
 	}
@@ -387,9 +411,18 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 	if inst.TypeName != "" {
 		av, castErr := xpath3.CastFromString(value, inst.TypeName)
 		if castErr != nil {
-			return dynamicError(errCodeXTTE1515, "attribute value %q does not match type %s", value, inst.TypeName)
-		}
-		if s, sErr := xpath3.AtomicToString(av); sErr == nil {
+			// Fall back to schema-defined type validation for user-defined types.
+			if ec.schemaRegistry != nil {
+				normalized, schemaErr := ec.schemaRegistry.CastToSchemaType(value, inst.TypeName)
+				if schemaErr != nil {
+					return dynamicError(errCodeXTTE1515,
+						"attribute value %q does not match type %s: %v", value, inst.TypeName, schemaErr)
+				}
+				value = normalized
+			} else {
+				return dynamicError(errCodeXTTE1515, "attribute value %q does not match type %s", value, inst.TypeName)
+			}
+		} else if s, sErr := xpath3.AtomicToString(av); sErr == nil {
 			value = s
 		}
 	}

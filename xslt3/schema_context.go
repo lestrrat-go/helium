@@ -3,6 +3,7 @@ package xslt3
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -42,6 +43,50 @@ func (r *schemaRegistry) LookupType(local, ns string) (baseType string, ok bool)
 		}
 	}
 	return "", false
+}
+
+// CastToSchemaType validates and normalizes a string value against a
+// user-defined schema type. Returns the normalized value and nil on success,
+// or an error if the value is invalid. The typeName must be in annotation
+// format: "Q{ns}local" for user-defined types or "xs:local" for built-ins.
+func (r *schemaRegistry) CastToSchemaType(value, typeName string) (string, error) {
+	local, ns := splitAnnotationName(typeName)
+	for _, s := range r.schemas {
+		td, ok := s.LookupType(local, ns)
+		if !ok {
+			continue
+		}
+		if td.ContentType != xsd.ContentTypeSimple {
+			// Complex types can't be cast from string.
+			return value, nil
+		}
+		if err := xsd.ValidateSimpleValue(value, td); err != nil {
+			return "", fmt.Errorf("value %q is not valid for type %s: %w", value, typeName, err)
+		}
+		return schemaNormalizeLexical(value, td), nil
+	}
+	// If the type name is still a prefix:local form (no Q{} wrapping yet),
+	// try resolving by local name against all schemas' target namespaces.
+	if !strings.HasPrefix(typeName, "Q{") && !strings.HasPrefix(typeName, "xs:") {
+		idx := strings.IndexByte(typeName, ':')
+		if idx >= 0 {
+			localOnly := typeName[idx+1:]
+			for _, s := range r.schemas {
+				td, ok := s.LookupType(localOnly, s.TargetNamespace())
+				if !ok {
+					continue
+				}
+				if td.ContentType != xsd.ContentTypeSimple {
+					return value, nil
+				}
+				if err := xsd.ValidateSimpleValue(value, td); err != nil {
+					return "", fmt.Errorf("value %q is not valid for type %s: %w", value, typeName, err)
+				}
+				return schemaNormalizeLexical(value, td), nil
+			}
+		}
+	}
+	return "", fmt.Errorf("unknown schema type %s", typeName)
 }
 
 // LookupSchemaElement implements xpath3.SchemaDeclarations.
