@@ -553,6 +553,10 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 	// Map general comparison operators to value comparison operators
 	op = normalizeCompareOp(op)
 
+	// Promote user-defined schema types to their built-in base for comparison.
+	a = promoteSchemaForCompare(a)
+	b = promoteSchemaForCompare(b)
+
 	// String comparison (includes string-derived types and anyURI)
 	aStr := isStringDerived(a.TypeName) || a.TypeName == TypeAnyURI
 	bStr := isStringDerived(b.TypeName) || b.TypeName == TypeAnyURI
@@ -644,11 +648,31 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 		return compareDuration(op, a.DurationVal(), b.DurationVal())
 	}
 
+	// Fallback for user-defined date/time types (only when at least one is non-built-in).
+	if (!IsKnownXSDType(a.TypeName) || !IsKnownXSDType(b.TypeName)) {
+		if ta, ok := a.Value.(time.Time); ok {
+			if tb, ok := b.Value.(time.Time); ok {
+				return compareDate(op, ta, tb, implicitTZ), nil
+			}
+		}
+		if _, ok := a.Value.(Duration); ok {
+			if _, ok := b.Value.(Duration); ok {
+				return compareDuration(op, a.DurationVal(), b.DurationVal())
+			}
+		}
+	}
+
 	// Types are not comparable
 	return false, &XPathError{
 		Code:    errCodeXPTY0004,
 		Message: fmt.Sprintf("cannot compare %s with %s", a.TypeName, b.TypeName),
 	}
+}
+
+// promoteSchemaForCompare promotes a user-defined schema type to its built-in
+// base type for comparison purposes.
+func promoteSchemaForCompare(a AtomicValue) AtomicValue {
+	return PromoteSchemaType(a)
 }
 
 // compareAtomicCollation compares two atomic values using the given collation

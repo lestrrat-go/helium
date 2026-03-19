@@ -49,6 +49,7 @@ func fnPrefixFromQName(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	a = PromoteSchemaType(a)
 	if a.TypeName != TypeQName {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected QName"}
 	}
@@ -67,6 +68,7 @@ func fnLocalNameFromQName(_ context.Context, args []Sequence) (Sequence, error) 
 	if err != nil {
 		return nil, err
 	}
+	a = PromoteSchemaType(a)
 	if a.TypeName != TypeQName {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected QName"}
 	}
@@ -81,6 +83,7 @@ func fnNamespaceURIFromQName(_ context.Context, args []Sequence) (Sequence, erro
 	if err != nil {
 		return nil, err
 	}
+	a = PromoteSchemaType(a)
 	if a.TypeName != TypeQName {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected QName"}
 	}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"time"
 )
 
 func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
@@ -64,6 +65,10 @@ func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "arithmetic operand must be numeric, got " + ra.TypeName}
 	}
 
+	// Promote user-defined schema types to their built-in numeric base.
+	la = promoteSchemaNumeric(la)
+	ra = promoteSchemaNumeric(ra)
+
 	// Tier 1: both integer → big.Int arithmetic
 	if isIntegerDerived(la.TypeName) && isIntegerDerived(ra.TypeName) {
 		return integerArith(e.Op, la.BigInt(), ra.BigInt())
@@ -74,6 +79,44 @@ func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	}
 	// Tier 3: float/double → float64 arithmetic
 	return floatArith(e.Op, la, ra)
+}
+
+// promoteSchemaNumeric promotes a user-defined numeric type to its built-in base.
+func promoteSchemaNumeric(a AtomicValue) AtomicValue {
+	return PromoteSchemaType(a)
+}
+
+// PromoteSchemaType promotes a user-defined schema type to its built-in base
+// type, based on the underlying Go value type. If the type is already a known
+// XSD type, the value is returned unchanged.
+func PromoteSchemaType(a AtomicValue) AtomicValue {
+	if IsKnownXSDType(a.TypeName) {
+		return a
+	}
+	switch v := a.Value.(type) {
+	case *big.Int:
+		return AtomicValue{TypeName: TypeInteger, Value: v}
+	case *big.Rat:
+		return AtomicValue{TypeName: TypeDecimal, Value: v}
+	case *FloatValue:
+		return AtomicValue{TypeName: TypeDouble, Value: v}
+	case float64:
+		return AtomicValue{TypeName: TypeDouble, Value: v}
+	case bool:
+		return AtomicValue{TypeName: TypeBoolean, Value: v}
+	case string:
+		return AtomicValue{TypeName: TypeString, Value: v}
+	case time.Time:
+		// Default to xs:dateTime — callers can narrow further
+		return AtomicValue{TypeName: TypeDateTime, Value: v}
+	case Duration:
+		return AtomicValue{TypeName: TypeDuration, Value: v}
+	case []byte:
+		return AtomicValue{TypeName: TypeBase64Binary, Value: v}
+	case QNameValue:
+		return AtomicValue{TypeName: TypeQName, Value: v}
+	}
+	return a
 }
 
 func integerArith(op TokenType, a, b *big.Int) (Sequence, error) {

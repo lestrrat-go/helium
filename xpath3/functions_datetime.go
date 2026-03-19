@@ -64,9 +64,14 @@ func extractTime(seq Sequence, allowedTypes ...string) (time.Time, bool, error) 
 		return time.Time{}, false, &XPathError{Code: errCodeXPTY0004, Message: "expected " + allowedTypes[0] + ", got " + a.TypeName}
 	}
 	if len(allowedTypes) > 0 {
+		// Promote user-defined types to built-in for type matching.
+		checkType := a.TypeName
+		if !IsKnownXSDType(checkType) {
+			checkType = PromoteSchemaType(a).TypeName
+		}
 		matched := false
 		for _, at := range allowedTypes {
-			if isSubtypeOf(a.TypeName, at) {
+			if isSubtypeOf(checkType, at) {
 				matched = true
 				break
 			}
@@ -133,11 +138,11 @@ func fnDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 	d, ok := dateA.Value.(time.Time)
-	if !ok || dateA.TypeName != TypeDate {
+	if !ok {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "first arg must be xs:date, got " + dateA.TypeName}
 	}
 	t, ok := timeA.Value.(time.Time)
-	if !ok || timeA.TypeName != TypeTime {
+	if !ok {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "second arg must be xs:time, got " + timeA.TypeName}
 	}
 

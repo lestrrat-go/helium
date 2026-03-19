@@ -234,6 +234,10 @@ func coerceArgToString(seq Sequence) (string, error) {
 		}
 		return s, nil
 	default:
+		// User-defined types: check if the underlying value is a string.
+		if s, ok := a.Value.(string); ok {
+			return s, nil
+		}
 		return "", &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected xs:string?, got %s", a.TypeName)}
 	}
 }
