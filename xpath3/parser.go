@@ -1285,17 +1285,28 @@ func (p *parser) parseElementOrAttributeTest(isElement bool) (NodeTest, bool, er
 	return AttributeTest{Name: name, TypeName: typeName}, true, nil
 }
 
-// parseDocumentNodeTest parses document-node(element(...)?) or document-node().
+// parseDocumentNodeTest parses document-node(element(...)?) or document-node(schema-element(...)) or document-node().
 func (p *parser) parseDocumentNodeTest() (NodeTest, bool, error) {
 	p.lexer.Next() // consume '('
 	var inner NodeTest
-	if p.lexer.Peek().Type == TokenName && p.lexer.Peek().Value == "element" {
-		p.lexer.Next() // consume 'element'
-		nt, _, err := p.parseElementOrAttributeTest(true)
-		if err != nil {
-			return nil, true, err
+	tok := p.lexer.Peek()
+	if tok.Type == TokenName {
+		switch tok.Value {
+		case "element":
+			p.lexer.Next() // consume 'element'
+			nt, _, err := p.parseElementOrAttributeTest(true)
+			if err != nil {
+				return nil, true, err
+			}
+			inner = nt
+		case "schema-element":
+			p.lexer.Next() // consume 'schema-element'
+			nt, _, err := p.parseSchemaTest(true)
+			if err != nil {
+				return nil, true, err
+			}
+			inner = nt
 		}
-		inner = nt
 	}
 	if err := p.expectToken(TokenRParen); err != nil {
 		return nil, true, fmt.Errorf("%w: ')' after document-node(", ErrExpectedToken)

@@ -237,6 +237,38 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 			return false
 		}
 		return true
+	case SchemaElementTest:
+		if n.Type() != helium.ElementNode {
+			return false
+		}
+		if ec == nil || ec.schemaDeclarations == nil {
+			// Without schema, match by name only.
+			if test.Name == "" || test.Name == "*" {
+				return true
+			}
+			_, local := splitQName(test.Name)
+			return ixpath.LocalNameOf(n) == local
+		}
+		prefix, local := splitQName(test.Name)
+		ns := ""
+		if prefix != "" && ec.namespaces != nil {
+			ns = ec.namespaces[prefix]
+		}
+		if ixpath.LocalNameOf(n) != local || ixpath.NodeNamespaceURI(n) != ns {
+			return false
+		}
+		typeName, found := ec.schemaDeclarations.LookupSchemaElement(local, ns)
+		if !found {
+			return false
+		}
+		ann := nodeTypeAnnotation(n, ec)
+		if ann == "" {
+			ann = TypeUntyped
+		}
+		if isSubtypeOf(ann, typeName) {
+			return true
+		}
+		return ec.schemaDeclarations.IsSubtypeOf(ann, typeName)
 	case NamespaceNodeTest:
 		return n.Type() == helium.NamespaceNode
 	case AnyItemTest:
