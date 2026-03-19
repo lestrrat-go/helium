@@ -124,11 +124,18 @@ func splitAnnotationName(name string) (local, ns string) {
 // first schema that declares a matching global attribute.
 func (r *schemaRegistry) LookupAttribute(local, ns string) (typeName string, ok bool) {
 	for _, s := range r.schemas {
-		// Global attributes are searched via the type map since AttrUse
-		// type names need resolution through the schema's type map.
-		// For now, iterate elements would not help. Schema does not expose
-		// globalAttrs publicly, so we check the NamedTypes approach.
-		_ = s
+		au, found := s.LookupAttribute(local, ns)
+		if !found {
+			continue
+		}
+		if au.TypeName.Local == "" {
+			return "xs:untypedAtomic", true
+		}
+		td, tdOk := s.LookupType(au.TypeName.Local, au.TypeName.NS)
+		if tdOk {
+			return xsdTypeNameFromDef(td), true
+		}
+		return "xs:untypedAtomic", true
 	}
 	return "", false
 }

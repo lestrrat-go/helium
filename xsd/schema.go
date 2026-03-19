@@ -61,6 +61,12 @@ func (s *Schema) LookupType(local, ns string) (*TypeDef, bool) {
 	return t, ok
 }
 
+// LookupAttribute returns the global attribute declaration for the given name.
+func (s *Schema) LookupAttribute(local, ns string) (*AttrUse, bool) {
+	a, ok := s.globalAttrs[QName{Local: local, NS: ns}]
+	return a, ok
+}
+
 // NamedTypes returns the schema's named type definitions.
 func (s *Schema) NamedTypes() []QName {
 	if len(s.types) == 0 {
