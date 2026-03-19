@@ -348,14 +348,14 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 	}
 
 	// Atomic type — need to atomize and potentially cast
-	return coerceToAtomicType(item, itemType)
+	return coerceToAtomicType(item, itemType, ec)
 }
 
 // coerceToAtomicType atomizes a node/value and casts to the target atomic type.
-func coerceToAtomicType(item xpath3.Item, targetType string) (xpath3.Item, error) {
+func coerceToAtomicType(item xpath3.Item, targetType string, ec *execContext) (xpath3.Item, error) {
 	// If already an atomic value, check/cast the type
 	if av, ok := item.(xpath3.AtomicValue); ok {
-		return castAtomicToType(av, targetType)
+		return castAtomicToType(av, targetType, ec)
 	}
 
 	// Node item — atomize first
@@ -369,13 +369,13 @@ func coerceToAtomicType(item xpath3.Item, targetType string) (xpath3.Item, error
 		return nil, fmt.Errorf("cannot atomize node for type %s: %w", targetType, err)
 	}
 
-	return castAtomicToType(av, targetType)
+	return castAtomicToType(av, targetType, ec)
 }
 
 // castAtomicToType casts an atomic value to the specified target type.
-func castAtomicToType(av xpath3.AtomicValue, targetType string) (xpath3.Item, error) {
+func castAtomicToType(av xpath3.AtomicValue, targetType string, ec ...*execContext) (xpath3.Item, error) {
 	// Normalize target type
-	target := normalizeTypeName(targetType)
+	target := normalizeTypeName(targetType, ec...)
 
 	// If already the right type, return as-is
 	if av.TypeName == target {
