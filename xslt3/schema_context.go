@@ -405,9 +405,7 @@ func ValidateDocIDConstraints(doc *helium.Document, ann xsd.TypeAnnotations) err
 			idrefs = append(idrefs, val)
 		case "xs:IDREFS":
 			// Space-separated list of IDREFs.
-			for _, ref := range splitSpaceSeparated(val) {
-				idrefs = append(idrefs, ref)
-			}
+			idrefs = append(idrefs, splitSpaceSeparated(val)...)
 		}
 	}
 
@@ -486,9 +484,7 @@ func collectXSITypeIDREFsFromNode(node helium.Node, idrefs *[]string) {
 				xsiType := attr.Value()
 				// Strip prefix to get local type name (e.g., "xs:IDREFS" → "IDREFS").
 				if idx := len(xsiType) - len("IDREFS"); idx >= 0 && xsiType[idx:] == "IDREFS" {
-					for _, ref := range splitSpaceSeparated(string(elem.Content())) {
-						*idrefs = append(*idrefs, ref)
-					}
+					*idrefs = append(*idrefs, splitSpaceSeparated(string(elem.Content()))...)
 				} else if idx := len(xsiType) - len("IDREF"); idx >= 0 && xsiType[idx:] == "IDREF" {
 					val := string(elem.Content())
 					if val != "" {
