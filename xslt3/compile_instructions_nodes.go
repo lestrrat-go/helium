@@ -333,6 +333,9 @@ func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
 		}
 		inst.Validation = v
 	}
+	if typeAttr := getAttr(elem, "type"); typeAttr != "" {
+		inst.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
+	}
 
 	if selectAttr := getAttr(elem, "select"); selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
@@ -424,6 +427,9 @@ func (c *compiler) compileCopyOf(elem *helium.Element) (*CopyOfInst, error) {
 			return nil, err
 		}
 		inst.Validation = v
+	}
+	if typeAttr := getAttr(elem, "type"); typeAttr != "" {
+		inst.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
 	}
 	return inst, nil
 }

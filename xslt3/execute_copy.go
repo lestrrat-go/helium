@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"errors"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -95,6 +96,22 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		return err
 	}
 
+	// Apply type validation if specified.
+	if inst.TypeName != "" {
+		out := ec.currentOutput()
+		if copied := out.current.LastChild(); copied != nil {
+			if copiedElem, ok := copied.(*helium.Element); ok {
+				if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil {
+					if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
+						return dynamicError(errCodeXTTE1540,
+							"element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
+					}
+					return err
+				}
+				ec.annotateNode(copiedElem, inst.TypeName)
+			}
+		}
+	}
 	// Apply validation if specified and context node is an element.
 	if v := ec.effectiveValidation(inst.Validation); v != "" && v != "preserve" {
 		out := ec.currentOutput()
@@ -327,7 +344,21 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 			if err := ec.copyNodeToOutput(v.Node, copyNS); err != nil {
 				return err
 			}
-			if preserve {
+			if inst.TypeName != "" {
+				// Type validation: validate the copied element against the declared type.
+				if copied := out.current.LastChild(); copied != nil {
+					if copiedElem, ok := copied.(*helium.Element); ok {
+						if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil {
+							if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
+								return dynamicError(errCodeXTTE1540,
+									"copy-of: element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
+							}
+							return err
+						}
+						ec.annotateNode(copiedElem, inst.TypeName)
+					}
+				}
+			} else if preserve {
 				ec.transferAnnotationsForCopy(v.Node, out.current, lastBefore)
 			} else if effectiveVal == "strict" || effectiveVal == "lax" || effectiveVal == "strip" {
 				// Apply validation/strip to the most recently added node in output.
