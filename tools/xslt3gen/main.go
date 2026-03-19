@@ -275,6 +275,12 @@ var generatedAssetSourceAliases = map[string]string{
 	"tests/decl/import-schema/variousTypesSchemaInline.xsd": "tests/decl/import-schema/schema004.xsd",
 }
 
+// generatedAssetSourceAliases maps stale upstream asset paths to the source file
+// that should be copied into the generated testdata tree.
+var generatedAssetSourceAliases = map[string]string{
+	"tests/decl/import-schema/variousTypesSchemaInline.xsd": "tests/decl/import-schema/schema004.xsd",
+}
+
 // ──────────────────────────────────────────────────────────────────────
 // Main
 // ──────────────────────────────────────────────────────────────────────
