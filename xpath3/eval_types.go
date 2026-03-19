@@ -440,6 +440,11 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		if ann == "" {
 			ann = TypeUntyped
 		}
+		// Untyped nodes (source documents not validated against schema) match
+		// schema-element(Q) when name + declaration exist per XSLT/XPath spec.
+		if ann == TypeUntyped {
+			return true
+		}
 		if !isSubtypeOf(ann, typeName) {
 			if ec != nil && ec.schemaDeclarations != nil {
 				return ec.schemaDeclarations.IsSubtypeOf(ann, typeName)
@@ -471,6 +476,11 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		ann := ni.TypeAnnotation
 		if ann == "" {
 			ann = TypeUntypedAtomic
+		}
+		// Untyped attributes (source documents not validated against schema) match
+		// schema-attribute(Q) when name + declaration exist per XSLT/XPath spec.
+		if ann == TypeUntypedAtomic {
+			return true
 		}
 		if !isSubtypeOf(ann, typeName) {
 			if ec != nil && ec.schemaDeclarations != nil {

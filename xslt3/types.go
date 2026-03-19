@@ -239,12 +239,26 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 		}
 
 		// If a type was specified, check the element's type annotation.
-		if reqTypeName != "" && reqTypeName != "*" && ec != nil && ec.schemaRegistry != nil && ec.typeAnnotations != nil {
-			ann := ec.typeAnnotations[ni.Node]
-			if ann == "" {
-				ann = "xs:untyped"
+		if reqTypeName != "" && reqTypeName != "*" && ec != nil && ec.schemaRegistry != nil {
+			ann := ""
+			if ec.typeAnnotations != nil {
+				ann = ec.typeAnnotations[ni.Node]
 			}
 			reqTypeNorm := normalizeTypeName(reqTypeName)
+			// Untyped nodes (source documents not validated against schema): check if the
+			// schema declares this element with a compatible type and accept it.
+			if ann == "" || ann == "xs:untyped" || ann == "Q{}untyped" {
+				elem2, isElem2 := ni.Node.(*helium.Element)
+				if isElem2 {
+					elemLocal2, elemNS2 := elem2.LocalName(), elem2.URI()
+					declType, found := ec.schemaRegistry.LookupSchemaElement(elemLocal2, elemNS2)
+					if found && (declType == reqTypeNorm || ec.schemaRegistry.IsSubtypeOf(declType, reqTypeNorm)) {
+						return item, nil
+					}
+				}
+				// Fallthrough: treat as type mismatch
+				return nil, fmt.Errorf("expected %s (type %s), element has type %s", itemType, reqTypeNorm, ann)
+			}
 			if !ec.schemaRegistry.IsSubtypeOf(ann, reqTypeNorm) {
 				return nil, fmt.Errorf("expected %s (type %s), element has type %s", itemType, reqTypeNorm, ann)
 			}
@@ -275,8 +289,11 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 				if ec.typeAnnotations != nil {
 					ann = ec.typeAnnotations[ni.Node]
 				}
-				if ann == "" {
-					ann = "xs:untyped"
+				// Untyped nodes (source documents not validated against schema) match
+				// schema-element(Q) when name + declaration exist — the schema declares
+				// what type the element should have, so name match + declaration is sufficient.
+				if ann == "" || ann == "xs:untyped" || ann == "Q{}untyped" {
+					return item, nil
 				}
 				if !ec.schemaRegistry.IsSubtypeOf(ann, declType) {
 					return nil, fmt.Errorf("expected %s (type %s), element has type %s", itemType, declType, ann)
@@ -313,8 +330,10 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 				if ec.typeAnnotations != nil {
 					ann = ec.typeAnnotations[ni.Node]
 				}
-				if ann == "" {
-					ann = "xs:untypedAtomic"
+				// Untyped attributes (source documents not validated against schema) match
+				// schema-attribute(Q) when name + declaration exist.
+				if ann == "" || ann == "xs:untypedAtomic" || ann == "Q{}untypedAtomic" {
+					return item, nil
 				}
 				if !ec.schemaRegistry.IsSubtypeOf(ann, declType) {
 					return nil, fmt.Errorf("expected %s (type %s), attribute has type %s", itemType, declType, ann)
