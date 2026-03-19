@@ -510,10 +510,9 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		if ann == "" {
 			ann = TypeUntyped
 		}
-		// Untyped nodes (source documents not validated against schema) match
-		// schema-element(Q) when name + declaration exist per XSLT/XPath spec.
+		// Untyped elements have not been validated — they do NOT match schema-element().
 		if ann == TypeUntyped {
-			return true
+			return false
 		}
 		if !isSubtypeOf(ann, typeName) {
 			if ec != nil && ec.schemaDeclarations != nil {

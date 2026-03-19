@@ -744,7 +744,7 @@ func matchSchemaElementTest(ctx *execContext, t xpath3.SchemaElementTest, node h
 		ann = ctx.typeAnnotations[node]
 	}
 	if ann == "" || ann == "xs:untyped" {
-		return true // untyped nodes match when declaration exists
+		return false // untyped elements have not been validated — no match
 	}
 	if ann == declType || ctx.schemaRegistry.IsSubtypeOf(ann, declType) {
 		return true

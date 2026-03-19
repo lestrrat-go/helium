@@ -296,8 +296,9 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 				if ec.typeAnnotations != nil {
 					ann = ec.typeAnnotations[ni.Node]
 				}
+				// Untyped elements (not validated) do not match schema-element().
 				if ann == "" || ann == "xs:untyped" || ann == "Q{}untyped" {
-					return item, nil
+					return nil, fmt.Errorf("expected %s, element is untyped (not validated)", itemType)
 				}
 				if !ec.schemaRegistry.IsSubtypeOf(ann, declType) {
 					return nil, fmt.Errorf("expected %s (type %s), element has type %s", itemType, declType, ann)
