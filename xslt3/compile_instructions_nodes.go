@@ -575,6 +575,9 @@ func (c *compiler) compileDocument(elem *helium.Element) (*DocumentInst, error) 
 		}
 		inst.Validation = v
 	}
+	if typeAttr := getAttr(elem, "type"); typeAttr != "" {
+		inst.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
+	}
 	body, err := c.compileChildren(elem)
 	if err != nil {
 		return nil, err

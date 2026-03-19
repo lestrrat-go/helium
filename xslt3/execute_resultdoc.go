@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -47,6 +48,20 @@ func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) err
 		return err
 	}
 	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+
+	// Apply type validation (xsl:document type="...").
+	if inst.TypeName != "" && ec.schemaRegistry != nil {
+		root := findDocumentElement(tmpDoc)
+		if root != nil {
+			if err := ec.validateAndNormalizeElementContent(root, inst.TypeName); err != nil {
+				if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
+					return dynamicError(errCodeXTTE1540,
+						"document content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
+				}
+				return err
+			}
+		}
+	}
 
 	// Apply validation if requested (xsl:document validation="strict"|"lax").
 	if v := inst.Validation; v == "strict" || v == "lax" {
@@ -150,6 +165,33 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 
 	if isPrimary {
 		v := inst.Validation
+		if inst.TypeName != "" && v == "" {
+			// type attribute without explicit validation: build into temp doc, validate type, copy.
+			tmpDoc := helium.NewDefaultDocument()
+			ec.outputStack = append(ec.outputStack, &outputFrame{doc: tmpDoc, current: tmpDoc, itemSeparator: itemSep})
+			if err := ec.executeSequenceConstructor(ctx, inst.Body); err != nil {
+				ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+				return err
+			}
+			ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+			root := findDocumentElement(tmpDoc)
+			if root != nil && ec.schemaRegistry != nil {
+				if err := ec.validateAndNormalizeElementContent(root, inst.TypeName); err != nil {
+					if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
+						return dynamicError(errCodeXTTE1540,
+							"result document content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
+					}
+					return err
+				}
+			}
+			primaryFrame := ec.outputStack[0]
+			for child := tmpDoc.FirstChild(); child != nil; child = child.NextSibling() {
+				if err := primaryFrame.doc.AddChild(child); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
 		if v == "strict" || v == "lax" {
 			// When validation is requested for the primary output, build into a
 			// temporary document, validate it, then copy children to the primary
