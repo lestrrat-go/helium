@@ -245,8 +245,8 @@ func promoteForAggregate(a AtomicValue) (AtomicValue, error) {
 			return AtomicValue{TypeName: TypeInteger, Value: a.BigInt()}, nil
 		case *big.Rat:
 			return AtomicValue{TypeName: TypeDecimal, Value: a.BigRat()}, nil
-		case float64:
-			return AtomicValue{TypeName: TypeDouble, Value: a.ToFloat64()}, nil
+		case float64, *FloatValue:
+			return AtomicValue{TypeName: TypeDouble, Value: a.Value}, nil
 		case float32:
 			return AtomicValue{TypeName: TypeFloat, Value: a.Value}, nil
 		}

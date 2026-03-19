@@ -48,7 +48,9 @@ func TestAtomicValueAccessors(t *testing.T) {
 			AtomizedType:   xpath3.TypeFloat,
 		})
 		require.NoError(t, err)
-		require.Equal(t, xpath3.TypeFloat, av.TypeName)
+		// Atomization preserves the user-defined type annotation so that
+		// "instance of" checks match the original schema type.
+		require.Equal(t, "Q{urn:test}derived-float", av.TypeName)
 
 		s, err := xpath3.AtomicToString(av)
 		require.NoError(t, err)

@@ -33,6 +33,20 @@ func promoteToNumeric(item Item) (AtomicValue, error) {
 	if !a.IsNumeric() {
 		return a, &XPathError{Code: errCodeXPTY0004, Message: "expected numeric type, got " + a.TypeName}
 	}
+	// User-defined types: promote to the built-in numeric base type
+	// so that numeric functions can operate on the value.
+	if !IsKnownXSDType(a.TypeName) {
+		switch a.Value.(type) {
+		case *big.Int:
+			a = AtomicValue{TypeName: TypeInteger, Value: a.Value}
+		case *big.Rat:
+			a = AtomicValue{TypeName: TypeDecimal, Value: a.Value}
+		case float64, *FloatValue:
+			a = AtomicValue{TypeName: TypeDouble, Value: a.Value}
+		case float32:
+			a = AtomicValue{TypeName: TypeFloat, Value: a.Value}
+		}
+	}
 	return a, nil
 }
 

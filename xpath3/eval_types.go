@@ -199,6 +199,8 @@ func resolveAtomicTypeName(tn AtomicTypeName, ec *evalContext) string {
 			if uri == catalog.XSD {
 				return "xs:" + tn.Name
 			}
+			// Non-XSD namespace: use Q{ns}local annotation format
+			return "Q{" + uri + "}" + tn.Name
 		}
 	}
 	return tn.Prefix + ":" + tn.Name
@@ -547,7 +549,14 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		if targetType == TypeAnyAtomicType {
 			return true
 		}
-		return isSubtypeOf(av.TypeName, targetType)
+		if isSubtypeOf(av.TypeName, targetType) {
+			return true
+		}
+		// Fall back to schema declarations for user-defined types.
+		if ec != nil && ec.schemaDeclarations != nil {
+			return ec.schemaDeclarations.IsSubtypeOf(av.TypeName, targetType)
+		}
+		return false
 	case FunctionTest:
 		// Maps and arrays are functions per XPath 3.1
 		if t.AnyFunction {

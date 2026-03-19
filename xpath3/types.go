@@ -322,12 +322,18 @@ func (a AtomicValue) IsNaN() bool {
 }
 
 // IsNumeric returns true if the type is xs:integer (or derived), xs:decimal, xs:double, or xs:float.
+// Also returns true for user-defined types whose underlying value is numeric.
 func (a AtomicValue) IsNumeric() bool {
 	if isIntegerDerived(a.TypeName) {
 		return true
 	}
 	switch a.TypeName {
 	case TypeDecimal, TypeDouble, TypeFloat:
+		return true
+	}
+	// User-defined schema types: check the underlying Go value.
+	switch a.Value.(type) {
+	case *big.Int, *big.Rat, float64, float32, *FloatValue:
 		return true
 	}
 	return false
@@ -848,6 +854,11 @@ func AtomizeItem(item Item) (AtomicValue, error) {
 		if v.AtomizedType != "" && v.AtomizedType != TypeUntypedAtomic && v.AtomizedType != v.TypeAnnotation {
 			cast, err := CastFromString(s, v.AtomizedType)
 			if err == nil {
+				// Preserve the user-defined type annotation so that
+				// "instance of" checks match the original schema type.
+				if v.TypeAnnotation != "" && !IsKnownXSDType(v.TypeAnnotation) {
+					cast.TypeName = v.TypeAnnotation
+				}
 				return cast, nil
 			}
 		}
