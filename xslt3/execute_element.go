@@ -335,15 +335,33 @@ func (ec *execContext) mapAnnotationsFromValidation(ann xsd.TypeAnnotations, src
 	if typeName, ok := ann[src]; ok {
 		ec.annotateNode(dst, typeName)
 	}
-	// Map attribute annotations
+	// Map attribute annotations and copy default/fixed attributes from validated copy.
 	if srcElem, ok := src.(*helium.Element); ok {
 		if dstElem, ok := dst.(*helium.Element); ok {
 			for _, srcAttr := range srcElem.Attributes() {
-				if typeName, ok := ann[srcAttr]; ok {
-					for _, dstAttr := range dstElem.Attributes() {
-						if srcAttr.LocalName() == dstAttr.LocalName() && srcAttr.URI() == dstAttr.URI() {
+				// Check if this attribute exists on the destination.
+				dstFound := false
+				for _, dstAttr := range dstElem.Attributes() {
+					if srcAttr.LocalName() == dstAttr.LocalName() && srcAttr.URI() == dstAttr.URI() {
+						dstFound = true
+						if typeName, ok := ann[srcAttr]; ok {
 							ec.annotateNode(dstAttr, typeName)
-							break
+						}
+						break
+					}
+				}
+				// Attribute exists on copy but not on original — it was inserted
+				// as a default/fixed value by schema validation. Copy it over.
+				if !dstFound {
+					// Copy the default/fixed attribute from the validated copy.
+					_ = dstElem.SetAttribute(srcAttr.Name(), srcAttr.Value())
+					// Annotate the newly added attribute.
+					if typeName, ok := ann[srcAttr]; ok {
+						for _, dstAttr := range dstElem.Attributes() {
+							if srcAttr.LocalName() == dstAttr.LocalName() && srcAttr.URI() == dstAttr.URI() {
+								ec.annotateNode(dstAttr, typeName)
+								break
+							}
 						}
 					}
 				}

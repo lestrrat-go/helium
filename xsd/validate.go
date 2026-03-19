@@ -324,6 +324,41 @@ func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, cfg *
 		}
 	}
 
+	// Insert default/fixed attribute values for absent optional attributes.
+	for _, au := range td.Attributes {
+		if au.Required {
+			continue
+		}
+		defVal := ""
+		if au.Default != nil {
+			defVal = *au.Default
+		} else if au.Fixed != nil {
+			defVal = *au.Fixed
+		} else {
+			continue
+		}
+		// Check if the attribute is already present.
+		found := false
+		for _, a := range elem.Attributes() {
+			aqn := QName{Local: a.LocalName(), NS: a.URI()}
+			if aqn == au.Name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			// Insert the default/fixed value as an attribute on the element.
+			_ = elem.SetAttribute(au.Name.Local, defVal)
+			// Annotate the newly inserted attribute.
+			for _, a := range elem.Attributes() {
+				if a.LocalName() == au.Name.Local && a.URI() == au.Name.NS {
+					annotateAttrUse(cfg, a, au, schema)
+					break
+				}
+			}
+		}
+	}
+
 	if hasErr {
 		return fmt.Errorf("attribute validation failed")
 	}
