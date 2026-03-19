@@ -659,7 +659,59 @@ func fnID(ctx context.Context, args []Sequence) (Sequence, error) {
 			nodes = append(nodes, elem)
 		}
 	}
+	nodes = append(nodes, idElementsFromTypeAnnotations(doc, tokens, getFnContext(ctx))...)
 	return sequenceFromDocOrderedNodes(ctx, nodes)
+}
+
+func idElementsFromTypeAnnotations(doc *helium.Document, tokens []string, ec *evalContext) []helium.Node {
+	if ec == nil || ec.typeAnnotations == nil || len(tokens) == 0 {
+		return nil
+	}
+
+	wanted := make(map[string]struct{}, len(tokens))
+	for _, token := range tokens {
+		wanted[token] = struct{}{}
+	}
+
+	var nodes []helium.Node
+	for node, typeName := range ec.typeAnnotations {
+		if !annotationMatchesIDType(typeName, ec) {
+			continue
+		}
+		if ixpath.DocumentRoot(node) != doc {
+			continue
+		}
+
+		switch typed := node.(type) {
+		case *helium.Attribute:
+			if _, ok := wanted[strings.TrimSpace(ixpath.StringValue(typed))]; !ok {
+				continue
+			}
+			parent, ok := typed.Parent().(*helium.Element)
+			if !ok {
+				continue
+			}
+			nodes = append(nodes, parent)
+		case *helium.Element:
+			if _, ok := wanted[strings.TrimSpace(ixpath.StringValue(typed))]; ok {
+				nodes = append(nodes, typed)
+			}
+		}
+	}
+	return nodes
+}
+
+func annotationMatchesIDType(typeName string, ec *evalContext) bool {
+	if typeName == "" {
+		return false
+	}
+	if isSubtypeOf(typeName, TypeID) {
+		return true
+	}
+	if ec == nil || ec.schemaDeclarations == nil {
+		return false
+	}
+	return ec.schemaDeclarations.IsSubtypeOf(typeName, TypeID)
 }
 
 func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -960,7 +1012,8 @@ func sequenceFromDocOrderedNodes(ctx context.Context, nodes []helium.Node) (Sequ
 
 	cache := &ixpath.DocOrderCache{}
 	maxNodes := maxNodeSetLength
-	if fc := getFnContext(ctx); fc != nil {
+	fc := getFnContext(ctx)
+	if fc != nil {
 		cache = fc.docOrder
 		maxNodes = fc.maxNodes
 	}
@@ -972,7 +1025,7 @@ func sequenceFromDocOrderedNodes(ctx context.Context, nodes []helium.Node) (Sequ
 
 	result := make(Sequence, 0, len(deduped))
 	for _, node := range deduped {
-		result = append(result, NodeItem{Node: node})
+		result = append(result, nodeItemFor(fc, node))
 	}
 	return result, nil
 }

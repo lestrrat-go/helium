@@ -175,11 +175,11 @@ type execContext struct {
 }
 ```
 
-The map is lazily allocated on first write by `annotateNode`.
+The map is initialized for schema-aware executions before XPath evaluation begins so later node annotations become visible to in-flight dynamic XPath calls (for example `id()` against a temporary tree built in a variable body).
 
 **`annotateNode(node helium.Node, typeName string)`** — Sets `typeAnnotations[node] = typeName`. No-op when `typeName` is empty.
 
-**`annotateAttr(elem *helium.Element, typeName, localName, nsURI, value string)`** — Locates the attribute node on the element and calls `annotateNode`. Also registers `xs:ID` with `resultDoc.RegisterID` for `id()` lookup.
+**`annotateAttr(elem *helium.Element, typeName, localName, nsURI, value string)`** — Locates the attribute node on the element and calls `annotateNode`. Also registers attributes whose annotation is `xs:ID` or any subtype of `xs:ID` with `resultDoc.RegisterID` for `id()` lookup.
 
 **`copyTypeAnnotations(srcNode helium.Node)`** — Currently a stub (copies `srcNode` annotation to itself; doesn't propagate to the copied result node). This is a known gap described in Section 9.
 

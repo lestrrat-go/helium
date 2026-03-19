@@ -727,7 +727,7 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 		dynCtx = xpath3.WithFunctionsNSBorrowed(dynCtx, fnsNS)
 	}
 
-	if len(ec.typeAnnotations) > 0 {
+	if ec.typeAnnotations != nil {
 		dynCtx = xpath3.WithTypeAnnotations(dynCtx, ec.typeAnnotations)
 	}
 	if ec.schemaRegistry != nil {
