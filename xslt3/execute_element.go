@@ -176,6 +176,10 @@ func (ec *execContext) validateConstructedAttribute(localName, nsURI, value, val
 // the declared XSD type name (e.g., "xs:integer") and normalizes it to the
 // canonical lexical form.  It raises XTTE1510 when the content is invalid.
 func (ec *execContext) validateAndNormalizeElementContent(elem *helium.Element, typeName string) error {
+	// xs:anyType and xs:untyped accept any content — skip validation entirely.
+	if typeName == "xs:anyType" || typeName == "xs:untyped" {
+		return nil
+	}
 	// Collect the string value of the element's content.
 	content := strings.TrimSpace(string(elem.Content()))
 
