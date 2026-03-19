@@ -179,6 +179,21 @@ func (r *schemaRegistry) ListItemType(typeName string) (string, bool) {
 	return "", false
 }
 
+// IsSubstitutionGroupMember checks if an element (memberLocal, memberNS) is in
+// the substitution group of the head element (headLocal, headNS).
+func (r *schemaRegistry) IsSubstitutionGroupMember(memberLocal, memberNS, headLocal, headNS string) bool {
+	headQN := xsd.QName{Local: headLocal, NS: headNS}
+	memberQN := xsd.QName{Local: memberLocal, NS: memberNS}
+	for _, s := range r.schemas {
+		for _, member := range s.SubstGroupMembers(headQN) {
+			if member.Name == memberQN {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // isXSBuiltin returns true if the annotation name is an xs: built-in type.
 func isXSBuiltin(name string) bool {
 	return len(name) > 3 && name[:3] == "xs:"

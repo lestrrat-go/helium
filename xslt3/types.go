@@ -278,7 +278,14 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 		if !isElem {
 			return nil, fmt.Errorf("expected %s, got non-element node", itemType)
 		}
-		if elem.LocalName() != reqLocal || elem.URI() != reqNS {
+		nameMatch := elem.LocalName() == reqLocal && elem.URI() == reqNS
+		// schema-element(E) also matches substitution group members of E.
+		substMatch := false
+		if !nameMatch && ec != nil && ec.schemaRegistry != nil {
+			substMatch = ec.schemaRegistry.IsSubstitutionGroupMember(
+				elem.LocalName(), elem.URI(), reqLocal, reqNS)
+		}
+		if !nameMatch && !substMatch {
 			return nil, fmt.Errorf("expected %s, got element %q", itemType, elem.LocalName())
 		}
 		// Check type annotation against the schema-declared type.
@@ -289,9 +296,6 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 				if ec.typeAnnotations != nil {
 					ann = ec.typeAnnotations[ni.Node]
 				}
-				// Untyped nodes (source documents not validated against schema) match
-				// schema-element(Q) when name + declaration exist — the schema declares
-				// what type the element should have, so name match + declaration is sufficient.
 				if ann == "" || ann == "xs:untyped" || ann == "Q{}untyped" {
 					return item, nil
 				}

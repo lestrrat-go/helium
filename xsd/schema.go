@@ -61,6 +61,12 @@ func (s *Schema) LookupType(local, ns string) (*TypeDef, bool) {
 	return t, ok
 }
 
+// SubstGroupMembers returns the element declarations in the substitution group
+// of the given head element.
+func (s *Schema) SubstGroupMembers(head QName) []*ElementDecl {
+	return s.substGroups[head]
+}
+
 // LookupAttribute returns the global attribute declaration for the given name.
 func (s *Schema) LookupAttribute(local, ns string) (*AttrUse, bool) {
 	a, ok := s.globalAttrs[QName{Local: local, NS: ns}]
