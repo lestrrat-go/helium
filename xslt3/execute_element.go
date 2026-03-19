@@ -198,7 +198,7 @@ func (ec *execContext) validateAndNormalizeElementContent(elem *helium.Element, 
 				return nil
 			case xsd.ContentTypeSimple:
 				// Simple content in a complex type: validate text content.
-				content := strings.TrimSpace(string(elem.Content()))
+				content := strings.TrimSpace(elementTextContent(elem))
 				if err := xsd.ValidateSimpleValue(content, td); err != nil {
 					return dynamicError(errCodeXTTE1510,
 						"content %q is not a valid value for type %s: %v", content, typeName, err)
@@ -209,7 +209,8 @@ func (ec *execContext) validateAndNormalizeElementContent(elem *helium.Element, 
 	}
 
 	// Built-in XSD type: validate by attempting to cast.
-	content := strings.TrimSpace(string(elem.Content()))
+	// Use text-only string value (skip comments/PIs) per XPath data model.
+	content := strings.TrimSpace(elementTextContent(elem))
 	_, castErr := xpath3.CastFromString(content, typeName)
 	if castErr != nil {
 		// Fall back to schema-defined simple type validation.
@@ -227,6 +228,27 @@ func (ec *execContext) validateAndNormalizeElementContent(elem *helium.Element, 
 
 	// Content is valid — original text is preserved in the DOM.
 	return nil
+}
+
+// elementTextContent returns the concatenation of all descendant text nodes,
+// skipping comments and processing instructions (XPath string-value semantics).
+func elementTextContent(elem *helium.Element) string {
+	var buf strings.Builder
+	collectTextContent(elem.FirstChild(), &buf)
+	return buf.String()
+}
+
+func collectTextContent(node helium.Node, buf *strings.Builder) {
+	for ; node != nil; node = node.NextSibling() {
+		switch node.Type() {
+		case helium.TextNode, helium.CDATASectionNode:
+			buf.Write(node.Content())
+		case helium.ElementNode:
+			if elem, ok := node.(*helium.Element); ok {
+				collectTextContent(elem.FirstChild(), buf)
+			}
+		}
+	}
 }
 
 // validateConstructedElement validates a constructed element node against the
