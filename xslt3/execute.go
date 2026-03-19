@@ -431,40 +431,6 @@ func (ec *execContext) transferAnnotationsForCopy(src helium.Node, parent helium
 	}
 }
 
-// deepTransferAnnotations recursively copies type annotations from a source
-// subtree to a destination subtree. The trees must have the same structure.
-func (ec *execContext) deepTransferAnnotations(src, dst helium.Node) {
-	if ec.typeAnnotations == nil {
-		return
-	}
-	if ann, ok := ec.typeAnnotations[src]; ok {
-		ec.annotateNode(dst, ann)
-	}
-	// Transfer attribute annotations
-	if srcElem, ok := src.(*helium.Element); ok {
-		if dstElem, ok := dst.(*helium.Element); ok {
-			for _, srcAttr := range srcElem.Attributes() {
-				if ann, ok := ec.typeAnnotations[srcAttr]; ok {
-					for _, dstAttr := range dstElem.Attributes() {
-						if srcAttr.LocalName() == dstAttr.LocalName() && srcAttr.URI() == dstAttr.URI() {
-							ec.annotateNode(dstAttr, ann)
-							break
-						}
-					}
-				}
-			}
-		}
-	}
-	// Transfer child annotations recursively
-	srcChild := src.FirstChild()
-	dstChild := dst.FirstChild()
-	for srcChild != nil && dstChild != nil {
-		ec.deepTransferAnnotations(srcChild, dstChild)
-		srcChild = srcChild.NextSibling()
-		dstChild = dstChild.NextSibling()
-	}
-}
-
 // varScope is a variable scope chain.
 type varScope struct {
 	vars           map[string]xpath3.Sequence

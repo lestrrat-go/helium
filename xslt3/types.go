@@ -42,7 +42,11 @@ func parseSequenceType(as string) SequenceType {
 
 // checkSequenceType checks that a sequence matches the declared type.
 // Returns the (possibly coerced) sequence on success, or an error on type mismatch.
-func checkSequenceType(seq xpath3.Sequence, st SequenceType, errCode string, context string) (xpath3.Sequence, error) {
+func checkSequenceType(seq xpath3.Sequence, st SequenceType, errCode string, context string, ec ...*execContext) (xpath3.Sequence, error) {
+	var execCtx *execContext
+	if len(ec) > 0 {
+		execCtx = ec[0]
+	}
 	// Check cardinality
 	count := len(seq)
 	switch st.Occurrence {
@@ -73,7 +77,7 @@ func checkSequenceType(seq xpath3.Sequence, st SequenceType, errCode string, con
 	// Check/coerce item types
 	result := make(xpath3.Sequence, 0, count)
 	for _, item := range seq {
-		coerced, err := coerceItem(item, st.ItemType)
+		coerced, err := coerceItem(item, st.ItemType, execCtx)
 		if err != nil {
 			return nil, dynamicError(errCode, "%s: %v", context, err)
 		}
@@ -84,7 +88,16 @@ func checkSequenceType(seq xpath3.Sequence, st SequenceType, errCode string, con
 
 // coerceItem checks that a single item matches the expected type, applying
 // atomization and casting as needed per the XSLT function conversion rules.
-func coerceItem(item xpath3.Item, itemType string) (xpath3.Item, error) {
+func coerceItem(item xpath3.Item, itemType string, ec ...*execContext) (xpath3.Item, error) {
+	var execCtx *execContext
+	if len(ec) > 0 {
+		execCtx = ec[0]
+	}
+	return coerceItemWithContext(item, itemType, execCtx)
+}
+
+// coerceItemWithContext is the inner implementation of coerceItem with an explicit exec context.
+func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (xpath3.Item, error) {
 	// Strip outer parentheses from the type (e.g., "(function(...) as ...)" → "function(...) as ...")
 	if len(itemType) > 2 && itemType[0] == '(' && itemType[len(itemType)-1] == ')' {
 		itemType = itemType[1 : len(itemType)-1]
@@ -142,17 +155,34 @@ func coerceItem(item xpath3.Item, itemType string) (xpath3.Item, error) {
 		return nil, fmt.Errorf("expected document-node(), got %s", describeItem(item))
 	}
 
-	// Handle document-node(element(...)) — document with specific element child
+	// Handle document-node(element(...)) — document with a specific root element.
 	if strings.HasPrefix(itemType, "document-node(") {
-		if ni, ok := item.(xpath3.NodeItem); ok {
-			if ni.Node.Type() == helium.DocumentNode {
-				return item, nil // simplified: accept any document node
-			}
+		ni, ok := item.(xpath3.NodeItem)
+		if !ok || ni.Node.Type() != helium.DocumentNode {
+			return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
 		}
-		return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
+		// Extract the inner element test, e.g. "element(foo)" from "document-node(element(foo))".
+		inner := strings.TrimSpace(itemType[len("document-node(") : len(itemType)-1])
+		if inner == "" {
+			return item, nil // document-node() without inner test — already matched above via switch
+		}
+		// Find the document element and check it against the inner element test.
+		doc, isDoc := ni.Node.(*helium.Document)
+		if !isDoc {
+			return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
+		}
+		rootElem := findDocumentElement(doc)
+		if rootElem == nil {
+			return nil, fmt.Errorf("expected %s: document has no root element", itemType)
+		}
+		rootItem := xpath3.NodeItem{Node: rootElem}
+		if _, err := coerceItemWithContext(rootItem, inner, ec); err != nil {
+			return nil, fmt.Errorf("expected %s: root element mismatch: %w", itemType, err)
+		}
+		return item, nil
 	}
 
-	// Handle attribute(name, type) patterns
+	// Handle attribute(name) / attribute(name, type) patterns
 	if strings.HasPrefix(itemType, "attribute(") {
 		if ni, ok := item.(xpath3.NodeItem); ok {
 			if ni.Node.Type() == helium.AttributeNode {
@@ -178,60 +208,120 @@ func coerceItem(item xpath3.Item, itemType string) (xpath3.Item, error) {
 		return item, nil // function items are checked by the XPath layer
 	}
 
-	// Handle element(name) patterns like element(foo), element(ns:foo)
+	// Handle element(name) / element(name, type) patterns.
 	if strings.HasPrefix(itemType, "element(") {
-		if ni, ok := item.(xpath3.NodeItem); ok {
-			if ni.Node.Type() == helium.ElementNode {
-				// Extract the name from element(name)
-				inner := itemType[len("element(") : len(itemType)-1]
-				inner = strings.TrimSpace(inner)
-				if inner == "" || inner == "*" {
-					return item, nil // element() or element(*) matches any element
-				}
-				// Check element name match
-				elemName := ni.Node.Name()
-				if elem, ok := ni.Node.(*helium.Element); ok {
-					elemName = elem.LocalName()
-				}
-				// Strip namespace prefix from the required name for matching
-				reqName := inner
-				if idx := strings.IndexByte(reqName, ','); idx >= 0 {
-					reqName = strings.TrimSpace(reqName[:idx]) // element(name, type) — just use name
-				}
-				if reqName == "*" {
-					return item, nil // element(*, type) matches any element
-				}
-				if idx := strings.IndexByte(reqName, ':'); idx >= 0 {
-					reqName = reqName[idx+1:] // strip prefix
-				}
-				if elemName == reqName {
-					return item, nil
-				}
-				return nil, fmt.Errorf("expected %s, got element %q", itemType, elemName)
+		ni, ok := item.(xpath3.NodeItem)
+		if !ok || ni.Node.Type() != helium.ElementNode {
+			return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
+		}
+		inner := strings.TrimSpace(itemType[len("element(") : len(itemType)-1])
+		if inner == "" || inner == "*" {
+			return item, nil // element() or element(*) matches any element
+		}
+		// Split off optional type argument: element(name, type)
+		parts := splitTopLevelTypeArgs(inner)
+		reqName := strings.TrimSpace(parts[0])
+		var reqTypeName string
+		if len(parts) == 2 {
+			reqTypeName = strings.TrimSpace(parts[1])
+		}
+
+		if reqName != "*" {
+			// Resolve prefix:local to (local, ns) for namespace-aware comparison.
+			reqLocal, reqNS := resolveSchemaQName(reqName, ec)
+			elem, isElem := ni.Node.(*helium.Element)
+			if !isElem {
+				return nil, fmt.Errorf("expected %s, got non-element node", itemType)
+			}
+			if elem.LocalName() != reqLocal || elem.URI() != reqNS {
+				return nil, fmt.Errorf("expected %s, got element %q", itemType, elem.LocalName())
 			}
 		}
-		return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
+
+		// If a type was specified, check the element's type annotation.
+		if reqTypeName != "" && reqTypeName != "*" && ec != nil && ec.schemaRegistry != nil && ec.typeAnnotations != nil {
+			ann := ec.typeAnnotations[ni.Node]
+			if ann == "" {
+				ann = "xs:untyped"
+			}
+			reqTypeNorm := normalizeTypeName(reqTypeName)
+			if !ec.schemaRegistry.IsSubtypeOf(ann, reqTypeNorm) {
+				return nil, fmt.Errorf("expected %s (type %s), element has type %s", itemType, reqTypeNorm, ann)
+			}
+		}
+		return item, nil
 	}
 
-	// Handle schema-element(name) — a node test, not an atomic type; match by node kind only.
-	// Schema-aware validation of the element's type is not performed here.
+	// Handle schema-element(name) — verify element name and check schema declaration.
 	if strings.HasPrefix(itemType, "schema-element(") {
-		if ni, ok := item.(xpath3.NodeItem); ok {
-			if ni.Node.Type() == helium.ElementNode {
-				return item, nil
+		ni, ok := item.(xpath3.NodeItem)
+		if !ok || ni.Node.Type() != helium.ElementNode {
+			return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
+		}
+		inner := strings.TrimSpace(itemType[len("schema-element(") : len(itemType)-1])
+		reqLocal, reqNS := resolveSchemaQName(inner, ec)
+		elem, isElem := ni.Node.(*helium.Element)
+		if !isElem {
+			return nil, fmt.Errorf("expected %s, got non-element node", itemType)
+		}
+		if elem.LocalName() != reqLocal || elem.URI() != reqNS {
+			return nil, fmt.Errorf("expected %s, got element %q", itemType, elem.LocalName())
+		}
+		// Check type annotation against the schema-declared type.
+		if ec != nil && ec.schemaRegistry != nil {
+			declType, found := ec.schemaRegistry.LookupSchemaElement(reqLocal, reqNS)
+			if found {
+				ann := ""
+				if ec.typeAnnotations != nil {
+					ann = ec.typeAnnotations[ni.Node]
+				}
+				if ann == "" {
+					ann = "xs:untyped"
+				}
+				if !ec.schemaRegistry.IsSubtypeOf(ann, declType) {
+					return nil, fmt.Errorf("expected %s (type %s), element has type %s", itemType, declType, ann)
+				}
 			}
 		}
-		return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
+		return item, nil
 	}
 
-	// Handle schema-attribute(name) — a node test, not an atomic type; match by node kind only.
+	// Handle schema-attribute(name) — verify attribute name and check schema declaration.
 	if strings.HasPrefix(itemType, "schema-attribute(") {
-		if ni, ok := item.(xpath3.NodeItem); ok {
-			if ni.Node.Type() == helium.AttributeNode {
-				return item, nil
+		ni, ok := item.(xpath3.NodeItem)
+		if !ok || ni.Node.Type() != helium.AttributeNode {
+			return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
+		}
+		inner := strings.TrimSpace(itemType[len("schema-attribute(") : len(itemType)-1])
+		reqLocal, reqNS := resolveSchemaQName(inner, ec)
+		// Retrieve attribute local name and namespace.
+		// Cast to *helium.Attribute to get LocalName() (Node.Name() includes prefix for attributes).
+		attr, isAttr := ni.Node.(*helium.Attribute)
+		if !isAttr {
+			return nil, fmt.Errorf("expected %s, got non-attribute node", itemType)
+		}
+		attrLocal := attr.LocalName()
+		attrNS := attr.URI()
+		if attrLocal != reqLocal || attrNS != reqNS {
+			return nil, fmt.Errorf("expected %s, got attribute %q", itemType, attrLocal)
+		}
+		// Check type annotation against the schema-declared type.
+		if ec != nil && ec.schemaRegistry != nil {
+			declType, found := ec.schemaRegistry.LookupSchemaAttribute(reqLocal, reqNS)
+			if found {
+				ann := ""
+				if ec.typeAnnotations != nil {
+					ann = ec.typeAnnotations[ni.Node]
+				}
+				if ann == "" {
+					ann = "xs:untypedAtomic"
+				}
+				if !ec.schemaRegistry.IsSubtypeOf(ann, declType) {
+					return nil, fmt.Errorf("expected %s (type %s), attribute has type %s", itemType, declType, ann)
+				}
 			}
 		}
-		return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
+		return item, nil
 	}
 
 	// Atomic type — need to atomize and potentially cast
@@ -382,6 +472,21 @@ func isNumericType(t string) bool {
 		return true
 	}
 	return false
+}
+
+// resolveSchemaQName resolves a QName string (e.g. "my:userNode" or "localName")
+// to (localName, namespace) using the stylesheet's namespace bindings.
+func resolveSchemaQName(qname string, ec *execContext) (local, ns string) {
+	idx := strings.IndexByte(qname, ':')
+	if idx < 0 {
+		return qname, ""
+	}
+	prefix := qname[:idx]
+	local = qname[idx+1:]
+	if ec != nil && ec.stylesheet != nil {
+		ns = ec.stylesheet.namespaces[prefix]
+	}
+	return local, ns
 }
 
 // describeItem returns a human-readable description of an item for error messages.

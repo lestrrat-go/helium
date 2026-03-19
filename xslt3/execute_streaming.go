@@ -150,7 +150,7 @@ func (ec *execContext) execIterate(ctx context.Context, inst *IterateInst) error
 		// Apply type coercion if as= is declared.
 		if p.As != "" && len(val) > 0 {
 			st := parseSequenceType(p.As)
-			coerced, err := checkSequenceType(val, st, errCodeXTTE0570, "xsl:iterate parameter $"+p.Name)
+			coerced, err := checkSequenceType(val, st, errCodeXTTE0570, "xsl:iterate parameter $"+p.Name, ec)
 			if err != nil {
 				return err
 			}
@@ -217,7 +217,7 @@ func (ec *execContext) execIterate(ctx context.Context, inst *IterateInst) error
 						// Apply type coercion if as= is declared.
 						if asType, ok := paramTypes[name]; ok && asType != "" && len(val) > 0 {
 							st := parseSequenceType(asType)
-							coerced, coerceErr := checkSequenceType(val, st, errCodeXTTE0570, "xsl:next-iteration parameter $"+name)
+							coerced, coerceErr := checkSequenceType(val, st, errCodeXTTE0570, "xsl:next-iteration parameter $"+name, ec)
 							if coerceErr != nil {
 								return coerceErr
 							}
@@ -1095,7 +1095,7 @@ func (ec *execContext) checkAccumulatorType(def *AccumulatorDef, seq xpath3.Sequ
 	if def == nil || def.As == "" {
 		return seq, nil
 	}
-	return checkSequenceType(seq, parseSequenceType(def.As), "XPTY0004", "accumulator "+def.Name)
+	return checkSequenceType(seq, parseSequenceType(def.As), "XPTY0004", "accumulator "+def.Name, ec)
 }
 
 // loadMergeDocument loads an XML document from a URI, resolving it relative

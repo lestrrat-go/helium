@@ -208,7 +208,7 @@ func (ec *execContext) evaluateWithParam(ctx context.Context, wp *WithParam) (xp
 	// Type check against the declared as type
 	if wp.As != "" {
 		st := parseSequenceType(wp.As)
-		checked, err := checkSequenceType(val, st, errCodeXTTE0570, "with-param $"+wp.Name)
+		checked, err := checkSequenceType(val, st, errCodeXTTE0570, "with-param $"+wp.Name, ec)
 		if err != nil {
 			return nil, err
 		}
