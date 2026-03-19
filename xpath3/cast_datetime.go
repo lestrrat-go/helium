@@ -88,6 +88,14 @@ func splitXSDYear(s string) (int, string, error) {
 // remaining month-day (and optional time/tz) components. It uses time.Parse
 // with a reference year of 2006, then replaces the year with the actual value.
 func buildTimeFromParts(year int, rest string, layouts []string, original string) (time.Time, bool) {
+	month, day, err := extractDateMonthDay(rest)
+	if err != nil {
+		return time.Time{}, false
+	}
+	if err := validateDateComponents(month, day, year); err != nil {
+		return time.Time{}, false
+	}
+
 	// rest starts with "-MM-DD..." — prepend a synthetic 4-digit year for time.Parse.
 	// Go's time.Parse reference year (2006) is not a leap year, so Feb 29 fails.
 	// Use a leap year (2000) in the value string. Go layout uses "2006" for year,
@@ -120,6 +128,23 @@ func buildTimeFromParts(year int, rest string, layouts []string, original string
 	}
 
 	return time.Time{}, false
+}
+
+func extractDateMonthDay(rest string) (int, int, error) {
+	if len(rest) < 6 || rest[0] != '-' || rest[3] != '-' {
+		return 0, 0, fmt.Errorf("invalid month-day segment %q", rest)
+	}
+
+	month, err := strconv.Atoi(rest[1:3])
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid month in %q", rest)
+	}
+
+	day, err := strconv.Atoi(rest[4:6])
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid day in %q", rest)
+	}
+	return month, day, nil
 }
 
 func parseXSDDate(s string) (time.Time, error) {
