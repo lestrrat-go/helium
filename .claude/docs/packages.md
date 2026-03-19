@@ -69,7 +69,7 @@ XPath 3.1 expression parsing and evaluation.
 - Structured errors: XPathError with W3C error codes (XPTY0004, FOER0000, etc.)
 - Limits: recursion 5000, node-set 10M, configurable op limit
 - Files: `xpath3.go` (API), `parser.go`, `lexer.go`, `eval.go`, `compare.go`, `cast.go`, `types.go`, `sequence.go`, `context.go`, `errors.go`, `functions*.go` (15 files), `expr.go`, `token.go`
-- Imports: helium, internal/xpath
+- Imports: helium, internal/xpath, internal/lexicon
 
 ## xslt3/
 
@@ -86,7 +86,7 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
 - Runtime helpers: `current()`, `document()`, `key()`, `generate-id()`, `system-property()`, `unparsed-entity-uri()`, `type-available()`
 - Output methods: `xml`, `html`, `text`
 - Files: `xslt3.go` (API), `options.go` (context config), `compile.go` (orchestration + shared helpers), `compile_imports.go`, `compile_packages.go`, `compile_schema.go`, `compile_templates.go`, `compile_functions_modes.go`, `compile_formats.go`, `compile_instructions.go` (dispatch + static context helpers), `compile_instructions_flow.go`, `compile_instructions_nodes.go`, `compile_instructions_vars.go`, `compile_patterns.go`, `execute.go`, `execute_instructions.go`, `output.go`, `functions.go`, `keys.go`, `avt.go`, `stylesheet.go`, `instruction.go`, `sort.go`, `errors.go`
-- Imports: helium, xpath3, xsd
+- Imports: helium, xpath3, xsd, internal/lexicon
 - Tests: `xslt3_test.go` runs phase-1 W3C XSLT 3.0 test sets from `testdata/xslt30/source/` when fetched
 
 ## xsd/
@@ -172,7 +172,7 @@ OASIS XML Catalog resolution for public/system IDs and URIs.
 - **Catalog.ResolveURI(uri) → string** — resolve URI reference
 - Catalog chaining via nextCatalog; URN urn:publicid: support
 - Files: `catalog.go`, `load.go`
-- Imports: helium, internal/catalog/
+- Imports: helium, internal/catalog/, internal/lexicon/
 
 ## stream/
 
@@ -236,6 +236,25 @@ Shared test helper utilities and fixtures. Not a production package.
 ## internal/encoding/
 
 Character encoding support wrapping golang.org/x/text/encoding.
+
+## internal/catalog/
+
+Internal OASIS XML Catalog model + resolution engine used by root parser + public `catalog/`.
+
+- Types: `Catalog`, `Entry`, `EntryType`, `Prefer`, `Loader`, `Resolver`
+- Helpers: `NormalizePublicID`, `UnwrapURN`, `ResolveURI`, `HasScheme`, `ParsePrefer`, `HasNextCatalog`
+- Files: `catalog.go`, `resolve.go`, `normalize.go`, `uri.go`, `urn.go`
+- Imports: none
+
+## internal/lexicon/
+
+Shared spec vocabulary strings reused across packages.
+
+- Namespaces: XML Catalog, XSLT, XSD, XPath/XQuery function namespaces, XML, XMLNS
+- XML vocabulary: common prefixes + attribute/value names such as `xml:base`
+- Catalog vocabulary: OASIS catalog element names, attribute names, `prefer` values
+- Files: `ns.go`, `xml.go`, `catalog.go`
+- Imports: none
 
 - **Load(name) → encoding.Encoding** — lookup by normalized name
 - Supports: UTF-8/16/32, ISO-8859-*, Windows-*, KOI8-*, Mac, CJK, EBCDIC, UCS-4

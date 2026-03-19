@@ -9,25 +9,26 @@ shim           → helium, stream, internal/encoding
 xinclude       → helium, xpointer
                   → xpath1 (via xpointer)
                   → internal/encoding
-xpath3         → helium, internal/xpath
-xslt3          → helium, xpath3, xsd
+xpath3         → helium, internal/xpath, internal/lexicon
+xslt3          → helium, xpath3, xsd, internal/lexicon
 xsd            → helium, xpath1
 relaxng        → helium
 schematron     → helium, xpath1
 xpointer       → helium, xpath1
 c14n           → helium
 html           → helium, sax
-catalog        → helium, internal/catalog
+catalog        → helium, internal/catalog, internal/lexicon
 stream         → internal/encoding
 sax            → helium
 helium (root)  → sax, enum, internal/catalog, internal/encoding, internal/bitset, internal/stack
 sink           → (none)
 enum           → (none)
+internal/lexicon → (none)
 test           → helium
 ```
 
 ## Leaf packages (no helium deps)
-sink, enum, internal/bitset, internal/stack, internal/cliutil
+sink, enum, internal/bitset, internal/stack, internal/cliutil, internal/catalog, internal/encoding, internal/lexicon
 
 ## Core layer
 helium (root) → sax, enum, internal/*
