@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xsd"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -214,19 +215,45 @@ func (ec *execContext) validateConstructedElement(ctx context.Context, elem *hel
 		if valErr != nil && validation == "strict" {
 			return dynamicError(errCodeXTTE1510, "validation of constructed element failed: %v", valErr)
 		}
-		// Merge type annotations for the actual (non-copy) element.
-		// The copied element maps correspond to the tmpDoc nodes, so we apply
-		// annotations by matching position. For now, annotate the top-level elem
-		// with the type found for the copied root element.
+		// Merge type annotations for the actual (non-copy) element by walking
+		// the temp tree and live tree in parallel.
 		if len(ann) > 0 {
-			for _, typeName := range ann {
-				ec.annotateNode(elem, typeName)
-				break // only use the first/root annotation for the element itself
-			}
+			ec.mapAnnotationsFromValidation(ann, copied, elem)
 		}
 		return nil
 	}
 	return nil
+}
+
+// mapAnnotationsFromValidation maps type annotations from a validated copy
+// tree back to the corresponding live tree nodes.
+func (ec *execContext) mapAnnotationsFromValidation(ann xsd.TypeAnnotations, src, dst helium.Node) {
+	if typeName, ok := ann[src]; ok {
+		ec.annotateNode(dst, typeName)
+	}
+	// Map attribute annotations
+	if srcElem, ok := src.(*helium.Element); ok {
+		if dstElem, ok := dst.(*helium.Element); ok {
+			for _, srcAttr := range srcElem.Attributes() {
+				if typeName, ok := ann[srcAttr]; ok {
+					for _, dstAttr := range dstElem.Attributes() {
+						if srcAttr.LocalName() == dstAttr.LocalName() && srcAttr.URI() == dstAttr.URI() {
+							ec.annotateNode(dstAttr, typeName)
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+	// Recurse into children
+	srcChild := src.FirstChild()
+	dstChild := dst.FirstChild()
+	for srcChild != nil && dstChild != nil {
+		ec.mapAnnotationsFromValidation(ann, srcChild, dstChild)
+		srcChild = srcChild.NextSibling()
+		dstChild = dstChild.NextSibling()
+	}
 }
 
 // stripAnnotations removes type annotations from a node and all its descendants.
@@ -290,10 +317,11 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 	// form is used (e.g. "0023" → 23 → "23").
 	if inst.TypeName != "" {
 		av, castErr := xpath3.CastFromString(value, inst.TypeName)
-		if castErr == nil {
-			if s, sErr := xpath3.AtomicToString(av); sErr == nil {
-				value = s
-			}
+		if castErr != nil {
+			return dynamicError(errCodeXTTE1515, "attribute value %q does not match type %s", value, inst.TypeName)
+		}
+		if s, sErr := xpath3.AtomicToString(av); sErr == nil {
+			value = s
 		}
 	}
 

@@ -315,7 +315,10 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 				return err
 			}
 			if preserve {
-				ec.transferAnnotations(v.Node)
+				last := out.current.LastChild()
+				if last != nil {
+					ec.deepTransferAnnotations(v.Node, last)
+				}
 			} else if effectiveVal == "strict" || effectiveVal == "lax" || effectiveVal == "strip" {
 				// Apply validation/strip to the most recently added node in output.
 				if copied := out.current.LastChild(); copied != nil {
