@@ -44,6 +44,13 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 				"xsl:import-schema namespace %q does not match schema targetNamespace %q",
 				declaredNS, schema.TargetNamespace())
 		}
+		// XTSE0220: when schema has a non-empty targetNamespace, the namespace
+		// attribute is required (per XSLT spec section 3.13).
+		if declaredNS == "" && schema.TargetNamespace() != "" {
+			return staticError(errCodeXTSE0220,
+				"xsl:import-schema: namespace attribute is required when schema has targetNamespace %q",
+				schema.TargetNamespace())
+		}
 		c.stylesheet.schemas = append(c.stylesheet.schemas, schema)
 		return nil
 	}

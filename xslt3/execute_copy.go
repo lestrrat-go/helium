@@ -98,6 +98,11 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 
 	// Apply type validation if specified.
 	if inst.TypeName != "" {
+		// XTTE1535: type annotation is only valid for element nodes.
+		if ec.contextNode != nil && ec.contextNode.Type() != helium.ElementNode {
+			return dynamicError(errCodeXTTE1535,
+				"copy: type attribute cannot be applied to %s node", ec.contextNode.Type())
+		}
 		out := ec.currentOutput()
 		if copied := out.current.LastChild(); copied != nil {
 			if copiedElem, ok := copied.(*helium.Element); ok {
@@ -345,6 +350,11 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 				return err
 			}
 			if inst.TypeName != "" {
+				// XTTE1535: type annotation is only valid for element/document nodes.
+				if v.Node.Type() != helium.ElementNode && v.Node.Type() != helium.DocumentNode {
+					return dynamicError(errCodeXTTE1535,
+						"copy-of: type attribute cannot be applied to %s node", v.Node.Type())
+				}
 				// Type validation: validate the copied element against the declared type.
 				if copied := out.current.LastChild(); copied != nil {
 					if copiedElem, ok := copied.(*helium.Element); ok {
