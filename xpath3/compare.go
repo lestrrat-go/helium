@@ -609,6 +609,10 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 		case TypeQName:
 			return compareQName(op, a.Value.(QNameValue), b.Value.(QNameValue))
 		case TypeGDay, TypeGMonth, TypeGMonthDay, TypeGYear, TypeGYearMonth:
+			// Gregorian partial types only support eq/ne, not ordering
+			if op != TokenEq && op != TokenNe {
+				return false, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("%s values are not orderable", a.TypeName)}
+			}
 			ta, okA := parseGTypeToTime(a.TypeName, stringFromAtomic(a))
 			tb, okB := parseGTypeToTime(b.TypeName, stringFromAtomic(b))
 			if !okA || !okB {
