@@ -50,11 +50,16 @@ func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) err
 	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 
 	// Apply type validation (xsl:document type="...").
-	if inst.TypeName != "" && ec.schemaRegistry != nil {
+	if inst.TypeName != "" {
+		// XTTE1550: document must have exactly one element child.
+		if err := validateDocumentStructure(tmpDoc); err != nil {
+			return err
+		}
 		root := findDocumentElement(tmpDoc)
-		if root != nil {
+		if root != nil && ec.schemaRegistry != nil {
 			if err := ec.validateAndNormalizeElementContent(root, inst.TypeName); err != nil {
-				if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
+				var xsltErr *XSLTError
+				if errors.As(err, &xsltErr) && xsltErr.Code == errCodeXTTE1510 {
 					return dynamicError(errCodeXTTE1540,
 						"document content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
 				}
@@ -177,7 +182,8 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 			root := findDocumentElement(tmpDoc)
 			if root != nil && ec.schemaRegistry != nil {
 				if err := ec.validateAndNormalizeElementContent(root, inst.TypeName); err != nil {
-					if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
+					var xsltErr *XSLTError
+					if errors.As(err, &xsltErr) && xsltErr.Code == errCodeXTTE1510 {
 						return dynamicError(errCodeXTTE1540,
 							"result document content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
 					}
