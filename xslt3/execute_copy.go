@@ -141,10 +141,21 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 		}
 
 		if opts.copyNamespaces {
-			// Copy all in-scope namespace declarations (not just those
-			// directly declared on the element).  This matches the XSLT 3.0
-			// spec for xsl:copy with copy-namespaces="yes".
+			// copy-namespaces="yes": copy all in-scope namespace declarations
+			// (including those inherited from ancestors).  This matches the
+			// XSLT 3.0 spec default behaviour.
 			for _, ns := range collectInScopeNamespaces(srcElem) {
+				if ns.URI() == "" {
+					continue // skip undeclarations
+				}
+				if err := elem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
+					return err
+				}
+			}
+		} else {
+			// copy-namespaces="no": copy only the namespace declarations that
+			// are directly on the source element (not inherited from ancestors).
+			for _, ns := range srcElem.Namespaces() {
 				if ns.URI() == "" {
 					continue // skip undeclarations
 				}
@@ -434,18 +445,32 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 	}
 }
 
-// copyElementNoNamespaces deep-copies an element but omits namespace
-// declarations that are not required by the element or attribute names.
+// copyElementNoNamespaces deep-copies an element keeping only the namespace
+// declarations that are directly on the source element (copy-namespaces="no").
+// Inherited namespace declarations from ancestors are NOT copied.
 func (ec *execContext) copyElementNoNamespaces(src *helium.Element) error {
 	elem, err := ec.resultDoc.CreateElement(src.LocalName())
 	if err != nil {
 		return err
 	}
 
-	// Only declare namespace for the element's own name
-	if src.URI() != "" {
-		if err := elem.DeclareNamespace(src.Prefix(), src.URI()); err != nil {
+	// Copy only the namespace declarations directly on the source element
+	// (not those inherited from ancestors).
+	for _, ns := range src.Namespaces() {
+		if ns.URI() == "" {
+			continue // skip undeclarations
+		}
+		if err := elem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
 			return err
+		}
+	}
+
+	// Ensure the element's own namespace is declared and set active.
+	if src.URI() != "" {
+		if !hasNSDecl(elem, src.Prefix(), src.URI()) {
+			if err := elem.DeclareNamespace(src.Prefix(), src.URI()); err != nil {
+				return err
+			}
 		}
 		if err := elem.SetActiveNamespace(src.Prefix(), src.URI()); err != nil {
 			return err
