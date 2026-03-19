@@ -397,6 +397,10 @@ func castAtomicToType(av xpath3.AtomicValue, targetType string, ec ...*execConte
 		s := av.StringVal()
 		cast, err := xpath3.CastFromString(s, target)
 		if err != nil {
+			// Try schema-aware cast for user-defined types.
+			if schemaCast, ok := trySchemaCast(s, target, ec...); ok {
+				return schemaCast, nil
+			}
 			return nil, fmt.Errorf("cannot cast %q to %s: %w", s, targetType, err)
 		}
 		return cast, nil
@@ -424,9 +428,58 @@ func castAtomicToType(av xpath3.AtomicValue, targetType string, ec ...*execConte
 	}
 	cast, err := xpath3.CastFromString(s, target)
 	if err != nil {
+		// Try schema-aware cast for user-defined types.
+		if schemaCast, ok := trySchemaCast(s, target, ec...); ok {
+			return schemaCast, nil
+		}
 		return nil, fmt.Errorf("cannot convert %s to %s", av.TypeName, targetType)
 	}
 	return cast, nil
+}
+
+// trySchemaCast attempts to cast a string to a user-defined schema type by
+// resolving to the built-in base type, casting to that, validating facets,
+// and returning the result with the user-defined type name.
+func trySchemaCast(s, target string, ec ...*execContext) (xpath3.Item, bool) {
+	if len(ec) == 0 || ec[0] == nil || ec[0].schemaRegistry == nil {
+		return nil, false
+	}
+	reg := ec[0].schemaRegistry
+	// Resolve to the built-in base type by walking the schema type chain.
+	local, ns := splitAnnotationName(target)
+	builtinBase := resolveToBuiltin(local, ns, reg)
+	if builtinBase == "" {
+		return nil, false
+	}
+	cast, err := xpath3.CastFromString(s, builtinBase)
+	if err != nil {
+		return nil, false
+	}
+	// Validate facets.
+	castStr, _ := xpath3.AtomicToString(cast)
+	if facetErr := reg.ValidateCast(castStr, target); facetErr != nil {
+		return nil, false
+	}
+	cast.TypeName = target
+	return cast, true
+}
+
+// resolveToBuiltin walks the schema type chain from a user-defined type to
+// find the ultimate built-in XSD base type.
+func resolveToBuiltin(local, ns string, reg *schemaRegistry) string {
+	current, currentNS := local, ns
+	for i := 0; i < 32; i++ {
+		baseType, ok := reg.LookupType(current, currentNS)
+		if !ok {
+			return ""
+		}
+		if xpath3.IsKnownXSDType(baseType) {
+			return baseType
+		}
+		newLocal, newNS := splitAnnotationName(baseType)
+		current, currentNS = newLocal, newNS
+	}
+	return ""
 }
 
 // normalizeTypeName normalizes a type name. xs: and xsd: prefixes are
