@@ -148,6 +148,30 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 	return nil
 }
 
+// validateConstructedAttribute validates an attribute value against the schema
+// when validation="strict" or validation="lax". Returns XTTE1510 when the
+// value is invalid, XTTE1555 when no matching global declaration is found
+// (strict only).
+func (ec *execContext) validateConstructedAttribute(localName, nsURI, value, validation string) error {
+	if ec.schemaRegistry == nil {
+		return nil
+	}
+	typeName, valid, valErr := ec.schemaRegistry.ValidateAttribute(localName, nsURI, value)
+	if typeName == "" {
+		// No matching global attribute declaration found.
+		if validation == "strict" {
+			return dynamicError(errCodeXTTE1555,
+				"no schema declaration found for attribute {%s}%s (validation=strict)", nsURI, localName)
+		}
+		return nil // lax: silently skip if no declaration
+	}
+	if !valid || valErr != nil {
+		return dynamicError(errCodeXTTE1510,
+			"attribute {%s}%s value %q is not valid for type %s: %v", nsURI, localName, value, typeName, valErr)
+	}
+	return nil
+}
+
 // validateAndNormalizeElementContent validates the text content of elem against
 // the declared XSD type name (e.g., "xs:integer") and normalizes it to the
 // canonical lexical form.  It raises XTTE1510 when the content is invalid.
@@ -212,8 +236,49 @@ func (ec *execContext) validateConstructedElement(ctx context.Context, elem *hel
 			return err
 		}
 		ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
-		if valErr != nil && validation == "strict" {
-			return dynamicError(errCodeXTTE1510, "validation of constructed element failed: %v", valErr)
+		if valErr != nil {
+			switch validation {
+			case "strict":
+				return dynamicError(errCodeXTTE1510, "validation of constructed element failed: %v", valErr)
+			case "lax":
+				return dynamicError(errCodeXTTE1515, "lax validation of constructed element failed: %v", valErr)
+			}
+		} else if ann == nil {
+			// No matching schema found.
+			if validation == "strict" {
+				// Strict validation: unknown validity = failure if element is in a
+				// schema-governed namespace but has no matching declaration.
+				elemNS := elem.URI()
+				elemLocal := elem.LocalName()
+				if _, found := ec.schemaRegistry.LookupElement(elemLocal, elemNS); !found {
+					return dynamicError(errCodeXTTE1510,
+						"no schema declaration found for element {%s}%s (validation=strict)", elemNS, elemLocal)
+				}
+			}
+		} else {
+			// Schema validation passed (ann != nil). Perform additional value-level
+			// validation using CastFromString to catch calendar-invalid dates etc.
+			// (the XSD regex validator may accept e.g. "2006-02-31" as a valid date).
+			elemNS := elem.URI()
+			elemLocal := elem.LocalName()
+			if typeName, found := ec.schemaRegistry.LookupElement(elemLocal, elemNS); found && typeName != "" {
+				// Only validate for simple types (built-in xs: types); skip for complex types.
+				if isBuiltinSimpleType(typeName) {
+					content := strings.TrimSpace(string(elem.Content()))
+					if _, castErr := xpath3.CastFromString(content, typeName); castErr != nil {
+						switch validation {
+						case "strict":
+							return dynamicError(errCodeXTTE1510,
+								"element {%s}%s content %q is not valid for type %s: %v",
+								elemNS, elemLocal, content, typeName, castErr)
+						case "lax":
+							return dynamicError(errCodeXTTE1515,
+								"element {%s}%s content %q is not valid for type %s: %v",
+								elemNS, elemLocal, content, typeName, castErr)
+						}
+					}
+				}
+			}
 		}
 		// Merge type annotations for the actual (non-copy) element by walking
 		// the temp tree and live tree in parallel.
@@ -366,6 +431,12 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 			if prefix == "" {
 				prefix = "ns0"
 			}
+			// Schema validation when validation attribute is set.
+			if inst.Validation == "strict" || inst.Validation == "lax" {
+				if err := ec.validateConstructedAttribute(localName, nsURI, value, inst.Validation); err != nil {
+					return err
+				}
+			}
 			// If the prefix is already bound to a different URI on this element,
 			// generate a unique prefix to avoid conflicts.
 			prefix = uniqueNSPrefix(elem, prefix, nsURI)
@@ -392,6 +463,12 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 		if idx := strings.IndexByte(name, ':'); idx >= 0 {
 			name = name[idx+1:]
 		}
+		// Schema validation for no-namespace attribute.
+		if inst.Validation == "strict" || inst.Validation == "lax" {
+			if err := ec.validateConstructedAttribute(name, "", value, inst.Validation); err != nil {
+				return err
+			}
+		}
 		elem.RemoveAttribute(name)
 		if err := elem.SetAttribute(name, value); err != nil {
 			return err
@@ -411,6 +488,12 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 			return dynamicError(errCodeXTDE0860,
 				"undeclared namespace prefix %q in attribute name %q", prefix, name)
 		}
+		// Schema validation for prefixed attribute.
+		if inst.Validation == "strict" || inst.Validation == "lax" {
+			if err := ec.validateConstructedAttribute(localName, uri, value, inst.Validation); err != nil {
+				return err
+			}
+		}
 		// Ensure the namespace is declared on the element
 		if !hasNSDecl(elem, prefix, uri) {
 			if err := elem.DeclareNamespace(prefix, uri); err != nil {
@@ -429,6 +512,13 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 		ec.annotateAttr(elem, inst.TypeName, localName, uri, value)
 		out.noteOutput()
 		return nil
+	}
+
+	// Schema validation for simple unprefixed attribute.
+	if inst.Validation == "strict" || inst.Validation == "lax" {
+		if err := ec.validateConstructedAttribute(name, "", value, inst.Validation); err != nil {
+			return err
+		}
 	}
 
 	// Remove existing attribute with same name to allow replacement

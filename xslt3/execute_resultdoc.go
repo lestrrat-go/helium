@@ -2,10 +2,39 @@ package xslt3
 
 import (
 	"context"
+	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
 )
+
+// validateDocumentStructure checks that a document node has exactly one element
+// child, no text nodes (non-whitespace), and only comments/PIs otherwise.
+// Returns XTTE1550 on violation.
+func validateDocumentStructure(doc *helium.Document) error {
+	elemCount := 0
+	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
+		switch child.Type() {
+		case helium.ElementNode:
+			elemCount++
+		case helium.TextNode, helium.CDATASectionNode:
+			// Any text content at the document level (including whitespace
+			// that is not whitespace-only) fails validation.
+			text := strings.TrimSpace(string(child.Content()))
+			if text != "" {
+				return dynamicError(errCodeXTTE1550,
+					"validated document has text nodes at the top level")
+			}
+		case helium.CommentNode, helium.ProcessingInstructionNode, helium.DTDNode:
+			// Allowed at document level.
+		}
+	}
+	if elemCount != 1 {
+		return dynamicError(errCodeXTTE1550,
+			"validated document must have exactly one root element, found %d", elemCount)
+	}
+	return nil
+}
 
 // execDocument implements xsl:document: creates a document node wrapping
 // the result of executing the body.
@@ -18,6 +47,30 @@ func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) err
 		return err
 	}
 	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+
+	// Apply validation if requested (xsl:document validation="strict"|"lax").
+	if v := inst.Validation; v == "strict" || v == "lax" {
+		if v == "strict" {
+			if err := validateDocumentStructure(tmpDoc); err != nil {
+				return err
+			}
+		}
+		if ec.schemaRegistry != nil {
+			ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
+			if valErr != nil && v == "strict" {
+				return dynamicError(errCodeXTTE1540, "validation of document node failed: %v", valErr)
+			}
+			if valErr == nil && v == "strict" {
+				// XTTE1555: check xs:ID uniqueness and xs:IDREF resolution.
+				if err := ValidateDocIDConstraints(tmpDoc, ann); err != nil {
+					return err
+				}
+			}
+			for node, typeName := range ann {
+				ec.annotateNode(node, typeName)
+			}
+		}
+	}
 
 	// Emit the document node as an item in the parent output frame.
 	// sequenceMode means we are in evaluateBodyAsSequence — emit as item.
@@ -96,6 +149,49 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 	defer func() { ec.currentOutputURI = savedOutputURI }()
 
 	if isPrimary {
+		v := inst.Validation
+		if v == "strict" || v == "lax" {
+			// When validation is requested for the primary output, build into a
+			// temporary document, validate it, then copy children to the primary
+			// output. This is the only way we can inspect the complete document
+			// structure before emitting it.
+			tmpDoc := helium.NewDefaultDocument()
+			ec.outputStack = append(ec.outputStack, &outputFrame{doc: tmpDoc, current: tmpDoc, itemSeparator: itemSep})
+			if err := ec.executeSequenceConstructor(ctx, inst.Body); err != nil {
+				ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+				return err
+			}
+			ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+			// XTTE1550: validate document structure.
+			if v == "strict" {
+				if err := validateDocumentStructure(tmpDoc); err != nil {
+					return err
+				}
+			}
+			if ec.schemaRegistry != nil {
+				ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
+				if valErr != nil && v == "strict" {
+					return dynamicError(errCodeXTTE1540, "validation of primary result document failed: %v", valErr)
+				}
+				if valErr == nil && v == "strict" {
+					// XTTE1555: check xs:ID uniqueness and xs:IDREF resolution.
+					if err := ValidateDocIDConstraints(tmpDoc, ann); err != nil {
+						return err
+					}
+				}
+				for node, typeName := range ann {
+					ec.annotateNode(node, typeName)
+				}
+			}
+			// Copy validated children into the primary output.
+			primaryFrame := ec.outputStack[0]
+			for child := tmpDoc.FirstChild(); child != nil; child = child.NextSibling() {
+				if err := primaryFrame.doc.AddChild(child); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
 		// Write directly to the primary output (base frame).
 		savedStack := ec.outputStack
 		ec.outputStack = ec.outputStack[:1] // keep only the base frame
@@ -137,10 +233,24 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 
 	// Validate the result document if requested.
 	if v := inst.Validation; v == "strict" || v == "lax" {
+		// XTTE1550: when validating a document node, the children must comprise
+		// exactly one element node, no text nodes, and zero or more comment and
+		// processing instruction nodes, in any order.
+		if v == "strict" {
+			if err := validateDocumentStructure(tmpDoc); err != nil {
+				return err
+			}
+		}
 		if ec.schemaRegistry != nil {
 			ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
 			if valErr != nil && v == "strict" {
 				return dynamicError(errCodeXTTE1540, "validation of result document failed: %v", valErr)
+			}
+			if valErr == nil && v == "strict" {
+				// XTTE1555: check xs:ID uniqueness and xs:IDREF resolution.
+				if err := ValidateDocIDConstraints(tmpDoc, ann); err != nil {
+					return err
+				}
 			}
 			for node, typeName := range ann {
 				ec.annotateNode(node, typeName)
