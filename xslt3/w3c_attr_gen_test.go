@@ -625,7 +625,7 @@ func TestW3C_expand_text(t *testing.T) {
 		{Name: "cvt-022", StylesheetPath: "tests/attr/expand-text/cvt-022.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = '{{2+2}}'")}},
 		{Name: "cvt-023", StylesheetPath: "tests/attr/expand-text/cvt-023.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = 'The Lord of the Rings'")}},
 		{Name: "cvt-024", StylesheetPath: "tests/attr/expand-text/cvt-024.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"{The value of a}\"")}},
-		{Name: "cvt-025", StylesheetPath: "tests/attr/expand-text/cvt-025.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"23\"")}, Skip: "unsupported feature: schema_aware"},
+		{Name: "cvt-025", StylesheetPath: "tests/attr/expand-text/cvt-025.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"23\"")}},
 		{Name: "cvt-026", StylesheetPath: "tests/attr/expand-text/cvt-026.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"http://www.example.com/cvt\"")}},
 		{Name: "cvt-027", StylesheetPath: "tests/attr/expand-text/cvt-027.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out = \"London\"")}},
 		{Name: "cvt-028", StylesheetPath: "tests/attr/expand-text/cvt-028.xsl", InitialTemplate: "main", Assertions: []w3cAssertion{w3cAssertXPath("/out/n[1] = \"\""), w3cAssertXPath("/out/n[2] = \"\""), w3cAssertXPath("/out/n[3] = \"3\""), w3cAssertXPath("empty(/out/n[4])")}},
