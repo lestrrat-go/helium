@@ -6,6 +6,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xsd"
 )
 
 func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
@@ -98,22 +99,33 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 
 	// Apply type validation if specified.
 	if inst.TypeName != "" {
-		// XTTE1535: type annotation is only valid for element nodes.
-		if ec.contextNode != nil && ec.contextNode.Type() != helium.ElementNode {
-			return dynamicError(errCodeXTTE1535,
-				"copy: type attribute cannot be applied to %s node", ec.contextNode.Type())
+		// For xsl:copy, the type attribute is only applied to element/attribute
+		// context nodes. For text/comment/PI, it is silently ignored.
+		isElemOrAttr := ec.contextNode != nil &&
+			(ec.contextNode.Type() == helium.ElementNode || ec.contextNode.Type() == helium.AttributeNode)
+		// XTTE1535: complex type on non-element node.
+		if !isElemOrAttr && ec.schemaRegistry != nil {
+			td, _, found := ec.schemaRegistry.LookupTypeDef(inst.TypeName)
+			// XTTE1535: complex type (any type with attributes, element content,
+			// or mixed content) cannot be applied to non-element nodes.
+			if found && isComplexTypeDef(td) {
+				return dynamicError(errCodeXTTE1535,
+					"copy: complex type %s cannot be applied to %s node", inst.TypeName, ec.contextNode.Type())
+			}
 		}
-		out := ec.currentOutput()
-		if copied := out.current.LastChild(); copied != nil {
-			if copiedElem, ok := copied.(*helium.Element); ok {
-				if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil {
-					if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
-						return dynamicError(errCodeXTTE1540,
-							"element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
+		if isElemOrAttr {
+			out := ec.currentOutput()
+			if copied := out.current.LastChild(); copied != nil {
+				if copiedElem, ok := copied.(*helium.Element); ok {
+					if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil {
+						if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
+							return dynamicError(errCodeXTTE1540,
+								"element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
+						}
+						return err
 					}
-					return err
+					ec.annotateNode(copiedElem, inst.TypeName)
 				}
-				ec.annotateNode(copiedElem, inst.TypeName)
 			}
 		}
 	}
@@ -130,6 +142,22 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		}
 	}
 	return nil
+}
+
+// isComplexTypeDef returns true if the TypeDef represents a complex type (has
+// attributes, element content, mixed content, or simpleContent with attributes).
+func isComplexTypeDef(td *xsd.TypeDef) bool {
+	if len(td.Attributes) > 0 || td.AnyAttribute != nil {
+		return true
+	}
+	switch td.ContentType {
+	case xsd.ContentTypeElementOnly, xsd.ContentTypeMixed, xsd.ContentTypeEmpty:
+		return true
+	}
+	if td.ContentModel != nil {
+		return true
+	}
+	return false
 }
 
 // effectiveValidation returns the validation mode for a copy/copy-of instruction,
@@ -350,8 +378,8 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 				return err
 			}
 			if inst.TypeName != "" {
-				// XTTE1535: type annotation is only valid for element/document nodes.
-				if v.Node.Type() != helium.ElementNode && v.Node.Type() != helium.DocumentNode {
+				// XTTE1535: type annotation is only valid for element/attribute/document nodes.
+				if v.Node.Type() != helium.ElementNode && v.Node.Type() != helium.AttributeNode && v.Node.Type() != helium.DocumentNode {
 					return dynamicError(errCodeXTTE1535,
 						"copy-of: type attribute cannot be applied to %s node", v.Node.Type())
 				}
