@@ -269,6 +269,17 @@ func TestPublicStringArgsPreserveAtomizationErrors(t *testing.T) {
 	}
 }
 
+func TestResolveQNameRejectsMalformedQName(t *testing.T) {
+	doc := parseTestDoc(t)
+
+	_, err := xpath3.Evaluate(t.Context(), doc, `resolve-QName("pre:thi:ng", /library/book[1])`)
+	require.Error(t, err)
+
+	var xpErr *xpath3.XPathError
+	require.ErrorAs(t, err, &xpErr)
+	require.Equal(t, "FOCA0002", xpErr.Code)
+}
+
 func TestJSONDocUsesURIResolverAndBaseURI(t *testing.T) {
 	ctx := xpath3.WithBaseURI(t.Context(), "http://example.com/base/")
 	ctx = xpath3.WithURIResolver(ctx, testURIResolver{

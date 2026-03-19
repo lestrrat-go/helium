@@ -27,27 +27,13 @@ func fnQName(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	prefix := ""
-	local := qname
-	if idx := strings.IndexByte(qname, ':'); idx >= 0 {
-		prefix = qname[:idx]
-		local = qname[idx+1:]
-		// Empty prefix with colon (e.g., ":person") is invalid
-		if prefix == "" {
-			return nil, &XPathError{Code: errCodeFOCA0002, Message: "invalid QName: " + qname}
-		}
+	prefix, local, err := parseLexicalQName(qname)
+	if err != nil {
+		return nil, err
 	}
 	// Validate: if there's a prefix, namespace must be non-empty
 	if prefix != "" && uri == "" {
 		return nil, &XPathError{Code: errCodeFOCA0002, Message: "namespace must not be empty when QName has a prefix"}
-	}
-	// Validate: prefix (if present) must be a valid NCName
-	if prefix != "" && !isValidNCName(prefix) {
-		return nil, &XPathError{Code: errCodeFOCA0002, Message: "invalid prefix in QName: " + prefix}
-	}
-	// Validate: local part must be a valid NCName
-	if !isValidNCName(local) {
-		return nil, &XPathError{Code: errCodeFOCA0002, Message: "invalid local name in QName: " + local}
 	}
 	return SingleAtomic(AtomicValue{
 		TypeName: TypeQName,
@@ -143,11 +129,9 @@ func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "resolve-QName: expected element node"}
 	}
 
-	prefix := ""
-	local := qnameStr
-	if idx := strings.IndexByte(qnameStr, ':'); idx >= 0 {
-		prefix = qnameStr[:idx]
-		local = qnameStr[idx+1:]
+	prefix, local, err := parseLexicalQName(qnameStr)
+	if err != nil {
+		return nil, err
 	}
 
 	uri := ""
@@ -169,6 +153,25 @@ func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
 		TypeName: TypeQName,
 		Value:    QNameValue{Prefix: prefix, Local: local, URI: uri},
 	}), nil
+}
+
+func parseLexicalQName(qname string) (string, string, error) {
+	prefix := ""
+	local := qname
+	if idx := strings.IndexByte(qname, ':'); idx >= 0 {
+		prefix = qname[:idx]
+		local = qname[idx+1:]
+		if prefix == "" {
+			return "", "", &XPathError{Code: errCodeFOCA0002, Message: "invalid QName: " + qname}
+		}
+	}
+	if prefix != "" && !isValidNCName(prefix) {
+		return "", "", &XPathError{Code: errCodeFOCA0002, Message: "invalid prefix in QName: " + prefix}
+	}
+	if !isValidNCName(local) {
+		return "", "", &XPathError{Code: errCodeFOCA0002, Message: "invalid local name in QName: " + local}
+	}
+	return prefix, local, nil
 }
 
 func coerceQNameString(seq Sequence, allowEmpty, allowAnyURI bool, message string) (string, error) {
