@@ -3,7 +3,6 @@ package xslt3
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -98,31 +97,6 @@ func (ec *execContext) schemaTypeName(uri, local string) string {
 		return xpath3.QAnnotation(uri, local)
 	}
 	return local
-}
-
-func (ec *execContext) schemaPrefixes(uri string) []string {
-	if uri == "" {
-		return nil
-	}
-	ns := make(map[string]string, len(ec.stylesheet.namespaces)+1)
-	collectPackageNamespaces(ec.stylesheet, ns)
-	for k, v := range ec.stylesheet.namespaces {
-		ns[k] = v
-	}
-	if ec.currentPackage != nil {
-		for k, v := range ec.currentPackage.namespaces {
-			ns[k] = v
-		}
-	}
-	var prefixes []string
-	for prefix, nsURI := range ns {
-		if prefix == "" || nsURI != uri {
-			continue
-		}
-		prefixes = append(prefixes, prefix)
-	}
-	slices.Sort(prefixes)
-	return prefixes
 }
 
 func schemaTypeVariety(td *xsd.TypeDef) xsd.TypeVariety {
