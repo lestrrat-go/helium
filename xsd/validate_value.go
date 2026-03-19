@@ -17,6 +17,17 @@ func resolveWhiteSpace(td *TypeDef) string {
 		if cur.Facets != nil && cur.Facets.WhiteSpace != nil {
 			return *cur.Facets.WhiteSpace
 		}
+		// Check if we've reached a built-in type with known whitespace behavior.
+		if cur.Name.NS == "http://www.w3.org/2001/XMLSchema" {
+			switch cur.Name.Local {
+			case "string":
+				return "preserve"
+			case "normalizedString":
+				return "replace"
+			}
+			// All other built-in types default to collapse.
+			return "collapse"
+		}
 	}
 	return "collapse"
 }
