@@ -415,17 +415,6 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 		}
 		return AtomicValue{TypeName: targetType, Value: n}, nil
 	}
-	// XSD integer subtypes: parse as integer, validate range, store as xs:integer
-	if isIntegerSubtype(targetType) {
-		n, ok := new(big.Int).SetString(s, 10)
-		if !ok {
-			return AtomicValue{}, castError(s, targetType)
-		}
-		if err := validateIntegerRange(n, targetType); err != nil {
-			return AtomicValue{}, err
-		}
-		return AtomicValue{TypeName: TypeInteger, Value: n}, nil
-	}
 	return AtomicValue{}, &XPathError{
 		Code:    errCodeXPTY0004,
 		Message: "cannot cast string to " + targetType,
