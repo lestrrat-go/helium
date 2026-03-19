@@ -64,19 +64,16 @@ func extractTime(seq Sequence, allowedTypes ...string) (time.Time, bool, error) 
 		return time.Time{}, false, &XPathError{Code: errCodeXPTY0004, Message: "expected " + allowedTypes[0] + ", got " + a.TypeName}
 	}
 	if len(allowedTypes) > 0 {
-		// Promote user-defined types to built-in for type matching.
-		checkType := a.TypeName
-		if !IsKnownXSDType(checkType) {
-			checkType = PromoteSchemaType(a).TypeName
-		}
 		matched := false
 		for _, at := range allowedTypes {
-			if isSubtypeOf(checkType, at) {
+			if isSubtypeOf(a.TypeName, at) {
 				matched = true
 				break
 			}
 		}
-		if !matched {
+		// For user-defined types, the Go value is time.Time which we already
+		// validated above — accept it without type-name check.
+		if !matched && IsKnownXSDType(a.TypeName) {
 			return time.Time{}, false, &XPathError{Code: errCodeXPTY0004, Message: "expected " + allowedTypes[0] + ", got " + a.TypeName}
 		}
 	}

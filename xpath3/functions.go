@@ -296,9 +296,10 @@ func coerceArgToDoubleRequired(seq Sequence) (float64, error) {
 		}
 		a = casted
 	}
-	if !isSubtypeOf(a.TypeName, TypeNumeric) {
+	if !a.IsNumeric() {
 		return 0, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected xs:double, got %s", a.TypeName)}
 	}
+	a = PromoteSchemaType(a)
 	return a.ToFloat64(), nil
 }
 
