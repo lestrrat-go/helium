@@ -95,7 +95,7 @@ func (ec *execContext) schemaTypeName(uri, local string) string {
 	// Use Q{ns}local annotation format for consistency with type annotations
 	// from schema validation and XPath instance-of checks.
 	if uri != "" {
-		return "Q{" + uri + "}" + local
+		return xpath3.QAnnotation(uri, local)
 	}
 	return local
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/catalog"
+	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
 
@@ -108,7 +109,7 @@ func resolveXSDTypeName(qname string, nsBindings map[string]string) string {
 				return "xs:" + local
 			}
 			// User-defined type: resolve to Q{ns}local canonical form.
-			return "Q{" + uri + "}" + local
+			return xpath3.QAnnotation(uri, local)
 		}
 	}
 	return qname

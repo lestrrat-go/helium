@@ -418,7 +418,7 @@ func resolveTestTypeName(raw string, ec *evalContext) string {
 				if uri == catalog.XSD {
 					return "xs:" + local
 				}
-				return "Q{" + uri + "}" + local
+				return QAnnotation(uri, local)
 			}
 		}
 	}

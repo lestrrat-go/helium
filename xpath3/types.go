@@ -122,6 +122,11 @@ const (
 	TypeNOTATION      = "xs:NOTATION"
 )
 
+// QAnnotation returns the Q{ns}local annotation format for a namespace URI and local name.
+func QAnnotation(ns, local string) string {
+	return "Q{" + ns + "}" + local
+}
+
 // isSubtypeOf returns true if actualType is the same as or a subtype of targetType
 // per the XSD type hierarchy.
 // subtypeCache caches isSubtypeOf results. The type hierarchy is static,

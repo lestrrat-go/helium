@@ -442,7 +442,7 @@ func xsdTypeNameFromDef(td *xsd.TypeDef) string {
 		return "xs:" + td.Name.Local
 	}
 	if td.Name.NS != "" {
-		return "Q{" + td.Name.NS + "}" + td.Name.Local
+		return xpath3.QAnnotation(td.Name.NS, td.Name.Local)
 	}
 	if td.Name.Local != "" {
 		return "Q{}" + td.Name.Local

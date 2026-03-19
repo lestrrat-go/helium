@@ -77,7 +77,7 @@ func evalCastExpr(ec *evalContext, e CastExpr) (Sequence, error) {
 				}
 				// Validate facets for user-defined types using Q{ns}local format.
 				s, _ := AtomicToString(result)
-				annName := "Q{" + ns + "}" + e.Type.Name
+				annName := QAnnotation(ns, e.Type.Name)
 				if facetErr := ec.schemaDeclarations.ValidateCast(s, annName); facetErr != nil {
 					return nil, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, facetErr)}
 				}
@@ -132,7 +132,7 @@ func evalCastableExpr(ec *evalContext, e CastableExpr) (Sequence, error) {
 		if e.Type.Prefix != "" && ec.namespaces != nil {
 			ns = ec.namespaces[e.Type.Prefix]
 		}
-		annName := "Q{" + ns + "}" + e.Type.Name
+		annName := QAnnotation(ns, e.Type.Name)
 		if builtinBase := resolveToBuiltinBase(e.Type.Name, ns, ec.schemaDeclarations); builtinBase != "" {
 			result, baseErr := CastAtomic(av, builtinBase)
 			if baseErr == nil {
@@ -200,7 +200,7 @@ func resolveAtomicTypeName(tn AtomicTypeName, ec *evalContext) string {
 				return "xs:" + tn.Name
 			}
 			// Non-XSD namespace: use Q{ns}local annotation format
-			return "Q{" + uri + "}" + tn.Name
+			return QAnnotation(uri, tn.Name)
 		}
 	}
 	return tn.Prefix + ":" + tn.Name
