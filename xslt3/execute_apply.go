@@ -285,39 +285,63 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 
 	// Set template params with defaults, overrides, or tunnel values
 	for _, p := range tmpl.Params {
+		var (
+			val        xpath3.Sequence
+			fromCaller bool
+		)
+
 		if p.Tunnel {
 			// Tunnel param: receive from tunnel context
 			if ec.tunnelParams != nil {
-				if val, ok := ec.tunnelParams[p.Name]; ok {
-					ec.setVar(p.Name, val)
-					continue
+				if v, ok := ec.tunnelParams[p.Name]; ok {
+					val = v
+					fromCaller = true
 				}
 			}
-		} else if val, ok := paramOverrides[p.Name]; ok {
-			ec.setVar(p.Name, val)
-			continue
+		} else if v, ok := paramOverrides[p.Name]; ok {
+			val = v
+			fromCaller = true
 		}
-		// Use default value
-		if p.Select != nil {
+
+		if !fromCaller && p.Select != nil {
 			xpathCtx := ec.newXPathContext(ec.contextNode)
 			result, err := p.Select.Evaluate(xpathCtx, ec.contextNode)
 			if err != nil {
 				return err
 			}
-			ec.setVar(p.Name, result.Sequence())
-		} else if len(p.Body) > 0 {
+			val = result.Sequence()
+		} else if !fromCaller && len(p.Body) > 0 {
 			// Per XSLT spec: param body without select produces a
 			// document node (temporary tree).
 			ec.temporaryOutputDepth++
-			val, err := ec.evaluateBodyAsDocument(ctx, p.Body)
+			var err error
+			if p.As != "" {
+				val, err = ec.evaluateBodyAsSequence(ctx, p.Body)
+			} else {
+				val, err = ec.evaluateBodyAsDocument(ctx, p.Body)
+			}
 			ec.temporaryOutputDepth--
 			if err != nil {
 				return err
 			}
-			ec.setVar(p.Name, val)
-		} else {
-			ec.setVar(p.Name, xpath3.EmptySequence())
+		} else if !fromCaller {
+			val = xpath3.EmptySequence()
 		}
+
+		if p.As != "" && len(val) > 0 {
+			st := parseSequenceType(p.As)
+			errCode := errCodeXTTE0570
+			if fromCaller {
+				errCode = errCodeXTTE0590
+			}
+			checked, err := checkSequenceType(val, st, errCode, "param $"+p.Name, ec)
+			if err != nil {
+				return err
+			}
+			val = checked
+		}
+
+		ec.setVar(p.Name, val)
 	}
 
 	if tmpl.As != "" {
