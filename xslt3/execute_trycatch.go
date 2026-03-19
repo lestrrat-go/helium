@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/catalog"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -218,7 +218,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 	// Extract error code and QName from the error.
 	// Unwrap wrapper errors (e.g., AVT XTDE0045 wrapping FOAR0001) to find
 	// the most specific XPath/XSLT error code for catch clause matching.
-	errNS := catalog.Err
+	errNS := lexicon.Err
 	errCode := errCodeXSLT0000
 	errDesc := tryErr.Error()
 	var errQName xpath3.QNameValue
@@ -371,7 +371,7 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *TryCatc
 	ec.pushVarScope()
 	defer ec.popVarScope()
 
-	errNS := catalog.Err
+	errNS := lexicon.Err
 	errCode := errCodeXSLT0000
 	errDesc := tryErr.Error()
 	var errQName xpath3.QNameValue

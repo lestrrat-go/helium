@@ -1,45 +1,14 @@
 // Package catalog implements OASIS XML Catalog resolution for public/system
-// identifiers and URIs, and provides well-known namespace URI constants used
-// across the helium module. This is an internal package — use the public
+// identifiers and URIs. This is an internal package — use the public
 // github.com/lestrrat-go/helium/catalog package instead.
 package catalog
 
 const (
-	// CatalogNamespace is the OASIS XML Catalog namespace.
-	CatalogNamespace = "urn:oasis:names:tc:entity:xmlns:xml:catalog"
-
 	// MaxDepth is the maximum recursion depth for catalog resolution.
 	MaxDepth = 50
 
 	// MaxDelegates is the maximum number of delegate catalogs per resolution.
 	MaxDelegates = 50
-
-	// XSLT is the XSLT 1.0/2.0/3.0 namespace.
-	XSLT = "http://www.w3.org/1999/XSL/Transform"
-
-	// XSD is the W3C XML Schema namespace.
-	XSD = "http://www.w3.org/2001/XMLSchema"
-
-	// Fn is the XPath 3.1 standard function namespace.
-	Fn = "http://www.w3.org/2005/xpath-functions"
-
-	// Math is the XPath 3.1 math function namespace.
-	Math = "http://www.w3.org/2005/xpath-functions/math"
-
-	// Map is the XPath 3.1 map function namespace.
-	Map = "http://www.w3.org/2005/xpath-functions/map"
-
-	// Array is the XPath 3.1 array function namespace.
-	Array = "http://www.w3.org/2005/xpath-functions/array"
-
-	// Err is the XPath/XQuery error namespace.
-	Err = "http://www.w3.org/2005/xqt-errors"
-
-	// XML is the XML namespace (predeclared, prefix "xml").
-	XML = "http://www.w3.org/XML/1998/namespace"
-
-	// XMLNS is the XML Namespaces namespace (prefix "xmlns").
-	XMLNS = "http://www.w3.org/2000/xmlns/"
 )
 
 // Prefer controls whether public or system identifiers take precedence
@@ -93,10 +62,10 @@ type visitedKey struct {
 
 // Catalog holds parsed catalog entries and provides resolution.
 type Catalog struct {
-	Entries       []Entry
-	Prefer        Prefer
-	BaseURI       string
-	Depth         int // recursion guard (shared across resolution chain)
+	Entries []Entry
+	Prefer  Prefer
+	BaseURI string
+	Depth   int // recursion guard (shared across resolution chain)
 	Loader  Loader
 	visited map[visitedKey]struct{}
 }

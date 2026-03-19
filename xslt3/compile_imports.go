@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/catalog"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -538,7 +538,7 @@ func findElementByID(doc *helium.Document, id string) *helium.Element {
 			if v, found := elem.GetAttribute("id"); found && v == id {
 				return elem
 			}
-			if v, found := elem.GetAttributeNS("id", catalog.XML); found && v == id {
+			if v, found := elem.GetAttributeNS("id", lexicon.XML); found && v == id {
 				return elem
 			}
 			if result := walk(elem); result != nil {

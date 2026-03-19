@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/catalog"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -415,7 +415,7 @@ func resolveTestTypeName(raw string, ec *evalContext) string {
 		}
 		if ec != nil && ec.namespaces != nil {
 			if uri, ok := ec.namespaces[prefix]; ok {
-				if uri == catalog.XSD {
+				if uri == lexicon.XSD {
 					return "xs:" + local
 				}
 				return QAnnotation(uri, local)

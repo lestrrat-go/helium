@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/lestrrat-go/helium/internal/catalog"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
@@ -89,7 +89,7 @@ func schemaConstructorArg(seq xpath3.Sequence, typeName string) (xpath3.AtomicVa
 }
 
 func (ec *execContext) schemaTypeName(uri, local string) string {
-	if uri == catalog.XSD {
+	if uri == lexicon.XSD {
 		return "xs:" + local
 	}
 	// Use Q{ns}local annotation format for consistency with type annotations
@@ -233,7 +233,7 @@ func schemaBuiltinXPathType(td *xsd.TypeDef) string {
 
 func schemaBuiltinBaseLocal(td *xsd.TypeDef) string {
 	for cur := td; cur != nil; cur = cur.BaseType {
-		if cur.Name.NS == catalog.XSD && cur.Name.Local != "" {
+		if cur.Name.NS == lexicon.XSD && cur.Name.Local != "" {
 			return cur.Name.Local
 		}
 	}

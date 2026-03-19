@@ -9,6 +9,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // loader implements icatalog.Loader using helium's parser.
@@ -75,9 +76,9 @@ func loadFromBytes(ctx context.Context, data []byte, baseURI string, eh helium.E
 		return nil, fmt.Errorf("catalog: no root element in %q", baseURI)
 	}
 
-	if root.URI() != icatalog.CatalogNamespace {
+	if root.URI() != lexicon.Catalog {
 		return nil, fmt.Errorf("catalog: root element namespace %q is not %q in %q",
-			root.URI(), icatalog.CatalogNamespace, baseURI)
+			root.URI(), lexicon.Catalog, baseURI)
 	}
 
 	cat := &icatalog.Catalog{
@@ -107,7 +108,7 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 		}
 		elem := child.(*helium.Element)
 
-		if elem.URI() != icatalog.CatalogNamespace {
+		if elem.URI() != lexicon.Catalog {
 			continue
 		}
 

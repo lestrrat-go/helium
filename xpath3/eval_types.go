@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/catalog"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -196,7 +196,7 @@ func resolveAtomicTypeName(tn AtomicTypeName, ec *evalContext) string {
 	// Resolve via namespace context
 	if ec.namespaces != nil {
 		if uri, ok := ec.namespaces[tn.Prefix]; ok {
-			if uri == catalog.XSD {
+			if uri == lexicon.XSD {
 				return "xs:" + tn.Name
 			}
 			// Non-XSD namespace: use Q{ns}local annotation format

@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/lestrrat-go/helium/internal/catalog"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // Function is the interface for XPath 3.1 functions, both built-in and user-defined.
@@ -18,12 +18,12 @@ type Function interface {
 
 // Namespace URIs for standard XPath 3.1 function namespaces.
 const (
-	NSFn    = catalog.Fn
-	NSMath  = catalog.Math
-	NSMap   = catalog.Map
-	NSArray = catalog.Array
-	NSErr   = catalog.Err
-	NSXS    = catalog.XSD
+	NSFn    = lexicon.Fn
+	NSMath  = lexicon.Math
+	NSMap   = lexicon.Map
+	NSArray = lexicon.Array
+	NSErr   = lexicon.Err
+	NSXS    = lexicon.XSD
 )
 
 // Default prefix → URI mappings.
