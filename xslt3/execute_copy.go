@@ -102,7 +102,8 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		if copied := out.current.LastChild(); copied != nil {
 			if copiedElem, ok := copied.(*helium.Element); ok {
 				if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil {
-					if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
+					var xsltErr *XSLTError
+					if errors.As(err, &xsltErr) && xsltErr.Code == errCodeXTTE1510 {
 						return dynamicError(errCodeXTTE1540,
 							"element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
 					}
@@ -349,7 +350,8 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 				if copied := out.current.LastChild(); copied != nil {
 					if copiedElem, ok := copied.(*helium.Element); ok {
 						if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil {
-							if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
+							var xsltErr *XSLTError
+							if errors.As(err, &xsltErr) && xsltErr.Code == errCodeXTTE1510 {
 								return dynamicError(errCodeXTTE1540,
 									"copy-of: element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
 							}
