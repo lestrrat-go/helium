@@ -299,6 +299,18 @@ func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, cfg *
 				out.WriteString(validityErrorAttr(filename, elem.Line(), elemDisplayName(elem), ad, msg))
 				hasErr = true
 			}
+			// Validate the attribute value against its declared type.
+			if au.TypeName.Local != "" {
+				attrTD, tdOK := schema.LookupType(au.TypeName.Local, au.TypeName.NS)
+				if tdOK && attrTD.ContentType == ContentTypeSimple {
+					if err := ValidateSimpleValue(a.Value(), attrTD); err != nil {
+						ad := attrDisplayName(a)
+						msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
+						out.WriteString(validityErrorAttr(filename, elem.Line(), elemDisplayName(elem), ad, msg))
+						hasErr = true
+					}
+				}
+			}
 			// Annotate the attribute with its declared type.
 			annotateAttrUse(cfg, a, au, schema)
 			continue
