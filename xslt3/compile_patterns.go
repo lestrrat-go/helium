@@ -699,9 +699,86 @@ func nodeMatchesTest(ctx *execContext, test xpath3.NodeTest, node helium.Node) b
 		return matchDocumentTest(ctx, nt, node)
 	case xpath3.NamespaceNodeTest:
 		return node.Type() == helium.NamespaceNode
+	case xpath3.SchemaElementTest:
+		return matchSchemaElementTest(ctx, nt, node)
+	case xpath3.SchemaAttributeTest:
+		return matchSchemaAttributeTest(ctx, nt, node)
 	default:
 		return false
 	}
+}
+
+// matchSchemaElementTest checks if a node matches a schema-element(name) test.
+func matchSchemaElementTest(ctx *execContext, t xpath3.SchemaElementTest, node helium.Node) bool {
+	if node.Type() != helium.ElementNode {
+		return false
+	}
+	elem := node.(*helium.Element)
+	// Resolve the schema element name.
+	prefix, local := splitQNamePair(t.Name)
+	ns := ""
+	if prefix != "" {
+		ns = ctx.stylesheet.namespaces[prefix]
+	} else if ctx.hasXPathDefaultNS {
+		ns = ctx.xpathDefaultNS
+	}
+	// Check name match (direct or substitution group).
+	nameMatch := elem.LocalName() == local && elem.URI() == ns
+	if !nameMatch && ctx.schemaRegistry != nil {
+		nameMatch = ctx.schemaRegistry.IsSubstitutionGroupMember(elem.LocalName(), elem.URI(), local, ns)
+	}
+	if !nameMatch {
+		return false
+	}
+	// Check schema declaration exists.
+	if ctx.schemaRegistry == nil {
+		return false
+	}
+	declType, found := ctx.schemaRegistry.LookupElement(local, ns)
+	if !found {
+		return false
+	}
+	// Check type annotation.
+	ann := ""
+	if ctx.typeAnnotations != nil {
+		ann = ctx.typeAnnotations[node]
+	}
+	if ann == "" || ann == "xs:untyped" {
+		return true // untyped nodes match when declaration exists
+	}
+	if ann == declType || ctx.schemaRegistry.IsSubtypeOf(ann, declType) {
+		return true
+	}
+	return false
+}
+
+// matchSchemaAttributeTest checks if a node matches a schema-attribute(name) test.
+func matchSchemaAttributeTest(ctx *execContext, t xpath3.SchemaAttributeTest, node helium.Node) bool {
+	if node.Type() != helium.AttributeNode {
+		return false
+	}
+	attr := node.(*helium.Attribute)
+	prefix, local := splitQNamePair(t.Name)
+	ns := ""
+	if prefix != "" {
+		ns = ctx.stylesheet.namespaces[prefix]
+	}
+	if attr.LocalName() != local || attr.URI() != ns {
+		return false
+	}
+	if ctx.schemaRegistry == nil {
+		return false
+	}
+	_, found := ctx.schemaRegistry.LookupAttribute(local, ns)
+	return found
+}
+
+// splitQNamePair splits "prefix:local" into (prefix, local) or ("", name).
+func splitQNamePair(name string) (string, string) {
+	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		return name[:idx], name[idx+1:]
+	}
+	return "", name
 }
 
 func matchTypeTest(tt xpath3.TypeTest, node helium.Node) bool {
