@@ -446,7 +446,18 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 		if attrErr != nil {
 			return attrErr
 		}
-		out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: attr})
+		ni := xpath3.NodeItem{Node: attr}
+		if inst.TypeName != "" {
+			ec.annotateNode(attr, inst.TypeName)
+			ni.TypeAnnotation = inst.TypeName
+			// Set ListItemType for list types (built-in or schema-defined).
+			if ec.schemaRegistry != nil {
+				if itemType, ok := ec.schemaRegistry.ListItemType(inst.TypeName); ok {
+					ni.ListItemType = itemType
+				}
+			}
+		}
+		out.pendingItems = append(out.pendingItems, ni)
 		out.noteOutput()
 		return nil
 	}

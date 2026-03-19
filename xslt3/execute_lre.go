@@ -202,8 +202,7 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *liter
 	if inst.TypeName != "" {
 		if err := ec.validateAndNormalizeElementContent(elem, inst.TypeName); err != nil {
 			// Convert XTTE1510 to XTTE1540 for xsl:type on LRE.
-			var xsltErr *XSLTError
-			if errors.As(err, &xsltErr) && xsltErr.Code == errCodeXTTE1510 {
+			if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
 				return dynamicError(errCodeXTTE1540,
 					"element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
 			}

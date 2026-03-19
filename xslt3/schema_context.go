@@ -163,6 +163,22 @@ func (r *schemaRegistry) ValidateCast(value, typeName string) error {
 	return xsd.ValidateSimpleValue(value, td)
 }
 
+// ListItemType implements xpath3.SchemaDeclarations.
+// For list types, returns the item type name in annotation format.
+func (r *schemaRegistry) ListItemType(typeName string) (string, bool) {
+	td, _, found := r.LookupTypeDef(typeName)
+	if !found {
+		return "", false
+	}
+	// Walk up the type chain to find the list variety.
+	for cur := td; cur != nil; cur = cur.BaseType {
+		if cur.Variety == xsd.TypeVarietyList && cur.ItemType != nil {
+			return xsdTypeNameFromDef(cur.ItemType), true
+		}
+	}
+	return "", false
+}
+
 // isXSBuiltin returns true if the annotation name is an xs: built-in type.
 func isXSBuiltin(name string) bool {
 	return len(name) > 3 && name[:3] == "xs:"

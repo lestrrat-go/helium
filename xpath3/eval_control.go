@@ -1,6 +1,7 @@
 package xpath3
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -264,7 +265,7 @@ func evalTryCatchExpr(ec *evalContext, e TryCatchExpr) (Sequence, error) {
 	if err == nil {
 		return result, nil
 	}
-	xpErr, ok := err.(*XPathError)
+	xpErr, ok := errors.AsType[*XPathError](err)
 	if !ok {
 		return nil, err // non-XPath errors propagate through
 	}

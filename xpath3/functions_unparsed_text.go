@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"errors"
 
 	"github.com/lestrrat-go/helium/internal/unparsedtext"
 )
@@ -33,7 +34,7 @@ func wrapUnparsedTextError(err error) error {
 	if err == nil {
 		return nil
 	}
-	if ue, ok := err.(*unparsedtext.Error); ok {
+	if ue, ok := errors.AsType[*unparsedtext.Error](err); ok {
 		return &XPathError{Code: ue.Code, Message: ue.Message}
 	}
 	return err

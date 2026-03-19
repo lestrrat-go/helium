@@ -45,8 +45,8 @@ func TestXPathErrorIs(t *testing.T) {
 	t.Run("errors.As extracts XPathError", func(t *testing.T) {
 		inner := &xpath3.XPathError{Code: "FORG0001", Message: "invalid value"}
 		wrapped := fmt.Errorf("eval failed: %w", inner)
-		var xpErr *xpath3.XPathError
-		require.True(t, errors.As(wrapped, &xpErr))
+		xpErr, ok := errors.AsType[*xpath3.XPathError](wrapped)
+		require.True(t, ok)
 		assert.Equal(t, "FORG0001", xpErr.Code)
 	})
 }

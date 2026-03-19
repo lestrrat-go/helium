@@ -48,6 +48,7 @@ type NodeItem struct {
 	Node           helium.Node
 	TypeAnnotation string // optional xs:... type annotation (schema-aware)
 	AtomizedType   string // optional built-in base type used for typed atomization
+	ListItemType   string // non-empty when the type is a list; the item type name
 }
 
 func (NodeItem) itemTag() {}

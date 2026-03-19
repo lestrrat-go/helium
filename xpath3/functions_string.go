@@ -220,16 +220,20 @@ func fnStringJoin(_ context.Context, args []Sequence) (Sequence, error) {
 			return nil, err
 		}
 	}
+	// Atomize the entire sequence (expands list types to multiple items).
+	atoms, err := AtomizeSequence(args[0])
+	if err != nil {
+		return nil, err
+	}
 	var b strings.Builder
-	for i, item := range args[0] {
+	for i, a := range atoms {
 		if i > 0 && sep != "" {
 			b.WriteString(sep)
 		}
-		a, err := AtomizeItem(item)
+		s, err := atomicToString(a)
 		if err != nil {
 			return nil, err
 		}
-		s, _ := atomicToString(a)
 		b.WriteString(s)
 	}
 	return SingleString(b.String()), nil

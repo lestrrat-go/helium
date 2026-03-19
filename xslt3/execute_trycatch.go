@@ -222,24 +222,24 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 	errCode := errCodeXSLT0000
 	errDesc := tryErr.Error()
 	var errQName xpath3.QNameValue
-	if xErr, ok := tryErr.(*XSLTError); ok {
+	if xErr, ok := errors.AsType[*XSLTError](tryErr); ok {
 		errCode = xErr.Code
 		errDesc = xErr.Message
 		errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: errCode}
 		// If this is a wrapper error (like XTDE0045 for AVT), check inner
 		// cause for a more specific error code.
 		if xErr.Cause != nil {
-			if innerXP, ok := xErr.Cause.(*xpath3.XPathError); ok {
+			if innerXP, ok := errors.AsType[*xpath3.XPathError](xErr.Cause); ok {
 				errCode = innerXP.Code
 				errDesc = innerXP.Message
 				errQName = innerXP.CodeQName()
-			} else if innerXS, ok := xErr.Cause.(*XSLTError); ok {
+			} else if innerXS, ok := errors.AsType[*XSLTError](xErr.Cause); ok {
 				errCode = innerXS.Code
 				errDesc = innerXS.Message
 				errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: innerXS.Code}
 			}
 		}
-	} else if xpErr, ok := tryErr.(*xpath3.XPathError); ok {
+	} else if xpErr, ok := errors.AsType[*xpath3.XPathError](tryErr); ok {
 		errCode = xpErr.Code
 		errDesc = xpErr.Message
 		errQName = xpErr.CodeQName()
@@ -284,7 +284,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 	// $err:value carries the sequence associated with the error.
 	// For xsl:message terminate="yes", this is the message body content.
 	errValueSeq := xpath3.EmptySequence()
-	if xErr, ok := tryErr.(*XSLTError); ok {
+	if xErr, ok := errors.AsType[*XSLTError](tryErr); ok {
 		if seq, ok := xErr.Value.(xpath3.Sequence); ok && len(seq) > 0 {
 			// Copy nodes into the result document so they are usable
 			// in the catch body's output tree.
@@ -375,7 +375,7 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *TryCatc
 	errCode := errCodeXSLT0000
 	errDesc := tryErr.Error()
 	var errQName xpath3.QNameValue
-	if xErr, ok := tryErr.(*XSLTError); ok {
+	if xErr, ok := errors.AsType[*XSLTError](tryErr); ok {
 		errCode = xErr.Code
 		errDesc = xErr.Message
 		errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: errCode}

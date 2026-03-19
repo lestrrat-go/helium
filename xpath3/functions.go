@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -188,16 +189,23 @@ func registerNS(uri, name string, min, max int, fn func(context.Context, []Seque
 	}
 }
 
-// seqToStringErr atomizes the first item to a string, propagating errors.
+// seqToStringErr atomizes the argument to a string, propagating errors.
+// For list-typed nodes, atomization may produce multiple items → XPTY0004.
 func seqToStringErr(seq Sequence) (string, error) {
 	if len(seq) == 0 {
 		return "", nil
 	}
-	a, err := AtomizeItem(seq[0])
+	atoms, err := AtomizeSequence(seq)
 	if err != nil {
 		return "", err
 	}
-	return atomicToString(a)
+	if len(atoms) == 0 {
+		return "", nil
+	}
+	if len(atoms) > 1 {
+		return "", &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected single string, got sequence of length %d", len(atoms))}
+	}
+	return atomicToString(atoms[0])
 }
 
 // coerceArgToStringRequired applies XPath 3.1 function coercion rules for xs:string params.
@@ -279,7 +287,7 @@ func coerceArgToInteger(seq Sequence) (int64, error) {
 func coerceArgToDoubleRequired(seq Sequence) (float64, error) {
 	a, err := extractSingleAtomicArg(seq, "xs:double")
 	if err != nil {
-		if xpErr, ok := err.(*XPathError); ok {
+		if xpErr, ok := errors.AsType[*XPathError](err); ok {
 			switch {
 			case strings.Contains(xpErr.Message, "empty sequence"):
 				return 0, &XPathError{Code: errCodeXPTY0004, Message: "expected xs:double, got empty sequence"}

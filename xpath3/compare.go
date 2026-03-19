@@ -7,6 +7,8 @@ import (
 	"math/big"
 	"strings"
 	"time"
+
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
 // evalGeneralComparison implements general comparison (= != < <= > >=).
@@ -296,6 +298,28 @@ func (it *atomicSequenceIter) Next() (AtomicValue, bool, error) {
 				it.stack = append(it.stack, atomicSeqFrame{seq: members[i]})
 			}
 			continue
+		}
+
+		// List types: expand to multiple atoms.
+		if ni, ok := item.(NodeItem); ok {
+			listItem := ni.ListItemType
+			if listItem == "" {
+				listItem = builtinListItemType(ni.TypeAnnotation)
+			}
+			if listItem != "" {
+				s := ixpath.StringValue(ni.Node)
+				tokens := strings.Fields(s)
+				listSeq := make(Sequence, len(tokens))
+				for i, tok := range tokens {
+					cast, err := CastFromString(tok, listItem)
+					if err != nil {
+						return AtomicValue{}, false, err
+					}
+					listSeq[i] = cast
+				}
+				it.stack = append(it.stack, atomicSeqFrame{seq: listSeq})
+				continue
+			}
 		}
 
 		atom, err := AtomizeItem(item)

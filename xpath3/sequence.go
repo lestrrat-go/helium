@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"strings"
 
 	"github.com/lestrrat-go/helium"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
 // SingleNode creates a Sequence containing a single NodeItem.
@@ -90,6 +92,25 @@ func AtomizeSequence(seq Sequence) ([]AtomicValue, error) {
 			}
 			continue
 		}
+		// List types: split whitespace-separated tokens and atomize each.
+		if ni, ok := item.(NodeItem); ok {
+			listItem := ni.ListItemType
+			if listItem == "" {
+				listItem = builtinListItemType(ni.TypeAnnotation)
+			}
+			if listItem != "" {
+				s := ixpath.StringValue(ni.Node)
+				tokens := strings.Fields(s)
+				for _, tok := range tokens {
+					cast, err := CastFromString(tok, listItem)
+					if err != nil {
+						return nil, err
+					}
+					result = append(result, cast)
+				}
+				continue
+			}
+		}
 		av, err := AtomizeItem(item)
 		if err != nil {
 			return nil, err
@@ -97,6 +118,19 @@ func AtomizeSequence(seq Sequence) ([]AtomicValue, error) {
 		result = append(result, av)
 	}
 	return result, nil
+}
+
+// builtinListItemType returns the item type for built-in XSD list types.
+func builtinListItemType(typeName string) string {
+	switch typeName {
+	case TypeNMTOKENS:
+		return TypeNMTOKEN
+	case TypeIDREFS:
+		return TypeIDREF
+	case TypeENTITIES:
+		return TypeENTITY
+	}
+	return ""
 }
 
 // EBV computes the Effective Boolean Value of a sequence per XPath 3.1 Section 2.4.3.

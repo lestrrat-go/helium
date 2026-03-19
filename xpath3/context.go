@@ -57,6 +57,9 @@ type SchemaDeclarations interface {
 	// schema type (including facet constraints). Returns nil if valid or the
 	// type is not found; returns an error if the value violates facets.
 	ValidateCast(value, typeName string) error
+	// ListItemType returns the item type name for a list type. If the type
+	// is not a list, returns ("", false).
+	ListItemType(typeName string) (itemType string, ok bool)
 }
 
 type evalConfig struct {
