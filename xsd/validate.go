@@ -125,6 +125,18 @@ func validateElementContent(elem *helium.Element, edecl *ElementDecl, td *TypeDe
 	case ContentTypeSimple:
 		return validateSimpleContent(elem, edecl, td, filename, out)
 	case ContentTypeElementOnly, ContentTypeMixed:
+		// For element-only content, non-whitespace text children are not allowed.
+		if td.ContentType == ContentTypeElementOnly {
+			for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+				if child.Type() == helium.TextNode || child.Type() == helium.CDATASectionNode {
+					if strings.TrimSpace(string(child.Content())) != "" {
+						msg := "Character content other than whitespace is not allowed because the content type is 'element-only'."
+						out.WriteString(validityError(filename, elem.Line(), elemDisplayName(elem), msg))
+						return fmt.Errorf("text content in element-only type")
+					}
+				}
+			}
+		}
 		if td.ContentModel == nil {
 			// No content model means anything goes (for mixed) or empty (for element-only).
 			if td.ContentType == ContentTypeElementOnly {
